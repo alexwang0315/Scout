@@ -77,6 +77,8 @@
     .map-pane, .info-pane {
       min-width: 0;
       border-color: var(--border);
+      position: relative;
+      z-index: 1;
     }
 
     .map-pane {
@@ -86,6 +88,8 @@
       background: #131619;
       min-height: 0;
       border-left: 1px solid var(--border);
+      overflow: visible;
+      z-index: 20;
     }
 
     .info-pane {
@@ -224,8 +228,8 @@
       min-width: 56px;
       border: 1px solid var(--border);
       border-radius: 6px;
-      background: #f6f8fb;
-      color: var(--text);
+      background: #111827;
+      color: #f8fafc;
       padding: 3px 7px;
       font-size: 12px;
       font-variant-numeric: tabular-nums;
@@ -267,9 +271,10 @@
       position: relative;
       width: fit-content;
       max-width: 100%;
+      z-index: 80;
     }
     .layer-menu summary {
-      min-height: 24px;
+      min-height: 28px;
       display: inline-flex;
       align-items: center;
       gap: 6px;
@@ -302,7 +307,7 @@
     .layer-menu-panel {
       position: absolute;
       top: calc(100% + 6px);
-      left: 0;
+      right: 0;
       width: min(540px, calc(100vw - 28px));
       max-height: 250px;
       overflow: auto;
@@ -311,7 +316,13 @@
       background: var(--surface);
       padding: 8px;
       box-shadow: 0 18px 42px rgba(0, 0, 0, .28);
-      z-index: 20;
+      z-index: 90;
+    }
+    .layer-menu:not([open]) .layer-menu-panel {
+      display: none;
+    }
+    .layer-menu[open] .layer-menu-panel {
+      display: block;
     }
     .layer-menu-header {
       display: flex;
@@ -327,6 +338,52 @@
       color: var(--text);
       font-weight: 700;
       letter-spacing: .03em;
+    }
+    .layer-preset-row {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .layer-preset-button {
+      min-height: 28px;
+      display: flex;
+      align-items: center;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--text);
+      padding: 5px 7px;
+      font-size: 11px;
+      font-weight: 700;
+      text-align: left;
+      cursor: pointer;
+    }
+    .layer-preset-button.is-active {
+      border-color: var(--focus);
+      background: #e9eef4;
+      color: #1d354d;
+    }
+    .layer-advanced {
+      border-top: 1px solid var(--border);
+      padding-top: 6px;
+    }
+    .layer-advanced summary {
+      border: 0;
+      background: transparent;
+      padding: 4px 0 6px;
+      min-height: 28px;
+      width: max-content;
+      max-width: 100%;
+      box-sizing: border-box;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+    .layer-menu-panel .filters label {
+      min-height: 28px;
+      padding: 4px 6px;
     }
     .map-pan-controls {
       display: inline-grid;
@@ -394,11 +451,14 @@
       overflow: hidden;
     }
     #map {
-      background: #fbfcfe;
-      cursor: crosshair;
+      background: #121619;
+      cursor: grab;
       touch-action: none;
       user-select: none;
     }
+    #map[data-map-interaction-mode="box"],
+    #map.is-selecting { cursor: crosshair; }
+    #map.is-panning { cursor: grabbing; }
     .zoom-selection {
       fill: rgba(45, 79, 112, .16);
       stroke: #2d4f70;
@@ -458,7 +518,7 @@
 
     .hover-hint {
       position: fixed;
-      z-index: 20;
+      z-index: 10000;
       max-width: 320px;
       padding: 10px 12px;
       border: 1px solid var(--border);
@@ -494,19 +554,103 @@
       background: #121619;
     }
 
+    :root {
+      --osm-carto-motorway-casing: #dc2a67;
+      --osm-carto-motorway-fill: #e892a2;
+      --osm-carto-trunk-fill: #f9b29c;
+      --osm-carto-primary-fill: #fcd6a4;
+      --osm-carto-secondary-fill: #f7fabf;
+      --osm-carto-residential-tertiary-fill: #ffffff;
+      --osm-carto-track-fill: #996600;
+      --osm-carto-grass: #cdebb0;
+      --osm-carto-forest: #add19e;
+      --osm-carto-park: #c8facc;
+      --osm-carto-farmland: #eef0d5;
+      --osm-carto-residential-landuse: #e0dfdf;
+      --osm-carto-building-fill: #d9d0c9;
+      --osm-carto-building-outline: #b8ada6;
+      --osm-carto-water-fill: #aad3df;
+      --osm-carto-water-text: #4d80b3;
+      --osm-carto-glacier: #ddecec;
+      --osm-carto-placename-text: #222222;
+      --osm-carto-line-label-text: #685a49;
+      --osm-carto-default-land: #eeeece;
+      --osm-carto-road-casing: #b9a16f;
+      --osm-carto-road-casing-strong: #8d6f38;
+      --osm-carto-path-casing: #ffffff;
+      --osm-carto-path-fill: #b47d46;
+      --osm-carto-footway-fill: #cf5f70;
+      --osm-carto-steps-fill: #9e7048;
+      --osm-carto-service-fill: #ffffff;
+      --osm-carto-water-line: #4d80b3;
+      --osm-carto-terrain-line: #9c8d78;
+    }
+
     .layer-imagery {
       fill: #f4f7fa;
     }
 
     .layer-osm {
-      fill: #ffffff;
-      opacity: 0.94;
+      fill: #f2efe9;
+      opacity: 0.9;
     }
 
     .osm-tile {
       opacity: 0.76;
       image-rendering: auto;
     }
+    .osm-pbf-area { stroke: rgba(110, 114, 102, .34); stroke-width: .65; vector-effect: non-scaling-stroke; pointer-events: visiblePainted; fill-rule: evenodd; }
+    .osm-pbf-area.forest { fill: var(--osm-carto-forest); }
+    .osm-pbf-area.park { fill: var(--osm-carto-park); }
+    .osm-pbf-area.grass { fill: var(--osm-carto-grass); }
+    .osm-pbf-area.water { fill: var(--osm-carto-water-fill); stroke: var(--osm-carto-water-text); }
+    .osm-pbf-area.building { fill: var(--osm-carto-building-fill); stroke: var(--osm-carto-building-outline); }
+    .osm-pbf-area.farmland { fill: var(--osm-carto-farmland); }
+    .osm-pbf-area.residential { fill: var(--osm-carto-residential-landuse); }
+    .osm-pbf-area.glacier { fill: var(--osm-carto-glacier); }
+    .osm-pbf-area.terrain { fill: #e7dfd2; stroke: rgba(153, 126, 92, .45); }
+    .osm-pbf-area.default { fill: var(--osm-carto-default-land); }
+    .osm-pbf-line { fill: none; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; pointer-events: visiblePainted; }
+    .osm-pbf-line-casing.path, .osm-pbf-line-casing.footway, .osm-pbf-line-casing.steps { stroke: var(--osm-carto-path-casing); stroke-width: 3.8; }
+    .osm-pbf-line-core.path { stroke: var(--osm-carto-path-fill); stroke-width: 1.55; stroke-dasharray: 4 4; }
+    .osm-pbf-line-core.footway { stroke: var(--osm-carto-footway-fill); stroke-width: 1.45; stroke-dasharray: 3 4; }
+    .osm-pbf-line-core.steps { stroke: var(--osm-carto-steps-fill); stroke-width: 1.55; stroke-dasharray: 1.5 3; }
+    .osm-pbf-line-casing.track { stroke: var(--osm-carto-road-casing-strong); stroke-width: 4.8; }
+    .osm-pbf-line-core.track { stroke: var(--osm-carto-track-fill); stroke-width: 2.5; stroke-dasharray: 7 4; }
+    .osm-pbf-line-casing.service { stroke: var(--osm-carto-road-casing); stroke-width: 4.5; }
+    .osm-pbf-line-core.service { stroke: var(--osm-carto-service-fill); stroke-width: 2.5; }
+    .osm-pbf-line-casing.motorway { stroke: var(--osm-carto-motorway-casing); stroke-width: 6.6; }
+    .osm-pbf-line-core.motorway { stroke: var(--osm-carto-motorway-fill); stroke-width: 4.1; }
+    .osm-pbf-line-casing.trunk { stroke: var(--osm-carto-road-casing); stroke-width: 6.2; }
+    .osm-pbf-line-core.trunk { stroke: var(--osm-carto-trunk-fill); stroke-width: 3.8; }
+    .osm-pbf-line-casing.primary { stroke: var(--osm-carto-road-casing); stroke-width: 5.9; }
+    .osm-pbf-line-core.primary { stroke: var(--osm-carto-primary-fill); stroke-width: 3.5; }
+    .osm-pbf-line-casing.secondary { stroke: var(--osm-carto-road-casing); stroke-width: 5.5; }
+    .osm-pbf-line-core.secondary { stroke: var(--osm-carto-secondary-fill); stroke-width: 3.2; }
+    .osm-pbf-line-casing.tertiary, .osm-pbf-line-casing.unclassified, .osm-pbf-line-casing.residential { stroke: var(--osm-carto-road-casing); stroke-width: 5.1; }
+    .osm-pbf-line-core.tertiary, .osm-pbf-line-core.unclassified, .osm-pbf-line-core.residential { stroke: var(--osm-carto-residential-tertiary-fill); stroke-width: 3; }
+    .osm-pbf-line-casing.road { stroke: var(--osm-carto-road-casing); stroke-width: 5.3; }
+    .osm-pbf-line-core.road { stroke: var(--osm-carto-residential-tertiary-fill); stroke-width: 3.1; }
+    .osm-pbf-line-casing.route { stroke: rgba(255, 255, 255, .9); stroke-width: 3.6; }
+    .osm-pbf-line-core.route { stroke: #7b8f2a; stroke-width: 1.55; stroke-dasharray: 8 5; }
+    .osm-pbf-line-casing.waterway { stroke: rgba(255, 255, 255, .85); stroke-width: 2.8; }
+    .osm-pbf-line-core.waterway { stroke: var(--osm-carto-water-line); stroke-width: 1.35; }
+    .osm-pbf-line-casing.terrain { stroke: rgba(255, 255, 255, .75); stroke-width: 2.6; }
+    .osm-pbf-line-core.terrain { stroke: var(--osm-carto-terrain-line); stroke-width: 1.15; stroke-dasharray: 2 3; }
+    .osm-pbf-line-casing.infrastructure { stroke: rgba(255, 255, 255, .8); stroke-width: 2.6; }
+    .osm-pbf-line-core.infrastructure { stroke: #8a8f99; stroke-width: 1.15; stroke-dasharray: 6 4; }
+    .osm-pbf-line-casing.default { stroke: rgba(255, 255, 255, .82); stroke-width: 2.5; }
+    .osm-pbf-line-core.default { stroke: #a36b2c; stroke-width: 1.1; }
+    .osm-pbf-point { fill: #5a5f63; stroke: rgba(255, 255, 255, .92); stroke-width: 1; opacity: .86; vector-effect: non-scaling-stroke; pointer-events: visiblePainted; }
+    .osm-pbf-point.milestone { fill: #8c6a21; stroke: #fff8df; stroke-width: 1.1; }
+    .osm-pbf-point.mobile { fill: #0077b6; stroke: #e6f6ff; stroke-width: 1.1; }
+    .osm-pbf-point.peak { fill: #a46020; stroke: #fff6e7; stroke-width: 1.1; }
+    .osm-pbf-point.shelter { fill: #6d5e3a; stroke: #fff8df; stroke-width: 1.15; }
+    .osm-pbf-point.parking { fill: #3f78b5; stroke: #eef6ff; stroke-width: 1.15; }
+    .osm-pbf-point.water { fill: #2f90c8; stroke: #e7f7ff; stroke-width: 1.15; }
+    .osm-pbf-point.poi { fill: #5a5f63; stroke: white; stroke-width: 1; }
+    .osm-pbf-label { fill: var(--osm-carto-placename-text); font-size: 11px; font-weight: 650; paint-order: stroke; stroke: rgba(255, 255, 255, .9); stroke-width: 3px; stroke-linejoin: round; pointer-events: none; }
+    .osm-pbf-line-label { fill: var(--osm-carto-line-label-text); font-size: 10px; font-weight: 600; }
 
     .raster-tile {
       opacity: 0.92;
@@ -653,7 +797,7 @@
     .segment-overlay {
       fill: none;
       stroke: var(--cat-segment);
-      stroke-width: 7;
+      stroke-width: 4;
       opacity: 0;
       cursor: pointer;
       pointer-events: stroke;
@@ -705,6 +849,20 @@
       vector-effect: non-scaling-stroke;
     }
 
+    .boss-point {
+      fill: #ef4444;
+      stroke: #fff;
+      stroke-width: 1.4;
+      opacity: .9;
+      cursor: pointer;
+      vector-effect: non-scaling-stroke;
+    }
+
+    .boss-point.is-not-ready {
+      stroke: #111827;
+      stroke-width: 1.9;
+    }
+
     .gis-perception-cp {
       fill: var(--cat-gis);
       stroke: #092f3f;
@@ -751,7 +909,7 @@
       inset: 0;
       pointer-events: none;
       overflow: hidden;
-      z-index: 5;
+      z-index: 40;
     }
     .map-label-badge,
     .map-label-callout {
@@ -824,7 +982,7 @@
     .risk-score-point.risk-l5 { fill: #9b2c2c; }
     .risk-ribbon {
       fill: none;
-      stroke-width: 7;
+      stroke-width: 4;
       stroke-linecap: round;
       stroke-linejoin: round;
       opacity: .48;
@@ -837,7 +995,7 @@
     .risk-ribbon-extreme { stroke: var(--risk-extreme); }
     .risk-heatmap {
       fill: none;
-      stroke-width: 10;
+      stroke-width: 5.5;
       stroke-linecap: round;
       stroke-linejoin: round;
       opacity: .72;
@@ -863,23 +1021,43 @@
     .risk-delta-aligned_high { stroke: #7f1d1d; }
     .risk-delta-minor_shift { stroke: #64748b; }
     .risk-delta-aligned { stroke: #94a3b8; opacity: .28; }
+    .soil-moisture-point { fill: #2563eb; stroke: #eff6ff; stroke-width: 2; opacity: .82; }
+    .antecedent-rain-point { fill: #0f766e; stroke: #ecfeff; stroke-width: 2; opacity: .82; }
+    .antecedent-rain-point.rain-high { fill: #d6a800; stroke: #fff7ed; }
+    .antecedent-rain-point.rain-extreme { fill: #dc2626; stroke: #fff1f2; }
+    .cwa-qpf-point { fill: #f59e0b; stroke: #fff7ed; stroke-width: 1.6; opacity: .9; vector-effect: non-scaling-stroke; }
+    .cwa-qpf-point.qpf-high { fill: #d97706; }
+    .cwa-qpf-point.qpf-extreme { fill: #b91c1c; }
+    .cwa-weather-point { fill: #0ea5e9; stroke: #e0f2fe; stroke-width: 1.6; opacity: .9; vector-effect: non-scaling-stroke; }
+    .cwa-weather-point.weather-warning { fill: #dc2626; stroke: #fff1f2; }
+    .environment-extent { vector-effect: non-scaling-stroke; stroke-width: 2; stroke-dasharray: 10 6; pointer-events: visiblePainted; }
+    .environment-extent.soil-moisture { fill: rgba(37, 99, 235, .13); stroke: #2563eb; }
+    .environment-extent.antecedent-rain { fill: rgba(15, 118, 110, .12); stroke: #0f766e; }
+    .environment-extent.cwa-qpf { fill: rgba(245, 158, 11, .15); stroke: #d97706; }
+    .environment-extent.cwa-weather { fill: rgba(14, 165, 233, .10); stroke: #0284c7; }
+    .environment-value-label { font-size: 14px; font-weight: 850; letter-spacing: 0; paint-order: stroke; stroke: rgba(255, 255, 255, .92); stroke-width: 5px; stroke-linejoin: round; pointer-events: none; }
+    .environment-value-label.soil-moisture { fill: #1d4ed8; }
+    .environment-value-label.antecedent-rain { fill: #0f766e; }
+    .environment-value-label.cwa-qpf { fill: #b45309; }
+    .environment-value-label.cwa-weather { fill: #0369a1; }
 
     .map-highlight {
       opacity: 1 !important;
       stroke: var(--focus) !important;
-      stroke-width: 5 !important;
-      filter: drop-shadow(0 0 8px rgba(138, 180, 248, 0.88));
+      stroke-width: 4 !important;
+      filter: drop-shadow(0 0 5px rgba(138, 180, 248, 0.72));
+      vector-effect: non-scaling-stroke;
     }
 
     circle.map-highlight {
       fill: var(--focus) !important;
       stroke: #ffffff !important;
-      stroke-width: 2.5 !important;
+      stroke-width: 2 !important;
     }
 
     .segment-overlay.map-highlight {
       opacity: 0.92 !important;
-      stroke-width: 9 !important;
+      stroke-width: 4.5 !important;
     }
 
     .is-hidden { display: none; }
@@ -1079,6 +1257,9 @@
     .read-only-note {
       color: var(--muted);
       font-size: 12px;
+      min-width: 0;
+      max-width: 100%;
+      overflow-wrap: anywhere;
     }
 
     .scenario-panel {
@@ -1087,6 +1268,13 @@
       margin-top: 16px;
       padding-top: 14px;
       border-top: 1px solid var(--border);
+      min-width: 0;
+      max-width: 100%;
+    }
+
+    .scenario-panel > * {
+      min-width: 0;
+      max-width: 100%;
     }
 
     .scenario-head {
@@ -1094,6 +1282,7 @@
       justify-content: space-between;
       gap: 12px;
       align-items: center;
+      min-width: 0;
     }
 
     .scenario-head h2 {
@@ -1109,6 +1298,8 @@
     .scenario-list {
       display: grid;
       gap: 8px;
+      min-width: 0;
+      max-width: 100%;
     }
 
     .scenario-card {
@@ -1249,6 +1440,12 @@
       border-radius: 6px;
       background: #171b20;
       overflow-wrap: anywhere;
+    }
+
+    .evidence-timeline-item.is-selected {
+      border-color: var(--focus);
+      background: rgba(45, 79, 112, .34);
+      box-shadow: inset 0 0 0 1px rgba(45, 79, 112, .72);
     }
 
     .evidence-timeline-item strong,
@@ -1535,6 +1732,12 @@
       text-transform: uppercase;
     }
 
+    .assistant-drawer .assistant-panel {
+      height: 100%;
+      min-height: 0;
+      overflow-y: auto;
+    }
+
     .assistant-head {
       display: flex;
       justify-content: space-between;
@@ -1662,7 +1865,18 @@
       color: var(--muted);
     }
 
-    @media (max-width: 980px) {
+    @media (max-width: 1120px) {
+      .layer-menu-panel {
+        position: fixed;
+        top: 120px;
+        left: 12px;
+        right: 12px;
+        width: auto;
+        max-height: calc(100vh - 140px);
+      }
+    }
+
+    @media (max-width: 1120px) {
       .shell {
         grid-template-columns: 1fr;
         grid-template-areas:
@@ -1690,6 +1904,45 @@
       .energy-monitor { grid-template-columns: 1fr 1fr; }
       .narrative-facts { grid-template-columns: 1fr; }
       .capability-metrics { grid-template-columns: 1fr; }
+    }
+
+    @media (max-width: 640px) {
+      .metric-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 6px;
+      }
+      .metric {
+        padding: 6px 8px;
+      }
+      .metric span {
+        font-size: 10px;
+      }
+      .metric strong {
+        font-size: 14px;
+      }
+      .metric strong {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .toolbar code {
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
+        overflow-wrap: anywhere;
+        line-height: 1.25;
+      }
+      .energy-monitor strong {
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
+        overflow-wrap: anywhere;
+        line-height: 1.25;
+      }
+      .energy-monitor {
+        gap: 6px;
+        padding: 7px 8px;
+      }
     }
   </style>
 </head>
@@ -1726,7 +1979,8 @@
               <button id="zoomIn" class="tool-button compact" type="button" title="Zoom in" aria-label="Zoom in">+</button>
               <button id="zoomOut" class="tool-button compact" type="button" title="Zoom out" aria-label="Zoom out">-</button>
               <button id="fitRoute" class="tool-button" type="button" title="Reset map view" aria-label="Reset map view">Fit</button>
-              <button id="boxZoomMode" class="tool-button compact is-active" type="button" title="Rectangle drag zoom is active: drag down-right to zoom in, up-left to zoom out" aria-label="Rectangle drag zoom" aria-pressed="true">▣</button>
+              <button id="panMode" class="tool-button is-active" type="button" title="Mouse drag pan is active" aria-label="Mouse drag pan" aria-pressed="true">Pan</button>
+              <button id="boxZoomMode" class="tool-button compact" type="button" title="Point or rectangle zoom: click to zoom in, drag down-right to zoom in, up-left to zoom out" aria-label="Rectangle drag zoom" aria-pressed="false">▣</button>
               <span id="zoomLevel" class="zoom-level" title="Map zoom">1.00x</span>
               <details class="layer-menu">
                 <summary id="layerControl" title="Show layer controls" aria-label="Layer controls">Layers <strong id="layerEnabledCount">-</strong></summary>
@@ -1735,10 +1989,19 @@
                     <span>Layers</span>
                     <small>map evidence</small>
                   </div>
-                  <div class="filters" aria-label="Map layers">
-                    <label title="Imagery layer"><input type="checkbox" data-layer="imagery" checked> Imagery</label>
+                  <div class="layer-preset-row" aria-label="Layer presets">
+                    <button class="layer-preset-button" type="button" data-layer-preset="risk-review">Risk Review</button>
+                    <button class="layer-preset-button" type="button" data-layer-preset="mcp-review">MCP Review</button>
+                    <button class="layer-preset-button" type="button" data-layer-preset="route-clean">Route Clean</button>
+                    <button class="layer-preset-button" type="button" data-layer-preset="debug-replay">Debug Replay</button>
+                    <button class="layer-preset-button" type="button" data-layer-preset="raster-check">Raster Check</button>
+                  </div>
+                  <details class="layer-advanced">
+                    <summary>Advanced layers</summary>
+                  <div class="filters" aria-label="Advanced map layers">
+                    <label title="Imagery layer"><input type="checkbox" data-layer="imagery"> Imagery</label>
                     <label title="Rudy Map hiking topographic layer"><input type="checkbox" data-layer="rudy"> Rudy</label>
-                    <label title="Rudy Map with TWMap style"><input type="checkbox" data-layer="rudy-twmap"> Rudy+TW</label>
+                    <label title="Rudy Map with TWMap style"><input type="checkbox" data-layer="rudy-twmap" checked> Rudy+TW</label>
                     <label title="Taiwan color relief terrain shading layer"><input type="checkbox" data-layer="relief"> Relief</label>
                     <label title="Taiwan geology 2016 layer"><input type="checkbox" data-layer="geology"> Geology</label>
                     <label title="Taiwan 1/5000 topographic layer"><input type="checkbox" data-layer="topo-5k"> Topo 5K</label>
@@ -1749,6 +2012,21 @@
                     <label title="Route-aligned baseline terrain risk layer"><input type="checkbox" data-layer="risk-ribbon" checked> Baseline</label>
                     <label title="Route-specific calibrated heat map"><input type="checkbox" data-layer="risk-heatmap" checked> Calibrated</label>
                     <label title="Difference between baseline risk and calibrated heat"><input type="checkbox" data-layer="risk-delta"> Delta</label>
+                    <label title="CWA quantitative precipitation forecast grid"><input type="checkbox" data-layer="cwa-qpf"> QPF</label>
+                    <label title="SMAP L4 soil moisture hydrology context"><input type="checkbox" data-layer="soil-moisture"> Soil H2O</label>
+                    <label title="GPM IMERG antecedent rain context"><input type="checkbox" data-layer="antecedent-rain"> Rain</label>
+                    <label title="CWA warnings observations and forecast evidence"><input type="checkbox" data-layer="cwa-weather"> CWA</label>
+                    <fieldset data-cwa-imagery-controls style="grid-column:1/-1;display:grid;grid-template-columns:repeat(3,minmax(120px,1fr));gap:6px;padding:8px;border:1px solid #334155;border-radius:8px">
+                      <legend>CWA radar / satellite</legend>
+                      <p data-cwa-rainfall-support="legacy_projection" style="grid-column:1/-1;margin:0;color:#f6c453;font-size:11px">Persisted rainfall grid is available in Pre-trip and Dashboard Map. This surface shows the legacy projection only; candidate-only and never runtime safety truth.</p>
+                      <label>Product <select data-cwa-imagery-product><option value="radar">Radar latest</option></select></label>
+                      <label>Window <select data-cwa-imagery-window><option value="3h">3h</option><option value="6h">6h</option><option value="9h">9h</option><option value="12h" selected>12h</option></select></label>
+                      <label>Frame <input type="range" min="0" max="0" value="0" data-cwa-imagery-timeline></label>
+                      <label>Radar opacity <input type="range" min="0" max="100" value="62" data-cwa-imagery-opacity="radar"></label>
+                      <label>Satellite opacity <input type="range" min="0" max="100" value="48" data-cwa-imagery-opacity="satellite"></label>
+                      <button type="button" data-cwa-imagery-play aria-pressed="false">Play</button>
+                      <output data-cwa-imagery-status role="status" aria-live="polite" style="grid-column:1/-1">Prepared cache not loaded</output>
+                    </fieldset>
                     <label title="Corridor layer"><input type="checkbox" data-layer="corridors" checked> Corridors</label>
                     <label title="Overpass evidence layer"><input type="checkbox" data-layer="overpass" checked> Overpass</label>
                     <label title="Route layer"><input type="checkbox" data-layer="route" checked> Route</label>
@@ -1760,10 +2038,12 @@
                     <label title="Point-of-interest layer"><input type="checkbox" data-layer="pois" checked> POI</label>
                     <label title="Hazard layer"><input type="checkbox" data-layer="hazards" checked> Hazards</label>
                     <label title="Major Critical Point layer"><input type="checkbox" data-layer="mcp" checked> MCP</label>
+                    <label title="Route Boss Demand vs Energy Reserve Challenge Fit layer"><input type="checkbox" data-layer="boss-points" checked> Boss</label>
                     <label title="Route note layer"><input type="checkbox" data-layer="route-notes"> Notes</label>
                     <label title="Event layer"><input type="checkbox" data-layer="events" checked> Ln</label>
                     <label title="Weather API layer"><input type="checkbox" data-layer="weather-api"> Weather</label>
                   </div>
+                  </details>
                 </div>
               </details>
               <div class="map-pan-controls" aria-label="Map pan controls">
@@ -1834,6 +2114,11 @@
           <h2>Evidence Timeline</h2>
           <p class="read-only-note">Shared category projection aligned with /admin/pretrip. Counts are evidence classes only, not runtime safety truth.</p>
           <div id="evidenceTimelineList" class="evidence-timeline-list"></div>
+        </section>
+        <section id="runtimeSafetyStateStorePanel" class="agent-skills-panel" aria-label="Runtime Safety State Store replay projection">
+          <h2>Runtime Safety State Store</h2>
+          <p class="read-only-note">Shared admin/debug read-only replay projection. It shows reducer candidate snapshots only; it does not call /safety/* or write Phase 1 state.</p>
+          <div id="runtimeSafetyStateStoreList" class="agent-skill-list"></div>
         </section>
         <section id="agentSkillsPanel" class="agent-skills-panel" aria-label="Scout agent skills list">
           <h2>Scout Agent Skills</h2>
@@ -1972,14 +2257,21 @@
 
   <script src="/admin/scout-assistant-ui.js"></script>
   <script>
-    const CASE_ID = "chilai_nanhua_day1";
+    const DEFAULT_CASE_ID = "chilai_nanhua_day1";
+    const CASE_ID_PARAM = new URLSearchParams(window.location.search).get("caseId")
+      || new URLSearchParams(window.location.search).get("projectId")
+      || "";
+    const CASE_ID = /^[A-Za-z0-9_.-]+$/.test(CASE_ID_PARAM)
+      ? CASE_ID_PARAM
+      : DEFAULT_CASE_ID;
+    const PRETRIP_PROJECT_ID = CASE_ID;
     const MAP_WIDTH = 1000;
     const MAP_HEIGHT = 720;
     const MAP_VISUAL_PADDING = 34;
     const MAP_MIN_ZOOM = 0.6;
     const MAP_MAX_ZOOM = 12000;
-    const FOCUS_POINT_VIEWPORT_M = 1000;
-    const POINT_LABEL_VIEWPORT_M = 30;
+    const FOCUS_POINT_VIEWPORT_M = 50;
+    const POINT_LABEL_VIEWPORT_M = 50;
     const POINT_LABEL_FONT_PX = 4;
     const POINT_LABEL_STROKE_PX = 0.6;
     const POINT_LABEL_OFFSET_PX = 3;
@@ -2020,6 +2312,7 @@
     ];
     const RASTER_SOURCE_LAYER_BY_ID = Object.fromEntries(RASTER_SOURCE_LAYER_DEFINITIONS.map(layer => [layer.layerId, layer]));
     const RASTER_OVERLAY_LAYER_DEFINITIONS = RASTER_SOURCE_LAYER_DEFINITIONS.filter(layer => layer.layerId !== "imagery");
+    const RASTER_BASEMAP_LAYER_IDS = new Set([...RASTER_SOURCE_LAYER_DEFINITIONS.map(layer => layer.layerId), "osm"]);
     const EVIDENCE_TREE_TABS = [
       {id: "default", label: "CP / Timeline", category: "checkpoint"},
       {id: "map_risk", label: "Map / Risk", category: "risk"},
@@ -2053,10 +2346,52 @@
         boundary: "reference tracks stay planning evidence only; not runtime safety truth"
       }
     ];
-    const state = { view: null, projected: null, selected: null, zoom: 1, panX: 0, panY: 0, zoomSelection: null, completedTripRecordings: null, focusedLabelIds: new Set(), activeEvidenceTreeTab: "default", evidenceTreeTabCounts: {} };
+    const state = { view: null, projected: null, selected: null, zoom: 1, panX: 0, panY: 0, zoomSelection: null, panSelection: null, mapInteractionMode: "pan", completedTripRecordings: null, focusedLabelIds: new Set(), mapKeyboardActive: false, evidenceTreeOpenGroups: new Set(), activeEvidenceTreeTab: "default", evidenceTreeTabCounts: {}, osmPbfVector: null, osmPbfVectorStatus: "not_loaded", osmCartoPaletteStatus: "not_loaded" };
     const svg = document.getElementById("map");
     const hoverHint = document.getElementById("hoverHint");
+    let treeClickFocusTimer = null;
+    const MAP_LAYER_RANKS = {
+      imagery: 0,
+      "rudy": 4,
+      "rudy-twmap": 4,
+      relief: 4,
+      geology: 4,
+      "topo-5k": 4,
+      forest: 4,
+      osm: 8,
+      terrain: 20,
+      corridors: 40,
+      overpass: 42,
+      route: 44,
+      "completed-track": 45,
+      "reference-tracks": 46,
+      retreat: 48,
+      segments: 50,
+      "risk-ribbon": 54,
+      "risk-heatmap": 55,
+      "risk-delta": 56,
+      "soil-moisture": 57,
+      "antecedent-rain": 58,
+      "cwa-qpf": 59,
+      "risk-score": 60,
+      checkpoints: 62,
+      pois: 64,
+      hazards: 65,
+      "route-notes": 66,
+      "cwa-weather": 67,
+      mcp: 68,
+      "boss-points": 70,
+      events: 72,
+      "weather-api": 80
+    };
     const layerInputs = document.querySelectorAll("[data-layer]");
+    const LAYER_PRESETS = {
+      "risk-review": ["imagery", "osm", "route", "segments", "checkpoints", "risk-score", "risk-ribbon", "risk-heatmap", "risk-delta", "cwa-qpf", "soil-moisture", "antecedent-rain", "cwa-weather", "mcp", "boss-points"],
+      "mcp-review": ["imagery", "osm", "route", "checkpoints", "mcp", "boss-points", "route-notes", "pois", "hazards", "overpass"],
+      "route-clean": ["imagery", "osm", "route", "completed-track", "reference-tracks", "retreat", "segments", "checkpoints"],
+      "debug-replay": ["imagery", "osm", "route", "completed-track", "reference-tracks", "segments", "checkpoints", "events", "overpass", "cwa-qpf", "soil-moisture", "antecedent-rain", "cwa-weather", "mcp", "boss-points"],
+      "raster-check": ["imagery", "rudy", "rudy-twmap", "relief", "geology", "topo-5k", "forest", "osm", "route"]
+    };
 
     function apiBase() {
       const params = new URLSearchParams(location.search);
@@ -2064,6 +2399,27 @@
       if (override) return override.replace(/\/$/, "");
       if (location.protocol === "file:") return "http://scout.local:9100";
       return "";
+    }
+
+    function applyOsmCartoPalette(payload) {
+      const variables = payload?.css_variables || {};
+      Object.entries(variables).forEach(([name, value]) => {
+        if (!/^--osm-carto-[a-z0-9-]+$/.test(name) || typeof value !== "string") return;
+        document.documentElement.style.setProperty(name, value);
+      });
+    }
+
+    async function loadOsmCartoPalette() {
+      if (state.osmCartoPaletteStatus === "ready" || state.osmCartoPaletteStatus === "loading") return;
+      try {
+        state.osmCartoPaletteStatus = "loading";
+        const response = await fetch(`${apiBase()}/admin/pretrip/osm-carto-palette`);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        applyOsmCartoPalette(await response.json());
+        state.osmCartoPaletteStatus = "ready";
+      } catch (error) {
+        state.osmCartoPaletteStatus = `failed: ${error.message}`;
+      }
     }
 
     function osmTileTemplate() {
@@ -2196,6 +2552,30 @@
       const y = height - pad - ((lat - bounds.south) / latSpan) * (height - pad * 2);
       return [x, y];
     }
+    function coordinateFromMapPointForBounds(bounds, x, y) {
+      const pad = MAP_VISUAL_PADDING;
+      const drawableWidth = Math.max(MAP_WIDTH - pad * 2, 1);
+      const drawableHeight = Math.max(MAP_HEIGHT - pad * 2, 1);
+      const lonSpan = Math.max(bounds.east - bounds.west, 0.000001);
+      const latSpan = Math.max(bounds.north - bounds.south, 0.000001);
+      return {
+        lat: clamp(bounds.north - ((y - pad) / drawableHeight) * latSpan, bounds.south, bounds.north),
+        lon: clamp(bounds.west + ((x - pad) / drawableWidth) * lonSpan, bounds.west, bounds.east)
+      };
+    }
+    function visibleBoundsFor(view) {
+      if (!view) return null;
+      const bounds = boundsWithMap(view);
+      const box = mapViewportBox();
+      const nw = coordinateFromMapPointForBounds(bounds, box.minX, box.minY);
+      const se = coordinateFromMapPointForBounds(bounds, box.minX + box.width, box.minY + box.height);
+      return {
+        north: Math.max(nw.lat, se.lat),
+        south: Math.min(nw.lat, se.lat),
+        west: Math.min(nw.lon, se.lon),
+        east: Math.max(nw.lon, se.lon)
+      };
+    }
 
     function pathFromCoords(bounds, coords) {
       return coords.map((point, index) => {
@@ -2215,6 +2595,291 @@
         .map(segment => pathFromCoords(bounds, segment))
         .filter(Boolean)
         .join(" ");
+    }
+    function shouldLoadOsmPbfVector(view) {
+      const layer = mapLayerById(view, "osm");
+      return Boolean(
+        layer.local_osm_render_geojson_ref
+        || layer.local_osm_feature_index_ref
+        || layer.osm_rendering_policy === "workspace_local_osm_extract_available"
+      );
+    }
+    function localOsmPbfVectorUrl(view) {
+      if (!shouldLoadOsmPbfVector(view)) return "";
+      return `${apiBase()}/admin/pretrip/projects/${encodeURIComponent(PRETRIP_PROJECT_ID)}/osm-pbf-vector.geojson?cb=${encodeURIComponent(OSM_TILE_CACHE_BUST)}`;
+    }
+    function geoJsonCoordinateToPoint(coordinate) {
+      if (!Array.isArray(coordinate) || coordinate.length < 2) return null;
+      const lon = Number(coordinate[0]);
+      const lat = Number(coordinate[1]);
+      return Number.isFinite(lat) && Number.isFinite(lon) ? {lat, lon} : null;
+    }
+    function geoJsonLineToPath(bounds, coordinates) {
+      return pathFromCoords(bounds, (coordinates || []).map(geoJsonCoordinateToPoint).filter(Boolean));
+    }
+    function geoJsonPolygonToPath(bounds, rings) {
+      return (rings || []).map(ring => {
+        const d = geoJsonLineToPath(bounds, ring);
+        return d ? `${d} Z` : "";
+      }).filter(Boolean).join(" ");
+    }
+    function pathFromGeoJsonGeometry(bounds, geometry) {
+      if (!geometry) return "";
+      if (geometry.type === "LineString") return geoJsonLineToPath(bounds, geometry.coordinates);
+      if (geometry.type === "MultiLineString") return (geometry.coordinates || []).map(line => geoJsonLineToPath(bounds, line)).filter(Boolean).join(" ");
+      if (geometry.type === "Polygon") return geoJsonPolygonToPath(bounds, geometry.coordinates);
+      if (geometry.type === "MultiPolygon") return (geometry.coordinates || []).map(polygon => geoJsonPolygonToPath(bounds, polygon)).filter(Boolean).join(" ");
+      return "";
+    }
+    function osmPbfFeatureId(feature) {
+      const props = feature?.properties || {};
+      return `osm_pbf.${props["@type"] || "object"}.${props["@id"] || props.id || "unknown"}`;
+    }
+    function osmPbfFeatureTags(feature) {
+      const props = feature?.properties || {};
+      const tags = props.tags && typeof props.tags === "object" ? props.tags : {};
+      return {...tags, ...props};
+    }
+    function osmPbfFeatureLabel(feature) {
+      const props = osmPbfFeatureTags(feature);
+      return props["name:zh"] || props.name || props.ref || props.distance || props["@id"] || "OSM feature";
+    }
+    function osmPbfFeatureItem(feature, category) {
+      const props = feature?.properties || {};
+      const tags = osmPbfFeatureTags(feature);
+      const point = feature?.geometry?.type === "Point" ? geoJsonCoordinateToPoint(feature.geometry.coordinates) : null;
+      return {
+        candidate_id: osmPbfFeatureId(feature),
+        source_id: osmPbfFeatureId(feature),
+        label: osmPbfFeatureLabel(feature),
+        evidence_type: "pretrip_local_osm_pbf_vector_feature",
+        category_id: category,
+        feature_type: feature?.geometry?.type || "geometry",
+        osm_type: props["@type"],
+        osm_id: props["@id"],
+        tags,
+        lat: point?.lat,
+        lon: point?.lon,
+        source_path: "normalized/map/osm_pbf_route_bbox_full.geojson",
+        candidate_only: true,
+        runtime_safety_truth: false
+      };
+    }
+    function osmPbfStyleCategory(feature) {
+      const props = osmPbfFeatureTags(feature);
+      const geometryType = String(feature?.geometry?.type || "");
+      const isArea = geometryType === "Polygon" || geometryType === "MultiPolygon";
+      const highway = String(props.highway || "");
+      const natural = String(props.natural || "");
+      const landuse = String(props.landuse || "");
+      const leisure = String(props.leisure || "");
+      const amenity = String(props.amenity || "");
+      const information = String(props.information || "");
+      const route = String(props.route || "");
+      const tourism = String(props.tourism || "");
+      if (natural === "water" || props.water) return isArea ? "water" : geometryType === "Point" ? "water" : "waterway";
+      if (props.waterway || natural === "spring" || amenity === "drinking_water") {
+        return geometryType === "Point" ? "water" : "waterway";
+      }
+      if (highway === "milestone" || information === "route_marker" || props.distance) return "milestone";
+      if (information === "mobile") return "mobile";
+      if (natural === "peak") return "peak";
+      if (amenity === "shelter" || tourism === "alpine_hut" || tourism === "wilderness_hut") return "shelter";
+      if (amenity === "parking") return "parking";
+      if (route === "hiking" || props.type === "route") return "route";
+      if (highway === "path") return "path";
+      if (highway === "footway") return "footway";
+      if (highway === "pedestrian") return "footway";
+      if (highway === "steps") return "steps";
+      if (highway === "track") return "track";
+      if (highway === "service") return "service";
+      if (["motorway", "trunk", "primary", "secondary", "tertiary", "unclassified", "residential", "living_street"].includes(highway)) {
+        return highway === "living_street" ? "residential" : highway;
+      }
+      if (highway) return "road";
+      if (leisure === "park" || leisure === "garden" || landuse === "recreation_ground") return "park";
+      if (natural === "wood" || natural === "forest" || landuse === "forest") return "forest";
+      if (natural === "grassland" || landuse === "grass" || landuse === "meadow") return "grass";
+      if (["scree", "bare_rock", "cliff"].includes(natural)) return "terrain";
+      if (landuse === "farmland" || landuse === "orchard") return "farmland";
+      if (landuse === "residential") return "residential";
+      if (natural === "glacier") return "glacier";
+      if (props.building) return "building";
+      if (amenity) return "poi";
+      if (props.power || props.man_made) return "infrastructure";
+      return "default";
+    }
+    function osmPbfIsAreaGeometry(geometry) {
+      return ["Polygon", "MultiPolygon"].includes(geometry?.type);
+    }
+    function osmPbfDrawOrder(category, geometryType) {
+      const areaOrder = {
+        glacier: 9,
+        farmland: 10,
+        grass: 11,
+        forest: 12,
+        park: 13,
+        residential: 14,
+        water: 20,
+        terrain: 22,
+        default: 24,
+        building: 30
+      };
+      const lineOrder = {
+        terrain: 34,
+        infrastructure: 36,
+        waterway: 38,
+        route: 42,
+        motorway: 50,
+        trunk: 51,
+        primary: 52,
+        secondary: 53,
+        tertiary: 54,
+        unclassified: 55,
+        residential: 56,
+        road: 57,
+        service: 58,
+        track: 60,
+        path: 65,
+        footway: 66,
+        steps: 67,
+        default: 80
+      };
+      if (geometryType === "Polygon" || geometryType === "MultiPolygon") return areaOrder[category] ?? areaOrder.default;
+      if (geometryType === "LineString" || geometryType === "MultiLineString") return lineOrder[category] ?? lineOrder.default;
+      if (geometryType === "Point") return category === "poi" ? 86 : 84;
+      return 90;
+    }
+    function appendOsmPbfLine(casingGroup, coreGroup, d, category, item) {
+      const casing = el("path", {d, class: `osm-pbf-line osm-pbf-line-casing ${category}`});
+      const core = el("path", {d, class: `osm-pbf-line osm-pbf-line-core ${category}`});
+      attachEvidence(casing, item);
+      attachEvidence(core, item);
+      casingGroup.appendChild(casing);
+      coreGroup.appendChild(core);
+    }
+    function osmPbfGeometryLines(geometry) {
+      if (geometry?.type === "LineString") return [geometry.coordinates || []];
+      if (geometry?.type === "MultiLineString") return geometry.coordinates || [];
+      return [];
+    }
+    function osmPbfProjectedLine(bounds, line) {
+      return (line || [])
+        .map(coordinate => {
+          const point = geoJsonCoordinateToPoint(coordinate);
+          if (!point) return null;
+          const [x, y] = project(bounds, point.lat, point.lon);
+          return {x, y};
+        })
+        .filter(Boolean);
+    }
+    function osmPbfLineLength(points) {
+      let length = 0;
+      for (let index = 1; index < points.length; index += 1) {
+        const dx = points[index].x - points[index - 1].x;
+        const dy = points[index].y - points[index - 1].y;
+        length += Math.hypot(dx, dy);
+      }
+      return length;
+    }
+    function osmPbfLineLabelAnchor(bounds, geometry) {
+      let bestPoints = [];
+      let bestLength = 0;
+      osmPbfGeometryLines(geometry).forEach(line => {
+        const points = osmPbfProjectedLine(bounds, line);
+        const length = osmPbfLineLength(points);
+        if (points.length >= 2 && length > bestLength) {
+          bestPoints = points;
+          bestLength = length;
+        }
+      });
+      if (bestLength < 44 || bestPoints.length < 2) return null;
+      const target = bestLength / 2;
+      let covered = 0;
+      for (let index = 1; index < bestPoints.length; index += 1) {
+        const start = bestPoints[index - 1];
+        const end = bestPoints[index];
+        const segmentLength = Math.hypot(end.x - start.x, end.y - start.y);
+        if (covered + segmentLength >= target) {
+          const ratio = segmentLength ? (target - covered) / segmentLength : 0;
+          return {
+            x: start.x + ratio * (end.x - start.x),
+            y: start.y + ratio * (end.y - start.y)
+          };
+        }
+        covered += segmentLength;
+      }
+      return bestPoints[Math.floor(bestPoints.length / 2)];
+    }
+    function appendOsmPbfLineLabel(group, bounds, feature, geometry, category, index) {
+      if (index > 220) return;
+      if (![
+        "path",
+        "footway",
+        "track",
+        "service",
+        "motorway",
+        "trunk",
+        "primary",
+        "secondary",
+        "tertiary",
+        "unclassified",
+        "residential",
+        "road",
+        "route",
+        "waterway"
+      ].includes(category)) return;
+      const label = osmPbfFeatureLabel(feature);
+      if (!label || label === "OSM feature" || /^\d+$/.test(label)) return;
+      const anchor = osmPbfLineLabelAnchor(bounds, geometry);
+      if (!anchor) return;
+      group.appendChild(el("text", {
+        x: anchor.x.toFixed(2),
+        y: anchor.y.toFixed(2),
+        class: "osm-pbf-label osm-pbf-line-label",
+        "text-anchor": "middle",
+        "data-osm-pbf-label": "true",
+        "data-osm-pbf-line-label": "true",
+        "data-anchor-x": anchor.x.toFixed(2),
+        "data-anchor-y": anchor.y.toFixed(2),
+        ...osmPbfZoomAttrs(category, "line-label")
+      }, label));
+    }
+    function osmPbfPointRadius(category) {
+      if (category === "milestone") return 3.2;
+      if (category === "mobile") return 3.8;
+      if (category === "peak") return 4.2;
+      if (category === "shelter" || category === "parking") return 3.5;
+      if (category === "water") return 3.1;
+      return 2.6;
+    }
+    function osmPbfZoomMin(category, kind) {
+      const majorRoads = ["motorway", "trunk", "primary", "secondary", "tertiary", "unclassified", "residential", "road", "service", "route"];
+      const primaryPoi = ["peak", "shelter", "parking", "water"];
+      if (kind === "line-label") return majorRoads.includes(category) ? 1.15 : 1.45;
+      if (kind === "point-label") return primaryPoi.includes(category) ? 1.25 : 1.85;
+      if (kind === "point") return primaryPoi.includes(category) ? 1 : 1.45;
+      if (kind === "area" && ["building", "residential"].includes(category)) return 1.35;
+      return 1;
+    }
+    function osmPbfZoomAttrs(category, kind) {
+      const min = osmPbfZoomMin(category, kind);
+      return min > 1 ? {"data-osm-pbf-zoom-min": min.toFixed(2)} : {};
+    }
+    function appendOsmPbfLabel(group, feature, x, y, category, index) {
+      if (index > 120) return;
+      const label = osmPbfFeatureLabel(feature);
+      if (!label || label === "OSM feature") return;
+      if (!["milestone", "mobile", "peak", "shelter", "parking", "water"].includes(category) && index % 9 !== 0) return;
+      group.appendChild(el("text", {
+        x: (x + 6).toFixed(2),
+        y: (y - 5).toFixed(2),
+        class: "osm-pbf-label",
+        "data-osm-pbf-label": "true",
+        "data-anchor-x": x.toFixed(2),
+        "data-anchor-y": y.toFixed(2),
+        ...osmPbfZoomAttrs(category, "point-label")
+      }, label));
     }
 
     function clamp(value, min, max) {
@@ -2313,28 +2978,60 @@
       }
       return tiles;
     }
-    function rasterTileCoverage(view, bounds, zoom = null, layerId = "imagery") {
-      const z = zoom ?? chooseRasterZoom(view, bounds, RASTER_MAX_TILES, layerId);
-      const rasterBounds = rasterBoundsFor(view, layerId);
-      return osmTileCoverage(bounds, z)
-        .filter(tile => boundsIntersect(tile, rasterBounds))
-        .map(tile => ({
-          ...tile,
-          href: rasterTileUrl(view, layerId, tile.z, tile.x, tile.y)
-        }));
+    function parentTileFor(tile, minZoom = OSM_MIN_ZOOM) {
+      if (!tile || tile.z <= minZoom) return null;
+      const z = tile.z - 1;
+      const x = Math.floor(tile.x / 2);
+      const y = Math.floor(tile.y / 2);
+      return {
+        z, x, y,
+        west: tileXToLon(x, z),
+        east: tileXToLon(x + 1, z),
+        north: tileYToLat(y, z),
+        south: tileYToLat(y + 1, z)
+      };
     }
-    function renderRasterImagery(group, view, bounds, width, height, layerId = "imagery") {
+    function positionTileImage(image, bounds, tile) {
+      const [x1, y1] = project(bounds, tile.north, tile.west);
+      const [x2, y2] = project(bounds, tile.south, tile.east);
+      image.setAttribute("x", Math.min(x1, x2).toFixed(2));
+      image.setAttribute("y", Math.min(y1, y2).toFixed(2));
+      image.setAttribute("width", Math.abs(x2 - x1).toFixed(2));
+      image.setAttribute("height", Math.abs(y2 - y1).toFixed(2));
+    }
+    function attachTileFallback(image, bounds, tile, hrefForTile, minZoom, dataAttribute) {
+      let fallbackTile = parentTileFor(tile, minZoom);
+      image.addEventListener("error", () => {
+        if (!fallbackTile) return;
+        const tileForRetry = fallbackTile;
+        fallbackTile = parentTileFor(tileForRetry, minZoom);
+        positionTileImage(image, bounds, tileForRetry);
+        image.setAttribute("href", hrefForTile(tileForRetry));
+        if (dataAttribute) image.setAttribute(dataAttribute, `${tileForRetry.z}/${tileForRetry.x}/${tileForRetry.y}`);
+      });
+    }
+    function rasterTileCoverage(view, bounds, zoom = null, layerId = "imagery") {
+      const range = rasterZoomRangeFor(view, layerId);
+      const preferredZoom = zoom ?? chooseRasterZoom(view, bounds, RASTER_MAX_TILES, layerId);
+      const rasterBounds = rasterBoundsFor(view, layerId);
+      for (let z = preferredZoom; z >= range.min; z -= 1) {
+        const tiles = osmTileCoverage(bounds, z)
+          .filter(tile => boundsIntersect(tile, rasterBounds))
+          .map(tile => ({
+            ...tile,
+            href: rasterTileUrl(view, layerId, tile.z, tile.x, tile.y)
+          }));
+        if (tiles.length || z === range.min) return tiles;
+      }
+      return [];
+    }
+    function renderRasterImagery(group, view, bounds, width, height, layerId = "imagery", coverageBounds = bounds) {
       const layer = rasterLayerFor(view, layerId);
       const opacity = Number(layer.raster_layer_opacity ?? RASTER_SOURCE_LAYER_BY_ID[layerId]?.opacity ?? 0.92);
-      rasterTileCoverage(view, bounds, null, layerId).forEach(tile => {
-        const [x1, y1] = project(bounds, tile.north, tile.west);
-        const [x2, y2] = project(bounds, tile.south, tile.east);
-        group.appendChild(el("image", {
+      const range = rasterZoomRangeFor(view, layerId);
+      rasterTileCoverage(view, coverageBounds, null, layerId).forEach(tile => {
+        const image = el("image", {
           href: tile.href,
-          x: Math.min(x1, x2).toFixed(2),
-          y: Math.min(y1, y2).toFixed(2),
-          width: Math.abs(x2 - x1).toFixed(2),
-          height: Math.abs(y2 - y1).toFixed(2),
           class: "raster-tile",
           preserveAspectRatio: "none",
           "data-raster-tile": `${tile.z}/${tile.x}/${tile.y}`,
@@ -2342,28 +3039,125 @@
           "data-source-id": layer.imagery_source_id || layer.source_id || "",
           "data-source-kind": layer.source_kind || "local_geotiff",
           opacity: Number.isFinite(opacity) ? opacity.toFixed(2) : "0.92"
-        }));
+        });
+        positionTileImage(image, bounds, tile);
+        attachTileFallback(
+          image,
+          bounds,
+          tile,
+          fallbackTile => rasterTileUrl(view, layerId, fallbackTile.z, fallbackTile.x, fallbackTile.y),
+          range.min,
+          "data-raster-tile"
+        );
+        group.appendChild(image);
       });
     }
-    function renderOsmBasemap(group, bounds, width, height) {
-      if (!isLocalOsmTileMode()) {
+    function renderOsmBasemap(group, bounds, width, height, coverageBounds = bounds) {
+      const features = state.osmPbfVector?.features || [];
+      const renderRasterTiles = !isLocalOsmTileMode() || !localOsmPbfVectorUrl(state.view);
+      if (renderRasterTiles) {
+        group.appendChild(el("rect", {x: 0, y: 0, width, height, class: "layer-osm"}));
+        osmTileCoverage(coverageBounds).forEach(tile => {
+          const image = el("image", {
+            href: tile.href,
+            class: "osm-tile",
+            preserveAspectRatio: "none",
+            "data-osm-tile": `${tile.z}/${tile.x}/${tile.y}`
+          });
+          positionTileImage(image, bounds, tile);
+          attachTileFallback(image, bounds, tile, fallbackTile => osmTileUrl(fallbackTile.z, fallbackTile.x, fallbackTile.y), OSM_MIN_ZOOM, "data-osm-tile");
+          group.appendChild(image);
+        });
+        group.appendChild(el("text", {x: width - 10, y: height - 10, "text-anchor": "end", class: "osm-attribution"}, OSM_ATTRIBUTION));
+      } else {
         group.appendChild(el("rect", {x: 0, y: 0, width, height, class: "layer-osm"}));
       }
-      osmTileCoverage(bounds).forEach(tile => {
-        const [x1, y1] = project(bounds, tile.north, tile.west);
-        const [x2, y2] = project(bounds, tile.south, tile.east);
-        group.appendChild(el("image", {
-          href: tile.href,
-          x: Math.min(x1, x2).toFixed(2),
-          y: Math.min(y1, y2).toFixed(2),
-          width: Math.abs(x2 - x1).toFixed(2),
-          height: Math.abs(y2 - y1).toFixed(2),
-          class: "osm-tile",
-          preserveAspectRatio: "none",
-          "data-osm-tile": `${tile.z}/${tile.x}/${tile.y}`
-        }));
+      if (features.length) {
+      const areaGroup = el("g", {"data-osm-pbf-kind": "areas"});
+      const lineCasingGroup = el("g", {"data-osm-pbf-kind": "line-casings"});
+      const lineCoreGroup = el("g", {"data-osm-pbf-kind": "line-fills"});
+      const pointGroup = el("g", {"data-osm-pbf-kind": "points"});
+      const labelGroup = el("g", {"data-osm-pbf-kind": "labels"});
+      let labelIndex = 0;
+      const renderEntries = features
+        .map((feature, index) => {
+          const geometry = feature?.geometry;
+          if (!geometry) return null;
+          const category = osmPbfStyleCategory(feature);
+          return {
+            feature,
+            index,
+            geometry,
+            category,
+            order: osmPbfDrawOrder(category, String(geometry.type || ""))
+          };
+        })
+        .filter(Boolean)
+        .sort((a, b) => a.order - b.order || a.index - b.index);
+      renderEntries.forEach(entry => {
+        const {feature, geometry, category} = entry;
+        if (!geometry) return;
+        const item = osmPbfFeatureItem(feature, category);
+        if (osmPbfIsAreaGeometry(geometry)) {
+          const d = pathFromGeoJsonGeometry(bounds, geometry);
+          if (!d) return;
+          const path = el("path", {d, class: `osm-pbf-area ${category}`, ...osmPbfZoomAttrs(category, "area")});
+            attachEvidence(path, item);
+            areaGroup.appendChild(path);
+            return;
+          }
+        if (["LineString", "MultiLineString"].includes(geometry.type)) {
+          const d = pathFromGeoJsonGeometry(bounds, geometry);
+          if (!d) return;
+          appendOsmPbfLine(lineCasingGroup, lineCoreGroup, d, category, item);
+          appendOsmPbfLineLabel(labelGroup, bounds, feature, geometry, category, labelIndex);
+          labelIndex += 1;
+          return;
+        }
+          if (geometry.type === "Point") {
+            const point = geoJsonCoordinateToPoint(geometry.coordinates);
+            if (!point) return;
+            const [x, y] = project(bounds, point.lat, point.lon);
+            const circle = el("circle", {cx: x.toFixed(2), cy: y.toFixed(2), r: osmPbfPointRadius(category), class: `osm-pbf-point ${category}`, ...osmPbfZoomAttrs(category, "point")});
+            attachEvidence(circle, item);
+            pointGroup.appendChild(circle);
+            appendOsmPbfLabel(labelGroup, feature, x, y, category, labelIndex);
+            labelIndex += 1;
+          }
       });
-      group.appendChild(el("text", {x: width - 10, y: height - 10, "text-anchor": "end", class: "osm-attribution"}, OSM_ATTRIBUTION));
+      group.appendChild(areaGroup);
+      group.appendChild(lineCasingGroup);
+      group.appendChild(lineCoreGroup);
+      group.appendChild(pointGroup);
+        group.appendChild(labelGroup);
+        group.appendChild(el("text", {x: width - 10, y: height - 24, "text-anchor": "end", class: "osm-attribution"}, "Scout local OSM PBF vector"));
+        return;
+      }
+    }
+    function layerInputChecked(layerId) {
+      const input = document.querySelector(`input[data-layer="${selectorValue(layerId)}"]`);
+      return !input || input.checked;
+    }
+    function renderRasterBasemapLayers(view) {
+      if (!view) return;
+      const bounds = boundsWithMap(view);
+      const coverageBounds = visibleBoundsFor(view) || bounds;
+      const imageryGroup = svg.querySelector('[data-layer-group="imagery"]');
+      if (imageryGroup) {
+        imageryGroup.replaceChildren();
+        if (layerInputChecked("imagery")) renderRasterImagery(imageryGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT, "imagery", coverageBounds);
+      }
+      RASTER_OVERLAY_LAYER_DEFINITIONS.forEach(layer => {
+        const rasterGroup = svg.querySelector(`[data-layer-group="${selectorValue(layer.layerId)}"]`);
+        if (!rasterGroup) return;
+        rasterGroup.replaceChildren();
+        if (layerInputChecked(layer.layerId)) renderRasterImagery(rasterGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT, layer.layerId, coverageBounds);
+      });
+      const osmGroup = svg.querySelector('[data-layer-group="osm"]');
+      if (osmGroup) {
+        osmGroup.replaceChildren();
+        if (layerInputChecked("osm")) renderOsmBasemap(osmGroup, bounds, MAP_WIDTH, MAP_HEIGHT, coverageBounds);
+      }
     }
 
     function terrainVisualization(view) {
@@ -2508,10 +3302,11 @@
       renderNarrativeFacts(item);
       renderCapabilityPanel(item);
       renderNextPlanCandidates(item);
-      document.getElementById("detailJson").textContent = JSON.stringify(item, null, 2);
+      document.getElementById("detailJson").textContent = JSON.stringify(isBossPoint(item) ? bossDetailPayload(item) : item, null, 2);
     }
 
     function detailTitle(item) {
+      if (isBossPoint(item)) return bossDisplayText(item);
       return item.name || item.checkpoint_id || item.segment_id || item.capsule_id || item.corridor_id || item.incident_id || item.source_id || item.evidence_type;
     }
 
@@ -2625,6 +3420,7 @@
           renderEnergyReserveMonitor(state.view);
           renderMap(state.view);
           renderEvidenceTree(state.view);
+          renderRuntimeSafetyStateStorePanel(state.view);
         }
         setDetail({
           ...(result.capability_timeline || {}),
@@ -3278,6 +4074,8 @@
       (view?.evidence_timeline?.categories || []).forEach(category => {
         const item = document.createElement("div");
         item.className = "evidence-timeline-item";
+        item.dataset.timelineCategory = category.category_id || "";
+        item.dataset.timelineSearchText = `${category.category_id || ""} ${category.label || ""}`.toLowerCase();
         const title = document.createElement("strong");
         title.textContent = `${category.label || category.category_id}: ${formatNumber(category.count)}`;
         const meta = document.createElement("small");
@@ -3292,6 +4090,36 @@
         empty.textContent = "No evidence timeline projection available.";
         list.appendChild(empty);
       }
+    }
+
+    function renderRuntimeSafetyStateStorePanel(view) {
+      const list = document.getElementById("runtimeSafetyStateStoreList");
+      if (!list) return;
+      list.replaceChildren();
+      const projection = view?.runtime_safety_state_store_projection || {};
+      const latest = projection.latest_snapshot || null;
+      const header = document.createElement("div");
+      header.className = "agent-skill-item";
+      header.innerHTML = `<strong>${projection.status || "missing"}</strong><small>${formatNumber(projection.snapshot_count || 0)} snapshots | ${projection.source_path || "no source ref"}</small>`;
+      list.appendChild(header);
+      if (latest) {
+        const item = document.createElement("div");
+        item.className = "agent-skill-item";
+        const title = document.createElement("strong");
+        title.textContent = latest.snapshot_id || "latest state snapshot";
+        const meta = document.createElement("small");
+        meta.textContent = `${latest.ln_level_candidate || "-"} | ${latest.reducer_state || "-"} | gate ${latest.selected_gate_id || "-"} | ${latest.recommendation || "-"}`;
+        const refs = document.createElement("small");
+        refs.textContent = `targets ${(latest.map_target_ids || []).join(", ") || "none"} | safety truth ${projection.boundary?.runtime_safety_truth === true}`;
+        item.appendChild(title);
+        item.appendChild(meta);
+        item.appendChild(refs);
+        list.appendChild(item);
+      }
+      const boundary = document.createElement("div");
+      boundary.className = "agent-skill-item";
+      boundary.innerHTML = `<strong>boundary</strong><small>projection_only=${projection.boundary?.projection_only === true} | phase1_l0_l4_state_mutated=${projection.boundary?.phase1_l0_l4_state_mutated === true} | safety_api_called=${projection.boundary?.safety_api_called === true}</small>`;
+      list.appendChild(boundary);
     }
 
     function renderAgentSkillsPanel(view) {
@@ -3369,7 +4197,9 @@
       if (item.evidence_type === "cross_surface_evidence_timeline_category") return "map";
       if (item.evidence_type === "post_analysis_capability") return "map";
       if (item.evidence_type === "completed_trip_scout_reaction_record") return "timeline";
+      if (String(item.evidence_type || "").includes("boss_point") || item.boss_point_id) return "mcp";
       if (String(item.evidence_type || "").includes("major_critical_point") || item.mcp_id) return "mcp";
+      if (String(item.evidence_type || "").includes("mileage")) return "mileage";
       if (String(item.evidence_type || "").includes("gis_perception") || item.nearby_group_id) return "gis";
       if (item.evidence_type === "mission_checkpoint" || item.checkpoint_id) return "checkpoint";
       if (item.evidence_type === "mission_segment") return "segment";
@@ -3380,6 +4210,37 @@
       if (String(item.evidence_type || "").includes("risk_")) return "risk";
       if (item.evidence_type === "device_observation") return "route";
       return "map";
+    }
+    function evidenceTreeTabForItem(item) {
+      const type = String(item?.evidence_type || "");
+      const category = evidenceCategory(item);
+      if (category === "risk" || ["gis", "mcp", "map"].includes(category) || type.includes("soil") || type.includes("rain")) return "map_risk";
+      if (category === "timeline" || category === "route" || type.includes("capability") || type.includes("completed_trip")) return "completed";
+      if (type.includes("review") || item?.candidate_ref) return "review";
+      if (category === "replay") return "info";
+      return "default";
+    }
+    function timelineTermsForItem(item) {
+      const category = evidenceCategory(item);
+      const type = String(item?.evidence_type || "").toLowerCase();
+      const terms = new Set([category, type]);
+      if (category === "risk" || type.includes("risk")) terms.add("map_risk");
+      if (category === "timeline" || type.includes("capability")) terms.add("timeline");
+      if (category === "mcp") terms.add("major");
+      if (category === "mileage") terms.add("mileage");
+      if (category === "gis") terms.add("gis");
+      return [...terms].filter(Boolean);
+    }
+    function highlightEvidenceTimelineFor(item) {
+      const terms = timelineTermsForItem(item);
+      let selected = null;
+      document.querySelectorAll(".evidence-timeline-item").forEach(node => {
+        const haystack = node.dataset.timelineSearchText || "";
+        const match = terms.some(term => term && haystack.includes(String(term).toLowerCase()));
+        node.classList.toggle("is-selected", match && !selected);
+        if (match && !selected) selected = node;
+      });
+      selected?.scrollIntoView({block: "nearest"});
     }
 
     function categoryColor(category) {
@@ -3403,10 +4264,14 @@
     }
 
     function hintTitle(item) {
+      if (isBossPoint(item)) return bossDisplayText(item);
       return item.name || item.checkpoint_id || item.corridor_id || item.rule_id || item.incident_id || item.source_id || item.evidence_type;
     }
 
     function hintSummary(item) {
+      if (isBossPoint(item)) return bossSummaryText(item);
+      const environmentSummary = environmentEvidenceSummary(item);
+      if (environmentSummary) return environmentSummary;
       if (item.evidence_type === "map_corridor") {
         return `${item.route_level || "corridor"} | width ${item.corridor_half_width_m}m | confidence ${item.source_metadata?.confidence ?? "-"}`;
       }
@@ -3469,7 +4334,86 @@
       if (!item) return "";
       if (item.evidence_type === "segment_capsule") return item.segment_id || item.capsule?.segment_id || item.source_id || "";
       if (item.evidence_type === "replay_checkpoint") return item.checkpoint?.checkpoint_id || item.source_id || "";
-      return item.source_id || item.event_id || item.checkpoint_id || item.segment_id || item.candidate_id || item.mcp_id || item.nearby_group_id || item.poi_id || item.corridor_id || item.hazard_id || item.incident_id || item.category_id || "";
+      return item.boss_point_id || item.source_mcp_id || item.source_candidate_id || item.source_id || item.event_id || item.checkpoint_id || item.segment_id || item.candidate_id || item.mcp_id || item.nearby_group_id || item.poi_id || item.corridor_id || item.hazard_id || item.incident_id || item.category_id || "";
+    }
+    function isBossPoint(item) {
+      return Boolean(item?.boss_point_id || String(item?.evidence_type || "").includes("boss_point"));
+    }
+    function bossDistanceLabel(item) {
+      const displayMileage = item?.display_mileage || {};
+      const displayLabel = String(displayMileage.label || displayMileage.display_label || "").trim();
+      if (displayLabel && displayLabel !== "K待校正") return displayLabel;
+      const distance = Number(item?.route_pressure_profile?.mid_distance_m ?? item?.evidence_summary?.route_pressure_profile?.mid_distance_m ?? item?.route_position?.distance_m);
+      return Number.isFinite(distance) ? `${(distance / 1000).toFixed(1)}K` : "";
+    }
+    function bossDisplayText(item) {
+      if (!isBossPoint(item)) return "";
+      const displayLabel = String(item?.display_label || "").trim();
+      if (displayLabel) return displayLabel;
+      const alias = String(item?.display_theme?.alias || "Boss").trim();
+      const label = String(item?.label || "").trim();
+      return [alias, label].filter(Boolean).join(" ") || String(item?.boss_point_id || "Boss Point");
+    }
+    function bossSummaryText(item) {
+      if (!isBossPoint(item)) return "";
+      const demand = item?.route_boss_demand || {};
+      const fit = item?.challenge_fit || {};
+      const pressure = item?.evidence_summary?.route_pressure_profile || item?.route_pressure_profile || {};
+      const distanceLabel = bossDistanceLabel(item);
+      const source = item?.coordinate_source || item?.map_coordinate_source || pressure.coordinate_source || "overpass_risk_ribbon_route_distance_interpolation";
+      return [
+        `demand ${Math.round(demand.score || 0)} ${demand.band || ""}`.trim(),
+        `fit ${Math.round(fit.score || 0)} ${fit.band || ""}`.trim(),
+        distanceLabel,
+        source
+      ].filter(Boolean).join(" | ");
+    }
+    function bossDetailPayload(item) {
+      if (!isBossPoint(item)) return item || {};
+      const pressure = item?.evidence_summary?.route_pressure_profile || item?.route_pressure_profile || {};
+      return {
+        display_label: bossDisplayText(item),
+        boss_point_id: item.boss_point_id,
+        label: item.label,
+        display_theme: item.display_theme,
+        lat: item.lat,
+        lon: item.lon,
+        coordinate_source: item.coordinate_source || item.map_coordinate_source || pressure.coordinate_source,
+        map_coordinate_source: item.map_coordinate_source,
+        canonical_centerline: "overpass_risk_ribbon",
+        gpx_evidence_axis: "projected_to_overpass_risk_ribbon",
+        route_position: item.route_position,
+        route_boss_demand: {
+          score: item.route_boss_demand?.score,
+          band: item.route_boss_demand?.band,
+          components: item.route_boss_demand?.components
+        },
+        challenge_fit: {
+          score: item.challenge_fit?.score,
+          band: item.challenge_fit?.band,
+          user_basis: item.challenge_fit?.user_basis
+        },
+        route_pressure_profile: {
+          pressure_peak_id: pressure.pressure_peak_id,
+          mid_distance_m: pressure.mid_distance_m,
+          route_pressure_score: pressure.route_pressure_score,
+          band: pressure.band,
+          coordinate_source: pressure.coordinate_source
+        },
+        evidence_summary: {
+          risk: item.evidence_summary?.risk || item.evidence_summary?.max_risk_score,
+          terrain: item.evidence_summary?.terrain,
+          slow_passage: item.evidence_summary?.slow_passage,
+          rest_stop_context: item.evidence_summary?.rest_stop_context,
+          nearby_route_note_count: item.evidence_summary?.nearby_route_note_count,
+          nearby_warning_note_count: item.evidence_summary?.nearby_warning_note_count
+        },
+        candidate_only: item.candidate_only,
+        runtime_safety_truth: item.runtime_safety_truth,
+        source_path: item.source_path,
+        source_refs: item.source_refs,
+        source_attribution: item.source_attribution
+      };
     }
 
     function selectorValue(value) {
@@ -3488,6 +4432,9 @@
         if (item.source_id === "map_hazards") return Array.from(svg.querySelectorAll('[data-map-kind="hazard"]'));
         if (item.source_id === "map_pois") return Array.from(svg.querySelectorAll('[data-map-kind="poi"]'));
       }
+      if (Array.isArray(item?.map_target_ids) && item.map_target_ids.length) {
+        return item.map_target_ids.flatMap(targetId => Array.from(svg.querySelectorAll(`[data-source-id="${selectorValue(targetId)}"]`)));
+      }
       if (!id) return [];
       return Array.from(svg.querySelectorAll(`[data-source-id="${selectorValue(id)}"]`));
     }
@@ -3497,6 +4444,9 @@
       return [
         evidenceSourceId(item),
         item.source_id,
+        item.boss_point_id,
+        item.source_mcp_id,
+        item.source_candidate_id,
         item.checkpoint_id,
         item.checkpoint?.checkpoint_id,
         item.candidate_id,
@@ -3504,6 +4454,7 @@
         item.nearby_group_id,
         item.poi_id,
         item.incident_id,
+        item.snapshot_id,
         item.source_ref,
         item.label,
         item.from_node_id,
@@ -3529,11 +4480,15 @@
         ...(view?.gis_perception_timeline?.checkpoint_candidates || []),
         ...(view?.gis_perception_timeline?.nearby_groups || []),
         ...(view?.major_critical_points?.candidates || []),
+        ...(view?.boss_points?.boss_points || []),
         ...(view?.route_notes?.candidates || []),
         ...(view?.map_candidates?.poi_candidates || []),
         ...(view?.overpass_evidence?.poi_candidates || []),
         ...(view?.risk_score?.points || []),
         ...(view?.incident_packages || []),
+        ...(view?.runtime_safety_state_store_projection?.latest_snapshot
+          ? [view.runtime_safety_state_store_projection.latest_snapshot]
+          : []),
         ...(view?.scout_reaction_simulation?.events || [])
       ];
     }
@@ -3687,6 +4642,10 @@
     function readablePointLabel(value) {
       const text = String(value || "").trim().replace(/\s+/g, " ");
       if (!text) return "";
+      if (text.includes("/")) {
+        const leaf = text.split("/").filter(Boolean).pop() || "";
+        if (leaf) return leaf.length > 48 ? `${leaf.slice(0, 47).trim()}…` : leaf;
+      }
       if (/^(node|way|relation)\/\d+$/.test(text) || /^\d{7,}$/.test(text)) return "";
       if (/^(gis_cp[._]|gis_cp_cluster\.|gis_cp_nearby_group\.|cp_note[._]|pretrip_gis_|overpass[._]|route_note\.reference_|ln_proposal\.route_note\.)/.test(text)) return "";
       const underscoreCount = (text.match(/_/g) || []).length;
@@ -3710,6 +4669,7 @@
     function pointLabelText(item) {
       const label = [
         item?.map_label,
+        bossDisplayText(item),
         item?.display_label,
         item?.short_label,
         item?.label,
@@ -3730,8 +4690,9 @@
     }
     function pointLabelCalloutTitle(item, fallbackLabel) {
       return [
-        item?.display_label,
         item?.map_label,
+        bossDisplayText(item),
+        item?.display_label,
         item?.route_note_summary,
         item?.summary,
         hintTitle(item),
@@ -3739,6 +4700,7 @@
       ].map(readablePointLabel).find(Boolean) || fallbackLabel || "selected point";
     }
     function pointLabelCalloutSummary(item, title) {
+      if (isBossPoint(item)) return bossSummaryText(item);
       return [
         hintSummary(item),
         item?.source_path,
@@ -3817,6 +4779,7 @@
         if (summaryText && summaryText !== titleText) {
           const summary = document.createElement("span");
           summary.textContent = summaryText;
+          node.appendChild(document.createTextNode("\n"));
           node.appendChild(summary);
         }
       } else {
@@ -3936,12 +4899,14 @@
       return pointBox(x, y);
     }
 
-    function focusMapBox(box, item = null) {
+    function focusMapBox(box, item = null, options = {}) {
       if (!box) return false;
-      const paddedWidth = Math.max(box.width + 90, 1);
-      const paddedHeight = Math.max(box.height + 90, 1);
-      const fitZoom = Math.min(MAP_WIDTH / paddedWidth, MAP_HEIGHT / paddedHeight);
-      state.zoom = focusZoomForBox(box, fitZoom, item);
+      if (options.preserveZoom === false) {
+        const paddedWidth = Math.max(box.width + 90, 1);
+        const paddedHeight = Math.max(box.height + 90, 1);
+        const fitZoom = Math.min(MAP_WIDTH / paddedWidth, MAP_HEIGHT / paddedHeight);
+        state.zoom = focusZoomForBox(box, fitZoom, item);
+      }
       state.panX = box.x + box.width / 2 - MAP_WIDTH / 2;
       state.panY = box.y + box.height / 2 - MAP_HEIGHT / 2;
       clampMapPan();
@@ -3952,7 +4917,7 @@
     function focusMapFor(item, options = {}) {
       if (options.label === true) state.focusedLabelIds = focusLabelIdsForItem(item);
       else if (options.label === false) state.focusedLabelIds = new Set();
-      const focused = focusMapBox(mapBoxFor(item), item);
+      const focused = focusMapBox(mapBoxFor(item), item, {preserveZoom: options.preserveZoom !== false});
       if (focused) highlightMapFor(item);
       updatePointLabels();
       return focused;
@@ -4026,8 +4991,6 @@
       const rawFactor = zoomFactor || Math.max(1, Math.min(MAP_WIDTH / box.width, MAP_HEIGHT / box.height));
       const factor = state.zoom > 1 ? Math.min(rawFactor, state.zoom) : rawFactor;
       state.zoom = Math.max(1, Math.min(MAP_MAX_ZOOM, state.zoom / factor));
-      state.panX = box.x + box.width / 2 - MAP_WIDTH / 2;
-      state.panY = box.y + box.height / 2 - MAP_HEIGHT / 2;
       clampMapPan();
       applyMapViewport();
       highlightMapFor(state.selected);
@@ -4038,8 +5001,62 @@
       return selection.current.x < selection.start.x && selection.current.y < selection.start.y;
     }
 
+    function beginMapPointerPan(event) {
+      if (state.mapInteractionMode !== "pan" || event.button !== 0) return;
+      state.panSelection = {
+        pointerId: event.pointerId,
+        screenX: event.clientX,
+        screenY: event.clientY,
+        currentScreenX: event.clientX,
+        currentScreenY: event.clientY,
+        moved: false
+      };
+      svg.classList.add("is-panning");
+      svg.setPointerCapture(event.pointerId);
+    }
+
+    function updateMapPointerPan(event) {
+      const selection = state.panSelection;
+      if (!selection || selection.pointerId !== event.pointerId) return;
+      const dx = event.clientX - selection.currentScreenX;
+      const dy = event.clientY - selection.currentScreenY;
+      const rect = svg.getBoundingClientRect();
+      const nextSelection = {
+        ...selection,
+        currentScreenX: event.clientX,
+        currentScreenY: event.clientY,
+        moved: selection.moved
+          || Math.abs(event.clientX - selection.screenX) > 6
+          || Math.abs(event.clientY - selection.screenY) > 6
+      };
+      state.panSelection = nextSelection;
+      if (!nextSelection.moved || !rect.width || !rect.height || (!dx && !dy)) return;
+      panMap(-dx * MAP_WIDTH / rect.width, -dy * MAP_HEIGHT / rect.height);
+      event.preventDefault();
+    }
+
+    function finishMapPointerPan(event) {
+      const selection = state.panSelection;
+      if (!selection || selection.pointerId !== event.pointerId) return false;
+      state.panSelection = null;
+      svg.classList.remove("is-panning");
+      if (svg.hasPointerCapture(event.pointerId)) svg.releasePointerCapture(event.pointerId);
+      return selection.moved;
+    }
+
+    function cancelMapPointerPan() {
+      state.panSelection = null;
+      svg.classList.remove("is-panning");
+    }
+
+    function handleMapWheelZoom(event) {
+      if (event.ctrlKey || event.metaKey) return;
+      event.preventDefault();
+      zoomMap(event.deltaY < 0 ? 1 : -1);
+    }
+
     function beginMapRectangleZoom(event) {
-      if (event.button !== 0) return;
+      if (state.mapInteractionMode !== "box" || event.button !== 0) return;
       const start = mapPointFromPointerEvent(event);
       if (!start) return;
       state.zoomSelection = {
@@ -4079,7 +5096,7 @@
         const box = boxFromPoints(selection.start, selection.current);
         if (isZoomOutDrag(selection)) zoomMapOutFromBox(box, selectionZoomFactor(selection));
         else zoomMapToBox(box);
-      }
+      } else if (selection) zoomMap(1);
     }
 
     function cancelMapRectangleZoom() {
@@ -4088,14 +5105,26 @@
       clearZoomSelectionOverlay();
     }
 
-    function highlightTreeNode(item) {
+    function highlightTreeNode(item, options = {}) {
       document.querySelectorAll(".tree button.is-selected").forEach(node => node.classList.remove("is-selected"));
       const sourceId = evidenceSourceId(item);
       const category = evidenceCategory(item);
       if (!sourceId) return;
       const selector = `[data-tree-source-id="${selectorValue(sourceId)}"][data-tree-category="${selectorValue(category)}"]`;
-      const match = document.querySelector(selector) || document.querySelector(`[data-tree-source-id="${selectorValue(sourceId)}"]`);
-      if (match) match.classList.add("is-selected");
+      let match = document.querySelector(selector) || document.querySelector(`[data-tree-source-id="${selectorValue(sourceId)}"]`);
+      if (!match && state.view) {
+        const tabId = evidenceTreeTabForItem(item);
+        if (state.activeEvidenceTreeTab !== tabId) {
+          state.activeEvidenceTreeTab = tabId;
+          renderEvidenceTree(state.view);
+          match = document.querySelector(selector) || document.querySelector(`[data-tree-source-id="${selectorValue(sourceId)}"]`);
+        }
+      }
+      if (match) {
+        match.classList.add("is-selected");
+        openEvidenceGroupForMatch(match, {expand: options.expand === true});
+        match.scrollIntoView({block: "nearest"});
+      }
     }
 
     function highlightMapFor(item) {
@@ -4105,9 +5134,10 @@
       targets.slice(0, 4).forEach(target => target.parentNode && target.parentNode.appendChild(target));
     }
 
-    function selectEvidence(item) {
+    function selectEvidence(item, options = {}) {
       setDetail(item);
-      highlightTreeNode(item);
+      highlightTreeNode(item, {expand: options.expandEvidenceGroup === true});
+      highlightEvidenceTimelineFor(item);
       highlightMapFor(item);
       renderAssistantPromptSuggestions(state.selected);
     }
@@ -4242,6 +5272,14 @@
       setAssistantStatus("Querying read-only assistant...");
       try {
         const queryPayload = assistantQueryPayload(resolvedQuestion);
+        const uiActionResult = await window.ScoutAssistantUI.tryHandleUiActionRequest({
+          surface: "admin",
+          requestText: resolvedQuestion,
+          queryPayload,
+          apiBase,
+          setStatus: setAssistantStatus
+        });
+        if (uiActionResult.handled) return;
         const payload = await window.ScoutAssistantUI.postJson("/assistant/query", queryPayload, {apiBase});
         renderAssistantResponse(payload, queryPayload);
       } catch (error) {
@@ -4268,6 +5306,43 @@
       window.ScoutAssistantUI.bindQuestionControls({submit: submitAssistantQuery});
     }
 
+    function handleScoutUiActionIntent(event) {
+      const action = event.detail?.action || {};
+      if (action.surface && action.surface !== "admin") return;
+      if (action.action_kind !== "focus_map_target") {
+        event.detail.result = {
+          status: "dispatched",
+          message: `Admin received ${action.action_kind || "ui action"} intent.`
+        };
+        return;
+      }
+      const target = action.target_ref === "selected"
+        ? (state.selected || state.view?.mission?.checkpoints?.[0] || state.view?.summary)
+        : findPointFocusEvidenceByRef(action.target_ref);
+      if (!target) {
+        event.detail.result = {
+          status: "blocked",
+          message: `No admin map target matched ${action.target_ref || "selected"}.`
+        };
+        return;
+      }
+      selectEvidence(target);
+      let focused = focusMapFor(target, {label: action.show_label !== false});
+      let focusedTarget = target;
+      if (!focused && action.target_ref === "selected" && state.view?.mission?.checkpoints?.[0]) {
+        focusedTarget = state.view.mission.checkpoints[0];
+        selectEvidence(focusedTarget);
+        focused = focusMapFor(focusedTarget, {label: action.show_label !== false});
+      }
+      event.detail.result = {
+        status: focused ? "applied" : "blocked",
+        message: focused
+          ? `Focused admin map target ${selectedAssistantContextLabel(focusedTarget)}.`
+          : `Admin map target ${selectedAssistantContextLabel(focusedTarget)} could not be focused.`
+      };
+    }
+    window.addEventListener("scout-ui-action-intent", handleScoutUiActionIntent);
+
     function tagEvidenceNode(node, item, mapKind = "") {
       const sourceId = evidenceSourceId(item);
       if (sourceId) node.setAttribute("data-source-id", sourceId);
@@ -4285,18 +5360,18 @@
       node.addEventListener("mousemove", moveHint);
       node.addEventListener("mouseleave", hideHint);
       node.addEventListener("focus", event => {
-        selectEvidence(item);
+        selectEvidence(item, {expandEvidenceGroup: true});
         showHint(event, item);
       });
       node.addEventListener("blur", hideHint);
       node.addEventListener("click", event => {
-        selectEvidence(item);
+        selectEvidence(item, {expandEvidenceGroup: true});
         showHint(event, item);
       });
       node.addEventListener("keydown", event => {
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
-          selectEvidence(item);
+          selectEvidence(item, {expandEvidenceGroup: true});
         }
       });
     }
@@ -4308,17 +5383,17 @@
       const routeCoords = view.route.points.map(point => ({lat: point.lat, lon: point.lon}));
 
       const imageryGroup = el("g", {"data-layer-group": "imagery"});
-      renderRasterImagery(imageryGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT);
+      if (layerInputChecked("imagery")) renderRasterImagery(imageryGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT);
       svg.appendChild(imageryGroup);
 
       RASTER_OVERLAY_LAYER_DEFINITIONS.forEach(layer => {
         const rasterGroup = el("g", {"data-layer-group": layer.layerId});
-        renderRasterImagery(rasterGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT, layer.layerId);
+        if (layerInputChecked(layer.layerId)) renderRasterImagery(rasterGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT, layer.layerId);
         svg.appendChild(rasterGroup);
       });
 
       const osmGroup = el("g", {"data-layer-group": "osm"});
-      renderOsmBasemap(osmGroup, bounds, MAP_WIDTH, MAP_HEIGHT);
+      if (layerInputChecked("osm")) renderOsmBasemap(osmGroup, bounds, MAP_WIDTH, MAP_HEIGHT);
       svg.appendChild(osmGroup);
 
       const terrainGroup = el("g", {"data-layer-group": "terrain"});
@@ -4434,7 +5509,8 @@
         if (coords.length < 2) return;
         const path = el("path", {
           d: pathFromCoords(bounds, coords),
-          class: `risk-ribbon ${segment.style_class || "risk-ribbon-moderate"}`
+          class: `risk-ribbon ${segment.style_class || "risk-ribbon-moderate"}`,
+          "data-risk-layer": "baseline"
         });
         if (segment.stroke) path.style.stroke = segment.stroke;
         attachEvidence(path, segment);
@@ -4449,7 +5525,8 @@
         if (coords.length < 2) return;
         const path = el("path", {
           d: pathFromCoords(bounds, coords),
-          class: `risk-heatmap ${segment.style_class || "risk-heatmap-low"}`
+          class: `risk-heatmap ${segment.style_class || "risk-heatmap-low"}`,
+          "data-risk-layer": "calibrated"
         });
         if (segment.stroke) path.style.stroke = segment.stroke;
         attachEvidence(path, segment);
@@ -4464,7 +5541,8 @@
         if (coords.length < 2) return;
         const path = el("path", {
           d: pathFromCoords(bounds, coords),
-          class: `risk-delta ${segment.style_class || "risk-delta-aligned"}`
+          class: `risk-delta ${segment.style_class || "risk-delta-aligned"}`,
+          "data-risk-layer": "delta"
         });
         if (segment.stroke) path.style.stroke = segment.stroke;
         attachEvidence(path, segment);
@@ -4472,6 +5550,67 @@
         riskDeltaGroup.appendChild(path);
       });
       svg.appendChild(riskDeltaGroup);
+      const cwaQpfGroup = el("g", {"data-layer-group": "cwa-qpf"});
+      renderEnvironmentExtent(cwaQpfGroup, bounds, "cwa-qpf", view.cwa_qpf, 0);
+      (view.cwa_qpf?.points || []).forEach(point => {
+        const [x, y] = project(bounds, point.lat, point.lon);
+        const circle = el("circle", {
+          cx: x,
+          cy: y,
+          r: 5.2,
+          class: `cwa-qpf-point ${cwaQpfClass(point)}`
+        });
+        attachEvidence(circle, point);
+        tagEvidenceNode(circle, point, "cwa-qpf");
+        cwaQpfGroup.appendChild(circle);
+        appendPointLabel(cwaQpfGroup, x, y, point, "cwa-qpf");
+      });
+      svg.appendChild(cwaQpfGroup);
+
+      const soilMoistureGroup = el("g", {"data-layer-group": "soil-moisture"});
+      renderEnvironmentExtent(soilMoistureGroup, bounds, "soil-moisture", view.soil_moisture, 1);
+      (view.soil_moisture?.points || []).forEach(point => {
+        const [x, y] = project(bounds, point.lat, point.lon);
+        const circle = el("circle", {cx: x, cy: y, r: 4.5, class: "soil-moisture-point"});
+        attachEvidence(circle, point);
+        tagEvidenceNode(circle, point, "soil-moisture");
+        soilMoistureGroup.appendChild(circle);
+      });
+      svg.appendChild(soilMoistureGroup);
+
+      const antecedentRainGroup = el("g", {"data-layer-group": "antecedent-rain"});
+      renderEnvironmentExtent(antecedentRainGroup, bounds, "antecedent-rain", view.antecedent_rain, 2);
+      (view.antecedent_rain?.points || []).forEach(point => {
+        const [x, y] = project(bounds, point.lat, point.lon);
+        const circle = el("circle", {
+          cx: x,
+          cy: y,
+          r: 4.8,
+          class: `antecedent-rain-point ${hydrologyRainClass(point)}`
+        });
+        attachEvidence(circle, point);
+        tagEvidenceNode(circle, point, "antecedent-rain");
+        antecedentRainGroup.appendChild(circle);
+      });
+      svg.appendChild(antecedentRainGroup);
+
+      const cwaWeatherGroup = el("g", {"data-layer-group": "cwa-weather"});
+      renderCwaWeatherImagery(cwaWeatherGroup, bounds, project, el);
+      renderEnvironmentExtent(cwaWeatherGroup, bounds, "cwa-weather", view.cwa_weather, 3);
+      (view.cwa_weather?.points || []).forEach(point => {
+        const [x, y] = project(bounds, point.lat, point.lon);
+        const circle = el("circle", {
+          cx: x,
+          cy: y,
+          r: 5,
+          class: `cwa-weather-point ${cwaWeatherClass(point)}`
+        });
+        attachEvidence(circle, point);
+        tagEvidenceNode(circle, point, "cwa-weather");
+        cwaWeatherGroup.appendChild(circle);
+        appendPointLabel(cwaWeatherGroup, x, y, point, "cwa-weather");
+      });
+      svg.appendChild(cwaWeatherGroup);
 
       const riskScoreGroup = el("g", {"data-layer-group": "risk-score"});
       (view.risk_score?.points || []).forEach(point => {
@@ -4545,6 +5684,22 @@
       });
       svg.appendChild(mcpGroup);
 
+      const bossGroup = el("g", {"data-layer-group": "boss-points"});
+      (view.boss_points?.boss_points || []).forEach(point => {
+        const coordinate = coordinateFromEvidence(point);
+        if (!coordinate) return;
+        const [x, y] = project(bounds, coordinate.lat, coordinate.lon);
+        const className = String(point.challenge_fit?.band || "").includes("not_ready")
+          ? "boss-point is-not-ready"
+          : "boss-point";
+        const circle = el("circle", {cx: x, cy: y, r: 7, class: className});
+        attachEvidence(circle, point);
+        tagEvidenceNode(circle, point, "boss-points");
+        bossGroup.appendChild(circle);
+        appendPointLabel(bossGroup, x, y, point, "boss-points");
+      });
+      svg.appendChild(bossGroup);
+
       const routeNoteGroup = el("g", {"data-layer-group": "route-notes"});
       (view.route_notes?.candidates || []).forEach(candidate => {
         const coordinate = coordinateFromEvidence(candidate);
@@ -4587,10 +5742,25 @@
       renderWeatherOverlayPlaceholder(weatherApiGroup, MAP_WIDTH, MAP_HEIGHT);
       svg.appendChild(weatherApiGroup);
 
+      orderMapLayerGroups();
       updateLayers();
       applyMapViewport();
     }
 
+    function scheduleTreeClickFocus(item) {
+      window.clearTimeout(treeClickFocusTimer);
+      selectEvidence(item);
+      treeClickFocusTimer = window.setTimeout(() => {
+        focusMapFor(item, {label: false});
+        treeClickFocusTimer = null;
+      }, 180);
+    }
+    function focusTreeItemImmediately(item, options = {}) {
+      window.clearTimeout(treeClickFocusTimer);
+      treeClickFocusTimer = null;
+      selectEvidence(item);
+      focusMapFor(item, options);
+    }
     function treeButton(item, mapped, sublabel = "") {
       const label = typeof mapped === "object" && mapped !== null ? mapped.label : mapped;
       const resolvedSublabel = typeof mapped === "object" && mapped !== null ? mapped.sublabel : sublabel;
@@ -4610,22 +5780,37 @@
         button.appendChild(small);
       }
       if (thumbnail) button.appendChild(thumbnail);
-      button.addEventListener("click", () => {
-        selectEvidence(item);
-        focusMapFor(item, {label: false});
-      });
+      button.addEventListener("click", () => scheduleTreeClickFocus(item));
       button.addEventListener("dblclick", event => {
         event.preventDefault();
-        selectEvidence(item);
-        focusMapFor(item, {label: true});
+        focusTreeItemImmediately(item, {label: true});
       });
       return button;
     }
 
-    function treeGroup(title, items, mapper, open = false, category = "map") {
+    function evidenceGroupKey(tabId, title) {
+      return `${tabId}:${title}`;
+    }
+    function openEvidenceGroupForMatch(match, options = {}) {
+      const details = match?.closest?.("details");
+      if (!details || options.expand !== true) return;
+      details.open = true;
+      if (details.dataset.evidenceGroupKey) state.evidenceTreeOpenGroups.add(details.dataset.evidenceGroupKey);
+    }
+    function trackEvidenceGroupToggle(details) {
+      details.addEventListener("toggle", () => {
+        const key = details.dataset.evidenceGroupKey;
+        if (!key) return;
+        if (details.open) state.evidenceTreeOpenGroups.add(key);
+        else state.evidenceTreeOpenGroups.delete(key);
+      });
+    }
+    function treeGroup(title, items, mapper, open = false, category = "map", groupKey = "") {
       const details = document.createElement("details");
-      details.open = false;
+      if (groupKey) details.dataset.evidenceGroupKey = groupKey;
+      details.open = Boolean(open || state.evidenceTreeOpenGroups.has(groupKey));
       details.style.setProperty("--category-color", categoryColor(category));
+      trackEvidenceGroupToggle(details);
       const summary = document.createElement("summary");
       summary.textContent = `${title} (${items.length})`;
       const group = document.createElement("div");
@@ -4664,7 +5849,7 @@
       const safeItems = items || [];
       state.evidenceTreeTabCounts[tabId] = (state.evidenceTreeTabCounts[tabId] || 0) + safeItems.length;
       if (state.activeEvidenceTreeTab !== tabId) return;
-      tree.appendChild(treeGroup(title, safeItems, mapper, open, category));
+      tree.appendChild(treeGroup(title, safeItems, mapper, open, category, evidenceGroupKey(tabId, title)));
     }
 
     function renderEvidenceTreeEmptyIfNeeded(tree) {
@@ -4687,6 +5872,14 @@
         label: item.safety_level,
         sublabel: `${item.observations_processed.toLocaleString()} observations | ${item.checkpoint_count} checkpoints | ${item.segment_capsule_count} capsules`
       }), false, "replay");
+      if (view.runtime_safety_state_store_projection) {
+        const projection = view.runtime_safety_state_store_projection;
+        const latest = projection.latest_snapshot ? [projection.latest_snapshot] : [];
+        appendEvidenceTreeGroup(tree, "info", "Runtime State Store", latest, item => ({
+          label: item.snapshot_id || projection.latest_snapshot_id || "state-store replay",
+          sublabel: `${item.ln_level_candidate || "-"} | ${item.reducer_state || "-"} | gate ${item.selected_gate_id || "-"} | ${projection.status}`
+        }), false, "timeline");
+      }
       appendEvidenceTreeGroup(tree, "default", "Checkpoints", view.mission.checkpoints, item => ({
         label: item.checkpoint_id,
         sublabel: `${item.checkpoint_type} | ${item.control_zone_after || "no zone"}`
@@ -4740,6 +5933,75 @@
         label: item.label || item.mcp_id,
         sublabel: `${item.confidence || "-"} | ${item.cp_support_reconciliation?.support_status || "support-review"} | ${Math.round(item.distance_m || 0)}m`
       }), false, "mcp");
+      appendEvidenceTreeGroup(tree, "default", "Boss Points", view.boss_points?.boss_points || [], item => ({
+        label: bossDisplayText(item),
+        sublabel: bossSummaryText(item)
+      }), false, "mcp");
+      appendEvidenceTreeGroup(tree, "default", "Mileage Tags", view.mileage_tag_alignment?.timeline_items || [], item => ({
+        label: item.label || item.display_mileage_label || item.source_id,
+        sublabel: `${item.source_kind || "mileage"} | ${item.route_projection_status || "projection-review"} | ${Math.round(item.route_distance_m || 0)}m`
+      }), false, "timeline");
+      const overpassGroups = view.overpass_evidence?.category_groups || {};
+      const overpassSummary = item => `${item.candidate_type || item.feature_type || "overpass"} | ${item.osm_type || "object"}/${item.osm_id || "-"} | ${item.confidence || "-"}`;
+      appendEvidenceTreeGroup(tree, "map_risk", "Overpass Trail Corridors", overpassGroups.overpass_trail_corridor || view.overpass_evidence?.corridor_candidates || [], item => ({
+        label: item.label || item.candidate_id,
+        sublabel: overpassSummary(item)
+      }), false, "route");
+      appendEvidenceTreeGroup(tree, "map_risk", "Overpass Hiking Routes", overpassGroups.overpass_hiking_route || [], item => ({
+        label: item.label || item.candidate_id,
+        sublabel: overpassSummary(item)
+      }), false, "route");
+      appendEvidenceTreeGroup(tree, "map_risk", "Overpass Shelters", overpassGroups.overpass_shelter || [], item => ({
+        label: item.label || item.candidate_id,
+        sublabel: overpassSummary(item)
+      }), false, "poi");
+      appendEvidenceTreeGroup(tree, "map_risk", "Overpass Water Sources", overpassGroups.overpass_water_source || [], item => ({
+        label: item.label || item.candidate_id,
+        sublabel: overpassSummary(item)
+      }), false, "poi");
+      appendEvidenceTreeGroup(tree, "map_risk", "Overpass Parking", overpassGroups.overpass_parking || [], item => ({
+        label: item.label || item.candidate_id,
+        sublabel: overpassSummary(item)
+      }), false, "poi");
+      appendEvidenceTreeGroup(tree, "map_risk", "Overpass Peaks", overpassGroups.overpass_peak || [], item => ({
+        label: item.label || item.candidate_id,
+        sublabel: overpassSummary(item)
+      }), false, "poi");
+      appendEvidenceTreeGroup(tree, "map_risk", "Overpass Terrain Risk", overpassGroups.overpass_terrain_risk || view.overpass_evidence?.hazard_candidates || [], item => ({
+        label: item.label || item.candidate_id,
+        sublabel: overpassSummary(item)
+      }), false, "risk");
+      appendEvidenceTreeGroup(tree, "map_risk", "Overpass Other POI", overpassGroups.overpass_other_poi || [], item => ({
+        label: item.label || item.candidate_id,
+        sublabel: overpassSummary(item)
+      }), false, "poi");
+      const osmPbfItems = view.osm_pbf_evidence?.items || [];
+      const osmPbfCategory = categoryId => osmPbfItems.filter(item => item.category_id === categoryId);
+      const osmPbfSummary = item => `${item.feature_type || "osm"} | ${item.geometry_type || "-"} | ${item.osm_type || "object"}/${item.osm_id || "-"}`;
+      appendEvidenceTreeGroup(tree, "map_risk", "OSM Trail Network", osmPbfCategory("trail_network"), item => ({
+        label: item.label || item.candidate_id,
+        sublabel: osmPbfSummary(item)
+      }), false, "route");
+      appendEvidenceTreeGroup(tree, "map_risk", "OSM Milestones", osmPbfCategory("milestone_route_marker"), item => ({
+        label: item.label || item.candidate_id,
+        sublabel: osmPbfSummary(item)
+      }), false, "timeline");
+      appendEvidenceTreeGroup(tree, "map_risk", "OSM Mobile", osmPbfCategory("mobile_signal"), item => ({
+        label: item.label || "通訊點",
+        sublabel: osmPbfSummary(item)
+      }), false, "poi");
+      appendEvidenceTreeGroup(tree, "map_risk", "OSM Peaks / Terrain", [...osmPbfCategory("peak_terrain"), ...osmPbfCategory("terrain_risk_context")], item => ({
+        label: item.label || item.candidate_id,
+        sublabel: osmPbfSummary(item)
+      }), false, "risk");
+      appendEvidenceTreeGroup(tree, "map_risk", "OSM POI / Amenities", osmPbfCategory("amenity_poi"), item => ({
+        label: item.label || item.candidate_id,
+        sublabel: osmPbfSummary(item)
+      }), false, "poi");
+      appendEvidenceTreeGroup(tree, "map_risk", "OSM Water / Hydrology", osmPbfCategory("water_hydrology"), item => ({
+        label: item.label || item.candidate_id,
+        sublabel: osmPbfSummary(item)
+      }), false, "risk");
       appendEvidenceTreeGroup(tree, "default", "AI GIS CP", view.gis_perception_timeline?.checkpoint_candidates || [], item => ({
         label: item.display_label || item.map_label || item.route_note_summary || item.candidate_id,
         sublabel: `${item.checkpoint_type || "-"} | group ${item.nearby_group_id || "-"} | ${item.route_note_freshness || "unknown"}`
@@ -4779,6 +6041,22 @@
       appendEvidenceTreeGroup(tree, "map_risk", "Risk Delta", view.risk_delta?.segments || [], item => ({
         label: `${item.delta_bucket || "delta"} ${Number(item.delta_score || 0).toFixed(1)}`,
         sublabel: `baseline ${Number(item.baseline_pretrip_risk || 0).toFixed(1)} | calibrated ${Number(item.calibrated_risk_candidate || 0).toFixed(1)}`
+      }), false, "risk");
+      appendEvidenceTreeGroup(tree, "map_risk", "CWA QPF", view.cwa_qpf?.points || [], item => ({
+        label: item.label || "CWA QPF",
+        sublabel: `${item.status || "candidate"} | PoP ${item.rain_probability ?? item.rainProbability ?? "-"}% | ${item.valid_from || "-"}`
+      }), false, "risk");
+      appendEvidenceTreeGroup(tree, "map_risk", "CWA Weather", view.cwa_weather?.points || [], item => ({
+        label: item.label || item.station_name || "CWA weather",
+        sublabel: `${item.evidence_type || "cwa"} | 24h ${item.last_24h_mm ?? "-"} mm | ${item.status || "candidate"}`
+      }), false, "risk");
+      appendEvidenceTreeGroup(tree, "map_risk", "Soil Moisture", view.soil_moisture?.points || [], item => ({
+        label: item.label || "SMAP soil moisture",
+        sublabel: `${item.collection_id || "SMAP"} | wetness ${item.sm_surface_wetness ?? item.antecedent_wetness_percentile ?? "-"}`
+      }), false, "risk");
+      appendEvidenceTreeGroup(tree, "map_risk", "Antecedent Rain", view.antecedent_rain?.points || [], item => ({
+        label: item.label || "GPM antecedent rain",
+        sublabel: `${item.collection_id || "GPM IMERG"} | 3h ${item.last_3h_mm ?? item.precipitation_mm ?? item.precipitation ?? "-"} mm`
       }), false, "risk");
       appendEvidenceTreeGroup(tree, "review", "Review Queue", view.review_queue?.items || [], item => ({
         label: item.title || item.item_id,
@@ -4872,7 +6150,7 @@
 
     function updateMetrics(view) {
       document.getElementById("caseMeta").textContent = view.summary.description || view.case_id;
-      document.getElementById("safetyLevel").textContent = view.replay.safety_level;
+      setReadableStateToken("safetyLevel", view.replay.safety_level);
       document.getElementById("segmentCapsules").textContent = view.replay.segment_capsule_count.toLocaleString();
       document.getElementById("routePoints").textContent = view.replay.observations_processed.toLocaleString();
       document.getElementById("corridors").textContent = view.map.corridors.length.toLocaleString();
@@ -4881,6 +6159,20 @@
       const meta = view.map.metadata;
       document.getElementById("mapMeta").textContent = `${meta.source} | confidence ${meta.confidence} | staleness ${meta.known_staleness_risk}`;
       renderEnergyReserveMonitor(view);
+    }
+
+    function readableStateToken(value) {
+      const raw = String(value || "").trim();
+      if (!raw) return "-";
+      return raw.replace(/^(L[0-4])_/, "$1 · ").replace(/_/g, " ");
+    }
+
+    function setReadableStateToken(id, value, fallback = "-") {
+      const node = document.getElementById(id);
+      if (!node) return;
+      const raw = String(value || fallback).trim();
+      node.textContent = readableStateToken(raw);
+      node.title = raw;
     }
 
     function setEnergyMonitorText(id, value, title) {
@@ -4919,27 +6211,155 @@
       const minY = (MAP_HEIGHT - height) / 2 + state.panY;
       return `${minX.toFixed(2)} ${minY.toFixed(2)} ${width.toFixed(2)} ${height.toFixed(2)}`;
     }
+    function mapViewportBox() {
+      const width = MAP_WIDTH / state.zoom;
+      const height = MAP_HEIGHT / state.zoom;
+      const minX = (MAP_WIDTH - width) / 2 + state.panX;
+      const minY = (MAP_HEIGHT - height) / 2 + state.panY;
+      return {minX, minY, width, height};
+    }
 
     function applyMapViewport() {
       svg.setAttribute("viewBox", mapViewBox());
+      renderRasterBasemapLayers(state.view);
       syncMapMarkerScale();
       updatePointLabels();
       updateMapZoomIndicator();
       updateScaleBar();
+    }
+    function mapLayerRank(node) {
+      return MAP_LAYER_RANKS[node.dataset.layerGroup] ?? 50;
+    }
+    function orderMapLayerGroups() {
+      [...svg.querySelectorAll(":scope > [data-layer-group]")]
+        .sort((left, right) => mapLayerRank(left) - mapLayerRank(right))
+        .forEach(node => svg.appendChild(node));
+    }
+    function mapKeyboardPanDelta(event) {
+      const step = event.shiftKey ? 140 : 70;
+      if (event.key === "ArrowUp") return [0, -step];
+      if (event.key === "ArrowDown") return [0, step];
+      if (event.key === "ArrowLeft") return [-step, 0];
+      if (event.key === "ArrowRight") return [step, 0];
+      return null;
+    }
+    function isEditableKeyboardTarget(target) {
+      const tag = String(target?.tagName || "").toLowerCase();
+      return target?.isContentEditable || ["input", "select", "textarea"].includes(tag);
+    }
+    function handleMapKeyboardPan(event) {
+      if (event.defaultPrevented) return;
+      const delta = mapKeyboardPanDelta(event);
+      if (event.altKey || event.ctrlKey || event.metaKey || isEditableKeyboardTarget(event.target)) return;
+      const mapHasFocus = document.activeElement === svg || svg.contains(document.activeElement);
+      if (!state.mapKeyboardActive && !mapHasFocus) return;
+      if (delta) panMap(delta[0], delta[1]);
+      else if (event.key === "+" || event.key === "=") zoomMap(1);
+      else if (event.key === "-") zoomMap(-1);
+      else if (event.key === "0") resetMapView();
+      else if (event.key.toLowerCase() === "p") setMapInteractionMode("pan");
+      else if (event.key.toLowerCase() === "b") setMapInteractionMode("box");
+      else if (event.key === "Escape") {
+        cancelMapRectangleZoom();
+        cancelMapPointerPan();
+      } else return;
+      event.preventDefault();
+    }
+    function activateMapKeyboardPan() {
+      state.mapKeyboardActive = true;
+      svg.focus({preventScroll: true});
+    }
+    function deactivateMapKeyboardPanOutside(event) {
+      if (!svg.contains(event.target)) state.mapKeyboardActive = false;
     }
     function updateMapZoomIndicator(extraLabel = "") {
       const node = document.getElementById("zoomLevel");
       if (!node) return;
       const zoomText = `${state.zoom.toFixed(2)}x`;
       node.textContent = extraLabel ? `${zoomText} ${extraLabel}` : zoomText;
-      node.title = "Map zoom; rectangle drag zoom is active.";
+      node.title = state.mapInteractionMode === "box"
+        ? "Map zoom; point and rectangle zoom are active."
+        : "Map zoom; mouse drag pan is active.";
+    }
+    function setMapInteractionMode(mode) {
+      state.mapInteractionMode = mode === "box" ? "box" : "pan";
+      cancelMapRectangleZoom();
+      cancelMapPointerPan();
+      svg.dataset.mapInteractionMode = state.mapInteractionMode;
+      const panButton = document.getElementById("panMode");
+      const boxButton = document.getElementById("boxZoomMode");
+      panButton?.classList.toggle("is-active", state.mapInteractionMode === "pan");
+      boxButton?.classList.toggle("is-active", state.mapInteractionMode === "box");
+      panButton?.setAttribute("aria-pressed", state.mapInteractionMode === "pan" ? "true" : "false");
+      boxButton?.setAttribute("aria-pressed", state.mapInteractionMode === "box" ? "true" : "false");
+      updateMapZoomIndicator(state.mapInteractionMode);
+    }
+    function mapStrokeWidthPx(node, scale) {
+      let base = 1.35;
+      if (node.classList.contains("route-line")) base = 2.55;
+      if (node.classList.contains("segment-overlay")) base = 3.55;
+      if (node.classList.contains("corridor")) base = 3.05;
+      if (node.classList.contains("retreat-line")) base = 2.05;
+      if (node.classList.contains("reference-track")) base = 1.4;
+      if (node.classList.contains("overpass-corridor")) base = 2.55;
+      if (node.classList.contains("risk-ribbon")) base = 3.35;
+      if (node.classList.contains("risk-heatmap")) base = 4.1;
+      if (node.classList.contains("risk-delta")) base = 2.9;
+      if (node.classList.contains("map-highlight")) base = Math.min(base, 2.8);
+      const factor = scale >= 128 ? 0.46 : scale >= 64 ? 0.6 : scale >= 32 ? 0.74 : 1;
+      return Math.max(1.0, base * factor);
+    }
+    function mapMarkerRadiusPx(circle, scale, baseRadius) {
+      let radius = Math.max(2.1, baseRadius);
+      if (circle.classList.contains("risk-score-point")) radius = Math.min(radius, 2.8);
+      if (circle.classList.contains("checkpoint")) radius = Math.min(radius, 4.8);
+      if (circle.classList.contains("mcp-candidate") || circle.classList.contains("boss-point")) radius = Math.min(radius, 5.4);
+      if (circle.classList.contains("map-highlight")) radius = Math.max(radius, 5.0);
+      if (scale >= 128) radius = Math.min(radius, 2.8);
+      else if (scale >= 64) radius = Math.min(radius, 3.4);
+      else if (scale >= 32) radius = Math.min(radius, 4.0);
+      return Math.max(1.7, radius);
     }
     function syncMapMarkerScale() {
       const scale = Math.max(state.zoom, 1);
+      svg.querySelectorAll("path,line,polyline,polygon,rect,circle").forEach(node => {
+        node.setAttribute("vector-effect", "non-scaling-stroke");
+        const strokeWidth = mapStrokeWidthPx(node, scale);
+        const priority = node.classList.contains("map-highlight") ? "important" : "";
+        node.style.setProperty("stroke-width", `${strokeWidth.toFixed(2)}px`, priority);
+      });
       svg.querySelectorAll("circle").forEach(circle => {
         if (!circle.dataset.baseRadius) circle.dataset.baseRadius = circle.getAttribute("r") || "4";
         const baseRadius = Number(circle.dataset.baseRadius);
-        if (Number.isFinite(baseRadius)) circle.setAttribute("r", Math.max(baseRadius / scale, 0.001));
+        if (Number.isFinite(baseRadius)) {
+          circle.setAttribute("r", Math.max(mapMarkerRadiusPx(circle, scale, baseRadius) / scale, 0.001).toFixed(4));
+        }
+      });
+      syncOsmPbfZoomVisibility(scale);
+      syncOsmPbfLabelScale(scale);
+    }
+    function syncOsmPbfZoomVisibility(scale) {
+      svg.querySelectorAll("[data-osm-pbf-zoom-min]").forEach(node => {
+        const minZoom = Number(node.dataset.osmPbfZoomMin);
+        node.style.display = Number.isFinite(minZoom) && scale < minZoom ? "none" : "";
+      });
+    }
+    function syncOsmPbfLabelScale(scale) {
+      const unitsPerPx = 1 / Math.max(scale, 1);
+      svg.querySelectorAll('[data-osm-pbf-label="true"]').forEach(label => {
+        const anchorX = Number(label.dataset.anchorX);
+        const anchorY = Number(label.dataset.anchorY);
+        if (!Number.isFinite(anchorX) || !Number.isFinite(anchorY)) return;
+        const fontSize = (11 * unitsPerPx).toFixed(3);
+        const strokeWidth = (3 * unitsPerPx).toFixed(3);
+        const offsetX = label.dataset.osmPbfLineLabel === "true" ? 0 : 6;
+        const offsetY = label.dataset.osmPbfLineLabel === "true" ? 0 : -5;
+        label.setAttribute("x", (anchorX + offsetX * unitsPerPx).toFixed(3));
+        label.setAttribute("y", (anchorY + offsetY * unitsPerPx).toFixed(3));
+        label.setAttribute("font-size", fontSize);
+        label.setAttribute("stroke-width", strokeWidth);
+        label.style.setProperty("font-size", `${fontSize}px`, "important");
+        label.style.setProperty("stroke-width", `${strokeWidth}px`, "important");
       });
     }
 
@@ -4978,10 +6398,135 @@
       return normalized >= 5 ? "risk-l5" : normalized >= 4 ? "risk-l4" : normalized >= 3 ? "risk-l3" : normalized >= 2 ? "risk-l2" : "risk-l1";
     }
 
+    function hydrologyRainClass(point) {
+      const value = Number(point?.last_3h_mm ?? point?.precipitation_mm ?? point?.precipitation ?? 0);
+      if (value >= 80) return "rain-extreme";
+      if (value >= 30) return "rain-high";
+      return "";
+    }
+    function cwaQpfClass(point) {
+      const probability = Number(point?.rain_probability ?? point?.rainProbability ?? 0);
+      const rainfall = Number(point?.rainfall_mm ?? point?.rainfallMm ?? 0);
+      if (probability >= 90 || rainfall >= 80) return "qpf-extreme";
+      if (probability >= 70 || rainfall >= 30) return "qpf-high";
+      return "";
+    }
+    function cwaWeatherClass(point) {
+      if (String(point?.evidence_type || "").includes("warning")) return "weather-warning";
+      if (Number(point?.last_24h_mm ?? 0) >= 80) return "weather-warning";
+      return "";
+    }
+    function environmentNumber(value, digits = 1, suffix = "") {
+      const number = Number(value);
+      if (!Number.isFinite(number)) return "n/a";
+      return `${number.toFixed(digits)}${suffix}`;
+    }
+    function environmentEvidenceSummary(item = {}) {
+      const layerId = String(item?.layer_id || item?.evidence_type || "").toLowerCase();
+      const candidateNote = "candidate-only context; not runtime safety truth";
+      if (layerId.includes("soil-moisture") || layerId.includes("soil_moisture")) {
+        return `SMAP L4 route bbox mean: surface ${environmentNumber(item?.sm_surface_wetness, 2)}, root ${environmentNumber(item?.sm_rootzone_wetness, 2)} | no-cache GEE evidence; ${candidateNote}`;
+      }
+      if (layerId.includes("antecedent-rain") || layerId.includes("antecedent_rain")) {
+        return `GPM IMERG route bbox 72h rain: ${environmentNumber(item?.last_72h_mm, 1, "mm")} | no-cache GEE evidence; ${candidateNote}`;
+      }
+      if (layerId.includes("cwa-qpf")) {
+        const pop = item?.rain_probability ?? item?.rainProbability;
+        const rain = item?.rainfall_mm ?? item?.rainfallMm;
+        const weather = item?.weather_text || item?.weatherText || item?.status || "forecast";
+        return `CWA forecast-derived QPF: PoP ${environmentNumber(pop, 0, "%")}, rain ${environmentNumber(rain, 1, "mm")} | ${weather}; ${candidateNote}`;
+      }
+      if (layerId.includes("cwa-weather")) {
+        if (String(item?.evidence_type || "").includes("warning")) {
+          return `Official CWA warning evidence: ${item?.headline || item?.label || item?.status || "warning"} | ${candidateNote}`;
+        }
+        const station = item?.station_name || item?.label || "CWA station";
+        return `CWA observation station: ${station} | 24h rain ${environmentNumber(item?.last_24h_mm, 1, "mm")} | ${candidateNote}`;
+      }
+      return "";
+    }
+    function environmentLayerBounds(layer) {
+      const bbox = layer?.bbox_wgs84 || layer?.summary?.bbox_wgs84 || {};
+      const west = Number(bbox.west ?? bbox.min_lon ?? bbox.minLon);
+      const east = Number(bbox.east ?? bbox.max_lon ?? bbox.maxLon);
+      const south = Number(bbox.south ?? bbox.min_lat ?? bbox.minLat);
+      const north = Number(bbox.north ?? bbox.max_lat ?? bbox.maxLat);
+      if (![west, east, south, north].every(Number.isFinite)) return null;
+      if (west >= east || south >= north) return null;
+      return {west, east, south, north};
+    }
+    function environmentLayerLabel(layerId, layer) {
+      const points = Array.isArray(layer?.points) ? layer.points : [];
+      const first = points[0] || {};
+      const values = layer?.summary?.values || {};
+      if (layerId === "soil-moisture") {
+        const surface = first.sm_surface_wetness ?? values.sm_surface_wetness;
+        const root = first.sm_rootzone_wetness ?? values.sm_rootzone_wetness;
+        return `SMAP surface ${environmentNumber(surface, 2)} / root ${environmentNumber(root, 2)}`;
+      }
+      if (layerId === "antecedent-rain") {
+        const rain72 = first.last_72h_mm ?? values.last_72h_mm;
+        return `GPM 72h ${environmentNumber(rain72, 1, "mm")}`;
+      }
+      if (layerId === "cwa-qpf") {
+        const maxPop = Math.max(0, ...points.map(point => Number(point.rain_probability ?? point.rainProbability ?? 0)).filter(Number.isFinite));
+        const maxRain = Math.max(0, ...points.map(point => Number(point.rainfall_mm ?? point.rainfallMm ?? 0)).filter(Number.isFinite));
+        return `CWA QPF PoP ${environmentNumber(maxPop, 0, "%")} / rain ${environmentNumber(maxRain, 1, "mm")}`;
+      }
+      if (layerId === "cwa-weather") {
+        const counts = layer?.counts || {};
+        const warnings = Number(counts.warning_point_count ?? 0);
+        const observations = Number(counts.observation_point_count ?? points.length ?? 0);
+        return `CWA warnings ${Number.isFinite(warnings) ? warnings : 0} / stations ${Number.isFinite(observations) ? observations : 0}`;
+      }
+      return layer?.label || layerId;
+    }
+    function renderEnvironmentExtent(group, bounds, layerId, layer, rowIndex = 0) {
+      const bbox = environmentLayerBounds(layer);
+      if (!bbox) return;
+      const [x1, y1] = project(bounds, bbox.north, bbox.west);
+      const [x2, y2] = project(bounds, bbox.south, bbox.east);
+      const x = Math.min(x1, x2);
+      const y = Math.min(y1, y2);
+      const width = Math.abs(x2 - x1);
+      const height = Math.abs(y2 - y1);
+      if (width < 1 || height < 1) return;
+      const points = Array.isArray(layer?.points) ? layer.points : [];
+      const item = {
+        ...(points[0] || {}),
+        source_id: layer?.source_id || `${layerId}.extent`,
+        candidate_id: layer?.source_id || `${layerId}.extent`,
+        evidence_type: layer?.evidence_type || `${layerId}_environment_extent`,
+        layer_id: layerId,
+        label: environmentLayerLabel(layerId, layer),
+        lat: (bbox.north + bbox.south) / 2,
+        lon: (bbox.west + bbox.east) / 2,
+      };
+      const rect = el("rect", {
+        x: x.toFixed(2),
+        y: y.toFixed(2),
+        width: width.toFixed(2),
+        height: height.toFixed(2),
+        rx: 8,
+        class: `environment-extent ${layerId}`,
+      });
+      attachEvidence(rect, item);
+      group.appendChild(rect);
+      const labelY = Math.min(Math.max(y + 22 + rowIndex * 24, 22), MAP_HEIGHT - 12);
+      const label = el("text", {
+        x: Math.min(Math.max(x + 10, 12), MAP_WIDTH - 320),
+        y: labelY,
+        class: `environment-value-label ${layerId}`,
+      }, item.label);
+      group.appendChild(label);
+    }
+
     function updateLayers() {
+      if (state.view) renderRasterBasemapLayers(state.view);
       layerInputs.forEach(input => {
         const group = svg.querySelector(`[data-layer-group="${input.dataset.layer}"]`);
         if (!group) return;
+        if (!input.checked && RASTER_BASEMAP_LAYER_IDS.has(input.dataset.layer)) group.replaceChildren();
         group.classList.toggle("is-hidden", !input.checked);
         group.setAttribute("data-layer-hidden", input.checked ? "false" : "true");
       });
@@ -4991,24 +6536,129 @@
         const enabled = inputs.filter(input => input.checked).length;
         summary.textContent = `${enabled}/${inputs.length}`;
       }
+      syncMapMarkerScale();
       updatePointLabels();
       highlightMapFor(state.selected);
+      syncLayerPresetButtons();
     }
 
+    function checkedLayerIds() {
+      return new Set([...layerInputs].filter(input => !input.disabled && input.checked).map(input => input.dataset.layer));
+    }
+
+    function availablePresetLayerSet(presetId) {
+      const available = new Set([...layerInputs].filter(input => !input.disabled).map(input => input.dataset.layer));
+      return new Set((LAYER_PRESETS[presetId] || []).filter(layer => available.has(layer)));
+    }
+
+    function matchingLayerPresetId() {
+      const checked = checkedLayerIds();
+      return Object.keys(LAYER_PRESETS).find(presetId => {
+        const preset = availablePresetLayerSet(presetId);
+        return checked.size === preset.size && [...preset].every(layer => checked.has(layer));
+      }) || "";
+    }
+
+    function syncLayerPresetButtons(activePresetId = matchingLayerPresetId()) {
+      document.querySelectorAll("[data-layer-preset]").forEach(button => {
+        const active = button.dataset.layerPreset === activePresetId;
+        button.classList.toggle("is-active", active);
+        button.setAttribute("aria-pressed", active ? "true" : "false");
+      });
+    }
+
+    function applyLayerPreset(presetId) {
+      const preset = availablePresetLayerSet(presetId);
+      if (!preset.size) return;
+      [...layerInputs].filter(input => !input.disabled).forEach(input => {
+        input.checked = preset.has(input.dataset.layer);
+      });
+      updateLayers();
+      syncLayerPresetButtons(presetId);
+    }
+    function closeLayerMenus(exceptMenu = null) {
+      document.querySelectorAll(".layer-menu[open]").forEach(menu => {
+        if (menu !== exceptMenu) menu.removeAttribute("open");
+      });
+    }
+    function layerMenuFromEvent(event) {
+      const path = typeof event.composedPath === "function" ? event.composedPath() : [];
+      const menuFromPath = path.find(node => node?.classList?.contains?.("layer-menu"));
+      if (menuFromPath) return menuFromPath;
+      return event.target?.closest?.(".layer-menu") || null;
+    }
+    function dismissLayerMenusForEvent(event) {
+      if (!layerMenuFromEvent(event)) closeLayerMenus();
+    }
+    function bindLayerMenuDismiss() {
+      if (window.__scoutLayerMenuDismissVersion === "v2") return;
+      window.__scoutLayerMenuDismissVersion = "v2";
+      document.querySelectorAll(".layer-menu").forEach(menu => {
+        menu.addEventListener("toggle", () => {
+          if (menu.open) closeLayerMenus(menu);
+        });
+      });
+      ["pointerdown", "mousedown", "touchstart", "click"].forEach(eventName => {
+        [window, document, document.documentElement, document.body]
+          .filter(Boolean)
+          .forEach(target => {
+            target.addEventListener(eventName, dismissLayerMenusForEvent, {capture: true, passive: true});
+          });
+      });
+      document.addEventListener("focusin", dismissLayerMenusForEvent, {capture: true});
+      document.addEventListener("keydown", event => {
+        if (event.key === "Escape") closeLayerMenus();
+      });
+    }
+
+    const cwaImageryUi = {manifest:null,windowId:"12h",frameIndex:0,productId:"radar",radarOpacity:.62,satelliteOpacity:.48,playTimer:null};
+    function cwaImageryFrames(family) {
+      const overlay=cwaImageryUi.manifest?.childOverlays?.[family]||{};
+      const ids=overlay.windows?.[cwaImageryUi.windowId]||[];
+      const hasWindow=Object.prototype.hasOwnProperty.call(overlay.windows||{},cwaImageryUi.windowId);
+      return (overlay.frames||[]).filter(frame=>(!hasWindow||ids.includes(frame.frameId))&&(cwaImageryUi.productId==="all"||cwaImageryUi.productId===family||frame.productId===cwaImageryUi.productId));
+    }
+    function selectedCwaImageryFrame(family) {const frames=cwaImageryFrames(family);return frames.length?frames[Math.min(cwaImageryUi.frameIndex,frames.length-1)]:null;}
+    function renderCwaWeatherImagery(group,bounds,projectFn,elementFn) {
+      ["satellite","radar"].forEach(family=>{const frame=selectedCwaImageryFrame(family);if(!frame?.assetUrl||!frame?.bboxWgs84||frame.mapOverlaySupported===false)return;const bbox=frame.bboxWgs84;const [x1,y1]=projectFn(bounds,bbox.north,bbox.west);const [x2,y2]=projectFn(bounds,bbox.south,bbox.east);group.appendChild(elementFn("image",{href:frame.assetUrl.startsWith("/")?`${apiBase()}${frame.assetUrl}`:frame.assetUrl,x:Math.min(x1,x2),y:Math.min(y1,y2),width:Math.abs(x2-x1),height:Math.abs(y2-y1),opacity:family==="radar"?cwaImageryUi.radarOpacity:cwaImageryUi.satelliteOpacity,preserveAspectRatio:"none","aria-hidden":"true","data-cwa-imagery-family":family,"data-cwa-imagery-frame":frame.frameId}));});
+    }
+    function replaceCwaProductOptions(select,products,selected){const families=[["radar","Radar latest"],["satellite","Satellite latest"],["all","All prepared (compare)"]].map(([value,label])=>{const option=document.createElement("option");option.value=value;option.textContent=label;return option;});const options=[...products.entries()].map(([id,label])=>{const option=document.createElement("option");option.value=id;option.textContent=label;return option;});select.replaceChildren(...families,...options);select.value=["radar","satellite","all"].includes(selected)||products.has(selected)?selected:"radar";}
+    function syncCwaImageryControls() {
+      const products=new Map();["radar","satellite"].forEach(family=>(cwaImageryUi.manifest?.childOverlays?.[family]?.frames||[]).forEach(frame=>{if(frame.productId)products.set(frame.productId,`${family}: ${frame.imageType||frame.productId} / ${frame.extent||"unknown"}`);}));
+      document.querySelectorAll("[data-cwa-imagery-product]").forEach(select=>{const selected=cwaImageryUi.productId;replaceCwaProductOptions(select,products,selected);});
+      const max=Math.max(cwaImageryFrames("radar").length,cwaImageryFrames("satellite").length,1);cwaImageryUi.frameIndex=Math.min(cwaImageryUi.frameIndex,max-1);
+      const playableFrameCount=Math.max(cwaImageryFrames("radar").length,cwaImageryFrames("satellite").length);if(playableFrameCount<2&&cwaImageryUi.playTimer){clearInterval(cwaImageryUi.playTimer);cwaImageryUi.playTimer=null;}document.querySelectorAll("[data-cwa-imagery-timeline]").forEach(input=>{input.max=String(max-1);input.value=String(cwaImageryUi.frameIndex);input.disabled=playableFrameCount<2;});document.querySelectorAll("[data-cwa-imagery-play]").forEach(button=>{button.disabled=playableFrameCount<2;if(playableFrameCount<2){button.textContent="Play";button.setAttribute("aria-pressed","false");}});
+      const current=selectedCwaImageryFrame("radar")||selectedCwaImageryFrame("satellite");document.querySelectorAll("[data-cwa-imagery-status]").forEach(output=>{output.setAttribute("aria-live",cwaImageryUi.playTimer?"off":"polite");output.textContent=current?`${current.sourceTimestamp||"unknown time"} · delay ${current.dataDelayMinutes??"n/a"}m · ${current.imageType||"imagery"}`:"Prepared CWA imagery unavailable";});
+    }
+    async function loadCwaWeatherImagery(projectId) {try{const response=await fetch(`${apiBase()}/admin/pretrip/projects/${encodeURIComponent(projectId)}/weather-imagery`);cwaImageryUi.manifest=response.ok?await response.json():null;}catch(_error){cwaImageryUi.manifest=null;}syncCwaImageryControls();}
+    function rerenderCwaImagery(){if(state.view)renderMap(state.view);}
+    function bindCwaWeatherImageryControls() {
+      document.querySelectorAll("[data-cwa-imagery-product]").forEach(select=>select.addEventListener("change",()=>{cwaImageryUi.productId=select.value;cwaImageryUi.frameIndex=0;syncCwaImageryControls();rerenderCwaImagery();}));
+      document.querySelectorAll("[data-cwa-imagery-window]").forEach(select=>select.addEventListener("change",()=>{cwaImageryUi.windowId=select.value;cwaImageryUi.frameIndex=0;syncCwaImageryControls();rerenderCwaImagery();}));
+      document.querySelectorAll("[data-cwa-imagery-timeline]").forEach(input=>input.addEventListener("input",()=>{cwaImageryUi.frameIndex=Number(input.value||0);syncCwaImageryControls();rerenderCwaImagery();}));
+      document.querySelectorAll("[data-cwa-imagery-opacity]").forEach(input=>input.addEventListener("input",()=>{const value=Number(input.value||0)/100;if(input.dataset.cwaImageryOpacity==="radar")cwaImageryUi.radarOpacity=value;else cwaImageryUi.satelliteOpacity=value;rerenderCwaImagery();}));
+      document.querySelectorAll("[data-cwa-imagery-play]").forEach(button=>button.addEventListener("click",()=>{const playableFrameCount=Math.max(cwaImageryFrames("radar").length,cwaImageryFrames("satellite").length);if(playableFrameCount<2)return;if(cwaImageryUi.playTimer){clearInterval(cwaImageryUi.playTimer);cwaImageryUi.playTimer=null;button.textContent="Play";button.setAttribute("aria-pressed","false");syncCwaImageryControls();return;}button.textContent="Pause";button.setAttribute("aria-pressed","true");cwaImageryUi.playTimer=setInterval(()=>{const max=Math.max(cwaImageryFrames("radar").length,cwaImageryFrames("satellite").length,1);cwaImageryUi.frameIndex=(cwaImageryUi.frameIndex+1)%max;syncCwaImageryControls();rerenderCwaImagery();},700);}));
+      syncCwaImageryControls();
+    }
     async function loadCase() {
       try {
+        const osmCartoPalettePromise = loadOsmCartoPalette();
         const response = await fetch(`${apiBase()}/admin/cases/${CASE_ID}`);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const view = await response.json();
         state.view = view;
+        await loadCwaWeatherImagery(PRETRIP_PROJECT_ID);
         updateMetrics(view);
         renderMap(view);
         renderEvidenceTree(view);
         renderEvidenceTimelinePanel(view);
+        renderRuntimeSafetyStateStorePanel(view);
         renderAgentSkillsPanel(view);
         renderCompletedTripRecordingPanel(view.completed_trip_recordings);
         renderScoutReactionSimulationPanel(view.scout_reaction_simulation);
         loadCompletedTripRecordings();
+        await osmCartoPalettePromise;
+        loadOsmPbfVectorLayer(view);
         setDetail({
           evidence_type: "case_summary",
           source_id: view.case_id,
@@ -5022,22 +6672,58 @@
         document.getElementById("detailJson").textContent = String(error.stack || error);
       }
     }
+    async function loadOsmPbfVectorLayer(view) {
+      const url = localOsmPbfVectorUrl(view);
+      if (!url) {
+        state.osmPbfVector = null;
+        state.osmPbfVectorStatus = "missing_ref";
+        return;
+      }
+      try {
+        state.osmPbfVectorStatus = "loading";
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        state.osmPbfVector = await response.json();
+        state.osmPbfVectorStatus = "ready";
+        if (state.view === view) renderMap(view);
+      } catch (error) {
+        state.osmPbfVector = null;
+        state.osmPbfVectorStatus = `failed: ${error.message}`;
+      }
+    }
 
+    bindLayerMenuDismiss();
     layerInputs.forEach(input => input.addEventListener("change", updateLayers));
+    document.querySelectorAll("[data-layer-preset]").forEach(button => {
+      button.addEventListener("click", () => applyLayerPreset(button.dataset.layerPreset));
+    });
     document.getElementById("zoomIn").addEventListener("click", () => zoomMap(1));
     document.getElementById("zoomOut").addEventListener("click", () => zoomMap(-1));
     document.getElementById("fitRoute").addEventListener("click", resetMapView);
-    document.getElementById("boxZoomMode").addEventListener("click", () => updateMapZoomIndicator("box"));
+    document.getElementById("panMode").addEventListener("click", () => setMapInteractionMode("pan"));
+    document.getElementById("boxZoomMode").addEventListener("click", () => setMapInteractionMode("box"));
     document.getElementById("panUp").addEventListener("click", () => panMap(0, -70));
     document.getElementById("panDown").addEventListener("click", () => panMap(0, 70));
     document.getElementById("panLeft").addEventListener("click", () => panMap(-70, 0));
     document.getElementById("panRight").addEventListener("click", () => panMap(70, 0));
+    svg.setAttribute("tabindex", "0");
+    svg.addEventListener("pointerdown", activateMapKeyboardPan);
+    svg.addEventListener("keydown", handleMapKeyboardPan);
+    document.addEventListener("keydown", handleMapKeyboardPan);
+    document.addEventListener("pointerdown", deactivateMapKeyboardPanOutside);
     svg.addEventListener("pointerdown", beginMapRectangleZoom);
     svg.addEventListener("pointermove", updateMapRectangleZoom);
     svg.addEventListener("pointerup", finishMapRectangleZoom);
     svg.addEventListener("pointercancel", cancelMapRectangleZoom);
+    svg.addEventListener("pointerdown", beginMapPointerPan);
+    svg.addEventListener("pointermove", updateMapPointerPan);
+    svg.addEventListener("pointerup", finishMapPointerPan);
+    svg.addEventListener("pointercancel", cancelMapPointerPan);
+    svg.addEventListener("wheel", handleMapWheelZoom, {passive: false});
+    setMapInteractionMode("pan");
     initSplitters();
     bindAssistantControls();
+    bindCwaWeatherImageryControls();
     loadAssistantStatus();
     loadCase();
   </script>

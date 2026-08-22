@@ -113,6 +113,13 @@ def build_route_risk_profile(
                     pretrip_risk,
                     thresholds=risk_config.risk_level_thresholds,
                 ),
+                route_base_source=point.route_base_source,
+                route_base_feature_id=point.route_base_feature_id,
+                route_base_projection_distance_m=(
+                    round(point.route_base_projection_distance_m, 3)
+                    if point.route_base_projection_distance_m is not None
+                    else None
+                ),
                 hazard_types=hazard_types,
                 confidence=RiskConfidence(
                     scp_confidence="medium" if matching_notes else "low"

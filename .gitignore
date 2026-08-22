@@ -29,6 +29,7 @@ ENV/
 # IDE
 .vscode/
 .idea/
+docs/.obsidian/
 *.swp
 *.swo
 *~
@@ -73,6 +74,10 @@ Scout/
 !skills/scout/
 !skills/scout/*.yaml
 
+# Keep generated Python bytecode ignored after source-tree re-inclusion rules.
+**/__pycache__/
+**/*.py[cod]
+
 # Scout local captures and heavyweight map data
 PdrSample/
 catographydata/
@@ -82,3 +87,17 @@ trajectory_map.png
 
 # Local operator setup helpers
 install_skills.sh
+
+# Alpha phone/wearable sandbox runtime artifacts
+/outputs/dashboard/living/alpha/
+
+# Generated qualification, evaluation, and local Dashboard evidence
+# Canonical summaries and retention manifests belong under docs/evals/.
+/artifacts/qualification/
+/outputs/qualification/
+/outputs/evals/
+/outputs/.obsidian/
+/outputs/dashboard/body_index/
+/outputs/dashboard/living/current.json
+/outputs/dashboard/living/runs/
+/outputs/dashboard/living/system-test-mobile-ui-run.json

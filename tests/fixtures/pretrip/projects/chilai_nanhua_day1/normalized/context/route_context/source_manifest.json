@@ -1,0 +1,387 @@
+{
+  "artifact_kind": "pretrip_route_context_source_manifest",
+  "boundary": {
+    "candidate_only": true,
+    "compile_allowed": false,
+    "live_safety_api_calls_allowed": false,
+    "phase1_runtime_mutation_allowed": false,
+    "phase2_brain_writeback_allowed": false,
+    "raw_payloads_embedded": false,
+    "runtime_safety_truth": false,
+    "safety_api_called": false,
+    "source_fulltext_embedded": false,
+    "workspace_file_mutation_allowed": true
+  },
+  "cache_policy": {
+    "answer_order": [
+      "live_refreshed_workspace_evidence",
+      "route_context_pack",
+      "local_spatial_index",
+      "operator_approved_source_refresh",
+      "fallback_with_uncertainty"
+    ],
+    "cache_only_answer_allowed": false,
+    "live_source_refresh_ref": "outputs/layers/normalized/web_case_evidence.json",
+    "live_source_refresh_status": "legacy_cache_without_network_provenance",
+    "mode": "live_source_refresh_required",
+    "network_refresh_required": true,
+    "offline_regeneration_allowed": true,
+    "offline_regeneration_boundary": "offline rebuilds may regenerate briefing artifacts from cache, but must preserve missing live-source-refresh evidence",
+    "refresh_required_before_runtime_truth": true,
+    "stale_source_safety_risk": true
+  },
+  "crawl_seed_plan_ref": "normalized/context/route_context/crawl_seed_plan.json",
+  "generated_at": "2026-07-03T00:00:00Z",
+  "live_source_refresh_evidence": {
+    "candidate_only": true,
+    "checked_at": "2026-07-03T00:00:00Z",
+    "collector_schema_version": null,
+    "network_calls_allowed": null,
+    "network_calls_made": null,
+    "reason": "The P0/P1 source artifact predates explicit network-call provenance.",
+    "runtime_safety_truth": false,
+    "source_generated_at": "2026-06-15T12:30:00Z",
+    "source_ref": "outputs/layers/normalized/web_case_evidence.json",
+    "status": "legacy_cache_without_network_provenance"
+  },
+  "optional_missing_source_kinds": [
+    "raster_label_evidence"
+  ],
+  "project_id": "chilai_nanhua_day1",
+  "required_missing_source_kinds": [],
+  "route_context_briefing_ref": "outputs/briefings/route_context_briefing.html",
+  "route_context_media_manifest_ref": "normalized/context/route_context/media_manifest.json",
+  "schema_version": "route_context_collection.v1",
+  "source_report": [
+    {
+      "candidate_only": true,
+      "conclusion_role": "representative_candidate",
+      "loaded_count": 6,
+      "required_by_standard_sec6": true,
+      "runtime_safety_truth": false,
+      "sha256": "51e7882dfb8bdd3fbc2c2257bfcca758459f612efa8bfcb9e6df012a9bf2f553",
+      "source_kind": "mcp_candidates",
+      "source_path": "outputs/mcp/mcp_candidates.json",
+      "source_tier": "P1",
+      "status": "loaded"
+    },
+    {
+      "candidate_only": true,
+      "conclusion_role": "representative_candidate",
+      "loaded_count": 8,
+      "required_by_standard_sec6": true,
+      "runtime_safety_truth": false,
+      "sha256": "a84c44ef13b1aeaea6fe58a23628e8e0107a44b8cca623a395cad8b637f1d86d",
+      "source_kind": "named_point_evidence",
+      "source_path": "outputs/mcp/named_point_evidence.json",
+      "source_tier": "P1",
+      "status": "loaded"
+    },
+    {
+      "candidate_only": true,
+      "conclusion_role": "representative_candidate_after_review",
+      "loaded_count": 1,
+      "required_by_standard_sec6": false,
+      "runtime_safety_truth": false,
+      "sha256": "7931015667a4585bbc460cef35ecf8c32768be47ec491361f2de142f6afd93c9",
+      "source_kind": "ocr_label_evidence",
+      "source_path": "outputs/mcp/mcp_ocr_labels.json",
+      "source_tier": "P1",
+      "status": "loaded"
+    },
+    {
+      "candidate_only": true,
+      "conclusion_role": "primary_briefing_evidence",
+      "loaded_count": 1,
+      "required_by_standard_sec6": false,
+      "runtime_safety_truth": false,
+      "sha256": "ddc6162cf52bfe9f8ac7a0e68b6a4fcd617b23e228e157b86df4a11c3a32d225",
+      "source_kind": "web_case_evidence",
+      "source_path": "outputs/layers/normalized/web_case_evidence.json",
+      "source_tier": "P0",
+      "source_tier_counts": {
+        "P0": 1
+      },
+      "status": "loaded"
+    },
+    {
+      "candidate_only": true,
+      "conclusion_role": "representative_candidate_after_review",
+      "loaded_count": 0,
+      "required_by_standard_sec6": false,
+      "runtime_safety_truth": false,
+      "sha256": null,
+      "source_kind": "raster_label_evidence",
+      "source_path": "outputs/layers/normalized/raster_label_evidence.geojson",
+      "source_tier": "P1",
+      "status": "missing"
+    },
+    {
+      "candidate_only": true,
+      "conclusion_role": "seed_only",
+      "loaded_count": 4406,
+      "required_by_standard_sec6": false,
+      "runtime_safety_truth": false,
+      "sha256": "ef2ae8d21e76685c899ea4035faafa5da11490e7e014c0be0aa12c788e43e50d",
+      "source_kind": "route_note_candidates",
+      "source_path": "candidates/route_note_candidates.json",
+      "source_tier": "P2",
+      "status": "loaded"
+    },
+    {
+      "candidate_only": true,
+      "conclusion_role": "provenance_only",
+      "loaded_count": 1,
+      "required_by_standard_sec6": false,
+      "runtime_safety_truth": false,
+      "sha256": "cd604e835fb9ab057f43e35c5308b0162b51c62d27c6b0bc74fba6066218d705",
+      "source_kind": "import_manifest",
+      "source_path": "outputs/import_manifest.json",
+      "source_tier": "P2",
+      "status": "loaded"
+    },
+    {
+      "candidate_only": true,
+      "conclusion_role": "route_scope",
+      "loaded_count": 1,
+      "required_by_standard_sec6": false,
+      "runtime_safety_truth": false,
+      "sha256": "28685bac2d466fb732395815b040c19ae536373dac760093731e7d533fdb10e8",
+      "source_kind": "route_summary",
+      "source_path": "normalized/routes/route_summary.json",
+      "source_tier": "P2",
+      "status": "loaded"
+    }
+  ],
+  "source_strategy": {
+    "P0": "官方資料用來確認路線、地形、天氣、危險、救援、生態與歷史地圖基線。",
+    "P1": "延伸資料用來補充公開命名點、路線故事、社群文章與地圖標籤。",
+    "P2": "隊伍觀察只作行前提醒與回顧線索；沒有佐證前不能變成廣泛路線結論。",
+    "briefing_conclusion_policy": "行前結論優先使用官方或可追溯公開資料；隊伍回顧只作已標示來源的提醒。",
+    "route_note_policy": "路線筆記預設只作待查線索，不直接形成行前結論。"
+  },
+  "source_tiers": [
+    {
+      "label": "林業及自然保育署自然步道資料",
+      "role": "official_baseline",
+      "source_id": "forest_trail_data",
+      "tier": "P0"
+    },
+    {
+      "label": "台灣山林悠遊網開放資料",
+      "role": "official_baseline",
+      "source_id": "taiwan_mountain_forest_open_data",
+      "tier": "P0"
+    },
+    {
+      "label": "臺灣登山申請一站式服務網",
+      "role": "official_baseline",
+      "source_id": "mountain_permit_service",
+      "tier": "P0"
+    },
+    {
+      "label": "國家公園路線開放狀態",
+      "role": "official_status",
+      "source_id": "national_park_route_status",
+      "tier": "P0"
+    },
+    {
+      "label": "內政部國土測繪中心 DEM / DTM / 地形圖",
+      "role": "terrain_baseline",
+      "source_id": "nlsc_dem_dtm_topomap",
+      "tier": "P0"
+    },
+    {
+      "label": "中央氣象署 CODiS / 開放資料",
+      "role": "weather_baseline",
+      "source_id": "cwa_codis_open_data",
+      "tier": "P0"
+    },
+    {
+      "label": "NCDR 災害潛勢資料",
+      "role": "hazard_baseline",
+      "source_id": "ncdr_disaster_potential",
+      "tier": "P0"
+    },
+    {
+      "label": "消防署山域事故救援案件",
+      "role": "incident_baseline",
+      "source_id": "nfa_mountain_rescue_cases",
+      "tier": "P0"
+    },
+    {
+      "label": "地方消防局山域事故與即時災情",
+      "role": "incident_local_baseline",
+      "source_id": "regional_fire_department_incident_feeds",
+      "tier": "P0"
+    },
+    {
+      "label": "政府資料開放平臺山域事故清冊 / 消防救援統計",
+      "role": "incident_open_data_baseline",
+      "source_id": "government_open_data_mountain_incidents",
+      "tier": "P0"
+    },
+    {
+      "label": "TBN 台灣生物多樣性網絡",
+      "role": "natural_baseline",
+      "source_id": "tbn_biodiversity",
+      "tier": "P0"
+    },
+    {
+      "label": "中研院臺灣百年歷史地圖",
+      "role": "historical_map_baseline",
+      "source_id": "as_taiwan_century_maps",
+      "tier": "P0"
+    },
+    {
+      "label": "尋路・循路－臺灣原住民族古道空間資訊網",
+      "role": "cultural_trail_baseline",
+      "source_id": "tacp_indigenous_historic_trails",
+      "tier": "P0"
+    },
+    {
+      "label": "國家文化記憶庫",
+      "role": "cultural_expansion",
+      "source_id": "national_culture_memory_bank",
+      "tier": "P1"
+    },
+    {
+      "label": "臺灣記憶",
+      "role": "historical_expansion",
+      "source_id": "taiwan_memory",
+      "tier": "P1"
+    },
+    {
+      "label": "原住民族古道空間資訊網",
+      "role": "cultural_spatial_expansion",
+      "source_id": "indigenous_trail_spatial_info",
+      "tier": "P1"
+    },
+    {
+      "label": "地質雲",
+      "role": "geology_expansion",
+      "source_id": "geology_cloud",
+      "tier": "P1"
+    },
+    {
+      "label": "OpenStreetMap / Overpass / OSM full-history",
+      "role": "map_expansion",
+      "source_id": "osm_overpass_history",
+      "tier": "P1"
+    },
+    {
+      "label": "魯地圖",
+      "role": "map_expansion",
+      "source_id": "rudymap",
+      "tier": "P1"
+    },
+    {
+      "label": "地圖產生器 / 山友 GPX",
+      "role": "community_route_seed",
+      "source_id": "map_generator_hiker_gpx",
+      "tier": "P1"
+    },
+    {
+      "label": "健行筆記",
+      "role": "community_article_evidence",
+      "source_id": "hiking_biji",
+      "tier": "P1"
+    },
+    {
+      "label": "Hikingbook",
+      "role": "community_route_evidence",
+      "source_id": "hikingbook",
+      "tier": "P1"
+    },
+    {
+      "label": "PTT Hiking",
+      "role": "community_article_evidence",
+      "source_id": "ptt_hiking",
+      "tier": "P1"
+    },
+    {
+      "label": "登山補給站",
+      "role": "community_article_evidence",
+      "source_id": "mountain_news_bbs",
+      "tier": "P1"
+    },
+    {
+      "label": "中華民國山難救助協會 / 山域搜救訓練資料",
+      "role": "rescue_training_reference",
+      "source_id": "mountain_rescue_association_knowledge",
+      "tier": "P1"
+    },
+    {
+      "label": "跑山獸 / 山小白 / 公開搜救與登山專家影音",
+      "role": "field_rescue_expert_observation",
+      "source_id": "expert_field_rescue_media",
+      "tier": "P1"
+    },
+    {
+      "label": "公開社群影音與路線貼文",
+      "role": "community_media_evidence",
+      "source_id": "public_community_media_posts",
+      "tier": "P1"
+    },
+    {
+      "label": "使用者實際 GPX",
+      "role": "scout_owned_observation",
+      "source_id": "user_completed_gpx",
+      "tier": "P2"
+    },
+    {
+      "label": "偏航紀錄",
+      "role": "scout_owned_observation",
+      "source_id": "off_route_records",
+      "tier": "P2"
+    },
+    {
+      "label": "停留點",
+      "role": "scout_owned_observation",
+      "source_id": "stay_points",
+      "tier": "P2"
+    },
+    {
+      "label": "拍照點",
+      "role": "scout_owned_observation",
+      "source_id": "photo_points",
+      "tier": "P2"
+    },
+    {
+      "label": "語音註記",
+      "role": "scout_owned_observation",
+      "source_id": "voice_notes",
+      "tier": "P2"
+    },
+    {
+      "label": "IMU 異常",
+      "role": "scout_owned_observation",
+      "source_id": "imu_anomalies",
+      "tier": "P2"
+    },
+    {
+      "label": "氣壓高度變化",
+      "role": "scout_owned_observation",
+      "source_id": "barometric_altitude_changes",
+      "tier": "P2"
+    },
+    {
+      "label": "前鋒/後衛距離",
+      "role": "scout_owned_team_context",
+      "source_id": "front_rear_distance",
+      "tier": "P2"
+    },
+    {
+      "label": "隊伍拉長紀錄",
+      "role": "scout_owned_team_context",
+      "source_id": "team_stretch_records",
+      "tier": "P2"
+    },
+    {
+      "label": "使用者回報「值得停」或「不值得停」",
+      "role": "scout_owned_review_feedback",
+      "source_id": "user_worth_stop_feedback",
+      "tier": "P2"
+    }
+  ]
+}

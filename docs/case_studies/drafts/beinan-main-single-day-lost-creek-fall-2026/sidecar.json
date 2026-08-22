@@ -1,0 +1,199 @@
+{
+  "schema_version": "case-study-addition.v0.1",
+  "case_id": "beinan_main_single_day_lost_creek_fall_2026",
+  "case_slug": "beinan-main-single-day-lost-creek-fall-2026",
+  "status": "draft",
+  "created_at": "2026-06-25T00:00:00+08:00",
+  "sources": [
+    {
+      "source_id": "src_001",
+      "type": "pasted_text",
+      "title": "徹夜未眠！卑南主到玉山後四峰，跨單位一日雙線緊急救援",
+      "url": null,
+      "publisher": "Kaohsiung City Fire Department Sixth Brigade, attributed pasted text",
+      "published_date": null,
+      "accessed_at": "2026-06-25",
+      "reliability": "reported_fact",
+      "source_url_hint": "https://www.facebook.com/100064842872284/photos/470632158441543/",
+      "access_note": "Text supplied by user; external search found a matching Facebook URL hint, but direct page fetch was not used as the source body.",
+      "text_summary": "Pasted rescue summary describing a 2026-06-22 Beinan Main Mountain single-day party delay, lost subgroup, creek fall injury, and 2026-06-23 rescue."
+    }
+  ],
+  "quotes": [
+    {
+      "quote_id": "q_001",
+      "source_id": "src_001",
+      "text": "因隊伍腳程落差，有3名山友未能在原定時間下山，加上天色昏暗不慎迷途",
+      "reason": "reported late subgroup and lost-party trigger",
+      "copyright_check": "short_excerpt"
+    },
+    {
+      "quote_id": "q_002",
+      "source_id": "src_001",
+      "text": "在嘗試移動時其中1人不慎跌落溪谷，足部腫脹疼痛無法行走",
+      "reason": "reported injury after attempted movement",
+      "copyright_check": "short_excerpt"
+    },
+    {
+      "quote_id": "q_003",
+      "source_id": "src_001",
+      "text": "迷途時請「原地等待」",
+      "reason": "reported safety reminder",
+      "copyright_check": "short_excerpt"
+    },
+    {
+      "quote_id": "q_004",
+      "source_id": "src_001",
+      "text": "於23日上午順利接觸迷途山友並進行患部評估包紮、繩索拖拉",
+      "reason": "reported rescue contact and extraction actions",
+      "copyright_check": "short_excerpt"
+    }
+  ],
+  "source_facts": [
+    {
+      "fact_id": "fact_001",
+      "summary": "The pasted rescue summary reports that a seven-person group challenged Beinan Main Mountain as a single-day itinerary on 2026-06-22.",
+      "source_refs": [
+        "src_001"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "fact_id": "fact_002",
+      "summary": "The report says pace differences left three members unable to descend by the planned time, and darkness contributed to route uncertainty.",
+      "source_refs": [
+        "q_001"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "fact_id": "fact_003",
+      "summary": "The report says one member fell into a creek valley while trying to move, with foot swelling and pain that prevented walking.",
+      "source_refs": [
+        "q_002"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "fact_id": "fact_004",
+      "summary": "The report says rescuers contacted the lost hikers on 2026-06-23 morning, assessed and bandaged the injured foot, used rope hauling, and returned all members safely to the trailhead by 17:00.",
+      "source_refs": [
+        "q_004"
+      ],
+      "confidence": "reported_fact"
+    }
+  ],
+  "timeline": [
+    {
+      "time_ref": "2026-06-22 night",
+      "event": "three_members_late_due_to_pace_gap_darkness_and_lost_route",
+      "source_refs": [
+        "q_001"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "time_ref": "2026-06-22 night",
+      "event": "one_lost_member_fell_into_creek_valley_while_attempting_to_move",
+      "source_refs": [
+        "q_002"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "time_ref": "2026-06-23 morning",
+      "event": "rescuers_contacted_lost_hikers_and_started_injury_care",
+      "source_refs": [
+        "q_004"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "time_ref": "2026-06-23 17:00",
+      "event": "all_members_safely_returned_to_trailhead",
+      "source_refs": [
+        "src_001"
+      ],
+      "confidence": "reported_fact"
+    }
+  ],
+  "taxonomy_keys": [
+    "lost_after_route_uncertainty",
+    "schedule_slip_and_retreat_gate",
+    "injury_at_known_location",
+    "team_separation_missing_member",
+    "condition_deterioration_on_route",
+    "rescue_message_v1",
+    "field_actions",
+    "pace_buffer_required",
+    "workload_route_matching",
+    "descent_attention_risk",
+    "low_tolerance_terrain"
+  ],
+  "scout_implications": [
+    {
+      "implication_id": "imp_001",
+      "phase": "phase_4_pretrip_planning",
+      "hook": "pretrip_readiness.single_day_workload_margin",
+      "type": "case_study_signal",
+      "summary": "Scout should treat single-day high-workload routes with pace-spread risk as needing conservative turnaround margins, subgroup policy, and darkness buffer review.",
+      "source_refs": [
+        "q_001"
+      ],
+      "confidence": "assumption"
+    },
+    {
+      "implication_id": "imp_002",
+      "phase": "case_study_corpus",
+      "hook": "team_state.pace_gap_split_detector",
+      "type": "case_study_signal",
+      "summary": "A field prompt could ask whether slower members are still within voice or visual range, whether the group has split, and whether the plan has a clear regroup deadline.",
+      "source_refs": [
+        "q_001"
+      ],
+      "confidence": "assumption"
+    },
+    {
+      "implication_id": "imp_003",
+      "phase": "case_study_corpus",
+      "hook": "lost_protocol.stop_and_wait",
+      "type": "case_study_signal",
+      "summary": "Once a subgroup is late, in darkness, or uncertain of route, Scout should prioritize stop-and-wait, safe-place selection, location capture, and approved rescue communication over continued movement.",
+      "source_refs": [
+        "q_001",
+        "q_002",
+        "q_003"
+      ],
+      "confidence": "assumption"
+    },
+    {
+      "implication_id": "imp_004",
+      "phase": "case_study_corpus",
+      "hook": "incident_package.injury_location_and_mobility",
+      "type": "case_study_signal",
+      "summary": "Scout should help humans record injury location, mobility status, pain/swelling description, fall terrain, and extraction constraints for approved rescue communication, without making medical diagnosis.",
+      "source_refs": [
+        "q_002",
+        "q_004"
+      ],
+      "confidence": "assumption"
+    }
+  ],
+  "boundaries": {
+    "medical": "not_diagnosis",
+    "legal": "no_fault_assignment",
+    "rescue": "not_official_sop",
+    "phase_change": "requires_human_review"
+  },
+  "discussion_questions": [
+    "Should Scout field prompts prioritize stop-and-wait, location sharing, and mobility status once a subgroup is late, in darkness, or uncertain of route?",
+    "What pace-gap threshold should trigger regroup or turnaround review before a single-day route becomes a night search problem?",
+    "How should Scout ask for injury and mobility information without crossing into diagnosis or official rescue command?"
+  ],
+  "promotion": {
+    "recommended_target": "docs/case_studies/accepted/",
+    "phase_1_patch_required": false,
+    "phase_2_patch_required": false,
+    "fixture_required": false
+  }
+}

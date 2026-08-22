@@ -20,6 +20,7 @@ def test_model_sla_gateway_budget_fallback_skips_provider_call() -> None:
         "openrouter:openai/gpt-4o-mini",
         env={
             "OPENROUTER_API_KEY": "sk-test",
+            "SCOUT_AI_OS_AGGRESSIVE_CONSTRUCTION_MODE": "0",
             "SCOUT_AI_OS_MODEL_MAX_COST_USD": "0",
             "SCOUT_AI_OS_MODEL_ESTIMATED_CALL_COST_USD": "0.001",
         },
@@ -48,6 +49,7 @@ def test_model_sla_gateway_timeout_fallback() -> None:
         "openrouter:openai/gpt-4o-mini",
         env={
             "OPENROUTER_API_KEY": "sk-test",
+            "SCOUT_AI_OS_AGGRESSIVE_CONSTRUCTION_MODE": "0",
             "SCOUT_AI_OS_MODEL_TIMEOUT_SECONDS": "0.01",
         },
     )
@@ -141,6 +143,7 @@ def test_pydantic_provider_uses_sla_fallback_before_external_budget_call(
         "openrouter:openai/gpt-4o-mini",
         env={
             "OPENROUTER_API_KEY": "sk-test",
+            "SCOUT_AI_OS_AGGRESSIVE_CONSTRUCTION_MODE": "0",
             "SCOUT_AI_OS_MODEL_MAX_COST_USD": "0",
             "SCOUT_AI_OS_MODEL_ESTIMATED_CALL_COST_USD": "0.001",
         },
@@ -159,3 +162,34 @@ def test_pydantic_provider_uses_sla_fallback_before_external_budget_call(
     assert provider.last_sla_result is not None
     assert provider.last_sla_result.status == "budget_fallback"
     assert policy.mode is ModelPolicyMode.EXTERNAL_PYDANTIC_AI
+
+
+def test_model_sla_gateway_treats_cost_and_timeout_as_telemetry_in_construction() -> None:
+    policy = resolve_model_policy(
+        "openrouter:openai/gpt-4o-mini",
+        env={
+            "OPENROUTER_API_KEY": "sk-test",
+            "SCOUT_AI_OS_MODEL_MAX_COST_USD": "0",
+            "SCOUT_AI_OS_MODEL_TIMEOUT_SECONDS": "0.01",
+            "SCOUT_AI_OS_MODEL_ESTIMATED_CALL_COST_USD": "0.001",
+        },
+    )
+    called = False
+
+    def provider_call() -> str:
+        nonlocal called
+        called = True
+        time.sleep(0.02)
+        return "provider"
+
+    result = ModelSlaGateway(policy).run_sync(
+        "construction-unbounded",
+        provider_call,
+        fallback_call=lambda: "fallback",
+    )
+
+    assert called is True
+    assert result.output == "provider"
+    assert result.status == "completed"
+    assert result.timeout_seconds is None
+    assert result.estimated_cost_usd == 0.001

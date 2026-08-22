@@ -30,6 +30,7 @@ from hardware_readiness_api import create_hardware_readiness_router
 from ingress_observer_supervisor import IngressObserverSupervisor
 from pretrip_assistant_context import build_pretrip_assistant_context
 from runtime_debug_log import FileRuntimeDebugEventLog
+from scout_env import load_scout_env_files
 
 
 DEFAULT_DATA_ROOT = Path("/data/scout")
@@ -42,6 +43,8 @@ def create_phase4_admin_runtime_app(
     *,
     environ: Mapping[str, str] | None = None,
 ) -> FastAPI:
+    if environ is None:
+        load_scout_env_files(repo_root=Path(__file__).resolve().parent)
     env = dict(environ or os.environ)
     data_root = Path(env.get("SCOUT_DATA_ROOT", str(DEFAULT_DATA_ROOT))).expanduser()
     workspace_root = Path(

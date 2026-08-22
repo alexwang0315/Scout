@@ -1,7 +1,7 @@
 # Scout AI OS MVP Specification
 
-**Document version:** 0.1.0
-**Date:** 2026-06-08
+**Document version:** 0.1.1
+**Date:** 2026-06-30
 **Audience:** Codex / coding agent / human implementer
 **Target platform:** Raspberry Pi edge controller + remote LLM APIs + future mobile companion runtime
 **Primary language:** Python 3.12+
@@ -13,6 +13,42 @@
 Scout AI OS is an adaptive workflow agent platform. Its purpose is to accept a user's ad-hoc natural-language request, compile that request into a typed workflow, search existing capabilities, compose or build missing low-risk capabilities, verify them in a sandbox, install executable workflows, notify the user when conditions are met, and save reusable learning artifacts for future similar requests.
 
 Scout must not be a pure chatbot. It must be a controlled automation system where the LLM plans and proposes, while deterministic runtime code validates, persists, executes, audits, and enforces permissions.
+
+### 1.0.1 First Deployment Assumption
+
+The first field deployment is remote-operated: only Scout AI accompanies the
+user as the mobile-facing interaction layer. The phone sends user requests,
+location/sensor summaries, photos or event metadata, and device status back to
+the server-room Scout stack. The main software, models, web research,
+workspace tools, computer-use/browser-use executors, databases, and hardware
+gateways run in the server room or trusted workstation environment. Users
+communicate with Scout software and hardware through Scout AI.
+
+### 1.0 Current Implementation Snapshot
+
+This repository now implements Phase 0 through Phase 9 of the Scout AI OS MVP
+architecture. The implemented core includes:
+
+- typed Pydantic schema contracts for workflows, capabilities, permissions,
+  runtime, sandbox, and learning artifacts;
+- deterministic SQLite stores and permission gates;
+- local notification gateway and runtime tick loop;
+- provider-backed agent facades with a local `FunctionModel` default;
+- model policy, timeout/cost SLA gateway, and external-model fallback handling;
+- Pydantic AI v2.33.0 compatibility helpers;
+- generated capability sandbox verification;
+- FastAPI routes and focused API/runtime tests;
+- Scout AI read-only workspace tool workflow:
+  context registry -> tool plan -> evidence collection -> answer synthesis;
+- weather/environment workspace tools for CWA and GEE artifacts;
+- route-context, route-mileage, and raster OCR evidence lookup tools;
+- Mac local chat fallback mode for Scout hardware-unavailable development.
+
+The MVP is still not allowed to let model output mutate Phase 1 safety state,
+call `/safety/*`, write Phase 2 Brain observed facts, directly send outbound
+messages, or directly control hardware. A reviewed non-safety outbound action
+may execute only through a typed `OutboundActionIntent`, an active
+`OutboundStandingGrant`, and a deterministic sender that records audit evidence.
 
 ### 1.1 Core Product Promise
 
@@ -58,6 +94,8 @@ Build a Raspberry Pi-compatible Scout core that supports:
 
 - Natural-language request intake.
 - Pydantic AI-based workflow compilation.
+- Pydantic AI v2.33.0 model execution with explicit model policy, OpenRouter and
+  OpenAI-chat provider semantics, and local FunctionModel fallback.
 - Capability search and registry.
 - Execution planning.
 - Permission checks.
@@ -67,6 +105,8 @@ Build a Raspberry Pi-compatible Scout core that supports:
 - Sandbox verifier for low-risk generated Python capabilities.
 - Learning artifact generation.
 - FastAPI endpoints for user requests, workflows, approvals, capabilities, and learning artifacts.
+- Read-only Scout AI evidence workflows for pretrip/admin/debug questions.
+- Mac-local fallback UI path when Scout hardware is unavailable.
 - Automated tests.
 
 ### 2.2 Non-Goals for MVP
@@ -75,7 +115,9 @@ Do **not** build these in the MVP:
 
 - Full mobile app.
 - Production background GPS runtime.
-- Heavy browser automation.
+- Unscoped destructive browser automation. Trusted server-room computer-use and
+  browser-use are first-class Scout AI capabilities when they run through the
+  reviewed executor path and record provenance.
 - Kubernetes deployment.
 - Full Temporal cluster.
 - Large vector database.
@@ -83,7 +125,8 @@ Do **not** build these in the MVP:
 - Payment automation.
 - External message sending without approval.
 - Production database modification tools.
-- Unrestricted shell execution.
+- Unscoped destructive shell execution outside the trusted server-room executor
+  capability.
 - Autonomous self-modification of Scout core code.
 
 ### 2.3 Future Extensions
@@ -261,7 +304,8 @@ MVP package choices:
 ```text
 python >= 3.12
 pydantic >= 2
-pydantic-ai
+pydantic-ai-slim[duckduckgo,mcp,openai,openrouter] == 2.33.0
+pydantic-evals == 2.33.0
 fastapi
 uvicorn
 aiosqlite or sqlite3 wrapper
@@ -283,6 +327,140 @@ sqlite-vec
 dbos
 mcp clients
 ```
+
+Pydantic AI v2.33.0 operating rules:
+
+- Scout's package path uses `pydantic-ai-slim` with `duckduckgo`, `openai`, and
+  `openrouter` extras for Pi compatibility and grounded local web search.
+- `pydantic_ai.Agent` calls must keep `end_strategy="early"` unless a future
+  reviewed design proves that continuing same-turn tool execution cannot
+  violate Scout's no-side-effect defaults.
+- Pydantic AI v2.33.0 preserves `end_strategy="early"` for native, prompted,
+  and image outputs. Scout keeps regression coverage on the existing early-stop
+  contract instead of adding a compatibility workaround.
+- `RunContext.usage_limits` is available to tools and capabilities in v2.33.0.
+  It may be used for telemetry and local preflight decisions, but it does not
+  replace Scout's deterministic permission, cost, timeout, or execution gates.
+- `UsageLimits.per_request_input_tokens_limit` must remain unset in Aggressive
+  Construction Mode. A provider context-window rejection is checkpointed and
+  resumed through Scout continuation; it is not converted into a hidden Scout
+  token ceiling.
+- `RunContext.is_tool_available` may reduce speculative planning against tools
+  that are not exposed in the current run. It is an availability hint only and
+  never grants permission or authority to execute a tool.
+- Capability integrations may use the v2 `get_model`, `resolve_model_id`,
+  and `for_agent` hooks, but capability-selected models remain subject to
+  Scout's model policy and deterministic effect boundaries.
+- OpenRouter provider adapters must treat configured model settings as immutable
+  caller input and derive a fresh request mapping for every model request.
+- Tool-search history is part of the provider-neutral conversation record and
+  must remain replayable when a recovery stage changes model or provider.
+- Bare MCP `McpError` failures are recoverable. Persist a redacted trace,
+  preserve completed evidence, and continue through Scout's deterministic
+  repair/retry ladder when another useful step remains.
+- MCP task preference (`prefer_tasks`) is an opt-in connector behavior. Scout's
+  default connector path remains direct and auditable until a task-capable MCP
+  server is explicitly configured; inherited MCP retries and tool-search
+  `max_retries` must preserve the minimum 10/10 recovery-stage capacity.
+- Usage telemetry may record `cache_hit_ratio`. Instrumentation that can
+  contain model request parameters must remain opt-in and secret-safe via
+  `include_model_request_parameters`.
+- Preserve arbitrary provider usage fields retained by `RequestUsage`; redact
+  sensitive provider metadata rather than dropping the complete usage record.
+- Deferred tool streaming uses `DeferredToolRequestsEvent` and
+  `DeferredToolResultsEvent`; adapters must preserve these events without
+  treating their payload as runtime safety truth.
+- Pydantic AI v2.33.0 requires a deferred tool to be revealed and its capability
+  loaded before the tool can be called. Scout progressive disclosure must keep
+  reveal state and capability state aligned; a rejected hidden-tool call is a
+  correct runtime guard, not missing workspace evidence.
+- NVIDIA-hosted GLM uses `SCOUT_AI_OS_MODEL=z-ai/glm-5.2` and requires
+  `NVIDIA_API_KEY`. Scout routes the request to NVIDIA's OpenAI-compatible
+  endpoint and sends `z-ai/glm-5.2` as the provider model id.
+- OpenRouter models use `openrouter:<vendor/model>` and require
+  `OPENROUTER_API_KEY`.
+- Direct OpenAI chat models use `openai-chat:<model>` and require
+  `OPENAI_API_KEY`. If an operator supplies `openai:<model>`, Scout normalizes
+  it to `openai-chat:<model>` to avoid an implicit switch to the OpenAI
+  Responses API behavior.
+- Trusted WebSearch and WebFetch capabilities are always attached to every
+  Scout AI Pydantic Agent path, including cloud, local FunctionModel, AI HAT+2,
+  evaluation, repair, continuation, and L5 planning agents. Direct OpenAI Chat
+  may use supported native search. OpenRouter, NVIDIA, and other OpenAI-compatible endpoints use
+  Scout's local DuckDuckGo search adapter so every search has a normal
+  `ToolCallPart`/`ToolReturnPart`; current WebFetch always uses Scout's local
+  URL/domain-validating adapter because these provider models do not expose
+  native WebFetch. Legacy disable values such as
+  `SCOUT_AI_OS_NATIVE_RESEARCH=0` are ignored: Scout AI paths must retain search
+  and fetch. Models without provider-native tool calling use Scout's server-side
+  adapters. Domain policy may still constrain destinations
+  for secret, private-network, or explicit security boundaries.
+- AI HAT+2 is not a no-tool exception. Its Hailo FunctionModel adapter must let
+  the local model choose Search/Fetch actions, execute them through Pydantic AI,
+  reject URLs that were not returned by Search, and project fetched public
+  content into candidate-only evidence before answer synthesis.
+- Provider-native MCP remains disabled until a separate Scout
+  connector/capability and the required Pydantic AI optional dependency are
+  reviewed and explicitly enabled.
+- The Mac-only `pydantic-ai-smoke` optional dependency installs MCP and the
+  Pydantic built-in WebFetch test extra. DuckDuckGo is a normal Mac/Pi runtime
+  dependency because OpenRouter/NVIDIA search uses the Scout local adapter.
+- `ToolFailed` may expose a model-visible tool failure without consuming a
+  retry. Scout adapters must distinguish it from transient retryable failures
+  and preserve the failure in the call trace.
+- Run-level tool retry overrides must preserve Scout's minimum 10-call
+  construction budget. A provider retry limit is not a substitute for Scout's
+  deterministic recovery stages.
+- OpenRouter `AdvisorTool` and OpenAI Responses
+  `WebSearchTool.external_web_access` are available in v2.33.0 but are not
+  enabled merely by upgrading the package; each still passes through Scout
+  capability and provider policy.
+- Pydantic AI v2.33.0 maps provider-native OpenRouter search to
+  `openrouter:web_search`. Scout still defaults to its local traced
+  WebSearch/WebFetch adapters until the native response contains auditable
+  source annotations and tool evidence.
+- Pydantic AI v2.33.0 preserves OpenRouter web-search citations in
+  `ModelResponse.provider_details["annotations"]`. Scout provenance adapters
+  may consume those annotations when present, but an HTTP success without
+  source annotations or an auditable native-tool trace still does not satisfy
+  the evidence sufficiency gate; use the local traced WebSearch/WebFetch path
+  when the provider omits citations.
+- Route-context generation requires stronger executable evidence than merely
+  attaching capabilities: an accepted live generation records at least one
+  WebSearch and one WebFetch in a content-free trace. Search/fetch content stays
+  candidate-only and never becomes runtime safety truth.
+- Instrumentation v6 emits tool results under the `tool` role. Scout trace
+  consumers must support that role before opting into version 6; version 5
+  compatibility remains covered by the smoke.
+- A timeout configured on a blocking synchronous tool or hook must terminate
+  the active await and surface a retryable timeout to the model. The underlying
+  abandoned thread must never be treated as a successful evidence result.
+- Pydantic AI v2.33.0 rejects nested `Agent.run_sync()` and
+  `Agent.run_stream_sync()` calls from framework-managed synchronous callbacks.
+  Scout delegated agents must use an async callback and `await agent.run(...)`;
+  the compatibility smoke guards against the former deadlock path.
+- Provider replay adapters must discard provider-native tool calls that cannot
+  be paired with a rendered result block rather than forwarding an invalid
+  history to the next provider.
+- Pydantic AI v2.33.0 uses `httpx2` for compatible HTTP clients. Scout provider
+  adapters must be verified with the installed OpenAI/OpenRouter SDK versions
+  and must continue redacting request headers and credentials.
+- `ModelHTTPError.headers` and `retry_after` may inform provider backoff
+  telemetry. Headers must be redacted before persistence or display.
+- OpenRouter responses with a null or missing choices payload are treated as a
+  provider `ModelAPIError`, preserving evidence and entering Scout's repair or
+  model-switch ladder instead of being misreported as a grounded no-answer.
+- `Agent.run_stream_events()` and `CompactionPart` must round-trip through the
+  compatibility smoke so continuation and compacted history remain observable.
+- `Agent.to_web()` chat requests must reject non-JSON content types before model
+  execution. This upstream guard does not replace Scout API input validation.
+- `Agent.to_web()` and `clai web` must also reject untrusted Host headers. Any
+  deployment reached through a reviewed non-loopback hostname must configure
+  `allowed_hosts` explicitly instead of disabling the v2.32 DNS-rebinding guard.
+- Pydantic AI's built-in URL fetch enforces its upstream download bound. Scout's
+  local WebFetch adapter retains its own allowlist, trace, and evidence policy.
+- MCP compatibility is verified against the v2.29 toolset/FastMCP contract;
+  upgrading MCP transport does not authorize an unreviewed remote connector.
 
 ---
 
@@ -697,6 +875,181 @@ Rules:
 Output:
 
 - `LearningBundle`
+
+### 7.6 Pydantic AI v2.33.0 Provider Policy
+
+Scout AI OS uses Pydantic AI v2.33.0 as a typed provider facade, not as an
+unbounded autonomous runtime.
+
+Provider modes:
+
+- local `FunctionModel`: default for tests, Mac smoke, and no-credential runs;
+- `z-ai/glm-5.2`: external NVIDIA OpenAI-compatible provider model id, gated
+  by `NVIDIA_API_KEY`;
+- `nvidia:<model-id>`: internal or advanced NVIDIA provider route, gated by
+  `NVIDIA_API_KEY`;
+- `openrouter:<vendor/model>`: external OpenRouter provider, gated by
+  `OPENROUTER_API_KEY`;
+- `openai-chat:<model>`: direct OpenAI chat provider, gated by
+  `OPENAI_API_KEY`;
+- `openai:<model>`: accepted only as an operator convenience alias and
+  normalized to `openai-chat:<model>`.
+
+Required provider behavior:
+
+- model policy output may report requested model, normalized model, timeout,
+  estimated cost, fallback model, and missing credential env names;
+- model policy output must never contain token values;
+- all provider calls use Scout's SLA gateway for timeout, budget preflight,
+  provider health, fallback, and telemetry;
+- local fallback is allowed for read-only interpretation only;
+- `end_strategy="early"` is required for typed Scout `Agent` calls;
+- native WebSearch and WebFetch are always enabled for external provider-backed
+  Scout AI calls; no Scout config, runner, prompt, or workspace-tools switch may
+  remove them;
+- provider-native MCP remains disabled until a reviewed Scout connector
+  explicitly enables it.
+
+### 7.7 Scout AI Route Context / Mileage / OCR Evidence Tools
+
+The Scout AI assistant tool layer may expose deterministic workspace evidence
+tools for route context, mileage anchors, and OCR labels:
+
+- `scout.ai.route_context.assess.v0` /
+  `pydantic_ai.tool.assess_scout_route_context.v0` reads
+  `route_context_points_ref`, `route_mileage_k_anchors_ref`, and bounded
+  `mileage_tag_alignment_ref` slices to answer questions such as "15K 在哪".
+- `pydantic_ai.tool.search_scout_map_perception.v0` reads legacy MCP OCR and
+  normalized raster OCR GeoJSON from `raster_label_evidence_ref`.
+- `pydantic_ai.tool.search_scout_evidence_fulltext.v0` indexes route mileage
+  anchors, mileage alignment summaries, normalized raster OCR, raw OCR
+  summaries, route notes, and source snippets.
+
+Required rules:
+
+- large mileage alignment and OCR payloads must be summarized or sliced before
+  model synthesis;
+- raw tile pixels and raw provider payloads must not be embedded in assistant
+  answers;
+- all route-context, mileage, and OCR outputs remain candidate-only unless a
+  reviewed package explicitly promotes them;
+- no route-context/OCR answer may mutate review decisions, runtime handoff,
+  Phase 1 safety state, `/safety/*`, outbound transport, or hardware.
+
+### 7.8 Scout AI Weather / Environment Evidence Tools
+
+The Scout AI assistant tool layer may expose deterministic workspace evidence
+tools to the Pydantic AI provider. These tools are capabilities in the Scout AI
+OS sense, but they are not runtime safety authorities.
+
+Current weather/environment tool split:
+
+- `scout.ai.weather_window.assess.v0`: route-local weather/daylight/camp/shelter
+  decision framing.
+- `scout.ai.cwa_environment.assess.v0`: prepared Central Weather Administration
+  warnings, observations, QPF, forecast, astronomy, tide/marine, and provenance
+  summaries from the local workspace.
+- `scout.ai.gee_environment.assess.v0`: prepared GEE SMAP/GPM soil moisture,
+  antecedent-rain, grid/timeline, and corridor hydrologic summaries from the
+  local workspace.
+
+Required rules:
+
+- CWA and GEE credentials remain server-side. They are never exposed to the
+  client, model prompt, artifact body, logs, or eval report.
+- Assistant answering never performs live CWA, GEE, browser, or Earth Engine
+  fetches. Live preparation is an operator-approved pretrip step that writes
+  bounded workspace artifacts.
+- Every CWA/GEE-derived result is candidate-only:
+  `candidate_only=true`, `runtime_safety_truth=false`,
+  `human_review_required=true`.
+- Missing or stale QPF, warning, SMAP, GPM, or antecedent-rain artifacts are
+  evidence gaps. The assistant must not convert missing weather evidence into a
+  low-risk conclusion.
+- QPF is route corridor / bbox evidence, not a single-slope forecast. SMAP/GPM
+  is hydrologic background, not a deterministic landslide or water-level truth.
+- No weather/environment tool may write Phase 1 L0-L4 state, `/safety/*`,
+  Phase 2 Brain facts, ObservedFact, IncidentStore, review decisions, outbound
+  messages, or hardware controls.
+
+Planner rules:
+
+- Natural weather questions select `weather_window` and CWA evidence.
+- Rain, stream, wet terrain, rockfall, landslide, and weather-terrain compound
+  questions additionally select GEE evidence.
+- Pretrip Go/No-Go and delay/departure questions select route readiness plus
+  route architecture, navigation terrain, weather window, CWA, GEE, pace, and
+  equipment evidence when available.
+
+### 7.9 Bounded Context and Progressive Tool Disclosure
+
+The workspace-grounded Pydantic AI assistant must use a bounded AIOS thin
+waist. It must not expose every registered tool, Total Info, full workspace
+artifacts, or unselected native provider capabilities at the start of a turn.
+
+Required flow:
+
+1. discover up to ten ranked `ContextHandle` records without loading their full
+   artifacts;
+2. create a hard-capped `ToolPlan` from compact `ToolCard` records;
+3. register only the selected full tool schemas;
+4. execute tools through deterministic workspace services;
+5. project raw results into sanitized, provenance-bearing `EvidenceCard` records;
+6. remove all tools before answer synthesis;
+7. verify citations and numeric claims deterministically;
+8. verify or repair without tools, using the attempt's available call capacity;
+9. checkpoint external limits and resume with a fresh recovery-stage budget.
+
+The typed contracts are `ContextHandle`, `ContextReadResult`, `ToolCard`,
+`PlannedToolCall`, `ToolPlan`, `EvidenceCard`, `AgentRunBudget`,
+`AgentRequestLedger`, `AgentRunLedger`, and `GroundingVerification` in
+`scout.schemas.agent_runtime`.
+
+Construction call capacity and resource policy:
+
+- every typed or unknown question class receives at least ten tool calls and ten
+  model requests per attempt and per recovery stage; no surface, stage,
+  average, p95, or static-fact policy may silently impose a lower capacity;
+- independently metered planner, retriever, synthesis, verifier, reviewer,
+  repair, retry, replan, browser, and subagent categories also default to ten;
+- Aggressive Construction Mode sets Scout-defined input/output/total-token,
+  tool-result-token, context-character, estimated-cost, answer-time, and
+  replay-time ceilings to `null`; counters remain observability telemetry;
+- explicit Productization/operator settings may restore resource SLOs, but must
+  not silently lower an agent call category below ten;
+- synthesis receives no tool definitions and cannot call another tool;
+- a fail-closed response is not counted as a completed grounded answer;
+- rejected draft claims remain audit metadata but are not user-visible claims.
+- deterministic preflight and post-response checks enforce call counts. Reaching
+  ten closes only the current stage; a checkpoint/continuation or next recovery
+  stage receives a fresh 10/10 budget;
+- non-greeting workspace questions with no selected tool evidence or bounded
+  context evidence fail closed instead of returning an unverified direct answer;
+- EvidenceCard projection recursively removes sensitive keys and secret-like
+  values, rejects credentialed URLs and absolute paths, and withholds evidence
+  explicitly marked private, secret, restricted, or confidential.
+
+Ten is guaranteed available capacity rather than a utilization target. Duplicate canonical calls,
+two consecutive calls without new evidence, and confirmed terminal evidence
+gaps still stop early. A provider's technical limit checkpoints evidence, call
+trace, and state and is reported as an external limit. After a failed attempt,
+follow the finite ladder in `SCOUT_OUTDOOR_AI_AGENT_STANDARD.md`: fix the
+tool/evidence/harness and rerun with fresh 10/10, switch model with fresh 10/10,
+build the complete Codex review artifact, then register a stable `KNOWN_ISSUE`
+with an explicit unblock condition if Codex cannot resolve it.
+
+The additive `/assistant/query` observability fields report per-request and
+turn totals for system, history, schema, result, input, cache, output, request,
+tool call, retry, repair, selected/executed tools, and budget stop reason.
+Existing response fields must not be removed or renamed.
+
+WebSearch/WebFetch remain available to general trusted provider calls and the
+bounded workspace path. Progressive disclosure may delay their use, but it may
+not remove them. OpenRouter/NVIDIA and unsupported native providers use Scout's
+local traced adapters so model/provider limitations do not disable research.
+
+The regression and measurement contract is documented in
+`docs/specs/scout-ai-bounded-context-progressive-disclosure.md`.
 
 ---
 

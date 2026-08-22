@@ -8,10 +8,17 @@
     "test": "tests"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "lint": "node --check tools/admin_ui_visual_smoke.js && node --check tools/scout_ui_operation_browser_smoke.js && node --check tools/dashboard_workspace_browser_smoke.js",
+    "typecheck": "./venv/bin/python -m pytest tests/test_scout_ai_os_scaffold.py::test_phase_1_scaffold_modules_are_importable -q",
+    "test": "./venv/bin/python -m pytest tests/test_scout_ai_os_docs.py tests/test_scout_ai_os_scaffold.py tests/test_scout_layer_contract.py tests/test_pretrip_raster_label_adapter.py -q",
     "assistant:browser-runtime": "./venv/bin/python assistant_browser_smoke_check.py --runtime-check-only --pretty",
     "assistant:browser-smoke": "./venv/bin/python assistant_browser_smoke_check.py --pretty",
-    "scout-ui:operation-smoke": "node tools/scout_ui_operation_browser_smoke.js --pretty"
+    "scout-ui:operation-smoke": "node tools/scout_ui_operation_browser_smoke.js --pretty",
+    "dashboard:workspace-smoke": "node tools/dashboard_workspace_browser_smoke.js --pretty",
+    "qualification:validate-manifest": "./venv/bin/python scripts/qualification/validate_manifest.py",
+    "qualification:check": "./venv/bin/python -m scripts.qualification.run_qualification --scope guard",
+    "qualification:check:full": "./venv/bin/python -m scripts.qualification.run_qualification --scope guard",
+    "qualification:check:smoke": "./venv/bin/python -m scripts.qualification.run_qualification --scope smoke"
   },
   "repository": {
     "type": "git",

@@ -1,0 +1,39 @@
+schema: scout.dashboardQualificationGates.v1
+qualification_boundary: maplibre_pre_migration_regression_guard
+productization: false
+blocking_states:
+  P0: [FAIL, FLAKY, BLOCKED, INSUFFICIENT_EVIDENCE, NOT_IMPLEMENTED]
+  P1: [FAIL, FLAKY, BLOCKED, INSUFFICIENT_EVIDENCE]
+  P2: [BLOCKED]
+global_blocks:
+  - manifest_mismatch
+  - evidence_hash_mismatch
+  - unreviewed_changed_capability
+  - unapproved_auto_fix
+  - reviewer_needs_correction
+  - live_runtime_attestation_missing
+  - live_runtime_continuity_failed
+  - fixture_or_synthetic_official_evidence
+  - gpt_pro_collaboration_review_missing
+  - human_disposition_missing_before_remediation
+  - browser_action_contract_mismatch
+  - dashboard_load_failed
+  - major_route_entry_failed
+  - fallback_map_unusable
+  - layer_contract_missing
+  - evidence_identity_lost
+  - browser_console_fatal
+  - horizontal_overflow
+  - new_operational_or_safety_authority
+  - independent_visual_review_incomplete
+paused_global_blocks:
+  - live_route_or_control_unexercised
+  - live_map_gesture_incomplete
+  - live_layer_toggle_incomplete
+  - exhaustive_visual_quality_failure
+trusted_baseline_verdicts: [QUALIFIED]
+trusted_baseline_runtime_provenance: live_operational_dashboard
+required_review_channel: gpt-pro-collaboration-in-app-browser
+remediation_requires_human_disposition: true
+specification_change_requires: SPEC_CHANGE
+retry_pass_state: FLAKY

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Scout Route Context Briefing"
+  short_description: "Generate Scout pretrip route context briefings"
+  default_prompt: "Use $scout-route-context-briefing to build a pretrip route context briefing for a Scout workspace, applying the media quality gate so route photos/maps are used instead of site icons, logos, or placeholders."

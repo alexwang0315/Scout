@@ -19,14 +19,16 @@
 
 html,
 body {
+  height: 100%;
   min-height: 100%;
 }
 
 body {
   margin: 0;
+  overflow: hidden;
   color: var(--text);
   background: var(--bg);
-  font: 14px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  font: 13px/1.38 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
 }
 
 button,
@@ -35,15 +37,17 @@ textarea {
 }
 
 button {
-  min-height: 34px;
+  min-height: 30px;
 }
 
 .app-shell {
   display: grid;
-  grid-template-columns: minmax(240px, 300px) minmax(420px, 1fr) minmax(280px, 360px);
-  gap: 12px;
-  min-height: 100vh;
-  padding: 12px;
+  grid-template-columns: minmax(210px, 260px) minmax(360px, 1fr) minmax(240px, 310px);
+  gap: 6px;
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
+  padding: 6px;
 }
 
 .server-panel,
@@ -51,6 +55,7 @@ button {
 .detail-panel {
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: var(--panel);
@@ -61,8 +66,9 @@ button {
 .detail-panel {
   display: grid;
   align-content: start;
-  gap: 12px;
-  padding: 12px;
+  gap: 7px;
+  overflow-y: auto;
+  padding: 8px;
 }
 
 .chat-panel {
@@ -75,11 +81,18 @@ button {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
+  min-width: 0;
+}
+
+.server-panel > .panel-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 5px;
 }
 
 .chat-panel > .panel-head {
-  padding: 12px 12px 10px;
+  padding: 10px 10px 8px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -91,12 +104,12 @@ p {
 }
 
 h1 {
-  font-size: 22px;
+  font-size: 20px;
   line-height: 1.15;
 }
 
 h2 {
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1.25;
 }
 
@@ -110,20 +123,33 @@ h3 {
 
 .hint {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   overflow-wrap: anywhere;
 }
 
+.status-lamps {
+  display: flex;
+  min-width: 0;
+  justify-content: flex-start;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
 .state-pill {
-  flex: 0 0 auto;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  flex: 0 1 auto;
   border: 1px solid var(--border);
   border-radius: 999px;
-  padding: 3px 8px;
+  padding: 3px 7px;
   color: var(--muted);
   background: var(--panel-2);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
+  text-overflow: ellipsis;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .state-pill.ok {
@@ -136,10 +162,15 @@ h3 {
   color: var(--bad);
 }
 
+.state-pill.warn {
+  border-color: rgba(208, 168, 92, 0.68);
+  color: var(--accent-2);
+}
+
 .status-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 5px;
 }
 
 .status-field,
@@ -148,24 +179,28 @@ h3 {
 .prompt-section,
 .surface-section {
   display: grid;
-  gap: 6px;
+  gap: 5px;
   min-width: 0;
+  overflow: hidden;
   border: 1px solid var(--border);
   border-radius: 6px;
-  padding: 8px;
+  padding: 6px;
   background: rgba(255, 255, 255, 0.025);
 }
 
 .status-field span {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
 }
 
 .status-field strong {
   min-width: 0;
+  font-size: 12px;
+  line-height: 1.35;
   overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .segmented {
@@ -186,7 +221,7 @@ h3 {
 }
 
 .segment {
-  padding: 6px 8px;
+  padding: 5px 7px;
   font-size: 12px;
 }
 
@@ -197,20 +232,29 @@ h3 {
 
 .prompt-list {
   display: grid;
-  gap: 6px;
+  gap: 5px;
 }
 
 .prompt-list button {
   width: 100%;
-  padding: 7px 9px;
+  min-height: 28px;
+  padding: 5px 8px;
   text-align: left;
   overflow-wrap: anywhere;
 }
 
 .compact-list {
   margin: 0;
-  padding-left: 17px;
+  padding-left: 14px;
   color: var(--muted);
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.compact-list strong {
+  color: var(--text);
 }
 
 .compact-list li + li {
@@ -226,13 +270,13 @@ h3 {
 }
 
 .secondary-button {
-  padding: 6px 10px;
+  padding: 5px 9px;
 }
 
 .primary-button {
   min-width: 80px;
   border-color: rgba(104, 183, 160, 0.72);
-  padding: 7px 12px;
+  padding: 6px 12px;
   background: rgba(104, 183, 160, 0.18);
   font-weight: 700;
 }
@@ -246,10 +290,10 @@ h3 {
 .messages {
   display: grid;
   align-content: start;
-  gap: 10px;
+  gap: 8px;
   min-height: 0;
   overflow-y: auto;
-  padding: 12px;
+  padding: 10px;
   background: #0f1417;
 }
 
@@ -271,15 +315,16 @@ h3 {
 
 .message-meta {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .message-body {
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 9px 10px;
+  padding: 8px 9px;
   background: var(--panel);
   overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .message.user .message-body {
@@ -306,33 +351,36 @@ h3 {
   align-items: center;
   flex-wrap: wrap;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .composer {
   display: grid;
-  gap: 8px;
-  padding: 12px;
+  gap: 5px;
+  padding: 8px 10px 10px;
   border-top: 1px solid var(--border);
   background: var(--panel);
 }
 
 .composer label {
   color: var(--muted);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
 }
 
 textarea {
   width: 100%;
-  min-height: 76px;
-  resize: vertical;
+  min-height: 50px;
+  max-height: 82px;
+  resize: none;
   border: 1px solid var(--border);
   border-radius: 6px;
-  padding: 9px;
+  padding: 8px;
   color: var(--text);
   background: rgba(255, 255, 255, 0.04);
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 textarea:focus,
@@ -368,11 +416,14 @@ pre {
   color: #cbd6d9;
   font-size: 12px;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 @media (max-width: 1120px) {
   .app-shell {
-    grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+    grid-template-columns: minmax(210px, 260px) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(150px, 28vh);
   }
 
   .detail-panel {
@@ -381,8 +432,16 @@ pre {
 }
 
 @media (max-width: 760px) {
+  body {
+    overflow: auto;
+  }
+
   .app-shell {
     grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(420px, 1fr) auto;
+    height: auto;
+    min-height: 100vh;
+    overflow: visible;
     padding: 8px;
   }
 

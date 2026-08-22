@@ -2,14 +2,24 @@
 
 from __future__ import annotations
 
-from typing import Any
+from datetime import UTC, datetime
+from typing import Any, Callable
+
+from pydantic import ValidationError
 
 from scout.schemas.capability import (
     CapabilityRisk,
     CapabilitySpec,
     GeneratedCapabilityPackage,
 )
+from scout.schemas.l5_code_mode import L5ActivationDecision, L5ActivationRequest
 from scout.schemas.permissions import PermissionDecision
+from scout.schemas.outbound import (
+    OutboundActionIntent,
+    OutboundDecisionStatus,
+    OutboundGrantDecision,
+    OutboundStandingGrant,
+)
 from scout.schemas.workflow import (
     ActionSpec,
     ActionType,
@@ -17,6 +27,8 @@ from scout.schemas.workflow import (
     WorkflowLifecycle,
     WorkflowSpec,
 )
+from scout.services.outbound_standing_grant import evaluate_outbound_standing_grant
+from scout.services.l5_code_mode import L5CodeModePolicy
 
 
 APPROVAL_PERMISSION_KEYWORDS = (
@@ -39,7 +51,6 @@ DENY_PERMISSION_KEYWORDS = (
     "credential",
     "secret",
     "production_db",
-    "external_message",
 )
 
 APPROVAL_ACTION_TYPES = {
@@ -61,8 +72,24 @@ DENY_ACTION_TERMS = (
 class PermissionGate:
     """Evaluate workflow and capability installation permission decisions."""
 
+    def __init__(
+        self,
+        *,
+        outbound_grant: OutboundStandingGrant | None = None,
+        clock: Callable[[], datetime] | None = None,
+        outbound_send_count: Callable[[], int] | None = None,
+    ) -> None:
+        self._outbound_grant = outbound_grant
+        self._clock = clock or (lambda: datetime.now(UTC))
+        self._outbound_send_count = outbound_send_count or (lambda: 0)
+
     def evaluate_workflow(self, workflow: WorkflowSpec) -> PermissionDecision:
         permission_text = " ".join(workflow.permissions.required).lower()
+        outbound_permission_requested = "external_message" in permission_text
+        outbound_intents, outbound_intent_errors = _outbound_intents(workflow.actions)
+        outbound_decisions = [
+            self.evaluate_outbound_intent(intent) for intent in outbound_intents
+        ]
         action_text = " ".join(
             [
                 action.description.lower()
@@ -85,6 +112,14 @@ class PermissionGate:
             f"UI action denied: {decision.reason}"
             for decision in ui_action_decisions
             if not decision.allowed
+        )
+        if outbound_intents and not outbound_permission_requested:
+            deny_reasons.append("typed outbound intent requires external_message permission")
+        deny_reasons.extend(outbound_intent_errors)
+        deny_reasons.extend(
+            ",".join(decision.blocker_reasons)
+            for decision in outbound_decisions
+            if decision.status is OutboundDecisionStatus.BLOCKED
         )
 
         if deny_reasons:
@@ -116,6 +151,13 @@ class PermissionGate:
             for decision in ui_action_decisions
             if decision.allowed and decision.requires_user_approval
         )
+        if outbound_permission_requested and not outbound_intents:
+            approval_reasons.append("typed_outbound_intent_missing")
+        approval_reasons.extend(
+            ",".join(decision.blocker_reasons)
+            for decision in outbound_decisions
+            if decision.status is OutboundDecisionStatus.NEEDS_APPROVAL
+        )
         if workflow.permissions.approval_required:
             approval_reasons.append(workflow.permissions.reason or "workflow requests approval")
 
@@ -134,6 +176,25 @@ class PermissionGate:
             reason="low-risk workflow",
             user_message="Workflow is allowed by MVP permission rules.",
         )
+
+    def evaluate_outbound_intent(
+        self,
+        intent: OutboundActionIntent,
+    ) -> OutboundGrantDecision:
+        return evaluate_outbound_standing_grant(
+            intent,
+            grant=self._outbound_grant,
+            now=self._clock(),
+            prior_send_count=self._outbound_send_count(),
+        )
+
+    def evaluate_l5_code_mode(
+        self,
+        request: L5ActivationRequest,
+    ) -> L5ActivationDecision:
+        """Evaluate L5 eligibility without granting additional action authority."""
+
+        return L5CodeModePolicy().evaluate(request)
 
     def _evaluate_ui_workflow_action(self, action: ActionSpec) -> PermissionDecision:
         plan = _ui_action_plan_from_action(action)
@@ -266,6 +327,22 @@ def _ui_action_plan_from_action(action: ActionSpec) -> dict[str, Any] | None:
         )
     except ValueError:
         return None
+
+
+def _outbound_intents(
+    actions: list[ActionSpec],
+) -> tuple[list[OutboundActionIntent], list[str]]:
+    intents: list[OutboundActionIntent] = []
+    errors: list[str] = []
+    for action in actions:
+        if "outbound_intent" not in action.config:
+            continue
+        payload = action.config.get("outbound_intent")
+        try:
+            intents.append(OutboundActionIntent.model_validate(payload))
+        except (ValidationError, TypeError, ValueError):
+            errors.append("invalid_typed_outbound_intent")
+    return intents, errors
 
 
 def _config_string(config: dict[str, Any], key: str) -> str | None:

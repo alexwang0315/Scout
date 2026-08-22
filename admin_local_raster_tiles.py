@@ -6,7 +6,7 @@ import io
 import json
 import math
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -32,6 +32,7 @@ DEFAULT_RASTER_TILE_SIZE = 256
 DEFAULT_ESTIMATED_RASTER_TILE_BYTES = 64 * 1024
 DEFAULT_IMAGERY_TILE_CACHE_MIN_ZOOM = 12
 DEFAULT_IMAGERY_TILE_CACHE_MAX_ZOOM = 17
+DEFAULT_IMAGERY_TILE_CACHE_TTL_DAYS = 30
 WEB_MERCATOR_MAX_LAT = 85.05112878
 TRANSPARENT_PNG_TILE = bytes.fromhex(
     "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
@@ -229,6 +230,7 @@ def render_raster_tile_png(
     y: int,
     *,
     tile_size: int = DEFAULT_RASTER_TILE_SIZE,
+    resample_mode: str | None = None,
 ) -> bytes:
     _validate_raster_source_manifest(source_manifest)
     validate_osm_tile_coords(z, x, y)
@@ -258,7 +260,14 @@ def render_raster_tile_png(
         return _png_bytes(tile_image)
 
     crop = image.crop(src_box)
-    resized = crop.resize((dst_box[2] - dst_box[0], dst_box[3] - dst_box[1]))
+    output_size = (dst_box[2] - dst_box[0], dst_box[3] - dst_box[1])
+    if resample_mode is None:
+        resized = crop.resize(output_size)
+    elif resample_mode == "nearest":
+        nearest = getattr(getattr(Image, "Resampling", Image), "NEAREST")
+        resized = crop.resize(output_size, resample=nearest)
+    else:
+        raise ValueError("resample_mode must be None or nearest")
     tile_image.paste(resized, (dst_box[0], dst_box[1]))
     return _png_bytes(tile_image)
 
@@ -372,6 +381,8 @@ def seed_imagery_tile_cache(
     provider_allows_offline_prefetch: bool = False,
     dry_run: bool = True,
     max_tiles: int | None = None,
+    tile_ttl_days: float | None = DEFAULT_IMAGERY_TILE_CACHE_TTL_DAYS,
+    fallback_cache_project_ids: Sequence[str] | None = None,
     fetch_tile: ImageryTileFetch | None = None,
 ) -> dict[str, Any]:
     if plan.get("artifact_kind") != "admin_imagery_tile_cache_plan":
@@ -386,8 +397,13 @@ def seed_imagery_tile_cache(
     started_at = time.time()
     tiles_seen = 0
     tiles_written = 0
+    tiles_refreshed = 0
     tiles_skipped_existing = 0
+    tiles_copied_from_fallback_cache = 0
+    tiles_failed = 0
+    tile_error_samples: list[dict[str, Any]] = []
     bytes_written = 0
+    now = time.time()
 
     for tile in iter_raster_plan_tiles(plan):
         if max_tiles is not None and tiles_seen >= max_tiles:
@@ -402,28 +418,75 @@ def seed_imagery_tile_cache(
             cache_root=cache_root,
         )
         if path.exists():
-            tiles_skipped_existing += 1
-            continue
+            if _cached_tile_is_fresh(path, tile_ttl_days=tile_ttl_days, now=now):
+                tiles_skipped_existing += 1
+                continue
+            stale_existing = True
+        else:
+            stale_existing = False
         if dry_run:
             continue
-        remote_tile = fetcher(
-            imagery_source,
-            int(tile["z"]),
-            int(tile["x"]),
-            int(tile["y"]),
+        fallback_path = _fresh_fallback_raster_tile_path(
+            cache_root,
+            project_ids=fallback_cache_project_ids,
+            current_project_id=str(plan["project_id"]),
+            layer_id=str(plan["layer_id"]),
+            z=tile["z"],
+            x=tile["x"],
+            y=tile["y"],
+            tile_ttl_days=tile_ttl_days,
+            now=now,
         )
+        if fallback_path is not None:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(fallback_path.read_bytes())
+            tiles_copied_from_fallback_cache += 1
+            if stale_existing:
+                tiles_refreshed += 1
+            bytes_written += path.stat().st_size
+            continue
+        try:
+            remote_tile = fetcher(
+                imagery_source,
+                int(tile["z"]),
+                int(tile["x"]),
+                int(tile["y"]),
+            )
+        except Exception as exc:
+            tiles_failed += 1
+            if len(tile_error_samples) < 20:
+                tile_error_samples.append(
+                    {
+                        "z": int(tile["z"]),
+                        "x": int(tile["x"]),
+                        "y": int(tile["y"]),
+                        "error_type": type(exc).__name__,
+                        "error": str(exc)[:240],
+                    }
+                )
+            continue
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(remote_tile.body)
         tiles_written += 1
+        if stale_existing:
+            tiles_refreshed += 1
         bytes_written += len(remote_tile.body)
 
+    status = "dry_run_ready"
+    if not dry_run:
+        status = "seed_completed_with_errors" if tiles_failed else "seed_complete"
     return _imagery_seed_summary(
-        "dry_run_ready" if dry_run else "seed_complete",
+        status,
         plan=plan,
         dry_run=dry_run,
         tiles_seen=tiles_seen,
         tiles_written=tiles_written,
+        tiles_refreshed=tiles_refreshed,
         tiles_skipped_existing=tiles_skipped_existing,
+        tiles_failed=tiles_failed,
+        tiles_copied_from_fallback_cache=tiles_copied_from_fallback_cache,
+        tile_error_samples=tile_error_samples,
+        tile_ttl_days=tile_ttl_days,
         bytes_written=bytes_written,
         started_at=started_at,
     )
@@ -454,6 +517,43 @@ def build_local_raster_tile_proxy_contract(
             "若明確開啟遠端取圖，proxy 會從 Scout imagery source registry 取圖並寫入本機 cache。",
         ],
     }
+
+
+def _fresh_fallback_raster_tile_path(
+    cache_root: Path,
+    *,
+    project_ids: Sequence[str] | None,
+    current_project_id: str,
+    layer_id: str,
+    z: int | str,
+    x: int | str,
+    y: int | str,
+    tile_ttl_days: float | None,
+    now: float,
+) -> Path | None:
+    if not project_ids:
+        return None
+    seen: set[str] = {current_project_id}
+    for raw_project_id in project_ids:
+        project_id = str(raw_project_id or "").strip()
+        if not project_id or project_id in seen:
+            continue
+        seen.add(project_id)
+        path = raster_tile_cache_path(
+            project_id,
+            layer_id,
+            z,
+            x,
+            y,
+            cache_root=cache_root,
+        )
+        if path.exists() and _cached_tile_is_fresh(
+            path,
+            tile_ttl_days=tile_ttl_days,
+            now=now,
+        ):
+            return path
+    return None
 
 
 def raster_tile_cache_path(
@@ -489,6 +589,7 @@ def load_or_build_raster_tile_payload(
     fallback_enabled: bool = True,
     imagery_source: Mapping[str, Any] | None = None,
     allow_remote_fetch: bool = False,
+    prefer_native_zoom: bool = False,
     remote_fetch_timeout_seconds: float = 10.0,
     remote_fetcher: Any = fetch_remote_imagery_tile,
 ) -> AdminRasterTilePayload:
@@ -514,28 +615,49 @@ def load_or_build_raster_tile_payload(
                 else None
             ),
         )
+    def fetch_native_payload() -> AdminRasterTilePayload:
+        remote_tile = remote_fetcher(
+            imagery_source,
+            int(z),
+            int(x),
+            int(y),
+            timeout_seconds=remote_fetch_timeout_seconds,
+        )
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_path.write_bytes(remote_tile.body)
+        return AdminRasterTilePayload(
+            body=remote_tile.body,
+            media_type=_tile_media_type(
+                remote_tile.body,
+                default=remote_tile.media_type,
+            ),
+            source="remote_fetch_cache_fill",
+            cache_path=cache_path,
+            body_sha256=remote_tile.body_sha256,
+            imagery_source_id=remote_tile.source_id,
+            remote_url_sha256=hashlib.sha256(
+                remote_tile.url.encode("utf-8")
+            ).hexdigest(),
+        )
+
+    if prefer_native_zoom and allow_remote_fetch and imagery_source is not None:
+        return fetch_native_payload()
+
+    parent_payload = _parent_raster_cache_tile_payload(
+        project_id,
+        layer_id,
+        z,
+        x,
+        y,
+        cache_root=cache_root,
+        requested_cache_path=cache_path,
+        imagery_source=imagery_source,
+    )
+    if parent_payload is not None:
+        return parent_payload
     if allow_remote_fetch and imagery_source is not None:
         try:
-            remote_tile = remote_fetcher(
-                imagery_source,
-                int(z),
-                int(x),
-                int(y),
-                timeout_seconds=remote_fetch_timeout_seconds,
-            )
-            cache_path.parent.mkdir(parents=True, exist_ok=True)
-            cache_path.write_bytes(remote_tile.body)
-            return AdminRasterTilePayload(
-                body=remote_tile.body,
-                media_type=_tile_media_type(remote_tile.body, default=remote_tile.media_type),
-                source="remote_fetch_cache_fill",
-                cache_path=cache_path,
-                body_sha256=remote_tile.body_sha256,
-                imagery_source_id=remote_tile.source_id,
-                remote_url_sha256=hashlib.sha256(
-                    remote_tile.url.encode("utf-8")
-                ).hexdigest(),
-            )
+            return fetch_native_payload()
         except Exception:
             if not fallback_enabled:
                 raise
@@ -560,6 +682,56 @@ def load_or_build_raster_tile_payload(
             else None
         ),
     )
+
+
+def _parent_raster_cache_tile_payload(
+    project_id: str,
+    layer_id: str,
+    z: int | str,
+    x: int | str,
+    y: int | str,
+    *,
+    cache_root: Path | str,
+    requested_cache_path: Path,
+    imagery_source: Mapping[str, Any] | None = None,
+) -> AdminRasterTilePayload | None:
+    tile = validate_osm_tile_coords(z, x, y)
+    for parent_z in range(tile["z"] - 1, -1, -1):
+        scale = 2 ** (tile["z"] - parent_z)
+        parent_x = tile["x"] // scale
+        parent_y = tile["y"] // scale
+        parent_path = raster_tile_cache_path(
+            project_id,
+            layer_id,
+            parent_z,
+            parent_x,
+            parent_y,
+            cache_root=cache_root,
+        )
+        if not parent_path.exists():
+            continue
+        parent_body = parent_path.read_bytes()
+        body = _crop_parent_tile_to_child(
+            parent_body,
+            child_x=tile["x"] - parent_x * scale,
+            child_y=tile["y"] - parent_y * scale,
+            scale=scale,
+        )
+        if body is None:
+            continue
+        return AdminRasterTilePayload(
+            body=body,
+            media_type="image/png",
+            source="local_parent_cache_fallback",
+            cache_path=requested_cache_path,
+            body_sha256=hashlib.sha256(body).hexdigest(),
+            imagery_source_id=(
+                str(imagery_source.get("source_id"))
+                if isinstance(imagery_source, Mapping) and imagery_source.get("source_id")
+                else None
+            ),
+        )
+    return None
 
 
 def tile_bounds_wgs84(z: int, x: int, y: int) -> dict[str, float]:
@@ -680,8 +852,14 @@ def _tile_paste_box(
         return None
     left = math.floor((float(bbox["west"]) - float(tile_bbox["west"])) / lon_span * tile_size)
     right = math.ceil((float(bbox["east"]) - float(tile_bbox["west"])) / lon_span * tile_size)
-    top = math.floor((_lat_to_global_pixel_y(float(bbox["north"]), z) - y * tile_size))
-    bottom = math.ceil((_lat_to_global_pixel_y(float(bbox["south"]), z) - y * tile_size))
+    top = math.floor(
+        _lat_to_global_pixel_y(float(bbox["north"]), z, tile_size=tile_size)
+        - y * tile_size
+    )
+    bottom = math.ceil(
+        _lat_to_global_pixel_y(float(bbox["south"]), z, tile_size=tile_size)
+        - y * tile_size
+    )
     left = max(0, min(tile_size, left))
     right = max(0, min(tile_size, right))
     top = max(0, min(tile_size, top))
@@ -740,7 +918,12 @@ def _imagery_seed_summary(
     dry_run: bool,
     tiles_seen: int,
     tiles_written: int,
+    tiles_refreshed: int,
     tiles_skipped_existing: int,
+    tiles_failed: int,
+    tiles_copied_from_fallback_cache: int,
+    tile_error_samples: list[dict[str, Any]] | None,
+    tile_ttl_days: float | None,
     bytes_written: int,
     started_at: float,
 ) -> dict[str, Any]:
@@ -755,13 +938,35 @@ def _imagery_seed_summary(
         "dry_run": dry_run,
         "tiles_seen": tiles_seen,
         "tiles_written": tiles_written,
+        "tiles_refreshed": tiles_refreshed,
         "tiles_skipped_existing": tiles_skipped_existing,
+        "tiles_copied_from_fallback_cache": tiles_copied_from_fallback_cache,
+        "tiles_failed": tiles_failed,
+        "tile_error_samples": tile_error_samples or [],
+        "tile_ttl_days": tile_ttl_days,
         "bytes_written": bytes_written,
         "duration_seconds": round(time.time() - started_at, 3),
         "external_network_required": not dry_run,
         "network_mode_required": "explicit-fetch",
         "downloads_tiles_into_repo": False,
     }
+
+
+def _cached_tile_is_fresh(
+    path: Path,
+    *,
+    tile_ttl_days: float | None,
+    now: float,
+) -> bool:
+    if tile_ttl_days is None:
+        return True
+    if tile_ttl_days <= 0:
+        return False
+    try:
+        modified_at = path.stat().st_mtime
+    except OSError:
+        return False
+    return now - modified_at <= tile_ttl_days * 24 * 60 * 60
 
 
 def _safe_identifier(value: Any, field_name: str) -> str:
@@ -776,6 +981,37 @@ def _safe_identifier(value: Any, field_name: str) -> str:
 
 def _transparent_png_tile() -> bytes:
     return TRANSPARENT_PNG_TILE
+
+
+def _crop_parent_tile_to_child(
+    body: bytes,
+    *,
+    child_x: int,
+    child_y: int,
+    scale: int,
+) -> bytes | None:
+    try:
+        from PIL import Image
+    except Exception:  # pragma: no cover - optional runtime dependency
+        return None
+    try:
+        with Image.open(io.BytesIO(body)) as image:
+            parent = image.convert("RGBA")
+            width, height = parent.size
+            left = int(round(child_x * width / scale))
+            upper = int(round(child_y * height / scale))
+            right = int(round((child_x + 1) * width / scale))
+            lower = int(round((child_y + 1) * height / scale))
+            if right <= left or lower <= upper:
+                return None
+            crop = parent.crop((left, upper, right, lower))
+            resample = getattr(getattr(Image, "Resampling", Image), "BICUBIC")
+            resized = crop.resize((width, height), resample=resample)
+            output = io.BytesIO()
+            resized.save(output, format="PNG")
+            return output.getvalue()
+    except Exception:
+        return None
 
 
 def _tile_media_type(body: bytes, *, default: str) -> str:
@@ -807,8 +1043,13 @@ def _lat_to_tile_float(lat: float, zoom: int) -> float:
     )
 
 
-def _lat_to_global_pixel_y(lat: float, zoom: int) -> float:
-    return _lat_to_tile_float(lat, zoom) * DEFAULT_RASTER_TILE_SIZE
+def _lat_to_global_pixel_y(
+    lat: float,
+    zoom: int,
+    *,
+    tile_size: int = DEFAULT_RASTER_TILE_SIZE,
+) -> float:
+    return _lat_to_tile_float(lat, zoom) * tile_size
 
 
 def _tile_index(value: float, zoom: int) -> int:

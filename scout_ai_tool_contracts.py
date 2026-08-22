@@ -8,14 +8,22 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from scout_safety_boundary_tool import (
+    SAFETY_ADMISSION_OPTIONAL_FIELDS,
     SAFETY_ADMISSION_REQUIRED_FIELDS,
     SAFETY_BOUNDARY_OUTPUT_KIND,
     SAFETY_BOUNDARY_TOOL_ID,
 )
 from scout_live_navigation_state_tool import (
+    LIVE_NAVIGATION_OPTIONAL_FIELDS,
     LIVE_NAVIGATION_REQUIRED_FIELDS,
     LIVE_NAVIGATION_STATE_OUTPUT_KIND,
     LIVE_NAVIGATION_STATE_TOOL_ID,
+    NMEA_ROUTE_RISK_PROBE_TOOL_ID,
+)
+from scout_navigation_terrain_tool import (
+    NAVIGATION_TERRAIN_OPTIONAL_FIELDS,
+    NAVIGATION_TERRAIN_OUTPUT_KIND,
+    NAVIGATION_TERRAIN_TOOL_ID,
 )
 from scout_ins_dr_trace_tool import (
     INS_DR_TRACE_OUTPUT_KIND,
@@ -32,6 +40,83 @@ from scout_weather_window_tool import (
     WEATHER_WINDOW_OUTPUT_KIND,
     WEATHER_WINDOW_REQUIRED_FIELDS,
     WEATHER_WINDOW_TOOL_ID,
+)
+from scout_cwa_environment_tool import (
+    CWA_ENVIRONMENT_OPTIONAL_FIELDS,
+    CWA_ENVIRONMENT_OUTPUT_KIND,
+    CWA_ENVIRONMENT_TOOL_ID,
+)
+from scout_gee_environment_tool import (
+    GEE_ENVIRONMENT_OPTIONAL_FIELDS,
+    GEE_ENVIRONMENT_OUTPUT_KIND,
+    GEE_ENVIRONMENT_TOOL_ID,
+)
+from scout_route_readiness_tool import (
+    ROUTE_READINESS_OPTIONAL_FIELDS,
+    ROUTE_READINESS_OUTPUT_KIND,
+    ROUTE_READINESS_TOOL_ID,
+)
+from scout_contextual_permission_tool import (
+    CONTEXTUAL_PERMISSION_OPTIONAL_FIELDS,
+    CONTEXTUAL_PERMISSION_OUTPUT_KIND,
+    CONTEXTUAL_PERMISSION_TOOL_ID,
+)
+from scout_route_context_tool import (
+    ROUTE_CONTEXT_OPTIONAL_FIELDS,
+    ROUTE_CONTEXT_OUTPUT_KIND,
+    ROUTE_CONTEXT_TOOL_ID,
+)
+from scout_pace_guardian_tool import (
+    PACE_GUARDIAN_OPTIONAL_FIELDS,
+    PACE_GUARDIAN_OUTPUT_KIND,
+    PACE_GUARDIAN_TOOL_ID,
+)
+from scout_equipment_resource_tool import (
+    EQUIPMENT_RESOURCE_OPTIONAL_FIELDS,
+    EQUIPMENT_RESOURCE_OUTPUT_KIND,
+    EQUIPMENT_RESOURCE_TOOL_ID,
+)
+from scout_team_status_tool import (
+    TEAM_STATUS_OPTIONAL_FIELDS,
+    TEAM_STATUS_OUTPUT_KIND,
+    TEAM_STATUS_TOOL_ID,
+)
+from scout_post_trip_review_tool import (
+    POST_TRIP_REVIEW_OPTIONAL_FIELDS,
+    POST_TRIP_REVIEW_OUTPUT_KIND,
+    POST_TRIP_REVIEW_TOOL_ID,
+)
+from scout_review_gap_tool import (
+    REVIEW_GAP_OPTIONAL_FIELDS,
+    REVIEW_GAP_OUTPUT_KIND,
+    REVIEW_GAP_REQUIRED_FIELDS,
+    REVIEW_GAP_TOOL_ID,
+)
+from scout_route_architecture_tool import (
+    ROUTE_ARCHITECTURE_OPTIONAL_FIELDS,
+    ROUTE_ARCHITECTURE_OUTPUT_KIND,
+    ROUTE_ARCHITECTURE_TOOL_ID,
+)
+from scout_media_literacy_tool import (
+    MEDIA_LITERACY_OPTIONAL_FIELDS,
+    MEDIA_LITERACY_OUTPUT_KIND,
+    MEDIA_LITERACY_TOOL_ID,
+)
+from scout_survival_incident_playbook_tool import (
+    SURVIVAL_INCIDENT_PLAYBOOK_OPTIONAL_FIELDS,
+    SURVIVAL_INCIDENT_PLAYBOOK_OUTPUT_KIND,
+    SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID,
+)
+from scout_runtime_ingress_status_tool import (
+    RUNTIME_INGRESS_STATUS_OPTIONAL_FIELDS,
+    RUNTIME_INGRESS_STATUS_OUTPUT_KIND,
+    RUNTIME_INGRESS_STATUS_REQUIRED_FIELDS,
+    RUNTIME_INGRESS_STATUS_TOOL_ID,
+)
+from scout_workspace_query_tool import (
+    WORKSPACE_QUERY_OUTPUT_KIND,
+    WORKSPACE_QUERY_TOOL_ID,
+    workspace_query_request_json_schema,
 )
 
 ARTIFACT_KIND_REGISTRY = "scout_ai_tool_registry"
@@ -146,6 +231,10 @@ class ScoutAiToolRegistryOutput(ScoutAiToolBaseModel):
 
 
 EXECUTABLE_TOOL_ALIASES: dict[str, list[str]] = {
+    WORKSPACE_QUERY_TOOL_ID: [
+        "scout.ai.workspace_query",
+        "scout.ai.workspace.query",
+    ],
     "pydantic_ai.tool.search_scout_workspace_catalog.v0": [
         "scout.ai.workspace_catalog.search",
     ],
@@ -175,8 +264,21 @@ EXECUTABLE_TOOL_ALIASES: dict[str, list[str]] = {
     LIVE_NAVIGATION_STATE_TOOL_ID: [
         "scout.ai.live_navigation_state.assess",
     ],
+    NMEA_ROUTE_RISK_PROBE_TOOL_ID: [
+        "assistant_skill.live_navigation.nmea_route_risk",
+        "scout.ai.nmea_live_navigation_probe.assess",
+        "scout.ai.live_navigation.nmea_route_risk",
+    ],
+    NAVIGATION_TERRAIN_TOOL_ID: [
+        "scout.ai.navigation_terrain.assess",
+        "scout.ai.map_readiness.assess",
+        "scout.ai.navigation_readiness.assess",
+    ],
     SAFETY_BOUNDARY_TOOL_ID: [
         "scout.ai.safety_boundary.explain",
+        "scout.ai.safety_boundary.assess",
+        "scout.ai.runtime_admission.assess",
+        "scout.ai.admission_boundary.assess",
     ],
     ENERGY_VITALS_TOOL_ID: [
         "scout.ai.energy_vitals.assess",
@@ -184,10 +286,81 @@ EXECUTABLE_TOOL_ALIASES: dict[str, list[str]] = {
     WEATHER_WINDOW_TOOL_ID: [
         "scout.ai.weather_window.assess",
     ],
+    CWA_ENVIRONMENT_TOOL_ID: [
+        "scout.ai.cwa_environment.assess",
+        "scout.ai.cwa_weather_environment.assess",
+        "scout.ai.cwa_weather.assess",
+    ],
+    GEE_ENVIRONMENT_TOOL_ID: [
+        "scout.ai.gee_environment.assess",
+        "scout.ai.smap_gpm_environment.assess",
+        "scout.ai.hydrology_environment.assess",
+    ],
+    ROUTE_READINESS_TOOL_ID: [
+        "scout.ai.route_readiness.assess",
+        "scout.ai.departure_gate.assess",
+        "scout.ai.pretrip_go_no_go.assess",
+    ],
+    CONTEXTUAL_PERMISSION_TOOL_ID: [
+        "scout.ai.contextual_permission.assess",
+        "scout.ai.micro_decision.assess",
+        "scout.ai.risk_budget.permission",
+    ],
+    ROUTE_CONTEXT_TOOL_ID: [
+        "scout.ai.route_context.assess",
+        "scout.ai.experience_guide.assess",
+    ],
+    PACE_GUARDIAN_TOOL_ID: [
+        "scout.ai.pace_guardian.assess",
+        "scout.ai.team_pace_fit.assess",
+        "scout.ai.readiness_pace_fit.assess",
+    ],
+    EQUIPMENT_RESOURCE_TOOL_ID: [
+        "scout.ai.equipment_resource.assess",
+        "scout.ai.device_resource.assess",
+        "scout.ai.gear_readiness.assess",
+    ],
+    TEAM_STATUS_TOOL_ID: [
+        "scout.ai.team_status.assess",
+        "scout.ai.team_guardian.assess",
+        "scout.ai.remote_contact.assess",
+    ],
+    POST_TRIP_REVIEW_TOOL_ID: [
+        "scout.ai.post_trip_review.assess",
+        "scout.ai.after_action.assess",
+        "scout.ai.learning_review.assess",
+    ],
+    REVIEW_GAP_TOOL_ID: [
+        "scout.ai.review_gap.assess",
+        "scout.ai.provenance_gap.assess",
+        "scout.ai.review_provenance.assess",
+    ],
+    ROUTE_ARCHITECTURE_TOOL_ID: [
+        "scout.ai.route_architecture.assess",
+        "scout.ai.cp_graph.assess",
+        "scout.ai.turn_back.assess",
+    ],
+    MEDIA_LITERACY_TOOL_ID: [
+        "scout.ai.media_literacy.assess",
+        "scout.ai.media_bias.assess",
+        "scout.ai.bias_sentinel.assess",
+    ],
+    SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID: [
+        "scout.ai.survival_incident_playbook.explain",
+        "scout.ai.incident_playbook.explain",
+        "scout.ai.sos_playbook.explain",
+    ],
+    RUNTIME_INGRESS_STATUS_TOOL_ID: [
+        "scout.ai.runtime_ingress_status.search",
+        "scout.ai.ingress_status.search",
+        "scout.ai.router_status.search",
+        "scout.ai.sensorlogger_status.search",
+    ],
 }
 
 
 EXECUTABLE_OUTPUT_KINDS: dict[str, str] = {
+    WORKSPACE_QUERY_TOOL_ID: WORKSPACE_QUERY_OUTPUT_KIND,
     "pydantic_ai.tool.search_scout_workspace_catalog.v0": "scout_ai_workspace_catalog_tool_output",
     "pydantic_ai.tool.search_scout_route_structure.v0": "scout_ai_route_structure_tool_output",
     "pydantic_ai.tool.search_scout_major_points.v0": "scout_ai_major_points_tool_output",
@@ -197,9 +370,25 @@ EXECUTABLE_OUTPUT_KINDS: dict[str, str] = {
     "pydantic_ai.tool.search_scout_map_perception.v0": "scout_ai_map_perception_tool_output",
     INS_DR_TRACE_TOOL_ID: INS_DR_TRACE_OUTPUT_KIND,
     LIVE_NAVIGATION_STATE_TOOL_ID: LIVE_NAVIGATION_STATE_OUTPUT_KIND,
+    NMEA_ROUTE_RISK_PROBE_TOOL_ID: LIVE_NAVIGATION_STATE_OUTPUT_KIND,
+    NAVIGATION_TERRAIN_TOOL_ID: NAVIGATION_TERRAIN_OUTPUT_KIND,
     SAFETY_BOUNDARY_TOOL_ID: SAFETY_BOUNDARY_OUTPUT_KIND,
     ENERGY_VITALS_TOOL_ID: ENERGY_VITALS_OUTPUT_KIND,
     WEATHER_WINDOW_TOOL_ID: WEATHER_WINDOW_OUTPUT_KIND,
+    CWA_ENVIRONMENT_TOOL_ID: CWA_ENVIRONMENT_OUTPUT_KIND,
+    GEE_ENVIRONMENT_TOOL_ID: GEE_ENVIRONMENT_OUTPUT_KIND,
+    ROUTE_READINESS_TOOL_ID: ROUTE_READINESS_OUTPUT_KIND,
+    CONTEXTUAL_PERMISSION_TOOL_ID: CONTEXTUAL_PERMISSION_OUTPUT_KIND,
+    ROUTE_CONTEXT_TOOL_ID: ROUTE_CONTEXT_OUTPUT_KIND,
+    PACE_GUARDIAN_TOOL_ID: PACE_GUARDIAN_OUTPUT_KIND,
+    EQUIPMENT_RESOURCE_TOOL_ID: EQUIPMENT_RESOURCE_OUTPUT_KIND,
+    TEAM_STATUS_TOOL_ID: TEAM_STATUS_OUTPUT_KIND,
+    POST_TRIP_REVIEW_TOOL_ID: POST_TRIP_REVIEW_OUTPUT_KIND,
+    REVIEW_GAP_TOOL_ID: REVIEW_GAP_OUTPUT_KIND,
+    ROUTE_ARCHITECTURE_TOOL_ID: ROUTE_ARCHITECTURE_OUTPUT_KIND,
+    MEDIA_LITERACY_TOOL_ID: MEDIA_LITERACY_OUTPUT_KIND,
+    SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID: SURVIVAL_INCIDENT_PLAYBOOK_OUTPUT_KIND,
+    RUNTIME_INGRESS_STATUS_TOOL_ID: RUNTIME_INGRESS_STATUS_OUTPUT_KIND,
 }
 
 
@@ -327,7 +516,11 @@ def _add_question_eval_tools(contracts: dict[str, ScoutAiToolContract]) -> None:
             implementation_status=ScoutAiToolImplementationStatus.READY_CURRENT_TOOL,
             description=str(raw.get("evidence_scope") or raw.get("label") or tool_id),
             data_bundles=[str(raw.get("evidence_scope") or "local Scout workspace evidence")],
-            required_fields=["project_root"],
+            required_fields=(
+                ["project_root", "request"]
+                if tool_id == WORKSPACE_QUERY_TOOL_ID
+                else ["project_root"]
+            ),
             optional_fields=_optional_fields_for(tool_id),
             workflow_steps=[
                 "resolve project root",
@@ -377,6 +570,46 @@ def _contract_from_raw(tool_id: str, raw: dict[str, Any]) -> ScoutAiToolContract
         existing_support = [
             *_as_str_list(raw.get("existing_support")),
             "scout_weather_window_tool.py read-only route weather package assessor",
+        ]
+    elif tool_id == ENERGY_VITALS_TOOL_ID:
+        status = ScoutAiToolImplementationStatus.READY_CURRENT_TOOL
+        required_fields = list(ENERGY_VITALS_REQUIRED_FIELDS)
+        implementation_gap = None
+        existing_support = [
+            *_as_str_list(raw.get("existing_support")),
+            "scout_energy_vitals_tool.py read-only energy/vitals assessor",
+        ]
+    elif tool_id == REVIEW_GAP_TOOL_ID:
+        status = ScoutAiToolImplementationStatus.READY_CURRENT_TOOL
+        required_fields = list(REVIEW_GAP_REQUIRED_FIELDS)
+        implementation_gap = None
+        existing_support = [
+            *_as_str_list(raw.get("existing_support")),
+            "scout_review_gap_tool.py compact review/provenance gap assessor",
+        ]
+    elif tool_id == NMEA_ROUTE_RISK_PROBE_TOOL_ID:
+        status = ScoutAiToolImplementationStatus.READY_CURRENT_TOOL
+        required_fields = list(LIVE_NAVIGATION_REQUIRED_FIELDS)
+        implementation_gap = None
+        existing_support = [
+            *_as_str_list(raw.get("existing_support")),
+            "scout_live_navigation_state_tool.py general read-only live navigation assessor supersedes the scenario probe gap",
+        ]
+    elif tool_id == RUNTIME_INGRESS_STATUS_TOOL_ID:
+        status = ScoutAiToolImplementationStatus.READY_CURRENT_TOOL
+        required_fields = list(RUNTIME_INGRESS_STATUS_REQUIRED_FIELDS)
+        implementation_gap = None
+        existing_support = [
+            *_as_str_list(raw.get("existing_support")),
+            "scout_runtime_ingress_status_tool.py read-only ingress/router trace assessor",
+        ]
+    elif tool_id == SAFETY_BOUNDARY_TOOL_ID:
+        status = ScoutAiToolImplementationStatus.READY_CURRENT_TOOL
+        required_fields = list(SAFETY_ADMISSION_REQUIRED_FIELDS)
+        implementation_gap = None
+        existing_support = [
+            *_as_str_list(raw.get("existing_support")),
+            "scout_safety_boundary_tool.py read-only current safety admission boundary assessor",
         ]
     else:
         required_fields = _as_str_list(raw.get("required_fields"))
@@ -438,6 +671,52 @@ def _argument_schema_for(tool_id: str) -> dict[str, Any]:
     for field in _optional_fields_for(tool_id):
         properties[field] = {"type": ["string", "number", "boolean", "array", "null"]}
     required = ["project_root"]
+    if tool_id == WORKSPACE_QUERY_TOOL_ID:
+        try:
+            request_schema = workspace_query_request_json_schema()
+        except ImportError:
+            request_schema = {
+                "type": "object",
+                "description": (
+                    "Typed deterministic workspace query request with an "
+                    "operation discriminator."
+                ),
+                "properties": {
+                    "operation": {
+                        "type": "string",
+                        "enum": [
+                            "inspect",
+                            "exists",
+                            "count",
+                            "distinct",
+                            "filter",
+                            "group_by",
+                            "top_k",
+                            "argmax",
+                            "diff",
+                            "freshness",
+                            "nearest",
+                            "interval",
+                            "route_forward",
+                        ],
+                    }
+                },
+                "required": ["operation"],
+            }
+        definitions = request_schema.pop("$defs", {})
+        properties = {
+            "project_root": {"type": "string"},
+            "request": request_schema,
+        }
+        schema = {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["project_root", "request"],
+            "properties": properties,
+        }
+        if definitions:
+            schema["$defs"] = definitions
+        return schema
     if tool_id == "pydantic_ai.tool.search_scout_evidence_fulltext.v0":
         required.append("query")
     return {
@@ -465,6 +744,8 @@ def _future_argument_schema(required_fields: list[str]) -> dict[str, Any]:
 
 
 def _optional_fields_for(tool_id: str) -> list[str]:
+    if tool_id == WORKSPACE_QUERY_TOOL_ID:
+        return []
     if tool_id == "pydantic_ai.tool.search_scout_workspace_catalog.v0":
         return ["domains", "include_missing"]
     if tool_id == "pydantic_ai.tool.search_scout_route_structure.v0":
@@ -511,9 +792,13 @@ def _optional_fields_for(tool_id: str) -> list[str]:
             "max_interpolation_gap_s",
         ]
     if tool_id == LIVE_NAVIGATION_STATE_TOOL_ID:
-        return list(LIVE_NAVIGATION_REQUIRED_FIELDS)
+        return list(LIVE_NAVIGATION_OPTIONAL_FIELDS)
+    if tool_id == NMEA_ROUTE_RISK_PROBE_TOOL_ID:
+        return list(LIVE_NAVIGATION_OPTIONAL_FIELDS)
+    if tool_id == NAVIGATION_TERRAIN_TOOL_ID:
+        return list(NAVIGATION_TERRAIN_OPTIONAL_FIELDS)
     if tool_id == SAFETY_BOUNDARY_TOOL_ID:
-        return list(SAFETY_ADMISSION_REQUIRED_FIELDS)
+        return list(SAFETY_ADMISSION_OPTIONAL_FIELDS)
     if tool_id == ENERGY_VITALS_TOOL_ID:
         return [
             *ENERGY_VITALS_REQUIRED_FIELDS,
@@ -521,6 +806,34 @@ def _optional_fields_for(tool_id: str) -> list[str]:
         ]
     if tool_id == WEATHER_WINDOW_TOOL_ID:
         return list(WEATHER_WINDOW_OPTIONAL_FIELDS)
+    if tool_id == CWA_ENVIRONMENT_TOOL_ID:
+        return list(CWA_ENVIRONMENT_OPTIONAL_FIELDS)
+    if tool_id == GEE_ENVIRONMENT_TOOL_ID:
+        return list(GEE_ENVIRONMENT_OPTIONAL_FIELDS)
+    if tool_id == ROUTE_READINESS_TOOL_ID:
+        return list(ROUTE_READINESS_OPTIONAL_FIELDS)
+    if tool_id == CONTEXTUAL_PERMISSION_TOOL_ID:
+        return list(CONTEXTUAL_PERMISSION_OPTIONAL_FIELDS)
+    if tool_id == ROUTE_CONTEXT_TOOL_ID:
+        return list(ROUTE_CONTEXT_OPTIONAL_FIELDS)
+    if tool_id == PACE_GUARDIAN_TOOL_ID:
+        return list(PACE_GUARDIAN_OPTIONAL_FIELDS)
+    if tool_id == EQUIPMENT_RESOURCE_TOOL_ID:
+        return list(EQUIPMENT_RESOURCE_OPTIONAL_FIELDS)
+    if tool_id == TEAM_STATUS_TOOL_ID:
+        return list(TEAM_STATUS_OPTIONAL_FIELDS)
+    if tool_id == POST_TRIP_REVIEW_TOOL_ID:
+        return list(POST_TRIP_REVIEW_OPTIONAL_FIELDS)
+    if tool_id == REVIEW_GAP_TOOL_ID:
+        return list(REVIEW_GAP_OPTIONAL_FIELDS)
+    if tool_id == ROUTE_ARCHITECTURE_TOOL_ID:
+        return list(ROUTE_ARCHITECTURE_OPTIONAL_FIELDS)
+    if tool_id == MEDIA_LITERACY_TOOL_ID:
+        return list(MEDIA_LITERACY_OPTIONAL_FIELDS)
+    if tool_id == SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID:
+        return list(SURVIVAL_INCIDENT_PLAYBOOK_OPTIONAL_FIELDS)
+    if tool_id == RUNTIME_INGRESS_STATUS_TOOL_ID:
+        return list(RUNTIME_INGRESS_STATUS_OPTIONAL_FIELDS)
     return []
 
 

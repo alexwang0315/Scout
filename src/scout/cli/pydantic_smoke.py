@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-from importlib.metadata import version
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any
@@ -13,6 +12,7 @@ from typing import Any
 from fastapi.testclient import TestClient
 
 from scout.agents import PydanticScoutAgentProvider, resolve_model_policy
+from scout.agents.pydantic_ai_compat import pydantic_ai_runtime_version
 from scout.api.routes import create_app
 
 
@@ -90,14 +90,16 @@ def run_smoke(
 ) -> dict[str, Any]:
     loaded_env_file = _load_env_file(env_file or repo_root / ".env")
     model_policy = resolve_model_policy(model)
+    reported_model = _reported_model_name(model_policy)
     if model_policy.missing_credential_env:
         return {
             "provider": "PydanticScoutAgentProvider",
-            "pydantic_ai_version": version("pydantic-ai"),
-            "model": model_policy.display_name,
+            "pydantic_ai_version": pydantic_ai_runtime_version(),
+            "model": reported_model,
             "model_policy": model_policy.model_dump(mode="json"),
             "env_file_loaded": loaded_env_file,
             "openrouter_api_key_present": bool(os.getenv("OPENROUTER_API_KEY")),
+            "nvidia_api_key_present": bool(os.getenv("NVIDIA_API_KEY")),
             "request_status": "model_config_blocked",
             "workflow_id": None,
             "workflow_count": 0,
@@ -155,8 +157,8 @@ def run_smoke(
         return {
             "app_title": app.title,
             "provider": "PydanticScoutAgentProvider",
-            "pydantic_ai_version": version("pydantic-ai"),
-            "model": model_policy.display_name,
+            "pydantic_ai_version": pydantic_ai_runtime_version(),
+            "model": reported_model,
             "model_policy": model_policy.model_dump(mode="json"),
             "model_sla": (
                 provider.last_sla_result.to_metadata()
@@ -165,6 +167,7 @@ def run_smoke(
             ),
             "env_file_loaded": loaded_env_file,
             "openrouter_api_key_present": bool(os.getenv("OPENROUTER_API_KEY")),
+            "nvidia_api_key_present": bool(os.getenv("NVIDIA_API_KEY")),
             "request_status": created_payload["status"],
             "workflow_id": created_payload.get("workflow_id"),
             "workflow_name": workflow_payload["name"] if workflow_payload else None,
@@ -190,6 +193,14 @@ def run_smoke(
             "capability_count": len(capabilities.json()["capabilities"]),
             "runtime_tick": tick.json(),
         }
+
+
+def _reported_model_name(model_policy: Any) -> str:
+    if getattr(model_policy, "provider", None) == "nvidia":
+        provider_model_id = getattr(model_policy, "provider_model_id", None)
+        if provider_model_id:
+            return str(provider_model_id)
+    return str(model_policy.display_name)
 
 
 def _load_env_file(path: Path) -> bool:

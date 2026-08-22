@@ -18,6 +18,12 @@ from scout.agents.deps import (
 )
 from scout.agents.model_gateway import ModelSlaCallResult, ModelSlaGateway
 from scout.agents.model_policy import ModelPolicy, resolve_model_policy
+from scout.agents.pydantic_ai_compat import (
+    build_chat_model,
+    pydantic_agent_runtime_kwargs,
+    pydantic_native_research_capabilities,
+    pydantic_result_output,
+)
 
 
 class PydanticScoutAgentProvider:
@@ -47,15 +53,20 @@ class PydanticScoutAgentProvider:
 
         def provider_call() -> BaseModel:
             agent = Agent(
-                self._model or self._local_function_model(request),
+                self._agent_model(request),
                 output_type=request.output_type,
                 instructions=_typed_output_instructions(request),
                 name=request.agent_name,
                 retries={"output": 3},
                 tools=_read_only_tools(request),
+                capabilities=pydantic_native_research_capabilities(self._model_policy),
+                **pydantic_agent_runtime_kwargs(),
             )
             result = agent.run_sync(request.prompt)
-            return validate_provider_output(result.output, request.output_type)
+            return validate_provider_output(
+                pydantic_result_output(result),
+                request.output_type,
+            )
 
         def fallback_call() -> BaseModel:
             return validate_provider_output(
@@ -70,6 +81,11 @@ class PydanticScoutAgentProvider:
         )
         self.last_sla_result = sla_result
         return validate_provider_output(sla_result.output, request.output_type)
+
+    def _agent_model(self, request: ScoutAgentRequest) -> Any:
+        if isinstance(self._model, str):
+            return build_chat_model(model_name=self._model)
+        return self._model or self._local_function_model(request)
 
     def _local_function_model(self, request: ScoutAgentRequest) -> FunctionModel:
         def scout_local_model(

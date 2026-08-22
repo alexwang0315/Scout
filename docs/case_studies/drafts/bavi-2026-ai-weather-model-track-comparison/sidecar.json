@@ -1,0 +1,379 @@
+{
+  "schema_version": "case-study-addition.v0.1",
+  "case_id": "bavi_2026_ai_weather_model_track_comparison",
+  "case_slug": "bavi-2026-ai-weather-model-track-comparison",
+  "status": "draft",
+  "created_at": "2026-07-11T00:00:00+08:00",
+  "sources": [
+    {
+      "source_id": "src_001",
+      "type": "pasted_text",
+      "title": "巴威颱風路徑預測 - AIGEFS 勝出",
+      "url": null,
+      "publisher": "User-provided text citing 觀氣象看天氣",
+      "published_date": null,
+      "accessed_at": "2026-07-11",
+      "reliability": "hearsay",
+      "access_note": "The text was provided without the original comparison image, legend, forecast cycle, tracker method, or underlying track data."
+    },
+    {
+      "source_id": "src_002",
+      "type": "url",
+      "title": "SCN 25-89: Implementation of AIGFS, AIGEFS, and HGEFS",
+      "url": "https://www.weather.gov/media/notification/pdf_2025/scn25-89_AIGFS_AIGEFS_and_HGEFS.pdf",
+      "publisher": "NOAA National Weather Service",
+      "published_date": "2025-12-09",
+      "accessed_at": "2026-07-11",
+      "reliability": "reported_fact"
+    },
+    {
+      "source_id": "src_003",
+      "type": "url",
+      "title": "Development of a hybrid ML and physical model global ensemble system",
+      "url": "https://repository.library.noaa.gov/view/noaa/70717",
+      "publisher": "NOAA/NCEP",
+      "published_date": "2025",
+      "accessed_at": "2026-07-11",
+      "reliability": "reported_fact"
+    },
+    {
+      "source_id": "src_004",
+      "type": "url",
+      "title": "Open-Meteo Ensemble API",
+      "url": "https://open-meteo.com/en/docs/ensemble-api",
+      "publisher": "Open-Meteo",
+      "published_date": null,
+      "accessed_at": "2026-07-11",
+      "reliability": "reported_fact"
+    },
+    {
+      "source_id": "src_005",
+      "type": "url",
+      "title": "ECMWF's AI forecasts become operational",
+      "url": "https://www.ecmwf.int/en/about/media-centre/news/2025/ecmwfs-ai-forecasts-become-operational",
+      "publisher": "ECMWF",
+      "published_date": "2025-02-25",
+      "accessed_at": "2026-07-11",
+      "reliability": "reported_fact"
+    },
+    {
+      "source_id": "src_006",
+      "type": "url",
+      "title": "AIFS Machine Learning data",
+      "url": "https://www.ecmwf.int/en/forecasts/datasets/aifs-machine-learning-data",
+      "publisher": "ECMWF",
+      "published_date": null,
+      "accessed_at": "2026-07-11",
+      "reliability": "reported_fact"
+    },
+    {
+      "source_id": "src_007",
+      "type": "url",
+      "title": "How we're supporting better tropical cyclone prediction with AI",
+      "url": "https://deepmind.google/blog/how-were-supporting-better-tropical-cyclone-prediction-with-ai/",
+      "publisher": "Google DeepMind",
+      "published_date": "2025-06-12",
+      "accessed_at": "2026-07-11",
+      "reliability": "reported_fact"
+    },
+    {
+      "source_id": "src_008",
+      "type": "url",
+      "title": "2026 Typhoon No. 9 Bavi case page",
+      "url": "https://rdc28.cwa.gov.tw/TDB/public/typhoon_detail?typhoon_id=202609",
+      "publisher": "Taiwan Central Weather Administration",
+      "published_date": null,
+      "accessed_at": "2026-07-11",
+      "reliability": "reported_fact"
+    },
+    {
+      "source_id": "src_009",
+      "type": "url",
+      "title": "JMA typhoon position table for 2026",
+      "url": "https://www.data.jma.go.jp/typhoon/position_table/table2026.html",
+      "publisher": "Japan Meteorological Agency",
+      "published_date": null,
+      "accessed_at": "2026-07-11",
+      "reliability": "reported_fact"
+    },
+    {
+      "source_id": "src_010",
+      "type": "url",
+      "title": "Secondary report relaying the model labels used for Bavi",
+      "url": "https://news.tvbs.com.tw/life/3247349",
+      "publisher": "TVBS",
+      "published_date": "2026-07-03",
+      "accessed_at": "2026-07-11",
+      "reliability": "hearsay"
+    }
+  ],
+  "quotes": [
+    {
+      "quote_id": "q_001",
+      "source_id": "src_001",
+      "text": "AIGEFS 在五個預測裡最接近真實路徑",
+      "reason": "user-provided single-event winner claim retained for later verification",
+      "copyright_check": "short_excerpt"
+    },
+    {
+      "quote_id": "q_002",
+      "source_id": "src_002",
+      "text": "AIGEFS runs with 31 members to provide ensemble forecasts.",
+      "reason": "official ensemble definition",
+      "copyright_check": "short_excerpt"
+    },
+    {
+      "quote_id": "q_003",
+      "source_id": "src_005",
+      "text": "ECMWF has taken the Artificial Intelligence Forecasting System (AIFS) into operations",
+      "reason": "official operational status",
+      "copyright_check": "short_excerpt"
+    },
+    {
+      "quote_id": "q_004",
+      "source_id": "src_007",
+      "text": "WeatherNext Graph, WeatherNext Gen and our latest experimental cyclone model",
+      "reason": "official evidence that Google exposes multiple distinct AI weather models",
+      "copyright_check": "short_excerpt"
+    },
+    {
+      "quote_id": "q_005",
+      "source_id": "src_008",
+      "text": "名稱 巴威 (BAVI) 編號 202609",
+      "reason": "official event identity",
+      "copyright_check": "short_excerpt"
+    }
+  ],
+  "source_facts": [
+    {
+      "fact_id": "fact_001",
+      "summary": "NOAA/NCEP implemented AIGEFS v1.0 operationally on 2025-12-17 as a GraphCast-based 31-member AI global ensemble forecasting system.",
+      "source_refs": [
+        "src_002",
+        "src_003"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "fact_id": "fact_002",
+      "summary": "HGEFS, not AIGEFS alone, is the 62-member hybrid that combines 31 AIGEFS members with 31 operational GEFSv12 members.",
+      "source_refs": [
+        "src_002",
+        "src_003"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "fact_id": "fact_003",
+      "summary": "Open-Meteo provides an ensemble API for NOAA model outputs but is not identified by NOAA as the developer of AIGEFS.",
+      "source_refs": [
+        "src_002",
+        "src_004"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "fact_id": "fact_004",
+      "summary": "AIFS Single became operational on 2025-02-25, AIFS ENS became operational on 2025-07-01, and both were upgraded to v2 on 2026-05-12.",
+      "source_refs": [
+        "src_005",
+        "src_006"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "fact_id": "fact_005",
+      "summary": "Google's public Weather Lab includes multiple models: WeatherNext Graph, WeatherNext Gen, and an experimental cyclone model that generates 50 possible scenarios up to 15 days ahead.",
+      "source_refs": [
+        "src_007"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "fact_id": "fact_006",
+      "summary": "The exact mapping between the secondary label Google FNV3 and Google's public experimental cyclone-model naming requires the original chart legend or source metadata.",
+      "source_refs": [
+        "src_007",
+        "src_010"
+      ],
+      "confidence": "assumption"
+    },
+    {
+      "fact_id": "fact_007",
+      "summary": "On 2026-07-11 the CWA page identified Bavi as 202609 but had not yet populated the final case fields; JMA had not yet listed 2609 in its post-analysis position table.",
+      "source_refs": [
+        "src_008",
+        "src_009"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "fact_id": "fact_008",
+      "summary": "The claim that AIGEFS won this five-model comparison cannot yet be reproduced without the original chart, common initialization time, tracker method, ensemble statistic, and finalized best track.",
+      "source_refs": [
+        "q_001",
+        "src_008",
+        "src_009"
+      ],
+      "confidence": "assumption"
+    }
+  ],
+  "timeline": [
+    {
+      "time_ref": "2025-02-25",
+      "event": "aifs_single_became_operational",
+      "source_refs": [
+        "src_005"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "time_ref": "2025-07-01",
+      "event": "aifs_ens_became_operational",
+      "source_refs": [
+        "src_006"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "time_ref": "2025-12-17",
+      "event": "aigefs_v1_became_operational",
+      "source_refs": [
+        "src_002"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "time_ref": "2026-07-09 14:30 Asia/Taipei",
+      "event": "cwa_issued_bavi_sea_warning",
+      "source_refs": [
+        "src_008"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "time_ref": "2026-07-10 05:30 Asia/Taipei",
+      "event": "cwa_issued_bavi_land_warning",
+      "source_refs": [
+        "src_008"
+      ],
+      "confidence": "reported_fact"
+    },
+    {
+      "time_ref": "2026-07-11",
+      "event": "winner_claim_recorded_before_final_best_track_was_available",
+      "source_refs": [
+        "q_001",
+        "src_008",
+        "src_009"
+      ],
+      "confidence": "hearsay"
+    }
+  ],
+  "taxonomy_keys": [
+    "weather_model_provenance",
+    "forecast_cycle_alignment",
+    "ensemble_uncertainty_preservation",
+    "single_event_model_verification",
+    "official_warning_authority"
+  ],
+  "taxonomy_definitions": {
+    "weather_model_provenance": "Preserve the model owner, data provider, model/version identifier, initialization source, and forecast kind.",
+    "forecast_cycle_alignment": "Compare model guidance only at a common initialization time and common lead hours.",
+    "ensemble_uncertainty_preservation": "Retain ensemble spread and member semantics instead of reducing uncertainty to one line.",
+    "single_event_model_verification": "Treat a one-storm result as a bounded case and require a declared quantitative scoring method.",
+    "official_warning_authority": "Keep official meteorological warnings authoritative over candidate model guidance."
+  },
+  "scout_implications": [
+    {
+      "implication_id": "imp_001",
+      "phase": "phase_4_pretrip_planning",
+      "hook": "pretrip_weather.model_identity_and_provider_provenance",
+      "type": "case_study_signal",
+      "summary": "Scout should retain model owner, data provider, model version, initialization time, and deterministic or ensemble semantics for every weather-model evidence item.",
+      "source_refs": [
+        "src_002",
+        "src_004",
+        "src_005",
+        "src_007"
+      ],
+      "confidence": "assumption"
+    },
+    {
+      "implication_id": "imp_002",
+      "phase": "case_study_corpus",
+      "hook": "pretrip_weather.forecast_cycle_alignment",
+      "type": "case_study_signal",
+      "summary": "Scout should not rank weather models unless forecasts share a common initialization time, verification source, tracker method, and lead-hour set.",
+      "source_refs": [
+        "q_001"
+      ],
+      "confidence": "assumption"
+    },
+    {
+      "implication_id": "imp_003",
+      "phase": "phase_4_pretrip_planning",
+      "hook": "pretrip_weather.ensemble_spread_preservation",
+      "type": "future_research",
+      "summary": "Scout should preserve ensemble spread and member count when presenting AIGEFS, AIFS ENS, GenCast, or another probabilistic forecast instead of showing only one representative line.",
+      "source_refs": [
+        "q_002",
+        "src_006",
+        "src_007"
+      ],
+      "confidence": "assumption"
+    },
+    {
+      "implication_id": "imp_004",
+      "phase": "after_action_review",
+      "hook": "after_action.weather_track_verification",
+      "type": "future_research",
+      "summary": "Scout should label live comparisons provisional and wait for an official post-analysis best track before producing a durable model-performance artifact.",
+      "source_refs": [
+        "src_008",
+        "src_009"
+      ],
+      "confidence": "assumption"
+    },
+    {
+      "implication_id": "imp_005",
+      "phase": "phase_4_pretrip_planning",
+      "hook": "pretrip_weather.official_warning_precedence",
+      "type": "existing_spec_support",
+      "summary": "Scout should treat AI and physics-based model tracks as candidate evidence while official CWA or local meteorological-agency warnings remain authoritative for trip decisions.",
+      "source_refs": [
+        "src_007",
+        "src_008"
+      ],
+      "confidence": "assumption"
+    }
+  ],
+  "boundaries": {
+    "medical": "not_diagnosis",
+    "legal": "no_fault_assignment",
+    "rescue": "not_official_sop",
+    "weather_authority": "official_warning_precedence",
+    "runtime_truth": "no_automatic_safety_threshold_change",
+    "phase_change": "requires_human_review"
+  },
+  "discussion_questions": [
+    "Should Scout require model owner, data provider, model version, initialization time, and forecast kind for every model-derived weather evidence item?",
+    "Should Scout block a model-winner label when the comparison lacks a common forecast cycle, ensemble definition, tracker method, or finalized best track?",
+    "Which combination of common-lead track error, closest approach, passage classification, and ensemble calibration should be used for after-action scoring?",
+    "Should all model-performance learning artifacts remain provisional until the official post-analysis best track is published?"
+  ],
+  "promotion": {
+    "recommended_target": "docs/case_studies/accepted/",
+    "phase_1_patch_required": false,
+    "phase_2_patch_required": false,
+    "fixture_required": false,
+    "requirements": [
+      "obtain_original_chart_and_legend",
+      "record_common_initialization_cycle",
+      "resolve_google_fnv3_model_identity",
+      "wait_for_final_official_best_track",
+      "recompute_quantitative_track_errors",
+      "human_review"
+    ]
+  }
+}

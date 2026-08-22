@@ -103,7 +103,7 @@ def test_model_policy_defaults_to_local_function_model() -> None:
     assert policy.model_for_agent is None
     assert policy.requires_network is False
     assert policy.missing_credential_env == []
-    assert policy.timeout_seconds == 30.0
+    assert policy.timeout_seconds is None
     assert policy.max_cost_usd is None
     assert policy.estimated_call_cost_usd == 0.0
     assert policy.fallback_model == "local FunctionModel"
@@ -126,6 +126,20 @@ def test_model_policy_normalizes_openrouter_alias_and_checks_key() -> None:
     assert with_key.missing_credential_env == []
     assert "sk-test-secret" not in str(with_key.model_dump(mode="json"))
 
+    glm = resolve_model_policy(
+        "glm-5.2",
+        env={"NVIDIA_API_KEY": "nvapi-test-secret"},
+    )
+    assert glm.model_for_agent == "nvidia:z-ai/glm-5.2"
+    assert glm.missing_credential_env == []
+
+    explicit_openrouter = resolve_model_policy(
+        "openrouter:z-ai/glm-5.2",
+        env={"OPENROUTER_API_KEY": "sk-test-secret"},
+    )
+    assert explicit_openrouter.model_for_agent == "openrouter:z-ai/glm-5.2"
+    assert explicit_openrouter.missing_credential_env == []
+
 
 def test_model_policy_uses_env_model_when_explicit_model_is_absent() -> None:
     policy = resolve_model_policy(
@@ -140,7 +154,41 @@ def test_model_policy_uses_env_model_when_explicit_model_is_absent() -> None:
     assert policy.missing_credential_env == []
 
 
-def test_model_policy_reports_rollout_timeout_budget_and_fallback() -> None:
+def test_model_policy_keeps_openai_chat_contract_on_pydantic_ai_v2() -> None:
+    policy = resolve_model_policy("openai:gpt-4o-mini", env={})
+
+    assert policy.mode is ModelPolicyMode.EXTERNAL_PYDANTIC_AI
+    assert policy.model_for_agent == "openai-chat:gpt-4o-mini"
+    assert policy.required_credential_env == ["OPENAI_API_KEY"]
+    assert policy.missing_credential_env == ["OPENAI_API_KEY"]
+
+    with_key = resolve_model_policy(
+        "openai-chat:gpt-4o-mini",
+        env={"OPENAI_API_KEY": "sk-test-secret"},
+    )
+    assert with_key.model_for_agent == "openai-chat:gpt-4o-mini"
+    assert with_key.missing_credential_env == []
+    assert "sk-test-secret" not in str(with_key.model_dump(mode="json"))
+
+
+def test_model_policy_supports_nvidia_api_key_models() -> None:
+    policy = resolve_model_policy("nemotron-super", env={})
+
+    assert policy.mode is ModelPolicyMode.EXTERNAL_PYDANTIC_AI
+    assert policy.model_for_agent == "nvidia:nvidia/llama-3.3-nemotron-super-49b-v1.5"
+    assert policy.required_credential_env == ["NVIDIA_API_KEY"]
+    assert policy.missing_credential_env == ["NVIDIA_API_KEY"]
+
+    with_key = resolve_model_policy(
+        "nvidia:nvidia/llama-3.3-nemotron-super-49b-v1.5",
+        env={"NVIDIA_API_KEY": "nvapi-test-secret"},
+    )
+    assert with_key.model_for_agent == "nvidia:nvidia/llama-3.3-nemotron-super-49b-v1.5"
+    assert with_key.missing_credential_env == []
+    assert "nvapi-test-secret" not in str(with_key.model_dump(mode="json"))
+
+
+def test_model_policy_records_but_does_not_enforce_resource_limits_in_construction() -> None:
     policy = resolve_model_policy(
         "openrouter:openai/gpt-4o-mini",
         env={
@@ -151,11 +199,32 @@ def test_model_policy_reports_rollout_timeout_budget_and_fallback() -> None:
         },
     )
 
-    assert policy.timeout_seconds == 12.5
-    assert policy.max_cost_usd == 0.02
+    assert policy.aggressive_construction_mode is True
+    assert policy.resource_limits_enforced is False
+    assert policy.configured_timeout_seconds == 12.5
+    assert policy.configured_max_cost_usd == 0.02
+    assert policy.timeout_seconds is None
+    assert policy.max_cost_usd is None
     assert policy.estimated_call_cost_usd == 0.001
     assert policy.fallback_model == "openrouter:google/gemma-3-27b-it"
     assert "sk-test-secret" not in str(policy.model_dump(mode="json"))
+
+
+def test_model_policy_enforces_resource_limits_only_when_construction_is_disabled() -> None:
+    policy = resolve_model_policy(
+        "openrouter:openai/gpt-4o-mini",
+        env={
+            "OPENROUTER_API_KEY": "sk-test-secret",
+            "SCOUT_AI_OS_AGGRESSIVE_CONSTRUCTION_MODE": "0",
+            "SCOUT_AI_OS_MODEL_TIMEOUT_SECONDS": "12.5",
+            "SCOUT_AI_OS_MODEL_MAX_COST_USD": "0.02",
+        },
+    )
+
+    assert policy.aggressive_construction_mode is False
+    assert policy.resource_limits_enforced is True
+    assert policy.timeout_seconds == 12.5
+    assert policy.max_cost_usd == 0.02
 
 
 def test_model_policy_reports_estimated_call_cost() -> None:

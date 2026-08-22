@@ -17,6 +17,20 @@ DEFAULT_REGISTRY_ID = "scout.imagery_sources.default.v1"
 DEFAULT_TILE_FETCH_TIMEOUT_SECONDS = 10.0
 HAPPYMAN_WMTS_ENDPOINT = "https://tile.happyman.idv.tw/mp/service"
 HAPPYMAN_WMTS_TILE_MATRIX_SET = "gm_grid"
+RUDY_MAP_LABEL_EXTRACTION_ROLES = (
+    "trail_mileage_k_anchor",
+    "road_mileage_stone",
+    "trail_name_label",
+    "named_place_label",
+    "cellular_communication_point",
+    "trail_annotation_label",
+    "contour_elevation_label",
+    "hazard_annotation_label",
+)
+RUDY_MAP_LABEL_NOTES_ZH = (
+    "Rudy/Rudy+TW 圖磚含步道 K、道路公里樁、通訊點、地名、等高線與路況標註，適合作為 map OCR 候選來源。",
+    "OCR 結果只能成為 pretrip candidate evidence；需投影到路線中心線並經 review。",
+)
 
 
 def _happyman_wmts_metadata(layer_id: str) -> dict[str, Any]:
@@ -106,6 +120,10 @@ DEFAULT_IMAGERY_SOURCE_REGISTRY: dict[str, Any] = {
             "label_zh": "魯地圖",
             "provider": "Happyman / Rudy Map",
             "source_kind": "wmts_kvp_tile",
+            "ocr_capable": True,
+            "label_extraction_roles": list(RUDY_MAP_LABEL_EXTRACTION_ROLES),
+            "map_label_source_priority": "high",
+            "map_label_evidence_policy": "candidate_only_review_required",
             **_happyman_wmts_metadata("rudy"),
             "url_template": (
                 "https://tile.happyman.idv.tw/mp/service?"
@@ -123,6 +141,7 @@ DEFAULT_IMAGERY_SOURCE_REGISTRY: dict[str, Any] = {
             "notes_zh": [
                 "魯地圖 Rudy Map 作為登山地形底圖使用；Scout 只透過 allowlist proxy/cache 呼叫。",
                 "WMTS KVP 參數使用 TILEMATRIX={z}, TILEROW={y}, TILECOL={x}。",
+                *RUDY_MAP_LABEL_NOTES_ZH,
             ],
         },
         "happyman_rudy_twmap": {
@@ -130,23 +149,26 @@ DEFAULT_IMAGERY_SOURCE_REGISTRY: dict[str, Any] = {
             "label": "Rudy Map + TWMap",
             "label_zh": "魯地圖 + TWMap style",
             "provider": "Happyman / Rudy Map",
-            "source_kind": "wmts_kvp_tile",
+            "source_kind": "xyz_tile",
+            "ocr_capable": True,
+            "label_extraction_roles": list(RUDY_MAP_LABEL_EXTRACTION_ROLES),
+            "map_label_source_priority": "highest",
+            "map_label_evidence_policy": "candidate_only_review_required",
             **_happyman_wmts_metadata("rudy_twmap"),
             "url_template": (
-                "https://tile.happyman.idv.tw/mp/service?"
-                "SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0"
-                "&LAYER=rudy_twmap&STYLE=default&TILEMATRIXSET=gm_grid"
-                "&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=image/png"
+                "https://tile.happyman.idv.tw/map/moi_osm/{z}/{x}/{y}.png"
             ),
-            "tile_order": "wmts_kvp_z_y_x",
+            "tile_order": "z_x_y",
             "media_type": "image/png",
             "min_zoom": 5,
             "max_zoom": 20,
-            "attribution": "魯地圖 / Happyman WMTS",
+            "attribution": "魯地圖 / Happyman XYZ tiles",
             "cache_policy": "local_cache_then_remote_fetch_when_explicit",
             "requires_explicit_remote_fetch": True,
             "notes_zh": [
                 "魯地圖加 TWMap style，適合與正射影像做比較。",
+                "Dashboard 動態圖磚使用官方 moi_osm z/x/y 路徑；WMTS metadata 僅保留相容性與稽核。",
+                *RUDY_MAP_LABEL_NOTES_ZH,
             ],
         },
         "happyman_colorrelief": {
@@ -482,6 +504,17 @@ def _source_public_contract(source: Mapping[str, Any]) -> dict[str, Any]:
             str(source.get("url_template") or "").encode("utf-8")
         ).hexdigest(),
     }
+    if source.get("ocr_capable") or source.get("label_extraction_roles"):
+        contract.update(
+            {
+                "ocr_capable": bool(source.get("ocr_capable")),
+                "label_extraction_roles": list(
+                    source.get("label_extraction_roles") or ()
+                ),
+                "map_label_source_priority": source.get("map_label_source_priority"),
+                "map_label_evidence_policy": source.get("map_label_evidence_policy"),
+            }
+        )
     contract.update(wmts_source_metadata(source))
     return contract
 

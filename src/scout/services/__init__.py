@@ -1,6 +1,7 @@
 """Deterministic services for Scout AI OS."""
 
 from scout.services.application_router import ApplicationRouter, RequestRoute, RoutedRequest
+from scout.services.bounded_agent_runtime import BoundedAgentRuntime, estimate_tokens
 from scout.services.capability_registry import CapabilityRecord, CapabilityRegistry
 from scout.services.db import (
     REQUIRED_TABLES,
@@ -24,6 +25,7 @@ from scout.services.generated_runtime_installer import (
 )
 from scout.services.learning_store import LearningArtifactRecord, LearningStore
 from scout.services.memory_store import MemoryItem, MemoryStore
+from scout.services.outbound_standing_grant import evaluate_outbound_standing_grant
 from scout.services.notification_gateway import (
     DryRunNotificationProvider,
     HttpsJsonNotificationTransport,
@@ -34,10 +36,12 @@ from scout.services.notification_gateway import (
     NotificationGateway,
     NotificationProvider,
     NotificationResult,
+    notification_payload_hash,
     OPERATOR_NOTIFICATION_APPROVAL_PHRASE,
     OperatorConfirmedNotificationProvider,
     OperatorNotificationApproval,
     StdoutNotificationProvider,
+    StandingGrantNotificationProvider,
     TelegramNotificationTransport,
 )
 from scout.services.permission_gate import PermissionGate
@@ -45,6 +49,7 @@ from scout.services.workflow_store import WorkflowRecord, WorkflowStore
 
 
 __all__ = [
+    "BoundedAgentRuntime",
     "CapabilityRegistry",
     "ApplicationRouter",
     "CapabilityRecord",
@@ -70,6 +75,7 @@ __all__ = [
     "NotificationGateway",
     "NotificationProvider",
     "NotificationResult",
+    "notification_payload_hash",
     "OPERATOR_NOTIFICATION_APPROVAL_PHRASE",
     "OperatorConfirmedNotificationProvider",
     "OperatorNotificationApproval",
@@ -79,10 +85,13 @@ __all__ = [
     "RuntimeIsolationProfile",
     "RoutedRequest",
     "StdoutNotificationProvider",
+    "StandingGrantNotificationProvider",
     "TelegramNotificationTransport",
     "WorkflowRecord",
     "WorkflowStore",
     "connect_database",
+    "estimate_tokens",
+    "evaluate_outbound_standing_grant",
     "generated_package_hash",
     "initialize_database",
     "list_tables",

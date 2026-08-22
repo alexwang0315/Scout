@@ -1,0 +1,82 @@
+# Scout AI Live Tool Selection Eval
+
+- model: `openrouter:openai/gpt-4o-mini`
+- project: `chilai_nanhua_day1`
+- pass_rate: `8/10`
+- assistant_api_pre_augmentation_used: `False`
+- counts_only_model_native_tool_calls: `True`
+
+| Case | Required matched | Native tool calls | Missing required |
+| --- | --- | --- | --- |
+| field-031 | True | `scout.ai.weather_window.assess.v0, scout.ai.cwa_environment.assess.v0` | `-` |
+| field-032 | True | `scout.ai.weather_window.assess.v0, scout.ai.cwa_environment.assess.v0, scout.ai.gee_environment.assess.v0` | `-` |
+| field-034 | True | `scout.ai.weather_window.assess.v0, scout.ai.cwa_environment.assess.v0` | `-` |
+| field-035 | True | `scout.ai.weather_window.assess.v0, scout.ai.cwa_environment.assess.v0` | `-` |
+| field-036 | True | `scout.ai.cwa_environment.assess.v0, scout.ai.weather_window.assess.v0, scout.ai.gee_environment.assess.v0` | `-` |
+| field-037 | True | `pydantic_ai.tool.search_scout_terrain_scores.v0, pydantic_ai.tool.search_scout_risk_scores.v0, scout.ai.weather_window.assess.v0, scout.ai.gee_environment.assess.v0, scout.ai.cwa_environment.assess.v0` | `-` |
+| field-039 | True | `scout.ai.gee_environment.assess.v0, scout.ai.cwa_environment.assess.v0, scout.ai.weather_window.assess.v0` | `-` |
+| seed-027 | False | `pydantic_ai.tool.search_scout_terrain_scores.v0, scout.ai.weather_window.assess.v0, scout.ai.cwa_environment.assess.v0, pydantic_ai.tool.search_scout_risk_scores.v0` | `scout.ai.gee_environment.assess.v0` |
+| seed-088 | False | `pydantic_ai.tool.search_scout_terrain_scores.v0, pydantic_ai.tool.search_scout_risk_scores.v0, scout.ai.weather_window.assess.v0, scout.ai.cwa_environment.assess.v0` | `scout.ai.gee_environment.assess.v0` |
+| seed-089 | True | `scout.ai.weather_window.assess.v0, scout.ai.gee_environment.assess.v0, scout.ai.cwa_environment.assess.v0, scout.ai.route_readiness.assess.v0` | `-` |
+
+## Answer Previews
+
+### field-031
+
+Question: 白牆下這段還適合走嗎？
+
+The assessment for the route segment under the "白牆" (White Wall) indicates the following:  1. **Weather Decision**: The recommendation is **CONDITIONAL_GO**. This means passage is allowed under certain conditions:    - You must retain the option to recheck the weather.    - Progress is only permitted before any deterioration in weather conditions.    - The next checkpoint (CP) will require a reassessment of the situation.     **Reasons for this decision**:    - The reviewed route weather package indicates no automatic approval for departure.    - The segment "weather.seg.tianchi_late" has an **ELEVATED** risk level with a final risk score of **0.62** and a weather risk score of **0.42**.
+
+### field-032
+
+Question: 現在風雨是否會放大失溫風險？
+
+The assessment of the current weather conditions indicates that there is an elevated risk of hypothermia due to wind and rain. Here are the key findings from the weather evaluations:  1. **Weather Window Assessment**:    - The decision is **CONDITIONAL_GO**, meaning passage is allowed under specific conditions. The route segment weather is classified as **ELEVATED** risk (final risk score of 0.62, weather risk score of 0.42).    - It is advised to set the next checkpoint for a weather re-evaluation, and if the weather risk increases, a change of route or retreat should be considered. The late segment requires daylight discipline, and no discretionary delays are permitted.    - **Source**: We
+
+### field-034
+
+Question: 這段如果起霧會不會容易失向？
+
+Based on the weather assessments for the query regarding fog ("起霧"), the following information is available:  1. **Weather Window Assessment**:    - The decision is **CONDITIONAL_GO**, meaning passage is allowed under certain conditions. Specifically, it is advised to proceed only if the weather does not worsen before reaching the next checkpoint (CP), where a re-evaluation will occur.    - The segment in question (weather.seg.tianchi_late) has been rated as **ELEVATED** risk, with a final risk score of **0.62** and a weather risk score of **0.42**. This indicates a significant concern for fog and other weather-related issues that could affect navigation.    - It is recommended to set the ne
+
+### field-035
+
+Question: 今天的天氣窗口是否足夠？
+
+The assessment of today's weather window indicates a **conditional go** for your plans, but with specific limitations and requirements for ongoing weather checks.  ### Weather Window Decision: - **Decision**: **CONDITIONAL GO** - **Conditions**: You may proceed only if the weather does not deteriorate before reaching the segment `weather.seg.tianchi_late`, and the next checkpoint (CP) will require a re-evaluation of the weather conditions. - **Reasoning**: The reviewed route weather package indicates no automatic departure approval; the late segment requires strict daylight discipline. The risk level for the segment is classified as **ELEVATED** with a final risk score of **0.62** and a weat
+
+### field-036
+
+Question: 溪水暴漲會不會阻斷路線？
+
+The assessment regarding the potential for stream surges (溪水暴漲) to obstruct the route indicates the following:  1. **Weather Window Assessment**:    - The decision is **CONDITIONAL_GO**. It is advised that passage is allowed only if conditions do not worsen before reaching the next checkpoint (CP). The segment towards Tianchi is marked as **ELEVATED** risk (final risk score of 0.62, weather risk score of 0.42). It is crucial to set the next CP for a weather re-check, and if the weather risk increases, a change of route or retreat is recommended. This decision is based on a reviewed route weather package, which does not grant automatic departure approval and emphasizes the need for daylight d
+
+### field-037
+
+Question: 這段下雨後會變成落石區嗎？
+
+Based on the gathered evidence regarding the potential for rockfall after rain in the area, here are the findings:  1. **Weather Conditions**: The reviewed route weather package indicates a **CONDITIONAL GO** decision. The segment weather is classified as **ELEVATED** risk (final risk score of 0.62) due to factors such as late-day fog chance and wet conditions. It is advised to set a checkpoint for re-evaluation of weather conditions, especially if risks increase. The next action is to monitor weather closely and adjust plans accordingly (source: weather window assessment).  2. **CWA Environment**: There is a **CWA warning** indicating elevated weather review pressure, with a maximum expecte
+
+### field-039
+
+Question: 風寒和濕衣是否已經構成風險？
+
+The assessment of the risks associated with "風寒和濕衣" (wind chill and wet clothing) indicates the following:  1. **Weather Window Assessment**:    - The decision is **CONDITIONAL GO**. It is advised to proceed only if weather conditions do not worsen before reaching the next checkpoint (CP). The segment towards Tianchi is rated as **ELEVATED** risk (final risk score of 0.62, weather risk score of 0.42). It requires careful monitoring of weather conditions and daylight discipline.    - Next steps include setting a checkpoint for re-evaluation of weather risks, with the option to change routes or retreat if conditions worsen. This decision is based on a reviewed route weather package, which does
+
+### seed-027
+
+Question: 哪些地方下雨後風險會變高？
+
+Based on the evidence gathered regarding the question "哪些地方下雨後風險會變高？" (Which areas have increased risk after rain?), here are the findings:  1. **Weather Window Assessment**:    - The route weather package indicates a **CONDITIONAL GO** decision, meaning passage is allowed under specific conditions. The segment **weather.seg.tianchi_late** has been assessed with an **ELEVATED** risk level (final risk = 0.62, weather risk = 0.42). It is crucial to re-evaluate weather conditions at the next checkpoint (CP) and adjust the route if weather risks increase. The decision emphasizes the need for daylight discipline and warns of potential late-day fog and wet conditions on the boardwalk. [Source: Wea
+
+### seed-088
+
+Question: 天氣與地形風險是否重疊？
+
+The assessment of whether weather and terrain risks overlap for the project "chilai_nanhua_day1" yields the following findings:  1. **Weather Assessment**:    - The reviewed route weather package indicates a **CONDITIONAL GO** decision. This means passage is allowed under specific conditions, primarily that the weather must be re-evaluated before proceeding. The segment towards Tianchi is marked as **ELEVATED** risk (final risk score of 0.62, weather risk of 0.42). The recommendation is to set the next checkpoint for a weather re-check and to change routes or retreat if the weather risk increases. [Source: Weather Decision Output]  2. **CWA Environment**:    - The CWA workspace evidence show
+
+### seed-089
+
+Question: 是否需要延後出發？
+
+Based on the pretrip assessments for the project "chilai_nanhua_day1," the following conclusions can be drawn regarding whether to delay departure:  1. **Route Readiness Assessment**:    - **Decision**: Conditional Go (CONDITIONAL_GO)    - **Conditions**: Must meet specific requirements and leave or return to the designated checkpoint by **2013-10-08T14:58:50+08:00**.    - **Reasons**: The reviewed planning package does not equate to departure approval, and daylight policies have not been evaluated using the sunrise/sunset window.    - **Next Steps**: Pass through a manual departure gate and retain alternative routes/retreat strategies before conditional departure.    - **Confidence Level**:

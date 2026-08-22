@@ -216,7 +216,10 @@ cache plan with:
   proxy template;
 - explicit network/cache policy.
 
-`no-network` preparation writes only the plan and existing cache refs.
+`no-network` preparation records planning metadata plus existing cache refs
+because it represents CI/offline replay. In-house pre-trip preparation should run in
+`explicit-fetch` mode and materialize the route corridor's vector evidence,
+permitted raster tile cache, OCR labels, route context, and mileage anchors.
 `explicit-fetch` preparation may seed the cache only from an allowlisted imagery
 source and only into workspace or Scout Pi cache paths, never into repo
 fixtures. The browser should request the current zoom's native tile when it is
@@ -225,14 +228,87 @@ and should not be treated as precise evidence.
 
 It may extract labels such as:
 
-- `通訊點`;
+- trail mileage anchors（步道 K）such as `5.5K`, `6K`, `13K`;
+- road mileage stones（公路公里樁）such as `台14線94K`;
+- trail names or route-branch labels;
+- `通訊點`, including carrier hints such as `遠傳`, `台哥大`, or emergency
+  `112`;
 - `水源`;
 - `山屋`;
 - `營地`;
+- contour elevation labels（等高線高程標籤）such as `1123` or `1500`;
 - `遠眺...`;
 - route names;
 - warnings;
 - viewpoint labels.
+
+For Taiwan hiking maps, **Rudy** and **Rudy+TW** are preferred OCR candidate
+sources because they commonly expose route mileage K anchors, named places,
+contour labels, trail annotations, and hazard notes in the same visual context.
+Map preparation records these sources in `raster_label_plan.json` as
+`ocr_candidate_sources`. In alpha, Rudy/Rudy+TW OCR is part of the map
+preparation pipeline itself: when `explicit-fetch` preparation has a permitted
+tile cache, map preparation runs OCR, normalizes the OCR output through the
+adapter, refreshes route-context points and `route_mileage_k_anchors.json`, and
+then reruns mileage tag alignment. This matches CP/MCP/Boss generation: the UI
+should open on prepared workspace artifacts, not require a separate operator
+command to materialize ordinary map-derived evidence.
+
+The alpha adapter is `pretrip_raster_label_adapter.py` and the agent/CLI tool
+`scout.pretrip.raster_label_adapter`. It does **not** run OCR or vision itself.
+It only accepts an explicit operator- or tool-provided JSON payload from an OCR
+engine, normalizes labels into
+`outputs/layers/normalized/raster_label_evidence.geojson`, writes
+`outputs/layers/raster_label_adapter_manifest.json`, and records project refs.
+This keeps live OCR and evidence normalization as separate contracts while
+still letting `pretrip_layer_preparation.py` orchestrate them as one map
+preparation stage. The adapter may be re-run manually for debugging, fixture
+tests, or replacing OCR output, but it is not the primary user workflow.
+
+The OCR extraction entrypoint is `pretrip_raster_label_ocr.py` and the agent/CLI
+tool is `scout.pretrip.raster_label_ocr`. It reads cached Rudy/Rudy+TW tile
+manifests, invokes an optional OCR runtime, and writes explicit OCR JSON to
+`outputs/layers/raster_label_ocr_output.json`. That file is adapter input only;
+it must not write `route_context_points`, `route_mileage_k_anchors`, or runtime
+safety state directly. The default runtime path is Tesseract via `pytesseract`
+so the same contract can run on macOS and Scout Pi after the operator installs
+the OCR runtime. Apple Vision/PyObjC may be used as a macOS optional engine
+later, but it is not the portable baseline. If `tesseract` or `pytesseract` is
+unavailable, the extractor writes a `blocked_dependency_missing` OCR artifact
+with zero labels rather than fabricating OCR results.
+
+Imagery and OCR caching are separate:
+
+- Rudy/Rudy+TW image tiles are stored under the configured raster cache root
+  such as `/data/scout/raster-tiles`. Map preparation uses a 30-day default TTL:
+  fresh tiles are skipped, stale tiles are refreshed, and individual fetch
+  failures are recorded without invalidating the whole preparation run.
+- OCR results are stored as per-tile JSON under
+  `outputs/layers/cache/raster_label_ocr_tiles/`. The cache key includes tile
+  image SHA-256, OCR engine version, engine name, language, and runner kind.
+  This means unchanged tiles do not rerun Tesseract, while changed tiles or OCR
+  engine changes naturally miss cache. The cache stores OCR text/bbox records
+  and provenance only; it never embeds raw tile imagery.
+
+Expected operator sequence:
+
+```bash
+python -m pretrip_layer_preparation \
+  --project-root <project_root> \
+  --layers imagery,overpass,terrain,risk-score,risk-ribbon,risk-heatmap \
+  --network-mode explicit-fetch \
+  --allow-network-fetch \
+  --seed-imagery-cache \
+  --imagery-provider-allows-offline-prefetch \
+  --imagery-seed-max-tiles <bounded_count>
+```
+
+The standalone OCR, adapter, and route-context CLIs remain available for
+debugging and reproducibility, but normal workspace preparation should not ask a
+user to run them after map preparation. If OCR dependencies or cached tiles are
+missing, map preparation writes a blocked OCR stage in
+`outputs/layers/raster_label_ocr_output.json` and keeps the normalized raster
+label evidence empty instead of fabricating mileage anchors.
 
 Every extracted label must preserve:
 
@@ -243,6 +319,41 @@ Every extracted label must preserve:
 - label geometry;
 - distance to route/reference tracks;
 - candidate-only boundary.
+
+Trail mileage anchors are treated as route-chainage evidence before they are
+treated as place names, but a standalone label such as `5.5K` is not unique
+enough to locate a broad mountain workspace. Road mileage stones are different:
+`台20線154K`, `投85線0K`, or `台14線94K` are road-chainage evidence and must not
+be merged into trail K anchors. The same mountain area can contain multiple
+trails and roads with their own K markers. OCR adapters must therefore group
+trail mileage anchors with at least one route context signal:
+
+- trail name or route-branch label from the same tile or nearby bbox;
+- route family from the current workspace/importer;
+- nearby named point, CP, MCP, or hazard text;
+- projection to the selected route/reference centerline.
+
+After OCR, the label bbox is georeferenced, projected to the route centerline,
+and checked for monotonic order along that route-context group. The grouping key
+should include the workspace project id, source id, trail-name label when
+available, nearest named point, projected centerline id, and normalized mileage
+value. Ambiguous mileage anchors remain review-required. A grouped label such as
+`6K` near `雲海保線所` can then help bind public pressure evidence like
+`雲海保線所後吊橋與大崩壁群` to the nearest reviewed CP/MCP/hazard or route boss
+candidate. OCR labels remain pretrip candidate evidence and never runtime safety
+truth.
+
+The route-context collector also normalizes K anchors already present in the
+workspace, even before an OCR adapter exists. Historical GPX waypoint labels,
+`outputs/mcp/mcp_ocr_labels.json`, and
+`outputs/layers/normalized/raster_label_evidence.geojson` are all converted into
+`candidates/route_mileage_k_anchors.json`. This file is a compact candidate
+summary: one grouped anchor per `route_context_key + normalized_mileage_k`, with
+supporting evidence count, coordinate source, raw label examples, and review
+reasons such as `single_source_evidence`, `coordinate_spread_over_300m`, or
+`exceeds_route_summary_distance`. Road mileage stones remain visible in
+`route_context_points` as `road_mileage_stone`, but are excluded from
+`route_mileage_k_anchors.json`.
 
 ### Historical GPX Evidence
 
@@ -386,9 +497,11 @@ bash tools/rebuild_pretrip_workspace_on_scout.sh
 
 The rebuild script reads the fixed material structure under
 `/data/scout/materials/pretrip/{project_id}`, regenerates GPX importer outputs,
-restores durable admin evidence refs from the moved backup workspace, then runs
+restores durable admin evidence refs from the moved backup workspace, runs
 route-corridor map preparation with Overpass, imagery, terrain, risk, route,
-reference-track, CP/POI/hazard, corridor, retreat, and route-note layers.
+reference-track, CP/POI/hazard, corridor, retreat, and route-note layers, then
+collects Sec. 6 route-context evidence into the local route context pack before
+the final workspace verifier runs.
 
 No-network fixture/replay planning remains available for deterministic tests:
 
@@ -469,6 +582,10 @@ pretrip_overpass_ingest.py
 pretrip_gis_perception.py
   Candidate-only GIS perception structures.
 
+pretrip_raster_label_adapter.py
+  Explicit OCR/map-label adapter output normalizer. It converts Rudy/Rudy+TW or
+  other georeferenced OCR JSON into candidate-only raster label evidence.
+
 pretrip_risk_heatmap.py
 pretrip_risk_attribution_diagnostic.py
   Risk heat/delta and factor-attribution outputs.
@@ -485,9 +602,6 @@ pretrip_route_corridor_map_preparation.py
 
 pretrip_web_case_evidence.py
   Explicit web-case query plan and fixture-backed evidence adapter.
-
-pretrip_raster_label_evidence.py
-  Local raster/tile label extraction adapter contract.
 
 tests/test_pretrip_route_corridor_map_preparation.py
   Fixture-backed route bundle, OSM, GPX, terrain, and AI input tests.
@@ -549,9 +663,11 @@ Always:
 Ask first:
 
 - live web search;
-- live Overpass download outside stored fixtures;
+- live Overpass download outside stored fixtures unless the operator selected
+  `explicit-fetch --allow-network-fetch`;
 - cloud Pydantic AI model calls;
-- raster OCR/vision over copyrighted map images;
+- raster OCR/vision over map images whose source does not explicitly allow this
+  workspace/offline preparation use;
 - changing final MissionGraph compile behavior;
 - increasing corridor widths enough to include broad off-route POI searches.
 
@@ -561,8 +677,9 @@ Never:
 - send raw GPX, raw DEM, raw tiles, or large scraped text directly to AI;
 - treat AI output as `ObservedFact`, `DerivedMeasurement`, or runtime safety
   truth;
-- call `/safety/*`;
-- mutate Phase 1 runtime state;
+- directly call `/safety/*` from map preparation instead of producing reviewed
+  workspace artifacts for the on-trip Scout loop;
+- mutate Phase 1 runtime state during pre-trip materialization;
 - write Phase 2 Brain facts;
 - compile final `MissionGraph`;
 - silently render missing OSM/imagery/terrain as fake-looking map patterns.

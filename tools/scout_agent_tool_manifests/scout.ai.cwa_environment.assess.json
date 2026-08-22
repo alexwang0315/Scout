@@ -1,0 +1,59 @@
+{
+  "id": "scout.ai.cwa_environment.assess",
+  "version": "0.1.0",
+  "description": "Assess prepared CWA official weather/environment workspace evidence, including warnings, observations, QPF, forecast, astronomy, tide/marine, and provenance summaries.",
+  "command": {
+    "argv": [
+      "{python}",
+      "-m",
+      "scout_agent_builtin_tools",
+      "ai-tool-run",
+      "--input",
+      "{input}",
+      "--json"
+    ],
+    "dry_run_argument": null
+  },
+  "mode": "local_evidence_query",
+  "input_schema_ref": "schemas/scout_agent/scout_ai_tool_request.json",
+  "output_schema_ref": "schemas/scout_agent/scout_ai_tool_result.json",
+  "allowed_reads": [
+    "assistant.tool_registry",
+    "assistant.tool_contracts",
+    "pretrip.workspace.project",
+    "pretrip.workspace.outputs.environment.cwa",
+    "pretrip.workspace.outputs.environment.factor_matrix",
+    "pretrip.workspace.outputs.environment.go_no_go_review",
+    "pretrip.workspace.outputs.weather_daylight_evidence"
+  ],
+  "allowed_writes": [],
+  "forbidden_writes": [
+    "phase1.runtime",
+    "phase1.safety",
+    "phase2.brain.observed_facts",
+    "live.safety_api",
+    "transport.egress",
+    "hardware.device",
+    "pretrip.workspace"
+  ],
+  "requires_authorization": {
+    "kind": "none"
+  },
+  "trace": {
+    "required": true,
+    "event_kind": "agent_tool_invocation"
+  },
+  "metadata": {
+    "tool_id": "scout.ai.cwa_environment.assess.v0",
+    "read_only": true,
+    "candidate_only": true,
+    "runtime_safety_truth": false,
+    "network_policy": "read_prepared_workspace_artifacts_only",
+    "server_side_secret_policy": "CWA API key must never be exposed to client, logs, or artifacts",
+    "runtime_activation_allowed": false,
+    "outbound_send_allowed": false,
+    "hardware_control_allowed": false,
+    "raw_payloads_embedded": false,
+    "model_output_is_runtime_truth": false
+  }
+}

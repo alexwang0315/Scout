@@ -10,6 +10,7 @@ from debug_api import create_debug_app
 from pretrip_admin_view import build_pretrip_admin_view
 from pretrip_import import (
     PretripImportRequest,
+    _dtm_source_dirs,
     restore_durable_admin_evidence_refs,
     run_pretrip_import,
 )
@@ -17,6 +18,47 @@ from pretrip_source_ingest import wgs84_to_twd97
 from runtime_debug_log import FileRuntimeDebugEventLog
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_dtm_source_dirs_keeps_material_manifest_dirs_when_cli_adds_one(
+    tmp_path: Path,
+) -> None:
+    material_root = tmp_path / "materials" / "chilai_nanhua_day1"
+    nantou = material_root / "sources" / "dtm" / "nantou"
+    hualien = material_root / "sources" / "dtm" / "hualien"
+    extra = tmp_path / "extra-dtm"
+    for path in (nantou, hualien, extra):
+        path.mkdir(parents=True)
+    (material_root / "material_manifest.json").write_text(
+        json.dumps(
+            {
+                "sources": {
+                    "dtm_dirs": [
+                        nantou.as_posix(),
+                        hualien.as_posix(),
+                    ]
+                }
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    source_dirs = _dtm_source_dirs(
+        PretripImportRequest(
+            project_id="chilai_nanhua_day1",
+            primary_gpx=tmp_path / "route.gpx",
+            workspace_root=tmp_path / "workspaces",
+            material_root=material_root,
+            dtm_dirs=(hualien, extra),
+        )
+    )
+
+    assert [path.resolve() for path in source_dirs] == [
+        nantou.resolve(),
+        hualien.resolve(),
+        extra.resolve(),
+    ]
 
 
 def test_pretrip_import_core_writes_pretrip_admin_and_debug_projections(tmp_path: Path) -> None:
@@ -89,6 +131,8 @@ def test_pretrip_import_core_writes_pretrip_admin_and_debug_projections(tmp_path
     checkpoint_events = _load(project_root / "outputs" / "checkpoint_events.json")
     segment_display = _load(project_root / "outputs" / "segment_display_geometry.json")
     segment_policy = _load(project_root / "outputs" / "segment_policy_candidates.json")
+    skill_config_manifest = _load(project_root / "candidates" / "skill_config_manifest.json")
+    readiness_report = _load(project_root / "outputs" / "readiness_report.json")
     source_inbox = _load(project_root / "inbox" / "source_manifest.json")
     source_index = _load(project_root / "sources" / "historical_gpx_source_index.json")
     gis_perception = _load(project_root / "outputs" / "gis_perception_candidates.json")
@@ -157,7 +201,15 @@ def test_pretrip_import_core_writes_pretrip_admin_and_debug_projections(tmp_path
     assert project["source_inbox_file_count"] == 3
     assert project["gis_perception_candidates_ref"] == "outputs/gis_perception_candidates.json"
     assert project["route_role"] == "golden_route"
+    assert project["route_days"] == 1
+    assert project["route_kind"] == "out_and_back"
+    assert project["skill_config_manifest_ref"] == "candidates/skill_config_manifest.json"
+    assert project["readiness_report_ref"] == "outputs/readiness_report.json"
     assert project["actual_user_track_available"] is False
+    assert project["boss_point_synthesis_status"] == "pending_map_preparation"
+    assert project["boss_point_synthesis_trigger"] == "prepare_layers_with_risk"
+    assert project["boss_point_synthesis_candidate_only"] is True
+    assert project["boss_point_synthesis_runtime_safety_truth"] is False
     assert route_summary["route_name"] == "golden route import"
     assert route_bundle["artifact_kind"] == (
         "pretrip_historical_gpx_route_evidence_bundle"
@@ -185,6 +237,9 @@ def test_pretrip_import_core_writes_pretrip_admin_and_debug_projections(tmp_path
     ]
     assert route_bundle["boundary"]["actual_user_track_available"] is False
     assert route_bundle["boundary"]["safety_api_called"] is False
+    assert manifest["boss_point_synthesis"]["status"] == "pending_map_preparation"
+    assert manifest["boss_point_synthesis"]["trigger"] == "prepare_layers_with_risk"
+    assert manifest["boss_point_synthesis"]["runtime_safety_truth"] is False
     assert "<trkpt" not in json.dumps(route_bundle, ensure_ascii=False).lower()
     assert reference_tracks["route_role"] == "golden_route"
     assert reference_tracks["golden_route"]["role"] == "golden_route_reference"
@@ -347,6 +402,13 @@ def test_pretrip_import_core_writes_pretrip_admin_and_debug_projections(tmp_path
     assert admin_projection["after_action_surface"]["completed_mission_replay"] is False
     assert admin_projection["debug_surface"]["file_runtime_debug_log_compatible"] is True
     assert admin_projection["boundary"]["projection_only"] is True
+    assert skill_config_manifest["artifact_kind"] == "skill_config_manifest"
+    assert skill_config_manifest["scope"] == "pretrip_readiness"
+    assert skill_config_manifest["project_id"] == "fixture_import"
+    assert readiness_report["status"] == "warning"
+    assert readiness_report["findings"][0]["rule_id"] == (
+        "same_day_short_requires_alternate_route"
+    )
     assert route_notes["counts"]["note_candidate_count"] == 3
     assert gis_ai_judgements["provider_kind"] == "pydantic_ai_test"
     assert gis_ai_judgements["judgement_count"] == 3
@@ -827,6 +889,49 @@ def test_pretrip_import_default_relative_speed_filter_keeps_five_times_spike(
     assert 'lat="24.006"' in primary_filtered_gpx
 
 
+def test_pretrip_import_relative_speed_filter_ignores_near_stationary_previous_leg(
+    tmp_path: Path,
+) -> None:
+    golden_route = _write_gpx(
+        tmp_path / "golden-route.gpx",
+        name="slow start then normal mountain route",
+        points=[
+            (24.0, 121.0, 1000.0, "2026-05-01T00:00:00Z"),
+            (24.00001, 121.0, 1001.0, "2026-05-01T00:10:00Z"),
+            (24.005, 121.0, 1010.0, "2026-05-01T00:20:00Z"),
+            (24.01, 121.0, 1020.0, "2026-05-01T00:30:00Z"),
+        ],
+    )
+
+    manifest = run_pretrip_import(
+        PretripImportRequest(
+            project_id="slow_start_relative_speed_import",
+            primary_gpx=golden_route,
+            workspace_root=tmp_path / "workspaces",
+            profile="pi-offline",
+            checkpoint_spacing_m=500.0,
+            import_timestamp="2026-05-21T00:00:00+00:00",
+        )
+    )
+
+    project_root = tmp_path / "workspaces" / "slow_start_relative_speed_import"
+    route_summary = _load(project_root / "normalized" / "routes" / "route_summary.json")
+    filter_report = _load(project_root / "outputs" / "gpx_speed_filter_report.json")
+    primary_filtered_gpx = Path(filter_report["primary"]["output_path"]).read_text(
+        encoding="utf-8"
+    )
+
+    assert manifest["counts"]["route_point_count"] == 4
+    assert manifest["counts"]["gpx_speed_filter_removed_point_count"] == 0
+    assert filter_report["primary"]["removed_track_point_count"] == 0
+    assert filter_report["primary"][
+        "min_previous_speed_for_relative_filter_kmh"
+    ] == 0.5
+    assert route_summary["point_count"] == 4
+    assert route_summary["bbox_wgs84"]["max_lat"] == 24.01
+    assert 'lat="24.01"' in primary_filtered_gpx
+
+
 def test_pretrip_import_preserves_gpx_segment_boundaries_in_display_geometry(
     tmp_path: Path,
 ) -> None:
@@ -1157,17 +1262,35 @@ def test_restore_durable_admin_evidence_refs_copies_safe_missing_refs(
         "departure_bundle_manifest_ref": "outputs/departure_bundle_manifest.json",
         "route_comparison_ref": "outputs/route_comparison.json",
         "capability_timeline_import_ref": "outputs/capability_timeline_import.json",
+        "terrain_visualization_ref": (
+            "outputs/layers/normalized/terrain_visualization.geojson"
+        ),
+        "terrain_hillshade_overlay_ref": (
+            "outputs/layers/normalized/terrain_hillshade.png"
+        ),
+        "terrain_elevation_tint_overlay_ref": (
+            "outputs/layers/normalized/terrain_elevation_tint.png"
+        ),
         "post_analysis_capability_timeline_ref": "../outside.json",
     }
     for key, ref in durable_refs.items():
         if ref.startswith("../"):
             continue
+        (source_root / ref).parent.mkdir(parents=True, exist_ok=True)
         (source_root / ref).write_text(
             json.dumps({"source_key": key}, sort_keys=True),
             encoding="utf-8",
         )
     (source_root / "project.json").write_text(
-        json.dumps({"project_id": "source", **durable_refs}, sort_keys=True),
+        json.dumps(
+            {
+                "project_id": "source",
+                **durable_refs,
+                "dtm_candidate_tile_count": 48,
+                "dtm_scanned_header_count": 1411,
+            },
+            sort_keys=True,
+        ),
         encoding="utf-8",
     )
     (destination_root / "outputs" / "route_comparison.json").write_text(
@@ -1200,6 +1323,17 @@ def test_restore_durable_admin_evidence_refs_copies_safe_missing_refs(
     assert project["capability_timeline_import_ref"] == (
         "outputs/capability_timeline_import.json"
     )
+    assert project["terrain_visualization_ref"] == (
+        "outputs/layers/normalized/terrain_visualization.geojson"
+    )
+    assert project["terrain_hillshade_overlay_ref"] == (
+        "outputs/layers/normalized/terrain_hillshade.png"
+    )
+    assert project["terrain_elevation_tint_overlay_ref"] == (
+        "outputs/layers/normalized/terrain_elevation_tint.png"
+    )
+    assert project["dtm_candidate_tile_count"] == 48
+    assert project["dtm_scanned_header_count"] == 1411
     assert "post_analysis_capability_timeline_ref" not in project
     assert _load(destination_root / "outputs" / "readiness_report.json") == {
         "source_key": "readiness_report_ref"
@@ -1207,11 +1341,297 @@ def test_restore_durable_admin_evidence_refs_copies_safe_missing_refs(
     assert _load(destination_root / "outputs" / "route_comparison.json") == {
         "kept": "destination"
     }
+    assert (
+        destination_root / "outputs" / "layers" / "normalized" / "terrain_hillshade.png"
+    ).exists()
     assert summary["copied"]["readiness_report_ref"] == "outputs/readiness_report.json"
+    assert summary["copied"]["terrain_hillshade_overlay_ref"] == (
+        "outputs/layers/normalized/terrain_hillshade.png"
+    )
+    assert summary["restored"]["dtm_candidate_tile_count"] == 48
     assert summary["skipped"]["route_comparison_ref"] == "payload_ref_already_exists"
     assert summary["invalid"]["post_analysis_capability_timeline_ref"] == (
         "../outside.json"
     )
+
+
+def test_restore_durable_admin_evidence_refs_can_overwrite_existing_refs(
+    tmp_path: Path,
+) -> None:
+    source_root = tmp_path / "source_project"
+    destination_root = tmp_path / "destination_project"
+    source_cache = (
+        source_root / "outputs" / "layers" / "cache" / "raster_label_ocr_tiles"
+    )
+    destination_cache = (
+        destination_root / "outputs" / "layers" / "cache" / "raster_label_ocr_tiles"
+    )
+    source_cache.mkdir(parents=True)
+    destination_cache.mkdir(parents=True)
+    (source_root / "outputs").mkdir(exist_ok=True)
+    (destination_root / "outputs").mkdir(exist_ok=True)
+    (source_root / "outputs" / "route_comparison.json").write_text(
+        json.dumps({"kept": "source"}, sort_keys=True),
+        encoding="utf-8",
+    )
+    (destination_root / "outputs" / "route_comparison.json").write_text(
+        json.dumps({"kept": "destination"}, sort_keys=True),
+        encoding="utf-8",
+    )
+    (source_cache / "source.json").write_text(
+        json.dumps({"tile": "source"}, sort_keys=True),
+        encoding="utf-8",
+    )
+    (destination_cache / "destination.json").write_text(
+        json.dumps({"tile": "destination"}, sort_keys=True),
+        encoding="utf-8",
+    )
+    (source_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": "source",
+                "route_comparison_ref": "outputs/route_comparison.json",
+                "raster_label_ocr_cache_ref": (
+                    "outputs/layers/cache/raster_label_ocr_tiles"
+                ),
+                "raster_label_ocr_label_count": 10,
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    (destination_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": "destination",
+                "route_comparison_ref": "outputs/route_comparison.json",
+                "raster_label_ocr_cache_ref": (
+                    "outputs/layers/cache/raster_label_ocr_tiles"
+                ),
+                "raster_label_ocr_label_count": 99,
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+
+    summary = restore_durable_admin_evidence_refs(
+        project_root=destination_root,
+        source_root=source_root,
+        overwrite_existing=True,
+    )
+
+    project = _load(destination_root / "project.json")
+    assert project["raster_label_ocr_label_count"] == 10
+    assert _load(destination_root / "outputs" / "route_comparison.json") == {
+        "kept": "source"
+    }
+    assert (destination_cache / "source.json").exists()
+    assert not (destination_cache / "destination.json").exists()
+    assert summary["copied"]["route_comparison_ref"] == "outputs/route_comparison.json"
+    assert summary["restored"]["raster_label_ocr_label_count"] == 10
+
+
+def test_restore_durable_admin_evidence_refs_never_replays_cwa_gee_environment(
+    tmp_path: Path,
+) -> None:
+    source_root = tmp_path / "source_project"
+    destination_root = tmp_path / "destination_project"
+    route_ref = "outputs/route_comparison.json"
+    cwa_ref = "outputs/environment/cwa/cwa_weather_evidence.json"
+    gee_ref = "outputs/environment/gee/scout_gee_feature_package.json"
+    derivative_ref = "outputs/environment/derived/environment_risk_derivatives.json"
+    for root, marker, cwa_count in (
+        (source_root, "source", 99),
+        (destination_root, "fresh", 7),
+    ):
+        for ref in (route_ref, cwa_ref, gee_ref, derivative_ref):
+            path = root / ref
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(
+                json.dumps(
+                    {
+                        "project_id": marker,
+                        "marker": marker,
+                        "ref": ref,
+                    },
+                    sort_keys=True,
+                ),
+                encoding="utf-8",
+            )
+        (root / "project.json").write_text(
+            json.dumps(
+                {
+                    "project_id": marker,
+                    "route_comparison_ref": route_ref,
+                    "cwa_weather_evidence_ref": cwa_ref,
+                    "gee_feature_package_ref": gee_ref,
+                    "environment_risk_derivatives_ref": derivative_ref,
+                    "cwa_weather_point_count": cwa_count,
+                    "gee_feature_package_segment_count": cwa_count,
+                    "environment_risk_derivative_status": marker,
+                },
+                sort_keys=True,
+            ),
+            encoding="utf-8",
+        )
+
+    summary = restore_durable_admin_evidence_refs(
+        project_root=destination_root,
+        source_root=source_root,
+        overwrite_existing=True,
+    )
+
+    project = _load(destination_root / "project.json")
+    assert _load(destination_root / route_ref)["marker"] == "source"
+    assert _load(destination_root / cwa_ref)["marker"] == "fresh"
+    assert _load(destination_root / gee_ref)["marker"] == "fresh"
+    assert _load(destination_root / derivative_ref)["marker"] == "fresh"
+    assert project["cwa_weather_point_count"] == 7
+    assert project["gee_feature_package_segment_count"] == 7
+    assert project["environment_risk_derivative_status"] == "fresh"
+    assert summary["copied"]["route_comparison_ref"] == route_ref
+    assert summary["skipped"]["cwa_weather_evidence_ref"] == (
+        "time_sensitive_environment_ref_not_restored"
+    )
+    assert summary["skipped"]["gee_feature_package_ref"] == (
+        "time_sensitive_environment_ref_not_restored"
+    )
+    assert summary["skipped"]["cwa_weather_point_count"] == (
+        "time_sensitive_environment_metadata_not_restored"
+    )
+
+
+def test_compare_pretrip_workspace_strict_counts_excludes_cwa_gee_metrics(
+    tmp_path: Path,
+) -> None:
+    required_refs = {
+        "import_manifest_ref": "outputs/import_manifest.json",
+        "route_evidence_bundle_ref": "normalized/routes/route_evidence_bundle.json",
+        "reference_segment_timing_ref": "outputs/reference_segment_timing.json",
+        "layer_preparation_manifest_ref": "outputs/layers/layer_preparation_manifest.json",
+        "layer_validation_report_ref": "outputs/layers/layer_validation_report.json",
+        "layer_map_projection_ref": "outputs/layers/projections/pretrip_map_layers.json",
+        "overpass_evidence_ref": "candidates/overpass_evidence.json",
+        "overpass_map_context_ref": "normalized/overpass/overpass_map_context.geojson",
+        "overpass_route_alignment_ref": "outputs/overpass_route_alignment.json",
+        "overpass_aligned_segment_candidates_ref": (
+            "candidates/segments.overpass_aligned.json"
+        ),
+        "risk_score_points_ref": "outputs/risk/risk_score_points.geojson",
+        "risk_ribbon_ref": "outputs/risk/risk_ribbon.geojson",
+        "calibrated_risk_heatmap_ref": "outputs/risk/calibrated_risk_heatmap.geojson",
+        "environment_risk_derivatives_ref": (
+            "outputs/environment/derived/environment_risk_derivatives.json"
+        ),
+        "raster_label_ocr_output_ref": "outputs/layers/raster_label_ocr_output.json",
+        "raster_label_evidence_ref": (
+            "outputs/layers/normalized/raster_label_evidence.geojson"
+        ),
+        "route_mileage_k_anchors_ref": "candidates/route_mileage_k_anchors.json",
+        "mileage_tag_alignment_ref": "outputs/mileage_tag_alignment.json",
+        "boss_points_ref": "outputs/boss_points.json",
+        "route_pressure_profile_ref": "outputs/route_pressure_profile.json",
+        "reference_pace_energy_analysis_ref": (
+            "outputs/reference_pace_energy_analysis.json"
+        ),
+        "reference_pace_energy_map_geojson_ref": (
+            "outputs/reference_pace_energy_map.geojson"
+        ),
+        "architecture_preparation_manifest_ref": (
+            "outputs/architecture_preparation_manifest.json"
+        ),
+    }
+    stable_metrics = {
+        "checkpoint_candidate_count": 3,
+        "segment_candidate_count": 4,
+        "route_note_candidate_count": 5,
+        "reference_track_count": 2,
+        "gpx_speed_filter_removed_track_point_count": 0,
+        "mcp_candidate_count": 1,
+        "mcp_ocr_label_count": 1,
+        "dtm_candidate_tile_count": 8,
+        "raster_label_ocr_status": "completed",
+        "raster_label_ocr_label_count": 10,
+        "imagery_tile_cache_seed_status": "completed",
+        "imagery_tile_cache_plan_tile_count": 12,
+        "overpass_candidate_count": 13,
+        "overpass_route_alignment_kept_gpx_point_count": 14,
+        "overpass_route_alignment_snapped_point_count": 15,
+        "risk_score_point_count": 16,
+        "risk_ribbon_segment_count": 17,
+        "calibrated_risk_heatmap_segment_count": 18,
+        "route_mileage_k_anchor_count": 19,
+        "mileage_tag_alignment_count": 20,
+        "reference_segment_timing_measurement_count": 21,
+        "reference_segment_timing_segment_count": 22,
+        "boss_point_count": 23,
+        "route_pressure_peak_count": 24,
+        "route_pressure_sample_count": 25,
+        "architecture_preparation_status": "ready",
+        "architecture_preparation_stage": "enriched",
+        "architecture_observed_route_bin_count": 26,
+        "architecture_guidance_eligible_route_bin_count": 27,
+        "architecture_checkpoint_passage_timing_node_count": 28,
+    }
+    for root, marker, environment_metrics in (
+        (
+            tmp_path / "reference",
+            "reference",
+            {
+                "environment_risk_derivative_status": "ready",
+                "cwa_warning_count": 9,
+                "gee_environment_status": "fetched",
+            },
+        ),
+        (
+            tmp_path / "candidate",
+            "candidate",
+            {
+                "environment_risk_derivative_status": "ready_with_data_gaps",
+                "cwa_warning_count": 0,
+                "gee_environment_status": "missing_credentials",
+            },
+        ),
+    ):
+        for ref in required_refs.values():
+            path = root / ref
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(
+                json.dumps({"marker": marker}, sort_keys=True),
+                encoding="utf-8",
+            )
+        (root / "project.json").write_text(
+            json.dumps(
+                {
+                    "project_id": marker,
+                    **required_refs,
+                    **stable_metrics,
+                    **environment_metrics,
+                },
+                sort_keys=True,
+            ),
+            encoding="utf-8",
+        )
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "tools" / "compare_pretrip_workspace_against_reference.py"),
+            "--reference-root",
+            str(tmp_path / "reference"),
+            "--candidate-root",
+            str(tmp_path / "candidate"),
+            "--strict-counts",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    report = json.loads(result.stdout)
+    assert report["status"] == "pass"
+    assert report["metric_diffs"] == {}
+    assert "gee_environment_status" in report["time_sensitive_metrics_excluded"]
 
 
 def test_pretrip_import_template_workspace_feeds_admin_view_projection(tmp_path: Path) -> None:

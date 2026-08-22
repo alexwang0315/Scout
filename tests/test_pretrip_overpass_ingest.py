@@ -7,6 +7,7 @@ from pretrip_models import RouteBBox
 from pretrip_overpass_ingest import (
     CONVERSION_RULE_VERSION,
     OverpassIngestResult,
+    import_overpass_evidence_candidates,
     load_overpass_evidence_candidates,
 )
 
@@ -57,11 +58,16 @@ def test_overpass_node_way_relation_tags_become_phase_a_candidates():
 
     relation = _candidate(result, "overpass.hiking_route_candidate.relation.2001")
     assert relation.osm_type == "relation"
-    assert relation.geometry["type"] == "LineString"
+    assert relation.geometry["type"] == "MultiLineString"
     assert relation.geometry["coordinates"] == [
-        [121.211, 24.051],
-        [121.214, 24.052],
-        [121.222, 24.055],
+        [
+            [121.211, 24.051],
+            [121.214, 24.052],
+        ],
+        [
+            [121.214, 24.052],
+            [121.222, 24.055],
+        ],
     ]
 
     shelter = _candidate(result, "overpass.shelter_candidate.node.5001")
@@ -73,6 +79,81 @@ def test_overpass_node_way_relation_tags_become_phase_a_candidates():
     assert terrain.feature_type == "hazard_zone"
     assert terrain.geojson_feature["properties"]["hazard_type"] == "landslide"
     assert terrain.geometry["type"] == "Polygon"
+
+
+def test_overpass_way_and_relation_huts_and_other_poi_get_representative_points():
+    payload = {
+        "version": 0.6,
+        "elements": [
+            {
+                "type": "way",
+                "id": 7001,
+                "tags": {"name": "天池山莊", "tourism": "alpine_hut"},
+                "geometry": [
+                    {"lat": 24.0420, "lon": 121.2790},
+                    {"lat": 24.0420, "lon": 121.2792},
+                    {"lat": 24.0422, "lon": 121.2792},
+                    {"lat": 24.0420, "lon": 121.2790},
+                ],
+            },
+            {
+                "type": "relation",
+                "id": 7002,
+                "tags": {"name": "測試避難設施", "amenity": "shelter"},
+                "members": [
+                    {
+                        "type": "way",
+                        "ref": 7001,
+                        "geometry": [
+                            {"lat": 24.0420, "lon": 121.2790},
+                            {"lat": 24.0422, "lon": 121.2792},
+                        ],
+                    }
+                ],
+            },
+            {
+                "type": "node",
+                "id": 7003,
+                "lat": 24.041,
+                "lon": 121.278,
+                "tags": {"name": "天池", "place": "locality"},
+            },
+            {
+                "type": "node",
+                "id": 7004,
+                "lat": 24.043,
+                "lon": 121.280,
+                "tags": {"name": "公廁", "amenity": "toilets"},
+            },
+        ],
+    }
+
+    result = import_overpass_evidence_candidates(
+        payload,
+        query_body="fixture",
+        bbox_wgs84=RouteBBox(
+            min_lat=24.03,
+            min_lon=121.27,
+            max_lat=24.05,
+            max_lon=121.29,
+        ),
+        request_timestamp="2026-07-28T00:00:00Z",
+        endpoint="fixture://overpass",
+        http_status=200,
+        raw_payload_uri="fixture.json",
+        normalized_artifact_path="normalized.geojson",
+        source_ref="fixture",
+    )
+
+    assert result.counts["shelter_candidate"] == 2
+    assert result.counts["other_poi_candidate"] == 2
+    assert all(candidate.geometry["type"] == "Point" for candidate in result.candidates)
+    other = next(
+        candidate
+        for candidate in result.candidates
+        if candidate.candidate_type == "other_poi_candidate"
+    )
+    assert other.geojson_feature["properties"]["poi_type"] == "other"
 
 
 def test_incomplete_overpass_geometry_is_marked_and_skipped_without_crash():
@@ -96,7 +177,15 @@ def test_normalized_overpass_geojson_loads_as_existing_scout_map_context(tmp_pat
 
     context = load_offline_map_context(normalized_path)
 
-    assert len(context.corridors) == 3
+    assert len(context.corridors) == 4
+    assert {
+        corridor.corridor_id
+        for corridor in context.corridors
+        if corridor.corridor_id.startswith("overpass.hiking_route_candidate.relation.2001")
+    } == {
+        "overpass.hiking_route_candidate.relation.2001.part_001",
+        "overpass.hiking_route_candidate.relation.2001.part_002",
+    }
     assert len(context.hazards) == 1
     assert len(context.pois) == 4
     assert {poi.poi_type for poi in context.pois} == {"shelter", "water_source", "parking", "peak"}
@@ -107,6 +196,17 @@ def test_normalized_overpass_geojson_loads_as_existing_scout_map_context(tmp_pat
 def test_normalized_geojson_features_keep_evidence_chain_metadata():
     result = _load_fixture()
 
+    assert result.normalized_geojson["artifact_kind"] == "pretrip_overpass_vector_evidence"
+    assert result.normalized_geojson["schema_version"] == "route_corridor_map_preparation.v1"
+    assert result.normalized_geojson["route_scope_ref"] == "normalized/routes/route_evidence_bundle.json"
+    assert result.normalized_geojson["boundary"] == {
+        "candidate_only": True,
+        "runtime_truth": False,
+        "runtime_safety_truth": False,
+        "phase1_runtime_mutation_allowed": False,
+        "phase2_brain_writeback_allowed": False,
+        "raw_gpx_embedded_in_json": False,
+    }
     feature = result.normalized_geojson["features"][0]
     properties = feature["properties"]
 

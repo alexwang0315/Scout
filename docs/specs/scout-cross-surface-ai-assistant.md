@@ -1,5 +1,7 @@
 # Spec: Scout Cross-Surface AI Assistant Guardrails
 
+Date: 2026-06-30
+
 ## Status
 
 Implemented through Slice 26 for the current Milestone 10 guardrail path.
@@ -21,11 +23,48 @@ assets, `docker-compose.pi.ai.yml` and `tools/pi_ollama_stress.py`, while
 keeping them under the `ai-experimental` manual hardware prototype profile and
 not part of the assistant readiness gate.
 
+2026-08-22 update: Scout AI is the full-capability user entrypoint. Pydantic AI
+provider compatibility targets v2.33.0. The assistant and Mac-local fallback
+paths use `end_strategy="early"`, normalize
+`openai:<model>` to `openai-chat:<model>`, and using the dedicated OpenRouter
+provider for `openrouter:<vendor/model>`. Trusted WebSearch and WebFetch are
+always enabled for every Scout AI Pydantic Agent path, including cloud,
+Mac-local, AI HAT+2, repair, continuation, eval, and L5 planning. OpenRouter and
+NVIDIA use Scout's local, traced search/fetch adapters; models without native
+tool calling receive the same server-side adapters. Direct OpenAI Chat may use
+supported native search. Legacy disable values such as
+`SCOUT_AI_OS_NATIVE_RESEARCH=0` are ignored. Provider-native MCP still requires a reviewed
+connector boundary. OpenRouter request settings remain immutable across calls,
+tool-search history remains replayable across provider handoffs, bare MCP
+errors enter the normal recovery ladder, and provider-specific `RequestUsage`
+fields remain available to redacted telemetry. `Agent.to_web()` Host validation
+remains enabled, and any reviewed LAN hostname must be added through
+`allowed_hosts`; deferred tools must be revealed with their capability before
+they become callable. OpenRouter native-search citations are preserved in
+`provider_details["annotations"]` when supplied, Instrumentation v6 tool-role
+traces require an explicit consumer opt-in, and blocking sync-tool timeouts are
+covered by the compatibility smoke.
+
+The AI HAT+2 `hailo_ollama` path uses a Pydantic AI FunctionModel research
+planner instead of bypassing capabilities. The local model selects the Search
+query and the exact Search-returned URL to Fetch; Pydantic AI owns execution and
+the content-free trace. Fetched pages remain public, read-only candidate
+evidence and never become runtime safety truth.
+
 This document defines the cross-surface assistant guardrails that now anchor the
 mock provider, bounded context adapters, read-only API, UI shell, opt-in
 Pydantic AI provider, cloud/local model fallback config, readiness gate,
 hardware-readiness runbook, static assistant UI smoke gate, browser-backed
 visual QA, and map-layer selected source labels.
+
+## First Deployment Topology
+
+第一版 Scout 是遠端能力池架構：現場只有 Scout AI 隨行，使用者透過手機和
+Scout AI 對話；手機把訊息、定位/感測摘要、照片或事件 metadata、裝置狀態傳回機房。
+模型、web search/fetch、workspace tools、computer-use/browser-use、資料庫、硬體
+gateway 與重型處理都在機房或可信任工作站上執行。Scout AI 是使用者和 Scout
+軟硬體之間的統一溝通入口，不應被本地 fallback 小模型或早期 read-only 假設降級成
+只能回答少數工具問題的助手。
 
 Implementation note: this milestone is complete for the current read-only
 assistant foundation. Future slices may improve UI reuse, add richer context, or
@@ -120,6 +159,80 @@ This milestone must not:
 | `/admin/pretrip` | project manifest, candidates, source registry, review queue, readiness/departure gate artifacts | planning state, candidate provenance, missing review items, readiness blockers | accept/reject candidates, create reviewed facts, compile runtime handoff, approve departure |
 | hardware readiness | provider health fixture, sample replay timeline, runtime debug log, mock transport queue | provider status, sample replay interpretation, debug readiness checklist | control hardware, change provider state, open real transport, start Pi/Docker deployment |
 
+## Weather / Environment Evidence Across Surfaces
+
+For route-weather and environment questions, the cross-surface assistant must
+route through the Scout AI tool registry instead of prompt-only weather
+reasoning.
+
+Required tool layering:
+
+- `scout.ai.weather_window.assess.v0` frames the weather/daylight/camp/shelter
+  decision.
+- `scout.ai.cwa_environment.assess.v0` reads prepared CWA warning,
+  observation, QPF, forecast, astronomy, tide/marine, and provenance artifacts.
+- `scout.ai.gee_environment.assess.v0` reads prepared GEE SMAP/GPM soil
+  moisture, antecedent-rain, grid/timeline, and hydrologic corridor artifacts.
+
+Surface-specific behavior:
+
+- `/admin/pretrip`: may show CWA/GEE candidate evidence, missing/stale gaps,
+  QPF peak windows, warning layers, SMAP/GPM corridor summaries, and
+  go/no-go review inputs. It must not approve departure or promote those
+  artifacts to runtime truth.
+- `/admin/debug`: may explain which weather/environment evidence was available
+  to the assistant and whether an answer was limited by stale/missing artifacts.
+  It must not call live CWA/GEE or mutate debug/runtime state.
+- `/admin`: may explain after-action provenance for weather/environment
+  evidence used in an incident or post-trip review. It must not rewrite
+  historical evidence or Brain facts.
+- hardware readiness: may only display fixture-backed or operator-recorded
+  weather/environment readiness evidence. It must not initialize Earth Engine,
+  fetch live CWA, or start network research.
+
+All weather/environment assistant answers must label CWA/GEE outputs as
+candidate-only, human-review-required, and not runtime safety truth. If CWA QPF
+or GEE SMAP/GPM evidence is missing or stale, the assistant reports that gap
+and avoids saying conditions are safe.
+
+## Route Context / Mileage / OCR Evidence Across Surfaces
+
+For route-context, mileage-anchor, and OCR questions, the cross-surface
+assistant must route through Scout workspace tools instead of prompt-only map
+interpretation.
+
+Required tool layering:
+
+- `pydantic_ai.tool.assess_scout_route_context.v0` answers route-context,
+  observation-point, and K/mileage anchor questions using
+  `route_context_points_ref`, `route_mileage_k_anchors_ref`, and bounded
+  `mileage_tag_alignment_ref` slices.
+- `pydantic_ai.tool.search_scout_map_perception.v0` searches legacy MCP OCR,
+  normalized raster OCR GeoJSON, contour labels, tile/source refs, and map
+  perception candidates.
+- `pydantic_ai.tool.search_scout_evidence_fulltext.v0` provides fallback
+  full-text retrieval for mileage anchors, OCR labels, route notes, source
+  snippets, and review/provenance records.
+
+Surface-specific behavior:
+
+- `/admin/pretrip`: may answer "15K 在哪", "OCR 讀到哪些地圖文字", or "哪些點值得停
+  3 分鐘" using candidate-only workspace evidence. It must not write review
+  decisions or rebuild the workspace.
+- `/admin/debug`: may explain which route-context/OCR evidence was available to
+  the assistant and why an answer is limited. It must not mutate debug/runtime
+  state.
+- `/admin`: may explain after-action route-context/OCR provenance. It must not
+  rewrite historical evidence or Brain facts.
+- Mac local chat fallback: may use the same read-only tool outputs when Scout
+  hardware is unavailable, but it must label answers as local fallback model
+  interpretation when a model was involved.
+
+Raw raster tiles, raw OCR payloads, and full mileage alignment files must stay
+out of model prompts and UI responses. Tool outputs should return bounded,
+source-linked records with `candidate_only=true` and
+`runtime_safety_truth=false`.
+
 ## Architecture
 
 The milestone should introduce four concepts.
@@ -183,15 +296,40 @@ Provider support should be staged:
 1. `mock`: deterministic, no model call, used for tests and UI contract.
 2. `pydantic_ai`: opt-in provider behind environment flags.
 
+Current Pydantic AI provider policy:
+
+- supported runtime family: Pydantic AI v2.33.0;
+- default model path: local `FunctionModel`;
+- external NVIDIA GLM path: `SCOUT_AI_OS_MODEL=z-ai/glm-5.2` with
+  `NVIDIA_API_KEY`; Scout sends `z-ai/glm-5.2` as the provider model id;
+- external OpenRouter model path: `openrouter:<vendor/model>` with
+  `OPENROUTER_API_KEY`;
+- direct OpenAI chat path: `openai-chat:<model>` with `OPENAI_API_KEY`;
+- compatibility alias: `openai:<model>` is normalized to
+  `openai-chat:<model>` to avoid an implicit switch to Responses API behavior;
+- `end_strategy="early"` is required for typed Scout assistant calls;
+- WebSearch and WebFetch are on by default for external provider-backed Scout AI
+  calls. Legacy disable values such as `SCOUT_AI_OS_NATIVE_RESEARCH=0` are
+  ignored; a runner, prompt, profile, or workspace-tools switch may not remove
+  WebSearch/WebFetch from an external Scout AI run.
+- provider-native MCP remains off unless separately reviewed and permissioned.
+- v2 capability model hooks may participate in model selection, but Scout
+  model policy remains authoritative and UI/event adapters must preserve
+  deferred tool request/result events.
+
 Proposed flags:
 
 ```text
 SCOUT_AI_ASSISTANT_ENABLED=1
 SCOUT_AI_ASSISTANT_PROVIDER=mock|pydantic_ai
-SCOUT_AI_ASSISTANT_TIMEOUT_SECONDS=8
-SCOUT_AI_ASSISTANT_MAX_CONTEXT_CHARS=12000
+SCOUT_AI_OS_AGGRESSIVE_CONSTRUCTION_MODE=1
 SCOUT_AI_ASSISTANT_CONFIG_PATH=/secure/local/scout-assistant-models.json
 ```
+
+Aggressive Construction Mode leaves assistant timeout and context-character
+limits unset. `SCOUT_AI_ASSISTANT_TIMEOUT_SECONDS` and
+`SCOUT_AI_ASSISTANT_MAX_CONTEXT_CHARS` are explicit Productization/operator
+overrides and become effective only when aggressive construction mode is off.
 
 The Pydantic AI provider should be separate from `/navigate`. It may reuse
 shared model configuration, but it should have its own system prompt and tools
@@ -219,6 +357,26 @@ Startup behavior:
   when `fallback_to_local_on_error` is enabled;
 - if provider startup or runtime execution fails, return a safe read-only
   assistant error response and leave the source surface unaffected.
+
+Provider-neutral execution rule:
+
+- Scout core, tool planning, evidence collection, verification, and shared eval
+  executors depend on a model-runner/adapter contract, not on Hailo, Ollama,
+  OpenRouter, NVIDIA, OpenAI, or another provider-specific interface;
+- cloud and local profiles may be configured and available on the same Scout
+  host. The request's runtime preference and failover policy select an explicit
+  execution target for each model request;
+- AI HAT+ 2 / Hailo Ollama is one explicit `local` adapter. It must never be the
+  hidden default of a shared executor, and its prompt packing or transport
+  constraints must remain inside that adapter;
+- OpenRouter, NVIDIA, direct OpenAI-compatible, and future providers use their
+  own adapters without passing through the Hailo adapter;
+- one request normally uses one selected target. Calling cloud and local for the
+  same answer requires an explicit dual-review policy rather than accidental
+  duplicate execution;
+- every response/eval trace records `model_adapter_id`, `model_profile`,
+  `provider`, and `model_transport`, plus failover provenance when failover
+  occurs. Provider secrets are never part of this metadata.
 
 ### 4.1. Milestone 10.2: Cloud-to-Local Assistant Failover Guardrail
 
@@ -326,6 +484,73 @@ Slice 3 status/runbook acceptance:
 - this slice must not start a local model listener, run Ollama, require Pi
   hardware, switch provider from status, expose token values, or weaken the
   read-only assistant boundary.
+
+Milestone 10.2 Slice 15: AI HAT+ 2 / Hailo Ollama Local Fallback
+
+Slice 15 connects the Pydantic AI assistant fallback profile to Raspberry Pi
+AI HAT+ 2 without linking Scout core to Hailo SDK internals. The integration is
+through a local OpenAI-compatible Hailo Ollama endpoint. This keeps Pydantic AI
+as the model/tool orchestration layer and keeps Hailo-10H as a local inference
+backend only.
+
+AI HAT+ 2 / Hailo Ollama fallback is a disconnected/local model fallback path;
+it is not a Scout runtime safety authority.
+
+AI HAT+ 2 fallback config shape:
+
+```json
+{
+  "local_model": {
+    "profile": "local",
+    "model_name": "hailo:qwen2.5:1.5b",
+    "backend": "hailo_ollama",
+    "hardware_accelerator": "raspberry_pi_ai_hat_plus_2_hailo10h",
+    "tool_calling": "enabled"
+  },
+  "fallback_to_local_on_error": true,
+  "local_fallback_fixed_schema": false
+}
+```
+
+If `base_url` is omitted for this profile, Scout resolves it to
+`http://127.0.0.1:8000/v1`, matching the Hailo Ollama OpenAI-compatible local
+endpoint shape. The profile does not require `OPENAI_API_KEY`; Scout supplies a
+non-secret local placeholder key only for OpenAI-compatible client
+construction.
+
+Slice 15 acceptance:
+
+- `/assistant/status` reports `local_model_backend=hailo_ollama`,
+  `local_hardware_accelerator=raspberry_pi_ai_hat_plus_2_hailo10h`,
+  `ai_hat_plus_2_fallback_enabled=true`, and
+  `ai_hat_plus_2_readiness_required=true` only under
+  `SCOUT_RUNTIME_PROFILE=pi-field`;
+- Pi field status uses
+  `local_fallback_mode=pi_field_ai_hat_plus_2_manual_opt_in`;
+- Mac/dev status uses
+  `local_fallback_mode=ai_hat_plus_2_configured_not_pi_field` if the same
+  config is loaded outside Pi field mode;
+- readiness and browser smoke checks still keep
+  `readiness_starts_local_model=false`,
+  `local_model_listener_required_for_readiness=false`, and
+  `status_model_switch_allowed=false`;
+- the Hailo local fallback path disables native provider web/search
+  capabilities and, by default, does not expose Scout workspace tool-calling to
+  the local Hailo model; prepared context and fixed-schema fallback remain the
+  bounded interface;
+- manual Pi/AI HAT+ 2 verification should use
+  `tools/pi_ai_hat_plus_2_smoke.py` and an already-running `hailo-ollama`
+  service; it remains not part of the assistant readiness gate;
+- Pydantic AI 2.22 calls to Hailo Ollama normalize its nanosecond `created`
+  response field into Unix seconds before provider response parsing. This
+  compatibility adapter is restricted to the `hailo:`/local Hailo model path;
+- a loopback-only Hailo listener is not reachable from the normal admin Docker
+  bridge through `host.docker.internal`. Hardware smoke may use a disposable
+  host-network container, but the long-running admin container must not broaden
+  the Hailo listener to the field LAN;
+- fallback output remains `read-only model interpretation` with
+  `safety_authority=false`, no `/safety/*` mutation, no ObservedFact write, no
+  outbound send, and no hardware/provider control.
 
 Milestone 10.2 Slice 4: Manual Pi/Ollama Verification Artifact
 
@@ -1263,6 +1488,57 @@ Milestone 10.2 Slice 11 hardware experiment assets are complete when:
 After Milestone 10.2 Slice 11, the hardware experiment assets remain optional
 operator-run evidence and must not be promoted into the assistant readiness
 gate without a separate spec decision.
+
+## Progressive Workspace Evidence Retrieval
+
+All assistant surfaces use the same evidence flow for explicit workspace
+questions:
+
+```text
+classify question
+  -> discover the minimum domain tools/artifacts
+  -> inspect schema when necessary
+  -> call scout.ai.workspace.query.v1 for deterministic records/aggregates
+  -> perform a bounded join only when classified as join/spatial
+  -> verify evidence IDs, source hashes, freshness, and boundaries
+  -> synthesize with tools disabled
+  -> verified no-tool repair/replan when needed
+  -> external-limit checkpoint and fresh-budget continuation
+```
+
+Budgets are selected by the typed `AgentBudgetPolicy`; surfaces do not choose
+their own request/tool counts. Every typed or unknown question class has at
+least 10 tool calls and 10 model requests per attempt and per recovery stage.
+Stage budgets and no-progress rules still stop early when evidence is
+sufficient. Planner, retriever, synthesis, verifier, reviewer, repair, retry,
+replan, browser, and subagent counters also default to at least 10. Pydantic AI
+`UsageLimits` enforces the current attempt and the Scout ledger checks actual
+usage afterward.
+
+Aggressive Construction Mode leaves Scout-defined token, evidence-card,
+context-character, cost, answer-time, and replay-time ceilings unset. External
+provider/platform limits are reported as external limits, checkpoint current
+evidence/call trace/state, and resume with a fresh continuation budget.
+
+The runtime stops before spending remaining budget when calls repeat canonical
+arguments, two calls add no evidence ID, a safe retry repeats a root cause, or
+the artifact/field/live/safety gap is terminal. Missing live position, team or
+health state, current field danger, stale weather, Go/No-Go evidence, retreat
+safety, and water-source state remain fail closed. A supported static fact is
+not rejected only because an unrelated live tool lacks data.
+
+Cross-surface responses may render complete facts, partial evidence, or an
+explicit evidence gap. They must not convert candidate evidence into runtime
+safety truth. Deterministic operation replay and cloud-model evaluation are
+reported separately; an offline 100% operation/fact score is not proof that an
+OpenRouter or local model selected tools or wrote a good answer.
+
+After a failed attempt, all surfaces follow the same finite ladder: repair the
+tool/evidence/schema/harness with fresh 10/10, switch model with fresh 10/10,
+build a complete Codex review artifact, and register a stable known issue with
+an explicit unblock condition if the question remains unresolved. This ladder
+does not relax secret redaction, workspace containment, permission gates, or
+runtime-safety-truth boundaries.
 
 ## Resolved Implementation Choices
 

@@ -151,7 +151,7 @@ Cutover summary:
 - `cloud_model=google/gemma-3-27b-it`;
 - `local_model=qwen2.5:0.5b`;
 - `local_fallback_enabled=true`;
-- `local_fallback_fixed_schema=true`;
+- `local_fallback_fixed_schema=false`;
 - `token_values_exposed=false`.
 
 `GET /runtime/streams/status-read-only` on `9099` returned:

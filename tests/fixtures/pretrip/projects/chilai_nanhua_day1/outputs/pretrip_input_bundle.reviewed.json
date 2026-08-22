@@ -1,0 +1,53 @@
+{
+  "artifact_kind": "scout_pretrip_input_bundle",
+  "artifact_version": "scout_pretrip_input_bundle.v0",
+  "boundary": {
+    "candidate_only": true,
+    "departure_approval_granted": false,
+    "model_output_is_runtime_truth": false,
+    "raw_payloads_embedded": false,
+    "reviewed_input_not_departure_approval": true,
+    "runtime_safety_truth": false
+  },
+  "departure": {
+    "departure_time_confirmed": true,
+    "time_confirmed": true
+  },
+  "project_id": "chilai_nanhua_day1",
+  "review": {
+    "human_review_required": false,
+    "input_status": "human_reviewed",
+    "notes": "Fixture-backed reviewed planning inputs for deterministic Scout AI standard coverage tests. This is not departure approval.",
+    "review_ref": "reviews/human_reviews.json#pretrip-input-bundle",
+    "review_state": "accepted",
+    "reviewed_at": "2026-05-02T20:15:00+08:00",
+    "reviewed_by": "reviewer.planning_admin"
+  },
+  "reviews": {
+    "daylight_reviewed": true,
+    "equipment_confirmed": true,
+    "remote_contact_confirmed": true,
+    "weather_reviewed": true
+  },
+  "source_refs": [
+    "outputs/pretrip_package.reviewed.json",
+    "outputs/planned_eta.json",
+    "outputs/route_weather_package.reviewed.json",
+    "outputs/resource_plan.json",
+    "outputs/team_status.json",
+    "outputs/equipment_status.json"
+  ],
+  "status": "reviewed_input_bundle",
+  "team": {
+    "leader_accepts_slowest_basis": true,
+    "slowest_basis_confirmed": true
+  },
+  "transport": {
+    "access_plan": "Trailhead access, return transport, and latest-return buffer reviewed for fixture planning context.",
+    "latest_return_time": "2013-10-08T20:30:00+08:00"
+  },
+  "user": {
+    "experience_level": "intermediate",
+    "goal": "training hike to Tianchi Lodge with conservative pace and standard checkpoint discipline."
+  }
+}

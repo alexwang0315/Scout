@@ -1,11 +1,14 @@
+import json
+import subprocess
 from pathlib import Path
 
-from pretrip_admin_view import build_pretrip_admin_view
+from pretrip_admin_view import build_pretrip_admin_view, load_pretrip_debug_projection_view
 
 
 ROOT = Path(__file__).resolve().parents[1]
 PAGE = ROOT / "docs" / "admin" / "phase4-pretrip-planning.html"
 ASSISTANT_UI_SCRIPT = ROOT / "docs" / "admin" / "scout-assistant-ui.js"
+MAPLIBRE_EVIDENCE_SCRIPT = ROOT / "docs" / "admin" / "scout-maplibre-evidence.js"
 
 
 def test_pretrip_admin_page_contains_expected_layout_contract():
@@ -16,6 +19,9 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert "height: 100vh;" in html
     assert "max-width: 100vw;" in html
     assert 'src="/admin/scout-assistant-ui.js"' in html
+    assert 'src="/admin/scout-maplibre-evidence.js"' in html
+    assert 'href="/admin/vendor/maplibre-gl/6.2.0/maplibre-gl.css"' in html
+    assert "unpkg.com/maplibre-gl" not in html
     assert 'id="readinessStrip"' in html
     assert 'id="energyReserveMonitor"' in html
     assert 'id="energyReserveHeadline"' in html
@@ -24,27 +30,166 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert "view.energy_reserve_monitor" in html
     assert "map frame" not in html.lower()
     assert 'id="map"' in html
+    assert "background: #e9eff4;" in html
     assert 'id="evidenceTree"' in html
     assert 'id="jsonPane"' in html
     assert 'id="sectionList"' in html
     assert "grid-template-rows: auto minmax(180px, .95fr) minmax(260px, 1.05fr);" in html
     assert "grid-template-columns: minmax(290px, 360px) minmax(640px, 1fr) minmax(340px, 420px);" in html
     assert 'grid-template-areas: "features map detail";' in html
+    assert "overflow: visible;\n      z-index: 20;" in html
+    assert "z-index: 80;" in html
+    assert "z-index: 90;" in html
     assert "grid-template-rows: auto minmax(0, 1fr);" in html
     assert "grid-template-rows: auto auto minmax(0, 1fr);" in html
     assert "feature-header-row" in html
     assert 'class="metric-grid" aria-label="Feature summary"' in html
+    assert "grid-template-columns: repeat(2, minmax(0, 1fr));" in html
+    assert '.list-controls input[type="search"] { grid-column: 1 / -1; }' in html
     assert ".list-controls .control-group-header { display: none; }" in html
     assert "overflow-y: auto;" in html
     assert "overscroll-behavior: contain;" in html
+
+
+def test_pretrip_admin_page_has_reversible_map_renderer_boundary():
+    html = PAGE.read_text(encoding="utf-8")
+
+    assert 'id="mapRendererShell"' in html
+    assert 'id="mapLibreEvidenceMap"' in html
+    assert 'id="mapRendererStatus"' in html
+    assert 'data-map-renderer-requested="auto"' in html
+    assert 'data-map-renderer-active="pending"' in html
+    assert 'const MAP_RENDERER_PREFERENCE = requestedMapRendererPreference();' in html
+    assert "function requestedMapRendererPreference()" in html
+    assert "async function initializePretripMapRenderer()" in html
+    assert "function activateSvgMapFallback(" in html
+    assert 'window.ScoutMapLibreEvidence.resolveRenderer' in html
+    assert 'shell.dataset.mapRendererActive = "svg"' in html
+    assert 'shell.dataset.mapRendererState = "degraded"' in html
+    assert "renderMap(state.view || view);" in html
+
+
+def test_maplibre_evidence_adapter_script_exists():
+    script = MAPLIBRE_EVIDENCE_SCRIPT.read_text(encoding="utf-8")
+
+    assert 'window.ScoutMapLibreEvidence = Object.freeze({' in script
+    assert "function normalizeRendererPreference(" in script
+    assert "function resolveRenderer(" in script
+    assert 'normalized === "svg"' in script
+    assert 'reason: "webgl_unavailable"' in script
+    assert 'reason: "maplibre_load_failed"' in script
+    assert "function normalizeEvidenceIdentity(" in script
+    assert "function buildEvidenceIndex(" in script
+    assert "function createEvidenceFeature(" in script
+    assert "function createEvidenceFeatureCollection(" in script
+    assert "function createEvidenceStyle(" in script
+    assert 'const EVIDENCE_SOURCE_ID = "scout-evidence"' in script
+    assert '"feature-state", "selected"' in script
+    assert "class MapLibreEvidenceRenderer" in script
+    assert "async function createRenderer(" in script
+    assert "setFeatureCollection(featureCollection)" in script
+    assert "setLayerVisibility(layerId, visible)" in script
+    assert "focus(reference, options = {})" in script
+    assert "fitAll(options = {})" in script
+    assert "fitLayer(layerId, options = {})" in script
+    assert 'throw new Error("candidate_runtime_truth_conflict")' in script
+    assert "identity_status" in script
+
+
+def test_pretrip_maplibre_workbench_uses_existing_controls_and_inspector():
+    html = PAGE.read_text(encoding="utf-8")
+
+    assert "async function activatePretripMapLibreRenderer(" in html
+    assert "function syncPretripMapLibreEvidence(view)" in html
+    assert "function selectPretripMapLibreFeature(feature)" in html
+    assert "state.mapLibreRenderer.setLayerVisibility(" in html
+    assert 'state.mapLibreRenderer.fitLayer("route", {maxZoom: 15})' in html
+    assert "state.mapLibreRenderer.zoomBy(direction)" in html
+    assert "state.mapLibreRenderer.panBy([x, y])" in html
+    assert "window.scoutPretripMapRendererBridge = Object.freeze({" in html
+    assert "state.mapLibreRenderer?.screenPoint(reference)" in html
+    assert "function focusMapLibreFor(item, options = {})" in html
+    assert "state.mapLibreRenderer.focus(reference" in html
+    assert "state.selected && focusMapLibreFor(state.selected, {preserveZoom: false})" in html
+    assert 'if (state.mapRenderer.active === "maplibre" && state.mapLibreRenderer)' in html
+    assert 'host.dataset.maplibreFeatureCount = String(featureCollection.features.length);' in html
+    assert 'shell.dataset.mapRendererActive = "maplibre"' in html
+    assert "setDetail(item || feature.properties);" in html
+
+
+def test_pretrip_maplibre_does_not_redraw_hidden_svg_until_fallback_is_needed():
+    html = PAGE.read_text(encoding="utf-8")
+
+    assert "function renderMap(view, {forceSvg = false} = {})" in html
+    assert (
+        'if (!forceSvg && state.mapRenderer?.active === "maplibre" '
+        "&& state.mapLibreRenderer)" in html
+    )
+    assert "return syncPretripMapLibreEvidence(view);" in html
+    assert "renderMap(state.view, {forceSvg: true});" in html
+
+
+def test_pretrip_maplibre_reuses_bounded_raster_tile_sources():
+    html = PAGE.read_text(encoding="utf-8")
+    script = MAPLIBRE_EVIDENCE_SCRIPT.read_text(encoding="utf-8")
+
+    assert "function pretripMapLibreRasterLayers(view)" in html
+    assert 'layerId === "rudy-twmap"' in html
+    assert 'layerId === "osm"' in html
+    assert "rasterLayers: pretripMapLibreRasterLayers(state.view)" in html
+    assert "function normalizeRasterLayer(" in script
+    assert 'throw new Error("unsupported_raster_tile_url")' in script
+    assert "rasterLayerStates" in script
+    assert "bindRasterStatus()" in script
+
+
+def test_pretrip_maplibre_binds_mileage_hints_box_zoom_and_terrain_images():
+    html = PAGE.read_text(encoding="utf-8")
+
+    assert "function pretripMapLibreTerrainImageLayers(view)" in html
+    assert 'control_layer_id: "terrain"' in html
+    assert 'source_type: "image"' in html
+    assert "image_coordinates:" in html
+    assert "(view.mileage_tag_alignment?.timeline_items || []).forEach(item =>" in html
+    assert 'append(item, "events", mapLibrePointGeometry(item)' in html
+    assert "hint_summary: hintSummary(item)" in html
+    assert "onFeatureHover: hoverPretripMapLibreFeature" in html
+    assert "onFeatureLeave: hideHint" in html
+    assert "state.mapLibreRenderer?.setInteractionMode(state.mapInteractionMode)" in html
+    focus_contract = html.split("function mapLibreEvidenceRefsForFocus(item)", 1)[1].split(
+        "function focusMapLibreFor", 1
+    )[0]
+    assert focus_contract.index("item.candidate_id") < focus_contract.index(
+        "item.source_id"
+    )
+
+
+def test_pretrip_admin_latest_ui_surfaces_reference_segment_timing():
+    html = PAGE.read_text(encoding="utf-8")
+
+    assert "Reference Segment Timing" in html
+    assert "view.reference_segment_timing?.segments" in html
+    assert "route_timing" in html
+    assert '["Route Timing", `${view.reference_segment_timing?.counts?.usable_segment_count || 0} segments / ${view.reference_segment_timing?.counts?.measurement_count || 0} samples`]' in html
+    assert 'type.includes("reference_segment_timing")' in html
+    assert 'item?.evidence_type === "pretrip_reference_segment_timing_segment"' in html
+    assert "preserveZoom: false" in html
     assert "scrollbar-gutter: stable;" in html
     assert "min-height: 0;" in html
+    assistant_drawer_open_css = html.split(".assistant-drawer[open]", 1)[1].split(".assistant-drawer summary", 1)[0]
+    assert "min-height: 0;" in assistant_drawer_open_css
+    assistant_panel_css = html.split(".assistant-drawer .assistant-panel", 1)[1].split(".assistant-head", 1)[0]
+    assert "height: 100%;" in assistant_panel_css
+    assert "min-height: 0;" in assistant_panel_css
+    assert "overflow-y: auto;" in assistant_panel_css
     assert "grid-template-columns: 1fr;" in html
     assert '"map"\n          "features"\n          "detail";' in html
     assert "grid-template-columns: repeat(3, minmax(0, 1fr));" in html
     assert "grid-template-columns: repeat(3, 24px);" in html
     assert "grid-template-rows: repeat(3, 24px);" in html
-    assert "#map { min-height: 420px; }" in html
+    responsive_map_css = html.split("@media (max-width: 1120px)", 1)[1].split(".toolbar-grid", 1)[0]
+    assert "#map {\n        height: auto;\n        min-height: 0;\n        aspect-ratio: 1000 / 720;" in responsive_map_css
+    assert "#map { min-height: 420px; }" not in html
     assert ".detail-body > *," in html
     assert ".tree > *," in html
     assert ".assistant-panel > *" in html
@@ -60,12 +205,30 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert "Wearables" in html
     assert "Scout Agent Skills" in html
     assert 'id="reviewWorkspacePanel"' in html
+
+
+def test_pretrip_admin_map_segments_render_from_display_geometry_first():
+    html = PAGE.read_text(encoding="utf-8")
+
+    assert "let segmentCoordSegments = coordinateSegments(" in html
+    assert "segment.display_geometry?.coordinates || []" in html
+    assert "if (!segmentCoordSegments.length) {" in html
+    assert "segmentCoordSegments = [[from, to]];" in html
+    assert "d: pathFromCoordSegments(bounds, segmentCoordSegments)" in html
     assert 'id="reviewWorkspaceTree"' in html
     assert 'id="importGpxPanel"' in html
     assert 'id="wearablesPanel"' in html
     assert 'id="agentSkillsPanel"' in html
     assert 'id="agentSkillsList"' in html
     assert "segment-overlay" in html
+    assert "stroke: #00d4ff;" in html
+    assert "stroke-dasharray: 7 4;" in html
+    assert "opacity: .92;" in html
+    assert "drop-shadow(0 0 2px rgba(0, 20, 28, .92))" in html
+    assert "stroke-width: 5.6;" in html
+    assert 'if (node.classList.contains("segment-overlay")) base = 5.6;' in html
+    assert "segments: 50," in html
+    assert "Preserve the canonical layer rank" in html
     assert "reference-track" in html
     assert "gis-perception-cp" in html
     assert "gis-nearby-group" in html
@@ -75,6 +238,9 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert "riskRibbonClass" in html
     assert "is-stale" in html
     assert "map-highlight" in html
+    assert "drop-shadow(0 0 7px rgba(15, 74, 84, .74))" in html
+    assert "stroke: #0f4a54 !important;" in html
+    assert "Math.max(base, 4.4)" in html
     assert "mapTargetsFor" in html
     assert "map_target_ids" in html
     assert "selectEvidence" in html
@@ -84,12 +250,28 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert "data-tree-status" in html
     assert ".route-note" in html
     assert ".mcp-candidate" in html
+    assert ".boss-point" in html
     assert "AI GIS CP" in html
     assert "GIS CP Areas" in html
     assert "Major Critical Points" in html
+    assert "Boss Points" in html
     assert "Evidence Timeline" in html
     assert "view.evidence_timeline?.categories" in html
     assert "view.major_critical_points?.candidates" in html
+    assert "view.boss_points?.boss_points" in html
+    assert "item?.boss_point_id || item?.source_mcp_id || item?.source_candidate_id" in html
+    assert "item.boss_point_id" in html
+    assert "item.source_mcp_id" in html
+    assert "item.source_candidate_id" in html
+    assert "function isBossPoint(item)" in html
+    assert "function bossDisplayText(item)" in html
+    assert "function bossSummaryText(item)" in html
+    assert "function bossDetailPayload(item)" in html
+    assert 'canonical_centerline: "overpass_risk_ribbon"' in html
+    assert 'gpx_evidence_axis: "projected_to_overpass_risk_ribbon"' in html
+    assert "label: bossDisplayText(item)" in html
+    assert "sublabel: bossSummaryText(item)" in html
+    assert 'String(point.challenge_fit?.band || "").includes("not_ready")' in html
     assert "item.cp_support_reconciliation?.support_status" in html
     assert "item.accepted_evidence_page_count" in html
     assert "item.source_family_coverage?.present" in html
@@ -100,15 +282,19 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert "Calibrated Heat" in html
     assert "Risk Delta" in html
     assert "view.risk_ribbon?.segments" in html
+    assert 'appendEvidenceTreeGroup(tree, "map_risk", "Baseline Risk", view.risk_ribbon?.segments || []' in html
+    assert 'appendEvidenceTreeGroup(tree, "map_risk", "Calibrated Heat", view.risk_heatmap?.segments || []' in html
+    assert 'appendEvidenceTreeGroup(tree, "map_risk", "Risk Heat"' not in html
+    assert 'appendEvidenceTreeGroup(tree, "default", "Boss Points", view.boss_points?.boss_points || []' in html
     assert "Capability Timeline Import" in html
     assert "Capability Timeline" in html
     assert "view.capability_timeline_import?.edges" in html
     assert "capability_timeline_import" in html
     assert "focusMapFor" in html
-    assert "FOCUS_POINT_VIEWPORT_M = 1000" in html
+    assert "FOCUS_POINT_VIEWPORT_M = 50" in html
     assert "const widthZoom = widthMeters / FOCUS_POINT_VIEWPORT_M;" in html
     assert "const heightZoom = heightMeters / FOCUS_POINT_VIEWPORT_M;" in html
-    assert "POINT_LABEL_VIEWPORT_M = 30" in html
+    assert "POINT_LABEL_VIEWPORT_M = 50" in html
     assert "POINT_LABEL_FONT_PX = 4" in html
     assert "POINT_LABEL_STROKE_PX = 0.6" in html
     assert "POINT_LABEL_OFFSET_PX = 3" in html
@@ -131,6 +317,8 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert '"data-label-summary": pointLabelCalloutSummary(item, pointLabelCalloutTitle(item, label))' in html
     assert "item?.map_label" in html
     assert "item?.display_label" in html
+    assert "bossDisplayText(item)" in html
+    assert "if (isBossPoint(item)) return bossSummaryText(item);" in html
     assert "gis_cp_cluster\\." in html
     assert "function updatePointLabels" in html
     assert '"data-label-layer"' in html
@@ -150,17 +338,49 @@ def test_pretrip_admin_page_contains_expected_layout_contract():
     assert "zoom-selection" in html
     assert "beginMapRectangleZoom" in html
     assert "zoomMapToBox" in html
-    assert "zoomMapOutFromBox" in html
-    assert "Math.max(1, Math.min(MAP_MAX_ZOOM, state.zoom / factor))" in html
-    assert "isZoomOutDrag" in html
-    assert 'button.addEventListener("click", () => {\n        selectEvidence(item);\n        focusMapFor(item, {label: false});' in html
-    assert 'button.addEventListener("dblclick", event => {\n        event.preventDefault();\n        selectEvidence(item);\n        focusMapFor(item, {label: true});' in html
+    assert "zoomMapOutFromBox" not in html
+    assert "isZoomOutDrag" not in html
+    zoom_to_box = html.split("function zoomMapToBox", 1)[1].split(
+        "function selectionZoomFactor", 1
+    )[0]
+    finish_box_zoom = html.split("function finishMapRectangleZoom", 1)[1].split(
+        "function cancelMapRectangleZoom", 1
+    )[0]
+    assert "const currentViewport = mapViewportBox();" in zoom_to_box
+    assert "state.zoom * factor" in zoom_to_box
+    assert "zoomMapToBox(box);" in finish_box_zoom
+    assert "zoomMapOutFromBox" not in finish_box_zoom
+    assert "let treeClickFocusTimer = null;" in html
+    assert "function scheduleTreeClickFocus(item)" in html
+    assert "window.clearTimeout(treeClickFocusTimer);" in html
+    assert 'item?.evidence_type === "pretrip_reference_segment_timing_segment"' in html
+    assert "focusMapFor(item, focusOptions);" in html
+    assert "function focusTreeItemImmediately(item, options = {})" in html
+    assert 'button.addEventListener("click", () => scheduleTreeClickFocus(item));' in html
+    assert 'button.addEventListener("dblclick", event => {\n        event.preventDefault();\n        focusTreeItemImmediately(item, {label: true});' in html
     assert 'addEventListener("dblclick"' in html
     assert "nearby_group_id" in html
     assert "route_note_freshness" in html
     assert "view.gis_perception_timeline?.checkpoint_candidates" in html
     assert "item.display_label || item.map_label || item.route_note_summary" in html
     assert "item.display_label || item.map_label || item.nearby_group_id" in html
+
+
+def test_pretrip_maplibre_adapter_converts_core_evidence_without_authority_promotion():
+    html = PAGE.read_text(encoding="utf-8")
+
+    assert "function pretripMapLibreFeatureCollection(view)" in html
+    assert "function appendPretripMapLibreFeature(" in html
+    assert "function mapLibreLineGeometryFromSegments(" in html
+    assert "window.ScoutMapLibreEvidence.createEvidenceFeature(" in html
+    assert "window.ScoutMapLibreEvidence.createEvidenceFeatureCollection(features)" in html
+    assert 'append(item, "route", mapLibreLineGeometryFromSegments(' in html
+    assert 'append(checkpoint, "checkpoints", mapLibrePointGeometry(checkpoint));' in html
+    assert 'append(segment, "segments", mapLibreLineGeometryFromSegments(segmentCoordSegments));' in html
+    assert 'append(candidate, "corridors", mapLibreLineGeometry(candidate.corridor.coordinates));' in html
+    assert 'append(segment, "risk-ribbon", mapLibreLineGeometry(segment.coordinates));' in html
+    assert "candidate_only: identity.candidate_only" in html
+    assert "runtime_safety_truth: identity.runtime_safety_truth" in html
 
 
 def test_pretrip_admin_page_has_top_level_readiness_strip_boundary_contract():
@@ -229,8 +449,18 @@ def test_pretrip_admin_page_has_read_only_toolbar_and_summary_raw_sample_contrac
     assert "raw_samples" not in html
 
 
+def test_approved_single_image_overlays_do_not_block_vector_evidence_hover():
+    html = PAGE.read_text(encoding="utf-8")
+    create_image_source = html.split(
+        "function createApprovedSingleImage", 1
+    )[1].split("function mapImageConformsToRenderPolicy", 1)[0]
+
+    assert '"pointer-events": "none"' in create_image_source
+
+
 def test_pretrip_admin_page_groups_dense_controls_and_uses_short_labels():
     html = PAGE.read_text(encoding="utf-8")
+    assistant_script = ASSISTANT_UI_SCRIPT.read_text(encoding="utf-8")
 
     assert "toolbar-grid" in html
     assert "assistant-drawer" in html
@@ -244,12 +474,72 @@ def test_pretrip_admin_page_groups_dense_controls_and_uses_short_labels():
     assert 'aria-label="Rectangle drag zoom"' in html
     assert 'id="zoomLevel" class="zoom-level"' in html
     assert "function updateMapZoomIndicator" in html
+    assert "function mapStrokeWidthPx(node, scale)" in html
+    assert "function mapMarkerRadiusPx(circle, scale, baseRadius)" in html
+    assert ".hover-hint {\n      position: fixed;\n      z-index: 10000;" in html
+    assert 'circle.classList.contains("mcp-candidate") || circle.classList.contains("boss-point")' in html
+    assert 'node.style.setProperty("stroke-width", `${strokeWidth.toFixed(2)}px`, priority)' in html
     assert "selectionZoomFactor(selection).toFixed(2)" in html
     assert 'aria-label="Map layer controls"' in html
     assert 'class="layer-menu"' in html
     assert 'id="layerControl" title="Show layer controls" aria-label="Layer controls"' in html
     assert 'id="layerEnabledCount"' in html
     assert "layer-menu-panel" in html
+    assert 'class="layer-preset-row" aria-label="Layer presets"' in html
+    assert 'data-layer-preset="risk-review"' in html
+    assert 'data-layer-preset="mcp-review"' in html
+    assert 'data-layer-preset="route-clean"' in html
+    assert 'data-layer-preset="debug-replay"' in html
+    assert 'data-layer-preset="raster-check"' in html
+    assert ".layer-menu-header small {" in html
+    layer_heading_small = html.split(".layer-menu-header small {", 1)[1].split("}", 1)[0]
+    assert "font-size: 11px;" in layer_heading_small
+    assert 'class="layer-advanced"' in html
+    assert "Advanced layers" in html
+    assert 'data-layer="boss-points" checked> Boss</label>' in html
+    assert ".filters label {\n      display: inline-flex;\n      align-items: center;\n      gap: 4px;\n      min-height: 28px;" in html
+    assert ".layer-menu summary {\n      min-height: 28px;" in html
+    assert ".layer-preset-button {\n      min-height: 28px;\n      display: flex;\n      align-items: center;" in html
+    assert ".layer-advanced summary {\n      border: 0;\n      background: transparent;\n      padding: 4px 0 6px;\n      min-height: 28px;" in html
+    assert "width: max-content;\n      max-width: 100%;\n      box-sizing: border-box;" in html
+    assert "@media (max-width: 1120px)" in html
+    mobile_readiness_css = html.split("@media (max-width: 640px)", 1)[1].split(".layer-menu-panel", 1)[0]
+    assert ".dashboard-map-only .layer-menu { margin-left: 56px; }" in mobile_readiness_css
+    assert 'document.body.classList.toggle("dashboard-map-only", DASHBOARD_MAP_ONLY);' in html
+    assert "grid-template-columns: repeat(2, minmax(0, 1fr));" in mobile_readiness_css
+    assert 'data-readiness-kind="energy"' in html
+    assert "white-space: nowrap;" in mobile_readiness_css
+    assert "text-overflow: ellipsis;" in mobile_readiness_css
+    assert "#energyReserveSubline {\n        white-space: normal;" in mobile_readiness_css
+    assert "text-overflow: clip;\n        line-height: 1.25;" in mobile_readiness_css
+    assert ".route-pane .metric-grid {\n        grid-template-columns: repeat(2, minmax(0, 1fr));" in mobile_readiness_css
+    assert ".route-pane .metric span,\n      .route-pane .metric strong {\n        overflow: visible;" in mobile_readiness_css
+    assert "text-overflow: clip;\n        white-space: normal;" in mobile_readiness_css
+    assert "grid-column: 1 / -1;" not in mobile_readiness_css
+    assert ".readiness-strip { grid-template-columns: 1fr; }" not in mobile_readiness_css
+    assert ".layer-menu-panel {\n        position: fixed;\n        top: 120px;\n        left: 12px;\n        right: 12px;\n        width: auto;" in html
+    assert "function applyLayerPreset" in html
+    assert "function syncLayerPresetButtons" in html
+    assert 'document.querySelectorAll("[data-layer]:not(:disabled)")' in html
+    assert "view.checkpoint_events?.events || []" in html
+    assert 'data-layer-group": "events"' in html
+    assert "combinedHazardCandidates(view)" in html
+    assert "function bindLayerMenuDismiss()" in html
+    assert "function closeLayerMenus(exceptMenu = null)" in html
+    assert "function layerMenuFromEvent(event)" in html
+    assert "event.composedPath()" in html
+    assert 'window.__scoutLayerMenuDismissVersion === "v2"' in html
+    assert "window.__scoutLayerMenuDismissBound" not in html
+    assert html.index("bindLayerMenuDismiss();") < html.index("bindAssistantControls();")
+    assert '["pointerdown", "mousedown", "touchstart", "click"].forEach(eventName =>' in html
+    assert "[window, document, document.documentElement, document.body]" in html
+    assert "target.addEventListener(eventName, dismissLayerMenusForEvent, {capture: true, passive: true});" in html
+    assert 'document.addEventListener("focusin", dismissLayerMenusForEvent, {capture: true});' in html
+    assert 'menu.addEventListener("toggle", () =>' in html
+    assert "if (menu.open) closeLayerMenus(menu);" in html
+    assert 'if (event.key === "Escape") closeLayerMenus();' in html
+    assert 'document.querySelectorAll(".layer-menu[open]")' in html
+    assert "availablePresetLayerSet" in html
     assert "summary.textContent = `${enabled}/${layerInputs.length}`;" in html
     assert "Workspace edit tools" in html
     assert 'aria-label="Workspace edit tools">Edit</summary>' in html
@@ -267,11 +557,120 @@ def test_pretrip_admin_page_groups_dense_controls_and_uses_short_labels():
     assert 'title="Route-aligned baseline terrain risk layer"><input type="checkbox" data-layer="risk-ribbon" checked> Baseline</label>' in html
     assert 'title="Route-specific calibrated heat map"><input type="checkbox" data-layer="risk-heatmap" checked> Calibrated</label>' in html
     assert 'title="Difference between baseline risk and calibrated heat"><input type="checkbox" data-layer="risk-delta"> Delta</label>' in html
+    assert 'title="CWA quantitative precipitation forecast grid"><input type="checkbox" data-layer="cwa-qpf"> QPF</label>' in html
+    assert 'title="SMAP L4 soil moisture hydrology context"><input type="checkbox" data-layer="soil-moisture"> Soil H2O</label>' in html
+    assert 'title="GPM IMERG antecedent rain context"><input type="checkbox" data-layer="antecedent-rain"> Rain</label>' in html
+    assert 'title="CWA warnings observations and forecast evidence"><input type="checkbox" data-layer="cwa-weather"> CWA</label>' in html
+    assert ".environment-extent" in html
+    assert "function renderEnvironmentExtent" in html
+    assert "function environmentEvidenceSummary" in html
+    assert "function environmentRiskDerivativeItemSummary" in html
+    assert "function environmentRiskCandidateTreeSummary" in html
+    assert "function renderEnvironmentRiskDerivativeCandidates" in html
+    assert 'evidenceType.includes("environment_risk_derivative")' in html
+    assert "route_revalidation_status" in html
+    assert "SMAP L4 route bbox mean" in html
+    assert "candidate-only context; not runtime safety truth" in html
+    assert "SMAP surface" in html
+    assert "GPM 72h" in html
     assert 'title="Weather API layer"><input type="checkbox" data-layer="weather-api"> Weather</label>' in html
     assert 'aria-label="Move to next review item">Next</button>' in html
     assert 'aria-label="Accept selected review">Accept</button>' in html
     assert 'aria-label="Route-note reviewed assumptions">Assumptions</button>' in html
     assert "function assistantQuestionLabel" in html
+    assert 'aria-label="Scout standard gap audit"' in html
+    assert 'id="assistantStandardGapAuditList"' in html
+    assert "Standard gaps?" in html
+    assert "SCOUT_OUTDOOR_AI_AGENT_STANDARD" in html
+    assert "window.ScoutAssistantUI.renderStandardGapAudit(payload)" in html
+    assert "window.ScoutAssistantUI.renderStandardGapAudit({})" in html
+    assert "function standardGapAudit" in assistant_script
+    assert "function standardGapAuditItems" in assistant_script
+    assert "function renderStandardGapAudit" in assistant_script
+    assert "assistantStandardGapAuditList" in assistant_script
+    assert "implementation_gap_tools" in assistant_script
+    assert "context_review_gap_tools" in assistant_script
+    assert "ui_validation:" in assistant_script
+
+
+def test_standard_gap_audit_items_render_zero_gap_ui_validation_contract():
+    payload = {
+        "sources": [
+            {
+                "source_id": "assistant_skill.pretrip.full_workflow.v0",
+                "context_summary": {
+                    "decision_output": {
+                        "standardGapAudit": {
+                            "schema": "scout_standard_gap_audit.v0",
+                            "runtimeSafetyTruth": False,
+                            "summary": {
+                                "standardGroupCount": 10,
+                                "coveredStandardGroupCount": 10,
+                                "implementationGapToolCount": 0,
+                                "contextOrReviewEvidenceGapToolCount": 0,
+                                "uiUxValidationNeeded": False,
+                            },
+                            "uiUxValidation": {
+                                "validated": True,
+                                "status": "validated_static_admin_ui",
+                                "surface": "pretrip_admin",
+                            },
+                            "groups": [
+                                {
+                                    "label": "六力動態決策",
+                                    "sections": "5-11",
+                                    "status": "implemented_evidence_available",
+                                    "missingFieldCount": 0,
+                                }
+                            ],
+                            "inputOrEvidenceGaps": [],
+                            "nextSlices": [
+                                "用真實專案資料重跑 Route Readiness 與 Contextual Permission。"
+                            ],
+                            "nonGoals": [
+                                "此 audit 不批准出發、不寫入 runtime safety truth。"
+                            ],
+                        }
+                    }
+                },
+            }
+        ]
+    }
+    script = f"""
+const fs = require("fs");
+const vm = require("vm");
+const code = fs.readFileSync({json.dumps(str(ASSISTANT_UI_SCRIPT))}, "utf8");
+const payload = {json.dumps(payload, ensure_ascii=False)};
+const context = {{ window: {{}}, console }};
+vm.createContext(context);
+vm.runInContext(code, context);
+console.log(JSON.stringify(context.window.ScoutAssistantUI.standardGapAuditItems(payload)));
+"""
+
+    result = subprocess.run(
+        ["node", "-e", script],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    items = json.loads(result.stdout)
+    assert "schema: scout_standard_gap_audit.v0 | runtime_safety_truth=false" in items
+    assert (
+        "coverage: 10/10 groups | implementation_gap_tools=0 | "
+        "context_review_gap_tools=0 | ui_ux_validation_needed=false"
+    ) in items
+    assert (
+        "ui_validation: status=validated_static_admin_ui | "
+        "surface=pretrip_admin | validated=true"
+    ) in items
+    assert any(
+        "group: 六力動態決策" in item
+        and "implemented_evidence_available" in item
+        for item in items
+    )
+    assert any(item.startswith("boundary: 此 audit 不批准出發") for item in items)
 
 
 def test_pretrip_admin_page_has_import_gpx_reference_route_panel():
@@ -419,6 +818,8 @@ def test_pretrip_admin_page_has_wearable_inventory_energy_controls():
     assert "/admin/pretrip/projects/${PROJECT_ID}/refresh-energy-projection" in html
     assert "/admin/pretrip/projects/${PROJECT_ID}/refresh-companion-match" in html
     assert "/admin/pretrip/projects/${PROJECT_ID}/refresh-energy-feedback" in html
+    assert 'id="routeContextBriefingLink"' in html
+    assert "/admin/pretrip/projects/chilai_nanhua_day1/briefings/route-context" in html
     assert "candidate_capsule_paths" in html
     assert "medical_diagnosis: false" in html
     assert "phase1_runtime_safety_truth: false" in html
@@ -428,12 +829,17 @@ def test_pretrip_admin_page_has_wearable_inventory_energy_controls():
 def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     html = PAGE.read_text(encoding="utf-8")
 
-    assert 'const PROJECT_ID = "chilai_nanhua_day1"' in html
+    assert 'const DEFAULT_PROJECT_ID = "chilai_nanhua_day1"' in html
+    assert "new URLSearchParams(window.location.search).get(\"projectId\")" in html
+    assert "const PROJECT_ID = /^[A-Za-z0-9_.-]+$/.test(PROJECT_ID_PARAM)" in html
+    assert "encodeURIComponent(PROJECT_ID)" in html
     assert "/admin/pretrip/projects/${PROJECT_ID}" in html
     assert "apiBase()" in html
     assert 'data-layer="imagery"' in html
+    assert '<input type="checkbox" data-layer="imagery"> Imagery' in html
     assert 'data-layer="rudy"' in html
     assert 'data-layer="rudy-twmap"' in html
+    assert '<input type="checkbox" data-layer="rudy-twmap" checked> Rudy+TW' in html
     assert 'data-layer="relief"' in html
     assert 'data-layer="geology"' in html
     assert 'data-layer="topo-5k"' in html
@@ -448,7 +854,11 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert 'data-layer="hazards"' in html
     assert 'data-layer="overpass"' in html
     assert 'data-layer="risk-ribbon"' in html
+    assert 'data-layer="cwa-qpf"' in html
+    assert 'data-layer="soil-moisture"' in html
+    assert 'data-layer="antecedent-rain"' in html
     assert 'data-layer="route-notes"' in html
+    assert 'data-layer="cwa-weather"' in html
     assert 'data-layer="weather-api"' in html
     assert "OSM_TILE_URL_TEMPLATE" in html
     assert "OSM_PUBLIC_TILE_URL_TEMPLATE" in html
@@ -460,7 +870,7 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert "RASTER_TILE_CACHE_BUST" in html
     assert "function rasterTileCacheBustedUrl" in html
     assert "/admin/tiles/osm/{z}/{x}/{y}.png" in html
-    assert "/admin/tiles/osm/{z}/{x}/{y}.png?fallback=transparent" in html
+    assert "/admin/tiles/osm/{z}/{x}/{y}.png?fallback=offline" in html
     assert "function osmTileTemplate" in html
     assert "function isLocalOsmTileMode" in html
     assert 'return requested === "public" ? OSM_PUBLIC_TILE_URL_TEMPLATE : OSM_LOCAL_TILE_URL_TEMPLATE' in html
@@ -480,7 +890,11 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert 'sourceId: "happyman_forest"' in html
     assert "function rasterZoomRangeFor" in html
     assert "function chooseRasterZoom" in html
-    assert "const z = zoom ?? chooseRasterZoom(view, bounds, RASTER_MAX_TILES, layerId)" in html
+    assert "const preferredZoom = zoom ?? chooseRasterZoom(view, bounds, RASTER_MAX_TILES, layerId)" in html
+    assert "for (let z = preferredZoom; z >= range.min; z -= 1)" in html
+    assert "function parentTileFor" in html
+    assert "function positionTileImage" in html
+    assert "function attachTileFallback" in html
     assert 'params.get("osmSource")' in html
     assert "https://tile.openstreetmap.org/{z}/{x}/{y}.png" in html
     assert "function renderRasterLayer" in html
@@ -499,10 +913,20 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert "function mapViewportBox" in html
     assert "function renderRasterBasemapLayers" in html
     assert "renderRasterBasemapLayers(state.view)" in html
+    assert "const RASTER_BASEMAP_LAYER_IDS" in html
+    assert "function layerInputChecked(layerId)" in html
+    assert 'if (layerInputChecked("imagery")) renderRasterLayer' in html
+    assert "if (layerInputChecked(layer.layerId)) renderRasterLayer" in html
+    assert 'if (layerInputChecked("osm")) renderOsmBasemap' in html
+    assert "RASTER_BASEMAP_LAYER_IDS.has(input.dataset.layer)" in html
+    assert "const coverageBounds = bounds" in html
     assert "const coverageBounds = visibleBoundsFor(view) || bounds" in html
+    assert ".layer-advanced summary {\n      border: 0;\n      background: transparent;\n      padding: 4px 0 6px;\n      min-height: 28px;" in html
+    assert "width: max-content;\n      max-width: 100%;\n      box-sizing: border-box;" in html
     assert "renderRasterLayer(imageryGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT, \"imagery\", coverageBounds)" in html
     assert "renderRasterLayer(rasterGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT, layer.layerId, coverageBounds)" in html
-    assert "renderOsmBasemap(osmGroup, bounds, MAP_WIDTH, MAP_HEIGHT, coverageBounds)" in html
+    assert "renderOsmBasemap(osmGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT, coverageBounds)" in html
+    assert '<input type="checkbox" data-layer="overpass" checked> Overpass' in html
     assert "function rasterTileCoverage" in html
     assert "function rasterBoundsFor" in html
     assert "function isDirectRuntimeRasterLayer" in html
@@ -512,7 +936,52 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert "class: \"raster-tile\"" in html
     assert "data-raster-tile" in html
     assert "function renderOsmBasemap" in html
-    assert "if (!isLocalOsmTileMode())" in html
+    assert "function localOsmPbfVectorUrl" in html
+    assert "/osm-pbf-vector.geojson" in html
+    assert "/admin/pretrip/osm-carto-palette" in html
+    assert "function applyOsmCartoPalette" in html
+    assert "function loadOsmCartoPalette" in html
+    assert "--osm-carto-track-fill: #996600;" in html
+    assert "var(--osm-carto-track-fill)" in html
+    assert ".osm-pbf-line-core.primary" in html
+    assert "var(--osm-carto-primary-fill)" in html
+    assert "function osmPbfZoomMin" in html
+    assert "data-osm-pbf-zoom-min" in html
+    assert "function renderOsmPbfVector" in html
+    assert "function osmPbfFeatureTags" in html
+    assert "props.tags && typeof props.tags === \"object\"" in html
+    assert "state.osmPbfVector?.features" in html
+    assert "function appendOsmPbfLine" in html
+    assert "function appendOsmPbfLineLabel" in html
+    assert "osm-pbf-line osm-pbf-line-casing" in html
+    assert "osm-pbf-line osm-pbf-line-core" in html
+    assert "osm-pbf-line-label" in html
+    assert '"data-osm-pbf-line-label": "true"' in html
+    assert "class: `osm-pbf-area ${category}`" in html
+    assert "function osmPbfDrawOrder" in html
+    assert '"data-osm-pbf-kind": "line-casings"' in html
+    assert '"data-osm-pbf-kind": "line-fills"' in html
+    assert "lineCasingGroup" in html
+    assert "lineCoreGroup" in html
+    assert ".osm-pbf-area.building" in html
+    assert "var(--osm-carto-water-fill)" in html
+    assert 'return isArea ? "water"' in html
+    assert ".osm-pbf-point { fill: #5a5f63;" in html
+    assert ".osm-pbf-point.shelter" in html
+    assert '"data-osm-pbf-label": "true"' in html
+    assert "function syncOsmPbfLabelScale" in html
+    assert "syncOsmPbfLabelScale(scale);" in html
+    update_layers_body = html.split("function updateLayers()", 1)[1].split("function checkedLayerIds()", 1)[0]
+    assert "syncMapMarkerScale();" in update_layers_body
+    assert update_layers_body.index("syncMapMarkerScale();") < update_layers_body.index("updatePointLabels();")
+    assert ".osm-pbf-line-core.path" in html
+    assert ".osm-pbf-line-core.track" in html
+    assert ".osm-pbf-line-core.road" in html
+    assert ".osm-pbf-line-core.terrain" in html
+    assert ".osm-pbf-area.forest" in html
+    assert "const hasLocalVector = Boolean(localOsmPbfVectorUrl(state.view));" in html
+    assert "if (isLocalOsmTileMode() && hasLocalVector) return false;" in html
+    assert 'group.appendChild(el("rect", {x: 0, y: 0, width, height, class: "layer-osm"}));' in html
     assert "function osmTileCoverage" in html
     assert 'el("image"' in html
     assert "class: \"osm-tile\"" in html
@@ -543,14 +1012,37 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert "weatherOverlayLabel(cards[0]?.summary || \"Weather evidence pending.\")" in html
     assert "/admin/pretrip/projects/${PROJECT_ID}/weather-overlay" in html
     assert "state.weatherOverlay" in html
+    reload_body = html.split("async function reloadProjectView()", 1)[1].split("async function loadOsmPbfVectorLayer", 1)[0]
+    assert "const osmPbfVectorPromise = loadOsmPbfVectorLayer(view);" in reload_body
+    assert reload_body.index("const osmPbfVectorPromise = loadOsmPbfVectorLayer(view);") < reload_body.index(
+        "/admin/pretrip/projects/${PROJECT_ID}/weather-overlay"
+    )
+    enhancement_barrier = reload_body.split(
+        "const enhancementResults = await Promise.allSettled([", 1
+    )[1].split("]);", 1)[0]
+    assert "osmPbfVectorPromise" in enhancement_barrier
     assert "Weather API overlay" in html
+    assert html.index('"Risk Score", view.risk_score?.points') < html.index(
+        '"Baseline Risk", view.risk_ribbon?.segments'
+    )
+    assert html.index('"Baseline Risk", view.risk_ribbon?.segments') < html.index(
+        '"Calibrated Heat", view.risk_heatmap?.segments'
+    )
+    assert html.index('"Calibrated Heat", view.risk_heatmap?.segments') < html.index(
+        '"Risk Delta", view.risk_delta?.segments'
+    )
     assert html.index('data-layer-group": "imagery"') < html.index(
         'data-layer-group": "osm"'
     )
-    assert html.index("renderRasterLayer(imageryGroup") < html.index(
+    render_map_body = html.split(
+        "function renderMap(view, {forceSvg = false} = {})", 1
+    )[1].split(
+        "function scheduleTreeClickFocus", 1
+    )[0]
+    assert render_map_body.index("renderRasterLayer(imageryGroup") < render_map_body.index(
         "RASTER_OVERLAY_LAYER_DEFINITIONS.forEach"
     )
-    assert html.index("RASTER_OVERLAY_LAYER_DEFINITIONS.forEach") < html.index(
+    assert render_map_body.index("RASTER_OVERLAY_LAYER_DEFINITIONS.forEach") < render_map_body.index(
         "renderOsmBasemap(osmGroup"
     )
     assert html.index('data-layer-group": "reference-tracks"') < html.index(
@@ -563,14 +1055,142 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
         'data-layer-group": "risk-delta"'
     )
     assert html.index('data-layer-group": "risk-delta"') < html.index(
+        'data-layer-group": "cwa-qpf"'
+    )
+    assert html.index('data-layer-group": "cwa-qpf"') < html.index(
+        'data-layer-group": "soil-moisture"'
+    )
+    assert html.index('data-layer-group": "soil-moisture"') < html.index(
+        'data-layer-group": "antecedent-rain"'
+    )
+    assert html.index('data-layer-group": "antecedent-rain"') < html.index(
+        'data-layer-group": "cwa-weather"'
+    )
+    assert html.index('data-layer-group": "cwa-weather"') < html.index(
         'data-layer-group": "terrain"'
     )
     assert html.index('data-layer-group": "terrain"') < html.index(
         'data-layer-group": "risk-score"'
     )
+    assert '"data-risk-layer": "baseline"' in html
+    assert '"data-risk-layer": "calibrated"' in html
+    assert '"data-risk-layer": "delta"' in html
     assert html.index('data-layer-group": "overpass"') < html.index(
         'data-layer-group": "weather-api"'
     )
+    assert html.index('data-layer-group": "cwa-weather"') < html.index(
+        'data-layer-group": "weather-api"'
+    )
+    assert 'class: "soil-moisture-point"' in html
+    assert "antecedent-rain-point" in html
+    assert "renderEnvironmentExtent(cwaQpfGroup" in html
+    assert "renderEnvironmentExtent(soilMoistureGroup" in html
+    assert "renderEnvironmentExtent(antecedentRainGroup" in html
+    assert "renderEnvironmentExtent(cwaWeatherGroup" in html
+    assert "const environmentRiskDerivativeItems" in html
+    assert "const environmentRiskDerivativeLayers" in html
+    assert 'appendEvidenceTreeGroup(tree, "map_risk", "Environmental Risk Derivatives"' in html
+    assert 'appendEvidenceTreeGroup(tree, "map_risk", "Wetness / Flash Flood Candidates"' in html
+    assert 'appendEvidenceTreeGroup(tree, "map_risk", "Practical Darkness Candidates"' in html
+    assert 'appendEvidenceTreeGroup(tree, "map_risk", "Environment Values"' in html
+    assert "baseEnvironmentValueItems" in html
+    assert 'appendEvidenceTreeGroup(tree, "map_risk", "Soil Moisture"' in html
+    assert 'appendEvidenceTreeGroup(tree, "map_risk", "Antecedent Rain"' in html
+    assert "function environmentValueTreeSummary" in html
+    assert "function environmentRiskMetricGapText" in html
+    assert "function environmentRiskEmptyNote" in html
+    assert "tree-summary-note" in html
+    assert "options.emptyNote" in html
+    assert "options.headerNote" in html
+    assert 'type.includes("environment_risk_derivative")' in html
+    assert "new_landslide_candidate_count" in html
+    assert "data gaps:" in html
+    assert "environment_risk_derivative_layers" in html
+    assert "environment-risk-derivative" in html
+    assert 'type.includes("environment") || type.includes("gee_") || type.includes("cwa_")' in html
+
+
+def test_pretrip_page_preserves_typed_empty_rainfall_overlay_reason() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+
+    assert '<link rel="icon" href="data:,">' in html
+    assert "async function loadCwaRainfallGridOverlay(view)" in html
+    assert "grid_overlay_status: overlay.status" in html
+    assert "grid_overlay_empty_reason: overlay.emptyReason || null" in html
+
+
+def test_weather_map_preserves_previous_tiles_until_replacement_generation_loads():
+    html = PAGE.read_text(encoding="utf-8")
+    raster_swap = html.split(
+        "function replaceRasterLayerWhenReady", 1
+    )[1].split("function renderRasterBasemapLayers", 1)[0]
+    raster_refresh = html.split(
+        "function renderRasterBasemapLayers", 1
+    )[1].split("function applyMapViewport", 1)[0]
+
+    assert 'data-tile-generation="pending"' in html
+    assert 'image.addEventListener("load"' in raster_swap
+    assert 'image.addEventListener("error"' in raster_swap
+    assert "rememberRudyMapView" in raster_swap
+    assert "retainRudyMapViewAfterTileFailure" in raster_refresh
+    assert "RASTER_TILE_SWAP_TIMEOUT_MS" in raster_swap
+    assert "if (loadedCount !== images.length) return;" in raster_swap
+    assert "group.dataset.pendingTileGenerationKey !== generationKey" in raster_swap
+    assert "promoteCandidate();" in raster_swap
+    assert "function discardPendingRasterLayerGeneration(" in html
+    assert "if (generationKey === group.dataset.activeTileGenerationKey)" in raster_swap
+    assert "discardPendingRasterLayerGeneration(group);" in raster_swap
+    assert "replaceRasterLayerWhenReady(imageryGroup" in raster_refresh
+    assert "replaceRasterLayerWhenReady(rasterGroup" in raster_refresh
+    assert "replaceRasterLayerWhenReady(osmGroup" in raster_refresh
+    assert "imageryGroup.replaceChildren();" not in raster_refresh
+    assert "rasterGroup.replaceChildren();" not in raster_refresh
+    assert "osmGroup.replaceChildren();" not in raster_refresh
+
+
+def test_weather_map_tile_failure_keeps_the_current_interaction_view() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    failure_handler = html.split(
+        "function retainRudyMapViewAfterTileFailure", 1
+    )[1].split("function markRasterLayerGenerationActive", 1)[0]
+
+    assert "group.dataset.nativeTileFailure = reason;" in failure_handler
+    assert "previous complete tiles retained at current view" in failure_handler
+    assert "state.lastFailedNativeMapZoom = failedZoom;" in failure_handler
+    assert "state.zoom =" not in failure_handler
+    assert "state.panX =" not in failure_handler
+    assert "state.panY =" not in failure_handler
+    assert "applyMapViewport();" not in failure_handler
+
+
+def test_weather_rudy_twmap_uses_scout_cache_proxy_instead_of_direct_wmts():
+    html = PAGE.read_text(encoding="utf-8")
+    definition = next(
+        line for line in html.splitlines() if '{layerId: "rudy-twmap"' in line
+    )
+
+    assert 'sourceKind: "scout_proxy_tile"' in definition
+    assert 'sourceId: "happyman_rudy_twmap"' in definition
+    assert 'cacheLayerId: "imagery"' in definition
+    assert 'initialMaxZoom: 13' in definition
+    assert 'preparedMaxZoom: 14' in definition
+    assert 'maxZoom: 20' in definition
+    assert "wmtsLayer" not in definition
+    assert "const RUDY_TWMAP_MAX_TILES = 160" in html
+    assert (
+        'const effectiveMaxTiles = layerId === "rudy-twmap" '
+        '? RUDY_TWMAP_MAX_TILES : maxTiles;'
+        in html
+    )
+    assert "tileCountForZoom(bounds, zoom) > effectiveMaxTiles" in html
+    assert "definition.initialMaxZoom + Math.ceil(Math.log2(Math.max(1, state.zoom)))" in html
+    assert "function mapInteractionMaxZoom()" in html
+    assert 'document.getElementById("zoomIn")' in html
+    assert 'state.zoom >= mapInteractionMaxZoom() - 0.001' in html
+    assert 'layerInputChecked("rudy-twmap")' in html
+    assert 'if (definition.sourceKind === "scout_proxy_tile")' in html
+    assert '"admin/tiles/imagery"' in html
+    assert "source_id=${encodeURIComponent(definition.sourceId)}&native=1" in html
 
 
 def test_pretrip_admin_page_renders_overpass_evidence_layer_and_tree():
@@ -588,14 +1208,31 @@ def test_pretrip_admin_page_renders_overpass_evidence_layer_and_tree():
     assert "overpass-corridor" in html
     assert "overpass-hazard" in html
     assert "overpass-poi" in html
+    assert "const overpassGroups = view.overpass_evidence?.category_groups" in html
+    assert 'appendEvidenceTreeGroup(tree, "map_risk", "Overpass Trail Corridors"' in html
+    assert 'appendEvidenceTreeGroup(tree, "map_risk", "Overpass Shelters"' in html
+    assert 'appendEvidenceTreeGroup(tree, "map_risk", "Overpass Water Sources"' in html
+    assert 'appendEvidenceTreeGroup(tree, "map_risk", "Overpass Peaks"' in html
+    assert 'appendEvidenceTreeGroup(tree, "map_risk", "Overpass Terrain Risk"' in html
     assert "view.overpass_evidence?.corridor_candidates" in html
     assert "view.overpass_evidence?.hazard_candidates" in html
     assert "view.overpass_evidence?.poi_candidates" in html
     assert 'appendEvidenceTreeGroup(tree, "map_risk", "Reference GPX"' in html
     assert 'id="evidenceTreeTabs"' in html
     assert "EVIDENCE_TREE_TABS" in html
-    assert "details.open = false;" in html
+    assert "button.dataset.evidenceTreeTab = tab.id" in html
+    assert "function setActiveEvidenceTreeTab(tabId, options = {})" in html
+    assert "function handleEvidenceTreeTabClick(event)" in html
+    assert "setActiveEvidenceTreeTab(button.dataset.evidenceTreeTab, {suppressAutoSwitch: true})" in html
+    assert 'document.getElementById("evidenceTreeTabs").addEventListener("click", handleEvidenceTreeTabClick)' in html
+    assert "details.open = Boolean(open || state.evidenceTreeOpenGroups.has(groupKey));" in html
     assert "details.open = open;" not in html
+    assert 'appendEvidenceTreeGroup(tree, "default", "Checkpoints", view.checkpoints, item => ({' in html
+    assert '}), true, "checkpoint");' not in html
+    assert '}), true, "segment");' not in html
+    assert '}), true, "mcp");' not in html
+    assert '}), true, "retreat");' not in html
+    assert '}), true, "review_group");' not in html
     assert 'label: "CP / Timeline"' in html
     assert 'label: "Map / Risk"' in html
     assert 'label: "Completed GPX"' in html
@@ -629,6 +1266,35 @@ def test_pretrip_admin_page_has_round1_map_interaction_contract():
     assert "finishMapRectangleZoom" in html
     assert "highlightMapFor(state.selected)" in html
     assert "highlightTreeNode(state.selected)" in html
+    assert "function evidenceTreeTabForItem(item)" in html
+    assert "const tabId = evidenceTreeTabForItem(item)" in html
+    assert "state.activeEvidenceTreeTab = tabId" in html
+    assert "suppressEvidenceTreeAutoSwitch" in html
+    assert "const previousSuppress = state.suppressEvidenceTreeAutoSwitch" in html
+    assert "if (options.suppressAutoSwitch === true) state.suppressEvidenceTreeAutoSwitch = true;" in html
+    assert "state.suppressEvidenceTreeAutoSwitch = previousSuppress;" in html
+    assert "function evidenceTimelineCategoryForItem(item)" in html
+    assert "function highlightEvidenceTimelineFor(item, options = {})" in html
+    assert 'data-evidence-timeline-category' in html
+    assert "evidenceTreeOpenGroups: new Set()" in html
+    assert "function openEvidenceGroupForMatch(match, options = {})" in html
+    assert "function trackEvidenceGroupToggle(details)" in html
+    assert "openEvidenceGroupForMatch(match, {expand: options.expand === true})" in html
+    assert "details.open = Boolean(open || state.evidenceTreeOpenGroups.has(groupKey));" in html
+    assert 'appendEvidenceTreeGroup(tree, "default", "Evidence Timeline", view.evidence_timeline?.categories || [], item => ({' in html
+    assert 'selectEvidence(item, {timeline: true, expandEvidenceGroup: true})' in html
+    assert "const MAP_LAYER_RANKS" in html
+    assert "events: 72" in html
+    assert "function orderMapLayerGroups()" in html
+    assert ".map-label-overlay {\n      position: absolute;\n      inset: 10px;\n      pointer-events: none;\n      overflow: hidden;\n      z-index: 40;" in html
+    assert "function handleMapKeyboardPan(event)" in html
+    assert "mapKeyboardActive: false" in html
+    assert "function activateMapKeyboardPan()" in html
+    assert 'document.addEventListener("keydown", handleMapKeyboardPan)' in html
+    assert 'document.addEventListener("pointerdown", deactivateMapKeyboardPanOutside)' in html
+    assert 'svg.setAttribute("tabindex", "0")' in html
+    assert "focusMapBox(mapBoxFor(item), item, {preserveZoom: options.preserveZoom !== false})" in html
+    assert "if (options.preserveZoom === false)" in html
 
 
 def test_pretrip_admin_page_has_round1_cp_segment_panel_contract():
@@ -644,6 +1310,7 @@ def test_pretrip_admin_page_has_round1_cp_segment_panel_contract():
     for function_name in (
         "statusFor",
         "sourceLabelFor",
+        "compactTreeSourceLabel",
         "itemSearchText",
         "updateStatusFilterOptions",
         "applyTreeFilters",
@@ -653,8 +1320,13 @@ def test_pretrip_admin_page_has_round1_cp_segment_panel_contract():
     assert "badge badge-status" in html
     assert "badge badge-category" in html
     assert "badge badge-source" in html
+    assert ".badge-status {\n      flex: 0 0 auto;" in html
+    assert ".badge-source {\n      flex: 1 1 9rem;" in html
     assert "data-tree-source-label" in html
     assert "sourceLabelFor(item)" in html
+    assert "sourceBadge.textContent = compactTreeSourceLabel(fullSourceLabel);" in html
+    assert "sourceBadge.title = fullSourceLabel" in html
+    assert 'node.appendChild(document.createTextNode("\\n"));' in html
     assert "tree-label" in html
     assert "data-filter-empty" in html
     assert "scrollIntoView" in html
@@ -757,8 +1429,8 @@ def test_pretrip_admin_page_review_items_stay_map_target_backed_and_read_only():
     assert "view?.route_notes?.candidates || []" in html
     assert 'el("g", {"data-layer-group": "route-notes"})' in html
     assert 'class: "route-note"' in html
-    assert 'button.addEventListener("click", () => {\n        selectEvidence(item);\n        focusMapFor(item, {label: false});' in html
-    assert 'button.addEventListener("dblclick", event => {\n        event.preventDefault();\n        selectEvidence(item);\n        focusMapFor(item, {label: true});' in html
+    assert 'button.addEventListener("click", () => scheduleTreeClickFocus(item));' in html
+    assert 'button.addEventListener("dblclick", event => {\n        event.preventDefault();\n        focusTreeItemImmediately(item, {label: true});' in html
     assert "fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}?compact=1`)" in html
     assert "fetch(`${apiBase()}/safety" not in html
 
@@ -1078,6 +1750,63 @@ def test_pretrip_admin_view_exposes_fixture_fields_used_by_readiness_strip():
     runtime_boundary = view["tabs"]["post_analysis"]["runtime_handoff"]["boundary"]
     assert runtime_boundary["safety_api_calls_allowed"] is False
     assert runtime_boundary["final_runtime_write_allowed"] is False
+
+
+def test_pretrip_admin_page_exposes_reference_segment_timing_in_latest_ui_model():
+    view = build_pretrip_admin_view("chilai_nanhua_day1", root=ROOT)
+    timing = view["reference_segment_timing"]
+    planning_sections = {
+        section["id"]: section
+        for section in view["tabs"]["pre_trip_planning"]["sections"]
+    }
+    timeline_categories = {
+        category["category_id"]: category
+        for category in view["evidence_timeline"]["categories"]
+    }
+
+    assert timing["status"] == "ready"
+    assert timing["counts"]["usable_segment_count"] == 8
+    assert timing["counts"]["measurement_count"] == 48
+    assert timing["privacy"]["raw_gpx_embedded_in_json"] is False
+    assert timing["privacy"]["coordinates_embedded"] is False
+    assert timing["privacy"]["precise_timestamps_embedded"] is False
+    assert timing["boundary"]["phase1_runtime_safety_truth"] is False
+    assert timing["segments"][0]["duration_minutes"]["p50"] is not None
+    assert timing["segments"][0]["route_guide_comparison"]["guide_duration_minutes"] == 120
+    assert timing["segments"][0]["map_focus_basis"] == "route_segment_distance_projection"
+    assert timing["segments"][0]["map_target_ids"]
+    assert all(
+        target.startswith("seg.") for target in timing["segments"][0]["map_target_ids"]
+    )
+    assert "reference_segment_timing" in planning_sections
+    assert planning_sections["reference_segment_timing"]["counts"][
+        "usable_segment_count"
+    ] == 8
+    assert timeline_categories["route_timing"]["available"] is True
+    assert timeline_categories["route_timing"]["count"] == 8
+
+
+def test_pretrip_debug_projection_includes_reference_segment_timing_events():
+    projection = load_pretrip_debug_projection_view("chilai_nanhua_day1", root=ROOT)
+    events = [
+        event
+        for event in projection["timeline_events"]
+        if event["kind"] == "reference_segment_timing_projected"
+    ]
+
+    assert projection["counts"]["reference_segment_timing_segment_count"] == 8
+    assert projection["counts"]["reference_segment_timing_measurement_count"] == 48
+    assert len(events) == 8
+    first_payload = events[0]["payload"]
+    assert first_payload["projection_event_type"] == "reference_segment_timing"
+    assert first_payload["duration_minutes"]["p50"] is not None
+    assert first_payload["distance_filter_km"]["min"] is not None
+    assert first_payload["route_guide_comparison"]["guide_duration_minutes"] == 120
+    assert first_payload["map_target_ids"]
+    assert all(target.startswith("seg.") for target in first_payload["map_target_ids"])
+    assert first_payload["raw_gpx_embedded_in_json"] is False
+    assert first_payload["coordinates_embedded"] is False
+    assert first_payload["precise_timestamps_embedded"] is False
 
 
 def test_pretrip_admin_page_fixture_sections_include_decision_log_and_import_queue():

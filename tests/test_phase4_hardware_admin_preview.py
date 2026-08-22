@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -138,6 +139,47 @@ def test_phase4_admin_runtime_serves_pretrip_and_mock_assistant_on_lan_profile()
     assert status_payload["provider"] == "mock"
     assert status_payload["token_values_exposed"] is False
     assert status_payload["assistant_context_registry"] == registry
+
+
+def test_phase4_admin_runtime_loads_scout_env_before_snapshot(monkeypatch) -> None:
+    calls: list[Path] = []
+
+    def fake_load_scout_env_files(*, repo_root: Path) -> object:
+        calls.append(repo_root)
+        os.environ["OPENROUTER_API_KEY"] = "sk-loaded-from-persistent"
+        return object()
+
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.setattr(
+        "phase4_admin_runtime.load_scout_env_files",
+        fake_load_scout_env_files,
+    )
+
+    app = create_phase4_admin_runtime_app()
+
+    assert app.title == "Scout Phase 4 Admin LAN Preview"
+    assert calls == [ROOT]
+
+
+def test_phase4_admin_runtime_explicit_environ_skips_process_env_loader(
+    monkeypatch,
+) -> None:
+    def fail_load_scout_env_files(*, repo_root: Path) -> object:
+        raise AssertionError(f"unexpected env load for {repo_root}")
+
+    monkeypatch.setattr(
+        "phase4_admin_runtime.load_scout_env_files",
+        fail_load_scout_env_files,
+    )
+
+    app = create_phase4_admin_runtime_app(
+        environ={
+            "SCOUT_RUNTIME_PROFILE": "pi-phase4-admin-preview",
+            "SCOUT_AI_ASSISTANT_ENABLED": "1",
+        }
+    )
+
+    assert app.title == "Scout Phase 4 Admin LAN Preview"
 
 
 def test_phase4_admin_runtime_status_reports_live_evidence_config_without_path_values(
@@ -470,9 +512,9 @@ def test_phase4_admin_runtime_pretrip_general_question_uses_tool_plan_fallback(
     assert response.status_code == 200
     payload = response.json()
     assert payload["observability"]["safe_failure"] is True
-    assert payload["answer"].startswith("Scout AI risk score tool fallback")
-    assert "大崩塌" in payload["answer"]
-    assert "runtime safety truth" in payload["answer"]
+    assert "Scout AI model answer unavailable" in payload["answer"]
+    assert "最高候選風險點" in payload["evidence_backed_answer"]
+    assert "score=" in payload["evidence_backed_answer"]
     assert any(
         limitation == f"resolved_by={RISK_SCORE_TOOL_ID}"
         for limitation in payload["limitations"]
@@ -867,6 +909,7 @@ def test_phase4_admin_dockerfile_runs_admin_app_not_field_runtime() -> None:
     assert "SCOUT_ADMIN_ACCESS_TOKEN_FILE=/data/scout/admin/secrets/phase4-admin-token" in source
     assert "phase46_live_replay_debug_projector.py" in source
     assert "debug_api.py" in source
+    assert "debug_event_provenance.py" in source
     assert "hardware_readiness_api.py" in source
     assert "hardware_readiness_admin_view.py" in source
     assert "hardware_readiness_assistant_context.py" in source
@@ -882,6 +925,19 @@ def test_phase4_admin_dockerfile_runs_admin_app_not_field_runtime() -> None:
     assert "pretrip_route_comparison.py" in source
     assert "tests/fixtures/hardware/readiness_context.json" in source
     assert "tests/fixtures/pretrip/projects/chilai_nanhua_day1/" in source
+    assert "scout_agent_builtin_tools.py" in source
+    assert "scout_cli.py" in source
+    assert "scout_agent_cli.py" in source
+    assert "scout_agent_runtime.py" in source
+    assert "COPY navigation_*.py ./" in source
+    assert "assistant_weather_preparation.py" in source
+    assert "dashboard_connected_preparation.py" in source
+    assert "dashboard_workspace_operations.py" in source
+    assert "tools/pi_wio_e5_lorawan_uplink_trial_plan.py" in source
+    assert "tools/pi_wio_e5_lorawan_rf_trial.py" in source
+    assert "tools/pi_wio_e5_chirpstack_join_audit.py" in source
+    assert "tools/pi_wio_e5_chirpstack_as9232_profile_provision.py" in source
+    assert "tools/pi_wio_e5_chirpstack_key_sync.py" in source
     assert 'CMD ["python", "-m", "uvicorn", "phase4_admin_runtime:app"' in source
     assert "scout_pi_runtime:app" not in source
     assert "COPY *.py" not in source
@@ -918,6 +974,7 @@ def test_phase4_admin_docker_context_whitelists_only_metadata_and_admin_assets()
 
     assert "!Dockerfile.pi.admin" in dockerignore
     assert "!requirements.pi.admin.txt" in dockerignore
+    assert "!debug_event_provenance.py" in dockerignore
     assert "!phase4_admin_runtime.py" in dockerignore
     assert "!phase46_live_replay_debug_projector.py" in dockerignore
     assert "!debug_api.py" in dockerignore
@@ -935,7 +992,24 @@ def test_phase4_admin_docker_context_whitelists_only_metadata_and_admin_assets()
     assert "!pretrip_source_ingest.py" in dockerignore
     assert "!pretrip_workspace_edit.py" in dockerignore
     assert "!runtime_debug_log.py" in dockerignore
+    assert "!scout_agent_builtin_tools.py" in dockerignore
+    assert "!scout_cli.py" in dockerignore
+    assert "!scout_agent_cli.py" in dockerignore
+    assert "!scout_agent_runtime.py" in dockerignore
+    assert "!navigation_*.py" in dockerignore
+    assert "!assistant_weather_preparation.py" in dockerignore
+    assert "!dashboard_connected_preparation.py" in dockerignore
+    assert "!dashboard_workspace_operations.py" in dockerignore
     assert "!scout_hardware_readiness_live_probe.py" in dockerignore
+    assert "!scout_sx1303_gateway_observer.py" in dockerignore
+    assert "!tools/pi_sx1303_gateway_smoke.py" in dockerignore
+    assert "!tools/pi_sx1303_gateway_rx_smoke.py" in dockerignore
+    assert "!tools/pi_sx1303_gateway_uplink_mqtt_tail.py" in dockerignore
+    assert "!tools/pi_wio_e5_lorawan_uplink_trial_plan.py" in dockerignore
+    assert "!tools/pi_wio_e5_lorawan_rf_trial.py" in dockerignore
+    assert "!tools/pi_wio_e5_chirpstack_join_audit.py" in dockerignore
+    assert "!tools/pi_wio_e5_chirpstack_as9232_profile_provision.py" in dockerignore
+    assert "!tools/pi_wio_e5_chirpstack_key_sync.py" in dockerignore
     assert "!admin_api.py" in dockerignore
     assert "!docs/admin/phase-3-5-runtime-debug.html" in dockerignore
     assert "!docs/admin/phase-3-6-hardware-readiness.html" in dockerignore

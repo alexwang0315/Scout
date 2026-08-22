@@ -1,0 +1,10 @@
+{
+  "cases": [
+    {
+      "case_id": "l5-water-12-5k-001",
+      "question": "12.5K 附近最近的水源在哪裡？請保留所有等距候選。",
+      "required_tool_ids": [],
+      "notes": "formal L5 mileage-axis tie fixture"
+    }
+  ]
+}

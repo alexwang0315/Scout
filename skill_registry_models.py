@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -46,6 +46,37 @@ class OutputSchema(StrictModel):
     node_types: list[str] = Field(default_factory=list)
     artifact_kinds: list[str] = Field(default_factory=list)
     required_fields: list[str] = Field(default_factory=list)
+    layout_contract: SkillLayoutContract | None = None
+    safety_boundary: SkillSafetyBoundary | None = None
+
+
+class VisualDirection(StrictModel):
+    palette: str
+    accents: list[str] = Field(default_factory=list)
+    rule: str
+
+
+class MediaQualityGate(StrictModel):
+    must_prefer: list[str] = Field(default_factory=list)
+    must_reject: list[str] = Field(default_factory=list)
+    missing_visual_policy: str
+    post_render_check: str
+
+
+class SkillSafetyBoundary(StrictModel):
+    candidate_only: bool = True
+    runtime_safety_truth: bool = False
+    safe_or_walkable: str | None = None
+
+
+class SkillLayoutContract(StrictModel):
+    required_sections: list[str] = Field(default_factory=list)
+    source_tiers_required: list[str] = Field(default_factory=list)
+    visual_direction: VisualDirection | None = None
+    media_quality_gate: MediaQualityGate | None = None
+    variant_generation_gate: dict[str, Any] | None = None
+    professional_itinerary_gate: dict[str, Any] | None = None
+    safety_boundary: SkillSafetyBoundary | None = None
 
 
 class RetryPolicy(StrictModel):
@@ -105,6 +136,41 @@ class ApplicationRoutingPolicy(StrictModel):
         return self
 
 
+class SkillAnswerExample(StrictModel):
+    question: str
+    facts: list[str] = Field(default_factory=list)
+    missing_evidence: list[str] = Field(default_factory=list)
+    boundary: str = ""
+    action_token: str
+    answer: str
+
+
+class SkillAnswerTopicGuidance(StrictModel):
+    triggers: list[str] = Field(min_length=1)
+    guidance: list[str] = Field(min_length=1)
+
+
+class SkillPromptContract(StrictModel):
+    mode: Literal["facts_only"]
+    precomposed_answer_allowed: bool = False
+    deterministic_answer_template_allowed: bool = False
+    same_model_self_review_allowed: bool = True
+    self_review_must_not_receive_reference_answer: bool = True
+    self_review_may_receive_previous_model_answer: bool = False
+
+
+class SkillAnswerContract(StrictModel):
+    language: str = "zh-Hant"
+    max_sentences: int = Field(default=2, ge=1, le=4)
+    prompt_contract: SkillPromptContract | None = None
+    evidence_checklist: list[str] = Field(default_factory=list)
+    missing_evidence_rules: list[str] = Field(default_factory=list)
+    style_rules: list[str] = Field(default_factory=list)
+    action_guidance: dict[str, str] = Field(default_factory=dict)
+    topic_guidance: list[SkillAnswerTopicGuidance] = Field(default_factory=list)
+    examples: list[SkillAnswerExample] = Field(default_factory=list)
+
+
 class SkillManifest(StrictModel):
     id: str
     version: str
@@ -123,6 +189,7 @@ class SkillManifest(StrictModel):
     control_surface: ControlSurface
     audit: AuditSettings
     application_routing: ApplicationRoutingPolicy | None = None
+    answer_contract: SkillAnswerContract | None = None
 
     @model_validator(mode="after")
     def validate_write_boundaries(self) -> SkillManifest:

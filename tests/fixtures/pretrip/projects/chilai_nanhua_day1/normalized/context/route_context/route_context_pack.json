@@ -1,0 +1,146 @@
+{
+  "artifact_kind": "pretrip_route_context_pack",
+  "boundary": {
+    "candidate_only": true,
+    "compile_allowed": false,
+    "live_safety_api_calls_allowed": false,
+    "phase1_runtime_mutation_allowed": false,
+    "phase2_brain_writeback_allowed": false,
+    "raw_payloads_embedded": false,
+    "runtime_safety_truth": false,
+    "safety_api_called": false,
+    "source_fulltext_embedded": false,
+    "workspace_file_mutation_allowed": true
+  },
+  "counts": {
+    "by_context_kind": {
+      "natural_context": 2,
+      "navigation_context": 4,
+      "resource_context": 4,
+      "risk_context": 5,
+      "route_context": 25,
+      "viewpoint": 1
+    },
+    "by_evidence_family": {
+      "article": 9,
+      "map_label": 31,
+      "mcp_candidates": 6,
+      "named_point": 8,
+      "named_point_evidence": 8,
+      "ocr": 1,
+      "ocr_label_evidence": 1,
+      "route_mileage": 30,
+      "route_note": 30,
+      "route_note_candidates": 30,
+      "web_case_evidence": 1
+    },
+    "by_evidence_type": {
+      "major_critical_point": 6,
+      "named_point": 3,
+      "ocr_map_label": 1,
+      "road_mileage_stone": 3,
+      "trail_mileage_k_anchor": 27,
+      "web_case_evidence": 1
+    },
+    "by_sec6_layer": {
+      "cultural": 7,
+      "historical": 32,
+      "natural": 4,
+      "observation_point": 1,
+      "route_context": 4,
+      "seasonal": 5,
+      "terrain": 11
+    },
+    "by_sensitivity_level": {
+      "cultural_review": 4,
+      "public": 37
+    },
+    "by_source_tier": {
+      "P0": 1,
+      "P1": 10,
+      "P2": 30
+    },
+    "by_stop_advisory_candidate": {
+      "context_reference_only": 28,
+      "low_priority_context_reference": 4,
+      "pass_through_or_minimize_exposure": 6,
+      "short_stop_requires_contextual_permission": 3
+    },
+    "candidate_only": true,
+    "route_context_point_count": 41,
+    "runtime_safety_truth": false
+  },
+  "crawl_seed_plan_ref": "normalized/context/route_context/crawl_seed_plan.json",
+  "generated_at": "2026-07-03T00:00:00Z",
+  "observation_scoring_policy": {
+    "candidate_only": true,
+    "formula": "observation_value_minus_risk_penalty",
+    "runtime_safety_truth": false,
+    "short_stop_requires": "scout.ai.contextual_permission.assess.v0"
+  },
+  "point_count": 41,
+  "project_id": "chilai_nanhua_day1",
+  "query_policy": {
+    "local_answer_sources": [
+      "route_context_points",
+      "source_manifest",
+      "route_summary"
+    ],
+    "mode": "cache_first_tool_second",
+    "stop_or_delay_advice_requires_contextual_permission": true
+  },
+  "route_context_briefing_ref": "outputs/briefings/route_context_briefing.html",
+  "route_context_evidence_ref": "normalized/context/route_context/route_context_evidence.json",
+  "route_context_media_manifest_ref": "normalized/context/route_context/media_manifest.json",
+  "route_context_points_ref": "candidates/route_context_points.json",
+  "route_mileage_k_anchor_count": 27,
+  "route_mileage_k_anchors_ref": "candidates/route_mileage_k_anchors.json",
+  "route_note_point_policy": "seed_only",
+  "route_summary": {
+    "bbox_wgs84": {
+      "max_lat": 24.053969560191035,
+      "max_lon": 121.28102609887719,
+      "min_lat": 23.872665725648403,
+      "min_lon": 121.17726685479283
+    },
+    "distance_m": 55174.67,
+    "elevation_max_m": 3350.81,
+    "elevation_min_m": 1216.69,
+    "ended_at": "2013-10-13T06:23:04Z",
+    "point_count": 2612,
+    "raw_route_points_embedded": false,
+    "route_name": "2013-10-08 10:58:50 每日記錄",
+    "started_at": "2013-10-08T02:58:50Z"
+  },
+  "route_summary_ref": "normalized/routes/route_summary.json",
+  "schema_version": "route_context_collection.v1",
+  "sensitivity_policy": {
+    "cultural_review": {
+      "coordinate_precision": "fuzzy_250m",
+      "requires_human_review_before_display": true,
+      "show_exact_coordinate": false
+    },
+    "public": {
+      "requires_human_review_before_display": false,
+      "show_exact_coordinate": true
+    },
+    "restricted": {
+      "coordinate_precision": "hidden_or_area_only",
+      "requires_human_review_before_display": true,
+      "show_exact_coordinate": false
+    },
+    "sensitive": {
+      "coordinate_precision": "fuzzy_250m",
+      "requires_human_review_before_display": true,
+      "show_exact_coordinate": false
+    }
+  },
+  "source_manifest_ref": "normalized/context/route_context/source_manifest.json",
+  "source_strategy": {
+    "P0": "官方資料用來確認路線、地形、天氣、危險、救援、生態與歷史地圖基線。",
+    "P1": "延伸資料用來補充公開命名點、路線故事、社群文章與地圖標籤。",
+    "P2": "隊伍觀察只作行前提醒與回顧線索；沒有佐證前不能變成廣泛路線結論。",
+    "briefing_conclusion_policy": "行前結論優先使用官方或可追溯公開資料；隊伍回顧只作已標示來源的提醒。",
+    "route_note_policy": "路線筆記預設只作待查線索，不直接形成行前結論。"
+  }
+}

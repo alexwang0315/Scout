@@ -1,0 +1,26 @@
+{
+  "type": "FeatureCollection",
+  "artifact_kind": "gee_soil_moisture_grid",
+  "collection_id": "NASA/SMAP/SPL4SMGP/008",
+  "raw_response_hash": "sha256:gee-soil-grid-fixture",
+  "stale_risk": "low",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "route corridor cell",
+        "sm_surface": 0.301,
+        "sm_surface_wetness": 0.74,
+        "candidate_only": true,
+        "runtime_safety_truth": false
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          121.25,
+          24.03
+        ]
+      }
+    }
+  ]
+}

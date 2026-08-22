@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import math
+import re
 import statistics
 from pathlib import Path
 from typing import Any
@@ -51,7 +52,7 @@ def analyze_scout_ins_dr_trace(
     write trajectory reports.
     """
 
-    root = Path(project_root)
+    root = Path(project_root).expanduser().resolve()
     project = _load_json_object(root / "project.json")
     project_id = str(project.get("project_id") or project.get("id") or root.name)
     record_limit = _bounded_int(max_records, default=DEFAULT_MAX_RECORDS, maximum=MAX_MAX_RECORDS)
@@ -90,6 +91,10 @@ def analyze_scout_ins_dr_trace(
             max_records=max(0, record_limit - len(loaded_samples)),
             max_horizontal_accuracy_m=accuracy_limit,
         )
+        try:
+            report["source_ref"] = str(resolved.relative_to(root))
+        except ValueError:
+            report["source_ref"] = str(resolved)
         loaded_samples.extend(samples)
         source_report.append(report)
         if len(loaded_samples) >= record_limit:
@@ -114,6 +119,53 @@ def analyze_scout_ins_dr_trace(
         estimate_samples=estimate_samples,
         paired=paired,
     )
+    metrics = _deviation_metrics(paired)
+    missing_fields = _missing_fields_for_answerability(answerability)
+    decision = _ins_dr_decision(
+        answerability=answerability,
+        metrics=metrics,
+        dropout_segments=dropout_segments,
+        zigzag=zigzag,
+        missing_fields=missing_fields,
+        vendor_fused_count=sum(1 for sample in estimate_samples if sample.get("vendor_fused")),
+        pdr_only_sample_count=sum(
+            1 for sample in loaded_samples if sample.get("estimate") and not sample.get("gps")
+        ),
+    )
+    field_answer = _field_answer(
+        query=query,
+        decision=decision,
+        metrics=metrics,
+        missing_fields=missing_fields,
+        source_report=source_report,
+        record_count=len(loaded_samples),
+        gps_sample_count=len(gps_samples),
+        ins_dr_sample_count=len(estimate_samples),
+        pdr_only_sample_count=sum(
+            1
+            for sample in loaded_samples
+            if sample.get("estimate") and not sample.get("gps")
+        ),
+        raw_imu_baseline_count=sum(
+            1 for sample in loaded_samples if sample.get("has_raw_imu")
+        ),
+    )
+    decision_output = _decision_output(
+        decision=decision,
+        metrics=metrics,
+        dropout_segments=dropout_segments,
+        zigzag=zigzag,
+        missing_fields=missing_fields,
+        field_answer=field_answer,
+    )
+    field_answer_source_ref = next(
+        (
+            str(item.get("source_ref"))
+            for item in source_report
+            if isinstance(item, dict) and item.get("source_ref")
+        ),
+        None,
+    )
 
     return {
         "tool_id": INS_DR_TRACE_TOOL_ID,
@@ -122,7 +174,15 @@ def analyze_scout_ins_dr_trace(
         "query": query,
         "analysis_kind": "read_only_ins_dr_trace",
         "answerability": answerability,
+        "source_status": "candidate_only",
+        "decision": decision["decision"],
+        "decision_output": decision_output,
+        "field_answer": field_answer,
+        "field_answer_priority": 100 if loaded_samples else 0,
+        "field_answer_source_ref": field_answer_source_ref,
+        "source_ref": field_answer_source_ref,
         "record_count": len(loaded_samples),
+        "result_count": 1,
         "gps_sample_count": len(gps_samples),
         "ins_dr_sample_count": len(estimate_samples),
         "paired_fix_count": len(paired),
@@ -131,25 +191,50 @@ def analyze_scout_ins_dr_trace(
         ),
         "vendor_fused_count": sum(1 for sample in estimate_samples if sample.get("vendor_fused")),
         "raw_imu_baseline_count": sum(1 for sample in loaded_samples if sample.get("has_raw_imu")),
-        "metrics": _deviation_metrics(paired),
+        "metrics": metrics,
         "top_deviations": paired[:result_limit],
         "gps_dropout_segment_count": len(dropout_segments),
         "gps_dropout_segments": dropout_segments[:result_limit],
         "zigzag_summary": zigzag,
         "estimate_cadence_summary": cadence,
-        "missing_fields": _missing_fields_for_answerability(answerability),
+        "missing_fields": missing_fields,
+        "ins_dr_trace": {
+            "role": "Navigation Truth / INS-DR Trace Guard",
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "decision": decision["decision"],
+            "decision_output": decision_output,
+            "metrics": metrics,
+            "paired_fix_count": len(paired),
+            "gps_dropout_segment_count": len(dropout_segments),
+            "zigzag_status": zigzag.get("status"),
+            "next_action": decision["next_action"],
+        },
         "source_report": source_report,
         "results": [
             {
                 "label": "INS/DR trace summary",
+                "decision": decision["decision"],
+                "decision_output": decision_output,
+                "field_answer": field_answer,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
                 "snippet": _summary_snippet(
                     answerability=answerability,
                     paired_count=len(paired),
-                    metrics=_deviation_metrics(paired),
+                    metrics=metrics,
                     dropout_count=len(dropout_segments),
                     zigzag=zigzag,
                 ),
             }
+        ],
+        "standard_alignment": [
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 11 Navigation & Terrain Intelligence",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 required decision output format",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 17 ContextualPermission schema",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 19.2 required on-route output",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 22 required development standards",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 23 acceptance criteria",
         ],
         "boundary": _closed_boundary(),
     }
@@ -191,6 +276,11 @@ def _candidate_sources(
                 "project_filter_outputs",
             ),
             (
+                root
+                / "outputs/evals/synthetic_context/aihat2_ins_dr_trace.jsonl",
+                "synthetic_aihat2_eval_trace",
+            ),
+            (
                 root / "sensorlogger_mqtt_filter_outputs.jsonl",
                 "project_filter_outputs",
             ),
@@ -218,7 +308,7 @@ def _load_trace_samples(
         )
         if sample is not None:
             samples.append(sample)
-    return samples, {
+    report = {
         "source_kind": source_kind,
         "status": "loaded",
         "source_path": str(path),
@@ -226,6 +316,15 @@ def _load_trace_samples(
         "raw_record_count": len(records),
         "raw_payloads_embedded": False,
     }
+    if source_kind == "synthetic_aihat2_eval_trace":
+        report.update(
+            {
+                "synthetic": True,
+                "live_sensor_snapshot": False,
+                "evidence_role": "synthetic eval fixture",
+            }
+        )
+    return samples, report
 
 
 def _load_records(path: Path, *, max_records: int) -> list[dict[str, Any]]:
@@ -608,6 +707,439 @@ def _missing_fields_for_answerability(answerability: str) -> list[str]:
     return []
 
 
+def _ins_dr_decision(
+    *,
+    answerability: str,
+    metrics: dict[str, Any],
+    dropout_segments: list[dict[str, Any]],
+    zigzag: dict[str, Any],
+    missing_fields: list[str],
+    vendor_fused_count: int,
+    pdr_only_sample_count: int,
+) -> dict[str, Any]:
+    if missing_fields:
+        return {
+            "decision": "DELAY",
+            "main_reasons": [
+                f"answerability={answerability}",
+                "INS/DR and GPS evidence are not sufficiently aligned",
+            ],
+            "next_action": (
+                "collect paired GPS and INS/DR samples before using this trace "
+                "to answer route-fit or turn decisions"
+            ),
+            "action_limit": (
+                "do not use missing or unpaired trace evidence to confirm route, "
+                "turn, shortcut, off-route, or safety-state decisions"
+            ),
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+
+    max_deviation = _metric_float(metrics, "max_deviation_m")
+    mean_deviation = _metric_float(metrics, "mean_deviation_m")
+    p95_deviation = _metric_float(metrics, "p95_deviation_m")
+    zigzag_detected = zigzag.get("status") == "possible_zigzag_detected"
+    dropout_count = len(dropout_segments)
+
+    if (
+        (max_deviation is not None and max_deviation >= 120.0)
+        or (p95_deviation is not None and p95_deviation >= 90.0)
+        or (zigzag_detected and dropout_count >= 1)
+    ):
+        return {
+            "decision": "NO_GO",
+            "main_reasons": _trace_reasons(
+                metrics=metrics,
+                dropout_count=dropout_count,
+                zigzag_detected=zigzag_detected,
+                vendor_fused_count=vendor_fused_count,
+                pdr_only_sample_count=pdr_only_sample_count,
+            ),
+            "next_action": (
+                "stop treating the INS/DR trace as route truth; re-anchor with "
+                "GPS, map corridor, terrain, and the last trustworthy CP"
+            ),
+            "action_limit": (
+                "do not continue, descend, shortcut, or mark route correctness "
+                "from this trace until re-anchored"
+            ),
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+
+    if (
+        (max_deviation is not None and max_deviation >= 45.0)
+        or (mean_deviation is not None and mean_deviation >= 25.0)
+        or zigzag_detected
+        or dropout_count >= 2
+    ):
+        return {
+            "decision": "CHANGE_PLAN",
+            "main_reasons": _trace_reasons(
+                metrics=metrics,
+                dropout_count=dropout_count,
+                zigzag_detected=zigzag_detected,
+                vendor_fused_count=vendor_fused_count,
+                pdr_only_sample_count=pdr_only_sample_count,
+            ),
+            "next_action": (
+                "slow down, re-anchor at a known CP or open-sky point, and compare "
+                "GPS, INS/DR, GPX, heading, and map corridor before proceeding"
+            ),
+            "action_limit": (
+                "do not use INS/DR alone for branch, off-route, or descent decisions"
+            ),
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+
+    return {
+        "decision": "CONDITIONAL_GO",
+        "main_reasons": _trace_reasons(
+            metrics=metrics,
+            dropout_count=dropout_count,
+            zigzag_detected=zigzag_detected,
+            vendor_fused_count=vendor_fused_count,
+            pdr_only_sample_count=pdr_only_sample_count,
+        ),
+        "next_action": (
+            "use INS/DR as candidate navigation support only; keep cross-checking "
+            "against GPS, route corridor, terrain, and CP timing"
+        ),
+        "action_limit": (
+            "conditional reference only; no runtime safety truth or route permission "
+            "is granted by trace metrics"
+        ),
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+
+
+def _field_answer(
+    *,
+    query: str,
+    decision: dict[str, Any],
+    metrics: dict[str, Any],
+    missing_fields: list[str],
+    source_report: list[dict[str, Any]],
+    record_count: int,
+    gps_sample_count: int,
+    ins_dr_sample_count: int,
+    pdr_only_sample_count: int,
+    raw_imu_baseline_count: int,
+) -> str:
+    reasons = [str(item) for item in decision.get("main_reasons") or [] if str(item)]
+    if missing_fields:
+        reasons.append("missing=" + ",".join(missing_fields))
+    metric_text = (
+        f"max_deviation_m={metrics.get('max_deviation_m')}; "
+        f"mean_deviation_m={metrics.get('mean_deviation_m')}; "
+        f"p95_deviation_m={metrics.get('p95_deviation_m')}"
+    )
+    loaded_sources = [
+        item for item in source_report if item.get("status") == "loaded"
+    ]
+    source_refs = [
+        str(item.get("source_ref") or item.get("source_path"))
+        for item in loaded_sources
+    ]
+    synthetic_sources = [item for item in loaded_sources if item.get("synthetic")]
+    saved_evidence = (
+        f"Saved trace evidence: sources={len(loaded_sources)}, records={record_count}, "
+        f"GNSS/GPS samples={gps_sample_count}, INS/DR samples={ins_dr_sample_count}, "
+        f"PDR-only samples={pdr_only_sample_count}, raw-IMU baselines="
+        f"{raw_imu_baseline_count}; source_refs={','.join(source_refs) or 'none'}. "
+    )
+    if synthetic_sources:
+        saved_evidence += (
+            "The loaded source is a synthetic eval fixture, not a live sensor "
+            "snapshot; no live GNSS/IMU/PDR capture is proven. "
+        )
+    if re.search(
+        r"(?:workspace|保存|stored|saved).*(?:gnss|gps|imu|pdr|sensor|snapshot)",
+        query,
+        re.IGNORECASE,
+    ):
+        synthetic_note = (
+            "這是合成評估 fixture，不是 live sensor snapshot；"
+            "尚無真實即時 GNSS/IMU/PDR capture 證據。"
+            if synthetic_sources
+            else ""
+        )
+        source_kind = "synthetic eval trace" if synthetic_sources else "trace"
+        return (
+            f"Workspace 已保存 {len(loaded_sources)} 個 {source_kind} 來源、"
+            f"共 {record_count} 筆；"
+            f"GNSS/GPS 樣本 {gps_sample_count}、INS/DR 樣本 {ins_dr_sample_count}、"
+            f"PDR-only 樣本 {pdr_only_sample_count}、raw-IMU 基線 "
+            f"{raw_imu_baseline_count}。source_ref="
+            f"{','.join(source_refs) or 'none'}。{synthetic_note}"
+        )
+    return (
+        saved_evidence
+        + f"INS/DR trace decision: {decision['decision']}. "
+        + f"{metric_text}. {'; '.join(reasons[:3])}. "
+        + f"Next step: {decision['next_action']}. "
+        + "This is candidate navigation evidence only, not runtime safety truth; "
+        + "it cannot trigger Ln, /safety/*, SOS, outbound send, or hardware control."
+    )
+
+
+def _decision_output(
+    *,
+    decision: dict[str, Any],
+    metrics: dict[str, Any],
+    dropout_segments: list[dict[str, Any]],
+    zigzag: dict[str, Any],
+    missing_fields: list[str],
+    field_answer: str,
+) -> dict[str, Any]:
+    decision_label = str(decision["decision"])
+    allowed = decision_label in {"GO", "CONDITIONAL_GO"}
+    reasons = [str(item) for item in decision.get("main_reasons") or [] if str(item)]
+    if not reasons:
+        reasons = ["INS/DR trace did not expose a decision reason"]
+    uncertainty_notes = _uncertainty_notes(
+        decision=decision_label,
+        dropout_segments=dropout_segments,
+        zigzag=zigzag,
+        missing_fields=missing_fields,
+    )
+    first_layer = {
+        "decision": _decision_phrase(decision_label),
+        "limit": str(decision["action_limit"]),
+        "reason": " / ".join(reasons[:2]),
+        "nextStep": str(decision["next_action"]),
+    }
+    residual_risk = [
+        "INS/DR, PDR, and vendor-fused traces are candidate navigation evidence only.",
+        (
+            "GPS, route corridor, terrain, weather, and CP context remain separate "
+            "decision inputs."
+        ),
+        (
+            "No runtime safety truth, /safety/*, Ln, SOS, outbound send, or "
+            "hardware control was triggered."
+        ),
+    ]
+    return {
+        "role": "Navigation Truth / INS-DR Trace Guard",
+        "format": "SCOUT_OUTDOOR_AI_AGENT_STANDARD.section16",
+        "decisionObjectSchema": "ContextualPermission",
+        "text": "\n".join(
+            (
+                f"[決策] {first_layer['decision']}",
+                f"[限制] {first_layer['limit']}",
+                f"[原因] {first_layer['reason']}",
+                f"[下一步] {first_layer['nextStep']}",
+            )
+        ),
+        "firstLayer": first_layer,
+        "secondLayer": {
+            "details": _decision_details(
+                metrics=metrics,
+                dropout_segments=dropout_segments,
+                zigzag=zigzag,
+                field_answer=field_answer,
+            ),
+            "uncertaintyNotes": uncertainty_notes,
+            "residualRisk": residual_risk,
+            "requiredConditions": _required_conditions(
+                decision=decision_label,
+                missing_fields=missing_fields,
+            ),
+            "alternativeActions": _alternative_actions(decision_label),
+        },
+        "action": "navigation_trace_reference",
+        "decision": decision_label,
+        "allowed": allowed,
+        "locationConstraint": "candidate trace metrics only; verify against route corridor",
+        "mainReasons": reasons[:3],
+        "cost": {
+            "timeBufferChangeMinutes": 0,
+            "attentionImpact": (
+                "Trace review consumes attention; stop or slow down before "
+                "re-anchoring if uncertainty is high."
+            ),
+            "retreatImpact": (
+                "Do not consume retreat buffer by expanding route uncertainty "
+                "from an unverified trace."
+            ),
+        },
+        "nextAction": first_layer["nextStep"],
+        "confidence": _confidence(
+            decision=decision_label,
+            uncertainty_notes=uncertainty_notes,
+        ),
+        "uncertaintyNotes": uncertainty_notes,
+        "residualRisk": residual_risk,
+        "requiredConditions": _required_conditions(
+            decision=decision_label,
+            missing_fields=missing_fields,
+        ),
+        "alternativeActions": _alternative_actions(decision_label),
+        "standardAlignment": [
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 11 Navigation & Terrain Intelligence",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 required decision output format",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 17 ContextualPermission schema",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 19.2 required on-route output",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 22 MUST/MUST NOT",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 23 acceptance criteria",
+        ],
+        "runtimeSafetyTruth": False,
+    }
+
+
+def _trace_reasons(
+    *,
+    metrics: dict[str, Any],
+    dropout_count: int,
+    zigzag_detected: bool,
+    vendor_fused_count: int,
+    pdr_only_sample_count: int,
+) -> list[str]:
+    reasons = []
+    for key in ("max_deviation_m", "mean_deviation_m", "p95_deviation_m"):
+        value = metrics.get(key)
+        if value is not None:
+            reasons.append(f"{key}={value}")
+    if dropout_count:
+        reasons.append(f"gps_dropout_segments={dropout_count}")
+    if zigzag_detected:
+        reasons.append("possible_zigzag_detected")
+    if vendor_fused_count:
+        reasons.append(f"vendor_fused_count={vendor_fused_count}")
+    if pdr_only_sample_count:
+        reasons.append(f"pdr_only_sample_count={pdr_only_sample_count}")
+    return reasons or ["trace metrics are within candidate thresholds"]
+
+
+def _decision_phrase(decision: str) -> str:
+    if decision == "CONDITIONAL_GO":
+        return "可作為候選導航參考。"
+    if decision == "CHANGE_PLAN":
+        return "先修正定位策略。"
+    if decision == "NO_GO":
+        return "不要依此 trace 繼續前進。"
+    if decision == "DELAY":
+        return "暫緩 INS/DR trace 判斷。"
+    if decision == "ESCALATE":
+        return "需要升級導航判斷。"
+    return "可作為參考。"
+
+
+def _uncertainty_notes(
+    *,
+    decision: str,
+    dropout_segments: list[dict[str, Any]],
+    zigzag: dict[str, Any],
+    missing_fields: list[str],
+) -> list[str]:
+    notes = []
+    if missing_fields:
+        notes.append("Missing fields: " + ", ".join(missing_fields))
+    if dropout_segments:
+        notes.append(
+            f"GPS dropout segment count={len(dropout_segments)}; INS/DR may drift."
+        )
+    if zigzag.get("status") == "possible_zigzag_detected":
+        notes.append("Possible zigzag or bearing reversal detected.")
+    if decision in {"CHANGE_PLAN", "NO_GO"}:
+        notes.append("Do not rely on INS/DR alone for route-fit decisions.")
+    notes.append("Trace analysis is read-only and does not inspect live hardware.")
+    return notes
+
+
+def _required_conditions(*, decision: str, missing_fields: list[str]) -> list[str]:
+    if missing_fields:
+        return [
+            "Provide " + ", ".join(missing_fields),
+            "Pair GPS and INS/DR samples within the accepted timestamp gap.",
+            "Re-run trace analysis before using the trace for navigation context.",
+        ]
+    conditions = [
+        "Cross-check INS/DR against GPS, GPX route corridor, terrain, and CP context.",
+        "Keep trace metrics as candidate navigation evidence only.",
+        "Do not call /safety/*, trigger Ln, send outbound, or control hardware.",
+    ]
+    if decision in {"CHANGE_PLAN", "NO_GO"}:
+        conditions.insert(0, "Re-anchor at a trusted CP, open-sky fix, or known route corridor.")
+    return conditions
+
+
+def _alternative_actions(decision: str) -> list[str]:
+    if decision == "DELAY":
+        return [
+            "collect paired GPS and INS/DR samples",
+            "ask live navigation state after obtaining a reliable fix",
+            "use map/GPX evidence instead of an unpaired trace",
+        ]
+    if decision == "NO_GO":
+        return [
+            "stop and re-anchor",
+            "return to last trustworthy CP",
+            "switch to conservative route-corridor verification",
+        ]
+    if decision == "CHANGE_PLAN":
+        return [
+            "slow down and re-anchor",
+            "compare GPS, INS/DR, GPX, and terrain",
+            "avoid off-route or descent decisions until aligned",
+        ]
+    return [
+        "use trace as candidate support only",
+        "continue cross-checking GPS and route corridor",
+        "ask contextual permission before stopping, rerouting, or leaving the path",
+    ]
+
+
+def _decision_details(
+    *,
+    metrics: dict[str, Any],
+    dropout_segments: list[dict[str, Any]],
+    zigzag: dict[str, Any],
+    field_answer: str,
+) -> list[str]:
+    details = [
+        field_answer,
+        (
+            f"deviation_count={metrics.get('count')}; "
+            f"max={metrics.get('max_deviation_m')}; "
+            f"mean={metrics.get('mean_deviation_m')}; "
+            f"p95={metrics.get('p95_deviation_m')}"
+        ),
+        (
+            f"gps_dropout_segments={len(dropout_segments)}; "
+            f"zigzag_status={zigzag.get('status')}"
+        ),
+    ]
+    for item in dropout_segments[:2]:
+        details.append(
+            "dropout "
+            f"lines={item.get('start_line_number')}-{item.get('end_line_number')} "
+            f"points={item.get('point_count')}"
+        )
+    return details
+
+
+def _confidence(*, decision: str, uncertainty_notes: list[str]) -> str:
+    if decision in {"DELAY", "NO_GO"}:
+        return "low"
+    if decision == "CHANGE_PLAN" or uncertainty_notes:
+        return "medium"
+    return "high"
+
+
+def _metric_float(metrics: dict[str, Any], key: str) -> float | None:
+    value = metrics.get(key)
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    return None
+
+
 def _summary_snippet(
     *,
     answerability: str,
@@ -635,6 +1167,9 @@ def _load_json_object(path: Path) -> dict[str, Any]:
 def _resolve_project_path(root: Path, path: Path) -> Path:
     expanded = path.expanduser()
     if expanded.is_absolute():
+        return expanded.resolve()
+    root_expanded = root.expanduser()
+    if expanded == root_expanded or expanded.is_relative_to(root_expanded):
         return expanded.resolve()
     return (root / expanded).resolve()
 

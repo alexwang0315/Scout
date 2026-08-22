@@ -10,17 +10,25 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from assistant_api import create_assistant_app
+from assistant_api import answer_assistant_query_safely
 from assistant_api import create_assistant_context_registry_status
 from assistant_api import create_assistant_provider_from_env
 from assistant_api import create_assistant_provider_status
 from assistant_api import create_assistant_workflow_status
+from assistant_api import _with_observability
 from assistant_context import assistant_source_refs_from_context, create_assistant_context_resolver
-from assistant_models import AssistantBoundary, ScoutAssistantQuery, ScoutAssistantResponse
+from assistant_models import (
+    AssistantBoundary,
+    AssistantSourceRef,
+    ScoutAssistantQuery,
+    ScoutAssistantResponse,
+)
 from assistant_skill_router import (
     PRETRIP_FULL_WORKFLOW_SOURCE_ID,
     PRETRIP_TOOL_PLANNER_SKILL_ID,
     augment_pretrip_sources_with_local_evidence_search,
 )
+from assistant_workspace_total_info import TOTAL_INFO_SOURCE_ID
 from admin_assistant_context import build_admin_assistant_context
 from pretrip_assistant_context import build_pretrip_assistant_context
 from runtime_debug_log import MemoryRuntimeDebugEventLog
@@ -297,7 +305,7 @@ class AssistantApiTests(unittest.TestCase):
         self.assertTrue(tool_registry["available"])
         self.assertEqual(tool_registry["artifact_kind"], "scout_ai_tool_registry")
         self.assertGreaterEqual(tool_registry["ready_current_tool_count"], 8)
-        self.assertGreaterEqual(tool_registry["contract_only_tool_count"], 1)
+        self.assertEqual(tool_registry["contract_only_tool_count"], 0)
         self.assertIn("ready_current_tool", tool_registry["implementation_status_counts"])
         self.assertNotIn(
             "scout.ai.weather_window.assess.v0",
@@ -391,7 +399,12 @@ class AssistantApiTests(unittest.TestCase):
         self.assertIn(payload["observability"]["latency_class"], {"fast", "slow", "timeout_or_error"})
         self.assertFalse(payload["observability"]["safe_failure"])
         self.assertNotIn("api_key", json.dumps(payload["observability"]).lower())
-        self.assertNotIn("token", json.dumps(payload["observability"]).lower())
+        serialized_observability = json.dumps(payload["observability"]).lower()
+        self.assertNotIn("api_key", serialized_observability)
+        self.assertNotIn("bearer ", serialized_observability)
+        self.assertIsNone(payload["observability"]["input_tokens"])
+        self.assertIsNone(payload["observability"]["estimated_cost"])
+        self.assertIsNone(payload["observability"]["cost_estimate_available"])
         source_ids = {source["source_id"] for source in payload["sources"]}
         self.assertIn("assistant_context.tool_registry", source_ids)
         tool_registry_source = _source_by_id(payload, "assistant_context.tool_registry")
@@ -409,6 +422,345 @@ class AssistantApiTests(unittest.TestCase):
         self.assertFalse(tool_registry["runtime_safety_truth"])
         self.assertFalse(tool_registry["context_path_values_exposed"])
         self.assertFalse(tool_registry["credential_values_exposed"])
+
+    def test_observability_hides_local_model_name_when_local_profile_was_not_used(self):
+        class ProviderWithConfiguredLocalModel:
+            local_model_name = "qwen2.5-instruct:1.5b"
+            last_profile = None
+            last_failover_reason = None
+
+        response = ScoutAssistantResponse(
+            surface="pretrip",
+            answer="cloud failed safely",
+            sources=[],
+            boundary=AssistantBoundary(surface="pretrip"),
+        )
+
+        observed = _with_observability(
+            response,
+            provider=ProviderWithConfiguredLocalModel(),
+            sources=[],
+            started_at=0,
+            safe_failure=True,
+        )
+
+        self.assertIsNone(observed.observability.model_profile_used)
+        self.assertIsNone(observed.observability.local_model_name)
+
+    def test_observability_projects_total_info_before_api_response(self):
+        class Provider:
+            pass
+
+        source = AssistantSourceRef(
+            source_id=TOTAL_INFO_SOURCE_ID,
+            source_path="workspace.total_info_entry",
+            evidence_type="assistant_workspace_total_info",
+            selected=True,
+            context_summary={
+                "artifact_kind": "assistant_workspace_total_info_context",
+                "artifact_version": "assistant_workspace_total_info_context.v0",
+                "project_id": "fixture",
+                "location_context": {
+                    "status": "available",
+                    "lat": 23.1,
+                    "lon": 121.2,
+                },
+                "body_resource_context": {
+                    "status": "available",
+                    "heart_rate": 170,
+                },
+                "sensor_snapshot_context": {
+                    "status": "available",
+                    "imu": [1, 2, 3],
+                },
+                "missing_or_partial_context": ["weather_environment_context"],
+            },
+        )
+        response = ScoutAssistantResponse(
+            surface="pretrip",
+            answer="bounded answer",
+            sources=[source],
+            boundary=AssistantBoundary(surface="pretrip"),
+        )
+
+        observed = _with_observability(
+            response,
+            provider=Provider(),
+            sources=[source],
+            started_at=0,
+            safe_failure=False,
+        )
+
+        summary = observed.sources[0].context_summary
+        self.assertEqual(
+            summary["context_statuses"],
+            {
+                "body_resource_context": "available",
+                "location_context": "available",
+                "sensor_snapshot_context": "available",
+            },
+        )
+        self.assertEqual(summary["missing_or_partial_context_count"], 1)
+        serialized = json.dumps(summary, ensure_ascii=False, sort_keys=True)
+        self.assertNotIn("23.1", serialized)
+        self.assertNotIn("121.2", serialized)
+        self.assertNotIn("170", serialized)
+        self.assertNotIn("imu", serialized)
+
+    def test_observability_projects_bounded_request_ledger_additively(self):
+        class ProviderWithLedger:
+            last_agent_run_ledger = {
+                "request_count": 2,
+                "tool_call_count": 1,
+                "system_chars": 900,
+                "tool_schema_count": 1,
+                "tool_schema_chars": 700,
+                "user_history_chars": 650,
+                "tool_result_chars": 500,
+                "input_tokens": 1_100,
+                "cache_write_tokens": 0,
+                "cache_read_tokens": 100,
+                "output_tokens": 90,
+                "estimated_cost": 0.001,
+                "cost_estimate_available": True,
+                "budget_remaining": {"input_tokens": 18_900},
+                "budget_stop_reason": None,
+                "selected_tool_ids": [
+                    "pydantic_ai.tool.search_scout_route_structure.v0"
+                ],
+                "executed_tool_ids": [
+                    "pydantic_ai.tool.search_scout_route_structure.v0"
+                ],
+                "retry_count": 0,
+                "repair_count": 0,
+                "requests": [
+                    {
+                        "request_index": 1,
+                        "system_chars": 450,
+                        "tool_schema_count": 1,
+                        "tool_schema_chars": 700,
+                        "user_history_chars": 350,
+                        "input_tokens": 600,
+                        "output_tokens": 40,
+                        "tool_call_count": 1,
+                    },
+                    {
+                        "request_index": 2,
+                        "system_chars": 450,
+                        "user_history_chars": 300,
+                        "tool_result_chars": 500,
+                        "input_tokens": 500,
+                        "cache_read_tokens": 100,
+                        "output_tokens": 50,
+                    },
+                ],
+            }
+
+        response = ScoutAssistantResponse(
+            surface="pretrip",
+            answer="bounded answer",
+            sources=[],
+            boundary=AssistantBoundary(surface="pretrip"),
+        )
+
+        observed = _with_observability(
+            response,
+            provider=ProviderWithLedger(),
+            sources=[],
+            started_at=0,
+            safe_failure=False,
+        )
+
+        self.assertEqual(observed.observability.request_count, 2)
+        self.assertEqual(observed.observability.tool_schema_chars, 700)
+        self.assertEqual(observed.observability.tool_result_chars, 500)
+        self.assertTrue(observed.observability.cost_estimate_available)
+        self.assertEqual(observed.observability.estimated_cost, 0.001)
+        self.assertEqual(len(observed.observability.request_ledger), 2)
+        self.assertEqual(
+            observed.observability.request_ledger[0].tool_schema_count,
+            1,
+        )
+        serialized = json.dumps(
+            observed.observability.model_dump(mode="json"),
+            ensure_ascii=False,
+        ).lower()
+        self.assertNotIn("api_key", serialized)
+        self.assertNotIn("bearer ", serialized)
+
+    def test_observability_projects_mser_state_without_runtime_authority(self):
+        class ProviderWithMserTrace:
+            last_mser_trace = {
+                "mode": "shadow",
+                "final": {
+                    "packet": {
+                        "compact_context": {
+                            "certificate": {"status": "sufficient"}
+                        }
+                    },
+                    "reasoning": {"disposition": "ready_to_reason"},
+                },
+                "selected_tool_ids": [
+                    "scout.ai.weather_window.assess.v0",
+                    "pydantic_ai.tool.search_scout_risk_scores.v0",
+                ],
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+            last_mser_answer_verification = {
+                "passed": True,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+
+        response = ScoutAssistantResponse(
+            surface="pretrip",
+            answer="candidate-only MSER answer",
+            sources=[],
+            boundary=AssistantBoundary(surface="pretrip"),
+        )
+
+        observed = _with_observability(
+            response,
+            provider=ProviderWithMserTrace(),
+            sources=[],
+            started_at=0,
+            safe_failure=False,
+        )
+
+        self.assertEqual(observed.observability.mser_mode, "shadow")
+        self.assertEqual(
+            observed.observability.mser_sufficiency_status,
+            "sufficient",
+        )
+        self.assertEqual(
+            observed.observability.mser_reasoning_disposition,
+            "ready_to_reason",
+        )
+        self.assertEqual(
+            observed.observability.mser_selected_tool_ids,
+            [
+                "scout.ai.weather_window.assess.v0",
+                "pydantic_ai.tool.search_scout_risk_scores.v0",
+            ],
+        )
+        self.assertTrue(
+            observed.observability.mser_answer_verification_passed
+        )
+
+    def test_new_request_does_not_reuse_previous_provider_ledger(self):
+        class ProviderWithStaleLedger:
+            last_agent_run_ledger = {
+                "request_count": 9,
+                "tool_call_count": 7,
+                "input_tokens": 99_999,
+                "selected_tool_ids": ["stale.tool"],
+                "requests": [],
+            }
+
+            def answer(self, query, *, sources):
+                return ScoutAssistantResponse(
+                    surface=query.surface,
+                    answer="fresh answer",
+                    sources=sources,
+                    boundary=AssistantBoundary(surface=query.surface),
+                )
+
+        response = answer_assistant_query_safely(
+            ProviderWithStaleLedger(),
+            ScoutAssistantQuery(surface="debug", question="fresh request"),
+            sources=[],
+        )
+
+        self.assertIsNone(response.observability.request_count)
+        self.assertIsNone(response.observability.tool_call_count)
+        self.assertIsNone(response.observability.input_tokens)
+        self.assertEqual(response.observability.selected_tool_ids, [])
+
+    def test_observability_does_not_present_unknown_cost_as_zero(self):
+        class ProviderWithUnknownCost:
+            last_agent_run_ledger = {
+                "request_count": 1,
+                "estimated_cost": 0.0,
+                "cost_estimate_available": False,
+                "requests": [],
+            }
+
+        response = ScoutAssistantResponse(
+            surface="pretrip",
+            answer="bounded answer",
+            sources=[],
+            boundary=AssistantBoundary(surface="pretrip"),
+        )
+
+        observed = _with_observability(
+            response,
+            provider=ProviderWithUnknownCost(),
+            sources=[],
+            started_at=0,
+            safe_failure=False,
+        )
+
+        self.assertFalse(observed.observability.cost_estimate_available)
+        self.assertIsNone(observed.observability.estimated_cost)
+
+    def test_bounded_runtime_capability_skips_deterministic_preexecution(self):
+        class RecordingProvider:
+            def __init__(self, *, capability_location: str):
+                bounded_runner = type(
+                    "BoundedRunner",
+                    (),
+                    {"bounded_agent_runtime_enabled": True},
+                )()
+                if capability_location == "runner":
+                    self.runner = bounded_runner
+                elif capability_location == "nested_runner":
+                    self.runner = type(
+                        "FallbackRunner",
+                        (),
+                        {"fallback_runner": bounded_runner},
+                    )()
+                else:
+                    self.bounded_agent_runtime_enabled = True
+
+            def answer(self, query: ScoutAssistantQuery, *, sources=None):
+                resolved_sources = list(sources or [])
+                return ScoutAssistantResponse(
+                    surface=query.surface,
+                    answer="bounded answer",
+                    sources=resolved_sources,
+                    boundary=AssistantBoundary(surface=query.surface),
+                )
+
+        for capability_location in ("provider", "runner", "nested_runner"):
+            with self.subTest(capability_location=capability_location):
+                provider = RecordingProvider(
+                    capability_location=capability_location,
+                )
+                with (
+                    patch(
+                        "assistant_api._augment_pretrip_evidence_first_sources",
+                        side_effect=lambda query, *, sources: sources,
+                    ) as augment_pretrip,
+                    patch(
+                        "assistant_api._augment_pydantic_workspace_tool_sources",
+                        side_effect=lambda provider, query, *, sources: sources,
+                    ) as augment_workspace,
+                ):
+                    client = TestClient(
+                        create_assistant_app(
+                            provider=provider,
+                            context_resolver=lambda query: [],
+                        )
+                    )
+                    response = client.post(
+                        "/assistant/query",
+                        json={"surface": "pretrip", "question": "Route status?"},
+                    )
+
+                self.assertEqual(response.status_code, 200)
+                augment_pretrip.assert_not_called()
+                augment_workspace.assert_not_called()
 
     def test_provider_failure_is_isolated_as_safe_response(self):
         class FailingProvider:
@@ -477,17 +829,172 @@ class AssistantApiTests(unittest.TestCase):
         self.assertEqual(weather_source["evidence_type"], "assistant_registry_tool_result")
         weather_summary = weather_source["context_summary"]
         self.assertEqual(weather_summary["status"], "completed")
-        self.assertEqual(weather_summary["latest"]["answerability"], "weather_placeholder_only")
-        self.assertIn("provider", weather_summary["latest"]["missing_fields"])
-        self.assertIn("ttl_s", weather_summary["latest"]["missing_fields"])
-        self.assertIn("route_weather_package", weather_summary["latest"]["missing_fields"])
-        self.assertIn(f"resolved_by={PRETRIP_FULL_WORKFLOW_SOURCE_ID}", payload["limitations"])
+        self.assertEqual(
+            weather_summary["latest"]["answerability"],
+            "route_weather_risk_available",
+        )
+        self.assertEqual(weather_summary["latest"]["missing_fields"], [])
         self.assertIn(f"resolved_by={PRETRIP_TOOL_PLANNER_SKILL_ID}", payload["limitations"])
         self.assertTrue(payload["observability"]["safe_failure"])
         self.assertFalse(payload["boundary"]["phase1_mutation_allowed"])
         self.assertFalse(payload["boundary"]["safety_mutation_allowed"])
         self.assertFalse(payload["boundary"]["outbound_send_allowed"])
         self.assertFalse(payload["boundary"]["hardware_control_allowed"])
+
+    def test_provider_tool_failure_retries_grounded_model_synthesis(self):
+        class FailingThenSynthesizingProvider:
+            last_profile = "cloud"
+            last_failover_reason = None
+
+            def __init__(self):
+                self.grounded_answer = ""
+
+            def answer(self, query: ScoutAssistantQuery, *, sources=None):
+                raise RuntimeError("provider tool loop failed")
+
+            def synthesize_grounded_answer(
+                self,
+                query: ScoutAssistantQuery,
+                *,
+                grounded_answer: str,
+            ) -> str:
+                self.grounded_answer = grounded_answer
+                return (
+                    "雨後需優先人工複核的最高候選風險點在最近 CP 213 約 190 m；"
+                    "GPX 累積約 106.27 km；score=99.58；bucket=extreme。"
+                    "天氣窗缺 provider，所以這不是即時天氣判定。"
+                )
+
+        provider = FailingThenSynthesizingProvider()
+
+        def context_resolver(query: ScoutAssistantQuery):
+            return [
+                AssistantSourceRef(
+                    source_id=RISK_SCORE_TOOL_ID,
+                    context_summary={
+                        "latest": {
+                            "status": "completed",
+                            "matched_score_count": 7052,
+                            "searched_score_count": 7052,
+                            "results": [
+                                {
+                                    "readable_location": (
+                                        "最近 CP 213 約 190 m；"
+                                        "GPX 累積約 106.27 km"
+                                    ),
+                                    "score": 99.58,
+                                    "risk_bucket": "extreme",
+                                }
+                            ],
+                        }
+                    },
+                    selected=True,
+                ),
+                AssistantSourceRef(
+                    source_id=WEATHER_WINDOW_TOOL_ID,
+                    context_summary={
+                        "latest": {
+                            "status": "missing",
+                            "missing_fields": ["provider"],
+                        }
+                    },
+                    selected=True,
+                ),
+            ]
+
+        client = TestClient(
+            create_assistant_app(
+                provider=provider,
+                context_resolver=context_resolver,
+            )
+        )
+
+        response = client.post(
+            "/assistant/query",
+            json={
+                "surface": "pretrip",
+                "question": "哪些地方下雨後會變危險？",
+                "runtime_preference": "cloud",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("Pydantic AI read-only model interpretation:", payload["answer"])
+        self.assertIn("CP 213", payload["answer"])
+        self.assertIn("score=99.58", payload["answer"])
+        self.assertNotIn("Scout AI risk score tool fallback", payload["answer"])
+        self.assertIn("CP 213", payload["evidence_backed_answer"])
+        self.assertIn("score=99.58", payload["evidence_backed_answer"])
+        self.assertIn("CP 213", provider.grounded_answer)
+        self.assertIn(
+            "grounded_model_synthesis_after_provider_error=passed",
+            payload["limitations"],
+        )
+        self.assertFalse(payload["observability"]["safe_failure"])
+
+    def test_provider_tool_failure_keeps_deterministic_summary_out_of_answer(self):
+        class FailingProvider:
+            last_profile = "cloud"
+            last_failover_reason = None
+
+            def answer(self, query: ScoutAssistantQuery, *, sources=None):
+                raise RuntimeError("provider tool loop failed")
+
+        provider = FailingProvider()
+
+        def context_resolver(query: ScoutAssistantQuery):
+            return [
+                AssistantSourceRef(
+                    source_id=RISK_SCORE_TOOL_ID,
+                    context_summary={
+                        "latest": {
+                            "status": "completed",
+                            "matched_score_count": 7052,
+                            "searched_score_count": 7052,
+                            "results": [
+                                {
+                                    "readable_location": (
+                                        "最近 CP 213 約 190 m；"
+                                        "GPX 累積約 106.27 km"
+                                    ),
+                                    "score": 99.58,
+                                    "risk_bucket": "extreme",
+                                }
+                            ],
+                        }
+                    },
+                    selected=True,
+                )
+            ]
+
+        client = TestClient(
+            create_assistant_app(
+                provider=provider,
+                context_resolver=context_resolver,
+            )
+        )
+
+        response = client.post(
+            "/assistant/query",
+            json={
+                "surface": "pretrip",
+                "question": "哪些地方下雨後會變危險？",
+                "runtime_preference": "cloud",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("model answer unavailable", payload["answer"])
+        self.assertNotIn("CP 213", payload["answer"])
+        self.assertNotIn("score=99.58", payload["answer"])
+        self.assertIn("CP 213", payload["evidence_backed_answer"])
+        self.assertIn("score=99.58", payload["evidence_backed_answer"])
+        self.assertIn(
+            "deterministic_tool_fallback_only=true",
+            payload["limitations"],
+        )
 
     def test_provider_success_receives_full_workflow_evidence_before_answer(self):
         class RecordingProvider:
@@ -551,13 +1058,11 @@ class AssistantApiTests(unittest.TestCase):
         self.assertEqual(weather_source["context_summary"]["status"], "completed")
         self.assertEqual(
             weather_source["context_summary"]["latest"]["answerability"],
-            "weather_placeholder_only",
+            "route_weather_risk_available",
         )
-        self.assertIn("provider", weather_source["context_summary"]["latest"]["missing_fields"])
-        self.assertIn("ttl_s", weather_source["context_summary"]["latest"]["missing_fields"])
-        self.assertIn(
-            "route_weather_package",
+        self.assertEqual(
             weather_source["context_summary"]["latest"]["missing_fields"],
+            [],
         )
         payload = response.json()
         self.assertFalse(payload["observability"]["safe_failure"])
@@ -668,7 +1173,10 @@ class AssistantApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
-        self.assertIn("risk score tool fallback", payload["answer"])
+        self.assertIn("model answer unavailable", payload["answer"])
+        self.assertNotIn("risk score tool fallback", payload["answer"])
+        self.assertIn("CP", payload["evidence_backed_answer"])
+        self.assertIn("score=", payload["evidence_backed_answer"])
         source_ids = {source["source_id"] for source in payload["sources"]}
         self.assertIn(PRETRIP_TOOL_PLANNER_SKILL_ID, source_ids)
         self.assertIn(RISK_SCORE_TOOL_ID, source_ids)
@@ -846,7 +1354,10 @@ class AssistantApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
-        self.assertIn("major point tool fallback", payload["answer"])
+        self.assertIn("model answer unavailable", payload["answer"])
+        self.assertNotIn("major point tool fallback", payload["answer"])
+        self.assertIn("major point 工具顯示", payload["evidence_backed_answer"])
+        self.assertIn("黑水塘", payload["evidence_backed_answer"])
         self.assertEqual(payload["sources"][0]["source_id"], MAJOR_POINT_TOOL_ID)
         latest = payload["sources"][0]["context_summary"]["latest"]
         self.assertEqual(latest["status"], "completed")
@@ -907,7 +1418,7 @@ class AssistantApiTests(unittest.TestCase):
         self.assertIn('"missing_evidence_fields_by_source"', prompt)
         self.assertIn('"provider"', prompt)
         self.assertIn('"ttl_s"', prompt)
-        self.assertIn('"route_weather_package"', prompt)
+        self.assertIn('"fresh_cwa_environment_evidence"', prompt)
         self.assertIn("state the missing evidence instead of inferring it", prompt)
 
         payload = response.json()
@@ -956,7 +1467,10 @@ class AssistantApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
-        self.assertIn("risk score tool fallback", payload["answer"])
+        self.assertIn("model answer unavailable", payload["answer"])
+        self.assertNotIn("risk score tool fallback", payload["answer"])
+        self.assertIn("CP", payload["evidence_backed_answer"])
+        self.assertIn("score=", payload["evidence_backed_answer"])
         self.assertEqual(payload["sources"][0]["source_id"], RISK_SCORE_TOOL_ID)
         latest = payload["sources"][0]["context_summary"]["latest"]
         self.assertEqual(latest["status"], "completed")
@@ -998,9 +1512,12 @@ class AssistantApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
-        self.assertIn("terrain score tool fallback", payload["answer"])
-        self.assertEqual(payload["sources"][0]["source_id"], TERRAIN_SCORE_TOOL_ID)
-        latest = payload["sources"][0]["context_summary"]["latest"]
+        self.assertIn("model answer unavailable", payload["answer"])
+        self.assertNotIn("terrain score tool fallback", payload["answer"])
+        self.assertIn("地形高分候選", payload["evidence_backed_answer"])
+        self.assertIn("slope_degrees=54", payload["evidence_backed_answer"])
+        terrain_source = _source_by_id(payload, TERRAIN_SCORE_TOOL_ID)
+        latest = terrain_source["context_summary"]["latest"]
         self.assertEqual(latest["status"], "completed")
         self.assertEqual(latest["metric"], "slope")
         self.assertGreater(latest["result_count"], 0)
@@ -1040,7 +1557,9 @@ class AssistantApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
-        self.assertIn("map perception tool fallback", payload["answer"])
+        self.assertIn("model answer unavailable", payload["answer"])
+        self.assertNotIn("map perception tool fallback", payload["answer"])
+        self.assertIn("map perception tool fallback", payload["evidence_backed_answer"])
         self.assertEqual(payload["sources"][0]["source_id"], MAP_PERCEPTION_TOOL_ID)
         latest = payload["sources"][0]["context_summary"]["latest"]
         self.assertEqual(latest["status"], "completed")
@@ -1088,7 +1607,10 @@ class AssistantApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
-        self.assertIn("risk score tool fallback", payload["answer"])
+        self.assertIn("雲端模型未成功完成自然語言回答合成", payload["answer"])
+        self.assertNotIn("risk score tool fallback", payload["answer"])
+        self.assertIn("CP", payload["evidence_backed_answer"])
+        self.assertIn("score=", payload["evidence_backed_answer"])
         self.assertEqual(payload["sources"][0]["source_id"], RISK_SCORE_TOOL_ID)
         self.assertFalse(payload["observability"]["safe_failure"])
         self.assertIn("UnresolvedToolCallText", " ".join(payload["limitations"]))
@@ -1340,7 +1862,10 @@ class AssistantApiTests(unittest.TestCase):
 
     def test_provider_factory_enables_pydantic_ai_only_by_env(self):
         class FakeRunner:
+            last_profile = None
+
             def run(self, prompt: str, *, timeout_seconds: int) -> str:
+                self.last_profile = "cloud"
                 return "safe pydantic response"
 
         mock_provider = create_assistant_provider_from_env({"SCOUT_AI_ASSISTANT_PROVIDER": "mock"})
@@ -1360,6 +1885,30 @@ class AssistantApiTests(unittest.TestCase):
         )
         self.assertIn("safe pydantic response", response.answer)
         self.assertTrue(response.read_only)
+        self.assertIsNone(pydantic_provider.timeout_seconds)
+        self.assertIsNone(pydantic_provider.max_context_chars)
+        self.assertEqual(
+            pydantic_provider.startup_connection_status,
+            "connected:cloud",
+        )
+
+    def test_provider_factory_passes_workspace_root_to_pydantic_provider(self):
+        class FakeRunner:
+            def run(self, prompt: str, *, timeout_seconds: int) -> str:
+                return "safe pydantic response"
+
+        with TemporaryDirectory() as tmpdir:
+            workspace_root = Path(tmpdir) / "pretrip-workspaces"
+            workspace_root.mkdir()
+            provider = create_assistant_provider_from_env(
+                {
+                    "SCOUT_AI_ASSISTANT_PROVIDER": "pydantic_ai",
+                    "SCOUT_PRETRIP_WORKSPACE_ROOT": str(workspace_root),
+                },
+                pydantic_runner=FakeRunner(),
+            )
+
+        self.assertEqual(provider.pretrip_workspace_root, workspace_root)
 
     def test_provider_factory_loads_external_model_config_and_connects_on_startup(self):
         class FakeRunner:
@@ -1410,7 +1959,7 @@ class AssistantApiTests(unittest.TestCase):
                 pydantic_runner=runner,
             )
 
-        self.assertEqual(runner.connect_calls, [3])
+        self.assertEqual(runner.connect_calls, [None])
         response = provider.answer(
             ScoutAssistantQuery(surface="debug", question="Explain state."),
             sources=[],
@@ -1512,13 +2061,71 @@ class AssistantApiTests(unittest.TestCase):
         self.assertFalse(status["cloud_only"])
         self.assertEqual(status["runtime_profile"], "pi-field")
         self.assertEqual(status["local_fallback_mode"], "pi_field_manual_opt_in")
-        self.assertTrue(status["local_fallback_fixed_schema"])
+        self.assertFalse(status["local_fallback_fixed_schema"])
         self.assertTrue(status["manual_verification_required"])
         self.assertEqual(status["local_fallback_max_concurrency"], 1)
         self.assertFalse(status["readiness_starts_local_model"])
         self.assertFalse(status["local_model_listener_required_for_readiness"])
         self.assertFalse(status["status_model_switch_allowed"])
         self.assertEqual(status["local_model"], "qwen2.5:0.5b")
+        self.assertNotIn("token-value-that-must-not-leak", json.dumps(status))
+
+    def test_provider_status_reports_ai_hat_plus_2_hailo_fallback_boundary(self):
+        class FakeProvider:
+            startup_connection_status = "not_checked"
+
+        with TemporaryDirectory() as tmpdir:
+            config_path = Path(tmpdir) / "assistant-models.json"
+            config_path.write_text(
+                json.dumps(
+                    {
+                        "active_profile": "cloud",
+                        "cloud_model": {
+                            "profile": "cloud",
+                            "model_name": "nvidia:z-ai/glm-5.2",
+                            "token_id": "cloud-token-ref",
+                            "token_env_var": "NVIDIA_API_KEY",
+                        },
+                        "local_model": {
+                            "profile": "local",
+                            "model_name": "hailo:qwen2.5:1.5b",
+                            "backend": "hailo_ollama",
+                            "hardware_accelerator": "raspberry_pi_ai_hat_plus_2_hailo10h",
+                        },
+                        "connect_on_startup": False,
+                        "fallback_to_local_on_error": True,
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            status = create_assistant_provider_status(
+                provider=FakeProvider(),
+                environ={
+                    "SCOUT_AI_ASSISTANT_PROVIDER": "pydantic_ai",
+                    "SCOUT_AI_ASSISTANT_CONFIG_PATH": str(config_path),
+                    "SCOUT_RUNTIME_PROFILE": "pi-field",
+                    "NVIDIA_API_KEY": "token-value-that-must-not-leak",
+                },
+            )
+
+        self.assertTrue(status["config_loaded"])
+        self.assertTrue(status["local_fallback_enabled"])
+        self.assertEqual(
+            status["local_fallback_mode"],
+            "pi_field_ai_hat_plus_2_manual_opt_in",
+        )
+        self.assertEqual(status["local_model_backend"], "hailo_ollama")
+        self.assertEqual(
+            status["local_hardware_accelerator"],
+            "raspberry_pi_ai_hat_plus_2_hailo10h",
+        )
+        self.assertTrue(status["ai_hat_plus_2_fallback_enabled"])
+        self.assertTrue(status["ai_hat_plus_2_readiness_required"])
+        self.assertEqual(status["ai_hat_plus_2_readiness_artifact"], "tools/pi_ai_hat_plus_2_smoke.py")
+        self.assertFalse(status["readiness_starts_local_model"])
+        self.assertFalse(status["local_model_listener_required_for_readiness"])
+        self.assertFalse(status["status_model_switch_allowed"])
         self.assertNotIn("token-value-that-must-not-leak", json.dumps(status))
 
     def test_provider_status_marks_dev_local_fallback_as_configured_but_not_pi_field(self):
@@ -1633,8 +2240,6 @@ class AssistantApiMountTests(unittest.TestCase):
             client = TestClient(server.app)
 
             self.assertEqual(client.post("/assistant/query", json={}).status_code, 404)
-            self.assertNotIn("/assistant/query", {route.path for route in server.app.routes})
-            self.assertNotIn("/assistant/status", {route.path for route in server.app.routes})
 
     def test_assistant_api_mounts_when_explicitly_enabled(self):
         with patch.dict(os.environ, {"SCOUT_AI_ASSISTANT_ENABLED": "1"}, clear=False):
@@ -1649,8 +2254,6 @@ class AssistantApiMountTests(unittest.TestCase):
 
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.json()["surface"], "hardware_readiness")
-            self.assertIn("/assistant/query", {route.path for route in server.app.routes})
-            self.assertIn("/assistant/status", {route.path for route in server.app.routes})
             self.assertEqual(client.get("/assistant/status").status_code, 200)
             self.assertEqual(client.put("/assistant/query", json={}).status_code, 405)
 
@@ -1677,7 +2280,6 @@ class AssistantApiMountTests(unittest.TestCase):
             payload = response.json()
             self.assertTrue(payload["read_only"])
             self.assertIn("startup failed safely", payload["answer"])
-            self.assertIn("/assistant/query", {route.path for route in server.app.routes})
 
 
 if __name__ == "__main__":

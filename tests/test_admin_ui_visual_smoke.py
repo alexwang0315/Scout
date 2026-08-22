@@ -18,6 +18,7 @@ def test_admin_ui_smoke_app_serves_all_admin_surfaces():
         "/admin/debug": "Scout Phase 3.5 Runtime Debug",
         "/admin/pretrip": "Scout Phase 4 Pre-Trip Planning",
         "/admin/hardware-readiness": "Scout Hardware Readiness",
+        "/admin/dashboard": "Scout Dashboard v0.1",
     }
     for route, expected_text in expected_pages.items():
         response = client.get(route)
@@ -40,14 +41,22 @@ def test_admin_ui_smoke_app_serves_all_admin_surfaces():
 def test_admin_ui_visual_smoke_script_covers_routes_viewports_and_boundaries():
     script = SCRIPT.read_text(encoding="utf-8")
 
-    for route in ("/admin/debug", "/admin/pretrip", "/admin/hardware-readiness", "/admin"):
+    for route in ("/admin/debug", "/admin/pretrip", "/admin/hardware-readiness", "/admin", "/admin/dashboard"):
         assert route in script
+    assert "/admin/dashboard?projectId=chilai_nanhua_day1#map" in script
+    assert '"/projects/chilai_nanhua_day1_scoutAI"' not in script
 
     for selector in (
         "#runtimeMap",
         "#narrativePanel",
         "#readinessStrip",
         "#assistantPanel",
+        "#dashboardShell",
+        "#dashboardMap",
+        "#dashboardMapStatus",
+        "#dashboardMapEvidence",
+        "#pretripMapFrame",
+        "#dashboardEvidence",
         "#providerGrid .provider-card",
         ".timeline-node.is-selected",
     ):
@@ -60,7 +69,44 @@ def test_admin_ui_visual_smoke_script_covers_routes_viewports_and_boundaries():
     assert "tinyTargets" in script
     assert "ready" in script
     assert "missingText" in script
+    assert "fallback geometry" in script
+    assert "frameSelector" in script
+    assert 'frameSurfaceId: "dashboard-map-only"' in script
+    assert "frameSelectors" in script
+    assert "frameVisibleSelectors" in script
+    assert "frameHiddenSelectors" in script
+    assert "frameMustFitViewport" in script
+    assert "collectDashboardFrameReuseChecks" in script
+    assert "smokeLoadCount" in script
+    assert "sameSrc" in script
+    assert "verticalOverflowPx" in script
+    assert "frameBottomOverflowPx" in script
+    assert "Scout Phase 4 Pre-Trip Planning" in script
+    assert ".map-pane" in script
+    assert ".toolbar-title" in script
+    assert ".tool-disclosure" in script
+    assert ".route-pane" in script
+    assert ".detail-pane" in script
+    assert "#jsonPane" in script
     assert "#routeMeta" in script
+    assert "mapOnly" in script
+    assert "#dashboardCwaImagery" in script
+    assert "cwaControlsInViewport" in script
+    assert "cwaControlsInteractive" in script
+    assert "cwaKeyboardAccessible" in script
+    assert "rangeChangedFromKeyboard" in script
+    assert "cwaOverlayImages" in script
+    assert "cwaOverlayDomUpdated" in script
+    assert "cwaSheetFitsViewport" in script
+    assert "cwaMapVisibleHeight" in script
+    assert "minTouchTargetPx: 44" in script
+    assert "SCOUT_ADMIN_UI_STARTUP_TIMEOUT_MS" in script
+    assert "cwaImageryFixtureManifest" in script
+    assert 'id: "compact", width: 320' in script
+    assert "data-dashboard-cwa-imagery-window" in script
+    assert "data-dashboard-cwa-imagery-play" in script
+    assert "data-dashboard-cwa-rainfall-product" in script
+    assert "setRainfallProduct" in script
     assert "mapIsLargest" in script
     assert "centeredMapLayout" in script
     assert "--screenshots-dir" in script

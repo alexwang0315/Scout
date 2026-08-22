@@ -1,0 +1,140 @@
+{
+  "schema": "scout.dashboardBrowserActionContract.v2",
+  "version": 2,
+  "official_mode": {
+    "runtime_provenance": "live_operational_dashboard",
+    "pre_existing_runtime_required": true,
+    "browser_operation_required": true,
+    "contract_tests_are_dashboard_evidence": false,
+    "qualification_boundary": "maplibre_pre_migration_regression_guard",
+    "productization": false,
+    "zero_unmapped_controls_required": false,
+    "zero_unreviewed_visual_states_required": false
+  },
+  "profiles": [
+    {"id": "desktop", "width": 1440, "height": 1000},
+    {"id": "large-mobile", "width": 390, "height": 844}
+  ],
+  "regression_guard": {
+    "id": "maplibre-pre-migration-boundary-freeze",
+    "active": true,
+    "major_routes": ["home", "map", "timeline", "outdoor-navigation", "diagnostic"],
+    "required_checks": [
+      "dashboard_load",
+      "major_route_entry",
+      "fallback_map_usable",
+      "layer_contract_present",
+      "evidence_identity_retained",
+      "no_browser_console_fatal_errors",
+      "no_horizontal_overflow",
+      "no_new_operational_or_safety_authority"
+    ],
+    "failure_classifications": [
+      "existing_regression",
+      "maplibre_migration_blocker",
+      "old_svg_implementation_detail",
+      "unrelated_dirty_worktree_issue",
+      "environment_limitation"
+    ],
+    "renderer_neutral_terms": [
+      "map_feature",
+      "layer_id",
+      "artifact_id",
+      "bbox",
+      "highlight_state",
+      "selected_evidence"
+    ],
+    "fallback_map_route": "map",
+    "representative_layer_operation": "toggle_and_restore_one_enabled_layer_id",
+    "authority_claim": "none"
+  },
+  "routes": [
+    {"id": "home", "guard_state": "required"},
+    {"id": "features-workspace", "guard_state": "inventory_only"},
+    {"id": "features-import-new-trip", "guard_state": "inventory_only"},
+    {"id": "features-country-material-pool", "guard_state": "inventory_only"},
+    {"id": "map", "guard_state": "required"},
+    {"id": "timeline", "guard_state": "required"},
+    {"id": "features-lbs", "guard_state": "inventory_only"},
+    {"id": "outdoor-route-context", "guard_state": "inventory_only"},
+    {"id": "outdoor-pace-fit", "guard_state": "inventory_only"},
+    {"id": "outdoor-pace-fit-body-index", "guard_state": "inventory_only"},
+    {"id": "outdoor-permission", "guard_state": "inventory_only"},
+    {"id": "outdoor-architecture", "guard_state": "inventory_only"},
+    {"id": "outdoor-weather", "guard_state": "inventory_only"},
+    {"id": "outdoor-navigation", "guard_state": "required"},
+    {"id": "emergency", "guard_state": "inventory_only"},
+    {"id": "agent", "guard_state": "inventory_only"},
+    {"id": "living", "guard_state": "inventory_only"},
+    {"id": "runtime-audit", "guard_state": "inventory_only"},
+    {"id": "surface-debug", "guard_state": "inventory_only"},
+    {"id": "debug", "guard_state": "inventory_only"},
+    {"id": "observer", "guard_state": "inventory_only"},
+    {"id": "settings", "guard_state": "inventory_only"},
+    {"id": "diagnostic", "guard_state": "required"}
+  ],
+  "paused_legacy_map_contract": {
+    "active": false,
+    "reason": "Paused until the MapLibre evidence surface is stable; retained only for historical evidence reproduction.",
+    "map_surfaces": [
+    {"id": "overview-map", "route": "home", "kind": "native", "viewport_id": "overview-map"},
+    {"id": "lbs-map", "route": "features-lbs", "kind": "native", "viewport_id": "lbs-map"},
+    {"id": "permission-map", "route": "outdoor-permission", "kind": "native", "viewport_id": "permission-map"},
+    {"id": "emergency-review-map", "route": "emergency", "kind": "native", "viewport_id": "emergency-review-map"},
+    {"id": "pace-fit-map", "route": "outdoor-pace-fit", "kind": "native", "viewport_id": "pace-fit-map"},
+    {"id": "navigation-map", "route": "outdoor-navigation", "kind": "native", "viewport_id": "navigation-workspace-map"},
+    {"id": "architecture-map", "route": "outdoor-architecture", "kind": "native", "viewport_id": "architecture-map"},
+    {"id": "map", "route": "map", "kind": "embedded-pretrip", "frame_selector": "#pretripMapFrame", "layer_scope": "pretrip"},
+    {"id": "weather-map", "route": "outdoor-weather", "kind": "embedded-pretrip", "frame_selector": "[data-weather-cwa-map-frame=\"true\"]", "layer_scope": "weather"}
+  ],
+    "required_map_gestures": [
+    "fit",
+    "zoom_in",
+    "zoom_out",
+    "mouse_pan",
+    "keyboard_pan",
+    "rectangle_zoom"
+  ],
+    "required_map_content": {
+      "render_policy": "tile-vector-approved-single-image",
+      "vector_content_required": true,
+      "tile_or_approved_single_image_required": true,
+      "successful_raster_request_required_when_tile_visible": true,
+      "all_exposed_layer_controls_must_be_toggled": true,
+      "enabled_layer_must_have_visible_rendered_content": true
+    },
+    "control_coverage": {
+      "disabled_controls_require_executable_state": true,
+      "delegated_controls_require_passing_specialist_case": true,
+      "allowed_terminal_states": ["OPERATED", "DELEGATED", "GUARD_VERIFIED", "TYPED_UNAVAILABLE"],
+      "blocking_terminal_states": ["UNMAPPED", "MISSING_AFTER_RELOAD", "DISABLED_IN_RUNTIME_STATE", "DISAPPEARED_BEFORE_OPERATION", "NONVISIBLE_AFTER_DISCOVERY", "SINGLE_RUNTIME_VALUE", "ROUTE_ABORTED_AFTER_OPERATION_ERROR", "NOT_EXERCISED", "NO_STATE_CHANGE", "NO_VISUAL_CHANGE", "EFFECT_AUTHORIZATION_REQUIRED"]
+    }
+  },
+  "control_coverage": {
+    "interactive_selector": "button, a[href], input, select, textarea, summary, [role=button], [role=tab], [tabindex]:not([tabindex=\"-1\"])",
+    "mode": "regression_guard",
+    "include_embedded_frames": true,
+    "all_visible_controls_required": false,
+    "major_route_entry_required": true,
+    "representative_layer_control_required": true,
+    "mutation_actions_require_explicit_authorization": true,
+    "browser_local_state_is_not_server_persistence_evidence": true
+  },
+  "visual_quality": {
+    "max_horizontal_overflow_px": 1,
+    "max_occluded_controls": 0,
+    "max_overlapping_control_pairs": 0,
+    "max_blurred_elements": 0,
+    "max_broken_images": 0,
+    "max_low_resolution_rasters": 0,
+    "max_unexplained_clipped_text": 0,
+    "minimum_readable_font_px": 10,
+    "minimum_screenshot_luminance_stddev": 5,
+    "minimum_screenshot_edge_density": 0.002,
+    "minimum_screenshot_laplacian_variance": 12,
+    "fatal_console_errors_allowed": 0,
+    "screenshot_before_after_each_operation": false,
+    "full_route_scroll_evidence_required": false,
+    "independent_visual_review_required": true
+  }
+}

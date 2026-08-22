@@ -1,0 +1,407 @@
+"""Pydantic AI compatibility helpers for packaged Scout agents."""
+
+from __future__ import annotations
+
+import os
+from importlib.metadata import PackageNotFoundError, version
+from typing import Any
+
+from scout.agents.model_policy import ModelPolicy
+from scout.schemas.agent_runtime import AgentRunBudget
+
+OPENAI_KEY_ENV = "OPENAI_API_KEY"
+OPENROUTER_KEY_ENV = "OPENROUTER_API_KEY"
+NVIDIA_KEY_ENV = "NVIDIA_API_KEY"
+NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
+AI_HAT_PLUS_2_HAILO_OLLAMA_BASE_URL = "http://127.0.0.1:8000/v1"
+LOCAL_OPENAI_COMPATIBLE_API_KEY = "scout-local-openai-compatible"
+MAX_UNIX_TIMESTAMP_SECONDS = 253_402_300_799
+
+
+try:
+    from pydantic_ai.models.openai import OpenAIChatModel as _PydanticOpenAIChatModel
+except ImportError:  # pragma: no cover - compatibility with older pydantic-ai.
+    from pydantic_ai.models.openai import OpenAIModel as _PydanticOpenAIChatModel
+
+
+def _normalize_hailo_created_timestamp(value: Any) -> Any:
+    """Normalize Hailo Ollama millisecond/microsecond/nanosecond timestamps."""
+
+    if isinstance(value, bool) or not isinstance(value, int):
+        return value
+    normalized = value
+    while normalized > MAX_UNIX_TIMESTAMP_SECONDS:
+        normalized //= 1_000
+    return normalized
+
+
+def _normalize_hailo_chat_completion(response: Any) -> Any:
+    created = getattr(response, "created", None)
+    normalized = _normalize_hailo_created_timestamp(created)
+    if normalized == created:
+        return response
+    model_copy = getattr(response, "model_copy", None)
+    if callable(model_copy):
+        return model_copy(update={"created": normalized})
+    return response
+
+
+class ScoutHailoOpenAIChatModel(_PydanticOpenAIChatModel):
+    """OpenAI-compatible model with Hailo Ollama response normalization."""
+
+    def _process_response(self, response: Any) -> Any:
+        return super()._process_response(_normalize_hailo_chat_completion(response))
+
+
+def pydantic_ai_runtime_version() -> str:
+    for package_name in ("pydantic-ai", "pydantic-ai-slim"):
+        try:
+            return version(package_name)
+        except PackageNotFoundError:
+            continue
+    return "not-installed"
+
+
+def pydantic_agent_runtime_kwargs() -> dict[str, Any]:
+    return {
+        "end_strategy": "early",
+        "retries": 10,
+    }
+
+
+def pydantic_usage_limits_from_budget(
+    budget: AgentRunBudget,
+    *,
+    request_limit: int | None = None,
+    tool_calls_limit: int | None = None,
+    input_tokens_limit: int | None = None,
+    output_tokens_limit: int | None = None,
+    total_tokens_limit: int | None = None,
+) -> Any:
+    """Translate Scout policy into Pydantic AI enforcement limits.
+
+    Optional values are for a bounded sub-run such as grounding repair. They
+    may narrow the Scout budget, but can never expand it.
+    """
+
+    from pydantic_ai import UsageLimits
+
+    return UsageLimits(
+        request_limit=_call_capacity(
+            "request_limit", request_limit, budget.max_requests
+        ),
+        tool_calls_limit=_call_capacity(
+            "tool_calls_limit", tool_calls_limit, budget.max_tool_calls
+        ),
+        input_tokens_limit=(
+            _narrow_limit(
+                "input_tokens_limit", input_tokens_limit, budget.max_input_tokens
+            )
+            if budget.enforce_resource_limits
+            else None
+        ),
+        output_tokens_limit=(
+            _narrow_limit(
+                "output_tokens_limit", output_tokens_limit, budget.max_output_tokens
+            )
+            if budget.enforce_resource_limits
+            else None
+        ),
+        total_tokens_limit=(
+            _narrow_limit(
+                "total_tokens_limit", total_tokens_limit, budget.max_total_tokens
+            )
+            if budget.enforce_resource_limits
+            else None
+        ),
+        # Pydantic AI 2.21 added this independent per-request guard. Scout's
+        # Construction Mode keeps it explicitly disabled so provider context
+        # limits remain telemetry/recovery boundaries rather than hidden caps.
+        per_request_input_tokens_limit=None,
+    )
+
+
+def _call_capacity(name: str, requested: int | None, maximum: int) -> int:
+    value = maximum if requested is None else requested
+    if value < 10:
+        raise ValueError(f"{name} must preserve at least 10 calls per attempt")
+    if value > maximum:
+        raise ValueError(f"{name} cannot exceed the Scout AgentRunBudget")
+    return value
+
+
+def _narrow_limit(
+    name: str,
+    requested: int | None,
+    maximum: int | None,
+) -> int | None:
+    if maximum is None:
+        if requested is not None and requested < 0:
+            raise ValueError(f"{name} must be non-negative")
+        return requested
+    value = maximum if requested is None else requested
+    if value < 0:
+        raise ValueError(f"{name} must be non-negative")
+    if value > maximum:
+        raise ValueError(f"{name} cannot exceed the Scout AgentRunBudget")
+    return value
+
+
+def pydantic_result_output(result: Any) -> Any:
+    return getattr(result, "output", getattr(result, "data", result))
+
+
+def pydantic_native_research_trace(result: Any) -> dict[str, Any]:
+    """Return a content-free audit summary of Pydantic AI tool activity."""
+
+    messages = result.all_messages() if callable(getattr(result, "all_messages", None)) else []
+    parts = [
+        part
+        for message in messages
+        for part in getattr(message, "parts", ())
+    ]
+    call_parts = [
+        part
+        for part in parts
+        if type(part).__name__ in {"ToolCallPart", "NativeToolCallPart"}
+    ]
+    return_parts = [
+        part
+        for part in parts
+        if type(part).__name__ in {"ToolReturnPart", "NativeToolReturnPart"}
+    ]
+    tool_names = sorted(
+        {
+            str(getattr(part, "tool_name", "")).strip()
+            for part in call_parts
+            if str(getattr(part, "tool_name", "")).strip()
+        }
+    )
+    folded_names = [name.casefold().replace("-", "_") for name in tool_names]
+    search_count = sum("web_search" in name for name in folded_names)
+    fetch_count = sum("web_fetch" in name for name in folded_names)
+    return {
+        "performed": search_count > 0 or fetch_count > 0,
+        "tool_call_count": len(call_parts),
+        "tool_return_count": len(return_parts),
+        "native_tool_call_count": sum(
+            type(part).__name__ == "NativeToolCallPart" for part in call_parts
+        ),
+        "web_search_call_count": search_count,
+        "web_fetch_call_count": fetch_count,
+        "tool_names": tool_names,
+    }
+
+
+def pydantic_native_research_capabilities(policy: ModelPolicy) -> list[Any]:
+    """Build no-approval native research capabilities for trusted Scout runs.
+
+    These are provider/model capabilities, not Scout runtime safety tools.
+    Results must remain candidate evidence unless a deterministic Scout
+    preparation step later reviews and materializes them.
+    """
+
+    capabilities: list[Any] = []
+    if policy.native_web_search_enabled:
+        from pydantic_ai.capabilities.web_search import WebSearch
+
+        from scout.agents.local_web_search import build_local_web_search
+
+        if policy.provider == "openai-chat":
+            capabilities.append(
+                WebSearch(
+                    native=True,
+                    max_uses=policy.native_research_max_searches,
+                    allowed_domains=policy.native_research_allowed_domains or None,
+                    blocked_domains=policy.native_research_blocked_domains or None,
+                    description=(
+                        "Scout trusted native web search. No per-query approval is "
+                        "required, but findings are candidate-only and are not "
+                        "runtime safety truth."
+                    ),
+                )
+            )
+        else:
+            capabilities.append(
+                WebSearch(
+                    native=False,
+                    local=build_local_web_search(
+                        allowed_domains=(
+                            policy.native_research_allowed_domains or None
+                        ),
+                        blocked_domains=(
+                            policy.native_research_blocked_domains or None
+                        ),
+                        max_uses=policy.native_research_max_searches,
+                    ),
+                    description=(
+                        "Scout trusted local web search with deterministic result "
+                        "provenance. No per-query approval is required, but findings "
+                        "are candidate-only and are not runtime safety truth."
+                    ),
+                )
+            )
+    if policy.native_web_fetch_enabled:
+        from pydantic_ai.capabilities.web_fetch import WebFetch
+
+        from scout.agents.local_web_fetch import build_local_web_fetch
+
+        capabilities.append(
+            WebFetch(
+                native=False,
+                local=build_local_web_fetch(
+                    allowed_domains=policy.native_research_allowed_domains or None,
+                    blocked_domains=policy.native_research_blocked_domains or None,
+                    max_uses=policy.native_research_max_fetches,
+                ),
+                allowed_domains=policy.native_research_allowed_domains or None,
+                blocked_domains=policy.native_research_blocked_domains or None,
+                max_content_tokens=None,
+                description=(
+                    "Scout trusted local web fetch with deterministic URL and domain "
+                    "validation. No per-query approval is required, but fetched "
+                    "content is candidate-only and is not runtime safety truth."
+                ),
+            )
+        )
+    return capabilities
+
+
+def build_chat_model(
+    *,
+    model_name: str,
+    base_url: str | None = None,
+    api_key: str | None = None,
+) -> Any:
+    model_name = normalize_chat_model_name(model_name)
+    if _is_openrouter_model(model_name=model_name, base_url=base_url):
+        normalized_name = _strip_openrouter_prefix(model_name)
+        try:
+            from pydantic_ai.models.openrouter import OpenRouterModel
+            from pydantic_ai.providers.openrouter import OpenRouterProvider
+
+            return OpenRouterModel(
+                normalized_name,
+                provider=OpenRouterProvider(api_key=api_key or os.getenv(OPENROUTER_KEY_ENV)),
+            )
+        except ImportError:
+            model_name = normalized_name
+            base_url = base_url or "https://openrouter.ai/api/v1"
+    is_nvidia_model = _is_nvidia_model(model_name=model_name, base_url=base_url)
+    if is_nvidia_model:
+        model_name = _strip_nvidia_prefix(model_name)
+        base_url = base_url or NVIDIA_BASE_URL
+        api_key = api_key or os.getenv(NVIDIA_KEY_ENV)
+    is_hailo_model = _is_hailo_ollama_model(
+        model_name=model_name,
+        base_url=base_url,
+    )
+    if is_hailo_model:
+        model_name = _strip_hailo_prefix(model_name)
+        base_url = base_url or AI_HAT_PLUS_2_HAILO_OLLAMA_BASE_URL
+        api_key = api_key or LOCAL_OPENAI_COMPATIBLE_API_KEY
+
+    try:
+        from pydantic_ai.models.openai import OpenAIChatModel
+    except ImportError:  # pragma: no cover - compatibility with older pydantic-ai.
+        from pydantic_ai.models.openai import OpenAIModel as OpenAIChatModel
+    from pydantic_ai.providers.openai import OpenAIProvider
+
+    resolved_api_key = _resolve_openai_compatible_api_key(
+        base_url=base_url,
+        api_key=api_key,
+    )
+    if is_nvidia_model:
+        from openai import AsyncOpenAI
+
+        provider = OpenAIProvider(
+            openai_client=AsyncOpenAI(
+                base_url=base_url,
+                api_key=resolved_api_key,
+                max_retries=0,
+            )
+        )
+    else:
+        provider = OpenAIProvider(
+            base_url=base_url,
+            api_key=resolved_api_key,
+        )
+
+    model_type = ScoutHailoOpenAIChatModel if is_hailo_model else OpenAIChatModel
+    return model_type(
+        _strip_openai_chat_prefix(model_name),
+        provider=provider,
+    )
+
+
+def normalize_chat_model_name(model_name: str) -> str:
+    """Normalize Scout cloud aliases to chat-model semantics.
+
+    Pydantic AI v2 uses the OpenAI Responses API for the ``openai:`` model
+    string prefix. Scout's existing provider path is intentionally
+    Chat-Completions-like and side-effect constrained, so ``openai:`` is
+    normalized to ``openai-chat:`` before constructing a model object.
+    """
+
+    if model_name.startswith("openai:"):
+        return "openai-chat:" + model_name.removeprefix("openai:")
+    return model_name
+
+
+def _is_openrouter_model(*, model_name: str, base_url: str | None) -> bool:
+    return model_name.startswith("openrouter:") or bool(
+        base_url and "openrouter.ai" in base_url
+    )
+
+
+def _is_nvidia_model(*, model_name: str, base_url: str | None) -> bool:
+    return model_name.startswith("nvidia:") or bool(
+        base_url and "integrate.api.nvidia.com" in base_url
+    )
+
+
+def _is_hailo_ollama_model(*, model_name: str, base_url: str | None) -> bool:
+    return model_name.startswith("hailo:") or bool(
+        base_url and _is_local_openai_compatible_base_url(base_url)
+    )
+
+
+def _strip_openrouter_prefix(model_name: str) -> str:
+    if model_name.startswith("openrouter:"):
+        return model_name.removeprefix("openrouter:")
+    return model_name
+
+
+def _strip_nvidia_prefix(model_name: str) -> str:
+    if model_name.startswith("nvidia:"):
+        return model_name.removeprefix("nvidia:")
+    return model_name
+
+
+def _strip_hailo_prefix(model_name: str) -> str:
+    if model_name.startswith("hailo:"):
+        return model_name.removeprefix("hailo:")
+    return model_name
+
+
+def _strip_openai_chat_prefix(model_name: str) -> str:
+    if model_name.startswith("openai-chat:"):
+        return model_name.removeprefix("openai-chat:")
+    return model_name
+
+
+def _resolve_openai_compatible_api_key(
+    *,
+    base_url: str | None,
+    api_key: str | None,
+) -> str | None:
+    if api_key:
+        return api_key
+    if base_url and _is_local_openai_compatible_base_url(base_url):
+        return LOCAL_OPENAI_COMPATIBLE_API_KEY
+    return os.getenv(OPENAI_KEY_ENV)
+
+
+def _is_local_openai_compatible_base_url(base_url: str) -> bool:
+    normalized = base_url.strip().lower()
+    return normalized.startswith(("http://127.0.0.1", "http://localhost"))

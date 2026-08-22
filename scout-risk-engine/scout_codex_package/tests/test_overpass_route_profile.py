@@ -21,11 +21,91 @@ def test_overpass_route_base_uses_osm_geometry_with_gpx_as_alignment_only(
         corridor_m=20.0,
     )
 
-    assert route_base.points[0].lat == 24.0
-    assert route_base.points[0].lon == 121.0
+    assert 24.0 <= route_base.points[0].lat <= 24.001
+    assert 121.0 <= route_base.points[0].lon <= 121.001
     assert route_base.metadata["reference_gpx_not_used_as_route_centerline"] is True
     assert route_base.metadata["route_base"] == "overpass_vector_evidence"
+    assert route_base.metadata["sampling_strategy"] == (
+        "reference_progress_projected_to_nearest_overpass_segment.v1"
+    )
     assert route_base.metadata["selected_feature_count"] == 1
+    assert route_base.metadata["projected_reference_sample_count"] == (
+        route_base.metadata["reference_sample_count"]
+    )
+    assert route_base.metadata["fallback_reference_sample_count"] == 0
+    assert route_base.sample_metadata[0]["route_base_source"] == "overpass_projection"
+    assert "reference_distance_m" in route_base.sample_metadata[0]
+
+
+def test_overpass_route_base_projects_to_nearest_segment_not_all_corridor_vertices(
+    tmp_path: Path,
+):
+    overpass_path = tmp_path / "overpass.geojson"
+    overpass_path.write_text(
+        json.dumps(
+            {
+                "type": "FeatureCollection",
+                "features": [
+                    {
+                        "type": "Feature",
+                        "geometry": {
+                            "type": "LineString",
+                            "coordinates": [
+                                [121.0, 24.0],
+                                [121.0005, 24.0],
+                                [121.001, 24.0],
+                            ],
+                        },
+                        "properties": {
+                            "id": "overpass.trail_corridor_candidate.way.main",
+                            "candidate_type": "trail_corridor_candidate",
+                        },
+                    },
+                    {
+                        "type": "Feature",
+                        "geometry": {
+                            "type": "LineString",
+                            "coordinates": [
+                                [121.0004, 24.00008],
+                                [121.0004, 24.00045],
+                            ],
+                        },
+                        "properties": {
+                            "id": "overpass.trail_corridor_candidate.way.spur",
+                            "candidate_type": "trail_corridor_candidate",
+                        },
+                    },
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    reference_gpx_path = tmp_path / "reference.gpx"
+    reference_gpx_path.write_text(
+        """<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="test" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><trkseg>
+    <trkpt lat="24.0" lon="121.0"/>
+    <trkpt lat="24.0" lon="121.001"/>
+  </trkseg></trk>
+</gpx>
+""",
+        encoding="utf-8",
+    )
+
+    route_base = build_overpass_route_base(
+        overpass_geojson_path=overpass_path,
+        reference_gpx_path=reference_gpx_path,
+        corridor_m=60.0,
+    )
+
+    assert route_base.metadata["selected_feature_ids"] == [
+        "overpass.trail_corridor_candidate.way.main"
+    ]
+    assert route_base.metadata["selected_feature_count"] == 1
+    assert all(abs(point.lat - 24.0) < 1e-8 for point in route_base.points)
+    assert all(121.0 <= point.lon <= 121.001 for point in route_base.points)
 
 
 def test_cli_overpass_route_profile_reads_twd97_dtm_tiles(tmp_path: Path):
@@ -66,6 +146,9 @@ def test_cli_overpass_route_profile_reads_twd97_dtm_tiles(tmp_path: Path):
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     assert payload["type"] == "FeatureCollection"
     assert len(payload["features"]) >= 2
+    assert payload["features"][0]["properties"]["route_base_source"] == (
+        "overpass_projection"
+    )
     assert csv_path.is_file()
     assert metadata["boundary"]["route_base_is_overpass_vector_evidence"] is True
     assert metadata["boundary"]["reference_gpx_not_used_as_route_centerline"] is True

@@ -1,0 +1,14 @@
+{
+  "artifact_kind": "gee_gpm_imerg_timeseries",
+  "collection_id": "NASA/GPM_L3/IMERG_V07",
+  "raw_response_hash": "sha256:gee-gpm-timeseries-fixture",
+  "stale_risk": "low",
+  "timeseries": [
+    {
+      "time": "2026-06-24T00:00:00Z",
+      "rain_1h_mm": 4.0,
+      "rain_24h_mm": 42.0,
+      "rain_72h_mm": 88.0
+    }
+  ]
+}

@@ -1,0 +1,66 @@
+{
+  "id": "scout.pretrip.boss_points_synthesize",
+  "version": "0.1.0",
+  "description": "Synthesize top route Boss Points and Challenge Fit from pretrip MCP, route note, risk, pace, and energy evidence.",
+  "command": {
+    "argv": [
+      "{python}",
+      "-m",
+      "scout_agent_builtin_tools",
+      "pretrip-boss-points-synthesize",
+      "--input",
+      "{input}",
+      "--json"
+    ],
+    "dry_run_argument": "--dry-run"
+  },
+  "mode": "workspace_write",
+  "input_schema_ref": "schemas/scout_agent/pretrip_boss_points_synthesize.request.json",
+  "output_schema_ref": "schemas/scout_agent/tool_result.json",
+  "allowed_reads": [
+    "pretrip.workspace.project",
+    "pretrip.workspace.candidates.checkpoints",
+    "pretrip.workspace.candidates.segments",
+    "pretrip.workspace.candidates.route_note_candidates",
+    "pretrip.workspace.outputs.risk_ribbon",
+    "pretrip.workspace.outputs.mcp_candidates",
+    "pretrip.workspace.outputs.named_point_evidence",
+    "pretrip.workspace.outputs.rest_area_candidates",
+    "pretrip.workspace.outputs.resume_segments",
+    "pretrip.workspace.outputs.incident_context",
+    "pretrip.workspace.outputs.weather_daylight_evidence",
+    "pretrip.workspace.normalized.pace.pace_coefficients",
+    "pretrip.workspace.normalized.pace.team_pace_fit",
+    "pretrip.workspace.outputs.team_status",
+    "pretrip.workspace.outputs.energy_vitals"
+  ],
+  "allowed_writes": [
+    "pretrip.workspace.outputs.boss_points",
+    "pretrip.workspace.outputs.boss_points_geojson"
+  ],
+  "forbidden_writes": [
+    "phase1.runtime",
+    "phase2.brain.observed_facts",
+    "live.safety_api"
+  ],
+  "requires_authorization": {
+    "kind": "user_or_operator"
+  },
+  "trace": {
+    "required": true,
+    "event_kind": "agent_tool_invocation"
+  },
+  "metadata": {
+    "standard_alignment": "SCOUT_OUTDOOR_AI_AGENT_STANDARD Sec. 7 Readiness & Pace Fit",
+    "formula": "Route Boss Demand vs User Pace Coefficient / Energy Reserve = Challenge Fit",
+    "default_slow_passage_min_span_m": 500,
+    "default_pressure_profile_bin_m": 500,
+    "route_pressure_profile_ref": "outputs/route_pressure_profile.json",
+    "rest_stop_evidence_deemphasized": true,
+    "network_policy": "no_live_network_fetch",
+    "candidate_only": true,
+    "runtime_safety_truth": false,
+    "medical_diagnosis": false,
+    "average_pace_used": false
+  }
+}

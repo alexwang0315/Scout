@@ -6,7 +6,6 @@ import json
 import os
 from datetime import UTC, datetime
 from importlib import import_module
-from importlib.metadata import version
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import Any, Literal
@@ -21,6 +20,7 @@ from scout.agents.model_gateway import (
     ModelSlaGateway,
 )
 from scout.agents.model_policy import ModelPolicy
+from scout.agents.pydantic_ai_compat import pydantic_ai_runtime_version
 from scout.api.routes import create_app
 from scout.cli.pydantic_smoke import run_smoke
 from pydantic import Field
@@ -198,7 +198,7 @@ def build_hardware_smoke_profile(
         "phases": list(HARDWARE_SMOKE_PHASES),
         "default_commands": [
             "./venv/bin/scout-ai-os-hardware-smoke --repo-root /Users/alexwang0315/scout-fusion",
-            "./venv/bin/scout-ai-os-hardware-smoke --repo-root /Users/alexwang0315/scout-fusion --allow-external-model --model gpt-4o-mini",
+            "./venv/bin/scout-ai-os-hardware-smoke --repo-root /Users/alexwang0315/scout-fusion --allow-external-model --model glm-5.2",
             "npm run scout-ui:operation-smoke",
         ],
     }
@@ -290,7 +290,7 @@ def _check_importability(repo_root: Path) -> HardwareSmokeCheck:
         "Scout AI OS modules are importable.",
         {
             "imported": imported,
-            "pydantic_ai_version": version("pydantic-ai"),
+            "pydantic_ai_version": pydantic_ai_runtime_version(),
         },
     )
 
@@ -937,6 +937,7 @@ def _redact_smoke_result(result: dict[str, Any]) -> dict[str, Any]:
             "model_sla",
             "env_file_loaded",
             "openrouter_api_key_present",
+            "nvidia_api_key_present",
             "request_status",
             "workflow_id",
             "workflow_name",

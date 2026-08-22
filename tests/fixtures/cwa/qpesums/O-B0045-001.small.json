@@ -1,0 +1,24 @@
+{
+  "cwaopendata": {
+    "dataid": "O-B0045-001",
+    "source": "CWA",
+    "dataset": {
+      "datasetInfo": {
+        "datasetDescription": "過去1小時雷達定量降雨估計",
+        "parameterSet": {
+          "StartPointLongitude": "121.0000",
+          "StartPointLatitude": "23.0000",
+          "GridResolution": "0.0125",
+          "DateTime": "2026-07-13T10:30:00+08:00",
+          "GridDimensionX": "3",
+          "GridDimensionY": "2",
+          "Precipitation": "mm"
+        }
+      },
+      "contents": {
+        "contentDescription": "fixture; first point lower-left; longitude first; TWD67; invalid=-1",
+        "content": "1.000E+00,2.000E+00,-1.000E+00,4.000E+00,8.000E+00,1.200E+01"
+      }
+    }
+  }
+}

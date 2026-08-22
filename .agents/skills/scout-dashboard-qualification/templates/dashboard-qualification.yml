@@ -1,0 +1,62 @@
+name: Scout Dashboard Qualification
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deterministic-qualification:
+    name: Scout Deterministic Qualification
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps
+      - run: npm run qualification:validate-manifest
+      - run: npm run build
+      - run: npm run qualification:check:full
+        env:
+          SCOUT_QUALIFICATION_RUNTIME_URL: ${{ vars.SCOUT_QUALIFICATION_RUNTIME_URL }}
+          SCOUT_QUALIFICATION_PROJECT_ID: ${{ vars.SCOUT_QUALIFICATION_PROJECT_ID }}
+      - if: always()
+        run: npm run qualification:bundle
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scout-dashboard-qualification-${{ github.sha }}
+          path: artifacts/qualification/
+          retention-days: 90
+
+  independent-review:
+    name: Scout Independent Evidence Review
+    needs: deterministic-qualification
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: scout-dashboard-qualification-${{ github.sha }}
+          path: artifacts/qualification/
+      - run: npm run qualification:verify-evidence
+      - run: |
+          echo "Complete gpt-pro-collaboration in the Codex in-app browser first."
+          test -f artifacts/qualification/reviewer-verdict.json
+          test -f artifacts/qualification/gpt-pro-review-reference.json
+      - run: npm run qualification:enforce-verdict
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scout-dashboard-reviewed-${{ github.sha }}
+          path: artifacts/qualification/

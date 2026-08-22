@@ -1,0 +1,191 @@
+{
+  "packet_id": "dashboard-internal-qualification.contextual-permission.phase1.rev1",
+  "packet_schema_version": "dashboardInternalQualificationClosure.v1",
+  "created_on": "2026-08-04",
+  "review_state": "awaiting_gpt_pro_verdict",
+  "content_sha256": "74a58ad238bdde9f609ea1bd19a71a8d0dbbbcda063f305cc359eb56471f429f",
+  "scope": {
+    "domain": "contextual_permission",
+    "phase": 1,
+    "runtime_ui_surface_added": false,
+    "active_workspace_mutated": false,
+    "qualification_workspace_policy": "isolated_temporary_and_sanitized_fixture_only"
+  },
+  "contracts": {
+    "rebuild_command_id": "contextual_permission_projection_rebuild",
+    "rebuild_evaluator_version": "contextual-permission.projection-rebuild-admission.v1",
+    "baseline_capabilities": [
+      "legacy_sparse.v1",
+      "ref_gpx_proposal.v1"
+    ],
+    "accepted_terminals": [
+      "ready",
+      "safely_blocked_for_migration"
+    ],
+    "progress_excludes": [
+      "http_200_alone",
+      "volatile_receipt_identity",
+      "timestamp_only_change",
+      "semantically_identical_artifact"
+    ]
+  },
+  "artifact_sha256": {
+    "docs/specs/scout-dashboard-internal-qualification.md": "0dcb46ecb845884459f711364eee5f65fec05cec762d97ac002acea6b09e7e2e",
+    "scout_contextual_permission_workbench.py": "391afc5ca7971c2db821d65766bb105ba334ccc52a9dff6d6dad660638be1532",
+    "scout_contextual_permission_workbench_api.py": "3a6efb6fa2d97704cc758586686b0ef33ddae0a3317b1f833749552829ca0ab2",
+    "tests/qualification/contextual_permission_phase1.py": "3883e58731792863cc68cdcedac7f7236c7496730d64d75368c52d4dc9daa335",
+    "tests/qualification/test_contextual_permission_phase1.py": "227d2e5db271eee293e9e63cbd8630884fad5b967edbb75b07e50cea29123568",
+    "tests/qualification/fixtures/contextual_permission/legacy_sparse_livelock_trace.json": "2ca76938141cabea0bbc4f12352b1dde6675135174685f597f8d01f22922f502",
+    "tests/qualification/fixtures/contextual_permission/supported_state_catalog.json": "0088ba2b47392c84e87631981b73b4277695aeb0fee47b4de59acd8ece242839",
+    "docs/admin/scout-dashboard-v0.1.html": "38a2b35a514223bf53d5760b2d7bc4b508cd6a6a4d1a14206e39adedb480880d",
+    "tests/test_scout_contextual_permission_workbench_api.py": "24e2a498eb80e9717286c1ecb177983a52e8ad19185c583e9c70ca2a35aba819",
+    "tests/test_scout_contextual_permission_workbench.py": "0180dce3df4bc1157f760e61eefa72969c7b56292c61d0bd8debee37273edd68",
+    "tests/test_scout_dashboard_page.py": "ec7b0969dfec37abdd81cd3037da9ca9f0d762643d1ee243a981dc9e61e5da7e",
+    "docs/specs/scout-pretrip-full-preparation-runbook.md": "e30c77d8b50cc98c5fed3302ae80f042d7e146827dd1fbddcdc32389fa77a0cc"
+  },
+  "historical_counterexample": {
+    "finding": "FLOW-LIVELOCK",
+    "closed_nonterminal_component": [
+      "regenerated-legacy-stale"
+    ],
+    "shortest_transition_ids": [
+      "generate-ref-gpx-legacy-1",
+      "generate-ref-gpx-legacy-2"
+    ],
+    "blocker_ids": [
+      "untyped:projection_rebuild_ineligible"
+    ],
+    "capability_ids": [
+      "legacy_sparse.v1"
+    ],
+    "effect_identities": [
+      "artifact_identity:new-legacy-draft",
+      "http_status:200",
+      "writes_performed:false"
+    ]
+  },
+  "corrected_witnesses": {
+    "machine_only": {
+      "start": "historical reviewed legacy artifact without capability discriminator",
+      "terminal": "safely_blocked_for_migration",
+      "root_blocker": "baseline_migration_required",
+      "recovery_action": "prepare_reference_segment_timing",
+      "required_inputs": [
+        "reference_segment_timing",
+        "proposal_first_day_end_review"
+      ],
+      "writes_performed": false
+    },
+    "explicit_synthetic_input_and_review": {
+      "trajectory": [
+        "install_synthetic_reference_timing",
+        "generate_ref_gpx_proposal",
+        "save_immutable_candidate",
+        "accept_exact_baseline_review",
+        "rebuild_observed_snapshot",
+        "accept_exact_permission_rule_review"
+      ],
+      "terminal": "ready",
+      "projection": "fresh",
+      "policy_review": "current",
+      "baseline_review_binding": "current",
+      "forbidden_effects": []
+    }
+  },
+  "fault_and_consistency_evidence": {
+    "observed_snapshot_upstream_replacement": {
+      "result": "projection_rebuild_stale_precondition",
+      "derived_writes": 0
+    },
+    "durable_write_interruption": {
+      "fault_point": "after_workbench_seed_atomic_replace",
+      "restart_projection": "contextual_permission_projection_write_in_doubt",
+      "recovery": "same_idempotency_key_roll_forward",
+      "post_recovery_projection": "fresh"
+    },
+    "lost_response_retries": [
+      "baseline_review_accept_same_receipt",
+      "projection_rebuild_same_receipt",
+      "permission_rules_review_same_receipt"
+    ],
+    "semantic_mutations_invalidated": [
+      "reviewed_baseline_payload",
+      "permission_rules_review_receipt"
+    ]
+  },
+  "mutation_canaries": [
+    {
+      "id": "mutant-fake-repair",
+      "expected_finding": "FLOW-LIVELOCK"
+    },
+    {
+      "id": "mutant-command-rejects-eligible-snapshot",
+      "expected_finding": "PREDICATE-DIVERGENCE"
+    },
+    {
+      "id": "review-binding-mutant",
+      "expected_finding": "DEPENDENCY-SPLIT-BRAIN"
+    },
+    {
+      "id": "mutant-outbound-effect",
+      "expected_finding": "FORBIDDEN-EFFECT"
+    }
+  ],
+  "effect_boundary": {
+    "allowed_root": "pytest temporary project workspace",
+    "project_tree_allowlist_verified": true,
+    "canonical_store_untouched": true,
+    "runtime_safety_truth": false,
+    "departure_approval_granted": false,
+    "active_runtime_session_updated": false,
+    "safety_api_called": false,
+    "outbound_action_performed": false,
+    "outbound_transport_invoked": false,
+    "external_send_performed": false,
+    "hardware_control_performed": false
+  },
+  "executed_checks": [
+    {
+      "command": "pytest tests/qualification/test_contextual_permission_phase1.py -q",
+      "result": "15 passed"
+    },
+    {
+      "command": "pytest tests/test_scout_contextual_permission_workbench_api.py tests/test_scout_contextual_permission_workbench.py tests/qualification/test_contextual_permission_phase1.py -q",
+      "result": "67 passed"
+    },
+    {
+      "command": "ruff check scout_contextual_permission_workbench.py scout_contextual_permission_workbench_api.py tests/qualification/contextual_permission_phase1.py tests/qualification/test_contextual_permission_phase1.py",
+      "result": "pass"
+    },
+    {
+      "command": "pytest tests/test_scout_dashboard_page.py::test_contextual_permission_workbench_uses_typed_projection_and_dedicated_scope -q",
+      "result": "1 passed"
+    },
+    {
+      "command": "live local browser DOM inspection at http://127.0.0.1:9099/admin/dashboard",
+      "result": {
+        "title": "Scout Dashboard v0.1",
+        "body_ready": true,
+        "expected_admission_snapshot_sha256_present": true,
+        "expected_evaluator_version_present": true,
+        "missing_snapshot_guard_present": true
+      }
+    },
+    {
+      "command": "scoped git diff check and secret-pattern scan",
+      "result": "pass"
+    }
+  ],
+  "not_claimed": [
+    "repository_wide_productization",
+    "Phase_2_reusable_engine_completion",
+    "Phase_3_dashboard_domain_coverage",
+    "real_active_workspace_mutation",
+    "runtime_safety_authority",
+    "external_side_effects"
+  ],
+  "required_phase_verdicts": {
+    "codex": "AGREE",
+    "gpt_pro": "pending"
+  }
+}

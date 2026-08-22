@@ -4,6 +4,141 @@ This interface gives Scout AI a deterministic way to read available tool
 contracts and run read-only local evidence tools without depending on prompt-only
 knowledge.
 
+## Implementation Update 2026-08-22
+
+Scout AI now runs against Pydantic AI v2.33.0 on the Mac and Pi dependency
+tracks. Tool execution remains deterministic and read-only by default:
+
+- `pydantic-ai-slim[duckduckgo,mcp,openai,openrouter]` is pinned to v2.33.0 for Pi
+  admin/live runtimes and the local development venv.
+- Scout keeps `pydantic_ai.Agent(end_strategy="early")` for typed Scout
+  provider calls. This intentionally avoids Pydantic AI v2's default graceful
+  continuation from executing extra same-turn tools after Scout has produced a
+  typed output.
+- The compatibility smoke covers function tools, typed output, MCP, local
+  WebSearch/WebFetch, stream events, compacted history, and the non-JSON
+  `Agent.to_web()` request guard before this pin is promoted to hardware. The
+  v2.32 smoke also verifies that an untrusted Host header is rejected before a
+  model request, covering the upstream DNS-rebinding fix.
+- Deferred tools must be revealed and their capability loaded before invocation
+  under v2.32. Scout progressive disclosure treats that rejection as a tool
+  availability decision and must not misclassify it as missing evidence.
+- Provider-native OpenRouter search uses `openrouter:web_search`. Pydantic AI
+  v2.32 preserves returned citations in
+  `ModelResponse.provider_details["annotations"]`; Scout's default remains the
+  local traced search/fetch path when the provider omits auditable citations.
+- The compatibility smoke verifies Instrumentation v6's `tool` role and the
+  legacy v5 role, OpenRouter annotation preservation, and timeout enforcement
+  for blocking synchronous tools. Scout does not opt into instrumentation v6
+  until its trace consumers accept the role change.
+- The v2.33.0 smoke rejects nested synchronous agent runs from framework-managed
+  sync callbacks. Delegated Scout agents must use an async callback and
+  `await agent.run(...)`, avoiding the former deadlock path.
+- Pydantic AI v2.32 uses `httpx2` for compatible clients. Provider smoke must
+  cover OpenRouter/OpenAI-compatible construction without exposing headers or
+  credentials.
+- Pydantic AI v2.32.2 normalizes DeepSeek Responses function-call replay. The
+  v2.33.0 compatibility smoke keeps the OpenRouter/DeepSeek tool replay path in
+  scope so a provider handoff cannot lose tool-call/result pairing.
+- Pydantic AI v2.33.0 supports `anthropic>=1.0.0`; a custom Anthropic provider
+  client must be an `httpx2.AsyncClient`. Scout does not construct or log such
+  a client unless the Anthropic provider is explicitly configured.
+- OpenRouter's native web plugin may complete without exposing a source or tool
+  trace. A successful transport response is not accepted as grounded evidence;
+  Scout keeps the local traced search/fetch path as the OpenRouter default.
+- NVIDIA-hosted GLM uses `SCOUT_AI_OS_MODEL=z-ai/glm-5.2` and
+  `NVIDIA_API_KEY`. Scout routes it to the OpenAI-compatible NVIDIA endpoint
+  while preserving `z-ai/glm-5.2` as the outbound model id.
+- OpenRouter model strings use the dedicated Pydantic AI OpenRouter provider
+  through the `openrouter:<vendor/model>` prefix and `OPENROUTER_API_KEY`.
+- Aggressive Construction Mode gives local and cloud models no Scout-defined
+  output-token cap by default. `SCOUT_AI_LOCAL_MODEL_MAX_TOKENS`, legacy
+  `SCOUT_AI_WORKSPACE_MODEL_MAX_TOKENS`, and
+  `SCOUT_AI_CLOUD_MODEL_MAX_TOKENS` are explicit operator/Productization
+  overrides, not hidden defaults.
+- Direct OpenAI model strings must use `openai-chat:<model>`. If an operator
+  supplies `openai:<model>`, Scout normalizes it to `openai-chat:<model>` to
+  preserve the existing Chat-Completions-like Scout tool/output contract rather
+  than silently switching to the OpenAI Responses API behavior.
+- Trusted WebSearch and WebFetch are always enabled for every Scout AI Pydantic
+  Agent path, including local/AI HAT+2 paths, repair/continuation, evaluation,
+  and L5 planning. Direct OpenAI Chat may use native search;
+  OpenRouter/NVIDIA use Scout's bounded DuckDuckGo function tool so the search
+  result and URL appear in the deterministic call trace. WebFetch currently
+  uses Scout's local URL/domain-validating function tool on all configured
+  providers. Legacy disable values such as
+  `SCOUT_AI_OS_NATIVE_RESEARCH=0` are ignored. Models without provider-native
+  tool calling use Scout's server-side adapters. Domain policy may still
+  protect secrets, private-network destinations, and explicit security
+  boundaries.
+- The AI HAT+2 `hailo_ollama` assistant path uses
+  `scout.agents.hailo_native_research`: Hailo selects `scout_web_search` and
+  `scout_web_fetch` actions, while Pydantic AI executes the capabilities and
+  enforces their per-stage 10/10 budget. A fetch URL must be an exact URL from
+  a preceding search result. Only fetched content becomes candidate evidence;
+  search snippets remain discovery metadata.
+- Provider-native MCP remains disabled until a Scout-owned connector boundary
+  explicitly enables it. The Mac `pydantic-ai-smoke` optional dependency
+  includes MCP and the Pydantic built-in WebFetch extra only for compatibility
+  verification.
+- Capability adapters may use v2 `get_model`, `resolve_model_id`, and
+  `for_agent` hooks. Model resolution still passes through Scout model policy.
+- `RunContext.is_tool_available` may be used to avoid planning unavailable
+  tools, but it is not an authorization signal. Deterministic Scout permission
+  and effect checks remain authoritative.
+- `UsageLimits.per_request_input_tokens_limit` remains unset in Aggressive
+  Construction Mode. External provider context limits trigger evidence
+  checkpointing and continuation rather than a hidden Scout token cap.
+- MCP `prefer_tasks` remains opt-in per reviewed connector. MCP and tool-search
+  retry settings inherit Scout's stage policy and may not reduce the guaranteed
+  10 tool calls and 10 model requests available to each recovery stage.
+- OpenRouter request settings are caller-owned immutable input. Provider
+  adapters may derive a per-request copy but must not mutate the configured
+  settings object while normalizing or sending a request.
+- Tool-search request and result history must survive supported model/provider
+  handoffs. Scout adapters must not discard those parts merely because the next
+  request uses a different provider.
+- A bare MCP `McpError` is a recoverable tool/provider failure. Scout records
+  the redacted error in the deterministic trace and may continue through its
+  normal recovery ladder instead of treating it as a process failure.
+- All provider-specific fields preserved by Pydantic AI `RequestUsage` remain
+  available to Scout telemetry. Unknown usage fields must not be silently
+  dropped, and any value that could contain sensitive provider metadata must be
+  redacted before persistence or display.
+- `ToolFailed` results must remain visible in the deterministic
+  call trace even when no model retry is requested.
+- OpenRouter `AdvisorTool` support and OpenAI Responses
+  `WebSearchTool.external_web_access` are opt-in provider features; the package
+  upgrade does not bypass Scout capability policy.
+- `ModelHTTPError.headers` and `retry_after` may drive redacted retry telemetry.
+  Raw authorization or provider headers must never enter artifacts or UI.
+- An OpenRouter null/missing choices response is a provider `ModelAPIError`.
+  Preserve completed evidence and enter the repair/model-switch ladder; do not
+  synthesize an evidence-free answer from that response.
+- Deferred tool streams expose `DeferredToolRequestsEvent` and
+  `DeferredToolResultsEvent`; tool adapters must preserve source references and
+  deterministic verification across those events.
+- `cache_hit_ratio` may be retained as usage telemetry. Model request parameter
+  instrumentation remains opt-in so prompts, tool arguments, and secrets are
+  not copied into traces by default.
+- Environment secrets remain server-side. Tool artifacts, admin/debug payloads,
+  and logs may report missing credential env names such as `NVIDIA_API_KEY`,
+  `OPENROUTER_API_KEY`, or `OPENAI_API_KEY`, but never their values.
+
+Recent workspace tool coverage also includes route-context mileage and raster
+OCR evidence:
+
+- `scout.ai.route_context.assess.v0` /
+  `pydantic_ai.tool.assess_scout_route_context.v0` resolves route-context
+  questions and K/mileage anchors such as "15K 在哪" from
+  `route_context_points_ref`, `route_mileage_k_anchors_ref`, and bounded
+  `mileage_tag_alignment_ref` slices.
+- `pydantic_ai.tool.search_scout_map_perception.v0` now reads normalized raster
+  OCR GeoJSON from `raster_label_evidence_ref` in addition to legacy MCP OCR.
+- `pydantic_ai.tool.search_scout_evidence_fulltext.v0` indexes route mileage
+  anchors, bounded mileage alignment summaries, normalized raster OCR records,
+  and raw OCR summaries when `project.json` refs are present.
+
 ## Registry Tool
 
 Manifest id:
@@ -450,6 +585,14 @@ Output artifact:
     "outbound_send_performed": false,
     "hardware_control_performed": false
   },
+  "model_policy": {
+    "pydantic_ai_version": "2.1.0",
+    "provider_mode": "deterministic_tools_only",
+    "external_model_used": false,
+    "fallback_used": false,
+    "required_credential_env": [],
+    "missing_credential_env": []
+  },
   "boundary": {
     "read_only": true,
     "runtime_safety_truth": false,
@@ -523,6 +666,18 @@ Result artifact:
       "evidence_type": "scout_ai_tool_contract"
     }
   ],
+  "model_policy": {
+    "pydantic_ai_version": "2.1.0",
+    "provider_mode": "deterministic_tool_runner",
+    "external_model_used": false,
+    "native_research_enabled": true,
+    "native_web_search_enabled": true,
+    "native_web_fetch_enabled": true,
+    "native_research_requires_approval": false,
+    "native_research_candidate_only": true,
+    "native_research_runtime_safety_truth": false,
+    "provider_native_mcp_enabled": false
+  },
   "boundary": {
     "read_only": true,
     "runtime_safety_truth": false,
@@ -546,6 +701,137 @@ Possible `status` values:
 Future tools should be registered in the registry before they are executable.
 This lets Scout AI explain missing evidence and implementation gaps without
 inventing tool behavior.
+
+### Native Research Availability
+
+`WebSearch` and `WebFetch` are permanent Pydantic AI capabilities for external
+Scout AI models. They remain attached when workspace tools are disabled or
+progressively disclosed; `SCOUT_AI_OS_NATIVE_RESEARCH=0` and equivalent legacy
+disable values are ignored. OpenRouter/NVIDIA use Scout's traced local adapters
+when the provider lacks the native form. Search snippets are discovery output,
+not evidence: a selected URL must be fetched, and any workspace persistence must
+go through a deterministic collector that records URL, timestamp, response hash,
+candidate-only status, and source references.
+
+AI HAT+2 uses server-side tool orchestration when network is reachable and cached
+evidence when it is not. This policy does not grant generated code, secrets,
+private-network destinations, `/safety/*`, outbound transport, or hardware
+control unrestricted network access.
+
+## Weather / Environment Workspace Tools
+
+Scout AI now separates route-weather reasoning into a decision tool plus two
+workspace evidence tools:
+
+| Layer | Tool id | Role |
+| --- | --- | --- |
+| Decision wrapper | `scout.ai.weather_window.assess.v0` | Route-local weather/daylight/camp/shelter decision framing. |
+| Official weather evidence | `scout.ai.cwa_environment.assess.v0` | Prepared Central Weather Administration warnings, observations, QPF, forecast, astronomy, tide/marine, and provenance summaries. |
+| Hydrologic background | `scout.ai.gee_environment.assess.v0` | Prepared GEE SMAP/GPM soil moisture, antecedent rain, grid/timeline, and corridor hydrologic summaries. |
+
+Both environment tools are deterministic, read-only Scout workspace readers.
+They do not call live CWA, GEE, OpenRouter, OpenAI, browser search, or
+Earth Engine during assistant answering. Server-side pretrip preparation may
+create the artifacts with credentials, but Scout AI receives only bounded,
+redacted, candidate-only artifacts from the workspace.
+
+Common request shape:
+
+```json
+{
+  "tool_id": "scout.ai.cwa_environment.assess.v0",
+  "project_root": "tests/fixtures/pretrip/projects/chilai_nanhua_day1",
+  "query": "白牆下這段還適合走嗎？",
+  "limit": 6,
+  "arguments": {
+    "include_features": true,
+    "include_timeline": true,
+    "stale_after_hours": 12
+  }
+}
+```
+
+`scout.ai.cwa_environment.assess.v0` reads these workspace artifacts when
+available:
+
+- `outputs/environment/environment_evidence_package.json`
+- `outputs/environment/environment_factor_matrix.json`
+- `outputs/environment/go_no_go_review_draft.json`
+- `outputs/environment/cwa/cwa_weather_evidence.json`
+- `outputs/environment/cwa/warnings.geojson`
+- `outputs/environment/cwa/observations.geojson`
+- `outputs/environment/cwa/qpf_grid.geojson`
+- `outputs/environment/cwa/qpf_route_timeline.json`
+- `outputs/environment/cwa/qpf_corridor_summary.json`
+- `outputs/environment/cwa/forecast_timeline.json`
+- `outputs/environment/cwa/astronomy_timeline.json`
+- `outputs/environment/cwa/tide_marine_timeline.json`
+
+`scout.ai.gee_environment.assess.v0` reads these workspace artifacts when
+available:
+
+- `outputs/environment/environment_evidence_package.json`
+- `outputs/environment/environment_factor_matrix.json`
+- `outputs/environment/go_no_go_review_draft.json`
+- `outputs/environment/gee/smap_l4_timeseries.json`
+- `outputs/environment/gee/smap_l4_corridor_summary.json`
+- `outputs/environment/gee/soil_moisture_grid.geojson`
+- `outputs/environment/gee/gpm_imerg_raw_summary.json`
+- `outputs/environment/gee/gpm_imerg_timeseries.json`
+- `outputs/environment/gee/gpm_imerg_corridor_summary.json`
+- `outputs/environment/gee/antecedent_rain_grid.geojson`
+
+Both outputs must include:
+
+- `candidate_only: true`
+- `runtime_safety_truth: false`
+- `human_review_required: true`
+- `external_api_calls_made: false`
+- `source_report`, `provenance_summary`, `missing_fields`, and `warnings`
+- a compact `field_answer` suitable for answer synthesis
+
+## Route Context, Mileage, And Raster OCR Workspace Tools
+
+Scout AI now treats route mileage and raster OCR as first-class workspace
+evidence instead of relying on prompt-only interpretation.
+
+| Layer | Tool id | Role |
+| --- | --- | --- |
+| Route-context assessor | `scout.ai.route_context.assess.v0` / `pydantic_ai.tool.assess_scout_route_context.v0` | Answer route context, observation-point, and K/mileage anchor questions. |
+| Raster/map perception | `pydantic_ai.tool.search_scout_map_perception.v0` | Search legacy MCP OCR, normalized raster OCR GeoJSON, contour/map labels, and tile-source refs. |
+| Workspace full-text | `pydantic_ai.tool.search_scout_evidence_fulltext.v0` | Index route mileage anchors, bounded mileage tag alignment, OCR labels, route notes, and source snippets. |
+
+Required reads are project-ref driven:
+
+- `route_context_points_ref`
+- `route_mileage_k_anchors_ref`
+- `mileage_tag_alignment_ref`
+- `mileage_tag_alignment_geojson_ref`
+- `raster_label_ocr_output_ref`
+- `raster_label_evidence_ref`
+
+These tools must keep large artifacts bounded. They may summarize
+`outputs/mileage_tag_alignment.json` and raw OCR output, but must not pass full
+alignment or raw tile payloads into the model. All returned items remain
+candidate-only unless a reviewed package explicitly promotes them.
+
+Planner behavior:
+
+- Natural weather questions select `weather_window` and CWA evidence.
+- Rain, stream, rockfall, landslide, wet terrain, and weather-terrain compound
+  questions also select GEE evidence.
+- Pretrip Go/No-Go questions select route readiness plus weather, CWA, and GEE
+  support evidence when the workspace provides it.
+- Missing or stale CWA/GEE artifacts are reported as evidence gaps; Scout AI
+  must not infer low weather risk from absent environment artifacts.
+
+Boundary:
+
+- These tools are pretrip/admin/debug evidence tools only.
+- They must not write candidate review decisions, ObservedFact, Phase 2 Brain
+  facts, IncidentStore records, runtime safety truth, or `/safety/*`.
+- They must not expose CWA API keys, GEE credentials, raw secrets, or
+  unredacted request URLs to the client, logs, or model prompt.
 
 ## Assistant Workflow Eval Runner
 
@@ -602,6 +888,67 @@ missing-evidence gaps when model synthesis is unavailable. It does not write
 JSON/Markdown files itself; the report and Markdown are returned in the tool
 payload so callers can decide where to persist review artifacts.
 
+## Deterministic Workspace Query Tool
+
+Manifest id:
+
+```text
+scout.ai.workspace.query.v1
+```
+
+This is the progressive follow-up tool after domain discovery. Its request is
+a Pydantic discriminated union; Pydantic AI receives the full operation schema
+instead of an untyped dictionary. Supported operations are:
+
+```text
+inspect exists count distinct filter group_by top_k argmax diff freshness
+nearest interval route_forward
+```
+
+An artifact selector contains exactly one controlled `source_ref` or
+`project_ref_key` and may include a bounded `collection_path`. Fields use a
+restricted dotted-name grammar. Predicates are typed comparisons; no JSONPath,
+SQL, Python, JavaScript, shell, or model-authored expression is evaluated.
+
+Example:
+
+```json
+{
+  "operation": "argmax",
+  "artifact": {
+    "project_ref_key": "segment_candidates_ref",
+    "collection_path": "segments"
+  },
+  "field": "distance_m",
+  "fields": [
+    "candidate_id",
+    "from_candidate_id",
+    "to_candidate_id",
+    "distance_m"
+  ]
+}
+```
+
+Every response has stable `status` and `answerability` fields, bounded results,
+scan/result counts, source refs, limitations, missing fields, next actions,
+root cause, safe-retry state, and stop condition. Each record carries:
+
+- execution-scoped `evidence_id`;
+- `source_ref`, `source_hash`, `record_id`, and locator;
+- bounded projected data and available observation/validity times;
+- `candidate_only=true` and `runtime_safety_truth=false`.
+
+`null` and missing are different. An explicit null remains in the result. A
+field absent from all selected records produces a warning with
+`answerability=missing_required_fields`; already available evidence is still
+returned. An empty existing collection produces a grounded zero result.
+
+The service confines resolved files to the project root, rejects traversal and
+symlink escape, permits JSON/GeoJSON only, and enforces artifact bytes, scanned
+records, returned records, nesting depth, string length, stable ordering, and
+diff-path limits. It performs no network or workspace write and never mutates
+Phase 1, `/safety/*`, Phase 2 Brain, incident, outbound, or hardware state.
+
 ## Pydantic AI Provider Integration
 
 The Pydantic AI assistant provider keeps the existing `search_scout_*` tool
@@ -614,10 +961,36 @@ Current provider behavior:
   tool ids, implementation status, descriptions, and optional fields.
 - `ScoutWorkspaceToolContext.search_scout_route_structure()` and the other
   current deterministic tools execute through `execute_scout_ai_tool()`.
+- `ScoutWorkspaceToolContext.query_scout_workspace()` accepts the typed
+  `WorkspaceQueryRequest` union and executes `scout.ai.workspace.query.v1`
+  inside the resolved project root. The model cannot supply a different root.
+- `AgentBudgetPolicy` selects the Scout `AgentRunBudget` from question class,
+  expected operations, joins, live-state requirements, and selected domains.
+  The Pydantic adapter only maps that budget to `UsageLimits`; the Scout ledger
+  independently verifies actual request/tool/token usage.
+- Every question class has the same executable ceiling: 10 tool calls and 10
+  model requests per attempt and per recovery stage, including unknown/new
+  classes. Stage, surface, average, p95, and static-fact policies may stop early
+  on sufficient evidence or no progress, but may not impose lower capacity.
+- Planner, retriever, synthesis, verifier, reviewer, repair, retry, replan,
+  browser, and subagent categories also default to at least 10 when separately
+  metered.
+- Construction Mode leaves token, EvidenceCard, context, cost, answer-time, and
+  replay-time ceilings unset. External platform limits create a checkpoint and
+  continuation with a fresh 10/10 budget.
+- Typed executor statuses `completed`, `success`, and `ok` are successful tool
+  outcomes for evaluation and ledger matching. They must not be reclassified
+  as transport errors merely because adapters use different success labels.
+- Failures follow the finite ladder in `SCOUT_OUTDOOR_AI_AGENT_STANDARD.md`:
+  fix tools/evidence/harness with fresh 10/10, switch model with fresh 10/10,
+  build the complete Codex review artifact, then register a stable known issue
+  with an explicit unblock condition.
 - Legacy `search_scout_workspace_evidence()` remains available for local
   evidence-index fallback, but the newer structured tools should be preferred
-  when the question maps to route, MCP, full-text, risk, terrain, or map
-  perception evidence.
-- Contract-only future tools, such as weather window assessment, are not exposed
-  as Pydantic AI functions until they have an executor. They remain visible
-  through the registry for missing-evidence explanations.
+  when the question maps to route, MCP, full-text, risk, terrain, map
+  perception, weather window, CWA environment, or GEE environment evidence.
+- `weather_window`, `cwa_environment`, and `gee_environment` are executable
+  read-only functions when present in the registry. Contract-only future tools
+  remain visible through the registry for missing-evidence explanations, but
+  are not exposed as executable Pydantic AI functions until they have an
+  executor.

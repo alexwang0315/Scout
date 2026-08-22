@@ -97,3 +97,358 @@ def test_supervisor_does_not_start_when_mqtt_is_not_configured(tmp_path: Path) -
     assert started == []
     assert status["observer_count"] == 0
     assert status["running_count"] == 0
+
+
+def test_supervisor_autostarts_gnss_hardware_observer_from_jsonl_sources(tmp_path: Path) -> None:
+    gateway_jsonl = tmp_path / "sx1303-gateway-gps.jsonl"
+    grove_jsonl = tmp_path / "grove-gps.jsonl"
+    gateway_jsonl.write_text("{}\n", encoding="utf-8")
+    grove_jsonl.write_text("{}\n", encoding="utf-8")
+    started: list[FakeProcess] = []
+
+    def fake_popen(command, **kwargs):
+        process = FakeProcess(list(command), **kwargs)
+        started.append(process)
+        return process
+
+    supervisor = IngressObserverSupervisor.from_env(
+        {
+            "SCOUT_SENSORLOGGER_MQTT_AUTOSTART": "false",
+            "SCOUT_GNSS_HARDWARE_AUTOSTART": "true",
+            "SCOUT_GNSS_HARDWARE_GATEWAY_JSONL": str(gateway_jsonl),
+            "SCOUT_GNSS_HARDWARE_GROVE_JSONL": str(grove_jsonl),
+            "SCOUT_GNSS_HARDWARE_EVIDENCE_DIR": str(tmp_path / "gnss-evidence"),
+            "SCOUT_GNSS_HARDWARE_LOG_PATH": str(tmp_path / "gnss-observer.log"),
+            "SCOUT_GNSS_HARDWARE_POLL_SECONDS": "1.5",
+            "SCOUT_GNSS_HARDWARE_MAX_RECORDS": "50",
+        },
+        app_root=tmp_path,
+        popen_factory=fake_popen,
+    )
+
+    supervisor.start()
+    status = supervisor.status()
+
+    assert len(started) == 1
+    command = started[0].command
+    command_text = " ".join(command)
+    assert "scout_gnss_hardware_observer.py" in command_text
+    assert "--gateway-jsonl" in command
+    assert str(gateway_jsonl) in command
+    assert "--grove-jsonl" in command
+    assert str(grove_jsonl) in command
+    assert "--print-ready" in command
+    assert "--poll-seconds" in command
+    assert "1.5" in command
+    assert "--max-records" in command
+    assert "50" in command
+    assert status["observer_count"] == 1
+    assert status["running_count"] == 1
+    assert status["configured_observer_names"] == ["gnss-hardware"]
+    assert status["observers"][0]["name"] == "gnss-hardware"
+    assert status["observers"][0]["reason"] == "configured_sources"
+    assert status["observers"][0]["phase1_l0_l4_state_mutated"] is False
+    assert status["observers"][0]["safety_api_called"] is False
+    assert status["boundary"]["phase1_l0_l4_state_mutated"] is False
+
+    supervisor.stop()
+
+    assert started[0].terminated is True
+
+
+def test_supervisor_passes_gnss_hardware_oled_and_led_options(tmp_path: Path) -> None:
+    gateway_jsonl = tmp_path / "sx1303-gateway-gps.jsonl"
+    gateway_jsonl.write_text("{}\n", encoding="utf-8")
+    started: list[FakeProcess] = []
+
+    def fake_popen(command, **kwargs):
+        process = FakeProcess(list(command), **kwargs)
+        started.append(process)
+        return process
+
+    supervisor = IngressObserverSupervisor.from_env(
+        {
+            "SCOUT_SENSORLOGGER_MQTT_AUTOSTART": "false",
+            "SCOUT_GNSS_HARDWARE_AUTOSTART": "true",
+            "SCOUT_GNSS_HARDWARE_GATEWAY_JSONL": str(gateway_jsonl),
+            "SCOUT_GNSS_HARDWARE_GROVE_JSONL": str(tmp_path / "missing-grove.jsonl"),
+            "SCOUT_GNSS_HARDWARE_EVIDENCE_DIR": str(tmp_path / "gnss-evidence"),
+            "SCOUT_GNSS_HARDWARE_LOG_PATH": str(tmp_path / "gnss-observer.log"),
+            "SCOUT_GNSS_HARDWARE_OLED_STATUS": "true",
+            "SCOUT_GNSS_HARDWARE_OLED_DRIVER": "sh1107g",
+            "SCOUT_GNSS_HARDWARE_LED_STATUS": "true",
+            "SCOUT_GNSS_HARDWARE_LED_PORT": "D5",
+            "SCOUT_GNSS_HARDWARE_LED_FIX_BIT": "10",
+            "SCOUT_GNSS_HARDWARE_LED_NO_FIX_BIT": "1",
+            "SCOUT_GNSS_HARDWARE_LED_BLINK_COUNT": "1",
+            "SCOUT_GNSS_HARDWARE_LED_BLINK_SECONDS": "0.15",
+        },
+        app_root=tmp_path,
+        popen_factory=fake_popen,
+    )
+
+    supervisor.start()
+    command = started[0].command
+
+    assert "--oled-status" in command
+    assert "--oled-driver" in command
+    assert "sh1107g" in command
+    assert "--led-status" in command
+    assert "--led-port" in command
+    assert "D5" in command
+    assert "--led-fix-bit" in command
+    assert "10" in command
+    assert "--led-no-fix-bit" in command
+    assert "1" in command
+    assert "--led-blink-seconds" in command
+    assert "0.15" in command
+    assert "/safety/" not in " ".join(command)
+
+    supervisor.stop()
+
+
+def test_supervisor_autostarts_sx1303_gateway_observer_when_enabled(tmp_path: Path) -> None:
+    started: list[FakeProcess] = []
+
+    def fake_popen(command, **kwargs):
+        process = FakeProcess(list(command), **kwargs)
+        started.append(process)
+        return process
+
+    supervisor = IngressObserverSupervisor.from_env(
+        {
+            "SCOUT_SENSORLOGGER_MQTT_AUTOSTART": "false",
+            "SCOUT_GNSS_HARDWARE_AUTOSTART": "false",
+            "SCOUT_SX1303_GATEWAY_AUTOSTART": "true",
+            "SCOUT_SX1303_GATEWAY_EVIDENCE_DIR": str(tmp_path / "sx1303-evidence"),
+            "SCOUT_SX1303_GATEWAY_LOG_PATH": str(tmp_path / "sx1303-observer.log"),
+            "SCOUT_SX1303_GATEWAY_UPLINK_JSONL": str(tmp_path / "uplinks.jsonl"),
+            "SCOUT_SX1303_GATEWAY_GATEWAY_GPS_JSONL": str(tmp_path / "gateway-gps.jsonl"),
+            "SCOUT_SX1303_GATEWAY_RF_PREFLIGHT_JSONL": str(tmp_path / "sx1303-gateway-smoke.jsonl"),
+            "SCOUT_SX1303_GATEWAY_RX_READINESS_JSONL": str(tmp_path / "sx1303-gateway-rx-readiness.jsonl"),
+            "SCOUT_SX1303_GATEWAY_CONFIG_PATHS": str(tmp_path / "as923_2.toml"),
+            "SCOUT_SX1303_GATEWAY_HOST": "host.docker.internal",
+            "SCOUT_SX1303_GATEWAY_TCP_PORTS": "1883,8080",
+            "SCOUT_SX1303_GATEWAY_UDP_PORTS": "1700",
+            "SCOUT_SX1303_GATEWAY_POLL_SECONDS": "9",
+            "SCOUT_SX1303_GATEWAY_MAX_JSONL_RECORDS": "25",
+            "SCOUT_SX1303_GATEWAY_OLED_STATUS": "true",
+            "SCOUT_SX1303_GATEWAY_OLED_DRIVER": "sh1107g",
+            "SCOUT_SX1303_GATEWAY_LED_STATUS": "true",
+            "SCOUT_SX1303_GATEWAY_LED_PORT": "D5",
+            "SCOUT_SX1303_GATEWAY_LED_OK_BIT": "8",
+            "SCOUT_SX1303_GATEWAY_LED_WARN_BIT": "1",
+            "SCOUT_SX1303_GATEWAY_LED_FAIL_BIT": "10",
+        },
+        app_root=tmp_path,
+        popen_factory=fake_popen,
+    )
+
+    supervisor.start()
+    status = supervisor.status()
+    command = started[0].command
+    command_text = " ".join(command)
+
+    assert len(started) == 1
+    assert "scout_sx1303_gateway_observer.py" in command_text
+    assert "--uplink-jsonl" in command
+    assert str(tmp_path / "uplinks.jsonl") in command
+    assert "--gateway-gps-jsonl" in command
+    assert str(tmp_path / "gateway-gps.jsonl") in command
+    assert "--rf-preflight-jsonl" in command
+    assert str(tmp_path / "sx1303-gateway-smoke.jsonl") in command
+    assert "--rx-readiness-jsonl" in command
+    assert str(tmp_path / "sx1303-gateway-rx-readiness.jsonl") in command
+    assert "--config-paths" in command
+    assert str(tmp_path / "as923_2.toml") in command
+    assert "--host" in command
+    assert "host.docker.internal" in command
+    assert "--tcp-ports" in command
+    assert "1883,8080" in command
+    assert "--udp-ports" in command
+    assert "1700" in command
+    assert "--poll-seconds" in command
+    assert "9" in command
+    assert "--max-jsonl-records" in command
+    assert "25" in command
+    assert "--print-ready" in command
+    assert "--oled-status" in command
+    assert "--led-status" in command
+    assert "--led-ok-bit" in command
+    assert "8" in command
+    assert "/safety/" not in command_text
+    assert status["observer_count"] == 1
+    assert status["configured_observer_names"] == ["sx1303-gateway"]
+    assert status["observers"][0]["name"] == "sx1303-gateway"
+    assert status["observers"][0]["reason"] == "explicit_autostart"
+    assert status["observers"][0]["rf_tx_allowed"] is False
+    assert status["observers"][0]["lorawan_uplink_allowed"] is False
+    assert status["observers"][0]["downlink_allowed"] is False
+    assert status["boundary"]["rf_tx_allowed"] is False
+    assert status["boundary"]["downlink_allowed"] is False
+
+    supervisor.stop()
+
+
+def test_supervisor_autostarts_lorawan_client_observer_when_enabled(tmp_path: Path) -> None:
+    started: list[FakeProcess] = []
+
+    def fake_popen(command, **kwargs):
+        process = FakeProcess(list(command), **kwargs)
+        started.append(process)
+        return process
+
+    supervisor = IngressObserverSupervisor.from_env(
+        {
+            "SCOUT_SENSORLOGGER_MQTT_AUTOSTART": "false",
+            "SCOUT_GNSS_HARDWARE_AUTOSTART": "false",
+            "SCOUT_SX1303_GATEWAY_AUTOSTART": "false",
+            "SCOUT_LORAWAN_CLIENT_AUTOSTART": "true",
+            "SCOUT_LORAWAN_CLIENT_EVIDENCE_DIR": str(tmp_path / "lorawan-client-evidence"),
+            "SCOUT_LORAWAN_CLIENT_LOG_PATH": str(tmp_path / "lorawan-client-observer.log"),
+            "SCOUT_LORAWAN_CLIENT_KEY_SYNC_JSONL": str(tmp_path / "key-sync.jsonl"),
+            "SCOUT_LORAWAN_CLIENT_PROFILE_PROVISION_JSONL": str(tmp_path / "profile.jsonl"),
+            "SCOUT_LORAWAN_CLIENT_TRIAL_PLAN_JSONL": str(tmp_path / "trial-plan.jsonl"),
+            "SCOUT_LORAWAN_CLIENT_RF_TRIAL_JSONL": str(tmp_path / "rf-trial.jsonl"),
+            "SCOUT_LORAWAN_CLIENT_JOIN_AUDIT_JSONL": str(tmp_path / "join-audit.jsonl"),
+            "SCOUT_LORAWAN_CLIENT_JOIN_STATE_DIAGNOSTIC_JSONL": str(tmp_path / "join-state.jsonl"),
+            "SCOUT_LORAWAN_CLIENT_UPLINK_JSONL": str(tmp_path / "uplink.jsonl"),
+            "SCOUT_LORAWAN_CLIENT_TAIL_STATUS_JSONL": str(tmp_path / "tail-status.jsonl"),
+            "SCOUT_LORAWAN_CLIENT_WIO_AT_JSONL": str(tmp_path / "wio-at.jsonl"),
+            "SCOUT_LORAWAN_CLIENT_POLL_SECONDS": "7",
+            "SCOUT_LORAWAN_CLIENT_MAX_JSONL_RECORDS": "30",
+            "SCOUT_LORAWAN_CLIENT_OLED_STATUS": "true",
+            "SCOUT_LORAWAN_CLIENT_OLED_DRIVER": "sh1107g",
+            "SCOUT_LORAWAN_CLIENT_LED_STATUS": "true",
+            "SCOUT_LORAWAN_CLIENT_LED_PORT": "D5",
+            "SCOUT_LORAWAN_CLIENT_LED_OK_BIT": "9",
+            "SCOUT_LORAWAN_CLIENT_LED_WARN_BIT": "1",
+            "SCOUT_LORAWAN_CLIENT_LED_FAIL_BIT": "10",
+        },
+        app_root=tmp_path,
+        popen_factory=fake_popen,
+    )
+
+    supervisor.start()
+    status = supervisor.status()
+    command = started[0].command
+    command_text = " ".join(command)
+
+    assert len(started) == 1
+    assert "scout_lorawan_client_observer.py" in command_text
+    assert "--key-sync-jsonl" in command
+    assert str(tmp_path / "key-sync.jsonl") in command
+    assert "--profile-provision-jsonl" in command
+    assert str(tmp_path / "profile.jsonl") in command
+    assert "--trial-plan-jsonl" in command
+    assert str(tmp_path / "trial-plan.jsonl") in command
+    assert "--rf-trial-jsonl" in command
+    assert str(tmp_path / "rf-trial.jsonl") in command
+    assert "--join-audit-jsonl" in command
+    assert str(tmp_path / "join-audit.jsonl") in command
+    assert "--join-state-diagnostic-jsonl" in command
+    assert str(tmp_path / "join-state.jsonl") in command
+    assert "--uplink-jsonl" in command
+    assert str(tmp_path / "uplink.jsonl") in command
+    assert "--tail-status-jsonl" in command
+    assert str(tmp_path / "tail-status.jsonl") in command
+    assert "--wio-at-jsonl" in command
+    assert str(tmp_path / "wio-at.jsonl") in command
+    assert "--poll-seconds" in command
+    assert "7" in command
+    assert "--max-jsonl-records" in command
+    assert "30" in command
+    assert "--print-ready" in command
+    assert "--oled-status" in command
+    assert "--led-status" in command
+    assert "--led-ok-bit" in command
+    assert "9" in command
+    assert "/safety/" not in command_text
+    assert status["observer_count"] == 1
+    assert status["configured_observer_names"] == ["lorawan-client"]
+    assert status["observers"][0]["name"] == "lorawan-client"
+    assert status["observers"][0]["reason"] == "explicit_autostart"
+    assert status["observers"][0]["rf_tx_allowed"] is False
+    assert status["observers"][0]["lorawan_uplink_allowed"] is False
+    assert status["observers"][0]["downlink_allowed"] is False
+    assert status["boundary"]["rf_tx_allowed"] is False
+    assert status["boundary"]["safety_api_called"] is False
+
+    supervisor.stop()
+
+    assert started[0].terminated is True
+
+
+def test_supervisor_autostarts_physiologic_gate_observer_when_explicit(tmp_path: Path) -> None:
+    vitals_jsonl = tmp_path / "sensorlogger_mqtt_sensor_vitals_records.jsonl"
+    baseline_json = tmp_path / "baseline.json"
+    route_context_json = tmp_path / "route-context.json"
+    vitals_jsonl.write_text("{}\n", encoding="utf-8")
+    baseline_json.write_text('{"personal_envelope_available": false}\n', encoding="utf-8")
+    route_context_json.write_text(
+        "\n".join(
+            [
+                "{",
+                '  "route_id": "fixture.route",',
+                '  "segment_id": "fixture.segment",',
+                '  "distance_to_next_checkpoint_m": 500,',
+                '  "estimated_minutes_to_next_checkpoint": 25,',
+                '  "estimated_minutes_to_planned_camp": 90,',
+                '  "daylight_buffer_minutes": 80',
+                "}",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    started: list[FakeProcess] = []
+
+    def fake_popen(command, **kwargs):
+        process = FakeProcess(list(command), **kwargs)
+        started.append(process)
+        return process
+
+    supervisor = IngressObserverSupervisor.from_env(
+        {
+            "SCOUT_SENSORLOGGER_MQTT_AUTOSTART": "false",
+            "SCOUT_GNSS_HARDWARE_AUTOSTART": "false",
+            "SCOUT_PHYSIOLOGIC_GATE_AUTOSTART": "true",
+            "SCOUT_PHYSIOLOGIC_GATE_SENSORLOGGER_VITALS_JSONL": str(vitals_jsonl),
+            "SCOUT_PHYSIOLOGIC_GATE_BASELINE_JSON": str(baseline_json),
+            "SCOUT_PHYSIOLOGIC_GATE_ROUTE_CONTEXT_JSON": str(route_context_json),
+            "SCOUT_PHYSIOLOGIC_GATE_EVIDENCE_DIR": str(tmp_path / "physio-evidence"),
+            "SCOUT_PHYSIOLOGIC_GATE_LOG_PATH": str(tmp_path / "physio-observer.log"),
+            "SCOUT_PHYSIOLOGIC_GATE_POLL_SECONDS": "5",
+            "SCOUT_PHYSIOLOGIC_GATE_WINDOW_MINUTES": "15",
+        },
+        app_root=tmp_path,
+        popen_factory=fake_popen,
+    )
+
+    supervisor.start()
+    status = supervisor.status()
+    command = started[0].command
+    command_text = " ".join(command)
+
+    assert len(started) == 1
+    assert "scout_physiologic_gate_observer.py" in command_text
+    assert "--sensorlogger-vitals-jsonl" in command
+    assert str(vitals_jsonl) in command
+    assert "--baseline-json" in command
+    assert str(baseline_json) in command
+    assert "--route-context-json" in command
+    assert str(route_context_json) in command
+    assert "--window-minutes" in command
+    assert "15" in command
+    assert "/safety/" not in command_text
+    assert status["observer_count"] == 1
+    assert status["running_count"] == 1
+    assert status["configured_observer_names"] == ["physiologic-gate"]
+    assert status["observers"][0]["name"] == "physiologic-gate"
+    assert status["observers"][0]["reason"] == "explicit_autostart"
+    assert status["observers"][0]["phase1_l0_l4_state_mutated"] is False
+    assert status["observers"][0]["safety_api_called"] is False
+    assert status["boundary"]["phase1_l0_l4_state_mutated"] is False
+
+    supervisor.stop()
+
+    assert started[0].terminated is True

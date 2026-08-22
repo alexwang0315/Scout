@@ -1,0 +1,54 @@
+{
+  "artifact_kind": "gee_smap_l4_corridor_summary",
+  "collection_id": "NASA/SMAP/SPL4SMGP/008",
+  "raw_response_hash": "sha256:gee-smap-summary-fixture",
+  "request_timestamp": "2026-06-24T00:00:00Z",
+  "stale_risk": "low",
+  "metrics": {
+    "sm_surface": {
+      "mean": 0.2943,
+      "max": 0.331,
+      "p95": 0.322,
+      "latest": 0.301,
+      "trend": "rising"
+    },
+    "sm_rootzone": {
+      "mean": 0.3094,
+      "max": 0.351,
+      "p95": 0.344,
+      "latest": 0.318,
+      "trend": "rising"
+    },
+    "sm_profile": {
+      "mean": 0.2948,
+      "max": 0.333,
+      "p95": 0.326,
+      "latest": 0.302,
+      "trend": "stable"
+    },
+    "sm_surface_wetness": {
+      "mean": 0.66,
+      "max": 0.82,
+      "p95": 0.78,
+      "latest": 0.74,
+      "trend": "rising"
+    },
+    "sm_rootzone_wetness": {
+      "mean": 0.61,
+      "max": 0.77,
+      "p95": 0.72,
+      "latest": 0.68,
+      "trend": "rising"
+    },
+    "surface_temp": {
+      "mean": 286.2,
+      "max": 289.1,
+      "p95": 288.7,
+      "latest": 287.0,
+      "trend": "stable"
+    }
+  },
+  "candidate_only": true,
+  "runtime_safety_truth": false,
+  "human_review_required": true
+}

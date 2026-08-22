@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -25,6 +26,7 @@ HEAT_COLORS = {
     "very_high": "#fdae61",
     "extreme": "#d7191c",
 }
+MAX_ROUTE_BASE_HEATMAP_SEGMENT_M = 80.0
 
 
 def build_calibrated_risk_heatmap(
@@ -36,6 +38,7 @@ def build_calibrated_risk_heatmap(
     route_risk_path = Path(route_risk_path)
     diagnostic_path = Path(risk_attribution_diagnostic_path)
     route_points = load_route_risk_points(route_risk_path)
+    route_base = _route_risk_route_base_metadata(route_risk_path)
     diagnostic = json.loads(diagnostic_path.read_text(encoding="utf-8"))
     formula = diagnostic["factor_analysis"]["formula_candidate"]
     terms = tuple(formula.get("terms", []))
@@ -58,6 +61,13 @@ def build_calibrated_risk_heatmap(
     skipped_pair_count = 0
     for start, end in zip(scored_points, scored_points[1:]):
         if start["route_id"] != end["route_id"]:
+            skipped_pair_count += 1
+            continue
+        if not route_risk_points_can_connect(
+            start,
+            end,
+            max_segment_m=MAX_ROUTE_BASE_HEATMAP_SEGMENT_M,
+        ):
             skipped_pair_count += 1
             continue
         score = max(start["calibrated_score"], end["calibrated_score"])
@@ -127,6 +137,7 @@ def build_calibrated_risk_heatmap(
         "source_sample_count": len(scored_points),
         "segment_count": len(features),
         "skipped_pair_count": skipped_pair_count,
+        "max_route_base_segment_m": MAX_ROUTE_BASE_HEATMAP_SEGMENT_M,
         "warning_cp_overlay_count": len(warning_proposals),
         "style": {
             bucket: {"stroke": color}
@@ -144,6 +155,8 @@ def build_calibrated_risk_heatmap(
             ],
         },
     }
+    if route_base:
+        metadata["route_base"] = route_base
     return {
         "type": "FeatureCollection",
         "metadata": metadata,
@@ -153,6 +166,15 @@ def build_calibrated_risk_heatmap(
             point_by_sample_id=point_by_sample_id,
         ),
     }
+
+
+def _route_risk_route_base_metadata(route_risk_path: Path) -> dict[str, Any]:
+    try:
+        payload = json.loads(route_risk_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    route_base = (payload.get("metadata") or {}).get("route_base")
+    return route_base if isinstance(route_base, dict) else {}
 
 
 def scored_route_point(
@@ -181,7 +203,40 @@ def scored_route_point(
             dimension: _optional_float(point.properties.get(dimension))
             for dimension in RISK_DIMENSIONS
         },
+        "route_base_source": point.properties.get("route_base_source"),
+        "route_base_feature_id": point.properties.get("route_base_feature_id"),
+        "route_base_projection_distance_m": _optional_float(
+            point.properties.get("route_base_projection_distance_m")
+        ),
     }
+
+
+def route_risk_points_can_connect(
+    start: dict[str, Any],
+    end: dict[str, Any],
+    *,
+    max_segment_m: float,
+) -> bool:
+    start_source = start.get("route_base_source")
+    end_source = end.get("route_base_source")
+    if start_source is None and end_source is None:
+        return True
+    if start_source != "overpass_projection" or end_source != "overpass_projection":
+        return False
+    return _haversine_m(start["lat"], start["lon"], end["lat"], end["lon"]) <= max_segment_m
+
+
+def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    earth_radius_m = 6_371_000.0
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    dphi = math.radians(lat2 - lat1)
+    dlambda = math.radians(lon2 - lon1)
+    h = (
+        math.sin(dphi / 2) ** 2
+        + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
+    )
+    return earth_radius_m * 2 * math.atan2(math.sqrt(h), math.sqrt(1 - h))
 
 
 def heat_thresholds(scores: Sequence[float] | Any) -> dict[str, float]:
@@ -345,26 +400,27 @@ def update_workspace_project_refs(
     if not project_path.exists():
         return
     project = json.loads(project_path.read_text(encoding="utf-8"))
-    project["calibrated_risk_heatmap_ref"] = _workspace_ref(workspace, heatmap_path)
-    project["calibrated_risk_heatmap_metadata_ref"] = _workspace_ref(
+    updated = dict(project)
+    updated["calibrated_risk_heatmap_ref"] = _workspace_ref(workspace, heatmap_path)
+    updated["calibrated_risk_heatmap_metadata_ref"] = _workspace_ref(
         workspace,
         metadata_path,
     )
     if preview_path is not None and preview_path.exists():
-        project["calibrated_risk_heatmap_preview_ref"] = _workspace_ref(
+        updated["calibrated_risk_heatmap_preview_ref"] = _workspace_ref(
             workspace,
             preview_path,
         )
     else:
-        project.pop("calibrated_risk_heatmap_preview_ref", None)
-    project["calibrated_risk_heatmap_segment_count"] = heatmap["metadata"][
+        updated.pop("calibrated_risk_heatmap_preview_ref", None)
+    updated["calibrated_risk_heatmap_segment_count"] = heatmap["metadata"][
         "segment_count"
     ]
-    project["calibrated_risk_heatmap_warning_cp_overlay_count"] = heatmap[
+    updated["calibrated_risk_heatmap_warning_cp_overlay_count"] = heatmap[
         "metadata"
     ]["warning_cp_overlay_count"]
     project_path.write_text(
-        json.dumps(project, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        json.dumps(updated, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",
     )
 

@@ -111,15 +111,59 @@ The smoke command uses `PydanticScoutAgentProvider` and Pydantic AI's local
 outputs without requiring cloud credentials. Pass `--model ...` only when an
 external Pydantic AI model provider is configured in the environment.
 
-For OpenRouter, put `OPENROUTER_API_KEY=...` in the repo-local `.env` file.
+Scout pins Pi runtimes to Pydantic AI v2.4.0. The Scout provider keeps
+`end_strategy="early"` so model output cannot cause additional same-turn tool
+execution after the typed Scout output is produced.
+
+For NVIDIA-hosted models, put `NVIDIA_API_KEY=...` in the repo-local `.env`
+file and select `SCOUT_AI_OS_MODEL=z-ai/glm-5.2`. Scout routes that model to
+the NVIDIA OpenAI-compatible endpoint while preserving the provider model id
+`z-ai/glm-5.2` in the outbound request. For OpenRouter, put
+`OPENROUTER_API_KEY=...` in `.env` and use `openrouter:<vendor/model>`, for
+example `openrouter:z-ai/glm-5.2`.
 The smoke command loads `<repo-root>/.env` by default and reports only whether
 the key is present, never the key value. Model selection precedence is
 `--model`, then `SCOUT_AI_OS_MODEL`, then local `FunctionModel`. Common aliases
-such as `gpt-4o-mini` and `gemma3-27b` normalize to OpenRouter model strings:
+such as `nemotron-super`, `glm-5.2`, `gpt-4o-mini`, and `gemma3-27b` normalize
+to model strings:
 
 ```bash
-./venv/bin/scout-ai-os-pydantic-smoke --model openrouter:openai/gpt-4o-mini
+./venv/bin/scout-ai-os-pydantic-smoke --model nemotron-super
+./venv/bin/scout-ai-os-pydantic-smoke --model z-ai/glm-5.2
 ```
+
+For direct OpenAI, use `openai-chat:<model>` or the compatibility alias
+`openai:<model>`. Scout normalizes `openai:` to `openai-chat:` because Pydantic
+AI v2 uses the OpenAI Responses API for the raw `openai:` model string, while
+Scout's current tool and typed-output contract is Chat-Completions-like. Direct
+OpenAI calls require `OPENAI_API_KEY`; NVIDIA calls require `NVIDIA_API_KEY`;
+OpenRouter calls require `OPENROUTER_API_KEY`.
+
+Scout AI model paths always expose trusted, no-per-query-approval WebSearch and
+WebFetch. Legacy disable values such as the following are accepted for rollout
+compatibility but cannot remove the capabilities:
+
+```bash
+SCOUT_AI_OS_NATIVE_RESEARCH=0
+SCOUT_AI_OS_NATIVE_WEB_SEARCH=0
+SCOUT_AI_OS_NATIVE_WEB_FETCH=0
+```
+
+Operators may raise the per-attempt research capacity, but cannot lower it below
+the Scout 10/10 construction budget:
+
+```bash
+SCOUT_AI_OS_NATIVE_RESEARCH_MAX_SEARCHES=10
+SCOUT_AI_OS_NATIVE_RESEARCH_MAX_FETCHES=10
+```
+
+Cloud providers receive Pydantic AI capabilities directly. Local and AI HAT+2
+paths use the same server-side search/fetch adapters when the model cannot
+execute provider-native tools. Native research output is candidate-only
+assistant evidence. It must not mutate
+Scout Phase 1 L0-L4 safety truth, hardware controls, outbound transports, or
+`/safety/*`. Provider-native MCP remains off until a separate connector and
+Pydantic AI optional dependency are added.
 
 If an external model is selected but its required credential is missing, the
 smoke command returns `model_config_blocked` without calling the provider.

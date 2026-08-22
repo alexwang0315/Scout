@@ -8,6 +8,7 @@ from pathlib import Path
 
 from scout_energy_baseline import build_energy_reserve_baseline, internal_load_score
 from scout_energy_models import load_wearable_activity_summary, load_wearable_activity_summaries
+from scout_energy_reserve import build_energy_reserve_explanation
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -63,6 +64,7 @@ class ScoutEnergyReserveTests(unittest.TestCase):
         self.assertGreater(route_family.route_effort_units_p50, 0)
         self.assertGreater(route_family.moving_time_per_effort_p50, 0)
         self.assertEqual(route_family.confidence, "medium")
+        self.assertIn("altitude", " ".join(route_family.limitations))
         self.assertEqual(baseline.reserve_trend.current_band, "rest_suggested")
         self.assertGreater(baseline.reserve_trend.acute_load_ratio, 1.5)
         self.assertEqual(baseline.data_quality.missing_hr_seconds, 900)
@@ -73,6 +75,29 @@ class ScoutEnergyReserveTests(unittest.TestCase):
         self.assertIn("route_family_profiles", payload)
         self.assertNotIn("/safety/", json.dumps(payload))
         self.assertNotIn("<trkpt", json.dumps(payload))
+
+    def test_energy_explanation_is_not_route_approval_or_medical_condition_inference(self):
+        activities = load_wearable_activity_summaries(FIXTURES, root=ROOT)
+        baseline = build_energy_reserve_baseline(activities, reference_date=date(2026, 5, 27))
+
+        explanation = build_energy_reserve_explanation(baseline)
+        payload = explanation.model_dump(mode="json")
+        cues = " ".join(explanation.advisory_cues)
+
+        self.assertEqual(explanation.source_provider, "mixed_wearable_activity_summaries")
+        self.assertEqual(explanation.source_path, "aggregate:tests/fixtures/wearables")
+        self.assertEqual(len(explanation.sha256), 64)
+        self.assertIn("not route approval", cues)
+        self.assertIn("GPX or structured route review", cues)
+        self.assertIn("retreat-gate planning", cues)
+        self.assertIn("single video recommendation", cues)
+        self.assertIn("medical diagnosis", explanation.forbidden_interpretations)
+        self.assertIn("medical condition inference", explanation.forbidden_interpretations)
+        self.assertNotIn("dehydr", json.dumps(payload).lower())
+        self.assertNotIn("arrhythm", json.dumps(payload).lower())
+        self.assertNotIn("overtraining", json.dumps(payload).lower())
+        self.assertFalse(payload["boundary"]["medical_diagnosis"])
+        self.assertFalse(payload["boundary"]["phase1_runtime_safety_truth"])
 
     def test_route_family_profiles_require_minimum_family_history(self):
         activity = load_wearable_activity_summary(FIXTURES[0], root=ROOT)

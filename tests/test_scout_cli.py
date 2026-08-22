@@ -6,12 +6,35 @@ from pathlib import Path
 
 from scout_agent_trace import load_agent_trace
 from scout_cli import run_scout_cli
+from pretrip_contextual_permission_collection import CONTEXTUAL_PERMISSION_RULES_REF
+from pretrip_navigation_terrain_collection import OFFLINE_MAP_MANIFEST_REF
+from pretrip_pace_fit_collection import PACE_COEFFICIENTS_REF, TEAM_PACE_FIT_REF
+from pretrip_boss_point_synthesis import BOSS_POINTS_REF
+from pretrip_route_architecture_collection import ROUTE_ARCHITECTURE_REF
+from pretrip_route_context_collection import (
+    ROUTE_CONTEXT_BRIEFING_REF,
+    ROUTE_CONTEXT_CRAWL_SEED_PLAN_REF,
+    ROUTE_CONTEXT_PACK_REF,
+    ROUTE_CONTEXT_POINTS_REF,
+)
+from pretrip_weather_decision_collection import (
+    ROUTE_WEATHER_PACKAGE_REF,
+    WEATHER_DECISION_CANDIDATES_REF,
+)
 from tests.test_admin_local_raster_source import _write_sample_geotiff
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CHILAI_PROJECT = (
     REPO_ROOT / "tests" / "fixtures" / "pretrip" / "projects" / "chilai_nanhua_day1"
+)
+POST_ANALYSIS_OUTPUTS = (
+    REPO_ROOT
+    / "tests"
+    / "fixtures"
+    / "post_analysis"
+    / "chilai_nanhua_day1_post_analysis"
+    / "outputs"
 )
 
 
@@ -394,6 +417,576 @@ def test_scout_pretrip_read_only_facades_expose_manifest_readiness_and_register(
     register_output = json.loads(register_payload["outputs"]["stdout"])
     assert register_output["summary"]["resolved_count"] == 16
     assert register_output["boundary"]["runtime_activation_allowed"] is False
+
+
+def test_scout_pretrip_route_context_collect_facade(tmp_path: Path) -> None:
+    project_root = tmp_path / "chilai_nanhua_day1"
+    shutil.copytree(CHILAI_PROJECT, project_root)
+    route_context_points_path = project_root / ROUTE_CONTEXT_POINTS_REF
+    existing_route_context_points = (
+        route_context_points_path.read_text(encoding="utf-8")
+        if route_context_points_path.exists()
+        else None
+    )
+
+    dry_exit, dry_payload = run_scout_cli(
+        [
+            "pretrip",
+            "route-context-collect",
+            "--project-root",
+            str(project_root),
+            "--limit-route-notes",
+            "8",
+            "--route-keyword",
+            "奇萊-南華",
+            "--dry-run",
+            "--json",
+        ]
+    )
+    assert dry_exit == 0
+    dry_output = json.loads(dry_payload["outputs"]["stdout"])
+    assert dry_output["result"]["writes_performed"] is False
+    if existing_route_context_points is None:
+        assert not route_context_points_path.exists()
+    else:
+        assert route_context_points_path.read_text(
+            encoding="utf-8"
+        ) == existing_route_context_points
+
+    exit_code, payload = run_scout_cli(
+        [
+            "pretrip",
+            "route-context-collect",
+            "--project-root",
+            str(project_root),
+            "--limit-route-notes",
+            "8",
+            "--route-keyword",
+            "奇萊-南華",
+            "--authorized-by",
+            "operator.alex",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    output = json.loads(payload["outputs"]["stdout"])
+    assert output["artifact_kind"] == "scout_pretrip_route_context_collect_tool_output"
+    assert output["result"]["writes_performed"] is True
+    assert output["result"]["crawl_seed_count"] > output["result"]["route_context_point_count"]
+    assert (project_root / ROUTE_CONTEXT_PACK_REF).is_file()
+    assert (project_root / ROUTE_CONTEXT_CRAWL_SEED_PLAN_REF).is_file()
+    assert (project_root / ROUTE_CONTEXT_BRIEFING_REF).is_file()
+    assert (project_root / ROUTE_CONTEXT_POINTS_REF).is_file()
+
+
+def test_scout_pretrip_raster_label_adapter_facade(tmp_path: Path) -> None:
+    project_root = tmp_path / "chilai_nanhua_day1"
+    shutil.copytree(CHILAI_PROJECT, project_root)
+    source = project_root / "outputs" / "layers" / "raw" / "cli_ocr_labels.json"
+    source.parent.mkdir(parents=True, exist_ok=True)
+    source.write_text(
+        json.dumps(
+            {
+                "labels": [
+                    {
+                        "id": "ocr.cli.k.006",
+                        "label_text": "6K",
+                        "lat": 24.0533,
+                        "lon": 121.2442,
+                        "source_ref": "rudy_twmap.cli_fixture",
+                        "source_image_hash": "sha256:cli-fixture-k",
+                        "confidence": 0.8,
+                    }
+                ]
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    output_ref = "outputs/layers/normalized/raster_label_cli_test.geojson"
+    manifest_ref = "outputs/layers/raster_label_cli_test_manifest.json"
+
+    dry_exit, dry_payload = run_scout_cli(
+        [
+            "pretrip",
+            "raster-label-adapter",
+            "--project-root",
+            str(project_root),
+            "--source",
+            str(source),
+            "--output-ref",
+            output_ref,
+            "--manifest-ref",
+            manifest_ref,
+            "--dry-run",
+            "--json",
+        ]
+    )
+    assert dry_exit == 0
+    dry_output = json.loads(dry_payload["outputs"]["stdout"])
+    assert dry_output["result"]["writes_performed"] is False
+    assert not (project_root / output_ref).exists()
+
+    exit_code, payload = run_scout_cli(
+        [
+            "pretrip",
+            "raster-label-adapter",
+            "--project-root",
+            str(project_root),
+            "--source",
+            str(source),
+            "--output-ref",
+            output_ref,
+            "--manifest-ref",
+            manifest_ref,
+            "--authorized-by",
+            "operator.alex",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    output = json.loads(payload["outputs"]["stdout"])
+    assert output["artifact_kind"] == "scout_pretrip_raster_label_adapter_tool_output"
+    assert output["result"]["feature_count"] == 1
+    assert output["boundary"]["live_ocr_or_vision_performed"] is False
+    project = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
+    assert project["raster_label_evidence_ref"] == output_ref
+    evidence = json.loads((project_root / output_ref).read_text(encoding="utf-8"))
+    assert evidence["features"][0]["properties"]["normalized_mileage_k"] == "6K"
+
+
+def test_scout_pretrip_route_architecture_collect_facade(tmp_path: Path) -> None:
+    project_root = tmp_path / "chilai_nanhua_day1"
+    shutil.copytree(CHILAI_PROJECT, project_root)
+
+    dry_exit, dry_payload = run_scout_cli(
+        [
+            "pretrip",
+            "route-architecture-collect",
+            "--project-root",
+            str(project_root),
+            "--limit",
+            "8",
+            "--dry-run",
+            "--json",
+        ]
+    )
+    assert dry_exit == 0
+    dry_output = json.loads(dry_payload["outputs"]["stdout"])
+    assert dry_output["result"]["writes_performed"] is False
+    assert not (project_root / ROUTE_ARCHITECTURE_REF).exists()
+
+    exit_code, payload = run_scout_cli(
+        [
+            "pretrip",
+            "route-architecture-collect",
+            "--project-root",
+            str(project_root),
+            "--current-time",
+            "2013-10-08T15:05:00+08:00",
+            "--limit",
+            "8",
+            "--authorized-by",
+            "operator.alex",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    output = json.loads(payload["outputs"]["stdout"])
+    assert output["artifact_kind"] == "scout_pretrip_route_architecture_collect_tool_output"
+    assert output["result"]["decision"] == "CHANGE_PLAN"
+    assert output["result"]["writes_performed"] is True
+    assert (project_root / ROUTE_ARCHITECTURE_REF).is_file()
+
+
+def test_scout_pretrip_pace_fit_collect_facade(tmp_path: Path) -> None:
+    project_root = tmp_path / "chilai_nanhua_day1"
+    shutil.copytree(CHILAI_PROJECT, project_root)
+    team_members_json = json.dumps(
+        [
+            {
+                "member_id": "leader",
+                "display_label": "Leader",
+                "pace_mps": 1.15,
+                "reserve_minutes": 55,
+                "fatigue_band": "normal",
+            },
+            {
+                "member_id": "teammate",
+                "display_label": "New teammate",
+                "pace_mps": 0.58,
+                "reserve_minutes": 8,
+                "fatigue_band": "tired",
+                "rest_need_minutes": 12,
+                "first_time_similar_route": True,
+                "conditions": ["sleep_debt", "knee_pain"],
+            },
+        ],
+        ensure_ascii=False,
+    )
+
+    dry_exit, dry_payload = run_scout_cli(
+        [
+            "pretrip",
+            "pace-fit-collect",
+            "--project-root",
+            str(project_root),
+            "--team-members-json",
+            team_members_json,
+            "--minutes-to-next-cp",
+            "24",
+            "--current-delay-minutes",
+            "22",
+            "--leader-accepts-slowest-basis",
+            "false",
+            "--team-rest-sync",
+            "mismatched",
+            "--dry-run",
+            "--json",
+        ]
+    )
+    assert dry_exit == 0
+    dry_output = json.loads(dry_payload["outputs"]["stdout"])
+    assert dry_output["result"]["writes_performed"] is False
+    assert not (project_root / TEAM_PACE_FIT_REF).exists()
+
+    exit_code, payload = run_scout_cli(
+        [
+            "pretrip",
+            "pace-fit-collect",
+            "--project-root",
+            str(project_root),
+            "--team-members-json",
+            team_members_json,
+            "--minutes-to-next-cp",
+            "24",
+            "--current-delay-minutes",
+            "22",
+            "--leader-accepts-slowest-basis",
+            "false",
+            "--team-rest-sync",
+            "mismatched",
+            "--authorized-by",
+            "operator.alex",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    output = json.loads(payload["outputs"]["stdout"])
+    assert output["artifact_kind"] == "scout_pretrip_pace_fit_collect_tool_output"
+    assert output["result"]["decision"] == "CHANGE_PLAN"
+    assert output["result"]["writes_performed"] is True
+    assert output["result"]["member_count"] == 2
+    assert output["result"]["boundary"]["average_pace_used"] is False
+    assert (project_root / TEAM_PACE_FIT_REF).is_file()
+
+
+def test_scout_pretrip_pace_fit_collect_builds_from_capability(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "chilai_nanhua_day1"
+    shutil.copytree(CHILAI_PROJECT, project_root)
+    _copy_post_analysis_outputs(project_root)
+
+    exit_code, payload = run_scout_cli(
+        [
+            "pretrip",
+            "pace-fit-collect",
+            "--project-root",
+            str(project_root),
+            "--build-from-capability",
+            "--member-id",
+            "alex",
+            "--display-label",
+            "Alex",
+            "--pack-weight-kg",
+            "12",
+            "--weather-impact-ratio",
+            "0.18",
+            "--authorized-by",
+            "operator.alex",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    output = json.loads(payload["outputs"]["stdout"])
+    assert output["artifact_kind"] == "scout_pretrip_pace_fit_collect_tool_output"
+    assert output["result"]["writes_performed"] is True
+    assert output["result"]["member_count"] == 1
+    assert output["result"]["coefficient_builder"]["status"] == "completed"
+    coefficients = json.loads((project_root / PACE_COEFFICIENTS_REF).read_text())
+    assert coefficients["member_coefficients"][0]["member_id"] == "alex"
+    assert coefficients["member_coefficients"][0]["load_impact_ratio"] == 0.09
+    assert (project_root / TEAM_PACE_FIT_REF).is_file()
+
+
+def test_scout_pretrip_boss_points_synthesize_facade(tmp_path: Path) -> None:
+    project_root = tmp_path / "chilai_nanhua_day1"
+    shutil.copytree(CHILAI_PROJECT, project_root)
+
+    dry_exit, dry_payload = run_scout_cli(
+        [
+            "pretrip",
+            "boss-points-synthesize",
+            "--project-root",
+            str(project_root),
+            "--dry-run",
+            "--json",
+        ]
+    )
+    assert dry_exit == 0
+    dry_output = json.loads(dry_payload["outputs"]["stdout"])
+    assert dry_output["result"]["boss_point_count"] == 5
+    assert dry_output["result"]["boundary"]["workspace_file_mutation_allowed"] is False
+    assert not (project_root / BOSS_POINTS_REF).exists()
+
+    exit_code, payload = run_scout_cli(
+        [
+            "pretrip",
+            "boss-points-synthesize",
+            "--project-root",
+            str(project_root),
+            "--slow-passage-min-span-m",
+            "500",
+            "--pressure-profile-bin-m",
+            "500",
+            "--authorized-by",
+            "operator.alex",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    output = json.loads(payload["outputs"]["stdout"])
+    assert output["artifact_kind"] == "scout_pretrip_boss_points_synthesize_tool_output"
+    assert output["result"]["policy"]["slow_passage_min_span_m"] == 500.0
+    assert output["result"]["policy"]["pressure_profile_bin_m"] == 500.0
+    assert output["result"]["route_pressure_profile_summary"]["sample_count"] > 0
+    assert output["result"]["boss_points"][0]["display_theme"]["alias"] == "呂布關"
+    assert output["result"]["boss_points"][0]["label"].startswith("高壓路段")
+    assert output["result"]["challenge_fit_summary"]["decision"] == (
+        "CHANGE_PLAN_OR_ADD_BUFFER"
+    )
+    assert (project_root / BOSS_POINTS_REF).is_file()
+
+
+def test_scout_pretrip_navigation_terrain_collect_facade(tmp_path: Path) -> None:
+    project_root = tmp_path / "chilai_nanhua_day1"
+    shutil.copytree(CHILAI_PROJECT, project_root)
+
+    dry_exit, dry_payload = run_scout_cli(
+        [
+            "pretrip",
+            "navigation-terrain-collect",
+            "--project-root",
+            str(project_root),
+            "--offline-map-downloaded",
+            "false",
+            "--gpx-loaded-on-device",
+            "false",
+            "--contour-skill-confirmed",
+            "false",
+            "--terrain-feature-skill-confirmed",
+            "false",
+            "--junction-points-known",
+            "false",
+            "--retreat-direction-understood",
+            "false",
+            "--backup-positioning-available",
+            "false",
+            "--terrain-risk-layers-understood",
+            "false",
+            "--team-map-user-count",
+            "1",
+            "--dry-run",
+            "--json",
+        ]
+    )
+    assert dry_exit == 0
+    dry_output = json.loads(dry_payload["outputs"]["stdout"])
+    assert dry_output["result"]["writes_performed"] is False
+    assert not (project_root / OFFLINE_MAP_MANIFEST_REF).exists()
+
+    exit_code, payload = run_scout_cli(
+        [
+            "pretrip",
+            "navigation-terrain-collect",
+            "--project-root",
+            str(project_root),
+            "--offline-map-downloaded",
+            "false",
+            "--gpx-loaded-on-device",
+            "false",
+            "--contour-skill-confirmed",
+            "false",
+            "--terrain-feature-skill-confirmed",
+            "false",
+            "--junction-points-known",
+            "false",
+            "--retreat-direction-understood",
+            "false",
+            "--backup-positioning-available",
+            "false",
+            "--terrain-risk-layers-understood",
+            "false",
+            "--team-map-user-count",
+            "1",
+            "--authorized-by",
+            "operator.alex",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    output = json.loads(payload["outputs"]["stdout"])
+    assert output["artifact_kind"] == (
+        "scout_pretrip_navigation_terrain_collect_tool_output"
+    )
+    assert output["result"]["decision"] == "GUIDED_ONLY"
+    assert output["result"]["writes_performed"] is True
+    assert output["result"]["map_readiness"]["junction_points_known"] is False
+    assert (
+        output["result"]["map_readiness"]["terrain_risk_layers_understood"] is False
+    )
+    assert output["result"]["boundary"]["live_sensor_read_allowed"] is False
+    assert (project_root / OFFLINE_MAP_MANIFEST_REF).is_file()
+
+
+def test_scout_pretrip_weather_decision_collect_facade(tmp_path: Path) -> None:
+    project_root = tmp_path / "chilai_nanhua_day1"
+    shutil.copytree(CHILAI_PROJECT, project_root)
+    weather_points = project_root / "normalized" / "weather" / "forecast_snapshots.json"
+    weather_points.parent.mkdir(parents=True, exist_ok=True)
+    weather_points.write_text(
+        json.dumps(
+            [
+                {
+                    "source": "fixture_cwa_forecast",
+                    "source_run_id": "cwa.fixture.cli",
+                    "validFrom": "2099-06-08T04:00:00+08:00",
+                    "validTo": "2099-06-08T07:00:00+08:00",
+                    "areaName": "仁愛鄉",
+                    "weatherText": "午後雷陣雨",
+                    "rainProbability": 80,
+                    "rainfallMm": 18,
+                    "windSpeedMps": 12,
+                }
+            ],
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    dry_exit, dry_payload = run_scout_cli(
+        [
+            "pretrip",
+            "weather-decision-collect",
+            "--project-root",
+            str(project_root),
+            "--weather-points",
+            "normalized/weather/forecast_snapshots.json",
+            "--default-township",
+            "仁愛鄉",
+            "--generated-at",
+            "2099-06-07T08:00:00Z",
+            "--valid-until",
+            "2099-06-10T08:00:00Z",
+            "--dry-run",
+            "--json",
+        ]
+    )
+    assert dry_exit == 0
+    dry_output = json.loads(dry_payload["outputs"]["stdout"])
+    assert dry_output["result"]["writes_performed"] is False
+    assert not (project_root / ROUTE_WEATHER_PACKAGE_REF).exists()
+
+    exit_code, payload = run_scout_cli(
+        [
+            "pretrip",
+            "weather-decision-collect",
+            "--project-root",
+            str(project_root),
+            "--weather-points",
+            "normalized/weather/forecast_snapshots.json",
+            "--default-township",
+            "仁愛鄉",
+            "--generated-at",
+            "2099-06-07T08:00:00Z",
+            "--valid-until",
+            "2099-06-10T08:00:00Z",
+            "--authorized-by",
+            "operator.alex",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    output = json.loads(payload["outputs"]["stdout"])
+    assert output["artifact_kind"] == (
+        "scout_pretrip_weather_decision_collect_tool_output"
+    )
+    assert output["result"]["decision"] == "CHANGE_PLAN"
+    assert output["result"]["writes_performed"] is True
+    assert (project_root / ROUTE_WEATHER_PACKAGE_REF).is_file()
+    assert (project_root / WEATHER_DECISION_CANDIDATES_REF).is_file()
+
+
+def test_scout_pretrip_contextual_permission_collect_facade(tmp_path: Path) -> None:
+    project_root = tmp_path / "chilai_nanhua_day1"
+    shutil.copytree(CHILAI_PROJECT, project_root)
+
+    dry_exit, dry_payload = run_scout_cli(
+        [
+            "pretrip",
+            "contextual-permission-collect",
+            "--project-root",
+            str(project_root),
+            "--remaining-safety-buffer-minutes",
+            "90",
+            "--current-time",
+            "2026-06-07T13:36:00+08:00",
+            "--next-cp-id",
+            "CP4",
+            "--dry-run",
+            "--json",
+        ]
+    )
+    assert dry_exit == 0
+    dry_output = json.loads(dry_payload["outputs"]["stdout"])
+    assert dry_output["result"]["writes_performed"] is False
+    assert not (project_root / CONTEXTUAL_PERMISSION_RULES_REF).exists()
+
+    exit_code, payload = run_scout_cli(
+        [
+            "pretrip",
+            "contextual-permission-collect",
+            "--project-root",
+            str(project_root),
+            "--remaining-safety-buffer-minutes",
+            "90",
+            "--current-time",
+            "2026-06-07T13:36:00+08:00",
+            "--next-cp-id",
+            "CP4",
+            "--authorized-by",
+            "operator.alex",
+            "--json",
+        ]
+    )
+
+    assert exit_code == 0
+    output = json.loads(payload["outputs"]["stdout"])
+    assert output["artifact_kind"] == (
+        "scout_pretrip_contextual_permission_collect_tool_output"
+    )
+    assert output["result"]["writes_performed"] is True
+    assert output["result"]["bounded_permission_count"] >= 4
+    assert (project_root / CONTEXTUAL_PERMISSION_RULES_REF).is_file()
 
 
 def test_scout_cp_apply_reviewed_delta_facade(tmp_path: Path) -> None:
@@ -973,6 +1566,16 @@ def _write_runtime_export_inputs(tmp_path: Path) -> tuple[Path, Path, Path]:
     final_graph_path.write_text(final_graph.to_json(), encoding="utf-8")
     handoff_path.write_text(handoff.to_json(), encoding="utf-8")
     return project_root, final_graph_path, handoff_path
+
+
+def _copy_post_analysis_outputs(project_root: Path) -> None:
+    outputs = project_root / "outputs"
+    outputs.mkdir(parents=True, exist_ok=True)
+    for filename in (
+        "capability_timeline.json",
+        "capability_route_time_comparison.json",
+    ):
+        shutil.copy2(POST_ANALYSIS_OUTPUTS / filename, outputs / filename)
 
 
 def _write_runtime_handoff_inputs(tmp_path: Path) -> tuple[Path, Path, Path, Path, Path]:

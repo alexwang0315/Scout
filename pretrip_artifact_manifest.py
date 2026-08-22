@@ -53,6 +53,38 @@ PROJECT_ARTIFACTS: tuple[tuple[str, str], ...] = (
     ("contour_interpretation_candidates", "contour_interpretation_candidates_ref"),
 )
 
+OPTIONAL_PROJECT_ARTIFACTS: tuple[tuple[str, str], ...] = (
+    ("route_context_evidence", "route_context_evidence_ref"),
+    ("route_context_source_manifest", "route_context_source_manifest_ref"),
+    ("route_context_pack", "route_context_pack_ref"),
+    ("route_context_crawl_seed_plan", "route_context_crawl_seed_plan_ref"),
+    ("route_context_media_manifest", "route_context_media_manifest_ref"),
+    ("route_context_briefing", "route_context_briefing_ref"),
+    ("route_context_points", "route_context_points_ref"),
+    ("route_architecture", "route_architecture_ref"),
+    ("pace_coefficients", "pace_coefficients_ref"),
+    ("team_pace_fit", "team_pace_fit_ref"),
+    ("route_pressure_profile", "route_pressure_profile_ref"),
+    ("route_pressure_profile_geojson", "route_pressure_profile_geojson_ref"),
+    ("boss_points", "boss_points_ref"),
+    ("boss_points_geojson", "boss_points_geojson_ref"),
+    ("offline_map_manifest", "offline_map_manifest_ref"),
+    ("ins_dr_readiness", "ins_dr_readiness_ref"),
+    ("route_weather_package", "route_weather_package_ref"),
+    ("route_weather_risk_package", "route_weather_risk_package_ref"),
+    ("route_weather_lora_alert", "route_weather_lora_alert_ref"),
+    ("cwa_imagery_registry", "cwa_imagery_registry_ref"),
+    ("cwa_radar_frames_manifest", "cwa_radar_frames_manifest_ref"),
+    ("cwa_satellite_frames_manifest", "cwa_satellite_frames_manifest_ref"),
+    ("cwa_weather_imagery_manifest", "cwa_weather_imagery_manifest_ref"),
+    ("route_imagery_sampling", "route_imagery_sampling_ref"),
+    ("radar_motion_estimate", "radar_motion_estimate_ref"),
+    ("weather_source_manifest", "weather_source_manifest_ref"),
+    ("weather_decision_candidates", "weather_decision_candidates_ref"),
+    ("contextual_permission_model", "contextual_permission_model_ref"),
+    ("contextual_permission_rules", "contextual_permission_rules_ref"),
+)
+
 
 @dataclass(frozen=True)
 class PreTripArtifactManifest:
@@ -84,6 +116,11 @@ def build_pretrip_artifact_manifest(project_json_path: Path | str) -> PreTripArt
         _project_artifact_entry(project_root, project, artifact_kind, ref_key)
         for artifact_kind, ref_key in PROJECT_ARTIFACTS
     ]
+    artifacts.extend(
+        _project_artifact_entry(project_root, project, artifact_kind, ref_key)
+        for artifact_kind, ref_key in OPTIONAL_PROJECT_ARTIFACTS
+        if project.get(ref_key)
+    )
 
     package_entry = next(
         entry for entry in artifacts if entry["artifact_kind"] == "pretrip_package"
@@ -92,7 +129,9 @@ def build_pretrip_artifact_manifest(project_json_path: Path | str) -> PreTripArt
 
     counts = {
         "total_artifacts": len(artifacts),
-        "project_artifacts": len(PROJECT_ARTIFACTS),
+        "project_artifacts": sum(
+            1 for artifact in artifacts if artifact.get("source") == "project"
+        ),
         "source_artifacts": sum(
             1 for artifact in artifacts if artifact.get("source") == "pretrip_package"
         ),
@@ -134,6 +173,16 @@ def _project_artifact_entry(
         return entry
 
     entry["sha256"] = _sha256_file(artifact_path)
+    if artifact_kind == "route_context_briefing":
+        entry.update(
+            {
+                "content_type": "text/html",
+                "size_bytes": artifact_path.stat().st_size,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        )
+        return entry
     payload = _load_json(artifact_path)
     entry.update(_project_artifact_summary(artifact_kind, payload))
     return entry
@@ -228,6 +277,450 @@ def _project_artifact_summary(artifact_kind: str, payload: Any) -> dict[str, Any
             "review_options_only": boundary.get("review_options_only"),
             "decision_recording_allowed": boundary.get("decision_recording_allowed"),
             "raw_gpx_embedded": boundary.get("raw_gpx_embedded"),
+        }
+
+    if artifact_kind == "route_context_evidence":
+        counts = payload.get("counts", {})
+        boundary = payload.get("boundary", {})
+        return {
+            "project_id": payload.get("project_id"),
+            "schema_version": payload.get("schema_version"),
+            "route_context_point_count": counts.get("route_context_point_count"),
+            "source_report_count": len(payload.get("source_report", [])),
+            "route_context_points_ref": payload.get("route_context_points_ref"),
+            "source_manifest_ref": payload.get("source_manifest_ref"),
+            "route_context_pack_ref": payload.get("route_context_pack_ref"),
+            "candidate_only": boundary.get("candidate_only"),
+            "runtime_safety_truth": boundary.get("runtime_safety_truth"),
+            "live_safety_api_calls_allowed": boundary.get(
+                "live_safety_api_calls_allowed"
+            ),
+        }
+
+    if artifact_kind == "route_context_source_manifest":
+        cache_policy = payload.get("cache_policy", {})
+        boundary = payload.get("boundary", {})
+        return {
+            "project_id": payload.get("project_id"),
+            "schema_version": payload.get("schema_version"),
+            "source_report_count": len(payload.get("source_report", [])),
+            "required_missing_source_count": len(
+                payload.get("required_missing_source_kinds", [])
+            ),
+            "optional_missing_source_count": len(
+                payload.get("optional_missing_source_kinds", [])
+            ),
+            "cache_mode": cache_policy.get("mode"),
+            "network_refresh_required": cache_policy.get(
+                "network_refresh_required"
+            ),
+            "cache_only_answer_allowed": cache_policy.get(
+                "cache_only_answer_allowed"
+            ),
+            "live_source_refresh_status": cache_policy.get(
+                "live_source_refresh_status"
+            ),
+            "candidate_only": boundary.get("candidate_only"),
+            "runtime_safety_truth": boundary.get("runtime_safety_truth"),
+        }
+
+    if artifact_kind == "route_context_pack":
+        route_summary = payload.get("route_summary", {})
+        query_policy = payload.get("query_policy", {})
+        boundary = payload.get("boundary", {})
+        return {
+            "project_id": payload.get("project_id"),
+            "schema_version": payload.get("schema_version"),
+            "point_count": payload.get("point_count"),
+            "route_context_points_ref": payload.get("route_context_points_ref"),
+            "source_manifest_ref": payload.get("source_manifest_ref"),
+            "route_summary_ref": payload.get("route_summary_ref"),
+            "route_distance_m": route_summary.get("distance_m"),
+            "raw_route_points_embedded": route_summary.get(
+                "raw_route_points_embedded"
+            ),
+            "query_mode": query_policy.get("mode"),
+            "stop_or_delay_advice_requires_contextual_permission": query_policy.get(
+                "stop_or_delay_advice_requires_contextual_permission"
+            ),
+            "candidate_only": boundary.get("candidate_only"),
+            "runtime_safety_truth": boundary.get("runtime_safety_truth"),
+        }
+
+    if artifact_kind == "route_context_crawl_seed_plan":
+        seed_policy = payload.get("route_note_seed_policy", {})
+        boundary = payload.get("boundary", {})
+        return {
+            "project_id": payload.get("project_id"),
+            "schema_version": payload.get("schema_version"),
+            "seed_count": payload.get("seed_count"),
+            "route_note_seed_count": payload.get("route_note_seed_count"),
+            "route_keywords": payload.get("route_keywords"),
+            "source_tier_count": len(payload.get("source_tiers", [])),
+            "route_notes_are_conclusion": seed_policy.get("route_notes_are_conclusion"),
+            "route_notes_are_seed_material": seed_policy.get(
+                "route_notes_are_seed_material"
+            ),
+            "route_note_point_policy": seed_policy.get("route_note_point_policy"),
+            "candidate_only": boundary.get("candidate_only"),
+            "runtime_safety_truth": boundary.get("runtime_safety_truth"),
+        }
+
+    if artifact_kind == "route_context_media_manifest":
+        boundary = payload.get("boundary", {})
+        image_curation = payload.get("image_curation", {})
+        visual_readiness = payload.get("visual_readiness", {})
+        if not isinstance(visual_readiness, dict):
+            visual_readiness = {}
+        return {
+            "project_id": payload.get("project_id"),
+            "schema_version": payload.get("schema_version"),
+            "media_count": payload.get("media_count"),
+            "available_media_count": payload.get("available_media_count"),
+            "duplicate_media_count": payload.get("duplicate_media_count"),
+            "overflow_media_count": payload.get("overflow_media_count"),
+            "anchored_media_count": payload.get("anchored_media_count"),
+            "route_point_media_count": payload.get("route_point_media_count"),
+            "gallery_image_count": len(payload.get("gallery_images", [])),
+            "image_coverage_status": image_curation.get("coverage_status"),
+            "visual_readiness_status": visual_readiness.get("status"),
+            "visual_readiness_label": visual_readiness.get("label"),
+            "visual_quality_gate": visual_readiness.get("quality_gate"),
+            "missing_image_count_to_target": visual_readiness.get(
+                "missing_image_count_to_target"
+            ),
+            "target_min_gallery_images": image_curation.get("target_min_gallery_images"),
+            "target_max_gallery_images": image_curation.get("target_max_gallery_images"),
+            "missing_context_layers": image_curation.get("missing_context_layers"),
+            "has_hero_image": bool(payload.get("hero_image")),
+            "raw_image_embedded": boundary.get("raw_image_embedded"),
+            "candidate_only": boundary.get("candidate_only"),
+            "runtime_safety_truth": boundary.get("runtime_safety_truth"),
+        }
+
+    if artifact_kind == "route_context_points":
+        counts = payload.get("counts", {})
+        boundary = payload.get("boundary", {})
+        return {
+            "project_id": payload.get("project_id"),
+            "schema_version": payload.get("schema_version"),
+            "point_count": payload.get("point_count"),
+            "by_sec6_layer": counts.get("by_sec6_layer"),
+            "by_sensitivity_level": counts.get("by_sensitivity_level"),
+            "by_stop_advisory_candidate": counts.get(
+                "by_stop_advisory_candidate"
+            ),
+            "candidate_only": boundary.get("candidate_only"),
+            "runtime_safety_truth": boundary.get("runtime_safety_truth"),
+        }
+
+    if artifact_kind == "route_architecture":
+        counts = payload.get("counts", {})
+        boundary = payload.get("boundary", {})
+        route_architecture = payload.get("route_architecture", {})
+        route_decision = payload.get("route_decision", {})
+        cp_graph = payload.get("cp_graph", {})
+        return {
+            "project_id": payload.get("project_id"),
+            "schema_version": payload.get("schema_version"),
+            "decision": payload.get("decision"),
+            "answerability": payload.get("answerability"),
+            "route_type": route_architecture.get("route_type")
+            if isinstance(route_architecture, dict)
+            else None,
+            "checkpoint_count": counts.get("checkpoint_count"),
+            "segment_count": counts.get("segment_count"),
+            "hard_point_count": counts.get("hard_point_count"),
+            "retreat_option_count": counts.get("retreat_option_count"),
+            "alternative_plan_option_count": counts.get(
+                "alternative_plan_option_count"
+            ),
+            "next_action": route_decision.get("next_action")
+            if isinstance(route_decision, dict)
+            else None,
+            "raw_route_geometry_embedded": cp_graph.get("raw_route_geometry_embedded")
+            if isinstance(cp_graph, dict)
+            else None,
+            "candidate_only": boundary.get("candidate_only"),
+            "runtime_safety_truth": boundary.get("runtime_safety_truth"),
+        }
+
+    if artifact_kind == "pace_coefficients":
+        counts = payload.get("counts", {})
+        boundary = payload.get("boundary", {})
+        return {
+            "project_id": payload.get("project_id"),
+            "schema_version": payload.get("schema_version"),
+            "status": payload.get("status"),
+            "coefficient_schema_count": payload.get("coefficient_schema_count"),
+            "member_coefficient_count": counts.get("member_coefficient_count"),
+            "missing_field_count": counts.get("missing_field_count"),
+            "candidate_only": boundary.get("candidate_only"),
+            "runtime_safety_truth": boundary.get("runtime_safety_truth"),
+            "average_pace_used": boundary.get("average_pace_used"),
+        }
+
+    if artifact_kind == "team_pace_fit":
+        counts = payload.get("counts", {})
+        boundary = payload.get("boundary", {})
+        pace_fit = payload.get("team_pace_fit", {})
+        pace_guardian = payload.get("pace_guardian", {})
+        return {
+            "project_id": payload.get("project_id"),
+            "schema_version": payload.get("schema_version"),
+            "decision": payload.get("decision"),
+            "answerability": payload.get("answerability"),
+            "member_count": counts.get("member_count"),
+            "members_with_pace_count": counts.get("members_with_pace_count"),
+            "vulnerable_member_count": counts.get("vulnerable_member_count"),
+            "missing_field_count": counts.get("missing_field_count"),
+            "pace_gap_ratio": pace_fit.get("pace_gap_ratio")
+            if isinstance(pace_fit, dict)
+            else None,
+            "average_pace_used": pace_guardian.get("average_pace_used")
+            if isinstance(pace_guardian, dict)
+            else boundary.get("average_pace_used"),
+            "human_review_required": payload.get("human_review_required"),
+            "candidate_only": boundary.get("candidate_only"),
+            "runtime_safety_truth": boundary.get("runtime_safety_truth"),
+        }
+
+    if artifact_kind == "boss_points":
+        boundary = payload.get("boundary", {})
+        challenge = payload.get("challenge_fit_summary", {})
+        pressure = payload.get("route_pressure_profile_summary", {})
+        return {
+            "project_id": payload.get("project_id"),
+            "schema_version": payload.get("schema_version"),
+            "status": payload.get("status"),
+            "boss_point_count": payload.get("boss_point_count"),
+            "route_pressure_sample_count": pressure.get("sample_count")
+            if isinstance(pressure, dict)
+            else None,
+            "route_pressure_peak_count": pressure.get("peak_count")
+            if isinstance(pressure, dict)
+            else None,
+            "decision": challenge.get("decision")
+            if isinstance(challenge, dict)
+            else None,
+            "highest_challenge_fit_score": challenge.get(
+                "highest_challenge_fit_score"
+            )
+            if isinstance(challenge, dict)
+            else None,
+            "candidate_only": boundary.get("candidate_only"),
+            "runtime_safety_truth": boundary.get("runtime_safety_truth"),
+            "average_pace_used": boundary.get("average_pace_used"),
+        }
+
+    if artifact_kind == "route_pressure_profile":
+        boundary = payload.get("boundary", {})
+        counts = payload.get("counts", {})
+        summary = payload.get("summary", {})
+        return {
+            "project_id": payload.get("project_id"),
+            "schema_version": payload.get("schema_version"),
+            "sample_count": counts.get("sample_count")
+            if isinstance(counts, dict)
+            else None,
+            "peak_count": counts.get("peak_count") if isinstance(counts, dict) else None,
+            "highest_route_pressure_score": summary.get(
+                "highest_route_pressure_score"
+            )
+            if isinstance(summary, dict)
+            else None,
+            "candidate_only": boundary.get("candidate_only"),
+            "runtime_safety_truth": boundary.get("runtime_safety_truth"),
+        }
+
+    if artifact_kind == "route_pressure_profile_geojson":
+        metadata = payload.get("metadata", {})
+        return {
+            "project_id": metadata.get("project_id")
+            if isinstance(metadata, dict)
+            else None,
+            "feature_count": len(payload.get("features", [])),
+            "candidate_only": metadata.get("candidate_only")
+            if isinstance(metadata, dict)
+            else None,
+            "runtime_safety_truth": metadata.get("runtime_safety_truth")
+            if isinstance(metadata, dict)
+            else None,
+        }
+
+    if artifact_kind == "boss_points_geojson":
+        metadata = payload.get("metadata", {})
+        return {
+            "project_id": metadata.get("project_id")
+            if isinstance(metadata, dict)
+            else None,
+            "feature_count": len(payload.get("features", [])),
+            "candidate_only": metadata.get("candidate_only")
+            if isinstance(metadata, dict)
+            else None,
+            "runtime_safety_truth": metadata.get("runtime_safety_truth")
+            if isinstance(metadata, dict)
+            else None,
+        }
+
+    if artifact_kind == "offline_map_manifest":
+        boundary = payload.get("boundary", {})
+        map_readiness = payload.get("map_readiness", {})
+        terrain_readiness = payload.get("terrain_readiness", {})
+        demand = payload.get("navigation_demand", {})
+        return {
+            "project_id": payload.get("project_id"),
+            "schema_version": payload.get("schema_version"),
+            "decision": payload.get("decision"),
+            "answerability": payload.get("answerability"),
+            "navigation_demand_level": demand.get("demand_level")
+            if isinstance(demand, dict)
+            else None,
+            "offline_map_downloaded": map_readiness.get("offline_map_downloaded")
+            if isinstance(map_readiness, dict)
+            else None,
+            "gpx_loaded_on_device": map_readiness.get("gpx_loaded_on_device")
+            if isinstance(map_readiness, dict)
+            else None,
+            "risk_layers_available": map_readiness.get("risk_layers_available")
+            if isinstance(map_readiness, dict)
+            else None,
+            "terrain_layers_available": map_readiness.get("terrain_layers_available")
+            if isinstance(map_readiness, dict)
+            else None,
+            "risk_ribbon_segment_count": terrain_readiness.get(
+                "risk_ribbon_segment_count"
+            )
+            if isinstance(terrain_readiness, dict)
+            else None,
+            "human_review_required": payload.get("human_review_required"),
+            "candidate_only": boundary.get("candidate_only"),
+            "runtime_safety_truth": boundary.get("runtime_safety_truth"),
+        }
+
+    if artifact_kind == "ins_dr_readiness":
+        boundary = payload.get("boundary", {})
+        positioning = payload.get("positioning_readiness", {})
+        map_skill = payload.get("map_skill_readiness", {})
+        return {
+            "project_id": payload.get("project_id"),
+            "schema_version": payload.get("schema_version"),
+            "decision": payload.get("decision"),
+            "answerability": payload.get("answerability"),
+            "backup_positioning_available": positioning.get(
+                "backup_positioning_available"
+            )
+            if isinstance(positioning, dict)
+            else None,
+            "team_map_user_count": positioning.get("team_map_user_count")
+            if isinstance(positioning, dict)
+            else None,
+            "live_sensor_probe_performed": positioning.get(
+                "live_sensor_probe_performed"
+            )
+            if isinstance(positioning, dict)
+            else None,
+            "contour_skill_confirmed": map_skill.get("contour_skill_confirmed")
+            if isinstance(map_skill, dict)
+            else None,
+            "human_review_required": payload.get("human_review_required"),
+            "candidate_only": boundary.get("candidate_only"),
+            "runtime_safety_truth": boundary.get("runtime_safety_truth"),
+        }
+
+    if artifact_kind == "route_weather_package":
+        return {
+            "route_id": payload.get("routeId") or payload.get("route_id"),
+            "status": payload.get("status"),
+            "provider": payload.get("provider"),
+            "issued_at": payload.get("issued_at"),
+            "valid_from": payload.get("valid_from") or payload.get("validFrom"),
+            "valid_to": payload.get("valid_to") or payload.get("validTo"),
+            "ttl_s": payload.get("ttl_s"),
+            "segment_count": len(payload.get("segments", [])),
+            "wx_alert_count": len(payload.get("wx_alerts", [])),
+            "human_review_required": payload.get("human_review_required"),
+            "authoritative_weather_computed": payload.get(
+                "authoritative_weather_computed"
+            ),
+            "external_api_calls_made": payload.get("external_api_calls_made"),
+            "runtime_safety_truth": payload.get("boundary", {}).get(
+                "runtime_safety_truth"
+            ),
+            "candidate_only": payload.get("boundary", {}).get("candidate_only"),
+        }
+
+    if artifact_kind == "weather_source_manifest":
+        cache_policy = payload.get("cache_policy", {})
+        boundary = payload.get("boundary", {})
+        return {
+            "project_id": payload.get("project_id"),
+            "schema_version": payload.get("schema_version"),
+            "source_report_count": len(payload.get("source_report", [])),
+            "required_missing_source_count": len(
+                payload.get("required_missing_source_kinds", [])
+            ),
+            "optional_missing_source_count": len(
+                payload.get("optional_missing_source_kinds", [])
+            ),
+            "cache_mode": cache_policy.get("mode"),
+            "live_fetch_performed": cache_policy.get("live_fetch_performed"),
+            "client_cwa_api_key_allowed": cache_policy.get(
+                "client_cwa_api_key_allowed"
+            ),
+            "candidate_only": boundary.get("candidate_only"),
+            "runtime_safety_truth": boundary.get("runtime_safety_truth"),
+        }
+
+    if artifact_kind == "weather_decision_candidates":
+        counts = payload.get("counts", {})
+        boundary = payload.get("boundary", {})
+        candidates = payload.get("candidates", [])
+        first = candidates[0] if candidates and isinstance(candidates[0], dict) else {}
+        return {
+            "project_id": payload.get("project_id"),
+            "schema_version": payload.get("schema_version"),
+            "candidate_count": counts.get("candidate_count"),
+            "missing_field_count": counts.get("missing_field_count"),
+            "warning_count": counts.get("warning_count"),
+            "wx_alert_count": counts.get("wx_alert_count"),
+            "first_decision": first.get("decision"),
+            "first_answerability": first.get("answerability"),
+            "human_review_required": first.get("human_review_required"),
+            "candidate_only": boundary.get("candidate_only"),
+            "runtime_safety_truth": boundary.get("runtime_safety_truth"),
+        }
+
+    if artifact_kind == "contextual_permission_model":
+        boundary = payload.get("boundary", {})
+        return {
+            "project_id": payload.get("project_id"),
+            "schema_version": payload.get("schema_version"),
+            "supported_action_count": len(payload.get("supported_actions", [])),
+            "input_signal_count": payload.get("input_signal_count"),
+            "source_report_count": len(payload.get("source_report", [])),
+            "rules_ref": payload.get("rules_ref"),
+            "decision_object_schema": payload.get("decision_object_schema"),
+            "candidate_only": boundary.get("candidate_only"),
+            "runtime_safety_truth": boundary.get("runtime_safety_truth"),
+        }
+
+    if artifact_kind == "contextual_permission_rules":
+        counts = payload.get("counts", {})
+        boundary = payload.get("boundary", {})
+        return {
+            "project_id": payload.get("project_id"),
+            "schema_version": payload.get("schema_version"),
+            "rule_count": counts.get("rule_count"),
+            "allowed_count": counts.get("allowed_count"),
+            "bounded_permission_count": counts.get("bounded_permission_count"),
+            "no_go_count": counts.get("no_go_count"),
+            "change_plan_count": counts.get("change_plan_count"),
+            "escalate_count": counts.get("escalate_count"),
+            "missing_field_count": counts.get("missing_field_count"),
+            "human_review_required": payload.get("human_review_required"),
+            "candidate_only": boundary.get("candidate_only"),
+            "runtime_safety_truth": boundary.get("runtime_safety_truth"),
         }
 
     if artifact_kind == "route_comparison":

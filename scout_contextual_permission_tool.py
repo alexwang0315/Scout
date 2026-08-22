@@ -1,0 +1,2903 @@
+from __future__ import annotations
+
+import json
+import re
+from datetime import datetime, timedelta
+from enum import StrEnum
+from math import floor
+from pathlib import Path
+from typing import Any, Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+
+CONTEXTUAL_PERMISSION_TOOL_ID = "scout.ai.contextual_permission.assess.v0"
+CONTEXTUAL_PERMISSION_OUTPUT_KIND = "scout_ai_contextual_permission_tool_output"
+CONTEXTUAL_PERMISSION_REQUIRED_FIELDS = ("project_root",)
+CONTEXTUAL_PERMISSION_OPTIONAL_FIELDS = (
+    "action",
+    "current_time",
+    "current_cp_id",
+    "next_cp_id",
+    "minutes_to_next_cp",
+    "remaining_safety_buffer_minutes",
+    "requested_duration_minutes",
+    "current_delay_minutes",
+    "next_segment_uncertainty_minutes",
+    "weather_reserve_minutes",
+    "daylight_reserve_minutes",
+    "retreat_reserve_minutes",
+    "slowest_member_reserve_minutes",
+    "weather_window_impact",
+    "daylight_impact",
+    "retreat_impact",
+    "fatigue_impact",
+    "team_pace_impact",
+    "location_constraint",
+    "terrain_risk_level",
+    "communication_status",
+    "equipment_status",
+    "confidence",
+    "planned_eta_path",
+    "weather_daylight_evidence_path",
+    "plan_validation_path",
+    "energy_vitals_path",
+    "team_status_path",
+)
+
+
+class ScoutDecision(StrEnum):
+    GO = "GO"
+    CONDITIONAL_GO = "CONDITIONAL_GO"
+    GUIDED_ONLY = "GUIDED_ONLY"
+    CHANGE_PLAN = "CHANGE_PLAN"
+    DELAY = "DELAY"
+    NO_GO = "NO_GO"
+    ESCALATE = "ESCALATE"
+
+
+class ConfidenceLevel(StrEnum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+
+class OutdoorAction(StrEnum):
+    STOP = "stop"
+    FILM = "film"
+    TRIPOD = "tripod"
+    PHOTO = "photo"
+    REST = "rest"
+    LUNCH = "lunch"
+    SUMMIT = "summit"
+    REROUTE = "reroute"
+    WAIT = "wait"
+    WAIT_TEAMMATE = "wait_teammate"
+    CONTINUE = "continue"
+    RETREAT = "retreat"
+    WEAR_RAIN_GEAR = "wear_rain_gear"
+    SPLIT_TEAM = "split_team"
+    CROSS_STREAM = "cross_stream"
+    ENTER_EXPOSED_SECTION = "enter_exposed_section"
+
+
+class ScoutContextualBaseModel(BaseModel):
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        use_enum_values=True,
+    )
+
+
+class ContextualPermissionCost(ScoutContextualBaseModel):
+    time_buffer_change_minutes: int | None = Field(
+        default=None,
+        alias="timeBufferChangeMinutes",
+    )
+    weather_window_impact: str | None = Field(
+        default=None,
+        alias="weatherWindowImpact",
+    )
+    daylight_impact: str | None = Field(default=None, alias="daylightImpact")
+    retreat_impact: str | None = Field(default=None, alias="retreatImpact")
+    fatigue_impact: str | None = Field(default=None, alias="fatigueImpact")
+    team_pace_impact: str | None = Field(default=None, alias="teamPaceImpact")
+    attention_budget_impact: str | None = Field(
+        default=None,
+        alias="attentionBudgetImpact",
+    )
+    media_experience_budget_impact: str | None = Field(
+        default=None,
+        alias="mediaExperienceBudgetImpact",
+    )
+    risk_budget_impact: str | None = Field(default=None, alias="riskBudgetImpact")
+
+
+class ContextualPermission(ScoutContextualBaseModel):
+    action: OutdoorAction
+    decision: ScoutDecision
+    allowed: bool
+    max_duration_minutes: int | None = Field(
+        default=None,
+        ge=0,
+        alias="maxDurationMinutes",
+    )
+    leave_by: str | None = Field(default=None, alias="leaveBy")
+    location_constraint: str | None = Field(default=None, alias="locationConstraint")
+    main_reasons: list[str] = Field(default_factory=list, alias="mainReasons")
+    cost: ContextualPermissionCost | None = None
+    next_action: str = Field(min_length=1, alias="nextAction")
+    confidence: ConfidenceLevel
+    uncertainty_notes: list[str] = Field(
+        default_factory=list,
+        alias="uncertaintyNotes",
+    )
+    residual_risk: list[str] = Field(default_factory=list, alias="residualRisk")
+    required_conditions: list[str] = Field(
+        default_factory=list,
+        alias="requiredConditions",
+    )
+    alternative_actions: list[str] = Field(
+        default_factory=list,
+        alias="alternativeActions",
+    )
+
+
+class DecisionOutputFirstLayer(ScoutContextualBaseModel):
+    decision: str = Field(min_length=1)
+    limit: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+    next_step: str = Field(min_length=1, alias="nextStep")
+
+
+class DecisionOutputSecondLayer(ScoutContextualBaseModel):
+    details: list[str] = Field(default_factory=list)
+    uncertainty_notes: list[str] = Field(
+        default_factory=list,
+        alias="uncertaintyNotes",
+    )
+    residual_risk: list[str] = Field(default_factory=list, alias="residualRisk")
+    required_conditions: list[str] = Field(
+        default_factory=list,
+        alias="requiredConditions",
+    )
+    alternative_actions: list[str] = Field(
+        default_factory=list,
+        alias="alternativeActions",
+    )
+
+
+class ScoutDecisionOutput(ScoutContextualBaseModel):
+    role: Literal["Micro-Decision Agent"] = "Micro-Decision Agent"
+    format: Literal["SCOUT_OUTDOOR_AI_AGENT_STANDARD.section16"] = (
+        "SCOUT_OUTDOOR_AI_AGENT_STANDARD.section16"
+    )
+    decision_object_schema: Literal["ContextualPermission"] = Field(
+        default="ContextualPermission",
+        alias="decisionObjectSchema",
+    )
+    action: OutdoorAction
+    decision: ScoutDecision
+    allowed: bool
+    max_duration_minutes: int | None = Field(
+        default=None,
+        ge=0,
+        alias="maxDurationMinutes",
+    )
+    leave_by: str | None = Field(default=None, alias="leaveBy")
+    location_constraint: str | None = Field(default=None, alias="locationConstraint")
+    cost: ContextualPermissionCost | None = None
+    main_reasons: list[str] = Field(default_factory=list, alias="mainReasons")
+    next_action: str = Field(min_length=1, alias="nextAction")
+    confidence: ConfidenceLevel
+    uncertainty_notes: list[str] = Field(
+        default_factory=list,
+        alias="uncertaintyNotes",
+    )
+    residual_risk: list[str] = Field(default_factory=list, alias="residualRisk")
+    required_conditions: list[str] = Field(
+        default_factory=list,
+        alias="requiredConditions",
+    )
+    alternative_actions: list[str] = Field(
+        default_factory=list,
+        alias="alternativeActions",
+    )
+    text: str = Field(min_length=1)
+    first_layer: DecisionOutputFirstLayer = Field(alias="firstLayer")
+    second_layer: DecisionOutputSecondLayer = Field(alias="secondLayer")
+    standard_alignment: list[str] = Field(
+        default_factory=list,
+        alias="standardAlignment",
+    )
+    runtime_safety_truth: Literal[False] = Field(
+        default=False,
+        alias="runtimeSafetyTruth",
+    )
+
+
+class RiskBudget(ScoutContextualBaseModel):
+    remaining_safety_buffer_minutes: float | None = Field(
+        default=None,
+        alias="remainingSafetyBufferMinutes",
+    )
+    requested_duration_minutes: float | None = Field(
+        default=None,
+        alias="requestedDurationMinutes",
+    )
+    current_delay_minutes: float = Field(default=0.0, alias="currentDelayMinutes")
+    next_segment_uncertainty_minutes: float = Field(
+        default=0.0,
+        alias="nextSegmentUncertaintyMinutes",
+    )
+    weather_reserve_minutes: float = Field(
+        default=0.0,
+        alias="weatherReserveMinutes",
+    )
+    daylight_reserve_minutes: float = Field(
+        default=0.0,
+        alias="daylightReserveMinutes",
+    )
+    retreat_reserve_minutes: float = Field(
+        default=0.0,
+        alias="retreatReserveMinutes",
+    )
+    slowest_member_reserve_minutes: float = Field(
+        default=0.0,
+        alias="slowestMemberReserveMinutes",
+    )
+    authorized_duration_minutes: int = Field(
+        default=0,
+        alias="authorizedDurationMinutes",
+    )
+    buffer_after_action_minutes: int | None = Field(
+        default=None,
+        alias="bufferAfterActionMinutes",
+    )
+
+
+_BUDGET_ACTIONS = {
+    OutdoorAction.STOP,
+    OutdoorAction.FILM,
+    OutdoorAction.TRIPOD,
+    OutdoorAction.PHOTO,
+    OutdoorAction.REST,
+    OutdoorAction.LUNCH,
+    OutdoorAction.SUMMIT,
+    OutdoorAction.REROUTE,
+    OutdoorAction.WAIT,
+    OutdoorAction.WAIT_TEAMMATE,
+    OutdoorAction.CROSS_STREAM,
+    OutdoorAction.ENTER_EXPOSED_SECTION,
+}
+
+_LOCATION_SENSITIVE_ACTIONS = _BUDGET_ACTIONS | {
+    OutdoorAction.CONTINUE,
+    OutdoorAction.RETREAT,
+}
+
+_EXPOSED_MEDIA_PRESSURE_ACTIONS = {
+    OutdoorAction.STOP,
+    OutdoorAction.FILM,
+    OutdoorAction.TRIPOD,
+    OutdoorAction.PHOTO,
+    OutdoorAction.REROUTE,
+    OutdoorAction.WAIT,
+}
+
+_DEFAULT_DURATION_BY_ACTION = {
+    OutdoorAction.STOP: 6,
+    OutdoorAction.FILM: 6,
+    OutdoorAction.TRIPOD: 4,
+    OutdoorAction.PHOTO: 5,
+    OutdoorAction.REST: 8,
+    OutdoorAction.LUNCH: 20,
+    OutdoorAction.SUMMIT: 30,
+    OutdoorAction.REROUTE: 12,
+    OutdoorAction.WAIT: 5,
+    OutdoorAction.WAIT_TEAMMATE: 5,
+    OutdoorAction.SPLIT_TEAM: 0,
+    OutdoorAction.CROSS_STREAM: 0,
+    OutdoorAction.ENTER_EXPOSED_SECTION: 0,
+    OutdoorAction.RETREAT: 0,
+    OutdoorAction.WEAR_RAIN_GEAR: 2,
+}
+
+_MINIMUM_USEFUL_DURATION_BY_ACTION = {
+    OutdoorAction.STOP: 1,
+    OutdoorAction.FILM: 2,
+    OutdoorAction.TRIPOD: 2,
+    OutdoorAction.PHOTO: 2,
+    OutdoorAction.REST: 3,
+    OutdoorAction.LUNCH: 12,
+    OutdoorAction.SUMMIT: 25,
+    OutdoorAction.REROUTE: 8,
+    OutdoorAction.WAIT: 1,
+    OutdoorAction.WAIT_TEAMMATE: 1,
+}
+
+_HIGH_RISK_LEVELS = {"high", "very_high", "critical", "severe", "extreme"}
+_CRITICAL_RISK_LEVELS = {"critical", "severe", "extreme"}
+DEFAULT_UNREVIEWED_WEATHER_RESERVE_MINUTES = 15
+DEFAULT_UNREVIEWED_SEGMENT_POLICY_RESERVE_MINUTES = 10
+DEFAULT_UNREVIEWED_DAYLIGHT_RESERVE_MINUTES = 60
+DEFAULT_ENERGY_MISSING_CORE_RESERVE_MINUTES = 10
+ENERGY_SLOW_DOWN_RESERVE_MINUTES = 5
+ENERGY_REST_SUGGESTED_RESERVE_MINUTES = 10
+ENERGY_MANUAL_CHECK_RESERVE_MINUTES = 20
+
+
+def assess_scout_contextual_permission(
+    project_root: Path | str,
+    *,
+    query: str = "",
+    action: str | None = None,
+    current_time: str | None = None,
+    current_cp_id: str | None = None,
+    next_cp_id: str | None = None,
+    minutes_to_next_cp: float | int | str | None = None,
+    remaining_safety_buffer_minutes: float | int | str | None = None,
+    requested_duration_minutes: float | int | str | None = None,
+    current_delay_minutes: float | int | str | None = None,
+    next_segment_uncertainty_minutes: float | int | str | None = None,
+    weather_reserve_minutes: float | int | str | None = None,
+    daylight_reserve_minutes: float | int | str | None = None,
+    retreat_reserve_minutes: float | int | str | None = None,
+    slowest_member_reserve_minutes: float | int | str | None = None,
+    weather_window_impact: str | None = None,
+    daylight_impact: str | None = None,
+    retreat_impact: str | None = None,
+    fatigue_impact: str | None = None,
+    team_pace_impact: str | None = None,
+    location_constraint: str | None = None,
+    terrain_risk_level: str | None = None,
+    communication_status: str | None = None,
+    equipment_status: str | None = None,
+    confidence: str | None = None,
+    planned_eta_path: str | None = None,
+    weather_daylight_evidence_path: str | None = None,
+    plan_validation_path: str | None = None,
+    energy_vitals_path: str | None = None,
+    team_status_path: str | None = None,
+) -> dict[str, Any]:
+    root = Path(project_root)
+    project = _load_project(root)
+    project_id = str(project.get("project_id") or project.get("id") or root.name)
+    resolved_action = _resolve_action(action, query)
+    if requested_duration_minutes is None:
+        requested_duration_minutes = _requested_duration_from_query(query)
+    if minutes_to_next_cp is None:
+        minutes_to_next_cp = _minutes_to_next_cp_from_query(query)
+    minutes_to_next_cp_value = _float_or_none(minutes_to_next_cp)
+    derived_budget_source = _derive_risk_budget_source(
+        root,
+        project=project,
+        current_time=current_time,
+        next_cp_id=next_cp_id,
+        planned_eta_path=planned_eta_path,
+    )
+    if remaining_safety_buffer_minutes is None and derived_budget_source:
+        remaining_safety_buffer_minutes = derived_budget_source[
+            "remaining_safety_buffer_minutes"
+        ]
+        if current_delay_minutes is None:
+            current_delay_minutes = derived_budget_source["current_delay_minutes"]
+        if next_cp_id is None:
+            next_cp_id = str(derived_budget_source["next_cp_id"])
+    workspace_reserve_source = _derive_workspace_reserve_source(
+        root,
+        project=project,
+        enabled=derived_budget_source is not None,
+        weather_daylight_evidence_path=weather_daylight_evidence_path,
+        plan_validation_path=plan_validation_path,
+        energy_vitals_path=energy_vitals_path,
+        team_status_path=team_status_path,
+    )
+    if derived_budget_source is not None:
+        reserves = workspace_reserve_source.get("reserves", {})
+        if _float_or_none(next_segment_uncertainty_minutes) is None:
+            next_segment_uncertainty_minutes = reserves.get(
+                "next_segment_uncertainty_minutes"
+            )
+        if _float_or_none(weather_reserve_minutes) is None:
+            weather_reserve_minutes = reserves.get("weather_reserve_minutes")
+        if _float_or_none(daylight_reserve_minutes) is None:
+            daylight_reserve_minutes = reserves.get("daylight_reserve_minutes")
+        if _float_or_none(retreat_reserve_minutes) is None:
+            retreat_reserve_minutes = reserves.get("retreat_reserve_minutes")
+        if _float_or_none(slowest_member_reserve_minutes) is None:
+            slowest_member_reserve_minutes = reserves.get(
+                "slowest_member_reserve_minutes"
+            )
+    budget = _risk_budget(
+        remaining_safety_buffer_minutes=remaining_safety_buffer_minutes,
+        requested_duration_minutes=requested_duration_minutes,
+        current_delay_minutes=current_delay_minutes,
+        next_segment_uncertainty_minutes=next_segment_uncertainty_minutes,
+        weather_reserve_minutes=weather_reserve_minutes,
+        daylight_reserve_minutes=daylight_reserve_minutes,
+        retreat_reserve_minutes=retreat_reserve_minutes,
+        slowest_member_reserve_minutes=slowest_member_reserve_minutes,
+    )
+    missing_fields = _missing_fields(
+        action=resolved_action,
+        budget=budget,
+    )
+    permission = _permission(
+        action=resolved_action,
+        query=query,
+        current_time=current_time,
+        current_cp_id=current_cp_id,
+        next_cp_id=next_cp_id,
+        minutes_to_next_cp=minutes_to_next_cp_value,
+        budget=budget,
+        missing_fields=missing_fields,
+        requested_duration_minutes=_float_or_none(requested_duration_minutes),
+        terrain_risk_level=_normalized_risk_level(terrain_risk_level, query),
+        communication_status=communication_status,
+        equipment_status=equipment_status,
+        confidence=confidence,
+        weather_window_impact=weather_window_impact,
+        daylight_impact=daylight_impact,
+        retreat_impact=retreat_impact,
+        fatigue_impact=fatigue_impact,
+        team_pace_impact=team_pace_impact,
+        location_constraint=location_constraint,
+    )
+    permission_payload = permission.model_dump(
+        mode="json",
+        by_alias=True,
+        exclude_none=True,
+    )
+    budget_payload = budget.model_dump(mode="json", by_alias=True, exclude_none=True)
+    decision_output = _decision_output(permission, budget=budget)
+    decision_output_payload = decision_output.model_dump(
+        mode="json",
+        by_alias=True,
+        exclude_none=True,
+    )
+    field_answer = decision_output.text
+    answerability = (
+        "contextual_permission_missing_required_fields"
+        if missing_fields
+        else "contextual_permission_decision_available"
+    )
+    risk_budget_source = _risk_budget_source(
+        remaining_safety_buffer_minutes=remaining_safety_buffer_minutes,
+        derived_budget_source=derived_budget_source,
+        workspace_reserve_source=workspace_reserve_source,
+    )
+    warnings = _warnings(
+        missing_fields=missing_fields,
+        communication_status=communication_status,
+        equipment_status=equipment_status,
+        risk_budget_source=risk_budget_source,
+    )
+
+    return {
+        "tool_id": CONTEXTUAL_PERMISSION_TOOL_ID,
+        "status": "completed",
+        "project_id": project_id,
+        "query": query,
+        "assessment_kind": "read_only_contextual_permission",
+        "answerability": answerability,
+        "source_status": "candidate_only",
+        "decision": permission.decision,
+        "allowed": permission.allowed,
+        "action": permission.action,
+        "minutes_to_next_cp": minutes_to_next_cp_value,
+        "max_duration_minutes": permission.max_duration_minutes,
+        "leave_by": permission.leave_by,
+        "location_constraint": permission.location_constraint,
+        "field_answer": field_answer,
+        "contextual_permission": permission_payload,
+        "decision_object": permission_payload,
+        "decision_output": decision_output_payload,
+        "risk_budget": budget_payload,
+        "risk_budget_source": risk_budget_source,
+        "missing_fields": missing_fields,
+        "warnings": warnings,
+        "standard_alignment": [
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 4 decision vocabulary",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 8 Contextual Permissioning",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 7.3 Team Pace Fit",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 13 risk budget",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 13.1 conceptual formula",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 required decision output format",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 field answer format",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 17 ContextualPermission schema",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 23 acceptance criteria",
+        ],
+        "result_count": 1,
+        "results": [
+            {
+                "label": "contextual permission decision",
+                "action": permission.action,
+                "decision": permission.decision,
+                "allowed": permission.allowed,
+                "minutes_to_next_cp": minutes_to_next_cp_value,
+                "max_duration_minutes": permission.max_duration_minutes,
+                "leave_by": permission.leave_by,
+                "location_constraint": permission.location_constraint,
+                "field_answer": field_answer,
+                "decision_object": permission_payload,
+                "decision_output": decision_output_payload,
+                "answerability": answerability,
+                "confidence": permission.confidence,
+                "main_reasons": list(permission.main_reasons),
+                "next_action": permission.next_action,
+            }
+        ],
+        "boundary": _closed_boundary(),
+    }
+
+
+def _risk_budget(
+    *,
+    remaining_safety_buffer_minutes: float | int | str | None,
+    requested_duration_minutes: float | int | str | None,
+    current_delay_minutes: float | int | str | None,
+    next_segment_uncertainty_minutes: float | int | str | None,
+    weather_reserve_minutes: float | int | str | None,
+    daylight_reserve_minutes: float | int | str | None,
+    retreat_reserve_minutes: float | int | str | None,
+    slowest_member_reserve_minutes: float | int | str | None,
+) -> RiskBudget:
+    remaining = _float_or_none(remaining_safety_buffer_minutes)
+    next_uncertainty = _nonnegative_float(next_segment_uncertainty_minutes)
+    weather = _nonnegative_float(weather_reserve_minutes)
+    daylight = _nonnegative_float(daylight_reserve_minutes)
+    retreat = _nonnegative_float(retreat_reserve_minutes)
+    slowest = _nonnegative_float(slowest_member_reserve_minutes)
+    authorized = 0
+    if remaining is not None:
+        authorized = floor(
+            remaining - next_uncertainty - weather - daylight - retreat - slowest
+        )
+    return RiskBudget(
+        remaining_safety_buffer_minutes=remaining,
+        requested_duration_minutes=_float_or_none(requested_duration_minutes),
+        current_delay_minutes=_nonnegative_float(current_delay_minutes),
+        next_segment_uncertainty_minutes=next_uncertainty,
+        weather_reserve_minutes=weather,
+        daylight_reserve_minutes=daylight,
+        retreat_reserve_minutes=retreat,
+        slowest_member_reserve_minutes=slowest,
+        authorized_duration_minutes=max(0, authorized),
+    )
+
+
+def _permission(
+    *,
+    action: OutdoorAction,
+    query: str,
+    current_time: str | None,
+    current_cp_id: str | None,
+    next_cp_id: str | None,
+    minutes_to_next_cp: float | None,
+    budget: RiskBudget,
+    missing_fields: list[str],
+    requested_duration_minutes: float | None,
+    terrain_risk_level: str | None,
+    communication_status: str | None,
+    equipment_status: str | None,
+    confidence: str | None,
+    weather_window_impact: str | None,
+    daylight_impact: str | None,
+    retreat_impact: str | None,
+    fatigue_impact: str | None,
+    team_pace_impact: str | None,
+    location_constraint: str | None,
+) -> ContextualPermission:
+    if action == OutdoorAction.SPLIT_TEAM:
+        return _no_go_permission(
+            action=action,
+            decision=ScoutDecision.NO_GO,
+            reason=(
+                "不建議讓走得快的人先去山頂；"
+                "分隊會放大最慢者、通訊、撤退與事故回應風險。"
+            ),
+            next_action=(
+                "保持隊伍完整，以最慢或最脆弱成員為基準；"
+                "若仍想攻頂，改成全隊共同折返時間或放棄山頂。"
+            ),
+            confidence=_confidence(confidence, default=ConfidenceLevel.MEDIUM),
+            uncertainty_notes=_status_uncertainty_notes(
+                communication_status=communication_status,
+                equipment_status=equipment_status,
+            ),
+            alternative_actions=_alternative_actions(action, next_cp_id),
+        )
+
+    if action in _LOCATION_SENSITIVE_ACTIONS and _location_is_stale_or_unknown(
+        location_constraint=location_constraint,
+        retreat_impact=retreat_impact,
+    ):
+        return _no_go_permission(
+            action=action,
+            decision=ScoutDecision.DELAY,
+            reason=(
+                "GNSS/GPS 定位已過期或目前位置未知，無法判斷此處停留或移動的相對風險。"
+            ),
+            next_action=(
+                "先停止依賴特定 CP 的移動指示，重新取得 GNSS/GPS 定位並人工確認周邊；"
+                "定位恢復後再判斷停留或移動。"
+            ),
+            confidence=ConfidenceLevel.LOW,
+            uncertainty_notes=[
+                "current location must be refreshed before route-relative permission can be issued.",
+                "位置未知時不得把 workspace 的候選 CP 當成目前可前往的指示。",
+            ],
+            alternative_actions=["重新取得定位", "人工確認周邊地形與原路線位置"],
+        )
+
+    sheltered_distance_m = _sheltered_candidate_distance_m(retreat_impact)
+    if (
+        action in _LOCATION_SENSITIVE_ACTIONS
+        and sheltered_distance_m is not None
+        and _looks_like_exposed_stop_context(
+            terrain_risk_level=terrain_risk_level,
+            location_constraint=location_constraint,
+            weather_window_impact=weather_window_impact,
+        )
+    ):
+        return _no_go_permission(
+            action=action,
+            decision=ScoutDecision.CHANGE_PLAN,
+            reason=(
+                "目前位置為強風或曝露停留候選，原地停留不適合；"
+                "但證據指出前方仍有背風候選點。"
+            ),
+            next_action=(
+                f"不要在此停留；維持在已知路線走廊內，前往約 {sheltered_distance_m:g} 公尺外的"
+                "前方背風候選點，抵達後重新評估。"
+            ),
+            confidence=_confidence(confidence, default=ConfidenceLevel.MEDIUM),
+            uncertainty_notes=[
+                "背風位置仍是候選證據，抵達前不得視為已確認安全停留點。"
+            ],
+            alternative_actions=["縮短停留需求", "撤回最近已確認安全位置"],
+        )
+
+    if action == OutdoorAction.LUNCH and _looks_like_exposed_lunch_context(
+        query=query,
+        terrain_risk_level=terrain_risk_level,
+        location_constraint=location_constraint,
+        weather_window_impact=weather_window_impact,
+    ):
+        uncertainty_notes = _status_uncertainty_notes(
+            communication_status=communication_status,
+            equipment_status=equipment_status,
+        )
+        if missing_fields:
+            uncertainty_notes.extend(
+                [
+                    "remaining_safety_buffer_minutes is still required for any bounded lunch permission.",
+                    "風口午餐即使時間看似足夠，也不能只用 buffer 授權。",
+                ]
+            )
+        return _no_go_permission(
+            action=action,
+            decision=ScoutDecision.NO_GO,
+            reason=(
+                "此處為風口或曝露停留點，午餐停留會增加失溫與體力流失；"
+                "不能只因時間 buffer 足夠就授權。"
+            ),
+            next_action=_exposed_lunch_next_action(
+                next_cp_id,
+                minutes_to_next_cp=minutes_to_next_cp,
+            ),
+            confidence=_confidence(confidence, default=ConfidenceLevel.MEDIUM),
+            uncertainty_notes=uncertainty_notes,
+            alternative_actions=_alternative_actions(action, next_cp_id),
+        )
+
+    if _looks_like_exposed_media_pressure(
+        action=action,
+        query=query,
+        terrain_risk_level=terrain_risk_level,
+        location_constraint=location_constraint,
+    ):
+        uncertainty_notes = _status_uncertainty_notes(
+            communication_status=communication_status,
+            equipment_status=equipment_status,
+        )
+        if missing_fields:
+            uncertainty_notes.append(
+                "remaining_safety_buffer_minutes is still required before any "
+                "lower-risk photo stop could be reconsidered."
+            )
+        return _no_go_permission(
+            action=action,
+            decision=ScoutDecision.NO_GO,
+            reason=_exposed_media_reason(action),
+            next_action=_exposed_media_next_action(action),
+            confidence=_confidence(confidence, default=ConfidenceLevel.MEDIUM),
+            uncertainty_notes=uncertainty_notes,
+            alternative_actions=_alternative_actions(action, next_cp_id),
+        )
+
+    if _is_high_risk_action(action, terrain_risk_level, query):
+        decision = (
+            ScoutDecision.ESCALATE
+            if terrain_risk_level in _CRITICAL_RISK_LEVELS
+            or action == OutdoorAction.CROSS_STREAM
+            else ScoutDecision.NO_GO
+        )
+        return _no_go_permission(
+            action=action,
+            decision=decision,
+            reason=_high_risk_reason(action, terrain_risk_level),
+            next_action=_high_risk_next_action(action, next_cp_id),
+            confidence=_confidence(confidence, default=ConfidenceLevel.MEDIUM),
+            uncertainty_notes=_high_risk_uncertainty_notes(
+                missing_fields=missing_fields,
+                communication_status=communication_status,
+                equipment_status=equipment_status,
+            ),
+            alternative_actions=_alternative_actions(action, next_cp_id),
+        )
+
+    if action == OutdoorAction.CONTINUE and _looks_like_risk_sentinel_continue(query):
+        return _no_go_permission(
+            action=action,
+            decision=ScoutDecision.NO_GO,
+            reason=(
+                "缺少可追溯的前方路段風險、目前位置與撤退窗口證據，"
+                "Scout 不能授權快速通過或繼續推進。"
+            ),
+            next_action="先留在或退回最近安全 CP，補齊位置、路段風險與撤退窗口後再判斷。",
+            confidence=ConfidenceLevel.LOW,
+            uncertainty_notes=[
+                "Risk Sentinel requires route segment, location, retreat-window, and current-condition evidence.",
+                "資料不足時 Scout 依標準採保守判斷，不把快速通過當成安全授權。",
+            ],
+            alternative_actions=[
+                "退回最近安全 CP",
+                "等待領隊確認路段風險",
+                "改走已審核替代路線或撤退",
+            ],
+        )
+
+    if action == OutdoorAction.REROUTE and _looks_like_unreviewed_reroute(query):
+        return _no_go_permission(
+            action=action,
+            decision=ScoutDecision.NO_GO,
+            reason=(
+                "這是臨時切岔路或改線請求；缺少已審核替代路線、可靠目前位置與"
+                "CP Graph 對照時，Scout 不能授權離開原路線。"
+            ),
+            next_action=_safe_next_action(action, next_cp_id),
+            confidence=ConfidenceLevel.LOW,
+            uncertainty_notes=[
+                "reviewed_alternative_route, current_position, and CP Graph fit are required before reroute permission.",
+                "資料不足時 Scout 依標準採保守判斷，不把捷徑或支線當成可走路線。",
+            ],
+            alternative_actions=_alternative_actions(action, next_cp_id),
+        )
+
+    if missing_fields and action in _BUDGET_ACTIONS:
+        requested_cost = _requested_duration_cost(requested_duration_minutes)
+        reason = "缺少剩餘安全 buffer，Scout 不能授權會消耗風險預算的行為。"
+        if requested_cost is not None:
+            reason = (
+                f"使用者要求約 {requested_cost} 分鐘；"
+                f"這會消耗約 {requested_cost} 分鐘時間 buffer，"
+                "但缺少剩餘安全 buffer，Scout 不能計算代價或授權。"
+            )
+        return _no_go_permission(
+            action=action,
+            decision=ScoutDecision.NO_GO,
+            reason=reason,
+            next_action=_safe_next_action(action, next_cp_id),
+            confidence=ConfidenceLevel.LOW,
+            cost=(
+                _contextual_permission_cost(
+                    action=action,
+                    time_buffer_change_minutes=-requested_cost,
+                )
+                if requested_cost is not None
+                else None
+            ),
+            uncertainty_notes=[
+                "remaining_safety_buffer_minutes is required for bounded permission.",
+                "資料不足時 Scout 依標準採保守判斷。",
+            ],
+            alternative_actions=_alternative_actions(action, next_cp_id),
+        )
+
+    if action == OutdoorAction.RETREAT:
+        max_duration = _DEFAULT_DURATION_BY_ACTION[OutdoorAction.RETREAT]
+        leave_by = _leave_by(current_time, max_duration)
+        retreat_location = location_constraint or _default_location_constraint(action)
+        return ContextualPermission(
+            action=action,
+            decision=ScoutDecision.GO,
+            allowed=True,
+            max_duration_minutes=max_duration,
+            leave_by=leave_by,
+            location_constraint=retreat_location,
+            main_reasons=["撤退通常降低暴露時間與後續不確定性。"],
+            cost=_contextual_permission_cost(
+                action=action,
+                time_buffer_change_minutes=0,
+            ),
+            next_action="開始撤退，前往最近安全點並保持隊伍完整。",
+            confidence=_confidence(confidence, default=ConfidenceLevel.MEDIUM),
+            residual_risk=["撤退途中仍需注意地形、天氣與隊伍狀態。"],
+            required_conditions=_direct_action_required_conditions(
+                action=action,
+                leave_by=leave_by,
+                max_duration=max_duration,
+                location_constraint=retreat_location,
+            ),
+        )
+
+    if action == OutdoorAction.WEAR_RAIN_GEAR:
+        max_duration = _DEFAULT_DURATION_BY_ACTION[OutdoorAction.WEAR_RAIN_GEAR]
+        leave_by = _leave_by(current_time, max_duration)
+        rain_gear_location = location_constraint or _default_location_constraint(action)
+        return ContextualPermission(
+            action=action,
+            decision=ScoutDecision.GO,
+            allowed=True,
+            max_duration_minutes=max_duration,
+            leave_by=leave_by,
+            location_constraint=rain_gear_location,
+            main_reasons=["穿雨具不應消耗主要路線 buffer，且可降低風寒與濕衣風險。"],
+            cost=_contextual_permission_cost(
+                action=action,
+                time_buffer_change_minutes=0,
+            ),
+            next_action="就地穿上雨具，完成後立即回到原定節奏。",
+            confidence=_confidence(confidence, default=ConfidenceLevel.MEDIUM),
+            residual_risk=["若風雨持續增強，仍需重新評估撤退或改線。"],
+            required_conditions=_direct_action_required_conditions(
+                action=action,
+                leave_by=leave_by,
+                max_duration=max_duration,
+                location_constraint=rain_gear_location,
+            ),
+        )
+
+    if action in _BUDGET_ACTIONS:
+        authorized = int(budget.authorized_duration_minutes)
+        minimum = _MINIMUM_USEFUL_DURATION_BY_ACTION.get(action, 1)
+        if authorized < minimum:
+            return _no_go_permission(
+                action=action,
+                decision=_budget_failure_decision(action),
+                reason=(
+                    f"目前可授權時間只有 {authorized} 分鐘，低於"
+                    f"{_action_label(action)}的最低可用門檻。"
+                ),
+                next_action=_safe_next_action(action, next_cp_id),
+                confidence=_confidence(confidence, default=ConfidenceLevel.MEDIUM),
+                uncertainty_notes=_status_uncertainty_notes(
+                    communication_status=communication_status,
+                    equipment_status=equipment_status,
+                ),
+                alternative_actions=_alternative_actions(action, next_cp_id),
+            )
+
+        requested_or_default = requested_duration_minutes
+        if requested_or_default is None:
+            requested_or_default = _DEFAULT_DURATION_BY_ACTION.get(action, authorized)
+        max_duration = max(0, min(floor(requested_or_default), authorized))
+        if action in {OutdoorAction.SUMMIT, OutdoorAction.REROUTE}:
+            decision = ScoutDecision.CONDITIONAL_GO
+            if max_duration < _DEFAULT_DURATION_BY_ACTION.get(action, max_duration):
+                decision = ScoutDecision.CHANGE_PLAN
+                return _no_go_permission(
+                    action=action,
+                    decision=decision,
+                    reason=(
+                        f"目前可授權時間只有 {authorized} 分鐘，不足以支撐"
+                        f"{_action_label(action)}。"
+                    ),
+                    next_action=_safe_next_action(action, next_cp_id),
+                    confidence=_confidence(confidence, default=ConfidenceLevel.MEDIUM),
+                    uncertainty_notes=_status_uncertainty_notes(
+                        communication_status=communication_status,
+                        equipment_status=equipment_status,
+                    ),
+                    alternative_actions=_alternative_actions(action, next_cp_id),
+                )
+        else:
+            decision = ScoutDecision.CONDITIONAL_GO
+
+        leave_by = _leave_by(current_time, max_duration)
+        buffer_after = (
+            None
+            if budget.remaining_safety_buffer_minutes is None
+            else floor(budget.remaining_safety_buffer_minutes - max_duration)
+        )
+        budget.buffer_after_action_minutes = buffer_after
+        return ContextualPermission(
+            action=action,
+            decision=decision,
+            allowed=True,
+            max_duration_minutes=max_duration,
+            leave_by=leave_by,
+            location_constraint=location_constraint or _default_location_constraint(action),
+            main_reasons=_allowed_reasons(
+                action=action,
+                max_duration=max_duration,
+                budget=budget,
+                current_cp_id=current_cp_id,
+                next_cp_id=next_cp_id,
+            ),
+            cost=_contextual_permission_cost(
+                action=action,
+                time_buffer_change_minutes=-max_duration,
+                weather_window_impact=weather_window_impact
+                or _default_weather_impact(budget),
+                daylight_impact=daylight_impact or _default_daylight_impact(budget),
+                retreat_impact=retreat_impact or _default_retreat_impact(budget),
+                fatigue_impact=fatigue_impact,
+                team_pace_impact=team_pace_impact or _default_team_pace_impact(budget),
+            ),
+            next_action=_allowed_next_action(action, next_cp_id),
+            confidence=_confidence(confidence, default=ConfidenceLevel.MEDIUM),
+            uncertainty_notes=_allowed_uncertainty_notes(
+                current_time=current_time,
+                communication_status=communication_status,
+                equipment_status=equipment_status,
+            ),
+            residual_risk=_residual_risk(action, terrain_risk_level),
+            required_conditions=_required_conditions(
+                leave_by=leave_by,
+                max_duration=max_duration,
+                action=action,
+            ),
+            alternative_actions=(
+                _alternative_actions(action, next_cp_id)
+                if action == OutdoorAction.WAIT_TEAMMATE
+                else []
+            ),
+        )
+
+    return ContextualPermission(
+        action=action,
+        decision=ScoutDecision.GO,
+        allowed=True,
+        main_reasons=["此行動未被判定為會直接消耗停留型風險預算。"],
+        cost=_contextual_permission_cost(
+            action=action,
+            time_buffer_change_minutes=0,
+        ),
+        next_action=_allowed_next_action(action, next_cp_id),
+        confidence=_confidence(confidence, default=ConfidenceLevel.LOW),
+        uncertainty_notes=[
+            "此工具目前只對停留、拍攝、休息、等待、攻頂等微決策做完整預算計算。"
+        ],
+        residual_risk=["仍需依現場天氣、地形與隊伍狀態重新評估。"],
+    )
+
+
+def _no_go_permission(
+    *,
+    action: OutdoorAction,
+    decision: ScoutDecision,
+    reason: str,
+    next_action: str,
+    confidence: ConfidenceLevel,
+    cost: ContextualPermissionCost | None = None,
+    uncertainty_notes: list[str] | None = None,
+    alternative_actions: list[str] | None = None,
+) -> ContextualPermission:
+    if cost is None and action in _BUDGET_ACTIONS:
+        cost = _contextual_permission_cost(
+            action=action,
+            time_buffer_change_minutes=0,
+        )
+    return ContextualPermission(
+        action=action,
+        decision=decision,
+        allowed=False,
+        main_reasons=[reason],
+        cost=cost,
+        next_action=next_action,
+        confidence=confidence,
+        uncertainty_notes=uncertainty_notes or [],
+        residual_risk=["若忽略此建議，可能壓縮撤退、日照、天氣或隊伍最慢者 buffer。"],
+        alternative_actions=alternative_actions or _alternative_actions(action, None),
+    )
+
+
+def _location_is_stale_or_unknown(
+    *,
+    location_constraint: str | None,
+    retreat_impact: str | None,
+) -> bool:
+    text = f"{location_constraint or ''} {retreat_impact or ''}".lower()
+    return any(
+        marker in text
+        for marker in (
+            "gnss stale",
+            "gps stale",
+            "current location unknown",
+            "location_unknown",
+            "位置未知",
+            "定位過期",
+        )
+    )
+
+
+def _sheltered_candidate_distance_m(retreat_impact: str | None) -> float | None:
+    match = re.search(
+        r"sheltered_candidate_ahead[_\s-]*(\d+(?:\.\d+)?)m",
+        str(retreat_impact or ""),
+        flags=re.IGNORECASE,
+    )
+    return float(match.group(1)) if match else None
+
+
+def _looks_like_exposed_stop_context(
+    *,
+    terrain_risk_level: str | None,
+    location_constraint: str | None,
+    weather_window_impact: str | None,
+) -> bool:
+    text = (
+        f"{terrain_risk_level or ''} {location_constraint or ''} "
+        f"{weather_window_impact or ''}"
+    ).lower()
+    return any(
+        marker in text
+        for marker in (
+            "high",
+            "critical",
+            "exposed",
+            "strong_wind",
+            "強風",
+            "曝露",
+            "風口",
+        )
+    )
+
+
+def _missing_fields(*, action: OutdoorAction, budget: RiskBudget) -> list[str]:
+    if action in _BUDGET_ACTIONS and budget.remaining_safety_buffer_minutes is None:
+        return ["remaining_safety_buffer_minutes"]
+    return []
+
+
+def _derive_risk_budget_source(
+    root: Path,
+    *,
+    project: dict[str, Any],
+    current_time: str | None,
+    next_cp_id: str | None,
+    planned_eta_path: str | None,
+) -> dict[str, Any] | None:
+    current = _parse_datetime(current_time)
+    if current is None:
+        return None
+    eta_payload, source_path = _load_planned_eta(
+        root,
+        project=project,
+        explicit_path=planned_eta_path,
+    )
+    if not eta_payload:
+        return None
+    estimate = _match_eta_estimate(
+        eta_payload,
+        current=current,
+        next_cp_id=next_cp_id,
+    )
+    if estimate is None:
+        return None
+    eta = _parse_datetime(str(estimate.get("eta") or ""))
+    if eta is None:
+        return None
+    minutes_until_eta = floor((eta - current).total_seconds() / 60)
+    remaining = max(0, minutes_until_eta)
+    delay = max(0, -minutes_until_eta)
+    return {
+        "source_status": "derived_from_planned_eta_candidate",
+        "source_path": source_path,
+        "matched_estimate_id": str(estimate.get("estimate_id") or ""),
+        "next_cp_id": str(estimate.get("to_node_name") or next_cp_id or ""),
+        "planned_eta": eta.isoformat(),
+        "current_time": current.isoformat(),
+        "minutes_until_planned_eta": minutes_until_eta,
+        "remaining_safety_buffer_minutes": remaining,
+        "current_delay_minutes": delay,
+        "runtime_safety_truth": False,
+        "notes": [
+            "Derived from candidate planned ETA only; not reviewed daylight, weather, or runtime safety truth.",
+            "Caller-provided remaining_safety_buffer_minutes takes precedence over this fallback.",
+        ],
+    }
+
+
+def _derive_workspace_reserve_source(
+    root: Path,
+    *,
+    project: dict[str, Any],
+    enabled: bool,
+    weather_daylight_evidence_path: str | None,
+    plan_validation_path: str | None,
+    energy_vitals_path: str | None,
+    team_status_path: str | None,
+) -> dict[str, Any]:
+    if not enabled:
+        return {
+            "source_status": "not_applied",
+            "runtime_safety_truth": False,
+            "reserves": {},
+            "reserve_sources": [],
+            "notes": [
+                "Workspace reserve fallback is applied only when the base buffer is derived from planned ETA."
+            ],
+        }
+
+    weather_payload, weather_source_path = _load_first_project_json(
+        root,
+        project=project,
+        explicit_path=weather_daylight_evidence_path,
+        ref_keys=("weather_daylight_evidence_ref",),
+        fallbacks=("outputs/weather_daylight_evidence.json",),
+    )
+    plan_payload, plan_source_path = _load_first_project_json(
+        root,
+        project=project,
+        explicit_path=plan_validation_path,
+        ref_keys=("plan_validation_candidates_ref",),
+        fallbacks=("outputs/plan_validation_candidates.json",),
+    )
+    energy_payload, energy_source_path = _load_first_project_json(
+        root,
+        project=project,
+        explicit_path=energy_vitals_path,
+        ref_keys=("energy_vitals_ref", "energy_vitals_snapshot_ref"),
+        fallbacks=(
+            "outputs/energy_vitals.json",
+            "outputs/energy_vitals_snapshot.json",
+            "outputs/energy/energy_vitals.json",
+        ),
+    )
+    team_payload, team_source_path = _load_first_project_json(
+        root,
+        project=project,
+        explicit_path=team_status_path,
+        ref_keys=("team_status_ref", "team_pace_ref", "team_guardian_ref"),
+        fallbacks=(
+            "outputs/team_status.json",
+            "outputs/team_pace_fit.json",
+            "outputs/team_guardian.json",
+        ),
+    )
+    reserves: dict[str, float] = {}
+    reserve_sources: list[dict[str, Any]] = []
+
+    daylight_margin = _dark_arrival_warning_margin_minutes(weather_payload)
+    if _weather_daylight_needs_review(weather_payload):
+        _set_reserve(
+            reserves,
+            reserve_sources,
+            field="daylight_reserve_minutes",
+            minutes=daylight_margin,
+            source_path=weather_source_path,
+            reason="weather/daylight artifact requires human review before go/no-go use",
+        )
+        _set_reserve(
+            reserves,
+            reserve_sources,
+            field="weather_reserve_minutes",
+            minutes=DEFAULT_UNREVIEWED_WEATHER_RESERVE_MINUTES,
+            source_path=weather_source_path,
+            reason="weather window is placeholder or not authoritative",
+        )
+
+    for finding in _plan_validation_findings(plan_payload):
+        missing = {
+            str(item)
+            for item in finding.get("missing_any", [])
+            if str(item).strip()
+        }
+        rule_id = str(finding.get("rule_id") or "")
+        if "reviewed_daylight_window" in missing:
+            _set_reserve(
+                reserves,
+                reserve_sources,
+                field="daylight_reserve_minutes",
+                minutes=daylight_margin,
+                source_path=plan_source_path,
+                reason=str(finding.get("message") or rule_id),
+            )
+        if "reviewed_weather_window" in missing:
+            _set_reserve(
+                reserves,
+                reserve_sources,
+                field="weather_reserve_minutes",
+                minutes=DEFAULT_UNREVIEWED_WEATHER_RESERVE_MINUTES,
+                source_path=plan_source_path,
+                reason=str(finding.get("message") or rule_id),
+            )
+        if rule_id == "segment_policy_candidates_require_human_review":
+            _set_reserve(
+                reserves,
+                reserve_sources,
+                field="next_segment_uncertainty_minutes",
+                minutes=DEFAULT_UNREVIEWED_SEGMENT_POLICY_RESERVE_MINUTES,
+                source_path=plan_source_path,
+                reason=str(finding.get("message") or rule_id),
+            )
+
+    energy_reserve = _slowest_member_reserve_from_energy_vitals(energy_payload)
+    if energy_reserve:
+        _set_reserve(
+            reserves,
+            reserve_sources,
+            field="slowest_member_reserve_minutes",
+            minutes=float(energy_reserve["reserve_minutes"]),
+            source_path=energy_source_path,
+            reason=str(energy_reserve["reason"]),
+            detail={
+                "source_kind": "energy_vitals_advisory",
+                "candidate_basis": energy_reserve["candidate_basis"],
+                "subject_id": energy_reserve.get("subject_id"),
+                "raw_health_payload_embedded": False,
+                "provider_values_are_scout_truth": False,
+            },
+        )
+
+    team_reserve = _slowest_member_reserve_from_team_status(team_payload)
+    if team_reserve:
+        _set_reserve(
+            reserves,
+            reserve_sources,
+            field="slowest_member_reserve_minutes",
+            minutes=float(team_reserve["reserve_minutes"]),
+            source_path=team_source_path,
+            reason=str(team_reserve["reason"]),
+            detail={
+                "source_kind": "team_status",
+                "candidate_basis": team_reserve["candidate_basis"],
+                "member_ref": team_reserve.get("member_ref"),
+                "average_pace_used": False,
+            },
+        )
+
+    source_status = (
+        "workspace_reserves_applied"
+        if reserve_sources
+        else "workspace_reserves_not_needed_reviewed_evidence"
+        if weather_payload or plan_payload or energy_payload or team_payload
+        else "workspace_reserves_not_found"
+    )
+    return {
+        "source_status": source_status,
+        "runtime_safety_truth": False,
+        "reserves": reserves,
+        "reserve_sources": reserve_sources,
+        "notes": [
+            "Workspace reserves are candidate-only deductions from planned ETA slack.",
+            "They do not mutate readiness, MissionGraph, Ln, or /safety/* state.",
+        ],
+    }
+
+
+def _set_reserve(
+    reserves: dict[str, float],
+    reserve_sources: list[dict[str, Any]],
+    *,
+    field: str,
+    minutes: float,
+    source_path: str | None,
+    reason: str,
+    detail: dict[str, Any] | None = None,
+) -> None:
+    if minutes <= 0:
+        return
+    previous = reserves.get(field, 0.0)
+    reserves[field] = max(previous, float(minutes))
+    source = {
+        "reserve_field": field,
+        "reserve_minutes": float(minutes),
+        "source_path": source_path,
+        "reason": reason,
+        "runtime_safety_truth": False,
+    }
+    if detail:
+        source.update({key: value for key, value in detail.items() if value is not None})
+    reserve_sources.append(source)
+
+
+def _slowest_member_reserve_from_energy_vitals(
+    payload: dict[str, Any],
+) -> dict[str, Any] | None:
+    if not payload:
+        return None
+    candidates = [_energy_reserve_candidate(payload)]
+    for key in ("members", "team_members", "participants"):
+        items = payload.get(key)
+        if isinstance(items, list):
+            candidates.extend(_energy_reserve_candidate(item) for item in items)
+    usable = [candidate for candidate in candidates if candidate is not None]
+    if not usable:
+        return None
+    usable.sort(key=lambda item: float(item["reserve_minutes"]), reverse=True)
+    return usable[0]
+
+
+def _slowest_member_reserve_from_team_status(
+    payload: dict[str, Any],
+) -> dict[str, Any] | None:
+    if not payload:
+        return None
+    candidates: list[dict[str, Any] | None] = []
+    for key in ("members", "team_members", "participants"):
+        items = payload.get(key)
+        if isinstance(items, list):
+            candidates.extend(_team_reserve_candidate(item) for item in items)
+    if not candidates:
+        candidates.append(_team_reserve_candidate(payload))
+    usable = [candidate for candidate in candidates if candidate is not None]
+    if not usable:
+        return None
+    usable.sort(key=lambda item: float(item["reserve_minutes"]), reverse=True)
+    return usable[0]
+
+
+def _energy_reserve_candidate(payload: Any) -> dict[str, Any] | None:
+    if not isinstance(payload, dict):
+        return None
+    provided = payload.get("provided_fields")
+    provided = provided if isinstance(provided, dict) else {}
+    advisory = payload.get("advisory")
+    advisory = advisory if isinstance(advisory, dict) else {}
+    cue_band = _first_text(
+        advisory.get("cue_band"),
+        provided.get("cue_band"),
+        payload.get("cue_band"),
+    )
+    reserve_band = _first_text(
+        provided.get("reserve_band"),
+        advisory.get("reserve_band"),
+        payload.get("reserve_band"),
+    )
+    reserve_score = _first_number(
+        provided.get("reserve_score"),
+        advisory.get("reserve_score"),
+        payload.get("reserve_score"),
+    )
+    drift_ratio = _first_number(
+        provided.get("heart_rate_drift_ratio"),
+        advisory.get("heart_rate_drift_ratio"),
+        payload.get("heart_rate_drift_ratio"),
+    )
+    answerability = str(payload.get("answerability") or "")
+    member_ref = _first_text(
+        provided.get("subject_id"),
+        payload.get("subject_id"),
+        payload.get("member_id"),
+        payload.get("participant_id"),
+    )
+    minutes, basis = _reserve_minutes_from_energy_markers(
+        cue_band=cue_band,
+        reserve_band=reserve_band,
+        reserve_score=reserve_score,
+        drift_ratio=drift_ratio,
+    )
+    if minutes <= 0 and answerability == "energy_vitals_missing_required_fields":
+        minutes = DEFAULT_ENERGY_MISSING_CORE_RESERVE_MINUTES
+        basis.append("energy_vitals_missing_required_fields")
+    if minutes <= 0:
+        return None
+    return {
+        "reserve_minutes": float(minutes),
+        "reason": (
+            "energy/vitals advisory requires preserving time for the slowest or "
+            "most vulnerable member"
+        ),
+        "candidate_basis": basis,
+        "subject_id": member_ref,
+    }
+
+
+def _team_reserve_candidate(payload: Any) -> dict[str, Any] | None:
+    if not isinstance(payload, dict):
+        return None
+    cue_band = _first_text(payload.get("cue_band"), payload.get("status"))
+    reserve_band = _first_text(payload.get("reserve_band"), payload.get("pace_band"))
+    reserve_score = _first_number(payload.get("reserve_score"), payload.get("pace_score"))
+    drift_ratio = _first_number(payload.get("heart_rate_drift_ratio"))
+    minutes, basis = _reserve_minutes_from_energy_markers(
+        cue_band=cue_band,
+        reserve_band=reserve_band,
+        reserve_score=reserve_score,
+        drift_ratio=drift_ratio,
+    )
+    vulnerability_flags = payload.get("vulnerability_flags")
+    if isinstance(vulnerability_flags, list) and vulnerability_flags and minutes < 10:
+        minutes = 10
+        basis.append("vulnerability_flags_present")
+    if _truthy(payload.get("is_slowest")) and minutes < 5:
+        minutes = 5
+        basis.append("explicit_slowest_member")
+    if minutes <= 0:
+        return None
+    return {
+        "reserve_minutes": float(minutes),
+        "reason": (
+            "team status evidence requires using the slowest or most vulnerable "
+            "member instead of average team pace"
+        ),
+        "candidate_basis": basis,
+        "member_ref": _first_text(
+            payload.get("member_ref"),
+            payload.get("member_id"),
+            payload.get("participant_id"),
+            payload.get("subject_id"),
+        ),
+    }
+
+
+def _reserve_minutes_from_energy_markers(
+    *,
+    cue_band: str | None,
+    reserve_band: str | None,
+    reserve_score: float | None,
+    drift_ratio: float | None,
+) -> tuple[float, list[str]]:
+    minutes = 0.0
+    basis: list[str] = []
+    normalized_cue = str(cue_band or "").strip().lower()
+    normalized_reserve = str(reserve_band or "").strip().lower()
+    for band in (normalized_cue, normalized_reserve):
+        if band in {"manual_check", "stop_and_check", "critical", "depleted"}:
+            minutes = max(minutes, float(ENERGY_MANUAL_CHECK_RESERVE_MINUTES))
+            basis.append(f"{band}_band")
+        elif band in {"rest_suggested", "low", "very_low", "warning"}:
+            minutes = max(minutes, float(ENERGY_REST_SUGGESTED_RESERVE_MINUTES))
+            basis.append(f"{band}_band")
+        elif band in {"slow_down", "watch"}:
+            minutes = max(minutes, float(ENERGY_SLOW_DOWN_RESERVE_MINUTES))
+            basis.append(f"{band}_band")
+    if reserve_score is not None:
+        if reserve_score <= 25:
+            minutes = max(minutes, float(ENERGY_MANUAL_CHECK_RESERVE_MINUTES))
+            basis.append("reserve_score_very_low")
+        elif reserve_score <= 40:
+            minutes = max(minutes, float(ENERGY_REST_SUGGESTED_RESERVE_MINUTES))
+            basis.append("reserve_score_low")
+    if drift_ratio is not None:
+        if drift_ratio >= 0.18:
+            minutes = max(minutes, float(ENERGY_MANUAL_CHECK_RESERVE_MINUTES))
+            basis.append("heart_rate_drift_manual_check_band")
+        elif drift_ratio >= 0.12:
+            minutes = max(minutes, float(ENERGY_REST_SUGGESTED_RESERVE_MINUTES))
+            basis.append("heart_rate_drift_rest_band")
+        elif drift_ratio >= 0.08:
+            minutes = max(minutes, float(ENERGY_SLOW_DOWN_RESERVE_MINUTES))
+            basis.append("heart_rate_drift_watch_band")
+    return minutes, list(dict.fromkeys(basis))
+
+
+def _weather_daylight_needs_review(payload: dict[str, Any]) -> bool:
+    if not payload:
+        return False
+    validation = payload.get("validation")
+    validation = validation if isinstance(validation, dict) else {}
+    daylight = payload.get("daylight")
+    daylight = daylight if isinstance(daylight, dict) else {}
+    weather_window = payload.get("weather_window")
+    weather_window = weather_window if isinstance(weather_window, dict) else {}
+    return any(
+        (
+            bool(payload.get("human_review_required")),
+            str(payload.get("status") or "") == "candidate_only",
+            str(validation.get("validation_status") or "") == "human_review_required",
+            str(daylight.get("source_status") or "") in {"manual_placeholder", ""},
+            str(weather_window.get("source_status") or "") in {"manual_placeholder", ""},
+            payload.get("authoritative_weather_computed") is False,
+        )
+    )
+
+
+def _dark_arrival_warning_margin_minutes(payload: dict[str, Any]) -> float:
+    value = _nested_number(
+        payload,
+        "threshold_policy",
+        "daylight",
+        "dark_arrival_warning_margin_min",
+    )
+    if value is None:
+        return float(DEFAULT_UNREVIEWED_DAYLIGHT_RESERVE_MINUTES)
+    return max(0.0, value)
+
+
+def _plan_validation_findings(payload: dict[str, Any]) -> list[dict[str, Any]]:
+    findings = payload.get("findings")
+    if not isinstance(findings, list):
+        return []
+    return [item for item in findings if isinstance(item, dict)]
+
+
+def _nested_number(payload: dict[str, Any], *keys: str) -> float | None:
+    current: Any = payload
+    for key in keys:
+        if not isinstance(current, dict):
+            return None
+        current = current.get(key)
+    return _float_or_none(current)
+
+
+def _risk_budget_source(
+    *,
+    remaining_safety_buffer_minutes: float | int | str | None,
+    derived_budget_source: dict[str, Any] | None,
+    workspace_reserve_source: dict[str, Any],
+) -> dict[str, Any]:
+    if derived_budget_source is not None:
+        source = dict(derived_budget_source)
+        source["workspace_reserve_source"] = workspace_reserve_source
+        source["reserve_sources"] = list(
+            workspace_reserve_source.get("reserve_sources", [])
+        )
+        return source
+    if remaining_safety_buffer_minutes is not None:
+        return {
+            "source_status": "caller_provided_normalized_evidence",
+            "runtime_safety_truth": False,
+            "workspace_reserve_source": workspace_reserve_source,
+            "notes": [
+                "Caller provided normalized buffer evidence; tool did not promote it to runtime safety truth."
+            ],
+        }
+    return {
+        "source_status": "missing_required_buffer_evidence",
+        "runtime_safety_truth": False,
+        "workspace_reserve_source": workspace_reserve_source,
+        "notes": [
+            "remaining_safety_buffer_minutes was not provided and no planned ETA fallback could be derived."
+        ],
+    }
+
+
+def _load_planned_eta(
+    root: Path,
+    *,
+    project: dict[str, Any],
+    explicit_path: str | None,
+) -> tuple[dict[str, Any], str | None]:
+    candidates: list[tuple[str, Path]] = []
+    if explicit_path:
+        candidates.append((explicit_path, _project_path(root, explicit_path)))
+    ref = project.get("planned_eta_ref")
+    if isinstance(ref, str) and ref.strip():
+        candidates.append((ref, _project_path(root, ref)))
+    candidates.append(("outputs/planned_eta.json", root / "outputs" / "planned_eta.json"))
+    seen: set[Path] = set()
+    for label, path in candidates:
+        resolved = path.resolve() if path.exists() else path
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        if not path.exists():
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(payload, dict):
+            return payload, label
+    return {}, None
+
+
+def _load_first_project_json(
+    root: Path,
+    *,
+    project: dict[str, Any],
+    explicit_path: str | None,
+    ref_keys: tuple[str, ...],
+    fallbacks: tuple[str, ...],
+) -> tuple[dict[str, Any], str | None]:
+    candidates: list[tuple[str, Path]] = []
+    if explicit_path:
+        candidates.append((explicit_path, _project_path(root, explicit_path)))
+    for key in ref_keys:
+        ref = project.get(key)
+        if isinstance(ref, str) and ref.strip():
+            candidates.append((ref, _project_path(root, ref)))
+    for fallback in fallbacks:
+        candidates.append((fallback, _project_path(root, fallback)))
+    seen: set[Path] = set()
+    for label, path in candidates:
+        resolved = path.resolve() if path.exists() else path
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        if not path.exists():
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(payload, dict):
+            return payload, label
+    return {}, None
+
+
+def _project_path(root: Path, value: str) -> Path:
+    path = Path(value)
+    return path if path.is_absolute() else root / path
+
+
+def _match_eta_estimate(
+    eta_payload: dict[str, Any],
+    *,
+    current: datetime,
+    next_cp_id: str | None,
+) -> dict[str, Any] | None:
+    estimates = eta_payload.get("estimates")
+    if not isinstance(estimates, list):
+        return None
+    dict_estimates = [item for item in estimates if isinstance(item, dict)]
+    if next_cp_id:
+        normalized_next = _normalize_identifier(next_cp_id)
+        for estimate in dict_estimates:
+            if normalized_next in {
+                _normalize_identifier(estimate.get("to_node_name")),
+                _normalize_identifier(estimate.get("estimate_id")),
+                _normalize_identifier(estimate.get("source_candidate_id")),
+            }:
+                return estimate
+    future_estimates: list[tuple[datetime, dict[str, Any]]] = []
+    for estimate in dict_estimates:
+        eta = _parse_datetime(str(estimate.get("eta") or ""))
+        if eta is None or eta < current:
+            continue
+        future_estimates.append((eta, estimate))
+    if not future_estimates:
+        return None
+    future_estimates.sort(key=lambda item: item[0])
+    return future_estimates[0][1]
+
+
+def _normalize_identifier(value: Any) -> str:
+    return str(value or "").strip().lower().replace(" ", "")
+
+
+def _resolve_action(action: str | None, query: str) -> OutdoorAction:
+    if action:
+        normalized = action.strip().lower()
+        for candidate in OutdoorAction:
+            if normalized == candidate.value:
+                return candidate
+    text = query.lower()
+    if _looks_like_buffer_cost_question(text):
+        return OutdoorAction.STOP
+    if _has_any(text, ("架腳架", "腳架", "tripod")):
+        return OutdoorAction.TRIPOD
+    if _has_any(text, ("拍影片", "拍片", "影片", "video", "film")):
+        return OutdoorAction.FILM
+    if _has_any(text, ("等隊友", "等後隊", "等待隊友", "等待後隊", "waitteammate")):
+        return OutdoorAction.WAIT_TEAMMATE
+    if _has_any(text, ("等霧", "等待", "wait")):
+        return OutdoorAction.WAIT
+    if _has_any(
+        text,
+        ("改線", "繞去", "支線", "岔路", "切過去", "捷徑", "reroute", "shortcut"),
+    ):
+        return OutdoorAction.REROUTE
+    if _has_any(
+        text,
+        ("拍照", "照片", "photo", "攝影", "拍攝", "很好拍", "去拍", "想去拍"),
+    ):
+        return OutdoorAction.PHOTO
+    if _has_any(text, ("午餐", "吃午餐", "吃飯", "lunch")):
+        return OutdoorAction.LUNCH
+    if _has_any(
+        text,
+        ("分隊", "分開", "split", "走得快的人先去", "快的人先去", "先去山頂"),
+    ):
+        return OutdoorAction.SPLIT_TEAM
+    if _has_any(text, ("多留", "留在這裡", "留在此處")):
+        return OutdoorAction.STOP
+    if _has_any(text, ("攻頂", "山頂", "summit")):
+        return OutdoorAction.SUMMIT
+    if _has_any(text, ("撤退", "折返", "下撤", "retreat")):
+        return OutdoorAction.RETREAT
+    if _has_any(text, ("穿雨衣", "雨衣", "rain gear")):
+        return OutdoorAction.WEAR_RAIN_GEAR
+    if _has_any(
+        text,
+        (
+            "渡溪",
+            "過溪",
+            "溪水",
+            "溪流",
+            "溪谷",
+            "水位無法確認",
+            "無法確認溪流水位",
+            "沒有渡溪經驗",
+            "無渡溪經驗",
+            "cross stream",
+        ),
+    ):
+        return OutdoorAction.CROSS_STREAM
+    if _has_any(text, ("曝露", "暴露", "邊坡", "exposed")):
+        return OutdoorAction.ENTER_EXPOSED_SECTION
+    if _has_any(text, ("休息", "rest")):
+        return OutdoorAction.REST
+    if _has_any(
+        text,
+        (
+            "多停",
+            "多停留",
+            "停多久",
+            "停下",
+            "停留",
+            "可以停",
+            "能不能停",
+            "什麼時間前必須離開",
+            "何時前必須離開",
+            "幾點前必須離開",
+            "什麼時間前離開",
+            "何時前離開",
+            "幾點前離開",
+            "必須離開",
+            "stop",
+        ),
+    ) or re.search(r"停\s*\d+(?:\.\d+)?\s*(?:分鐘|分|min|minutes?)", text):
+        return OutdoorAction.STOP
+    return OutdoorAction.CONTINUE
+
+
+def _looks_like_buffer_cost_question(text: str) -> bool:
+    return _has_any(
+        text.replace(" ", ""),
+        (
+            "會消耗什麼buffer",
+            "消耗什麼buffer",
+            "消耗哪些buffer",
+            "耗掉什麼buffer",
+            "吃掉什麼buffer",
+            "消耗什麼餘裕",
+            "消耗哪些餘裕",
+            "消耗什麼預算",
+            "消耗哪些預算",
+            "風險預算",
+            "代價是什麼",
+            "成本是什麼",
+        ),
+    )
+
+
+def _requested_duration_from_query(query: str) -> float | None:
+    text = str(query or "").strip().lower().replace(" ", "")
+    action_prefix = (
+        "多停|多停留|多留|停留|停|拍照|拍攝|拍影片|拍片|多拍|等待|等|休息|午餐|吃午餐"
+    )
+    match = re.search(
+        rf"(?:{action_prefix})(\d+(?:\.\d+)?)(?:分鐘|分|min|minutes?)",
+        text,
+    )
+    if match:
+        return float(match.group(1))
+    chinese_match = re.search(
+        rf"(?:{action_prefix})([零〇一二兩三四五六七八九十]+)(?:分鐘|分)",
+        text,
+    )
+    if chinese_match:
+        return float(_chinese_integer(chinese_match.group(1)))
+    return None
+
+
+def _chinese_integer(value: str) -> int:
+    digits = {
+        "零": 0,
+        "〇": 0,
+        "一": 1,
+        "二": 2,
+        "兩": 2,
+        "三": 3,
+        "四": 4,
+        "五": 5,
+        "六": 6,
+        "七": 7,
+        "八": 8,
+        "九": 9,
+    }
+    if "十" not in value:
+        return digits.get(value, 0)
+    left, _, right = value.partition("十")
+    tens = digits.get(left, 1) if left else 1
+    ones = digits.get(right, 0) if right else 0
+    return tens * 10 + ones
+
+
+def _requested_duration_cost(
+    requested_duration_minutes: float | int | str | None,
+) -> int | None:
+    value = _float_or_none(requested_duration_minutes)
+    if value is None or value <= 0:
+        return None
+    return max(1, floor(value))
+
+
+def _contextual_permission_cost(
+    *,
+    action: OutdoorAction,
+    time_buffer_change_minutes: int,
+    weather_window_impact: str | None = None,
+    daylight_impact: str | None = None,
+    retreat_impact: str | None = None,
+    fatigue_impact: str | None = None,
+    team_pace_impact: str | None = None,
+) -> ContextualPermissionCost:
+    return ContextualPermissionCost(
+        time_buffer_change_minutes=time_buffer_change_minutes,
+        weather_window_impact=weather_window_impact,
+        daylight_impact=daylight_impact,
+        retreat_impact=retreat_impact,
+        fatigue_impact=fatigue_impact,
+        team_pace_impact=team_pace_impact,
+        attention_budget_impact=_attention_budget_impact(
+            action,
+            time_buffer_change_minutes=time_buffer_change_minutes,
+        ),
+        media_experience_budget_impact=_media_experience_budget_impact(
+            action,
+            time_buffer_change_minutes=time_buffer_change_minutes,
+        ),
+        risk_budget_impact=_risk_budget_impact(
+            action,
+            time_buffer_change_minutes=time_buffer_change_minutes,
+        ),
+    )
+
+
+def _attention_budget_impact(
+    action: OutdoorAction,
+    *,
+    time_buffer_change_minutes: int,
+) -> str:
+    if action in {OutdoorAction.RETREAT, OutdoorAction.WEAR_RAIN_GEAR}:
+        return "attention shifts to the protective action; no optional stop budget is authorized."
+    if action in {
+        OutdoorAction.PHOTO,
+        OutdoorAction.FILM,
+        OutdoorAction.TRIPOD,
+        OutdoorAction.WAIT,
+    }:
+        return (
+            "optional media or waiting attention must stay secondary to route, "
+            "weather, terrain, and team monitoring."
+        )
+    if action in {OutdoorAction.REROUTE, OutdoorAction.SUMMIT}:
+        return (
+            "objective pressure must not reduce navigation, terrain, weather, "
+            "and team-state attention."
+        )
+    if time_buffer_change_minutes < 0:
+        return "optional stop attention must remain bounded and end at the cutoff."
+    return "no additional optional attention budget spend is authorized."
+
+
+def _media_experience_budget_impact(
+    action: OutdoorAction,
+    *,
+    time_buffer_change_minutes: int,
+) -> str:
+    if action in {OutdoorAction.PHOTO, OutdoorAction.FILM, OutdoorAction.TRIPOD}:
+        return (
+            "spends optional photo/video experience budget only inside the "
+            "approved route corridor."
+        )
+    if action == OutdoorAction.WAIT:
+        return (
+            "spends optional waiting-for-view experience budget and must be "
+            "abandoned at the cutoff."
+        )
+    if action == OutdoorAction.SUMMIT:
+        return (
+            "spends summit/objective experience budget and competes with retreat "
+            "and daylight margin."
+        )
+    if action == OutdoorAction.REROUTE:
+        return "spends detour/alternate-experience budget and requires reviewed route evidence."
+    if action in {
+        OutdoorAction.STOP,
+        OutdoorAction.REST,
+        OutdoorAction.LUNCH,
+        OutdoorAction.WAIT_TEAMMATE,
+    }:
+        return "spends optional rest or experience budget, not core safety margin."
+    if time_buffer_change_minutes < 0:
+        return "spends optional experience budget and must not become open-ended."
+    return "no optional media or experience budget is authorized."
+
+
+def _risk_budget_impact(
+    action: OutdoorAction,
+    *,
+    time_buffer_change_minutes: int,
+) -> str:
+    if time_buffer_change_minutes < 0:
+        return (
+            f"spends {abs(time_buffer_change_minutes)} minutes of bounded risk "
+            "budget after reserves."
+        )
+    if action == OutdoorAction.RETREAT:
+        return "does not authorize optional risk spend; retreat is treated as exposure reduction."
+    if action == OutdoorAction.WEAR_RAIN_GEAR:
+        return "does not authorize optional risk spend; protective gear reduces weather exposure."
+    return "no optional risk budget spend is authorized."
+
+
+def _minutes_to_next_cp_from_query(query: str) -> float | None:
+    text = str(query or "").strip().lower().replace(" ", "")
+    patterns = (
+        r"(?:再前進|再走|前方|到|前往|下一個cp|下一cp|nextcp)"
+        r"(?:約|大約|還有|需時|需要)?(\d+(?:\.\d+)?)(?:分鐘|分|min|minutes?)",
+        r"(\d+(?:\.\d+)?)(?:分鐘|分|min|minutes?)"
+        r"(?:到|抵達|前往|可到|可以到)(?:cp|checkpoint)?[\w\u4e00-\u9fff-]*",
+        r"(?:cp|checkpoint)[\w-]*(?:約|大約|還有|距離|需時|需要)"
+        r"(\d+(?:\.\d+)?)(?:分鐘|分|min|minutes?)",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if match:
+            return float(match.group(1))
+    return None
+
+
+def _normalized_risk_level(level: str | None, query: str) -> str | None:
+    if level and str(level).strip():
+        return str(level).strip().lower()
+    text = query.lower()
+    if _has_any(
+        text,
+        (
+            "暴漲",
+            "落石",
+            "滑墜",
+            "曝露邊坡",
+            "暴露邊坡",
+            "高曝露",
+            "曝露陡坡",
+            "暴露陡坡",
+            "斷崖",
+            "崩壁",
+            "溪水",
+            "溪流",
+            "溪谷",
+            "水位無法確認",
+            "無法確認溪流水位",
+        ),
+    ):
+        return "high"
+    return None
+
+
+def _is_high_risk_action(
+    action: OutdoorAction,
+    terrain_risk_level: str | None,
+    query: str,
+) -> bool:
+    if action not in {OutdoorAction.CROSS_STREAM, OutdoorAction.ENTER_EXPOSED_SECTION}:
+        return False
+    if terrain_risk_level in _HIGH_RISK_LEVELS:
+        return True
+    return _has_any(
+        query.lower(),
+        (
+            "暴漲",
+            "濕滑",
+            "落石",
+            "滑墜",
+            "曝露",
+            "暴露",
+            "水位無法確認",
+            "無法確認溪流水位",
+            "沒有渡溪經驗",
+            "無渡溪經驗",
+        ),
+    )
+
+
+def _looks_like_risk_sentinel_continue(query: str) -> bool:
+    text = query.lower().replace(" ", "")
+    return _has_any(
+        text,
+        (
+            "快速通過",
+            "快通過",
+            "迅速通過",
+            "這段要不要快速通過",
+            "撤退窗口",
+            "高風險路段",
+            "前方高風險",
+            "落石",
+            "落石區",
+            "通訊死角",
+            "能不能繼續",
+            "現在能不能繼續",
+            "可以繼續前進",
+            "可以繼續推進",
+            "繼續前進嗎",
+        ),
+    )
+
+
+def _looks_like_unreviewed_reroute(query: str) -> bool:
+    text = str(query or "").lower().replace(" ", "")
+    return _has_any(
+        text,
+        (
+            "這個岔路",
+            "這條岔路",
+            "那個岔路",
+            "岔路可以切",
+            "可以切",
+            "切過去",
+            "捷徑",
+            "支線",
+            "臨時改線",
+            "繞去",
+            "繞一下",
+            "旁邊那個點",
+            "shortcut",
+            "reroute",
+        ),
+    )
+
+
+def _high_risk_reason(action: OutdoorAction, terrain_risk_level: str | None) -> str:
+    if action == OutdoorAction.CROSS_STREAM:
+        return "渡溪或進入溪谷屬高後果情境，水位與撤退窗口不確定時不得輕率授權。"
+    if action == OutdoorAction.ENTER_EXPOSED_SECTION:
+        return "曝露地形會放大滑墜、落石與天候風險，不適合用現場衝動決策通過。"
+    return f"{_action_label(action)}目前落在高風險條件中：{terrain_risk_level or 'unknown'}。"
+
+
+def _high_risk_next_action(action: OutdoorAction, next_cp_id: str | None) -> str:
+    if action == OutdoorAction.CROSS_STREAM:
+        return "停止進入溪谷，退回穩定安全點，必要時等待領隊、嚮導或官方資訊。"
+    return _safe_next_action(action, next_cp_id)
+
+
+def _high_risk_uncertainty_notes(
+    *,
+    missing_fields: list[str],
+    communication_status: str | None,
+    equipment_status: str | None,
+) -> list[str]:
+    notes = _status_uncertainty_notes(
+        communication_status=communication_status,
+        equipment_status=equipment_status,
+    )
+    if missing_fields:
+        notes.append(
+            "高後果地形先採保守禁止；缺少 "
+            + "、".join(missing_fields)
+            + " 仍需補齊後才能重評估。"
+        )
+    return notes
+
+
+def _looks_like_exposed_lunch_context(
+    *,
+    query: str,
+    terrain_risk_level: str | None,
+    location_constraint: str | None,
+    weather_window_impact: str | None,
+) -> bool:
+    if terrain_risk_level in _HIGH_RISK_LEVELS:
+        return True
+    query_text = str(query or "").lower()
+    if _has_any(
+        query_text,
+        (
+            "風口",
+            "強風",
+            "陣風",
+            "風寒",
+            "失溫",
+            "曝露",
+            "暴露",
+            "稜線",
+            "ridge",
+            "windy",
+            "windchill",
+            "exposed",
+            "cold exposure",
+        ),
+    ):
+        return True
+    context_text = f"{location_constraint or ''} {weather_window_impact or ''}".lower()
+    if _has_any(
+        context_text,
+        (
+            "sheltered",
+            "背風",
+            "避風",
+        ),
+    ):
+        return False
+    text = " ".join(
+        str(part or "")
+        for part in (location_constraint, weather_window_impact)
+    ).lower()
+    return _has_any(
+        text,
+        (
+            "風口",
+            "強風",
+            "陣風",
+            "風寒",
+            "失溫",
+            "曝露",
+            "暴露",
+            "稜線",
+            "ridge",
+            "wind",
+            "windy",
+            "windchill",
+            "exposed",
+            "cold exposure",
+        ),
+    )
+
+
+def _looks_like_exposed_media_pressure(
+    *,
+    action: OutdoorAction,
+    query: str,
+    terrain_risk_level: str | None,
+    location_constraint: str | None,
+) -> bool:
+    if action not in _EXPOSED_MEDIA_PRESSURE_ACTIONS:
+        return False
+    text = _normalize_identifier(
+        " ".join(str(part or "") for part in (query, location_constraint))
+    )
+    has_media_pressure = _has_any(
+        text,
+        (
+            "拍照",
+            "照片",
+            "拍攝",
+            "拍片",
+            "影片",
+            "腳架",
+            "架腳架",
+            "去拍",
+            "想去拍",
+            "很好拍",
+            "照片很好看",
+            "打卡",
+            "美照",
+            "photo",
+            "video",
+            "film",
+            "tripod",
+            "checkin",
+        ),
+    )
+    if not has_media_pressure:
+        return False
+    if terrain_risk_level in _HIGH_RISK_LEVELS:
+        return True
+    if _has_any(
+        text,
+        (
+            "乾季",
+            "晴天",
+            "雨季",
+            "熱門照片",
+            "ig",
+            "instagram",
+            "社群",
+        ),
+    ) and _has_any(
+        text,
+        (
+            "濕滑",
+            "泥濘",
+            "今天",
+            "繞去",
+            "離開主線",
+            "旁邊",
+            "支線",
+        ),
+    ):
+        return True
+    return _has_any(
+        text,
+        (
+            "高曝露",
+            "曝露",
+            "暴露",
+            "陡坡",
+            "邊坡",
+            "斷崖",
+            "崩壁",
+            "落石",
+            "滑墜",
+            "濕滑",
+            "泥濘",
+            "風口",
+            "強風",
+            "陣風",
+            "稜線",
+            "exposed",
+            "cliff",
+            "steep",
+            "wind",
+            "windy",
+        ),
+    )
+
+
+def _exposed_lunch_next_action(
+    next_cp_id: str | None,
+    *,
+    minutes_to_next_cp: float | None,
+) -> str:
+    if next_cp_id and minutes_to_next_cp is not None:
+        return (
+            "不在此午餐，請再前進約 "
+            f"{minutes_to_next_cp:g} 分鐘到 {next_cp_id}，"
+            "到較避風處再重新評估。"
+        )
+    if next_cp_id:
+        return f"不在此午餐，請再前往 {next_cp_id}，到較避風處再重新評估。"
+    return "不在此午餐，請再前往下一個較避風 CP，到較避風處再重新評估。"
+
+
+def _exposed_media_reason(action: OutdoorAction) -> str:
+    if action == OutdoorAction.TRIPOD:
+        return (
+            "腳架會增加停留時間、佔用路徑寬度並放大強風或曝露邊坡風險；"
+            "不能為取景穩定度增加停留、靠近或離開路線走廊。"
+        )
+    return (
+        "該拍攝或停留目標位於曝露或高後果地形；"
+        "不能為照片、影片或打卡期待增加停留、靠近或繞行。"
+    )
+
+
+def _exposed_media_next_action(action: OutdoorAction) -> str:
+    if action == OutdoorAction.TRIPOD:
+        return (
+            "不要架腳架；收起設備並回到主線或穩定安全點，"
+            "改在已審核且不壓縮撤退 buffer 的觀察點再評估。"
+        )
+    return (
+        "不要前往或停留拍攝；回到主線或穩定安全點，"
+        "改在已審核且不壓縮撤退 buffer 的觀察點再評估。"
+    )
+
+
+def _budget_failure_decision(action: OutdoorAction) -> ScoutDecision:
+    if action in {OutdoorAction.SUMMIT, OutdoorAction.REROUTE}:
+        return ScoutDecision.CHANGE_PLAN
+    return ScoutDecision.NO_GO
+
+
+def _allowed_reasons(
+    *,
+    action: OutdoorAction,
+    max_duration: int,
+    budget: RiskBudget,
+    current_cp_id: str | None,
+    next_cp_id: str | None,
+) -> list[str]:
+    reasons = [
+        (
+            f"目前可授權風險預算約 {budget.authorized_duration_minutes} 分鐘，"
+            f"{_action_label(action)}上限設定為 {max_duration} 分鐘。"
+        )
+    ]
+    if budget.remaining_safety_buffer_minutes is not None:
+        reasons.append(
+            (
+                f"此行為會消耗 {max_duration} 分鐘 buffer；執行後預估仍保留"
+                f" {budget.buffer_after_action_minutes} 分鐘總安全 buffer。"
+            )
+        )
+    if budget.current_delay_minutes > 0:
+        reasons.append(f"目前比計畫晚約 {budget.current_delay_minutes:g} 分鐘，不能延長停留。")
+    reserved = (
+        budget.next_segment_uncertainty_minutes
+        + budget.weather_reserve_minutes
+        + budget.daylight_reserve_minutes
+        + budget.retreat_reserve_minutes
+        + budget.slowest_member_reserve_minutes
+    )
+    if reserved > 0:
+        reasons.append(
+            f"已先保留 {reserved:g} 分鐘給前方不確定性、天氣、日照、撤退或最慢成員。"
+        )
+    if current_cp_id or next_cp_id:
+        reasons.append(
+            "決策節點：目前 "
+            f"{current_cp_id or 'unknown CP'}，下一步指向 {next_cp_id or '下一安全點'}。"
+        )
+    return reasons[:4]
+
+
+def _allowed_next_action(action: OutdoorAction, next_cp_id: str | None) -> str:
+    destination = _destination_phrase(next_cp_id)
+    if action in {OutdoorAction.FILM, OutdoorAction.PHOTO}:
+        return f"完成拍攝後直接{destination}，不要追加取景或離開路線走廊。"
+    if action == OutdoorAction.TRIPOD:
+        return (
+            f"收起腳架後直接{destination}，不要把腳架架在風口、"
+            "窄路、曝露邊坡或路線走廊外。"
+        )
+    if action == OutdoorAction.REST:
+        return f"短休結束後重新集合，確認最慢成員狀態，再{destination}。"
+    if action == OutdoorAction.LUNCH:
+        return f"只做短版午餐，完成後收整裝備並{destination}。"
+    if action == OutdoorAction.WAIT:
+        return f"若時限內能見度沒有改善，放棄拍攝與等待，直接{destination}。"
+    if action == OutdoorAction.WAIT_TEAMMATE:
+        return (
+            f"最多等到時限；若仍未會合或取得明確位置，不要延長等待，"
+            f"保持隊伍完整並{destination}或啟動隊伍狀態檢查。"
+        )
+    if action == OutdoorAction.SUMMIT:
+        return "設定硬性折返時間，逾時立即放棄攻頂。"
+    if action == OutdoorAction.REROUTE:
+        return "只採用已知安全替代線，並在下一 CP 重新評估。"
+    return f"到時限後立即離開，{destination}。"
+
+
+def _safe_next_action(action: OutdoorAction, next_cp_id: str | None) -> str:
+    destination = _destination_phrase(next_cp_id)
+    if action in {
+        OutdoorAction.FILM,
+        OutdoorAction.TRIPOD,
+        OutdoorAction.PHOTO,
+        OutdoorAction.STOP,
+        OutdoorAction.REST,
+        OutdoorAction.LUNCH,
+        OutdoorAction.WAIT,
+        OutdoorAction.WAIT_TEAMMATE,
+    }:
+        return f"不要在此停留，請先{destination}，再重新評估。"
+    if action == OutdoorAction.SUMMIT:
+        return "不要繼續攻頂，請執行折返或改短線方案。"
+    if action == OutdoorAction.REROUTE:
+        return "不要臨時改線，請回到原路線或前往已知安全 CP。"
+    if action == OutdoorAction.SPLIT_TEAM:
+        return "不要分隊，請保持隊伍完整並前往共同安全點。"
+    return f"請{destination}並重新評估。"
+
+
+def _alternative_actions(action: OutdoorAction, next_cp_id: str | None) -> list[str]:
+    destination = _destination_phrase(next_cp_id)
+    if action == OutdoorAction.WAIT_TEAMMATE:
+        return [
+            f"{destination} 後再會合",
+            "改用既定集合點或隊伍狀態檢查",
+            "必要時撤退到共同安全點",
+        ]
+    if action in {
+        OutdoorAction.FILM,
+        OutdoorAction.TRIPOD,
+        OutdoorAction.PHOTO,
+        OutdoorAction.STOP,
+        OutdoorAction.WAIT,
+    }:
+        return [f"{destination} 後再停留", "取消拍攝或等待", "只在路線內側快速通過"]
+    if action == OutdoorAction.REST:
+        return [f"{destination} 再休息", "縮短為站立補水", "改成撤退或短線"]
+    if action == OutdoorAction.LUNCH:
+        return [f"{destination} 吃午餐", "改成行進補給", "取消長時間停留"]
+    if action == OutdoorAction.SUMMIT:
+        return ["立即折返", "改短線或放棄山頂停留", "在安全 CP 重新評估"]
+    if action == OutdoorAction.REROUTE:
+        return ["回到原路線", "只走已審核替代路線", "前往下一 CP 重新評估"]
+    if action == OutdoorAction.SPLIT_TEAM:
+        return ["保持隊伍完整", "由最慢成員決定節奏", "前往共同集合點"]
+    if action == OutdoorAction.CROSS_STREAM:
+        return ["不要渡溪", "退回安全高點", "等待官方或領隊判斷"]
+    return [destination, "重新評估", "撤退或改線"]
+
+
+def _destination_phrase(next_cp_id: str | None) -> str:
+    if next_cp_id and str(next_cp_id).strip():
+        return f"前往 {str(next_cp_id).strip()}"
+    return "前往下一個安全 CP"
+
+
+def _decision_output(
+    permission: ContextualPermission,
+    *,
+    budget: RiskBudget,
+) -> ScoutDecisionOutput:
+    first_layer = _decision_first_layer(permission, budget=budget)
+    second_layer = _decision_second_layer(permission, budget=budget)
+    text = "\n".join(
+        (
+            f"[決策] {first_layer.decision}",
+            f"[限制] {first_layer.limit}",
+            f"[原因] {first_layer.reason}",
+            f"[下一步] {first_layer.next_step}",
+        )
+    )
+    return ScoutDecisionOutput(
+        action=permission.action,
+        decision=permission.decision,
+        allowed=permission.allowed,
+        max_duration_minutes=permission.max_duration_minutes,
+        leave_by=permission.leave_by,
+        location_constraint=permission.location_constraint,
+        cost=permission.cost,
+        main_reasons=list(permission.main_reasons),
+        next_action=permission.next_action,
+        confidence=permission.confidence,
+        uncertainty_notes=list(permission.uncertainty_notes),
+        residual_risk=list(permission.residual_risk),
+        required_conditions=list(permission.required_conditions),
+        alternative_actions=list(permission.alternative_actions),
+        text=text,
+        first_layer=first_layer,
+        second_layer=second_layer,
+        standard_alignment=[
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 13 risk budget",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 13.1 conceptual formula",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 first-layer field decision",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 16 second-layer reason expansion",
+            "SCOUT_OUTDOOR_AI_AGENT_STANDARD section 17 ContextualPermission schema",
+        ],
+    )
+
+
+def _decision_first_layer(
+    permission: ContextualPermission,
+    *,
+    budget: RiskBudget,
+) -> DecisionOutputFirstLayer:
+    return DecisionOutputFirstLayer(
+        decision=_decision_phrase(permission),
+        limit=_limit_phrase(permission),
+        reason=_reason_phrase(permission, budget=budget),
+        next_step=permission.next_action,
+    )
+
+
+def _decision_second_layer(
+    permission: ContextualPermission,
+    *,
+    budget: RiskBudget,
+) -> DecisionOutputSecondLayer:
+    details: list[str] = []
+    if budget.remaining_safety_buffer_minutes is not None:
+        details.append(
+            f"目前剩餘安全 buffer 約 {budget.remaining_safety_buffer_minutes:g} 分鐘。"
+        )
+    details.append(
+        f"可授權時間約 {budget.authorized_duration_minutes} 分鐘。"
+    )
+    if budget.requested_duration_minutes is not None:
+        details.append(
+            f"使用者要求時間約 {budget.requested_duration_minutes:g} 分鐘。"
+        )
+    if budget.next_segment_uncertainty_minutes:
+        details.append(
+            f"下一段不確定性 reserve {budget.next_segment_uncertainty_minutes:g} 分鐘。"
+        )
+    if budget.weather_reserve_minutes:
+        details.append(f"天氣 reserve {budget.weather_reserve_minutes:g} 分鐘。")
+    if budget.daylight_reserve_minutes:
+        details.append(f"日照 reserve {budget.daylight_reserve_minutes:g} 分鐘。")
+    if budget.retreat_reserve_minutes:
+        details.append(f"撤退 reserve {budget.retreat_reserve_minutes:g} 分鐘。")
+    if budget.slowest_member_reserve_minutes:
+        details.append(
+            f"最慢成員 reserve {budget.slowest_member_reserve_minutes:g} 分鐘。"
+        )
+    if permission.cost and permission.cost.time_buffer_change_minutes is not None:
+        details.append(
+            f"此決策的時間 buffer 變化為 {permission.cost.time_buffer_change_minutes:g} 分鐘。"
+        )
+    if permission.cost and permission.cost.attention_budget_impact:
+        details.append("注意力預算：" + permission.cost.attention_budget_impact)
+    if permission.cost and permission.cost.media_experience_budget_impact:
+        details.append(
+            "拍攝/體驗預算：" + permission.cost.media_experience_budget_impact
+        )
+    if permission.cost and permission.cost.risk_budget_impact:
+        details.append("風險預算：" + permission.cost.risk_budget_impact)
+    return DecisionOutputSecondLayer(
+        details=details,
+        uncertainty_notes=list(permission.uncertainty_notes),
+        residual_risk=list(permission.residual_risk),
+        required_conditions=list(permission.required_conditions),
+        alternative_actions=list(permission.alternative_actions),
+    )
+
+
+def _decision_phrase(permission: ContextualPermission) -> str:
+    action_label = _action_label(permission.action)
+    if permission.allowed and permission.action == OutdoorAction.RETREAT:
+        return "建議撤退。"
+    if (
+        permission.allowed
+        and permission.action == OutdoorAction.WEAR_RAIN_GEAR
+        and permission.max_duration_minutes is not None
+    ):
+        return f"可以穿雨具，最多 {permission.max_duration_minutes} 分鐘。"
+    if permission.allowed and permission.max_duration_minutes is not None:
+        return f"可以，最多 {permission.max_duration_minutes} 分鐘。"
+    if permission.allowed:
+        return f"可以{action_label}。"
+    if permission.decision == ScoutDecision.ESCALATE:
+        return f"需要升級處理，不建議{action_label}。"
+    if permission.decision == ScoutDecision.CHANGE_PLAN:
+        return f"改變計畫，不建議{action_label}。"
+    if permission.decision == ScoutDecision.DELAY:
+        return f"延後{action_label}。"
+    return f"不建議{action_label}。"
+
+
+def _limit_phrase(permission: ContextualPermission) -> str:
+    if permission.allowed and permission.action == OutdoorAction.RETREAT:
+        location = _location_limit_clause(permission.location_constraint)
+        if permission.leave_by:
+            return (
+                f"立即開始撤退，{permission.leave_by} 前離開目前位置；"
+                f"不授權停留{location}。"
+            )
+        return f"立即開始撤退，不授權停留{location}。"
+    if permission.allowed and permission.max_duration_minutes is not None:
+        location = _location_limit_clause(permission.location_constraint)
+        if permission.leave_by:
+            return (
+                f"最多 {permission.max_duration_minutes} 分鐘，"
+                f"{permission.leave_by} 前離開{location}。"
+            )
+        return (
+            f"最多 {permission.max_duration_minutes} 分鐘，"
+            f"從現在起到時立即離開{location}。"
+        )
+    if permission.allowed:
+        return "不額外消耗停留 buffer；執行後立即回到原定節奏。"
+    return "不授權此行動；不要消耗停留或改線 buffer。"
+
+
+def _location_limit_clause(location_constraint: str | None) -> str:
+    if not location_constraint:
+        return ""
+    return f"；地點限制：{location_constraint}"
+
+
+def _reason_phrase(permission: ContextualPermission, *, budget: RiskBudget) -> str:
+    reasons = [reason for reason in permission.main_reasons[:2] if reason]
+    if budget.remaining_safety_buffer_minutes is not None:
+        reasons.append(
+            f"目前剩餘安全 buffer 約 {budget.remaining_safety_buffer_minutes:g} 分鐘。"
+        )
+    if reasons:
+        return " ".join(reasons)
+    return "目前證據不足，Scout 依標準採保守判斷。"
+
+
+def _required_conditions(
+    *,
+    leave_by: str | None,
+    max_duration: int,
+    action: OutdoorAction,
+) -> list[str]:
+    conditions = [f"最多 {max_duration} 分鐘"]
+    conditions.append(
+        f"{leave_by} 前離開" if leave_by else "以現在時間起算，到時立即離開"
+    )
+    if action in {
+        OutdoorAction.FILM,
+        OutdoorAction.TRIPOD,
+        OutdoorAction.PHOTO,
+        OutdoorAction.STOP,
+        OutdoorAction.WAIT,
+        OutdoorAction.WAIT_TEAMMATE,
+    }:
+        conditions.append("不要離開步道內側或既有路線走廊")
+    if action == OutdoorAction.TRIPOD:
+        conditions.append("不得在風口、窄路、曝露邊坡或會阻礙通行處架腳架")
+    if action == OutdoorAction.WAIT:
+        conditions.append("若時限內能見度沒有改善，放棄拍攝並前往下一個 CP")
+    if action == OutdoorAction.WAIT_TEAMMATE:
+        conditions.append("等待期間保持隊伍完整，不得分隊或讓任何人單獨前進")
+        conditions.append("若時限內未會合或位置不明，啟動隊伍狀態檢查")
+    conditions.append("若天氣、能見度、隊伍狀態或地形風險惡化，立即取消")
+    return conditions
+
+
+def _direct_action_required_conditions(
+    *,
+    action: OutdoorAction,
+    leave_by: str | None,
+    max_duration: int,
+    location_constraint: str | None,
+) -> list[str]:
+    if action == OutdoorAction.RETREAT:
+        conditions = ["立即開始撤退，不授權原地停留"]
+        if leave_by:
+            conditions.append(f"{leave_by} 前離開目前位置")
+        conditions.append(
+            location_constraint
+            or "保持隊伍完整，沿已知路線或最近安全撤退線前往最近安全點"
+        )
+        conditions.append("不分隊，不改走未審核支線")
+        return conditions
+
+    conditions = [f"最多 {max_duration} 分鐘"]
+    conditions.append(
+        f"{leave_by} 前離開" if leave_by else "以現在時間起算，到時立即離開"
+    )
+    if location_constraint:
+        conditions.append(location_constraint)
+    conditions.append("完成後立即回到原定節奏")
+    conditions.append("若天氣、能見度、隊伍狀態或地形風險惡化，立即重新評估")
+    return conditions
+
+
+def _allowed_uncertainty_notes(
+    *,
+    current_time: str | None,
+    communication_status: str | None,
+    equipment_status: str | None,
+) -> list[str]:
+    notes = _status_uncertainty_notes(
+        communication_status=communication_status,
+        equipment_status=equipment_status,
+    )
+    if not current_time:
+        notes.append("current_time not provided; leaveBy is expressed as a relative deadline.")
+    return notes
+
+
+def _status_uncertainty_notes(
+    *,
+    communication_status: str | None,
+    equipment_status: str | None,
+) -> list[str]:
+    notes: list[str] = []
+    if not communication_status:
+        notes.append("communication_status not provided.")
+    if not equipment_status:
+        notes.append("equipment_status not provided.")
+    return notes
+
+
+def _residual_risk(action: OutdoorAction, terrain_risk_level: str | None) -> list[str]:
+    risks = ["即使遵守時限，仍可能受天氣、地面濕滑、能見度與隊伍狀態變化影響。"]
+    if action in {OutdoorAction.FILM, OutdoorAction.PHOTO, OutdoorAction.TRIPOD}:
+        risks.append("拍攝衝動可能導致追加停留或離開安全路線。")
+    if action == OutdoorAction.TRIPOD:
+        risks.append("腳架會增加停留時間、佔用路徑寬度，強風時也可能造成失衡。")
+    if action == OutdoorAction.WAIT:
+        risks.append("等待霧散可能轉成追加拍攝時間，必須用硬性離開時間切斷。")
+    if action == OutdoorAction.WAIT_TEAMMATE:
+        risks.append("等待隊友可能壓縮日照、撤退與後續 CP buffer，不能無限延長。")
+    if terrain_risk_level:
+        risks.append(f"現場地形風險標記為 {terrain_risk_level}，需保守處理。")
+    return risks
+
+
+def _default_location_constraint(action: OutdoorAction) -> str | None:
+    if action in {
+        OutdoorAction.FILM,
+        OutdoorAction.TRIPOD,
+        OutdoorAction.PHOTO,
+        OutdoorAction.STOP,
+        OutdoorAction.REST,
+        OutdoorAction.WAIT,
+        OutdoorAction.WAIT_TEAMMATE,
+    }:
+        return "留在步道內側或既有路線走廊內"
+    if action == OutdoorAction.LUNCH:
+        return "只使用路線走廊內最近的穩定、低曝露停留點"
+    if action == OutdoorAction.WEAR_RAIN_GEAR:
+        return "就地安全位置；不離開步道內側或既有路線走廊"
+    if action == OutdoorAction.RETREAT:
+        return (
+            "保持隊伍完整，沿已知路線或最近安全撤退線前往最近安全點；"
+            "不分隊、不改走未審核支線"
+        )
+    return None
+
+
+def _default_weather_impact(budget: RiskBudget) -> str | None:
+    if budget.weather_reserve_minutes > 0:
+        return f"{budget.weather_reserve_minutes:g} minutes reserved for weather change"
+    return None
+
+
+def _default_daylight_impact(budget: RiskBudget) -> str | None:
+    if budget.daylight_reserve_minutes > 0:
+        return f"{budget.daylight_reserve_minutes:g} minutes reserved for daylight margin"
+    return None
+
+
+def _default_retreat_impact(budget: RiskBudget) -> str | None:
+    if budget.retreat_reserve_minutes > 0:
+        return f"{budget.retreat_reserve_minutes:g} minutes reserved for retreat margin"
+    return None
+
+
+def _default_team_pace_impact(budget: RiskBudget) -> str | None:
+    if budget.slowest_member_reserve_minutes > 0:
+        return f"{budget.slowest_member_reserve_minutes:g} minutes reserved for slowest member"
+    return None
+
+
+def _leave_by(current_time: str | None, max_duration_minutes: int) -> str | None:
+    parsed = _parse_datetime(current_time)
+    if parsed is not None:
+        return (parsed + timedelta(minutes=max_duration_minutes)).isoformat()
+    return _local_clock_leave_by(current_time, max_duration_minutes)
+
+
+def _local_clock_leave_by(
+    current_time: str | None,
+    max_duration_minutes: int,
+) -> str | None:
+    if not current_time:
+        return None
+    match = re.fullmatch(r"(\d{1,2})[:：](\d{2})", current_time.strip())
+    if not match:
+        return None
+    hour = int(match.group(1))
+    minute = int(match.group(2))
+    if hour > 23 or minute > 59:
+        return None
+    total_minutes = (hour * 60 + minute + max_duration_minutes) % (24 * 60)
+    return f"{total_minutes // 60:02d}:{total_minutes % 60:02d}"
+
+
+def _parse_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    text = value.strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = f"{text[:-1]}+00:00"
+    try:
+        return datetime.fromisoformat(text)
+    except ValueError:
+        return None
+
+
+def _confidence(value: str | None, *, default: ConfidenceLevel) -> ConfidenceLevel:
+    if value:
+        normalized = value.strip().lower()
+        for candidate in ConfidenceLevel:
+            if normalized == candidate.value:
+                return candidate
+    return default
+
+
+def _action_label(action: OutdoorAction | str) -> str:
+    labels = {
+        OutdoorAction.STOP: "停留",
+        OutdoorAction.FILM: "拍影片",
+        OutdoorAction.TRIPOD: "架腳架",
+        OutdoorAction.PHOTO: "拍照",
+        OutdoorAction.REST: "休息",
+        OutdoorAction.LUNCH: "吃午餐",
+        OutdoorAction.SUMMIT: "攻頂",
+        OutdoorAction.REROUTE: "改線",
+        OutdoorAction.WAIT: "等待",
+        OutdoorAction.WAIT_TEAMMATE: "等隊友",
+        OutdoorAction.CONTINUE: "繼續前進",
+        OutdoorAction.RETREAT: "撤退",
+        OutdoorAction.WEAR_RAIN_GEAR: "穿雨具",
+        OutdoorAction.SPLIT_TEAM: "分隊",
+        OutdoorAction.CROSS_STREAM: "渡溪",
+        OutdoorAction.ENTER_EXPOSED_SECTION: "進入曝露地形",
+    }
+    try:
+        return labels[OutdoorAction(str(action))]
+    except ValueError:
+        return str(action)
+
+
+def _warnings(
+    *,
+    missing_fields: list[str],
+    communication_status: str | None,
+    equipment_status: str | None,
+    risk_budget_source: dict[str, Any],
+) -> list[str]:
+    warnings: list[str] = []
+    if missing_fields:
+        warnings.append("Missing field evidence forced a conservative permission decision.")
+    if risk_budget_source.get("source_status") == "derived_from_planned_eta_candidate":
+        warnings.append(
+            "Risk budget was derived from candidate planned ETA, not reviewed live safety truth."
+        )
+    if risk_budget_source.get("reserve_sources"):
+        warnings.append(
+            "Workspace reserve was deducted from planned ETA slack."
+        )
+    if not communication_status:
+        warnings.append("communication_status missing; no team/contact assumption was made.")
+    if not equipment_status:
+        warnings.append("equipment_status missing; no equipment readiness assumption was made.")
+    return warnings
+
+
+def _load_project(root: Path) -> dict[str, Any]:
+    path = root / "project.json"
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _float_or_none(value: Any) -> float | None:
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _first_number(*values: Any) -> float | None:
+    for value in values:
+        parsed = _float_or_none(value)
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _first_text(*values: Any) -> str | None:
+    for value in values:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+        if value is not None and not isinstance(value, (dict, list, tuple, set)):
+            text = str(value).strip()
+            if text:
+                return text
+    return None
+
+
+def _truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "y"}
+    return bool(value)
+
+
+def _nonnegative_float(value: Any) -> float:
+    parsed = _float_or_none(value)
+    if parsed is None:
+        return 0.0
+    return max(0.0, parsed)
+
+
+def _has_any(text: str, fragments: tuple[str, ...]) -> bool:
+    normalized = str(text or "").lower().replace(" ", "")
+    return any(fragment.lower().replace(" ", "") in normalized for fragment in fragments)
+
+
+def _closed_boundary() -> dict[str, bool]:
+    return {
+        "read_only": True,
+        "runtime_safety_truth": False,
+        "candidate_only": True,
+        "model_synthesis_performed": False,
+        "model_output_is_runtime_truth": False,
+        "live_safety_api_calls_allowed": False,
+        "safety_api_called": False,
+        "phase1_l0_l4_state_mutated": False,
+        "outbound_send_performed": False,
+        "hardware_control_performed": False,
+        "workspace_file_write_allowed": False,
+    }

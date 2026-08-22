@@ -6,8 +6,10 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-DEFAULT_ASSISTANT_TIMEOUT_SECONDS = 8
-DEFAULT_ASSISTANT_MAX_CONTEXT_CHARS = 12000
+DEFAULT_ASSISTANT_TIMEOUT_SECONDS: int | None = None
+DEFAULT_ASSISTANT_MAX_CONTEXT_CHARS: int | None = None
+AI_HAT_PLUS_2_ACCELERATOR = "raspberry_pi_ai_hat_plus_2_hailo10h"
+AI_HAT_PLUS_2_HAILO_OLLAMA_BASE_URL = "http://127.0.0.1:8000"
 
 
 class AssistantModelProfile(BaseModel):
@@ -16,21 +18,63 @@ class AssistantModelProfile(BaseModel):
     profile: Literal["cloud", "local"]
     model_name: str = Field(min_length=1)
     base_url: str | None = None
+    backend: Literal["auto", "openai_compatible", "ollama", "hailo_ollama"] = "auto"
+    hardware_accelerator: Literal["none", "raspberry_pi_ai_hat_plus_2_hailo10h"] = "none"
+    tool_calling: Literal["auto", "enabled", "disabled"] = "auto"
+    model_settings: dict[str, object] = Field(default_factory=dict)
     token_id: str | None = None
     token_env_var: str | None = None
 
+    def resolved_base_url(self) -> str | None:
+        if self.base_url:
+            return self.base_url
+        if (
+            self.profile == "local"
+            and self.hardware_accelerator == AI_HAT_PLUS_2_ACCELERATOR
+            and self.backend in {"auto", "hailo_ollama", "openai_compatible"}
+        ):
+            return AI_HAT_PLUS_2_HAILO_OLLAMA_BASE_URL
+        return None
+
+    def workspace_tools_enabled(self) -> bool:
+        """Keep Scout's server-side tool orchestration available for every profile.
+
+        Legacy ``disabled`` and ``workspace_tools_enabled=false`` values are
+        accepted for config compatibility but no longer remove tools from Scout
+        AI. A provider that cannot emit native tool calls uses the deterministic
+        runtime adapter instead.
+        """
+
+        return True
+
 
 class AssistantModelConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     active_profile: Literal["cloud", "local"] = "cloud"
     cloud_model: AssistantModelProfile
     local_model: AssistantModelProfile
-    timeout_seconds: int = Field(default=DEFAULT_ASSISTANT_TIMEOUT_SECONDS, ge=1, le=120)
-    max_context_chars: int = Field(default=DEFAULT_ASSISTANT_MAX_CONTEXT_CHARS, ge=1000, le=200000)
+    aggressive_construction_mode: bool = True
+    timeout_seconds: int | None = Field(default=DEFAULT_ASSISTANT_TIMEOUT_SECONDS, ge=1)
+    max_context_chars: int | None = Field(
+        default=DEFAULT_ASSISTANT_MAX_CONTEXT_CHARS,
+        ge=1000,
+    )
+    max_tool_calls_per_attempt: int = Field(default=10, ge=10)
+    max_model_requests_per_attempt: int = Field(default=10, ge=10)
+    planner_call_limit: int = Field(default=10, ge=10)
+    retriever_call_limit: int = Field(default=10, ge=10)
+    synthesis_call_limit: int = Field(default=10, ge=10)
+    verifier_call_limit: int = Field(default=10, ge=10)
+    reviewer_call_limit: int = Field(default=10, ge=10)
+    repair_call_limit: int = Field(default=10, ge=10)
+    retry_call_limit: int = Field(default=10, ge=10)
+    replan_call_limit: int = Field(default=10, ge=10)
+    browser_call_limit: int = Field(default=10, ge=10)
+    subagent_call_limit: int = Field(default=10, ge=10)
     connect_on_startup: bool = True
     fallback_to_local_on_error: bool = True
-    local_fallback_fixed_schema: bool = True
+    local_fallback_fixed_schema: bool = False
 
     @model_validator(mode="after")
     def validate_profile_roles(self) -> "AssistantModelConfig":
@@ -39,6 +83,12 @@ class AssistantModelConfig(BaseModel):
         if self.local_model.profile != "local":
             raise ValueError("local_model.profile must be local")
         return self
+
+    def effective_timeout_seconds(self) -> int | None:
+        return None if self.aggressive_construction_mode else self.timeout_seconds
+
+    def effective_max_context_chars(self) -> int | None:
+        return None if self.aggressive_construction_mode else self.max_context_chars
 
 
 def load_assistant_model_config(path: Path | str) -> AssistantModelConfig:

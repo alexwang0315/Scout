@@ -1,0 +1,46 @@
+{
+  "artifact_kind": "scout_equipment_status_fixture",
+  "artifact_version": "scout_equipment_status_fixture.v0",
+  "backup_light": {
+    "ready": true
+  },
+  "boundary": {
+    "candidate_only": true,
+    "raw_payloads_embedded": false,
+    "runtime_safety_truth": false
+  },
+  "communication": {
+    "ready": true
+  },
+  "first_aid": {
+    "ready": true
+  },
+  "gpx": {
+    "loaded": true
+  },
+  "headlamp": {
+    "ready": true
+  },
+  "hydration": {
+    "water_liters": 2.0
+  },
+  "nutrition": {
+    "food_hours": 8.0
+  },
+  "offline_map": {
+    "ready": true
+  },
+  "project_id": "chilai_nanhua_day1",
+  "rain_shell": {
+    "ready": true
+  },
+  "review": {
+    "human_review_required": false,
+    "input_status": "human_reviewed",
+    "notes": "Fixture equipment status confirms required Scout standard resource fields for planning tests only.",
+    "review_ref": "reviews/human_reviews.json#equipment-status-placeholder",
+    "review_state": "accepted",
+    "reviewed_at": "2026-05-02T20:25:00+08:00"
+  },
+  "status": "reviewed_planning_context"
+}

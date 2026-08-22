@@ -63,6 +63,12 @@ credentials for external providers return `model_config_blocked` with only
 environment variable names, not secret values. The same redacted policy reports
 configured timeout, max-cost, and fallback model settings.
 
+NVIDIA-hosted GLM uses `SCOUT_AI_OS_MODEL=z-ai/glm-5.2` and requires
+`NVIDIA_API_KEY`; Scout sends `z-ai/glm-5.2` as the provider model id.
+OpenRouter models use `openrouter:<vendor/model>` and require
+`OPENROUTER_API_KEY`; direct OpenAI chat models use `openai-chat:<model>` and
+require `OPENAI_API_KEY`.
+
 The `scout-ai-os-evals` CLI loads `src/scout/evals/workflow_router_cases.json`
 as a `pydantic_evals.Dataset` and runs deterministic API regression cases for
 workflow installation, approval-required workflows, UI routing, boundary

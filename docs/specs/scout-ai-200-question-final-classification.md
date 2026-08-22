@@ -3,9 +3,27 @@
 - artifact_kind: `scout_ai_200_question_final_classification`
 - artifact_version: `scout_ai_200_question_final_classification.v0`
 - generated_on: `2026-06-06`
+- latest_delta_reviewed_on: `2026-06-30`
 - source corpus: `docs/specs/scout-ai-200-question-corpus.json`
 - source eval: `scout_ai_question_answerability_eval.v0`
 - boundary: read-only; no `/safety/*`; no Phase 1 L0-L4 mutation; no outbound send; no medical diagnosis
+
+## 2026-06-30 Superseding Implementation Deltas
+
+The summary counts below remain the original 2026-06-06 baseline. The following
+deltas supersede individual classifications until the full 200-question suite
+is rerun:
+
+| Question family / ID | Previous classification impact | Current tool/model path | Updated answerability |
+| --- | --- | --- | --- |
+| K/mileage anchor questions such as "本次路徑的 15K 在哪" | Previously depended on route notes or generic OCR/full-text and could miss new mileage artifacts. | `pydantic_ai.tool.assess_scout_route_context.v0`, `route_mileage_k_anchors_ref`, bounded `mileage_tag_alignment_ref` | `answerable_by_current_read_only_tools` when workspace refs exist |
+| OCR/map-label questions such as seed-018 and "924m 標註在哪" | Previously covered legacy MCP OCR only. | `pydantic_ai.tool.search_scout_map_perception.v0`, `raster_label_evidence_ref`, `raster_label_ocr_output_ref` | `answerable_by_current_read_only_tools` when raster OCR refs exist |
+| Weather/environment questions listed in the 2026-06-24 routing update | Previously `requires_missing_evidence` for fresh weather/TTL. | `scout.ai.weather_window.assess.v0`, `scout.ai.cwa_environment.assess.v0`, `scout.ai.gee_environment.assess.v0` | `evidence_available` or `partial_evidence_with_missing_context` depending on current-run CWA/GEE artifacts |
+| seed-091 / seed-092 / seed-095 provider/tool-status questions | Previously modeled as runtime ingress/status gaps. | Scout model policy, Pydantic AI v2.1 smoke output, tool registry, context registry | `answerable_by_current_read_only_tools` for provider/tool configuration; runtime ingress still requires runtime records |
+| Questions requiring live WebSearch or provider-native MCP | Not part of baseline deterministic tools. | No implicit v2 native WebSearch/MCP. Requires reviewed connector/capability. | `requires_missing_evidence` or `blocked_for_direct_action_can_only_explain` until connector is approved |
+
+All deltas preserve the same boundary: candidate/read-only evidence only, no
+runtime safety truth, no `/safety/*`, no outbound send, and no hardware control.
 
 ## Summary
 
@@ -159,6 +177,34 @@
 | field-038 | field_weather_environment | 現在停下來會不會變冷太快？ | - | `scout.ai.weather_window.assess.v0` (weather window assessment) |
 | field-039 | field_weather_environment | 風寒和濕衣是否已經構成風險？ | - | `scout.ai.weather_window.assess.v0` (weather window assessment) |
 
+2026-06-24 routing update:
+
+- `scout.ai.weather_window.assess.v0` remains the weather decision wrapper for
+  this answerability class.
+- Natural weather questions now expand to
+  `scout.ai.cwa_environment.assess.v0` when prepared CWA evidence exists in the
+  workspace.
+- Rain, stream, wet terrain, rockfall, landslide, and weather-terrain compound
+  questions also expand to `scout.ai.gee_environment.assess.v0`.
+- These environment tools are candidate-only workspace readers. They do not
+  perform live network fetches and cannot write runtime safety truth.
+
+2026-06-24 fixture-backed retest against
+`tests/fixtures/pretrip/projects/chilai_nanhua_day1`:
+
+| ID | 問題 | Selected environment tools | Answerability |
+| --- | --- | --- | --- |
+| field-031 | 白牆下這段還適合走嗎？ | weather_window, CWA | evidence_available |
+| field-032 | 現在風雨是否會放大失溫風險？ | weather_window, CWA, GEE | evidence_available |
+| field-034 | 這段如果起霧會不會容易失向？ | weather_window, CWA | evidence_available |
+| field-035 | 今天的天氣窗口是否足夠？ | weather_window, CWA | evidence_available |
+| field-036 | 溪水暴漲會不會阻斷路線？ | weather_window, CWA, GEE | partial_evidence_with_missing_context |
+| field-037 | 這段下雨後會變成落石區嗎？ | weather_window, CWA, GEE | partial_evidence_with_missing_context |
+| field-039 | 風寒和濕衣是否已經構成風險？ | weather_window, CWA | partial_evidence_with_missing_context |
+| seed-027 | 哪些地方下雨後風險會變高？ | weather_window, CWA, GEE | evidence_available |
+| seed-088 | 天氣與地形風險是否重疊？ | weather_window, CWA, GEE | partial_evidence_with_missing_context |
+| seed-089 | 是否需要延後出發？ | route_readiness, weather_window, CWA, GEE | evidence_available |
+
 #### 個人/隊伍 baseline profile (`user_or_team_baseline_profile`) - 14 題
 
 - 需要補的資料：fitness baseline、expected pace、load、acclimatization、skill level、水/補給計畫、risk tolerance
@@ -230,9 +276,9 @@
 | seed-052 | transport_router | MQTT message routing latency 是多少？ | - | `scout.ai.runtime_ingress_status.search.v0` (runtime ingress/router/status search) |
 | seed-058 | transport_router | router 的 match reason 是什麼？ | - | `scout.ai.runtime_ingress_status.search.v0` (runtime ingress/router/status search) |
 | seed-060 | transport_router | transport service 有沒有發送 outbound packet？ | - | `scout.ai.runtime_ingress_status.search.v0` (runtime ingress/router/status search) |
-| seed-092 | admin_debug_ai | Pydantic AI 是否啟用？ | - | `scout.ai.runtime_ingress_status.search.v0` (runtime ingress/router/status search) |
-| seed-093 | admin_debug_ai | assistant status 正常嗎？ | - | `scout.ai.runtime_ingress_status.search.v0` (runtime ingress/router/status search) |
-| seed-094 | admin_debug_ai | 如果 provider 失敗，fallback 會怎麼回答？ | - | `scout.ai.runtime_ingress_status.search.v0` (runtime ingress/router/status search) |
+| seed-092 | admin_debug_ai | Pydantic AI 是否啟用？ | - | model policy/status projection, `scout.ai.tool_registry.describe` |
+| seed-093 | admin_debug_ai | assistant status 正常嗎？ | - | assistant status projection, model policy/status projection |
+| seed-094 | admin_debug_ai | 如果 provider 失敗，fallback 會怎麼回答？ | - | model policy/SLA telemetry, assistant status projection |
 
 #### Safety candidate/admission state (`safety_candidate_or_admission_state`) - 8 題
 

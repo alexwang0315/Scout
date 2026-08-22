@@ -1,0 +1,86 @@
+{
+  "all_accounted_for": true,
+  "artifact_kind": "scout_team_status_fixture",
+  "artifact_version": "scout_team_status_fixture.v0",
+  "boundary": {
+    "candidate_only": true,
+    "outbound_send_performed": false,
+    "raw_payloads_embedded": false,
+    "runtime_safety_truth": false
+  },
+  "checkin": {
+    "overdue_minutes": 0,
+    "planned_interval_minutes": 30
+  },
+  "communication": {
+    "status": "ok"
+  },
+  "communication_status": "ok",
+  "governance": {
+    "leader_accepts_slowest_basis": true
+  },
+  "leader_accepts_slowest_basis": true,
+  "members": [
+    {
+      "accounted_for": true,
+      "display_label": "Mission owner placeholder",
+      "last_heard_minutes": 0,
+      "member_id": "person.owner_placeholder",
+      "pace_mps": 0.88,
+      "position_status": "with_group",
+      "reserve_minutes": 65,
+      "review": {
+        "human_review_required": false,
+        "input_status": "human_reviewed",
+        "review_ref": "reviews/human_reviews.json#team-status-placeholder",
+        "review_state": "accepted"
+      },
+      "scout_pace_coefficient": {
+        "downhill_speed_mps": 0.62,
+        "flat_speed_mps": 1.0,
+        "late_trip_speed_decay_ratio": 0.12,
+        "rest_frequency_minutes": 55,
+        "uphill_speed_mps": 0.54
+      }
+    },
+    {
+      "accounted_for": true,
+      "display_label": "Teammate placeholder",
+      "last_heard_minutes": 0,
+      "member_id": "person.teammate_placeholder",
+      "pace_mps": 0.72,
+      "position_status": "with_group",
+      "reserve_minutes": 48,
+      "review": {
+        "human_review_required": false,
+        "input_status": "human_reviewed",
+        "review_ref": "reviews/human_reviews.json#team-status-placeholder",
+        "review_state": "accepted"
+      },
+      "scout_pace_coefficient": {
+        "downhill_speed_mps": 0.5,
+        "flat_speed_mps": 0.86,
+        "late_trip_speed_decay_ratio": 0.18,
+        "rest_frequency_minutes": 45,
+        "technical_terrain_slowdown_ratio": 0.22,
+        "uphill_speed_mps": 0.45
+      }
+    }
+  ],
+  "planned_checkin_interval_minutes": 30,
+  "project_id": "chilai_nanhua_day1",
+  "rendezvous": {
+    "point": "雲海保線所"
+  },
+  "rendezvous_point": "雲海保線所",
+  "review": {
+    "human_review_required": false,
+    "input_status": "human_reviewed",
+    "notes": "Fixture team status provides reviewed planning context only; it is not live team position truth.",
+    "review_ref": "reviews/human_reviews.json#team-status-placeholder",
+    "review_state": "accepted",
+    "reviewed_at": "2026-05-02T20:20:00+08:00"
+  },
+  "split_team": false,
+  "team_rest_sync": "synced"
+}

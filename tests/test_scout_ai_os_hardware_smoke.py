@@ -27,7 +27,7 @@ def test_hardware_smoke_profile_records_all_planned_phases(
 def test_hardware_smoke_default_uses_local_model_and_safe_gates(
     monkeypatch,
 ) -> None:
-    monkeypatch.setenv("SCOUT_AI_OS_MODEL", "gpt-4o-mini")
+    monkeypatch.setenv("SCOUT_AI_OS_MODEL", "glm-5.2")
 
     report = run_hardware_smoke(repo_root=ROOT)
 
@@ -75,19 +75,20 @@ def test_hardware_smoke_external_model_blocks_without_key(
     monkeypatch,
 ) -> None:
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+    monkeypatch.delenv("NVIDIA_API_KEY", raising=False)
 
     report = run_hardware_smoke(
         repo_root=ROOT,
-        model="gpt-4o-mini",
+        model="glm-5.2",
         allow_external_model=True,
         env_file=ROOT / "missing.env",
     )
 
     checks = {check.check_id: check for check in report.checks}
-    assert report.model_policy["display_name"] == "openrouter:openai/gpt-4o-mini"
-    assert report.model_policy["missing_credential_env"] == ["OPENROUTER_API_KEY"]
+    assert report.model_policy["display_name"] == "nvidia:z-ai/glm-5.2"
+    assert report.model_policy["missing_credential_env"] == ["NVIDIA_API_KEY"]
     assert checks["pydantic_ai_smoke"].status == "blocked"
-    assert "OPENROUTER_API_KEY" in json.dumps(report.model_dump(mode="json"))
+    assert "NVIDIA_API_KEY" in json.dumps(report.model_dump(mode="json"))
 
 
 def test_hardware_smoke_accepts_advisory_hardware_evidence(

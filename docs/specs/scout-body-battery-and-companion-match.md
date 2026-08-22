@@ -364,6 +364,8 @@ Success means a user can:
 - share a coarse capability profile without raw GPX or exact timestamps;
 - find companion candidates with similar walking, climbing, descending, rest,
   and fatigue-decay patterns;
+- identify group pace pressure when a stronger companion rhythm pushes the user
+  above sustainable effort and creates later rest-cost delay;
 - receive field rest cues when live wearable signals drift below personal
   baseline expectations.
 
@@ -386,6 +388,21 @@ This creates daily-use retention:
 - after a trip, Scout explains where fatigue appeared;
 - when joining others, users can compare coarse capability without exposing raw
   private traces.
+
+Companion mismatch can also appear during a trip. If the user is trying to
+follow companions with clearly higher capability, Scout should treat the cause
+as `companion_pace_pressure`, not as a personal failure or diagnosis. A window
+with high heart-rate pressure and collapsed movement efficiency can become a
+rest cue; if the user keeps moving because of group pressure and later needs
+large rests, Scout should hand evidence to companion match, pace, and delay
+composition.
+The runtime evidence artifact for this first detector is
+`scout_companion_pace_pressure_evidence`. The first runtime composer that joins
+this evidence with physiologic rest directives and pace/delay handoff is
+`scout_route_pressure_composer_result`.
+Walking and hiking runtime baselines should use
+`scout_walking_hiking_baseline` so companion comparison does not silently reuse
+running-oriented cardio baselines for field pacing.
 
 The field-use rationale is sharper than general wellness: many accidents open a
 window when the next step becomes difficult and the user starts losing calm
@@ -1510,6 +1527,13 @@ match_score =
 Weights should be route-type aware. For example, ascent endurance matters more
 for high-ascent routes; descent conservatism matters more for steep return
 routes; rest rhythm matters more for group trips.
+
+Match score is not only "who is faster." Scout should preserve asymmetric risk:
+walking with much stronger companions can pressure the weaker member into
+over-output, while walking with a much slower group can create delay or
+darkness pressure. The first runtime handoff for this is
+`external_pressure_flags=["companion_pace_pressure"]`, which routes the evidence
+to `companion_match_gate`, `pace_gate`, and `delay_gate`.
 
 ## UI Requirements
 

@@ -1,0 +1,145 @@
+id: historical-dem-gpx-route-inference
+version: 0.1.0
+status: experimental
+type: analysis
+priority: 55
+triggers:
+  - event: assistant.historical_dem_gpx_route_inference_requested
+    description: Reconstruct a candidate historical route topology from archival records, coordinate tables, DEM terrain, and public or Scout-owned GPX evidence.
+    required_refs:
+      - pretrip.workspace.project
+      - docs.specs.scout_historical_dem_gpx_route_inference
+activation_gate:
+  mode: manual
+  requires_human_approval: false
+  conditions:
+    - user asks to locate a historical station, settlement, hunting path, lost trail, or infer terrain-feasible routes between named points
+    - input sources remain separated as P0 official/baseline, P1 public route/community, and P2 Scout-owned field evidence
+    - all coordinate systems and transformations are explicit
+    - output is a route hypothesis with shared nodes and edges, not a single asserted trail
+    - output remains candidate-only and cannot become runtime safety truth
+    - no outbound send, hardware control, live navigation mutation, or safety decision is allowed
+noise_control:
+  cooldown_seconds: 0
+  dedupe_window_seconds: 0
+  max_runs_per_mission: null
+  suppression_keys:
+    - project_id
+    - route_name
+preflight:
+  required_skill_ids:
+    - route-reference-point-lookup
+  required_capabilities:
+    - scout.ai.route_context.assess.v0
+    - pydantic_ai.tool.search_scout_workspace_catalog.v0
+    - pydantic_ai.tool.search_scout_route_structure.v0
+    - pydantic_ai.tool.search_scout_map_perception.v0
+    - pydantic_ai.tool.search_scout_evidence_fulltext.v0
+  required_artifacts:
+    - pretrip.workspace.project
+    - docs.specs.scout_historical_dem_gpx_route_inference
+allowed_reads:
+  - docs.specs.scout_historical_dem_gpx_route_inference
+  - agents.skills.infer_historical_dem_gpx_routes
+  - pretrip.workspace.project
+  - pretrip.workspace.route_summary
+  - pretrip.workspace.outputs.map_perception
+  - pretrip.workspace.outputs.layers.normalized.raster_label_evidence
+  - pretrip.workspace.outputs.layers.normalized.web_case_evidence
+  - pretrip.workspace.outputs.mcp
+  - pretrip.workspace.outputs.mcp.named_point_evidence
+  - pretrip.workspace.candidates.route_context_points
+  - pretrip.workspace.candidates.route_mileage_k_anchors
+  - pretrip.workspace.candidates.route_note_candidates
+  - pretrip.workspace.scout_owned.completed_trip_gpx
+  - pretrip.workspace.scout_owned.deviation_records
+  - pretrip.workspace.scout_owned.photo_points
+  - pretrip.workspace.evidence_fulltext
+allowed_writes: []
+forbidden_writes:
+  - pretrip.workspace
+  - phase1.runtime
+  - phase1.safety
+  - phase2.brain.observed_facts
+  - live.safety_api
+  - hardware.controls
+  - transport.egress
+output_schema:
+  format: artifact
+  node_types:
+    - HistoricalDemGpxRouteHypothesis
+    - RouteHypothesisNode
+    - RouteHypothesisEdge
+    - RouteInferenceContradiction
+    - RouteInferenceEvidenceGap
+    - SkillRunRecord
+  artifact_kinds:
+    - historical_dem_gpx_route_hypothesis
+    - historical_route_source_ledger
+    - historical_route_datum_audit
+    - historical_route_candidate_geojson
+  required_fields:
+    - project_id
+    - route_name
+    - source_ledger
+    - source_tier_counts
+    - coordinate_context
+    - datum_audit
+    - historical_clue_sequence
+    - anchors
+    - dem_processing_summary
+    - gpx_processing_summary
+    - topology_nodes
+    - topology_edges
+    - route_options_edge_ids
+    - shared_edge_ids
+    - contradictions
+    - evidence_gaps
+    - field_verification_questions
+    - source_refs
+    - candidate_only
+    - runtime_safety_truth
+  safety_boundary:
+    candidate_only: true
+    runtime_safety_truth: false
+    safe_or_walkable: not_determined
+failure_policy:
+  on_error: record_failure
+  retry:
+    max_attempts: 0
+    backoff_seconds: 0
+  degrade_to: route-reference-point-lookup
+control_surface:
+  operator_visible: true
+  manual_run_allowed: true
+  disable_allowed: true
+  status_label: Historical DEM + GPX route inference
+audit:
+  log_inputs: true
+  log_outputs: true
+  log_decision: true
+  retention: mission_lifetime
+application_routing:
+  enabled: true
+  route_id: scout.historical_dem_gpx_route_inference
+  route_target: scout.ai.route_context.assess.v0
+  routing_agent: scout.skill_routing_agent.v0
+  observation_names:
+    - historical_route_reconstruction_question
+    - lost_trail_location_question
+    - dem_corridor_enumeration_question
+    - gpx_historical_alignment_question
+    - ridge_valley_route_topology_question
+  capability_tags:
+    - historical_route
+    - archival_coordinate
+    - datum_audit
+    - dem_terrain_corridor
+    - d8_flow_accumulation
+    - public_gpx_alignment
+    - shared_route_topology
+    - route_hypothesis_visualization
+  profile: pretrip_read_only
+  side_effect_policy: no_runtime_safety_mutation_no_outbound
+  allowed_outbound_envelope_classes: []
+  fan_out: false

@@ -10,13 +10,23 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi",
     "pydantic>=2",
-    "pydantic-ai",
+    "pydantic-ai-slim[duckduckgo,openai,openrouter]==2.33.0",
+    "pydantic-evals==2.33.0",
     "pyyaml",
     "uvicorn",
 ]
 
+[project.optional-dependencies]
+ai-hat-eval = [
+    "smbus2==0.5.0",
+]
+pydantic-ai-smoke = [
+    "pydantic-ai-slim[duckduckgo,mcp,web-fetch]==2.33.0",
+]
+
 [project.scripts]
 scout-ai-os-pydantic-smoke = "scout.cli.pydantic_smoke:main"
+scout-ai-os-pydantic-compat-smoke = "scout.cli.pydantic_compat_smoke:main"
 scout-ai-os-evals = "scout.evals.regression:main"
 scout-ai-os-hardware-evidence = "scout.cli.hardware_evidence:main"
 scout-ai-os-hardware-smoke = "scout.cli.hardware_smoke:main"

@@ -30,6 +30,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        tesseract-ocr \
+        tesseract-ocr-chi-tra \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY requirements.pi.admin.txt .
 RUN pip install --no-cache-dir -r requirements.pi.admin.txt
 
@@ -45,6 +51,7 @@ COPY \
     admin_tile_cache_builder.py \
     admin_tile_proxy.py \
     admin_weather_overlay.py \
+    application_router.py \
     assistant_api.py \
     assistant_context.py \
     assistant_model_config.py \
@@ -52,11 +59,25 @@ COPY \
     assistant_offline_fallback_contract.py \
     assistant_pydantic_provider.py \
     assistant_provider.py \
+    assistant_readiness_check.py \
     assistant_skill_router.py \
+    assistant_weather_preparation.py \
+    assistant_workspace_total_info.py \
     checkpoint_manager.py \
     communication_provider.py \
     communication_tool.py \
+    assistant_ui_smoke_check.py \
+    cwa_imagery_registry.py \
+    cwa_precipitation_grid.py \
+    cwa_precipitation_grid_ingestor.py \
+    cwa_radar_ingestor.py \
+    cwa_route_identity.py \
+    cwa_satellite_ingestor.py \
+    dashboard_connected_preparation.py \
+    dashboard_workspace_operations.py \
+    dashboard_workspace_publication.py \
     debug_assistant_context.py \
+    debug_event_provenance.py \
     debug_api.py \
     environment_provider.py \
     geo_utils.py \
@@ -67,6 +88,7 @@ COPY \
     incident_package.py \
     incident_store.py \
     ingress_observer_supervisor.py \
+    ingress_evidence.py \
     ins_dr_input_adapter.py \
     ins_dr_navigation.py \
     mission_graph.py \
@@ -77,6 +99,7 @@ COPY \
     offline_map.py \
     offline_map_models.py \
     pdr_fallback.py \
+    pydantic_ai_runtime_compat.py \
     phase2_brain_models.py \
     phase2_refs.py \
     phase2_store_utils.py \
@@ -104,6 +127,11 @@ COPY \
     pretrip_gpx_filter.py \
     pretrip_import.py \
     pretrip_layer_preparation.py \
+    pretrip_artifact_manifest.py \
+    pretrip_p0_p1_source_collection.py \
+    pretrip_reference_segment_timing.py \
+    pretrip_route_briefing_compose.py \
+    pretrip_route_context_collection.py \
     pretrip_mcp_models.py \
     pretrip_mcp_review.py \
     pretrip_mcp_synthesis.py \
@@ -138,19 +166,45 @@ COPY \
     recording_policy_runtime.py \
     replay_runner.py \
     resource_provider.py \
+    radar_motion_estimator.py \
+    radar_satellite_risk_extractor.py \
+    rainfall_grid_freshness.py \
     risk_rules.py \
+    route_imagery_sampler.py \
     route_matching.py \
+    route_precipitation_sampler.py \
     route_progress.py \
     runtime_artifact_resolution.py \
+    runtime_audit_api.py \
+    runtime_audit_ledger.py \
+    runtime_audit_models.py \
     runtime_debug_log.py \
     runtime_debug_models.py \
+    scout_gnss_hardware_observer.py \
+    scout_layer_contract.py \
+    scout_agent_builtin_tools.py \
+    scout_agent_cli.py \
     scout_agent_debug_projection.py \
     scout_agent_kb.py \
+    scout_agent_runtime.py \
+    scout_alpha_simulation_api.py \
+    scout_alpha_simulation_models.py \
+    scout_alpha_simulation_sandbox.py \
+    scout_alpha_simulation_scenarios.py \
+    scout_emergency_mobile_closed_loop_api.py \
+    scout_emergency_mobile_closed_loop_sandbox.py \
+    scout_env.py \
+    scout_live_navigation_snapshot_adapter.py \
+    scout_live_navigation_snapshot_evidence.py \
+    scout_live_navigation_snapshot_route_match.py \
+    scout_local_mqtt_broker_harness.py \
     safety_models.py \
     safety_state_machine.py \
+    scout_cli.py \
     scout_agent_models.py \
     scout_agent_tools.py \
     scout_agent_trace.py \
+    scout_ai_context_registry.py \
     scout_companion_match_admin.py \
     scout_companion_match_models.py \
     scout_energy_baseline.py \
@@ -158,11 +212,48 @@ COPY \
     scout_energy_models.py \
     scout_energy_reserve.py \
     scout_energy_reserve_monitor.py \
+    scout_contextual_permission_tool.py \
+    scout_contextual_permission_rudy.py \
+    scout_contextual_permission_workbench.py \
+    scout_contextual_permission_workbench_api.py \
+    scout_energy_vitals_tool.py \
+    scout_equipment_resource_tool.py \
+    scout_ins_dr_trace_tool.py \
+    scout_live_navigation_state_tool.py \
+    scout_route_context_tool.py \
     scout_hardware_readiness_live_probe.py \
     scout_map_perception_tool.py \
+    scout_media_literacy_tool.py \
     scout_mobile_handoff.py \
+    scout_navigation_terrain_tool.py \
+    scout_pace_guardian_tool.py \
+    scout_post_trip_review_tool.py \
     scout_risk_score_tool.py \
+    scout_route_architecture_tool.py \
+    scout_route_readiness_tool.py \
+    scout_safety_boundary_tool.py \
+    scout_sensor_vitals_record.py \
+    scout_sensorlogger_mqtt_observer.py \
+    scout_runtime_physiologic_gate.py \
+    scout_runtime_physiologic_integration.py \
+    scout_runtime_physiologic_pipeline.py \
+    scout_runtime_physiologic_timeline.py \
+    scout_runtime_safety_gate_adapters.py \
+    scout_runtime_safety_gate_models.py \
+    scout_runtime_safety_reducer.py \
+    scout_runtime_safety_state_store.py \
+    scout_runtime_state_store_projection.py \
+    scout_runtime_phase1_mutation.py \
+    scout_runtime_route_gate_feeds.py \
+    scout_runtime_shadow_replay.py \
+    scout_lorawan_client_observer.py \
+    scout_sx1303_gateway_observer.py \
+    scout_survival_incident_playbook_tool.py \
+    scout_team_status_tool.py \
     scout_terrain_score_tool.py \
+    scout_gee_integration.py \
+    scout_weather_integration.py \
+    scout_weather_window_tool.py \
     scout_wearable_adapters.py \
     scout_wearable_admin.py \
     scout_wearable_daily_home.py \
@@ -171,6 +262,9 @@ COPY \
     scout_wearable_raw_importers.py \
     scout_wearable_validator.py \
     scout_workspace_search_tools.py \
+    weather_grid_store.py \
+    weather_imagery_freshness.py \
+    weather_imagery_tile_cache.py \
     skill_registry.py \
     skill_registry_models.py \
     spatial_imprint_debug_projection.py \
@@ -179,14 +273,41 @@ COPY \
     voice_cue_models.py \
     ./
 
+COPY scout_ai_*.py scout_*_tool.py ./
+COPY navigation_*.py ./
+COPY pretrip_*.py ./
+COPY src/scout/ ./scout/
+
 COPY tools/pydantic_ai_cloud_latency_benchmark.py ./tools/
+COPY tools/scout_ai_pydantic_232_local_web_eval.py ./tools/
+COPY tools/pi_grove_led_bar_smoke.py ./tools/
+COPY tools/pi_oled_i2c_smoke.py ./tools/
+COPY tools/pi_sx1303_gateway_smoke.py ./tools/
+COPY tools/pi_sx1303_gateway_rx_smoke.py ./tools/
+COPY tools/pi_sx1303_gateway_uplink_mqtt_tail.py ./tools/
+COPY tools/pi_sx1303_gateway_gps_nmea_smoke.py ./tools/
+COPY tools/pi_wio_e5_lorawan_uplink_trial_plan.py ./tools/
+COPY tools/pi_wio_e5_lorawan_rf_trial.py ./tools/
+COPY tools/pi_wio_e5_chirpstack_join_audit.py ./tools/
+COPY tools/pi_wio_e5_chirpstack_as9232_profile_provision.py ./tools/
+COPY tools/pi_wio_e5_chirpstack_key_sync.py ./tools/
+COPY tools/pi_wio_e5_chirpstack_join_state_reset.py ./tools/
 COPY tools/scout_agent_tool_manifests/ ./tools/scout_agent_tool_manifests/
+COPY .agents/skills/scout-route-context-briefing/ ./.agents/skills/scout-route-context-briefing/
+COPY skills/scout/ ./skills/scout/
 
 COPY docs/admin/phase1-after-action.html ./docs/admin/
 COPY docs/admin/phase-3-5-runtime-debug.html ./docs/admin/
 COPY docs/admin/phase-3-6-hardware-readiness.html ./docs/admin/
 COPY docs/admin/phase4-pretrip-planning.html ./docs/admin/
 COPY docs/admin/scout-assistant-ui.js ./docs/admin/
+COPY docs/specs/SCOUT_OUTDOOR_AI_AGENT_STANDARD.md ./docs/specs/
+COPY docs/specs/scout-ai-135-tool-data-workflow-matrix.json ./docs/specs/
+COPY docs/evals/scout-pydantic-ai-232-local-web-20-corpus.json ./docs/evals/
+COPY config/gee_datasets.yaml ./config/gee_datasets.yaml
+COPY tests/test_assistant_skill_router.py ./tests/
+COPY tests/test_pretrip_admin_page.py ./tests/
+COPY tests/test_scout_outdoor_standard_coverage.py ./tests/
 
 COPY scout-risk-engine/scout_codex_package/ ./scout-risk-engine/scout_codex_package/
 RUN pip install --no-cache-dir ./scout-risk-engine/scout_codex_package
@@ -208,6 +329,10 @@ RUN useradd --create-home --uid 1000 scout \
         /data/scout/admin/secrets /data/scout/osm-tiles /data/scout/raster-tiles \
         /data/scout/logs /data/scout/admin/ingress \
     && chown -R scout:scout /data/scout /app
+
+RUN SCOUT_ADMIN_AUTH_REQUIRED=false \
+    SCOUT_INGRESS_OBSERVER_SUPERVISOR_ENABLED=false \
+    python -c "import phase4_admin_runtime"
 
 USER scout
 

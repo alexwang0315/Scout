@@ -8,6 +8,7 @@ from typing import Any
 
 
 ALLOWED_METADATA_SUFFIXES = frozenset({".json", ".geojson", ".jsonl"})
+ALLOWED_WORKSPACE_HTML_PARENT = Path("outputs/briefings")
 RAW_SOURCE_SUFFIXES = frozenset(
     {
         ".asc",
@@ -115,7 +116,10 @@ def _metadata_files_for_copy(source_root: Path) -> list[Path]:
         )
 
     unsupported_files = [
-        path for path in files if path.suffix.lower() not in ALLOWED_METADATA_SUFFIXES
+        path
+        for path in files
+        if path.suffix.lower() not in ALLOWED_METADATA_SUFFIXES
+        and not _is_allowed_workspace_html_artifact(path, source_root)
     ]
     if unsupported_files:
         rel_paths = ", ".join(
@@ -127,6 +131,16 @@ def _metadata_files_for_copy(source_root: Path) -> list[Path]:
         )
 
     return files
+
+
+def _is_allowed_workspace_html_artifact(path: Path, source_root: Path) -> bool:
+    if path.suffix.lower() != ".html":
+        return False
+    try:
+        relative_path = path.relative_to(source_root)
+    except ValueError:
+        return False
+    return relative_path.parent == ALLOWED_WORKSPACE_HTML_PARENT
 
 
 def _project_id_from_fixture(source_root: Path) -> str:

@@ -1,0 +1,84 @@
+{
+  "artifact_kind": "post_trip_review_context",
+  "artifact_version": "post_trip_review_context.v1",
+  "status": "reviewed_post_trip_review_context",
+  "candidate_only": true,
+  "runtime_safety_truth": false,
+  "capability_timeline": {
+    "case_id": "chilai_nanhua_day1_reviewed",
+    "route_family": "chilai_nanhua",
+    "summary": {
+      "completion_status": "completed_with_minor_delays",
+      "planned_segment_count": 5,
+      "traversed_segment_count": 5,
+      "partial_segment_count": 0,
+      "unreached_segment_count": 0,
+      "moving_time_s": 21900,
+      "elapsed_time_s": 27600,
+      "rest_time_s": 3300
+    },
+    "edges": [
+      {"edge_id": "edge.cp1.cp2", "traversal_status": "completed"},
+      {"edge_id": "edge.cp2.cp3", "traversal_status": "completed"},
+      {"edge_id": "edge.cp3.cp4", "traversal_status": "completed"}
+    ],
+    "rest_intervals": [
+      {"cp_id": "cp3", "duration_s": 900},
+      {"cp_id": "cp4", "duration_s": 1200}
+    ],
+    "data_quality": {
+      "gps_gap_count": 0,
+      "ambiguous_checkpoint_count": 0,
+      "route_deviation_count": 0,
+      "limitations": []
+    }
+  },
+  "capability_capsule": {
+    "case_id": "chilai_nanhua_day1_reviewed",
+    "route_family": "chilai_nanhua",
+    "moving_time_min": 365,
+    "elapsed_time_min": 460,
+    "rest_time_min": 55,
+    "distance_km": 13.2,
+    "moving_pace_min_per_km": 27.7,
+    "confidence": "reviewed"
+  },
+  "route_time_comparison": {
+    "summary": {
+      "comparison_count": 5,
+      "slower_than_guide_count": 2,
+      "faster_than_guide_count": 1,
+      "informational_only": true
+    }
+  },
+  "after_action_next_plan_candidates": {
+    "candidates": [
+      {
+        "candidate_id": "after_action.cp3_rest_ahead",
+        "title": "Move lunch/rest decision earlier to CP3 shelter",
+        "human_review_required": false
+      }
+    ]
+  },
+  "subjective_difficulty": "Harder than expected on late-day fog and pace control.",
+  "equipment_gaps": ["Glove warmth was marginal during fog wait."],
+  "near_miss_events": ["Nearly missed a junction marker before CP4 in fog."],
+  "incident_events": [],
+  "weather_matched_expectation": false,
+  "route_condition_notes": ["Fog arrived earlier than forecast near CP4."],
+  "route_context_updates": ["Yunhai hut worked as a reliable regrouping point."],
+  "user_feedback_items": ["Move lunch/rest stop earlier when fog risk rises."],
+  "boundary": {
+    "learning_write_performed": false,
+    "phase2_brain_write_performed": false,
+    "runtime_safety_truth": false
+  },
+  "review": {
+    "review_state": "accepted",
+    "human_review_required": false,
+    "reviewed_at": "2026-06-16T14:10:00+08:00",
+    "reviewed_by": "reviewer.learning_admin",
+    "notes": "Reviewed deterministic post-trip context fixture. It may propose learning updates but does not write memory, Brain, route models, or runtime safety truth.",
+    "review_ref": "reviews/human_reviews.json#post-trip-review-context-placeholder"
+  }
+}

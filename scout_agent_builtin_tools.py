@@ -156,6 +156,24 @@ def run_builtin_tool(argv: Sequence[str] | None = None) -> tuple[int, dict[str, 
         return _pretrip_workspace_edit(args)
     if args.command == "pretrip-import-gpx":
         return _pretrip_import_gpx(args)
+    if args.command == "pretrip-route-context-collect":
+        return _pretrip_route_context_collect(args)
+    if args.command == "pretrip-raster-label-ocr":
+        return _pretrip_raster_label_ocr(args)
+    if args.command == "pretrip-raster-label-adapter":
+        return _pretrip_raster_label_adapter(args)
+    if args.command == "pretrip-route-architecture-collect":
+        return _pretrip_route_architecture_collect(args)
+    if args.command == "pretrip-pace-fit-collect":
+        return _pretrip_pace_fit_collect(args)
+    if args.command == "pretrip-boss-points-synthesize":
+        return _pretrip_boss_points_synthesize(args)
+    if args.command == "pretrip-navigation-terrain-collect":
+        return _pretrip_navigation_terrain_collect(args)
+    if args.command == "pretrip-weather-decision-collect":
+        return _pretrip_weather_decision_collect(args)
+    if args.command == "pretrip-contextual-permission-collect":
+        return _pretrip_contextual_permission_collect(args)
     if args.command == "pretrip-prepare-layers":
         return _pretrip_prepare_layers(args)
     if args.command == "pretrip-artifact-manifest":
@@ -404,6 +422,55 @@ def _build_parser() -> argparse.ArgumentParser:
     pretrip_import_parser.add_argument("--input", type=Path, required=True)
     pretrip_import_parser.add_argument("--dry-run", action="store_true")
     pretrip_import_parser.add_argument("--json", action="store_true")
+
+    route_context_parser = subparsers.add_parser("pretrip-route-context-collect")
+    route_context_parser.add_argument("--input", type=Path, required=True)
+    route_context_parser.add_argument("--dry-run", action="store_true")
+    route_context_parser.add_argument("--json", action="store_true")
+
+    raster_label_ocr_parser = subparsers.add_parser("pretrip-raster-label-ocr")
+    raster_label_ocr_parser.add_argument("--input", type=Path, required=True)
+    raster_label_ocr_parser.add_argument("--dry-run", action="store_true")
+    raster_label_ocr_parser.add_argument("--json", action="store_true")
+
+    raster_label_parser = subparsers.add_parser("pretrip-raster-label-adapter")
+    raster_label_parser.add_argument("--input", type=Path, required=True)
+    raster_label_parser.add_argument("--dry-run", action="store_true")
+    raster_label_parser.add_argument("--json", action="store_true")
+
+    route_architecture_parser = subparsers.add_parser("pretrip-route-architecture-collect")
+    route_architecture_parser.add_argument("--input", type=Path, required=True)
+    route_architecture_parser.add_argument("--dry-run", action="store_true")
+    route_architecture_parser.add_argument("--json", action="store_true")
+
+    pace_fit_parser = subparsers.add_parser("pretrip-pace-fit-collect")
+    pace_fit_parser.add_argument("--input", type=Path, required=True)
+    pace_fit_parser.add_argument("--dry-run", action="store_true")
+    pace_fit_parser.add_argument("--json", action="store_true")
+
+    boss_points_parser = subparsers.add_parser("pretrip-boss-points-synthesize")
+    boss_points_parser.add_argument("--input", type=Path, required=True)
+    boss_points_parser.add_argument("--dry-run", action="store_true")
+    boss_points_parser.add_argument("--json", action="store_true")
+
+    navigation_terrain_parser = subparsers.add_parser(
+        "pretrip-navigation-terrain-collect"
+    )
+    navigation_terrain_parser.add_argument("--input", type=Path, required=True)
+    navigation_terrain_parser.add_argument("--dry-run", action="store_true")
+    navigation_terrain_parser.add_argument("--json", action="store_true")
+
+    weather_decision_parser = subparsers.add_parser("pretrip-weather-decision-collect")
+    weather_decision_parser.add_argument("--input", type=Path, required=True)
+    weather_decision_parser.add_argument("--dry-run", action="store_true")
+    weather_decision_parser.add_argument("--json", action="store_true")
+
+    contextual_permission_parser = subparsers.add_parser(
+        "pretrip-contextual-permission-collect"
+    )
+    contextual_permission_parser.add_argument("--input", type=Path, required=True)
+    contextual_permission_parser.add_argument("--dry-run", action="store_true")
+    contextual_permission_parser.add_argument("--json", action="store_true")
 
     prepare_layers_parser = subparsers.add_parser("pretrip-prepare-layers")
     prepare_layers_parser.add_argument("--input", type=Path, required=True)
@@ -2423,6 +2490,489 @@ def _pretrip_import_gpx(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
                 "workspace_file_mutation_allowed": True,
                 "candidate_only": True,
                 "raw_gpx_embedded": False,
+            },
+        },
+    )
+
+
+def _pretrip_route_context_collect(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
+    from pretrip_route_context_collection import collect_pretrip_route_context
+
+    request = _load_json(args.input)
+    project_root = _optional_path(request.get("project_root"))
+    if project_root is None:
+        project_id = request.get("project_id")
+        workspace_root = _optional_path(request.get("workspace_root"))
+        if project_id and workspace_root:
+            project_root = workspace_root / str(project_id)
+    if project_root is None:
+        return 2, _error_payload("route context collection requires project_root or workspace_root plus project_id")
+
+    result = collect_pretrip_route_context(
+        project_root,
+        dry_run=bool(args.dry_run),
+        include_route_notes=bool(request.get("include_route_notes", True)),
+        limit_route_notes=int(request.get("limit_route_notes", 80)),
+        route_note_point_policy=str(request.get("route_note_point_policy") or "seed_only"),
+        route_keyword=request.get("route_keyword"),
+        write_briefing=bool(request.get("write_briefing", True)),
+        collected_at=request.get("collected_at"),
+    )
+    return (
+        0,
+        {
+            "artifact_kind": "scout_pretrip_route_context_collect_tool_output",
+            "status": "completed",
+            "dry_run": bool(args.dry_run),
+            "result": result,
+            "boundary": {
+                **_closed_boundary(),
+                "workspace_file_mutation_allowed": not bool(args.dry_run),
+                "candidate_only": True,
+                "raw_payloads_embedded": False,
+                "network_calls_made": False,
+            },
+        },
+    )
+
+
+def _pretrip_raster_label_adapter(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
+    from pretrip_raster_label_adapter import build_raster_label_evidence
+
+    request = _load_json(args.input)
+    project_root = _optional_path(request.get("project_root"))
+    if project_root is None:
+        project_id = request.get("project_id")
+        workspace_root = _optional_path(request.get("workspace_root"))
+        if project_id and workspace_root:
+            project_root = workspace_root / str(project_id)
+    if project_root is None:
+        return 2, _error_payload(
+            "raster label adapter requires project_root or workspace_root plus project_id"
+        )
+
+    source_path = request.get("source_path") or request.get("source")
+    if not source_path:
+        return 2, _error_payload("raster label adapter requires source_path")
+
+    result = build_raster_label_evidence(
+        project_root,
+        source_path=str(source_path),
+        output_ref=str(
+            request.get("output_ref")
+            or "outputs/layers/normalized/raster_label_evidence.geojson"
+        ),
+        manifest_ref=str(
+            request.get("manifest_ref")
+            or "outputs/layers/raster_label_adapter_manifest.json"
+        ),
+        collected_at=request.get("collected_at"),
+        update_project=bool(request.get("update_project", True)),
+        dry_run=bool(args.dry_run),
+    )
+    return (
+        0,
+        {
+            "artifact_kind": "scout_pretrip_raster_label_adapter_tool_output",
+            "status": "completed",
+            "dry_run": bool(args.dry_run),
+            "result": result,
+            "boundary": {
+                **_closed_boundary(),
+                "workspace_file_mutation_allowed": not bool(args.dry_run),
+                "candidate_only": True,
+                "network_calls_made": False,
+                "live_ocr_or_vision_performed": False,
+                "raw_payloads_embedded": False,
+                "raw_tiles_embedded": False,
+            },
+        },
+    )
+
+
+def _pretrip_raster_label_ocr(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
+    from pretrip_raster_label_ocr import extract_raster_label_ocr
+
+    request = _load_json(args.input)
+    project_root = _optional_path(request.get("project_root"))
+    if project_root is None:
+        project_id = request.get("project_id")
+        workspace_root = _optional_path(request.get("workspace_root"))
+        if project_id and workspace_root:
+            project_root = workspace_root / str(project_id)
+    if project_root is None:
+        return 2, _error_payload(
+            "raster label OCR requires project_root or workspace_root plus project_id"
+        )
+
+    source_ids = request.get("source_ids")
+    if source_ids is None and request.get("source_id"):
+        source_ids = [request["source_id"]]
+    if source_ids is None:
+        source_ids = []
+
+    result = extract_raster_label_ocr(
+        project_root,
+        tile_manifest_path=request.get("tile_manifest_path")
+        or request.get("tile_manifest"),
+        raster_label_plan_path=request.get("raster_label_plan_path")
+        or request.get("raster_label_plan"),
+        output_ref=str(
+            request.get("output_ref")
+            or "outputs/layers/raster_label_ocr_output.json"
+        ),
+        engine=str(request.get("engine") or "tesseract"),
+        tesseract_lang=str(request.get("tesseract_lang") or "chi_tra+eng"),
+        min_confidence=float(request.get("min_confidence", 0.35)),
+        source_ids=[str(source_id) for source_id in source_ids],
+        max_tiles=_optional_int(request.get("max_tiles")),
+        collected_at=request.get("collected_at"),
+        update_project=bool(request.get("update_project", True)),
+        dry_run=bool(args.dry_run),
+    )
+    ocr_performed = result["status"] == "completed"
+    return (
+        0,
+        {
+            "artifact_kind": "scout_pretrip_raster_label_ocr_tool_output",
+            "status": "completed",
+            "dry_run": bool(args.dry_run),
+            "result": result,
+            "boundary": {
+                **_closed_boundary(),
+                "workspace_file_mutation_allowed": not bool(args.dry_run),
+                "candidate_only": True,
+                "network_calls_made": False,
+                "live_ocr_or_vision_performed": ocr_performed,
+                "raw_payloads_embedded": False,
+                "raw_tiles_embedded": False,
+            },
+        },
+    )
+
+
+def _pretrip_route_architecture_collect(
+    args: argparse.Namespace,
+) -> tuple[int, dict[str, Any]]:
+    from pretrip_route_architecture_collection import (
+        collect_pretrip_route_architecture,
+    )
+
+    request = _load_json(args.input)
+    project_root = _optional_path(request.get("project_root"))
+    if project_root is None:
+        project_id = request.get("project_id")
+        workspace_root = _optional_path(request.get("workspace_root"))
+        if project_id and workspace_root:
+            project_root = workspace_root / str(project_id)
+    if project_root is None:
+        return 2, _error_payload(
+            "route architecture collection requires project_root or workspace_root plus project_id"
+        )
+
+    result = collect_pretrip_route_architecture(
+        project_root,
+        dry_run=bool(args.dry_run),
+        current_cp_id=request.get("current_cp_id"),
+        current_time=request.get("current_time"),
+        target_cp_id=request.get("target_cp_id"),
+        limit=int(request.get("limit", 12)),
+        generated_at=request.get("generated_at"),
+    )
+    return (
+        0,
+        {
+            "artifact_kind": "scout_pretrip_route_architecture_collect_tool_output",
+            "status": "completed",
+            "dry_run": bool(args.dry_run),
+            "result": result,
+            "boundary": {
+                **_closed_boundary(),
+                "workspace_file_mutation_allowed": not bool(args.dry_run),
+                "candidate_only": True,
+                "raw_payloads_embedded": False,
+                "network_calls_made": False,
+                "live_safety_api_calls_allowed": False,
+            },
+        },
+    )
+
+
+def _pretrip_pace_fit_collect(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
+    from pretrip_pace_fit_collection import collect_pretrip_pace_fit
+
+    request = _load_json(args.input)
+    project_root = _optional_path(request.get("project_root"))
+    if project_root is None:
+        project_id = request.get("project_id")
+        workspace_root = _optional_path(request.get("workspace_root"))
+        if project_id and workspace_root:
+            project_root = workspace_root / str(project_id)
+    if project_root is None:
+        return 2, _error_payload(
+            "pace fit collection requires project_root or workspace_root plus project_id"
+        )
+
+    team_members = request.get("team_members")
+    if not isinstance(team_members, list):
+        team_members = None
+    result = collect_pretrip_pace_fit(
+        project_root,
+        dry_run=bool(args.dry_run),
+        team_members=team_members,
+        build_coefficients_from_capability=bool(
+            request.get("build_coefficients_from_capability")
+            or request.get("build_from_capability")
+        ),
+        capability_timeline_path=_optional_path(request.get("capability_timeline_path")),
+        route_time_comparison_path=_optional_path(
+            request.get("route_time_comparison_path")
+        ),
+        route_weather_package_path=_optional_path(
+            request.get("route_weather_package_path")
+        ),
+        weather_decision_candidates_path=_optional_path(
+            request.get("weather_decision_candidates_path")
+        ),
+        member_id=request.get("member_id"),
+        display_label=request.get("display_label"),
+        pack_weight_kg=request.get("pack_weight_kg"),
+        load_impact_ratio=request.get("load_impact_ratio"),
+        weather_impact_ratio=request.get("weather_impact_ratio"),
+        self_report_gap_ratio=request.get("self_report_gap_ratio"),
+        current_time=request.get("current_time"),
+        next_cp_id=request.get("next_cp_id"),
+        minutes_to_next_cp=request.get("minutes_to_next_cp"),
+        current_delay_minutes=request.get("current_delay_minutes"),
+        leader_accepts_slowest_basis=request.get("leader_accepts_slowest_basis"),
+        team_rest_sync=request.get("team_rest_sync"),
+        generated_at=request.get("generated_at"),
+    )
+    return (
+        0,
+        {
+            "artifact_kind": "scout_pretrip_pace_fit_collect_tool_output",
+            "status": "completed",
+            "dry_run": bool(args.dry_run),
+            "result": result,
+            "boundary": {
+                **_closed_boundary(),
+                "workspace_file_mutation_allowed": not bool(args.dry_run),
+                "candidate_only": True,
+                "raw_payloads_embedded": False,
+                "raw_health_payload_embedded": False,
+                "network_calls_made": False,
+                "live_safety_api_calls_allowed": False,
+                "medical_diagnosis": False,
+                "average_pace_used": False,
+            },
+        },
+    )
+
+
+def _pretrip_boss_points_synthesize(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
+    from pretrip_boss_point_synthesis import synthesize_pretrip_boss_points
+
+    request = _load_json(args.input)
+    project_root = _optional_path(request.get("project_root"))
+    if project_root is None:
+        project_id = request.get("project_id")
+        workspace_root = _optional_path(request.get("workspace_root"))
+        if project_id and workspace_root:
+            project_root = workspace_root / str(project_id)
+    if project_root is None:
+        return 2, _error_payload(
+            "boss point synthesis requires project_root or workspace_root plus project_id"
+        )
+
+    result = synthesize_pretrip_boss_points(
+        project_root,
+        top_n=int(request.get("top_n", 5)),
+        route_note_radius_m=float(request.get("route_note_radius_m", 300.0)),
+        risk_window_m=float(request.get("risk_window_m", 300.0)),
+        slow_passage_min_span_m=float(
+            request.get("slow_passage_min_span_m", 500.0)
+        ),
+        pressure_profile_bin_m=float(request.get("pressure_profile_bin_m", 500.0)),
+        generated_at=request.get("generated_at"),
+        dry_run=bool(args.dry_run),
+    )
+    return (
+        0,
+        {
+            "artifact_kind": "scout_pretrip_boss_points_synthesize_tool_output",
+            "status": "completed",
+            "dry_run": bool(args.dry_run),
+            "result": result,
+            "boundary": {
+                **_closed_boundary(),
+                "workspace_file_mutation_allowed": not bool(args.dry_run),
+                "candidate_only": True,
+                "raw_payloads_embedded": False,
+                "raw_health_payload_embedded": False,
+                "network_calls_made": False,
+                "live_safety_api_calls_allowed": False,
+                "medical_diagnosis": False,
+                "average_pace_used": False,
+            },
+        },
+    )
+
+
+def _pretrip_navigation_terrain_collect(
+    args: argparse.Namespace,
+) -> tuple[int, dict[str, Any]]:
+    from pretrip_navigation_terrain_collection import (
+        collect_pretrip_navigation_terrain,
+    )
+
+    request = _load_json(args.input)
+    project_root = _optional_path(request.get("project_root"))
+    if project_root is None:
+        project_id = request.get("project_id")
+        workspace_root = _optional_path(request.get("workspace_root"))
+        if project_id and workspace_root:
+            project_root = workspace_root / str(project_id)
+    if project_root is None:
+        return 2, _error_payload(
+            "navigation terrain collection requires project_root or workspace_root plus project_id"
+        )
+
+    result = collect_pretrip_navigation_terrain(
+        project_root,
+        dry_run=bool(args.dry_run),
+        offline_map_downloaded=request.get("offline_map_downloaded"),
+        gpx_loaded_on_device=request.get("gpx_loaded_on_device"),
+        contour_skill_confirmed=request.get("contour_skill_confirmed"),
+        terrain_feature_skill_confirmed=request.get("terrain_feature_skill_confirmed"),
+        junction_points_known=request.get("junction_points_known"),
+        retreat_direction_understood=request.get("retreat_direction_understood"),
+        backup_positioning_available=request.get("backup_positioning_available"),
+        terrain_risk_layers_understood=request.get(
+            "terrain_risk_layers_understood"
+        ),
+        team_map_user_count=request.get("team_map_user_count"),
+        generated_at=request.get("generated_at"),
+    )
+    return (
+        0,
+        {
+            "artifact_kind": "scout_pretrip_navigation_terrain_collect_tool_output",
+            "status": "completed",
+            "dry_run": bool(args.dry_run),
+            "result": result,
+            "boundary": {
+                **_closed_boundary(),
+                "workspace_file_mutation_allowed": not bool(args.dry_run),
+                "candidate_only": True,
+                "raw_payloads_embedded": False,
+                "network_calls_made": False,
+                "live_safety_api_calls_allowed": False,
+                "hardware_control_allowed": False,
+                "live_sensor_read_allowed": False,
+            },
+        },
+    )
+
+
+def _pretrip_weather_decision_collect(args: argparse.Namespace) -> tuple[int, dict[str, Any]]:
+    from pretrip_weather_decision_collection import collect_pretrip_weather_decision
+
+    request = _load_json(args.input)
+    project_root = _optional_path(request.get("project_root"))
+    if project_root is None:
+        project_id = request.get("project_id")
+        workspace_root = _optional_path(request.get("workspace_root"))
+        if project_id and workspace_root:
+            project_root = workspace_root / str(project_id)
+    if project_root is None:
+        return 2, _error_payload(
+            "weather decision collection requires project_root or workspace_root plus project_id"
+        )
+
+    result = collect_pretrip_weather_decision(
+        project_root,
+        dry_run=bool(args.dry_run),
+        weather_points_path=request.get("weather_points_path"),
+        warnings_path=request.get("warnings_path"),
+        route_segments_path=request.get("route_segments_path"),
+        default_township=request.get("default_township"),
+        generated_at=request.get("generated_at"),
+        valid_until=request.get("valid_until"),
+        provider=str(request.get("provider") or "workspace_local_weather_points"),
+    )
+    return (
+        0,
+        {
+            "artifact_kind": "scout_pretrip_weather_decision_collect_tool_output",
+            "status": "completed",
+            "dry_run": bool(args.dry_run),
+            "result": result,
+            "boundary": {
+                **_closed_boundary(),
+                "workspace_file_mutation_allowed": not bool(args.dry_run),
+                "candidate_only": True,
+                "raw_payloads_embedded": False,
+                "network_calls_made": False,
+                "client_cwa_api_key_allowed": False,
+            },
+        },
+    )
+
+
+def _pretrip_contextual_permission_collect(
+    args: argparse.Namespace,
+) -> tuple[int, dict[str, Any]]:
+    from pretrip_contextual_permission_collection import (
+        collect_pretrip_contextual_permission,
+    )
+
+    request = _load_json(args.input)
+    project_root = _optional_path(request.get("project_root"))
+    if project_root is None:
+        project_id = request.get("project_id")
+        workspace_root = _optional_path(request.get("workspace_root"))
+        if project_id and workspace_root:
+            project_root = workspace_root / str(project_id)
+    if project_root is None:
+        return 2, _error_payload(
+            "contextual permission collection requires project_root or workspace_root plus project_id"
+        )
+
+    result = collect_pretrip_contextual_permission(
+        project_root,
+        dry_run=bool(args.dry_run),
+        current_time=request.get("current_time"),
+        current_cp_id=request.get("current_cp_id"),
+        next_cp_id=request.get("next_cp_id"),
+        communication_status=request.get("communication_status"),
+        equipment_status=request.get("equipment_status"),
+        remaining_safety_buffer_minutes=request.get("remaining_safety_buffer_minutes"),
+        requested_duration_minutes=request.get("requested_duration_minutes"),
+        current_delay_minutes=request.get("current_delay_minutes"),
+        next_segment_uncertainty_minutes=request.get(
+            "next_segment_uncertainty_minutes"
+        ),
+        weather_reserve_minutes=request.get("weather_reserve_minutes"),
+        daylight_reserve_minutes=request.get("daylight_reserve_minutes"),
+        retreat_reserve_minutes=request.get("retreat_reserve_minutes"),
+        slowest_member_reserve_minutes=request.get("slowest_member_reserve_minutes"),
+        generated_at=request.get("generated_at"),
+    )
+    return (
+        0,
+        {
+            "artifact_kind": "scout_pretrip_contextual_permission_collect_tool_output",
+            "status": "completed",
+            "dry_run": bool(args.dry_run),
+            "result": result,
+            "boundary": {
+                **_closed_boundary(),
+                "workspace_file_mutation_allowed": not bool(args.dry_run),
+                "candidate_only": True,
+                "raw_payloads_embedded": False,
+                "network_calls_made": False,
+                "live_safety_api_calls_allowed": False,
             },
         },
     )

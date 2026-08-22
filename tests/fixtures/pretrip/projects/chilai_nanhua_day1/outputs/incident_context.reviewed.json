@@ -1,0 +1,36 @@
+{
+  "artifact_kind": "incident_context",
+  "artifact_version": "incident_context.v1",
+  "status": "reviewed_incident_context",
+  "candidate_only": true,
+  "runtime_safety_truth": false,
+  "boundary": {
+    "candidate_only": true,
+    "runtime_safety_truth": false,
+    "real_sos_sent": false,
+    "real_sms_sent": false,
+    "real_satellite_sent": false,
+    "outbound_send_performed": false,
+    "phase1_l0_l4_state_mutated": false,
+    "safety_api_called": false,
+    "raw_payloads_embedded": false
+  },
+  "current_location_status": "Reviewed fixture: team is near CP4 / Yunhai route corridor; offline map coordinate screenshot is available; last reliable anchor is cp.004.",
+  "team_status": "Reviewed fixture: 2 members together, both accounted for, no injury reported in this planning context.",
+  "communication_status": "Reviewed fixture: phone signal intermittent, SMS/manual call possible only by human operator, battery reserve visible.",
+  "weather_exposure": "Reviewed fixture: late-day fog/daylight pressure possible; no active storm exposure reported in this incident context.",
+  "operator_authorization_ref": "operator.review.required.before.outbound",
+  "review": {
+    "review_state": "accepted",
+    "human_review_required": false,
+    "reviewed_at": "2026-06-16T12:30:00+08:00",
+    "reviewed_by": "reviewer.planning_admin",
+    "notes": "Reviewed deterministic incident context fixture for Scout AI standard coverage. This is not runtime safety truth and does not authorize SOS or outbound send.",
+    "review_ref": "reviews/human_reviews.json#incident-context-placeholder"
+  },
+  "source_refs": [
+    "outputs/live_navigation_snapshot.reviewed.json",
+    "outputs/team_status.json",
+    "outputs/route_weather_package.reviewed.json"
+  ]
+}

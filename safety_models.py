@@ -25,6 +25,12 @@ class SafetyEventType(StrEnum):
     MISSED_CHECKPOINT = "missed_checkpoint"
     RESOURCE_CONSTRAINT = "resource_constraint"
     SENSOR_ANOMALY = "sensor_anomaly"
+    PACE_PRESSURE = "pace_pressure"
+    DELAY_PRESSURE = "delay_pressure"
+    PHYSIOLOGIC_PRESSURE = "physiologic_pressure"
+    WEATHER_THREAT = "weather_threat"
+    DARKNESS_RISK = "darkness_risk"
+    ENVIRONMENT_THREAT = "environment_threat"
 
 
 class SafetyEvent(BaseModel):

@@ -13,6 +13,7 @@ from pretrip_source_ingest import sha256_file
 
 DEFAULT_MAX_REASONABLE_SPEED_KMH = 120.0
 DEFAULT_MAX_PREVIOUS_SPEED_RATIO = 8.0
+DEFAULT_MIN_PREVIOUS_SPEED_FOR_RELATIVE_FILTER_KMH = 0.5
 DEFAULT_RESUME_SEGMENT_GAP_M = 1000.0
 DEFAULT_ROUTE_NOTE_PROTECTION_RADIUS_M = 30.0
 
@@ -39,6 +40,9 @@ class GpxSpeedFilterReport:
             "output_path": self.output_path,
             "max_reasonable_speed_kmh": self.max_reasonable_speed_kmh,
             "max_previous_speed_ratio": self.max_previous_speed_ratio,
+            "min_previous_speed_for_relative_filter_kmh": (
+                DEFAULT_MIN_PREVIOUS_SPEED_FOR_RELATIVE_FILTER_KMH
+            ),
             "original_track_point_count": self.original_track_point_count,
             "filtered_track_point_count": self.filtered_track_point_count,
             "removed_track_point_count": self.removed_track_point_count,
@@ -52,10 +56,12 @@ class GpxSpeedFilterReport:
                 "track point divided by elapsed time would require speed greater "
                 "than max_reasonable_speed_kmh, or when it would require speed "
                 "greater than max_previous_speed_ratio times the previous kept "
-                "segment speed. Long distance GPS resume gaps are preserved and "
-                "annotated downstream as resume segments instead of being pruned. "
-                "Track points protected by nearby GPX route notes are retained and "
-                "reported as route_note_protected exemptions."
+                "segment speed when the previous kept segment is moving faster "
+                "than min_previous_speed_for_relative_filter_kmh. Long distance "
+                "GPS resume gaps are preserved and annotated downstream as resume "
+                "segments instead of being pruned. Track points protected by nearby "
+                "GPX route notes are retained and reported as route_note_protected "
+                "exemptions."
             ),
             "route_note_protection_radius_m": DEFAULT_ROUTE_NOTE_PROTECTION_RADIUS_M,
             "candidate_only": True,
@@ -209,6 +215,8 @@ def _removal_reason(
     if required_speed > max_reasonable_speed_kmh:
         return "required_speed_exceeds_absolute_threshold"
     if previous_kept_speed_kmh is None or previous_kept_speed_kmh <= 0:
+        return None
+    if previous_kept_speed_kmh < DEFAULT_MIN_PREVIOUS_SPEED_FOR_RELATIVE_FILTER_KMH:
         return None
     if required_speed > previous_kept_speed_kmh * max_previous_speed_ratio:
         return "required_speed_exceeds_previous_speed_ratio"

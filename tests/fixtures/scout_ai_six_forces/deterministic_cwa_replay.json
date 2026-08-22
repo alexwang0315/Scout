@@ -1,0 +1,30 @@
+{
+  "artifact_kind": "scout_ai_deterministic_cwa_replay_fixture",
+  "dataset_id": "F-C0032-001",
+  "request_time": "2026-07-16T08:00:00+08:00",
+  "weather_points": [
+    {
+      "areaName": "南投縣",
+      "rainProbability": 30,
+      "source": "F-C0032-001",
+      "source_run_id": "fixture.six600.20260716",
+      "tempC": 18,
+      "validFrom": "2026-07-16T06:00:00+08:00",
+      "validTo": "2026-07-16T18:00:00+08:00",
+      "weatherText": "多雲午後短暫陣雨",
+      "windSpeedMps": 8.5
+    },
+    {
+      "areaName": "花蓮縣",
+      "rainProbability": 40,
+      "source": "F-C0032-001",
+      "source_run_id": "fixture.six600.20260716",
+      "tempC": 19,
+      "validFrom": "2026-07-16T06:00:00+08:00",
+      "validTo": "2026-07-16T18:00:00+08:00",
+      "weatherText": "多雲局部短暫陣雨",
+      "windSpeedMps": 7.5
+    }
+  ],
+  "warnings": []
+}

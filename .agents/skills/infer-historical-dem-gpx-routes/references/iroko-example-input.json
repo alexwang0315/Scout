@@ -1,0 +1,224 @@
+{
+  "project_id": "iroko-historical-route-reconstruction",
+  "route_name": "登山口至異祿閣駐在所候選拓撲",
+  "coordinate_context": {
+    "map_crs": "EPSG:3826",
+    "historical_point_crs": "EPSG:3828",
+    "gpx_crs": "EPSG:4326",
+    "dem_crs": "EPSG:4326",
+    "coarse_conversion": "taiwan_affine_approximation"
+  },
+  "sources": [
+    {
+      "id": "ysnp-historical-survey",
+      "tier": "P0",
+      "family": "official_historical_survey",
+      "url": "https://www.ysnp.gov.tw/UploadPlugin?Caption=%E6%8B%89%E5%BA%AB%E6%8B%89%E5%BA%AB%E6%BA%AA%E6%B5%81%E5%9F%9F%E4%BA%BA%E6%96%87%E5%8F%B2%E8%B9%9F%E5%9D%80%E4%BF%9D%E5%AD%98%E6%88%96%E5%BE%A9%E8%88%8A%E5%B7%A5%E7%A8%8B%E4%B9%8B%E6%95%B4%E9%AB%94%E8%A6%8F%E5%8A%83.pdf&file=f3IQy1pLHzLZpYHVOiJELXwqRtBE%2FVzQO2w4DU%2BvhVzmMWha7Xk2U7vJgwvpsci%2FGtISD3HvTvxug%2FqdNhadAQ%3D%3D",
+      "retrieved_at": "2026-07-23",
+      "claims": [
+        "異祿閣駐在所原始座標為TWD67 272734/2583555",
+        "IR-1與IR-2構成進入駐在所前的歷史序列"
+      ]
+    },
+    {
+      "id": "biji-public-gpx-2779953",
+      "tier": "P1",
+      "family": "public_completed_trip_gpx",
+      "url": "https://hiking.biji.co/index.php?act=gpx_detail&id=2779953&q=trail",
+      "retrieved_at": "2026-07-23",
+      "claims": [
+        "登山口至1115公尺營地及1148峰前鞍部可由公開航跡建立觀察錨點"
+      ]
+    },
+    {
+      "id": "copernicus-glo30",
+      "tier": "P0",
+      "family": "dem_baseline",
+      "url": "https://registry.opendata.aws/copernicus-dem/",
+      "retrieved_at": "2026-07-23",
+      "claims": [
+        "提供30公尺DEM以抽取橫向地形帶與D8谷線候選"
+      ]
+    }
+  ],
+  "anchors": [
+    {
+      "id": "A",
+      "name": "登山口",
+      "x": 277200.84,
+      "y": 2581264.92,
+      "crs": "EPSG:3826",
+      "source_refs": ["biji-public-gpx-2779953"]
+    },
+    {
+      "id": "camp1115",
+      "name": "1115M營地",
+      "x": 276357.51,
+      "y": 2582234.13,
+      "crs": "EPSG:3826",
+      "source_refs": ["biji-public-gpx-2779953"]
+    },
+    {
+      "id": "saddle1148",
+      "name": "1148峰前鞍部",
+      "x": 276199.24,
+      "y": 2582456.88,
+      "crs": "EPSG:3826",
+      "source_refs": ["biji-public-gpx-2779953", "copernicus-glo30"]
+    },
+    {
+      "id": "station-original",
+      "name": "異祿閣駐在所原始點",
+      "x": 272734,
+      "y": 2583555,
+      "crs": "EPSG:3828",
+      "source_refs": ["ysnp-historical-survey"]
+    }
+  ],
+  "nodes": [
+    {
+      "id": "trailhead",
+      "source_refs": ["biji-public-gpx-2779953"]
+    },
+    {
+      "id": "camp1115",
+      "source_refs": ["biji-public-gpx-2779953"]
+    },
+    {
+      "id": "saddle1148",
+      "source_refs": ["biji-public-gpx-2779953", "copernicus-glo30"]
+    },
+    {
+      "id": "h5-v1",
+      "source_refs": ["copernicus-glo30"]
+    },
+    {
+      "id": "h4-v1",
+      "source_refs": ["copernicus-glo30"]
+    },
+    {
+      "id": "ir1",
+      "source_refs": ["ysnp-historical-survey"]
+    },
+    {
+      "id": "ir2",
+      "source_refs": ["ysnp-historical-survey"]
+    },
+    {
+      "id": "station",
+      "source_refs": ["ysnp-historical-survey"]
+    }
+  ],
+  "edges": [
+    {
+      "id": "OBS-A-CAMP",
+      "from": "trailhead",
+      "to": "camp1115",
+      "kind": "gpx_observed",
+      "coordinates": [
+        [277200.84, 2581264.92],
+        [276357.51, 2582234.13]
+      ],
+      "source_refs": ["biji-public-gpx-2779953"],
+      "cost": 1
+    },
+    {
+      "id": "OBS-CAMP-SADDLE",
+      "from": "camp1115",
+      "to": "saddle1148",
+      "kind": "gpx_observed",
+      "coordinates": [
+        [276357.51, 2582234.13],
+        [276199.24, 2582456.88]
+      ],
+      "source_refs": ["biji-public-gpx-2779953"],
+      "cost": 1
+    },
+    {
+      "id": "H5-WEST",
+      "from": "saddle1148",
+      "to": "h5-v1",
+      "kind": "dem_horizontal_band",
+      "coordinates": [
+        [276199.24, 2582456.88],
+        [275100, 2582700]
+      ],
+      "source_refs": ["copernicus-glo30"],
+      "cost": 2
+    },
+    {
+      "id": "H4-WEST",
+      "from": "saddle1148",
+      "to": "h4-v1",
+      "kind": "dem_horizontal_band",
+      "coordinates": [
+        [276199.24, 2582456.88],
+        [275050, 2582810]
+      ],
+      "source_refs": ["copernicus-glo30"],
+      "cost": 2.5
+    },
+    {
+      "id": "V1-SWITCH",
+      "from": "h5-v1",
+      "to": "h4-v1",
+      "kind": "dem_valley_transfer",
+      "coordinates": [
+        [275100, 2582700],
+        [275050, 2582810]
+      ],
+      "source_refs": ["copernicus-glo30"],
+      "cost": 1.2
+    },
+    {
+      "id": "H4-IR1",
+      "from": "h4-v1",
+      "to": "ir1",
+      "kind": "dem_horizontal_band",
+      "coordinates": [
+        [275050, 2582810],
+        [273758.87, 2583183.20]
+      ],
+      "source_refs": ["copernicus-glo30", "ysnp-historical-survey"],
+      "cost": 2
+    },
+    {
+      "id": "IR1-IR2",
+      "from": "ir1",
+      "to": "ir2",
+      "kind": "historical_trace",
+      "coordinates": [
+        [273758.87, 2583183.20],
+        [273698.87, 2583353.20]
+      ],
+      "source_refs": ["ysnp-historical-survey"],
+      "cost": 1
+    },
+    {
+      "id": "IR2-STATION",
+      "from": "ir2",
+      "to": "station",
+      "kind": "historical_trace",
+      "coordinates": [
+        [273698.87, 2583353.20],
+        [273562.87, 2583348.20]
+      ],
+      "source_refs": ["ysnp-historical-survey"],
+      "cost": 1
+    }
+  ],
+  "start_node": "trailhead",
+  "end_node": "station",
+  "max_paths": 20,
+  "contradictions": [
+    {
+      "claim": "官方點表使用TWD67，而附圖格網與DEM對位使用TWD97。",
+      "source_refs": ["ysnp-historical-survey", "copernicus-glo30"],
+      "resolution": "保留原始點，另產生非測量級TWD97近似點；精確用途改用官方格網轉換。"
+    }
+  ],
+  "evidence_gaps": [
+    "H4/H5與V1為地形候選，尚無現地踏查證明存在連續獵路。",
+    "植被、崩塌、溪溝水量與合法進入狀態需要另行查證。"
+  ]
+}

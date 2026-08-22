@@ -20,6 +20,7 @@ from scout_ai_tool_planner import (
     ScoutAiToolPlan,
     ScoutAiToolPlanItem,
     ScoutAiToolPlanItemStatus,
+    looks_like_workspace_inventory_question,
     plan_scout_ai_tools,
 )
 from scout_weather_window_tool import WEATHER_WINDOW_TOOL_ID
@@ -64,11 +65,13 @@ def augment_pretrip_sources_with_local_evidence_search(
         limit=limit,
         evidence_sources=evidence_sources,
     )
-    full_workflow_source = build_pretrip_full_workflow_source(
-        query,
-        project_root=project_root,
-        limit=limit,
-    )
+    full_workflow_source = None
+    if not looks_like_workspace_inventory_question(query.question):
+        full_workflow_source = build_pretrip_full_workflow_source(
+            query,
+            project_root=project_root,
+            limit=limit,
+        )
     search_source = build_pretrip_local_evidence_search_source(
         query,
         project_root=project_root,
@@ -120,11 +123,13 @@ def augment_pretrip_sources_with_tool_plan(
     )
     if not planner_sources:
         return _dedupe_sources([*base_sources, *energy_sources])
-    full_workflow_source = build_pretrip_full_workflow_source(
-        query,
-        project_root=project_root,
-        limit=limit,
-    )
+    full_workflow_source = None
+    if not looks_like_workspace_inventory_question(query.question):
+        full_workflow_source = build_pretrip_full_workflow_source(
+            query,
+            project_root=project_root,
+            limit=limit,
+        )
     return _dedupe_sources(
         [
             *base_sources,
@@ -363,6 +368,9 @@ def _compact_full_workflow_summary(payload: dict[str, Any]) -> dict[str, Any]:
         "question": payload.get("question"),
         "answerability": payload.get("answerability"),
         "answer": payload.get("answer"),
+        "decision_output": _compact_full_workflow_decision_output(
+            payload.get("decision_output"),
+        ),
         "workflow_steps": [
             _compact_full_workflow_step(step)
             for step in payload.get("workflow_steps", [])
@@ -391,6 +399,118 @@ def _compact_full_workflow_summary(payload: dict[str, Any]) -> dict[str, Any]:
         "read_only": True,
         "runtime_safety_truth": False,
         "raw_payloads_embedded": False,
+    }
+
+
+def _compact_full_workflow_decision_output(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    compact = {
+        "answerSourceToolId": value.get("answerSourceToolId"),
+        "action": value.get("action"),
+        "decision": value.get("decision"),
+        "allowed": value.get("allowed"),
+        "confidence": value.get("confidence"),
+        "runtimeSafetyTruth": False,
+        "cost": value.get("cost") if isinstance(value.get("cost"), dict) else {},
+    }
+    audit = value.get("standardGapAudit")
+    if isinstance(audit, dict):
+        compact["standardGapAudit"] = _compact_standard_gap_audit(audit)
+    return compact
+
+
+def _compact_standard_gap_audit(audit: dict[str, Any]) -> dict[str, Any]:
+    groups = audit.get("groups") if isinstance(audit.get("groups"), list) else []
+    input_gaps = (
+        audit.get("inputOrEvidenceGaps")
+        if isinstance(audit.get("inputOrEvidenceGaps"), list)
+        else []
+    )
+    implementation_gaps = (
+        audit.get("implementationGaps")
+        if isinstance(audit.get("implementationGaps"), list)
+        else []
+    )
+    return {
+        "schema": audit.get("schema"),
+        "runtimeSafetyTruth": False,
+        "summary": audit.get("summary") if isinstance(audit.get("summary"), dict) else {},
+        "uiUxValidation": _compact_standard_gap_ui_validation(
+            audit.get("uiUxValidation"),
+        ),
+        "groups": [
+            _compact_standard_gap_group(group)
+            for group in groups
+            if isinstance(group, dict)
+        ][:10],
+        "inputOrEvidenceGaps": [
+            _compact_standard_gap_item(item)
+            for item in input_gaps
+            if isinstance(item, dict)
+        ][:12],
+        "implementationGaps": [
+            _compact_standard_gap_item(item)
+            for item in implementation_gaps
+            if isinstance(item, dict)
+        ][:12],
+        "nextSlices": audit.get("nextSlices", [])[:5]
+        if isinstance(audit.get("nextSlices"), list)
+        else [],
+        "nonGoals": audit.get("nonGoals", [])[:5]
+        if isinstance(audit.get("nonGoals"), list)
+        else [],
+    }
+
+
+def _compact_standard_gap_ui_validation(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    return {
+        "validated": value.get("validated") is True,
+        "status": value.get("status"),
+        "surface": value.get("surface"),
+        "sourceRefs": value.get("sourceRefs", [])[:5]
+        if isinstance(value.get("sourceRefs"), list)
+        else [],
+        "renderedFields": value.get("renderedFields", [])[:12]
+        if isinstance(value.get("renderedFields"), list)
+        else [],
+        "missingContracts": value.get("missingContracts", [])[:5]
+        if isinstance(value.get("missingContracts"), list)
+        else [],
+        "boundary": value.get("boundary") if isinstance(value.get("boundary"), dict) else {},
+    }
+
+
+def _compact_standard_gap_group(group: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "label": group.get("label"),
+        "sections": group.get("sections"),
+        "status": group.get("status"),
+        "classification": group.get("classification"),
+        "missingFieldCount": group.get("missingFieldCount", 0),
+        "matchedToolIds": group.get("matchedToolIds", [])[:6]
+        if isinstance(group.get("matchedToolIds"), list)
+        else [],
+        "sourceIds": group.get("sourceIds", [])[:4]
+        if isinstance(group.get("sourceIds"), list)
+        else [],
+        "nextSlice": group.get("nextSlice"),
+    }
+
+
+def _compact_standard_gap_item(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "toolId": item.get("toolId"),
+        "classification": item.get("classification"),
+        "collectionStatus": item.get("collectionStatus"),
+        "missingFieldCount": item.get("missingFieldCount", 0),
+        "missingFields": item.get("missingFields", [])[:8]
+        if isinstance(item.get("missingFields"), list)
+        else [],
+        "implementationGap": item.get("implementationGap"),
+        "nextSlice": item.get("nextSlice"),
     }
 
 

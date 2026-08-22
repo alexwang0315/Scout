@@ -1,0 +1,118 @@
+{
+  "artifact_kind": "pretrip_web_case_evidence",
+  "boundary": {
+    "candidate_only": true,
+    "large_scraped_text_embedded": false,
+    "raw_html_embedded_in_json": false,
+    "raw_image_embedded": false,
+    "runtime_safety_truth": false
+  },
+  "counts": {
+    "by_source_tier": {
+      "P0": 1
+    },
+    "image_ref_count": 6
+  },
+  "generated_at": "2026-06-15T12:30:00Z",
+  "points": [
+    {
+      "candidate_id": "web_case.chilai_nanhua_day1.official_forest_trail_064",
+      "candidate_only": true,
+      "content_sha256": "metadata-only-reference",
+      "image_refs": [
+        {
+          "alt": "能高越嶺道高山景觀",
+          "candidate_only": true,
+          "caption": "能高越嶺道高山景觀",
+          "page_url": "https://recreation.forest.gov.tw/Trail/RT?tr_id=064",
+          "raw_image_embedded": false,
+          "runtime_safety_truth": false,
+          "source_family": "official_baseline",
+          "source_tier": "P0",
+          "url": "https://recreation.forest.gov.tw/Files/RT/Photo/064/05/064.jpg"
+        },
+        {
+          "alt": "雲海保線所",
+          "candidate_only": true,
+          "caption": "雲海保線所：中繼休息點與雲霧展望",
+          "page_url": "https://recreation.forest.gov.tw/Trail/RT?tr_id=064",
+          "raw_image_embedded": false,
+          "runtime_safety_truth": false,
+          "source_family": "official_baseline",
+          "source_tier": "P0",
+          "url": "https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E9%9B%B2%E6%B5%B7%E4%BF%9D%E7%B7%9A%E6%89%80.JPG"
+        },
+        {
+          "alt": "天池山莊",
+          "candidate_only": true,
+          "caption": "天池山莊：能高越嶺道 13.1K 山屋",
+          "page_url": "https://recreation.forest.gov.tw/Trail/RT?tr_id=064",
+          "raw_image_embedded": false,
+          "runtime_safety_truth": false,
+          "source_family": "official_baseline",
+          "source_tier": "P0",
+          "url": "https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E5%A4%A9%E6%B1%A0%E5%B1%B1%E8%8E%8A.JPG"
+        },
+        {
+          "alt": "光被八表雲海日出",
+          "candidate_only": true,
+          "caption": "光被八表雲海日出",
+          "page_url": "https://recreation.forest.gov.tw/Trail/RT?tr_id=064",
+          "raw_image_embedded": false,
+          "runtime_safety_truth": false,
+          "source_family": "official_baseline",
+          "source_tier": "P0",
+          "url": "https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E8%83%BD%E9%AB%98%E8%B6%8A%E5%B6%BA%E9%81%93%E5%85%89%E6%89%B9%E5%85%AB%E8%A1%A8%E9%9B%B2%E6%B5%B7%E6%97%A5%E5%87%BA.JPG"
+        },
+        {
+          "alt": "光被八表日出",
+          "candidate_only": true,
+          "caption": "光被八表日出",
+          "page_url": "https://recreation.forest.gov.tw/Trail/RT?tr_id=064",
+          "raw_image_embedded": false,
+          "runtime_safety_truth": false,
+          "source_family": "official_baseline",
+          "source_tier": "P0",
+          "url": "https://recreation.forest.gov.tw/Files/RT/Photo/064/05/%E5%85%89%E6%89%B9%E5%85%AB%E8%A1%A8%E6%97%A5%E5%87%BA.JPG"
+        },
+        {
+          "alt": "能高越嶺道西段導覽圖",
+          "candidate_only": true,
+          "caption": "能高越嶺道西段導覽圖",
+          "page_url": "https://recreation.forest.gov.tw/Trail/RT?tr_id=064",
+          "raw_image_embedded": false,
+          "runtime_safety_truth": false,
+          "source_family": "official_baseline",
+          "source_tier": "P0",
+          "url": "https://recreation.forest.gov.tw/Files/RT/Photo/064/01/%E8%83%BD%E9%AB%98%E8%B6%8A%E5%B6%BA%E5%B0%8E%E8%A6%BD%E5%9C%B0%E5%9C%96202510-ok-0310%E4%BF%AE.jpg"
+        }
+      ],
+      "label": "能高越嶺道官方照片",
+      "requires_human_review": true,
+      "runtime_safety_truth": false,
+      "source_family": "official_baseline",
+      "source_families": [
+        "official_baseline"
+      ],
+      "source_kind": "p0_p1_web_source",
+      "source_tier": "P0",
+      "summary": "官方路線頁照片可作為行前簡報視覺素材；圖片僅以 URL metadata 引用，不嵌入 raw image。",
+      "title": "能高越嶺道官方照片",
+      "url": "https://recreation.forest.gov.tw/Trail/RT?tr_id=064"
+    }
+  ],
+  "project_id": "chilai_nanhua_day1",
+  "schema_version": "route_corridor_map_preparation.v1",
+  "source_id": "chilai_nanhua_day1.p0_p1_web_case_evidence",
+  "source_path": "outputs/layers/normalized/web_case_evidence.json",
+  "source_statuses": [
+    {
+      "source_family": "official_baseline",
+      "source_id": "official_forest_trail_064",
+      "source_tier": "P0",
+      "status": "metadata_only_fixture",
+      "url": "https://recreation.forest.gov.tw/Trail/RT?tr_id=064"
+    }
+  ],
+  "status": "ready_from_p0_p1_sources"
+}

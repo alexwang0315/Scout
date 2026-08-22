@@ -16,12 +16,14 @@ EVIDENCE_TIMELINE_CATEGORY_ORDER = (
     "route",
     "checkpoints",
     "segments",
+    "route_timing",
     "capability_timeline",
     "rest_intervals",
     "mcp",
     "gis_cp",
     "risk",
     "map_context",
+    "mileage",
     "reference_tracks",
     "review",
     "runtime_handoff",
@@ -31,12 +33,14 @@ EVIDENCE_TIMELINE_CATEGORY_LABELS = {
     "route": "Route",
     "checkpoints": "Checkpoints",
     "segments": "Segments",
+    "route_timing": "Route Timing",
     "capability_timeline": "Capability Timeline",
     "rest_intervals": "Rest Intervals",
     "mcp": "Major Critical Points",
     "gis_cp": "GIS CP Evidence",
     "risk": "Risk Evidence",
     "map_context": "Map Context",
+    "mileage": "Mileage Tags",
     "reference_tracks": "Reference GPX",
     "review": "Review Evidence",
     "runtime_handoff": "Runtime Handoff",
@@ -52,11 +56,19 @@ def build_pretrip_evidence_timeline(view: dict[str, Any]) -> dict[str, Any]:
     route_notes = view.get("route_notes") or {}
     map_candidates = view.get("map_candidates") or {}
     overpass = view.get("overpass_evidence") or {}
+    osm_pbf = view.get("osm_pbf_evidence") or {}
+    environment_values = view.get("environment_values") or {}
     route = view.get("route") or {}
+    mileage = view.get("mileage_tag_alignment") or {}
+    reference_segment_timing = view.get("reference_segment_timing") or {}
     counts = {
         "route": 1 if route else 0,
         "checkpoints": _len(view.get("checkpoints")),
         "segments": _len(view.get("segments")),
+        "route_timing": int(
+            (reference_segment_timing.get("counts") or {}).get("usable_segment_count")
+            or _len(reference_segment_timing.get("segments"))
+        ),
         "capability_timeline": _len(capability.get("edges")),
         "rest_intervals": int(
             (capability.get("counts") or {}).get("rest_interval_count")
@@ -74,9 +86,12 @@ def build_pretrip_evidence_timeline(view: dict[str, Any]) -> dict[str, Any]:
         + _len((view.get("risk_heatmap") or {}).get("segments"))
         + _len((view.get("risk_delta") or {}).get("segments")),
         "map_context": int((overpass.get("counts") or {}).get("candidates") or 0)
+        + int((osm_pbf.get("counts") or {}).get("item_count") or 0)
         + int((map_candidates.get("counts") or {}).get("corridor_candidates") or 0)
         + int((map_candidates.get("counts") or {}).get("hazard_candidates") or 0)
-        + int((map_candidates.get("counts") or {}).get("poi_candidates") or 0),
+        + int((map_candidates.get("counts") or {}).get("poi_candidates") or 0)
+        + int((environment_values.get("counts") or {}).get("item_count") or 0),
+        "mileage": int((mileage.get("counts") or {}).get("tag_count") or 0),
         "reference_tracks": int(
             (view.get("reference_tracks") or {}).get("reference_track_count")
             or _len((view.get("reference_tracks") or {}).get("reference_tracks"))
@@ -98,11 +113,19 @@ def build_admin_evidence_timeline(view: dict[str, Any]) -> dict[str, Any]:
     route_notes = view.get("route_notes") or {}
     map_payload = view.get("map") or {}
     overpass = view.get("overpass_evidence") or {}
+    osm_pbf = view.get("osm_pbf_evidence") or {}
     map_candidates = view.get("map_candidates") or {}
+    environment_values = view.get("environment_values") or {}
+    mileage = view.get("mileage_tag_alignment") or {}
+    reference_segment_timing = view.get("reference_segment_timing") or {}
     counts = {
         "route": 1 if view.get("route") else 0,
         "checkpoints": _len((view.get("mission") or {}).get("checkpoints")),
         "segments": _len((view.get("mission") or {}).get("segments")),
+        "route_timing": int(
+            (reference_segment_timing.get("counts") or {}).get("usable_segment_count")
+            or _len(reference_segment_timing.get("segments"))
+        ),
         "capability_timeline": int(capability.get("edge_count") or _len(capability.get("edges"))),
         "rest_intervals": int(
             (capability.get("summary") or {}).get("rest_interval_count")
@@ -121,12 +144,15 @@ def build_admin_evidence_timeline(view: dict[str, Any]) -> dict[str, Any]:
         + _len((view.get("risk_delta") or {}).get("segments"))
         + _len(view.get("risk_rules")),
         "map_context": int((overpass.get("counts") or {}).get("candidates") or 0)
+        + int((osm_pbf.get("counts") or {}).get("item_count") or 0)
         + int((map_candidates.get("counts") or {}).get("corridor_candidates") or 0)
         + int((map_candidates.get("counts") or {}).get("hazard_candidates") or 0)
         + int((map_candidates.get("counts") or {}).get("poi_candidates") or 0)
+        + int((environment_values.get("counts") or {}).get("item_count") or 0)
         or _len(map_payload.get("corridors"))
         + _len(map_payload.get("hazards"))
         + _len(map_payload.get("pois")),
+        "mileage": int((mileage.get("counts") or {}).get("tag_count") or 0),
         "reference_tracks": int(
             (view.get("reference_tracks") or {}).get("reference_track_count")
             or _len((view.get("reference_tracks") or {}).get("reference_tracks"))

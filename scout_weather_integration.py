@@ -7,6 +7,7 @@ import xml.etree.ElementTree as ET
 import urllib.parse
 import urllib.request
 import zipfile
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from math import asin, cos, radians, sin, sqrt
 from pathlib import Path
@@ -16,9 +17,16 @@ from urllib.error import HTTPError
 
 CWA_BASE_URL = "https://opendata.cwa.gov.tw/api/v1/rest/datastore"
 CWA_FILEAPI_BASE_URL = "https://opendata.cwa.gov.tw/fileapi/v1/opendataapi"
+CWA_PROVIDER_ID = "cwa_opendata"
+SCOUT_CWA_API_KEY_ENV = "SCOUT_CWA_API_KEY"
+LEGACY_CWA_API_KEY_ENV = "CWA_API_KEY"
 CWA_TOWNSHIP_WEEKLY_FORECAST = "F-D0047-093"
 CWA_36H_FORECAST = "F-C0032-001"
 CWA_WEATHER_WARNING = "W-C0033-001"
+CWA_FILEAPI_MAX_RESPONSE_BYTES = 64 * 1024 * 1024
+CWA_FILEAPI_MAX_ZIP_ENTRIES = 512
+CWA_FILEAPI_MAX_ZIP_ENTRY_BYTES = 8 * 1024 * 1024
+CWA_FILEAPI_MAX_ZIP_EXPANDED_BYTES = 128 * 1024 * 1024
 
 WEATHER_INTEGRATION_ARTIFACT_KIND = "route_weather_package"
 
@@ -59,16 +67,40 @@ def cwa_fileapi_url(
     return f"{base_url.rstrip('/')}/{urllib.parse.quote(dataset_id)}?{query}"
 
 
+def resolve_cwa_api_key(
+    env: Mapping[str, str] | None = None,
+    *,
+    api_key_env: str | None = SCOUT_CWA_API_KEY_ENV,
+) -> tuple[str, str]:
+    """Resolve the server-side CWA key without exposing the value in artifacts."""
+    active_env = os.environ if env is None else env
+    env_names: list[str] = []
+    if api_key_env:
+        env_names.append(api_key_env)
+    for fallback in (SCOUT_CWA_API_KEY_ENV, LEGACY_CWA_API_KEY_ENV):
+        if fallback not in env_names:
+            env_names.append(fallback)
+
+    for env_name in env_names:
+        api_key = str(active_env.get(env_name, "")).strip()
+        if api_key:
+            return api_key, env_name
+
+    expected = f"{SCOUT_CWA_API_KEY_ENV} is required for server-side CWA fetch"
+    if LEGACY_CWA_API_KEY_ENV in env_names:
+        expected += f" (legacy fallback: {LEGACY_CWA_API_KEY_ENV})"
+    raise RuntimeError(expected)
+
+
 def fetch_cwa_dataset(
     dataset_id: str,
     *,
     params: dict[str, str] | None = None,
-    api_key_env: str = "CWA_API_KEY",
+    api_key_env: str = SCOUT_CWA_API_KEY_ENV,
+    env: Mapping[str, str] | None = None,
     timeout_s: float = 20.0,
 ) -> dict[str, Any]:
-    api_key = os.environ.get(api_key_env, "").strip()
-    if not api_key:
-        raise RuntimeError(f"{api_key_env} is required for server-side CWA fetch")
+    api_key, resolved_env = resolve_cwa_api_key(env, api_key_env=api_key_env)
     url = cwa_dataset_url(dataset_id, api_key=api_key, params=params)
     request = urllib.request.Request(url, headers={"accept": "application/json"})
     try:
@@ -79,7 +111,8 @@ def fetch_cwa_dataset(
             return fetch_cwa_file_dataset(
                 dataset_id,
                 file_format="ZIP",
-                api_key_env=api_key_env,
+                api_key_env=resolved_env,
+                env=env,
                 timeout_s=timeout_s,
             )
         raise
@@ -91,12 +124,11 @@ def fetch_cwa_file_dataset(
     *,
     file_format: str = "JSON",
     params: dict[str, str] | None = None,
-    api_key_env: str = "CWA_API_KEY",
+    api_key_env: str = SCOUT_CWA_API_KEY_ENV,
+    env: Mapping[str, str] | None = None,
     timeout_s: float = 20.0,
 ) -> dict[str, Any]:
-    api_key = os.environ.get(api_key_env, "").strip()
-    if not api_key:
-        raise RuntimeError(f"{api_key_env} is required for server-side CWA fetch")
+    api_key, _resolved_env = resolve_cwa_api_key(env, api_key_env=api_key_env)
     url = cwa_fileapi_url(
         dataset_id,
         api_key=api_key,
@@ -105,7 +137,12 @@ def fetch_cwa_file_dataset(
     )
     request = urllib.request.Request(url, headers={"accept": "application/json,application/zip,*/*"})
     with urllib.request.urlopen(request, timeout=timeout_s) as response:  # noqa: S310 - trusted CWA endpoint.
-        raw = response.read()
+        content_length = response.headers.get("Content-Length")
+        if content_length and int(content_length) > CWA_FILEAPI_MAX_RESPONSE_BYTES:
+            raise ValueError("CWA file API response exceeds size limit")
+        raw = response.read(CWA_FILEAPI_MAX_RESPONSE_BYTES + 1)
+    if len(raw) > CWA_FILEAPI_MAX_RESPONSE_BYTES:
+        raise ValueError("CWA file API response exceeds size limit")
     if raw.startswith(b"PK"):
         return _decode_cwa_zip_payload(dataset_id, raw)
     try:
@@ -122,11 +159,24 @@ def fetch_cwa_file_dataset(
 def _decode_cwa_zip_payload(dataset_id: str, raw: bytes) -> dict[str, Any]:
     documents: list[dict[str, str]] = []
     with zipfile.ZipFile(io.BytesIO(raw)) as archive:
-        for name in archive.namelist():
+        entries = archive.infolist()
+        if len(entries) > CWA_FILEAPI_MAX_ZIP_ENTRIES:
+            raise ValueError("CWA ZIP response exceeds entry limit")
+        expanded_bytes = 0
+        for entry in entries:
+            name = entry.filename
             if not name.lower().endswith(".xml"):
                 continue
+            if entry.file_size > CWA_FILEAPI_MAX_ZIP_ENTRY_BYTES:
+                raise ValueError("CWA ZIP entry exceeds size limit")
+            expanded_bytes += entry.file_size
+            if expanded_bytes > CWA_FILEAPI_MAX_ZIP_EXPANDED_BYTES:
+                raise ValueError("CWA ZIP response exceeds expanded size limit")
             try:
-                text = archive.read(name).decode("utf-8")
+                payload = archive.read(entry)
+                if len(payload) != entry.file_size:
+                    raise ValueError("CWA ZIP entry size mismatch")
+                text = payload.decode("utf-8")
             except (KeyError, UnicodeDecodeError):
                 continue
             documents.append({"name": name, "text": text})

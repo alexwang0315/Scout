@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "scout.dashboardCapabilityManifest.v1",
+  "type": "object",
+  "required": ["schema", "version", "surfaces"],
+  "properties": {
+    "schema": {"const": "scout.dashboardCapabilityManifest.v1"},
+    "version": {"type": "integer", "minimum": 1},
+    "baseline_policy": {"type": "string", "minLength": 1},
+    "surfaces": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "route", "capabilities"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "route": {"type": "string", "minLength": 1},
+          "capabilities": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"$ref": "#/$defs/capability"}
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "$defs": {
+    "nonEmptyStringArray": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string", "minLength": 1},
+      "uniqueItems": true
+    },
+    "capability": {
+      "type": "object",
+      "required": [
+        "id",
+        "criticality",
+        "status",
+        "expected_behavior",
+        "forbidden_behavior",
+        "required_tests",
+        "required_evidence",
+        "authority_boundary"
+      ],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]+$"},
+        "criticality": {"enum": ["P0", "P1", "P2"]},
+        "status": {"enum": ["operational", "partial", "intent_only", "candidate", "shadow", "sandbox", "not_implemented"]},
+        "qualification_state": {"enum": ["active", "paused", "outside_boundary"]},
+        "owner": {"type": "string"},
+        "introduced_in_commit": {"type": "string"},
+        "expected_behavior": {"$ref": "#/$defs/nonEmptyStringArray"},
+        "forbidden_behavior": {"$ref": "#/$defs/nonEmptyStringArray"},
+        "required_tests": {"$ref": "#/$defs/nonEmptyStringArray"},
+        "required_evidence": {"$ref": "#/$defs/nonEmptyStringArray"},
+        "authority_boundary": {
+          "type": "object",
+          "required": ["source", "runtime_authority"],
+          "properties": {
+            "source": {"enum": ["server", "browser", "reducer", "none"]},
+            "runtime_authority": {"const": false}
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

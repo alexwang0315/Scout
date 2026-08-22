@@ -25,6 +25,39 @@ class _FakeResponse:
         return json.dumps(self.payload).encode("utf-8")
 
 
+class _FakeLocalFallback:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, Any]] = []
+
+    def answer(self, request: Any, active_context: dict[str, Any]) -> dict[str, Any]:
+        self.calls.append(
+            {
+                "message": request.message,
+                "surface": request.surface,
+                "active_context": dict(active_context),
+            }
+        )
+        return {
+            "status": "local_fallback_answered",
+            "message": "Mac local Pydantic AI fallback answer.",
+            "route": {
+                "route_class": "evidence_query",
+                "tool_id": "mac.local.pydantic_ai_v2_fallback",
+                "permission": {
+                    "allowed": True,
+                    "requires_user_approval": False,
+                    "reason": "read-only fallback",
+                    "user_message": "answered locally",
+                },
+            },
+            "local_fallback": {
+                "provider": "pydantic_ai_v2",
+                "model": "openrouter:z-ai/glm-5.2",
+                "runtime_safety_truth": False,
+            },
+        }
+
+
 def test_mac_chat_serves_static_interface() -> None:
     client = TestClient(create_mac_chat_app(target_url="http://scout.local:9120"))
 
@@ -36,10 +69,27 @@ def test_mac_chat_serves_static_interface() -> None:
     assert "Scout AI" in index.text
     assert "Conversation" in index.text
     assert "server-panel" in index.text
+    assert "fallbackState" in index.text
+    assert "Local fallback" in index.text
+    assert "/static/styles.css?v=compact-20260701" in index.text
+    assert "/static/app.js?v=compact-20260701" in index.text
     assert script.status_code == 200
     assert "/api/chat" in script.text
+    assert "updateFallbackIndicator" in script.text
+    assert "no runtime mutation" in script.text
+    assert "no outbound send" in script.text
+    assert "local UI only" in script.text
     assert styles.status_code == 200
     assert ".assistant" in styles.text or ".message.assistant" in styles.text
+    assert ".status-lamps" in styles.text
+    assert ".state-pill.warn" in styles.text
+    assert "height: 100vh;" in styles.text
+    assert "overflow: hidden;" in styles.text
+    assert "grid-template-rows: auto minmax(0, 1fr) auto;" in styles.text
+    assert "overflow-y: auto;" in styles.text
+    assert "max-height: 82px;" in styles.text
+    assert "resize: none;" in styles.text
+    assert "word-break: break-word;" in styles.text
 
 
 def test_mac_chat_reports_hardware_server_capabilities() -> None:
@@ -162,6 +212,74 @@ def test_mac_chat_surfaces_remote_disconnect_without_fallback() -> None:
     assert payload["summary"]["status"] == "disconnected"
     assert payload["response"] == {}
     assert "Scout server unavailable" in payload["error"]
+
+
+def test_mac_chat_reports_local_fallback_availability() -> None:
+    def fake_urlopen(_request: Any, *, timeout: float) -> _FakeResponse:
+        del timeout
+        raise URLError("connection refused")
+
+    scout_client = ScoutServerClient(
+        "http://scout.local:9120",
+        urlopen_func=fake_urlopen,
+    )
+    client = TestClient(
+        create_mac_chat_app(
+            scout_client=scout_client,
+            local_fallback_enabled=True,
+            local_fallback_provider=_FakeLocalFallback(),
+        )
+    )
+
+    config = client.get("/api/config").json()
+    status = client.get("/api/server").json()
+
+    assert config["local_fallback_enabled"] is True
+    assert config["boundary"]["remote_scout_server_required"] is False
+    assert config["boundary"]["mac_local_pydantic_ai_fallback_enabled"] is True
+    assert status["connected"] is False
+    assert status["local_fallback_enabled"] is True
+    assert status["local_fallback_available"] is True
+
+
+def test_mac_chat_uses_local_fallback_when_remote_disconnects() -> None:
+    def fake_urlopen(_request: Any, *, timeout: float) -> _FakeResponse:
+        del timeout
+        raise URLError("connection refused")
+
+    scout_client = ScoutServerClient(
+        "http://scout.local:9120",
+        urlopen_func=fake_urlopen,
+    )
+    fallback = _FakeLocalFallback()
+    client = TestClient(
+        create_mac_chat_app(
+            scout_client=scout_client,
+            local_fallback_enabled=True,
+            local_fallback_provider=fallback,
+        )
+    )
+
+    response = client.post(
+        "/api/chat",
+        json={
+            "message": "白牆時我現在應該繼續走嗎？",
+            "surface": "pretrip",
+            "active_context": {"project_id": "chilai_nanhua_day1"},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["ok"] is True
+    assert payload["response_source"] == "mac_local_pydantic_ai_v2"
+    assert payload["remote_error"]
+    assert payload["summary"]["status"] == "local_fallback_answered"
+    assert payload["summary"]["tool_id"] == "mac.local.pydantic_ai_v2_fallback"
+    assert payload["response"]["local_fallback"]["runtime_safety_truth"] is False
+    assert fallback.calls[0]["surface"] == "pretrip"
+    assert fallback.calls[0]["active_context"]["project_id"] == "chilai_nanhua_day1"
+    assert fallback.calls[0]["active_context"]["client"] == "scout_mac_chat"
 
 
 def test_normalize_server_url_rejects_non_http_urls() -> None:

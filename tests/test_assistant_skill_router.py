@@ -223,10 +223,8 @@ def test_pretrip_tool_plan_fallback_reports_weather_partial_tool_evidence() -> N
     assert f"resolved_by={PRETRIP_TOOL_PLANNER_SKILL_ID}" in response.limitations
     weather_summary = _summary_for(response.sources, WEATHER_WINDOW_TOOL_ID)
     assert weather_summary["status"] == "completed"
-    assert weather_summary["latest"]["answerability"] == "weather_placeholder_only"
-    assert "provider" in weather_summary["latest"]["missing_fields"]
-    assert "ttl_s" in weather_summary["latest"]["missing_fields"]
-    assert "route_weather_package" in weather_summary["latest"]["missing_fields"]
+    assert weather_summary["latest"]["answerability"] == "route_weather_risk_available"
+    assert weather_summary["latest"]["missing_fields"] == []
     assert response.boundary.safety_mutation_allowed is False
     assert response.boundary.outbound_send_allowed is False
 
@@ -252,19 +250,74 @@ def test_pretrip_full_workflow_source_reports_weather_partial_tool_evidence() ->
     assert summary is not None
     assert summary["artifact_kind"] == "scout_ai_full_workflow"
     assert summary["answerability"] == "partial_evidence_with_missing_context"
-    assert summary["selected_tool_count"] == 1
-    assert summary["executed_tool_count"] == 1
+    assert summary["selected_tool_count"] == 2
+    assert summary["executed_tool_count"] == 2
     assert summary["contract_gap_count"] == 0
     assert summary["missing_evidence_count"] == 1
     assert summary["workflow_policy"]["model_provider_used"] is False
     assert summary["workflow_policy"]["model_synthesis_performed"] is False
     assert summary["boundary"]["runtime_safety_truth"] is False
     assert summary["runtime_safety_truth"] is False
-    assert "weather_placeholder_only" in summary["answer"]
+    assert "route_weather_risk_available" in summary["answer"]
+    assert "fresh_cwa_environment_evidence" in summary["answer"]
     assert summary["sources"][0]["tool_id"] == WEATHER_WINDOW_TOOL_ID
-    assert "provider" in summary["missing_evidence"][0]["missing_fields"]
-    assert "ttl_s" in summary["missing_evidence"][0]["missing_fields"]
-    assert "route_weather_package" in summary["missing_evidence"][0]["missing_fields"]
+    assert summary["sources"][1]["tool_id"] == "scout.ai.cwa_environment.assess.v0"
+    assert summary["missing_evidence"] == [
+        {
+            "tool_id": "scout.ai.cwa_environment.assess.v0",
+            "collection_status": "completed",
+            "missing_fields": ["fresh_cwa_environment_evidence"],
+            "implementation_gap": None,
+        }
+    ]
+
+
+def test_pretrip_full_workflow_source_exposes_standard_gap_audit_for_ui() -> None:
+    query = ScoutAssistantQuery(
+        surface=AssistantSurface.PRETRIP,
+        question="請以 SCOUT_OUTDOOR_AI_AGENT_STANDARD 為基準，檢視目前 Scout 體系還缺哪些東西，六力是否都有實作？",
+        context_ref="chilai_nanhua_day1",
+        project_id="chilai_nanhua_day1",
+    )
+
+    source = build_pretrip_full_workflow_source(
+        query,
+        project_root=PROJECT_ROOT,
+        limit=8,
+    )
+
+    assert source is not None
+    summary = source.context_summary
+    assert summary is not None
+    decision_output = summary["decision_output"]
+    audit = decision_output["standardGapAudit"]
+    assert decision_output["answerSourceToolId"] == "scout.ai.standard_gap_overview.v0"
+    assert decision_output["decision"] == "GUIDED_ONLY"
+    assert decision_output["allowed"] is False
+    assert decision_output["runtimeSafetyTruth"] is False
+    assert audit["schema"] == "scout_standard_gap_audit.v0"
+    assert audit["runtimeSafetyTruth"] is False
+    assert audit["summary"]["standardGroupCount"] == 10
+    assert audit["summary"]["coveredStandardGroupCount"] == 10
+    assert audit["summary"]["implementationGapToolCount"] == 0
+    assert audit["summary"]["contextOrReviewEvidenceGapToolCount"] == 1
+    assert audit["summary"]["uiUxValidationNeeded"] is False
+    assert audit["uiUxValidation"]["validated"] is True
+    assert audit["uiUxValidation"]["status"] == "validated_static_admin_ui"
+    assert len(audit["groups"]) == 10
+    assert audit["inputOrEvidenceGaps"] == [
+        {
+            "toolId": "scout.ai.cwa_environment.assess.v0",
+            "classification": "context_or_review_evidence_required",
+            "collectionStatus": "completed",
+            "missingFieldCount": 1,
+            "missingFields": ["fresh_cwa_environment_evidence"],
+            "implementationGap": None,
+            "nextSlice": "補足該工具缺少的具體情境 evidence 後重跑標準檢視。",
+        }
+    ]
+    assert audit["implementationGaps"] == []
+    assert summary["runtime_safety_truth"] is False
 
 
 def test_pretrip_full_workflow_fallback_uses_compact_workflow_source() -> None:
@@ -287,19 +340,16 @@ def test_pretrip_full_workflow_fallback_uses_compact_workflow_source() -> None:
         provider_error_type="ProviderFailed",
     )
 
-    assert response is not None
-    assert "registry planner fallback" in response.answer
-    assert "full workflow fallback" in response.answer
-    assert "weather_placeholder_only" in response.answer
+    assert response is None
     assert PRETRIP_FULL_WORKFLOW_SOURCE_ID in {
-        source.source_id for source in response.sources
+        source.source_id for source in sources
     }
-    workflow_summary = _summary_for(response.sources, PRETRIP_FULL_WORKFLOW_SOURCE_ID)
-    assert workflow_summary["answerability"] == "partial_evidence_with_missing_context"
+    workflow_summary = _summary_for(sources, PRETRIP_FULL_WORKFLOW_SOURCE_ID)
+    assert workflow_summary["answerability"] == (
+        "partial_evidence_with_missing_context"
+    )
     assert workflow_summary["contract_gap_count"] == 0
-    assert f"resolved_by={PRETRIP_FULL_WORKFLOW_SOURCE_ID}" in response.limitations
-    assert response.boundary.safety_mutation_allowed is False
-    assert response.boundary.outbound_send_allowed is False
+    assert workflow_summary["missing_evidence_count"] == 1
 
 
 def test_pretrip_tool_plan_hydrates_live_navigation_snapshot_source() -> None:
@@ -416,6 +466,12 @@ def test_pretrip_tool_plan_hydrates_energy_vitals_snapshot_source() -> None:
     assert "reserve_score" in energy_summary["hydration"]["field_names"]
     assert latest["status"] == "completed"
     assert latest["answerability"] == "energy_vitals_advisory_available"
+    assert latest["decision"] == "CONDITIONAL_GO"
+    assert latest["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert latest["decision_output"]["decision"] == "CONDITIONAL_GO"
+    assert latest["decision_output"]["allowed"] is True
+    assert latest["decision_output"]["runtimeSafetyTruth"] is False
+    assert "短休最多 10 分鐘" in latest["decision_output"]["firstLayer"]["limit"]
     assert latest["missing_fields"] == []
     assert latest["provided_fields"]["heart_rate_bpm"] == 162.0
     assert latest["advisory"]["cue_band"] == "rest_suggested"
@@ -532,6 +588,10 @@ def test_pretrip_tool_plan_augmentation_reads_sensor_vitals_jsonl_for_energy_sna
     assert latest["time_window"]["heart_rate_trend"]["delta"] == 14.0
     assert latest["time_window"]["record_gap_count"] == 0
     assert latest["advisory"]["cue_band"] == "rest_suggested"
+    assert latest["decision"] == "CONDITIONAL_GO"
+    assert latest["decision_output"]["decisionObjectSchema"] == "ContextualPermission"
+    assert latest["decision_output"]["decision"] == "CONDITIONAL_GO"
+    assert latest["decision_output"]["runtimeSafetyTruth"] is False
     assert latest["boundary"]["medical_diagnosis"] is False
     assert latest["boundary"]["safety_api_called"] is False
     assert latest["boundary"]["outbound_send_performed"] is False
@@ -714,6 +774,25 @@ def test_pretrip_tool_plan_augmentation_defers_to_deterministic_cp_skill() -> No
     registry_summary = _summary_for(augmented, PRETRIP_CONTEXT_REGISTRY_SOURCE_ID)
     assert registry_summary["runtime_safety_truth"] is False
     assert registry_summary["raw_payloads_embedded"] is False
+
+
+def test_pretrip_tool_plan_augmentation_skips_full_workflow_for_workspace_inventory() -> None:
+    query = ScoutAssistantQuery(
+        surface=AssistantSurface.PRETRIP,
+        question="候選資料、review 資料、runtime handoff 資料分別在哪些區塊？",
+        context_ref="chilai_nanhua_day1",
+        project_id="chilai_nanhua_day1",
+    )
+
+    augmented = augment_pretrip_sources_with_tool_plan(
+        query,
+        sources=[_pretrip_context_source()],
+        project_root=PROJECT_ROOT,
+    )
+
+    source_ids = {source.source_id for source in augmented}
+    assert PRETRIP_FULL_WORKFLOW_SOURCE_ID not in source_ids
+    assert PRETRIP_TOOL_PLANNER_SKILL_ID in source_ids
 
 
 def test_pretrip_cp_count_skill_resolves_from_context_summary() -> None:

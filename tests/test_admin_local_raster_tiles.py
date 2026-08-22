@@ -1,3 +1,6 @@
+import io
+import os
+import time
 from pathlib import Path
 
 import pytest
@@ -129,6 +132,130 @@ def test_seeds_wmts_imagery_tile_cache_with_fixture_fetcher(tmp_path):
     assert cached_path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
 
 
+def test_wmts_imagery_tile_cache_uses_30_day_ttl(tmp_path):
+    source = imagery_source_for_project({"imagery_source_id": "happyman_rudy"})
+    plan = build_imagery_tile_cache_plan(
+        {
+            "west": 121.2,
+            "south": 24.03,
+            "east": 121.2,
+            "north": 24.03,
+        },
+        project_id="chilai_nanhua_day1",
+        layer_id="rudy",
+        imagery_source=source,
+        cache_root=tmp_path / "imagery-tiles",
+        min_zoom=12,
+        max_zoom=12,
+    )
+    tile = plan["zoom_ranges"][0]
+    cached_path = raster_tile_cache_path(
+        "chilai_nanhua_day1",
+        "rudy",
+        12,
+        tile["x_min"],
+        tile["y_min"],
+        cache_root=tmp_path / "imagery-tiles",
+    )
+    calls: list[tuple[int, int, int]] = []
+
+    def fake_fetch(imagery_source, z, x, y):
+        calls.append((z, x, y))
+        return RemoteImageryTile(
+            body=b"\x89PNG\r\n\x1a\nwmts-fixture",
+            media_type="image/png",
+            source_id=imagery_source["source_id"],
+            url="https://example.test/wmts",
+            body_sha256="fixture-hash",
+        )
+
+    first = seed_imagery_tile_cache(
+        plan,
+        imagery_source=source,
+        provider_allows_offline_prefetch=True,
+        dry_run=False,
+        fetch_tile=fake_fetch,
+    )
+    second = seed_imagery_tile_cache(
+        plan,
+        imagery_source=source,
+        provider_allows_offline_prefetch=True,
+        dry_run=False,
+        fetch_tile=fake_fetch,
+    )
+    stale_mtime = time.time() - 31 * 24 * 60 * 60
+    os.utime(cached_path, (stale_mtime, stale_mtime))
+    third = seed_imagery_tile_cache(
+        plan,
+        imagery_source=source,
+        provider_allows_offline_prefetch=True,
+        dry_run=False,
+        fetch_tile=fake_fetch,
+    )
+
+    assert first["tiles_written"] == 1
+    assert second["tiles_skipped_existing"] == 1
+    assert second["tiles_written"] == 0
+    assert second["tile_ttl_days"] == 30
+    assert third["tiles_written"] == 1
+    assert third["tiles_refreshed"] == 1
+    assert len(calls) == 2
+
+
+def test_wmts_imagery_tile_cache_reuses_fresh_fallback_namespace(tmp_path):
+    source = imagery_source_for_project({"imagery_source_id": "happyman_rudy"})
+    plan = build_imagery_tile_cache_plan(
+        {
+            "west": 121.2,
+            "south": 24.03,
+            "east": 121.2,
+            "north": 24.03,
+        },
+        project_id="tryimport_project",
+        layer_id="rudy",
+        imagery_source=source,
+        cache_root=tmp_path / "imagery-tiles",
+        min_zoom=12,
+        max_zoom=12,
+    )
+    tile = plan["zoom_ranges"][0]
+    fallback_path = raster_tile_cache_path(
+        "stable_project",
+        "rudy",
+        12,
+        tile["x_min"],
+        tile["y_min"],
+        cache_root=tmp_path / "imagery-tiles",
+    )
+    fallback_path.parent.mkdir(parents=True)
+    fallback_path.write_bytes(b"\x89PNG\r\n\x1a\nstable-cache")
+
+    def failing_fetch(imagery_source, z, x, y):
+        raise AssertionError("fresh fallback cache should avoid remote fetch")
+
+    summary = seed_imagery_tile_cache(
+        plan,
+        imagery_source=source,
+        provider_allows_offline_prefetch=True,
+        dry_run=False,
+        fallback_cache_project_ids=("stable_project",),
+        fetch_tile=failing_fetch,
+    )
+
+    target_path = raster_tile_cache_path(
+        "tryimport_project",
+        "rudy",
+        12,
+        tile["x_min"],
+        tile["y_min"],
+        cache_root=tmp_path / "imagery-tiles",
+    )
+    assert summary["status"] == "seed_complete"
+    assert summary["tiles_copied_from_fallback_cache"] == 1
+    assert summary["tiles_written"] == 0
+    assert target_path.read_bytes() == fallback_path.read_bytes()
+
+
 def test_dry_run_does_not_write_tiles(tmp_path):
     source = tmp_path / "sample_wgs84.tiff"
     _write_sample_geotiff(source)
@@ -253,6 +380,126 @@ def test_raster_tile_proxy_detects_cached_jpeg_media_type(tmp_path):
     assert payload.source == "local_cache"
 
 
+def test_raster_tile_proxy_serves_cropped_parent_cache_fallback(tmp_path):
+    try:
+        from PIL import Image
+    except Exception as exc:  # pragma: no cover - environment guard
+        pytest.skip(f"Pillow is unavailable: {exc}")
+
+    parent_path = raster_tile_cache_path(
+        "chilai_nanhua_day1",
+        "imagery",
+        1,
+        1,
+        1,
+        cache_root=tmp_path,
+    )
+    parent_path.parent.mkdir(parents=True)
+    parent_path.write_bytes(_quadrant_png())
+
+    payload = load_or_build_raster_tile_payload(
+        "chilai_nanhua_day1",
+        "imagery",
+        2,
+        3,
+        2,
+        cache_root=tmp_path,
+    )
+
+    assert payload.source == "local_parent_cache_fallback"
+    assert payload.media_type == "image/png"
+    assert payload.cache_path == raster_tile_cache_path(
+        "chilai_nanhua_day1",
+        "imagery",
+        2,
+        3,
+        2,
+        cache_root=tmp_path,
+    )
+    assert payload.headers()["Cache-Control"] == "no-store"
+    with Image.open(io.BytesIO(payload.body)) as image:
+        assert image.size == (256, 256)
+        assert image.convert("RGBA").getpixel((128, 128))[:3] == (0, 255, 0)
+
+
+def test_raster_tile_proxy_prefers_requested_native_zoom_before_parent_fallback(
+    tmp_path,
+):
+    parent_path = raster_tile_cache_path(
+        "chilai_nanhua_day1",
+        "imagery",
+        1,
+        1,
+        1,
+        cache_root=tmp_path,
+    )
+    parent_path.parent.mkdir(parents=True)
+    parent_path.write_bytes(_quadrant_png())
+    source = imagery_source_for_project({"imagery_source_id": "nlsc_photo2"})
+    remote_body = b"\x89PNG\r\n\x1a\nnative-z2"
+    calls = []
+
+    def fake_fetcher(imagery_source, z, x, y, *, timeout_seconds):
+        calls.append((imagery_source["source_id"], z, x, y, timeout_seconds))
+        return RemoteImageryTile(
+            body=remote_body,
+            media_type="image/png",
+            source_id="nlsc_photo2",
+            url="https://example.test/tiles/2/3/2.png",
+            body_sha256="native-z2-sha",
+        )
+
+    payload = load_or_build_raster_tile_payload(
+        "chilai_nanhua_day1",
+        "imagery",
+        2,
+        3,
+        2,
+        cache_root=tmp_path,
+        imagery_source=source,
+        allow_remote_fetch=True,
+        prefer_native_zoom=True,
+        remote_fetch_timeout_seconds=1.5,
+        remote_fetcher=fake_fetcher,
+    )
+
+    assert payload.source == "remote_fetch_cache_fill"
+    assert payload.body == remote_body
+    assert calls == [("nlsc_photo2", 2, 3, 2, 1.5)]
+
+
+def test_raster_tile_proxy_never_substitutes_parent_for_native_zoom(tmp_path):
+    parent_path = raster_tile_cache_path(
+        "chilai_nanhua_day1",
+        "imagery",
+        1,
+        1,
+        1,
+        cache_root=tmp_path,
+    )
+    parent_path.parent.mkdir(parents=True)
+    parent_path.write_bytes(_quadrant_png())
+    source = imagery_source_for_project({"imagery_source_id": "nlsc_photo2"})
+
+    def failing_fetcher(*_args, **_kwargs):
+        raise TimeoutError("native tile unavailable")
+
+    with pytest.raises(TimeoutError, match="native tile unavailable"):
+        load_or_build_raster_tile_payload(
+            "chilai_nanhua_day1",
+            "imagery",
+            2,
+            3,
+            2,
+            cache_root=tmp_path,
+            imagery_source=source,
+            allow_remote_fetch=True,
+            prefer_native_zoom=True,
+            remote_fetch_timeout_seconds=0.25,
+            remote_fetcher=failing_fetcher,
+        )
+
+
 def test_raster_tile_proxy_contract_and_validation(tmp_path):
     contract = build_local_raster_tile_proxy_contract(cache_root=tmp_path)
 
@@ -343,6 +590,24 @@ def test_raster_tile_proxy_can_fill_cache_from_explicit_imagery_source(tmp_path)
     assert cached.source == "local_cache"
     assert cached.body == remote_body
     assert cached.headers()["X-Scout-Imagery-Source-Id"] == "nlsc_photo2"
+
+
+def _quadrant_png() -> bytes:
+    from PIL import Image
+
+    image = Image.new("RGBA", (256, 256), (0, 0, 0, 0))
+    colors = {
+        (0, 0, 128, 128): (255, 0, 0, 255),
+        (128, 0, 256, 128): (0, 255, 0, 255),
+        (0, 128, 128, 256): (0, 0, 255, 255),
+        (128, 128, 256, 256): (255, 255, 0, 255),
+    }
+    for box, color in colors.items():
+        patch = Image.new("RGBA", (box[2] - box[0], box[3] - box[1]), color)
+        image.paste(patch, box[:2])
+    output = io.BytesIO()
+    image.save(output, format="PNG")
+    return output.getvalue()
 
 
 def test_tile_bounds_are_wgs84_slippy_bounds():

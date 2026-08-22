@@ -520,6 +520,476 @@ JSONL 裡每個回應行。若 OLED 或 LED 沒反應，但終端機已有回應
 與模組供電。這一步只證明本地序列通訊可用，不能推論山區通訊距離、網關覆蓋、團隊訊息
 可靠度或任何求救能力。
 
+Wio-E5 / LoRa-E5 client uplink trial plan:
+
+```bash
+python3 tools/pi_wio_e5_lorawan_uplink_trial_plan.py \
+  --wio-at-jsonl /data/scout/providers/wio_e5/wio-e5-at-smoke.jsonl \
+  --gateway-rx-jsonl /data/scout/providers/lora/sx1303-gateway-rx-readiness.jsonl \
+  --uplink-jsonl /data/scout/providers/lora/sx1303-gateway-uplink.jsonl \
+  --frequency-hz 923200000 \
+  --region-profile AS923_2 \
+  --oled-status \
+  --led-status \
+  --output-jsonl /data/scout/providers/lora/wio-e5-uplink-trial-plan.jsonl
+```
+
+若 Wio-E5 read-only AT smoke 與 SX1303 RX readiness 都已通過，但還沒要做真正 RF
+發射，這支工具會停在 `waiting_for_operator_approval`，OLED 顯示 `SCOUT LORA`、
+`WAIT APPROVAL`、`NO RF TX`，LED Bar 預設閃 LED2。若 evidence 不足，OLED 顯示
+`PLAN BLOCKED`，LED Bar 預設閃 LED1。
+
+真的準備進入合法 bench RF trial 時，才可在下一次 planning run 加上明確批准字串：
+
+```bash
+python3 tools/pi_wio_e5_lorawan_uplink_trial_plan.py \
+  --operator-approval-token I_ACCEPT_RF_TX_AS923_2_TW_920_925 \
+  --frequency-hz 923200000 \
+  --region-profile AS923_2 \
+  --oled-status \
+  --led-status
+```
+
+中文註釋：這仍然不是 sender。工具只產生 `ready_for_manual_uplink_trial` plan evidence，
+不開 serial、不送 `AT+JOIN`、不送 `AT+MSG`、不送 `AT+TEST`、不做 downlink、不使用
+`mosquitto_pub`，也不發射 RF。它會檢查台灣 `920000000-925000000 Hz` planning boundary，
+預設 `923200000 Hz` / `AS923_2`，並把結果寫到
+`/data/scout/providers/lora/wio-e5-uplink-trial-plan.jsonl`。JSONL 只保存 DevEUI hash，
+不保存 approval token 原文；`operator_approval_token_stored=false`、
+`rf_tx_allowed=false`、`lorawan_uplink_allowed=false`、`rf_tx_executed=false`、
+`lorawan_uplink_executed=false` 必須固定。真正的 client uplink 需要另一個明確、
+人工觸發且可審計的 RF trial step，並應先啟動 SX1303 passive MQTT uplink tail 觀察
+`sx1303-gateway-uplink.jsonl`。
+
+SX1303 Gateway HAT SPI / chip-id RF preflight smoke:
+
+```bash
+python3 tools/pi_sx1303_gateway_smoke.py \
+  --spi-device /dev/spidev0.0 \
+  --hal-root /home/alexwang0315/Documents/sx1302_hal_rpi5-master \
+  --oled-status \
+  --oled-driver sh1107g \
+  --led-status \
+  --led-port D5 \
+  --output-jsonl /data/scout/providers/lora/sx1303-gateway-smoke.jsonl
+```
+
+無實體接線或本機開發時可先 dry-run：
+
+```bash
+python3 tools/pi_sx1303_gateway_smoke.py \
+  --dry-run \
+  --oled-status \
+  --oled-dry-run \
+  --led-status \
+  --led-dry-run
+```
+
+中文註釋：這支工具只跑 `sx1302_hal` 的 `util_chip_id`，用 GPIO/SPI reset/read
+SX1303 concentrator 並擷取 gateway EUI、chip version 與 temperature-sensor
+evidence。它不啟動 packet forwarder、不送 RF、不做 LoRaWAN join/uplink、不改
+ChirpStack config，也不接 `/safety/*`。成功時 OLED 會顯示 `SCOUT LORA GW`、
+`RF OK`、gateway EUI 尾碼與 `NO RF TX`；LED Bar 預設閃 LED7，失敗閃 LED10。
+JSONL 會固定包含 `rf_tx_allowed=false`、`packet_forwarder_started=false`、
+`lorawan_uplink_allowed=false`、`phase1_safety_decision_change_allowed=false`、
+`remote_outbound_allowed=false` 與
+`hardware_control_scope=diagnostic_gateway_evidence_only`。
+
+2026-07-06 Scout Pi 實機結果：`/dev/spidev0.0` 與本機
+`sx1302_hal_rpi5-master` 的 `util_chip_id` 路徑已確認可讀 SX1303。診斷回傳
+concentrator EUI `0x0016c001f11f5f46`、chip version `0x12`，並看到
+temperature sensor evidence。這只證明 SPI 與 concentrator 可存取；仍不代表已收到
+LoRaWAN client uplink。
+
+SX1303 Gateway passive RX readiness smoke:
+
+```bash
+python3 tools/pi_sx1303_gateway_rx_smoke.py \
+  --chirpstack-root /data/scout/providers/lora/chirpstack-docker \
+  --oled-status \
+  --oled-driver sh1107g \
+  --led-status \
+  --led-port D5 \
+  --output-jsonl /data/scout/providers/lora/sx1303-gateway-rx-readiness.jsonl
+```
+
+無 Docker 或本機開發時可先用 fixture / dry-run：
+
+```bash
+python3 tools/pi_sx1303_gateway_rx_smoke.py \
+  --dry-run \
+  --oled-status \
+  --oled-dry-run \
+  --led-status \
+  --led-dry-run
+```
+
+中文註釋：這支工具只被動讀本機 Docker container 狀態、TCP/UDP listen 狀態與 bounded
+gateway log 摘要。它不保存 raw log lines、不啟動 packet forwarder、不送 RF、不做
+LoRaWAN join/uplink、不改 ChirpStack config，也不接 `/safety/*`。成功時 OLED 會顯示
+`SCOUT LORA RX`、`RX READY NO UL`、TCP/UDP 摘要與 `NO RF TX`；LED Bar 預設
+RX ready 閃 LED8、uplink hint 閃 LED9、缺件或不完整閃 LED1。
+
+判讀重點：看到 RX ready 只代表本機接收側服務、橋接器、訊息代理與監聽埠大致可用；
+它仍然不是隊員端已送出訊號，也不是山區覆蓋能力證明。真正收到隊員端資料以前，Scout
+只能把這一層視為「等待上行資料」的診斷狀態。
+
+SX1303 Gateway passive MQTT uplink tail:
+
+```bash
+python3 tools/pi_sx1303_gateway_uplink_mqtt_tail.py \
+  --duration-seconds 20 \
+  --max-messages 1 \
+  --oled-status \
+  --oled-driver sh1107g \
+  --led-status \
+  --led-port D5 \
+  --output-jsonl /data/scout/providers/lora/sx1303-gateway-uplink.jsonl \
+  --status-jsonl /data/scout/providers/lora/sx1303-gateway-uplink-tail-status.jsonl
+```
+
+無 client uplink 或本機開發時可先 dry-run：
+
+```bash
+python3 tools/pi_sx1303_gateway_uplink_mqtt_tail.py \
+  --dry-run \
+  --oled-status \
+  --oled-dry-run \
+  --led-status \
+  --led-dry-run
+```
+
+中文註釋：這支工具只用 `mosquitto_sub` 被動訂閱本機 ChirpStack MQTT topic，例如
+`application/+/device/+/event/up` 與 `as923_2/gateway/+/event/up`。它不使用
+`mosquitto_pub`、不發送 RF、不做 LoRaWAN join/uplink、不做 downlink、不改設定，也不接
+`/safety/*`。沒有收到 uplink 時只寫
+`/data/scout/providers/lora/sx1303-gateway-uplink-tail-status.jsonl`，不寫
+`sx1303-gateway-uplink.jsonl`；只有真的收到 uplink event 時才 append 結構化 uplink
+evidence。預設 DevEUI 與 gateway id 只寫 hash，payload data 不寫入 JSONL，只保留
+`payload_bytes`、frequency、SF、bandwidth、RSSI、SNR、frame counter 等診斷摘要。
+OLED 會顯示 `SCOUT LORA UL`、`WAIT UPLINK` 或 `UPLINK OK`；LED Bar 預設等待閃
+LED1、收到 uplink 閃 LED9。
+
+判讀重點：等待期間看到沒有資料是正常結果，代表目前還沒有隊員端節點送出上行訊息；
+這不是錯誤，也不是網關故障。只有在你明確讓合法頻段的 client 節點送出訊息後，這支
+工具才應該看到計數增加。收到後仍只代表通訊證據存在，不能直接升級 Scout 安全等級。
+
+Wio-E5 / LoRa-E5 operator-approved RF uplink trial:
+
+先做 Join-only RF trial。這一步只送 `AT` 與 `AT+JOIN`，即使 Join 成功也不送
+`AT+MSG`：
+
+```bash
+python3 tools/pi_wio_e5_lorawan_rf_trial.py \
+  --plan-jsonl /data/scout/providers/lora/wio-e5-uplink-trial-plan.jsonl \
+  --port /dev/ttyUSB0 \
+  --frequency-hz 923200000 \
+  --region-profile AS923_2 \
+  --operator-approval-token I_ACCEPT_RF_TX_AS923_2_TW_920_925 \
+  --execute-rf-tx \
+  --join-only \
+  --oled-status \
+  --led-status \
+  --output-jsonl /data/scout/providers/lora/wio-e5-rf-trial.jsonl
+```
+
+只有 Join-only evidence 顯示 `rf_trial_join_confirmed_no_uplink` 後，才執行單筆
+uplink trial：
+
+```bash
+python3 tools/pi_wio_e5_lorawan_rf_trial.py \
+  --plan-jsonl /data/scout/providers/lora/wio-e5-uplink-trial-plan.jsonl \
+  --port /dev/ttyUSB0 \
+  --frequency-hz 923200000 \
+  --region-profile AS923_2 \
+  --payload-text SCOUT \
+  --operator-approval-token I_ACCEPT_RF_TX_AS923_2_TW_920_925 \
+  --execute-rf-tx \
+  --oled-status \
+  --led-status \
+  --output-jsonl /data/scout/providers/lora/wio-e5-rf-trial.jsonl
+```
+
+安全順序固定是：先跑 `pi_wio_e5_lorawan_uplink_trial_plan.py` 取得
+`ready_for_manual_uplink_trial`，再開 `pi_sx1303_gateway_uplink_mqtt_tail.py` 等待
+uplink，再執行 `pi_wio_e5_lorawan_rf_trial.py --join-only`，確認 Join 成功後才執行
+不帶 `--join-only` 的單筆 uplink。RF executor 是唯一會送
+`AT+JOIN` / `AT+MSG="SCOUT"` 的工具；沒有 `--execute-rf-tx`、沒有
+`I_ACCEPT_RF_TX_AS923_2_TW_920_925`、plan 不是 ready、頻率/region 不相符、或加上
+`--dry-run` 時都必須拒絕 RF。
+
+中文註釋：這支工具不設定 AppKey / DevEUI / AppEUI / channel mask，也不改 ChirpStack
+device registry。它只在已 provisioning 的 Wio-E5 上做單次 bench RF trial。預設 sequence
+是 `AT`、`AT+JOIN`、`AT+MSG="SCOUT"`；若 join 未確認，預設停止在 join，不送 uplink。
+若加上 `--join-only`，sequence 只會是 `AT`、`AT+JOIN`，Join 成功時狀態為
+`rf_trial_join_confirmed_no_uplink`，且 `lorawan_uplink_executed=false`。
+只有 operator 明確加 `--continue-after-join-failure` 才允許 join 不明時仍送 uplink。
+若 module 已知 joined，可用 `--skip-join` 只送 `AT+MSG="SCOUT"`。
+
+evidence 必須如實標記 `rf_tx_allowed=true`、`rf_tx_executed=true`、`join_executed=true`
+或 `lorawan_uplink_executed=true`，但仍固定
+`phase1_safety_decision_change_allowed=false`、`phase1_l0_l4_state_mutated=false`、
+`safety_api_called=false`、`downlink_allowed=false`、`remote_outbound_allowed=false`。
+OLED 會顯示 `SCOUT LORA TX`、`RF SENT` / `RF FAIL` / `BLOCKED` / `DRY RUN`；
+LED Bar 預設 dry-run 閃 LED2、RF command sent 閃 LED9、失敗閃 LED10、blocked 閃 LED1。
+
+現場判讀請保持保守：看到 `RF SENT` 只代表模組已接受並嘗試發送一筆 LoRaWAN 指令，
+不代表網關一定收到，也不代表網路伺服器完成 join 或 application event。真正成功的依據是
+另一邊的 passive MQTT uplink tail 寫入 `uplink_observed`，以及
+`sx1303-gateway-uplink.jsonl` 出現同一時間窗內的 frequency、RSSI、SNR、frame counter
+摘要。若 OLED 顯示 `RF FAIL`，先看 `wio-e5-rf-trial.jsonl` 的 command response，再檢查
+device 是否已在 ChirpStack 登錄、AppKey 是否正確、gateway 是否仍在 AS923_2、天線是否接好。
+任何失敗都不要用手動反覆高頻發送來測距；先回到診斷工具確認設定與接收側，再做下一次單筆試送。
+
+Wio-E5 / ChirpStack join provisioning audit:
+
+```bash
+python3 tools/pi_wio_e5_chirpstack_join_audit.py \
+  --wio-at-jsonl /data/scout/providers/wio_e5/wio-e5-at-smoke.jsonl \
+  --rf-trial-jsonl /data/scout/providers/lora/wio-e5-rf-trial.jsonl \
+  --uplink-jsonl /data/scout/providers/lora/sx1303-gateway-uplink.jsonl \
+  --tail-status-jsonl /data/scout/providers/lora/sx1303-gateway-uplink-tail-status.jsonl \
+  --oled-status \
+  --led-status \
+  --output-jsonl /data/scout/providers/lora/wio-e5-chirpstack-join-audit.jsonl
+```
+
+中文註釋：這支 audit 工具是 RF trial 失敗後的第一個下一步。它只讀 Wio-E5 AT
+identity evidence、`wio-e5-rf-trial.jsonl`、SX1303 uplink/tail JSONL、ChirpStack
+container log、gateway bridge log，以及可選的 Postgres device table read-only query。
+它不改 ChirpStack、不建立 device、不改 AppKey、不發 MQTT、不送 downlink、不送 RF，也不接
+`/safety/*`。DevEUI / AppEUI 只輸出 hash；raw log lines、raw device EUI、approval token
+都不可寫入 JSONL。
+
+現場操作時請先看三件事：裝置是否已被登錄、網關是否看見入網請求、伺服器是否拒絕。
+若三者都沒有明確證據，先不要重複發射，也不要猜測安全狀態；應回到配對資料、區域設定、
+天線與供電逐項確認。這個步驟的價值是把「沒有收到」拆成可追查的設定問題、接收問題或
+節點問題，讓下一次試送前有明確修正方向。
+
+主要判讀：
+
+- `client_dev_eui_not_registered_in_chirpstack`：Wio-E5 DevEUI 沒在 ChirpStack device registry 看到；
+- `client_join_failed_no_gateway_join_hint`：Wio 回 join failed，但 ChirpStack/gateway log 沒看到 join request hint；
+- `client_join_failed_network_server_rejected`：log 有 join request，也有 rejected / MIC / AppKey / unknown device 類線索；
+- `uplink_observed`：已經收到 application uplink，可以進入 last-heard evidence review。
+
+OLED 會顯示 `SCOUT LORA AUD`、`DEV MISSING` / `NO JOIN HINT` / `JOIN REJECT` / `UL OK`、
+`READ ONLY` 與 `NO RF TX`。LED Bar 預設沒有 join hint 閃 LED1、join seen 閃 LED8、
+uplink observed 閃 LED9、provisioning rejected 閃 LED10。這個 audit 結果只用來決定下一個
+provisioning 動作，不是 Scout safety decision source。
+
+Wio-E5 / ChirpStack join-state reset dry-run:
+
+```bash
+python3 tools/pi_wio_e5_chirpstack_join_state_reset.py \
+  --device-name scout-wio-e5-client \
+  --output-jsonl /data/scout/providers/lora/wio-e5-chirpstack-join-state-reset.jsonl
+```
+
+若只讀診斷顯示 `stale_join_state_suspected`，且 dry-run 確認只會命中一個 device 與一個
+device key，才允許做明確批准的 join-state reset：
+
+```bash
+python3 tools/pi_wio_e5_chirpstack_join_state_reset.py \
+  --device-name scout-wio-e5-client \
+  --execute \
+  --operator-approval-token I_ACCEPT_CHIRPSTACK_JOIN_STATE_RESET_AS923_2 \
+  --output-jsonl /data/scout/providers/lora/wio-e5-chirpstack-join-state-reset.jsonl
+```
+
+中文註釋：這支工具只清 ChirpStack 端的 `device_session`、`dev_addr`、
+`secondary_dev_addr`、`f_cnt_up`、`dev_nonces` 與 `join_nonce`，用來處理 bench 測試時
+模組與 server join state 不同步或 DevNonce replay 的情況。它不改 DevEUI / JoinEUI /
+AppKey / NwkKey / device profile，不送 RF、不開 Wio serial、不送 MQTT、不接 `/safety/*`。
+沒有 `--execute` 與 `I_ACCEPT_CHIRPSTACK_JOIN_STATE_RESET_AS923_2` 時必須停在
+`dry_run_join_state_reset_planned` 或 `blocked_join_state_reset`。
+
+現場判讀請保持一個原則：這個 reset 只是把網路伺服器端的舊入網狀態清掉，讓下一次
+Join-only 測試回到乾淨起點。它不是修天線、不是增加發射功率、不是重新配對金鑰，也不是
+安全決策。若 reset 後 Join-only 仍失敗，應重新檢查模組端 JoinEUI、AppKey、頻道、天線、
+封包轉送器與 ChirpStack log，而不是連續重複送入網請求。
+
+2026-07-06 Scout Pi 實機結果：第一次 RF trial 失敗時沒有啟動 packet forwarder，因此
+gateway bridge 與 ChirpStack 都只是在等待資料。改用
+`global_conf.scout-as9232-lns.spi.no-tx.json` 啟動 RX-only packet forwarder 後，
+concentrator 可啟動、UDP bridge 有 PULL_ACK，且可收到 CRC OK Wio-E5 RF packet；
+這證明 Wio-E5 到 SX1303 的接收路徑可用。接著發現兩個 network-server / bench config
+問題：ChirpStack `AS923_2` 區域設定缺少 Wio-E5 當下使用的 bench channels，而且
+RX-only packet forwarder 無法送出 JoinAccept downlink。
+
+後續處理已完成：key sync 與 profile provisioning 對齊 device profile 到
+`AS923_2` / `as923_2`；明確批准的 join-state reset 清掉 ChirpStack server-side
+session、DevNonce 與 join nonce；受控 bench config
+`global_conf.scout-as9232-lns.spi.join-tx.json` 只允許 radio 0 在 `920-925 MHz`
+window 做 JoinAccept / MAC-command downlink 測試。Join-only RF trial 後 Wio-E5 回
+`Network joined`，evidence 為 `rf_trial_join_confirmed_no_uplink`。接著在已 joined
+狀態用 `--skip-join` 做單筆 `AT+MSG="SCOUT"` uplink，RF trial evidence 為
+`rf_trial_uplink_command_sent`，passive MQTT tail 寫入 `uplink_observed`，topic 預設遮罩為
+`application/<redacted>/device/<redacted>/event/up`，不嵌入 raw payload。
+
+目前常駐 observer 結論：`sx1303-gateway` 為 `gateway_receiving_uplinks` /
+`gateway_uplink_evidence_available`，`lorawan-client` 為 `uplink_observed` /
+`client_uplink_evidence_available`。兩者仍是 read-only evidence observers：不啟動
+packet forwarder、不送 RF、不送 uplink/downlink、不改 ChirpStack、不接 `/safety/*`。
+現場後續判讀以「是否有新的上行證據、是否仍在合法頻率、是否保持只讀邊界」為主，不把
+這次通訊成功直接解讀成安全等級變化，也不把燈號或 OLED 畫面當成求救訊號。若要再次發射，
+仍應限定單筆、短時間、可回放的測試視窗，並同步保存本機 JSONL 證據。
+
+Wio-E5 / ChirpStack AS923_2 profile provisioning:
+
+```bash
+python3 tools/pi_wio_e5_chirpstack_as9232_profile_provision.py \
+  --wio-at-jsonl /data/scout/providers/wio_e5/wio-e5-at-smoke.jsonl \
+  --allow-in-place-profile-update \
+  --operator-approval-token I_ACCEPT_CHIRPSTACK_PROFILE_MUTATION_AS923_2 \
+  --execute \
+  --oled-status \
+  --led-status \
+  --output-jsonl /data/scout/providers/lora/wio-e5-chirpstack-profile-provision.jsonl
+```
+
+中文註釋：這支 provisioning 工具是明確批准後才可執行的 ChirpStack 設定修正工具。
+預設不寫入；沒有 `--execute` 與
+`I_ACCEPT_CHIRPSTACK_PROFILE_MUTATION_AS923_2` 時只會產生 dry-run plan。它不送 RF、
+不送 downlink、不發 MQTT、不改 AppKey、不改 JoinEUI、不建立新 device，也不接
+`/safety/*`。它只會在 Wio-E5 DevEUI 已登錄、JoinEUI/AppEUI 相符、key 存在、
+device 未停用、且 profile 不是 shared profile 時，把該 Wio-E5 的 profile 對齊
+`AS923_2` / `as923_2`。
+
+若已存在 AS923_2 profile，工具只切換這個 device 的 `device_profile_id`。若沒有現成
+AS923_2 profile，且目前 profile 只被這一個 Wio-E5 使用，才可在
+`--allow-in-place-profile-update` 下原地更新 profile。JSONL 必須標明
+`postgres_write_performed`、`chirpstack_config_changed`、`device_registry_changed`、
+`profile_mutation_scope`，但仍固定 `rf_tx_allowed=false`、`lorawan_uplink_allowed=false`、
+`downlink_allowed=false`、`safety_api_called=false`。DevEUI、AppEUI 與 key 原文不可輸出。
+OLED 會顯示 `SCOUT LORA PROV`、`READY` / `MUTATED` / `BLOCKED`、`AS923_2` 與
+`NO RF TX`；LED Bar 預設 ready 閃 LED8、mutated 閃 LED9、blocked 閃 LED10。
+
+Wio-E5 / ChirpStack OTAA key sync:
+
+```bash
+python3 tools/pi_wio_e5_chirpstack_key_sync.py \
+  --wio-at-jsonl /data/scout/providers/wio_e5/wio-e5-at-smoke.jsonl \
+  --use-existing-chirpstack-key \
+  --operator-approval-token I_ACCEPT_LORAWAN_KEY_SYNC_AS923_2 \
+  --execute \
+  --oled-status \
+  --led-status \
+  --output-jsonl /data/scout/providers/lora/wio-e5-chirpstack-key-sync.jsonl
+```
+
+中文註釋：這支 key sync 工具只處理 OTAA root key 對齊，不做 RF trial。預設不寫入；
+沒有 `--execute` 與 `I_ACCEPT_LORAWAN_KEY_SYNC_AS923_2` 時只會產生 dry-run plan。
+建議現場優先使用 `--use-existing-chirpstack-key`：工具會讀 ChirpStack 既有
+`nwk_key` / `app_key`，但 JSONL 與 stdout 只記錄 fingerprint，不輸出 raw key，然後把
+該 root key 重新寫入 Wio-E5 `AT+KEY=APPKEY,"..."`。如果要重建一組新 key，才改用
+`--generate-key` 或 `--key-file`，並同步更新 ChirpStack `device_keys` 與 Wio-E5。
+
+它固定 `rf_tx_allowed=false`、`join_executed=false`、`lorawan_uplink_allowed=false`、
+`downlink_allowed=false`、`mqtt_publish_performed=false`、`safety_api_called=false`、
+`phase1_safety_decision_change_allowed=false`。JSONL 必須標明
+`serial_write_performed`、`wio_module_state_changed`、`postgres_write_performed`、
+`device_keys_changed`、`target_key_fingerprint`、`root_key_printed=false`、
+`raw_key_embedded=false`、`operator_approval_token_stored=false`。OLED 會顯示
+`SCOUT LORA KEY`、`KEY READY` / `KEY SYNCED` / `KEY BLOCK` 與 `NO RF TX`；
+LED Bar 預設 ready 閃 LED8、synced 閃 LED9、blocked 閃 LED10。
+
+SX1303 Gateway HAT L76K GPS NMEA UART smoke:
+
+```bash
+python3 tools/pi_sx1303_gateway_gps_nmea_smoke.py \
+  --ports /dev/serial0,/dev/ttyAMA0,/dev/ttyAMA10,/dev/ttyS0 \
+  --baud-rates 9600,38400,57600,115200 \
+  --duration-seconds 4 \
+  --oled-status \
+  --oled-driver sh1107g \
+  --led-status \
+  --led-port D5 \
+  --output-jsonl /data/scout/providers/lora/sx1303-gateway-gps-nmea-smoke.jsonl
+```
+
+無實體接線或本機開發時可先 dry-run：
+
+```bash
+python3 tools/pi_sx1303_gateway_gps_nmea_smoke.py \
+  --dry-run \
+  --oled-status \
+  --oled-dry-run \
+  --led-status \
+  --led-dry-run
+```
+
+中文註釋：SX1303 本身不是 NMEA 來源；Waveshare Gateway HAT 上的 L76K GNSS
+module 才會透過 UART 輸出 NMEA。這支工具掃描 Pi 上可能接到 L76K 的 UART 與 baud，
+預設包含 `/dev/serial0`、`/dev/ttyAMA0`、`/dev/ttyAMA10` 和 `/dev/ttyS0`，以及
+`9600,38400,57600,115200`。它不啟動 packet forwarder、不送 RF、不做 LoRaWAN
+join/uplink，只產生 `diagnostic_gateway_gnss_uart_only` JSONL evidence。
+
+判讀時先看 stdout / JSONL 的 `status`：
+
+- `nmea_ok`：已找到有效 `$GP...` / `$GN...` NMEA，且 checksum 至少一筆有效；
+- `nmea_without_valid_checksum`：有像 NMEA 的 sentence，但 checksum 沒通過；
+- `bad_stream`：UART 有 byte，但不像 NMEA，優先檢查 baud、UART mapping、HAT 接觸與 GPS module 狀態；
+- `no_stream`：該 UART/baud 沒資料；
+- `missing_device`：該 device path 不存在。
+
+若 `status=nmea_ok`，再考慮把 gateway packet forwarder/global_conf 的
+`gps_tty_path` 改到 `selected_port`。若仍是 `bad_stream` 或 `no_stream`，不要只因為
+`/dev/serial0` 存在就把它當作 gateway GPS。OLED 會顯示 `SCOUT GW GPS`、
+`NMEA OK` / `BAD STREAM` / `NO NMEA`；LED Bar 預設 NMEA OK 閃 LED10，失敗閃 LED1。
+LED/OLED 均只是 diagnostic feedback，不是 Scout safety decision source。
+
+2026-06-16 Scout Pi live result: SX1303 Gateway HAT L76K NMEA was confirmed on
+`/dev/serial0` at `9600` baud. The smoke returned `status=nmea_ok`,
+`selected_port=/dev/serial0`, `selected_baud=9600`, `nmea_available=true`, OLED
+write `ok`, and LED write `ok`. The older gateway config path `/dev/ttyS0` did
+not exist on this Pi, so future packet forwarder config should use the selected
+UART path only after confirming no other service owns it. Do not copy exact live
+lat/lon from field smoke into committed repo docs; keep precise coordinates in
+local evidence JSONL only.
+
+GNSS hardware observer for SX1303 gateway GPS + Grove GPS JSONL listening:
+
+```bash
+python3 scout_gnss_hardware_observer.py \
+  --once \
+  --gateway-jsonl /data/scout/providers/lora/sx1303-gateway-gps-nmea-smoke.jsonl \
+  --grove-jsonl /data/scout/providers/gnss/manual-smoke.jsonl \
+  --evidence-dir /data/scout/admin/ingress/gnss_hardware
+```
+
+長時間 observer：
+
+```bash
+python3 scout_gnss_hardware_observer.py \
+  --gateway-jsonl /data/scout/providers/lora/sx1303-gateway-gps-nmea-smoke.jsonl \
+  --grove-jsonl /data/scout/providers/gnss/manual-smoke.jsonl \
+  --evidence-dir /data/scout/admin/ingress/gnss_hardware \
+  --poll-seconds 2 \
+  --print-ready
+```
+
+中文註釋：`scout_gnss_hardware_observer.py` 不直接開 UART、不搶 `/dev/serial0` 或
+`/dev/ttyAMA0`，只讀上面兩支 smoke 工具已寫出的 JSONL。它會把 SX1303 Gateway HAT
+L76K GNSS 與 Grove GPS module 收斂成同一份
+`/data/scout/admin/ingress/gnss_hardware/live_navigation_snapshot.json`，並寫
+`gnss_hardware_observer_status.json` 讓 Scout AI / admin tool 查詢目前 listening source、
+有效 fix source、選用來源與邊界欄位。若沒有有效 fix，snapshot 仍會寫
+`snapshot_status=no_valid_fix`，但不會偽造 `lat` / `lon`。
+
+邊界：這個 observer 是 GNSS evidence listener，不是 field safety decision source。
+固定標記 `live_hardware_read_performed=false`、`runtime_safety_truth=false`、
+`phase1_l0_l4_state_mutated=false`、`safety_api_called=false`、
+`rf_tx_allowed=false`、`lorawan_uplink_allowed=false`。它不送 LoRaWAN 封包、不做
+SOS、不呼叫 live `/safety/*` mutation，也不把 GPS fix 自動提升為 L0-L4 判斷。
+
+操作順序建議先分開確認兩個來源：先跑 gateway GPS smoke，確認網關板上的定位模組
+確實有資料；再跑 Grove GPS smoke，確認外接定位模組也能輸出資料。兩邊都能寫入
+JSONL 後，才啟動這個 observer 進行彙整。若其中一邊暫時沒有定位或沒有資料，
+observer 仍會保留來源狀態，方便現場判斷是接線、天線、序列埠、波特率或天空視野
+造成的差異。這份彙整只代表目前可聽到的定位證據，不代表已完成路線比對、檢查點
+抵達判斷或安全等級變更。
+
 ## 4.2 IMU / GNSS Manual Hardware Bring-Up
 
 以下命令只供 operator 在 Pi host 上手動執行。這些工具把 Hiwonder/WIT 類 IM10A、

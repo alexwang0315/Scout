@@ -19,7 +19,7 @@ PlannerRunnerFactory = Callable[[Any], "ScoutAgentPlannerRunner"]
 
 
 class ScoutAgentPlannerRunner(Protocol):
-    def run(self, prompt: str, *, timeout_seconds: int) -> str:
+    def run(self, prompt: str, *, timeout_seconds: int | None) -> str:
         ...
 
 
@@ -186,7 +186,7 @@ def run_pydantic_agent_tool_plan(
     manifest_dir: str | Path,
     context: dict[str, Any] | None = None,
     trace_log_path: str | Path | None = None,
-    timeout_seconds: int = 8,
+    timeout_seconds: int | None = None,
 ) -> ScoutAgentToolPlanExecution:
     prompt = build_agent_tool_planning_prompt(
         user_intent=user_intent,
@@ -270,7 +270,7 @@ def run_configured_scout_agent_tool_plan(
         manifest_dir=manifest_dir,
         context=context,
         trace_log_path=trace_log_path,
-        timeout_seconds=config.timeout_seconds,
+        timeout_seconds=config.effective_timeout_seconds(),
     )
     return execution, build_scout_agent_planner_provider_status(config, runner)
 

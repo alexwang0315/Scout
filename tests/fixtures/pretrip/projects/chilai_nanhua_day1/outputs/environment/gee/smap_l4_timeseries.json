@@ -1,0 +1,14 @@
+{
+  "artifact_kind": "gee_smap_l4_timeseries",
+  "collection_id": "NASA/SMAP/SPL4SMGP/008",
+  "raw_response_hash": "sha256:gee-smap-timeseries-fixture",
+  "stale_risk": "low",
+  "timeseries": [
+    {
+      "time": "2026-06-24T01:30:00Z",
+      "sm_surface": 0.301,
+      "sm_rootzone": 0.318,
+      "sm_surface_wetness": 0.74
+    }
+  ]
+}

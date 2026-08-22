@@ -15,7 +15,22 @@ from scout_companion_match_models import (
     write_companion_match_review_artifact,
 )
 from scout_energy_models import load_wearable_activity_summaries
+from scout_runtime_safety_gate_adapters import build_delay_gate_event
+from scout_runtime_safety_gate_models import (
+    build_runtime_safety_gate_event,
+    build_runtime_safety_gate_event_batch,
+)
+from scout_runtime_safety_reducer import (
+    build_phase1_adapter_result,
+    reduce_runtime_safety_gate_events,
+)
+from scout_runtime_safety_state_store import RuntimeSafetyStateStore
+from pretrip_boss_point_synthesis import synthesize_pretrip_boss_points
+from pretrip_mileage_tag_alignment import align_pretrip_workspace_mileage_tags
 from pretrip_admin_view import (
+    _geojson_line_coordinates,
+    _mileage_tag_alignment_summary,
+    _reference_segment_timing_summary,
     build_pretrip_admin_view,
     list_pretrip_admin_projects,
     load_pretrip_debug_projection_view,
@@ -31,6 +46,122 @@ WEARABLE_FIXTURES = [
     WEARABLE_FIXTURE_ROOT / "apple_health_missing_hr_interval.json",
     WEARABLE_FIXTURE_ROOT / "garmin_body_battery_provider_values.json",
 ]
+
+
+def test_geojson_line_coordinates_tolerates_extra_nested_segments():
+    coordinates = _geojson_line_coordinates(
+        {
+            "type": "LineString",
+            "coordinates": [
+                [[121.21, 24.05], [121.211, 24.051]],
+                [[121.22, 24.06], [121.221, 24.061]],
+            ],
+        }
+    )
+
+    assert coordinates == [
+        {"lon": 121.21, "lat": 24.05},
+        {"lon": 121.211, "lat": 24.051},
+        {"lon": 121.22, "lat": 24.06},
+        {"lon": 121.221, "lat": 24.061},
+    ]
+
+
+def test_reference_segment_timing_without_projection_does_not_highlight_whole_route():
+    timing = _reference_segment_timing_summary(
+        {
+            "project_id": "demo_route",
+            "status": "ready",
+            "counts": {"usable_segment_count": 1, "measurement_count": 3},
+            "segments": [
+                {
+                    "segment_id": "ref_segment_timing.demo.unprojected",
+                    "label": "Unprojected reference segment",
+                    "sample_count": 3,
+                    "duration_minutes": {"p50": 42},
+                    "track_distance_km": {"p50": 1.2},
+                }
+            ],
+            "privacy": {"coordinates_embedded": False},
+            "boundary": {"runtime_safety_truth": False},
+        },
+        "outputs/reference_segment_timing.json",
+        project_id="demo_route",
+        route_segments=[],
+    )
+
+    item = timing["segments"][0]
+    assert item["map_target_ids"] == []
+    assert item["map_focus_basis"] == "no_segment_distance_projection"
+
+
+def test_mileage_timeline_prioritizes_reviewable_k_labels_before_uncalibrated_tags():
+    mileage = _mileage_tag_alignment_summary(
+        {
+            "project_id": "demo_route",
+            "status": "completed",
+            "counts": {
+                "tag_count": 3,
+                "aligned_tag_count": 2,
+                "usable_anchor_count": 2,
+                "runtime_safety_truth_count": 0,
+            },
+            "mileage_tags": [
+                {
+                    "mileage_tag_id": "mileage.demo.uncalibrated",
+                    "source_id": "cp.001",
+                    "source_kind": "checkpoint",
+                    "display_label": "K待校正 CP 001",
+                    "display_mileage_label": "K待校正",
+                    "display_mileage": {
+                        "label": "K待校正",
+                        "alignment_status": "outside_anchor_range",
+                    },
+                    "route_distance_m": 10.0,
+                    "lat": 24.0,
+                    "lon": 121.0,
+                },
+                {
+                    "mileage_tag_id": "mileage.demo.one_k",
+                    "source_id": "cp.100",
+                    "source_kind": "checkpoint",
+                    "display_label": "1K CP 100",
+                    "display_mileage_label": "1K",
+                    "display_mileage": {
+                        "label": "1K",
+                        "alignment_status": "interpolated_between_mileage_anchors",
+                    },
+                    "route_distance_m": 1000.0,
+                    "lat": 24.0,
+                    "lon": 121.01,
+                },
+                {
+                    "mileage_tag_id": "mileage.demo.two_k",
+                    "source_id": "seg.200",
+                    "source_kind": "segment",
+                    "display_label": "2K Segment 200",
+                    "display_mileage_label": "2K",
+                    "display_mileage": {
+                        "label": "2K",
+                        "alignment_status": "matched_mileage_anchor",
+                    },
+                    "route_distance_m": 2000.0,
+                    "lat": 24.0,
+                    "lon": 121.02,
+                },
+            ],
+            "boundary": {"runtime_safety_truth": False},
+        },
+        {"features": []},
+        source_refs={"mileage_tag_alignment": "outputs/mileage_tag_alignment.json"},
+    )
+
+    labels = [
+        item["display_mileage"]["label"]
+        for item in mileage["timeline_items"]
+    ]
+    assert labels[:2] == ["1K", "2K"]
+    assert labels[-1] == "K待校正"
 
 
 def _assert_pretrip_candidate_metadata(item):
@@ -321,6 +452,85 @@ def test_builds_fixture_backed_pretrip_admin_view():
     _assert_pretrip_candidate_metadata(view["checkpoint_events"]["events"][0])
     _assert_pretrip_candidate_metadata(view["checkpoints"][0])
     _assert_pretrip_candidate_metadata(view["segments"][0])
+
+
+def test_admin_view_bounds_overpass_aligned_segment_geometry_payload(
+    tmp_path: Path,
+) -> None:
+    fixture_project_root = (
+        ROOT / "tests" / "fixtures" / "pretrip" / "projects" / PROJECT_ID
+    )
+    workspace_project_root = tmp_path / PROJECT_ID
+    shutil.copytree(fixture_project_root, workspace_project_root)
+    project_path = workspace_project_root / "project.json"
+    project = json.loads(project_path.read_text(encoding="utf-8"))
+    segment_candidates = json.loads(
+        (workspace_project_root / project["segment_candidates_ref"]).read_text(
+            encoding="utf-8"
+        )
+    )
+    segment_items = (
+        segment_candidates.get("candidates", [])
+        if isinstance(segment_candidates, dict)
+        else segment_candidates
+    )
+    segment_id = segment_items[0]["candidate_id"]
+    source_points = [
+        {
+            "lat": 24.0 + index * 0.00001,
+            "lon": 121.0 + index * 0.00001,
+            "overpass_projection": {
+                "status": "centerline_interpolated",
+                "route_distance_m": index * 10.0,
+            },
+        }
+        for index in range(250)
+    ]
+    aligned_ref = "outputs/overpass_aligned_segment_display_geometry.json"
+    aligned_display = {
+        "artifact_kind": "pretrip_overpass_aligned_segment_display_geometry",
+        "schema_version": "0.1.0",
+        "source_path": aligned_ref,
+        "segments": [
+            {
+                "segment_candidate_id": segment_id,
+                "display_point_count": len(source_points),
+                "display_segment_count": 1,
+                "coordinates": source_points,
+                "coordinate_segments": [source_points],
+                "segment_boundary_preserved": True,
+            }
+        ],
+        "boundary": {"candidate_only": True, "runtime_safety_truth": False},
+    }
+    aligned_path = workspace_project_root / aligned_ref
+    aligned_path.parent.mkdir(parents=True, exist_ok=True)
+    aligned_path.write_text(
+        json.dumps(aligned_display, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    project["overpass_aligned_segment_display_geometry_ref"] = aligned_ref
+    project_path.write_text(
+        json.dumps(project, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    view = build_pretrip_admin_view(
+        PROJECT_ID,
+        root=ROOT,
+        project_root=workspace_project_root,
+    )
+
+    segment = next(item for item in view["segments"] if item["candidate_id"] == segment_id)
+    display_geometry = segment["display_geometry"]
+    assert display_geometry["display_point_count"] == 24
+    assert display_geometry["source_display_point_count"] == len(source_points)
+    assert display_geometry["geometry_simplified_for_admin_payload"] is True
+    assert display_geometry["full_geometry_ref"] == aligned_ref
+    assert display_geometry["coordinates"][0] == source_points[0]
+    assert display_geometry["coordinates"][-1] == source_points[-1]
+    assert all("overpass_projection" in point for point in display_geometry["coordinates"])
+    assert len(json.dumps(display_geometry, ensure_ascii=False)) < 25_000
     _assert_pretrip_candidate_metadata(view["retreat_routes"][0])
     assert view["map_candidates"]["counts"] == {
         "corridor_candidates": 1,
@@ -333,9 +543,30 @@ def test_builds_fixture_backed_pretrip_admin_view():
     _assert_pretrip_candidate_metadata(view["map_candidates"]["poi_candidates"][0])
     assert view["overpass_evidence"]["counts"]["candidates"] == 219
     assert view["overpass_evidence"]["counts"]["skipped"] == 0
+    assert view["overpass_evidence"]["counts"]["item_count"] == 219
+    assert view["overpass_evidence"]["counts"]["category_counts"] == {
+        "overpass_parking": 2,
+        "overpass_peak": 19,
+        "overpass_shelter": 4,
+        "overpass_trail_corridor": 191,
+        "overpass_water_source": 3,
+    }
     assert len(view["overpass_evidence"]["corridor_candidates"]) == 191
     assert len(view["overpass_evidence"]["hazard_candidates"]) == 0
     assert len(view["overpass_evidence"]["poi_candidates"]) == 28
+    assert len(view["overpass_evidence"]["timeline_items"]) == 219
+    assert len(
+        view["overpass_evidence"]["category_groups"]["overpass_trail_corridor"]
+    ) == 191
+    assert len(view["overpass_evidence"]["category_groups"]["overpass_peak"]) == 19
+    assert (
+        view["overpass_evidence"]["corridor_candidates"][0]["category_id"]
+        == "overpass_trail_corridor"
+    )
+    assert (
+        view["overpass_evidence"]["poi_candidates"][0]["category_id"]
+        == "overpass_peak"
+    )
     _assert_pretrip_candidate_metadata(
         view["overpass_evidence"]["corridor_candidates"][0]
     )
@@ -348,23 +579,29 @@ def test_builds_fixture_backed_pretrip_admin_view():
         "route",
         "checkpoints",
         "segments",
+        "route_timing",
         "capability_timeline",
         "rest_intervals",
         "mcp",
         "gis_cp",
         "risk",
         "map_context",
+        "mileage",
         "reference_tracks",
         "review",
         "runtime_handoff",
     ]
     assert view["evidence_timeline"]["counts"] == {
-        "category_count": 12,
-        "available_category_count": 12,
-        "total_evidence_count": 6268,
+        "category_count": 14,
+        "available_category_count": 13,
+        "total_evidence_count": 6276,
     }
     assert view["scout_agent_skills"]["artifact_kind"] == "scout_agent_skill_registry_summary"
-    assert view["scout_agent_skills"]["counts"]["tool_count"] == 45
+    assert view["scout_agent_skills"]["counts"]["tool_count"] >= 45
+    assert any(
+        tool["id"] == "scout.pretrip.boss_points_synthesize"
+        for tool in view["scout_agent_skills"]["tools"]
+    )
     assert view["scout_agent_skills"]["boundary"]["tool_execution_allowed_from_ui"] is False
     assert view["tabs"]["agent_skills"]["sections"][0]["id"] == "scout_agent_skills"
     assert view["readiness"]["status"] == "ready"
@@ -694,15 +931,20 @@ def test_builds_fixture_backed_pretrip_admin_view():
         "reference-tracks",
         "retreat",
         "segments",
-        "risk-score",
         "risk-ribbon",
         "risk-heatmap",
         "risk-delta",
+        "soil-moisture",
+        "antecedent-rain",
+        "cwa-qpf",
+        "risk-score",
         "checkpoints",
         "pois",
         "hazards",
-        "mcp",
         "route-notes",
+        "cwa-weather",
+        "mcp",
+        "boss-points",
         "events",
         "weather-api",
     ]
@@ -720,6 +962,12 @@ def test_builds_fixture_backed_pretrip_admin_view():
     mcp_layer = next(layer for layer in view["map_layers"] if layer["layer_id"] == "mcp")
     assert mcp_layer["source_kind"] == "major_critical_point_candidate"
     assert mcp_layer["external_api_calls_made"] is False
+    boss_layer = next(
+        layer for layer in view["map_layers"] if layer["layer_id"] == "boss-points"
+    )
+    assert boss_layer["source_kind"] == "pretrip_boss_point_challenge_fit"
+    assert boss_layer["challenge_fit_layer"] is True
+    assert boss_layer["runtime_safety_truth"] is False
     assert view["tabs"]["pre_trip_planning"]["map_layers"] == view["map_layers"]
     assert view["layer_preparation"]["status"] == "not_prepared"
     assert view["layer_preparation"]["network_policy"]["network_calls_made"] is False
@@ -740,6 +988,65 @@ def test_builds_fixture_backed_pretrip_admin_view():
     assert capability["boundary"]["runtime_safety_truth"] is False
     assert capability["boundary"]["phase1_runtime_mutation_allowed"] is False
     assert capability["boundary"]["mission_graph_compile_allowed"] is False
+
+
+def test_admin_view_accepts_overpass_multiline_corridor_geometry(
+    tmp_path: Path,
+) -> None:
+    fixture_project_root = (
+        ROOT / "tests" / "fixtures" / "pretrip" / "projects" / PROJECT_ID
+    )
+    workspace_project_root = tmp_path / PROJECT_ID
+    shutil.copytree(fixture_project_root, workspace_project_root)
+    project = json.loads(
+        (workspace_project_root / "project.json").read_text(encoding="utf-8")
+    )
+    overpass_path = workspace_project_root / project["overpass_evidence_ref"]
+    overpass = json.loads(overpass_path.read_text(encoding="utf-8"))
+    candidate = next(
+        item
+        for item in overpass["candidates"]
+        if item["feature_type"] == "approved_corridor"
+    )
+    candidate["geometry"] = {
+        "type": "MultiLineString",
+        "coordinates": [
+            [[121.21, 24.05], [121.211, 24.051]],
+            [[121.22, 24.06], [121.221, 24.061]],
+        ],
+    }
+    candidate["geojson_feature"]["geometry"] = candidate["geometry"]
+    overpass_path.write_text(
+        json.dumps(overpass, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+    view = build_pretrip_admin_view(
+        PROJECT_ID,
+        root=ROOT,
+        project_root=workspace_project_root,
+    )
+
+    rendered = next(
+        item
+        for item in view["overpass_evidence"]["corridor_candidates"]
+        if item["candidate_id"] == candidate["candidate_id"]
+    )
+    assert rendered["geometry"]["type"] == "MultiLineString"
+    assert rendered["corridor"]["coordinates"] == [
+        {"lon": 121.21, "lat": 24.05},
+        {"lon": 121.211, "lat": 24.051},
+    ]
+    assert rendered["corridor"]["coordinate_segments"] == [
+        [
+            {"lon": 121.21, "lat": 24.05},
+            {"lon": 121.211, "lat": 24.051},
+        ],
+        [
+            {"lon": 121.22, "lat": 24.06},
+            {"lon": 121.221, "lat": 24.061},
+        ],
+    ]
 
 
 def test_layer_preparation_rows_preserve_spec_metadata_after_workspace_run(
@@ -890,6 +1197,143 @@ def test_map_layers_expose_local_raster_coverage_metadata(tmp_path: Path) -> Non
         assert rudy_twmap["imagery_source_id"] == "happyman_rudy_twmap"
 
 
+def test_osm_map_layer_exposes_workspace_local_render_extract(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / PROJECT_ID
+    shutil.copytree(
+        ROOT / "tests" / "fixtures" / "pretrip" / "projects" / PROJECT_ID,
+        project_root,
+    )
+    project_path = project_root / "project.json"
+    project = json.loads(project_path.read_text(encoding="utf-8"))
+    project.update(
+        {
+            "osm_pbf_render_extract_ref": "normalized/map/osm_pbf_route_bbox.osm.pbf",
+            "osm_pbf_render_extract_manifest_ref": (
+                "normalized/map/osm_pbf_render_extract_manifest.json"
+            ),
+            "osm_pbf_render_extract_source_kind": (
+                "local_osm_pbf_route_bbox_extract"
+            ),
+            "osm_pbf_render_extract_feature_count": 295,
+            "osm_pbf_render_geojson_ref": (
+                "normalized/map/osm_pbf_route_bbox_full.geojson"
+            ),
+            "osm_pbf_feature_index_ref": (
+                "outputs/layers/normalized/osm_pbf_feature_index.json"
+            ),
+            "osm_pbf_feature_index_feature_count": 2,
+            "osm_pbf_feature_index_category_counts": {
+                "milestone_route_marker": 1,
+                "mobile_signal": 1,
+            },
+        }
+    )
+    project_path.write_text(
+        json.dumps(project, ensure_ascii=False, sort_keys=True),
+        encoding="utf-8",
+    )
+    feature_index_path = (
+        project_root / "outputs/layers/normalized/osm_pbf_feature_index.json"
+    )
+    feature_index_path.parent.mkdir(parents=True, exist_ok=True)
+    feature_index_path.write_text(
+        json.dumps(
+            {
+                "artifact_kind": "pretrip_local_osm_pbf_feature_index",
+                "status": "candidate_only",
+                "render_source_ref": "normalized/map/osm_pbf_route_bbox.osm.pbf",
+                "counts": {
+                    "item_count": 2,
+                    "category_counts": {
+                        "milestone_route_marker": 1,
+                        "mobile_signal": 1,
+                    },
+                },
+                "categories": [
+                    {
+                        "category_id": "milestone_route_marker",
+                        "category_label": "OSM mileage / route markers（OSM 里程與路標）",
+                        "timeline_group": "OSM Milestones",
+                        "count": 1,
+                    },
+                    {
+                        "category_id": "mobile_signal",
+                        "category_label": "OSM mobile signal points（OSM 通訊點）",
+                        "timeline_group": "OSM Mobile",
+                        "count": 1,
+                    },
+                ],
+                "items": [
+                    {
+                        "candidate_id": "osm_pbf.node.1",
+                        "category_id": "milestone_route_marker",
+                        "label": "7K+000",
+                        "feature_type": "highway:milestone",
+                        "geometry_type": "Point",
+                        "osm_type": "node",
+                        "osm_id": "1",
+                        "lat": 23.87,
+                        "lon": 121.17,
+                        "candidate_only": True,
+                        "runtime_safety_truth": False,
+                    },
+                    {
+                        "candidate_id": "osm_pbf.node.2",
+                        "category_id": "mobile_signal",
+                        "label": "通訊點",
+                        "feature_type": "information:mobile",
+                        "geometry_type": "Point",
+                        "osm_type": "node",
+                        "osm_id": "2",
+                        "lat": 23.871,
+                        "lon": 121.171,
+                        "candidate_only": True,
+                        "runtime_safety_truth": False,
+                    },
+                ],
+                "boundary": {
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                },
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+
+    view = build_pretrip_admin_view(PROJECT_ID, root=ROOT, project_root=project_root)
+
+    osm = next(layer for layer in view["map_layers"] if layer["layer_id"] == "osm")
+    assert osm["local_osm_render_extract_ref"] == (
+        "normalized/map/osm_pbf_route_bbox.osm.pbf"
+    )
+    assert osm["local_osm_render_extract_manifest_ref"] == (
+        "normalized/map/osm_pbf_render_extract_manifest.json"
+    )
+    assert osm["local_osm_render_extract_source_kind"] == (
+        "local_osm_pbf_route_bbox_extract"
+    )
+    assert osm["local_osm_render_extract_feature_count"] == 295
+    assert osm["local_osm_render_geojson_ref"] == (
+        "normalized/map/osm_pbf_route_bbox_full.geojson"
+    )
+    assert osm["local_osm_feature_index_feature_count"] == 2
+    assert osm["osm_rendering_policy"] == "workspace_local_osm_extract_available"
+    assert view["osm_pbf_evidence"]["counts"]["item_count"] == 2
+    assert view["osm_pbf_evidence"]["category_groups"]["milestone_route_marker"][0][
+        "lat"
+    ] == 23.87
+    map_context = next(
+        category
+        for category in view["evidence_timeline"]["categories"]
+        if category["category_id"] == "map_context"
+    )
+    assert map_context["count"] >= 2
+
+
 def test_loads_debug_projection_view_with_shared_map_and_dense_timeline():
     projection = load_pretrip_debug_projection_view(PROJECT_ID, root=ROOT)
 
@@ -904,6 +1348,8 @@ def test_loads_debug_projection_view_with_shared_map_and_dense_timeline():
     assert projection["counts"]["mcp_review_action_count"] == 0
     assert projection["counts"]["risk_ribbon_segment_count"] == 841
     assert "terrain_bitmap_overlay_count" in projection["counts"]
+    assert "terrain_source_dtm_tile_count" in projection["counts"]
+    assert "terrain_source_dtm_grid_cell_count" in projection["counts"]
     assert "terrain_visualization" in projection
     assert projection["terrain_visualization"]["boundary"]["runtime_safety_truth"] is False
     assert projection["counts"]["source_lifecycle_event_count"] == 4
@@ -953,6 +1399,931 @@ def test_loads_debug_projection_view_with_shared_map_and_dense_timeline():
     assert checkpoint_event["payload"]["runtime_safety_truth"] is False
     assert segment_event["payload"]["segment_id"].startswith("seg.")
     assert segment_event["payload"]["map_target_ids"]
+
+
+def test_debug_projection_view_includes_physio_timeline_projection(tmp_path):
+    fixture_project_root = (
+        ROOT / "tests" / "fixtures" / "pretrip" / "projects" / PROJECT_ID
+    )
+    project_root = tmp_path / PROJECT_ID
+    shutil.copytree(fixture_project_root, project_root)
+    project_path = project_root / "project.json"
+    project = json.loads(project_path.read_text(encoding="utf-8"))
+    segment_ref = project.get(
+        "overpass_aligned_segment_candidates_ref",
+        project["segment_candidates_ref"],
+    )
+    first_segment = json.loads((project_root / segment_ref).read_text(encoding="utf-8"))[0]
+    segment_id = first_segment["candidate_id"]
+    physio_dir = project_root / "outputs" / "physio"
+    physio_dir.mkdir(parents=True)
+    physio_projection_ref = "outputs/physio/physiologic_timeline_projection.json"
+    physio_projection = {
+        "artifact_kind": "scout_physiologic_timeline_projection",
+        "artifact_version": "physiologic_timeline_projection.v1",
+        "source_provider": "fixture",
+        "source_path": physio_projection_ref,
+        "sha256": "f" * 64,
+        "session_id": "debug.physio.fixture",
+        "mission_id": PROJECT_ID,
+        "event_count": 1,
+        "events": [
+            {
+                "event_id": "debug_event.physiologic_gate.window.000001",
+                "session_id": "debug.physio.fixture",
+                "mission_id": PROJECT_ID,
+                "timestamp": "offset:+000m-+015m",
+                "sequence": 1,
+                "kind": "physiologic_gate_window",
+                "phase": "phase35",
+                "severity": "warning",
+                "subject_ref": "physiologic_gate.window.001",
+                "source_refs": ["outputs/physio/physiologic_gate_evidence.jsonl"],
+                "map_refs": [segment_id],
+                "summary": "window 1 | state=stop_and_rest | ETA+20m",
+                "payload": {
+                    "projection_event_type": "physiologic_gate_window",
+                    "gate": "physiologic_gate",
+                    "state": "stop_and_rest",
+                    "required_action": "stop_and_rest",
+                    "window_index": 1,
+                    "eta_delay_minutes": 20,
+                    "segment_id": segment_id,
+                    "map_target_ids": [segment_id],
+                    "boundary": {
+                        "medical_diagnosis": False,
+                        "runtime_safety_truth": False,
+                        "phase1_runtime_safety_truth": False,
+                        "safety_api_called": False,
+                    },
+                },
+            }
+        ],
+        "counts": {
+            "event_count": 1,
+            "by_kind": {"physiologic_gate_window": 1},
+            "by_state": {"stop_and_rest": 1},
+            "with_map_ref_count": 1,
+            "without_map_ref_count": 0,
+        },
+    }
+    (project_root / physio_projection_ref).write_text(
+        json.dumps(physio_projection, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    project["physiologic_timeline_projection_ref"] = physio_projection_ref
+    project_path.write_text(json.dumps(project, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    projection = load_pretrip_debug_projection_view(
+        PROJECT_ID,
+        root=ROOT,
+        project_root=project_root,
+    )
+
+    physio = projection["physiologic_timeline_projection"]
+    physio_events = [
+        event
+        for event in projection["timeline_events"]
+        if event["kind"] == "physiologic_gate_window"
+    ]
+    assert physio["status"] == "ready"
+    assert physio["event_count"] == 1
+    assert projection["counts"]["physiologic_timeline_event_count"] == 1
+    assert projection["environment_risk_derivative_layers"]["artifact_kind"] == (
+        "pretrip_environment_risk_derivative_layers"
+    )
+    assert len(physio_events) == 1
+    event = physio_events[0]
+    assert event["payload"]["project_id"] == PROJECT_ID
+    assert event["payload"]["runtime_safety_truth"] is False
+    assert event["payload"]["boundary"]["medical_diagnosis"] is False
+    assert event["payload"]["boundary"]["safety_api_called"] is False
+    assert event["payload"]["segment_id"] == segment_id
+    assert event["payload"]["map_target_ids"] == [segment_id]
+    assert event["map_refs"] == [segment_id]
+
+
+def test_debug_projection_view_includes_runtime_safety_reducer_projection(tmp_path):
+    fixture_project_root = (
+        ROOT / "tests" / "fixtures" / "pretrip" / "projects" / PROJECT_ID
+    )
+    project_root = tmp_path / PROJECT_ID
+    shutil.copytree(fixture_project_root, project_root)
+    project_path = project_root / "project.json"
+    project = json.loads(project_path.read_text(encoding="utf-8"))
+    segment_ref = project.get(
+        "overpass_aligned_segment_candidates_ref",
+        project["segment_candidates_ref"],
+    )
+    first_segment = json.loads((project_root / segment_ref).read_text(encoding="utf-8"))[0]
+    segment_id = first_segment["candidate_id"]
+    runtime_dir = project_root / "outputs" / "runtime_safety"
+    runtime_dir.mkdir(parents=True)
+
+    physiologic = build_runtime_safety_gate_event(
+        gate_id="physiologic_gate",
+        event_id="physiologic_gate:stop-and-rest",
+        source_provider="sensorlogger_fixture",
+        source_path="outputs/physio/physiologic_safety_gate_event.json",
+        state_candidate="stop_and_rest",
+        severity="rest",
+        ln_transition_candidate="candidate_rest",
+        required_action="stop_and_rest",
+        confidence="high",
+        route_pressure_review_required=True,
+        eta_delay_minutes=20,
+        route_context={
+            "route_id": PROJECT_ID,
+            "segment_id": segment_id,
+            "map_target_ids": [segment_id],
+        },
+    )
+    delay = build_delay_gate_event(
+        {
+            "event_id": "delay_gate:timeline-watch",
+            "source_path": "outputs/runtime_safety/delay_gate.json",
+            "delay_minutes": 18,
+            "planned_buffer_minutes": 12,
+            "route_context": {
+                "route_id": PROJECT_ID,
+                "segment_id": segment_id,
+                "map_target_ids": [segment_id],
+            },
+        }
+    )
+    batch = build_runtime_safety_gate_event_batch([physiologic, delay])
+    reducer = reduce_runtime_safety_gate_events(
+        batch,
+        source_path="outputs/runtime_safety/runtime_safety_gate_events.json",
+    )
+    phase1_adapter = build_phase1_adapter_result(
+        reducer,
+        source_path="outputs/runtime_safety/phase1_adapter_result.json",
+    )
+    batch_ref = "outputs/runtime_safety/runtime_safety_gate_events.json"
+    reducer_ref = "outputs/runtime_safety/runtime_safety_reducer_dry_run.json"
+    phase1_ref = "outputs/runtime_safety/phase1_adapter_result.json"
+    (project_root / batch_ref).write_text(
+        json.dumps(batch.model_dump(mode="json"), ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (project_root / reducer_ref).write_text(
+        json.dumps(reducer.model_dump(mode="json"), ensure_ascii=False),
+        encoding="utf-8",
+    )
+    (project_root / phase1_ref).write_text(
+        json.dumps(phase1_adapter.model_dump(mode="json"), ensure_ascii=False),
+        encoding="utf-8",
+    )
+    state_store_ref = "outputs/runtime_safety/state_store"
+    state_store = RuntimeSafetyStateStore(project_root / state_store_ref)
+    state_snapshot = state_store.save_snapshot(
+        reducer,
+        phase1_adapter_result=phase1_adapter,
+    )
+    project["runtime_safety_gate_event_batch_ref"] = batch_ref
+    project["runtime_safety_reducer_dry_run_ref"] = reducer_ref
+    project["runtime_safety_phase1_adapter_ref"] = phase1_ref
+    project["runtime_safety_state_store_dir_ref"] = state_store_ref
+    project_path.write_text(json.dumps(project, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    projection = load_pretrip_debug_projection_view(
+        PROJECT_ID,
+        root=ROOT,
+        project_root=project_root,
+    )
+
+    reducer_projection = projection["runtime_safety_reducer_projection"]
+    reducer_events = [
+        event
+        for event in projection["timeline_events"]
+        if event["kind"] == "runtime_safety_reducer_dry_run"
+    ]
+    adapter_events = [
+        event
+        for event in projection["timeline_events"]
+        if event["kind"] == "runtime_safety_phase1_adapter_result"
+    ]
+    state_store_events = [
+        event
+        for event in projection["timeline_events"]
+        if event["kind"] == "runtime_safety_state_store_snapshot"
+    ]
+    assert reducer_projection["status"] == "ready"
+    assert reducer_projection["event_count"] == 2
+    assert projection["counts"]["runtime_safety_reducer_event_count"] == 2
+    state_store_projection = projection["runtime_safety_state_store_projection"]
+    assert state_store_projection["status"] == "ready"
+    assert state_store_projection["surface_targets"] == ["/admin/debug", "/admin"]
+    assert state_store_projection["snapshot_count"] == 1
+    assert state_store_projection["latest_snapshot_id"] == state_snapshot.snapshot_id
+    assert state_store_projection["boundary"]["runtime_safety_truth"] is False
+    assert projection["counts"]["runtime_safety_state_store_snapshot_count"] == 1
+    assert projection["environment_risk_derivative_layers"]["artifact_kind"] == (
+        "pretrip_environment_risk_derivative_layers"
+    )
+    assert len(reducer_events) == 1
+    assert len(adapter_events) == 1
+    assert len(state_store_events) == 1
+    reducer_event = reducer_events[0]
+    assert reducer_event["payload"]["ln_level_candidate"] == "L3_RETREAT"
+    state_store_event = state_store_events[0]
+    assert state_store_event["payload"]["snapshot_id"] == state_snapshot.snapshot_id
+    assert state_store_event["payload"]["runtime_safety_truth"] is False
+    assert state_store_event["payload"]["boundary"]["safety_api_called"] is False
+    assert state_store_event["payload"]["map_target_ids"] == [segment_id]
+    assert reducer_event["payload"]["recommendation"] == "retreat_review"
+    assert reducer_event["payload"]["runtime_safety_truth"] is False
+    assert reducer_event["payload"]["boundary"]["phase1_l0_l4_state_mutated"] is False
+    assert reducer_event["payload"]["boundary"]["safety_api_called"] is False
+    assert reducer_event["payload"]["map_target_ids"] == [segment_id]
+    assert reducer_event["map_refs"] == [segment_id]
+    adapter_event = adapter_events[0]
+    assert adapter_event["payload"]["status"] == "blocked_feature_flag_disabled"
+    assert adapter_event["payload"]["transition_request_prepared"] is False
+    assert adapter_event["payload"]["boundary"]["individual_gate_owned"] is False
+    assert adapter_event["payload"]["boundary"]["phase1_l0_l4_state_mutated"] is False
+    assert adapter_event["payload"]["boundary"]["safety_api_called"] is False
+
+
+def test_debug_projection_exposes_environment_layer_points_from_project_refs(tmp_path):
+    fixture_project_root = (
+        ROOT / "tests" / "fixtures" / "pretrip" / "projects" / PROJECT_ID
+    )
+    project_root = tmp_path / PROJECT_ID
+    shutil.copytree(fixture_project_root, project_root)
+    project_path = project_root / "project.json"
+    project = json.loads(project_path.read_text(encoding="utf-8"))
+
+    env_root = project_root / "outputs" / "environment"
+    cwa_root = env_root / "cwa"
+    gee_root = env_root / "gee"
+    derived_root = env_root / "derived"
+    cwa_root.mkdir(parents=True, exist_ok=True)
+    gee_root.mkdir(parents=True, exist_ok=True)
+    derived_root.mkdir(parents=True, exist_ok=True)
+
+    def write_geojson(path: Path, layer_id: str, source_id: str, label: str) -> None:
+        layer_props = {}
+        if layer_id == "cwa-qpf":
+            layer_props = {"rain_probability": 70, "rainfall_mm": 12.5}
+        elif layer_id == "cwa-weather":
+            layer_props = {"last_24h_mm": 36.0, "station_name": "CWA sample"}
+        elif layer_id == "soil-moisture":
+            layer_props = {
+                "collection_id": "NASA/SMAP/SPL4SMGP/008",
+                "source_collection_id": "NASA/SMAP/SPL4SMGP/008",
+                "sm_surface_wetness": 0.37,
+                "sm_rootzone_wetness": 0.44,
+                "band_names": ["sm_surface", "sm_rootzone", "sm_profile"],
+                "spatial_resolution_m": 11000,
+                "temporal_resolution": "3h",
+                "raw_summary_sha256": "a" * 64,
+                "raw_response_hash": f"sha256:{'a' * 64}",
+                "human_review_required": True,
+                "external_api_calls_made": True,
+            }
+        elif layer_id == "antecedent-rain":
+            layer_props = {"last_72h_mm": 22.5, "last_3h_mm": 4.0}
+        path.write_text(
+            json.dumps(
+                {
+                    "type": "FeatureCollection",
+                    "bbox_wgs84": {
+                        "west": 121.2,
+                        "south": 23.8,
+                        "east": 121.3,
+                        "north": 23.9,
+                    },
+                    "cache_policy": {"cacheable": False, "ttl_seconds": 0},
+                    "features": [
+                        {
+                            "type": "Feature",
+                            "geometry": {
+                                "type": "Point",
+                                "coordinates": [121.22, 23.89],
+                            },
+                            "properties": {
+                                "source_id": source_id,
+                                "layer_id": layer_id,
+                                "label": label,
+                                "candidate_only": True,
+                                "runtime_safety_truth": False,
+                                **layer_props,
+                            },
+                        }
+                    ],
+                },
+                sort_keys=True,
+            ),
+            encoding="utf-8",
+        )
+
+    def write_derived_geojson(
+        path: Path,
+        *,
+        candidate_kind: str,
+        candidate_id: str,
+        label: str,
+        severity: str,
+        score: float,
+        center_lat: float,
+        center_lon: float,
+        cwa_time_metadata: dict[str, object] | None = None,
+    ) -> None:
+        cwa_fields = (
+            {
+                "cwa_time_metadata": cwa_time_metadata,
+                "source_time_metadata": {"cwa": cwa_time_metadata},
+                "cwa_api_fetched_at_hour": cwa_time_metadata.get(
+                    "api_fetched_at_hour"
+                ),
+                "cwa_valid_until_hour": cwa_time_metadata.get("valid_until_hour"),
+                "time_precision": "hour",
+                "timezone": "UTC",
+            }
+            if cwa_time_metadata
+            else {}
+        )
+        path.write_text(
+            json.dumps(
+                {
+                    "type": "FeatureCollection",
+                    "bbox_wgs84": {
+                        "west": 121.2,
+                        "south": 23.8,
+                        "east": 121.3,
+                        "north": 23.9,
+                    },
+                    **cwa_fields,
+                    "features": [
+                        {
+                            "type": "Feature",
+                            "geometry": {
+                                "type": "LineString",
+                                "coordinates": [
+                                    [121.2195, 23.8895],
+                                    [121.2205, 23.8905],
+                                ],
+                            },
+                            "properties": {
+                                "candidate_id": candidate_id,
+                                "candidate_kind": candidate_kind,
+                                "source_segment_id": "segment.001",
+                                "label": label,
+                                "severity": severity,
+                                "score": score,
+                                "confidence": "medium",
+                                "center_lat": center_lat,
+                                "center_lon": center_lon,
+                                "start_distance_m": 0.0,
+                                "mid_distance_m": 75.0,
+                                "end_distance_m": 150.0,
+                                "supporting_metrics": {
+                                    "slope_deg": 40.9,
+                                    "flow_accumulation_proxy": 447.0,
+                                },
+                                "missing_metrics": ["gpm_1h_mm"],
+                                "candidate_only": True,
+                                "runtime_safety_truth": False,
+                                **cwa_fields,
+                            },
+                        }
+                    ],
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            ),
+            encoding="utf-8",
+        )
+
+    cwa_time_metadata = {
+        "api_request_attempted_at_hour": "2026-06-26T01:00:00Z",
+        "api_fetched_at_hour": "2026-06-26T01:00:00Z",
+        "valid_until_hour": "2026-06-26T09:00:00Z",
+        "time_precision": "hour",
+        "timezone": "UTC",
+    }
+    (cwa_root / "cwa_weather_evidence.json").write_text(
+        json.dumps(
+            {
+                "status": "ready",
+                "external_api_calls_made": True,
+                "counts": {"observation_count": 1},
+                "datasets": ["O-A0002-001"],
+                "cwa_time_metadata": cwa_time_metadata,
+                "temporal_coverage": cwa_time_metadata,
+                "boundary": {
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                },
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    (cwa_root / "warnings.geojson").write_text(
+        json.dumps({"type": "FeatureCollection", "features": []}),
+        encoding="utf-8",
+    )
+    write_geojson(
+        cwa_root / "observations.geojson",
+        "cwa-weather",
+        "cwa.obs.001",
+        "CWA station sample",
+    )
+    write_geojson(
+        cwa_root / "qpf_grid.geojson",
+        "cwa-qpf",
+        "cwa.qpf.001",
+        "QPF sample",
+    )
+    (cwa_root / "qpf_corridor_summary.json").write_text(
+        json.dumps({"status": "ready"}, sort_keys=True),
+        encoding="utf-8",
+    )
+    write_geojson(
+        gee_root / "soil_moisture_grid.geojson",
+        "soil-moisture",
+        "gee.smap.001",
+        "Soil moisture sample",
+    )
+    (gee_root / "smap_l4_corridor_summary.json").write_text(
+        json.dumps({"status": "source_status_only"}, sort_keys=True),
+        encoding="utf-8",
+    )
+    write_geojson(
+        gee_root / "antecedent_rain_grid.geojson",
+        "antecedent-rain",
+        "gee.gpm.001",
+        "Antecedent rain sample",
+    )
+    (gee_root / "gpm_imerg_corridor_summary.json").write_text(
+        json.dumps({"status": "source_status_only"}, sort_keys=True),
+        encoding="utf-8",
+    )
+    (gee_root / "scout_gee_feature_package.json").write_text(
+        json.dumps(
+            {
+                "artifact_kind": "scout_gee_feature_package",
+                "schema_version": "scout_gee_feature_package.v0.1",
+                "project_id": PROJECT_ID,
+                "status": "ready",
+                "provider": "google_earth_engine",
+                "server_side_only": True,
+                "mobile_runtime_dependency": False,
+                "raspberry_pi_runtime_dependency": False,
+                "route": {
+                    "buffer": {
+                        "properties": {
+                            "bbox_wgs84": {
+                                "west": 121.2,
+                                "south": 23.8,
+                                "east": 121.3,
+                                "north": 23.9,
+                            }
+                        }
+                    }
+                },
+                "counts": {
+                    "segment_count": 2,
+                    "raw_segment_feature_count": 2,
+                    "stale_warning_count": 1,
+                },
+                "source_datasets": [
+                    {"dataset_id": "NASA/NASADEM_HGT/001"},
+                    {"dataset_id": "NASA/GPM_L3/IMERG_V07"},
+                ],
+                "confidence_summary": {"mean_confidence": 0.73},
+                "cloud_filtering_thresholds": {
+                    "sentinel2_cloud_score_plus_min_cs": 0.6
+                },
+                "date_ranges": {"gpm_imerg": {"start": "2026-05-19"}},
+                "stale_data_warnings": ["sentinel2_no_cloud_free_imagery"],
+                "raw_response_sha256": "b" * 64,
+                "boundary": {
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                    "external_api_calls_made": True,
+                    "raspberry_pi_runtime_gee_dependency": False,
+                },
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    (derived_root / "environment_risk_derivatives.json").write_text(
+        json.dumps(
+            {
+                "artifact_kind": "scout_environment_risk_derivatives",
+                "schema_version": "scout_environment_risk_derivatives.v0.1",
+                "project_id": PROJECT_ID,
+                "status": "ready_with_data_gaps",
+                "headline": "這條路線 500m buffer 內目前產生 1 處新崩塌候選。",
+                "source_raw_response_sha256": "b" * 64,
+                "source_datasets": [
+                    {"dataset_id": "NASA/NASADEM_HGT/001"},
+                    {"dataset_id": "COPERNICUS/S2_SR_HARMONIZED"},
+                ],
+                "source_metric_gaps": [
+                    {"metric_family": "sentinel1", "missing_ratio": 0.5}
+                ],
+                "cwa_time_metadata": cwa_time_metadata,
+                "temporal_coverage": {"cwa": cwa_time_metadata},
+                "counts": {
+                    "segment_count": 2,
+                    "new_landslide_candidate_count": 1,
+                    "wetness_flash_flood_candidate_count": 2,
+                    "trail_obscurity_candidate_count": 1,
+                    "practical_darkness_candidate_count": 1,
+                },
+                "route_revalidation_report": {
+                    "status": "needs_event_date",
+                    "event_date": None,
+                },
+                "boundary": {
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                },
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    write_derived_geojson(
+        derived_root / "wetness_flash_flood_susceptibility.geojson",
+        candidate_kind="wetness_flash_flood_susceptibility",
+        candidate_id="wetness.001",
+        label="濕滑/溪溝暴漲候選 0.1K",
+        severity="medium",
+        score=0.65,
+        center_lat=23.8901,
+        center_lon=121.2201,
+        cwa_time_metadata=cwa_time_metadata,
+    )
+    write_derived_geojson(
+        derived_root / "practical_darkness_time.geojson",
+        candidate_kind="practical_darkness_time",
+        candidate_id="darkness.001",
+        label="日落地形遮蔽候選 0.1K",
+        severity="high",
+        score=0.72,
+        center_lat=23.8911,
+        center_lon=121.2211,
+    )
+    for empty_name in ("new_landslide_candidates.geojson", "trail_obscurity_risk.geojson"):
+        (derived_root / empty_name).write_text(
+            json.dumps(
+                {
+                    "type": "FeatureCollection",
+                    "bbox_wgs84": {
+                        "west": 121.2,
+                        "south": 23.8,
+                        "east": 121.3,
+                        "north": 23.9,
+                    },
+                    "features": [],
+                },
+                sort_keys=True,
+            ),
+            encoding="utf-8",
+        )
+    (derived_root / "route_revalidation_report.json").write_text(
+        json.dumps(
+            {
+                "status": "needs_event_date",
+                "event_date": None,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+
+    project.update(
+        {
+            "cwa_weather_evidence_ref": (
+                "outputs/environment/cwa/cwa_weather_evidence.json"
+            ),
+            "cwa_warnings_geojson_ref": "outputs/environment/cwa/warnings.geojson",
+            "cwa_observations_geojson_ref": (
+                "outputs/environment/cwa/observations.geojson"
+            ),
+            "cwa_qpf_grid_ref": "outputs/environment/cwa/qpf_grid.geojson",
+            "cwa_qpf_corridor_summary_ref": (
+                "outputs/environment/cwa/qpf_corridor_summary.json"
+            ),
+            "soil_moisture_grid_ref": (
+                "outputs/environment/gee/soil_moisture_grid.geojson"
+            ),
+            "smap_l4_corridor_summary_ref": (
+                "outputs/environment/gee/smap_l4_corridor_summary.json"
+            ),
+            "antecedent_rain_grid_ref": (
+                "outputs/environment/gee/antecedent_rain_grid.geojson"
+            ),
+            "gpm_imerg_corridor_summary_ref": (
+                "outputs/environment/gee/gpm_imerg_corridor_summary.json"
+            ),
+            "gee_feature_package_ref": (
+                "outputs/environment/gee/scout_gee_feature_package.json"
+            ),
+            "environment_risk_derivatives_ref": (
+                "outputs/environment/derived/environment_risk_derivatives.json"
+            ),
+            "new_landslide_candidates_ref": (
+                "outputs/environment/derived/new_landslide_candidates.geojson"
+            ),
+            "wetness_flash_flood_susceptibility_ref": (
+                "outputs/environment/derived/wetness_flash_flood_susceptibility.geojson"
+            ),
+            "trail_obscurity_risk_ref": (
+                "outputs/environment/derived/trail_obscurity_risk.geojson"
+            ),
+            "practical_darkness_time_ref": (
+                "outputs/environment/derived/practical_darkness_time.geojson"
+            ),
+            "route_revalidation_report_ref": (
+                "outputs/environment/derived/route_revalidation_report.json"
+            ),
+        }
+    )
+    project_path.write_text(
+        json.dumps(project, ensure_ascii=False, sort_keys=True),
+        encoding="utf-8",
+    )
+
+    view = build_pretrip_admin_view(PROJECT_ID, root=ROOT, project_root=project_root)
+    debug = load_pretrip_debug_projection_view(
+        PROJECT_ID,
+        root=ROOT,
+        project_root=project_root,
+    )
+
+    assert len(view["cwa_qpf"]["points"]) == 1
+    assert len(view["cwa_weather"]["points"]) == 1
+    assert len(view["soil_moisture"]["points"]) == 1
+    assert len(view["antecedent_rain"]["points"]) == 1
+    assert view["soil_moisture"]["bbox_wgs84"]["west"] == 121.2
+    assert view["soil_moisture"]["cache_policy"]["cacheable"] is False
+    assert view["antecedent_rain"]["bbox_wgs84"]["north"] == 23.9
+    assert len(debug["cwa_qpf"]["points"]) == 1
+    assert len(debug["cwa_weather"]["points"]) == 1
+    assert len(debug["soil_moisture"]["points"]) == 1
+    assert len(debug["antecedent_rain"]["points"]) == 1
+    assert debug["cwa_qpf"]["bbox_wgs84"]["east"] == 121.3
+    assert debug["antecedent_rain"]["cache_policy"]["ttl_seconds"] == 0
+    assert debug["counts"]["cwa_qpf_point_count"] == 1
+    assert debug["counts"]["cwa_weather_point_count"] == 1
+    assert debug["counts"]["soil_moisture_point_count"] == 1
+    assert debug["counts"]["antecedent_rain_point_count"] == 1
+    assert view["environment_values"]["status"] == "ready"
+    assert view["environment_values"]["counts"]["item_count"] == 6
+    labels = {item["label"] for item in view["environment_values"]["items"]}
+    assert {
+        "CWA QPF values",
+        "CWA weather values",
+        "GEE soil moisture values",
+        "GEE antecedent rain values",
+        "GEE route feature package",
+        "Environmental risk derivatives",
+    } <= labels
+    soil_item = next(
+        item
+        for item in view["environment_values"]["items"]
+        if item["layer_id"] == "soil-moisture"
+        and item["evidence_type"] == "pretrip_environment_value_evidence"
+    )
+    assert soil_item["value_summary"]["sm_surface_wetness"] == 0.37
+    assert soil_item["cache_policy"]["cacheable"] is False
+    assert soil_item["runtime_safety_truth"] is False
+    soil_point = view["soil_moisture"]["points"][0]
+    assert soil_point["source_collection_id"] == "NASA/SMAP/SPL4SMGP/008"
+    assert soil_point["spatial_resolution_m"] == 11000
+    assert soil_point["human_review_required"] is True
+    package_item = next(
+        item
+        for item in view["environment_values"]["items"]
+        if item["evidence_type"] == "pretrip_gee_route_environment_feature_package"
+    )
+    assert package_item["value_summary"]["segment_count"] == 2
+    assert package_item["boundary"]["raspberry_pi_runtime_gee_dependency"] is False
+    derivatives_item = next(
+        item
+        for item in view["environment_values"]["items"]
+        if item["evidence_type"] == "pretrip_environment_risk_derivative_database"
+    )
+    assert derivatives_item["value_summary"]["new_landslide_candidate_count"] == 1
+    assert derivatives_item["value_summary"]["wetness_flash_flood_candidate_count"] == 2
+    assert derivatives_item["value_summary"]["route_revalidation_status"] == (
+        "needs_event_date"
+    )
+    assert derivatives_item["boundary"]["runtime_safety_truth"] is False
+    derivative_layers = view["environment_risk_derivative_layers"]
+    assert derivative_layers["source_status"] == "ready_with_data_gaps"
+    assert derivative_layers["source_metric_gaps"][0]["metric_family"] == "sentinel1"
+    assert derivative_layers["data_quality"]["missing_metric_family_count"] == 1
+    assert derivative_layers["counts"]["wetness_flash_flood_candidate_count"] == 1
+    assert derivative_layers["counts"]["practical_darkness_candidate_count"] == 1
+    assert derivative_layers["counts"]["total_candidate_count"] == 2
+    assert len(derivative_layers["category_items"]) == 5
+    wetness = derivative_layers["wetness_flash_flood_susceptibility"][
+        "candidates"
+    ][0]
+    assert wetness["label"] == "濕滑/溪溝暴漲候選 0.1K"
+    assert wetness["evidence_type"] == (
+        "pretrip_environment_wetness_flash_flood_candidate"
+    )
+    assert wetness["lat"] == 23.8901
+    assert wetness["lon"] == 121.2201
+    assert len(wetness["coordinates"]) == 2
+    assert wetness["supporting_metrics"]["flow_accumulation_proxy"] == 447.0
+    assert wetness["cwa_api_fetched_at_hour"] == "2026-06-26T01:00:00Z"
+    assert wetness["cwa_valid_until_hour"] == "2026-06-26T09:00:00Z"
+    assert wetness["cwa_time_metadata"]["api_fetched_at_hour"] == (
+        "2026-06-26T01:00:00Z"
+    )
+    assert wetness["runtime_safety_truth"] is False
+    assert wetness["boundary"]["runtime_safety_truth"] is False
+    darkness = derivative_layers["practical_darkness_time"]["candidates"][0]
+    assert darkness["label"] == "日落地形遮蔽候選 0.1K"
+    assert darkness["lat"] == 23.8911
+    assert {
+        "新崩塌候選：0",
+        "濕滑/溪溝暴漲候選：1",
+        "路跡不明候選：0",
+        "日落地形遮蔽候選：1",
+        "災後路線重評估",
+    } <= {item["label"] for item in derivative_layers["category_items"]}
+    wetness_category = next(
+        item
+        for item in derivative_layers["category_items"]
+        if item["category_key"] == "wetness_flash_flood_susceptibility"
+    )
+    assert wetness_category["source_status"] == "ready_with_data_gaps"
+    assert wetness_category["data_quality"]["missing_metric_families"] == [
+        "sentinel1"
+    ]
+    assert wetness_category["value_summary"]["cwa_api_fetched_at_hour"] == (
+        "2026-06-26T01:00:00Z"
+    )
+    assert derivatives_item["value_summary"]["cwa_valid_until_hour"] == (
+        "2026-06-26T09:00:00Z"
+    )
+    landslide_collection = derivative_layers["new_landslide_candidates"]
+    assert landslide_collection["empty_state"]["status"] == "ready_with_data_gaps"
+    assert landslide_collection["empty_state"]["missing_metric_families"] == [
+        "sentinel1"
+    ]
+    assert landslide_collection["empty_state"]["note"] == (
+        "ready_with_data_gaps | data gaps: sentinel1"
+    )
+    assert (
+        derivative_layers["wetness_flash_flood_susceptibility"]["empty_state"]
+        is None
+    )
+    assert debug["environment_values"]["counts"]["item_count"] == 6
+    assert debug["environment_risk_derivative_layers"]["counts"][
+        "total_candidate_count"
+    ] == 2
+    assert debug["counts"]["environment_risk_derivative_candidate_count"] == 2
+
+
+def test_boss_points_challenge_fit_surfaces_in_admin_and_debug(tmp_path: Path):
+    project_root = tmp_path / PROJECT_ID
+    shutil.copytree(
+        ROOT / "tests" / "fixtures" / "pretrip" / "projects" / PROJECT_ID,
+        project_root,
+    )
+    synthesize_pretrip_boss_points(
+        project_root,
+        generated_at="2099-06-07T08:00:00Z",
+    )
+    align_pretrip_workspace_mileage_tags(
+        project_root,
+        generated_at="2099-06-07T08:00:00Z",
+    )
+
+    view = build_pretrip_admin_view(
+        PROJECT_ID,
+        root=ROOT,
+        project_root=project_root,
+    )
+
+    boss_points = view["boss_points"]
+    assert boss_points["status"] == "completed"
+    assert boss_points["counts"]["boss_point_count"] == 5
+    assert boss_points["counts"]["geojson_feature_count"] == 5
+    assert boss_points["counts"]["route_pressure_sample_count"] > 0
+    assert boss_points["counts"]["route_pressure_peak_count"] > 0
+    assert boss_points["formula"] == {
+        "route_boss_demand": (
+            "sum(component_scores) * late_trip_multiplier * "
+            "rest_stop_deemphasis_multiplier"
+        ),
+        "route_pressure_profile": (
+            "full-route fixed-distance pressure bins -> local peaks -> "
+            "Boss candidate merge"
+        ),
+        "challenge_fit": (
+            "route_boss_demand_score * (1 + pace_energy_vulnerability)"
+        ),
+        "average_pace_only": False,
+        "raw_health_payload_embedded": False,
+    }
+    assert boss_points["challenge_fit_summary"]["decision"] == (
+        "CHANGE_PLAN_OR_ADD_BUFFER"
+    )
+    assert boss_points["challenge_fit_summary"][
+        "highest_challenge_fit_label"
+    ].startswith("高壓路段")
+    assert boss_points["boundary"]["runtime_safety_truth"] is False
+    assert boss_points["boundary"]["phase1_runtime_mutation_allowed"] is False
+    first = boss_points["boss_points"][0]
+    _assert_pretrip_candidate_metadata(first)
+    assert first["label"].startswith("高壓路段")
+    assert first["display_label"] == "呂布關 " + first["label"]
+    assert first["source_candidate_id"].startswith("route_pressure_peak.")
+    assert first["display_theme"]["alias"] == "呂布關"
+    assert first["lat"] is not None
+    assert first["lon"] is not None
+    assert first["coordinate_source"] == (
+        "overpass_risk_ribbon_route_distance_interpolation"
+    )
+    assert first["map_coordinate_source"] == (
+        "overpass_risk_ribbon_route_distance_interpolation"
+    )
+    assert first["map_target_ids"][0] == first["boss_point_id"]
+    assert first["display_theme"]["decorative_only"] is True
+    assert first["route_boss_demand"]["score"] > 80
+    assert first["route_boss_demand"]["components"]["route_pressure_profile"] > 0
+    assert first["challenge_fit"]["score"] == 100
+    assert first["challenge_fit"]["user_basis"] == (
+        "slowest_member_or_private_energy_reserve"
+    )
+    assert first["challenge_fit"]["energy_factors"]["reserve_band"] == (
+        "rest_suggested"
+    )
+    assert first["source_attribution"][0]["source_kind"] == (
+        "boss_point_challenge_fit"
+    )
+    assert any(
+        point["source_candidate_id"].startswith("route_pressure_peak.")
+        for point in boss_points["boss_points"]
+    )
+    machao = next(
+        point
+        for point in boss_points["boss_points"]
+        if point["display_theme"]["alias"] == "馬超壁"
+    )
+    assert machao["display_label"].startswith("馬超壁 ")
+    assert machao["map_label"].startswith("馬超壁")
+    assert machao["display_mileage"]["label"]
+    assert machao["boss_selection"]["candidate_only"] is True
+    assert machao["boss_selection"]["runtime_safety_truth"] is False
+    assert machao["lat"] is not None
+    assert machao["lon"] is not None
+    assert machao["coordinate_source"] == (
+        "overpass_risk_ribbon_route_distance_interpolation"
+    )
+    mileage = view["mileage_tag_alignment"]
+    assert mileage["status"] == "completed"
+    assert mileage["counts"]["tag_count"] > 0
+    assert mileage["counts"]["runtime_safety_truth_count"] == 0
+    assert mileage["source_kind_counts"]["checkpoint"] == 124
+    assert mileage["source_kind_counts"]["segment"] == 123
+    assert mileage["raw_source_summary"]["route_note_not_expanded_count"] > 0
+
+    planning_sections = {
+        section["id"]: section
+        for section in view["tabs"]["pre_trip_planning"]["sections"]
+    }
+    assert planning_sections["boss_points"]["counts"]["boss_point_count"] == 5
+    assert planning_sections["boss_points"]["summary"]["decision"] == (
+        "CHANGE_PLAN_OR_ADD_BUFFER"
+    )
+    assert planning_sections["mileage_tag_alignment"]["counts"]["tag_count"] == (
+        mileage["counts"]["tag_count"]
+    )
+
+    debug = load_pretrip_debug_projection_view(
+        PROJECT_ID,
+        root=ROOT,
+        project_root=project_root,
+    )
+    assert debug["counts"]["boss_point_count"] == 5
+    assert debug["boss_points"]["counts"]["boss_point_count"] == 5
+    assert debug["boss_points"]["boss_points"][0]["label"].startswith("高壓路段")
+    assert debug["boss_points"]["boss_points"][0]["coordinate_source"] == (
+        "overpass_risk_ribbon_route_distance_interpolation"
+    )
+    assert debug["boss_points"]["route_pressure_profile_summary"]["peak_count"] > 0
+    assert debug["mileage_tag_alignment"]["counts"]["tag_count"] == (
+        mileage["counts"]["tag_count"]
+    )
+    assert debug["counts"]["mileage_tag_count"] == mileage["counts"]["tag_count"]
 
 
 def test_builds_admin_view_from_local_workspace_project_root(tmp_path):
@@ -1033,6 +2404,10 @@ def test_pretrip_view_exposes_energy_reserve_monitor_without_runtime_mutation():
     assert monitor["status"] == "missing_health_data"
     assert monitor["health_data"]["loaded"] is False
     assert monitor["trip_capability"]["loaded"] is True
+    assert monitor["trip_capability"]["completion_status"] == "complete"
+    assert monitor["trip_capability"]["planned_segment_count"] == 73
+    assert monitor["trip_capability"]["completed_segment_count"] == 73
+    assert monitor["display"]["trip_text"] == "complete capability"
     assert monitor["candidate_change"]["applied_to_baseline"] is False
     assert monitor["boundary"]["phase1_runtime_safety_truth"] is False
     assert monitor["boundary"]["safety_api_calls_allowed"] is False
@@ -1157,6 +2532,10 @@ def test_admin_view_exposes_workspace_risk_score_layer(
     assert view["terrain_visualization"]["status"] == "candidate_only"
     assert view["terrain_visualization"]["counts"]["feature_count"] == 0
     assert view["terrain_visualization"]["counts"]["bitmap_overlay_count"] == 4
+    assert view["terrain_visualization"]["counts"]["source_dtm_tile_count"] > 0
+    assert view["terrain_visualization"]["dtm_grid"]["source_tile_count"] == (
+        view["terrain_visualization"]["counts"]["source_dtm_tile_count"]
+    )
     assert view["terrain_visualization"]["counts"]["cell_count"] > 0
     assert view["terrain_visualization"]["visualization_spec"]["modes"] == [
         "hillshade",
@@ -1315,11 +2694,13 @@ def test_tabs_expose_compact_traceable_detail_sections():
         ("risk_delta", "Risk Delta"),
         ("weather", "Weather And Daylight"),
         ("overpass_evidence", "Overpass Vector Evidence"),
+        ("osm_pbf_evidence", "Local OSM PBF Feature Index"),
         ("gis_perception_timeline", "GIS Perception CP Timeline"),
         ("major_critical_points", "Major Critical Points"),
         ("route_notes", "Route Notes"),
         ("route_note_ln_proposals", "Route Note Ln Proposals"),
         ("reference_tracks", "Reference Tracks"),
+        ("reference_segment_timing", "Reference Segment Timing"),
         ("checkpoint_events", "Checkpoint Events"),
         ("departure_bundle", "Departure Bundle"),
     ]

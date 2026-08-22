@@ -556,3 +556,284 @@ def test_runbook_documents_wio_e5_lorawan_at_diagnostic_smoke() -> None:
         "不可接 live `/safety/*` mutation",
     ):
         assert token in source
+
+
+def test_runbook_documents_wio_e5_lorawan_uplink_trial_plan() -> None:
+    source = read_runbook()
+
+    for token in (
+        "tools/pi_wio_e5_lorawan_uplink_trial_plan.py",
+        "Wio-E5 / LoRa-E5 client uplink trial plan",
+        "--wio-at-jsonl /data/scout/providers/wio_e5/wio-e5-at-smoke.jsonl",
+        "--gateway-rx-jsonl /data/scout/providers/lora/sx1303-gateway-rx-readiness.jsonl",
+        "--uplink-jsonl /data/scout/providers/lora/sx1303-gateway-uplink.jsonl",
+        "--frequency-hz 923200000",
+        "--region-profile AS923_2",
+        "/data/scout/providers/lora/wio-e5-uplink-trial-plan.jsonl",
+        "waiting_for_operator_approval",
+        "I_ACCEPT_RF_TX_AS923_2_TW_920_925",
+        "ready_for_manual_uplink_trial",
+        "`PLAN BLOCKED`",
+        "`WAIT APPROVAL`",
+        "`NO RF TX`",
+        "LED2",
+        "LED1",
+        "不開 serial",
+        "不送 `AT+JOIN`",
+        "不送 `AT+MSG`",
+        "不送 `AT+TEST`",
+        "不使用\n`mosquitto_pub`",
+        "不發射 RF",
+        "`920000000-925000000 Hz`",
+        "`operator_approval_token_stored=false`",
+        "`rf_tx_allowed=false`",
+        "`lorawan_uplink_allowed=false`",
+        "`rf_tx_executed=false`",
+        "`lorawan_uplink_executed=false`",
+        "真正的 client uplink 需要另一個明確",
+    ):
+        assert token in source
+
+
+def test_runbook_documents_wio_e5_operator_approved_rf_trial() -> None:
+    source = read_runbook()
+
+    for token in (
+        "tools/pi_wio_e5_lorawan_rf_trial.py",
+        "Wio-E5 / LoRa-E5 operator-approved RF uplink trial",
+        "--plan-jsonl /data/scout/providers/lora/wio-e5-uplink-trial-plan.jsonl",
+        "--payload-text SCOUT",
+        "--execute-rf-tx",
+        "/data/scout/providers/lora/wio-e5-rf-trial.jsonl",
+        "--join-only",
+        "`rf_trial_join_confirmed_no_uplink`",
+        "`ready_for_manual_uplink_trial`",
+        "pi_sx1303_gateway_uplink_mqtt_tail.py",
+        "`AT+JOIN` / `AT+MSG=\"SCOUT\"`",
+        "`I_ACCEPT_RF_TX_AS923_2_TW_920_925`",
+        "`--dry-run`",
+        "不設定 AppKey / DevEUI / AppEUI / channel mask",
+        "不改 ChirpStack",
+        "`--continue-after-join-failure`",
+        "`--skip-join`",
+        "`rf_tx_allowed=true`",
+        "`rf_tx_executed=true`",
+        "`join_executed=true`",
+        "`lorawan_uplink_executed=true`",
+        "`phase1_safety_decision_change_allowed=false`",
+        "`phase1_l0_l4_state_mutated=false`",
+        "`safety_api_called=false`",
+        "`downlink_allowed=false`",
+        "`remote_outbound_allowed=false`",
+        "`SCOUT LORA TX`",
+        "`RF SENT`",
+        "`RF FAIL`",
+        "`BLOCKED`",
+        "`DRY RUN`",
+        "LED9",
+        "LED10",
+    ):
+        assert token in source
+
+
+def test_runbook_documents_wio_e5_chirpstack_join_audit() -> None:
+    source = read_runbook()
+
+    for token in (
+        "tools/pi_wio_e5_chirpstack_join_audit.py",
+        "Wio-E5 / ChirpStack join provisioning audit",
+        "--wio-at-jsonl /data/scout/providers/wio_e5/wio-e5-at-smoke.jsonl",
+        "--rf-trial-jsonl /data/scout/providers/lora/wio-e5-rf-trial.jsonl",
+        "--uplink-jsonl /data/scout/providers/lora/sx1303-gateway-uplink.jsonl",
+        "--tail-status-jsonl /data/scout/providers/lora/sx1303-gateway-uplink-tail-status.jsonl",
+        "/data/scout/providers/lora/wio-e5-chirpstack-join-audit.jsonl",
+        "只讀 Wio-E5 AT",
+        "Postgres device table read-only query",
+        "不改 ChirpStack",
+        "不建立 device",
+        "不改 AppKey",
+        "不發 MQTT",
+        "不送 downlink",
+        "不送 RF",
+        "DevEUI / AppEUI 只輸出 hash",
+        "raw log lines",
+        "raw device EUI",
+        "client_dev_eui_not_registered_in_chirpstack",
+        "client_join_failed_no_gateway_join_hint",
+        "client_join_failed_network_server_rejected",
+        "`uplink_observed`",
+        "`SCOUT LORA AUD`",
+        "`DEV MISSING`",
+        "`NO JOIN HINT`",
+        "`JOIN REJECT`",
+        "`UL OK`",
+        "LED8",
+        "LED9",
+        "LED10",
+        "不是 Scout safety decision source",
+        "tools/pi_wio_e5_chirpstack_join_state_reset.py",
+        "Wio-E5 / ChirpStack join-state reset dry-run",
+        "I_ACCEPT_CHIRPSTACK_JOIN_STATE_RESET_AS923_2",
+        "`dry_run_join_state_reset_planned`",
+        "`blocked_join_state_reset`",
+        "模組與 server join state 不同步或 DevNonce replay",
+        "不改 DevEUI / JoinEUI",
+    ):
+        assert token in source
+
+
+def test_runbook_documents_wio_e5_chirpstack_as9232_profile_provisioning() -> None:
+    source = read_runbook()
+
+    for token in (
+        "tools/pi_wio_e5_chirpstack_as9232_profile_provision.py",
+        "Wio-E5 / ChirpStack AS923_2 profile provisioning",
+        "--wio-at-jsonl /data/scout/providers/wio_e5/wio-e5-at-smoke.jsonl",
+        "--allow-in-place-profile-update",
+        "I_ACCEPT_CHIRPSTACK_PROFILE_MUTATION_AS923_2",
+        "--execute",
+        "/data/scout/providers/lora/wio-e5-chirpstack-profile-provision.jsonl",
+        "預設不寫入",
+        "不送 RF",
+        "不送 downlink",
+        "不發 MQTT",
+        "不改 AppKey",
+        "不改 JoinEUI",
+        "不建立新 device",
+        "`AS923_2` / `as923_2`",
+        "`device_profile_id`",
+        "`postgres_write_performed`",
+        "`chirpstack_config_changed`",
+        "`device_registry_changed`",
+        "`profile_mutation_scope`",
+        "`rf_tx_allowed=false`",
+        "`lorawan_uplink_allowed=false`",
+        "`downlink_allowed=false`",
+        "`safety_api_called=false`",
+        "DevEUI、AppEUI 與 key 原文不可輸出",
+        "`SCOUT LORA PROV`",
+        "`MUTATED`",
+        "LED8",
+        "LED9",
+        "LED10",
+    ):
+        assert token in source
+
+
+def test_runbook_documents_wio_e5_chirpstack_key_sync() -> None:
+    source = read_runbook()
+
+    for token in (
+        "tools/pi_wio_e5_chirpstack_key_sync.py",
+        "Wio-E5 / ChirpStack OTAA key sync",
+        "--wio-at-jsonl /data/scout/providers/wio_e5/wio-e5-at-smoke.jsonl",
+        "--use-existing-chirpstack-key",
+        "I_ACCEPT_LORAWAN_KEY_SYNC_AS923_2",
+        "--execute",
+        "/data/scout/providers/lora/wio-e5-chirpstack-key-sync.jsonl",
+        "不做 RF trial",
+        "dry-run plan",
+        "`AT+KEY=APPKEY",
+        "`rf_tx_allowed=false`",
+        "`join_executed=false`",
+        "`lorawan_uplink_allowed=false`",
+        "`downlink_allowed=false`",
+        "`mqtt_publish_performed=false`",
+        "`safety_api_called=false`",
+        "`phase1_safety_decision_change_allowed=false`",
+        "`serial_write_performed`",
+        "`wio_module_state_changed`",
+        "`postgres_write_performed`",
+        "`device_keys_changed`",
+        "`target_key_fingerprint`",
+        "`root_key_printed=false`",
+        "`raw_key_embedded=false`",
+        "`operator_approval_token_stored=false`",
+        "`SCOUT LORA KEY`",
+        "`KEY SYNCED`",
+        "LED8",
+        "LED9",
+        "LED10",
+    ):
+        assert token in source
+
+
+def test_runbook_documents_sx1303_gateway_gps_nmea_smoke() -> None:
+    source = read_runbook()
+
+    for token in (
+        "tools/pi_sx1303_gateway_smoke.py",
+        "SX1303 Gateway HAT SPI / chip-id RF preflight smoke",
+        "--spi-device /dev/spidev0.0",
+        "--hal-root /home/alexwang0315/Documents/sx1302_hal_rpi5-master",
+        "/data/scout/providers/lora/sx1303-gateway-smoke.jsonl",
+        "`util_chip_id`",
+        "`RF OK`",
+        "`NO RF TX`",
+        "LED7",
+        "packet_forwarder_started=false",
+        "diagnostic_gateway_evidence_only",
+        "0x0016c001f11f5f46",
+        "仍不代表已收到",
+    ):
+        assert token in source
+
+    for token in (
+        "tools/pi_sx1303_gateway_rx_smoke.py",
+        "SX1303 Gateway passive RX readiness smoke",
+        "--chirpstack-root /data/scout/providers/lora/chirpstack-docker",
+        "/data/scout/providers/lora/sx1303-gateway-rx-readiness.jsonl",
+        "`SCOUT LORA RX`",
+        "`RX READY NO UL`",
+        "不保存 raw log lines",
+        "不啟動 packet forwarder",
+        "不送 RF",
+        "不做 LoRaWAN join/uplink",
+        "LED8",
+        "LED9",
+    ):
+        assert token in source
+
+    for token in (
+        "tools/pi_sx1303_gateway_uplink_mqtt_tail.py",
+        "SX1303 Gateway passive MQTT uplink tail",
+        "application/+/device/+/event/up",
+        "as923_2/gateway/+/event/up",
+        "/data/scout/providers/lora/sx1303-gateway-uplink.jsonl",
+        "/data/scout/providers/lora/sx1303-gateway-uplink-tail-status.jsonl",
+        "不使用",
+        "mosquitto_pub",
+        "DevEUI",
+        "payload data 不寫入 JSONL",
+        "`WAIT UPLINK`",
+        "`UPLINK OK`",
+    ):
+        assert token in source
+
+    for token in (
+        "tools/pi_sx1303_gateway_gps_nmea_smoke.py",
+        "SX1303 Gateway HAT L76K GPS NMEA UART smoke",
+        "--ports /dev/serial0,/dev/ttyAMA0,/dev/ttyAMA10,/dev/ttyS0",
+        "--baud-rates 9600,38400,57600,115200",
+        "/data/scout/providers/lora/sx1303-gateway-gps-nmea-smoke.jsonl",
+        "SX1303 本身不是 NMEA 來源",
+        "L76K GNSS",
+        "`diagnostic_gateway_gnss_uart_only`",
+        "`nmea_ok`",
+        "`bad_stream`",
+        "`missing_device`",
+        "`gps_tty_path`",
+        "`selected_port`",
+        "`SCOUT GW GPS`",
+        "LED10",
+        "LED1",
+        "不是 Scout safety decision source",
+        "scout_gnss_hardware_observer.py",
+        "--gateway-jsonl /data/scout/providers/lora/sx1303-gateway-gps-nmea-smoke.jsonl",
+        "--grove-jsonl /data/scout/providers/gnss/manual-smoke.jsonl",
+        "/data/scout/admin/ingress/gnss_hardware/live_navigation_snapshot.json",
+        "`snapshot_status=no_valid_fix`",
+        "`live_hardware_read_performed=false`",
+        "`lorawan_uplink_allowed=false`",
+    ):
+        assert token in source

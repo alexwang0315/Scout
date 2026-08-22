@@ -213,6 +213,146 @@ def _add_pretrip_group(subparsers: argparse._SubParsersAction) -> None:
     import_gpx.add_argument("--authorized-by", default=None)
     import_gpx.add_argument("--output", type=Path, default=None)
     import_gpx.add_argument("--json", action="store_true")
+    route_context = pretrip_sub.add_parser("route-context-collect")
+    route_context.add_argument("--project-root", type=Path, default=None)
+    route_context.add_argument("--project-id", default=None)
+    route_context.add_argument("--workspace-root", type=Path, default=None)
+    route_context.add_argument("--limit-route-notes", type=int, default=80)
+    route_context.add_argument("--no-route-notes", action="store_true")
+    route_context.add_argument(
+        "--route-note-point-policy",
+        choices=("seed_only", "promote_representative"),
+        default="seed_only",
+    )
+    route_context.add_argument("--route-keyword", default=None)
+    route_context.add_argument("--no-briefing", action="store_true")
+    route_context.add_argument("--collected-at", default=None)
+    route_context.add_argument("--dry-run", action="store_true")
+    route_context.add_argument("--authorized-by", default=None)
+    route_context.add_argument("--output", type=Path, default=None)
+    route_context.add_argument("--json", action="store_true")
+    raster_label = pretrip_sub.add_parser("raster-label-adapter")
+    raster_label.add_argument("--project-root", type=Path, default=None)
+    raster_label.add_argument("--project-id", default=None)
+    raster_label.add_argument("--workspace-root", type=Path, default=None)
+    raster_label.add_argument("--source", "--source-path", dest="source_path", type=Path, required=True)
+    raster_label.add_argument("--output-ref", default=None)
+    raster_label.add_argument("--manifest-ref", default=None)
+    raster_label.add_argument("--collected-at", default=None)
+    raster_label.add_argument("--no-project-update", action="store_true")
+    raster_label.add_argument("--dry-run", action="store_true")
+    raster_label.add_argument("--authorized-by", default=None)
+    raster_label.add_argument("--output", type=Path, default=None)
+    raster_label.add_argument("--json", action="store_true")
+    route_architecture = pretrip_sub.add_parser("route-architecture-collect")
+    route_architecture.add_argument("--project-root", type=Path, default=None)
+    route_architecture.add_argument("--project-id", default=None)
+    route_architecture.add_argument("--workspace-root", type=Path, default=None)
+    route_architecture.add_argument("--current-cp-id", default=None)
+    route_architecture.add_argument("--current-time", default=None)
+    route_architecture.add_argument("--target-cp-id", default=None)
+    route_architecture.add_argument("--limit", type=int, default=12)
+    route_architecture.add_argument("--generated-at", default=None)
+    route_architecture.add_argument("--dry-run", action="store_true")
+    route_architecture.add_argument("--authorized-by", default=None)
+    route_architecture.add_argument("--output", type=Path, default=None)
+    route_architecture.add_argument("--json", action="store_true")
+    pace_fit = pretrip_sub.add_parser("pace-fit-collect")
+    pace_fit.add_argument("--project-root", type=Path, default=None)
+    pace_fit.add_argument("--project-id", default=None)
+    pace_fit.add_argument("--workspace-root", type=Path, default=None)
+    pace_fit.add_argument("--team-members-json", default=None)
+    pace_fit.add_argument("--build-from-capability", action="store_true")
+    pace_fit.add_argument("--capability-timeline-path", type=Path, default=None)
+    pace_fit.add_argument("--route-time-comparison-path", type=Path, default=None)
+    pace_fit.add_argument("--route-weather-package-path", type=Path, default=None)
+    pace_fit.add_argument("--weather-decision-candidates-path", type=Path, default=None)
+    pace_fit.add_argument("--member-id", default=None)
+    pace_fit.add_argument("--display-label", default=None)
+    pace_fit.add_argument("--pack-weight-kg", default=None)
+    pace_fit.add_argument("--load-impact-ratio", default=None)
+    pace_fit.add_argument("--weather-impact-ratio", default=None)
+    pace_fit.add_argument("--self-report-gap-ratio", default=None)
+    pace_fit.add_argument("--current-time", default=None)
+    pace_fit.add_argument("--next-cp-id", default=None)
+    pace_fit.add_argument("--minutes-to-next-cp", default=None)
+    pace_fit.add_argument("--current-delay-minutes", default=None)
+    pace_fit.add_argument("--leader-accepts-slowest-basis", default=None)
+    pace_fit.add_argument("--team-rest-sync", default=None)
+    pace_fit.add_argument("--generated-at", default=None)
+    pace_fit.add_argument("--dry-run", action="store_true")
+    pace_fit.add_argument("--authorized-by", default=None)
+    pace_fit.add_argument("--output", type=Path, default=None)
+    pace_fit.add_argument("--json", action="store_true")
+    boss_points = pretrip_sub.add_parser("boss-points-synthesize")
+    boss_points.add_argument("--project-root", type=Path, default=None)
+    boss_points.add_argument("--project-id", default=None)
+    boss_points.add_argument("--workspace-root", type=Path, default=None)
+    boss_points.add_argument("--top-n", type=int, default=5)
+    boss_points.add_argument("--route-note-radius-m", type=float, default=300.0)
+    boss_points.add_argument("--risk-window-m", type=float, default=300.0)
+    boss_points.add_argument("--slow-passage-min-span-m", type=float, default=500.0)
+    boss_points.add_argument("--pressure-profile-bin-m", type=float, default=500.0)
+    boss_points.add_argument("--generated-at", default=None)
+    boss_points.add_argument("--dry-run", action="store_true")
+    boss_points.add_argument("--authorized-by", default=None)
+    boss_points.add_argument("--output", type=Path, default=None)
+    boss_points.add_argument("--json", action="store_true")
+    navigation_terrain = pretrip_sub.add_parser("navigation-terrain-collect")
+    navigation_terrain.add_argument("--project-root", type=Path, default=None)
+    navigation_terrain.add_argument("--project-id", default=None)
+    navigation_terrain.add_argument("--workspace-root", type=Path, default=None)
+    navigation_terrain.add_argument("--offline-map-downloaded", default=None)
+    navigation_terrain.add_argument("--gpx-loaded-on-device", default=None)
+    navigation_terrain.add_argument("--contour-skill-confirmed", default=None)
+    navigation_terrain.add_argument("--terrain-feature-skill-confirmed", default=None)
+    navigation_terrain.add_argument("--junction-points-known", default=None)
+    navigation_terrain.add_argument("--retreat-direction-understood", default=None)
+    navigation_terrain.add_argument("--backup-positioning-available", default=None)
+    navigation_terrain.add_argument("--terrain-risk-layers-understood", default=None)
+    navigation_terrain.add_argument("--team-map-user-count", default=None)
+    navigation_terrain.add_argument("--generated-at", default=None)
+    navigation_terrain.add_argument("--dry-run", action="store_true")
+    navigation_terrain.add_argument("--authorized-by", default=None)
+    navigation_terrain.add_argument("--output", type=Path, default=None)
+    navigation_terrain.add_argument("--json", action="store_true")
+    weather_decision = pretrip_sub.add_parser("weather-decision-collect")
+    weather_decision.add_argument("--project-root", type=Path, default=None)
+    weather_decision.add_argument("--project-id", default=None)
+    weather_decision.add_argument("--workspace-root", type=Path, default=None)
+    weather_decision.add_argument("--weather-points", dest="weather_points_path", default=None)
+    weather_decision.add_argument("--warnings", dest="warnings_path", default=None)
+    weather_decision.add_argument("--route-segments", dest="route_segments_path", default=None)
+    weather_decision.add_argument("--default-township", default=None)
+    weather_decision.add_argument("--generated-at", default=None)
+    weather_decision.add_argument("--valid-until", default=None)
+    weather_decision.add_argument("--provider", default="workspace_local_weather_points")
+    weather_decision.add_argument("--dry-run", action="store_true")
+    weather_decision.add_argument("--authorized-by", default=None)
+    weather_decision.add_argument("--output", type=Path, default=None)
+    weather_decision.add_argument("--json", action="store_true")
+    contextual_permission = pretrip_sub.add_parser("contextual-permission-collect")
+    contextual_permission.add_argument("--project-root", type=Path, default=None)
+    contextual_permission.add_argument("--project-id", default=None)
+    contextual_permission.add_argument("--workspace-root", type=Path, default=None)
+    contextual_permission.add_argument("--current-time", default=None)
+    contextual_permission.add_argument("--current-cp-id", default=None)
+    contextual_permission.add_argument("--next-cp-id", default=None)
+    contextual_permission.add_argument("--communication-status", default=None)
+    contextual_permission.add_argument("--equipment-status", default=None)
+    contextual_permission.add_argument("--remaining-safety-buffer-minutes", default=None)
+    contextual_permission.add_argument("--requested-duration-minutes", default=None)
+    contextual_permission.add_argument("--current-delay-minutes", default=None)
+    contextual_permission.add_argument("--next-segment-uncertainty-minutes", default=None)
+    contextual_permission.add_argument("--weather-reserve-minutes", default=None)
+    contextual_permission.add_argument("--daylight-reserve-minutes", default=None)
+    contextual_permission.add_argument("--retreat-reserve-minutes", default=None)
+    contextual_permission.add_argument("--slowest-member-reserve-minutes", default=None)
+    contextual_permission.add_argument("--generated-at", default=None)
+    contextual_permission.add_argument("--dry-run", action="store_true")
+    contextual_permission.add_argument("--authorized-by", default=None)
+    contextual_permission.add_argument("--output", type=Path, default=None)
+    contextual_permission.add_argument("--json", action="store_true")
     layers = pretrip_sub.add_parser("prepare-layers")
     layers.add_argument("--project-root", type=Path, default=None)
     layers.add_argument("--project-id", default=None)
@@ -555,6 +695,174 @@ def _tool_request_for_args(args: argparse.Namespace) -> tuple[str, dict[str, Any
             "workspace_root": str(args.workspace_root),
             **({"reference_dir": str(args.reference_dir)} if args.reference_dir else {}),
         }
+    if group == "pretrip" and args.pretrip_command == "route-context-collect":
+        request = {
+            "include_route_notes": not args.no_route_notes,
+            "limit_route_notes": args.limit_route_notes,
+            "route_note_point_policy": args.route_note_point_policy,
+            "write_briefing": not args.no_briefing,
+        }
+        _set_path(request, "project_root", args.project_root)
+        _set_path(request, "workspace_root", args.workspace_root)
+        if args.project_id:
+            request["project_id"] = args.project_id
+        if args.route_keyword:
+            request["route_keyword"] = args.route_keyword
+        if args.collected_at:
+            request["collected_at"] = args.collected_at
+        return "scout.pretrip.route_context_collect", request
+    if group == "pretrip" and args.pretrip_command == "raster-label-adapter":
+        request = {
+            "source_path": str(args.source_path),
+            "update_project": not args.no_project_update,
+        }
+        _set_path(request, "project_root", args.project_root)
+        _set_path(request, "workspace_root", args.workspace_root)
+        if args.project_id:
+            request["project_id"] = args.project_id
+        if args.output_ref:
+            request["output_ref"] = args.output_ref
+        if args.manifest_ref:
+            request["manifest_ref"] = args.manifest_ref
+        if args.collected_at:
+            request["collected_at"] = args.collected_at
+        return "scout.pretrip.raster_label_adapter", request
+    if group == "pretrip" and args.pretrip_command == "route-architecture-collect":
+        request = {"limit": args.limit}
+        _set_path(request, "project_root", args.project_root)
+        _set_path(request, "workspace_root", args.workspace_root)
+        if args.project_id:
+            request["project_id"] = args.project_id
+        if args.current_cp_id:
+            request["current_cp_id"] = args.current_cp_id
+        if args.current_time:
+            request["current_time"] = args.current_time
+        if args.target_cp_id:
+            request["target_cp_id"] = args.target_cp_id
+        if args.generated_at:
+            request["generated_at"] = args.generated_at
+        return "scout.pretrip.route_architecture_collect", request
+    if group == "pretrip" and args.pretrip_command == "pace-fit-collect":
+        request = {}
+        _set_path(request, "project_root", args.project_root)
+        _set_path(request, "workspace_root", args.workspace_root)
+        if args.project_id:
+            request["project_id"] = args.project_id
+        if args.team_members_json:
+            members = json.loads(args.team_members_json)
+            if not isinstance(members, list):
+                raise ValueError("--team-members-json must decode to a list")
+            request["team_members"] = members
+        if args.build_from_capability:
+            request["build_coefficients_from_capability"] = True
+        for key in (
+            "capability_timeline_path",
+            "route_time_comparison_path",
+            "route_weather_package_path",
+            "weather_decision_candidates_path",
+        ):
+            _set_path(request, key, getattr(args, key))
+        for key in (
+            "member_id",
+            "display_label",
+            "pack_weight_kg",
+            "load_impact_ratio",
+            "weather_impact_ratio",
+            "self_report_gap_ratio",
+            "current_time",
+            "next_cp_id",
+            "minutes_to_next_cp",
+            "current_delay_minutes",
+            "leader_accepts_slowest_basis",
+            "team_rest_sync",
+            "generated_at",
+        ):
+            value = getattr(args, key)
+            if value is not None:
+                request[key] = value
+        return "scout.pretrip.pace_fit_collect", request
+    if group == "pretrip" and args.pretrip_command == "boss-points-synthesize":
+        request = {
+            "top_n": args.top_n,
+            "route_note_radius_m": args.route_note_radius_m,
+            "risk_window_m": args.risk_window_m,
+            "slow_passage_min_span_m": args.slow_passage_min_span_m,
+            "pressure_profile_bin_m": args.pressure_profile_bin_m,
+        }
+        _set_path(request, "project_root", args.project_root)
+        _set_path(request, "workspace_root", args.workspace_root)
+        if args.project_id:
+            request["project_id"] = args.project_id
+        if args.generated_at:
+            request["generated_at"] = args.generated_at
+        return "scout.pretrip.boss_points_synthesize", request
+    if group == "pretrip" and args.pretrip_command == "navigation-terrain-collect":
+        request = {}
+        _set_path(request, "project_root", args.project_root)
+        _set_path(request, "workspace_root", args.workspace_root)
+        if args.project_id:
+            request["project_id"] = args.project_id
+        for key in (
+            "offline_map_downloaded",
+            "gpx_loaded_on_device",
+            "contour_skill_confirmed",
+            "terrain_feature_skill_confirmed",
+            "junction_points_known",
+            "retreat_direction_understood",
+            "backup_positioning_available",
+            "terrain_risk_layers_understood",
+            "team_map_user_count",
+            "generated_at",
+        ):
+            value = getattr(args, key)
+            if value is not None:
+                request[key] = value
+        return "scout.pretrip.navigation_terrain_collect", request
+    if group == "pretrip" and args.pretrip_command == "weather-decision-collect":
+        request = {"provider": args.provider}
+        _set_path(request, "project_root", args.project_root)
+        _set_path(request, "workspace_root", args.workspace_root)
+        if args.project_id:
+            request["project_id"] = args.project_id
+        if args.weather_points_path:
+            request["weather_points_path"] = args.weather_points_path
+        if args.warnings_path:
+            request["warnings_path"] = args.warnings_path
+        if args.route_segments_path:
+            request["route_segments_path"] = args.route_segments_path
+        if args.default_township:
+            request["default_township"] = args.default_township
+        if args.generated_at:
+            request["generated_at"] = args.generated_at
+        if args.valid_until:
+            request["valid_until"] = args.valid_until
+        return "scout.pretrip.weather_decision_collect", request
+    if group == "pretrip" and args.pretrip_command == "contextual-permission-collect":
+        request = {}
+        _set_path(request, "project_root", args.project_root)
+        _set_path(request, "workspace_root", args.workspace_root)
+        if args.project_id:
+            request["project_id"] = args.project_id
+        for key in (
+            "current_time",
+            "current_cp_id",
+            "next_cp_id",
+            "communication_status",
+            "equipment_status",
+            "remaining_safety_buffer_minutes",
+            "requested_duration_minutes",
+            "current_delay_minutes",
+            "next_segment_uncertainty_minutes",
+            "weather_reserve_minutes",
+            "daylight_reserve_minutes",
+            "retreat_reserve_minutes",
+            "slowest_member_reserve_minutes",
+            "generated_at",
+        ):
+            value = getattr(args, key)
+            if value is not None:
+                request[key] = value
+        return "scout.pretrip.contextual_permission_collect", request
     if group == "pretrip" and args.pretrip_command == "prepare-layers":
         request = {"profile": args.profile}
         _set_path(request, "project_root", args.project_root)

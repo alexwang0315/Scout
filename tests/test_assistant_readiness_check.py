@@ -92,6 +92,42 @@ def test_forbidden_assistant_foundation_tokens_fail_readiness(
     assert expected_missing in result["missing_required_artifacts"]
 
 
+def test_provider_network_adapter_is_allowed_but_runtime_mutation_is_not(
+    tmp_path: Path,
+) -> None:
+    _write_complete_minimal_repo(tmp_path)
+    provider_path = tmp_path / "assistant_pydantic_provider.py"
+    provider_path.write_text(
+        "import urllib.request\nObservedFactWriter\n",
+        encoding="utf-8",
+    )
+
+    result = build_readiness_check(tmp_path)
+    missing = result["checks"]["assistant_foundation_static_boundaries"]["missing"]
+
+    assert not any(item.endswith(":urllib") for item in missing)
+    assert (
+        "assistant_foundation_forbidden_token:assistant_pydantic_provider.py:ObservedFactWriter"
+        in missing
+    )
+
+
+def test_ordinary_request_budget_names_do_not_look_like_network_effects(
+    tmp_path: Path,
+) -> None:
+    _write_complete_minimal_repo(tmp_path)
+    _write(
+        tmp_path / "assistant_provider.py",
+        "requests = []\nmax_model_requests = 10\nrequest_count = len(requests)\n",
+    )
+
+    result = build_readiness_check(tmp_path)
+    missing = result["checks"]["assistant_foundation_static_boundaries"]["missing"]
+
+    assert not any(item.endswith(":requests") for item in missing)
+    assert result["ok"] is True
+
+
 def test_missing_spec_server_and_runbook_tokens_are_reported(tmp_path: Path) -> None:
     _write_complete_minimal_repo(tmp_path)
     _write(tmp_path / "docs/specs/scout-cross-surface-ai-assistant.md", "Milestone 10 only")

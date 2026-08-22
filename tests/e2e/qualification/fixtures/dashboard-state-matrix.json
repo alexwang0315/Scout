@@ -1,0 +1,77 @@
+{
+  "schema": "scout.dashboardQualificationFixtureMatrix.v1",
+  "fixtures": [
+    {
+      "id": "dashboard-ready",
+      "project_id": "chilai_nanhua_day1",
+      "state": "ready",
+      "surfaces": ["navigation", "permission", "architecture", "weather"],
+      "candidate_only": true,
+      "runtime_safety_truth": false,
+      "writes_allowed_during_qualification": false
+    },
+    {
+      "id": "permission-degraded",
+      "project_id": "qualification_degraded",
+      "state": "degraded",
+      "surfaces": ["permission"],
+      "candidate_only": true,
+      "runtime_safety_truth": false,
+      "writes_allowed_during_qualification": false
+    },
+    {
+      "id": "permission-blocked",
+      "project_id": "qualification_blocked",
+      "state": "blocked",
+      "surfaces": ["permission"],
+      "candidate_only": true,
+      "runtime_safety_truth": false,
+      "writes_allowed_during_qualification": false
+    },
+    {
+      "id": "permission-stale",
+      "project_id": "qualification_stale",
+      "state": "stale",
+      "surfaces": ["permission"],
+      "candidate_only": true,
+      "runtime_safety_truth": false,
+      "writes_allowed_during_qualification": false
+    },
+    {
+      "id": "navigation-partial",
+      "project_id": "qualification_partial",
+      "state": "partial",
+      "surfaces": ["navigation"],
+      "candidate_only": true,
+      "runtime_safety_truth": false,
+      "writes_allowed_during_qualification": false
+    },
+    {
+      "id": "evidence-zero",
+      "project_id": "qualification_zero_evidence",
+      "state": "zero_evidence",
+      "surfaces": ["diagnostic", "evidence"],
+      "candidate_only": true,
+      "runtime_safety_truth": false,
+      "writes_allowed_during_qualification": false
+    },
+    {
+      "id": "assistant-enabled",
+      "project_id": "qualification_assistant_enabled",
+      "state": "assistant_enabled",
+      "surfaces": ["assistant", "diagnostic"],
+      "candidate_only": true,
+      "runtime_safety_truth": false,
+      "writes_allowed_during_qualification": false
+    },
+    {
+      "id": "assistant-disabled",
+      "project_id": "qualification_assistant_disabled",
+      "state": "assistant_disabled",
+      "surfaces": ["assistant", "diagnostic"],
+      "candidate_only": true,
+      "runtime_safety_truth": false,
+      "writes_allowed_during_qualification": false
+    }
+  ]
+}

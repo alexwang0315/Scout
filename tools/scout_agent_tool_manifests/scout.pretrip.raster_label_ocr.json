@@ -1,0 +1,58 @@
+{
+  "id": "scout.pretrip.raster_label_ocr",
+  "version": "0.1.0",
+  "description": "Run optional local OCR over cached Rudy/Rudy+TW raster tiles and emit explicit candidate-only OCR JSON for the raster label adapter.",
+  "command": {
+    "argv": [
+      "{python}",
+      "-m",
+      "scout_agent_builtin_tools",
+      "pretrip-raster-label-ocr",
+      "--input",
+      "{input}",
+      "--json"
+    ],
+    "dry_run_argument": "--dry-run"
+  },
+  "mode": "workspace_write",
+  "input_schema_ref": "schemas/scout_agent/pretrip_raster_label_ocr.request.json",
+  "output_schema_ref": "schemas/scout_agent/tool_result.json",
+  "allowed_reads": [
+    "pretrip.workspace.project",
+    "pretrip.workspace.outputs.layers.plans.raster_label_plan",
+    "pretrip.workspace.outputs.layers.admin_imagery_tile_cache_plan",
+    "pretrip.workspace.local_raster_tile_cache"
+  ],
+  "allowed_writes": [
+    "pretrip.workspace.outputs.layers.raster_label_ocr_output",
+    "pretrip.workspace.project_refs"
+  ],
+  "forbidden_writes": [
+    "pretrip.workspace.candidates.route_context_points",
+    "pretrip.workspace.candidates.route_mileage_k_anchors",
+    "phase1.runtime",
+    "phase2.brain.observed_facts",
+    "live.safety_api"
+  ],
+  "requires_authorization": {
+    "kind": "user_or_operator"
+  },
+  "trace": {
+    "required": true,
+    "event_kind": "agent_tool_invocation"
+  },
+  "metadata": {
+    "standard_alignment": "SCOUT_OUTDOOR_AI_AGENT_STANDARD Sec. 6 Route Context Intelligence",
+    "workspace_layout_section": "Outdoor AI Agent Data Placement",
+    "network_policy": "no_live_network_fetch",
+    "preferred_engine": "tesseract",
+    "preferred_sources": ["rudy", "rudy_twmap"],
+    "explicit_adapter_input_output_ref": "outputs/layers/raster_label_ocr_output.json",
+    "adapter_tool_id": "scout.pretrip.raster_label_adapter",
+    "route_context_tool_id": "scout.pretrip.route_context_collect",
+    "candidate_only": true,
+    "runtime_safety_truth": false,
+    "raw_payloads_embedded": false,
+    "raw_tiles_embedded": false
+  }
+}

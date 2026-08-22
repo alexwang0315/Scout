@@ -1,4 +1,5 @@
 import os
+import json
 import shutil
 import tempfile
 import unittest
@@ -9,12 +10,15 @@ from fastapi.testclient import TestClient
 
 from admin_after_action import build_admin_case_view
 from admin_api import create_admin_app
+from pretrip_boss_point_synthesis import synthesize_pretrip_boss_points
+from pretrip_mileage_tag_alignment import align_pretrip_workspace_mileage_tags
 from pretrip_admin_view import build_pretrip_admin_view
 from scout_energy_models import load_wearable_activity_summaries
 from scout_energy_reserve import write_energy_reserve_artifacts
 
 
 ROOT = Path(__file__).resolve().parents[1]
+SCOUT_AGENT_TOOL_MANIFEST_DIR = ROOT / "tools" / "scout_agent_tool_manifests"
 CASE_ID = "scout_260512_field_golden"
 PRETRIP_CASE_ID = "chilai_nanhua_day1"
 WEARABLE_FIXTURE_ROOT = ROOT / "tests" / "fixtures" / "wearables"
@@ -53,18 +57,24 @@ class AdminAfterActionTests(unittest.TestCase):
                 "corridors",
                 "overpass",
                 "route",
+                "completed-track",
                 "reference-tracks",
                 "retreat",
                 "segments",
-                "risk-score",
                 "risk-ribbon",
                 "risk-heatmap",
                 "risk-delta",
+                "soil-moisture",
+                "antecedent-rain",
+                "cwa-qpf",
+                "risk-score",
                 "checkpoints",
                 "pois",
                 "hazards",
-                "mcp",
                 "route-notes",
+                "cwa-weather",
+                "mcp",
+                "boss-points",
                 "events",
                 "weather-api",
             ],
@@ -77,6 +87,11 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertTrue(view["map_layers"][-1]["label_zh"].startswith("氣象 API"))
         self.assertFalse(view["map_layers"][-1]["available"])
         self.assertFalse(view["map_layers"][-1]["default_enabled"])
+        boss_layer = next(
+            layer for layer in view["map_layers"] if layer["layer_id"] == "boss-points"
+        )
+        self.assertFalse(boss_layer["available"])
+        self.assertFalse(boss_layer["runtime_safety_truth"])
         self.assertEqual(view["replay"]["observations_processed"], 1568)
         self.assertEqual(view["replay"]["safety_level"], "L0_NORMAL")
         self.assertEqual(view["replay"]["checkpoint_count"], 10)
@@ -143,6 +158,21 @@ class AdminAfterActionTests(unittest.TestCase):
             "/admin/debug",
         ])
         self.assertEqual(payload["debug_projection"]["event_count"], 4)
+        state_store_projection = payload["runtime_safety_state_store_projection"]
+        self.assertEqual(
+            state_store_projection["artifact_kind"],
+            "scout_runtime_state_store_replay_projection",
+        )
+        self.assertEqual(state_store_projection["status"], "missing")
+        self.assertEqual(state_store_projection["surface_targets"], [
+            "/admin",
+            "/admin/debug",
+        ])
+        self.assertFalse(state_store_projection["boundary"]["runtime_safety_truth"])
+        self.assertFalse(
+            state_store_projection["boundary"]["phase1_l0_l4_state_mutated"]
+        )
+        self.assertFalse(state_store_projection["boundary"]["safety_api_called"])
         self.assertEqual(payload["capability_timeline"]["evidence_type"], "post_analysis_capability")
         self.assertEqual(payload["capability_timeline"]["route_family"], "nenggao_andongjun")
         self.assertEqual(payload["capability_timeline"]["edge_count"], 73)
@@ -186,7 +216,17 @@ class AdminAfterActionTests(unittest.TestCase):
             payload["gis_perception_timeline"]["counts"]["checkpoint_candidate_count"],
             111,
         )
-        self.assertEqual(payload["scout_agent_skills"]["counts"]["tool_count"], 45)
+        expected_tool_count = len(
+            [
+                *SCOUT_AGENT_TOOL_MANIFEST_DIR.glob("*.json"),
+                *SCOUT_AGENT_TOOL_MANIFEST_DIR.glob("*.yaml"),
+                *SCOUT_AGENT_TOOL_MANIFEST_DIR.glob("*.yml"),
+            ]
+        )
+        self.assertEqual(
+            payload["scout_agent_skills"]["counts"]["tool_count"],
+            expected_tool_count,
+        )
         self.assertFalse(
             payload["scout_agent_skills"]["boundary"]["tool_execution_allowed_from_ui"]
         )
@@ -202,6 +242,109 @@ class AdminAfterActionTests(unittest.TestCase):
             ]
         )
 
+    def test_pretrip_admin_case_view_includes_boss_points_when_workspace_has_artifact(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_root = Path(temp_dir) / PRETRIP_CASE_ID
+            shutil.copytree(
+                ROOT / "tests" / "fixtures" / "pretrip" / "projects" / PRETRIP_CASE_ID,
+                project_root,
+            )
+            synthesize_pretrip_boss_points(
+                project_root,
+                generated_at="2099-06-07T08:00:00Z",
+            )
+            align_pretrip_workspace_mileage_tags(
+                project_root,
+                generated_at="2099-06-07T08:00:00Z",
+            )
+
+            view = build_admin_case_view(
+                PRETRIP_CASE_ID,
+                root=ROOT,
+                pretrip_project_root=project_root,
+            )
+            pretrip_view = build_pretrip_admin_view(
+                PRETRIP_CASE_ID,
+                root=ROOT,
+                project_root=project_root,
+            )
+
+        self.assertEqual(view["boss_points"]["counts"]["boss_point_count"], 5)
+        self.assertEqual(
+            view["mileage_tag_alignment"]["counts"]["tag_count"],
+            pretrip_view["mileage_tag_alignment"]["counts"]["tag_count"],
+        )
+        self.assertEqual(
+            len(view["mileage_tag_alignment"]["timeline_items"]),
+            len(pretrip_view["mileage_tag_alignment"]["timeline_items"]),
+        )
+        self.assertEqual(
+            {
+                item["category_id"]: item["count"]
+                for item in view["evidence_timeline"]["categories"]
+            }["mileage"],
+            {
+                item["category_id"]: item["count"]
+                for item in pretrip_view["evidence_timeline"]["categories"]
+            }["mileage"],
+        )
+        first_boss = view["boss_points"]["boss_points"][0]
+        self.assertTrue(first_boss["label"].startswith("高壓路段 "))
+        self.assertEqual(
+            first_boss["display_label"],
+            f'{first_boss["display_theme"]["alias"]} {first_boss["label"]}',
+        )
+        self.assertEqual(
+            first_boss["coordinate_source"],
+            "overpass_risk_ribbon_route_distance_interpolation",
+        )
+        machao_boss = next(
+            point
+            for point in view["boss_points"]["boss_points"]
+            if point["display_theme"]["alias"] == "馬超壁"
+        )
+        self.assertTrue(machao_boss["display_label"].startswith("馬超壁 "))
+        self.assertTrue(machao_boss["map_label"].startswith("馬超壁"))
+        self.assertTrue(machao_boss["display_mileage"]["label"])
+        self.assertIsNotNone(machao_boss["lat"])
+        self.assertIsNotNone(machao_boss["lon"])
+        self.assertEqual(
+            machao_boss["coordinate_source"],
+            "overpass_risk_ribbon_route_distance_interpolation",
+        )
+        boss_layer = next(
+            layer for layer in view["map_layers"] if layer["layer_id"] == "boss-points"
+        )
+        self.assertTrue(boss_layer["available"])
+        self.assertEqual(boss_layer["source_path"], "outputs/boss_points.geojson")
+        self.assertFalse(view["boss_points"]["boundary"]["runtime_safety_truth"])
+
+    def test_admin_case_api_can_project_any_workspace_pretrip_project(self):
+        custom_project_id = "chilai_nanhua_day1_tryimport_scoutAI_1"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace_root = Path(temp_dir)
+            project_root = workspace_root / custom_project_id
+            shutil.copytree(
+                ROOT / "tests" / "fixtures" / "pretrip" / "projects" / PRETRIP_CASE_ID,
+                project_root,
+            )
+            project_path = project_root / "project.json"
+            project = json.loads(project_path.read_text(encoding="utf-8"))
+            project["project_id"] = custom_project_id
+            project_path.write_text(json.dumps(project), encoding="utf-8")
+
+            client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+            response = client.get(f"/admin/cases/{custom_project_id}")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["case_id"], custom_project_id)
+        self.assertEqual(payload["project_id"], custom_project_id)
+        self.assertEqual(payload["admin_surface_projection"]["surface_targets"], [
+            "/admin",
+            "/admin/pretrip",
+            "/admin/debug",
+        ])
     def test_pretrip_project_api_energy_reserve_monitor_reads_loaded_health_baseline(self):
         activities = load_wearable_activity_summaries(WEARABLE_FIXTURES, root=ROOT)
         with tempfile.TemporaryDirectory() as tmpdir, patch.dict(
@@ -577,6 +720,136 @@ class AdminAfterActionTests(unittest.TestCase):
             True,
         )
 
+    def test_completed_trip_recordings_are_scoped_to_requested_workspace(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            workspace_root = Path(temp_dir) / "workspaces"
+            project_id = "dongqing_project"
+            project_root = workspace_root / project_id
+            (project_root / "candidates").mkdir(parents=True)
+            recorded = (
+                project_root
+                / "post_analysis"
+                / "completed_trips"
+                / "recorded"
+                / "primary_user"
+            )
+            recorded.mkdir(parents=True)
+            completed_gpx = recorded / "completed.gpx"
+            completed_gpx.write_text(
+                """<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="scout-test" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><name>Dongqing completed</name><trkseg>
+    <trkpt lat="23.000" lon="121.000"><ele>100</ele><time>2026-01-01T00:00:00Z</time></trkpt>
+    <trkpt lat="23.010" lon="121.000"><ele>150</ele><time>2026-01-01T00:30:00Z</time></trkpt>
+    <trkpt lat="23.020" lon="121.000"><ele>120</ele><time>2026-01-01T01:00:00Z</time></trkpt>
+  </trkseg></trk>
+</gpx>
+""",
+                encoding="utf-8",
+            )
+            checkpoints = [
+                {
+                    "candidate_id": "cp.start",
+                    "label": "Start",
+                    "lat": 23.000,
+                    "lon": 121.000,
+                    "arrival_radius_m": 50,
+                },
+                {
+                    "candidate_id": "cp.finish",
+                    "label": "Finish",
+                    "lat": 23.020,
+                    "lon": 121.000,
+                    "arrival_radius_m": 50,
+                },
+            ]
+            segments = [
+                {
+                    "candidate_id": "seg.001",
+                    "from_candidate_id": "cp.start",
+                    "to_candidate_id": "cp.finish",
+                    "distance_m": 2224.0,
+                }
+            ]
+            (project_root / "candidates" / "checkpoints.json").write_text(
+                json.dumps(checkpoints),
+                encoding="utf-8",
+            )
+            (project_root / "candidates" / "segments.json").write_text(
+                json.dumps(segments),
+                encoding="utf-8",
+            )
+            (project_root / "project.json").write_text(
+                json.dumps(
+                    {
+                        "project_id": project_id,
+                        "checkpoint_candidates_ref": "candidates/checkpoints.json",
+                        "segment_candidates_ref": "candidates/segments.json",
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            client = TestClient(
+                create_admin_app(pretrip_workspace_root=workspace_root)
+            )
+            catalog_response = client.get(
+                "/admin/post-analysis/completed-trip-recordings",
+                params={"projectId": project_id},
+            )
+
+            self.assertEqual(catalog_response.status_code, 200)
+            catalog = catalog_response.json()
+            self.assertEqual(catalog["project_id"], project_id)
+            self.assertEqual(catalog["case_id"], project_id)
+            self.assertEqual(catalog["storage_scope"], "workspace")
+            self.assertEqual(catalog["recording_count"], 1)
+            self.assertEqual(
+                Path(catalog["recording_set_root"]).resolve(),
+                (
+                    project_root
+                    / "post_analysis"
+                    / "completed_trips"
+                    / "recorded"
+                ).resolve(),
+            )
+
+            recording_id = catalog["recordings"][0]["recording_id"]
+            selected = client.post(
+                f"/admin/post-analysis/completed-trip-recordings/{recording_id}/select",
+                params={"projectId": project_id},
+            )
+
+            self.assertEqual(selected.status_code, 200)
+            result = selected.json()
+            self.assertEqual(result["project_id"], project_id)
+            self.assertEqual(result["case_id"], project_id)
+            active_gpx = Path(result["paths"]["active_completed_track_gpx"])
+            self.assertTrue(active_gpx.is_file())
+            self.assertTrue(
+                active_gpx.resolve().is_relative_to(project_root.resolve())
+            )
+            self.assertTrue(
+                Path(result["paths"]["outputs_dir"])
+                .resolve()
+                .is_relative_to(project_root.resolve())
+            )
+            refreshed = client.get(
+                "/admin/post-analysis/completed-trip-recordings",
+                params={"projectId": project_id},
+            )
+            self.assertEqual(refreshed.status_code, 200)
+            refreshed_payload = refreshed.json()
+            self.assertEqual(
+                refreshed_payload["active_recording"]["recording_id"],
+                recording_id,
+            )
+            unsafe = client.get(
+                "/admin/post-analysis/completed-trip-recordings",
+                params={"projectId": "../dongqing_project"},
+            )
+            self.assertEqual(unsafe.status_code, 422)
+
     def test_admin_page_serves_presentation_layer(self):
         client = TestClient(create_admin_app())
 
@@ -585,9 +858,16 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers["cache-control"], "no-store")
         self.assertIn("Scout Phase 1 Admin", response.text)
-        self.assertIn(f"/admin/cases/${{CASE_ID}}", response.text)
+        self.assertIn("/admin/cases/${CASE_ID}", response.text)
         self.assertIn('id="energyReserveMonitor"', response.text)
         self.assertIn("renderEnergyReserveMonitor", response.text)
+        self.assertIn('id="runtimeSafetyStateStorePanel"', response.text)
+        self.assertIn('id="runtimeSafetyStateStoreList"', response.text)
+        self.assertIn("renderRuntimeSafetyStateStorePanel", response.text)
+        self.assertIn('"Runtime State Store"', response.text)
+        self.assertIn("runtime_safety_state_store_projection", response.text)
+        self.assertIn("item.snapshot_id", response.text)
+        self.assertIn("item?.map_target_ids", response.text)
         self.assertIn("hoverHint", response.text)
         self.assertIn("height: 100vh", response.text)
         self.assertIn("max-width: 100vw", response.text)
@@ -632,13 +912,53 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertIn("function renderTerrainBitmapOverlays", response.text)
         self.assertIn("function renderOverpassEvidence", response.text)
         self.assertIn("class: \"terrain-raster-overlay\"", response.text)
+        self.assertIn(".terrain-raster-overlay", response.text)
+        self.assertIn("image-rendering: auto;", response.text)
         self.assertIn("overpass-corridor", response.text)
         self.assertIn("overpass-hazard", response.text)
         self.assertIn("overpass-poi", response.text)
+        self.assertIn(
+            "const overpassGroups = view.overpass_evidence?.category_groups",
+            response.text,
+        )
+        self.assertIn("Overpass Trail Corridors", response.text)
+        self.assertIn("Overpass Water Sources", response.text)
+        self.assertIn("Overpass Terrain Risk", response.text)
+        self.assertIn('data-layer="boss-points" checked> Boss</label>', response.text)
+        self.assertIn("view.boss_points?.boss_points || []", response.text)
+        self.assertIn(
+            "item.boss_point_id || item.source_mcp_id || item.source_candidate_id",
+            response.text,
+        )
+        self.assertIn("function isBossPoint(item)", response.text)
+        self.assertIn("function bossDisplayText(item)", response.text)
+        self.assertIn("function bossSummaryText(item)", response.text)
+        self.assertIn("function bossDetailPayload(item)", response.text)
+        self.assertIn('canonical_centerline: "overpass_risk_ribbon"', response.text)
+        self.assertIn('gpx_evidence_axis: "projected_to_overpass_risk_ribbon"', response.text)
+        self.assertIn("label: bossDisplayText(item)", response.text)
+        self.assertIn("sublabel: bossSummaryText(item)", response.text)
+        self.assertIn(
+            'String(point.challenge_fit?.band || "").includes("not_ready")',
+            response.text,
+        )
+        self.assertIn('tagEvidenceNode(circle, point, "boss-points")', response.text)
         self.assertIn("jsonPane", response.text)
         self.assertIn("narrativePanel", response.text)
         self.assertIn("layer-menu", response.text)
         self.assertIn('aria-label="Map layer controls"', response.text)
+        self.assertIn('class="layer-preset-row" aria-label="Layer presets"', response.text)
+        self.assertIn('data-layer-preset="risk-review"', response.text)
+        self.assertIn('data-layer-preset="mcp-review"', response.text)
+        self.assertIn('data-layer-preset="route-clean"', response.text)
+        self.assertIn('data-layer-preset="debug-replay"', response.text)
+        self.assertIn(
+            '[...layerInputs].filter(input => !input.disabled)',
+            response.text,
+        )
+        self.assertIn('data-layer-preset="raster-check"', response.text)
+        self.assertIn('class="layer-advanced"', response.text)
+        self.assertIn("Advanced layers", response.text)
         self.assertIn("assistant-drawer", response.text)
         self.assertIn('<details class="assistant-drawer" open>', response.text)
         self.assertIn('aria-label="Open read-only after-action assistant"', response.text)
@@ -651,7 +971,10 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertIn("narrativeFacts", response.text)
         self.assertIn("chilai_nanhua_day1 is shown as read-only GPX projection evidence", response.text)
         self.assertIn("not Phase 1 runtime safety truth", response.text)
-        self.assertIn('const CASE_ID = "chilai_nanhua_day1"', response.text)
+        self.assertIn('const DEFAULT_CASE_ID = "chilai_nanhua_day1"', response.text)
+        self.assertIn('new URLSearchParams(window.location.search).get("caseId")', response.text)
+        self.assertIn('new URLSearchParams(window.location.search).get("projectId")', response.text)
+        self.assertIn("const CASE_ID = /^[A-Za-z0-9_.-]+$/.test(CASE_ID_PARAM)", response.text)
         self.assertIn("nextPlanCandidatePanel", response.text)
         self.assertNotIn("completedTripScenarioPanel", response.text)
         self.assertNotIn("Completed Trip Scenario", response.text)
@@ -678,8 +1001,11 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertIn("Evidence Timeline", response.text)
         self.assertIn('id="evidenceTreeTabs"', response.text)
         self.assertIn("EVIDENCE_TREE_TABS", response.text)
-        self.assertIn("details.open = false;", response.text)
-        self.assertNotIn("details.open = open;", response.text)
+        self.assertIn("function appendEvidenceTreeGroup(tree, tabId, title, items, mapper, open = false", response.text)
+        self.assertIn(
+            "details.open = Boolean(open || state.evidenceTreeOpenGroups.has(groupKey));",
+            response.text,
+        )
         self.assertIn('label: "CP / Timeline"', response.text)
         self.assertIn('label: "Map / Risk"', response.text)
         self.assertIn('label: "Completed GPX"', response.text)
@@ -727,10 +1053,10 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertIn("segmentCapsules", response.text)
         self.assertIn("--cat-checkpoint", response.text)
         self.assertIn("checkpoint-start", response.text)
-        self.assertIn("FOCUS_POINT_VIEWPORT_M = 1000", response.text)
+        self.assertIn("FOCUS_POINT_VIEWPORT_M = 50", response.text)
         self.assertIn("const widthZoom = widthMeters / FOCUS_POINT_VIEWPORT_M;", response.text)
         self.assertIn("const heightZoom = heightMeters / FOCUS_POINT_VIEWPORT_M;", response.text)
-        self.assertIn("POINT_LABEL_VIEWPORT_M = 30", response.text)
+        self.assertIn("POINT_LABEL_VIEWPORT_M = 50", response.text)
         self.assertIn("POINT_LABEL_FONT_PX = 4", response.text)
         self.assertIn("POINT_LABEL_STROKE_PX = 0.6", response.text)
         self.assertIn("POINT_LABEL_OFFSET_PX = 3", response.text)
@@ -753,6 +1079,8 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertIn('"data-label-summary": pointLabelCalloutSummary(item, pointLabelCalloutTitle(item, label))', response.text)
         self.assertIn("item?.map_label", response.text)
         self.assertIn("item?.display_label", response.text)
+        self.assertIn("bossDisplayText(item)", response.text)
+        self.assertIn("if (isBossPoint(item)) return bossSummaryText(item);", response.text)
         self.assertIn("gis_cp_cluster\\.", response.text)
         self.assertIn("function updatePointLabels", response.text)
         self.assertIn('"data-label-layer"', response.text)
@@ -784,11 +1112,27 @@ class AdminAfterActionTests(unittest.TestCase):
         )
         self.assertIn("view.reference_tracks?.reference_tracks", response.text)
         self.assertIn("view.evidence_timeline?.categories", response.text)
-        self.assertIn('button.addEventListener("click", () => {\n        selectEvidence(item);\n        focusMapFor(item, {label: false});', response.text)
-        self.assertIn('button.addEventListener("dblclick", event => {\n        event.preventDefault();\n        selectEvidence(item);\n        focusMapFor(item, {label: true});', response.text)
+        self.assertIn("let treeClickFocusTimer = null;", response.text)
+        self.assertIn("function scheduleTreeClickFocus(item)", response.text)
+        self.assertIn("function focusTreeItemImmediately(item, options = {})", response.text)
+        self.assertIn('button.addEventListener("click", () => scheduleTreeClickFocus(item));', response.text)
+        self.assertIn('button.addEventListener("dblclick", event => {\n        event.preventDefault();\n        focusTreeItemImmediately(item, {label: true});', response.text)
         self.assertIn("evidenceCategory", response.text)
         self.assertIn("categoryColor", response.text)
         self.assertIn("map-highlight", response.text)
+        self.assertIn("function syncMapMarkerScale", response.text)
+        self.assertIn("function mapStrokeWidthPx(node, scale)", response.text)
+        self.assertIn("function mapMarkerRadiusPx(circle, scale, baseRadius)", response.text)
+        self.assertIn(
+            'circle.classList.contains("mcp-candidate") || circle.classList.contains("boss-point")',
+            response.text,
+        )
+        self.assertIn(
+            'node.style.setProperty("stroke-width", `${strokeWidth.toFixed(2)}px`, priority)',
+            response.text,
+        )
+        self.assertIn("vector-effect: non-scaling-stroke", response.text)
+        self.assertIn(".segment-overlay.map-highlight", response.text)
         self.assertIn("highlightMapFor", response.text)
         self.assertIn("segment-overlay", response.text)
         self.assertIn("data-source-id", response.text)
@@ -796,12 +1140,24 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertNotIn('), true, "segment"', response.text)
         self.assertNotIn('), true, "timeline"', response.text)
         self.assertIn('data-layer="imagery"', response.text)
+        self.assertIn('<input type="checkbox" data-layer="imagery"> Imagery', response.text)
+        self.assertIn('<input type="checkbox" data-layer="rudy-twmap" checked> Rudy+TW', response.text)
         self.assertIn('data-layer="osm"', response.text)
+        self.assertIn('data-layer="cwa-qpf"', response.text)
+        self.assertIn('data-layer="cwa-weather"', response.text)
+        self.assertIn(".environment-extent", response.text)
+        self.assertIn("function renderEnvironmentExtent", response.text)
+        self.assertIn("function environmentEvidenceSummary", response.text)
+        self.assertIn("SMAP L4 route bbox mean", response.text)
+        self.assertIn("candidate-only context; not runtime safety truth", response.text)
+        self.assertIn("renderEnvironmentExtent(cwaQpfGroup", response.text)
         self.assertIn('data-layer="weather-api"', response.text)
         self.assertIn("OSM_TILE_URL_TEMPLATE", response.text)
         self.assertIn("OSM_PUBLIC_TILE_URL_TEMPLATE", response.text)
         self.assertIn("OSM_LOCAL_TILE_URL_TEMPLATE", response.text)
         self.assertIn("const OSM_TARGET_ZOOM = 17", response.text)
+        self.assertIn("function chooseOsmZoom", response.text)
+        self.assertIn("let zoom = clamp(OSM_TARGET_ZOOM, OSM_MIN_ZOOM, OSM_MAX_ZOOM)", response.text)
         self.assertIn("const OSM_MAX_TILES = 64", response.text)
         self.assertIn("const RASTER_MAX_TILES = 64", response.text)
         self.assertIn("RASTER_TILE_CACHE_BUST", response.text)
@@ -820,17 +1176,35 @@ class AdminAfterActionTests(unittest.TestCase):
         )
         self.assertIn("function tileRangeForZoom", response.text)
         self.assertIn("function tileCountForZoom", response.text)
+        self.assertNotIn("tile-parent-fallback", response.text)
+        self.assertNotIn("parentTileFallbackCoverage", response.text)
         self.assertIn("tileCountForZoom(bounds, zoom) > maxTiles", response.text)
         self.assertIn("function rasterTileTemplate", response.text)
         self.assertIn("function rasterZoomRangeFor", response.text)
         self.assertIn("function chooseRasterZoom", response.text)
         self.assertIn(
-            'const z = zoom ?? chooseRasterZoom(view, bounds, RASTER_MAX_TILES, layerId)',
+            "const preferredZoom = zoom ?? chooseRasterZoom(view, bounds, RASTER_MAX_TILES, layerId)",
             response.text,
         )
+        self.assertIn("for (let z = preferredZoom; z >= range.min; z -= 1)", response.text)
         self.assertIn('params.get("osmSource")', response.text)
         self.assertIn("https://tile.openstreetmap.org/{z}/{x}/{y}.png", response.text)
         self.assertIn("function renderRasterImagery", response.text)
+        self.assertIn("function coordinateFromMapPointForBounds", response.text)
+        self.assertIn("function visibleBoundsFor", response.text)
+        self.assertIn("function mapViewportBox", response.text)
+        self.assertIn("function renderRasterBasemapLayers", response.text)
+        self.assertIn("renderRasterBasemapLayers(state.view)", response.text)
+        self.assertIn("const coverageBounds = visibleBoundsFor(view) || bounds", response.text)
+        self.assertIn(
+            'renderRasterImagery(imageryGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT, "imagery", coverageBounds)',
+            response.text,
+        )
+        self.assertIn(
+            "renderRasterImagery(rasterGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT, layer.layerId, coverageBounds)",
+            response.text,
+        )
+        self.assertIn("renderOsmBasemap(osmGroup, bounds, MAP_WIDTH, MAP_HEIGHT, coverageBounds)", response.text)
         self.assertIn("function rasterTileCoverage", response.text)
         self.assertIn("function isDirectRuntimeRasterLayer", response.text)
         self.assertIn(
@@ -844,7 +1218,52 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertIn('class: "raster-tile"', response.text)
         self.assertIn("data-raster-tile", response.text)
         self.assertIn("function renderOsmBasemap", response.text)
-        self.assertIn("if (!isLocalOsmTileMode())", response.text)
+        self.assertIn("function localOsmPbfVectorUrl", response.text)
+        self.assertIn("/osm-pbf-vector.geojson", response.text)
+        self.assertIn("/admin/pretrip/osm-carto-palette", response.text)
+        self.assertIn("function applyOsmCartoPalette", response.text)
+        self.assertIn("function loadOsmCartoPalette", response.text)
+        self.assertIn("--osm-carto-track-fill: #996600;", response.text)
+        self.assertIn("var(--osm-carto-track-fill)", response.text)
+        self.assertIn(".osm-pbf-line-core.primary", response.text)
+        self.assertIn("var(--osm-carto-primary-fill)", response.text)
+        self.assertIn("function osmPbfZoomMin", response.text)
+        self.assertIn("data-osm-pbf-zoom-min", response.text)
+        self.assertIn("function osmPbfFeatureTags", response.text)
+        self.assertIn('props.tags && typeof props.tags === "object"', response.text)
+        self.assertIn("state.osmPbfVector?.features", response.text)
+        self.assertIn("function appendOsmPbfLine", response.text)
+        self.assertIn("function appendOsmPbfLineLabel", response.text)
+        self.assertIn("osm-pbf-line osm-pbf-line-casing", response.text)
+        self.assertIn("osm-pbf-line osm-pbf-line-core", response.text)
+        self.assertIn("osm-pbf-line-label", response.text)
+        self.assertIn('"data-osm-pbf-line-label": "true"', response.text)
+        self.assertIn('class: `osm-pbf-area ${category}`', response.text)
+        self.assertIn("function osmPbfDrawOrder", response.text)
+        self.assertIn('"data-osm-pbf-kind": "line-casings"', response.text)
+        self.assertIn('"data-osm-pbf-kind": "line-fills"', response.text)
+        self.assertIn("lineCasingGroup", response.text)
+        self.assertIn("lineCoreGroup", response.text)
+        self.assertIn(".osm-pbf-area.building", response.text)
+        self.assertIn("var(--osm-carto-water-fill)", response.text)
+        self.assertIn('return isArea ? "water"', response.text)
+        self.assertIn(".osm-pbf-point { fill: #5a5f63;", response.text)
+        self.assertIn(".osm-pbf-point.shelter", response.text)
+        self.assertIn('"data-osm-pbf-label": "true"', response.text)
+        self.assertIn("function syncOsmPbfLabelScale", response.text)
+        self.assertIn("syncOsmPbfLabelScale(scale);", response.text)
+        update_layers_body = response.text.split("function updateLayers()", 1)[1].split("function checkedLayerIds()", 1)[0]
+        self.assertIn("syncMapMarkerScale();", update_layers_body)
+        self.assertLess(
+            update_layers_body.index("syncMapMarkerScale();"),
+            update_layers_body.index("updatePointLabels();"),
+        )
+        self.assertIn(".osm-pbf-line-core.path", response.text)
+        self.assertIn(".osm-pbf-line-core.track", response.text)
+        self.assertIn(".osm-pbf-line-core.road", response.text)
+        self.assertIn(".osm-pbf-line-core.terrain", response.text)
+        self.assertIn(".osm-pbf-area.forest", response.text)
+        self.assertIn("const renderRasterTiles = !isLocalOsmTileMode() || !localOsmPbfVectorUrl(state.view);", response.text)
         self.assertIn("function osmTileCoverage", response.text)
         self.assertIn('el("image"', response.text)
         self.assertIn('class: "osm-tile"', response.text)
@@ -883,10 +1302,17 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertIn("function nextPlanCandidatesFor(item)", html)
         self.assertIn("function renderNextPlanCandidates(item)", html)
         self.assertIn("AFTER_ACTION_NEXT_PLAN_CANDIDATES", html)
-        self.assertIn('document.getElementById("detailJson").textContent = JSON.stringify(item, null, 2)', html)
-        self.assertIn("function selectEvidence(item)", html)
+        self.assertIn(
+            'document.getElementById("detailJson").textContent = JSON.stringify(isBossPoint(item) ? bossDetailPayload(item) : item, null, 2)',
+            html,
+        )
+        self.assertIn("function selectEvidence(item, options = {})", html)
         self.assertIn("setDetail(item);", html)
-        self.assertIn("highlightTreeNode(item);", html)
+        self.assertIn(
+            "highlightTreeNode(item, {expand: options.expandEvidenceGroup === true});",
+            html,
+        )
+        self.assertIn("highlightEvidenceTimelineFor(item);", html)
         self.assertIn("highlightMapFor(item);", html)
         self.assertIn("loadCase();", html)
 

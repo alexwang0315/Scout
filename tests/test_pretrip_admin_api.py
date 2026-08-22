@@ -1,10 +1,20 @@
+import hashlib
 import json
 import shutil
+import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from admin_api import create_admin_app
+import admin_api
+from admin_api import (
+    _compact_pretrip_project_view,
+    _ensure_scout_src_on_path,
+    _route_context_briefing_max_tokens,
+    _run_route_context_briefing_scout_ai,
+    create_admin_app,
+)
 from admin_local_raster_tiles import raster_tile_cache_path
 
 
@@ -19,9 +29,7 @@ REPO_EXPERT_CONTRIBUTION_APPLY_PLAN = (
     FIXTURE_PROJECT_ROOT / "outputs" / "expert_contribution_apply_plan.json"
 )
 REPO_EXPERT_CONTRIBUTION_WORKSPACE_APPLY_RESULT = (
-    FIXTURE_PROJECT_ROOT
-    / "outputs"
-    / "expert_contribution_workspace_apply_result.json"
+    FIXTURE_PROJECT_ROOT / "outputs" / "expert_contribution_workspace_apply_result.json"
 )
 REPO_ROUTE_NOTE_REVIEWED_ASSUMPTIONS = (
     FIXTURE_PROJECT_ROOT / "outputs" / "route_note_reviewed_assumptions.json"
@@ -57,6 +65,92 @@ def _copy_pretrip_workspace(tmp_path: Path) -> Path:
     workspace_root = tmp_path / "pretrip_workspace"
     shutil.copytree(FIXTURE_PROJECT_ROOT, workspace_root / PROJECT_ID)
     return workspace_root
+
+
+def test_admin_projection_rejects_out_of_workspace_ref(tmp_path: Path) -> None:
+    workspace_root = _copy_pretrip_workspace(tmp_path)
+    project_root = workspace_root / PROJECT_ID
+    project_path = project_root / "project.json"
+    baseline_project = json.loads(project_path.read_text(encoding="utf-8"))
+    outside = tmp_path / "outside-admin-projection.json"
+    sentinel = "outside-workspace-sentinel"
+    outside.write_text(json.dumps({"sentinel": sentinel}), encoding="utf-8")
+    (workspace_root / "outside-admin-projection.json").write_text(
+        json.dumps({"sentinel": sentinel}),
+        encoding="utf-8",
+    )
+    symlink_path = project_root / "outputs" / "escaped-admin-projection.json"
+    symlink_path.parent.mkdir(parents=True, exist_ok=True)
+    symlink_path.symlink_to(outside)
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    for unsafe_ref in (
+        "../outside-admin-projection.json",
+        str(outside),
+        "outputs/escaped-admin-projection.json",
+    ):
+        project_path.write_text(
+            json.dumps({**baseline_project, "admin_projection_ref": unsafe_ref}),
+            encoding="utf-8",
+        )
+
+        response = client.get(f"/admin/pretrip/projects/{PROJECT_ID}/admin-projection")
+
+        assert response.status_code == 422
+        assert sentinel not in response.text
+
+
+def test_debug_projection_rejects_mismatched_cwa_project_identity(
+    tmp_path: Path,
+) -> None:
+    workspace_root = _copy_pretrip_workspace(tmp_path)
+    project_root = workspace_root / PROJECT_ID
+    project_path = project_root / "project.json"
+    project = json.loads(project_path.read_text(encoding="utf-8"))
+    projection_ref = "outputs/environment/cwa/rainfall/review-mismatch.geojson"
+    projection_path = project_root / projection_ref
+    projection_path.parent.mkdir(parents=True, exist_ok=True)
+    projection_path.write_text(
+        json.dumps(
+            {
+                "type": "FeatureCollection",
+                "artifactKind": "cwa_route_grid_projection",
+                "projectId": "different-project",
+                "products": [],
+                "features": [],
+            }
+        ),
+        encoding="utf-8",
+    )
+    project["cwa_rainfall_route_projection_ref"] = projection_ref
+    project_path.write_text(json.dumps(project), encoding="utf-8")
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.get(f"/admin/pretrip/projects/{PROJECT_ID}/debug-projection")
+
+    assert response.status_code == 422
+    assert "project identity" in response.json()["detail"].lower()
+
+
+def test_debug_projection_events_are_stamped_by_server_ingestion_channel() -> None:
+    fixture_workspace_root = ROOT / "tests" / "fixtures" / "pretrip" / "projects"
+    client = TestClient(create_admin_app(pretrip_workspace_root=fixture_workspace_root))
+
+    response = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/debug-projection-events"
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["event_provenance_contract"]["authoritative"] is True
+    assert payload["event_provenance_contract"]["transport_independent"] is True
+    assert payload["events"]
+    assert {event["event_provenance"] for event in payload["events"]} == {
+        "fixture_replay"
+    }
+    assert {
+        event["provenance_contract"]["ingestion_channel"] for event in payload["events"]
+    } == {"fixture_replay"}
 
 
 def _write_small_gpx(
@@ -136,7 +230,9 @@ def _corrected_review_payload(
     }
 
 
-def _batch_review_payload(*decisions: dict[str, object], persist_to_workspace: bool = False) -> dict[str, object]:
+def _batch_review_payload(
+    *decisions: dict[str, object], persist_to_workspace: bool = False
+) -> dict[str, object]:
     return {
         "decisions": list(decisions),
         "persist_to_workspace": persist_to_workspace,
@@ -155,6 +251,63 @@ def test_pretrip_admin_page_serves_static_shell():
     assert "evidenceTree" in response.text
     assert "jsonPane" in response.text
     assert "segment-overlay" in response.text
+
+
+def test_maplibre_evidence_adapter_serves_same_origin_script():
+    client = TestClient(create_admin_app())
+
+    response = client.get("/admin/scout-maplibre-evidence.js")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/javascript")
+    assert response.headers["cache-control"] == "no-store"
+    assert "window.ScoutMapLibreEvidence" in response.text
+
+
+def test_maplibre_distribution_assets_serve_same_origin_with_fixed_version():
+    client = TestClient(create_admin_app())
+
+    module_responses = [
+        client.get(f"/admin/vendor/maplibre-gl/6.2.0/{name}")
+        for name in (
+            "maplibre-gl.mjs",
+            "maplibre-gl-shared.mjs",
+            "maplibre-gl-worker.mjs",
+        )
+    ]
+    css_response = client.get(
+        "/admin/vendor/maplibre-gl/6.2.0/maplibre-gl.css"
+    )
+
+    for module_response in module_responses:
+        assert module_response.status_code == 200
+        assert module_response.headers["content-type"].startswith(
+            "application/javascript"
+        )
+        assert module_response.headers["cache-control"] == (
+            "public, max-age=31536000, immutable"
+        )
+        assert module_response.text
+    assert "MapLibre GL JS" in module_responses[0].text
+    assert css_response.status_code == 200
+    assert css_response.headers["content-type"].startswith("text/css")
+    assert css_response.headers["cache-control"] == (
+        "public, max-age=31536000, immutable"
+    )
+    assert ".maplibregl-map" in css_response.text
+
+
+def test_debug_admin_page_serves_static_shell():
+    client = TestClient(create_admin_app())
+
+    response = client.get("/admin/debug")
+
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    assert "Scout Phase 3.5 Runtime Debug" in response.text
+    assert "PRETRIP_DEBUG_PROJECTION_PATH" in response.text
+    assert "/debug-projection" in response.text
+    assert 'data-layer="overpass"' in response.text
 
 
 def test_pretrip_projects_api_lists_fixture_projects():
@@ -192,26 +345,28 @@ def test_pretrip_project_api_returns_read_only_view_model():
     assert payload["review_draft_log"]["boundary"]["package_mutation_allowed"] is False
     assert payload["route_note_review_options"]["counts"]["review_option_count"] == 197
     assert (
-        payload["route_note_review_options"]["counts"]["decision_recorded_count"]
-        == 0
+        payload["route_note_review_options"]["counts"]["decision_recorded_count"] == 0
     )
     assert payload["route_note_review_options"]["boundary"]["draft_only"] is True
     assert payload["route_note_review_options"]["options"][0][
         "allowed_admin_dispositions"
     ] == ["promote_hint", "promote_warning", "ignore", "field_verify"]
-    assert payload["tabs"]["pre_trip_planning"]["review_draft_log"]["evidence_type"] == (
-        "pretrip_review_draft_log"
-    )
-    assert payload["tabs"]["pre_trip_planning"]["review_draft_log"]["source_path"].endswith(
-        "reviews/review_draft_log.json"
-    )
+    assert payload["tabs"]["pre_trip_planning"]["review_draft_log"][
+        "evidence_type"
+    ] == ("pretrip_review_draft_log")
+    assert payload["tabs"]["pre_trip_planning"]["review_draft_log"][
+        "source_path"
+    ].endswith("reviews/review_draft_log.json")
     response_text = response.text
     assert "proposed_fields" not in response_text
     assert "reviewer_prompt" not in response_text
     assert "target_segment_refs" not in response_text
-    assert payload["tabs"]["post_analysis"]["runtime_handoff"]["boundary"][
-        "phase1_runtime_mutation_allowed"
-    ] is False
+    assert (
+        payload["tabs"]["post_analysis"]["runtime_handoff"]["boundary"][
+            "phase1_runtime_mutation_allowed"
+        ]
+        is False
+    )
 
 
 def test_pretrip_project_api_compact_payload_removes_duplicate_tabs():
@@ -228,24 +383,1186 @@ def test_pretrip_project_api_compact_payload_removes_duplicate_tabs():
     assert compact_payload["compact_payload"]["trimmed_heavy_layer_items"] is True
     assert compact_payload["tabs"]["pre_trip_planning"]["sections"]
     assert compact_payload["tabs"]["agent_skills"]["sections"]
-    assert compact_payload["tabs"]["agent_skills"]["scout_agent_skills"]["counts"][
-        "tool_count"
-    ] == 45
-    assert compact_payload["tabs"]["agent_skills"]["evidence_timeline"]["counts"][
-        "category_count"
-    ] == 12
+    assert (
+        compact_payload["tabs"]["agent_skills"]["scout_agent_skills"]["counts"][
+            "tool_count"
+        ]
+        == compact_payload["scout_agent_skills"]["counts"]["tool_count"]
+    )
+    assert (
+        compact_payload["tabs"]["agent_skills"]["evidence_timeline"]["counts"][
+            "category_count"
+        ]
+        == compact_payload["evidence_timeline"]["counts"]["category_count"]
+    )
     assert "route_notes" not in compact_payload["tabs"]["pre_trip_planning"]
     assert compact_payload["tabs"]["post_analysis"]["segment_terrain"]["source_path"]
-    assert compact_payload["tabs"]["post_analysis"]["runtime_handoff"]["boundary"][
-        "phase1_runtime_mutation_allowed"
-    ] is False
+    assert (
+        compact_payload["tabs"]["post_analysis"]["runtime_handoff"]["boundary"][
+            "phase1_runtime_mutation_allowed"
+        ]
+        is False
+    )
+    assert compact_payload["capability_timeline_import"]["edges"]
+    assert (
+        len(compact_payload["capability_timeline_import"]["edges"])
+        == (compact_payload["capability_timeline_import"]["counts"]["edge_count"])
+    )
+    assert compact_payload["tabs"]["post_analysis"]["capability_timeline_import"][
+        "edges"
+    ]
     assert "samples" in compact_payload["terrain_visualization"]
     assert compact_payload["terrain_visualization"]["contours"] == []
     if compact_payload["route_notes"]["candidates"]:
         assert "source_path" not in compact_payload["route_notes"]["candidates"][0]
-        assert compact_payload["route_notes"]["candidates"][0]["runtime_safety_truth"] is False
+        assert (
+            compact_payload["route_notes"]["candidates"][0]["runtime_safety_truth"]
+            is False
+        )
     assert "checkpoint_candidates" not in compact_payload["gis_perception"]
     assert len(compact_response.content) < len(full_response.content)
+
+
+def test_pretrip_project_projection_cache_hits_and_invalidates_on_workspace_change(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    project_id = "projection_cache_demo"
+    project_root = tmp_path / project_id
+    project_root.mkdir()
+    (project_root / "project.json").write_text(
+        json.dumps({"project_id": project_id}),
+        encoding="utf-8",
+    )
+    build_calls: list[str] = []
+
+    def fake_build(project: str, *, project_root: Path) -> dict[str, object]:
+        build_calls.append(project)
+        return {
+            "project_id": project,
+            "tabs": {
+                "pre_trip_planning": {"sections": []},
+                "review_workspace": {"sections": []},
+                "post_analysis": {"sections": []},
+                "agent_skills": {"sections": []},
+            },
+        }
+
+    monkeypatch.setattr(admin_api, "build_pretrip_admin_view", fake_build)
+    monkeypatch.setattr(
+        admin_api,
+        "_attach_energy_reserve_monitor",
+        lambda payload, **kwargs: None,
+    )
+    client = TestClient(create_admin_app(pretrip_workspace_root=tmp_path))
+
+    first = client.get(f"/admin/pretrip/projects/{project_id}?compact=1")
+    second = client.get(f"/admin/pretrip/projects/{project_id}?compact=1")
+
+    assert first.status_code == 200
+    assert second.status_code == 200
+    assert first.headers["x-scout-projection-cache"] == "miss"
+    assert second.headers["x-scout-projection-cache"] == "hit"
+    assert build_calls == [project_id]
+
+    (project_root / "candidates.json").write_text("{}", encoding="utf-8")
+    changed = client.get(f"/admin/pretrip/projects/{project_id}?compact=1")
+
+    assert changed.status_code == 200
+    assert changed.headers["x-scout-projection-cache"] == "miss"
+    assert build_calls == [project_id, project_id]
+
+
+def test_pretrip_project_refreshes_expired_osm_pbf_cache_status_on_every_request(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    project_id = "expired_osm_cache_demo"
+    project_root = tmp_path / project_id
+    project_root.mkdir()
+    (project_root / "project.json").write_text(
+        json.dumps({"project_id": project_id}),
+        encoding="utf-8",
+    )
+    pbf_cache = {
+        "cache_status": "fresh",
+        "refresh_required": False,
+        "file_modified_at": "2026-06-01T00:00:00+00:00",
+        "checked_at": "2026-06-15T00:00:00+00:00",
+        "expires_at": "2026-07-01T00:00:00+00:00",
+        "age_days": 14.0,
+    }
+
+    def fake_build(project: str, *, project_root: Path) -> dict[str, object]:
+        summary = {
+            "project_id": project,
+            "osm_pbf_cache_status": "fresh",
+            "osm_pbf_refresh_required": False,
+            "osm_pbf_cache_expires_at": pbf_cache["expires_at"],
+        }
+        osm_pbf_evidence = {
+            "status": "ready",
+            "pbf_cache": dict(pbf_cache),
+            "items": [],
+        }
+        return {
+            "project_id": project,
+            **summary,
+            "summary": summary,
+            "osm_pbf_evidence": osm_pbf_evidence,
+            "tabs": {
+                "pre_trip_planning": {
+                    "sections": [],
+                    "summary": summary,
+                    "osm_pbf_evidence": osm_pbf_evidence,
+                },
+                "review_workspace": {"sections": []},
+                "post_analysis": {"sections": []},
+                "agent_skills": {"sections": []},
+            },
+        }
+
+    monkeypatch.setattr(admin_api, "build_pretrip_admin_view", fake_build)
+    monkeypatch.setattr(
+        admin_api,
+        "_attach_energy_reserve_monitor",
+        lambda payload, **kwargs: None,
+    )
+    client = TestClient(
+        create_admin_app(
+            pretrip_workspace_root=tmp_path,
+            now_factory=lambda: datetime(2026, 7, 28, tzinfo=timezone.utc),
+        )
+    )
+
+    first = client.get(f"/admin/pretrip/projects/{project_id}?compact=1")
+    second = client.get(f"/admin/pretrip/projects/{project_id}?compact=1")
+
+    assert first.status_code == 200
+    assert second.headers["x-scout-projection-cache"] == "hit"
+    payload = second.json()
+    assert payload["osm_pbf_cache_status"] == "stale_refresh_recommended"
+    assert payload["osm_pbf_refresh_required"] is True
+    assert payload["summary"]["osm_pbf_cache_status"] == "stale_refresh_recommended"
+    assert payload["osm_pbf_evidence"]["pbf_cache"]["cache_status"] == (
+        "stale_refresh_recommended"
+    )
+    assert payload["osm_pbf_evidence"]["pbf_cache"]["refresh_required"] is True
+    assert payload["osm_pbf_evidence"]["pbf_cache"]["checked_at"] == (
+        "2026-07-28T00:00:00+00:00"
+    )
+    assert payload["osm_pbf_evidence"]["pbf_cache"]["age_days"] == 57.0
+
+
+def test_compact_pretrip_project_view_bounds_segment_and_route_note_payloads():
+    route_note_candidates = [
+        {
+            "candidate_id": f"note.{index}",
+            "evidence_type": "gpx_route_note",
+            "lat": 23.9,
+            "lon": 121.1,
+            "normalized_note": "route note",
+            "review_state": "candidate",
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "source_path": "heavy/source/path.json",
+        }
+        for index in range(501)
+    ]
+    dense_points = [
+        {
+            "lat": 23.9 + index / 10000,
+            "lon": 121.1 + index / 10000,
+            "route_distance_m": index * 10,
+            "overpass_projection": {"status": "centerline_interpolated"},
+        }
+        for index in range(20)
+    ]
+    map_segments = [
+        {
+            "candidate_id": f"seg.{index:03d}",
+            "source_id": f"seg.{index:03d}",
+            "from_candidate_id": f"cp.{index:03d}",
+            "to_candidate_id": f"cp.{index + 1:03d}",
+            "distance_m": 100,
+            "display_geometry": {
+                "display_point_count": len(dense_points),
+                "coordinates": dense_points,
+            },
+            "overpass_projection": {"status": "aligned"},
+        }
+        for index in range(60)
+    ]
+    risk_segments = [
+        {
+            "source_id": f"risk.segment.{index:03d}",
+            "coordinates": [
+                {"lat": 23.9 + index / 10000, "lon": 121.1 + index / 10000},
+                {
+                    "lat": 23.9005 + index / 10000,
+                    "lon": 121.1005 + index / 10000,
+                },
+            ],
+            "pretrip_risk": 50 + index % 10,
+            "risk_bucket": "moderate",
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+        for index in range(60)
+    ]
+    overpass_corridors = [
+        {
+            "candidate_id": f"overpass.{index:03d}",
+            "candidate_type": "trail_corridor_candidate",
+            "category_id": "overpass_trail_corridor",
+            "feature_type": "path",
+            "osm_type": "way",
+            "osm_id": str(index),
+            "corridor": {
+                "coordinates": [
+                    {"lat": 23.9 + index / 10000, "lon": 121.1 + index / 10000},
+                    {
+                        "lat": 23.9005 + index / 10000,
+                        "lon": 121.1005 + index / 10000,
+                    },
+                ]
+            },
+        }
+        for index in range(60)
+    ]
+    checkpoint_events = [
+        {
+            "event_id": f"event.{index:03d}",
+            "source_id": f"event.{index:03d}",
+            "event_type": "checkpoint_candidate_reached",
+            "label": f"CP {index:03d}",
+            "sequence": index + 1,
+            "lat": 23.9 + index / 10000,
+            "lon": 121.1 + index / 10000,
+            "progress_m": index * 100,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+        for index in range(74)
+    ]
+    compact = _compact_pretrip_project_view(
+        {
+            "project_id": PROJECT_ID,
+            "tabs": {},
+            "route": {
+                "source_id": "route",
+                "distance_m": 1000,
+                "point_count": len(dense_points),
+                "display_geometry": {
+                    "display_point_count": len(dense_points),
+                    "coordinates": dense_points,
+                },
+            },
+            "segments": map_segments,
+            "checkpoint_events": {
+                "event_count": len(checkpoint_events),
+                "events": checkpoint_events,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            },
+            "route_notes": {"candidates": route_note_candidates},
+            "overpass_evidence": {
+                "corridor_candidates": overpass_corridors,
+                "hazard_candidates": [],
+                "poi_candidates": [],
+            },
+            "reference_tracks": {"reference_tracks": []},
+            "mileage_tag_alignment": {
+                "status": "completed",
+                "counts": {"tag_count": 1},
+                "timeline_items": [
+                    {
+                        "source_id": "mileage.001",
+                        "label": "K1.0 CP 001",
+                        "source_kind": "checkpoint",
+                        "display_mileage_label": "K1.0",
+                        "route_projection_status": "aligned",
+                        "route_distance_m": 1000,
+                        "candidate_only": True,
+                        "runtime_safety_truth": False,
+                    }
+                ],
+            },
+            "environment_risk_derivative_layers": {
+                "status": "ready_with_data_gaps",
+                "source_status": "ready_with_data_gaps",
+                "source_metric_gaps": [
+                    {
+                        "metric_family": "sentinel1",
+                        "missing_ratio": 0.5,
+                        "missing_segment_count": 5,
+                        "segment_count": 10,
+                    }
+                ],
+                "data_quality": {
+                    "source_status": "ready_with_data_gaps",
+                    "missing_metric_family_count": 1,
+                },
+                "counts": {
+                    "wetness_flash_flood_candidate_count": 1,
+                    "practical_darkness_candidate_count": 1,
+                },
+                "category_items": [
+                    {
+                        "source_id": "env.category.wetness",
+                        "label": "濕滑/溪溝暴漲候選：1",
+                        "candidate_count": 1,
+                        "source_status": "ready_with_data_gaps",
+                        "source_metric_gaps": [
+                            {"metric_family": "sentinel1", "missing_ratio": 0.5}
+                        ],
+                        "data_quality": {
+                            "missing_metric_families": ["sentinel1"],
+                        },
+                        "candidate_only": True,
+                        "runtime_safety_truth": False,
+                    }
+                ],
+                "wetness_flash_flood_susceptibility": {
+                    "counts": {"candidate_count": 1},
+                    "source_status": "ready_with_data_gaps",
+                    "source_metric_gaps": [
+                        {"metric_family": "sentinel1", "missing_ratio": 0.5}
+                    ],
+                    "data_quality": {"missing_metric_families": ["sentinel1"]},
+                    "candidates": [
+                        {
+                            "source_id": "wetness.001",
+                            "label": "濕滑/溪溝暴漲候選 1.0K",
+                            "candidate_kind": "wetness_flash_flood_susceptibility",
+                            "lat": 23.9,
+                            "lon": 121.1,
+                            "coordinates": [
+                                {"lat": 23.9, "lon": 121.1},
+                                {"lat": 23.91, "lon": 121.11},
+                            ],
+                            "score": 0.8,
+                            "cwa_time_metadata": {
+                                "api_fetched_at_hour": "2026-06-26T03:00:00Z",
+                                "valid_until_hour": "2026-06-27T18:00:00Z",
+                                "time_precision": "hour",
+                                "timezone": "UTC",
+                            },
+                            "cwa_api_fetched_at_hour": "2026-06-26T03:00:00Z",
+                            "cwa_valid_until_hour": "2026-06-27T18:00:00Z",
+                            "candidate_only": True,
+                            "runtime_safety_truth": False,
+                        }
+                    ],
+                },
+                "practical_darkness_time": {
+                    "counts": {"candidate_count": 1},
+                    "candidates": [
+                        {
+                            "source_id": "dark.001",
+                            "candidate_kind": "practical_darkness_time",
+                            "lat": 23.91,
+                            "lon": 121.11,
+                            "coordinates": [
+                                {"lat": 23.91, "lon": 121.11},
+                                {"lat": 23.92, "lon": 121.12},
+                            ],
+                            "candidate_only": True,
+                            "runtime_safety_truth": False,
+                        }
+                    ],
+                },
+            },
+            "risk_score": {
+                "counts": {"point_count": 1},
+                "points": [
+                    {
+                        "source_id": "risk.point.001",
+                        "lat": 23.9,
+                        "lon": 121.1,
+                        "pretrip_risk": 50,
+                        "risk_level": 3,
+                        "candidate_only": True,
+                        "runtime_safety_truth": False,
+                    }
+                ],
+            },
+            "risk_ribbon": {
+                "counts": {"segment_count": len(risk_segments)},
+                "segments": risk_segments,
+            },
+            "risk_heatmap": {
+                "counts": {"segment_count": len(risk_segments)},
+                "segments": risk_segments,
+            },
+            "risk_delta": {
+                "counts": {"segment_count": len(risk_segments)},
+                "segments": [
+                    {
+                        **segment,
+                        "source_id": f"risk.delta.{index:03d}",
+                        "delta_score": 5,
+                    }
+                    for index, segment in enumerate(risk_segments)
+                ],
+            },
+        }
+    )
+
+    assert len(compact["segments"]) == len(map_segments)
+    assert len(compact["checkpoint_events"]["events"]) == len(checkpoint_events)
+    assert compact["checkpoint_events"]["events"][0]["lat"] == 23.9
+    assert compact["checkpoint_events"]["events"][0]["event_id"] == "event.000"
+    assert compact["checkpoint_events"]["source_events_count"] == len(
+        checkpoint_events
+    )
+    segment_geometry = compact["segments"][0]["display_geometry"]
+    assert segment_geometry["display_point_count"] == 4
+    assert segment_geometry["source_display_point_count"] == len(dense_points)
+    assert "coordinates" not in segment_geometry
+    assert "overpass_projection" not in segment_geometry["coordinate_segments"][0][0]
+    assert compact["segments"][0]["overpass_projection"]["status"] == "aligned"
+    assert len(compact["route_notes"]["candidates"]) == 120
+    assert compact["route_notes"]["source_candidate_count"] == 501
+    assert compact["route_notes"]["admin_payload_truncated"] is True
+    assert compact["overpass_evidence"]["corridor_candidates"][0]["corridor"][
+        "coordinates"
+    ]
+    assert (
+        compact["overpass_evidence"]["corridor_candidates"][0]["category_id"]
+        == "overpass_trail_corridor"
+    )
+    assert len(compact["overpass_evidence"]["corridor_candidates"]) == len(
+        overpass_corridors
+    )
+    assert compact["overpass_evidence"]["source_corridor_candidates_count"] == len(
+        overpass_corridors
+    )
+    assert compact["overpass_evidence"]["admin_payload_truncated"] is False
+    assert (
+        compact["mileage_tag_alignment"]["timeline_items"][0]["display_mileage_label"]
+        == "K1.0"
+    )
+    assert (
+        compact["mileage_tag_alignment"]["timeline_items"][0]["route_distance_m"]
+        == 1000
+    )
+    derivative_layers = compact["environment_risk_derivative_layers"]
+    assert derivative_layers["source_status"] == "ready_with_data_gaps"
+    assert derivative_layers["source_metric_gaps"][0]["metric_family"] == "sentinel1"
+    assert derivative_layers["data_quality"]["missing_metric_family_count"] == 1
+    assert len(derivative_layers["category_items"]) == 1
+    assert derivative_layers["category_items"][0]["source_status"] == (
+        "ready_with_data_gaps"
+    )
+    assert derivative_layers["category_items"][0]["data_quality"][
+        "missing_metric_families"
+    ] == ["sentinel1"]
+    assert (
+        derivative_layers["wetness_flash_flood_susceptibility"]["source_status"]
+        == "ready_with_data_gaps"
+    )
+    assert (
+        derivative_layers["wetness_flash_flood_susceptibility"]["candidates"][0][
+            "candidate_kind"
+        ]
+        == "wetness_flash_flood_susceptibility"
+    )
+    assert derivative_layers["wetness_flash_flood_susceptibility"]["candidates"][0][
+        "coordinates"
+    ]
+    assert (
+        derivative_layers["wetness_flash_flood_susceptibility"]["candidates"][0][
+            "cwa_api_fetched_at_hour"
+        ]
+        == "2026-06-26T03:00:00Z"
+    )
+    assert (
+        derivative_layers["wetness_flash_flood_susceptibility"]["candidates"][0][
+            "cwa_time_metadata"
+        ]["valid_until_hour"]
+        == "2026-06-27T18:00:00Z"
+    )
+    assert compact["risk_score"]["points"][0]["pretrip_risk"] == 50
+    assert len(compact["risk_ribbon"]["segments"]) == len(risk_segments)
+    assert compact["risk_ribbon"]["source_segments_count"] == len(risk_segments)
+    assert compact["risk_ribbon"]["admin_payload_truncated"] is False
+    assert compact["risk_ribbon"]["segments"][0]["coordinates"]
+    assert len(compact["risk_heatmap"]["segments"]) == len(risk_segments)
+    assert compact["risk_heatmap"]["source_segments_count"] == len(risk_segments)
+    assert compact["risk_heatmap"]["admin_payload_truncated"] is False
+    assert compact["risk_heatmap"]["segments"][0]["coordinates"]
+    assert len(compact["risk_delta"]["segments"]) == len(risk_segments)
+    assert compact["risk_delta"]["source_segments_count"] == len(risk_segments)
+    assert compact["risk_delta"]["admin_payload_truncated"] is False
+    assert compact["risk_delta"]["segments"][0]["coordinates"]
+
+
+def test_pretrip_project_route_context_briefing_api_serves_workspace_html(
+    tmp_path: Path,
+):
+    workspace_root = _copy_pretrip_workspace(tmp_path)
+    project_root = workspace_root / PROJECT_ID
+    briefing_ref = "outputs/briefings/route_context_briefing.html"
+    briefing_path = project_root / briefing_ref
+    briefing_path.parent.mkdir(parents=True, exist_ok=True)
+    briefing_path.write_text(
+        "<!doctype html><html><body><h1>Scout 行前路線說明</h1></body></html>",
+        encoding="utf-8",
+    )
+    project_path = project_root / "project.json"
+    project = json.loads(project_path.read_text(encoding="utf-8"))
+    project["route_context_briefing_ref"] = briefing_ref
+    project_path.write_text(json.dumps(project, ensure_ascii=False), encoding="utf-8")
+
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+    response = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/briefings/route-context"
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["x-scout-candidate-only"] == "true"
+    assert response.headers["x-scout-runtime-safety-truth"] == "false"
+    assert response.headers["x-scout-route-context-briefing"] == "true"
+    assert response.headers["x-scout-source-ref"] == briefing_ref
+    assert "Scout 行前路線說明" in response.text
+
+    project["route_context_briefing_ref"] = "../outside.html"
+    project_path.write_text(json.dumps(project, ensure_ascii=False), encoding="utf-8")
+    unsafe_response = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/briefings/route-context"
+    )
+    assert unsafe_response.status_code == 422
+
+
+def test_pretrip_project_route_context_briefing_status_is_explicit_and_read_only(
+    tmp_path: Path,
+):
+    workspace_root = _copy_pretrip_workspace(tmp_path)
+    project_root = workspace_root / PROJECT_ID
+    briefing_ref = "outputs/briefings/status_test_route_context_briefing.html"
+    project_path = project_root / "project.json"
+    project = json.loads(project_path.read_text(encoding="utf-8"))
+    project["route_context_briefing_ref"] = briefing_ref
+    project_path.write_text(json.dumps(project, ensure_ascii=False), encoding="utf-8")
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    missing_response = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/briefings/route-context/status"
+    )
+
+    assert missing_response.status_code == 200
+    assert missing_response.headers["cache-control"] == "no-store"
+    assert missing_response.json() == {
+        "schema_version": "route_context_briefing_status.v1",
+        "status": "missing",
+        "project_id": PROJECT_ID,
+        "briefing_ref": briefing_ref,
+        "content_length": 0,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "content_reviewed": False,
+        "content_review_verdict": None,
+        "content_review_ref": None,
+        "content_review_model": None,
+        "readability_score": None,
+        "detail": "Canonical briefing artifact is not prepared for the selected workspace.",
+    }
+
+    briefing_path = project_root / briefing_ref
+    briefing_path.parent.mkdir(parents=True, exist_ok=True)
+    briefing_path.write_text(
+        "<!doctype html><html><body><h1>Candidate route context</h1></body></html>",
+        encoding="utf-8",
+    )
+    available_response = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/briefings/route-context/status"
+    )
+
+    assert available_response.status_code == 200
+    assert available_response.headers["cache-control"] == "no-store"
+    assert available_response.json() == {
+        "schema_version": "route_context_briefing_status.v1",
+        "status": "available",
+        "project_id": PROJECT_ID,
+        "briefing_ref": briefing_ref,
+        "content_length": briefing_path.stat().st_size,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "content_reviewed": False,
+        "content_review_verdict": None,
+        "content_review_ref": None,
+        "content_review_model": None,
+        "readability_score": None,
+        "detail": "Canonical briefing artifact exists; content quality requires review.",
+    }
+
+    project["route_context_briefing_ref"] = "../outside.html"
+    project_path.write_text(json.dumps(project, ensure_ascii=False), encoding="utf-8")
+    unsafe_response = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/briefings/route-context/status"
+    )
+    assert unsafe_response.status_code == 422
+
+
+def test_pretrip_project_route_context_briefing_regenerate_calls_scout_ai(
+    tmp_path: Path,
+):
+    workspace_root = _copy_pretrip_workspace(tmp_path)
+    project_root = workspace_root / PROJECT_ID
+    captured: dict[str, object] = {}
+
+    def fake_scout_ai_runner(prompt: str, timeout_seconds: int) -> str:
+        captured["prompt"] = prompt
+        captured["timeout_seconds"] = timeout_seconds
+        plan_payload = json.dumps(
+            {
+                "route_context_intelligence_plan": "use workspace cache and rebuild the deterministic briefing",
+                "sec6_layer_coverage": [
+                    "historical",
+                    "cultural",
+                    "natural",
+                    "terrain",
+                    "seasonal",
+                    "observation_point",
+                ],
+                "source_tier_review": {
+                    "P0": "official baseline",
+                    "P1": "expansion evidence",
+                    "P2": "Scout-owned review seed",
+                },
+                "observation_stop_candidates": [
+                    "3-minute candidates require Contextual Permissioning"
+                ],
+                "missing_evidence": [],
+                "regeneration_notes": ["offline compiler rebuilds HTML"],
+            },
+            ensure_ascii=False,
+        )
+        return f"Candidate-only Route Context Intelligence plan:\n```json\n{plan_payload}\n```"
+
+    client = TestClient(
+        create_admin_app(
+            pretrip_workspace_root=workspace_root,
+            route_context_briefing_ai_runner=fake_scout_ai_runner,
+        )
+    )
+    response = client.post(
+        f"/admin/pretrip/projects/{PROJECT_ID}/briefings/route-context/regenerate",
+        json={
+            "confirm_regenerate": True,
+            "operator_alias": "dashboard_operator",
+            "model": "nvidia:z-ai/glm-5.2",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "completed"
+    assert payload["operator_triggered"] is True
+    assert payload["scout_ai"]["provider"] == "nvidia"
+    assert payload["scout_ai"]["model_name"] == "nvidia:z-ai/glm-5.2"
+    assert payload["scout_ai"]["external_model_call_performed"] is True
+    assert payload["boundary"]["runtime_safety_truth"] is False
+    assert payload["boundary"]["live_safety_automation_triggered"] is False
+    assert captured["timeout_seconds"] == 45
+    assert (
+        "Scout AI task: operator-triggered Route Context Intelligence briefing plan"
+        in str(captured["prompt"])
+    )
+    assert "docs/specs/scout-route-context-intelligence-implementation.md" in str(
+        captured["prompt"]
+    )
+    assert "route_context_pack.json" in str(captured["prompt"])
+    assert "P0 as official baseline" in str(captured["prompt"])
+    assert "Do not call tools" in str(captured["prompt"])
+    assert "Workspace summary" in str(captured["prompt"])
+    assert (
+        payload["route_context_intelligence_contract"]["generation_mode"]
+        == "scout_ai_plan_plus_offline_workspace_compiler"
+    )
+
+    project = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
+    assert project["route_context_briefing_regenerated_by"] == "scout_ai_nvidia"
+    regeneration_ref = project["route_context_briefing_regeneration_ref"]
+    regeneration_payload = json.loads(
+        (project_root / regeneration_ref).read_text(encoding="utf-8")
+    )
+    assert regeneration_payload["external_model_call_performed"] is True
+    assert regeneration_payload["model_provider"] == "nvidia"
+    assert regeneration_payload["boundary"]["raw_prompt_embedded"] is False
+    assert regeneration_payload["boundary"]["api_key_embedded"] is False
+    assert regeneration_payload["route_context_collection"]["writes_performed"] is True
+    assert (
+        regeneration_payload["route_context_intelligence_contract"][
+            "implementation_spec_ref"
+        ]
+        == "docs/specs/scout-route-context-intelligence-implementation.md"
+    )
+    assert (
+        regeneration_payload["route_context_intelligence_contract"]["boundary"][
+            "runtime_safety_truth"
+        ]
+        is False
+    )
+    scout_ai_plan = regeneration_payload["scout_ai_route_context_intelligence_plan"]
+    assert scout_ai_plan["status"] == "parsed"
+    assert scout_ai_plan["schema"] == "route_context_intelligence_plan.v1"
+    assert "observation_point" in scout_ai_plan["payload"]["sec6_layer_coverage"]
+
+    briefing = (
+        project_root / "outputs" / "briefings" / "route_context_briefing.html"
+    ).read_text(encoding="utf-8")
+    assert briefing.startswith("<!doctype html>")
+    assert "<h1" in briefing
+    assert "route_context_pack.json" not in briefing
+    assert "Route Context Intelligence implementation" not in briefing
+    assert "Scout AI 產生計畫" not in briefing
+    assert "compiler" not in briefing
+    assert "workspace cache" not in briefing
+    assert "review_state=" not in briefing
+    assert "Scout AI" not in briefing
+
+
+def test_pretrip_project_route_context_quality_cycle_promotes_reviewed_briefing(
+    tmp_path: Path,
+):
+    workspace_root = _copy_pretrip_workspace(tmp_path)
+    project_root = workspace_root / PROJECT_ID
+    evidence_path = (
+        project_root / "inputs/route_context_regeneration_evidence_20260802.json"
+    )
+    evidence_path.parent.mkdir(parents=True, exist_ok=True)
+    evidence_path.write_text(
+        json.dumps({"project_id": PROJECT_ID}, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    captured: dict[str, object] = {}
+
+    def fake_quality_cycle_runner(**kwargs: object) -> dict[str, object]:
+        captured.update(kwargs)
+        briefing_ref = "outputs/briefings/route_context_briefing.html"
+        briefing_path = project_root / briefing_ref
+        briefing_path.parent.mkdir(parents=True, exist_ok=True)
+        briefing = "<!doctype html><html><body><h1>東清八通關古道新版導覽</h1></body></html>"
+        briefing_path.write_text(briefing, encoding="utf-8")
+        briefing_sha256 = hashlib.sha256(briefing.encode("utf-8")).hexdigest()
+        review_ref = "outputs/route_context_pipeline/scout_ai_semantic_review_result.json"
+        review_path = project_root / review_ref
+        review_path.parent.mkdir(parents=True, exist_ok=True)
+        review_path.write_text(
+            json.dumps(
+                {
+                    "project_id": PROJECT_ID,
+                    "briefing_sha256": briefing_sha256,
+                    "verdict": "PASS",
+                    "readability_score": 5,
+                    "summary": "可供領隊與隊員順序閱讀。",
+                    "findings": [],
+                    "priority_revisions": [],
+                    "model": "deepseek/deepseek-v3.2",
+                    "provider": "openrouter",
+                    "reviewed_at": "2026-08-02T04:00:00Z",
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        return {
+            "artifact_kind": "scout_ai_route_context_quality_cycle",
+            "schema_version": "scout.route_context_quality_cycle.v1",
+            "status": "completed",
+            "stage": "content_review",
+            "project_id": PROJECT_ID,
+            "evidence_ref": evidence_path.relative_to(project_root).as_posix(),
+            "briefing_ref": briefing_ref,
+            "briefing_sha256": briefing_sha256,
+            "canonical_briefing_sha256": briefing_sha256,
+            "canonical_promoted": True,
+            "rejected_candidate_ref": None,
+            "generation": {
+                "model": "deepseek/deepseek-v3.2",
+                "provider": "openrouter",
+                "receipt_ref": "outputs/route_context_regeneration/regeneration_receipt.json",
+                "model_request_count": 2,
+                "editorial_contract": {
+                    "status": "PASS",
+                    "mode": "closed_route_non_regression",
+                },
+            },
+            "review": {
+                "verdict": "PASS",
+                "readability_score": 5,
+                "summary": "可供領隊與隊員順序閱讀。",
+                "findings": [],
+                "priority_revisions": [],
+                "finding_count": 0,
+                "model": "deepseek/deepseek-v3.2",
+                "provider": "openrouter",
+                "semantic_review_ref": review_ref,
+            },
+            "boundary": {
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "departure_approval": False,
+                "model_wrote_html": False,
+                "deterministic_compile": True,
+                "independent_content_review": True,
+            },
+        }
+
+    client = TestClient(
+        create_admin_app(
+            pretrip_workspace_root=workspace_root,
+            route_context_briefing_cycle_runner=fake_quality_cycle_runner,
+        )
+    )
+    response = client.post(
+        f"/admin/pretrip/projects/{PROJECT_ID}/briefings/route-context/regenerate",
+        json={
+            "confirm_regenerate": True,
+            "operator_alias": "dashboard_operator",
+            "model": "deepseek/deepseek-v3.2",
+            "timeout_seconds": 240,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "completed"
+    assert payload["canonical_promoted"] is True
+    assert payload["review"]["verdict"] == "PASS"
+    assert payload["review"]["readability_score"] == 5
+    assert payload["generation"]["model_request_count"] == 2
+    assert payload["generation"]["editorial_contract"]["status"] == "PASS"
+    assert payload["operator_triggered"] is True
+    assert payload["iframe_src"].endswith(f"?v={payload['briefing_sha256'][:16]}")
+    assert captured["model_name"] == "deepseek/deepseek-v3.2"
+    assert captured["timeout_seconds"] == 240
+
+    status = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/briefings/route-context/status"
+    ).json()
+    assert status["content_reviewed"] is True
+    assert status["content_review_verdict"] == "PASS"
+    assert status["readability_score"] == 5
+    assert status["content_review_model"] == "deepseek/deepseek-v3.2"
+
+    briefing_response = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/briefings/route-context"
+    )
+    assert briefing_response.status_code == 200
+    assert "東清八通關古道新版導覽" in briefing_response.text
+
+
+def test_pretrip_project_route_context_briefing_variants_generate_calls_scout_ai(
+    tmp_path: Path,
+):
+    workspace_root = _copy_pretrip_workspace(tmp_path)
+    project_root = workspace_root / PROJECT_ID
+    canonical_briefing = (
+        project_root / "outputs" / "briefings" / "route_context_briefing.html"
+    )
+    canonical_before = canonical_briefing.read_text(encoding="utf-8")
+    captured: dict[str, object] = {}
+
+    class FakeVariantsRunner:
+        def __init__(self, model_name: str) -> None:
+            self.model_name = model_name
+            self.last_prompt: str | None = None
+            self.last_response: str | None = None
+            self.last_usage = {
+                "provider_reported": True,
+                "input_tokens": 7804,
+                "output_tokens": 4700,
+                "total_tokens": 12504,
+                "requests": 1,
+                "tool_calls": 0,
+            }
+
+        def run(self, prompt: str, *, timeout_seconds: int) -> str:
+            captured["prompt"] = prompt
+            captured["timeout_seconds"] = timeout_seconds
+            self.last_prompt = prompt
+            self.last_response = json.dumps(
+                _route_context_briefing_variants_plan(),
+                ensure_ascii=False,
+            )
+            return self.last_response
+
+    def fake_variants_runner_factory(model_name: str, model_max_tokens: int):
+        captured["model_name"] = model_name
+        captured["model_max_tokens"] = model_max_tokens
+        return FakeVariantsRunner(model_name)
+
+    client = TestClient(
+        create_admin_app(
+            pretrip_workspace_root=workspace_root,
+            route_context_briefing_variants_runner_factory=(
+                fake_variants_runner_factory
+            ),
+        )
+    )
+    response = client.post(
+        f"/admin/pretrip/projects/{PROJECT_ID}/briefings/route-context/variants/generate",
+        json={
+            "confirm_generate": True,
+            "model": "nvidia:z-ai/glm-5.2",
+            "timeout_seconds": 300,
+            "model_max_tokens": 7000,
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "completed"
+    assert payload["variant_count"] == 5
+    assert payload["model"] == "nvidia:z-ai/glm-5.2"
+    assert payload["skill_id"] == "route-context-intelligence"
+    assert payload["token_usage"]["total_tokens"] == 12504
+    assert [item["file_ref"] for item in payload["variants"]] == [
+        "01-magazine_atlas.html",
+        "02-command_wall.html",
+        "03-field_notebook.html",
+        "04-topographic_feature.html",
+        "05-night_navigation.html",
+    ]
+    assert payload["one_model_call_complete"] is True
+    assert payload["no_codex_posthoc_supplement"] is True
+    assert payload["boundary"]["workspace_canonical_briefing_overwritten"] is False
+    assert captured["model_name"] == "nvidia:z-ai/glm-5.2"
+    assert captured["model_max_tokens"] == 7000
+    assert captured["timeout_seconds"] == 300
+    assert "Generate exactly five complete route-content briefing variant specs" in str(
+        captured["prompt"]
+    )
+    assert "route-context-intelligence" in str(captured["prompt"])
+
+    output_dir = (
+        project_root / "outputs" / "briefings" / "route_context_variants_ai_once"
+    )
+    plan_payload = json.loads(
+        (output_dir / "scout_ai_route_context_variant_model_plan.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert plan_payload["prompt_content"]
+    assert plan_payload["response_content"]
+    assert plan_payload["skill_manifest_sha256"]
+    assert plan_payload["model_output_sha256"]
+    assert plan_payload["token_usage"]["total_tokens"] == 12504
+    assert plan_payload["boundary"]["workspace_canonical_briefing_overwritten"] is False
+    assert canonical_briefing.read_text(encoding="utf-8") == canonical_before
+
+    status_response = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/briefings/route-context/variants"
+    )
+    assert status_response.status_code == 200
+    assert status_response.json()["variant_count"] == 5
+
+    index_response = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/briefings/route-context/variants/file",
+        params={"ref": "index.html"},
+    )
+    assert index_response.status_code == 200
+    assert index_response.headers["x-scout-candidate-only"] == "true"
+    assert index_response.headers["x-scout-runtime-safety-truth"] == "false"
+    assert index_response.headers["x-scout-route-context-briefing-variants"] == "true"
+    assert "Scout AI 一次產生的 5 版 Route Briefing" in index_response.text
+    for file_ref in [item["file_ref"] for item in payload["variants"]]:
+        assert f"?ref={file_ref}" in index_response.text
+        linked_response = client.get(
+            f"/admin/pretrip/projects/{PROJECT_ID}/briefings/route-context/variants/file",
+            params={"ref": file_ref},
+        )
+        assert linked_response.status_code == 200
+    assert "?ref=route_context_variant_comparison.md" in index_response.text
+    assert "?ref=route_context_variant_comparison.json" in index_response.text
+
+    legacy_ref = payload["variants"][0]["file_ref"]
+    (output_dir / "index.html").write_text(
+        f'<a href="{legacy_ref}">legacy generated card</a>',
+        encoding="utf-8",
+    )
+    legacy_index_response = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/briefings/route-context/variants/file",
+        params={"ref": "index.html"},
+    )
+    assert legacy_index_response.status_code == 200
+    assert f"?ref={legacy_ref}" in legacy_index_response.text
+    assert f'href="{legacy_ref}"' not in legacy_index_response.text
+
+
+def test_pretrip_project_route_context_briefing_variants_provider_failure_is_fail_closed(
+    tmp_path: Path,
+) -> None:
+    workspace_root = _copy_pretrip_workspace(tmp_path)
+    project_root = workspace_root / PROJECT_ID
+    project_path = project_root / "project.json"
+    project_before = project_path.read_text(encoding="utf-8")
+
+    class FailingVariantsRunner:
+        model_name = "nvidia:z-ai/glm-5.2"
+        last_usage = {
+            "provider_reported": False,
+            "input_tokens": None,
+            "output_tokens": None,
+            "total_tokens": None,
+            "requests": 1,
+            "tool_calls": 0,
+        }
+
+        def run(self, _prompt: str, *, timeout_seconds: int) -> str:
+            assert timeout_seconds == 300
+            raise RuntimeError("synthetic provider unavailable")
+
+    client = TestClient(
+        create_admin_app(
+            pretrip_workspace_root=workspace_root,
+            route_context_briefing_variants_runner_factory=(
+                lambda _model_name, _model_max_tokens: FailingVariantsRunner()
+            ),
+        )
+    )
+    response = client.post(
+        f"/admin/pretrip/projects/{PROJECT_ID}/briefings/route-context/variants/generate",
+        json={
+            "confirm_generate": True,
+            "model": "nvidia:z-ai/glm-5.2",
+            "timeout_seconds": 300,
+            "model_max_tokens": 7000,
+        },
+    )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "synthetic provider unavailable"
+    assert project_path.read_text(encoding="utf-8") == project_before
+
+
+def _route_context_briefing_variants_plan() -> dict[str, object]:
+    return {
+        "artifact_kind": "scout_ai_route_context_briefing_variants_plan",
+        "schema_version": "scout_ai_route_context_briefing_variants_plan.v1",
+        "skill_id": "route-context-intelligence",
+        "one_model_call_complete": True,
+        "no_codex_posthoc_supplement": True,
+        "variants": [_route_context_briefing_variant(index) for index in range(1, 6)],
+    }
+
+
+def _route_context_briefing_variant(index: int) -> dict[str, object]:
+    slugs = [
+        "magazine-atlas",
+        "command-wall",
+        "field-notebook",
+        "topographic-feature",
+        "night-navigation",
+    ]
+    tones = [
+        "山岳雜誌",
+        "隊伍作戰牆",
+        "領隊野帳",
+        "地形特刊",
+        "夜航簡報",
+    ]
+    return {
+        "slug": slugs[index - 1],
+        "title": f"{tones[index - 1]}奇萊南華",
+        "subtitle": "林道、山莊、稜線與短停題目",
+        "tone": tones[index - 1],
+        "concept": f"{tones[index - 1]}路線閱讀",
+        "editorial_thesis": "把沿線地形、來源與觀察點排成領隊出發前能審查的段落。",
+        "hero_caption": "能高越嶺道與南華山稜線景觀。",
+        "nav_labels": ["路線", "照片", "比例", "章節", "觀察", "來源"],
+        "layer_headlines": {
+            "historical": "保線與舊路痕跡提示路線背景。",
+            "cultural": "地名與通行記憶連回隊伍說明。",
+            "natural": "林相、水線與雲霧補足路感。",
+            "terrain": "崩壁、啞口與稜線是閱讀重點。",
+            "seasonal": "午後雲霧與低溫放進行前提醒。",
+            "observation": "短停題目只用於討論與審查。",
+        },
+        "chapter_titles": [f"路段閱讀 {index}-{i}" for i in range(1, 9)],
+        "observation_prompts": [
+            f"觀察題 {index}-{i}：確認上下路段關係。" for i in range(1, 11)
+        ],
+        "point_angles": [
+            {
+                "label": f"路線點 {i}",
+                "angle": f"從隊伍節奏看地形與視野轉換 {i}。",
+                "question": f"先確認哪個方向線索 {i}？",
+                "route_reading": f"這個點只作行前脈絡討論 {i}。",
+            }
+            for i in range(1, 19)
+        ],
+        "chart_titles": [f"比例圖 {index}-{i}" for i in range(1, 7)],
+        "source_storyline": "官方路線圖、行程點與影像分開確認，再排成行前討論順序。",
+        "leader_review_focus": "領隊先確認照片、短停提問與資料來源是否支撐隊伍說明。",
+        "closing_note": "這份版本是行前閱讀，不取代現地停留或安全決策。",
+    }
+
+
+def test_route_context_briefing_runner_adds_src_to_python_path(
+    monkeypatch,
+) -> None:
+    src_path = str(ROOT / "src")
+    monkeypatch.setattr(sys, "path", [path for path in sys.path if path != src_path])
+
+    _ensure_scout_src_on_path()
+
+    assert sys.path[0] == src_path
+
+
+def test_route_context_briefing_runner_disables_native_research_tools(
+    monkeypatch,
+) -> None:
+    import assistant_pydantic_provider
+
+    captured: dict[str, object] = {}
+
+    class FakeRunner:
+        def __init__(self, **kwargs: object) -> None:
+            captured["runner_kwargs"] = kwargs
+
+        def run(self, prompt: str, *, timeout_seconds: int) -> str:
+            captured["prompt"] = prompt
+            captured["timeout_seconds"] = timeout_seconds
+            return "route-context-plan"
+
+    monkeypatch.setattr(
+        assistant_pydantic_provider,
+        "PydanticAIEnvRunner",
+        FakeRunner,
+    )
+
+    output = _run_route_context_briefing_scout_ai(
+        "Generate the deterministic route-context plan without tools.",
+        model_name="nvidia:z-ai/glm-5.2",
+        timeout_seconds=45,
+        runner=None,
+    )
+
+    assert output == "route-context-plan"
+    runner_kwargs = captured["runner_kwargs"]
+    assert isinstance(runner_kwargs, dict)
+    assert runner_kwargs["model_name"] == "nvidia:z-ai/glm-5.2"
+    assert runner_kwargs["workspace_tools_enabled"] is False
+    assert captured["timeout_seconds"] == 45
+
+
+def test_route_context_briefing_max_tokens_defaults_above_short_answer_limit(
+    monkeypatch,
+) -> None:
+    monkeypatch.delenv("SCOUT_DASHBOARD_BRIEFING_MAX_TOKENS", raising=False)
+    assert _route_context_briefing_max_tokens() == 2048
+
+    monkeypatch.setenv("SCOUT_DASHBOARD_BRIEFING_MAX_TOKENS", "128")
+    assert _route_context_briefing_max_tokens() == 512
+
+    monkeypatch.setenv("SCOUT_DASHBOARD_BRIEFING_MAX_TOKENS", "99999")
+    assert _route_context_briefing_max_tokens() == 4096
 
 
 def test_pretrip_project_terrain_overlay_api_serves_workspace_png(tmp_path: Path):
@@ -291,6 +1608,94 @@ def test_pretrip_project_terrain_overlay_api_serves_workspace_png(tmp_path: Path
     assert response.headers["x-scout-terrain-overlay"] == "slope_shading"
     assert response.headers["x-scout-runtime-safety-truth"] == "false"
     assert response.content == png_bytes
+
+
+def test_pretrip_project_osm_pbf_vector_api_serves_workspace_geojson(tmp_path: Path):
+    workspace_root = tmp_path / "pretrip_workspace"
+    project_root = workspace_root / PROJECT_ID
+    vector_ref = "normalized/map/osm_pbf_route_bbox_full.geojson"
+    vector_path = project_root / vector_ref
+    vector_path.parent.mkdir(parents=True, exist_ok=True)
+    vector_payload = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "geometry": {"type": "Point", "coordinates": [121.1, 23.9]},
+                "properties": {
+                    "@type": "node",
+                    "@id": 1,
+                    "highway": "milestone",
+                    "distance": "7K+000",
+                },
+            }
+        ],
+    }
+    vector_path.write_text(json.dumps(vector_payload), encoding="utf-8")
+    (project_root / "project.json").write_text(
+        json.dumps({"osm_pbf_render_geojson_ref": vector_ref}),
+        encoding="utf-8",
+    )
+
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+    response = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/osm-pbf-vector.geojson"
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("application/geo+json")
+    assert response.headers["x-scout-osm-pbf-vector"] == "true"
+    assert response.headers["x-scout-source-ref"] == vector_ref
+    assert response.headers["x-scout-candidate-only"] == "true"
+    assert response.headers["x-scout-runtime-safety-truth"] == "false"
+    assert response.json()["features"][0]["properties"]["distance"] == "7K+000"
+
+    project = {"osm_pbf_render_geojson_ref": "../outside.geojson"}
+    (project_root / "project.json").write_text(json.dumps(project), encoding="utf-8")
+    unsafe_response = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/osm-pbf-vector.geojson"
+    )
+    assert unsafe_response.status_code == 422
+
+
+def test_pretrip_osm_carto_palette_api_serves_simplified_renderer_contract():
+    client = TestClient(create_admin_app())
+
+    response = client.get("/admin/pretrip/osm-carto-palette")
+
+    assert response.status_code == 200
+    assert response.headers["x-scout-osm-carto-palette"] == "true"
+    assert response.headers["x-scout-runtime-safety-truth"] == "false"
+    payload = response.json()
+    assert payload["schema_version"] == "scout_osm_carto_palette.v1"
+    assert payload["source"]["upstream_project"] == "openstreetmap-carto"
+    assert (
+        payload["css_variables"]["--osm-carto-track-fill"]
+        == payload["palette"]["roads"]["track_fill"]
+        == "#996600"
+    )
+    assert payload["renderer_mapping"]["track"]["core"] == "--osm-carto-track-fill"
+    assert payload["renderer_mapping"]["primary"]["core"] == "--osm-carto-primary-fill"
+    assert payload["renderer_mapping"]["forest"]["fill"] == "--osm-carto-forest"
+    assert payload["palette"]["water"]["water_fill"] == "#aad3df"
+    assert payload["renderer_mapping"]["building"]["draw_order"] == 30
+    assert payload["rendering_contract"]["drawing_order"] == [
+        "background",
+        "landcover",
+        "water_polygons",
+        "building_polygons",
+        "road_casings",
+        "road_fills",
+        "points",
+        "labels",
+    ]
+    assert "casing first" in payload["rendering_contract"]["road_policy"]
+    assert (
+        payload["zoom_rules"]["scout_admin_zoom_scale"]["line_labels"][
+            "major_roads_min"
+        ]
+        == 1.15
+    )
 
 
 def test_pretrip_project_weather_overlay_api_returns_summary_only_contract():
@@ -483,7 +1888,46 @@ def test_admin_imagery_tile_proxy_api_uses_workspace_project_cache_root(
     assert response.content == cached_path.read_bytes()
 
 
-def test_admin_imagery_tile_proxy_api_returns_transparent_fallback(monkeypatch, tmp_path):
+def test_admin_imagery_tile_proxy_api_discovers_adjacent_shared_cache_root(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.delenv("SCOUT_ADMIN_RASTER_TILE_CACHE_ROOT", raising=False)
+    workspace_root = tmp_path / "workspaces"
+    project_id = "chilai_nanhua_day1"
+    project_root = workspace_root / project_id
+    shared_cache_root = workspace_root / "scout-local-data" / "raster-tiles"
+    project_root.mkdir(parents=True)
+    (project_root / "project.json").write_text(
+        json.dumps({"project_id": project_id}, sort_keys=True),
+        encoding="utf-8",
+    )
+    cached_path = raster_tile_cache_path(
+        project_id,
+        "imagery",
+        5,
+        26,
+        13,
+        cache_root=shared_cache_root,
+    )
+    cached_path.parent.mkdir(parents=True)
+    cached_path.write_bytes(b"\x89PNG\r\n\x1a\nshared-rudy-tile")
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.get(
+        f"/admin/tiles/imagery/{project_id}/imagery/5/26/13.png"
+        "?source_id=happyman_rudy_twmap"
+    )
+
+    assert response.status_code == 200
+    assert response.headers["x-scout-tile-source"] == "local_cache"
+    assert response.headers["x-scout-imagery-source-id"] == "happyman_rudy_twmap"
+    assert response.content == cached_path.read_bytes()
+
+
+def test_admin_imagery_tile_proxy_api_returns_transparent_fallback(
+    monkeypatch, tmp_path
+):
     monkeypatch.setenv("SCOUT_ADMIN_RASTER_TILE_CACHE_ROOT", str(tmp_path))
     client = TestClient(create_admin_app())
 
@@ -623,6 +2067,64 @@ def test_admin_imagery_tile_proxy_api_can_fill_named_rudy_layer_from_source_id(
     assert cached_path.read_bytes() == remote_body
 
 
+def test_admin_imagery_tile_proxy_api_native_zoom_uses_explicit_xyz_source(
+    monkeypatch,
+    tmp_path,
+):
+    workspace_root = tmp_path / "workspaces"
+    project_id = "chilai_nanhua_day1"
+    project_root = workspace_root / project_id
+    cache_root = tmp_path / "raster-tiles"
+    project_root.mkdir(parents=True)
+    (project_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": project_id,
+                "imagery_tile_cache_root": str(cache_root),
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("SCOUT_ADMIN_IMAGERY_REMOTE_FETCH", raising=False)
+    remote_body = b"\x89PNG\r\n\x1a\nrudy-twmap-z15"
+    requested = []
+
+    class FakeResponse:
+        headers = {"Content-Type": "image/png"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return remote_body
+
+    def fake_urlopen(request, timeout):
+        requested.append((request.full_url, timeout))
+        return FakeResponse()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.get(
+        f"/admin/tiles/imagery/{project_id}/imagery/15/27418/14126.png"
+        "?source_id=happyman_rudy_twmap&native=1"
+    )
+
+    assert response.status_code == 200
+    assert response.headers["x-scout-tile-source"] == "remote_fetch_cache_fill"
+    assert response.headers["x-scout-imagery-source-id"] == "happyman_rudy_twmap"
+    assert requested == [
+        (
+            "https://tile.happyman.idv.tw/map/moi_osm/15/27418/14126.png",
+            3.0,
+        )
+    ]
+
+
 def test_admin_imagery_tile_proxy_api_rejects_invalid_identity():
     client = TestClient(create_admin_app())
 
@@ -681,9 +2183,113 @@ def test_pretrip_project_workspace_api_creates_metadata_only_tmp_copy(tmp_path):
     ).is_file()
     assert all(
         path.suffix.lower() in {".json", ".geojson", ".jsonl"}
+        or (
+            path.suffix.lower() == ".html"
+            and path.relative_to(workspace_project_root).parent
+            == Path("outputs/briefings")
+        )
         for path in workspace_project_root.rglob("*")
         if path.is_file()
     )
+    assert _repo_fixture_bytes() == original_fixture_bytes
+
+
+def test_dashboard_workspace_catalog_resolves_server_owned_workspace_root(tmp_path):
+    workspace_root = _copy_pretrip_workspace(tmp_path)
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.get("/admin/dashboard/workspaces")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["workspace_parent_root"] == str(workspace_root.resolve())
+    project = next(
+        item for item in payload["projects"] if item["project_id"] == PROJECT_ID
+    )
+    assert project["workspace_backed"] is True
+    assert project["resolved_project_root"] == str(
+        (workspace_root / PROJECT_ID).resolve()
+    )
+    assert project["capabilities"]["switch"] is True
+    assert project["capabilities"]["record_operation_request"] is True
+
+
+def test_dashboard_workspace_context_rejects_unknown_project(tmp_path):
+    workspace_root = _copy_pretrip_workspace(tmp_path)
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.get("/admin/dashboard/workspaces/missing")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Dashboard workspace not found"
+
+
+def test_dashboard_workspace_operation_request_requires_explicit_confirmation(
+    tmp_path,
+):
+    workspace_root = _copy_pretrip_workspace(tmp_path)
+    project_root = workspace_root / PROJECT_ID
+    request_log = project_root / "reviews" / "workspace_operation_requests.jsonl"
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.post(
+        f"/admin/dashboard/workspaces/{PROJECT_ID}/operation-requests",
+        json={"operation": "package", "confirm_record": False},
+    )
+
+    assert response.status_code == 400
+    assert "confirm_record=true" in response.json()["detail"]
+    assert not request_log.exists()
+
+
+def test_dashboard_workspace_operation_request_is_append_only_intent_not_execution(
+    tmp_path,
+):
+    workspace_root = _copy_pretrip_workspace(tmp_path)
+    project_root = workspace_root / PROJECT_ID
+    request_log = project_root / "reviews" / "workspace_operation_requests.jsonl"
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.post(
+        f"/admin/dashboard/workspaces/{PROJECT_ID}/operation-requests",
+        json={
+            "operation": "delete_review",
+            "confirm_record": True,
+            "requested_by": "dashboard_operator",
+            "note": "Review whether this workspace can be retired.",
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    request = payload["request"]
+    assert request["operation"] == "delete_review"
+    assert request["status"] == "requested"
+    assert request["destructive"] is True
+    assert request["execution_performed"] is False
+    assert request["runtime_safety_truth"] is False
+    assert request["candidate_only"] is True
+    assert project_root.is_dir()
+    persisted_lines = request_log.read_text(encoding="utf-8").splitlines()
+    assert len(persisted_lines) == 1
+    assert json.loads(persisted_lines[0])["request_id"] == request["request_id"]
+
+    listed = client.get(f"/admin/dashboard/workspaces/{PROJECT_ID}/operation-requests")
+    assert listed.status_code == 200
+    assert listed.json()["requests"][0]["request_id"] == request["request_id"]
+
+
+def test_dashboard_workspace_operation_request_never_writes_repo_fixture():
+    original_fixture_bytes = _repo_fixture_bytes()
+    client = TestClient(create_admin_app())
+
+    response = client.post(
+        f"/admin/dashboard/workspaces/{PROJECT_ID}/operation-requests",
+        json={"operation": "clone", "confirm_record": True},
+    )
+
+    assert response.status_code == 409
+    assert "workspace-backed project" in response.json()["detail"]
     assert _repo_fixture_bytes() == original_fixture_bytes
 
 
@@ -697,7 +2303,9 @@ def test_pretrip_project_workspace_api_rejects_duplicate_create(tmp_path):
 
     assert first_response.status_code == 200
     assert duplicate_response.status_code == 409
-    assert "workspace project root already exists" in duplicate_response.json()["detail"]
+    assert (
+        "workspace project root already exists" in duplicate_response.json()["detail"]
+    )
     assert _repo_fixture_bytes() == original_fixture_bytes
 
 
@@ -768,7 +2376,9 @@ def test_pretrip_mcp_review_action_preview_does_not_write_workspace(tmp_path):
     assert payload["artifact_kind"] == "pretrip_mcp_review_action_preview"
     assert payload["preview"] is True
     assert payload["mutation"]["workspace_files_mutated"] is False
-    assert not (workspace_project_root / "outputs" / "mcp" / "mcp_review_actions.json").exists()
+    assert not (
+        workspace_project_root / "outputs" / "mcp" / "mcp_review_actions.json"
+    ).exists()
 
 
 def test_pretrip_mcp_review_actions_reject_unknown_linked_cp(tmp_path):
@@ -998,12 +2608,17 @@ def test_pretrip_import_gpx_run_writes_workspace_and_returns_projection_paths(tm
         "/admin/pretrip/projects/api_run_import/debug-projection"
     )
     assert admin_projection.status_code == 200
-    assert admin_projection.json()["planning_semantics"][
-        "pretrip_actual_user_track_exists"
-    ] is False
+    assert (
+        admin_projection.json()["planning_semantics"][
+            "pretrip_actual_user_track_exists"
+        ]
+        is False
+    )
     assert debug_projection.status_code == 200
     assert debug_projection.json()["event_count"] == 4
-    assert debug_projection.json()["boundary"]["phase1_runtime_mutation_allowed"] is False
+    assert (
+        debug_projection.json()["boundary"]["phase1_runtime_mutation_allowed"] is False
+    )
     assert debug_projection_view.status_code == 200
     debug_projection_payload = debug_projection_view.json()
     assert debug_projection_payload["event_count"] > 4
@@ -1019,12 +2634,20 @@ def test_pretrip_import_gpx_run_writes_workspace_and_returns_projection_paths(tm
         is False
     )
     assert debug_projection_payload["boundary"]["runtime_safety_truth"] is False
-    assert debug_projection_payload["timeline_events"][2]["kind"] == "checkpoint_detected"
+    assert (
+        debug_projection_payload["timeline_events"][2]["kind"] == "checkpoint_detected"
+    )
 
 
 def test_pretrip_prepare_layers_preview_is_workspace_metadata_only(tmp_path):
     original_fixture_bytes = _repo_fixture_bytes()
     workspace_root = _copy_pretrip_workspace(tmp_path)
+    workspace_project_root = workspace_root / PROJECT_ID
+    workspace_bytes_before = {
+        path.relative_to(workspace_project_root): path.read_bytes()
+        for path in sorted(workspace_project_root.rglob("*"))
+        if path.is_file()
+    }
     client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
 
     response = client.post(
@@ -1045,7 +2668,12 @@ def test_pretrip_prepare_layers_preview_is_workspace_metadata_only(tmp_path):
     assert payload["boundary"]["workspace_file_mutation_allowed"] is False
     assert payload["boundary"]["phase1_runtime_mutation_allowed"] is False
     assert payload["mutation"]["workspace_files_mutated"] is False
-    assert not (workspace_root / PROJECT_ID / "outputs" / "layers").exists()
+    workspace_bytes_after = {
+        path.relative_to(workspace_project_root): path.read_bytes()
+        for path in sorted(workspace_project_root.rglob("*"))
+        if path.is_file()
+    }
+    assert workspace_bytes_after == workspace_bytes_before
     assert "<trkpt" not in response.text.lower()
     assert _repo_fixture_bytes() == original_fixture_bytes
 
@@ -1187,8 +2815,7 @@ def test_pretrip_review_decision_api_persists_to_tmp_workspace(tmp_path):
         {
             "review_queue_manifest_id": "review_queue.chilai_nanhua_day1.v0",
             "item_id": (
-                "review_queue.chilai_nanhua_day1.contour."
-                "contour.g11.seg_006_008"
+                "review_queue.chilai_nanhua_day1.contour.contour.g11.seg_006_008"
             ),
             "source_ref": "outputs/contour_interpretation_candidates.json",
             "candidate_ref": UNDECIDED_CONTOUR_CANDIDATE_REF,
@@ -1210,8 +2837,14 @@ def test_pretrip_review_decision_api_persists_to_tmp_workspace(tmp_path):
     persisted_log = json.loads(workspace_log.read_text(encoding="utf-8"))
     assert persisted_log["counts"]["action_count"] == 4
     assert persisted_log["counts"]["accepted_count"] == 2
-    assert persisted_log["decisions"][-1]["decision_id"] == payload["record"]["decision_id"]
-    assert persisted_log["decisions"][-1]["candidate_ref"] == UNDECIDED_CONTOUR_CANDIDATE_REF
+    assert (
+        persisted_log["decisions"][-1]["decision_id"]
+        == payload["record"]["decision_id"]
+    )
+    assert (
+        persisted_log["decisions"][-1]["candidate_ref"]
+        == UNDECIDED_CONTOUR_CANDIDATE_REF
+    )
     assert persisted_log["decisions"][-1]["target_ids"] == UNDECIDED_CONTOUR_TARGET_IDS
     assert REPO_REVIEW_DECISION_LOG.read_bytes() == original_log
 
@@ -1289,7 +2922,10 @@ def test_pretrip_route_note_disposition_api_persists_to_tmp_workspace_only(tmp_p
 
     persisted_log = json.loads(workspace_log.read_text(encoding="utf-8"))
     assert persisted_log["counts"]["disposition_count"] == 1
-    assert persisted_log["records"][0]["candidate_ref"] == "route_note.golden_route.wpt_025"
+    assert (
+        persisted_log["records"][0]["candidate_ref"]
+        == "route_note.golden_route.wpt_025"
+    )
     assert persisted_log["records"][0]["selected_disposition"] == "promote_warning"
     assert "<gpx" not in workspace_log.read_text(encoding="utf-8").lower()
     assert _repo_fixture_bytes() == original_fixture_bytes
@@ -1521,7 +3157,10 @@ def test_pretrip_workspace_edit_api_records_planned_tool_operations(tmp_path):
     assert final_payload["counts"]["phase2_writeback_count"] == 0
     assert final_payload["record"]["operation"] == "rectangle_group_selection"
     assert final_payload["record"]["target_kind"] == "rectangle_selection"
-    assert final_payload["boundary"]["workspace_candidate_artifact_mutation_allowed"] is True
+    assert (
+        final_payload["boundary"]["workspace_candidate_artifact_mutation_allowed"]
+        is True
+    )
     assert final_payload["boundary"]["package_mutation_allowed"] is False
     assert final_payload["boundary"]["mission_graph_mutation_allowed"] is False
     assert final_payload["boundary"]["runtime_mutation_allowed"] is False
@@ -1545,10 +3184,15 @@ def test_pretrip_workspace_edit_api_records_planned_tool_operations(tmp_path):
     assert responses[0].json()["mutation"]["checkpoint_candidates_mutated"] is True
     assert responses[1].json()["mutation"]["retreat_route_candidates_mutated"] is True
     assert responses[2].json()["mutation"]["retreat_route_candidates_mutated"] is True
-    assert responses[3].json()["mutation"]["workspace_candidate_artifacts_mutated"] is False
+    assert (
+        responses[3].json()["mutation"]["workspace_candidate_artifacts_mutated"]
+        is False
+    )
     assert responses[4].json()["mutation"]["checkpoint_candidates_mutated"] is True
     after_checkpoints = json.loads(workspace_checkpoints.read_text(encoding="utf-8"))
-    after_retreat_routes = json.loads(workspace_retreat_routes.read_text(encoding="utf-8"))
+    after_retreat_routes = json.loads(
+        workspace_retreat_routes.read_text(encoding="utf-8")
+    )
     assert workspace_checkpoints.read_bytes() != before_checkpoints
     assert workspace_retreat_routes.read_bytes() != before_retreat_routes
     assert all(item["candidate_id"] != "cp.010" for item in after_checkpoints)
@@ -1627,7 +3271,7 @@ def test_pretrip_route_note_reviewed_assumptions_api_writes_workspace_only(tmp_p
     disposition_response = client.post(
         f"/admin/pretrip/projects/{PROJECT_ID}/route-note-dispositions",
         json={
-                "route_note_ref": "route_note.golden_route.wpt_025",
+            "route_note_ref": "route_note.golden_route.wpt_025",
             "disposition": "promote_warning",
             "reviewer_alias": "trip_leader",
             "decided_at": "2026-05-15T11:30:00+08:00",
@@ -1659,7 +3303,9 @@ def test_pretrip_route_note_reviewed_assumptions_api_writes_workspace_only(tmp_p
     assert payload["boundary"]["workspace_route_note_reviewed_assumptions_path"] == str(
         workspace_assumptions
     )
-    assert payload["mutation"]["workspace_route_note_reviewed_assumptions_mutated"] is True
+    assert (
+        payload["mutation"]["workspace_route_note_reviewed_assumptions_mutated"] is True
+    )
     assert workspace_assumptions.is_file()
     workspace_payload = json.loads(workspace_assumptions.read_text(encoding="utf-8"))
     assert workspace_payload["counts"]["accepted_interpretation_count"] == 1
@@ -1696,9 +3342,12 @@ def test_pretrip_project_api_overlays_route_note_reviewed_assumptions(tmp_path):
         section["id"]: section
         for section in view["tabs"]["review_workspace"]["sections"]
     }
-    assert sections["route_note_reviewed_assumptions"]["counts"][
-        "accepted_interpretation_count"
-    ] == 1
+    assert (
+        sections["route_note_reviewed_assumptions"]["counts"][
+            "accepted_interpretation_count"
+        ]
+        == 1
+    )
 
 
 def test_pretrip_project_api_overlays_local_workspace_review_decisions(tmp_path):
@@ -1734,9 +3383,9 @@ def test_pretrip_project_api_overlays_local_workspace_review_decisions(tmp_path)
         UNDECIDED_CONTOUR_CANDIDATE_REF
     )
     assert (
-        after_payload["tabs"]["pre_trip_planning"]["review_decision_log"][
-            "counts"
-        ]["action_count"]
+        after_payload["tabs"]["pre_trip_planning"]["review_decision_log"]["counts"][
+            "action_count"
+        ]
         == 4
     )
     assert REPO_REVIEW_DECISION_LOG.read_bytes() == original_log
@@ -1771,7 +3420,10 @@ def test_pretrip_review_decision_api_rejects_duplicate_workspace_append(tmp_path
     persisted_log = json.loads(workspace_log.read_text(encoding="utf-8"))
     assert persisted_log["counts"]["action_count"] == 4
     assert persisted_log["counts"]["accepted_count"] == 2
-    assert persisted_log["decisions"][-1]["candidate_ref"] == UNDECIDED_CONTOUR_CANDIDATE_REF
+    assert (
+        persisted_log["decisions"][-1]["candidate_ref"]
+        == UNDECIDED_CONTOUR_CANDIDATE_REF
+    )
     assert persisted_log["decisions"][-1]["target_ids"] == UNDECIDED_CONTOUR_TARGET_IDS
     assert REPO_REVIEW_DECISION_LOG.read_bytes() == original_log
 
@@ -1810,6 +3462,7 @@ def test_pretrip_review_decision_api_rejects_duplicate_candidate_ref_append(tmp_
     assert persisted_log["counts"]["accepted_count"] == 2
     assert persisted_log["counts"]["rejected_count"] == 1
     assert persisted_log["decisions"][-1]["decision"] == "accepted"
+    assert REPO_REVIEW_DECISION_LOG.read_bytes() == original_log
 
 
 def test_pretrip_review_decision_batch_preview_is_no_write():
@@ -1836,7 +3489,10 @@ def test_pretrip_review_decision_batch_preview_is_no_write():
     assert payload["preview"] is True
     assert payload["record_count"] == 2
     assert payload["records"][0]["candidate_ref"] == UNDECIDED_CONTOUR_CANDIDATE_REF
-    assert payload["records"][1]["candidate_ref"] == UNDECIDED_DEPARTURE_BUNDLE_CANDIDATE_REF
+    assert (
+        payload["records"][1]["candidate_ref"]
+        == UNDECIDED_DEPARTURE_BUNDLE_CANDIDATE_REF
+    )
     assert payload["boundary"]["batch_atomic_validation"] is True
     assert payload["boundary"]["admin_api_write_performed"] is False
     assert payload["mutation"]["fixture_files_mutated"] is False
@@ -1879,14 +3535,19 @@ def test_pretrip_review_decision_batch_persists_workspace_atomically(tmp_path):
 
     persisted_log = json.loads(workspace_log.read_text(encoding="utf-8"))
     assert persisted_log["counts"]["action_count"] == 5
-    assert persisted_log["decisions"][-2]["candidate_ref"] == UNDECIDED_CONTOUR_CANDIDATE_REF
+    assert (
+        persisted_log["decisions"][-2]["candidate_ref"]
+        == UNDECIDED_CONTOUR_CANDIDATE_REF
+    )
     assert persisted_log["decisions"][-1]["candidate_ref"] == (
         UNDECIDED_DEPARTURE_BUNDLE_CANDIDATE_REF
     )
     assert REPO_REVIEW_DECISION_LOG.read_bytes() == original_log
 
 
-def test_pretrip_review_decision_batch_rejects_duplicates_without_partial_write(tmp_path):
+def test_pretrip_review_decision_batch_rejects_duplicates_without_partial_write(
+    tmp_path,
+):
     original_log = REPO_REVIEW_DECISION_LOG.read_bytes()
     workspace_root = _copy_pretrip_workspace(tmp_path)
     workspace_log = workspace_root / PROJECT_ID / "reviews" / "review_decision_log.json"
@@ -1958,7 +3619,9 @@ def test_pretrip_review_decision_apply_plan_api_rejects_without_workspace():
     assert REPO_REVIEW_DECISION_APPLY_PLAN.read_bytes() == original_apply_plan
 
 
-def test_pretrip_review_decision_apply_plan_api_regenerates_tmp_workspace_only(tmp_path):
+def test_pretrip_review_decision_apply_plan_api_regenerates_tmp_workspace_only(
+    tmp_path,
+):
     original_apply_plan = REPO_REVIEW_DECISION_APPLY_PLAN.read_bytes()
     workspace_root = _copy_pretrip_workspace(tmp_path)
     workspace_apply_plan = (
@@ -2091,8 +3754,9 @@ def test_pretrip_review_decision_api_persists_gis_cp_workspace_pointer(tmp_path)
         workspace_apply_plan.read_text(encoding="utf-8")
     )
     gis_decision = workspace_apply_payload["decisions"][-1]
-    assert workspace_review_payload["decisions"][-1]["candidate_ref"] == (
-        gis_item["candidate_ref"]
+    assert (
+        workspace_review_payload["decisions"][-1]["candidate_ref"]
+        == (gis_item["candidate_ref"])
     )
     assert gis_decision["candidate_ref"] == gis_item["candidate_ref"]
     assert gis_decision["target_ids"] == gis_item["review_focus"]
@@ -2431,7 +4095,9 @@ def test_pretrip_workspace_corrected_review_flow_regenerates_workspace_apply_pla
     assert REPO_REVIEW_DECISION_APPLY_PLAN.read_bytes() == original_apply_plan
 
 
-def test_pretrip_review_decision_apply_plan_api_rejects_missing_workspace_project(tmp_path):
+def test_pretrip_review_decision_apply_plan_api_rejects_missing_workspace_project(
+    tmp_path,
+):
     workspace_root = tmp_path / "pretrip_workspace"
     workspace_root.mkdir()
     client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
@@ -2547,7 +4213,9 @@ def test_pretrip_departure_reviewed_candidates_api_writes_workspace_only(tmp_pat
     assert payload["mutation"]["phase2_writeback_performed"] is False
     assert payload["mutation"]["fixture_files_mutated"] is False
     assert payload["mutation"]["workspace_files_mutated"] is True
-    assert payload["mutation"]["workspace_departure_reviewed_candidates_mutated"] is True
+    assert (
+        payload["mutation"]["workspace_departure_reviewed_candidates_mutated"] is True
+    )
 
     output_payload = json.loads(workspace_output.read_text(encoding="utf-8"))
     gis_candidate = next(
@@ -2579,7 +4247,9 @@ def test_pretrip_departure_reviewed_candidates_api_writes_workspace_only(tmp_pat
 
 def test_pretrip_departure_reviewed_candidates_api_rejects_missing_apply_plan(tmp_path):
     workspace_root = _copy_pretrip_workspace(tmp_path)
-    (workspace_root / PROJECT_ID / "outputs" / "review_decision_apply_plan.json").unlink()
+    (
+        workspace_root / PROJECT_ID / "outputs" / "review_decision_apply_plan.json"
+    ).unlink()
     client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
 
     response = client.post(
@@ -2587,7 +4257,9 @@ def test_pretrip_departure_reviewed_candidates_api_rejects_missing_apply_plan(tm
     )
 
     assert response.status_code == 409
-    assert "missing required review_decision_apply_plan_ref" in response.json()["detail"]
+    assert (
+        "missing required review_decision_apply_plan_ref" in response.json()["detail"]
+    )
 
 
 def test_pretrip_expert_contribution_apply_plan_api_rejects_without_workspace():
@@ -2640,7 +4312,9 @@ def test_pretrip_expert_contribution_apply_plan_api_writes_workspace_only(tmp_pa
     )
     assert payload["mutation"]["candidate_artifacts_mutated"] is False
     assert payload["mutation"]["external_import_queue_mutated"] is False
-    assert payload["mutation"]["workspace_expert_contribution_apply_plan_mutated"] is True
+    assert (
+        payload["mutation"]["workspace_expert_contribution_apply_plan_mutated"] is True
+    )
     assert workspace_apply_plan.is_file()
     assert not REPO_EXPERT_CONTRIBUTION_APPLY_PLAN.exists()
     assert _repo_fixture_bytes() == original_fixture_bytes
@@ -2687,23 +4361,27 @@ def test_pretrip_expert_contribution_workspace_apply_result_api_mutates_workspac
     assert payload["counts"]["runtime_mutation_count"] == 0
     assert payload["counts"]["phase2_brain_writeback_count"] == 0
     assert payload["boundary"]["workspace_candidate_artifact_mutation_allowed"] is True
-    assert payload["boundary"]["workspace_external_import_queue_mutation_allowed"] is True
+    assert (
+        payload["boundary"]["workspace_external_import_queue_mutation_allowed"] is True
+    )
     assert payload["boundary"]["package_mutation_allowed"] is False
     assert payload["boundary"]["mission_graph_mutation_allowed"] is False
     assert payload["boundary"]["runtime_mutation_allowed"] is False
     assert payload["boundary"]["phase1_runtime_mutation_allowed"] is False
     assert payload["boundary"]["phase2_writeback_allowed"] is False
     assert payload["boundary"]["fixture_file_mutation_allowed"] is False
-    assert payload["boundary"]["workspace_expert_contribution_apply_result_path"] == str(
-        workspace_apply_result
-    )
+    assert payload["boundary"][
+        "workspace_expert_contribution_apply_result_path"
+    ] == str(workspace_apply_result)
     assert payload["mutation"]["workspace_candidate_artifacts_mutated"] is True
     assert payload["mutation"]["workspace_external_import_queue_mutated"] is True
     assert payload["mutation"]["fixture_files_mutated"] is False
     assert workspace_apply_result.is_file()
 
     after_checkpoints = json.loads(workspace_checkpoints.read_text(encoding="utf-8"))
-    after_retreat_routes = json.loads(workspace_retreat_routes.read_text(encoding="utf-8"))
+    after_retreat_routes = json.loads(
+        workspace_retreat_routes.read_text(encoding="utf-8")
+    )
     after_import_queue = json.loads(workspace_import_queue.read_text(encoding="utf-8"))
     assert len(after_checkpoints) == len(before_checkpoints) + 1
     assert after_checkpoints[-1]["review_state"] == "needs_human_review"
@@ -2735,9 +4413,9 @@ def test_pretrip_project_api_overlays_expert_contribution_workspace_apply_result
     assert apply_response.status_code == 200
     assert view_response.status_code == 200
     view = view_response.json()
-    assert view["expert_contribution_apply_plan"]["counts"][
-        "planned_operation_count"
-    ] == 3
+    assert (
+        view["expert_contribution_apply_plan"]["counts"]["planned_operation_count"] == 3
+    )
     result = view["expert_contribution_workspace_apply_result"]
     assert result["counts"]["applied_operation_count"] == 3
     assert result["boundary"]["workspace_candidate_artifact_mutation_allowed"] is True
@@ -2746,12 +4424,16 @@ def test_pretrip_project_api_overlays_expert_contribution_workspace_apply_result
         section["id"]: section
         for section in view["tabs"]["review_workspace"]["sections"]
     }
-    assert sections["expert_contribution_apply_plan"]["counts"][
-        "planned_operation_count"
-    ] == 3
-    assert sections["expert_contribution_workspace_apply_result"]["counts"][
-        "applied_operation_count"
-    ] == 3
+    assert (
+        sections["expert_contribution_apply_plan"]["counts"]["planned_operation_count"]
+        == 3
+    )
+    assert (
+        sections["expert_contribution_workspace_apply_result"]["counts"][
+            "applied_operation_count"
+        ]
+        == 3
+    )
 
 
 def test_pretrip_import_gpx_preview_api_is_no_write(tmp_path):

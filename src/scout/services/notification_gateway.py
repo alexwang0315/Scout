@@ -12,6 +12,10 @@ from urllib.parse import urlparse
 from typing import Any, Callable, Protocol
 from uuid import uuid4
 
+from pydantic import ValidationError
+
+from scout.schemas.outbound import OutboundActionIntent, OutboundStandingGrant
+from scout.services.outbound_standing_grant import evaluate_outbound_standing_grant
 from scout.services.workflow_store import WorkflowStore
 
 OPERATOR_NOTIFICATION_APPROVAL_PHRASE = "SEND SCOUT NOTIFICATION"
@@ -389,6 +393,151 @@ class OperatorConfirmedNotificationProvider:
         )
 
 
+class StandingGrantNotificationProvider:
+    """Execute typed non-safety notifications within one reviewed grant."""
+
+    def __init__(
+        self,
+        transport: NotificationProvider,
+        *,
+        provider_ref: str,
+        grant: OutboundStandingGrant,
+        clock: Callable[[], datetime] | None = None,
+    ) -> None:
+        if not provider_ref.strip():
+            raise ValueError("provider_ref must be non-empty")
+        self.transport = transport
+        self.provider_ref = provider_ref
+        self.grant = grant
+        self._clock = clock or (lambda: datetime.now(UTC))
+        self._send_count = 0
+        self._sent_idempotency_keys: frozenset[str] = frozenset()
+        self.name = f"standing_grant:{transport.name}"
+        self.notifications: list[NotificationResult] = []
+        self.audit_log: list[NotificationAuditRecord] = []
+
+    @property
+    def send_count(self) -> int:
+        return self._send_count
+
+    def deliver(self, result: NotificationResult) -> NotificationResult:
+        intent = self._intent_from_result(result)
+        if intent is None:
+            return self._blocked(result, "typed_outbound_intent_missing")
+
+        decision = evaluate_outbound_standing_grant(
+            intent,
+            grant=self.grant,
+            now=self._clock(),
+            prior_send_count=self._send_count,
+        )
+        local_blockers: list[str] = []
+        if intent.provider_ref != self.provider_ref:
+            local_blockers.append("notification_provider_intent_mismatch")
+        if result.user_id != intent.recipient_ref:
+            local_blockers.append("notification_recipient_intent_mismatch")
+        if result.priority != intent.priority.value:
+            local_blockers.append("notification_priority_intent_mismatch")
+        if notification_payload_hash(
+            title=result.title,
+            body=result.body,
+            priority=result.priority,
+        ) != intent.payload_hash:
+            local_blockers.append("notification_payload_hash_mismatch")
+        if intent.idempotency_key in self._sent_idempotency_keys:
+            local_blockers.append("duplicate_idempotency_key")
+        blockers = [*decision.blocker_reasons, *local_blockers]
+        if blockers:
+            return self._blocked(result, ",".join(dict.fromkeys(blockers)), intent=intent)
+
+        safe_metadata = _standing_grant_metadata(result.metadata, intent, self.grant)
+        transport_result = self.transport.deliver(
+            _copy_notification_result(
+                result,
+                provider=self.transport.name,
+                sent=True,
+                metadata=safe_metadata,
+            )
+        )
+        delivered = _copy_notification_result(
+            transport_result,
+            provider=self.name,
+            sent=transport_result.sent,
+            metadata={
+                **transport_result.metadata,
+                "transport": self.transport.name,
+                "standing_grant_id": self.grant.grant_id,
+                "outbound_intent_id": intent.intent_id,
+                "auto_execute_allowed": True,
+                "live_external_send_path": True,
+            },
+        )
+        self.notifications.append(delivered)
+        if delivered.sent:
+            self._send_count += 1
+            self._sent_idempotency_keys = frozenset(
+                {*self._sent_idempotency_keys, intent.idempotency_key}
+            )
+        self._record_audit(
+            delivered,
+            blocked_reason=None if delivered.sent else "transport_failed",
+        )
+        return delivered
+
+    @staticmethod
+    def _intent_from_result(result: NotificationResult) -> OutboundActionIntent | None:
+        payload = result.metadata.get("outbound_intent")
+        try:
+            return OutboundActionIntent.model_validate(payload)
+        except (ValidationError, TypeError, ValueError):
+            return None
+
+    def _blocked(
+        self,
+        result: NotificationResult,
+        blocked_reason: str,
+        *,
+        intent: OutboundActionIntent | None = None,
+    ) -> NotificationResult:
+        metadata = dict(result.metadata)
+        metadata.pop("outbound_intent", None)
+        if intent is not None:
+            metadata.update(_standing_grant_metadata(result.metadata, intent, self.grant))
+        delivered = _copy_notification_result(
+            result,
+            provider=self.name,
+            sent=False,
+            metadata={
+                **metadata,
+                "standing_grant_id": self.grant.grant_id,
+                "auto_execute_allowed": False,
+                "blocked_reason": blocked_reason,
+            },
+        )
+        self.notifications.append(delivered)
+        self._record_audit(delivered, blocked_reason=blocked_reason)
+        return delivered
+
+    def _record_audit(
+        self,
+        result: NotificationResult,
+        *,
+        blocked_reason: str | None,
+    ) -> None:
+        self.audit_log.append(
+            NotificationAuditRecord(
+                audit_id=str(uuid4()),
+                notification_id=result.notification_id,
+                provider=result.provider,
+                user_id_hash=_stable_secret_hash(result.user_id),
+                priority=result.priority,
+                sent=result.sent,
+                blocked_reason=blocked_reason,
+                metadata=_redact_notification_metadata(result.metadata),
+            )
+        )
+
+
 class NotificationGateway:
     """MVP notification gateway that logs locally and records workflow events."""
 
@@ -455,6 +604,38 @@ def _copy_notification_result(
     )
 
 
+def notification_payload_hash(*, title: str, body: str, priority: str) -> str:
+    payload = json.dumps(
+        {"body": body, "priority": priority, "title": title},
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _standing_grant_metadata(
+    metadata: dict[str, Any],
+    intent: OutboundActionIntent,
+    grant: OutboundStandingGrant,
+) -> dict[str, Any]:
+    safe_metadata = dict(metadata)
+    safe_metadata.pop("outbound_intent", None)
+    safe_metadata.update(
+        {
+            "standing_grant_id": grant.grant_id,
+            "outbound_intent_id": intent.intent_id,
+            "outbound_message_class": intent.message_class,
+            "outbound_provider_ref": intent.provider_ref,
+            "outbound_recipient_ref": intent.recipient_ref,
+            "outbound_payload_hash": intent.payload_hash,
+            "outbound_data_classes": [item.value for item in intent.data_classes],
+            "outbound_scope_ref": intent.scope_ref,
+        }
+    )
+    return safe_metadata
+
+
 def _redact_notification_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
     redacted: dict[str, Any] = {}
     for key, value in metadata.items():
@@ -480,9 +661,11 @@ __all__ = [
     "NotificationGateway",
     "NotificationProvider",
     "NotificationResult",
+    "notification_payload_hash",
     "OPERATOR_NOTIFICATION_APPROVAL_PHRASE",
     "OperatorConfirmedNotificationProvider",
     "OperatorNotificationApproval",
     "StdoutNotificationProvider",
+    "StandingGrantNotificationProvider",
     "TelegramNotificationTransport",
 ]

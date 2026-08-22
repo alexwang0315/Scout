@@ -1,0 +1,2372 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scout Emergency Approval v0 - 2026-06-24 14:01 CST</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #111315;
+      --surface: #1a1d20;
+      --surface-2: #22272b;
+      --surface-3: #2d3338;
+      --line: #3a4248;
+      --text: #f3f6f7;
+      --muted: #aeb8bd;
+      --subtle: #78858c;
+      --danger: #ff4e42;
+      --danger-2: #b9221a;
+      --warn: #ffb020;
+      --ok: #35c97b;
+      --cyan: #44c7d4;
+      --ink: #080a0b;
+      --radius: 8px;
+      --focus: 0 0 0 3px rgba(68, 199, 212, 0.42);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      letter-spacing: 0;
+    }
+
+    body {
+      overflow-x: auto;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    button:focus-visible,
+    input:focus-visible {
+      outline: none;
+      box-shadow: var(--focus);
+    }
+
+    .workspace {
+      min-width: 1060px;
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 420px minmax(620px, 1fr);
+      gap: 20px;
+      padding: 20px;
+      background:
+        linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+        linear-gradient(180deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+        var(--bg);
+      background-size: 40px 40px;
+    }
+
+    .surface,
+    .desktop-console {
+      border: 1px solid var(--line);
+      background: rgba(26, 29, 32, 0.96);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    .mobile-device {
+      width: 390px;
+      min-height: 820px;
+      align-self: start;
+      border: 1px solid #40494f;
+      border-radius: 28px;
+      padding: 12px;
+      background: #050607;
+    }
+
+    .surface {
+      min-height: 794px;
+      border-radius: 20px;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+    }
+
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 8px 14px 2px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .status-bar span,
+    .level-row span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .level-row .packet-state {
+      flex: 1;
+    }
+
+    .app-header,
+    .desktop-header {
+      display: grid;
+      gap: 10px;
+      padding: 14px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
+    }
+
+    .master-spec-link {
+      width: fit-content;
+      color: var(--cyan);
+      font-size: 12px;
+      font-weight: 700;
+      text-decoration-thickness: 1px;
+      text-underline-offset: 3px;
+    }
+
+    .master-spec-link:focus-visible {
+      border-radius: 4px;
+      outline: none;
+      box-shadow: var(--focus);
+    }
+
+    .desktop-header {
+      grid-template-columns: minmax(280px, 1fr) auto;
+      align-items: center;
+      padding: 18px 20px;
+    }
+
+    .title-row,
+    .level-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin: 0;
+    }
+
+    h1 {
+      font-size: 18px;
+      line-height: 1.2;
+    }
+
+    h2 {
+      font-size: 15px;
+      line-height: 1.25;
+    }
+
+    h3 {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 650;
+      line-height: 1.2;
+      text-transform: uppercase;
+    }
+
+    .desktop-console h1 {
+      font-size: 24px;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 4px 8px;
+      border: 1px solid rgba(255, 78, 66, 0.46);
+      border-radius: 999px;
+      color: #ffd6d2;
+      background: rgba(255, 78, 66, 0.12);
+      font-size: 12px;
+      font-weight: 750;
+      white-space: nowrap;
+    }
+
+    .packet-state {
+      color: var(--warn);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .screen-body {
+      display: grid;
+      gap: 10px;
+      padding: 10px;
+      overflow: auto;
+    }
+
+    .section {
+      display: grid;
+      gap: 10px;
+      align-content: start;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface-2);
+    }
+
+    .desktop-body {
+      display: grid;
+      grid-template-columns: minmax(290px, 0.85fr) minmax(380px, 1.15fr);
+      gap: 16px;
+      padding: 16px;
+    }
+
+    .stack {
+      display: grid;
+      gap: 12px;
+      align-content: start;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .metric {
+      display: grid;
+      gap: 4px;
+      min-height: 64px;
+      padding: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 6px;
+      background: rgba(0, 0, 0, 0.14);
+    }
+
+    .metric span {
+      color: var(--subtle);
+      font-size: 11px;
+      line-height: 1.2;
+    }
+
+    .metric strong {
+      overflow-wrap: anywhere;
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.25;
+    }
+
+    .gate-dashboard {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .gate-card {
+      min-height: 76px;
+      display: grid;
+      gap: 5px;
+      place-items: center;
+      padding: 8px 6px;
+      border: 1px solid rgba(255, 255, 255, 0.09);
+      border-radius: var(--radius);
+      background: rgba(0, 0, 0, 0.14);
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .gate-card strong {
+      color: var(--text);
+      font-size: 11px;
+      line-height: 1.1;
+    }
+
+    .gate-card span {
+      color: var(--subtle);
+      font-size: 10px;
+      line-height: 1.1;
+    }
+
+    .gate-card[data-state="normal"] {
+      border-color: rgba(53, 201, 123, 0.44);
+    }
+
+    .gate-card[data-state="watch"] {
+      border-color: rgba(255, 176, 32, 0.52);
+    }
+
+    .gate-card[data-state="danger"] {
+      border-color: rgba(255, 78, 66, 0.68);
+      background: rgba(255, 78, 66, 0.12);
+    }
+
+    .physio-icon,
+    .gate-symbol {
+      width: 34px;
+      height: 34px;
+      display: inline-grid;
+      place-items: center;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--cyan);
+      position: relative;
+    }
+
+    .gate-card[data-state="normal"] .physio-icon,
+    .gate-card[data-state="normal"] .gate-symbol {
+      color: var(--ok);
+    }
+
+    .gate-card[data-state="watch"] .physio-icon,
+    .gate-card[data-state="watch"] .gate-symbol {
+      color: var(--warn);
+    }
+
+    .gate-card[data-state="danger"] .physio-icon,
+    .gate-card[data-state="danger"] .gate-symbol {
+      color: var(--danger);
+      box-shadow: 0 0 0 4px rgba(255, 78, 66, 0.12);
+    }
+
+    .physio-icon::before {
+      content: "";
+      width: 9px;
+      height: 9px;
+      border: 2px solid currentColor;
+      border-radius: 50%;
+      position: absolute;
+      top: 6px;
+    }
+
+    .physio-icon::after {
+      content: "";
+      width: 17px;
+      height: 13px;
+      border: 2px solid currentColor;
+      border-top: 0;
+      border-radius: 0 0 10px 10px;
+      position: absolute;
+      top: 17px;
+    }
+
+    .gate-symbol svg {
+      width: 22px;
+      height: 22px;
+      stroke: currentColor;
+      stroke-width: 2;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .status-strip {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .workspace-resource-controls {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: end;
+    }
+
+    .workspace-field {
+      display: grid;
+      gap: 5px;
+    }
+
+    .workspace-field span {
+      color: var(--subtle);
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1.2;
+      text-transform: uppercase;
+    }
+
+    .workspace-field input {
+      width: 100%;
+      min-height: 34px;
+      padding: 7px 9px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(0, 0, 0, 0.18);
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .workspace-load {
+      min-height: 34px;
+      padding: 7px 10px;
+      border: 1px solid rgba(68, 199, 212, 0.55);
+      border-radius: var(--radius);
+      background: rgba(68, 199, 212, 0.13);
+      color: #c9f8fb;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 760;
+      white-space: nowrap;
+    }
+
+    .resource-list {
+      min-height: 76px;
+      max-height: 126px;
+      overflow: auto;
+      padding: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius);
+      background: rgba(0, 0, 0, 0.18);
+      color: #c9d5d8;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 10px;
+      line-height: 1.35;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .evidence-frame {
+      gap: 12px;
+    }
+
+    .evidence-frame-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .evidence-tabs {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 6px;
+      padding: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: var(--radius);
+      background: rgba(0, 0, 0, 0.18);
+    }
+
+    .evidence-tab {
+      min-height: 34px;
+      padding: 7px 8px;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 760;
+    }
+
+    .evidence-tab:hover {
+      border-color: rgba(68, 199, 212, 0.42);
+      color: var(--text);
+    }
+
+    .evidence-tab[aria-selected="true"] {
+      border-color: rgba(68, 199, 212, 0.62);
+      background: rgba(68, 199, 212, 0.14);
+      color: #c9f8fb;
+    }
+
+    .evidence-panel {
+      display: grid;
+      gap: 10px;
+    }
+
+    .evidence-panel[hidden] {
+      display: none;
+    }
+
+    .status-strip .metric {
+      min-height: 52px;
+    }
+
+    .decision-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .decision-grid.desktop {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .decision-btn {
+      min-height: 58px;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface-3);
+      color: var(--text);
+      cursor: pointer;
+      display: grid;
+      grid-template-columns: auto 1fr;
+      align-items: center;
+      gap: 8px;
+      text-align: left;
+    }
+
+    .decision-btn:hover {
+      border-color: var(--cyan);
+      background: #303940;
+    }
+
+    .decision-btn.danger {
+      border-color: rgba(255, 78, 66, 0.58);
+      background: rgba(255, 78, 66, 0.16);
+    }
+
+    .decision-btn.primary {
+      border-color: rgba(53, 201, 123, 0.58);
+      background: rgba(53, 201, 123, 0.16);
+    }
+
+    .decision-btn.warn {
+      border-color: rgba(255, 176, 32, 0.58);
+      background: rgba(255, 176, 32, 0.14);
+    }
+
+    .decision-btn .icon {
+      width: 26px;
+      height: 26px;
+      display: inline-grid;
+      place-items: center;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--cyan);
+      font-weight: 900;
+    }
+
+    .decision-btn strong {
+      display: block;
+      font-size: 13px;
+      line-height: 1.2;
+    }
+
+    .decision-btn span:last-child {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.2;
+    }
+
+    .callout-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .callout-btn {
+      min-height: 68px;
+      display: grid;
+      grid-template-columns: 34px 1fr;
+      gap: 9px;
+      align-items: center;
+      padding: 10px;
+      border: 1px solid rgba(68, 199, 212, 0.42);
+      border-radius: var(--radius);
+      background: rgba(68, 199, 212, 0.1);
+      color: var(--text);
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .callout-btn:hover {
+      border-color: var(--cyan);
+      background: rgba(68, 199, 212, 0.16);
+    }
+
+    .callout-btn strong {
+      display: block;
+      font-size: 13px;
+      line-height: 1.15;
+    }
+
+    .callout-btn span:last-child {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.2;
+      margin-top: 2px;
+    }
+
+    .callout-icon {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, 0.22);
+      color: var(--cyan);
+    }
+
+    .callout-icon svg {
+      width: 22px;
+      height: 22px;
+      stroke: currentColor;
+      stroke-width: 2;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .map-frame {
+      position: relative;
+      min-height: 230px;
+      overflow: hidden;
+      border: 1px solid #455059;
+      border-radius: var(--radius);
+      background:
+        linear-gradient(32deg, rgba(68, 199, 212, 0.15), transparent 38%),
+        linear-gradient(150deg, rgba(53, 201, 123, 0.12), transparent 44%),
+        #151a1c;
+    }
+
+    .layer-controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      align-content: start;
+      gap: 6px;
+    }
+
+    .layer-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-height: 30px;
+      padding: 5px 7px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--text);
+      background: rgba(255, 255, 255, 0.07);
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 720;
+    }
+
+    .layer-toggle:hover {
+      border-color: var(--cyan);
+    }
+
+    .layer-toggle.is-off {
+      color: var(--subtle);
+      background: rgba(255, 255, 255, 0.035);
+      opacity: 0.66;
+    }
+
+    .swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 3px;
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      background: var(--cyan);
+    }
+
+    .swatch.imagery { background: linear-gradient(135deg, #355b45, #705a36); }
+    .swatch.rudy { background: repeating-linear-gradient(45deg, #1f6270, #1f6270 3px, #bfa35b 3px, #bfa35b 6px); }
+    .swatch.overpass { background: #d7dce0; }
+    .swatch.segment { background: var(--cyan); }
+    .swatch.cpmcp { background: var(--ok); }
+    .swatch.note { background: var(--warn); }
+    .swatch.terrain { background: #6f8f61; }
+
+    .map-layer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .layer-imagery {
+      opacity: 0.42;
+      background:
+        radial-gradient(circle at 28% 38%, rgba(93, 122, 72, 0.5), transparent 22%),
+        radial-gradient(circle at 68% 52%, rgba(122, 88, 54, 0.42), transparent 20%),
+        linear-gradient(135deg, rgba(40, 68, 53, 0.62), rgba(18, 26, 27, 0.1));
+    }
+
+    .layer-rudy {
+      opacity: 0.28;
+      background:
+        repeating-linear-gradient(28deg, transparent, transparent 18px, rgba(221, 177, 80, 0.22) 19px, transparent 21px),
+        repeating-linear-gradient(-32deg, transparent, transparent 24px, rgba(68, 199, 212, 0.15) 25px, transparent 27px);
+    }
+
+    .layer-terrain {
+      opacity: 0.34;
+      background:
+        radial-gradient(ellipse at 72% 34%, transparent 0 24%, rgba(148, 173, 106, 0.22) 25%, transparent 26%),
+        radial-gradient(ellipse at 42% 72%, transparent 0 19%, rgba(148, 173, 106, 0.18) 20%, transparent 21%),
+        radial-gradient(ellipse at 34% 30%, transparent 0 13%, rgba(148, 173, 106, 0.15) 14%, transparent 15%);
+    }
+
+    .layer-overpass {
+      opacity: 0.6;
+    }
+
+    .layer-overpass::before,
+    .layer-overpass::after {
+      content: "";
+      position: absolute;
+      border-radius: 999px;
+      background: rgba(226, 232, 235, 0.45);
+      transform: rotate(-28deg);
+    }
+
+    .layer-overpass::before {
+      width: 62%;
+      height: 3px;
+      left: 2%;
+      bottom: 26%;
+    }
+
+    .layer-overpass::after {
+      width: 34%;
+      height: 2px;
+      right: 5%;
+      top: 30%;
+      opacity: 0.6;
+    }
+
+    .note-marker {
+      position: absolute;
+      right: 17%;
+      bottom: 33%;
+      max-width: 116px;
+      padding: 5px 7px;
+      border: 1px solid rgba(255, 176, 32, 0.68);
+      border-radius: 6px;
+      background: rgba(8, 10, 11, 0.76);
+      color: #ffe0a3;
+      font-size: 10px;
+      line-height: 1.15;
+    }
+
+    .desktop-map {
+      min-height: 510px;
+    }
+
+    .map-frame[data-layer-imagery="false"] .layer-imagery,
+    .map-frame[data-layer-rudy-twmap="false"] .layer-rudy,
+    .map-frame[data-layer-terrain="false"] .layer-terrain,
+    .map-frame[data-layer-overpass="false"] .layer-overpass,
+    .map-frame[data-layer-segments="false"] .layer-segments,
+    .map-frame[data-layer-checkpoints="false"] .layer-checkpoints,
+    .map-frame[data-layer-mcp="false"] .layer-mcp,
+    .map-frame[data-layer-route-notes="false"] .layer-route-notes {
+      display: none;
+    }
+
+    .map-grid {
+      position: absolute;
+      inset: 0;
+      background:
+        repeating-linear-gradient(0deg, transparent, transparent 31px, rgba(255, 255, 255, 0.05) 32px),
+        repeating-linear-gradient(90deg, transparent, transparent 31px, rgba(255, 255, 255, 0.05) 32px);
+    }
+
+    .map-frame svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .route-line {
+      fill: none;
+      stroke: var(--cyan);
+      stroke-width: 5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .retreat-line {
+      fill: none;
+      stroke: var(--warn);
+      stroke-width: 3;
+      stroke-dasharray: 9 8;
+      stroke-linecap: round;
+    }
+
+    .hazard-zone {
+      fill: rgba(255, 78, 66, 0.2);
+      stroke: rgba(255, 78, 66, 0.58);
+      stroke-width: 1;
+    }
+
+    .map-pin {
+      position: absolute;
+      min-width: 78px;
+      padding: 5px 7px;
+      border: 1px solid rgba(255, 255, 255, 0.16);
+      border-radius: 6px;
+      background: rgba(8, 10, 11, 0.76);
+      color: var(--text);
+      font-size: 11px;
+      line-height: 1.15;
+      backdrop-filter: blur(8px);
+    }
+
+    .pin-current {
+      left: 44%;
+      top: 48%;
+      border-color: rgba(255, 78, 66, 0.72);
+    }
+
+    .pin-retreat {
+      left: 16%;
+      top: 68%;
+      border-color: rgba(255, 176, 32, 0.7);
+    }
+
+    .pin-camp {
+      right: 8%;
+      top: 20%;
+      border-color: rgba(53, 201, 123, 0.68);
+    }
+
+    .pin-mcp {
+      right: 25%;
+      top: 48%;
+      border-color: rgba(68, 199, 212, 0.7);
+    }
+
+    .map-legend {
+      position: absolute;
+      left: 10px;
+      bottom: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .legend-key {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 6px;
+      border-radius: 999px;
+      background: rgba(0, 0, 0, 0.34);
+    }
+
+    .line-dot {
+      width: 18px;
+      height: 3px;
+      border-radius: 999px;
+      background: var(--cyan);
+    }
+
+    .line-dot.warn {
+      background: var(--warn);
+    }
+
+    .artifact {
+      min-height: 134px;
+      max-height: 230px;
+      overflow: auto;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #0d0f10;
+      color: #d8e2e5;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 11px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .bottom-bar {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px;
+      border-top: 1px solid var(--line);
+      background: var(--surface);
+    }
+
+    .file-load {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 38px;
+      padding: 7px 10px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      color: var(--text);
+      background: var(--surface-3);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .file-load input {
+      display: none;
+    }
+
+    .transport-row,
+    .packet-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .transport-row:last-child,
+    .packet-row:last-child {
+      border-bottom: 0;
+    }
+
+    .transport-row strong,
+    .packet-row strong {
+      color: var(--text);
+      font-size: 13px;
+    }
+
+    .state-chip {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 4px 7px;
+      border-radius: 999px;
+      background: rgba(255, 176, 32, 0.14);
+      color: #ffd795;
+      font-size: 11px;
+      font-weight: 760;
+      white-space: nowrap;
+    }
+
+    .state-chip.ok {
+      background: rgba(53, 201, 123, 0.14);
+      color: #9df0c0;
+    }
+
+    .state-chip.off {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--muted);
+    }
+
+    .desktop-footer {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+      padding: 0 16px 16px;
+    }
+
+    .banner {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border: 1px solid rgba(255, 176, 32, 0.32);
+      border-radius: var(--radius);
+      background: rgba(255, 176, 32, 0.11);
+      color: #ffe0a3;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    @media (max-width: 760px) {
+      html,
+      body {
+        width: 100%;
+        max-width: 100vw;
+        overflow-x: hidden;
+      }
+
+      .workspace {
+        min-width: 0;
+        width: 100%;
+        max-width: 100vw;
+        grid-template-columns: 1fr;
+        gap: 12px;
+        padding: 10px;
+        overflow: hidden;
+      }
+
+      .mobile-device {
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+        min-height: 0;
+        padding: 0;
+        border-radius: 0;
+        border: 0;
+        background: transparent;
+        overflow: hidden;
+      }
+
+      .surface,
+      .screen-body,
+      .section,
+      .status-bar,
+      .app-header,
+      .bottom-bar,
+      .gate-dashboard,
+      .gate-card,
+      .decision-grid,
+      .decision-btn,
+      .metric-grid,
+      .metric,
+      .evidence-frame {
+        min-width: 0;
+        max-width: 100%;
+      }
+
+      .surface {
+        min-height: 100vh;
+        border-radius: var(--radius);
+      }
+
+      .desktop-console {
+        display: none;
+        min-width: 0;
+      }
+
+      .status-bar span,
+      .bottom-bar > *,
+      .gate-card span,
+      .decision-btn strong,
+      .decision-btn span,
+      .metric strong {
+        min-width: 0;
+        overflow-wrap: anywhere;
+      }
+
+      .bottom-bar {
+        flex-wrap: wrap;
+      }
+
+      .desktop-header,
+      .desktop-body,
+      .desktop-footer {
+        grid-template-columns: 1fr;
+      }
+
+      .decision-grid.desktop {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="workspace" data-emergency-ui-version="v0">
+    <section class="mobile-device" aria-label="Emergency mobile approval">
+      <div class="surface" data-emergency-surface="mobile">
+        <div>
+          <div class="status-bar">
+            <span>SCOUT FIELD</span>
+            <span data-bind="transportSummary">SMS ready</span>
+          </div>
+          <header class="app-header">
+            <div class="title-row">
+              <h1>Emergency Approval</h1>
+              <span class="status-pill" data-bind="safetyLevel">L3_DISTRESS</span>
+            </div>
+            <div class="level-row">
+              <span class="packet-state" data-bind="packetStatus">pending_approval</span>
+              <span data-bind="selectedGate">physiologic_gate</span>
+            </div>
+            <a class="master-spec-link" href="../specs/scout-alpha-mobile-wearable-simulation-sandbox.md" target="_blank" rel="noopener">Alpha Sandbox 主規格與安全邊界</a>
+          </header>
+        </div>
+
+        <div class="screen-body">
+          <section class="section" aria-labelledby="mobile-state-title">
+            <h2 id="mobile-state-title" data-bind="pathStateTitle">Production Path State</h2>
+            <div class="gate-dashboard" data-gate-dashboard="mobile">
+              <div class="gate-card" data-gate="physiologic_gate" data-state="danger">
+                <span class="physio-icon" aria-hidden="true"></span>
+                <strong>Physio</strong>
+                <span data-bind="physioState">danger</span>
+              </div>
+              <div class="gate-card" data-gate="pace_gate" data-state="watch">
+                <span class="gate-symbol" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 16h5l2-8 3 12 2-7h4"></path></svg></span>
+                <strong>Pace</strong>
+                <span>slow</span>
+              </div>
+              <div class="gate-card" data-gate="delay_gate" data-state="watch">
+                <span class="gate-symbol" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="7"></circle><path d="M12 13V8M12 13l4 2M9 3h6"></path></svg></span>
+                <strong>Delay</strong>
+                <span>late</span>
+              </div>
+              <div class="gate-card" data-gate="weather_gate" data-state="normal">
+                <span class="gate-symbol" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 18h10a4 4 0 0 0 0-8 6 6 0 0 0-11-1A4.5 4.5 0 0 0 7 18Z"></path></svg></span>
+                <strong>Weather</strong>
+                <span>ok</span>
+              </div>
+              <div class="gate-card" data-gate="darkness_gate" data-state="watch">
+                <span class="gate-symbol" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M17 3a8 8 0 1 0 4 14A7 7 0 0 1 17 3Z"></path></svg></span>
+                <strong>Dark</strong>
+                <span>buffer</span>
+              </div>
+              <div class="gate-card" data-gate="environment_threat_gate" data-state="normal">
+                <span class="gate-symbol" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 19h18L13 5l-3 6-2-3Z"></path></svg></span>
+                <strong>Env</strong>
+                <span>clear</span>
+              </div>
+            </div>
+            <div class="status-strip">
+              <div class="metric"><span>Packet</span><strong data-bind="packetId">scout_alert_packet</strong></div>
+              <div class="metric"><span>Source</span><strong data-bind="sourceFreshness">fresh / partial</strong></div>
+              <div class="metric"><span>Transport</span><strong data-bind="transportSummary">SMS ready</strong></div>
+            </div>
+            <div class="banner" role="status">
+              <strong>sent=false</strong>
+              <span data-bind="decisionSummary">No verified transport has reported delivery.</span>
+            </div>
+          </section>
+
+          <section class="section" aria-labelledby="mobile-decision-title">
+            <h2 id="mobile-decision-title">Quick Decision</h2>
+            <div class="decision-grid" data-decision-surface="mobile">
+              <button class="decision-btn primary" type="button" data-decision="approve_send">
+                <span class="icon">✓</span><span><strong>同意送出</strong><span>approved transport only</span></span>
+              </button>
+              <button class="decision-btn danger" type="button" data-decision="deny_send">
+                <span class="icon">×</span><span><strong>不同意</strong><span>keep packet local</span></span>
+              </button>
+              <button class="decision-btn warn" type="button" data-decision="review_5">
+                <span class="icon">5</span><span><strong>5 分鐘後再看</strong><span>review timer artifact</span></span>
+              </button>
+              <button class="decision-btn warn" type="button" data-decision="review_10">
+                <span class="icon">10</span><span><strong>10 分鐘後再看</strong><span>review timer artifact</span></span>
+              </button>
+              <button class="decision-btn" type="button" data-decision="downgrade_request">
+                <span class="icon">↓</span><span><strong>現況還好請降級</strong><span>counter-signal only</span></span>
+              </button>
+              <button class="decision-btn" type="button" data-decision="call_now">
+                <span class="icon">☎</span><span><strong>即刻通話</strong><span>119 / 112 manual call</span></span>
+              </button>
+              <button class="decision-btn" type="button" data-decision="copy_packet">
+                <span class="icon">□</span><span><strong>手動複製通報包</strong><span>clipboard draft</span></span>
+              </button>
+              <button class="decision-btn" type="button" data-decision="retreat_camp">
+                <span class="icon">⌂</span><span><strong>撤退 / 緊急紮營</strong><span>route action</span></span>
+              </button>
+            </div>
+          </section>
+
+          <section class="section" aria-labelledby="mobile-callout-title">
+            <h2 id="mobile-callout-title">Emergency Call Out</h2>
+            <div class="callout-grid">
+              <button class="callout-btn" type="button" data-callout="message">
+                <span class="callout-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4Z"></path><path d="M8 9h8M8 13h6"></path></svg></span>
+                <span><strong>Message</strong><span>119 / 112 draft only</span></span>
+              </button>
+              <button class="callout-btn" type="button" data-callout="voice">
+                <span class="callout-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 8c0 6 4 10 10 10l2-3-4-2-2 2c-2-1-3-2-4-4l2-2-2-4Z"></path></svg></span>
+                <span><strong>Voice</strong><span>manual call script</span></span>
+              </button>
+            </div>
+          </section>
+
+          <section class="section" aria-labelledby="mobile-map-title">
+            <h2 id="mobile-map-title">Offline Map</h2>
+            <div class="layer-controls" aria-label="Offline map layer controls">
+              <button class="layer-toggle" type="button" data-layer-toggle="rudy-twmap" aria-pressed="true"><span class="swatch rudy"></span>Cached Rudy+TW</button>
+              <button class="layer-toggle" type="button" data-layer-toggle="imagery" aria-pressed="true"><span class="swatch imagery"></span>Cached Imagery</button>
+              <button class="layer-toggle" type="button" data-layer-toggle="overpass" aria-pressed="true"><span class="swatch overpass"></span>Overpass</button>
+              <button class="layer-toggle" type="button" data-layer-toggle="segments" aria-pressed="true"><span class="swatch segment"></span>Segment</button>
+              <button class="layer-toggle" type="button" data-layer-toggle="checkpoints" aria-pressed="true"><span class="swatch cpmcp"></span>CP/MCP</button>
+              <button class="layer-toggle" type="button" data-layer-toggle="route-notes" aria-pressed="true"><span class="swatch note"></span>Note</button>
+              <button class="layer-toggle" type="button" data-layer-toggle="terrain" aria-pressed="true"><span class="swatch terrain"></span>Terrain</button>
+            </div>
+            <div class="map-frame" data-map-surface="mobile">
+              <div class="map-layer layer-imagery" data-layer-group="imagery"></div>
+              <div class="map-layer layer-rudy" data-layer-group="rudy-twmap"></div>
+              <div class="map-layer layer-terrain" data-layer-group="terrain"></div>
+              <div class="map-layer layer-overpass" data-layer-group="overpass"></div>
+              <div class="map-grid"></div>
+              <svg class="map-layer layer-segments" data-layer-group="segments" viewBox="0 0 400 260" aria-hidden="true">
+                <path class="hazard-zone" d="M245 45 C310 55 340 105 315 148 C292 188 235 178 217 134 C197 89 206 56 245 45Z"></path>
+                <path class="retreat-line" d="M200 150 C150 166 92 174 58 222"></path>
+                <path class="route-line" d="M35 225 C88 205 125 168 168 145 C212 122 258 104 305 70 C335 49 354 33 376 24"></path>
+              </svg>
+              <div class="map-layer layer-checkpoints" data-layer-group="checkpoints">
+                <div class="map-pin pin-current"><strong data-bind="segmentId">seg.002</strong><br>current ref</div>
+                <div class="map-pin pin-retreat">RETREAT<br>branch A</div>
+                <div class="map-pin pin-camp"><strong data-bind="checkpointId">camp.001</strong><br>camp</div>
+              </div>
+              <div class="map-layer layer-mcp" data-layer-group="mcp">
+                <div class="map-pin pin-mcp">MCP<br>water/radio</div>
+              </div>
+              <div class="map-layer layer-route-notes" data-layer-group="route-notes">
+                <div class="note-marker">note: wind gap / slow team regroup</div>
+              </div>
+              <div class="map-legend">
+                <span class="legend-key"><span class="line-dot"></span>route</span>
+                <span class="legend-key"><span class="line-dot warn"></span>retreat</span>
+              </div>
+            </div>
+          </section>
+
+          <section class="section evidence-frame" aria-labelledby="mobile-evidence-title" data-evidence-frame="mobile">
+            <div class="evidence-frame-header">
+              <h2 id="mobile-evidence-title">Evidence Frame</h2>
+              <span class="state-chip" data-bind="workspaceStatus">sample only</span>
+            </div>
+            <div class="evidence-tabs" role="tablist" aria-label="Mobile evidence tabs">
+              <button class="evidence-tab" type="button" role="tab" id="mobile-tab-approval" aria-selected="true" aria-controls="mobile-evidence-approval" data-evidence-surface="mobile" data-evidence-tab="approval">Approval</button>
+              <button class="evidence-tab" type="button" role="tab" id="mobile-tab-packet" aria-selected="false" aria-controls="mobile-evidence-packet" tabindex="-1" data-evidence-surface="mobile" data-evidence-tab="packet">Package</button>
+              <button class="evidence-tab" type="button" role="tab" id="mobile-tab-workspace" aria-selected="false" aria-controls="mobile-evidence-workspace" tabindex="-1" data-evidence-surface="mobile" data-evidence-tab="workspace">Workspace</button>
+            </div>
+            <div class="evidence-panel" role="tabpanel" id="mobile-evidence-approval" aria-labelledby="mobile-tab-approval" data-evidence-surface="mobile" data-evidence-panel="approval">
+              <pre class="artifact" data-artifact-preview="mobile"></pre>
+            </div>
+            <div class="evidence-panel" role="tabpanel" id="mobile-evidence-packet" aria-labelledby="mobile-tab-packet" data-evidence-surface="mobile" data-evidence-panel="packet" hidden>
+              <pre class="artifact" data-packet-preview></pre>
+            </div>
+            <div class="evidence-panel" role="tabpanel" id="mobile-evidence-workspace" aria-labelledby="mobile-tab-workspace" data-evidence-surface="mobile" data-evidence-panel="workspace" hidden>
+              <h3>Workspace Resources</h3>
+              <div class="workspace-resource-controls">
+                <label class="workspace-field">
+                  <span>Project</span>
+                  <input data-project-input type="text" value="chilai_nanhua_day1" autocomplete="off">
+                </label>
+                <button class="workspace-load" type="button" data-load-workspace>Load workspace</button>
+              </div>
+              <div class="status-strip">
+                <div class="metric"><span>API</span><strong data-bind="workspaceApiBase">scout.local:9100</strong></div>
+                <div class="metric"><span>Kind</span><strong data-bind="workspaceKind">pretrip</strong></div>
+                <div class="metric"><span>Status</span><strong data-bind="workspaceStatus">sample only</strong></div>
+              </div>
+              <pre class="resource-list" data-workspace-resource-preview="mobile"></pre>
+            </div>
+          </section>
+        </div>
+
+        <div class="bottom-bar">
+          <label class="file-load">
+            Load dry-run JSON
+            <input type="file" accept="application/json,.json" data-file-input>
+          </label>
+          <button class="workspace-load" type="button" data-load-living>Connect Living</button>
+          <span class="state-chip" data-bind="livingStatus">not connected</span>
+          <span class="state-chip" data-bind="transportState">dry-run</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="desktop-console" data-emergency-surface="desktop" aria-label="Emergency desktop approval console">
+      <header class="desktop-header">
+        <div>
+          <h1>Scout Emergency Approval Console</h1>
+          <p class="packet-state" data-bind="packetStatus">pending_approval</p>
+        </div>
+        <span class="status-pill" data-bind="safetyLevel">L3_DISTRESS</span>
+      </header>
+
+      <div class="desktop-body">
+        <div class="stack">
+          <section class="section" aria-labelledby="desktop-state-title">
+            <h2 id="desktop-state-title" data-bind="pathStateTitle">Production Path State</h2>
+            <div class="gate-dashboard" data-gate-dashboard="desktop">
+              <div class="gate-card" data-gate="physiologic_gate" data-state="danger">
+                <span class="physio-icon" aria-hidden="true"></span>
+                <strong>Physio</strong>
+                <span data-bind="physioState">danger</span>
+              </div>
+              <div class="gate-card" data-gate="pace_gate" data-state="watch">
+                <span class="gate-symbol" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 16h5l2-8 3 12 2-7h4"></path></svg></span>
+                <strong>Pace</strong>
+                <span>slow</span>
+              </div>
+              <div class="gate-card" data-gate="delay_gate" data-state="watch">
+                <span class="gate-symbol" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="7"></circle><path d="M12 13V8M12 13l4 2M9 3h6"></path></svg></span>
+                <strong>Delay</strong>
+                <span>late</span>
+              </div>
+              <div class="gate-card" data-gate="weather_gate" data-state="normal">
+                <span class="gate-symbol" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M7 18h10a4 4 0 0 0 0-8 6 6 0 0 0-11-1A4.5 4.5 0 0 0 7 18Z"></path></svg></span>
+                <strong>Weather</strong>
+                <span>ok</span>
+              </div>
+              <div class="gate-card" data-gate="darkness_gate" data-state="watch">
+                <span class="gate-symbol" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M17 3a8 8 0 1 0 4 14A7 7 0 0 1 17 3Z"></path></svg></span>
+                <strong>Dark</strong>
+                <span>buffer</span>
+              </div>
+              <div class="gate-card" data-gate="environment_threat_gate" data-state="normal">
+                <span class="gate-symbol" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 19h18L13 5l-3 6-2-3Z"></path></svg></span>
+                <strong>Env</strong>
+                <span>clear</span>
+              </div>
+            </div>
+            <div class="status-strip">
+              <div class="metric"><span>Route</span><strong data-bind="routeLabel">Fixture Route</strong></div>
+              <div class="metric"><span>Segment</span><strong data-bind="segmentId">seg.002</strong></div>
+              <div class="metric"><span>Packet</span><strong data-bind="packetId">scout_alert_packet</strong></div>
+            </div>
+          </section>
+
+          <section class="section" aria-labelledby="transport-title">
+            <h2 id="transport-title">Transport Readiness</h2>
+            <div class="transport-row"><span>SMS bridge</span><span class="state-chip ok" data-bind="smsState">draft_ready</span></div>
+            <div class="transport-row"><span>LoRa payload</span><span class="state-chip" data-bind="loraState">draft_ready</span></div>
+            <div class="transport-row"><span>MQTT payload</span><span class="state-chip" data-bind="mqttState">draft_ready</span></div>
+            <div class="transport-row"><span>Transport outcome</span><span class="state-chip off" data-bind="deliveryState">not_reported</span></div>
+          </section>
+
+          <section class="section" aria-labelledby="desktop-callout-title">
+            <h2 id="desktop-callout-title">Emergency Call Out</h2>
+            <div class="callout-grid">
+              <button class="callout-btn" type="button" data-callout="message">
+                <span class="callout-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4Z"></path><path d="M8 9h8M8 13h6"></path></svg></span>
+                <span><strong>Message</strong><span>draft for 119 / 112</span></span>
+              </button>
+              <button class="callout-btn" type="button" data-callout="voice">
+                <span class="callout-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M6 8c0 6 4 10 10 10l2-3-4-2-2 2c-2-1-3-2-4-4l2-2-2-4Z"></path></svg></span>
+                <span><strong>Voice</strong><span>manual call script</span></span>
+              </button>
+            </div>
+          </section>
+
+          <section class="section" aria-labelledby="desktop-decision-title">
+            <h2 id="desktop-decision-title">Decision Controls</h2>
+            <div class="decision-grid desktop" data-decision-surface="desktop">
+              <button class="decision-btn primary" type="button" data-decision="approve_send">
+                <span class="icon">✓</span><span><strong>同意送出</strong><span>requires verified executor</span></span>
+              </button>
+              <button class="decision-btn danger" type="button" data-decision="deny_send">
+                <span class="icon">×</span><span><strong>不同意</strong><span>no outbound action</span></span>
+              </button>
+              <button class="decision-btn warn" type="button" data-decision="review_5">
+                <span class="icon">5</span><span><strong>5 分鐘後再看</strong><span>defer review</span></span>
+              </button>
+              <button class="decision-btn warn" type="button" data-decision="review_10">
+                <span class="icon">10</span><span><strong>10 分鐘後再看</strong><span>defer review</span></span>
+              </button>
+              <button class="decision-btn" type="button" data-decision="downgrade_request">
+                <span class="icon">↓</span><span><strong>現況還好請降級</strong><span>reviewed counter-signal</span></span>
+              </button>
+              <button class="decision-btn" type="button" data-decision="call_now">
+                <span class="icon">☎</span><span><strong>即刻通話</strong><span>119 / 112</span></span>
+              </button>
+              <button class="decision-btn" type="button" data-decision="copy_packet">
+                <span class="icon">□</span><span><strong>手動複製通報包</strong><span>clipboard only</span></span>
+              </button>
+              <button class="decision-btn" type="button" data-decision="retreat_camp">
+                <span class="icon">⌂</span><span><strong>撤退 / 緊急紮營</strong><span>route action</span></span>
+              </button>
+            </div>
+          </section>
+        </div>
+
+        <section class="section" aria-labelledby="desktop-map-title">
+          <h2 id="desktop-map-title">Offline Map</h2>
+          <div class="layer-controls" aria-label="Offline map layer controls">
+            <button class="layer-toggle" type="button" data-layer-toggle="rudy-twmap" aria-pressed="true"><span class="swatch rudy"></span>Cached Rudy+TW</button>
+            <button class="layer-toggle" type="button" data-layer-toggle="imagery" aria-pressed="true"><span class="swatch imagery"></span>Cached Imagery</button>
+            <button class="layer-toggle" type="button" data-layer-toggle="overpass" aria-pressed="true"><span class="swatch overpass"></span>Overpass</button>
+            <button class="layer-toggle" type="button" data-layer-toggle="segments" aria-pressed="true"><span class="swatch segment"></span>Segment</button>
+            <button class="layer-toggle" type="button" data-layer-toggle="checkpoints" aria-pressed="true"><span class="swatch cpmcp"></span>CP/MCP</button>
+            <button class="layer-toggle" type="button" data-layer-toggle="route-notes" aria-pressed="true"><span class="swatch note"></span>Note</button>
+            <button class="layer-toggle" type="button" data-layer-toggle="terrain" aria-pressed="true"><span class="swatch terrain"></span>Terrain</button>
+          </div>
+          <div class="map-frame desktop-map" data-map-surface="desktop">
+            <div class="map-layer layer-imagery" data-layer-group="imagery"></div>
+            <div class="map-layer layer-rudy" data-layer-group="rudy-twmap"></div>
+            <div class="map-layer layer-terrain" data-layer-group="terrain"></div>
+            <div class="map-layer layer-overpass" data-layer-group="overpass"></div>
+            <div class="map-grid"></div>
+            <svg class="map-layer layer-segments" data-layer-group="segments" viewBox="0 0 620 520" aria-hidden="true">
+              <path class="hazard-zone" d="M392 64 C472 82 532 146 504 232 C477 315 368 304 336 226 C306 151 320 79 392 64Z"></path>
+              <path class="retreat-line" d="M318 288 C250 310 158 340 96 444"></path>
+              <path class="route-line" d="M52 454 C126 405 172 332 252 288 C321 250 382 204 465 122 C516 72 558 41 598 24"></path>
+            </svg>
+            <div class="map-layer layer-checkpoints" data-layer-group="checkpoints">
+              <div class="map-pin pin-current"><strong data-bind="segmentId">seg.002</strong><br>last known ref</div>
+              <div class="map-pin pin-retreat">RETREAT<br>branch A</div>
+              <div class="map-pin pin-camp"><strong data-bind="checkpointId">camp.001</strong><br>planned camp</div>
+            </div>
+            <div class="map-layer layer-mcp" data-layer-group="mcp">
+              <div class="map-pin pin-mcp">MCP<br>water/radio</div>
+            </div>
+            <div class="map-layer layer-route-notes" data-layer-group="route-notes">
+              <div class="note-marker">note: wind gap / slow team regroup</div>
+            </div>
+            <div class="map-legend">
+              <span class="legend-key"><span class="line-dot"></span>route</span>
+              <span class="legend-key"><span class="line-dot warn"></span>retreat</span>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <div class="desktop-footer">
+        <section class="section evidence-frame" aria-labelledby="desktop-evidence-title" data-evidence-frame="desktop">
+          <div class="evidence-frame-header">
+            <h2 id="desktop-evidence-title">Evidence Frame</h2>
+            <span class="state-chip" data-bind="workspaceStatus">sample only</span>
+          </div>
+          <div class="evidence-tabs" role="tablist" aria-label="Desktop evidence tabs">
+            <button class="evidence-tab" type="button" role="tab" id="desktop-tab-approval" aria-selected="true" aria-controls="desktop-evidence-approval" data-evidence-surface="desktop" data-evidence-tab="approval">Approval Artifact</button>
+            <button class="evidence-tab" type="button" role="tab" id="desktop-tab-packet" aria-selected="false" aria-controls="desktop-evidence-packet" tabindex="-1" data-evidence-surface="desktop" data-evidence-tab="packet">Emergency Package Draft</button>
+            <button class="evidence-tab" type="button" role="tab" id="desktop-tab-workspace" aria-selected="false" aria-controls="desktop-evidence-workspace" tabindex="-1" data-evidence-surface="desktop" data-evidence-tab="workspace">Workspace Resources</button>
+          </div>
+          <div class="evidence-panel" role="tabpanel" id="desktop-evidence-approval" aria-labelledby="desktop-tab-approval" data-evidence-surface="desktop" data-evidence-panel="approval">
+            <pre class="artifact" data-artifact-preview="desktop"></pre>
+          </div>
+          <div class="evidence-panel" role="tabpanel" id="desktop-evidence-packet" aria-labelledby="desktop-tab-packet" data-evidence-surface="desktop" data-evidence-panel="packet" hidden>
+            <pre class="artifact" data-packet-preview></pre>
+          </div>
+          <div class="evidence-panel" role="tabpanel" id="desktop-evidence-workspace" aria-labelledby="desktop-tab-workspace" data-evidence-surface="desktop" data-evidence-panel="workspace" hidden>
+            <h3>Workspace Resources</h3>
+            <div class="workspace-resource-controls">
+              <label class="workspace-field">
+                <span>Project</span>
+                <input data-project-input type="text" value="chilai_nanhua_day1" autocomplete="off">
+              </label>
+              <button class="workspace-load" type="button" data-load-workspace>Load workspace</button>
+            </div>
+            <div class="status-strip">
+              <div class="metric"><span>API</span><strong data-bind="workspaceApiBase">scout.local:9100</strong></div>
+              <div class="metric"><span>Kind</span><strong data-bind="workspaceKind">pretrip</strong></div>
+              <div class="metric"><span>Status</span><strong data-bind="workspaceStatus">sample only</strong></div>
+            </div>
+            <pre class="resource-list" data-workspace-resource-preview="desktop"></pre>
+          </div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const DEFAULT_WORKSPACE_PROJECT_ID = "chilai_nanhua_day1";
+    const WORKSPACE_LAYOUT_VERSION = "scout.workspace.v1";
+    const LIVING_ENDPOINT = "/admin/dashboard/living";
+    const LIVING_REFRESH_INTERVAL_MS = 3000;
+    const WORKSPACE_ENDPOINT_NAMES = {
+      project: "compact pretrip project view",
+      admin_projection: "admin surface projection",
+      debug_projection: "debug projection view",
+      debug_projection_events: "debug projection event stream"
+    };
+
+    const sampleDryRun = {
+      artifact_kind: "scout_alert_application_dry_run_result",
+      packet: {
+        packet_id: "scout_alert_packet.demo001",
+        safety_level: "L3_DISTRESS",
+        event_type: "physiologic_pressure",
+        selected_gate_id: "physiologic_gate",
+        summary: "physiologic_gate raised L3_DISTRESS with delay corroboration",
+        source_path: "alert_application_packet.json",
+        sha256: "demo-sha256-alert-packet",
+        emergency_packet: {
+          route_id: "fixture.route",
+          route_name: "Fixture Route",
+          segment_id: "seg.002",
+          checkpoint_id: "camp.001",
+          map_target_ids: ["seg.002", "camp.001"],
+          location_ref: "segment:seg.002",
+          party_count: 2,
+          condition_summary: "High strain with route delay; stop, review retreat or emergency camp.",
+          requested_action: "stop, review retreat or emergency camp, and prepare alert draft",
+          emergency_contacts: ["119", "112"]
+        },
+        privacy: {
+          local_only: true,
+          raw_health_payload_shared: false,
+          raw_gpx_shared: false,
+          precise_coordinates_shared: false,
+          precise_timestamps_shared: false
+        },
+        boundary: {
+          application_layer_only: true,
+          outbound_send_performed: false,
+          hardware_transport_invoked: false,
+          safety_api_called: false,
+          medical_diagnosis: false
+        }
+      },
+      rendered_messages: [
+        {
+          transport_profile: "sms_text",
+          body_text: "SCOUT ALERT DRAFT - NOT SENT | LEVEL L3_DISTRESS | SEG seg.002 | CP camp.001 | STATUS High strain with route delay | CONTACT 119/112",
+          sent: false
+        },
+        {
+          transport_profile: "lora_compact",
+          payload_json: { v: 1, lvl: "L3_DISTRESS", s: "seg.002", c: "camp.001", sent: false },
+          sent: false
+        },
+        {
+          transport_profile: "mqtt_json",
+          mqtt_topic: "scout/alerts/application/scout_alert_packet.demo001",
+          payload_json: { sent: false, dry_run: true },
+          sent: false
+        }
+      ],
+      policy_decision: {
+        status: "requires_human_approval",
+        external_send_allowed: false,
+        manual_copy_allowed: false,
+        operator_approval_present: false
+      }
+    };
+
+    const decisionLabels = {
+      approve_send: "agree_send",
+      deny_send: "do_not_send",
+      review_5: "review_again_5_minutes",
+      review_10: "review_again_10_minutes",
+      downgrade_request: "current_condition_ok_downgrade_request",
+      call_now: "immediate_phone_call",
+      copy_packet: "manual_copy_emergency_packet",
+      retreat_camp: "retreat_or_emergency_camp",
+      message_callout: "message_draft",
+      voice_callout: "voice_call_script",
+      pending_review: "pending_review"
+    };
+
+    const layerIds = [
+      "rudy-twmap",
+      "imagery",
+      "overpass",
+      "segments",
+      "checkpoints",
+      "route-notes",
+      "terrain"
+    ];
+
+    const layerAliases = {
+      checkpoints: ["checkpoints", "mcp"]
+    };
+
+    const activeLayers = layerIds.reduce((layers, layerId) => {
+      layers[layerId] = true;
+      return layers;
+    }, {});
+
+    const initialProjectId = initialWorkspaceProjectId();
+    const workspaceState = {
+      projectId: initialProjectId,
+      apiBase: apiBase(),
+      kind: "pretrip",
+      status: "sample only",
+      sourceRefs: [],
+      endpointRefs: workspaceResourcePaths(initialProjectId),
+      resources: {},
+      errors: []
+    };
+
+    let activePayload = sampleDryRun;
+    let approvalArtifact = buildDecisionArtifact("pending_review");
+    let livingProjection = null;
+    let livingRefreshTimer = null;
+
+    function initialWorkspaceProjectId() {
+      const params = new URLSearchParams(location.search);
+      return (
+        params.get("projectId")
+        || params.get("project")
+        || localStorage.getItem("scout.emergencyProjectId")
+        || DEFAULT_WORKSPACE_PROJECT_ID
+      );
+    }
+
+    function apiBase() {
+      const params = new URLSearchParams(location.search);
+      const override = params.get("apiBase") || localStorage.getItem("scout.adminApiBase");
+      if (override) return override.replace(/\/$/, "");
+      if (location.protocol === "file:") return "http://scout.local:9100";
+      return "";
+    }
+
+    function workspaceResourcePaths(projectId) {
+      const encodedProjectId = encodeURIComponent(projectId || DEFAULT_WORKSPACE_PROJECT_ID);
+      return {
+        project: `/admin/pretrip/projects/${encodedProjectId}?compact=1`,
+        admin_projection: `/admin/pretrip/projects/${encodedProjectId}/admin-projection`,
+        debug_projection: `/admin/pretrip/projects/${encodedProjectId}/debug-projection`,
+        debug_projection_events: `/admin/pretrip/projects/${encodedProjectId}/debug-projection-events`
+      };
+    }
+
+    function workspaceUrl(path) {
+      return path.startsWith("http://") || path.startsWith("https://")
+        ? path
+        : `${apiBase()}${path}`;
+    }
+
+    async function fetchLivingProjection() {
+      const response = await fetch(workspaceUrl(LIVING_ENDPOINT), { cache: "no-store" });
+      if (!response.ok) throw new Error(`${response.status} ${response.statusText}`.trim());
+      return response.json();
+    }
+
+    async function postLivingAction(path, payload) {
+      const response = await fetch(workspaceUrl(path), {
+        method: "POST",
+        headers: { "Accept": "application/json", "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.detail || `${response.status} ${path}`);
+      return data;
+    }
+
+    function payloadFromLivingProjection(projection) {
+      const packet = projection.alert_packet || {};
+      const route = projection.route || {};
+      const safety = projection.safety || {};
+      const scenario = projection.scenario || {};
+      const drafts = Array.isArray(packet.transport_drafts) ? packet.transport_drafts : [];
+      const draft = (profile) => drafts.find((item) => item.profile === profile) || {};
+      const sms = draft("sms_text");
+      const lora = draft("lora_compact");
+      const mqtt = draft("mqtt_json");
+      return {
+        artifact_kind: "scout_alert_application_dry_run_result",
+        source_provider: "scout_emergency_mobile_closed_loop_sandbox",
+        workspace_layout: WORKSPACE_LAYOUT_VERSION,
+        workspace_project_id: scenario.project_id,
+        source_refs: projection.source_refs || [],
+        living_projection: projection,
+        living_gates: safety.gates || [],
+        packet: {
+          packet_id: packet.packet_id || `sandbox.packet:${scenario.scenario_id || "unknown"}`,
+          safety_level: packet.safety_level_candidate || safety.ln_level_candidate || "L0_NORMAL",
+          event_type: "sandbox_reducer_candidate",
+          selected_gate_id: packet.selected_gate_id || safety.selected_gate_id || "unknown_gate",
+          summary: packet.summary || "Sandbox projection loaded",
+          source_path: packet.source_reducer_ref || "living_projection",
+          sha256: packet.sha256 || "living-projection",
+          emergency_packet: {
+            route_id: route.route_id,
+            route_name: scenario.project_id,
+            segment_id: route.segment_id,
+            checkpoint_id: route.checkpoint_id,
+            map_target_ids: [route.segment_id, route.checkpoint_id].filter(Boolean),
+            location_ref: route.location_ref || "synthetic-location-ref",
+            party_count: 1,
+            condition_summary: packet.summary || safety.recommendation || "Sandbox review",
+            requested_action: packet.requested_action || "operator sandbox review",
+            emergency_contacts: ["119", "112"]
+          },
+          privacy: {
+            local_only: true,
+            raw_health_payload_shared: false,
+            raw_gpx_shared: false,
+            precise_coordinates_shared: false,
+            precise_timestamps_shared: false
+          },
+          boundary: {
+            application_layer_only: true,
+            outbound_send_performed: false,
+            hardware_transport_invoked: false,
+            safety_api_called: false,
+            medical_diagnosis: false,
+            workspace_write_performed: false,
+            runtime_safety_truth: false,
+            synthetic_scenario: true
+          }
+        },
+        rendered_messages: [
+          {
+            transport_profile: "sms_text",
+            body_text: sms.summary || "SCOUT SANDBOX ALERT DRAFT - NOT SENT",
+            sent: false
+          },
+          {
+            transport_profile: "lora_compact",
+            payload_json: { sandbox: true, packet_id: packet.packet_id, sent: false },
+            sent: false
+          },
+          {
+            transport_profile: "mqtt_json",
+            mqtt_topic: mqtt.topic_ref || `scout/sandbox/${scenario.scenario_id || "unknown"}/alerts`,
+            payload_json: { sandbox: true, packet_id: packet.packet_id, sent: false },
+            sent: false
+          }
+        ],
+        policy_decision: {
+          status: projection.status || "pending_approval",
+          external_send_allowed: false,
+          manual_copy_allowed: false,
+          operator_approval_present: Boolean(projection.approval)
+        }
+      };
+    }
+
+    async function loadLivingProjection({ schedule = true } = {}) {
+      const projection = await fetchLivingProjection();
+      livingProjection = projection.status === "unavailable" ? null : projection;
+      if (livingProjection) {
+        activePayload = payloadFromLivingProjection(livingProjection);
+        approvalArtifact = livingProjection.approval || buildDecisionArtifact("pending_review");
+        render(activePayload);
+      } else {
+        bindText("livingStatus", "no sandbox run");
+      }
+      if (schedule) scheduleLivingRefresh();
+      return livingProjection;
+    }
+
+    function scheduleLivingRefresh() {
+      if (livingRefreshTimer) window.clearTimeout(livingRefreshTimer);
+      livingRefreshTimer = window.setTimeout(async () => {
+        livingRefreshTimer = null;
+        try {
+          await loadLivingProjection({ schedule: false });
+        } catch (_error) {
+          bindText("livingStatus", "Living unavailable");
+        } finally {
+          if (livingProjection) scheduleLivingRefresh();
+        }
+      }, LIVING_REFRESH_INTERVAL_MS);
+    }
+
+    function packetFrom(payload) {
+      return payload.packet || payload.alert_packet || payload;
+    }
+
+    function emergencyFrom(payload) {
+      const packet = packetFrom(payload);
+      return packet.emergency_packet || {};
+    }
+
+    function renderedProfile(payload, profile) {
+      return (payload.rendered_messages || []).find((message) => message.transport_profile === profile) || {};
+    }
+
+    function policyFrom(payload) {
+      return payload.policy_decision || {};
+    }
+
+    function bindText(name, value) {
+      document.querySelectorAll(`[data-bind="${name}"]`).forEach((node) => {
+        node.textContent = value || "unknown";
+      });
+    }
+
+    function renderWorkspaceResources() {
+      bindText("workspaceApiBase", workspaceState.apiBase || "same-origin");
+      bindText("workspaceKind", workspaceState.kind || "pretrip");
+      bindText("workspaceStatus", workspaceState.status || "sample only");
+      setProjectInputs(workspaceState.projectId);
+
+      const preview = {
+        workspace_layout: WORKSPACE_LAYOUT_VERSION,
+        project_id: workspaceState.projectId,
+        workspace_kind: workspaceState.kind,
+        status: workspaceState.status,
+        endpoint_refs: workspaceState.endpointRefs,
+        source_refs: workspaceState.sourceRefs.slice(0, 12),
+        loaded_resources: Object.fromEntries(
+          Object.entries(workspaceState.resources).map(([key, resource]) => [
+            key,
+            {
+              label: WORKSPACE_ENDPOINT_NAMES[key] || key,
+              ok: resource.ok,
+              source_path: resource.source_path || null,
+              error: resource.error || null
+            }
+          ])
+        ),
+        boundary: {
+          read_only_get_only: true,
+          no_workspace_write: true,
+          runtime_safety_truth: false,
+          phase1_mutation_requested: false,
+          external_send_performed: false
+        }
+      };
+
+      document.querySelectorAll("[data-workspace-resource-preview]").forEach((node) => {
+        node.textContent = JSON.stringify(preview, null, 2);
+      });
+    }
+
+    function setProjectInputs(projectId) {
+      document.querySelectorAll("[data-project-input]").forEach((input) => {
+        if (input.value !== projectId) input.value = projectId;
+      });
+    }
+
+    async function fetchWorkspaceJson(resourceKey, path) {
+      const response = await fetch(workspaceUrl(path), { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error(`${response.status} ${response.statusText}`.trim());
+      }
+      return response.json();
+    }
+
+    async function loadWorkspaceResources() {
+      const projectId = workspaceState.projectId || DEFAULT_WORKSPACE_PROJECT_ID;
+      const endpointRefs = workspaceResourcePaths(projectId);
+      workspaceState.endpointRefs = endpointRefs;
+      workspaceState.status = "loading workspace";
+      workspaceState.errors = [];
+      renderWorkspaceResources();
+
+      const entries = await Promise.all(
+        Object.entries(endpointRefs).map(async ([resourceKey, path]) => {
+          try {
+            const payload = await fetchWorkspaceJson(resourceKey, path);
+            return [resourceKey, {
+              ok: true,
+              path,
+              payload,
+              source_path: payload?.source_path || path
+            }];
+          } catch (error) {
+            return [resourceKey, {
+              ok: false,
+              path,
+              payload: null,
+              error: error.message
+            }];
+          }
+        })
+      );
+
+      workspaceState.resources = Object.fromEntries(entries);
+      workspaceState.errors = entries
+        .filter(([, resource]) => !resource.ok)
+        .map(([resourceKey, resource]) => `${resourceKey}: ${resource.error}`);
+      const projectPayload = workspaceState.resources.project?.payload || {};
+      workspaceState.kind = projectPayload.workspace_kind || projectPayload.import_stage || "pretrip";
+      workspaceState.sourceRefs = workspaceSourceRefs(workspaceState.resources);
+      workspaceState.status = workspaceState.errors.length
+        ? "partial workspace"
+        : "workspace loaded";
+      activePayload = payloadFromWorkspaceResources(workspaceState.resources);
+      approvalArtifact = buildDecisionArtifact("pending_review");
+      applyWorkspaceLayerRefs(projectPayload);
+      render(activePayload);
+    }
+
+    function workspaceSourceRefs(resources) {
+      const refs = new Set(["project.json"]);
+      Object.values(resources).forEach((resource) => {
+        if (!resource?.ok) return;
+        if (resource.source_path) refs.add(resource.source_path);
+        const payload = resource.payload || {};
+        Object.values(payload.artifacts || {}).forEach((value) => {
+          if (typeof value === "string" && value) refs.add(value);
+        });
+        Object.values(payload.source_refs || {}).forEach((value) => {
+          if (typeof value === "string" && value) refs.add(value);
+        });
+      });
+      return Array.from(refs).filter(Boolean).slice(0, 48);
+    }
+
+    function applyWorkspaceLayerRefs(projectPayload) {
+      const layers = Array.isArray(projectPayload?.map_layers) ? projectPayload.map_layers : [];
+      const byId = new Map(layers.map((layer) => [layer.layer_id, layer]));
+      document.querySelectorAll("[data-layer-toggle]").forEach((button) => {
+        const layerId = button.dataset.layerToggle;
+        const layer = byId.get(layerId) || byId.get(layerId === "checkpoints" ? "mcp" : layerId) || {};
+        const sourceRef = layer.source_path || layer.source_ref || layer.source_refs?.[0] || "";
+        if (sourceRef) button.dataset.workspaceSourceRef = sourceRef;
+        button.title = sourceRef
+          ? `${layer.label || layer.label_zh || layerId}: ${sourceRef}`
+          : `${layerId}: workspace layer ref pending`;
+      });
+    }
+
+    function payloadFromWorkspaceResources(resources) {
+      const projectPayload = resources.project?.payload || {};
+      const debugProjection = resources.debug_projection?.payload || {};
+      const debugEventsPayload = resources.debug_projection_events?.payload || {};
+      const events = [
+        ...(debugProjection.timeline_events || []),
+        ...(debugEventsPayload.events || [])
+      ];
+      const alertEvent = [...events].reverse().find((event) => event.kind === "alert_application_packet_prepared");
+      const reducer = debugProjection.runtime_safety_reducer_projection
+        || projectPayload.runtime_safety_reducer_projection
+        || {};
+      const stateStore = debugProjection.runtime_safety_state_store_projection
+        || projectPayload.runtime_safety_state_store_projection
+        || {};
+      const routeName = projectPayload.summary?.route_name
+        || projectPayload.route_name
+        || projectPayload.project?.route_name
+        || workspaceState.projectId;
+      const selectedGate = alertEvent?.payload?.selected_gate_id
+        || reducer.selected_gate_id
+        || stateStore.latest_selected_gate_id
+        || "workspace_resource_gate";
+      const safetyLevel = safetyLevelFromWorkspace(
+        alertEvent?.payload?.safety_level
+        || reducer.ln_level_candidate
+        || reducer.proposed_ln_level_candidate
+        || stateStore.latest_ln_level_candidate
+        || "L1_CAUTION"
+      );
+      const mapRefs = alertEvent?.map_refs
+        || reducer.map_target_ids
+        || stateStore.latest_map_target_ids
+        || [];
+      const segmentId = alertEvent?.payload?.segment_id || mapRefs.find((ref) => String(ref).startsWith("seg.")) || "workspace.segment";
+      const checkpointId = alertEvent?.payload?.checkpoint_id || mapRefs.find((ref) => String(ref).startsWith("camp.") || String(ref).startsWith("cp.")) || "workspace.checkpoint";
+      const summary = alertEvent?.summary
+        || reducer.recommendation
+        || stateStore.latest_recommendation
+        || "Workspace projection loaded; review shared admin/pretrip/debug resources before approval.";
+
+      return {
+        artifact_kind: "scout_alert_application_dry_run_result",
+        source_provider: "scout_emergency_workspace_loader",
+        workspace_layout: WORKSPACE_LAYOUT_VERSION,
+        workspace_project_id: workspaceState.projectId,
+        source_refs: workspaceState.sourceRefs,
+        packet: {
+          packet_id: alertEvent?.payload?.packet_id || `scout_alert_packet.${workspaceState.projectId}.workspace`,
+          safety_level: safetyLevel,
+          event_type: alertEvent?.payload?.event_type || "workspace_projection_review",
+          selected_gate_id: selectedGate,
+          summary,
+          source_path: alertEvent?.source_refs?.[0] || "project.json",
+          sha256: alertEvent?.payload?.sha256 || "workspace-projection",
+          emergency_packet: {
+            route_id: workspaceState.projectId,
+            route_name: routeName,
+            segment_id: segmentId,
+            checkpoint_id: checkpointId,
+            map_target_ids: mapRefs,
+            location_ref: mapRefs[0] ? `workspace_ref:${mapRefs[0]}` : `project:${workspaceState.projectId}`,
+            party_count: 1,
+            condition_summary: summary,
+            requested_action: "review workspace projection, route context, and emergency callout options",
+            emergency_contacts: ["119", "112"]
+          },
+          privacy: {
+            local_only: true,
+            raw_health_payload_shared: false,
+            raw_gpx_shared: false,
+            precise_coordinates_shared: false,
+            precise_timestamps_shared: false
+          },
+          boundary: {
+            application_layer_only: true,
+            outbound_send_performed: false,
+            hardware_transport_invoked: false,
+            safety_api_called: false,
+            medical_diagnosis: false,
+            workspace_write_performed: false
+          }
+        },
+        rendered_messages: workspaceRenderedMessages(safetyLevel, segmentId, checkpointId, summary),
+        policy_decision: {
+          status: alertEvent ? "workspace_alert_projection_loaded" : "workspace_projection_loaded",
+          external_send_allowed: false,
+          manual_copy_allowed: false,
+          operator_approval_present: false
+        }
+      };
+    }
+
+    function safetyLevelFromWorkspace(level) {
+      const value = String(level || "");
+      if (value.includes("L4")) return "L4_EMERGENCY";
+      if (value.includes("L3")) return "L3_DISTRESS";
+      if (value.includes("L2")) return "L2_CONCERN";
+      if (value.includes("L1")) return "L1_CAUTION";
+      return value || "L1_CAUTION";
+    }
+
+    function workspaceRenderedMessages(safetyLevel, segmentId, checkpointId, summary) {
+      return [
+        {
+          transport_profile: "sms_text",
+          body_text: `SCOUT ALERT DRAFT - NOT SENT | PROJECT ${workspaceState.projectId} | LEVEL ${safetyLevel} | SEG ${segmentId} | CP ${checkpointId} | STATUS ${summary} | CONTACT 119/112`,
+          sent: false
+        },
+        {
+          transport_profile: "lora_compact",
+          payload_json: { v: 1, lvl: safetyLevel, s: segmentId, c: checkpointId, sent: false },
+          sent: false
+        },
+        {
+          transport_profile: "mqtt_json",
+          mqtt_topic: `scout/alerts/application/${workspaceState.projectId}`,
+          payload_json: { sent: false, dry_run: true, project_id: workspaceState.projectId },
+          sent: false
+        }
+      ];
+    }
+
+    function render(payload) {
+      const packet = packetFrom(payload);
+      const emergency = emergencyFrom(payload);
+      const policy = policyFrom(payload);
+      const sms = renderedProfile(payload, "sms_text");
+      const lora = renderedProfile(payload, "lora_compact");
+      const mqtt = renderedProfile(payload, "mqtt_json");
+
+      bindText("safetyLevel", packet.safety_level || "L3_DISTRESS");
+      const physioState = physiologicStateFromLevel(packet.safety_level || "L3_DISTRESS");
+      bindText("physioState", physioState.label);
+      updateGateState("physiologic_gate", physioState.state);
+      bindText("packetStatus", policy.status || "pending_approval");
+      bindText("selectedGate", packet.selected_gate_id || "unknown_gate");
+      const living = payload.living_projection || null;
+      bindText("pathStateTitle", living ? "Shadow Reducer Candidate" : "Production Path State");
+      bindText("sourceFreshness", living?.route?.fix_quality || "fresh / partial");
+      bindText("packetId", packet.packet_id || "scout_alert_packet");
+      bindText("transportSummary", transportSummary(sms, lora, mqtt));
+      bindText("transportState", policy.status || "dry-run");
+      bindText("eventType", packet.event_type || "unknown_event");
+      bindText("routeLabel", emergency.route_name || emergency.route_id || "route_ref");
+      bindText("segmentId", emergency.segment_id || "segment_ref");
+      bindText("checkpointId", emergency.checkpoint_id || "checkpoint_ref");
+      bindText("smsState", sms.body_text ? "draft_ready" : "missing");
+      bindText("loraState", lora.payload_json ? "draft_ready" : "missing");
+      bindText("mqttState", mqtt.payload_json ? "draft_ready" : "missing");
+      bindText("deliveryState", living?.transport_receipt
+        ? `sandbox:${living.transport_receipt.outcome} · production=false`
+        : "not_reported");
+      bindText("decisionSummary", living?.transport_receipt?.simulated_receipt_correlated
+        ? "Simulator receipt recorded. No real transport or delivery occurred."
+        : decisionSummary(policy));
+      bindText("livingStatus", living ? `Living r${living.revision || 0}` : "not connected");
+      applyLivingGateStates(payload.living_gates || []);
+
+      const packetPreview = {
+        packet_id: packet.packet_id,
+        safety_level: packet.safety_level,
+        selected_gate_id: packet.selected_gate_id,
+        route_id: emergency.route_id,
+        segment_id: emergency.segment_id,
+        checkpoint_id: emergency.checkpoint_id,
+        location_ref: emergency.location_ref,
+        party_count: emergency.party_count,
+        requested_action: emergency.requested_action,
+        contacts: emergency.emergency_contacts,
+        sent: false
+      };
+      const packetPreviewText = JSON.stringify(packetPreview, null, 2);
+      document.querySelectorAll("[data-packet-preview]").forEach((node) => {
+        node.textContent = packetPreviewText;
+      });
+      renderWorkspaceResources();
+      renderArtifact();
+      applyLayerState();
+    }
+
+    function physiologicStateFromLevel(level) {
+      if (level === "L0_NORMAL") {
+        return { state: "normal", label: "healthy" };
+      }
+      if (level === "L1_CAUTION" || level === "L2_CONCERN") {
+        return { state: "watch", label: "strained" };
+      }
+      return { state: "danger", label: "danger" };
+    }
+
+    function updateGateState(gateId, state) {
+      document.querySelectorAll(`[data-gate="${gateId}"]`).forEach((node) => {
+        node.dataset.state = state;
+      });
+    }
+
+    function applyLivingGateStates(gates) {
+      gates.forEach((gate) => {
+        const severity = String(gate.severity || "none");
+        const state = ["alert_review", "retreat_review"].includes(severity)
+          ? "danger"
+          : ["watch", "rest"].includes(severity) ? "watch" : "normal";
+        updateGateState(gate.gate_id, state);
+        document.querySelectorAll(`[data-gate="${gate.gate_id}"]`).forEach((node) => {
+          const label = node.querySelector("span:last-child");
+          if (label) label.textContent = `${gate.state_candidate || state} / ${severity}`;
+        });
+      });
+    }
+
+    function transportSummary(sms, lora, mqtt) {
+      const ready = [
+        sms.body_text ? "SMS" : null,
+        lora.payload_json ? "LoRa" : null,
+        mqtt.payload_json ? "MQTT" : null
+      ].filter(Boolean);
+      return ready.length ? `${ready.join(" / ")} draft` : "local-only";
+    }
+
+    function decisionSummary(policy) {
+      if (policy.external_send_allowed) {
+        return "Waiting for verified transport executor before delivery can be recorded.";
+      }
+      return "No verified transport has reported delivery.";
+    }
+
+    function buildDecisionArtifact(decision) {
+      const packet = packetFrom(activePayload);
+      const emergency = emergencyFrom(activePayload);
+      return {
+        artifact_kind: "scout_emergency_approval_action",
+        artifact_version: "emergency_approval_action.v0",
+        decision: decisionLabels[decision] || decision,
+        source_packet_id: packet.packet_id,
+        source_packet_sha256: packet.sha256 || "unknown",
+        workspace_layout: WORKSPACE_LAYOUT_VERSION,
+        workspace_project_id: workspaceState.projectId,
+        workspace_kind: workspaceState.kind,
+        workspace_resource_status: workspaceState.status,
+        workspace_source_refs: workspaceState.sourceRefs,
+        workspace_endpoint_refs: workspaceState.endpointRefs,
+        scenario_id: activePayload.living_projection?.scenario?.scenario_id || null,
+        selected_gate_id: packet.selected_gate_id || "unknown_gate",
+        safety_level: packet.safety_level || "unknown_level",
+        route_id: emergency.route_id || null,
+        segment_id: emergency.segment_id || null,
+        checkpoint_id: emergency.checkpoint_id || null,
+        map_target_ids: emergency.map_target_ids || [],
+        requested_transport: decision === "approve_send" ? "approved_transport_executor" : "none",
+        external_send_requested: decision === "approve_send",
+        external_send_performed: false,
+        verified_delivery_required: decision === "approve_send",
+        safety_api_called: false,
+        phase1_mutation_requested: false,
+        raw_health_payload_shared: false,
+        raw_gpx_shared: false,
+        precise_coordinates_shared: false,
+        precise_timestamps_shared: false,
+        decision_offset_label: "operator_action_offset",
+        sent: false
+      };
+    }
+
+    function buildCalloutArtifact(channel) {
+      const packet = packetFrom(activePayload);
+      const emergency = emergencyFrom(activePayload);
+      const sms = renderedProfile(activePayload, "sms_text");
+      const calloutDecision = channel === "voice" ? "voice_callout" : "message_callout";
+      const artifact = buildDecisionArtifact(calloutDecision);
+      artifact.callout_channel = channel;
+      artifact.callout_action = decisionLabels[calloutDecision];
+      artifact.callout_contacts = emergency.emergency_contacts || ["119", "112"];
+      artifact.callout_requires_manual_operator = true;
+      artifact.outbound_transport_invoked = false;
+      artifact.external_send_requested = false;
+      artifact.verified_delivery_required = false;
+      artifact.message_draft = channel === "message" ? (sms.body_text || packet.summary || "SCOUT ALERT DRAFT - NOT SENT") : null;
+      artifact.voice_call_script = channel === "voice"
+        ? [
+            "Scout emergency call draft.",
+            `Level: ${packet.safety_level || "unknown"}.`,
+            `Route: ${emergency.route_name || emergency.route_id || "unknown route"}.`,
+            `Segment: ${emergency.segment_id || "unknown segment"}.`,
+            `Checkpoint: ${emergency.checkpoint_id || "unknown checkpoint"}.`,
+            `Condition: ${emergency.condition_summary || packet.summary || "field status review needed"}.`,
+            `Requested action: ${emergency.requested_action || "operator review"}.`
+          ].join(" ")
+        : null;
+      return artifact;
+    }
+
+    function renderArtifact() {
+      const text = JSON.stringify(approvalArtifact, null, 2);
+      document.querySelectorAll("[data-artifact-preview]").forEach((node) => {
+        node.textContent = text;
+      });
+    }
+
+    async function syncLivingDecision(decision) {
+      if (!livingProjection) return false;
+      const packet = livingProjection.alert_packet || {};
+      const scenario = livingProjection.scenario || {};
+      const serverDecision = decisionLabels[decision] || decision;
+      const projection = await postLivingAction(`${LIVING_ENDPOINT}/approvals`, {
+        scenario_id: scenario.scenario_id,
+        packet_id: packet.packet_id,
+        packet_sha256: packet.sha256,
+        decision: serverDecision,
+        idempotency_key: `mobile-${scenario.run_id}-${livingProjection.revision}-${serverDecision}`,
+        confirm_sandbox_action: true
+      });
+      livingProjection = projection;
+      activePayload = payloadFromLivingProjection(projection);
+      approvalArtifact = projection.approval || approvalArtifact;
+      render(activePayload);
+      scheduleLivingRefresh();
+      return true;
+    }
+
+    async function handleDecision(decision) {
+      approvalArtifact = buildDecisionArtifact(decision);
+      renderArtifact();
+      if (decision === "copy_packet") {
+        const sms = renderedProfile(activePayload, "sms_text");
+        if (navigator.clipboard && sms.body_text) {
+          navigator.clipboard.writeText(sms.body_text).catch(() => {});
+        }
+      }
+      try {
+        await syncLivingDecision(decision);
+      } catch (error) {
+        approvalArtifact = {
+          ...approvalArtifact,
+          living_sync_status: "failed",
+          living_sync_error: String(error.message || error),
+          sent: false
+        };
+        renderArtifact();
+      }
+    }
+
+    async function handleCallout(channel) {
+      approvalArtifact = buildCalloutArtifact(channel);
+      renderArtifact();
+      try {
+        await syncLivingDecision(channel === "voice" ? "voice_callout" : "message_callout");
+      } catch (error) {
+        approvalArtifact = {
+          ...approvalArtifact,
+          living_sync_status: "failed",
+          living_sync_error: String(error.message || error),
+          sent: false
+        };
+        renderArtifact();
+      }
+    }
+
+    function affectedLayerIds(layerId) {
+      return layerAliases[layerId] || [layerId];
+    }
+
+    function applyLayerState() {
+      layerIds.forEach((layerId) => {
+        const enabled = activeLayers[layerId];
+        document.querySelectorAll("[data-layer-toggle]").forEach((button) => {
+          if (button.dataset.layerToggle === layerId) {
+            button.setAttribute("aria-pressed", enabled ? "true" : "false");
+            button.classList.toggle("is-off", !enabled);
+          }
+        });
+        affectedLayerIds(layerId).forEach((affectedLayerId) => {
+          document.querySelectorAll("[data-map-surface]").forEach((frame) => {
+            frame.setAttribute(`data-layer-${affectedLayerId}`, enabled ? "true" : "false");
+          });
+        });
+      });
+    }
+
+    function toggleLayer(layerId) {
+      activeLayers[layerId] = !activeLayers[layerId];
+      applyLayerState();
+    }
+
+    function updateWorkspaceProject(projectId) {
+      const nextProjectId = (projectId || DEFAULT_WORKSPACE_PROJECT_ID).trim();
+      workspaceState.projectId = nextProjectId || DEFAULT_WORKSPACE_PROJECT_ID;
+      workspaceState.endpointRefs = workspaceResourcePaths(workspaceState.projectId);
+      localStorage.setItem("scout.emergencyProjectId", workspaceState.projectId);
+      renderWorkspaceResources();
+    }
+
+    function selectEvidenceTab(surface, tabName) {
+      document.querySelectorAll(`[data-evidence-surface="${surface}"][data-evidence-tab]`).forEach((button) => {
+        const selected = button.dataset.evidenceTab === tabName;
+        button.setAttribute("aria-selected", selected ? "true" : "false");
+        button.tabIndex = selected ? 0 : -1;
+      });
+      document.querySelectorAll(`[data-evidence-surface="${surface}"][data-evidence-panel]`).forEach((panel) => {
+        panel.hidden = panel.dataset.evidencePanel !== tabName;
+      });
+    }
+
+    function selectAdjacentEvidenceTab(button, direction) {
+      const surface = button.dataset.evidenceSurface;
+      const tabs = Array.from(document.querySelectorAll(`[data-evidence-surface="${surface}"][data-evidence-tab]`));
+      const index = tabs.indexOf(button);
+      if (index < 0) return;
+      const next = tabs[(index + direction + tabs.length) % tabs.length];
+      selectEvidenceTab(surface, next.dataset.evidenceTab);
+      next.focus();
+    }
+
+    document.querySelectorAll("[data-decision]").forEach((button) => {
+      button.addEventListener("click", () => { void handleDecision(button.dataset.decision); });
+    });
+
+    document.querySelectorAll("[data-callout]").forEach((button) => {
+      button.addEventListener("click", () => { void handleCallout(button.dataset.callout); });
+    });
+
+    document.querySelectorAll("[data-load-living]").forEach((button) => {
+      button.addEventListener("click", () => {
+        button.disabled = true;
+        loadLivingProjection()
+          .catch((error) => bindText("livingStatus", `Living failed: ${error.message || error}`))
+          .finally(() => { button.disabled = false; });
+      });
+    });
+
+    document.querySelectorAll("[data-layer-toggle]").forEach((button) => {
+      button.addEventListener("click", () => toggleLayer(button.dataset.layerToggle));
+    });
+
+    document.querySelectorAll("[data-evidence-tab]").forEach((button) => {
+      button.addEventListener("click", () => {
+        selectEvidenceTab(button.dataset.evidenceSurface, button.dataset.evidenceTab);
+      });
+      button.addEventListener("keydown", (event) => {
+        if (event.key === "ArrowRight") {
+          event.preventDefault();
+          selectAdjacentEvidenceTab(button, 1);
+        }
+        if (event.key === "ArrowLeft") {
+          event.preventDefault();
+          selectAdjacentEvidenceTab(button, -1);
+        }
+      });
+    });
+
+    document.querySelectorAll("[data-project-input]").forEach((input) => {
+      input.addEventListener("input", () => updateWorkspaceProject(input.value));
+    });
+
+    document.querySelectorAll("[data-load-workspace]").forEach((button) => {
+      button.addEventListener("click", () => {
+        button.disabled = true;
+        loadWorkspaceResources()
+          .catch((error) => {
+            workspaceState.status = "workspace load failed";
+            workspaceState.errors = [error.message];
+            renderWorkspaceResources();
+          })
+          .finally(() => {
+            button.disabled = false;
+          });
+      });
+    });
+
+    document.querySelectorAll("[data-file-input]").forEach((input) => {
+      input.addEventListener("change", async (event) => {
+        const file = event.target.files && event.target.files[0];
+        if (!file) return;
+        const text = await file.text();
+        activePayload = JSON.parse(text);
+        approvalArtifact = buildDecisionArtifact("pending_review");
+        render(activePayload);
+      });
+    });
+
+    render(activePayload);
+    if (new URLSearchParams(location.search).get("living") === "1") {
+      loadLivingProjection().catch((error) => {
+        bindText("livingStatus", `Living failed: ${error.message || error}`);
+      });
+    }
+  </script>
+</body>
+</html>

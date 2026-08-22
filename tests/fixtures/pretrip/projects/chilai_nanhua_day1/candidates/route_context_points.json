@@ -1,0 +1,3741 @@
+{
+  "artifact_kind": "pretrip_route_context_points",
+  "boundary": {
+    "candidate_only": true,
+    "compile_allowed": false,
+    "live_safety_api_calls_allowed": false,
+    "phase1_runtime_mutation_allowed": false,
+    "phase2_brain_writeback_allowed": false,
+    "raw_payloads_embedded": false,
+    "runtime_safety_truth": false,
+    "safety_api_called": false,
+    "source_fulltext_embedded": false,
+    "workspace_file_mutation_allowed": true
+  },
+  "counts": {
+    "by_context_kind": {
+      "natural_context": 2,
+      "navigation_context": 4,
+      "resource_context": 4,
+      "risk_context": 5,
+      "route_context": 25,
+      "viewpoint": 1
+    },
+    "by_evidence_family": {
+      "article": 9,
+      "map_label": 31,
+      "mcp_candidates": 6,
+      "named_point": 8,
+      "named_point_evidence": 8,
+      "ocr": 1,
+      "ocr_label_evidence": 1,
+      "route_mileage": 30,
+      "route_note": 30,
+      "route_note_candidates": 30,
+      "web_case_evidence": 1
+    },
+    "by_evidence_type": {
+      "major_critical_point": 6,
+      "named_point": 3,
+      "ocr_map_label": 1,
+      "road_mileage_stone": 3,
+      "trail_mileage_k_anchor": 27,
+      "web_case_evidence": 1
+    },
+    "by_sec6_layer": {
+      "cultural": 7,
+      "historical": 32,
+      "natural": 4,
+      "observation_point": 1,
+      "route_context": 4,
+      "seasonal": 5,
+      "terrain": 11
+    },
+    "by_sensitivity_level": {
+      "cultural_review": 4,
+      "public": 37
+    },
+    "by_source_tier": {
+      "P0": 1,
+      "P1": 10,
+      "P2": 30
+    },
+    "by_stop_advisory_candidate": {
+      "context_reference_only": 28,
+      "low_priority_context_reference": 4,
+      "pass_through_or_minimize_exposure": 6,
+      "short_stop_requires_contextual_permission": 3
+    },
+    "candidate_only": true,
+    "route_context_point_count": 41,
+    "runtime_safety_truth": false
+  },
+  "generated_at": "2026-07-03T00:00:00Z",
+  "point_count": 41,
+  "points": [
+    {
+      "accepted_evidence_page_count": 12,
+      "aliases": [
+        "林道叉路"
+      ],
+      "candidate_id": "route_context.mcp_candidates.mcp.old_forest_fork.001",
+      "candidate_only": true,
+      "confidence": "medium",
+      "context_kind": "navigation_context",
+      "display_label": "舊林道叉路",
+      "display_policy": {
+        "coordinate_precision": "fuzzy_250m",
+        "reason": "cultural context requires review before precise display",
+        "requires_human_review_before_display": true,
+        "show_exact_coordinate": false,
+        "show_label": true
+      },
+      "distance_m": 600.0,
+      "evidence_families": [
+        "article",
+        "mcp_candidates",
+        "named_point",
+        "named_point_evidence"
+      ],
+      "evidence_type": "major_critical_point",
+      "label": "舊林道叉路",
+      "lat": 24.05065393075347,
+      "linked_cp_candidates": [
+        "cp.start"
+      ],
+      "linked_named_points": [
+        "np.old_forest_fork"
+      ],
+      "lon": 121.21523100882769,
+      "mcp_classes": [
+        "fork_junction"
+      ],
+      "mention_page_count": 1,
+      "mention_ratio": 0.083,
+      "merged_evidence_types": [
+        "major_critical_point",
+        "named_point"
+      ],
+      "nearest_cp_candidate_id": "cp.start",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 61.0,
+        "reason_codes": [
+          "candidate_context",
+          "historical_context",
+          "cultural_context",
+          "natural_context"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 61.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "representative_candidate",
+      "reference_gaps": [
+        "hiking_biji",
+        "missing mandatory source family: hiking_biji",
+        "missing mandatory source family: sunriver_culture",
+        "sunriver_culture"
+      ],
+      "requires_human_review": true,
+      "review_state": "needs_human_review",
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "cultural",
+        "historical",
+        "natural",
+        "terrain"
+      ],
+      "sensitivity_level": "cultural_review",
+      "source_candidate_id": "mcp.old_forest_fork.001",
+      "source_families": [
+        "ptt_hiking"
+      ],
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "unknown",
+        "ttl_policy": "refresh_when_source_pack_changes"
+      },
+      "source_path": "outputs/mcp/mcp_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "mcp_candidates",
+          "source_path": "outputs/mcp/mcp_candidates.json"
+        },
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "named_point_evidence",
+          "source_path": "outputs/mcp/named_point_evidence.json"
+        }
+      ],
+      "source_tier": "P1",
+      "stop_advisory_candidate": "short_stop_requires_contextual_permission"
+    },
+    {
+      "accepted_evidence_page_count": 12,
+      "aliases": [
+        "黑水池",
+        "黑水塘營地"
+      ],
+      "candidate_id": "route_context.mcp_candidates.mcp.heishuitang.002",
+      "candidate_only": true,
+      "confidence": "high",
+      "context_kind": "resource_context",
+      "display_label": "黑水塘",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 2350.0,
+      "evidence_families": [
+        "article",
+        "mcp_candidates",
+        "named_point",
+        "named_point_evidence"
+      ],
+      "evidence_type": "major_critical_point",
+      "label": "黑水塘",
+      "lat": 24.052010625600815,
+      "linked_cp_candidates": [
+        "cp.002"
+      ],
+      "linked_named_points": [
+        "np.heishuitang",
+        "np.yunhai_station"
+      ],
+      "lon": 121.22796119190753,
+      "mcp_classes": [
+        "water_source",
+        "camp_hut_structure"
+      ],
+      "mention_page_count": 4,
+      "mention_ratio": 0.333,
+      "merged_evidence_types": [
+        "major_critical_point",
+        "named_point"
+      ],
+      "nearest_cp_candidate_id": "cp.002",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 35.0,
+        "reason_codes": [
+          "candidate_context",
+          "resource_context"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 35.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "representative_candidate",
+      "reference_gaps": [],
+      "requires_human_review": true,
+      "review_state": "needs_human_review",
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "cultural",
+        "route_context"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "mcp.heishuitang.002",
+      "source_families": [
+        "ptt_hiking",
+        "hiking_biji",
+        "sunriver_culture",
+        "public_web"
+      ],
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "unknown",
+        "ttl_policy": "refresh_when_source_pack_changes"
+      },
+      "source_path": "outputs/mcp/mcp_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "mcp_candidates",
+          "source_path": "outputs/mcp/mcp_candidates.json"
+        },
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "named_point_evidence",
+          "source_path": "outputs/mcp/named_point_evidence.json"
+        }
+      ],
+      "source_tier": "P1",
+      "stop_advisory_candidate": "context_reference_only"
+    },
+    {
+      "accepted_evidence_page_count": 12,
+      "aliases": [
+        "崩壁高繞入口"
+      ],
+      "candidate_id": "route_context.mcp_candidates.mcp.major_collapse_wall.003",
+      "candidate_only": true,
+      "confidence": "high",
+      "context_kind": "risk_context",
+      "display_label": "大崩壁",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 4100.0,
+      "evidence_families": [
+        "article",
+        "mcp_candidates",
+        "named_point",
+        "named_point_evidence"
+      ],
+      "evidence_type": "major_critical_point",
+      "label": "大崩壁",
+      "lat": 24.046623408794403,
+      "linked_cp_candidates": [
+        "cp.003"
+      ],
+      "linked_named_points": [
+        "np.major_collapse_wall",
+        "np.rope_bridge"
+      ],
+      "lon": 121.23617763631046,
+      "mcp_classes": [
+        "extreme_terrain_hazard"
+      ],
+      "mention_page_count": 3,
+      "mention_ratio": 0.25,
+      "merged_evidence_types": [
+        "major_critical_point",
+        "named_point"
+      ],
+      "nearest_cp_candidate_id": "cp.003",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 25.0,
+        "reason_codes": [
+          "candidate_context",
+          "risk_context_penalty"
+        ],
+        "risk_penalty": 35.0,
+        "runtime_safety_truth": false,
+        "value": 0.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "representative_candidate",
+      "reference_gaps": [],
+      "requires_human_review": true,
+      "review_state": "needs_human_review",
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "cultural",
+        "seasonal",
+        "terrain"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "mcp.major_collapse_wall.003",
+      "source_families": [
+        "ptt_hiking",
+        "hiking_biji",
+        "sunriver_culture"
+      ],
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "unknown",
+        "ttl_policy": "refresh_when_source_pack_changes"
+      },
+      "source_path": "outputs/mcp/mcp_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "mcp_candidates",
+          "source_path": "outputs/mcp/mcp_candidates.json"
+        },
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "named_point_evidence",
+          "source_path": "outputs/mcp/named_point_evidence.json"
+        }
+      ],
+      "source_tier": "P1",
+      "stop_advisory_candidate": "pass_through_or_minimize_exposure"
+    },
+    {
+      "accepted_evidence_page_count": 12,
+      "candidate_id": "route_context.mcp_candidates.mcp.hidden_forest.004",
+      "candidate_only": true,
+      "confidence": "medium",
+      "context_kind": "risk_context",
+      "display_label": "隱蔽樹林區",
+      "display_policy": {
+        "coordinate_precision": "fuzzy_250m",
+        "reason": "cultural context requires review before precise display",
+        "requires_human_review_before_display": true,
+        "show_exact_coordinate": false,
+        "show_label": true
+      },
+      "distance_m": 6900.0,
+      "evidence_families": [
+        "mcp_candidates"
+      ],
+      "evidence_type": "major_critical_point",
+      "label": "隱蔽樹林區",
+      "lat": 24.04476505704224,
+      "linked_cp_candidates": [
+        "cp.005"
+      ],
+      "linked_named_points": [
+        "np.hidden_forest"
+      ],
+      "lon": 121.25119037926197,
+      "mcp_classes": [
+        "hidden_forest_route_loss"
+      ],
+      "mention_ratio": 0.167,
+      "nearest_cp_candidate_id": "cp.005",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 47.0,
+        "reason_codes": [
+          "candidate_context",
+          "cultural_context",
+          "natural_context",
+          "risk_context_penalty"
+        ],
+        "risk_penalty": 35.0,
+        "runtime_safety_truth": false,
+        "value": 12.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "representative_candidate",
+      "reference_gaps": [
+        "missing mandatory source family: sunriver_culture"
+      ],
+      "requires_human_review": true,
+      "review_state": "needs_human_review",
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "cultural",
+        "natural",
+        "seasonal"
+      ],
+      "sensitivity_level": "cultural_review",
+      "source_candidate_id": "mcp.hidden_forest.004",
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "unknown",
+        "ttl_policy": "refresh_when_source_pack_changes"
+      },
+      "source_path": "outputs/mcp/mcp_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "mcp_candidates",
+          "source_path": "outputs/mcp/mcp_candidates.json"
+        }
+      ],
+      "source_tier": "P1",
+      "stop_advisory_candidate": "pass_through_or_minimize_exposure"
+    },
+    {
+      "accepted_evidence_page_count": 12,
+      "aliases": [
+        "大景",
+        "啞口"
+      ],
+      "candidate_id": "route_context.mcp_candidates.mcp.ridge_pass_view.005",
+      "candidate_only": true,
+      "confidence": "medium",
+      "context_kind": "viewpoint",
+      "display_label": "稜線啞口觀景點",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 8200.0,
+      "evidence_families": [
+        "article",
+        "mcp_candidates",
+        "named_point",
+        "named_point_evidence"
+      ],
+      "evidence_type": "major_critical_point",
+      "label": "稜線啞口觀景點",
+      "lat": 24.048184286803007,
+      "linked_cp_candidates": [
+        "cp.006"
+      ],
+      "linked_named_points": [
+        "np.ridge_pass_view"
+      ],
+      "lon": 121.25656644813716,
+      "mcp_classes": [
+        "viewpoint_trailhead_pass"
+      ],
+      "mention_page_count": 2,
+      "mention_ratio": 0.167,
+      "merged_evidence_types": [
+        "major_critical_point",
+        "named_point"
+      ],
+      "nearest_cp_candidate_id": "cp.006",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 69.0,
+        "reason_codes": [
+          "candidate_context",
+          "observation_point",
+          "historical_context"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 69.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "representative_candidate",
+      "reference_gaps": [
+        "hiking_biji",
+        "missing mandatory source family: hiking_biji",
+        "missing mandatory source family: ptt_hiking",
+        "ptt_hiking"
+      ],
+      "requires_human_review": true,
+      "review_state": "needs_human_review",
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "cultural",
+        "historical",
+        "observation_point",
+        "terrain"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "mcp.ridge_pass_view.005",
+      "source_families": [
+        "sunriver_culture",
+        "public_web"
+      ],
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "unknown",
+        "ttl_policy": "refresh_when_source_pack_changes"
+      },
+      "source_path": "outputs/mcp/mcp_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "mcp_candidates",
+          "source_path": "outputs/mcp/mcp_candidates.json"
+        },
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "named_point_evidence",
+          "source_path": "outputs/mcp/named_point_evidence.json"
+        }
+      ],
+      "source_tier": "P1",
+      "stop_advisory_candidate": "short_stop_requires_contextual_permission"
+    },
+    {
+      "accepted_evidence_page_count": 12,
+      "aliases": [
+        "收訊點",
+        "手機訊號點"
+      ],
+      "candidate_id": "route_context.mcp_candidates.mcp.mobile_reception_ridge.006",
+      "candidate_only": true,
+      "confidence": "low",
+      "context_kind": "route_context",
+      "display_label": "稜線通訊點",
+      "display_policy": {
+        "coordinate_precision": "fuzzy_250m",
+        "reason": "cultural context requires review before precise display",
+        "requires_human_review_before_display": true,
+        "show_exact_coordinate": false,
+        "show_label": true
+      },
+      "distance_m": 9500.0,
+      "evidence_families": [
+        "article",
+        "mcp_candidates",
+        "named_point",
+        "named_point_evidence"
+      ],
+      "evidence_type": "major_critical_point",
+      "label": "稜線通訊點",
+      "lat": 24.0,
+      "linked_cp_candidates": [
+        "cp.039"
+      ],
+      "linked_named_points": [
+        "np.mobile_reception_ridge"
+      ],
+      "lon": 121.0,
+      "mcp_classes": [
+        "mobile_reception"
+      ],
+      "mention_page_count": 2,
+      "mention_ratio": 0.167,
+      "merged_evidence_types": [
+        "major_critical_point",
+        "named_point"
+      ],
+      "nearest_cp_candidate_id": "cp.039",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 37.0,
+        "reason_codes": [
+          "candidate_context",
+          "cultural_context"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 37.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "representative_candidate",
+      "reference_gaps": [
+        "missing mandatory source family: sunriver_culture",
+        "sunriver_culture"
+      ],
+      "requires_human_review": true,
+      "review_state": "suggested_insertion_review_required",
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "cultural",
+        "terrain"
+      ],
+      "sensitivity_level": "cultural_review",
+      "source_candidate_id": "mcp.mobile_reception_ridge.006",
+      "source_families": [
+        "ptt_hiking",
+        "hiking_biji"
+      ],
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "unknown",
+        "ttl_policy": "refresh_when_source_pack_changes"
+      },
+      "source_path": "outputs/mcp/mcp_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "mcp_candidates",
+          "source_path": "outputs/mcp/mcp_candidates.json"
+        },
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "named_point_evidence",
+          "source_path": "outputs/mcp/named_point_evidence.json"
+        }
+      ],
+      "source_tier": "P1",
+      "stop_advisory_candidate": "context_reference_only"
+    },
+    {
+      "aliases": [
+        "雲海保線所",
+        "保線所"
+      ],
+      "candidate_id": "route_context.named_point_evidence.np.yunhai_station",
+      "candidate_only": true,
+      "confidence": "medium",
+      "context_kind": "resource_context",
+      "display_label": "雲海保線所",
+      "display_policy": {
+        "coordinate_precision": "fuzzy_250m",
+        "reason": "cultural context requires review before precise display",
+        "requires_human_review_before_display": true,
+        "show_exact_coordinate": false,
+        "show_label": true
+      },
+      "distance_m": 1500.0,
+      "evidence_families": [
+        "article",
+        "named_point",
+        "named_point_evidence"
+      ],
+      "evidence_type": "named_point",
+      "label": "雲海保線所",
+      "lat": 24.04682851396501,
+      "lon": 121.22322332113981,
+      "mention_page_count": 2,
+      "mention_ratio": 0.167,
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 69.0,
+        "reason_codes": [
+          "candidate_context",
+          "historical_context",
+          "cultural_context",
+          "resource_context",
+          "multi_source_support"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 69.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "point_classes": [
+        "camp_hut_structure"
+      ],
+      "promotion_basis": "representative_candidate",
+      "reference_gaps": [
+        "ptt_hiking"
+      ],
+      "requires_human_review": true,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "historical",
+        "cultural",
+        "seasonal"
+      ],
+      "sensitivity_level": "cultural_review",
+      "source_candidate_id": "np.yunhai_station",
+      "source_families": [
+        "hiking_biji",
+        "sunriver_culture",
+        "offline_map_ocr"
+      ],
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "stale_risk": "low",
+        "status": "recent_enough_for_pretrip",
+        "ttl_policy": "refresh_when_search_pack_changes"
+      },
+      "source_path": "outputs/mcp/named_point_evidence.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "named_point_evidence",
+          "source_path": "outputs/mcp/named_point_evidence.json"
+        }
+      ],
+      "source_tier": "P1",
+      "stop_advisory_candidate": "short_stop_requires_contextual_permission"
+    },
+    {
+      "aliases": [
+        "固定繩",
+        "繩索橋"
+      ],
+      "candidate_id": "route_context.named_point_evidence.np.rope_bridge",
+      "candidate_only": true,
+      "confidence": "medium",
+      "context_kind": "route_context",
+      "display_label": "固定繩橋段",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 4700.0,
+      "evidence_families": [
+        "article",
+        "named_point",
+        "named_point_evidence"
+      ],
+      "evidence_type": "named_point",
+      "label": "固定繩橋段",
+      "lat": 24.046623408794403,
+      "lon": 121.23617763631046,
+      "mention_page_count": 2,
+      "mention_ratio": 0.167,
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 33.0,
+        "reason_codes": [
+          "candidate_context",
+          "multi_source_support"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 33.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "point_classes": [
+        "technical_infrastructure"
+      ],
+      "promotion_basis": "representative_candidate",
+      "reference_gaps": [
+        "ptt_hiking",
+        "sunriver_culture"
+      ],
+      "requires_human_review": true,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "terrain"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "np.rope_bridge",
+      "source_families": [
+        "hiking_biji",
+        "public_web"
+      ],
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "stale_risk": "medium",
+        "status": "review_recommended",
+        "ttl_policy": "refresh_when_search_pack_changes"
+      },
+      "source_path": "outputs/mcp/named_point_evidence.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "named_point_evidence",
+          "source_path": "outputs/mcp/named_point_evidence.json"
+        }
+      ],
+      "source_tier": "P1",
+      "stop_advisory_candidate": "low_priority_context_reference"
+    },
+    {
+      "aliases": [
+        "易迷樹林"
+      ],
+      "candidate_id": "route_context.named_point_evidence.np.hidden_forest",
+      "candidate_only": true,
+      "confidence": "medium",
+      "context_kind": "natural_context",
+      "display_label": "隱蔽樹林區",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 6900.0,
+      "evidence_families": [
+        "article",
+        "named_point",
+        "named_point_evidence"
+      ],
+      "evidence_type": "named_point",
+      "label": "隱蔽樹林區",
+      "lat": 24.04476505704224,
+      "lon": 121.25119037926197,
+      "mention_page_count": 2,
+      "mention_ratio": 0.167,
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 43.0,
+        "reason_codes": [
+          "candidate_context",
+          "natural_context",
+          "multi_source_support"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 43.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "point_classes": [
+        "hidden_forest_route_loss"
+      ],
+      "promotion_basis": "representative_candidate",
+      "reference_gaps": [
+        "sunriver_culture"
+      ],
+      "requires_human_review": true,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "natural"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "np.hidden_forest",
+      "source_families": [
+        "ptt_hiking",
+        "hiking_biji"
+      ],
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "stale_risk": "low",
+        "status": "recent_enough_for_pretrip",
+        "ttl_policy": "refresh_when_search_pack_changes"
+      },
+      "source_path": "outputs/mcp/named_point_evidence.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "named_point_evidence",
+          "source_path": "outputs/mcp/named_point_evidence.json"
+        }
+      ],
+      "source_tier": "P1",
+      "stop_advisory_candidate": "context_reference_only"
+    },
+    {
+      "candidate_id": "route_context.ocr_label_evidence.ocr.yunhai_station.001",
+      "candidate_only": true,
+      "confidence": 0.87,
+      "context_kind": "resource_context",
+      "display_label": "雲海保線所",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": null,
+      "evidence_families": [
+        "map_label",
+        "ocr",
+        "ocr_label_evidence"
+      ],
+      "evidence_type": "ocr_map_label",
+      "label": "雲海保線所",
+      "label_role": "",
+      "lat": null,
+      "lon": null,
+      "map_label_kind": "map_label",
+      "named_point_id": "np.yunhai_station",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 57.0,
+        "reason_codes": [
+          "candidate_context",
+          "historical_context",
+          "resource_context",
+          "multi_source_support"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 57.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "representative_candidate_after_review",
+      "requires_human_review": true,
+      "review_state": "needs_human_review",
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "historical",
+        "seasonal"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "ocr.yunhai_station.001",
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "unknown",
+        "ttl_policy": "refresh_when_raster_tile_changes"
+      },
+      "source_path": "outputs/mcp/mcp_ocr_labels.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "ocr_label_evidence",
+          "source_path": "outputs/mcp/mcp_ocr_labels.json"
+        },
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "source_ref",
+          "source_ref": "local_map_tile.z15.x26142.y13991"
+        }
+      ],
+      "source_tier": "P1",
+      "stop_advisory_candidate": "context_reference_only"
+    },
+    {
+      "candidate_id": "route_context.web_case_evidence.web_case.chilai_nanhua_day1.official_forest_trail_064",
+      "candidate_only": true,
+      "context_kind": "natural_context",
+      "display_label": "能高越嶺道官方照片",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": null,
+      "evidence_families": [
+        "article",
+        "web_case_evidence"
+      ],
+      "evidence_type": "web_case_evidence",
+      "label": "能高越嶺道官方照片",
+      "lat": null,
+      "lon": null,
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 49.0,
+        "reason_codes": [
+          "candidate_context",
+          "historical_context",
+          "natural_context"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 49.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "primary_briefing_evidence",
+      "requires_human_review": true,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "historical",
+        "natural"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "web_case.chilai_nanhua_day1.official_forest_trail_064",
+      "source_families": [
+        "official_baseline"
+      ],
+      "source_family": "official_baseline",
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "unknown",
+        "ttl_policy": "refresh_before_public_answer_if_network_allowed"
+      },
+      "source_path": "outputs/layers/normalized/web_case_evidence.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "web_case_evidence",
+          "source_path": "outputs/layers/normalized/web_case_evidence.json"
+        }
+      ],
+      "source_tier": "P0",
+      "stop_advisory_candidate": "context_reference_only"
+    },
+    {
+      "candidate_id": "route_context.route_note_candidates.workspace_route.0K",
+      "candidate_only": true,
+      "confidence": 0.59,
+      "context_kind": "route_context",
+      "coordinate_source": "route_note_candidate_median",
+      "coordinate_spread_m": null,
+      "display_label": "0K",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 0.0,
+      "evidence_families": [
+        "map_label",
+        "route_mileage",
+        "route_note",
+        "route_note_candidates"
+      ],
+      "evidence_type": "road_mileage_stone",
+      "label": "0K",
+      "label_role": "road_mileage_stone",
+      "lat": 24.082645979,
+      "lon": 121.215797961,
+      "mileage_anchor_kind": "road_mileage_stone",
+      "mileage_k": 0.0,
+      "mileage_m": 0.0,
+      "normalized_mileage_k": "0K",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 33.0,
+        "reason_codes": [
+          "candidate_context",
+          "multi_source_support"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 33.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "seed_only",
+      "raw_label_examples": [
+        "17投85線0K取右"
+      ],
+      "raw_mileage_text": "0K",
+      "requires_human_review": true,
+      "review_reasons": [
+        "road_mileage_stone_not_trail_k_anchor",
+        "single_source_evidence"
+      ],
+      "review_required": true,
+      "review_state": "needs_human_review",
+      "route_context_key": "workspace_route",
+      "route_mileage_m": 0.0,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "route_context"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "workspace_route.0K",
+      "source_evidence_count": 1,
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "stale_or_unknown",
+        "ttl_policy": "review_age_before_promotion"
+      },
+      "source_path": "candidates/route_note_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "route_note_candidates",
+          "source_path": "candidates/route_note_candidates.json"
+        }
+      ],
+      "source_tier": "P2",
+      "stop_advisory_candidate": "low_priority_context_reference",
+      "supporting_candidate_ids": [
+        "route_note.reference_009_reference_009_3_____gdb_speed_filtered.wpt_016"
+      ]
+    },
+    {
+      "candidate_id": "route_context.route_note_candidates.workspace_route.0.5K",
+      "candidate_only": true,
+      "confidence": 0.59,
+      "context_kind": "route_context",
+      "coordinate_source": "golden_route_route_note_candidate",
+      "coordinate_spread_m": null,
+      "display_label": "0.5K",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 500.0,
+      "evidence_families": [
+        "map_label",
+        "route_mileage",
+        "route_note",
+        "route_note_candidates"
+      ],
+      "evidence_type": "trail_mileage_k_anchor",
+      "label": "0.5K",
+      "label_role": "trail_mileage_k_anchor",
+      "lat": 24.05235202051699,
+      "lon": 121.21822896413505,
+      "mileage_anchor_kind": "trail_mileage_k_anchor",
+      "mileage_k": 0.5,
+      "mileage_m": 500.0,
+      "normalized_mileage_k": "0.5K",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 47.0,
+        "reason_codes": [
+          "candidate_context",
+          "historical_context",
+          "multi_source_support"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 47.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "seed_only",
+      "raw_label_examples": [
+        "0.5K"
+      ],
+      "raw_mileage_text": "0.5K",
+      "requires_human_review": true,
+      "review_reasons": [
+        "single_source_evidence"
+      ],
+      "review_required": true,
+      "review_state": "needs_human_review",
+      "route_context_key": "workspace_route",
+      "route_mileage_m": 500.0,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "historical"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "workspace_route.0.5K",
+      "source_evidence_count": 1,
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "stale_or_unknown",
+        "ttl_policy": "review_age_before_promotion"
+      },
+      "source_path": "candidates/route_note_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "route_note_candidates",
+          "source_path": "candidates/route_note_candidates.json"
+        }
+      ],
+      "source_tier": "P2",
+      "stop_advisory_candidate": "context_reference_only",
+      "supporting_candidate_ids": [
+        "route_note.golden_route.wpt_000"
+      ]
+    },
+    {
+      "candidate_id": "route_context.route_note_candidates.workspace_route.1K",
+      "candidate_only": true,
+      "confidence": 0.67,
+      "context_kind": "route_context",
+      "coordinate_source": "route_note_candidate_median",
+      "coordinate_spread_m": 0.0,
+      "display_label": "1K",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 1000.0,
+      "evidence_families": [
+        "map_label",
+        "route_mileage",
+        "route_note",
+        "route_note_candidates"
+      ],
+      "evidence_type": "trail_mileage_k_anchor",
+      "label": "1K",
+      "label_role": "trail_mileage_k_anchor",
+      "lat": 24.047343,
+      "lon": 121.221309,
+      "mileage_anchor_kind": "trail_mileage_k_anchor",
+      "mileage_k": 1.0,
+      "mileage_m": 1000.0,
+      "normalized_mileage_k": "1K",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 47.0,
+        "reason_codes": [
+          "candidate_context",
+          "historical_context",
+          "multi_source_support"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 47.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "seed_only",
+      "raw_label_examples": [
+        "1K"
+      ],
+      "raw_mileage_text": "1K",
+      "requires_human_review": true,
+      "review_reasons": [],
+      "review_required": false,
+      "review_state": "candidate",
+      "route_context_key": "workspace_route",
+      "route_mileage_m": 1000.0,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "historical"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "workspace_route.1K",
+      "source_evidence_count": 3,
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "stale_or_unknown",
+        "ttl_policy": "review_age_before_promotion"
+      },
+      "source_path": "candidates/route_note_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "route_note_candidates",
+          "source_path": "candidates/route_note_candidates.json"
+        }
+      ],
+      "source_tier": "P2",
+      "stop_advisory_candidate": "context_reference_only",
+      "supporting_candidate_ids": [
+        "route_note.reference_002_reference_002_2024_09_14_________p_speed_filtered.wpt_330",
+        "route_note.reference_018_reference_018_speed_filtered.wpt_012",
+        "route_note.reference_020_reference_020__gpx_speed_filtered.wpt_005"
+      ]
+    },
+    {
+      "candidate_id": "route_context.route_note_candidates.workspace_route.1.1K",
+      "candidate_only": true,
+      "confidence": 0.59,
+      "context_kind": "route_context",
+      "coordinate_source": "route_note_candidate_median",
+      "coordinate_spread_m": null,
+      "display_label": "1.1K",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 1100.0,
+      "evidence_families": [
+        "map_label",
+        "route_mileage",
+        "route_note",
+        "route_note_candidates"
+      ],
+      "evidence_type": "trail_mileage_k_anchor",
+      "label": "1.1K",
+      "label_role": "trail_mileage_k_anchor",
+      "lat": 24.057915006,
+      "lon": 121.283549974,
+      "mileage_anchor_kind": "trail_mileage_k_anchor",
+      "mileage_k": 1.1,
+      "mileage_m": 1100.0,
+      "normalized_mileage_k": "1.1K",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 47.0,
+        "reason_codes": [
+          "candidate_context",
+          "historical_context",
+          "multi_source_support"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 47.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "seed_only",
+      "raw_label_examples": [
+        "019奇萊南峰1.1K"
+      ],
+      "raw_mileage_text": "1.1K",
+      "requires_human_review": true,
+      "review_reasons": [
+        "single_source_evidence"
+      ],
+      "review_required": true,
+      "review_state": "needs_human_review",
+      "route_context_key": "workspace_route",
+      "route_mileage_m": 1100.0,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "historical",
+        "terrain"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "workspace_route.1.1K",
+      "source_evidence_count": 1,
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "stale_or_unknown",
+        "ttl_policy": "review_age_before_promotion"
+      },
+      "source_path": "candidates/route_note_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "route_note_candidates",
+          "source_path": "candidates/route_note_candidates.json"
+        }
+      ],
+      "source_tier": "P2",
+      "stop_advisory_candidate": "context_reference_only",
+      "supporting_candidate_ids": [
+        "route_note.reference_014_reference_014_____gdb_gpx_speed_filtered.wpt_018"
+      ]
+    },
+    {
+      "candidate_id": "route_context.route_note_candidates.workspace_route.1.5K",
+      "candidate_only": true,
+      "confidence": 0.59,
+      "context_kind": "route_context",
+      "coordinate_source": "golden_route_route_note_candidate",
+      "coordinate_spread_m": null,
+      "display_label": "1.5K",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 1500.0,
+      "evidence_families": [
+        "map_label",
+        "route_mileage",
+        "route_note",
+        "route_note_candidates"
+      ],
+      "evidence_type": "trail_mileage_k_anchor",
+      "label": "1.5K",
+      "label_role": "trail_mileage_k_anchor",
+      "lat": 24.04670001938939,
+      "lon": 121.2232410069555,
+      "mileage_anchor_kind": "trail_mileage_k_anchor",
+      "mileage_k": 1.5,
+      "mileage_m": 1500.0,
+      "normalized_mileage_k": "1.5K",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 47.0,
+        "reason_codes": [
+          "candidate_context",
+          "historical_context",
+          "multi_source_support"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 47.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "seed_only",
+      "raw_label_examples": [
+        "1.5K"
+      ],
+      "raw_mileage_text": "1.5K",
+      "requires_human_review": true,
+      "review_reasons": [
+        "single_source_evidence"
+      ],
+      "review_required": true,
+      "review_state": "needs_human_review",
+      "route_context_key": "workspace_route",
+      "route_mileage_m": 1500.0,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "historical"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "workspace_route.1.5K",
+      "source_evidence_count": 1,
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "stale_or_unknown",
+        "ttl_policy": "review_age_before_promotion"
+      },
+      "source_path": "candidates/route_note_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "route_note_candidates",
+          "source_path": "candidates/route_note_candidates.json"
+        }
+      ],
+      "source_tier": "P2",
+      "stop_advisory_candidate": "context_reference_only",
+      "supporting_candidate_ids": [
+        "route_note.golden_route.wpt_001"
+      ]
+    },
+    {
+      "candidate_id": "route_context.route_note_candidates.workspace_route.2K",
+      "candidate_only": true,
+      "confidence": 0.71,
+      "context_kind": "route_context",
+      "coordinate_source": "golden_route_route_note_candidate",
+      "coordinate_spread_m": 190.09,
+      "display_label": "2K",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 2000.0,
+      "evidence_families": [
+        "map_label",
+        "route_mileage",
+        "route_note",
+        "route_note_candidates"
+      ],
+      "evidence_type": "trail_mileage_k_anchor",
+      "label": "2K",
+      "label_role": "trail_mileage_k_anchor",
+      "lat": 24.044373035430908,
+      "lon": 121.22596403583884,
+      "mileage_anchor_kind": "trail_mileage_k_anchor",
+      "mileage_k": 2.0,
+      "mileage_m": 2000.0,
+      "normalized_mileage_k": "2K",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 47.0,
+        "reason_codes": [
+          "candidate_context",
+          "historical_context",
+          "multi_source_support"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 47.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "seed_only",
+      "raw_label_examples": [
+        "2K"
+      ],
+      "raw_mileage_text": "2K",
+      "requires_human_review": true,
+      "review_reasons": [],
+      "review_required": false,
+      "review_state": "candidate",
+      "route_context_key": "workspace_route",
+      "route_mileage_m": 2000.0,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "historical"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "workspace_route.2K",
+      "source_evidence_count": 4,
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "stale_or_unknown",
+        "ttl_policy": "review_age_before_promotion"
+      },
+      "source_path": "candidates/route_note_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "route_note_candidates",
+          "source_path": "candidates/route_note_candidates.json"
+        }
+      ],
+      "source_tier": "P2",
+      "stop_advisory_candidate": "context_reference_only",
+      "supporting_candidate_ids": [
+        "route_note.golden_route.wpt_007",
+        "route_note.reference_002_reference_002_2024_09_14_________p_speed_filtered.wpt_336",
+        "route_note.reference_018_reference_018_speed_filtered.wpt_027",
+        "route_note.reference_020_reference_020__gpx_speed_filtered.wpt_007"
+      ]
+    },
+    {
+      "candidate_id": "route_context.route_note_candidates.workspace_route.2.5K",
+      "candidate_only": true,
+      "confidence": 0.59,
+      "context_kind": "route_context",
+      "coordinate_source": "golden_route_route_note_candidate",
+      "coordinate_spread_m": null,
+      "display_label": "2.5K",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 2500.0,
+      "evidence_families": [
+        "map_label",
+        "route_mileage",
+        "route_note",
+        "route_note_candidates"
+      ],
+      "evidence_type": "trail_mileage_k_anchor",
+      "label": "2.5K",
+      "label_role": "trail_mileage_k_anchor",
+      "lat": 24.04871502891183,
+      "lon": 121.22605296783149,
+      "mileage_anchor_kind": "trail_mileage_k_anchor",
+      "mileage_k": 2.5,
+      "mileage_m": 2500.0,
+      "normalized_mileage_k": "2.5K",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 47.0,
+        "reason_codes": [
+          "candidate_context",
+          "historical_context",
+          "multi_source_support"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 47.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "seed_only",
+      "raw_label_examples": [
+        "2.5K"
+      ],
+      "raw_mileage_text": "2.5K",
+      "requires_human_review": true,
+      "review_reasons": [
+        "single_source_evidence"
+      ],
+      "review_required": true,
+      "review_state": "needs_human_review",
+      "route_context_key": "workspace_route",
+      "route_mileage_m": 2500.0,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "historical"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "workspace_route.2.5K",
+      "source_evidence_count": 1,
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "stale_or_unknown",
+        "ttl_policy": "review_age_before_promotion"
+      },
+      "source_path": "candidates/route_note_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "route_note_candidates",
+          "source_path": "candidates/route_note_candidates.json"
+        }
+      ],
+      "source_tier": "P2",
+      "stop_advisory_candidate": "context_reference_only",
+      "supporting_candidate_ids": [
+        "route_note.golden_route.wpt_006"
+      ]
+    },
+    {
+      "candidate_id": "route_context.route_note_candidates.workspace_route.3K",
+      "candidate_only": true,
+      "confidence": 0.87,
+      "context_kind": "route_context",
+      "coordinate_source": "route_note_candidate_median",
+      "coordinate_spread_m": 212.31,
+      "display_label": "3K",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 3000.0,
+      "evidence_families": [
+        "map_label",
+        "route_mileage",
+        "route_note",
+        "route_note_candidates"
+      ],
+      "evidence_type": "trail_mileage_k_anchor",
+      "label": "3K",
+      "label_role": "trail_mileage_k_anchor",
+      "lat": 24.052039627,
+      "lon": 121.229660623,
+      "mileage_anchor_kind": "trail_mileage_k_anchor",
+      "mileage_k": 3.0,
+      "mileage_m": 3000.0,
+      "normalized_mileage_k": "3K",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 47.0,
+        "reason_codes": [
+          "candidate_context",
+          "historical_context",
+          "multi_source_support"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 47.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "seed_only",
+      "raw_label_examples": [
+        "3K",
+        "3K | 24-01-2005 09:36",
+        "002-3K",
+        "056--3K",
+        "003能高3K",
+        "003-3K"
+      ],
+      "raw_mileage_text": "3K",
+      "requires_human_review": true,
+      "review_reasons": [],
+      "review_required": false,
+      "review_state": "candidate",
+      "route_context_key": "workspace_route",
+      "route_mileage_m": 3000.0,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "historical"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "workspace_route.3K",
+      "source_evidence_count": 14,
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "stale_or_unknown",
+        "ttl_policy": "review_age_before_promotion"
+      },
+      "source_path": "candidates/route_note_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "route_note_candidates",
+          "source_path": "candidates/route_note_candidates.json"
+        }
+      ],
+      "source_tier": "P2",
+      "stop_advisory_candidate": "context_reference_only",
+      "supporting_candidate_ids": [
+        "route_note.reference_002_reference_002_2024_09_14_________p_speed_filtered.wpt_343",
+        "route_note.reference_004_reference_004_c_documents_and_settings_administrator___20111127_29_gdb_gpx_speed_filtered.wpt_002",
+        "route_note.reference_010_reference_010___speed_filtered.wpt_000",
+        "route_note.reference_011_reference_011_gpx_speed_filtered.wpt_037",
+        "route_note.reference_013_reference_013_____speed_filtered.wpt_058",
+        "route_note.reference_014_reference_014_____gdb_gpx_speed_filtered.wpt_002",
+        "route_note.reference_015_reference_015__gpx_speed_filtered.wpt_018",
+        "route_note.reference_016_reference_016_speed_filtered.wpt_037",
+        "route_note.reference_017_reference_017_speed_filtered.wpt_003",
+        "route_note.reference_018_reference_018_speed_filtered.wpt_033",
+        "route_note.reference_019_reference_019_gpx_speed_filtered.wpt_001",
+        "route_note.reference_020_reference_020__gpx_speed_filtered.wpt_012",
+        "route_note.reference_021_reference_021_speed_filtered.wpt_002",
+        "route_note.reference_023_reference_023___gpx_speed_filtered.wpt_002"
+      ]
+    },
+    {
+      "candidate_id": "route_context.route_note_candidates.workspace_route.3.5K",
+      "candidate_only": true,
+      "confidence": 0.59,
+      "context_kind": "route_context",
+      "coordinate_source": "golden_route_route_note_candidate",
+      "coordinate_spread_m": null,
+      "display_label": "3.5K",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 3500.0,
+      "evidence_families": [
+        "map_label",
+        "route_mileage",
+        "route_note",
+        "route_note_candidates"
+      ],
+      "evidence_type": "trail_mileage_k_anchor",
+      "label": "3.5K",
+      "label_role": "trail_mileage_k_anchor",
+      "lat": 24.049312993884087,
+      "lon": 121.23123700730503,
+      "mileage_anchor_kind": "trail_mileage_k_anchor",
+      "mileage_k": 3.5,
+      "mileage_m": 3500.0,
+      "normalized_mileage_k": "3.5K",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 47.0,
+        "reason_codes": [
+          "candidate_context",
+          "historical_context",
+          "multi_source_support"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 47.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "seed_only",
+      "raw_label_examples": [
+        "3.5K"
+      ],
+      "raw_mileage_text": "3.5K",
+      "requires_human_review": true,
+      "review_reasons": [
+        "single_source_evidence"
+      ],
+      "review_required": true,
+      "review_state": "needs_human_review",
+      "route_context_key": "workspace_route",
+      "route_mileage_m": 3500.0,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "historical"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "workspace_route.3.5K",
+      "source_evidence_count": 1,
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "stale_or_unknown",
+        "ttl_policy": "review_age_before_promotion"
+      },
+      "source_path": "candidates/route_note_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "route_note_candidates",
+          "source_path": "candidates/route_note_candidates.json"
+        }
+      ],
+      "source_tier": "P2",
+      "stop_advisory_candidate": "context_reference_only",
+      "supporting_candidate_ids": [
+        "route_note.golden_route.wpt_008"
+      ]
+    },
+    {
+      "candidate_id": "route_context.route_note_candidates.workspace_route.4K",
+      "candidate_only": true,
+      "confidence": 0.79,
+      "context_kind": "route_context",
+      "coordinate_source": "golden_route_route_note_candidate",
+      "coordinate_spread_m": 144.46,
+      "display_label": "4K",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 4000.0,
+      "evidence_families": [
+        "map_label",
+        "route_mileage",
+        "route_note",
+        "route_note_candidates"
+      ],
+      "evidence_type": "trail_mileage_k_anchor",
+      "label": "4K",
+      "label_role": "trail_mileage_k_anchor",
+      "lat": 24.048528028652072,
+      "lon": 121.23422800563276,
+      "mileage_anchor_kind": "trail_mileage_k_anchor",
+      "mileage_k": 4.0,
+      "mileage_m": 4000.0,
+      "normalized_mileage_k": "4K",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 47.0,
+        "reason_codes": [
+          "candidate_context",
+          "historical_context",
+          "multi_source_support"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 47.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "seed_only",
+      "raw_label_examples": [
+        "4K",
+        "木炭窯遺址（4K）",
+        "02 4K尾上山登山口",
+        "04回4K取右"
+      ],
+      "raw_mileage_text": "4K",
+      "requires_human_review": true,
+      "review_reasons": [],
+      "review_required": false,
+      "review_state": "candidate",
+      "route_context_key": "workspace_route",
+      "route_mileage_m": 4000.0,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "historical"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "workspace_route.4K",
+      "source_evidence_count": 6,
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "stale_or_unknown",
+        "ttl_policy": "review_age_before_promotion"
+      },
+      "source_path": "candidates/route_note_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "route_note_candidates",
+          "source_path": "candidates/route_note_candidates.json"
+        }
+      ],
+      "source_tier": "P2",
+      "stop_advisory_candidate": "context_reference_only",
+      "supporting_candidate_ids": [
+        "route_note.golden_route.wpt_011",
+        "route_note.reference_007_reference_007_lucky_200226_____p_speed_filtered.wpt_009",
+        "route_note.reference_009_reference_009_3_____gdb_speed_filtered.wpt_001",
+        "route_note.reference_009_reference_009_3_____gdb_speed_filtered.wpt_003",
+        "route_note.reference_018_reference_018_speed_filtered.wpt_034",
+        "route_note.reference_020_reference_020__gpx_speed_filtered.wpt_013"
+      ]
+    },
+    {
+      "candidate_id": "route_context.route_note_candidates.workspace_route.4.1K",
+      "candidate_only": true,
+      "confidence": 0.59,
+      "context_kind": "route_context",
+      "coordinate_source": "route_note_candidate_median",
+      "coordinate_spread_m": null,
+      "display_label": "4.1K",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 4100.0,
+      "evidence_families": [
+        "map_label",
+        "route_mileage",
+        "route_note",
+        "route_note_candidates"
+      ],
+      "evidence_type": "trail_mileage_k_anchor",
+      "label": "4.1K",
+      "label_role": "trail_mileage_k_anchor",
+      "lat": 24.048420992,
+      "lon": 121.234447025,
+      "mileage_anchor_kind": "trail_mileage_k_anchor",
+      "mileage_k": 4.1,
+      "mileage_m": 4100.0,
+      "normalized_mileage_k": "4.1K",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 47.0,
+        "reason_codes": [
+          "candidate_context",
+          "historical_context",
+          "multi_source_support"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 47.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "seed_only",
+      "raw_label_examples": [
+        "004尾上山登山口4.1K"
+      ],
+      "raw_mileage_text": "4.1K",
+      "requires_human_review": true,
+      "review_reasons": [
+        "single_source_evidence"
+      ],
+      "review_required": true,
+      "review_state": "needs_human_review",
+      "route_context_key": "workspace_route",
+      "route_mileage_m": 4100.0,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "historical"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "workspace_route.4.1K",
+      "source_evidence_count": 1,
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "stale_or_unknown",
+        "ttl_policy": "review_age_before_promotion"
+      },
+      "source_path": "candidates/route_note_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "route_note_candidates",
+          "source_path": "candidates/route_note_candidates.json"
+        }
+      ],
+      "source_tier": "P2",
+      "stop_advisory_candidate": "context_reference_only",
+      "supporting_candidate_ids": [
+        "route_note.reference_014_reference_014_____gdb_gpx_speed_filtered.wpt_003"
+      ]
+    },
+    {
+      "candidate_id": "route_context.route_note_candidates.workspace_route.5K",
+      "candidate_only": true,
+      "confidence": 0.71,
+      "context_kind": "route_context",
+      "coordinate_source": "golden_route_route_note_candidate",
+      "coordinate_spread_m": 9.14,
+      "display_label": "5K",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 5000.0,
+      "evidence_families": [
+        "map_label",
+        "route_mileage",
+        "route_note",
+        "route_note_candidates"
+      ],
+      "evidence_type": "trail_mileage_k_anchor",
+      "label": "5K",
+      "label_role": "trail_mileage_k_anchor",
+      "lat": 24.04932196252048,
+      "lon": 121.2388229649514,
+      "mileage_anchor_kind": "trail_mileage_k_anchor",
+      "mileage_k": 5.0,
+      "mileage_m": 5000.0,
+      "normalized_mileage_k": "5K",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 47.0,
+        "reason_codes": [
+          "candidate_context",
+          "historical_context",
+          "multi_source_support"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 47.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "seed_only",
+      "raw_label_examples": [
+        "5K"
+      ],
+      "raw_mileage_text": "5K",
+      "requires_human_review": true,
+      "review_reasons": [],
+      "review_required": false,
+      "review_state": "candidate",
+      "route_context_key": "workspace_route",
+      "route_mileage_m": 5000.0,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "historical"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "workspace_route.5K",
+      "source_evidence_count": 4,
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "stale_or_unknown",
+        "ttl_policy": "review_age_before_promotion"
+      },
+      "source_path": "candidates/route_note_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "route_note_candidates",
+          "source_path": "candidates/route_note_candidates.json"
+        }
+      ],
+      "source_tier": "P2",
+      "stop_advisory_candidate": "context_reference_only",
+      "supporting_candidate_ids": [
+        "route_note.golden_route.wpt_012",
+        "route_note.reference_002_reference_002_2024_09_14_________p_speed_filtered.wpt_345",
+        "route_note.reference_018_reference_018_speed_filtered.wpt_037",
+        "route_note.reference_020_reference_020__gpx_speed_filtered.wpt_016"
+      ]
+    },
+    {
+      "candidate_id": "route_context.route_note_candidates.workspace_route.5.5K",
+      "candidate_only": true,
+      "confidence": 0.75,
+      "context_kind": "resource_context",
+      "coordinate_source": "route_note_candidate_median",
+      "coordinate_spread_m": 16.2,
+      "display_label": "5.5K",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 5500.0,
+      "evidence_families": [
+        "map_label",
+        "route_mileage",
+        "route_note",
+        "route_note_candidates"
+      ],
+      "evidence_type": "trail_mileage_k_anchor",
+      "label": "5.5K",
+      "label_role": "trail_mileage_k_anchor",
+      "lat": 24.0535143,
+      "lon": 121.2439454,
+      "mileage_anchor_kind": "trail_mileage_k_anchor",
+      "mileage_k": 5.5,
+      "mileage_m": 5500.0,
+      "normalized_mileage_k": "5.5K",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 57.0,
+        "reason_codes": [
+          "candidate_context",
+          "historical_context",
+          "resource_context",
+          "multi_source_support",
+          "risk_context_penalty"
+        ],
+        "risk_penalty": 35.0,
+        "runtime_safety_truth": false,
+        "value": 22.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "seed_only",
+      "raw_label_examples": [
+        "5.5K雲海保線所崩塌地",
+        "044-5.5K崩塌地",
+        "5.5K雲海保線"
+      ],
+      "raw_mileage_text": "5.5K",
+      "requires_human_review": true,
+      "review_reasons": [],
+      "review_required": false,
+      "review_state": "candidate",
+      "route_context_key": "workspace_route",
+      "route_mileage_m": 5500.0,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "historical",
+        "terrain",
+        "seasonal"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "workspace_route.5.5K",
+      "source_evidence_count": 5,
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "stale_or_unknown",
+        "ttl_policy": "review_age_before_promotion"
+      },
+      "source_path": "candidates/route_note_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "route_note_candidates",
+          "source_path": "candidates/route_note_candidates.json"
+        }
+      ],
+      "source_tier": "P2",
+      "stop_advisory_candidate": "pass_through_or_minimize_exposure",
+      "supporting_candidate_ids": [
+        "route_note.reference_004_reference_004_c_documents_and_settings_administrator___20111127_29_gdb_gpx_speed_filtered.wpt_003",
+        "route_note.reference_013_reference_013_____speed_filtered.wpt_047",
+        "route_note.reference_015_reference_015__gpx_speed_filtered.wpt_008",
+        "route_note.reference_018_reference_018_speed_filtered.wpt_035",
+        "route_note.reference_020_reference_020__gpx_speed_filtered.wpt_014"
+      ]
+    },
+    {
+      "candidate_id": "route_context.route_note_candidates.workspace_route.5.8K",
+      "candidate_only": true,
+      "confidence": 0.59,
+      "context_kind": "risk_context",
+      "coordinate_source": "route_note_candidate_median",
+      "coordinate_spread_m": null,
+      "display_label": "5.8K",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 5800.0,
+      "evidence_families": [
+        "map_label",
+        "route_mileage",
+        "route_note",
+        "route_note_candidates"
+      ],
+      "evidence_type": "trail_mileage_k_anchor",
+      "label": "5.8K",
+      "label_role": "trail_mileage_k_anchor",
+      "lat": 24.053259026,
+      "lon": 121.242263988,
+      "mileage_anchor_kind": "trail_mileage_k_anchor",
+      "mileage_k": 5.8,
+      "mileage_m": 5800.0,
+      "normalized_mileage_k": "5.8K",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 47.0,
+        "reason_codes": [
+          "candidate_context",
+          "historical_context",
+          "multi_source_support",
+          "risk_context_penalty"
+        ],
+        "risk_penalty": 35.0,
+        "runtime_safety_truth": false,
+        "value": 12.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "seed_only",
+      "raw_label_examples": [
+        "006 5.8K崩塌地"
+      ],
+      "raw_mileage_text": "5.8K",
+      "requires_human_review": true,
+      "review_reasons": [
+        "single_source_evidence"
+      ],
+      "review_required": true,
+      "review_state": "needs_human_review",
+      "route_context_key": "workspace_route",
+      "route_mileage_m": 5800.0,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "historical",
+        "terrain"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "workspace_route.5.8K",
+      "source_evidence_count": 1,
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "stale_or_unknown",
+        "ttl_policy": "review_age_before_promotion"
+      },
+      "source_path": "candidates/route_note_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "route_note_candidates",
+          "source_path": "candidates/route_note_candidates.json"
+        }
+      ],
+      "source_tier": "P2",
+      "stop_advisory_candidate": "pass_through_or_minimize_exposure",
+      "supporting_candidate_ids": [
+        "route_note.reference_014_reference_014_____gdb_gpx_speed_filtered.wpt_005"
+      ]
+    },
+    {
+      "candidate_id": "route_context.route_note_candidates.workspace_route.6K",
+      "candidate_only": true,
+      "confidence": 0.59,
+      "context_kind": "route_context",
+      "coordinate_source": "golden_route_route_note_candidate",
+      "coordinate_spread_m": null,
+      "display_label": "6K",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 6000.0,
+      "evidence_families": [
+        "map_label",
+        "route_mileage",
+        "route_note",
+        "route_note_candidates"
+      ],
+      "evidence_type": "trail_mileage_k_anchor",
+      "label": "6K",
+      "label_role": "trail_mileage_k_anchor",
+      "lat": 24.05335801653564,
+      "lon": 121.24421101994812,
+      "mileage_anchor_kind": "trail_mileage_k_anchor",
+      "mileage_k": 6.0,
+      "mileage_m": 6000.0,
+      "normalized_mileage_k": "6K",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 47.0,
+        "reason_codes": [
+          "candidate_context",
+          "historical_context",
+          "multi_source_support"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 47.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "seed_only",
+      "raw_label_examples": [
+        "6K"
+      ],
+      "raw_mileage_text": "6K",
+      "requires_human_review": true,
+      "review_reasons": [
+        "single_source_evidence"
+      ],
+      "review_required": true,
+      "review_state": "needs_human_review",
+      "route_context_key": "workspace_route",
+      "route_mileage_m": 6000.0,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "historical"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "workspace_route.6K",
+      "source_evidence_count": 1,
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "stale_or_unknown",
+        "ttl_policy": "review_age_before_promotion"
+      },
+      "source_path": "candidates/route_note_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "route_note_candidates",
+          "source_path": "candidates/route_note_candidates.json"
+        }
+      ],
+      "source_tier": "P2",
+      "stop_advisory_candidate": "context_reference_only",
+      "supporting_candidate_ids": [
+        "route_note.golden_route.wpt_013"
+      ]
+    },
+    {
+      "candidate_id": "route_context.route_note_candidates.workspace_route.7K",
+      "candidate_only": true,
+      "confidence": 0.87,
+      "context_kind": "route_context",
+      "coordinate_source": "golden_route_route_note_candidate",
+      "coordinate_spread_m": 12.58,
+      "display_label": "7K",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 7000.0,
+      "evidence_families": [
+        "map_label",
+        "route_mileage",
+        "route_note",
+        "route_note_candidates"
+      ],
+      "evidence_type": "trail_mileage_k_anchor",
+      "label": "7K",
+      "label_role": "trail_mileage_k_anchor",
+      "lat": 24.04758003540337,
+      "lon": 121.24966302886605,
+      "mileage_anchor_kind": "trail_mileage_k_anchor",
+      "mileage_k": 7.0,
+      "mileage_m": 7000.0,
+      "normalized_mileage_k": "7K",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 47.0,
+        "reason_codes": [
+          "candidate_context",
+          "historical_context",
+          "multi_source_support"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 47.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "seed_only",
+      "raw_label_examples": [
+        "7K",
+        "7K | 24-01-2005 11:18",
+        "007-7K",
+        "008-7K"
+      ],
+      "raw_mileage_text": "7K",
+      "requires_human_review": true,
+      "review_reasons": [],
+      "review_required": false,
+      "review_state": "candidate",
+      "route_context_key": "workspace_route",
+      "route_mileage_m": 7000.0,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "historical"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "workspace_route.7K",
+      "source_evidence_count": 11,
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "stale_or_unknown",
+        "ttl_policy": "review_age_before_promotion"
+      },
+      "source_path": "candidates/route_note_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "route_note_candidates",
+          "source_path": "candidates/route_note_candidates.json"
+        }
+      ],
+      "source_tier": "P2",
+      "stop_advisory_candidate": "context_reference_only",
+      "supporting_candidate_ids": [
+        "route_note.golden_route.wpt_015",
+        "route_note.reference_002_reference_002_2024_09_14_________p_speed_filtered.wpt_347",
+        "route_note.reference_010_reference_010___speed_filtered.wpt_084",
+        "route_note.reference_011_reference_011_gpx_speed_filtered.wpt_149",
+        "route_note.reference_016_reference_016_speed_filtered.wpt_149",
+        "route_note.reference_017_reference_017_speed_filtered.wpt_016",
+        "route_note.reference_018_reference_018_speed_filtered.wpt_038",
+        "route_note.reference_019_reference_019_gpx_speed_filtered.wpt_007",
+        "route_note.reference_020_reference_020__gpx_speed_filtered.wpt_017",
+        "route_note.reference_021_reference_021_speed_filtered.wpt_009",
+        "route_note.reference_023_reference_023___gpx_speed_filtered.wpt_008"
+      ]
+    },
+    {
+      "candidate_id": "route_context.route_note_candidates.workspace_route.8K",
+      "candidate_only": true,
+      "confidence": 0.75,
+      "context_kind": "route_context",
+      "coordinate_source": "golden_route_route_note_candidate",
+      "coordinate_spread_m": 31.7,
+      "display_label": "8K",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 8000.0,
+      "evidence_families": [
+        "map_label",
+        "route_mileage",
+        "route_note",
+        "route_note_candidates"
+      ],
+      "evidence_type": "trail_mileage_k_anchor",
+      "label": "8K",
+      "label_role": "trail_mileage_k_anchor",
+      "lat": 24.044610997661948,
+      "lon": 121.25445898622274,
+      "mileage_anchor_kind": "trail_mileage_k_anchor",
+      "mileage_k": 8.0,
+      "mileage_m": 8000.0,
+      "normalized_mileage_k": "8K",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 47.0,
+        "reason_codes": [
+          "candidate_context",
+          "historical_context",
+          "multi_source_support"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 47.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "seed_only",
+      "raw_label_examples": [
+        "8K",
+        "012 8K木炭遺址",
+        "木炭窯遺址（8K） | 木炭窯遺址",
+        "8K木炭遺址"
+      ],
+      "raw_mileage_text": "8K",
+      "requires_human_review": true,
+      "review_reasons": [],
+      "review_required": false,
+      "review_state": "candidate",
+      "route_context_key": "workspace_route",
+      "route_mileage_m": 8000.0,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "historical"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "workspace_route.8K",
+      "source_evidence_count": 5,
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "stale_or_unknown",
+        "ttl_policy": "review_age_before_promotion"
+      },
+      "source_path": "candidates/route_note_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "route_note_candidates",
+          "source_path": "candidates/route_note_candidates.json"
+        }
+      ],
+      "source_tier": "P2",
+      "stop_advisory_candidate": "context_reference_only",
+      "supporting_candidate_ids": [
+        "route_note.golden_route.wpt_016",
+        "route_note.reference_002_reference_002_2024_09_14_________p_speed_filtered.wpt_025",
+        "route_note.reference_007_reference_007_lucky_200226_____p_speed_filtered.wpt_010",
+        "route_note.reference_018_reference_018_speed_filtered.wpt_039",
+        "route_note.reference_020_reference_020__gpx_speed_filtered.wpt_018"
+      ]
+    },
+    {
+      "candidate_id": "route_context.route_note_candidates.workspace_route.8.5K",
+      "candidate_only": true,
+      "confidence": 0.71,
+      "context_kind": "risk_context",
+      "coordinate_source": "route_note_candidate_median",
+      "coordinate_spread_m": 141.48,
+      "display_label": "8.5K",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 8500.0,
+      "evidence_families": [
+        "map_label",
+        "route_mileage",
+        "route_note",
+        "route_note_candidates"
+      ],
+      "evidence_type": "trail_mileage_k_anchor",
+      "label": "8.5K",
+      "label_role": "trail_mileage_k_anchor",
+      "lat": 24.048201763,
+      "lon": 121.255261485,
+      "mileage_anchor_kind": "trail_mileage_k_anchor",
+      "mileage_k": 8.5,
+      "mileage_m": 8500.0,
+      "normalized_mileage_k": "8.5K",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 47.0,
+        "reason_codes": [
+          "candidate_context",
+          "historical_context",
+          "multi_source_support",
+          "risk_context_penalty"
+        ],
+        "risk_penalty": 35.0,
+        "runtime_safety_truth": false,
+        "value": 12.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "seed_only",
+      "raw_label_examples": [
+        "049-8.5K最後水源",
+        "008 8.5K最後水源",
+        "8.5K崩壁"
+      ],
+      "raw_mileage_text": "8.5K",
+      "requires_human_review": true,
+      "review_reasons": [],
+      "review_required": false,
+      "review_state": "candidate",
+      "route_context_key": "workspace_route",
+      "route_mileage_m": 8500.0,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "historical",
+        "terrain"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "workspace_route.8.5K",
+      "source_evidence_count": 4,
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "stale_or_unknown",
+        "ttl_policy": "review_age_before_promotion"
+      },
+      "source_path": "candidates/route_note_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "route_note_candidates",
+          "source_path": "candidates/route_note_candidates.json"
+        }
+      ],
+      "source_tier": "P2",
+      "stop_advisory_candidate": "pass_through_or_minimize_exposure",
+      "supporting_candidate_ids": [
+        "route_note.reference_013_reference_013_____speed_filtered.wpt_053",
+        "route_note.reference_014_reference_014_____gdb_gpx_speed_filtered.wpt_007",
+        "route_note.reference_015_reference_015__gpx_speed_filtered.wpt_013",
+        "route_note.reference_021_reference_021_speed_filtered.wpt_065"
+      ]
+    },
+    {
+      "candidate_id": "route_context.route_note_candidates.workspace_route.9K",
+      "candidate_only": true,
+      "confidence": 0.71,
+      "context_kind": "route_context",
+      "coordinate_source": "golden_route_route_note_candidate",
+      "coordinate_spread_m": 68.82,
+      "display_label": "9K",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 9000.0,
+      "evidence_families": [
+        "map_label",
+        "route_mileage",
+        "route_note",
+        "route_note_candidates"
+      ],
+      "evidence_type": "trail_mileage_k_anchor",
+      "label": "9K",
+      "label_role": "trail_mileage_k_anchor",
+      "lat": 24.04779301956296,
+      "lon": 121.25692896544933,
+      "mileage_anchor_kind": "trail_mileage_k_anchor",
+      "mileage_k": 9.0,
+      "mileage_m": 9000.0,
+      "normalized_mileage_k": "9K",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 47.0,
+        "reason_codes": [
+          "candidate_context",
+          "historical_context",
+          "multi_source_support"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 47.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "seed_only",
+      "raw_label_examples": [
+        "9K"
+      ],
+      "raw_mileage_text": "9K",
+      "requires_human_review": true,
+      "review_reasons": [],
+      "review_required": false,
+      "review_state": "candidate",
+      "route_context_key": "workspace_route",
+      "route_mileage_m": 9000.0,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "historical"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "workspace_route.9K",
+      "source_evidence_count": 4,
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "stale_or_unknown",
+        "ttl_policy": "review_age_before_promotion"
+      },
+      "source_path": "candidates/route_note_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "route_note_candidates",
+          "source_path": "candidates/route_note_candidates.json"
+        }
+      ],
+      "source_tier": "P2",
+      "stop_advisory_candidate": "context_reference_only",
+      "supporting_candidate_ids": [
+        "route_note.golden_route.wpt_017",
+        "route_note.reference_002_reference_002_2024_09_14_________p_speed_filtered.wpt_348",
+        "route_note.reference_018_reference_018_speed_filtered.wpt_040",
+        "route_note.reference_020_reference_020__gpx_speed_filtered.wpt_019"
+      ]
+    },
+    {
+      "candidate_id": "route_context.route_note_candidates.workspace_route.10K",
+      "candidate_only": true,
+      "confidence": 0.87,
+      "context_kind": "route_context",
+      "coordinate_source": "golden_route_route_note_candidate",
+      "coordinate_spread_m": 27.97,
+      "display_label": "10K",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 10000.0,
+      "evidence_families": [
+        "map_label",
+        "route_mileage",
+        "route_note",
+        "route_note_candidates"
+      ],
+      "evidence_type": "trail_mileage_k_anchor",
+      "label": "10K",
+      "label_role": "trail_mileage_k_anchor",
+      "lat": 24.049309976398945,
+      "lon": 121.26416900195181,
+      "mileage_anchor_kind": "trail_mileage_k_anchor",
+      "mileage_k": 10.0,
+      "mileage_m": 10000.0,
+      "normalized_mileage_k": "10K",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 47.0,
+        "reason_codes": [
+          "candidate_context",
+          "historical_context",
+          "multi_source_support"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 47.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "seed_only",
+      "raw_label_examples": [
+        "10K",
+        "１０Ｋ",
+        "10K | 24-01-2005 12:28",
+        "008-10K",
+        "048-10K",
+        "009能高10K",
+        "009-10K"
+      ],
+      "raw_mileage_text": "10K",
+      "requires_human_review": true,
+      "review_reasons": [],
+      "review_required": false,
+      "review_state": "candidate",
+      "route_context_key": "workspace_route",
+      "route_mileage_m": 10000.0,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "historical"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "workspace_route.10K",
+      "source_evidence_count": 16,
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "stale_or_unknown",
+        "ttl_policy": "review_age_before_promotion"
+      },
+      "source_path": "candidates/route_note_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "route_note_candidates",
+          "source_path": "candidates/route_note_candidates.json"
+        }
+      ],
+      "source_tier": "P2",
+      "stop_advisory_candidate": "context_reference_only",
+      "supporting_candidate_ids": [
+        "route_note.golden_route.wpt_002",
+        "route_note.reference_002_reference_002_2024_09_14_________p_speed_filtered.wpt_256",
+        "route_note.reference_004_reference_004_c_documents_and_settings_administrator___20111127_29_gdb_gpx_speed_filtered.wpt_000",
+        "route_note.reference_008_reference_008_chen661_5_gpx_speed_filtered.wpt_038",
+        "route_note.reference_010_reference_010___speed_filtered.wpt_047",
+        "route_note.reference_011_reference_011_gpx_speed_filtered.wpt_170",
+        "route_note.reference_013_reference_013_____speed_filtered.wpt_052",
+        "route_note.reference_014_reference_014_____gdb_gpx_speed_filtered.wpt_008",
+        "route_note.reference_015_reference_015__gpx_speed_filtered.wpt_012",
+        "route_note.reference_016_reference_016_speed_filtered.wpt_170",
+        "route_note.reference_017_reference_017_speed_filtered.wpt_019",
+        "route_note.reference_018_reference_018_speed_filtered.wpt_004",
+        "route_note.reference_019_reference_019_gpx_speed_filtered.wpt_008",
+        "route_note.reference_020_reference_020__gpx_speed_filtered.wpt_000",
+        "route_note.reference_021_reference_021_speed_filtered.wpt_010",
+        "route_note.reference_023_reference_023___gpx_speed_filtered.wpt_009"
+      ]
+    },
+    {
+      "candidate_id": "route_context.route_note_candidates.workspace_route.10.1K",
+      "candidate_only": true,
+      "confidence": 0.59,
+      "context_kind": "risk_context",
+      "coordinate_source": "route_note_candidate_median",
+      "coordinate_spread_m": null,
+      "display_label": "10.1K",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 10100.0,
+      "evidence_families": [
+        "map_label",
+        "route_mileage",
+        "route_note",
+        "route_note_candidates"
+      ],
+      "evidence_type": "trail_mileage_k_anchor",
+      "label": "10.1K",
+      "label_role": "trail_mileage_k_anchor",
+      "lat": 24.04786435,
+      "lon": 121.265154295,
+      "mileage_anchor_kind": "trail_mileage_k_anchor",
+      "mileage_k": 10.1,
+      "mileage_m": 10100.0,
+      "normalized_mileage_k": "10.1K",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 47.0,
+        "reason_codes": [
+          "candidate_context",
+          "historical_context",
+          "multi_source_support",
+          "risk_context_penalty"
+        ],
+        "risk_penalty": 35.0,
+        "runtime_safety_truth": false,
+        "value": 12.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "seed_only",
+      "raw_label_examples": [
+        "10.1K崩壁"
+      ],
+      "raw_mileage_text": "10.1K",
+      "requires_human_review": true,
+      "review_reasons": [
+        "single_source_evidence"
+      ],
+      "review_required": true,
+      "review_state": "needs_human_review",
+      "route_context_key": "workspace_route",
+      "route_mileage_m": 10100.0,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "historical",
+        "terrain"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "workspace_route.10.1K",
+      "source_evidence_count": 1,
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "stale_or_unknown",
+        "ttl_policy": "review_age_before_promotion"
+      },
+      "source_path": "candidates/route_note_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "route_note_candidates",
+          "source_path": "candidates/route_note_candidates.json"
+        }
+      ],
+      "source_tier": "P2",
+      "stop_advisory_candidate": "pass_through_or_minimize_exposure",
+      "supporting_candidate_ids": [
+        "route_note.reference_021_reference_021_speed_filtered.wpt_057"
+      ]
+    },
+    {
+      "candidate_id": "route_context.route_note_candidates.workspace_route.10.8K",
+      "candidate_only": true,
+      "confidence": 0.59,
+      "context_kind": "route_context",
+      "coordinate_source": "route_note_candidate_median",
+      "coordinate_spread_m": null,
+      "display_label": "10.8K",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 10800.0,
+      "evidence_families": [
+        "map_label",
+        "route_mileage",
+        "route_note",
+        "route_note_candidates"
+      ],
+      "evidence_type": "trail_mileage_k_anchor",
+      "label": "10.8K",
+      "label_role": "trail_mileage_k_anchor",
+      "lat": 24.044063995,
+      "lon": 121.26642298,
+      "mileage_anchor_kind": "trail_mileage_k_anchor",
+      "mileage_k": 10.8,
+      "mileage_m": 10800.0,
+      "normalized_mileage_k": "10.8K",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 47.0,
+        "reason_codes": [
+          "candidate_context",
+          "historical_context",
+          "multi_source_support"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 47.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "seed_only",
+      "raw_label_examples": [
+        "010 16號水準點10.8K"
+      ],
+      "raw_mileage_text": "10.8K",
+      "requires_human_review": true,
+      "review_reasons": [
+        "single_source_evidence"
+      ],
+      "review_required": true,
+      "review_state": "needs_human_review",
+      "route_context_key": "workspace_route",
+      "route_mileage_m": 10800.0,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "historical"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "workspace_route.10.8K",
+      "source_evidence_count": 1,
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "stale_or_unknown",
+        "ttl_policy": "review_age_before_promotion"
+      },
+      "source_path": "candidates/route_note_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "route_note_candidates",
+          "source_path": "candidates/route_note_candidates.json"
+        }
+      ],
+      "source_tier": "P2",
+      "stop_advisory_candidate": "context_reference_only",
+      "supporting_candidate_ids": [
+        "route_note.reference_014_reference_014_____gdb_gpx_speed_filtered.wpt_009"
+      ]
+    },
+    {
+      "candidate_id": "route_context.route_note_candidates.workspace_route.11K",
+      "candidate_only": true,
+      "confidence": 0.75,
+      "context_kind": "route_context",
+      "coordinate_source": "golden_route_route_note_candidate",
+      "coordinate_spread_m": 6.22,
+      "display_label": "11K",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 11000.0,
+      "evidence_families": [
+        "map_label",
+        "route_mileage",
+        "route_note",
+        "route_note_candidates"
+      ],
+      "evidence_type": "trail_mileage_k_anchor",
+      "label": "11K",
+      "label_role": "trail_mileage_k_anchor",
+      "lat": 24.042156022042036,
+      "lon": 121.26684098504484,
+      "mileage_anchor_kind": "trail_mileage_k_anchor",
+      "mileage_k": 11.0,
+      "mileage_m": 11000.0,
+      "normalized_mileage_k": "11K",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 47.0,
+        "reason_codes": [
+          "candidate_context",
+          "historical_context",
+          "multi_source_support"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 47.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "seed_only",
+      "raw_label_examples": [
+        "11K",
+        "１１Ｋ"
+      ],
+      "raw_mileage_text": "11K",
+      "requires_human_review": true,
+      "review_reasons": [],
+      "review_required": false,
+      "review_state": "candidate",
+      "route_context_key": "workspace_route",
+      "route_mileage_m": 11000.0,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "historical"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "workspace_route.11K",
+      "source_evidence_count": 5,
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "stale_or_unknown",
+        "ttl_policy": "review_age_before_promotion"
+      },
+      "source_path": "candidates/route_note_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "route_note_candidates",
+          "source_path": "candidates/route_note_candidates.json"
+        }
+      ],
+      "source_tier": "P2",
+      "stop_advisory_candidate": "context_reference_only",
+      "supporting_candidate_ids": [
+        "route_note.golden_route.wpt_003",
+        "route_note.reference_002_reference_002_2024_09_14_________p_speed_filtered.wpt_274",
+        "route_note.reference_008_reference_008_chen661_5_gpx_speed_filtered.wpt_039",
+        "route_note.reference_018_reference_018_speed_filtered.wpt_009",
+        "route_note.reference_020_reference_020__gpx_speed_filtered.wpt_002"
+      ]
+    },
+    {
+      "candidate_id": "route_context.route_note_candidates.workspace_route.11.5K",
+      "candidate_only": true,
+      "confidence": 0.67,
+      "context_kind": "route_context",
+      "coordinate_source": "route_note_candidate_median",
+      "coordinate_spread_m": 0.01,
+      "display_label": "11.5K",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 11500.0,
+      "evidence_families": [
+        "map_label",
+        "route_mileage",
+        "route_note",
+        "route_note_candidates"
+      ],
+      "evidence_type": "trail_mileage_k_anchor",
+      "label": "11.5K",
+      "label_role": "trail_mileage_k_anchor",
+      "lat": 24.0431039,
+      "lon": 121.2707516,
+      "mileage_anchor_kind": "trail_mileage_k_anchor",
+      "mileage_k": 11.5,
+      "mileage_m": 11500.0,
+      "normalized_mileage_k": "11.5K",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 47.0,
+        "reason_codes": [
+          "candidate_context",
+          "historical_context",
+          "multi_source_support"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 47.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "seed_only",
+      "raw_label_examples": [
+        "11.5K"
+      ],
+      "raw_mileage_text": "11.5K",
+      "requires_human_review": true,
+      "review_reasons": [],
+      "review_required": false,
+      "review_state": "candidate",
+      "route_context_key": "workspace_route",
+      "route_mileage_m": 11500.0,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "historical"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "workspace_route.11.5K",
+      "source_evidence_count": 3,
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "stale_or_unknown",
+        "ttl_policy": "review_age_before_promotion"
+      },
+      "source_path": "candidates/route_note_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "route_note_candidates",
+          "source_path": "candidates/route_note_candidates.json"
+        }
+      ],
+      "source_tier": "P2",
+      "stop_advisory_candidate": "context_reference_only",
+      "supporting_candidate_ids": [
+        "route_note.reference_002_reference_002_2024_09_14_________p_speed_filtered.wpt_257",
+        "route_note.reference_018_reference_018_speed_filtered.wpt_005",
+        "route_note.reference_020_reference_020__gpx_speed_filtered.wpt_001"
+      ]
+    },
+    {
+      "candidate_id": "route_context.route_note_candidates.workspace_route.12K",
+      "candidate_only": true,
+      "confidence": 0.87,
+      "context_kind": "route_context",
+      "coordinate_source": "golden_route_route_note_candidate",
+      "coordinate_spread_m": 10.44,
+      "display_label": "12K",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 12000.0,
+      "evidence_families": [
+        "map_label",
+        "route_mileage",
+        "route_note",
+        "route_note_candidates"
+      ],
+      "evidence_type": "trail_mileage_k_anchor",
+      "label": "12K",
+      "label_role": "trail_mileage_k_anchor",
+      "lat": 24.045135034248233,
+      "lon": 121.27426098100841,
+      "mileage_anchor_kind": "trail_mileage_k_anchor",
+      "mileage_k": 12.0,
+      "mileage_m": 12000.0,
+      "normalized_mileage_k": "12K",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 47.0,
+        "reason_codes": [
+          "candidate_context",
+          "historical_context",
+          "multi_source_support"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 47.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "seed_only",
+      "raw_label_examples": [
+        "12K",
+        "１２Ｋ",
+        "12K | 24-01-2005 13:21",
+        "010-12K",
+        "047-12K",
+        "011能高12K",
+        "011-12K"
+      ],
+      "raw_mileage_text": "12K",
+      "requires_human_review": true,
+      "review_reasons": [],
+      "review_required": false,
+      "review_state": "candidate",
+      "route_context_key": "workspace_route",
+      "route_mileage_m": 12000.0,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "historical"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "workspace_route.12K",
+      "source_evidence_count": 16,
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "stale_or_unknown",
+        "ttl_policy": "review_age_before_promotion"
+      },
+      "source_path": "candidates/route_note_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "route_note_candidates",
+          "source_path": "candidates/route_note_candidates.json"
+        }
+      ],
+      "source_tier": "P2",
+      "stop_advisory_candidate": "context_reference_only",
+      "supporting_candidate_ids": [
+        "route_note.golden_route.wpt_004",
+        "route_note.reference_002_reference_002_2024_09_14_________p_speed_filtered.wpt_282",
+        "route_note.reference_004_reference_004_c_documents_and_settings_administrator___20111127_29_gdb_gpx_speed_filtered.wpt_001",
+        "route_note.reference_008_reference_008_chen661_5_gpx_speed_filtered.wpt_040",
+        "route_note.reference_010_reference_010___speed_filtered.wpt_052",
+        "route_note.reference_011_reference_011_gpx_speed_filtered.wpt_219",
+        "route_note.reference_013_reference_013_____speed_filtered.wpt_051",
+        "route_note.reference_014_reference_014_____gdb_gpx_speed_filtered.wpt_010",
+        "route_note.reference_015_reference_015__gpx_speed_filtered.wpt_011",
+        "route_note.reference_016_reference_016_speed_filtered.wpt_219",
+        "route_note.reference_017_reference_017_speed_filtered.wpt_022",
+        "route_note.reference_018_reference_018_speed_filtered.wpt_010",
+        "route_note.reference_019_reference_019_gpx_speed_filtered.wpt_010",
+        "route_note.reference_020_reference_020__gpx_speed_filtered.wpt_003",
+        "route_note.reference_021_reference_021_speed_filtered.wpt_012",
+        "route_note.reference_023_reference_023___gpx_speed_filtered.wpt_011"
+      ]
+    },
+    {
+      "candidate_id": "route_context.route_note_candidates.workspace_route.13K",
+      "candidate_only": true,
+      "confidence": 0.75,
+      "context_kind": "navigation_context",
+      "coordinate_source": "route_note_candidate_median",
+      "coordinate_spread_m": 12.92,
+      "display_label": "13K",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 13000.0,
+      "evidence_families": [
+        "map_label",
+        "route_mileage",
+        "route_note",
+        "route_note_candidates"
+      ],
+      "evidence_type": "trail_mileage_k_anchor",
+      "label": "13K",
+      "label_role": "trail_mileage_k_anchor",
+      "lat": 24.0459639,
+      "lon": 121.2795767,
+      "mileage_anchor_kind": "trail_mileage_k_anchor",
+      "mileage_k": 13.0,
+      "mileage_m": 13000.0,
+      "normalized_mileage_k": "13K",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 47.0,
+        "reason_codes": [
+          "candidate_context",
+          "historical_context",
+          "multi_source_support"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 47.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "seed_only",
+      "raw_label_examples": [
+        "13K",
+        "１３Ｋ",
+        "013南峰岔路口13K"
+      ],
+      "raw_mileage_text": "13K",
+      "requires_human_review": true,
+      "review_reasons": [],
+      "review_required": false,
+      "review_state": "candidate",
+      "route_context_key": "workspace_route",
+      "route_mileage_m": 13000.0,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "historical",
+        "terrain"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "workspace_route.13K",
+      "source_evidence_count": 5,
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "stale_or_unknown",
+        "ttl_policy": "review_age_before_promotion"
+      },
+      "source_path": "candidates/route_note_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "route_note_candidates",
+          "source_path": "candidates/route_note_candidates.json"
+        }
+      ],
+      "source_tier": "P2",
+      "stop_advisory_candidate": "context_reference_only",
+      "supporting_candidate_ids": [
+        "route_note.reference_002_reference_002_2024_09_14_________p_speed_filtered.wpt_290",
+        "route_note.reference_008_reference_008_chen661_5_gpx_speed_filtered.wpt_041",
+        "route_note.reference_014_reference_014_____gdb_gpx_speed_filtered.wpt_012",
+        "route_note.reference_018_reference_018_speed_filtered.wpt_011",
+        "route_note.reference_020_reference_020__gpx_speed_filtered.wpt_004"
+      ]
+    },
+    {
+      "candidate_id": "route_context.route_note_candidates.workspace_route.14.5K",
+      "candidate_only": true,
+      "confidence": 0.59,
+      "context_kind": "route_context",
+      "coordinate_source": "golden_route_route_note_candidate",
+      "coordinate_spread_m": null,
+      "display_label": "14.5K",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 14500.0,
+      "evidence_families": [
+        "map_label",
+        "route_mileage",
+        "route_note",
+        "route_note_candidates"
+      ],
+      "evidence_type": "trail_mileage_k_anchor",
+      "label": "14.5K",
+      "label_role": "trail_mileage_k_anchor",
+      "lat": 24.03806397691369,
+      "lon": 121.2810430303216,
+      "mileage_anchor_kind": "trail_mileage_k_anchor",
+      "mileage_k": 14.5,
+      "mileage_m": 14500.0,
+      "normalized_mileage_k": "14.5K",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 47.0,
+        "reason_codes": [
+          "candidate_context",
+          "historical_context",
+          "multi_source_support"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 47.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "seed_only",
+      "raw_label_examples": [
+        "14.5K | 2013-10-09 6:28:22"
+      ],
+      "raw_mileage_text": "14.5K",
+      "requires_human_review": true,
+      "review_reasons": [
+        "single_source_evidence"
+      ],
+      "review_required": true,
+      "review_state": "needs_human_review",
+      "route_context_key": "workspace_route",
+      "route_mileage_m": 14500.0,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "historical"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "workspace_route.14.5K",
+      "source_evidence_count": 1,
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "stale_or_unknown",
+        "ttl_policy": "review_age_before_promotion"
+      },
+      "source_path": "candidates/route_note_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "route_note_candidates",
+          "source_path": "candidates/route_note_candidates.json"
+        }
+      ],
+      "source_tier": "P2",
+      "stop_advisory_candidate": "context_reference_only",
+      "supporting_candidate_ids": [
+        "route_note.golden_route.wpt_005"
+      ]
+    },
+    {
+      "candidate_id": "route_context.route_note_candidates.workspace_route.15K",
+      "candidate_only": true,
+      "confidence": 0.59,
+      "context_kind": "route_context",
+      "coordinate_source": "route_note_candidate_median",
+      "coordinate_spread_m": null,
+      "display_label": "15K",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 15000.0,
+      "evidence_families": [
+        "map_label",
+        "route_mileage",
+        "route_note",
+        "route_note_candidates"
+      ],
+      "evidence_type": "trail_mileage_k_anchor",
+      "label": "15K",
+      "label_role": "trail_mileage_k_anchor",
+      "lat": 24.034234788,
+      "lon": 121.280180449,
+      "mileage_anchor_kind": "trail_mileage_k_anchor",
+      "mileage_k": 15.0,
+      "mileage_m": 15000.0,
+      "normalized_mileage_k": "15K",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 47.0,
+        "reason_codes": [
+          "candidate_context",
+          "historical_context",
+          "multi_source_support"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 47.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "seed_only",
+      "raw_label_examples": [
+        "１５Ｋ | 2007-12-22 2:53:01PM"
+      ],
+      "raw_mileage_text": "15K",
+      "requires_human_review": true,
+      "review_reasons": [
+        "single_source_evidence"
+      ],
+      "review_required": true,
+      "review_state": "needs_human_review",
+      "route_context_key": "workspace_route",
+      "route_mileage_m": 15000.0,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "historical"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "workspace_route.15K",
+      "source_evidence_count": 1,
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "stale_or_unknown",
+        "ttl_policy": "review_age_before_promotion"
+      },
+      "source_path": "candidates/route_note_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "route_note_candidates",
+          "source_path": "candidates/route_note_candidates.json"
+        }
+      ],
+      "source_tier": "P2",
+      "stop_advisory_candidate": "context_reference_only",
+      "supporting_candidate_ids": [
+        "route_note.reference_008_reference_008_chen661_5_gpx_speed_filtered.wpt_042"
+      ]
+    },
+    {
+      "candidate_id": "route_context.route_note_candidates.workspace_route.92.3K",
+      "candidate_only": true,
+      "confidence": 0.49,
+      "context_kind": "navigation_context",
+      "coordinate_source": "route_note_candidate_median",
+      "coordinate_spread_m": null,
+      "display_label": "92.3K",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 92300.0,
+      "evidence_families": [
+        "map_label",
+        "route_mileage",
+        "route_note",
+        "route_note_candidates"
+      ],
+      "evidence_type": "road_mileage_stone",
+      "label": "92.3K",
+      "label_role": "road_mileage_stone",
+      "lat": 24.030199992,
+      "lon": 121.184319975,
+      "mileage_anchor_kind": "road_mileage_stone",
+      "mileage_k": 92.3,
+      "mileage_m": 92300.0,
+      "normalized_mileage_k": "92.3K",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 33.0,
+        "reason_codes": [
+          "candidate_context",
+          "multi_source_support"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 33.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "seed_only",
+      "raw_label_examples": [
+        "20 92.3K岔路"
+      ],
+      "raw_mileage_text": "92.3K",
+      "requires_human_review": true,
+      "review_reasons": [
+        "road_mileage_stone_not_trail_k_anchor",
+        "single_source_evidence",
+        "exceeds_route_summary_distance"
+      ],
+      "review_required": true,
+      "review_state": "needs_human_review",
+      "route_context_key": "workspace_route",
+      "route_mileage_m": 92300.0,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "route_context"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "workspace_route.92.3K",
+      "source_evidence_count": 1,
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "stale_or_unknown",
+        "ttl_policy": "review_age_before_promotion"
+      },
+      "source_path": "candidates/route_note_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "route_note_candidates",
+          "source_path": "candidates/route_note_candidates.json"
+        }
+      ],
+      "source_tier": "P2",
+      "stop_advisory_candidate": "low_priority_context_reference",
+      "supporting_candidate_ids": [
+        "route_note.reference_009_reference_009_3_____gdb_speed_filtered.wpt_019"
+      ]
+    },
+    {
+      "candidate_id": "route_context.route_note_candidates.workspace_route.94K",
+      "candidate_only": true,
+      "confidence": 0.49,
+      "context_kind": "navigation_context",
+      "coordinate_source": "route_note_candidate_median",
+      "coordinate_spread_m": null,
+      "display_label": "94K",
+      "display_policy": {
+        "coordinate_precision": "exact_candidate_coordinate",
+        "reason": "public candidate context",
+        "requires_human_review_before_display": false,
+        "show_exact_coordinate": true,
+        "show_label": true
+      },
+      "distance_m": 94000.0,
+      "evidence_families": [
+        "map_label",
+        "route_mileage",
+        "route_note",
+        "route_note_candidates"
+      ],
+      "evidence_type": "road_mileage_stone",
+      "label": "94K",
+      "label_role": "road_mileage_stone",
+      "lat": 24.041712033,
+      "lon": 121.184498006,
+      "mileage_anchor_kind": "road_mileage_stone",
+      "mileage_k": 94.0,
+      "mileage_m": 94000.0,
+      "normalized_mileage_k": "94K",
+      "observation_score": {
+        "candidate_only": true,
+        "observation_value": 33.0,
+        "reason_codes": [
+          "candidate_context",
+          "multi_source_support"
+        ],
+        "risk_penalty": 0.0,
+        "runtime_safety_truth": false,
+        "value": 33.0
+      },
+      "phase1_runtime_mutation_allowed": false,
+      "phase2_brain_writeback_allowed": false,
+      "promotion_basis": "seed_only",
+      "raw_label_examples": [
+        "16 94K岔路"
+      ],
+      "raw_mileage_text": "94K",
+      "requires_human_review": true,
+      "review_reasons": [
+        "road_mileage_stone_not_trail_k_anchor",
+        "single_source_evidence",
+        "exceeds_route_summary_distance"
+      ],
+      "review_required": true,
+      "review_state": "needs_human_review",
+      "route_context_key": "workspace_route",
+      "route_mileage_m": 94000.0,
+      "runtime_safety_truth": false,
+      "safety_api_called": false,
+      "sec6_layers": [
+        "route_context"
+      ],
+      "sensitivity_level": "public",
+      "source_candidate_id": "workspace_route.94K",
+      "source_evidence_count": 1,
+      "source_freshness": {
+        "requires_refresh_before_runtime_truth": true,
+        "status": "stale_or_unknown",
+        "ttl_policy": "review_age_before_promotion"
+      },
+      "source_path": "candidates/route_note_candidates.json",
+      "source_refs": [
+        {
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "source_kind": "route_note_candidates",
+          "source_path": "candidates/route_note_candidates.json"
+        }
+      ],
+      "source_tier": "P2",
+      "stop_advisory_candidate": "low_priority_context_reference",
+      "supporting_candidate_ids": [
+        "route_note.reference_009_reference_009_3_____gdb_speed_filtered.wpt_015"
+      ]
+    }
+  ],
+  "project_id": "chilai_nanhua_day1",
+  "schema_version": "route_context_collection.v1",
+  "source_evidence_ref": "normalized/context/route_context/route_context_evidence.json"
+}

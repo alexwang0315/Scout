@@ -162,8 +162,32 @@ class DebugPageTests(unittest.TestCase):
         self.assertIn("function handleMapHoverPointerMove", html)
         self.assertIn('runtimeMap.addEventListener("pointermove", handleMapHoverPointerMove)', html)
         self.assertIn('runtimeMap.addEventListener("pointerleave", hideMapHoverTooltip)', html)
+        self.assertIn("const MAP_LAYER_RANKS", html)
+        self.assertIn("function orderMapLayerGroups()", html)
+        self.assertIn(".map-label-overlay {\n      position: absolute;\n      inset: 0;\n      pointer-events: none;\n      overflow: hidden;\n      z-index: 40;", html)
+        self.assertIn("function handleMapKeyboardPan(event)", html)
+        self.assertIn("mapKeyboardActive: false", html)
+        self.assertIn("function activateMapKeyboardPan()", html)
+        self.assertIn('document.addEventListener("keydown", handleMapKeyboardPan)', html)
+        self.assertIn('document.addEventListener("pointerdown", deactivateMapKeyboardPanOutside)', html)
+        self.assertIn('runtimeMap.setAttribute("tabindex", "0")', html)
+        self.assertIn(
+            "focusMapBox(mapBoxForEvent(event), event, {preserveZoom: options.preserveZoom !== false})",
+            html,
+        )
+        self.assertIn("if (options.preserveZoom === false)", html)
+        self.assertIn("clickTarget", html)
+        self.assertIn("function eventForMapTarget(target)", html)
+        self.assertIn('const genericRefs = new Set(["runtime", "imagery", "osm", "terrain"]);', html)
+        self.assertIn("const preferredRefs = rawRefs.filter(ref => !genericRefs.has(ref));", html)
+        self.assertIn("function selectTimelineForMapTarget(target)", html)
+        self.assertIn('node.closest("details.timeline-group-details")?.setAttribute("open", "")', html)
+        self.assertIn("document.querySelector(`.timeline-group-details ${eventSelector}`) || document.querySelector(eventSelector)", html)
+        self.assertIn("selectTimelineNode(event, index, {node, focus: true, expandGroup: true})", html)
+        self.assertIn("selectTimelineForMapTarget(selection.clickTarget)", html)
         self.assertIn(".map-hover-tooltip", html)
         self.assertIn(".map-hover-tooltip.is-visible", html)
+        self.assertIn(".map-hover-tooltip {\n      position: absolute;\n      z-index: 10000;", html)
         self.assertIn("debugPageState.hoveredMapTarget !== target", html)
         self.assertIn("${kind}: ${title}", html)
         self.assertIn("pointer-events: visiblePainted", html)
@@ -181,12 +205,122 @@ class DebugPageTests(unittest.TestCase):
         self.assertIn("grid-area: map", html)
         self.assertIn("grid-area: details", html)
         self.assertIn("grid-area: assistant", html)
-        self.assertNotIn("position: fixed", html)
+        self.assertIn("position: relative;\n      z-index: 1;", html)
+        self.assertIn("position: relative;\n      z-index: 20;", html)
+        self.assertIn("position: fixed", html)
+        self.assertIn("max-height: calc(100vh - 140px)", html)
         self.assertNotIn("map-dock", html)
         self.assertIn('role="button"', html)
         self.assertIn('tabindex="0"', html)
         self.assertIn('aria-label="chilai_nanhua_day1 debug evidence map"', html)
+        self.assertIn("background: #111820;", html)
         self.assertIn("renderDebugEvidenceMap", html)
+
+    def test_static_debug_page_uses_shared_maplibre_with_svg_fallback(self):
+        html = PAGE_PATH.read_text(encoding="utf-8")
+
+        self.assertIn(
+            'href="/admin/vendor/maplibre-gl/6.2.0/maplibre-gl.css"',
+            html,
+        )
+        self.assertNotIn("unpkg.com/maplibre-gl", html)
+        self.assertIn('/admin/scout-maplibre-evidence.js', html)
+        self.assertIn('id="runtimeMapRendererShell"', html)
+        self.assertIn('id="runtimeMapLibre"', html)
+        self.assertIn('data-map-renderer-active="pending"', html)
+        self.assertIn(
+            ".map-panel #runtimeMap,\n      .map-panel #runtimeMapLibre {\n"
+            "        height: auto;\n        min-height: 260px;\n"
+            "        aspect-ratio: 16 / 9;\n      }",
+            html,
+        )
+        self.assertIn("function debugMapLibreFeatureCollection(", html)
+        self.assertIn("async function activateDebugMapLibreRenderer(", html)
+        self.assertIn("function activateDebugSvgFallback(", html)
+        self.assertIn("function focusDebugMapLibreForEvent(", html)
+        self.assertIn("function selectDebugMapLibreFeature(", html)
+        self.assertIn("function debugMapLibreRasterLayers(", html)
+        self.assertIn("candidate_only: true", html)
+        self.assertIn("runtime_safety_truth: false", html)
+        self.assertIn("debugPageState.mapLibreRenderer.setLayerVisibility(", html)
+        self.assertIn("function localOsmPbfVectorUrl", html)
+        self.assertIn("/osm-pbf-vector.geojson", html)
+        self.assertIn("/admin/pretrip/osm-carto-palette", html)
+        self.assertIn("function applyOsmCartoPalette", html)
+        self.assertIn("function loadOsmCartoPalette", html)
+        self.assertIn("--osm-carto-track-fill: #996600;", html)
+        self.assertIn("var(--osm-carto-track-fill)", html)
+        self.assertIn(".osm-pbf-line-core.primary", html)
+        self.assertIn("var(--osm-carto-primary-fill)", html)
+
+    def test_debug_maplibre_does_not_redraw_hidden_svg_until_fallback_is_needed(self):
+        html = PAGE_PATH.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "function renderDebugEvidenceMap(projection, {forceSvg = false} = {})",
+            html,
+        )
+        self.assertIn("if (!forceSvg && debugMapLibreActive())", html)
+        self.assertIn("return syncDebugMapLibreProjection(projection);", html)
+
+    def test_debug_maplibre_forwards_hints_box_zoom_and_terrain_images(self):
+        html = PAGE_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("function debugMapLibreTerrainImageLayers(projection)", html)
+        self.assertIn('control_layer_id: "terrain"', html)
+        self.assertIn('source_type: "image"', html)
+        self.assertIn("onFeatureHover: hoverDebugMapLibreFeature", html)
+        self.assertIn("onFeatureLeave: hideMapHoverTooltip", html)
+        self.assertIn(
+            "debugPageState.mapLibreRenderer?.setInteractionMode(debugPageState.mapInteractionMode)",
+            html,
+        )
+        self.assertIn(
+            "renderDebugEvidenceMap(debugPageState.projection, {forceSvg: true});",
+            html,
+        )
+        self.assertIn("function osmPbfZoomMin", html)
+        self.assertIn("data-osm-pbf-zoom-min", html)
+        self.assertIn("function renderOsmPbfVector", html)
+        self.assertIn("function osmPbfFeatureTags", html)
+        self.assertIn('props.tags && typeof props.tags === "object"', html)
+        self.assertIn("debugPageState.osmPbfVector?.features", html)
+        self.assertIn('appendRasterLayer(osmGroup, projection, bounds, "osm");', html)
+        self.assertIn("renderOsmPbfVector(osmGroup, projection, bounds);", html)
+        self.assertIn("function appendOsmPbfLine", html)
+        self.assertIn("function appendOsmPbfLineLabel", html)
+        self.assertIn("osm-pbf-line osm-pbf-line-casing", html)
+        self.assertIn("osm-pbf-line osm-pbf-line-core", html)
+        self.assertIn("osm-pbf-line-label", html)
+        self.assertIn('"data-osm-pbf-line-label": "true"', html)
+        self.assertIn('class: `osm-pbf-area ${category}`', html)
+        self.assertIn("function osmPbfDrawOrder", html)
+        self.assertIn('"data-osm-pbf-kind": "line-casings"', html)
+        self.assertIn('"data-osm-pbf-kind": "line-fills"', html)
+        self.assertIn("lineCasingGroup", html)
+        self.assertIn("lineCoreGroup", html)
+        self.assertIn(".osm-pbf-area.building", html)
+        self.assertIn("var(--osm-carto-water-fill)", html)
+        self.assertIn('return isArea ? "water"', html)
+        self.assertIn('<input type="checkbox" data-layer="overpass" checked> Overpass', html)
+        self.assertIn(".osm-pbf-point { fill: #5a5f63;", html)
+        self.assertIn(".osm-pbf-point.shelter", html)
+        self.assertIn('"data-osm-pbf-label": "true"', html)
+        self.assertIn("function syncOsmPbfLabelScale", html)
+        self.assertIn("syncOsmPbfLabelScale(scale);", html)
+        update_layers_body = html.split("function updateLayers()", 1)[1].split("function layerInputChecked", 1)[0]
+        self.assertIn("syncMapMarkerScale();", update_layers_body)
+        self.assertLess(
+            update_layers_body.index("syncMapMarkerScale();"),
+            update_layers_body.index("updatePointLabels();"),
+        )
+        self.assertIn(".osm-pbf-line-core.path", html)
+        self.assertIn(".osm-pbf-line-core.track", html)
+        self.assertIn(".osm-pbf-line-core.road", html)
+        self.assertIn(".osm-pbf-line-core.terrain", html)
+        self.assertIn(".osm-pbf-area.forest", html)
+        self.assertIn("const localOsmVectorAvailable = isOsm && isLocalOsmTileMode()", html)
+        self.assertIn("Boolean(localOsmPbfVectorUrl(projection))", html)
         self.assertIn("reference-track", html)
         self.assertIn("overpass-corridor", html)
         self.assertIn('aria-label="Map view controls"', html)
@@ -203,6 +337,95 @@ class DebugPageTests(unittest.TestCase):
         self.assertIn('id="panRight"', html)
         self.assertIn('id="layerControl" title="Show layer controls" aria-label="Layer controls"', html)
         self.assertIn('id="layerEnabledCount"', html)
+        self.assertIn('class="layer-preset-row" aria-label="Layer presets"', html)
+        self.assertIn('data-layer-preset="risk-review"', html)
+        self.assertIn('data-layer-preset="mcp-review"', html)
+        self.assertIn('data-layer-preset="route-clean"', html)
+        self.assertIn('data-layer-preset="debug-replay"', html)
+        self.assertIn(
+            'document.querySelectorAll("[data-layer]:not(:disabled)")',
+            html,
+        )
+        self.assertIn('data-layer-preset="raster-check"', html)
+        self.assertIn('<input type="checkbox" data-layer="imagery"> Imagery', html)
+        self.assertIn('<input type="checkbox" data-layer="rudy-twmap" checked> Rudy+TW', html)
+        self.assertIn('class="layer-advanced"', html)
+        self.assertIn("Advanced layers", html)
+        self.assertIn('data-layer="boss-points" checked> Boss</label>', html)
+        self.assertIn(".boss-point", html)
+        self.assertIn("projection.boss_points?.boss_points", html)
+        self.assertIn("item?.boss_point_id || item?.source_mcp_id || item?.source_candidate_id", html)
+        self.assertIn("function isBossPoint(item)", html)
+        self.assertIn("function bossDisplayText(item)", html)
+        self.assertIn("function bossSummaryText(item)", html)
+        self.assertIn("bossDisplayText(item)", html)
+        self.assertIn("if (isBossPoint(item)) return bossSummaryText(item);", html)
+        self.assertIn('"boss-points",', html)
+        self.assertIn('String(point.challenge_fit?.band || "").includes("not_ready")', html)
+        self.assertIn("function mapStrokeWidthPx(node, scale)", html)
+        self.assertIn("function mapMarkerRadiusPx(circle, scale, baseRadius)", html)
+        self.assertIn(
+            'circle.classList.contains("mcp-candidate") || circle.classList.contains("boss-point")',
+            html,
+        )
+        self.assertIn(
+            'node.style.setProperty("stroke-width", `${strokeWidth.toFixed(2)}px`, priority)',
+            html,
+        )
+        self.assertIn(".tool-button {\n      min-height: 28px;", html)
+        self.assertIn(".tool-button.compact {\n      min-width: 28px;", html)
+        self.assertIn("background: #111827;\n      color: #f8fafc;", html)
+        self.assertIn(".filters label {\n      display: inline-flex;\n      align-items: center;\n      gap: 3px;\n      min-height: 28px;", html)
+        self.assertIn(".layer-menu summary {\n      min-height: 28px;", html)
+        self.assertIn("z-index: 80;", html)
+        self.assertIn("z-index: 90;", html)
+        self.assertIn("function bindLayerMenuDismiss()", html)
+        self.assertIn("function closeLayerMenus(exceptMenu = null)", html)
+        self.assertIn("function layerMenuFromEvent(event)", html)
+        self.assertIn("event.composedPath()", html)
+        self.assertIn('window.__scoutLayerMenuDismissVersion === "v2"', html)
+        self.assertNotIn("window.__scoutLayerMenuDismissBound", html)
+        self.assertIn('["pointerdown", "mousedown", "touchstart", "click"].forEach(eventName =>', html)
+        self.assertIn("[window, document, document.documentElement, document.body]", html)
+        self.assertIn("target.addEventListener(eventName, dismissLayerMenusForEvent, {capture: true, passive: true});", html)
+        self.assertIn('document.addEventListener("focusin", dismissLayerMenusForEvent, {capture: true});', html)
+        self.assertIn('menu.addEventListener("toggle", () =>', html)
+        self.assertIn("if (menu.open) closeLayerMenus(menu);", html)
+        self.assertIn('if (event.key === "Escape") closeLayerMenus();', html)
+        self.assertIn('document.querySelectorAll(".layer-menu[open]")', html)
+        self.assertIn(".layer-preset-button {\n      min-height: 28px;\n      display: flex;\n      align-items: center;", html)
+        self.assertIn(".layer-advanced summary {\n      border: 0;\n      background: transparent;\n      padding: 4px 0 6px;\n      min-height: 28px;", html)
+        self.assertIn("width: max-content;\n      max-width: 100%;\n      box-sizing: border-box;", html)
+        self.assertIn(".layer-menu-panel {\n        position: fixed;\n        top: 120px;\n        left: 12px;\n        right: 12px;\n        width: auto;", html)
+        self.assertIn(".map-pan-controls .tool-button {\n      min-height: 28px;\n      min-width: 28px;", html)
+        self.assertIn(".tab {\n      min-height: 28px;", html)
+        self.assertIn("body {\n        height: auto;\n        min-height: 100vh;\n        overflow: auto;", html)
+        self.assertIn(".shell {\n        grid-template-rows: auto auto;\n        height: auto;\n        min-height: 100vh;", html)
+        responsive_main_css = html.split("@media (max-width: 1120px)", 1)[1].split(".column", 1)[0]
+        self.assertIn('"map"\n          "details"\n          "timeline"\n          "assistant";', responsive_main_css)
+        self.assertNotIn('"map"\n          "timeline"\n          "details"\n          "assistant";', responsive_main_css)
+        self.assertNotIn('"timeline"\n          "map"\n          "details"\n          "assistant";', responsive_main_css)
+        self.assertIn(".details-panel,\n      .map-panel {\n        display: block;", html)
+        self.assertIn(".map-panel {\n        min-height: 0;", html)
+        self.assertIn(
+            ".map-panel #runtimeMap,\n      .map-panel #runtimeMapLibre {\n"
+            "        height: auto;\n        min-height: 260px;\n"
+            "        aspect-ratio: 16 / 9;",
+            html,
+        )
+        self.assertNotIn("height: clamp(260px, 60vh, 520px);", html)
+        self.assertIn("display: block;\n        height: auto;", html)
+        self.assertIn(".details-panel .panel-head,\n      .map-panel .panel-head", html)
+        self.assertIn(".panel-head > .pill {\n      flex: 0 1 auto;\n      min-width: 0;", html)
+        self.assertIn(".panel-title {\n      display: grid;\n      gap: 1px;\n      flex: 1 1 auto;\n      min-width: 0;", html)
+        self.assertIn("align-items: flex-start;\n        flex-wrap: wrap;\n        gap: 8px;", html)
+        self.assertIn("grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));", html)
+        self.assertIn("#runtimeProfile,\n      #selectedMapTarget", html)
+        self.assertIn(".map-panel .panel-body {\n        display: block;\n        overflow: visible;", html)
+        self.assertEqual(html.count('id="safetyLevel"'), 1)
+        self.assertIn("function applyLayerPreset", html)
+        self.assertIn("function syncLayerPresetButtons", html)
+        self.assertIn("availablePresetLayerSet", html)
         self.assertIn("grid-template-columns: repeat(3, minmax(0, 1fr))", html)
         self.assertIn(".map-pan-controls", html)
         self.assertIn("display: inline-flex;", html)
@@ -210,7 +433,10 @@ class DebugPageTests(unittest.TestCase):
         self.assertIn(".pan-right { order: 4; }", html)
         self.assertIn("grid-template-rows: auto minmax(0, 1fr) auto auto", html)
         self.assertIn(".tab-panel-head .hint", html)
-        self.assertIn("white-space: nowrap;", html)
+        tab_hint_css = html.split(".tab-panel-head .hint", 1)[1].split("}", 1)[0]
+        self.assertIn("white-space: normal;", tab_hint_css)
+        self.assertIn("text-overflow: clip;", tab_hint_css)
+        self.assertIn("overflow-wrap: anywhere;", tab_hint_css)
         self.assertIn(".map-toolbar", html)
         self.assertIn("display: flex;", html)
         self.assertIn(".control-group-header", html)
@@ -248,11 +474,29 @@ class DebugPageTests(unittest.TestCase):
         self.assertIn("function chooseRasterZoom", html)
         self.assertIn("function rasterTileCoverage", html)
         self.assertIn('data-layer="terrain" checked> Terrain', html)
+        self.assertIn('data-layer="cwa-qpf"', html)
+        self.assertIn('data-layer="cwa-weather"', html)
+        self.assertIn(".environment-extent", html)
+        self.assertIn("function renderEnvironmentExtent", html)
+        self.assertIn("function environmentEvidenceSummary", html)
+        self.assertIn("SMAP L4 route bbox mean", html)
+        self.assertIn("candidate-only context; not runtime safety truth", html)
+        self.assertIn("renderEnvironmentExtent(cwaQpfGroup", html)
         self.assertIn(".terrain-raster-overlay", html)
+        self.assertIn("const RASTER_BASEMAP_LAYER_IDS", html)
+        self.assertIn("function layerInputChecked(layerId)", html)
+        self.assertIn("function syncRasterBasemapLayers", html)
+        self.assertIn("syncRasterBasemapLayers();", html)
+        self.assertIn("if (!layerInputChecked(kind)) return;", html)
+        self.assertIn("RASTER_BASEMAP_LAYER_IDS.has(input.dataset.layer)", html)
+        self.assertIn("function visibleBoundsForProjection", html)
+        self.assertIn("function mapViewportBox", html)
+        self.assertIn("const coverageBounds = visibleBoundsForProjection(projection) || bounds", html)
+        self.assertIn("function attachTileFallback", html)
         self.assertIn("function terrainRasterOverlays", html)
         self.assertIn("function renderTerrainBitmapOverlays", html)
         self.assertIn("pretrip_terrain_visualization_bitmap_overlay", html)
-        self.assertIn("const tiles = isOsm ? tileCoverage(bounds) : rasterTileCoverage(projection, bounds, null, kind)", html)
+        self.assertIn("const tiles = isOsm ? tileCoverage(coverageBounds) : rasterTileCoverage(projection, coverageBounds, null, kind)", html)
         self.assertIn("if (isOsm && !isLocalOsmTileMode())", html)
         self.assertIn("const pad = MAP_VISUAL_PADDING;", html)
         self.assertNotIn("const pad = MAP_VISUAL_PADDING / debugPageState.zoom", html)
@@ -268,6 +512,9 @@ class DebugPageTests(unittest.TestCase):
             html.index('data-layer-group": "terrain"'),
             html.index('data-layer-group": "overpass"'),
         )
+        self.assertIn('"data-risk-layer": "baseline"', html)
+        self.assertIn('"data-risk-layer": "calibrated"', html)
+        self.assertIn('"data-risk-layer": "delta"', html)
 
     def test_static_debug_page_makes_timeline_body_touchpad_scrollable(self):
         html = PAGE_PATH.read_text(encoding="utf-8")
@@ -300,6 +547,13 @@ class DebugPageTests(unittest.TestCase):
         self.assertIn(">Why L2?</button>", html)
         self.assertIn(">Sources?</button>", html)
         self.assertIn(">Missing?</button>", html)
+        assistant_panel_css = html.split(".assistant-drawer .assistant-panel", 1)[1].split(".assistant-body", 1)[0]
+        self.assertIn("height: 100%;", assistant_panel_css)
+        self.assertIn("min-height: 0;", assistant_panel_css)
+        self.assertIn("overflow: hidden;", assistant_panel_css)
+        assistant_body_css = html.split(".assistant-body", 1)[1].split(".assistant-grid", 1)[0]
+        self.assertIn("max-height: none;", assistant_body_css)
+        self.assertIn("overflow-y: auto;", assistant_body_css)
         self.assertIn("function assistantQuestionLabel", html)
         self.assertIn('title="${escapeHtml(question)}"', html)
 
@@ -310,9 +564,19 @@ class DebugPageTests(unittest.TestCase):
         self.assertIn("timelineSnapshotForEvent", html)
         self.assertIn("renderSafetySnapshot", html)
         self.assertIn("safetyLevelForEvent", html)
+        self.assertIn("function readableStateToken", html)
+        self.assertIn('raw.replace(/^(L[0-4])_/, "$1 · ").replace(/_/g, " ")', html)
+        self.assertIn('setReadableStateToken("safetyLevel", snapshot.safetyLevel, "unknown")', html)
+        self.assertIn('setReadableStateToken("latestTransition", snapshot.latestTransition, "none")', html)
+        self.assertIn("node.title = raw;", html)
+        metric_strong_css = html.split(".metric strong", 1)[1].split(".levels", 1)[0]
+        self.assertIn("line-height: 1.22;", metric_strong_css)
+        self.assertIn("overflow-wrap: break-word;", metric_strong_css)
+        self.assertIn("word-break: normal;", metric_strong_css)
         self.assertIn("debugPageState.chronologicalEvents", html)
+        self.assertIn("debugPageState.timelineGroups", html)
         self.assertIn("顯示 timeline #", html)
-        self.assertIn("selectTimelineNode(event, index)", html)
+        self.assertIn("selectTimelineNode(event, index, {node})", html)
 
     def test_static_debug_page_scopes_runtime_detail_tabs_to_selected_timeline_node(self):
         html = PAGE_PATH.read_text(encoding="utf-8")
@@ -350,13 +614,16 @@ class DebugPageTests(unittest.TestCase):
         self.assertIn('id="hardwareProviderList"', html)
         self.assertIn('id="hardwareBoundaryList"', html)
         self.assertIn("hardwareInterfaceItem", html)
+        self.assertIn("hardwareDetailGrid", html)
+        self.assertIn("hardwareLineChips", html)
+        self.assertIn("hardware-line-chip-row", html)
         self.assertIn("Object.entries(interfaceItem.details || {}).slice(0, 5)", html)
-        self.assertIn("device=${text(device.id || device.label || \"usb\")}", html)
-        self.assertIn("rw_lines=${writable.length}", html)
-        self.assertIn("advanced=${advanced.map", html)
-        self.assertIn("gpioset_enabled=${boundary.gpioset_command_enabled", html)
-        self.assertIn("wiring_confirmed=${boundary.wiring_manifest_confirmed", html)
-        self.assertIn("drive_gate=wiring_manifest_required", html)
+        self.assertIn('["device", text(device.id || device.label || "usb")]', html)
+        self.assertIn('["rw lines", writable.length]', html)
+        self.assertIn('["advanced", advanced.map', html)
+        self.assertIn('["gpioset", boundary.gpioset_command_enabled ? "enabled" : "disabled"]', html)
+        self.assertIn('["wiring", boundary.wiring_manifest_confirmed ? "confirmed" : "not confirmed"]', html)
+        self.assertIn('["drive gate", "wiring manifest required"]', html)
         self.assertIn("GPIO 腳位狀態", html)
         self.assertIn("GPIO/I2C/I2S/TTS/Bluetooth/UART/power/GNSS/IMU/USB/SSD inventory", html)
         self.assertIn("debug 頁不應該直接拉 GPIO high/low 或控制硬體", html)
@@ -368,13 +635,25 @@ class DebugPageTests(unittest.TestCase):
 
         self.assertIn("timeline-meta", html)
         self.assertIn("grid-template-columns: minmax(0, 1fr) auto;", html)
+        self.assertIn(".timeline-node > .hint,\n    .timeline-node > .summary", html)
+        self.assertIn("-webkit-line-clamp: 2;", html)
+        self.assertIn(".timeline-node > .summary.mono", html)
+        self.assertIn("text-overflow: ellipsis;", html)
+        self.assertIn(".timeline-node.timeline-child > .hint", html)
+        self.assertIn("-webkit-line-clamp: 1;", html)
+        self.assertIn(".timeline-node.is-selected > .summary:not(.mono)", html)
+        self.assertIn("-webkit-line-clamp: 3;", html)
         self.assertIn(".gis-perception-cp", html)
         self.assertIn("specificMapTargets", html)
         self.assertIn("if (!isPointFocusEvent(event)) clampMapPan();", html)
-        self.assertIn("FOCUS_POINT_VIEWPORT_M = 1000", html)
+        self.assertIn("function zoomMap(direction)", html)
+        zoom_body = html.split("function zoomMap(direction)", 1)[1].split("function resetMapView", 1)[0]
+        self.assertNotIn("centerX - MAP_WIDTH / 2", zoom_body)
+        self.assertNotIn("centerY - MAP_HEIGHT / 2", zoom_body)
+        self.assertIn("FOCUS_POINT_VIEWPORT_M = 50", html)
         self.assertIn("const widthZoom = widthMeters / FOCUS_POINT_VIEWPORT_M;", html)
         self.assertIn("const heightZoom = heightMeters / FOCUS_POINT_VIEWPORT_M;", html)
-        self.assertIn("POINT_LABEL_VIEWPORT_M = 30", html)
+        self.assertIn("POINT_LABEL_VIEWPORT_M = 50", html)
         self.assertIn("POINT_LABEL_FONT_PX = 4", html)
         self.assertIn("POINT_LABEL_STROKE_PX = 0.6", html)
         self.assertIn("POINT_LABEL_OFFSET_PX = 3", html)
@@ -384,10 +663,12 @@ class DebugPageTests(unittest.TestCase):
         self.assertIn("niceScaleMeters", html)
         self.assertIn("formatScaleMeters", html)
         self.assertIn("function readablePointLabel", html)
+        self.assertIn('if (text.includes("/"))', html)
         self.assertIn("function compactPointLabel", html)
         self.assertIn("function pointLabelUnitsPerScreenPixel", html)
         self.assertIn(".map-label-overlay", html)
         self.assertIn("function appendMapOverlayLabel", html)
+        self.assertIn('node.appendChild(document.createTextNode("\\n"));', html)
         self.assertIn("function placeMapOverlayNode", html)
         self.assertIn("overlay?.replaceChildren();", html)
         self.assertIn('label.classList.add("is-hidden");', html)
@@ -406,15 +687,130 @@ class DebugPageTests(unittest.TestCase):
         self.assertIn("anchorY - POINT_LABEL_OFFSET_PX * unitsPerPx", html)
         self.assertIn("currentViewportRangeM() <= POINT_LABEL_VIEWPORT_M", html)
         self.assertIn("layerEnabled && (focused || showByZoom)", html)
-        self.assertIn('node.addEventListener("click", () => {\n          selectTimelineNode(event, index);\n          focusMapForEvent(event, {label: false});', html)
-        self.assertIn('node.addEventListener("dblclick", (mouseEvent) => {\n          mouseEvent.preventDefault();\n          selectTimelineNode(event, index);\n          focusMapForEvent(event, {label: true});', html)
-        self.assertIn("focusMapForEvent(event, {label: false});\n            return;", html)
+        self.assertIn("function zoomMapOutFromBox", html)
+        zoom_out_body = html.split("function zoomMapOutFromBox", 1)[1].split("function isZoomOutDrag", 1)[0]
+        self.assertNotIn("box.x + box.width / 2 - MAP_WIDTH / 2", zoom_out_body)
+        self.assertNotIn("box.y + box.height / 2 - MAP_HEIGHT / 2", zoom_out_body)
+        self.assertIn('node.addEventListener("click", () => {\n          selectTimelineNode(event, index, {node});\n          focusMapForEvent(event, {label: false});', html)
+        self.assertIn('node.addEventListener("dblclick", (mouseEvent) => {\n          mouseEvent.preventDefault();\n          selectTimelineNode(event, index, {node});\n          focusMapForEvent(event, {label: true});', html)
+        self.assertIn("selectTimelineNode(event, index, {node});\n            focusMapForEvent(event, {label: false});\n            return;", html)
+        self.assertIn('title="${escapeHtml(title)}"', html)
+        self.assertIn('<p class="hint" title="${escapeHtml(hintForEvent(event))}">', html)
+        self.assertIn('<p class="summary" title="${escapeHtml(summary)}">', html)
+        self.assertIn('<p class="summary mono" title="${escapeHtml(event.timestamp)} ${escapeHtml(event.subject_ref || "")}">', html)
         self.assertIn("level-badge", html)
         self.assertIn("levelBadgeForEvent", html)
         self.assertIn("levelBadgeClassForEvent", html)
         self.assertIn("levelToken", html)
         self.assertIn("L0->L2", html)
         self.assertIn('aria-label="L state at this timeline node"', html)
+
+    def test_static_debug_page_groups_dense_timeline_events_but_keeps_child_targets(self):
+        html = PAGE_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("function timelineGroupKey", html)
+        self.assertIn("DENSE_TIMELINE_GROUP_KINDS", html)
+        self.assertIn('"checkpoint_detected", "route_progress_evaluated", "gis_perception_checkpoint_projected"', html)
+        self.assertIn('route_progress_evaluated: ["route-progress", "route", "segment"]', html)
+        self.assertIn('subject.includes("segment") && !payload.segment_id && !specificMapTargets.length', html)
+        self.assertIn("if (DENSE_TIMELINE_GROUP_KINDS.has(kind)) return kind;", html)
+        self.assertIn("function buildTimelineGroups", html)
+        self.assertIn("function renderTimelineGroup", html)
+        self.assertIn("function renderTimelineEventNode", html)
+        self.assertIn("timeline-group", html)
+        self.assertIn("timeline-group-summary", html)
+        self.assertIn("timeline-group-summary timeline-group-node", html)
+        self.assertIn(".timeline-group-summary .item-line {\n      grid-template-columns: minmax(0, 1fr);", html)
+        self.assertIn(".timeline-group-summary h3 {\n      white-space: nowrap;", html)
+        self.assertIn(".timeline-group-summary .timeline-meta {\n      display: flex;", html)
+        self.assertIn(".timeline-group-summary > .hint,\n    .timeline-group-summary > .summary.mono {\n      display: none;", html)
+        self.assertIn(".timeline-group-summary > .summary:not(.mono) {\n      -webkit-line-clamp: 1;", html)
+        mobile_css = html.split("@media (max-width: 1120px)", 1)[1].split("</style>", 1)[0]
+        self.assertIn(".timeline-node > .hint,\n      .timeline-node > .summary,", mobile_css)
+        self.assertIn("white-space: normal;\n        overflow: visible;\n        text-overflow: clip;", mobile_css)
+        self.assertIn("-webkit-line-clamp: unset;\n        overflow-wrap: anywhere;", mobile_css)
+        self.assertIn(".timeline-group-summary h3 {\n        white-space: normal;", mobile_css)
+        self.assertIn(".assistant-list,\n      .assistant-list li {\n        min-width: 0;", mobile_css)
+        self.assertIn(".assistant-list li {\n        word-break: break-word;", mobile_css)
+        self.assertIn(".assistant-body {\n        overflow-x: hidden;", mobile_css)
+        self.assertIn(".pill,\n      .assistant-body .pill {\n        white-space: normal;", mobile_css)
+        self.assertIn("timeline-group-count", html)
+        self.assertIn("timeline-group-details", html)
+        self.assertIn(".timeline-group-details summary {\n      cursor: pointer;\n      display: inline-flex;\n      align-items: center;\n      min-height: 24px;", html)
+        self.assertIn(".timeline-group-details:not([open]) > .timeline-group-children {\n      display: none;", html)
+        self.assertIn("timeline-child", html)
+        self.assertIn('data-event-id="${escapeHtml(event.event_id || "")}"', html)
+        self.assertIn('document.getElementById("eventCount").textContent = `${events.length} events / ${timelineGroups.length} groups`;', html)
+        self.assertIn("debugPageState.timelineGroups = timelineGroups", html)
+        self.assertIn("if (group.count > 1) return [group];", html)
+
+    def test_static_debug_page_renders_physio_timeline_projection_contract(self):
+        html = PAGE_PATH.read_text(encoding="utf-8")
+
+        self.assertIn(
+            "<title>Scout Phase 3.5 Runtime Debug | 2026-06-23 12:13:54 CST</title>",
+            html,
+        )
+        self.assertIn(
+            '<h1>Runtime Debug <span class="title-timestamp">2026-06-23 12:13:54 CST</span></h1>',
+            html,
+        )
+        self.assertIn(
+            'physiologic_gate_window: ["skill", "route-progress", "segment"]',
+            html,
+        )
+        self.assertIn(
+            'physiologic_gate_safety_event: ["skill", "safety", "route-progress", "segment"]',
+            html,
+        )
+        self.assertIn(
+            'runtime_safety_reducer_dry_run: ["skill", "safety", "route-progress", "segment"]',
+            html,
+        )
+        self.assertIn(
+            'runtime_safety_phase1_adapter_result: ["skill", "safety"]',
+            html,
+        )
+        self.assertIn(
+            'runtime_safety_state_store_snapshot: ["skill", "safety", "route-progress", "segment"]',
+            html,
+        )
+        self.assertIn(
+            'physiologic_gate_window: "生理壓力 gate 的 15 分鐘窗口 projection；不是醫療診斷或 safety truth。"',
+            html,
+        )
+        self.assertIn(
+            'runtime_safety_reducer_dry_run: "多 gate safety reducer dry-run；顯示候選 L_n，不直接改 Phase 1。"',
+            html,
+        )
+        self.assertIn(
+            'runtime_safety_phase1_adapter_result: "Phase 1 adapter candidate；需 feature flag 與 review，這裡不呼叫 safety mutation endpoint。"',
+            html,
+        )
+        self.assertIn(
+            'runtime_safety_state_store_snapshot: "State-store replay snapshot；admin/debug 共用只讀 reducer candidate，不是 Phase 1 safety truth。"',
+            html,
+        )
+        self.assertIn(
+            'const projectedMapRefs = Array.isArray(event?.map_refs) ? event.map_refs.filter(Boolean) : [];',
+            html,
+        )
+        self.assertIn('projectedMapRefs.forEach(ref => refs.add(ref));', html)
+        self.assertIn('"physiologic_gate_window"', html)
+        self.assertIn('(event.kind || "").startsWith("physiologic_")', html)
+        self.assertIn('(event.kind || "").startsWith("runtime_safety_")', html)
+        self.assertIn('id="physiologicGateCount"', html)
+        self.assertIn('id="runtimeSafetyReducerCount"', html)
+        self.assertIn('id="runtimeSafetyStateStoreCount"', html)
+        self.assertIn('document.getElementById("physiologicGateCount").textContent = String(physiologicEvents.length);', html)
+        self.assertIn('document.getElementById("runtimeSafetyReducerCount").textContent = String(runtimeSafetyReducerEvents.length);', html)
+        self.assertIn('document.getElementById("runtimeSafetyStateStoreCount").textContent = String(runtimeSafetyStateStoreEvents.length);', html)
+        self.assertIn("Show ${escapeHtml(group.count)} events", html)
+        self.assertIn("function selectorValue", html)
+        self.assertIn("function eventByTimelineNode", html)
+        self.assertIn("function eventIndexByTimelineNode", html)
+        self.assertIn("node?.dataset?.eventId", html)
+        self.assertIn("options.node", html)
 
     def test_static_debug_page_has_visible_focus_and_roving_keyboard_navigation(self):
         html = PAGE_PATH.read_text(encoding="utf-8")
@@ -455,15 +851,22 @@ class DebugPageTests(unittest.TestCase):
         shared_script = ASSISTANT_UI_SCRIPT.read_text(encoding="utf-8")
         fetch_targets = set(re.findall(r'fetchJson\("([^"]+)"\)', html))
 
+        self.assertIn("/admin/pretrip/projects/{projectId}/debug-projection", html)
         self.assertIn(
-            "/admin/pretrip/projects/chilai_nanhua_day1/debug-projection",
+            "/admin/pretrip/projects/{projectId}/debug-projection-events",
             html,
         )
         self.assertIn(
-            "/admin/pretrip/projects/chilai_nanhua_day1/debug-projection-events",
+            "`/admin/pretrip/projects/${encodeURIComponent(PRETRIP_PROJECT_ID)}/debug-projection`",
             html,
         )
-        self.assertIn('const PRETRIP_PROJECT_ID = "chilai_nanhua_day1"', html)
+        self.assertIn(
+            "`/admin/pretrip/projects/${encodeURIComponent(PRETRIP_PROJECT_ID)}/debug-projection-events`",
+            html,
+        )
+        self.assertIn('const DEFAULT_PRETRIP_PROJECT_ID = "chilai_nanhua_day1"', html)
+        self.assertIn('new URLSearchParams(window.location.search).get("projectId")', html)
+        self.assertIn("const PRETRIP_PROJECT_ID = /^[A-Za-z0-9_.-]+$/.test(PRETRIP_PROJECT_ID_PARAM)", html)
         self.assertIn("PRETRIP_DEBUG_PROJECTION_PATH", html)
         self.assertIn("PRETRIP_DEBUG_PROJECTION_EVENTS_PATH", html)
         self.assertIn("loadProjectedDebugEventPayload", html)
@@ -510,6 +913,25 @@ class DebugPageTests(unittest.TestCase):
         for layer_input in layer_inputs:
             self.assertIn('type="checkbox"', layer_input)
             self.assertIn("data-layer=", layer_input)
+
+    def test_static_debug_page_separates_transport_from_event_provenance(self):
+        html = PAGE_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("function debugEventProvenance", html)
+        provenance_function = html.split("function debugEventProvenance", 1)[1].split(
+            "function debugProvenanceSummary", 1
+        )[0]
+        self.assertIn("event.event_provenance", provenance_function)
+        self.assertIn("Unknown", provenance_function)
+        self.assertNotIn("haystack", provenance_function)
+        self.assertNotIn("event.summary", provenance_function)
+        self.assertNotIn("event.payload", provenance_function)
+        self.assertIn("function debugProvenanceSummary", html)
+        self.assertIn("Transport connected", html)
+        self.assertIn("Fixture replay", html)
+        self.assertIn("Smoke test", html)
+        self.assertIn('aria-label="Event provenance"', html)
+        self.assertNotIn('setText("loadStatus", "Live debug stream connected.")', html)
 
 
 if __name__ == "__main__":

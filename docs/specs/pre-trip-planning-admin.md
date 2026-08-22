@@ -31,8 +31,8 @@ project-based evidence synthesis layer, not as a single scraper.
 Success means the first slice can produce a versioned planning package that:
 
 - compiles into Phase 1 `MissionGraph` data;
-- references route corridor, POI, hazard, DEM/DTM/contour, and imagery
-  artifacts with provenance;
+- references route corridor, POI, hazard, DEM/DTM/contour, imagery, weather,
+  and environmental artifacts with provenance;
 - seeds Phase 2 `Artifact`, `ObservedFact`, `DerivedMeasurement`,
   `HumanReview`, `ModelInterpretation`, and skill-related nodes without
   violating fact-only writeback;
@@ -540,6 +540,16 @@ Emit or reference:
   - provider/license metadata;
   - alignment notes;
   - reviewed interpretation refs, not automatic facts.
+- weather and environmental artifacts:
+  - CWA QPF（中央氣象署定量降水預報） grid/timeline/corridor summary refs;
+  - CWA Weather（中央氣象署天氣證據） warning, observation, forecast,
+    astronomy, tide, earthquake, and station-background evidence refs;
+  - GEE/SMAP soil-moisture（土壤含水量） grid, timeseries, and corridor
+    summary refs;
+  - GEE/GPM antecedent-rain（前期累積降雨） grid, timeseries, and corridor
+    summary refs;
+  - provider, request timestamp, bbox/corridor, credential boundary,
+    confidence, stale-risk, and missing-source metadata.
 
 ### Phase 2 Brain Outputs
 
@@ -553,6 +563,8 @@ Emit or seed:
   - DEM/DTM source;
   - contour GeoJSON;
   - satellite/imagery reference manifest;
+  - CWA weather/QPF evidence package;
+  - GEE soil-moisture and antecedent-rain summaries;
   - pre-trip package JSON;
   - validation report JSON;
   - compiled Phase 1 MissionGraph JSON;
@@ -627,6 +639,87 @@ Initial useful OSM tags:
 - `amenity=shelter|drinking_water|parking|hospital`;
 - `emergency=access_point|phone`;
 - `surface`, `sac_scale`, `trail_visibility`, `incline`.
+
+### Weather And Environmental Evidence
+
+Weather and environmental sensing are **pretrip candidate/evidence**（行前候選 /
+證據） layers. They may improve go/no-go review, CP proposals, stale-risk
+triage, and timeline context, but they must not call `/safety/*`, mutate Phase
+1 runtime state, or become runtime safety truth.
+
+The layer contract uses these ids:
+
+- `cwa-qpf`: CWA QPF（中央氣象署定量降水預報） corridor/grid evidence. It
+  should summarize route-bbox or route-corridor rainfall forecast bands,
+  update timestamp, valid time window, and uncertainty/stale-risk metadata.
+- `cwa-weather`: CWA Weather（中央氣象署天氣證據） for official warnings,
+  observations, township forecasts, sunrise/sunset, moonrise/moonset, tide,
+  earthquake, health-weather, and station background records when explicitly
+  requested.
+- `soil-moisture`: GEE/SMAP Soil Moisture（Google Earth Engine / NASA SMAP
+  土壤含水量） for basin or corridor-scale saturation context. It is not a
+  single-slope warning because SMAP resolution is coarse.
+- `antecedent-rain`: GEE/GPM Antecedent Rain（Google Earth Engine / GPM IMERG
+  前期累積降雨） for recent rainfall accumulation context before a trip.
+- `weather-api`: external weather/API status overlay（外部天氣 API 狀態圖層）.
+  It indicates source availability, fetch status, stale data, or credential
+  gaps; it is not a separate authoritative hazard layer.
+
+Expected CWA output refs:
+
+```text
+outputs/environment/cwa/cwa_weather_evidence.json
+outputs/environment/cwa/warnings.geojson
+outputs/environment/cwa/observations.geojson
+outputs/environment/cwa/qpf_grid.geojson
+outputs/environment/cwa/qpf_route_timeline.json
+outputs/environment/cwa/qpf_corridor_summary.json
+```
+
+Expected GEE output refs:
+
+```text
+outputs/environment/gee/soil_moisture_grid.geojson
+outputs/environment/gee/smap_l4_timeseries.json
+outputs/environment/gee/smap_l4_corridor_summary.json
+outputs/environment/gee/antecedent_rain_grid.geojson
+outputs/environment/gee/gpm_imerg_timeseries.json
+outputs/environment/gee/gpm_imerg_corridor_summary.json
+```
+
+Credential and fetch rules:
+
+- CWA uses server-side `SCOUT_CWA_API_KEY`; browser code must never receive or
+  persist the key.
+- The alpha CWA fetcher currently prepares `F-C0032-001` 36-hour forecast,
+  `W-C0033-001` warnings, and `O-A0002-001` rain observations. When direct
+  `F-C0041-*` QPF（定量降水預報） grid access is unavailable, `cwa-qpf` must be
+  labelled as `forecast-derived QPF candidate`（由官方預報衍生的 QPF 候選） and
+  must not pretend to be a true gridded QPF product.
+- GEE uses server-side Earth Engine authentication（Earth Engine 驗證） and the
+  configured Cloud project or service account; browser code must consume only
+  prepared artifacts.
+- If GEE credentials or the GEE fetcher are not ready, map preparation should
+  still write source-status GeoJSON（來源狀態 GeoJSON） markers for
+  `soil-moisture` and `antecedent-rain` so the UI can distinguish "source not
+  configured" from a broken layer. These markers carry no numeric SMAP/GPM
+  value and remain candidate-only metadata.
+- Live fetches require explicit operator intent, workspace provenance, request
+  timestamp, bbox/corridor, endpoint/dataset id, response status, raw or
+  reduced payload hash, and normalized artifact path.
+- Missing credentials, disabled fetch, source outage, or out-of-coverage data
+  must produce `missing_source` / `unavailable` metadata instead of fake
+  weather or environmental evidence.
+- These layers may create candidate warnings, candidate CPs, or review items
+  only through the normal pretrip review path.
+
+Layer ordering must remain readable across `/admin/pretrip`, `/admin/debug`,
+and `/admin`: imagery/WMTS and base map tiles (`imagery`, `rudy`,
+`rudy-twmap`, `relief`, `geology`, `topo-5k`, `forest`, `osm`) render at the
+bottom; terrain/risk rasters and ribbons render above base maps; weather,
+rainfall, soil moisture, points, lines, and vector evidence render above
+terrain/risk; labels render above markers. `completed-track` is after-action
+only and should not appear as a pretrip planning source.
 
 ### GIS Perception Layer
 
@@ -2076,6 +2169,12 @@ Acceptance checks:
   gust 28.5 m/s, and dark-arrival warning margin 60 minutes. These fields may
   produce candidate warnings or blockers after review, but their presence does
   not mean authoritative weather was fetched, computed, or reviewed.
+- CWA and GEE environmental layers are explicit pretrip source layers. CWA QPF
+  and Weather evidence can contribute official warning, observation, forecast,
+  daylight, tide, earthquake, and health-weather review items. GEE SMAP/GPM
+  evidence can contribute soil-moisture and antecedent-rain context. All remain
+  candidate-only until reviewed, and missing credentials or unavailable source
+  data must be visible as source-status metadata.
 - Wrong-scope route stats: ignore any 33.43km stats that do not belong to the
   Chilai-Nanhua / Nenggao Day 1 calibration route.
 
