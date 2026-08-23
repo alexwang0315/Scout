@@ -23,6 +23,9 @@ ai-hat-eval = [
 pydantic-ai-smoke = [
     "pydantic-ai-slim[duckduckgo,mcp,web-fetch]==2.33.0",
 ]
+nextgen-intelligence = [
+    "praisonaiagents==1.7.0",
+]
 
 [project.scripts]
 scout-ai-os-pydantic-smoke = "scout.cli.pydantic_smoke:main"
@@ -31,6 +34,7 @@ scout-ai-os-evals = "scout.evals.regression:main"
 scout-ai-os-hardware-evidence = "scout.cli.hardware_evidence:main"
 scout-ai-os-hardware-smoke = "scout.cli.hardware_smoke:main"
 scout-ai-os-mac-chat = "scout.cli.mac_chat:main"
+scout-ai-os-intelligence-mcp = "scout.nextgen.intelligence_mcp_server:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

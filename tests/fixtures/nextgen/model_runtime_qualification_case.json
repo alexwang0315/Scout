@@ -1,0 +1,38 @@
+{
+  "case_id": "terrain-http-qualification-v0",
+  "workspace_id": "workspace-http-qualification",
+  "workspace_revision": "workspace-revision-1",
+  "mission_id": "mission-http-qualification",
+  "mission_version": "mission-version-1",
+  "route_id": "route-http-qualification",
+  "route_version": "route-version-1",
+  "question": "Find ridge, saddle, and steep terrain candidate evidence around the reviewed route.",
+  "geographic_scope": {
+    "route_id": "route-http-qualification",
+    "corridor_meters": 250,
+    "crs": "EPSG:4326"
+  },
+  "evidence_refs": [
+    "route:http-qualification",
+    "dem:http-qualification",
+    "qgis:http-qualification"
+  ],
+  "allowed_capabilities": [
+    "route.read",
+    "dem.read",
+    "qgis.processing.slope",
+    "workspace.evidence.read"
+  ],
+  "expected_min_findings": 3,
+  "expected_tool_calls": [
+    "route.read",
+    "dem.read",
+    "qgis.processing.slope"
+  ],
+  "max_runtime_seconds": 30,
+  "max_model_requests": 10,
+  "timeout_seconds": 10,
+  "privacy_sensitive": true,
+  "candidate_only": true,
+  "runtime_safety_truth": false
+}

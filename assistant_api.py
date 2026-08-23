@@ -23,6 +23,7 @@ from assistant_models import (
 )
 from assistant_provider import FailedAssistantProvider, MockAssistantProvider, ScoutAssistantProvider
 from runtime_audit_ledger import FileRuntimeAuditLedger
+from scout.nextgen.runtime_shadow import ModelRuntimeShadowTrace
 from assistant_skill_router import (
     PRETRIP_FULL_WORKFLOW_SOURCE_ID,
     PRETRIP_TOOL_PLANNER_SKILL_ID,
@@ -742,6 +743,9 @@ def _with_observability(
         if isinstance(raw_mser_verification, dict)
         else {}
     )
+    runtime_shadow = _validated_runtime_shadow_trace(
+        _provider_runtime_value(provider, "last_runtime_shadow_trace")
+    )
     mser_state = (
         mser_trace.get("final")
         if isinstance(mser_trace.get("final"), dict)
@@ -848,6 +852,7 @@ def _with_observability(
             if isinstance(ledger.get("requests"), list)
             else []
         ),
+        runtime_shadow=runtime_shadow,
     )
     public_sources = [
         source.model_copy(
@@ -872,6 +877,15 @@ def _provider_metadata(provider: ScoutAssistantProvider, name: str) -> str | Non
     return str(value) if value is not None else None
 
 
+def _validated_runtime_shadow_trace(value: object | None) -> ModelRuntimeShadowTrace | None:
+    if value is None:
+        return None
+    try:
+        return ModelRuntimeShadowTrace.model_validate(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _reset_provider_request_observability(provider: ScoutAssistantProvider) -> None:
     defaults: dict[str, object | None] = {
         "last_profile": None,
@@ -885,6 +899,7 @@ def _reset_provider_request_observability(provider: ScoutAssistantProvider) -> N
         "last_grounding_verification": {},
         "last_context_handles": [],
         "last_context_reads": [],
+        "last_runtime_shadow_trace": {},
     }
     runner = getattr(provider, "runner", None)
     candidates = (

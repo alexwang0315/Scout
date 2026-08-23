@@ -1,0 +1,19 @@
+{
+  "runtime_id": "experimental.max.local",
+  "provider": "max",
+  "model_id": "configured-by-operator",
+  "base_url": "http://127.0.0.1:8000/v1",
+  "transport_scope": "loopback",
+  "tier": "max_local_or_server",
+  "locality": "mac_server",
+  "accelerator": "gpu",
+  "context_limit_tokens": 32768,
+  "max_concurrency": 1,
+  "offline_capable": false,
+  "privacy_preserving": true,
+  "api_key_env": null,
+  "accepted_observed_model_ids": [],
+  "experimental": true,
+  "candidate_only": true,
+  "runtime_safety_truth": false
+}
