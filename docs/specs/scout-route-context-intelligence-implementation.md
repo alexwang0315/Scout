@@ -66,7 +66,7 @@ Route Context Intelligence 使用三層來源：
 | --- | --- |
 | `.agents/skills/scout-route-context-briefing/SKILL.md` | Codex/operator orchestration skill，規定 live network fetch、P0/P1/P2、candidate-only 與 briefing shape |
 | `.agents/skills/scout-route-context-briefing/references/source-catalog.md` | P0/P1/P2 source catalog 與 Sec. 6 context layers |
-| `skills/scout/route-context-intelligence.yaml` | Scout AI / Pydantic AI read-only skill contract；負責 route-context 問答、P0/P1/P2 source gap、3 分鐘觀察點與 briefing-ready context 的 skill routing/output boundary |
+| `skills/scout/route-context-intelligence.yaml` | Scout AI / Pydantic AI skill contract；負責 route-context 問答、P0/P1/P2 source gap、WebSearch/WebFetch research handoff、3 分鐘觀察點與 briefing-ready context 的 routing/output boundary |
 | `pretrip_p0_p1_source_collection.py` | bounded live web evidence collector；只有 operator 明確允許時才 network fetch |
 | `pretrip_route_context_collection.py` | route context compiler；不直接 fetch network，只讀 workspace cache 並輸出 canonical route-context artifacts，同時標示是否已有 live source refresh evidence |
 | `pretrip_route_briefing_compose.py` | 將 research payload compose 成 route briefing HTML 的工具層 |
@@ -127,7 +127,54 @@ outputs/briefings/
 
 ## 6. Live Network 與離線重產流程
 
-第一次需要補 P0/P1 web evidence 時，operator 明確允許 live network：
+### 6.1 Scout AI Native Research Contract
+
+有網路的 operator-triggered briefing 產生流程必須保留 Pydantic AI 的
+`WebSearch` 與 `WebFetch` capabilities。它們不得因 `workspace_tools_enabled=false`、
+briefing runner、final-synthesis prompt，或舊環境值
+`SCOUT_AI_OS_NATIVE_RESEARCH=0` 而被移除。
+
+執行順序固定為：
+
+1. 先讀 route identity、既有 cache 與 source gaps。
+2. 用 `WebSearch` 發現目前可用的 P0/P1 候選來源。
+3. 對每一個要採用的來源呼叫 `WebFetch`；search snippet 不能當成證據。
+4. 模型只回傳已 fetch 的 public HTTP(S) source URL 與 label。
+5. server-side `pretrip_p0_p1_source_collection` 重新 fetch、hash、normalize，寫入
+   bounded `web_case_evidence.json`。
+6. `pretrip_route_context_collection` 再從 workspace cache 編譯 route context 與 HTML。
+
+Live generation 只有在 content-free call trace 同時記錄至少一次 WebSearch 與一次
+WebFetch 時才算完成。trace 只保存 tool name、call/return count 與 Search/Fetch count，
+不保存網頁全文、prompt、credential。模型提出的來源必須是 public HTTP(S) URL；localhost、
+私有 IP、內嵌帳密與非 HTTP(S) scheme 一律拒絕。
+
+Research Agent 的 validation/tool retry capacity 為 10。單一 URL 不完整、被 URL policy
+拒絕或暫時無法讀取時，WebFetch 必須回傳 `ModelRetry`，讓模型從既有 Search 結果改選
+另一個 public URL；不得因 Pydantic AI 預設的一次 retry 提前結束整個 briefing run。
+
+`RegenerationEvidence.current_status.operability=unknown` 時，deterministic editorial gate
+必須保留「待查／尚未確認／重新查核」語意，並拒絕「目前未開放、封閉、等待重開、
+已恢復」等模型自行升格的狀態敘述。只有 `operability=closed` 的 P0 evidence packet
+可以使用封閉／重開語意。
+
+模型不能自行把網頁文字寫入 canonical workspace。取消 native research 停用，不代表
+取消 URL validation、來源分級、hash/provenance、human review 或 candidate-only boundary。
+L5 generated code、secrets、硬體控制與 `/safety/*` 仍不取得 unrestricted network。
+
+AI HAT+2 本地模型不必原生實作 provider tool calling；在網路可用時由 Scout
+server-side tool orchestration 執行 WebSearch/WebFetch，再把 bounded evidence 交給本地模型。
+離線時則使用既有 cache 並明確標示未完成 live refresh。
+
+目前 `pretrip_route_context_scout_ai_cycle` 的 generation/review Agent 已能實際執行並記錄
+Search/Fetch，但 structured editorial-plan 路徑尚未把 tool return 正文交給
+`pretrip_p0_p1_source_collection` materialize 成新的 P0/P1 evidence。完成這個 handoff 前，
+research trace 只能證明工具執行，不能證明 `current_status` 已刷新；evidence packet 若仍為
+`unknown`，quality cycle 應維持 `NEEDS_WORK`，不得只因模型已上網就發布 canonical briefing。
+
+### 6.2 Operator Source Collection CLI
+
+第一次需要補 P0/P1 web evidence 時，也可以由 operator 明確執行 live network collector：
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 python -m pretrip_p0_p1_source_collection \
@@ -184,12 +231,12 @@ rejected candidate artifact，並重跑 deterministic compiler。
 
 Scout AI 對 route-context 問題的查詢順序：
 
-1. `route_context_pack.json`
-2. `route_context_points.json`
-3. `source_manifest.json`
-4. route summary / map / risk artifacts
-5. 只有 operator 明確允許時才使用 remote source connector
-6. 若資料不足，回覆 uncertainty 與 missing evidence
+1. route identity、`route_context_pack.json`、`route_context_points.json`
+2. `source_manifest.json` 的 freshness 與 source gaps
+3. route summary / map / risk artifacts
+4. 有網路時用 WebSearch 發現目前 P0/P1 來源，再用 WebFetch 讀取所選正文
+5. 由 server-side collector 驗證並 cache researched sources
+6. 若網路或來源失敗，使用 cache 回覆並明列 uncertainty 與 missing evidence
 
 `skills/scout/route-context-intelligence.yaml` 是 Scout AI / Pydantic AI 專用的
 read-only skill contract。它不取代 `scout.ai.route_context.assess.v0`，而是告訴
@@ -205,14 +252,17 @@ assistant / skill router 何時該使用 route-context tool、應讀哪些 works
   視為最低必要 cache；缺少時回報 source gap，而不是自由生成敘事。
 - 保留 `P0/P1/P2` source tier、source family、workspace path/URL、hash/provenance、
   review state 與 `candidate_only` boundary。
-- 若需要產生 briefing-ready HTML 或簡報內容，仍只能從 workspace cache 與
-  route-specific media refs 形成候選輸出；不得使用網站圖示、logo、SVG UI icon、
+- 若需要產生 briefing-ready HTML 或簡報內容，先將 WebSearch/WebFetch 結果經
+  server-side collector 轉成 workspace cache，再由 cache 與 route-specific media refs
+  形成候選輸出；不得使用網站圖示、logo、SVG UI icon、
   tracking pixel、社群 widget 或 generic placeholder 充當路線照片。
 - 清楚區分「值得觀察」與「現在可以停留」。前者是 Route Context Intelligence，
   後者仍必須交由 Contextual Permissioning 檢查時間、天候、日照、隊伍距離、
   疲勞、撤退窗口與風險預算。
-- 不寫 workspace、不觸發 live network、不呼叫 `/safety/*`、不控制硬體、不送出
-  outbound message，也不把模型文字升級成 runtime safety truth。
+- skill/model 不直接寫 workspace；native research 可以觸發 WebSearch/WebFetch，但只有
+  deterministic server-side collector 可以寫入 bounded candidate cache。不得呼叫
+  `/safety/*`、控制硬體、送出 outbound message，也不得把模型文字升級成 runtime
+  safety truth。
 
 目前 `scout.ai.route_context.assess.v0` 已可讀 canonical `route_context_pack_ref`，
 因此可回答：
@@ -282,6 +332,10 @@ live_source_refresh_evidence.status=<offline/status only; not live refreshed>
 Route Context Intelligence 應符合：
 
 - `pretrip_p0_p1_source_collection` 只有在 `--allow-network-fetch` 時才做 live network。
+- 外部 Scout AI 與 operator-triggered route-context briefing runner 必須掛載
+  WebSearch/WebFetch；舊 disable env 或 `workspace_tools_enabled=false` 不得移除它們。
+- 每一個被採用的搜尋結果必須先 WebFetch，並再由 server-side collector fetch/hash；
+  search snippet 不得直接進入 briefing evidence。
 - 有網路的行前更新流程必須留下 `network_calls_made=true` provenance。
 - `pretrip_route_context_collection` 可在離線模式重產 route-context artifacts，但 source
   manifest 不得使用 `live_fetch_performed` switch。

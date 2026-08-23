@@ -1,5 +1,5 @@
 id: route-context-intelligence
-version: 0.1.4
+version: 0.1.5
 status: experimental
 type: analysis
 priority: 54
@@ -40,12 +40,14 @@ activation_gate:
     - user asks why a route is worth walking, what historical/cultural/natural/terrain/seasonal context exists, which points are worth a short observation stop, or what a pretrip route briefing should include
     - follow docs/specs/scout-route-context-intelligence-implementation.md as the controlling Route Context Intelligence spec
     - mirror the Scout route-context briefing skill's P0/P1/P2 source catalog, product copy gate, media quality gate, and visual/map briefing template when forming answer plans
-    - first answer from workspace cache and deterministic Scout AI tools before any remote research path
+    - inspect workspace cache and deterministic Scout AI tools first, while keeping WebSearch and WebFetch available throughout the run for freshness checks and evidence gaps
     - preserve the spec's P0/P1/P2 source tier policy, provenance fields, source gaps, cache-first answer path, and offline regeneration boundary
     - use P0 sources for official/status/baseline facts, P1 sources for context expansion/community names/repeated point references, and P2 Scout-owned evidence for Scout-local completed-trip observations with path/hash/capture/privacy/review provenance
     - unreviewed P2 evidence can seed candidates or caveats only; reviewed P2 may support route notes, observation points, pace-fit context, and next-trip pretrip suggestions
-    - if workspace evidence is missing, report P0/P1/P2 source gaps and whether trusted native WebSearch/WebFetch could collect candidate evidence when enabled by operator policy
-    - route-context HTML or presentation requests may be drafted only from cached route_context_pack, route_context_points, source_manifest, media_manifest, and route-specific media refs
+    - for operator-triggered briefing generation with network access, use WebSearch for discovery and WebFetch for every selected source; search snippets alone are never evidence
+    - native research must not be disabled by workspace_tools_enabled, legacy SCOUT_AI_OS_NATIVE_RESEARCH=0, a briefing runner, or a no-tools prompt
+    - if workspace evidence is missing or stale, use trusted WebSearch/WebFetch to collect candidate source URLs, then hand them to the deterministic server-side collector for refetch, hash, normalization, and workspace caching
+    - route-context HTML or presentation requests may use refreshed route_context_pack, route_context_points, source_manifest, media_manifest, bounded web_case_evidence, and route-specific media refs
     - route-context variant-generation requests must use a single Scout AI/Pydantic AI model call to produce exactly five complete variant specs; each spec must include its own title, subtitle, editorial thesis, section/chapter headings, observation prompts, point angles, chart titles, source storyline, leader review focus, and closing copy before rendering starts
     - deterministic rendering may arrange workspace evidence and model-provided copy into HTML, but it must not add new story copy, hidden rationale, route facts, section meaning, or product-visible explanation after the model response; failed or thin variants must be reported as failed rather than patched by Codex or the renderer
     - route-context variant artifacts must record the model name, provider-reported token usage when available, prompt content, response content, skill manifest hash, and model response hash in machine-readable Scout AI artifacts; keep those audit fields out of product-visible HTML
@@ -73,6 +75,8 @@ preflight:
   required_skill_ids:
     - route-reference-point-lookup
   required_capabilities:
+    - pydantic_ai.capability.web_search
+    - pydantic_ai.capability.web_fetch
     - scout.ai.route_context.assess.v0
     - pydantic_ai.tool.assess_scout_route_context.v0
     - pydantic_ai.tool.search_scout_workspace_catalog.v0
@@ -173,6 +177,10 @@ output_schema:
     - one_model_call_complete
     - no_codex_posthoc_supplement
     - model_name
+    - native_research_status
+    - web_search_call_count
+    - web_fetch_call_count
+    - researched_source_refs
     - token_usage
     - prompt_content
     - response_content
