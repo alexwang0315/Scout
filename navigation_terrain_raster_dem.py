@@ -18,14 +18,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
-from admin_local_raster_tiles import render_raster_tile_png, tile_bounds_wgs84
+from admin_local_raster_tiles import tile_bounds_wgs84
 
 
 DEFAULT_TERRAIN_DEM_MANIFEST_REF = "outputs/navigation/terrain_rgb/manifest.json"
 DEFAULT_TERRAIN_DEM_ZOOM = 13
 DEFAULT_TERRAIN_DEM_TILE_SIZE = 256
 TERRAIN_DEM_SCHEMA_VERSION = "scout_navigation_terrain_dem.v1"
-TERRAIN_DEM_RESAMPLING = "nearest"
+TERRAIN_DEM_RESAMPLING = "bilinear_elevation"
+LEGACY_TERRAIN_DEM_RESAMPLING = "nearest"
 _SAFE_PROJECT_ID = re.compile(r"^[A-Za-z0-9_.-]+$")
 
 
@@ -177,7 +178,6 @@ def prepare_navigation_terrain_dem_tiles(
         zoom=zoom,
         tile_size=tile_size,
     )
-    encoded_image = _terrain_rgb_image(elevations)
     source_manifest = {
         "artifact_kind": "admin_local_raster_source_manifest",
         "source_kind": "local_geotiff",
@@ -192,14 +192,13 @@ def prepare_navigation_terrain_dem_tiles(
 
     rendered_tiles: dict[tuple[int, int], bytes] = {}
     for x, y in _slippy_tile_coordinates(bbox_wgs84, zoom):
-        body = render_raster_tile_png(
-            encoded_image,
+        body = _render_terrain_rgb_tile(
+            elevations,
             source_manifest,
             zoom,
             x,
             y,
             tile_size=tile_size,
-            resample_mode=TERRAIN_DEM_RESAMPLING,
         )
         if _png_is_fully_supported(body):
             rendered_tiles[(x, y)] = body
@@ -246,6 +245,9 @@ def prepare_navigation_terrain_dem_tiles(
         "prepared_at": timestamp,
         "encoding": "mapbox",
         "resampling": TERRAIN_DEM_RESAMPLING,
+        "visual_interpolation": "bilinear",
+        "interpolation_domain": "elevation_m_before_terrain_rgb_encoding",
+        "adds_source_resolution": False,
         "tile_size": tile_size,
         "minzoom": zoom,
         "maxzoom": zoom,
@@ -275,7 +277,8 @@ def prepare_navigation_terrain_dem_tiles(
             "Only a fully source-supported rectangular tile block is published.",
             "Areas outside the published block remain unavailable; no elevation is synthesized.",
             "The 20 m source grid is presentation evidence and is not increased in resolution.",
-            "Nearest-neighbor tile sampling preserves Terrain RGB elevation codes without inventing interpolated heights.",
+            "Bilinear interpolation smooths rendered elevation between supported source cells only.",
+            "Visual interpolation does not add source resolution or create new spatial evidence.",
         ],
         "boundary": {
             "candidate_only": True,
@@ -283,6 +286,7 @@ def prepare_navigation_terrain_dem_tiles(
             "runtime_safety_truth": False,
             "safe_or_walkable": "not_determined",
             "unsupported_cells_encoded_as_terrain": False,
+            "visual_interpolation_only": True,
             "raw_dem_embedded": False,
             "phase1_runtime_mutation_allowed": False,
         },
@@ -319,10 +323,22 @@ def load_navigation_terrain_dem_manifest(
         raise TerrainDemPreparationError("terrain DEM project_id mismatch")
     if manifest.get("encoding") != "mapbox":
         raise TerrainDemPreparationError("terrain DEM must use mapbox encoding")
-    if manifest.get("resampling") != TERRAIN_DEM_RESAMPLING:
+    if manifest.get("resampling") not in {
+        TERRAIN_DEM_RESAMPLING,
+        LEGACY_TERRAIN_DEM_RESAMPLING,
+    }:
         raise TerrainDemPreparationError(
-            "terrain DEM must preserve encoded elevations with nearest resampling"
+            "terrain DEM uses an unsupported elevation resampling contract"
         )
+    if manifest.get("resampling") == TERRAIN_DEM_RESAMPLING:
+        if manifest.get("visual_interpolation") != "bilinear":
+            raise TerrainDemPreparationError(
+                "terrain DEM bilinear resampling must disclose visual interpolation"
+            )
+        if manifest.get("adds_source_resolution") is not False:
+            raise TerrainDemPreparationError(
+                "terrain DEM visual interpolation cannot add source resolution"
+            )
     if manifest.get("nodata_policy") != "exclude_incomplete_tiles":
         raise TerrainDemPreparationError("terrain DEM nodata policy is unsafe")
     return manifest
@@ -475,6 +491,97 @@ def _terrain_rgb_image(elevations: Any) -> Any:
     rgba[..., 2] = (encoded % 256).astype(np.uint8)
     rgba[..., 3] = np.where(supported, 255, 0).astype(np.uint8)
     return Image.fromarray(rgba, mode="RGBA")
+
+
+def _render_terrain_rgb_tile(
+    elevations: Any,
+    source_manifest: Mapping[str, Any],
+    z: int,
+    x: int,
+    y: int,
+    *,
+    tile_size: int,
+) -> bytes:
+    """Interpolate scalar elevation before Terrain RGB encoding.
+
+    All four contributing source cells must be finite. This smooths the
+    presentation mesh without bridging nodata or claiming added resolution.
+    """
+
+    try:
+        import numpy as np
+    except Exception as exc:  # pragma: no cover - environment guard.
+        raise RuntimeError("NumPy is required to render terrain DEM tiles") from exc
+
+    source_bbox = _normalize_bbox(
+        source_manifest.get("georeference", {}).get("bbox_wgs84"),
+        keys=("west", "south", "east", "north"),
+    )
+    if source_bbox is None:
+        raise TerrainDemPreparationError("terrain DEM source has no WGS84 bounds")
+    source = np.asarray(elevations, dtype=np.float64)
+    if source.ndim != 2 or source.shape[0] < 1 or source.shape[1] < 1:
+        raise TerrainDemPreparationError("terrain DEM source grid is invalid")
+
+    tile_bbox = tile_bounds_wgs84(z, x, y)
+    pixel_columns = np.arange(tile_size, dtype=np.float64) + 0.5
+    pixel_rows = np.arange(tile_size, dtype=np.float64) + 0.5
+    longitudes = (
+        tile_bbox["west"]
+        + pixel_columns / tile_size * (tile_bbox["east"] - tile_bbox["west"])
+    )
+    global_y = (float(y) + pixel_rows / tile_size) / float(2**z)
+    latitudes = np.degrees(np.arctan(np.sinh(np.pi * (1.0 - 2.0 * global_y))))
+
+    source_x = (
+        (longitudes - source_bbox["west"])
+        / (source_bbox["east"] - source_bbox["west"])
+        * max(0, source.shape[1] - 1)
+    )
+    source_y = (
+        (source_bbox["north"] - latitudes)
+        / (source_bbox["north"] - source_bbox["south"])
+        * max(0, source.shape[0] - 1)
+    )
+    inside_x = (longitudes >= source_bbox["west"]) & (
+        longitudes <= source_bbox["east"]
+    )
+    inside_y = (latitudes >= source_bbox["south"]) & (
+        latitudes <= source_bbox["north"]
+    )
+    source_x = np.clip(source_x, 0, source.shape[1] - 1)
+    source_y = np.clip(source_y, 0, source.shape[0] - 1)
+    x0 = np.floor(source_x).astype(int)
+    y0 = np.floor(source_y).astype(int)
+    x1 = np.minimum(x0 + 1, source.shape[1] - 1)
+    y1 = np.minimum(y0 + 1, source.shape[0] - 1)
+    x_weight = source_x - x0
+    y_weight = source_y - y0
+
+    top_left = source[y0[:, None], x0[None, :]]
+    top_right = source[y0[:, None], x1[None, :]]
+    bottom_left = source[y1[:, None], x0[None, :]]
+    bottom_right = source[y1[:, None], x1[None, :]]
+    supported = (
+        inside_y[:, None]
+        & inside_x[None, :]
+        & np.isfinite(top_left)
+        & np.isfinite(top_right)
+        & np.isfinite(bottom_left)
+        & np.isfinite(bottom_right)
+    )
+    top = top_left * (1.0 - x_weight[None, :]) + top_right * x_weight[None, :]
+    bottom = (
+        bottom_left * (1.0 - x_weight[None, :])
+        + bottom_right * x_weight[None, :]
+    )
+    interpolated = top * (1.0 - y_weight[:, None]) + bottom * y_weight[:, None]
+    interpolated = np.where(supported, interpolated, np.nan)
+
+    image = _terrain_rgb_image(interpolated)
+    output = io.BytesIO()
+    image.save(output, format="PNG")
+    return output.getvalue()
 
 
 def _png_is_fully_supported(body: bytes) -> bool:

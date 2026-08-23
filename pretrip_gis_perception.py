@@ -14,6 +14,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pydantic_ai_runtime_compat import (
     build_chat_model,
     pydantic_agent_runtime_kwargs,
+    pydantic_native_research_capabilities_for_model,
     pydantic_result_output,
 )
 from pretrip_route_note_candidates import (
@@ -678,6 +679,9 @@ class PydanticAICloudGisPerceptionProvider:
             output_type=_CloudRouteNoteJudgementBatch,
             system_prompt=_GIS_PERCEPTION_SYSTEM_PROMPT,
             retries={"output": 2},
+            capabilities=pydantic_native_research_capabilities_for_model(
+                self.model_name
+            ),
             **pydantic_agent_runtime_kwargs(),
         )
         result = agent.run_sync(

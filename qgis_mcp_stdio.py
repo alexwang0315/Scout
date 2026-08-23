@@ -17,6 +17,7 @@ QGIS_MCP_PROTOCOL_VERSION = "2025-11-25"
 QGIS_MCP_ALLOWED_TOOLS = frozenset(
     {
         "qgis_context",
+        "qgis_crs",
         "qgis_layer_inspect",
         "qgis_layer_manage",
         "qgis_identify",
@@ -27,6 +28,8 @@ QGIS_MCP_ALLOWED_TOOLS = frozenset(
         "qgis_project_action",
         "qgis_project_inspect",
         "qgis_raster_style",
+        "qgis_style_apply",
+        "qgis_vector_export",
         "qgis_processing_start",
         "qgis_operation",
         "qgis_screenshot",
@@ -39,9 +42,33 @@ QGIS_MCP_ALLOWED_ALGORITHMS = frozenset(
         "gdal:assignprojection",
         "gdal:slope",
         "grass:r.geomorphon",
+        "grass:r.mapcalc.simple",
         "grass:r.slope.aspect",
+        "grass:r.thin",
+        "grass:r.to.vect",
         "grass:r.watershed",
     }
+)
+QGIS_MCP_GEOMORPHON_RIDGE_CONSENSUS_EXPRESSION = (
+    "if(((A == 3) + (B == 3) + (C == 3)) >= 2, 1, null())"
+)
+QGIS_MCP_GEOMORPHON_VALLEY_CONSENSUS_EXPRESSION = (
+    "if(((A == 9) + (B == 9) + (C == 9)) >= 2, 1, null())"
+)
+QGIS_MCP_FLOW_CHANNEL_CANDIDATE_EXPRESSION = (
+    "if(abs(A) >= 25, 1, null())"
+)
+_ALLOWED_GEOMORPHON_CONSENSUS_EXPRESSIONS = frozenset(
+    {
+        QGIS_MCP_GEOMORPHON_RIDGE_CONSENSUS_EXPRESSION,
+        QGIS_MCP_GEOMORPHON_VALLEY_CONSENSUS_EXPRESSION,
+        QGIS_MCP_FLOW_CHANNEL_CANDIDATE_EXPRESSION,
+    }
+)
+_GRASS_MAIN_THREAD_ALGORITHMS = frozenset(
+    algorithm
+    for algorithm in QGIS_MCP_ALLOWED_ALGORITHMS
+    if algorithm.startswith("grass:")
 )
 _PROCESSING_PARAMETER_KEYS = {
     "gdal:assignprojection": frozenset({"INPUT", "CRS"}),
@@ -104,6 +131,45 @@ _PROCESSING_PARAMETER_KEYS = {
             "GRASS_RASTER_FORMAT_META",
         }
     ),
+    "grass:r.mapcalc.simple": frozenset(
+        {
+            "a",
+            "b",
+            "c",
+            "expression",
+            "output",
+            "GRASS_REGION_PARAMETER",
+            "GRASS_REGION_CELLSIZE_PARAMETER",
+            "GRASS_RASTER_FORMAT_OPT",
+            "GRASS_RASTER_FORMAT_META",
+        }
+    ),
+    "grass:r.thin": frozenset(
+        {
+            "input",
+            "iterations",
+            "output",
+            "GRASS_REGION_PARAMETER",
+            "GRASS_REGION_CELLSIZE_PARAMETER",
+            "GRASS_RASTER_FORMAT_OPT",
+            "GRASS_RASTER_FORMAT_META",
+        }
+    ),
+    "grass:r.to.vect": frozenset(
+        {
+            "input",
+            "type",
+            "column",
+            "-s",
+            "-v",
+            "-z",
+            "-b",
+            "-t",
+            "output",
+            "GRASS_REGION_PARAMETER",
+            "GRASS_REGION_CELLSIZE_PARAMETER",
+        }
+    ),
     "grass:r.watershed": frozenset(
         {
             "elevation",
@@ -130,6 +196,9 @@ _PROCESSING_INPUT_KEYS = {
     "gdal:slope": ("INPUT",),
     "grass:r.slope.aspect": ("elevation",),
     "grass:r.geomorphon": ("elevation",),
+    "grass:r.mapcalc.simple": ("a",),
+    "grass:r.thin": ("input",),
+    "grass:r.to.vect": ("input",),
     "grass:r.watershed": ("elevation",),
 }
 _PROCESSING_OUTPUT_KEYS = {
@@ -138,6 +207,9 @@ _PROCESSING_OUTPUT_KEYS = {
     "gdal:slope": ("OUTPUT",),
     "grass:r.slope.aspect": ("slope", "aspect"),
     "grass:r.geomorphon": ("forms",),
+    "grass:r.mapcalc.simple": ("output",),
+    "grass:r.thin": ("output",),
+    "grass:r.to.vect": ("output",),
     "grass:r.watershed": ("accumulation",),
 }
 _CORE_OR_DISCOVERY_TOOLS = frozenset(
@@ -273,6 +345,12 @@ class QgisMcpStdioClient:
             maximum = float(arguments.get("maximum", 90.0))
             if minimum < 0 or maximum > 90 or minimum >= maximum:
                 raise QgisMcpToolRejected("Slope visualization range must stay within 0-90")
+        elif tool == "qgis_style_apply":
+            self._validate_route_style(arguments)
+        elif tool == "qgis_vector_export":
+            self._validate_vector_export(arguments)
+        elif tool == "qgis_crs":
+            self._validate_route_crs_assignment(arguments)
         elif tool == "qgis_layer_inspect":
             include = arguments.get("include") or []
             if not isinstance(include, list) or not set(include).issubset(
@@ -432,7 +510,14 @@ class QgisMcpStdioClient:
         action = str(arguments.get("action", ""))
         if action not in _ALLOWED_PROJECT_ACTIONS:
             raise QgisMcpToolRejected(f"QGIS project action is not allowlisted: {action}")
-        if action in {"add_vector", "add_raster"}:
+        if action == "add_vector":
+            source = arguments.get("source")
+            if not isinstance(source, str) or not self._vector_source_allowed(
+                source,
+                provider=arguments.get("provider"),
+            ):
+                raise QgisMcpToolRejected("QGIS layer source is outside bounded roots")
+        if action == "add_raster":
             source = arguments.get("source")
             if not isinstance(source, str) or not self._path_allowed(source):
                 raise QgisMcpToolRejected("QGIS layer source is outside bounded roots")
@@ -449,17 +534,34 @@ class QgisMcpStdioClient:
         if action in {"remove_layer", "zoom_layer"} and not arguments.get("layer"):
             raise QgisMcpToolRejected(f"QGIS project action {action} requires a layer")
 
+    def _vector_source_allowed(self, value: str, *, provider: Any) -> bool:
+        marker = "|layername="
+        if marker not in value:
+            return provider in {None, "", "ogr"} and self._path_allowed(value)
+        if value.count(marker) != 1 or provider != "ogr":
+            return False
+        path, layer_name = value.split(marker, 1)
+        return (
+            Path(path).suffix.casefold() == ".gpkg"
+            and self._path_under(path, (self.config.run_root,))
+            and layer_name.startswith("Scout candidate route source ")
+            and 1 <= len(layer_name) <= 120
+            and all(
+                char.isalnum() or char in " ._-"
+                for char in layer_name
+            )
+        )
+
     def _validate_processing(self, arguments: dict[str, Any]) -> None:
         algorithm = str(arguments.get("algorithm", ""))
         if algorithm not in QGIS_MCP_ALLOWED_ALGORITHMS:
             raise QgisMcpToolRejected(f"QGIS Processing algorithm is not allowlisted: {algorithm}")
         if bool(arguments.get("add_to_project", False)):
             raise QgisMcpToolRejected("QGIS Processing may not implicitly add outputs to the project")
-        if bool(arguments.get("allow_main_thread", False)) and algorithm not in {
-            "grass:r.slope.aspect",
-            "grass:r.geomorphon",
-            "grass:r.watershed",
-        }:
+        if (
+            bool(arguments.get("allow_main_thread", False))
+            and algorithm not in _GRASS_MAIN_THREAD_ALGORITHMS
+        ):
             raise QgisMcpToolRejected(
                 "QGIS Processing main-thread execution is limited to fixed GRASS workflows"
             )
@@ -492,6 +594,110 @@ class QgisMcpStdioClient:
                 )
         self._validate_processing_values(algorithm, parameters)
 
+    @staticmethod
+    def _route_source_layer_allowed(value: str) -> bool:
+        return (
+            value.startswith("Scout_candidate_route_source_")
+            and 1 <= len(value) <= 180
+            and all(char in _SAFE_LAYER_REFERENCE_CHARS for char in value)
+        )
+
+    @staticmethod
+    def _terrain_vector_source_layer_allowed(value: str) -> bool:
+        return (
+            value.startswith("Scout_candidate_terrain_vector_source_")
+            and 1 <= len(value) <= 180
+            and all(char in _SAFE_LAYER_REFERENCE_CHARS for char in value)
+        )
+
+    def _validate_vector_export(self, arguments: dict[str, Any]) -> None:
+        expected = {
+            "layer",
+            "path",
+            "format",
+            "encoding",
+            "selected_only",
+            "destination_crs",
+            "overwrite",
+            "create_parent",
+            "include_z",
+            "save_metadata",
+        }
+        if set(arguments) != expected:
+            raise QgisMcpToolRejected("QGIS vector export arguments are not allowlisted")
+        layer = arguments.get("layer")
+        if not isinstance(layer, str):
+            raise QgisMcpToolRejected("QGIS vector export layer reference is unsafe")
+        path = arguments.get("path")
+        if not isinstance(path, str) or not self._path_under(
+            path, (self.config.run_root,)
+        ):
+            raise QgisMcpToolRejected(
+                "QGIS vector export path must stay inside the worker run root"
+            )
+        if self._route_source_layer_allowed(layer):
+            expected_suffix = ".gpkg"
+            expected_format = "gpkg"
+            expected_crs = {"3826", "EPSG:3826"}
+            label = "route"
+        elif self._terrain_vector_source_layer_allowed(layer):
+            expected_suffix = ".geojson"
+            expected_format = "geojson"
+            expected_crs = {"4326", "EPSG:4326"}
+            label = "candidate terrain vector"
+        else:
+            raise QgisMcpToolRejected("QGIS vector export layer reference is unsafe")
+        if Path(path).suffix.casefold() != expected_suffix:
+            raise QgisMcpToolRejected(
+                f"QGIS {label} export file type is not allowlisted"
+            )
+        if arguments.get("format") != expected_format:
+            raise QgisMcpToolRejected(
+                f"QGIS {label} export format is not allowlisted"
+            )
+        if str(arguments.get("encoding", "")).upper() != "UTF-8":
+            raise QgisMcpToolRejected("QGIS vector export encoding must remain UTF-8")
+        if str(arguments.get("destination_crs", "")).upper() not in expected_crs:
+            raise QgisMcpToolRejected(
+                f"QGIS {label} export destination CRS is not allowlisted"
+            )
+        expected_flags = {
+            "selected_only": False,
+            "overwrite": False,
+            "create_parent": False,
+            "include_z": False,
+            "save_metadata": True,
+        }
+        if any(arguments.get(key) is not value for key, value in expected_flags.items()):
+            raise QgisMcpToolRejected("QGIS vector export flags are outside the bounded set")
+
+    @staticmethod
+    def _validate_route_crs_assignment(arguments: dict[str, Any]) -> None:
+        if set(arguments) != {"action", "layer", "target", "value"}:
+            raise QgisMcpToolRejected("QGIS route CRS arguments are not allowlisted")
+        layer = arguments.get("layer")
+        route_layer = (
+            isinstance(layer, str)
+            and layer.startswith("Scout_candidate_route_")
+            and not layer.startswith("Scout_candidate_route_source_")
+        )
+        terrain_layer = (
+            isinstance(layer, str)
+            and layer.startswith("Scout_candidate_terrain_vector_source_")
+        )
+        if (
+            not (route_layer or terrain_layer)
+            or not 1 <= len(layer) <= 180
+            or any(char not in _SAFE_LAYER_REFERENCE_CHARS for char in layer)
+        ):
+            raise QgisMcpToolRejected("QGIS candidate CRS layer reference is unsafe")
+        if arguments.get("action") != "assign_layer":
+            raise QgisMcpToolRejected("QGIS CRS access is limited to candidate assignment")
+        if str(arguments.get("target", "")).upper() not in {"3826", "EPSG:3826"}:
+            raise QgisMcpToolRejected("QGIS route CRS assignment is limited to EPSG:3826")
+        if str(arguments.get("value", "")).upper() not in {"3826", "EPSG:3826"}:
+            raise QgisMcpToolRejected("QGIS route CRS value is limited to EPSG:3826")
+
     def _validate_capability_search(self, arguments: dict[str, Any]) -> None:
         if set(arguments) - {"query", "kinds", "limit"}:
             raise QgisMcpToolRejected("QGIS capability search arguments are not allowlisted")
@@ -515,6 +721,34 @@ class QgisMcpStdioClient:
             raise QgisMcpToolRejected("Processing capability is not allowlisted")
 
     @staticmethod
+    def _validate_route_style(arguments: dict[str, Any]) -> None:
+        if set(arguments) != {"layer", "mode", "color", "opacity", "width"}:
+            raise QgisMcpToolRejected("QGIS route style arguments are not allowlisted")
+        layer = arguments.get("layer")
+        if (
+            not isinstance(layer, str)
+            or not 1 <= len(layer) <= 180
+            or any(char not in _SAFE_LAYER_REFERENCE_CHARS for char in layer)
+        ):
+            raise QgisMcpToolRejected("QGIS route style layer reference is unsafe")
+        if arguments.get("mode") != "simple":
+            raise QgisMcpToolRejected("QGIS route styling is limited to simple symbols")
+        color = arguments.get("color")
+        if (
+            not isinstance(color, str)
+            or len(color) != 7
+            or not color.startswith("#")
+            or any(char not in "0123456789abcdefABCDEF" for char in color[1:])
+        ):
+            raise QgisMcpToolRejected("QGIS route style color must be a hex color")
+        opacity = float(arguments.get("opacity", 0.0))
+        width = float(arguments.get("width", 0.0))
+        if not math.isfinite(opacity) or not 0.5 <= opacity <= 1.0:
+            raise QgisMcpToolRejected("QGIS route style opacity is outside the bounded range")
+        if not math.isfinite(width) or not 0.5 <= width <= 8.0:
+            raise QgisMcpToolRejected("QGIS route style width is outside the bounded range")
+
+    @staticmethod
     def _validate_raster_identify(arguments: dict[str, Any]) -> None:
         if set(arguments) - {"point", "crs", "layers", "tolerance", "limit_per_layer"}:
             raise QgisMcpToolRejected("QGIS raster identify arguments are not allowlisted")
@@ -532,8 +766,8 @@ class QgisMcpStdioClient:
         if str(arguments.get("crs", "")).upper() not in {"4326", "EPSG:4326"}:
             raise QgisMcpToolRejected("QGIS raster identify is limited to EPSG:4326 input")
         layers = arguments.get("layers")
-        if not isinstance(layers, list) or not 1 <= len(layers) <= 4:
-            raise QgisMcpToolRejected("QGIS raster identify requires one to four layers")
+        if not isinstance(layers, list) or not 1 <= len(layers) <= 8:
+            raise QgisMcpToolRejected("QGIS raster identify requires one to eight layers")
         if any(
             not isinstance(layer, str)
             or not 1 <= len(layer) <= 180
@@ -546,8 +780,8 @@ class QgisMcpStdioClient:
         if int(arguments.get("limit_per_layer", 1)) != 1:
             raise QgisMcpToolRejected("QGIS raster identify is limited to one value per layer")
 
-    @staticmethod
     def _validate_processing_values(
+        self,
         algorithm: str,
         parameters: dict[str, Any],
     ) -> None:
@@ -567,6 +801,61 @@ class QgisMcpStdioClient:
                 raise QgisMcpToolRejected("GRASS geomorphon radii are outside the bounded range")
             if not math.isfinite(flat) or not 0 <= flat <= 90:
                 raise QgisMcpToolRejected("GRASS geomorphon flatness is outside the bounded range")
+        elif algorithm == "grass:r.mapcalc.simple":
+            expression = parameters.get("expression")
+            if expression not in _ALLOWED_GEOMORPHON_CONSENSUS_EXPRESSIONS:
+                raise QgisMcpToolRejected(
+                    "GRASS mapcalc is limited to fixed Scout terrain masks"
+                )
+            if expression != QGIS_MCP_FLOW_CHANNEL_CANDIDATE_EXPRESSION:
+                if any(
+                    not isinstance(parameters.get(key), str)
+                    or not self._path_allowed(str(parameters[key]))
+                    for key in ("b", "c")
+                ):
+                    raise QgisMcpToolRejected(
+                        "GRASS geomorphon consensus requires bounded B and C rasters"
+                    )
+            elif set(parameters).intersection({"b", "c"}):
+                raise QgisMcpToolRejected(
+                    "GRASS flow-channel mask may only use accumulation raster A"
+                )
+            if Path(str(parameters.get("output", ""))).suffix.casefold() != ".tif":
+                raise QgisMcpToolRejected(
+                    "GRASS geomorphon consensus output must be a GeoTIFF"
+                )
+        elif algorithm == "grass:r.thin":
+            iterations = int(parameters.get("iterations", 200))
+            if not 1 <= iterations <= 512:
+                raise QgisMcpToolRejected(
+                    "GRASS thinning iterations are outside the bounded range"
+                )
+            if Path(str(parameters.get("output", ""))).suffix.casefold() != ".tif":
+                raise QgisMcpToolRejected("GRASS thinning output must be a GeoTIFF")
+        elif algorithm == "grass:r.to.vect":
+            if int(parameters.get("type", -1)) != 0:
+                raise QgisMcpToolRejected(
+                    "GRASS raster vectorization is limited to line output"
+                )
+            if parameters.get("column", "class_code") != "class_code":
+                raise QgisMcpToolRejected(
+                    "GRASS raster vectorization column is not allowlisted"
+                )
+            expected_flags = {
+                "-s": False,
+                "-v": True,
+                "-z": False,
+                "-b": False,
+                "-t": False,
+            }
+            if any(parameters.get(key, value) is not value for key, value in expected_flags.items()):
+                raise QgisMcpToolRejected(
+                    "GRASS raster vectorization flags are outside the bounded set"
+                )
+            if Path(str(parameters.get("output", ""))).suffix.casefold() != ".gpkg":
+                raise QgisMcpToolRejected(
+                    "GRASS line vector output must be a bounded GeoPackage"
+                )
         elif algorithm == "grass:r.watershed":
             memory = int(parameters.get("memory", 256))
             convergence = int(parameters.get("convergence", 5))

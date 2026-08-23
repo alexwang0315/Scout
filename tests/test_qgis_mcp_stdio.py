@@ -226,6 +226,183 @@ def test_qgis_mcp_stdio_bounds_slope_cartography(tmp_path: Path) -> None:
         )
 
 
+def test_qgis_mcp_stdio_bounds_route_cartography(tmp_path: Path) -> None:
+    client = QgisMcpStdioClient(
+        QgisMcpClientConfig(
+            command=(sys.executable, str(tmp_path / "unused.py")),
+            run_root=tmp_path / "runs",
+            source_roots=(tmp_path / "source",),
+        )
+    )
+    client.validate_tool_call(
+        "qgis_style_apply",
+        {
+            "layer": "route-layer",
+            "mode": "simple",
+            "color": "#ff365e",
+            "opacity": 1.0,
+            "width": 2.4,
+        },
+    )
+    for arguments in (
+        {
+            "layer": "route-layer",
+            "mode": "categorized",
+            "color": "#ff365e",
+            "opacity": 1.0,
+            "width": 2.4,
+        },
+        {
+            "layer": "../../secret",
+            "mode": "simple",
+            "color": "#ff365e",
+            "opacity": 1.0,
+            "width": 2.4,
+        },
+        {
+            "layer": "route-layer",
+            "mode": "simple",
+            "color": "red",
+            "opacity": 1.0,
+            "width": 2.4,
+        },
+    ):
+        with pytest.raises(QgisMcpToolRejected):
+            client.validate_tool_call("qgis_style_apply", arguments)
+
+
+def test_qgis_mcp_stdio_bounds_route_export(tmp_path: Path) -> None:
+    run_root = tmp_path / "runs"
+    run_root.mkdir()
+    output = run_root / "route_epsg3826.gpkg"
+    client = QgisMcpStdioClient(
+        QgisMcpClientConfig(
+            command=(sys.executable, str(tmp_path / "unused.py")),
+            run_root=run_root,
+        )
+    )
+    valid = {
+        "layer": "Scout_candidate_route_source_fixture",
+        "path": str(output),
+        "format": "gpkg",
+        "encoding": "UTF-8",
+        "selected_only": False,
+        "destination_crs": "EPSG:3826",
+        "overwrite": False,
+        "create_parent": False,
+        "include_z": False,
+        "save_metadata": True,
+    }
+    client.validate_tool_call("qgis_vector_export", valid)
+    client.validate_tool_call(
+        "qgis_crs",
+        {
+            "action": "assign_layer",
+            "layer": "Scout_candidate_terrain_vector_source_ridge_fixture",
+            "target": "EPSG:3826",
+            "value": "EPSG:3826",
+        },
+    )
+    projected_source = (
+        f"{output}|layername=Scout candidate route source fixture"
+    )
+    client.validate_tool_call(
+        "qgis_project_action",
+        {
+            "action": "add_vector",
+            "source": projected_source,
+            "name": "Scout candidate route fixture",
+            "provider": "ogr",
+        },
+    )
+    client.validate_tool_call(
+        "qgis_crs",
+        {
+            "action": "assign_layer",
+            "layer": "Scout_candidate_route_fixture_abc123",
+            "target": "EPSG:3826",
+            "value": "EPSG:3826",
+        },
+    )
+    for invalid in (
+        {**valid, "layer": "other-project-layer"},
+        {**valid, "destination_crs": "EPSG:4326"},
+        {**valid, "path": str(tmp_path / "outside.gpkg")},
+        {**valid, "overwrite": True},
+    ):
+        with pytest.raises(QgisMcpToolRejected):
+            client.validate_tool_call("qgis_vector_export", invalid)
+    with pytest.raises(QgisMcpToolRejected):
+        client.validate_tool_call(
+            "qgis_project_action",
+            {
+                "action": "add_vector",
+                "source": projected_source,
+                "provider": "memory",
+            },
+        )
+    for invalid in (
+        {
+            "action": "transform_points",
+            "layer": "Scout_candidate_route_fixture_abc123",
+            "target": "EPSG:3826",
+            "value": "EPSG:3826",
+        },
+        {
+            "action": "assign_layer",
+            "layer": "other-project-layer",
+            "target": "EPSG:3826",
+            "value": "EPSG:3826",
+        },
+        {
+            "action": "assign_layer",
+            "layer": "Scout_candidate_route_fixture_abc123",
+            "target": "EPSG:4326",
+            "value": "EPSG:4326",
+        },
+    ):
+        with pytest.raises(QgisMcpToolRejected):
+            client.validate_tool_call("qgis_crs", invalid)
+
+
+def test_qgis_mcp_stdio_bounds_candidate_terrain_vector_export(
+    tmp_path: Path,
+) -> None:
+    run_root = tmp_path / "runs"
+    run_root.mkdir()
+    output = run_root / "ridge_lines.geojson"
+    client = QgisMcpStdioClient(
+        QgisMcpClientConfig(
+            command=(sys.executable, str(tmp_path / "unused.py")),
+            run_root=run_root,
+        )
+    )
+    valid = {
+        "layer": "Scout_candidate_terrain_vector_source_ridge_fixture",
+        "path": str(output),
+        "format": "geojson",
+        "encoding": "UTF-8",
+        "selected_only": False,
+        "destination_crs": "EPSG:4326",
+        "overwrite": False,
+        "create_parent": False,
+        "include_z": False,
+        "save_metadata": True,
+    }
+
+    client.validate_tool_call("qgis_vector_export", valid)
+
+    for invalid in (
+        {**valid, "layer": "Scout_candidate_route_source_fixture"},
+        {**valid, "destination_crs": "EPSG:3826"},
+        {**valid, "path": str(run_root / "ridge_lines.gpkg")},
+        {**valid, "format": "gpkg"},
+        {**valid, "overwrite": True},
+    ):
+        with pytest.raises(QgisMcpToolRejected):
+            client.validate_tool_call("qgis_vector_export", invalid)
+
+
 def test_qgis_mcp_stdio_bounds_layer_inspection(tmp_path: Path) -> None:
     client = QgisMcpStdioClient(
         QgisMcpClientConfig(
@@ -409,10 +586,136 @@ def test_qgis_mcp_stdio_allows_only_bounded_grass_feature_outputs(
     )
     assert {
         "gdal:assignprojection",
+        "grass:r.mapcalc.simple",
         "grass:r.slope.aspect",
         "grass:r.geomorphon",
+        "grass:r.thin",
+        "grass:r.to.vect",
         "grass:r.watershed",
     }.issubset(QGIS_MCP_ALLOWED_ALGORITHMS)
+
+    fine = run_root / "geomorphon_fine.tif"
+    medium = run_root / "geomorphon_medium.tif"
+    coarse = run_root / "geomorphon_coarse.tif"
+    ridge_mask = run_root / "ridge_consensus.tif"
+    ridge_thin = run_root / "ridge_thin.tif"
+    ridge_vector = run_root / "ridge_lines.gpkg"
+    stream_raster = run_root / "stream_network.tif"
+    stream_vector = run_root / "stream_network.gpkg"
+    for path in (fine, medium, coarse):
+        path.write_bytes(b"fixture")
+    client.validate_tool_call(
+        "qgis_processing_start",
+        {
+            "algorithm": "grass:r.mapcalc.simple",
+            "allow_main_thread": True,
+            "parameters": {
+                "a": str(fine),
+                "b": str(medium),
+                "c": str(coarse),
+                "expression": "if(((A == 3) + (B == 3) + (C == 3)) >= 2, 1, null())",
+                "output": str(ridge_mask),
+            },
+        },
+    )
+    client.validate_tool_call(
+        "qgis_processing_start",
+        {
+            "algorithm": "grass:r.mapcalc.simple",
+            "allow_main_thread": True,
+            "parameters": {
+                "a": str(run_root / "flow_accumulation.tif"),
+                "expression": "if(abs(A) >= 25, 1, null())",
+                "output": str(stream_raster),
+            },
+        },
+    )
+    client.validate_tool_call(
+        "qgis_processing_start",
+        {
+            "algorithm": "grass:r.thin",
+            "allow_main_thread": True,
+            "parameters": {
+                "input": str(ridge_mask),
+                "iterations": 200,
+                "output": str(ridge_thin),
+            },
+        },
+    )
+    client.validate_tool_call(
+        "qgis_processing_start",
+        {
+            "algorithm": "grass:r.to.vect",
+            "allow_main_thread": True,
+            "parameters": {
+                "input": str(ridge_thin),
+                "type": 0,
+                "column": "class_code",
+                "-s": False,
+                "-v": True,
+                "-z": False,
+                "-b": False,
+                "-t": False,
+                "output": str(ridge_vector),
+            },
+        },
+    )
+    client.validate_tool_call(
+        "qgis_processing_start",
+        {
+            "algorithm": "grass:r.watershed",
+            "allow_main_thread": True,
+            "parameters": {
+                "elevation": str(dem),
+                "threshold": 50,
+                "convergence": 5,
+                "memory": 256,
+                "-s": False,
+                "-m": True,
+                "-4": False,
+                "-a": False,
+                "-b": False,
+                "accumulation": str(run_root / "flow_accumulation.tif"),
+            },
+        },
+    )
+
+    forbidden_processing = (
+        {
+            "algorithm": "grass:r.mapcalc.simple",
+            "allow_main_thread": True,
+            "parameters": {
+                "a": str(fine),
+                "b": str(medium),
+                "c": str(coarse),
+                "expression": "A * 1000",
+                "output": str(ridge_mask),
+            },
+        },
+        {
+            "algorithm": "grass:r.to.vect",
+            "allow_main_thread": True,
+            "parameters": {
+                "input": str(ridge_thin),
+                "type": 2,
+                "column": "class_code",
+                "output": str(ridge_vector),
+            },
+        },
+        {
+            "algorithm": "grass:r.stream.extract",
+            "allow_main_thread": True,
+            "parameters": {
+                "elevation": str(dem),
+                "threshold": 0,
+                "stream_raster": str(stream_raster),
+                "stream_vector": str(stream_vector),
+            },
+        },
+    )
+    for arguments in forbidden_processing:
+        with pytest.raises(QgisMcpToolRejected):
+            client.validate_tool_call("qgis_processing_start", arguments)
 
     with pytest.raises(QgisMcpToolRejected):
         client.validate_tool_call(

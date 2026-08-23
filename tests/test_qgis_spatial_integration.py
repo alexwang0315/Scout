@@ -515,15 +515,32 @@ def test_dashboard_qgis_panel_contract_is_backend_only() -> None:
     assert '? "qgis-route"' in html
     assert ': kind === "qgis_terrain_feature_sample"' in html
     assert '? "qgis-terrain-samples"' in html
-    assert ': "qgis-slope";' in html
+    assert 'kind === "qgis_candidate_ridge_line"' in html
+    assert '"qgis-ridge-lines"' in html
+    assert 'kind === "qgis_candidate_valley_line"' in html
+    assert '"qgis-valley-lines"' in html
+    assert 'kind === "qgis_candidate_stream_network"' in html
+    assert '"qgis-stream-network"' in html
+    assert 'id: "scout-qgis-ridge-candidate"' in html
+    assert 'id: "scout-qgis-valley-candidate"' in html
+    assert 'id: "scout-qgis-stream-network-candidate"' in html
+    assert 'data-qgis-layer-toggle="ridges"' in html
+    assert 'data-qgis-layer-toggle="valleys"' in html
+    assert 'data-qgis-layer-toggle="streams"' in html
     assert "scout-qgis-route-preview" not in html
     assert "scout-qgis-slope-preview" not in html
     assert "qgisSpatialBasePath()" in html
     assert 'data-qgis-review-evidence="true"' in html
+    assert 'data-qgis-visual-review="not-started"' in html
+    assert 'data-qgis-visual-review="render-unavailable"' in html
+    assert "QGIS integration is disabled. No workflow or rendered evidence artifact exists." in html
+    assert "Visual review cannot begin." in html
     assert 'data-qgis-terrain-features="true"' in html
     assert 'startQgisSpatialWorkflow("terrain_feature_stack.v1")' in html
     assert "GRASS capability discovery" in html
-    assert "Geomorphon landforms generated" in html
+    assert "Multiscale geomorphons generated" in html
+    assert "Ridge and valley candidates vectorized" in html
+    assert "Stream-network candidate extracted" in html
     assert ".qgis-analysis-panel .navigation-reading-head" in html
     assert "flex-wrap: wrap" in html
     assert "/spatial/qgis" in html

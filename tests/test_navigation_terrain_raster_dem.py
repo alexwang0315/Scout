@@ -55,7 +55,7 @@ def test_prepare_navigation_terrain_dem_tiles_writes_only_fully_supported_tiles(
     grid_path = source_root / "demo.grd"
     grid_path.write_text(
         "".join(
-            f"{column * 20} {160 - row * 20} {3107.1 if column < 4 else 3107.2}\n"
+            f"{column * 20} {160 - row * 20} {3000 + row * 10 + column * 20}\n"
             for row in range(8)
             for column in range(8)
         ),
@@ -121,7 +121,10 @@ def test_prepare_navigation_terrain_dem_tiles_writes_only_fully_supported_tiles(
 
     assert result["status"] == "ready"
     assert result["encoding"] == "mapbox"
-    assert result["resampling"] == "nearest"
+    assert result["resampling"] == "bilinear_elevation"
+    assert result["visual_interpolation"] == "bilinear"
+    assert result["interpolation_domain"] == "elevation_m_before_terrain_rgb_encoding"
+    assert result["adds_source_resolution"] is False
     assert result["nodata_policy"] == "exclude_incomplete_tiles"
     assert result["tile_block"] == {
         "x_min": x,
@@ -138,12 +141,40 @@ def test_prepare_navigation_terrain_dem_tiles_writes_only_fully_supported_tiles(
             decode_mapbox_terrain_rgb(pixel[:3])
             for pixel in rgba.get_flattened_data()
         ]
-        assert min(decoded) >= 3107.0
-        assert max(decoded) <= 3107.3
+        source_elevations = {
+            float(3000 + row * 10 + column * 20)
+            for row in range(8)
+            for column in range(8)
+        }
+        assert min(decoded) >= min(source_elevations)
+        assert max(decoded) <= max(source_elevations)
+        assert len(set(decoded)) > len(source_elevations)
+        decoded_rows = [decoded[index : index + 16] for index in range(0, 256, 16)]
+        adjacent_deltas = [
+            abs(decoded_rows[row][column] - decoded_rows[row][column - 1])
+            for row in range(16)
+            for column in range(1, 16)
+        ] + [
+            abs(decoded_rows[row][column] - decoded_rows[row - 1][column])
+            for row in range(1, 16)
+            for column in range(16)
+        ]
+        assert max(adjacent_deltas) < 15
 
     project = json.loads((project_root / "project.json").read_text())
     assert project["navigation_terrain_dem_manifest_ref"] == result["manifest_ref"]
     assert load_navigation_terrain_dem_manifest(project_root, project) == result
+
+    legacy = dict(result)
+    legacy["resampling"] = "nearest"
+    legacy.pop("visual_interpolation")
+    legacy.pop("interpolation_domain")
+    legacy.pop("adds_source_resolution")
+    (project_root / result["manifest_ref"]).write_text(
+        json.dumps(legacy),
+        encoding="utf-8",
+    )
+    assert load_navigation_terrain_dem_manifest(project_root, project)["resampling"] == "nearest"
 
 
 def test_prepare_navigation_terrain_dem_tiles_rejects_partial_alpha_as_nodata(

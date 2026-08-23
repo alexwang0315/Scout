@@ -18,9 +18,10 @@ from assistant_model_config import load_assistant_model_config
 from pydantic_ai_runtime_compat import (
     build_chat_model,
     pydantic_agent_runtime_kwargs,
+    pydantic_native_research_capabilities_for_model,
+    pydantic_native_research_trace,
 )
 from scout_env import load_scout_env_files
-
 
 ROOT = Path(__file__).resolve().parent
 SEMANTIC_REVIEW_SCHEMA_VERSION = "scout.route_context_semantic_review.v1"
@@ -272,6 +273,7 @@ def run_scout_ai_review(
     reviewed_at = _utc_now()
     usage = _integer_mapping(call_result.get("usage"))
     response_metadata = _string_mapping(call_result.get("response_metadata"))
+    native_research = call_result.get("native_research") or {}
     semantic_review = {
         "schema_version": SEMANTIC_REVIEW_SCHEMA_VERSION,
         "project_id": packet["project_id"],
@@ -285,6 +287,7 @@ def run_scout_ai_review(
         **decision_payload,
         "usage": usage,
         "response_metadata": response_metadata,
+        "native_research": native_research,
         "reviewed_at": reviewed_at,
         "boundary": _boundary(),
     }
@@ -326,6 +329,7 @@ def run_scout_ai_review(
         "comparison_ref": COMPARISON_REF.as_posix(),
         "comparison_report_ref": COMPARISON_REPORT_REF.as_posix(),
         "comparison_status": comparison["comparison_status"],
+        "native_research": native_research,
         "prior_review_archive_refs": list(prior_review_archive_refs),
         "boundary": _boundary(),
     }
@@ -501,6 +505,7 @@ def _call_live_model(
         model,
         output_type=ScoutAIReviewDecision,
         instructions=SYSTEM_INSTRUCTIONS,
+        capabilities=pydantic_native_research_capabilities_for_model(model_name),
         **pydantic_agent_runtime_kwargs(),
     )
     try:
@@ -519,6 +524,7 @@ def _call_live_model(
         "decision": result.output.model_dump(mode="json"),
         "usage": _serialize_usage(result),
         "response_metadata": _serialize_response_metadata(result),
+        "native_research": pydantic_native_research_trace(result),
     }
 
 

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import ipaddress
 import json
 import math
 import os
@@ -14,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Callable, Literal, Mapping
-from urllib.parse import quote
+from urllib.parse import quote, urlparse
 from xml.etree.ElementTree import ParseError
 
 import yaml
@@ -4741,13 +4742,32 @@ def create_admin_router(
                 project=project,
                 operator_alias=request.operator_alias,
             )
+            native_research_trace: dict[str, Any] = {}
             model_output = _run_route_context_briefing_scout_ai(
                 prompt,
                 model_name=model_name,
                 timeout_seconds=request.timeout_seconds,
                 runner=route_context_briefing_ai_runner,
+                research_trace=native_research_trace,
             )
             regenerated_at = _admin_utc_now()
+            scout_ai_plan = _briefing_regeneration_json(model_output)
+            researched_sources = _route_context_research_source_records(
+                scout_ai_plan
+            )
+            research_collection: dict[str, Any] | None = None
+            if researched_sources:
+                from pretrip_p0_p1_source_collection import (
+                    collect_pretrip_p0_p1_sources,
+                )
+
+                research_collection = collect_pretrip_p0_p1_sources(
+                    project_root,
+                    allow_network_fetch=True,
+                    source_records=researched_sources,
+                    generated_at=regenerated_at,
+                    timeout_seconds=float(max(1, request.timeout_seconds)),
+                )
 
             from pretrip_route_context_collection import collect_pretrip_route_context
 
@@ -4775,7 +4795,6 @@ def create_admin_router(
             ).hexdigest()
             prompt_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
             route_context_intelligence_contract = _route_context_intelligence_contract()
-            scout_ai_plan = _briefing_regeneration_json(model_output)
             regeneration_payload = {
                 "artifact_kind": "scout_ai_route_context_briefing_regeneration",
                 "schema_version": "scout_dashboard_route_context_briefing_regeneration.v1",
@@ -4792,6 +4811,14 @@ def create_admin_router(
                 "model_output_preview": _briefing_regeneration_preview(model_output),
                 "route_context_intelligence_contract": route_context_intelligence_contract,
                 "scout_ai_route_context_intelligence_plan": scout_ai_plan,
+                "native_research": {
+                    "enabled": True,
+                    "web_search_enabled": True,
+                    "web_fetch_enabled": True,
+                    "trace": native_research_trace,
+                    "researched_source_count": len(researched_sources),
+                    "deterministic_collection": research_collection,
+                },
                 "route_context_collection": collection,
                 "outputs": collection.get("outputs", {}),
                 "boundary": {
@@ -6263,7 +6290,7 @@ def create_admin_router(
 
     @router.get("/pretrip/projects/{project_id}/debug-projection-events")
     def pretrip_project_debug_projection_events(project_id: str) -> dict[str, Any]:
-        project_root = _pretrip_workspace_project_root(
+        project_root = _pretrip_project_root_for_read(
             pretrip_workspace_root,
             project_id=project_id,
         )
@@ -9087,6 +9114,23 @@ def _compact_pretrip_heavy_layers(view: dict[str, Any]) -> None:
     )
     if isinstance(view.get("terrain_visualization"), dict):
         view["terrain_visualization"]["contours"] = []
+    view["qgis_spatial_risk_inputs"] = _compact_collection_items(
+        view.get("qgis_spatial_risk_inputs"),
+        "samples",
+        extra_keys=(
+            "alignment_status",
+            "qgis_sample_distance_m",
+            "baseline_pretrip_risk",
+            "slope_degrees",
+            "aspect_degrees",
+            "geomorphon_code",
+            "geomorphon_label",
+            "flow_accumulation_cells",
+            "flow_accumulation_likely_underestimated",
+            "risk_v2_status",
+            "risk_score_applied",
+        ),
+    )
     view["gis_perception_timeline"] = _compact_gis_perception_timeline(
         view.get("gis_perception_timeline")
     )
@@ -9280,21 +9324,31 @@ def _run_route_context_briefing_scout_ai(
     model_name: str,
     timeout_seconds: int,
     runner: Callable[[str, int], str] | None,
+    research_trace: dict[str, Any] | None = None,
 ) -> str:
     if runner is not None:
-        return runner(prompt, timeout_seconds)
+        output = runner(prompt, timeout_seconds)
+        if research_trace is not None:
+            trace = getattr(runner, "last_native_research_trace", None)
+            if isinstance(trace, dict):
+                research_trace.update(trace)
+        return output
 
     _ensure_scout_src_on_path()
     from assistant_pydantic_provider import PydanticAIEnvRunner
 
-    return PydanticAIEnvRunner(
+    env_runner = PydanticAIEnvRunner(
         model_name=model_name,
         workspace_model_max_tokens=_route_context_briefing_max_tokens(),
-        workspace_tools_enabled=False,
-    ).run(
+        workspace_tools_enabled=True,
+    )
+    output = env_runner.run(
         prompt,
         timeout_seconds=timeout_seconds,
     )
+    if research_trace is not None:
+        research_trace.update(env_runner.last_native_research_trace)
+    return output
 
 
 def _ensure_scout_src_on_path() -> None:
@@ -9382,15 +9436,19 @@ def _route_context_briefing_regeneration_prompt(
         "plan per docs/specs/scout-route-context-intelligence-implementation.md.\n"
         "Return concise JSON with keys: route_context_intelligence_plan, "
         "sec6_layer_coverage, source_tier_review, observation_stop_candidates, "
-        "missing_evidence, regeneration_notes.\n"
+        "missing_evidence, researched_sources, regeneration_notes.\n"
         "Use the workspace cache path: route_context_pack.json, "
         "route_context_points.json, source_manifest.json, route summary, map/risk "
         "artifacts. Treat P0 as official baseline, P1 as expansion evidence, and "
         "P2 as Scout-owned review seed.\n"
-        "Do not call tools or ask for additional evidence. The backend "
-        "deterministic compiler will read those workspace files after your JSON "
-        "plan; your role is to return the spec-aligned plan and explicit "
-        "evidence gaps from this summary.\n"
+        "Native research is enabled for this operator-triggered run. Use WebSearch "
+        "to discover current P0 official and P1 contextual sources, then use "
+        "WebFetch on every source selected for the plan; search snippets alone are "
+        "not evidence. Return researched_sources as a list of objects containing "
+        "only the fetched public HTTP(S) URL and a concise label. The backend will "
+        "fetch and hash those URLs again before adding them to workspace candidate "
+        "evidence. If a fetch fails, put it in missing_evidence instead of "
+        "researched_sources.\n"
         "Do not provide raw HTML. Do not include internal design rationale, "
         "implementation prompts, or generator instructions as user-visible copy.\n"
         "Keep all statements candidate-only. Do not authorize stop permission, "
@@ -9679,6 +9737,54 @@ def _briefing_regeneration_json(model_output: Any) -> dict[str, Any]:
     }
 
 
+def _route_context_research_source_records(
+    scout_ai_plan: dict[str, Any],
+) -> list[dict[str, str]]:
+    payload = scout_ai_plan.get("payload")
+    if not isinstance(payload, dict):
+        return []
+    raw_sources = payload.get("researched_sources")
+    if not isinstance(raw_sources, list):
+        return []
+    records: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for raw in raw_sources:
+        if not isinstance(raw, dict):
+            continue
+        url = str(raw.get("url") or "").strip()
+        parsed = urlparse(url)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or not parsed.hostname
+            or not _is_public_research_hostname(parsed.hostname)
+            or parsed.username is not None
+            or parsed.password is not None
+            or url in seen
+        ):
+            continue
+        seen.add(url)
+        label = str(raw.get("label") or parsed.hostname).strip()[:160]
+        records.append({"url": url, "label": label or parsed.hostname})
+        if len(records) >= 10:
+            break
+    return records
+
+
+def _is_public_research_hostname(hostname: str) -> bool:
+    normalized = hostname.strip().rstrip(".").casefold()
+    if (
+        not normalized
+        or normalized == "localhost"
+        or normalized.endswith((".localhost", ".local", ".internal"))
+    ):
+        return False
+    try:
+        address = ipaddress.ip_address(normalized)
+    except ValueError:
+        return True
+    return address.is_global
+
+
 def _extract_briefing_regeneration_json(text: str) -> Any:
     candidates = _fenced_json_candidates(text)
     candidates.append(text)
@@ -9732,11 +9838,21 @@ def _route_context_intelligence_contract() -> dict[str, Any]:
         "standard_alignment": (
             "SCOUT_OUTDOOR_AI_AGENT_STANDARD Sec. 6 Route Context Intelligence"
         ),
-        "generation_mode": "scout_ai_plan_plus_offline_workspace_compiler",
-        "scout_ai_role": (
-            "produce a concise route-context intelligence plan from workspace "
-            "cache; never generate raw briefing HTML"
+        "generation_mode": (
+            "scout_ai_native_research_plus_verified_workspace_cache_plus_compiler"
         ),
+        "scout_ai_role": (
+            "use workspace evidence plus WebSearch/WebFetch when current public "
+            "research is needed, then produce a concise route-context plan; never "
+            "generate raw briefing HTML"
+        ),
+        "native_research": {
+            "enabled": True,
+            "web_search_enabled": True,
+            "web_fetch_enabled": True,
+            "search_snippet_is_evidence": False,
+            "verified_cache_handoff_required": True,
+        },
         "deterministic_compiler": (
             "pretrip_route_context_collection.collect_pretrip_route_context"
         ),
@@ -10082,6 +10198,9 @@ def _navigation_terrain_dem_public_manifest(
         "prepared_at": manifest.get("prepared_at"),
         "encoding": manifest.get("encoding"),
         "resampling": manifest.get("resampling"),
+        "visual_interpolation": manifest.get("visual_interpolation"),
+        "interpolation_domain": manifest.get("interpolation_domain"),
+        "adds_source_resolution": manifest.get("adds_source_resolution"),
         "tile_size": manifest.get("tile_size"),
         "minzoom": manifest.get("minzoom"),
         "maxzoom": manifest.get("maxzoom"),

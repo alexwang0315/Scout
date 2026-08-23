@@ -305,10 +305,65 @@
     }
 
     .status-strip {
+      min-width: 0;
+      justify-self: end;
+    }
+
+    .dashboard-truth-details {
+      position: relative;
+    }
+
+    .dashboard-truth-details > summary {
+      min-height: 34px;
       display: flex;
-      flex-wrap: wrap;
+      align-items: center;
       justify-content: flex-end;
+      gap: 8px;
+      padding: 3px;
+      color: var(--text);
+      cursor: pointer;
+      list-style: none;
+    }
+
+    .dashboard-truth-details > summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .dashboard-truth-details > summary::after {
+      content: "+";
+      color: var(--subtle);
+      font-family: var(--mono);
+      font-size: 16px;
+    }
+
+    .dashboard-truth-details[open] > summary::after {
+      content: "−";
+    }
+
+    .dashboard-truth-summary-copy {
+      max-width: min(440px, 42vw);
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.35;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .dashboard-truth-panel {
+      position: absolute;
+      z-index: 420;
+      top: calc(100% + 8px);
+      right: 0;
+      width: min(760px, calc(100vw - 280px));
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 7px;
+      padding: 9px;
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      background: rgba(8, 16, 14, .98);
+      box-shadow: 0 18px 42px rgba(0, 0, 0, .42);
     }
 
     .truth-item {
@@ -2618,7 +2673,7 @@
 
     .pace-fit-status-grid {
       display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
+      grid-template-columns: minmax(200px, 1.15fr) repeat(3, minmax(150px, .8fr));
       gap: 1px;
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -2634,7 +2689,7 @@
 
     .pace-fit-status-cell span {
       display: block;
-      color: var(--subtle);
+      color: var(--muted);
       font-size: 11px;
       font-weight: 850;
       text-transform: uppercase;
@@ -2657,11 +2712,269 @@
       overflow-wrap: anywhere;
     }
 
-    .pace-fit-workbench {
+    .pace-spatial-workbench {
       display: grid;
-      grid-template-columns: minmax(260px, .78fr) minmax(420px, 1.25fr) minmax(320px, .86fr);
+      grid-template-columns: minmax(520px, 2.25fr) minmax(280px, .75fr);
       gap: 12px;
-      align-items: start;
+      align-items: stretch;
+    }
+
+    .pace-map-surface,
+    .pace-cp-inspector,
+    .pace-timeline-band,
+    .pace-supporting-details {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      overflow: hidden;
+    }
+
+    .pace-map-head,
+    .pace-timeline-head {
+      min-height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 9px 12px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, .018);
+    }
+
+    .pace-map-head h3,
+    .pace-timeline-head h3 {
+      color: var(--text);
+      font-size: 14px;
+    }
+
+    .pace-map-head p,
+    .pace-timeline-head p {
+      margin: 2px 0 0;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .pace-map-body {
+      position: relative;
+      min-height: clamp(520px, 62vh, 760px);
+      background: #0a1418;
+    }
+
+    .pace-map-body .architecture-empty {
+      min-height: clamp(520px, 62vh, 760px);
+      border: 0;
+      border-radius: 0;
+    }
+
+    .pace-map-context-label {
+      position: absolute;
+      z-index: 28;
+      left: 12px;
+      bottom: 12px;
+      max-width: min(420px, calc(100% - 24px));
+      display: grid;
+      gap: 2px;
+      padding: 8px 10px;
+      border: 1px solid rgba(147, 181, 191, .46);
+      border-radius: 6px;
+      color: var(--muted);
+      background: rgba(7, 16, 18, .9);
+      box-shadow: 0 10px 24px rgba(0, 0, 0, .28);
+      pointer-events: none;
+    }
+
+    .pace-map-context-label strong {
+      color: var(--text);
+      font-size: 13px;
+    }
+
+    .pace-map-context-label span {
+      font-size: 11px;
+    }
+
+    .pace-cp-inspector {
+      min-height: clamp(520px, 62vh, 760px);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .pace-cp-inspector-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 15px 14px 13px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .pace-cp-inspector-head > div span {
+      display: block;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 850;
+      text-transform: uppercase;
+    }
+
+    .pace-cp-inspector-head strong {
+      display: block;
+      margin-top: 4px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 27px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .pace-cp-inspector-body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      padding: 14px;
+    }
+
+    .pace-cp-facts {
+      display: grid;
+      gap: 0;
+    }
+
+    .pace-cp-fact {
+      display: grid;
+      gap: 3px;
+      padding: 10px 0;
+      border-bottom: 1px solid rgba(255, 255, 255, .07);
+    }
+
+    .pace-cp-fact:first-child {
+      padding-top: 0;
+    }
+
+    .pace-cp-fact span {
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .pace-cp-fact strong {
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+      overflow-wrap: anywhere;
+    }
+
+    .pace-cp-meaning {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .pace-primary-advisory {
+      margin-top: auto;
+      display: grid;
+      gap: 5px;
+      padding: 12px;
+      border-left: 3px solid var(--accent);
+      background: rgba(183, 207, 99, .065);
+    }
+
+    .pace-primary-advisory span {
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .pace-primary-advisory strong {
+      color: var(--text);
+      font-size: 16px;
+      line-height: 1.4;
+    }
+
+    .pace-timeline-band {
+      padding-bottom: 10px;
+    }
+
+    .pace-timeline-scroll {
+      overflow-x: auto;
+      overscroll-behavior-inline: contain;
+      padding: 0 12px;
+    }
+
+    .pace-supporting-details > summary {
+      min-height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
+      color: var(--text);
+      cursor: pointer;
+      list-style: none;
+    }
+
+    .pace-supporting-details > summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .pace-supporting-details > summary::after {
+      content: "+";
+      color: var(--subtle);
+      font-family: var(--mono);
+      font-size: 17px;
+    }
+
+    .pace-supporting-details[open] > summary::after {
+      content: "−";
+    }
+
+    .pace-supporting-details > summary span {
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .pace-supporting-details > summary em {
+      margin-left: auto;
+      color: var(--muted);
+      font-style: normal;
+      font-size: 11px;
+    }
+
+    .pace-supporting-grid {
+      display: grid;
+      grid-template-columns: minmax(300px, 1.1fr) minmax(280px, .95fr) minmax(250px, .75fr);
+      border-top: 1px solid var(--line);
+    }
+
+    .pace-support-section {
+      min-width: 0;
+      padding: 14px;
+    }
+
+    .pace-support-section + .pace-support-section {
+      border-left: 1px solid var(--line);
+    }
+
+    .pace-support-section h3 {
+      margin-bottom: 10px;
+      color: var(--text);
+      font-size: 13px;
+    }
+
+    .pace-support-section h3:not(:first-child) {
+      margin-top: 18px;
+    }
+
+    .pace-table-scroll {
+      max-width: 100%;
+      overflow-x: auto;
+      overscroll-behavior-inline: contain;
+    }
+
+    .pace-support-section .pace-output {
+      margin-top: 14px;
     }
 
     .pace-fit-stack {
@@ -2839,13 +3152,27 @@
 
     .pace-cp-node {
       position: relative;
+      width: 100%;
       min-width: 0;
       display: grid;
       justify-items: center;
       gap: 5px;
+      padding: 0;
+      border: 0;
+      border-radius: 5px;
       color: var(--muted);
+      background: transparent;
+      font: inherit;
       font-size: 11px;
       text-align: center;
+      cursor: pointer;
+    }
+
+    .pace-cp-node:hover,
+    .pace-cp-node:focus-visible {
+      color: var(--text);
+      outline: 2px solid rgba(183, 207, 99, .72);
+      outline-offset: 3px;
     }
 
     .pace-cp-dot {
@@ -2960,17 +3287,77 @@
     }
 
     .pace-mini-map {
-      min-height: 210px;
-      border: 1px solid rgba(255, 255, 255, .08);
-      border-radius: 8px;
+      min-height: clamp(520px, 62vh, 760px);
+      border: 0;
+      border-radius: 0;
       overflow: hidden;
       background: #0a1418;
     }
 
     .pace-mini-map svg {
       width: 100%;
-      height: 210px;
+      height: 100%;
+      min-height: inherit;
       display: block;
+    }
+
+    .pace-mini-map [data-pace-checkpoint-select] {
+      cursor: pointer;
+    }
+
+    @media (max-width: 1119px) {
+      .pace-fit-status-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .pace-spatial-workbench {
+        grid-template-columns: 1fr;
+      }
+
+      .pace-cp-inspector {
+        min-height: 0;
+      }
+
+      .pace-supporting-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .pace-support-section + .pace-support-section {
+        border-top: 1px solid var(--line);
+        border-left: 0;
+      }
+    }
+
+    @media (max-width: 620px) {
+      .pace-fit-status-cell {
+        padding: 9px 10px;
+      }
+
+      .pace-map-head,
+      .pace-timeline-head {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .pace-map-body,
+      .pace-map-body .architecture-empty,
+      .pace-mini-map {
+        min-height: min(62dvh, 560px);
+      }
+
+      .pace-cp-timeline {
+        min-width: 720px;
+      }
+
+      .pace-supporting-details > summary {
+        align-items: flex-start;
+        flex-wrap: wrap;
+      }
+
+      .pace-supporting-details > summary em {
+        width: calc(100% - 24px);
+        margin-left: 0;
+      }
     }
 
     .body-index-dashboard {
@@ -4888,7 +5275,21 @@
         grid-template-columns: 1fr;
       }
       .status-strip {
+        width: 100%;
+        justify-self: stretch;
+      }
+      .dashboard-truth-details > summary {
         justify-content: flex-start;
+      }
+      .dashboard-truth-summary-copy {
+        max-width: none;
+        flex: 1;
+      }
+      .dashboard-truth-panel {
+        position: static;
+        width: 100%;
+        grid-template-columns: 1fr;
+        margin-top: 6px;
       }
       .truth-item {
         flex: 1 1 150px;
@@ -4949,7 +5350,6 @@
       .import-trip-pipeline,
       .material-pool-layout,
       .route-briefing-layout,
-      .pace-fit-status-grid,
       .pace-fit-workbench,
       .pace-action-grid,
       .pace-delay-grid,
@@ -5396,11 +5796,17 @@
     }
 
     .field-instrument-theme .workspace {
+      --architecture-sticky-flush-offset: -18px;
       padding: 18px;
     }
 
     .field-instrument-theme .workspace > * {
       animation: field-instrument-arrive .36s cubic-bezier(.2, .8, .2, 1) both;
+    }
+
+    .field-instrument-theme .workspace > .route-architecture-shell {
+      /* qualification-architecture-no-rerender-shift */
+      animation: none;
     }
 
     .field-instrument-theme .workspace > *:nth-child(2) { animation-delay: .035s; }
@@ -5939,9 +6345,9 @@
     }
 
     .architecture-lensbar {
-      /* qualification-architecture-lens-sticky */
+      /* qualification-architecture-lens-flush-sticky */
       position: sticky;
-      top: 0;
+      top: var(--architecture-sticky-flush-offset, -18px);
       z-index: 16;
       padding: 10px;
       border-bottom: 1px solid var(--line);
@@ -5950,12 +6356,6 @@
     }
 
     .architecture-map-frame {
-      overflow: visible;
-    }
-
-    .dashboard-shell:has(.route-architecture-shell),
-    .dashboard-frame:has(.route-architecture-shell) {
-      /* qualification-architecture-sticky-containment */
       overflow: visible;
     }
 
@@ -5978,6 +6378,15 @@
     .architecture-map-canvas [data-architecture-bin-id] {
       cursor: pointer;
       transition: stroke-width .13s ease, opacity .13s ease, filter .13s ease;
+    }
+
+    .architecture-map-canvas [data-architecture-selection-surface="map-bin"] {
+      pointer-events: stroke;
+      scroll-margin-top: 84px;
+    }
+
+    .architecture-map-canvas [data-architecture-selection-surface="map-evidence"] {
+      scroll-margin-top: 84px;
     }
 
     .architecture-map-canvas [data-architecture-bin-id]:hover,
@@ -6457,7 +6866,10 @@
     }
 
     @media (max-width: 620px) {
-      .field-instrument-theme .workspace { padding: 12px; }
+      .field-instrument-theme .workspace {
+        --architecture-sticky-flush-offset: -12px;
+        padding: 12px;
+      }
       .field-instrument-theme .topbar { padding: 12px; }
     }
 
@@ -9823,8 +10235,20 @@
     .field-instrument-theme .truth-item > span,
     .dashboard-map-controls output,
     .permission-eyebrow,
+    .permission-node small,
+    .permission-node code,
+    .permission-policy,
+    .permission-summary-tile span,
+    .permission-summary-tile small,
+    .permission-day-map figcaption,
+    .permission-day-map-source,
     .permission-proposal-stat span,
     .permission-day-label,
+    .permission-day-location small,
+    .permission-day-route code,
+    .permission-day-meta,
+    .permission-day-evidence,
+    .permission-simulation-form label,
     .weather-layer-control small,
     .weather-layer-control [data-weather-layer-state],
     .navigation-terrain-review-title small,
@@ -9943,12 +10367,19 @@
           <h2 id="pageTitle">Home</h2>
         </div>
         <div class="status-strip" id="dashboardTruthStrip" aria-label="Dashboard truth status" aria-live="polite">
-          <span class="chip warn" id="maturityChip">partial</span>
-          <div class="truth-item" data-truth-field="surface"><span>Surface</span><strong>Loading</strong></div>
-          <div class="truth-item" data-truth-field="data"><span>Data</span><strong>Unknown</strong></div>
-          <div class="truth-item" data-truth-field="action"><span>Action</span><strong>Read-only</strong></div>
-          <div class="truth-item" data-truth-field="verification"><span>Verification</span><strong>Untested</strong></div>
-          <div class="truth-item" data-truth-field="provenance"><span>Provenance / Readiness</span><strong>Unknown</strong></div>
+          <details class="dashboard-truth-details">
+            <summary>
+              <span class="chip warn" id="maturityChip">partial</span>
+              <span class="dashboard-truth-summary-copy" id="dashboardTruthSummary">Loading dashboard truth metadata</span>
+            </summary>
+            <div class="dashboard-truth-panel">
+              <div class="truth-item" data-truth-field="surface"><span>Surface</span><strong>Loading</strong></div>
+              <div class="truth-item" data-truth-field="data"><span>Data</span><strong>Unknown</strong></div>
+              <div class="truth-item" data-truth-field="action"><span>Action</span><strong>Read-only</strong></div>
+              <div class="truth-item" data-truth-field="verification"><span>Verification</span><strong>Untested</strong></div>
+              <div class="truth-item" data-truth-field="provenance"><span>Provenance / Readiness</span><strong>Unknown</strong></div>
+            </div>
+          </details>
         </div>
       </header>
 
@@ -10084,7 +10515,7 @@
       "outdoor-navigation": Object.freeze({maturity: "partial", surface: "Terrain reading workbench", data: "Workspace DEM + candidate morphology", action: "Read-only feature inspection", verification: "Workspace API + UX verified", provenance: "Prepared DTM + GPX source ledger", mode: "Operational analysis"}),
     });
     const ROUTE_DATA_SCOPES = Object.freeze({
-      project: ["home", "timeline", "features-lbs", "features-workspace", "features-import-new-trip", "surface-debug", "emergency", "outdoor-route-context", "outdoor-architecture", "outdoor-weather"],
+      project: ["home", "timeline", "features-lbs", "features-workspace", "features-import-new-trip", "surface-debug", "emergency", "outdoor-route-context", "outdoor-pace-fit", "outdoor-architecture", "outdoor-weather"],
       briefing: ["outdoor-route-context"],
       body: ["outdoor-pace-fit", "outdoor-pace-fit-body-index"],
       weather: ["home", "outdoor-weather"],
@@ -10740,12 +11171,13 @@
       architectureSelectedPassageNodeId: "",
       architectureMobileView: "spine",
       architectureFingerprintScrollLeft: 0,
+      paceSelectedCheckpointId: "",
       navigationSelectedFeatureId: "saddle-west",
       navigationTerrainLens: "structure",
       navigationTerrainSourceMode: "workspace",
       navigationTerrainViewMode: "split",
       navigationTerrainEvidenceDomain: "observed",
-      navigationTerrainVerticalExaggeration: 1.5,
+      navigationTerrainVerticalExaggeration: 1,
       navigationTerrainReviewDrafts: {},
       navigationTerrainReviewArtifactFingerprint: "",
       navigationSelectedHierarchyEdgeId: "",
@@ -10758,7 +11190,14 @@
       qgisSpatialBusy: false,
       qgisSpatialMessage: "",
       qgisSpatialPollTimer: null,
-      qgisSpatialLayerVisibility: {route: true, slope: true, features: true},
+      qgisSpatialLayerVisibility: {
+        route: true,
+        slope: true,
+        features: true,
+        ridges: true,
+        valleys: true,
+        streams: true,
+      },
       qgisSpatialSelectedArtifactId: "",
       qgisSpatialSelectedFeatureRef: "",
       navigationSelectedLivePointId: "",
@@ -12795,8 +13234,15 @@
         ["provenance", "Provenance / Readiness", `${truth.provenance} · ${truth.mode}`],
       ];
       strip.innerHTML = `
-        <span class="chip ${maturityTone}" id="maturityChip">${escapeHtml(truth.maturity)}</span>
-        ${fields.map(([field, label, value]) => `<div class="truth-item" data-truth-field="${field}" data-tone="${truthTone(value)}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("")}
+        <details class="dashboard-truth-details">
+          <summary>
+            <span class="chip ${maturityTone}" id="maturityChip">${escapeHtml(truth.maturity)}</span>
+            <span class="dashboard-truth-summary-copy" id="dashboardTruthSummary">${escapeHtml(`${truth.surface} · ${truth.action}`)}</span>
+          </summary>
+          <div class="dashboard-truth-panel">
+            ${fields.map(([field, label, value]) => `<div class="truth-item" data-truth-field="${field}" data-tone="${truthTone(value)}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("")}
+          </div>
+        </details>
       `;
     }
 
@@ -16176,7 +16622,7 @@
     }
 
     function diagnosticWorkspaceContext() {
-      return diagnosticJson(`/admin/dashboard/workspaces/${encodeURIComponent(projectId())}`);
+      return diagnosticJson(`/admin/dashboard/workspaces/${encodeURIComponent(projectId())}`, 180000);
     }
 
     function diagnosticProjectProjection() {
@@ -16389,7 +16835,7 @@
         diagnosticWorkspaceCatalog(),
         diagnosticWorkspaceContext(),
         diagnosticProjectProjection(),
-        diagnosticJson(`${projectPath}/debug-projection`),
+        diagnosticJson(`${projectPath}/debug-projection`, 180000),
         diagnosticJson(`${projectPath}/debug-projection-events`),
         diagnosticJson(`${projectPath}/weather-dashboard`),
         diagnosticJson(`${projectPath}/navigation-terrain-intelligence`, 120000),
@@ -16614,7 +17060,7 @@
     async function diagnosticCheck010() {
       const project = encodeURIComponent(projectId());
       const [debugProjection, debugEvents] = await Promise.all([
-        diagnosticJson(`/admin/pretrip/projects/${project}/debug-projection`),
+        diagnosticJson(`/admin/pretrip/projects/${project}/debug-projection`, 180000),
         diagnosticJson(`/admin/pretrip/projects/${project}/debug-projection-events`),
       ]);
       diagnosticRequire(debugProjection?.project_id === projectId(), "Debug projection resolved a different project.");
@@ -16664,7 +17110,7 @@
     async function diagnosticCheck012() {
       const context = await diagnosticWorkspaceContext();
       diagnosticRequire(context.capabilities?.record_operation_request === true, "Workspace operation request capability is unavailable.");
-      const payload = await diagnosticJson(`/admin/dashboard/workspaces/${encodeURIComponent(projectId())}/operation-requests`);
+      const payload = await diagnosticJson(`/admin/dashboard/workspaces/${encodeURIComponent(projectId())}/operation-requests`, 180000);
       diagnosticRequire(Array.isArray(payload.requests), "Workspace operation request list is unavailable.");
       const unsafe = payload.requests.find(request => request.execution_performed === true || request.runtime_safety_truth === true);
       diagnosticRequire(!unsafe, "An operation request claims execution or runtime safety truth.");
@@ -16751,7 +17197,8 @@
       const checkpoints = asArray(project.checkpoints);
       const riskCount = asArray(project.risk_ribbon?.segments).length
         + asArray(project.risk_heatmap?.segments).length
-        + asArray(project.risk_delta?.segments).length;
+        + asArray(project.risk_delta?.segments).length
+        + asArray(project.qgis_spatial_risk_inputs?.samples).length;
       diagnosticRequire(segments.length > 0, "Current project has no Segment evidence.");
       diagnosticRequire(checkpoints.length > 0, "Current project has no checkpoint evidence.");
       diagnosticRequire(riskCount > 0, "Current project has no risk ribbon/heat/delta evidence.");
@@ -19682,31 +20129,95 @@
       });
     }
 
+    function dashboardMapSvgVisibleRatios(viewport) {
+      const svg = viewport.querySelector("[data-dashboard-map-stage] > svg");
+      if (!svg) return null;
+      const viewBox = svg.viewBox?.baseVal;
+      const matrix = svg.getScreenCTM();
+      if (
+        !viewBox
+        || !(viewBox.width > 0)
+        || !(viewBox.height > 0)
+        || !matrix
+      ) return null;
+
+      let inverse = null;
+      try {
+        inverse = matrix.inverse();
+      } catch (_error) {
+        return null;
+      }
+      const viewportRect = viewport.getBoundingClientRect();
+      const corners = [
+        new DOMPoint(viewportRect.left, viewportRect.top),
+        new DOMPoint(viewportRect.right, viewportRect.top),
+        new DOMPoint(viewportRect.right, viewportRect.bottom),
+        new DOMPoint(viewportRect.left, viewportRect.bottom),
+      ].map(point => point.matrixTransform(inverse));
+      if (!corners.every(point => (
+        Number.isFinite(point.x) && Number.isFinite(point.y)
+      ))) return null;
+      const viewBoxRight = viewBox.x + viewBox.width;
+      const viewBoxBottom = viewBox.y + viewBox.height;
+      const left = Math.max(viewBox.x, Math.min(
+        viewBoxRight,
+        Math.min(...corners.map(point => point.x)),
+      ));
+      const right = Math.max(viewBox.x, Math.min(
+        viewBoxRight,
+        Math.max(...corners.map(point => point.x)),
+      ));
+      const top = Math.max(viewBox.y, Math.min(
+        viewBoxBottom,
+        Math.min(...corners.map(point => point.y)),
+      ));
+      const bottom = Math.max(viewBox.y, Math.min(
+        viewBoxBottom,
+        Math.max(...corners.map(point => point.y)),
+      ));
+      if (!(right > left) || !(bottom > top)) return null;
+
+      const horizontalPadding = Math.min(viewBox.width * .04, (right - left) * .12);
+      const verticalPadding = Math.min(viewBox.height * .04, (bottom - top) * .12);
+      return {
+        leftRatio: Math.max(0, (left - horizontalPadding - viewBox.x) / viewBox.width),
+        rightRatio: Math.min(1, (right + horizontalPadding - viewBox.x) / viewBox.width),
+        topRatio: Math.max(0, (top - verticalPadding - viewBox.y) / viewBox.height),
+        bottomRatio: Math.min(1, (bottom + verticalPadding - viewBox.y) / viewBox.height),
+      };
+    }
+
     function navigationRudyVisibleBounds(viewport, viewState, fullBounds) {
       const stage = viewport.querySelector("[data-dashboard-map-stage]");
       if (!stage) return fullBounds;
-      const stageWidth = Math.max(1, stage.offsetWidth || stage.scrollWidth || 0);
-      const stageHeight = Math.max(1, stage.offsetHeight || stage.scrollHeight || 0);
-      const viewportWidth = Math.max(1, viewport.clientWidth || 0);
-      const viewportHeight = Math.max(1, viewport.clientHeight || 0);
-      const zoom = Math.max(1, Number(viewState.zoom) || 1);
-      const left = Math.max(0, Math.min(stageWidth, -Number(viewState.x || 0) / zoom));
-      const top = Math.max(0, Math.min(stageHeight, -Number(viewState.y || 0) / zoom));
-      const right = Math.max(left, Math.min(
-        stageWidth,
-        (viewportWidth - Number(viewState.x || 0)) / zoom,
-      ));
-      const bottom = Math.max(top, Math.min(
-        stageHeight,
-        (viewportHeight - Number(viewState.y || 0)) / zoom,
-      ));
-      if (!(right > left) || !(bottom > top)) return fullBounds;
-      const horizontalPadding = Math.min(stageWidth * .04, (right - left) * .12);
-      const verticalPadding = Math.min(stageHeight * .04, (bottom - top) * .12);
-      const leftRatio = Math.max(0, (left - horizontalPadding) / stageWidth);
-      const rightRatio = Math.min(1, (right + horizontalPadding) / stageWidth);
-      const topRatio = Math.max(0, (top - verticalPadding) / stageHeight);
-      const bottomRatio = Math.min(1, (bottom + verticalPadding) / stageHeight);
+      let visibleRatios = dashboardMapSvgVisibleRatios(viewport);
+      if (!visibleRatios) {
+        const stageWidth = Math.max(1, stage.offsetWidth || stage.scrollWidth || 0);
+        const stageHeight = Math.max(1, stage.offsetHeight || stage.scrollHeight || 0);
+        const viewportWidth = Math.max(1, viewport.clientWidth || 0);
+        const viewportHeight = Math.max(1, viewport.clientHeight || 0);
+        const zoom = Math.max(1, Number(viewState.zoom) || 1);
+        const left = Math.max(0, Math.min(stageWidth, -Number(viewState.x || 0) / zoom));
+        const top = Math.max(0, Math.min(stageHeight, -Number(viewState.y || 0) / zoom));
+        const right = Math.max(left, Math.min(
+          stageWidth,
+          (viewportWidth - Number(viewState.x || 0)) / zoom,
+        ));
+        const bottom = Math.max(top, Math.min(
+          stageHeight,
+          (viewportHeight - Number(viewState.y || 0)) / zoom,
+        ));
+        if (!(right > left) || !(bottom > top)) return fullBounds;
+        const horizontalPadding = Math.min(stageWidth * .04, (right - left) * .12);
+        const verticalPadding = Math.min(stageHeight * .04, (bottom - top) * .12);
+        visibleRatios = {
+          leftRatio: Math.max(0, (left - horizontalPadding) / stageWidth),
+          rightRatio: Math.min(1, (right + horizontalPadding) / stageWidth),
+          topRatio: Math.max(0, (top - verticalPadding) / stageHeight),
+          bottomRatio: Math.min(1, (bottom + verticalPadding) / stageHeight),
+        };
+      }
+      const {leftRatio, rightRatio, topRatio, bottomRatio} = visibleRatios;
       const northWorldY = navigationMercatorY(fullBounds.north);
       const southWorldY = navigationMercatorY(fullBounds.south);
       return {
@@ -19906,6 +20417,44 @@
 
     function updateNavigationRudyTileLayer(viewport, viewState) {
       updateDashboardRudyTileLayer(viewport, viewState);
+    }
+
+    function dashboardMapCoordinateDistanceMeters(start, end) {
+      const startLat = Number(start?.lat);
+      const startLon = Number(start?.lon);
+      const endLat = Number(end?.lat);
+      const endLon = Number(end?.lon);
+      if (![startLat, startLon, endLat, endLon].every(Number.isFinite)) return 0;
+      const radians = value => value * Math.PI / 180;
+      const deltaLat = radians(endLat - startLat);
+      const deltaLon = radians(endLon - startLon);
+      const haversine = Math.sin(deltaLat / 2) ** 2
+        + Math.cos(radians(startLat)) * Math.cos(radians(endLat))
+        * Math.sin(deltaLon / 2) ** 2;
+      return 6371008.8 * 2 * Math.atan2(
+        Math.sqrt(haversine),
+        Math.sqrt(Math.max(0, 1 - haversine)),
+      );
+    }
+
+    function dashboardMapMeasuredCoordinateSegments(coordinateSegments) {
+      let totalDistanceM = 0;
+      const measuredSegments = asArray(coordinateSegments).map(segment => {
+        const points = asArray(segment).filter(point => (
+          Number.isFinite(Number(point?.lat))
+          && Number.isFinite(Number(point?.lon))
+        ));
+        return points.map((point, index) => {
+          if (index > 0) {
+            totalDistanceM += dashboardMapCoordinateDistanceMeters(
+              points[index - 1],
+              point,
+            );
+          }
+          return {...point, dashboardMapDistanceM: totalDistanceM};
+        });
+      }).filter(segment => segment.length >= 2);
+      return {coordinateSegments: measuredSegments, totalDistanceM};
     }
 
     function dashboardMapPointPosition(point, bounds, width = 1000, height = 392) {
@@ -20282,9 +20831,20 @@
       return mode === "3d" ? .38 : 1;
     }
 
-    function navigationTerrainMinimumReviewZoom(dem, mode) {
+    function navigationTerrainCameraMinimumZoom(dem, mode) {
       const sourceZoom = Number(dem?.minzoom || 13);
-      return mode === "3d" ? sourceZoom : Math.max(5, sourceZoom - 2);
+      return mode === "3d" ? Math.min(22, sourceZoom + 1)
+        : Math.max(5, sourceZoom - 5);
+    }
+
+    function navigationTerrainInterpolationText(dem) {
+      if (dem?.visual_interpolation === "bilinear") {
+        return "bilinear display smoothing · adds source resolution: no";
+      }
+      if (dem?.resampling === "nearest") {
+        return "nearest display sampling · source-grid steps may be visible";
+      }
+      return "display interpolation unavailable · adds source resolution: unknown";
     }
 
     function navigationTerrainDemReady(snapshot) {
@@ -20300,6 +20860,14 @@
       const isTerrain = mode === "3d";
       const evidenceDomain = navigationTerrainEvidenceDomain();
       const rudyOpacity = navigationTerrainRudyOpacity(mode);
+      const routeCoverage = navigationTerrainRouteDemCoverage(snapshot);
+      const routeCoverageText = navigationTerrainRouteDemCoverageText(snapshot);
+      const interpolationText = navigationTerrainInterpolationText(dem);
+      const fitAuthority = isTerrain ? "prepared-dem-local-detail" : "golden-route";
+      const fitLabel = isTerrain ? "Reset prepared DEM local detail" : "Fit entire Golden Route";
+      const scaleText = isTerrain
+        ? `3D LOCAL DETAIL · Z${navigationTerrainCameraMinimumZoom(dem, mode)} camera floor for decoded Z${valueOrDash(dem.minzoom)} DEM`
+        : "FULL GOLDEN ROUTE · independent 2D scale";
       const sourceLabel = evidenceDomain === "observed"
         ? isTerrain
           ? `Rudy+TW ${(rudyOpacity * 100).toFixed(0)}% terrain texture + prepared DEM`
@@ -20308,7 +20876,7 @@
           ? "Prepared DEM + non-spatial learned prior"
           : "Prepared DEM only";
       const stateText = ready
-        ? `${formatInteger(dem.tile_count)} complete Z${formatInteger(dem.minzoom)} Terrain RGB tiles · ${valueOrDash(dem.source_cell_resolution_m)}m source cells · ${sourceLabel}`
+        ? `${scaleText} · ${formatInteger(dem.tile_count)} complete Terrain RGB tiles · ${valueOrDash(dem.source_cell_resolution_m)}m source cells · ${interpolationText} · ${routeCoverageText} · ${sourceLabel}`
         : "Prepared Terrain RGB tiles are unavailable. The workbench will not synthesize a flat or gap-filled surface.";
       return `
         <div
@@ -20325,7 +20893,12 @@
             data-navigation-rudy-opacity="${navigationTerrainRudyOpacity(mode)}"
             data-navigation-rudy-fade-duration="0"
             data-navigation-map-surface-geometry="${mode === "3d" ? "terrain" : "flat"}"
-            data-navigation-terrain-min-review-zoom="${navigationTerrainMinimumReviewZoom(dem, mode)}"
+            data-navigation-terrain-source-min-zoom="${valueOrDash(dem.minzoom)}"
+            data-navigation-terrain-camera-min-zoom="${navigationTerrainCameraMinimumZoom(dem, mode)}"
+            data-navigation-dem-route-coverage="${escapeHtml(routeCoverage.status)}"
+            data-navigation-terrain-visual-interpolation="${escapeHtml(dem.visual_interpolation || "unavailable")}"
+            data-navigation-terrain-adds-source-resolution="${String(dem.adds_source_resolution === true)}"
+            data-navigation-maplibre-fit-authority="${fitAuthority}"
             data-dashboard-map-surface="navigation-map"
             data-dashboard-basemap-layer="${evidenceDomain === "observed" ? "rudy-twmap" : "none"}"
             data-dashboard-basemap-policy="rudy-twmap-only"
@@ -20341,8 +20914,10 @@
             type="button"
             class="navigation-terrain-maplibre-fit"
             data-navigation-maplibre-fit="${escapeHtml(mode)}"
+            aria-label="${fitLabel}"
+            title="${fitLabel}"
             ${ready ? "" : "disabled"}
-          >FIT</button>
+          >${isTerrain ? "RESET" : "FIT"}</button>
           <div
             class="navigation-terrain-maplibre-state"
             data-navigation-maplibre-state="${ready ? "loading" : "failed"}"
@@ -20384,7 +20959,7 @@
       const terrainPane = `
         <div class="navigation-terrain-view-pane" data-navigation-terrain-pane="3d">
           ${renderNavigationTerrainMapLibreHost(snapshot, "3d")}
-          <span class="navigation-terrain-pane-label">MAPLIBRE 3D 地形形態複核</span>
+          <span class="navigation-terrain-pane-label">MAPLIBRE 3D 局部地形形態複核</span>
         </div>
       `;
       return `
@@ -20395,7 +20970,7 @@
             <span>Terrain RGB: ${escapeHtml(terrainDem.encoding || "not prepared")}</span>
             <span>Adds source resolution: No</span>
             <span>Z: ${verticalExaggeration.toFixed(1)}×</span>
-            <span>Camera: MapLibre perspective / north-up 2D</span>
+            <span>Camera: 3D local detail / full-route 2D</span>
             <span>Draft review: Unsaved</span>
           </div>
         </div>
@@ -20406,7 +20981,7 @@
             <p>同時檢查等高線、DEM 形態、地形骨架與路線關係；所有線面仍是候選證據，不是步道、通行或安全結論。</p>
           </div>
           <div class="navigation-terrain-review-controls">
-            <small>證據域明示 · 視圖同步 · Z exaggeration 明示</small>
+            <small>證據域明示 · 中心同步 / 尺度獨立 · Z exaggeration 明示</small>
             <div class="navigation-terrain-domain-switch" role="group" aria-label="Terrain evidence domain">
               ${[
                 ["terrain", "Terrain Evidence Only"],
@@ -20417,7 +20992,7 @@
             <div class="navigation-terrain-view-switch" role="group" aria-label="Terrain review view">
               ${[
                 ["map", "2D Evidence"],
-                ["terrain", "3D Terrain"],
+                ["terrain", "3D Local Detail"],
                 ["split", "Split Review"],
               ].map(([mode, label]) => `<button type="button" data-navigation-terrain-view="${mode}" aria-pressed="${viewMode === mode ? "true" : "false"}">${label}</button>`).join("")}
             </div>
@@ -20449,6 +21024,9 @@
           if (kind === "qgis_candidate_route") return visibility.route !== false;
           if (kind === "qgis_slope_candidate") return visibility.slope !== false;
           if (kind === "qgis_terrain_feature_sample") return visibility.features !== false;
+          if (kind === "qgis_candidate_ridge_line") return visibility.ridges !== false;
+          if (kind === "qgis_candidate_valley_line") return visibility.valleys !== false;
+          if (kind === "qgis_candidate_stream_network") return visibility.streams !== false;
           return true;
         })
         .map(feature => ({
@@ -20484,7 +21062,13 @@
           ? "qgis-route"
           : kind === "qgis_terrain_feature_sample"
             ? "qgis-terrain-samples"
-            : "qgis-slope";
+            : kind === "qgis_candidate_ridge_line"
+              ? "qgis-ridge-lines"
+              : kind === "qgis_candidate_valley_line"
+                ? "qgis-valley-lines"
+                : kind === "qgis_candidate_stream_network"
+                  ? "qgis-stream-network"
+                  : "qgis-slope";
         return adapter.createEvidenceFeature({
           ...properties,
           feature_id: properties.id || feature.id,
@@ -20677,6 +21261,60 @@
         : null;
     }
 
+    function navigationTerrainGoldenRouteBounds(snapshot) {
+      const coordinates = navigationTerrainMapLibreCoordinates(
+        snapshot?.route_samples?.points,
+      );
+      if (coordinates.length < 2) return null;
+      const bounds = coordinates.reduce((result, coordinate) => ({
+        west: Math.min(result.west, coordinate[0]),
+        south: Math.min(result.south, coordinate[1]),
+        east: Math.max(result.east, coordinate[0]),
+        north: Math.max(result.north, coordinate[1]),
+      }), {
+        west: Number.POSITIVE_INFINITY,
+        south: Number.POSITIVE_INFINITY,
+        east: Number.NEGATIVE_INFINITY,
+        north: Number.NEGATIVE_INFINITY,
+      });
+      return [[bounds.west, bounds.south], [bounds.east, bounds.north]];
+    }
+
+    function navigationTerrainFitBounds(snapshot) {
+      return navigationTerrainGoldenRouteBounds(snapshot)
+        || navigationTerrainMapLibreBounds(snapshot?.terrain_raster_dem || {});
+    }
+
+    function navigationTerrainRouteDemCoverage(snapshot) {
+      const routeCoordinates = navigationTerrainMapLibreCoordinates(
+        snapshot?.route_samples?.points,
+      );
+      const demBounds = navigationRudyBounds(snapshot?.terrain_raster_dem?.bounds_wgs84);
+      if (!routeCoordinates.length || !demBounds) {
+        return {status: "unknown", supportedCount: 0, totalCount: routeCoordinates.length, percent: 0};
+      }
+      const supportedCount = routeCoordinates.filter(([lon, lat]) => (
+        lon >= demBounds.west
+        && lon <= demBounds.east
+        && lat >= demBounds.south
+        && lat <= demBounds.north
+      )).length;
+      const totalCount = routeCoordinates.length;
+      return {
+        status: supportedCount === totalCount ? "complete" : "partial",
+        supportedCount,
+        totalCount,
+        percent: supportedCount / totalCount * 100,
+      };
+    }
+
+    function navigationTerrainRouteDemCoverageText(snapshot) {
+      const coverage = navigationTerrainRouteDemCoverage(snapshot);
+      return coverage.totalCount
+        ? `${coverage.status === "complete" ? "FULL DEM COVERAGE" : "PARTIAL DEM COVERAGE"} · ${coverage.supportedCount}/${coverage.totalCount} displayed route samples (${coverage.percent.toFixed(0)}%)`
+        : "ROUTE / DEM COVERAGE UNKNOWN";
+    }
+
     function navigationTerrainRudyTileTemplate() {
       return [
         "/admin/tiles/imagery",
@@ -20863,6 +21501,44 @@
           layout: {"line-cap": "round", "line-join": "round"},
         },
         {
+          id: "scout-qgis-stream-network-candidate",
+          type: "line",
+          source: "scout-terrain-candidates",
+          filter: ["==", ["get", "kind"], "qgis_candidate_stream_network"],
+          paint: {
+            "line-color": "#1769aa",
+            "line-width": lineWidth(1.8, 3.8),
+            "line-opacity": .92,
+          },
+          layout: {"line-cap": "round", "line-join": "round"},
+        },
+        {
+          id: "scout-qgis-valley-candidate",
+          type: "line",
+          source: "scout-terrain-candidates",
+          filter: ["==", ["get", "kind"], "qgis_candidate_valley_line"],
+          paint: {
+            "line-color": "#38a7c7",
+            "line-width": lineWidth(2.2, 4.4),
+            "line-opacity": .9,
+            "line-dasharray": [2.5, 1.2],
+          },
+          layout: {"line-cap": "round", "line-join": "round"},
+        },
+        {
+          id: "scout-qgis-ridge-candidate",
+          type: "line",
+          source: "scout-terrain-candidates",
+          filter: ["==", ["get", "kind"], "qgis_candidate_ridge_line"],
+          paint: {
+            "line-color": "#ffb000",
+            "line-width": lineWidth(2.4, 4.8),
+            "line-opacity": .94,
+            "line-dasharray": [1.2, .9],
+          },
+          layout: {"line-cap": "round", "line-join": "round"},
+        },
+        {
           id: "scout-qgis-terrain-feature-samples",
           type: "circle",
           source: "scout-terrain-candidates",
@@ -20970,8 +21646,11 @@
       return canvas;
     }
 
-    function fitNavigationTerrainMapLibre(map, dem, mode) {
-      const bounds = navigationTerrainMapLibreBounds(dem);
+    function fitNavigationTerrainMapLibre(map, snapshot, mode) {
+      const dem = snapshot?.terrain_raster_dem || {};
+      const bounds = mode === "3d"
+        ? navigationTerrainMapLibreBounds(dem) || navigationTerrainFitBounds(snapshot)
+        : navigationTerrainFitBounds(snapshot);
       if (!bounds) return;
       map.fitBounds(bounds, {
         padding: mode === "3d" ? 54 : 36,
@@ -20979,9 +21658,9 @@
         pitch: mode === "3d" ? 58 : 0,
         bearing: mode === "3d" ? -28 : 0,
       });
-      const minimumReviewZoom = navigationTerrainMinimumReviewZoom(dem, mode);
-      if (mode === "3d" && map.getZoom() < minimumReviewZoom) {
-        map.jumpTo({zoom: minimumReviewZoom, pitch: 58, bearing: -28});
+      const minimumCameraZoom = navigationTerrainCameraMinimumZoom(dem, mode);
+      if (mode === "3d" && map.getZoom() < minimumCameraZoom) {
+        map.jumpTo({zoom: minimumCameraZoom, pitch: 58, bearing: -28});
       }
     }
 
@@ -20990,20 +21669,11 @@
       navigationTerrainMapLibreRuntime.synchronizing = true;
       try {
         const center = sourceEntry.map.getCenter();
-        const terrainZoomFloor = navigationTerrainMapLibreRuntime.maps.reduce(
-          (floor, entry) => entry.mode === "3d"
-            ? Math.max(floor, entry.map.getMinZoom())
-            : floor,
-          Number.NEGATIVE_INFINITY,
-        );
-        const sourceZoom = sourceEntry.map.getZoom();
-        const zoom = Number.isFinite(terrainZoomFloor)
-          ? Math.max(sourceZoom, terrainZoomFloor)
-          : sourceZoom;
-        if (zoom !== sourceZoom) sourceEntry.map.jumpTo({center, zoom});
+        const zoom = sourceEntry.map.getZoom();
         navigationTerrainMapLibreRuntime.maps.forEach(entry => {
           if (entry === sourceEntry) return;
-          entry.map.jumpTo({center, zoom});
+          const synchronizeZoom = entry.mode === sourceEntry.mode;
+          entry.map.jumpTo({center, ...(synchronizeZoom ? {zoom} : {})});
         });
       } finally {
         navigationTerrainMapLibreRuntime.synchronizing = false;
@@ -21015,17 +21685,17 @@
       if (!hosts.length || state.route !== "outdoor-navigation") return;
       const snapshot = navigationTerrainSnapshot();
       const dem = snapshot?.terrain_raster_dem || {};
-      if (
-        dem.status !== "ready"
-        || !dem.tile_url_template
-        || !navigationTerrainMapLibreBounds(dem)
-      ) return;
+      const routeCoverageText = navigationTerrainRouteDemCoverageText(snapshot);
+      const interpolationText = navigationTerrainInterpolationText(dem);
+      const terrainReady = navigationTerrainDemReady(snapshot);
+      const activeHosts = terrainReady ? hosts : [];
+      if (!activeHosts.length) return;
       const generation = navigationTerrainMapLibreRuntime.generation;
       let maplibregl;
       try {
         maplibregl = await loadNavigationTerrainMapLibre();
       } catch (error) {
-        hosts.forEach(host => {
+        activeHosts.forEach(host => {
           host.dataset.navigationMaplibreStatus = "failed";
           const status = host.parentElement?.querySelector("[data-navigation-maplibre-state]");
           if (status) {
@@ -21036,12 +21706,19 @@
         return;
       }
       if (generation !== navigationTerrainMapLibreRuntime.generation) return;
-      hosts.forEach(host => {
-        const mode = host.dataset.navigationMaplibreMap === "3d" ? "3d" : "2d";
-        const demBounds = navigationRudyBounds(dem.bounds_wgs84);
+      activeHosts.forEach(host => {
+        const requestedMode = host.dataset.navigationMaplibreMap;
+        const mode = requestedMode === "3d" ? "3d" : "2d";
+        const mapScopeText = mode === "3d"
+          ? `3D LOCAL DETAIL · Z${navigationTerrainCameraMinimumZoom(dem, mode)} camera floor for decoded Z${formatInteger(dem.minzoom)} DEM`
+          : "FULL GOLDEN ROUTE · independent 2D scale";
+        const bounds = mode === "3d"
+          ? navigationTerrainMapLibreBounds(dem) || navigationTerrainFitBounds(snapshot)
+          : navigationTerrainFitBounds(snapshot);
+        if (!bounds) return;
         const center = [
-          (demBounds.west + demBounds.east) / 2,
-          (demBounds.south + demBounds.north) / 2,
+          (bounds[0][0] + bounds[1][0]) / 2,
+          (bounds[0][1] + bounds[1][1]) / 2,
         ];
         const status = host.parentElement?.querySelector("[data-navigation-maplibre-state]");
         try {
@@ -21049,10 +21726,10 @@
             container: host,
             style: navigationTerrainMapLibreStyle(snapshot, mode),
             center,
-            zoom: Number(dem.minzoom || 13) - .55,
+            zoom: navigationTerrainCameraMinimumZoom(dem, mode),
             pitch: mode === "3d" ? 58 : 0,
             bearing: mode === "3d" ? -28 : 0,
-            minZoom: navigationTerrainMinimumReviewZoom(dem, mode),
+            minZoom: navigationTerrainCameraMinimumZoom(dem, mode),
             maxZoom: Math.min(20, Number(dem.maxzoom || 13) + 4),
             maxPitch: 80,
             scrollZoom: false,
@@ -21079,6 +21756,70 @@
             host.dataset.navigationMaplibrePitch = map.getPitch().toFixed(1);
             host.dataset.navigationMaplibreBearing = map.getBearing().toFixed(1);
           };
+          const rudyBlend = host.dataset.navigationEvidenceDomain === "observed"
+            ? mode === "3d"
+              ? `Rudy+TW ${Math.round(navigationTerrainRudyOpacity(mode) * 100)}% terrain texture`
+              : "Rudy+TW 100% flat map · DEM shading hidden"
+            : "Rudy+TW off";
+          let terrainVerificationSequence = 0;
+          const markMapReady = terrainElevation => {
+            host.dataset.navigationMaplibreStatus = "ready";
+            host.dataset.navigationTerrainElevationStatus = mode === "3d"
+              ? "decoded"
+              : "not-applicable";
+            if (Number.isFinite(terrainElevation)) {
+              host.dataset.navigationTerrainCenterElevation = terrainElevation.toFixed(1);
+            }
+            if (status) {
+              status.dataset.navigationMaplibreState = "ready";
+              const terrainEvidence = Number.isFinite(terrainElevation)
+                ? ` · center rendered elevation ${terrainElevation.toFixed(1)}m (visualization only)`
+                : "";
+              status.innerHTML = `<strong>${mode === "3d" ? "MAPLIBRE 3D TERRAIN · DEM DECODED" : "MAPLIBRE 2D EVIDENCE · READY"}</strong>${mapScopeText} · ${formatInteger(dem.tile_count)} complete Terrain RGB tiles · ${routeCoverageText} · ${rudyBlend} · ${valueOrDash(dem.source_cell_resolution_m)}m source cells · ${interpolationText}${terrainEvidence} · wheel/double-click zoom disabled`;
+            }
+          };
+          const verifyTerrainElevation = (attempt, verificationSequence) => {
+            if (
+              verificationSequence !== terrainVerificationSequence
+              || generation !== navigationTerrainMapLibreRuntime.generation
+              || !host.isConnected
+            ) return;
+            const cameraCenter = map.getCenter();
+            const terrainElevation = map.queryTerrainElevation(cameraCenter);
+            const expectsNonZeroTerrain = asArray(snapshot?.route_samples?.points).some(
+              point => Math.abs(Number(point?.elevation_m)) > 1,
+            );
+            const decoded = Number.isFinite(terrainElevation)
+              && (!expectsNonZeroTerrain || Math.abs(terrainElevation) > 1);
+            if (decoded) {
+              markMapReady(terrainElevation);
+              return;
+            }
+            if (attempt < 30) {
+              window.setTimeout(
+                () => verifyTerrainElevation(attempt + 1, verificationSequence),
+                100,
+              );
+              return;
+            }
+            host.dataset.navigationMaplibreStatus = "degraded";
+            host.dataset.navigationTerrainElevationStatus = "unresolved";
+            if (status) {
+              status.dataset.navigationMaplibreState = "failed";
+              status.innerHTML = `<strong>MAPLIBRE 3D TERRAIN · DEGRADED</strong>Terrain RGB loaded but a non-zero decoded elevation was not available at the local review center. No 3D terrain claim is made.`;
+            }
+          };
+          const scheduleTerrainElevationVerification = () => {
+            terrainVerificationSequence += 1;
+            host.dataset.navigationMaplibreStatus = "verifying";
+            host.dataset.navigationTerrainElevationStatus = "verifying";
+            delete host.dataset.navigationTerrainCenterElevation;
+            if (status) {
+              status.dataset.navigationMaplibreState = "loading";
+              status.innerHTML = `<strong>MAPLIBRE 3D TERRAIN · VERIFYING LOCAL DEM</strong>${mapScopeText} · decoded elevation pending`;
+            }
+            verifyTerrainElevation(0, terrainVerificationSequence);
+          };
           map.scrollZoom.disable();
           map.doubleClickZoom.disable();
           map.addControl(new maplibregl.NavigationControl({
@@ -21088,22 +21829,23 @@
           }), "top-right");
           map.once("load", () => {
             if (generation !== navigationTerrainMapLibreRuntime.generation) return;
-            fitNavigationTerrainMapLibre(map, dem, mode);
-            host.dataset.navigationMaplibreStatus = "ready";
+            fitNavigationTerrainMapLibre(map, snapshot, mode);
+            host.dataset.navigationMaplibreStatus = mode === "3d" ? "verifying" : "ready";
+            host.dataset.navigationTerrainElevationStatus = mode === "3d"
+              ? "verifying"
+              : "not-applicable";
             host.dataset.navigationMaplibreVersion = String(maplibregl.getVersion?.() || "6.2.0");
             updateCameraEvidence();
-            if (status) {
-              const rudyBlend = host.dataset.navigationEvidenceDomain === "observed"
-                ? mode === "3d"
-                  ? `Rudy+TW ${Math.round(navigationTerrainRudyOpacity(mode) * 100)}% terrain texture`
-                  : "Rudy+TW 100% flat map · DEM shading hidden"
-                : "Rudy+TW off";
-              status.dataset.navigationMaplibreState = "ready";
-              status.innerHTML = `<strong>${mode === "3d" ? "MAPLIBRE 3D TERRAIN" : "MAPLIBRE 2D EVIDENCE"} · READY</strong>${formatInteger(dem.tile_count)} complete Terrain RGB tiles · Z${formatInteger(dem.minzoom)} source floor · ${rudyBlend} · ${valueOrDash(dem.source_cell_resolution_m)}m cells · wheel/double-click zoom disabled`;
-            }
+            if (mode === "3d") scheduleTerrainElevationVerification();
+            else markMapReady(null);
           });
-          map.on("move", () => synchronizeNavigationTerrainMapLibre(entry));
-          map.on("moveend", updateCameraEvidence);
+          map.on("move", () => {
+            synchronizeNavigationTerrainMapLibre(entry);
+          });
+          map.on("moveend", () => {
+            updateCameraEvidence();
+            if (mode === "3d") scheduleTerrainElevationVerification();
+          });
           map.on("error", event => {
             host.dataset.navigationMaplibreStatus = "failed";
             if (status) {
@@ -21127,13 +21869,13 @@
           host.addEventListener("keydown", event => {
             if (event.key !== "0") return;
             event.preventDefault();
-            fitNavigationTerrainMapLibre(map, dem, mode);
+            fitNavigationTerrainMapLibre(map, snapshot, mode);
           });
           const fitButton = host.parentElement?.querySelector(
             `[data-navigation-maplibre-fit="${cssEscape(mode)}"]`,
           );
           fitButton?.addEventListener("click", () => {
-            fitNavigationTerrainMapLibre(map, dem, mode);
+            fitNavigationTerrainMapLibre(map, snapshot, mode);
             keyboardSurface.focus({preventScroll: true});
           });
         } catch (error) {
@@ -21820,9 +22562,13 @@
               ["dem_loaded", "DEM loaded"],
               ["capability_discovery", "GRASS capability discovery"],
               ["slope_aspect_generated", "Slope and aspect generated"],
-              ["geomorphon_generated", "Geomorphon landforms generated"],
+              ["geomorphon_generated", "Multiscale geomorphons generated"],
+              ["ridge_valley_vectorized", "Ridge and valley candidates vectorized"],
               ["hydrology_generated", "Flow accumulation generated"],
+              ["stream_network_extracted", "Stream-network candidate extracted"],
               ["crs_normalized", "CRS metadata normalized"],
+              ["candidate_vectors_exported", "Candidate lines exported for MapLibre"],
+              ["route_feature_sampling", "Route terrain features sampled"],
               ["map_rendered", "Map rendered"],
               ["evidence_review_pending", "Evidence review pending"],
             ]
@@ -21897,6 +22643,9 @@
             <button type="button" data-qgis-layer-toggle="route" aria-pressed="${state.qgisSpatialLayerVisibility?.route === false ? "false" : "true"}">Route</button>
             <button type="button" data-qgis-layer-toggle="slope" aria-pressed="${state.qgisSpatialLayerVisibility?.slope === false ? "false" : "true"}">Slope coverage</button>
             <button type="button" data-qgis-layer-toggle="features" aria-pressed="${state.qgisSpatialLayerVisibility?.features === false ? "false" : "true"}">Terrain samples</button>
+            <button type="button" data-qgis-layer-toggle="ridges" aria-pressed="${state.qgisSpatialLayerVisibility?.ridges === false ? "false" : "true"}">Ridge candidates</button>
+            <button type="button" data-qgis-layer-toggle="valleys" aria-pressed="${state.qgisSpatialLayerVisibility?.valleys === false ? "false" : "true"}">Valley candidates</button>
+            <button type="button" data-qgis-layer-toggle="streams" aria-pressed="${state.qgisSpatialLayerVisibility?.streams === false ? "false" : "true"}">Stream candidates</button>
           </div>
           <div class="qgis-workflow-summary">
             <span class="chip ${qgisSpatialWorkflowTone(workflowState)}">Workflow · ${escapeHtml(String(workflowState).toUpperCase())}</span>
@@ -21908,7 +22657,7 @@
             <strong>candidate_only=true</strong>
             <strong>runtime_safety_truth=false</strong>
             <strong>operational=false</strong>
-            <span>${status.fixture_mode ? "fixture / synthetic / non-runtime" : "live QGIS requires artifact review"}</span>
+            <span>${status.fixture_mode ? "fixture / synthetic / non-runtime" : "QGIS outputs require artifact review"}</span>
           </div>
         </section>
       `;
@@ -21949,11 +22698,24 @@
     function renderQgisVisualReview() {
       const workflow = state.qgisSpatialWorkflow;
       const renderArtifact = qgisSpatialRenderArtifact();
-      if (!workflow || !renderArtifact) {
+      if (!workflow) {
+        const availability = state.qgisSpatialStatus?.availability || "loading";
+        const disabled = availability === "disabled";
         return `
-          <section class="qgis-visual-review" data-qgis-visual-review="pending">
-            <div class="navigation-terrain-inspector-head"><strong>QGIS Visual Review</strong><small>pending</small></div>
-            <div class="qgis-render-placeholder">No QGIS rendered evidence artifact is available yet.</div>
+          <section class="qgis-visual-review" data-qgis-visual-review="not-started">
+            <div class="navigation-terrain-inspector-head"><strong>QGIS Visual Review</strong><small>${disabled ? "disabled · not started" : "not started"}</small></div>
+            <div class="qgis-render-placeholder">${disabled
+              ? "QGIS integration is disabled. No workflow or rendered evidence artifact exists."
+              : "No QGIS workflow has been started. Visual review begins only after a rendered evidence artifact exists."}</div>
+          </section>
+        `;
+      }
+      if (!renderArtifact) {
+        const renderState = workflow.render_status || "not available";
+        return `
+          <section class="qgis-visual-review" data-qgis-visual-review="render-unavailable">
+            <div class="navigation-terrain-inspector-head"><strong>QGIS Visual Review</strong><small>render ${escapeHtml(renderState)}</small></div>
+            <div class="qgis-render-placeholder">Workflow ${escapeHtml(workflow.workflow_run_id || "unknown")} has no rendered evidence artifact. Visual review cannot begin.</div>
           </section>
         `;
       }
@@ -21970,7 +22732,7 @@
             <span>hash ${escapeHtml((renderArtifact.artifact_hash || "unavailable").slice(0, 18))}</span>
             <span>CRS ${escapeHtml(renderArtifact.crs || "UNKNOWN")}</span>
             <span>source resolution ${escapeHtml(qgisSpatialResolutionLabel(renderArtifact.source_resolution))}</span>
-            <span>${renderArtifact.fixture ? "fixture synthetic non-runtime" : "live QGIS render artifact"}</span>
+            <span>${renderArtifact.fixture ? "fixture synthetic non-runtime" : "QGIS render artifact"}</span>
           </div>
         </section>
       `;
@@ -22079,7 +22841,7 @@
         <div class="navigation-workspace-map-status" aria-live="polite"><strong>${escapeHtml(title)}</strong>${escapeHtml(detail)}</div>
         <div class="navigation-workspace-scale">${hasBasemap ? `Rudy+TW orientation basemap only · z<span data-navigation-rudy-zoom-label>${baseZoom}</span> · ` : ""}No terrain vectors or terrain tiles are claimed in this state.</div>
       `;
-      return renderDashboardMapViewport("navigation-workspace-map",
+      return `${renderDashboardMapViewport("navigation-workspace-map",
         "Navigation terrain evidence map shell",
         mapContent,
         {
@@ -22089,7 +22851,7 @@
           renderPolicy: DASHBOARD_MAP_RENDER_POLICY,
           wheelZoom: false,
         },
-      );
+      )}`;
     }
 
     function renderNavigationPage(force) {
@@ -22840,25 +23602,32 @@
 
     function architectureMapSlices(mapData, bins, selectedBin, routeDistance, displayBounds) {
       if (!mapData.connected || !bins.length) return "";
-      const sourcePointCount = Math.max(1, mapData.coordinateSegments.reduce((sum, segment) => sum + segment.length, 0));
-      const sampledSegments = mapData.coordinateSegments.map(segment => {
+      const measured = dashboardMapMeasuredCoordinateSegments(
+        mapData.coordinateSegments,
+      );
+      if (!(measured.totalDistanceM > 0)) return "";
+      const sourcePointCount = Math.max(1, measured.coordinateSegments.reduce((sum, segment) => sum + segment.length, 0));
+      const sampledSegments = measured.coordinateSegments.map(segment => {
         const pointBudget = Math.max(2, Math.round(1000 * segment.length / sourcePointCount));
         return sampleCoordinates(segment, pointBudget);
       }).filter(segment => segment.length >= 2);
-      const totalPairs = Math.max(1, sampledSegments.reduce((sum, segment) => sum + Math.max(0, segment.length - 1), 0));
-      let pairIndex = 0;
       const groups = [];
       sampledSegments.forEach(segment => {
         let current = null;
         segment.slice(1).forEach((point, index) => {
-          const progress = (pairIndex + .5) / totalPairs;
-          pairIndex += 1;
-          const routeDistanceAtPoint = progress * routeDistance;
+          const startPoint = segment[index];
+          const geometryDistanceAtPoint = (
+            Number(startPoint.dashboardMapDistanceM)
+            + Number(point.dashboardMapDistanceM)
+          ) / 2;
+          const routeDistanceAtPoint = (
+            geometryDistanceAtPoint / measured.totalDistanceM
+          ) * routeDistance;
           const bin = bins.find(item => routeDistanceAtPoint >= Number(item.start_distance_m) && routeDistanceAtPoint <= Number(item.end_distance_m));
           const selected = Boolean(bin && bin.route_bin_id === selectedBin?.route_bin_id);
           const key = `${bin?.route_bin_id || "missing"}:${selected ? "selected" : "normal"}`;
           const start = dashboardMapPointPosition(
-            segment[index],
+            startPoint,
             displayBounds,
             MAP_WIDTH,
             MAP_HEIGHT,
@@ -22879,7 +23648,11 @@
         });
         if (current) groups.push(current);
       });
-      return groups.map(group => {
+      const orderedGroups = [
+        ...groups.filter(group => !group.selected),
+        ...groups.filter(group => group.selected),
+      ];
+      return orderedGroups.map(group => {
         const bin = group.bin;
         const color = bin ? architectureLensColor(bin) : state.architectureLens === "structure" ? "#62b8c6" : "#46554d";
         const binData = bin ? ` data-architecture-bin-id="${escapeHtml(bin.route_bin_id)}"` : "";
@@ -23220,89 +23993,213 @@
       `;
     }
 
+    function paceFitCheckpointRecords() {
+      const events = asArray(state.project?.checkpoint_events?.events);
+      const eventsByCheckpoint = new Map(events.map(event => [
+        String(event?.checkpoint_candidate_id || ""),
+        event,
+      ]));
+      return asArray(state.project?.checkpoints).flatMap((checkpoint, index) => {
+        const lat = Number(checkpoint?.lat);
+        const lon = Number(checkpoint?.lon);
+        if (!Number.isFinite(lat) || !Number.isFinite(lon)) return [];
+        const id = String(
+          checkpoint?.candidate_id
+          || checkpoint?.checkpoint_id
+          || checkpoint?.mcp_id
+          || `pace-checkpoint-${index + 1}`,
+        );
+        const event = eventsByCheckpoint.get(id) || null;
+        const elevation = Number(event?.elevation_m ?? checkpoint?.elevation_m);
+        const routeDistance = Number(
+          checkpoint?.route_distance_m
+          ?? event?.progress_m
+          ?? checkpoint?.overpass_projection?.route_distance_m,
+        );
+        return [{
+          id,
+          label: String(checkpoint?.label || checkpoint?.name || id),
+          lat,
+          lon,
+          routeDistanceM: Number.isFinite(routeDistance) ? routeDistance : null,
+          elevationM: Number.isFinite(elevation) ? elevation : null,
+          observedAt: event?.observed_at || null,
+          sourceId: String(checkpoint?.source_id || "unavailable"),
+          sourcePath: String(checkpoint?.source_path || "unavailable"),
+          reviewState: String(checkpoint?.review_state || "unknown"),
+          candidateOnly: checkpoint?.candidate_only === true,
+          runtimeSafetyTruth: checkpoint?.runtime_safety_truth === true,
+        }];
+      });
+    }
+
+    function paceFitCheckpointContext() {
+      const checkpoints = paceFitCheckpointRecords();
+      if (!checkpoints.length) {
+        return {
+          available: false,
+          checkpoints: [],
+          label: "Checkpoint unavailable",
+          selectionReason: "workspace data loading",
+        };
+      }
+      const routeDistanceM = Number(state.project?.route?.distance_m);
+      const midpointM = Number.isFinite(routeDistanceM) ? routeDistanceM / 2 : null;
+      const selectedByOperator = checkpoints.find(
+        checkpoint => checkpoint.id === state.paceSelectedCheckpointId,
+      );
+      const midpointCheckpoint = midpointM === null
+        ? checkpoints[Math.floor((checkpoints.length - 1) / 2)]
+        : checkpoints.reduce((closest, checkpoint) => {
+            if (checkpoint.routeDistanceM === null) return closest;
+            if (!closest || closest.routeDistanceM === null) return checkpoint;
+            return Math.abs(checkpoint.routeDistanceM - midpointM)
+              < Math.abs(closest.routeDistanceM - midpointM)
+              ? checkpoint
+              : closest;
+          }, null);
+      const selected = selectedByOperator || midpointCheckpoint || checkpoints[0];
+      const selectedIndex = checkpoints.findIndex(checkpoint => checkpoint.id === selected.id);
+      return {
+        ...selected,
+        available: true,
+        checkpoints,
+        selectedIndex,
+        nextCheckpoint: checkpoints[selectedIndex + 1] || null,
+        selectionReason: selectedByOperator ? "operator selected" : "route midpoint default",
+      };
+    }
+
+    function paceFitCheckpointMapPoints(mapData, context, maxPoints = 24) {
+      const checkpoints = asArray(context?.checkpoints);
+      if (!checkpoints.length) {
+        return fallbackRoutePoints(mapData, Math.min(10, maxPoints)).map((point, index) => ({
+          ...point,
+          id: `pace-route-sample-${index + 1}`,
+          label: `Route sample ${index + 1}`,
+          selected: false,
+          sourceType: "route_sample",
+        }));
+      }
+      const sampleCount = Math.max(2, Math.min(maxPoints, checkpoints.length));
+      const indices = new Set(Array.from({length: sampleCount}, (_, index) => (
+        Math.round(index * (checkpoints.length - 1) / Math.max(1, sampleCount - 1))
+      )));
+      if (Number.isInteger(context?.selectedIndex)) indices.add(context.selectedIndex);
+      return Array.from(indices)
+        .sort((left, right) => left - right)
+        .map(index => ({
+          ...checkpoints[index],
+          selected: checkpoints[index]?.id === context?.id,
+          sourceType: "workspace_checkpoint",
+        }))
+        .filter(point => Number.isFinite(point?.lat) && Number.isFinite(point?.lon));
+    }
+
     function renderPaceFitPage(force) {
+      const context = paceFitCheckpointContext();
+      const route = state.project?.route || {};
+      const mapData = buildMapData();
+      const timelineNodes = paceFitCheckpointMapPoints(mapData, context, 9);
+      const routeLabel = String(route.route_name || state.pretripDataProjectId || projectId());
+      const coordinateLabel = context.available
+        ? `${context.lat.toFixed(6)}, ${context.lon.toFixed(6)}`
+        : "unavailable";
+      const elevationLabel = Number.isFinite(context.elevationM)
+        ? `${Math.round(context.elevationM).toLocaleString()} m`
+        : "unavailable";
+      const distanceLabel = context.routeDistanceM === null || context.routeDistanceM === undefined
+        ? "unavailable"
+        : `${(context.routeDistanceM / 1000).toFixed(2)} km`;
+      const nextSegmentLabel = context.nextCheckpoint
+        ? `${context.label} -> ${context.nextCheckpoint.label}`
+        : "No following checkpoint in workspace";
+      const paceObjectPreview = JSON.stringify({
+        selectedCheckpointId: context.available ? context.id : null,
+        selectedCheckpointLabel: context.available ? context.label : null,
+        selectionBasis: context.selectionReason,
+        slowestMemberBasis: null,
+        paceRuntimeAttached: false,
+        candidateOnly: true,
+        runtimeSafetyTruth: false,
+        boundaryMode: "read_only_spatial_context",
+      }, null, 2);
       const budgetRows = [
-        ["Time buffer", "+28 min", "6 min", "+22 min", "OK", 72],
-        ["Daylight buffer", "+7h 19m", "0 min", "+7h 19m", "OK", 83],
-        ["Weather window", "+1h 47m", "6 min", "+1h 41m", "OK", 64],
-        ["Retreat buffer", "+2h 03m", "0 min", "+2h 03m", "OK", 76],
-        ["Team pace buffer", "+19 min", "6 min", "+13 min", "WATCH", 58],
-      ];
-      const timelineNodes = [
-        ["CP085", "09:22", "done"],
-        ["CP086", "09:54", "done"],
-        ["CP087", "10:24", "current"],
-        ["CP088", "11:06", ""],
-        ["CP089", "11:48", ""],
-        ["CP091", "12:52", ""],
-        ["CP092", "13:26", "risk"],
-        ["CP093", "14:08", "risk"],
-        ["FINISH", "15:20", ""],
+        ["Time buffer", "+28 min", "6 min", "+22 min", "FIXTURE", 72],
+        ["Daylight buffer", "+7h 19m", "0 min", "+7h 19m", "FIXTURE", 83],
+        ["Weather window", "+1h 47m", "6 min", "+1h 41m", "FIXTURE", 64],
+        ["Retreat buffer", "+2h 03m", "0 min", "+2h 03m", "FIXTURE", 76],
+        ["Team pace buffer", "+19 min", "6 min", "+13 min", "FIXTURE", 58],
       ];
       return `
         ${outdoorTabs(force.route)}
         ${paceFitSubTabs("outdoor-pace-fit")}
         <section class="pace-fit-dashboard" data-pace-fit-dashboard="true">
           <div class="pace-fit-status-grid" aria-label="Pace fit route status">
-            <div class="pace-fit-status-cell"><span>Route</span><strong>chilai_nanhua_day1</strong><em>day 1 projection</em></div>
-            <div class="pace-fit-status-cell"><span>Current CP</span><strong>CP 087</strong><em>2,842 m elevation</em></div>
-            <div class="pace-fit-status-cell"><span>Leave-by</span><strong>13:42</strong><em>UTC+8 local</em></div>
-            <div class="pace-fit-status-cell"><span>Team pace</span><strong>slowest member</strong><em>B02 basis</em></div>
-            <div class="pace-fit-status-cell"><span>Boundary</span><strong>advisory / dry-run</strong><em>no safety mutation</em></div>
+            <div class="pace-fit-status-cell"><span>Workspace route</span><strong>${escapeHtml(routeLabel)}</strong><em>${escapeHtml(`${context.checkpoints.length} checkpoint candidates`)}</em></div>
+            <div class="pace-fit-status-cell"><span>Selected CP</span><strong>${escapeHtml(context.label)}</strong><em>${escapeHtml(context.selectionReason)}</em></div>
+            <div class="pace-fit-status-cell"><span>Route position</span><strong>${escapeHtml(distanceLabel)}</strong><em>${escapeHtml(elevationLabel)}</em></div>
+            <div class="pace-fit-status-cell"><span>Boundary</span><strong>candidate context</strong><em>not live location or safety truth</em></div>
           </div>
 
-          <div class="pace-fit-workbench">
-            <div class="pace-fit-stack">
-              <section class="pace-fit-card">
-                <div class="pace-fit-card-head"><h3>Pace Parameters</h3><span class="chip info">Read-only preview</span></div>
-                <div class="pace-fit-card-body">
-                  <div class="pace-action-grid" role="list" aria-label="Read-only pace parameter examples">
-                    ${[
-                      ["Stay example", "6 min"],
-                      ["Short break", "3 min"],
-                      ["Lunch window", "15 min"],
-                      ["Fog wait", "10 min"],
-                      ["Team wait", "8 min"],
-                      ["Shorter-line scenario", "reference only"],
-                      ["Retreat branch", "branch A"],
-                      ["Rain gear allowance", "2 min"],
-                      ["Photo-stop allowance", "4 min"],
-                    ].map(([label, detail]) => `<div class="pace-parameter-tile" role="listitem"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(detail)}</span></div>`).join("")}
-                  </div>
-                  <p class="status">Static planning examples only. No pace action engine or runtime decision is attached.</p>
-                </div>
-              </section>
-
-              <section class="pace-fit-card">
-                <div class="pace-fit-card-head"><h3>Current CP Status</h3><span class="pace-status-ok">STAYING</span></div>
-                <div class="pace-fit-card-body pace-stat-list">
+          <div class="pace-spatial-workbench" data-pace-map-primary="true">
+            ${renderPaceFitPrimaryMap(context)}
+            <aside class="pace-cp-inspector" aria-label="Selected checkpoint inspector">
+              <div class="pace-cp-inspector-head">
+                <div><span>Selected checkpoint</span><strong>${escapeHtml(context.label)}</strong></div>
+                <span class="chip warn">candidate only</span>
+              </div>
+              <div class="pace-cp-inspector-body">
+                <div class="pace-cp-facts">
                   ${[
-                    ["CP location", "CP 087", "23.120456, 120.832156"],
-                    ["Elevation", "2,842 m", "ridge shoulder"],
-                    ["Planned ETA", "11:18", "baseline plan"],
-                    ["Actual ETA", "11:34", "+16 min"],
-                    ["Mobile signal", "4G good", "last report 10:22:31"],
-                    ["Slowest member", "B02", "420 m behind"],
-                  ].map(([label, value, detail]) => `<div class="pace-stat-row"><div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div><em>${escapeHtml(detail)}</em></div>`).join("")}
+                    ["Coordinate", coordinateLabel],
+                    ["Route distance", distanceLabel],
+                    ["Elevation evidence", elevationLabel],
+                    ["Review state", context.reviewState || "unknown"],
+                    ["Source", context.sourceId || "unavailable"],
+                    ["Recorded GPX time", context.observedAt ? formatDateTime(context.observedAt) : "unavailable"],
+                  ].map(([label, value]) => `<div class="pace-cp-fact"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("")}
                 </div>
-              </section>
+                <p class="pace-cp-meaning">這個位置來自目前 workspace 的 checkpoint candidate，作用是把 CP 編號、路線位置與來源證據綁在一起；它不代表隊伍目前位於此處，也不是安全或通行判定。</p>
+                <div class="pace-primary-advisory">
+                  <span>Pace runtime</span>
+                  <strong>尚未接上即時隊伍速度；此頁目前只提供可查證的空間上下文。</strong>
+                </div>
+              </div>
+            </aside>
+          </div>
 
-              <section class="pace-fit-card">
-                <div class="pace-fit-card-head"><h3>Next Segment Risk</h3><span class="pace-status-watch">MODERATE</span></div>
-                <div class="pace-fit-card-body pace-stat-list">
-                  ${[
-                    ["Segment", "CP 087 -> CP 088", "1.84 km"],
-                    ["Key terrain", "crosswind / gusts", "ridge bend"],
-                    ["Estimated time", "00:32", "slow member basis"],
-                  ].map(([label, value, detail]) => `<div class="pace-stat-row"><div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div><em>${escapeHtml(detail)}</em></div>`).join("")}
-                </div>
-              </section>
+          <section class="pace-timeline-band">
+            <div class="pace-timeline-head">
+              <div><h3>CP Timeline</h3><p>選擇 checkpoint 會同步地圖與 inspector；距離來自 workspace route projection。</p></div>
+              <span class="chip info">${escapeHtml(`${context.checkpoints.length} candidates`)}</span>
             </div>
+            <div class="pace-timeline-scroll">
+              <div class="pace-cp-timeline" aria-label="Pace checkpoint timeline">
+                ${timelineNodes.map(point => {
+                  const pointIndex = context.checkpoints.findIndex(item => item.id === point.id);
+                  const stateClass = point.selected ? "current" : pointIndex >= 0 && pointIndex < context.selectedIndex ? "done" : "";
+                  const pointDistance = point.routeDistanceM === null || point.routeDistanceM === undefined
+                    ? "route sample"
+                    : `${(point.routeDistanceM / 1000).toFixed(1)} km`;
+                  return `
+                    <button class="pace-cp-node ${stateClass ? `is-${stateClass}` : ""}" type="button" data-pace-checkpoint-select="${escapeHtml(point.id)}" aria-pressed="${point.selected ? "true" : "false"}">
+                      <span class="pace-cp-dot" aria-hidden="true"></span>
+                      <strong>${escapeHtml(point.label)}</strong>
+                      <span>${escapeHtml(pointDistance)}</span>
+                    </button>
+                  `;
+                }).join("")}
+              </div>
+            </div>
+          </section>
 
-            <div class="pace-fit-stack">
-              <section class="pace-fit-card">
-                <div class="pace-fit-card-head"><h3>Risk Budget Calculator</h3><span class="chip info">pace fit</span></div>
-                <div class="pace-fit-card-body">
+          <details class="pace-supporting-details" data-pace-supporting-details="true">
+            <summary><span>Supporting pace preview and evidence</span><em>Fixture calculations, parameters, provenance, and raw object</em></summary>
+            <div class="pace-fit-workbench pace-supporting-grid">
+              <section class="pace-support-section">
+                <h3>Risk Budget Calculator <span class="chip warn">fixture / non-runtime</span></h3>
+                <div class="pace-table-scroll">
                   <table class="pace-budget-table">
                     <thead><tr><th>Factor</th><th>Available</th><th>Used</th><th>Reserve</th><th>Status</th></tr></thead>
                     <tbody>
@@ -23310,129 +24207,67 @@
                         <tr>
                           <td>${escapeHtml(factor)}</td>
                           <td>${escapeHtml(available)}</td>
-                          <td>
-                            <div class="pace-meter"><div class="bar"><span style="width:${Number(percent)}%"></span></div><span>${escapeHtml(used)}</span></div>
-                          </td>
+                          <td><div class="pace-meter"><div class="bar"><span style="width:${Number(percent)}%"></span></div><span>${escapeHtml(used)}</span></div></td>
                           <td>${escapeHtml(reserve)}</td>
-                          <td><span class="${status === "OK" ? "pace-status-ok" : "pace-status-watch"}">${escapeHtml(status)}</span></td>
+                          <td><span class="pace-status-watch">${escapeHtml(status)}</span></td>
                         </tr>
                       `).join("")}
                     </tbody>
                   </table>
                 </div>
-              </section>
-
-              <section class="pace-fit-card">
-                <div class="pace-fit-card-head"><h3>CP Timeline</h3><span class="pace-status-watch">Leave 13:42</span></div>
-                <div class="pace-fit-card-body">
-                  <div class="pace-cp-timeline" aria-label="Pace checkpoint timeline">
-                    ${timelineNodes.map(([cp, time, stateClass]) => `
-                      <div class="pace-cp-node ${stateClass ? `is-${stateClass}` : ""}">
-                        <span class="pace-cp-dot"></span>
-                        <strong>${escapeHtml(cp)}</strong>
-                        <span>${escapeHtml(time)}</span>
-                      </div>
-                    `).join("")}
-                  </div>
-                  <div class="pace-delay-grid">
-                    ${[
-                      ["+5 min", "reserve remains +17 min"],
-                      ["+10 min", "reserve remains +12 min"],
-                      ["+15 min", "reserve remains +7 min"],
-                    ].map(([delay, reserve]) => `<div class="pace-delay-card"><strong>${escapeHtml(delay)}</strong><span>${escapeHtml(reserve)}</span></div>`).join("")}
-                  </div>
+                <div class="pace-output">
+                  <span class="chip info">Pace Output</span>
+                  <strong>尚無可執行 pace recommendation。</strong>
+                  <p class="status">現有數值只保留為 Read-only preview，不能寫入 runtime 或被解讀為安全建議。</p>
                 </div>
               </section>
 
-              <section class="pace-fit-card">
-                <div class="pace-fit-card-head"><h3>Pace Output</h3><span class="pace-status-ok">usable</span></div>
-                <div class="pace-fit-card-body">
-                  <div class="pace-output">
-                    <strong>最多停留 6 分鐘，13:42 前離開 CP 087。</strong>
-                    <div class="pace-output-grid">
-                      <div>
-                        <h4>Reasons</h4>
-                        <ul>
-                          <li>時間與日照緩衝仍足夠。</li>
-                          <li>後段爬升與稜線風會吃掉隊伍速度。</li>
-                          <li>最慢成員落後 420 m，需要保留追趕空間。</li>
-                        </ul>
-                      </div>
-                      <div>
-                        <h4>Adjustment</h4>
-                        <ul>
-                          <li>13:42 離開 CP 087。</li>
-                          <li>前往 CP 088，預估 11:06 到達。</li>
-                          <li>若延遲超過 20 分鐘，改用 shorter line。</li>
-                        </ul>
-                      </div>
-                    </div>
-                  </div>
+              <section class="pace-support-section">
+                <h3>Pace Parameters <span class="chip info">Read-only preview</span></h3>
+                <div class="pace-action-grid" role="list" aria-label="Read-only pace parameter examples">
+                  ${[
+                    ["Stay example", "6 min"],
+                    ["Short break", "3 min"],
+                    ["Lunch window", "15 min"],
+                    ["Fog wait", "10 min"],
+                    ["Team wait", "8 min"],
+                    ["Retreat branch", "reference only"],
+                  ].map(([label, detail]) => `<div class="pace-parameter-tile" role="listitem"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(detail)}</span></div>`).join("")}
                 </div>
+                <h3>Current CP Status <span class="pace-status-watch">NOT LIVE</span></h3>
+                <div class="pace-stat-list">
+                  ${[
+                    ["Selected candidate", context.label, coordinateLabel],
+                    ["Next segment", nextSegmentLabel, "terrain risk not evaluated"],
+                    ["Team position", "unavailable", "no live location source attached"],
+                    ["Slowest member", "unavailable", "no pace runtime attached"],
+                  ].map(([label, value, detail]) => `<div class="pace-stat-row"><div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div><em>${escapeHtml(detail)}</em></div>`).join("")}
+                </div>
+              </section>
+
+              <section class="pace-support-section" aria-label="Pace fit evidence">
+                <h3>Pace Evidence <span class="chip warn">candidate</span></h3>
+                <div class="pace-stat-list">
+                  ${[
+                    ["Route source", mapData.sourceId || "unavailable", mapData.sourcePath || "unavailable"],
+                    ["Checkpoint source", context.sourceId || "unavailable", context.sourcePath || "unavailable"],
+                    ["Review state", context.reviewState || "unknown", "runtime safety truth remains false"],
+                    ["Residual Risk", "not evaluated", "requires reviewed terrain, weather, and team evidence"],
+                  ].map(([label, value, detail]) => `<div class="pace-stat-row"><div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div><em>${escapeHtml(detail)}</em></div>`).join("")}
+                </div>
+                <h3>Artifact Metadata</h3>
+                <div class="metric-line">
+                  ${[
+                    ["Workspace", state.pretripDataProjectId || projectId()],
+                    ["Model profile", "not attached"],
+                    ["Boundary mode", "candidate / read-only"],
+                  ].map(([label, value]) => `<div class="metric-row"><span>${escapeHtml(label)}</span><span>${escapeHtml(value)}</span></div>`).join("")}
+                </div>
+                <h3>Pace Object Preview</h3>
+                <pre class="pace-json-preview">${escapeHtml(paceObjectPreview)}</pre>
               </section>
             </div>
-
-            <aside class="pace-fit-stack" aria-label="Pace fit evidence">
-              <section class="pace-fit-card">
-                <div class="pace-fit-card-head"><h3>Pace Evidence</h3><span class="chip ok">traceable</span></div>
-                <div class="pace-fit-card-body pace-stat-list">
-                  ${[
-                    ["Weather", "多雲，側風 18 km/h", "CWA + forecast refs"],
-                    ["Team state", "全面可行", "slowest member basis"],
-                    ["Gear state", "電量 78%", "offline maps cached"],
-                    ["Route pressure", "MCP + risk ribbon", "CP087-CP088"],
-                  ].map(([label, value, detail]) => `<div class="pace-stat-row"><div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div><em>${escapeHtml(detail)}</em></div>`).join("")}
-                  <div class="pace-evidence-tags">
-                    <span>GPX Route v3.2</span>
-                    <span>OSM 2026-05-15</span>
-                    <span>Weather API</span>
-                    <span>Team telemetry</span>
-                  </div>
-                </div>
-              </section>
-
-              <section class="pace-fit-card">
-                <div class="pace-fit-card-head"><h3>Artifact Metadata</h3><span class="chip warn">dry-run</span></div>
-                <div class="pace-fit-card-body">
-                  <div class="metric-line">
-                    ${[
-                      ["Case", "pretrip_projection"],
-                      ["Workspace", "pretrip_project"],
-                      ["Model profile", "pace_fit_agent.v0.4.1"],
-                      ["Boundary mode", "advisory / dry-run"],
-                    ].map(([label, value]) => `<div class="metric-row"><span>${escapeHtml(label)}</span><span>${escapeHtml(value)}</span></div>`).join("")}
-                  </div>
-                </div>
-              </section>
-
-              <section class="pace-fit-card">
-                <div class="pace-fit-card-head"><h3>Residual Risk</h3><span class="pace-status-watch">LOW-MEDIUM</span></div>
-                <div class="pace-fit-card-body">
-                  <div class="metric-line">
-                    <div class="metric-row"><span>Primary</span><span>側風、延遲累積、能見度變化</span></div>
-                    <div class="metric-row"><span>Uncertainty</span><span>午後雲量與隊伍後段衰退</span></div>
-                    <div class="metric-row"><span>Guard</span><span>每 10 分鐘更新 ETA 與隊伍距離</span></div>
-                  </div>
-                </div>
-              </section>
-
-              <section class="pace-fit-card">
-                <div class="pace-fit-card-head"><h3>Pace Object Preview</h3><span class="chip info">read-only</span></div>
-                <div class="pace-fit-card-body">
-                  <pre class="pace-json-preview">{
-  "allowedMinutes": 6,
-  "leaveBy": "13:42",
-  "currentCp": "CP087",
-  "slowestMemberBasis": "B02",
-  "bufferRemainingMinutes": 22,
-  "boundaryMode": "advisory_dry_run"
-}</pre>
-                </div>
-              </section>
-
-              ${renderPaceFitMiniMap()}
-            </aside>
-          </div>
+          </details>
         </section>
       `;
     }
@@ -24130,7 +24965,7 @@
         <div class="dashboard-map-controls" data-dashboard-map-controls="${escapeHtml(viewportId)}" aria-label="Map view controls">
           <button type="button" data-map-control="zoom-in" aria-label="Zoom in" title="Zoom in (+)">+</button>
           <button type="button" data-map-control="zoom-out" aria-label="Zoom out" title="Zoom out (-)">−</button>
-          <button type="button" data-map-control="reset" aria-label="Reset map view" title="Fit map (0)">Fit</button>
+          <button type="button" data-map-control="reset" aria-label="Fit map and reset view" title="Fit map (0)">Fit</button>
           <button type="button" data-map-control="pan" aria-label="Mouse drag pan" aria-pressed="${panActive ? "true" : "false"}" title="Mouse drag pan (P)">Pan</button>
           ${mouseZoomEnabled ? `<button type="button" data-map-control="box-zoom" aria-label="Point or rectangle zoom" aria-pressed="${panActive ? "false" : "true"}" title="Persistent box zoom, maximum 4× per selection: drag in any direction to zoom in; use minus to zoom out (B)">▣</button>` : ""}
           <output data-map-zoom-level aria-label="Map zoom level">100%</output>
@@ -24336,7 +25171,7 @@
         apply(message);
       };
 
-      const focusElements = (elements, message = "") => {
+      const focusElements = (elements, message = "", options = {}) => {
         const elementRects = Array.from(elements || [])
           .filter(element => element?.getBoundingClientRect)
           .map(element => element.getBoundingClientRect())
@@ -24350,11 +25185,26 @@
         const targetRight = Math.max(...elementRects.map(rect => rect.right));
         const targetTop = Math.min(...elementRects.map(rect => rect.top));
         const targetBottom = Math.max(...elementRects.map(rect => rect.bottom));
-        panBy(
-          viewportRect.left + viewportRect.width / 2 - (targetLeft + targetRight) / 2,
-          viewportRect.top + viewportRect.height / 2 - (targetTop + targetBottom) / 2,
-          message,
+        const minimumZoom = Math.max(
+          1,
+          Math.min(maxZoom, Number(options.minimumZoom) || 1),
         );
+        const nextZoom = Math.min(
+          maxZoom,
+          Math.max(viewState.zoom, minimumZoom),
+        );
+        const targetX = (targetLeft + targetRight) / 2 - viewportRect.left;
+        const targetY = (targetTop + targetBottom) / 2 - viewportRect.top;
+        const localX = (targetX - viewState.x) / viewState.zoom;
+        const localY = (targetY - viewState.y) / viewState.zoom;
+        const {width, height} = metrics();
+        viewState = {
+          ...viewState,
+          zoom: nextZoom,
+          x: width / 2 - localX * nextZoom,
+          y: height / 2 - localY * nextZoom,
+        };
+        apply(message);
         return true;
       };
 
@@ -24570,10 +25420,14 @@
       });
     }
 
-    function renderPaceFitMiniMap() {
+    function renderPaceFitPrimaryMap(context = paceFitCheckpointContext()) {
+      return renderPaceFitMiniMap(context);
+    }
+
+    function renderPaceFitMiniMap(context = paceFitCheckpointContext()) {
       const mapData = buildMapData();
-      const width = 420;
-      const height = 240;
+      const width = 980;
+      const height = 620;
       const displayBounds = dashboardRudyPaddedBounds(mapData.bounds);
       const baseZoom = displayBounds ? navigationRudyBaseZoom(displayBounds) : null;
       const routePath = displayBounds
@@ -24582,42 +25436,52 @@
             displayBounds,
             width,
             height,
-            720,
+            1200,
           )
         : "";
-      const workspaceCheckpoints = normalizeCoordinates(asArray(state.project?.checkpoints));
-      const checkpointPoints = workspaceCheckpoints.length
-        ? sampleCoordinates(workspaceCheckpoints, 18)
-        : fallbackRoutePoints(mapData, 8);
+      const checkpointPoints = paceFitCheckpointMapPoints(mapData, context, 24);
       const checkpointMarkup = checkpointPoints.map((point, index) => {
         const position = dashboardMapPointPosition(point, displayBounds, width, height);
         if (!position) return "";
         const label = point.label || `Route sample ${index + 1}`;
-        const current = String(label).replace(/\s+/g, "").toUpperCase() === "CP087";
+        const selected = point.id === context.id;
+        const symbolTransform = dashboardMapScreenSymbolTransform(
+          "pace-fit-map",
+          position.x,
+          position.y,
+        );
         return `
           <g
-            role="img"
+            role="button"
             tabindex="0"
+            transform="${symbolTransform}"
+            data-dashboard-map-screen-symbol="true"
+            data-dashboard-map-symbol-x="${position.x.toFixed(1)}"
+            data-dashboard-map-symbol-y="${position.y.toFixed(1)}"
+            data-pace-checkpoint-select="${escapeHtml(point.id)}"
+            data-pace-checkpoint-id="${escapeHtml(point.id)}"
+            data-pace-checkpoint-selected="${selected ? "true" : "false"}"
             data-dashboard-map-hint-source="pace-checkpoint-evidence"
             data-dashboard-map-hint-title="${escapeHtml(label)}"
-            data-dashboard-map-hint-summary="${escapeHtml(`${current ? "Current pace checkpoint" : "Workspace route checkpoint"} · candidate evidence`)}"
+            data-dashboard-map-hint-summary="${escapeHtml(`${selected ? "Selected" : "Workspace"} checkpoint candidate · ${point.sourceId || point.sourceType || "source unavailable"}`)}"
+            aria-label="${escapeHtml(`Select ${label} checkpoint candidate`)}"
           >
             <circle
-              cx="${position.x.toFixed(1)}"
-              cy="${position.y.toFixed(1)}"
-              r="${current ? "7" : index === 0 || index === checkpointPoints.length - 1 ? "5" : "3.2"}"
-              fill="${current ? "#69aef4" : "#f0f2e7"}"
+              cx="0"
+              cy="0"
+              r="${selected ? "9" : index === 0 || index === checkpointPoints.length - 1 ? "6" : "4"}"
+              fill="${selected ? "#b7cf63" : "#f0f2e7"}"
               stroke="#0a1512"
-              stroke-width="${current ? "2.5" : "1.5"}"
+              stroke-width="${selected ? "3" : "1.5"}"
             ></circle>
-            ${current ? `<text x="${(position.x + 9).toFixed(1)}" y="${(position.y - 8).toFixed(1)}" fill="#eafcff" font-size="11" font-family="monospace">${escapeHtml(label)}</text>` : ""}
+            ${selected ? `<text x="13" y="-10" fill="#f3f7db" font-size="13" font-weight="800" font-family="monospace">${escapeHtml(label)}</text>` : ""}
             <title>${escapeHtml(`${label} · candidate checkpoint evidence`)}</title>
           </g>
         `;
       }).join("");
       const mapSvg = `
-        <svg viewBox="0 0 420 240" role="img" aria-label="CP087 pace fit mini map">
-          <rect width="420" height="240" fill="#0b1519"></rect>
+        <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Pace Fit route and selected checkpoint candidate">
+          <rect width="${width}" height="${height}" fill="#0b1519"></rect>
           ${displayBounds && Number.isFinite(baseZoom) ? renderDashboardRudyTileLayer(displayBounds, baseZoom, {
             surfaceId: "pace-fit-map",
             width,
@@ -24632,7 +25496,8 @@
             data-dashboard-map-hint-summary="Workspace route geometry · advisory candidate context"
             fill="none"
             stroke="#4ed3d8"
-            stroke-width="4"
+            stroke-width="5"
+            data-dashboard-map-screen-stroke="5"
             stroke-linecap="round"
             stroke-linejoin="round"
           ><title>Pace Fit synchronized workspace route</title></path>
@@ -24640,9 +25505,12 @@
         </svg>
       `;
       return `
-        <section class="pace-fit-card">
-          <div class="pace-fit-card-head"><h3>Synchronized Map</h3><span class="chip info">Rudy+TW</span></div>
-          <div class="pace-fit-card-body">
+        <section class="pace-map-surface">
+          <div class="pace-map-head">
+            <div><h3>Synchronized Map</h3><p>Workspace route geometry + checkpoint candidates · Rudy+TW</p></div>
+            <span class="chip info">${escapeHtml(context.available ? context.label : "loading")}</span>
+          </div>
+          <div class="pace-map-body">
             ${mapData.connected && displayBounds ? renderDashboardMapViewport(
               "pace-fit-map",
               "Pace Fit synchronized route map",
@@ -24652,6 +25520,12 @@
                 attributes: `data-dashboard-basemap-layer="rudy-twmap" data-dashboard-basemap-policy="rudy-twmap-only" data-dashboard-tile-zoom="${baseZoom}"`,
                 renderPolicy: DASHBOARD_MAP_RENDER_POLICY,
                 wheelZoom: false,
+                overlayHtml: `
+                  <div class="pace-map-context-label">
+                    <strong>${escapeHtml(context.available ? context.label : "Checkpoint unavailable")}</strong>
+                    <span>${escapeHtml(context.available ? `${context.lat.toFixed(6)}, ${context.lon.toFixed(6)} · candidate only` : "Waiting for workspace route evidence")}</span>
+                  </div>
+                `,
               },
             ) : '<div class="architecture-empty"><div><strong>Route map projection unavailable.</strong>Load workspace route geometry to render Rudy+TW tiles and synchronized pace evidence.</div></div>'}
           </div>
@@ -25841,6 +26715,10 @@
       add("map_risk", "Baseline Risk", view.risk_ribbon?.segments, (item) => ({ label: `${item.risk_bucket || "baseline"} ${numberText(item.pretrip_risk, 1)}`, sublabel: `${Math.round(item.start_distance_m || 0)}-${Math.round(item.end_distance_m || 0)}m` }), "risk");
       add("map_risk", "Calibrated Heat", view.risk_heatmap?.segments, (item) => ({ label: `${item.risk_bucket || "heat"} ${numberText(item.pretrip_risk, 1)}`, sublabel: `${item.score_field || "calibrated"} | ${Math.round(item.start_distance_m || 0)}-${Math.round(item.end_distance_m || 0)}m` }), "risk");
       add("map_risk", "Risk Delta", view.risk_delta?.segments, (item) => ({ label: `${item.delta_bucket || "delta"} ${numberText(item.delta_score, 1)}`, sublabel: `baseline ${numberText(item.baseline_pretrip_risk, 1)} | calibrated ${numberText(item.calibrated_risk_candidate, 1)}` }), "risk");
+      add("map_risk", "Reviewed GRASS Terrain Inputs", view.qgis_spatial_risk_inputs?.samples, (item) => ({
+        label: `${item.geomorphon_label || "terrain"} · slope ${numberText(item.slope_degrees, 1)}°`,
+        sublabel: `${item.risk_v2_status || "calibration_required"} | baseline unchanged | ${Math.round(item.distance_m || 0)}m`,
+      }), "risk", {displayCount: view.qgis_spatial_risk_inputs?.counts?.aligned_sample_count});
       add("map_risk", "Environmental Risk Derivatives", view.environment_risk_derivative_layers?.category_items || [], (item) => ({ label: item.label || item.source_id || "Environmental risk derivatives", sublabel: item.status || item.evidence_type || "candidate" }), "risk", { displayCount: view.environment_risk_derivative_layers?.counts?.candidate_count });
       add("map_risk", "New Landslide Candidates", view.environment_risk_derivative_layers?.new_landslide_candidates?.candidates, (item) => ({ label: item.label || "New landslide candidate", sublabel: item.status || item.risk_bucket || "candidate" }), "risk", { displayCount: view.environment_risk_derivative_layers?.new_landslide_candidates?.counts?.candidate_count, zeroState: derivativeZeroState(view.environment_risk_derivative_layers?.new_landslide_candidates) });
       add("map_risk", "Wetness / Flash Flood Candidates", view.environment_risk_derivative_layers?.wetness_flash_flood_susceptibility?.candidates, (item) => ({ label: item.label || "Wetness / flash-flood candidate", sublabel: item.status || item.risk_bucket || "candidate" }), "risk", { displayCount: view.environment_risk_derivative_layers?.wetness_flash_flood_susceptibility?.counts?.candidate_count, zeroState: derivativeZeroState(view.environment_risk_derivative_layers?.wetness_flash_flood_susceptibility) });
@@ -26729,7 +27607,10 @@
           );
         }
         if (!targets.length) return false;
-        return controller.focusElements(targets, "Architecture selection centered on map.");
+        return controller.focusElements(targets,
+          "Architecture selection focused on map.",
+          {minimumZoom: 4},
+        );
       };
       const rerenderArchitecture = (
         focusSelector = "",
@@ -26769,7 +27650,10 @@
       shell.querySelectorAll("button[data-architecture-mobile-view]").forEach(button => {
         button.addEventListener("click", () => {
           state.architectureMobileView = button.dataset.architectureMobileView || "spine";
-          rerenderArchitecture(`[data-architecture-mobile-view="${cssEscape(state.architectureMobileView)}"]`);
+          rerenderArchitecture(
+            `[data-architecture-mobile-view="${cssEscape(state.architectureMobileView)}"]`,
+            {centerMap: state.architectureMobileView === "map"},
+          );
         });
       });
       const selectBin = (binId, {openSegment = false, focusSurface = ""} = {}) => {
@@ -28081,7 +28965,7 @@
       document.querySelectorAll("[data-qgis-layer-toggle]").forEach(button => {
         button.addEventListener("click", () => {
           const key = button.dataset.qgisLayerToggle || "";
-          if (!["route", "slope", "features"].includes(key)) return;
+          if (!["route", "slope", "features", "ridges", "valleys", "streams"].includes(key)) return;
           state.qgisSpatialLayerVisibility = {
             ...(state.qgisSpatialLayerVisibility || {}),
             [key]: state.qgisSpatialLayerVisibility?.[key] === false,
@@ -28097,6 +28981,47 @@
       });
     }
 
+    function bindPaceFitControls() {
+      document.querySelectorAll("[data-pace-checkpoint-select]").forEach(control => {
+        const selectCheckpoint = () => {
+          const checkpointId = control.dataset.paceCheckpointSelect || "";
+          if (!checkpointId || checkpointId === state.paceSelectedCheckpointId) return;
+          const selectionStartedOnMap = control.hasAttribute("data-pace-checkpoint-id");
+          state.paceSelectedCheckpointId = checkpointId;
+          render();
+          window.requestAnimationFrame(() => {
+            const viewport = document.querySelector(
+              '[data-dashboard-map-viewport="pace-fit-map"]',
+            );
+            const selectedMarker = Array.from(
+              document.querySelectorAll("[data-pace-checkpoint-id]"),
+            ).find(marker => marker.dataset.paceCheckpointId === checkpointId);
+            if (viewport && selectedMarker) {
+              viewport.dashboardMapController?.focusElements(
+                [selectedMarker],
+                "Selected checkpoint centered on the synchronized map.",
+                {minimumZoom: 2},
+              );
+            }
+            const focusTarget = selectionStartedOnMap
+              ? selectedMarker
+              : Array.from(document.querySelectorAll(".pace-cp-node")).find(
+                  node => node.dataset.paceCheckpointSelect === checkpointId,
+                );
+            focusTarget?.focus?.({preventScroll: true});
+          });
+        };
+        control.addEventListener("click", selectCheckpoint);
+        if (control.tagName.toLowerCase() !== "button") {
+          control.addEventListener("keydown", event => {
+            if (event.key !== "Enter" && event.key !== " ") return;
+            event.preventDefault();
+            selectCheckpoint();
+          });
+        }
+      });
+    }
+
     function bindRenderedControls() {
       bindRuntimeAuditControls();
       bindDiagnosticControls();
@@ -28107,6 +29032,7 @@
       bindQgisSpatialControls();
       bindWeatherCwaControls();
       bindDashboardMapViewports();
+      bindPaceFitControls();
       bindDashboardMapHints();
       const pretripMapFrame = document.getElementById("pretripMapFrame");
       if (pretripMapFrame) bindPretripMapOnlyFrame(pretripMapFrame);
