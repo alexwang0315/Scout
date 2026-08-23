@@ -1,7 +1,8 @@
 # Scout Generated Evidence Retention Manifest — 2026-08-18
 
-Status: inventory complete; two Pi evaluation directories restored locally and
-checksum-verified; no deletion or external archive authorized
+Status: minimum sealed evidence copied to iCloud Drive, checksum-verified, and
+reported caught-up by CloudDocs; full raw roots remain local and no deletion is
+authorized
 Inventory repository HEAD: `d64a17a95b542258a5bb1006f56593e29d240c8b`
 
 ## Purpose
@@ -26,12 +27,20 @@ separate, exact-path allowlist approved by the user.
 | `EVIDENCE_GAP` | A committed document refers to evidence not present in this checkout | Locate or correct the reference before claiming complete preservation |
 | `REMOTE_VERIFIED` | A remote artifact was inspected read-only and has a recorded directory checksum, but has not been copied to the approved archive | Preserve the remote source until an archived copy passes checksum verification |
 | `LOCAL_VERIFIED_COPY` | A complete Git-ignored local copy reproduces the recorded remote directory checksum | Preserve both copies until a durable archive destination is approved and independently verified |
+| `ICLOUD_VERIFIED_COPY` | A versioned iCloud Drive copy has a per-file checksum list, reproduced source digests, no placeholders, and a caught-up CloudDocs receipt | Preserve all sources because iCloud sync is not an immutable backup |
 
 ## Sealed retention candidates
 
 Directory digests below are SHA-256 hashes of concatenated per-file SHA-256
-lines in `hash  ./relative/path` format with paths sorted bytewise. Sizes are
-allocated KiB at inventory or remote-verification time.
+lines with paths sorted bytewise. The first eight local candidates were
+calculated from the repository root with repository-relative paths. The two
+Pi-restored candidates and their remote sources were calculated from inside
+each candidate directory with `./relative/path`. Sizes are allocated KiB at
+inventory or remote-verification time.
+
+These legacy values remain valid for their recorded path scope. The 2026-08-19
+iCloud archive described below standardizes all copied roots on
+repository-relative paths.
 
 | Class | Path | Files | KiB | Directory SHA-256 | Reason |
 |---|---|---:|---:|---|---|
@@ -96,19 +105,52 @@ under this remote root:
   retention manifest is intended for version control.
 
 Class: `LOCAL_VERIFIED_COPY` for the Mac copies and `REMOTE_VERIFIED` for the Pi
-sources. These are now two matching working copies, not a durable external
-archive. Preserve both until an approved archive destination receives the
-directories and independently reproduces the recorded checksums.
+sources. These matching working copies are retained alongside the verified
+iCloud minimum archive. Preserve them because iCloud Drive synchronization is
+not an immutable backup and no deletion allowlist has been approved.
+
+## iCloud minimum archive
+
+User approval `APPROVE_ICLOUD_ARCHIVE` authorized copying the minimum sealed
+evidence set to:
+
+`iCloud Drive/ScoutArchives/scout-fusion-candidate-evidence-minimum-20260819T064200+0800/`
+
+- Source repository HEAD:
+  `0fed218510b427370be4f5696f63137f6bbcb85b`.
+- Scope: the ten sealed local candidates above plus the complete
+  `docs/evals/` context snapshot.
+- Payload: 156 source files, 137,732,545 logical bytes and 134,868 allocated
+  KiB before archive metadata.
+- Final archive: 158 files and 134,900 allocated KiB, including
+  `ARCHIVE_MANIFEST.md` and `SHA256SUMS.txt`.
+- All eleven repository-relative source digests remained stable before and
+  after copying and matched the iCloud copy.
+- `SHA256SUMS.txt` verified 157 of 157 covered files with no malformed lines.
+- The final archive-root-relative directory SHA-256 is
+  `fc074eafb2d7e0574a9c5c658a2b8a98295fda02578c2606524293930a6a7c8b`.
+- `SHA256SUMS.txt` SHA-256:
+  `71ca35c9969c4c328c2ec479f1939210f8a06ab376302e3c690dfdf60098c826`.
+- `ARCHIVE_MANIFEST.md` SHA-256:
+  `ab5eff0f8a2f0a1d65be2d2964550c601ff39c265e27fb634d400519e7d23931`.
+- No `.icloud` placeholder was present.
+- At `2026-08-19T06:47:09+08:00`, `com.apple.CloudDocs` reported
+  `caught-up`; this archive path was absent from Client Truth Unclean Items
+  after its `06:46:40` sync.
+- The archive and all sources remain candidate-only and are not runtime safety
+  truth.
+
+Class: `ICLOUD_VERIFIED_COPY`. This is a verified synchronized off-device copy,
+not an immutable or offline backup. It does not authorize source cleanup.
 
 ## Next gate
 
-1. Decide a durable external archive destination for the two verified
-   evaluation directories, screenshots, videos, traces, and other raw evidence.
-2. Copy the locally restored directories to that destination without changing
-   either current source, then independently compare their checksums.
-3. Independently review the two active manual bundles.
-4. Copy only bounded canonical reports and summaries into `docs/evals/`.
-5. Verify copied or archived checksums against this manifest.
-6. Produce an exact retain/archive/delete allowlist for human approval.
+1. Commit this bounded iCloud archive receipt.
+2. Independently review the two active manual bundles.
+3. Decide whether the remaining full raw roots, approximately 1.71 GiB, should
+   also be copied to iCloud Drive.
+4. Decide whether an independent external SSD or NAS copy is required for
+   immutable or offline protection.
+5. Produce an exact retain/archive/delete allowlist for human approval.
 
 No path listed here is approved for deletion yet.

@@ -151,7 +151,7 @@ class SkillRegistryTests(unittest.TestCase):
         self.assertFalse(
             route_context_intelligence.activation_gate.requires_human_approval
         )
-        self.assertEqual(route_context_intelligence.version, "0.1.4")
+        self.assertEqual(route_context_intelligence.version, "0.1.5")
         self.assertIn(
             "route-reference-point-lookup",
             route_context_intelligence.preflight.required_skill_ids,

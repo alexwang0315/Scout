@@ -26,11 +26,12 @@ if str(SRC) not in sys.path:
 from pydantic_ai_runtime_compat import (  # noqa: E402
     build_chat_model,
     pydantic_agent_runtime_kwargs,
+    pydantic_native_research_capabilities_for_model,
+    pydantic_native_research_trace,
     pydantic_result_output,
 )
 from scout.agents.model_policy import resolve_model_policy  # noqa: E402
 from scout_env import load_scout_env_files  # noqa: E402
-
 
 ARTIFACT_KIND = "scout_ai_route_context_briefing_variants"
 ARTIFACT_VERSION = "scout_ai_route_context_briefing_variants.v1"
@@ -119,6 +120,7 @@ class ModelRunner(Protocol):
     last_prompt: str | None
     last_response: str | None
     last_usage: dict[str, Any] | None
+    last_native_research_trace: dict[str, Any] | None
 
     def run(self, prompt: str, *, timeout_seconds: int) -> str:
         ...
@@ -146,6 +148,7 @@ class UsageRecordingPydanticAIRunner:
         self.last_prompt: str | None = None
         self.last_response: str | None = None
         self.last_usage: dict[str, Any] | None = None
+        self.last_native_research_trace: dict[str, Any] | None = None
 
     def run(self, prompt: str, *, timeout_seconds: int) -> str:
         self.last_prompt = prompt
@@ -159,8 +162,16 @@ class UsageRecordingPydanticAIRunner:
                 build_chat_model(model_name=chat_model_name),
                 system_prompt=(
                     "Scout AI route-context-intelligence briefing generator. "
-                    "Return strict JSON only. Do not mutate Scout runtime, "
+                    "Before returning the plan, use WebSearch at least once and "
+                    "WebFetch at least once for current public route context; search "
+                    "snippets are not evidence. If one fetched URL fails, choose "
+                    "another public Search result and continue. Return strict JSON "
+                    "only. Do not "
+                    "mutate Scout runtime, "
                     "hardware, safety, transport, or workspace canonical briefing."
+                ),
+                capabilities=pydantic_native_research_capabilities_for_model(
+                    chat_model_name
                 ),
                 **pydantic_agent_runtime_kwargs(),
             )
@@ -171,6 +182,15 @@ class UsageRecordingPydanticAIRunner:
             output = str(pydantic_result_output(result))
             self.last_response = output
             self.last_usage = _usage_to_dict(getattr(result, "usage", None))
+            self.last_native_research_trace = pydantic_native_research_trace(result)
+            if (
+                self.last_native_research_trace["web_search_call_count"] < 1
+                or self.last_native_research_trace["web_fetch_call_count"] < 1
+            ):
+                raise ValueError(
+                    "Scout AI variants generation did not complete the required "
+                    "WebSearch -> WebFetch research handoff"
+                )
             return output
 
         executor = ThreadPoolExecutor(max_workers=1)
@@ -222,6 +242,7 @@ def generate_route_context_briefing_variants(
             prompt=prompt,
             response=raw_output,
             usage=getattr(runner, "last_usage", None),
+            native_research=getattr(runner, "last_native_research_trace", None),
         )
         _validate_model_plan(plan)
     except Exception as exc:
@@ -1513,10 +1534,16 @@ def attach_model_record(
     prompt: str,
     response: str,
     usage: dict[str, Any] | None,
+    native_research: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     plan["_prompt_content"] = prompt
     plan["_response_content"] = response
     plan["_token_usage"] = usage or _estimated_usage(prompt=prompt, response=response)
+    plan["_native_research"] = native_research or {
+        "performed": False,
+        "web_search_call_count": 0,
+        "web_fetch_call_count": 0,
+    }
     return plan
 
 

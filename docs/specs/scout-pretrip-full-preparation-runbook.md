@@ -3804,9 +3804,74 @@ SOP change:
 
 - Terrain RGB zoom is a coverage choice, not a source-resolution claim. Audit
   per-zoom alpha support first, choose the lowest zoom that yields a fully
-  supported rectangular block, retain nearest-neighbor encoding, and continue
-  to disclose the 20 m source-cell resolution. Never relax the complete-tile
-  rule merely to make 3D render.
+  supported rectangular block, and continue to disclose the 20 m source-cell
+  resolution. Never relax the complete-tile rule merely to make 3D render.
+- Do not resize already encoded Terrain RGB channels with bilinear filtering;
+  channel carry boundaries would corrupt decoded heights. For smoother 3D
+  presentation, interpolate scalar elevation first, require all four source
+  cells to be finite, then encode the interpolated value as Terrain RGB.
+  Record `adds_source_resolution=false`; visual interpolation is not new
+  spatial evidence.
+
+## Run Log: 2026-08-22 Navigation Terrain Display Smoothing Correction
+
+Observed defect:
+
+- The zoom-15 Terrain RGB artifact used nearest-neighbor resampling from the
+  20 m source grid. At this latitude a rendered tile pixel is substantially
+  smaller than one source cell, so each source elevation became a repeated
+  plateau. MapLibre connected those plateaus with abrupt walls, and the default
+  `1.5x` vertical exaggeration made the staircase artifact more prominent.
+
+Bounded correction contract:
+
+- Interpolate scalar metres with bilinear weights before Terrain RGB encoding.
+- Reject every rendered pixel unless all four contributing source cells are
+  finite; retain `exclude_incomplete_tiles` and the complete rectangular block.
+- Publish `visual_interpolation=bilinear`,
+  `interpolation_domain=elevation_m_before_terrain_rgb_encoding`, and
+  `adds_source_resolution=false`.
+- Reset the Dashboard default to `1.0x`; larger exaggeration remains an
+  explicitly selected visualization control.
+
+Planned targeted preparation after focused tests pass:
+
+```text
+./venv/bin/python navigation_terrain_raster_dem.py --workspace-root /Users/alexwang0315/workspace --project-id chilai_nanhua_day1_scoutAI --zoom 15
+```
+
+Result: PASS
+
+```text
+Prepared at: 2026-08-22T09:23:40Z
+Manifest: outputs/navigation/terrain_rgb/manifest.json
+Source fingerprint: 1eaa51668ef9579aa9743ef1b800c2c223cdcef8cf8e79b63ddc2bc5b7519b83
+Prepared block: 14 complete zoom-15 Terrain RGB tiles
+Resampling: bilinear_elevation
+Visual interpolation: bilinear
+Adds source resolution: false
+Unsupported cells encoded as terrain: false
+Candidate only: true
+Runtime safety truth: false
+```
+
+Old/new artifact roughness audit across all 14 tiles:
+
+```text
+nearest: zero-adjacent-delta ratio 78.22%, p95 14.5 m, p99 22.5 m, max 67.3 m
+bilinear elevation: zero-adjacent-delta ratio 1.17%, p95 4.6 m, p99 6.1 m, max 14.0 m
+```
+
+Browser qualification on an isolated fresh-code runtime (`127.0.0.1:9101`):
+
+- Default `1.0x` and explicit `1.5x` views both rendered a continuous terrain
+  surface without the former repeated-cell staircase.
+- MapLibre reported `DEM DECODED`; center elevation was non-zero.
+- The 2D map still contained all displayed Golden Route samples after fit.
+- Effective 500 px narrow viewport had zero horizontal overflow.
+- Console errors/warnings: none. Terrain DEM tile responses: HTTP 200.
+- Focused Dashboard/MapLibre/DEM tests: 113 passed. Pre-trip API tests:
+  101 passed. Ruff and diff checks: passed.
 
 ## 2026-08-21 MapLibre and QGIS MCP evidence slice v0.1
 
@@ -4076,3 +4141,51 @@ Qualification after DEM completion:
   the deterministic non-blank render check. Dashboard browser qualification
   was not rerun because this DEM-completion step did not change browser-visible
   behavior; it remains a separate integration gate.
+
+### Pi multiscale morphology and candidate line extraction (2026-08-22)
+
+`terrain_feature_stack.v1` now produces three fixed geomorphon scales (5, 10,
+and 20 cells), two-of-three ridge/valley consensus masks, thinned ridge and
+valley vectors, and a candidate flow-channel network. These are terrain
+morphology evidence only. In particular, a flow-channel line does not confirm
+observed water, a ridge/valley line does not confirm a usable route, and none
+of these artifacts changes runtime safety or operational state.
+
+The real Pi sequence established two dependency constraints:
+
+- `r38` reached `r.stream.extract`, then the GRASS 8.4.1 native process
+  segfaulted during stream extraction and created neither declared output.
+  Scout preserved this as `PROCESSING_FAILED`; do not re-enable this algorithm
+  in the v0.1 allowlist on this image without a separate dependency fix and
+  qualification.
+- `r39` and `r40` showed that `r.watershed stream=` can be entirely NoData for
+  a narrow route corridor. This agrees with the GRASS documentation that edge
+  areas may not form complete exterior basins. It is not evidence that no
+  channel exists.
+- `r42` therefore used the already produced flow-accumulation raster and the
+  fixed expression `if(abs(A) >= 25, 1, null())`, followed by `r.thin` and
+  `r.to.vect`. Negative accumulation remains explicitly flagged as potentially
+  underestimated outside-region inflow. This bounded fallback is a candidate
+  flow-channel morphology, not a hydrologically validated river network.
+
+Real `r42` evidence:
+
+```text
+benchmark run: chilai_nanhua_day1.pi-gis-20260822.r42
+QGIS worker run: qgis-worker-20260822T061554705299Z-fd6670fc70
+report: artifacts/pi-gis-benchmark/chilai_nanhua_day1.pi-gis-20260822.r42/benchmark-report.json
+QGIS render: artifacts/pi-gis-benchmark/chilai_nanhua_day1.pi-gis-20260822.r42/qgis-worker/runs/qgis-worker-20260822T061554705299Z-fd6670fc70/qgis_render_preview.png
+```
+
+The run completed in 22.426 seconds on the Pi, with temperature moving from
+49.6 C to 51.8 C and swap unchanged at 4 MB. It exported 16 hashed QGIS worker
+artifacts. The WGS84 candidate vectors contained 72 ridge features, 90 valley
+features, and 160 flow-channel features; the combined MapLibre collection held
+452 features. All artifact hashes and all MapLibre authority flags were
+verified locally. Processing and render completed, while visual and human
+review remain pending.
+
+References:
+
+- GRASS `r.watershed`: https://grass.osgeo.org/grass-stable/manuals/r.watershed.html
+- GRASS `r.stream.extract`: https://grass.osgeo.org/grass-stable/manuals/r.stream.extract.html
