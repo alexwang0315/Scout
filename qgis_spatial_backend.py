@@ -4,6 +4,7 @@ import hashlib
 import html
 import ipaddress
 import json
+import math
 import os
 import re
 import threading
@@ -60,9 +61,14 @@ QGIS_ALLOWED_TOOL_IDS = (
     "qgis.processing.slope",
     "qgis.processing.grass.slope_aspect",
     "qgis.processing.grass.geomorphon",
+    "qgis.processing.grass.geomorphon_consensus",
+    "qgis.processing.grass.watershed_stream",
+    "qgis.processing.grass.thin",
+    "qgis.processing.grass.raster_to_vector",
     "qgis.processing.grass.watershed",
     "qgis.processing.gdal.assign_projection",
     "qgis.raster.identify",
+    "qgis.vector.export_candidate_geojson",
     "qgis.render.map_preview",
     "scout.artifact.export",
 )
@@ -443,9 +449,14 @@ class QgisSpatialBackend:
                         "qgis.capabilities.processing.describe",
                         "qgis.processing.grass.slope_aspect",
                         "qgis.processing.grass.geomorphon",
+                        "qgis.processing.grass.geomorphon_consensus",
+                        "qgis.processing.grass.watershed_stream",
+                        "qgis.processing.grass.thin",
+                        "qgis.processing.grass.raster_to_vector",
                         "qgis.processing.grass.watershed",
                         "qgis.processing.gdal.assign_projection",
                         "qgis.raster.identify",
+                        "qgis.vector.export_candidate_geojson",
                         "qgis.render.map_preview",
                         "scout.artifact.export",
                     ],
@@ -1600,7 +1611,15 @@ class QgisSpatialBackend:
             "slope_raster",
             "aspect_raster",
             "geomorphon_raster",
+            "geomorphon_fine_raster",
+            "geomorphon_coarse_raster",
+            "geomorphon_consensus_ridge_raster",
+            "geomorphon_consensus_valley_raster",
             "flow_accumulation_raster",
+            "stream_network_raster",
+            "ridge_lines_vector",
+            "valley_lines_vector",
+            "stream_network_vector",
             "terrain_feature_route_samples",
             "terrain_feature_manifest",
             "qgis_visual_context",
@@ -1652,6 +1671,18 @@ class QgisSpatialBackend:
         _validate_terrain_feature_route_samples_bytes(
             artifact_bytes["terrain_feature_route_samples"]
         )
+        _validate_candidate_terrain_vector_bytes(
+            artifact_bytes["ridge_lines_vector"],
+            expected_kind="qgis_candidate_ridge_line",
+        )
+        _validate_candidate_terrain_vector_bytes(
+            artifact_bytes["valley_lines_vector"],
+            expected_kind="qgis_candidate_valley_line",
+        )
+        _validate_candidate_terrain_vector_bytes(
+            artifact_bytes["stream_network_vector"],
+            expected_kind="qgis_candidate_stream_network",
+        )
 
         run_id = local_run.workflow_run_id
         root_ref = f"{QGIS_WORKFLOW_ROOT_REF}/{run_id}"
@@ -1661,7 +1692,15 @@ class QgisSpatialBackend:
             "slope_raster": f"{root_ref}/grass_slope.tif",
             "aspect_raster": f"{root_ref}/grass_aspect.tif",
             "geomorphon_raster": f"{root_ref}/grass_geomorphon_landforms.tif",
+            "geomorphon_fine_raster": f"{root_ref}/grass_geomorphon_fine.tif",
+            "geomorphon_coarse_raster": f"{root_ref}/grass_geomorphon_coarse.tif",
+            "geomorphon_consensus_ridge_raster": f"{root_ref}/grass_geomorphon_ridge_consensus.tif",
+            "geomorphon_consensus_valley_raster": f"{root_ref}/grass_geomorphon_valley_consensus.tif",
             "flow_accumulation_raster": f"{root_ref}/grass_flow_accumulation.tif",
+            "stream_network_raster": f"{root_ref}/grass_stream_network.tif",
+            "ridge_lines_vector": f"{root_ref}/ridge_lines.geojson",
+            "valley_lines_vector": f"{root_ref}/valley_lines.geojson",
+            "stream_network_vector": f"{root_ref}/stream_network.geojson",
             "terrain_feature_route_samples": f"{root_ref}/terrain_feature_route_samples.geojson",
             "terrain_feature_manifest": f"{root_ref}/terrain_feature_manifest.json",
             "qgis_visual_context": f"{root_ref}/qgis_visual_context.json",
@@ -1671,7 +1710,15 @@ class QgisSpatialBackend:
             "slope_raster": "grass:r.slope.aspect",
             "aspect_raster": "grass:r.slope.aspect",
             "geomorphon_raster": "grass:r.geomorphon",
+            "geomorphon_fine_raster": "grass:r.geomorphon",
+            "geomorphon_coarse_raster": "grass:r.geomorphon",
+            "geomorphon_consensus_ridge_raster": "grass:r.mapcalc.simple",
+            "geomorphon_consensus_valley_raster": "grass:r.mapcalc.simple",
             "flow_accumulation_raster": "grass:r.watershed",
+            "stream_network_raster": "grass:r.watershed+r.mapcalc.simple",
+            "ridge_lines_vector": "grass:r.mapcalc.simple+r.thin+r.to.vect",
+            "valley_lines_vector": "grass:r.mapcalc.simple+r.thin+r.to.vect",
+            "stream_network_vector": "grass:r.watershed+r.mapcalc.simple+r.thin+r.to.vect",
             "terrain_feature_route_samples": "qgis_identify.raster_values",
             "terrain_feature_manifest": "scout.artifact.normalize",
             "qgis_visual_context": "qgis.visual_context",
@@ -2398,7 +2445,12 @@ def _completed_steps(
             ),
             (
                 "geomorphon_generated",
-                "Geomorphon landforms generated",
+                "Multiscale geomorphons generated",
+                SpatialCapabilityCategory.TERRAIN,
+            ),
+            (
+                "ridge_valley_vectorized",
+                "Ridge and valley candidates vectorized",
                 SpatialCapabilityCategory.TERRAIN,
             ),
             (
@@ -2407,9 +2459,19 @@ def _completed_steps(
                 SpatialCapabilityCategory.HYDROLOGY,
             ),
             (
+                "stream_network_extracted",
+                "Stream-network candidate extracted",
+                SpatialCapabilityCategory.HYDROLOGY,
+            ),
+            (
                 "crs_normalized",
                 "CRS metadata normalized",
                 SpatialCapabilityCategory.PROCESSING,
+            ),
+            (
+                "candidate_vectors_exported",
+                "Candidate lines exported for MapLibre",
+                SpatialCapabilityCategory.VECTOR,
             ),
             (
                 "route_feature_sampling",
@@ -2655,6 +2717,101 @@ def _validate_terrain_feature_route_samples_bytes(raw: bytes) -> None:
             raise QgisSpatialBackendError(
                 "QGIS route terrain sample attempted risk or runtime authority"
             )
+
+
+def _validate_candidate_terrain_vector_bytes(
+    raw: bytes,
+    *,
+    expected_kind: str,
+) -> None:
+    if len(raw) > 16 * 1024 * 1024:
+        raise QgisSpatialBackendError("QGIS candidate terrain vector exceeded the limit")
+    try:
+        payload = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise QgisSpatialBackendError(
+            "QGIS candidate terrain vector is malformed"
+        ) from exc
+    if not isinstance(payload, dict) or payload.get("type") != "FeatureCollection":
+        raise QgisSpatialBackendError("QGIS candidate terrain vector must be GeoJSON")
+    metadata = payload.get("metadata")
+    if (
+        not isinstance(metadata, dict)
+        or metadata.get("candidate_only") is not True
+        or metadata.get("runtime_safety_truth") is not False
+        or metadata.get("operational") is not False
+        or metadata.get("risk_score_applied") is not False
+        or str(metadata.get("crs", "")).upper() not in {"4326", "EPSG:4326"}
+    ):
+        raise QgisSpatialBackendError(
+            "QGIS candidate terrain vector metadata violated authority or CRS"
+        )
+    features = payload.get("features")
+    if not isinstance(features, list) or len(features) > 20_000:
+        raise QgisSpatialBackendError(
+            "QGIS candidate terrain vector feature count is outside the limit"
+        )
+    coordinate_count = 0
+    for feature in features:
+        properties = feature.get("properties") if isinstance(feature, dict) else None
+        geometry = feature.get("geometry") if isinstance(feature, dict) else None
+        if (
+            not isinstance(properties, dict)
+            or properties.get("kind") != expected_kind
+            or properties.get("candidate_only") is not True
+            or properties.get("runtime_safety_truth") is not False
+            or properties.get("operational") is not False
+            or properties.get("risk_score_applied") is not False
+        ):
+            raise QgisSpatialBackendError(
+                "QGIS candidate terrain vector attempted runtime authority"
+            )
+        if not isinstance(geometry, dict) or geometry.get("type") not in {
+            "LineString",
+            "MultiLineString",
+        }:
+            raise QgisSpatialBackendError(
+                "QGIS candidate terrain vector contains non-line geometry"
+            )
+        lines = (
+            [geometry.get("coordinates")]
+            if geometry.get("type") == "LineString"
+            else geometry.get("coordinates")
+        )
+        if not isinstance(lines, list) or not lines:
+            raise QgisSpatialBackendError(
+                "QGIS candidate terrain vector contains empty geometry"
+            )
+        for line in lines:
+            if not isinstance(line, list) or len(line) < 2:
+                raise QgisSpatialBackendError(
+                    "QGIS candidate terrain vector contains an invalid line"
+                )
+            for coordinate in line:
+                if not isinstance(coordinate, list) or len(coordinate) < 2:
+                    raise QgisSpatialBackendError(
+                        "QGIS candidate terrain vector coordinate is malformed"
+                    )
+                try:
+                    lon, lat = float(coordinate[0]), float(coordinate[1])
+                except (TypeError, ValueError) as exc:
+                    raise QgisSpatialBackendError(
+                        "QGIS candidate terrain vector coordinate is not numeric"
+                    ) from exc
+                if (
+                    not math.isfinite(lon)
+                    or not math.isfinite(lat)
+                    or not -180 <= lon <= 180
+                    or not -90 <= lat <= 90
+                ):
+                    raise QgisSpatialBackendError(
+                        "QGIS candidate terrain vector is outside EPSG:4326"
+                    )
+                coordinate_count += 1
+                if coordinate_count > 500_000:
+                    raise QgisSpatialBackendError(
+                        "QGIS candidate terrain vector has too many coordinates"
+                    )
 
 
 def _public_worker_error(

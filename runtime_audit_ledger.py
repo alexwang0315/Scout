@@ -219,6 +219,18 @@ class FileRuntimeAuditLedger:
         self._last_writer_error_code: str | None = None
         self._writer_lock_path = self.instance_dir / ".writer.lock"
         self._artifact_digest_key: bytes | None = None
+        self._event_file_cache: dict[
+            Path,
+            tuple[tuple[int, int, int, int], list[RuntimeAuditEvent], list[str]],
+        ] = {}
+        self._verified_instance_cache: dict[
+            str,
+            tuple[
+                tuple[tuple[str, tuple[int, int, int, int]], ...],
+                RuntimeAuditIntegrity,
+                list[RuntimeAuditEvent],
+            ],
+        ] = {}
 
     @property
     def started(self) -> bool:
@@ -675,8 +687,10 @@ class FileRuntimeAuditLedger:
         selected_month = selected_day[:7] if selected_day is not None else None
         timezone_offset = _validated_timezone_offset(utc_offset_minutes)
         events, errors, instance_ids = self._read_all_events()
-        integrity = self._verify_grouped_events(events, errors=errors)
-        verified_events = self._verified_prefix_events(events)
+        integrity, verified_events = self._verified_event_snapshot(
+            events,
+            errors=errors,
+        )
         summary = _summarize(verified_events)
         base_filtered = [
             event
@@ -998,18 +1012,71 @@ class FileRuntimeAuditLedger:
         return True
 
     def _read_all_events(self) -> tuple[list[RuntimeAuditEvent], list[str], set[str]]:
+        with self._lock:
+            events: list[RuntimeAuditEvent] = []
+            errors: list[str] = []
+            instance_ids: set[str] = set()
+            if not self.root.is_dir():
+                self._event_file_cache = {}
+                return events, errors, instance_ids
+            active_cache: dict[
+                Path,
+                tuple[tuple[int, int, int, int], list[RuntimeAuditEvent], list[str]],
+            ] = {}
+            for instance_dir in sorted(
+                path for path in self.root.iterdir() if path.is_dir()
+            ):
+                event_paths = sorted(instance_dir.glob("events-*.jsonl"))
+                if event_paths or (instance_dir / "manifest.json").is_file():
+                    instance_ids.add(instance_dir.name)
+                for event_path in event_paths:
+                    try:
+                        file_stat = event_path.stat()
+                    except OSError:
+                        errors.append("event-file-read-failed")
+                        continue
+                    fingerprint = (
+                        file_stat.st_dev,
+                        file_stat.st_ino,
+                        file_stat.st_size,
+                        file_stat.st_mtime_ns,
+                    )
+                    cached = self._event_file_cache.get(event_path)
+                    if cached is not None and cached[0] == fingerprint:
+                        file_events, file_errors = cached[1], cached[2]
+                    else:
+                        file_events, file_errors = self._read_event_file(event_path)
+                    active_cache[event_path] = (
+                        fingerprint,
+                        file_events,
+                        file_errors,
+                    )
+                    events.extend(file_events)
+                    errors.extend(file_errors)
+            self._event_file_cache = active_cache
+            return events, errors, instance_ids
+
+    def _read_event_file(
+        self,
+        path: Path,
+    ) -> tuple[list[RuntimeAuditEvent], list[str]]:
         events: list[RuntimeAuditEvent] = []
         errors: list[str] = []
-        instance_ids: set[str] = set()
-        if not self.root.is_dir():
-            return events, errors, instance_ids
-        for instance_dir in sorted(path for path in self.root.iterdir() if path.is_dir()):
-            instance_events, instance_errors = self._read_instance_events(instance_dir)
-            if instance_events or (instance_dir / "manifest.json").is_file():
-                instance_ids.add(instance_dir.name)
-            events.extend(instance_events)
-            errors.extend(instance_errors)
-        return events, errors, instance_ids
+        try:
+            lines = path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return events, ["event-file-read-failed"]
+        for line in lines:
+            if not line.strip():
+                continue
+            try:
+                events.append(RuntimeAuditEvent.model_validate_json(line))
+            except ValueError:
+                errors.append("event-record-invalid")
+                events.sort(key=lambda event: event.sequence)
+                return events, errors
+        events.sort(key=lambda event: event.sequence)
+        return events, errors
 
     def _read_instance_events(
         self,
@@ -1020,20 +1087,11 @@ class FileRuntimeAuditLedger:
         if not instance_dir.is_dir():
             return events, errors
         for path in sorted(instance_dir.glob("events-*.jsonl")):
-            try:
-                lines = path.read_text(encoding="utf-8").splitlines()
-            except OSError:
-                errors.append("event-file-read-failed")
-                continue
-            for line in lines:
-                if not line.strip():
-                    continue
-                try:
-                    events.append(RuntimeAuditEvent.model_validate_json(line))
-                except ValueError:
-                    errors.append("event-record-invalid")
-                    events.sort(key=lambda event: event.sequence)
-                    return events, errors
+            file_events, file_errors = self._read_event_file(path)
+            events.extend(file_events)
+            errors.extend(file_errors)
+            if file_errors:
+                break
         events.sort(key=lambda event: event.sequence)
         return events, errors
 
@@ -1062,6 +1120,88 @@ class FileRuntimeAuditLedger:
                 previous_sequence = event.sequence
                 previous_hash = event.event_hash
         return verified
+
+    def _verified_event_snapshot(
+        self,
+        events: Iterable[RuntimeAuditEvent],
+        *,
+        errors: list[str],
+    ) -> tuple[RuntimeAuditIntegrity, list[RuntimeAuditEvent]]:
+        grouped: dict[str, list[RuntimeAuditEvent]] = {}
+        for event in events:
+            grouped.setdefault(event.runtime_instance_id, []).append(event)
+        file_errors_by_instance: dict[str, list[str]] = {}
+        fingerprints_by_instance: dict[
+            str,
+            list[tuple[str, tuple[int, int, int, int]]],
+        ] = {}
+        for event_path, (fingerprint, _file_events, file_errors) in (
+            self._event_file_cache.items()
+        ):
+            instance_id = event_path.parent.name
+            fingerprints_by_instance.setdefault(instance_id, []).append(
+                (event_path.name, fingerprint)
+            )
+            if file_errors:
+                file_errors_by_instance.setdefault(instance_id, []).extend(
+                    file_errors
+                )
+
+        active_cache: dict[
+            str,
+            tuple[
+                tuple[tuple[str, tuple[int, int, int, int]], ...],
+                RuntimeAuditIntegrity,
+                list[RuntimeAuditEvent],
+            ],
+        ] = {}
+        verified_events: list[RuntimeAuditEvent] = []
+        checked_count = 0
+        mapped_error_count = 0
+        error_count = 0
+        first_integrity_error: str | None = None
+        instance_ids = sorted(set(grouped) | set(file_errors_by_instance))
+        for instance_id in instance_ids:
+            instance_events = grouped.get(instance_id, [])
+            instance_errors = file_errors_by_instance.get(instance_id, [])
+            mapped_error_count += len(instance_errors)
+            fingerprint = tuple(
+                sorted(fingerprints_by_instance.get(instance_id, []))
+            )
+            cached = self._verified_instance_cache.get(instance_id)
+            if cached is not None and cached[0] == fingerprint:
+                instance_integrity = cached[1]
+                instance_verified = cached[2]
+            else:
+                instance_integrity = self._verify_grouped_events(
+                    instance_events,
+                    errors=instance_errors,
+                )
+                instance_verified = self._verified_prefix_events(instance_events)
+            active_cache[instance_id] = (
+                fingerprint,
+                instance_integrity,
+                instance_verified,
+            )
+            verified_events.extend(instance_verified)
+            checked_count += instance_integrity.checked_event_count
+            error_count += instance_integrity.error_count
+            first_integrity_error = (
+                first_integrity_error or instance_integrity.first_error_code
+            )
+        self._verified_instance_cache = active_cache
+        unmapped_errors = max(0, len(errors) - mapped_error_count)
+        error_count += unmapped_errors
+        first_error = errors[0] if errors else first_integrity_error
+        return (
+            RuntimeAuditIntegrity(
+                verified=error_count == 0,
+                checked_event_count=checked_count,
+                error_count=error_count,
+                first_error_code=first_error,
+            ),
+            verified_events,
+        )
 
     def _verify_grouped_events(
         self,

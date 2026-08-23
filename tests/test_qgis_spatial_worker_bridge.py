@@ -254,11 +254,53 @@ _ROUTE_SAMPLE_BYTES = json.dumps(
 ).encode("utf-8")
 
 
+def _candidate_vector_bytes(kind: str) -> bytes:
+    return json.dumps(
+        {
+            "type": "FeatureCollection",
+            "metadata": {
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "operational": False,
+                "risk_score_applied": False,
+                "crs": "EPSG:4326",
+            },
+            "features": [
+                {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "LineString",
+                        "coordinates": [[121.21, 24.05], [121.22, 24.04]],
+                    },
+                    "properties": {
+                        "kind": kind,
+                        "candidate_only": True,
+                        "runtime_safety_truth": False,
+                        "operational": False,
+                        "risk_score_applied": False,
+                    },
+                }
+            ],
+        },
+        separators=(",", ":"),
+    ).encode("utf-8")
+
+
 _TERRAIN_FEATURE_BYTES = {
     "slope_raster": b"grass-slope-raster",
     "aspect_raster": b"grass-aspect-raster",
     "geomorphon_raster": b"grass-geomorphon-raster",
+    "geomorphon_fine_raster": b"grass-geomorphon-fine-raster",
+    "geomorphon_coarse_raster": b"grass-geomorphon-coarse-raster",
+    "geomorphon_consensus_ridge_raster": b"grass-ridge-consensus-raster",
+    "geomorphon_consensus_valley_raster": b"grass-valley-consensus-raster",
     "flow_accumulation_raster": b"grass-flow-accumulation-raster",
+    "stream_network_raster": b"grass-stream-network-raster",
+    "ridge_lines_vector": _candidate_vector_bytes("qgis_candidate_ridge_line"),
+    "valley_lines_vector": _candidate_vector_bytes("qgis_candidate_valley_line"),
+    "stream_network_vector": _candidate_vector_bytes(
+        "qgis_candidate_stream_network"
+    ),
     "terrain_feature_route_samples": _ROUTE_SAMPLE_BYTES,
     "terrain_feature_manifest": b'{"candidate_only":true}',
     "qgis_visual_context": b'{"rendered_feature":"grass_slope_candidate"}',
@@ -275,7 +317,15 @@ def _terrain_feature_worker_run(state: str) -> dict[str, Any]:
         "slope_raster": "grass_slope.tif",
         "aspect_raster": "grass_aspect.tif",
         "geomorphon_raster": "grass_geomorphon_landforms.tif",
+        "geomorphon_fine_raster": "grass_geomorphon_fine.tif",
+        "geomorphon_coarse_raster": "grass_geomorphon_coarse.tif",
+        "geomorphon_consensus_ridge_raster": "grass_geomorphon_ridge_consensus.tif",
+        "geomorphon_consensus_valley_raster": "grass_geomorphon_valley_consensus.tif",
         "flow_accumulation_raster": "grass_flow_accumulation.tif",
+        "stream_network_raster": "grass_stream_network.tif",
+        "ridge_lines_vector": "ridge_lines.geojson",
+        "valley_lines_vector": "valley_lines.geojson",
+        "stream_network_vector": "stream_network.geojson",
         "terrain_feature_route_samples": "terrain_feature_route_samples.geojson",
         "terrain_feature_manifest": "terrain_feature_manifest.json",
         "qgis_visual_context": "qgis_visual_context.json",
@@ -285,7 +335,15 @@ def _terrain_feature_worker_run(state: str) -> dict[str, Any]:
         "slope_raster": "image/tiff",
         "aspect_raster": "image/tiff",
         "geomorphon_raster": "image/tiff",
+        "geomorphon_fine_raster": "image/tiff",
+        "geomorphon_coarse_raster": "image/tiff",
+        "geomorphon_consensus_ridge_raster": "image/tiff",
+        "geomorphon_consensus_valley_raster": "image/tiff",
         "flow_accumulation_raster": "image/tiff",
+        "stream_network_raster": "image/tiff",
+        "ridge_lines_vector": "application/geo+json",
+        "valley_lines_vector": "application/geo+json",
+        "stream_network_vector": "application/geo+json",
         "terrain_feature_route_samples": "application/geo+json",
         "terrain_feature_manifest": "application/json",
         "qgis_visual_context": "application/json",
@@ -316,10 +374,13 @@ def _terrain_feature_worker_run(state: str) -> dict[str, Any]:
         "processing_algorithms": [
             "grass:r.slope.aspect",
             "grass:r.geomorphon",
+            "grass:r.mapcalc.simple",
+            "grass:r.thin",
+            "grass:r.to.vect",
             "grass:r.watershed",
         ],
         "processing_parameters": {
-            "geomorphon_search_cells": 10,
+            "geomorphon_search_cells": {"fine": 5, "medium": 10, "coarse": 20},
             "watershed_threshold_cells": 50,
         },
         "warnings": ["candidate terrain feature execution evidence only"],
@@ -470,7 +531,15 @@ def test_qgis_backend_grass_feature_stack_is_hashed_and_normalized(
         "slope_raster",
         "aspect_raster",
         "geomorphon_raster",
+        "geomorphon_fine_raster",
+        "geomorphon_coarse_raster",
+        "geomorphon_consensus_ridge_raster",
+        "geomorphon_consensus_valley_raster",
         "flow_accumulation_raster",
+        "stream_network_raster",
+        "ridge_lines_vector",
+        "valley_lines_vector",
+        "stream_network_vector",
         "terrain_feature_route_samples",
         "terrain_feature_manifest",
         "qgis_visual_context",

@@ -25,6 +25,9 @@ from pydantic import ValidationError
 from qgis_mcp_stdio import (
     QGIS_MCP_ALLOWED_ALGORITHMS,
     QGIS_MCP_ALLOWED_TOOLS,
+    QGIS_MCP_FLOW_CHANNEL_CANDIDATE_EXPRESSION,
+    QGIS_MCP_GEOMORPHON_RIDGE_CONSENSUS_EXPRESSION,
+    QGIS_MCP_GEOMORPHON_VALLEY_CONSENSUS_EXPRESSION,
     QgisMcpClientConfig,
     QgisMcpError,
     QgisMcpStdioClient,
@@ -67,6 +70,18 @@ _GRASS_TERRAIN_FEATURE_SCHEMAS = {
         "required_parameters": frozenset({"elevation", "forms"}),
         "output_parameters": ("forms",),
     },
+    "grass:r.mapcalc.simple": {
+        "required_parameters": frozenset({"a", "b", "c", "expression", "output"}),
+        "output_parameters": ("output",),
+    },
+    "grass:r.thin": {
+        "required_parameters": frozenset({"input", "output"}),
+        "output_parameters": ("output",),
+    },
+    "grass:r.to.vect": {
+        "required_parameters": frozenset({"input", "output"}),
+        "output_parameters": ("output",),
+    },
     "grass:r.watershed": {
         "required_parameters": frozenset({"elevation", "accumulation"}),
         "output_parameters": ("accumulation",),
@@ -83,6 +98,12 @@ _SAFE_ID_CHARS = frozenset(
     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._:-"
 )
 _MAX_TERRAIN_FEATURE_ROUTE_SAMPLES = 128
+_GEOMORPHON_SCALES = (
+    ("fine", 5),
+    ("medium", 10),
+    ("coarse", 20),
+)
+_MAX_CANDIDATE_VECTOR_FEATURES = 20_000
 _GEOMORPHON_LABELS = {
     1: "flat",
     2: "peak",
@@ -891,10 +912,25 @@ class QgisWorkerService:
         run = queued
         run_root = self._run_root(run.worker_run_id)
         route_path = run_root / "route.geojson"
+        projected_route_path = run_root / "route_epsg3826.gpkg"
         slope_path = run_root / "grass_slope.tif"
         aspect_path = run_root / "grass_aspect.tif"
+        geomorphon_fine_path = run_root / "grass_geomorphon_fine.tif"
         geomorphon_path = run_root / "grass_geomorphon_landforms.tif"
+        geomorphon_coarse_path = run_root / "grass_geomorphon_coarse.tif"
+        ridge_consensus_path = run_root / "grass_geomorphon_ridge_consensus.tif"
+        valley_consensus_path = run_root / "grass_geomorphon_valley_consensus.tif"
+        ridge_thin_path = run_root / "grass_geomorphon_ridge_thin.tif"
+        valley_thin_path = run_root / "grass_geomorphon_valley_thin.tif"
+        ridge_projected_path = run_root / "ridge_lines_epsg3826.gpkg"
+        valley_projected_path = run_root / "valley_lines_epsg3826.gpkg"
+        ridge_geojson_path = run_root / "ridge_lines.geojson"
+        valley_geojson_path = run_root / "valley_lines.geojson"
         accumulation_path = run_root / "grass_flow_accumulation.tif"
+        stream_raster_path = run_root / "grass_stream_network.tif"
+        stream_thin_path = run_root / "grass_stream_network_thin.tif"
+        stream_projected_path = run_root / "stream_network_epsg3826.gpkg"
+        stream_geojson_path = run_root / "stream_network.geojson"
         route_samples_path = run_root / "terrain_feature_route_samples.geojson"
         manifest_path = run_root / "terrain_feature_manifest.json"
         render_path = run_root / "qgis_render_preview.png"
@@ -930,9 +966,10 @@ class QgisWorkerService:
                 "qgis_context",
                 {
                     "task": (
-                        "Prepare candidate-only terrain features with the exact allowlisted "
-                        "GRASS Processing algorithms r.slope.aspect, r.geomorphon, and "
-                        "r.watershed; render slope context without drawing a safety conclusion."
+                        "Prepare candidate-only multiscale geomorphons, bounded ridge and "
+                        "valley line candidates, and a stream-network candidate with only "
+                        "the exact allowlisted GRASS Processing tools; render spatial "
+                        "evidence without drawing a route, water, hazard, or safety conclusion."
                     ),
                     "budget_bytes": 8192,
                     "detail": "summary",
@@ -964,12 +1001,79 @@ class QgisWorkerService:
 
             current_step = "route_preparation"
             _write_private_json(route_path, request.route_geojson)
-            route_layer = self._call(
+            source_route_layer = self._call(
                 "qgis_project_action",
                 {
                     "action": "add_vector",
                     "source": str(route_path),
+                    "name": f"Scout candidate route source {run.worker_run_id[-10:]}",
+                },
+            )
+            source_route_layer_id = str(
+                source_route_layer.get("id")
+                or source_route_layer.get("layer_id")
+                or ""
+            )
+            if not source_route_layer_id:
+                raise _WorkerProcessingFailed(
+                    "QGIS did not return a source route layer ID"
+                )
+            added_layers.append(source_route_layer_id)
+            route_export = self._call(
+                "qgis_vector_export",
+                {
+                    "layer": source_route_layer_id,
+                    "path": str(projected_route_path),
+                    "format": "gpkg",
+                    "encoding": "UTF-8",
+                    "selected_only": False,
+                    "destination_crs": "EPSG:3826",
+                    "overwrite": False,
+                    "create_parent": False,
+                    "include_z": False,
+                    "save_metadata": True,
+                },
+            )
+            exported_path = str(route_export.get("path") or "")
+            exported_layer_name = str(route_export.get("layer_name") or "")
+            if (
+                not projected_route_path.is_file()
+                or Path(exported_path).resolve(strict=False)
+                != projected_route_path.resolve(strict=False)
+                or int(route_export.get("feature_count", -1)) != 1
+                or not exported_layer_name.startswith(
+                    "Scout candidate route source "
+                )
+            ):
+                raise _WorkerProcessingFailed(
+                    "QGIS did not export exactly one projected route feature"
+                )
+            route_capabilities = [
+                {
+                    "kind": "tool",
+                    "id": "qgis_vector_export",
+                    "provider": "qgis",
+                    "required_parameters": [
+                        "layer",
+                        "path",
+                        "destination_crs",
+                    ],
+                    "output_parameters": ["path"],
+                }
+            ]
+            self._call(
+                "qgis_project_action",
+                {"action": "remove_layer", "layer": source_route_layer_id},
+            )
+            route_layer = self._call(
+                "qgis_project_action",
+                {
+                    "action": "add_vector",
+                    "source": (
+                        f"{projected_route_path}|layername={exported_layer_name}"
+                    ),
                     "name": f"Scout candidate route {run.worker_run_id[-10:]}",
+                    "provider": "ogr",
                 },
             )
             route_layer_id = str(
@@ -978,6 +1082,32 @@ class QgisWorkerService:
             if not route_layer_id:
                 raise _WorkerProcessingFailed("QGIS did not return a route layer ID")
             added_layers.append(route_layer_id)
+            route_crs_assignment = self._call(
+                "qgis_crs",
+                {
+                    "action": "assign_layer",
+                    "layer": route_layer_id,
+                    "target": "EPSG:3826",
+                    "value": "EPSG:3826",
+                },
+            )
+            prepared_route_inspection = self._call(
+                "qgis_layer_inspect",
+                {
+                    "layer": route_layer_id,
+                    "include": ["metadata"],
+                    "sample_limit": 0,
+                },
+            )
+            prepared_route_summary = prepared_route_inspection.get("summary") or {}
+            prepared_route_crs = str(
+                prepared_route_summary.get("crs") or "UNKNOWN"
+            ).upper()
+            if prepared_route_crs not in {"3826", "EPSG:3826"}:
+                raise _WorkerCrsUnresolved(
+                    f"Prepared route CRS is unresolved or unsupported: {prepared_route_crs}"
+                )
+            _validate_projected_route_extent(prepared_route_summary.get("extent"))
             run = self._complete_step(run, current_step)
             self._persist(run)
             self._check_cancel(cancel_event)
@@ -1014,6 +1144,10 @@ class QgisWorkerService:
                 raise _WorkerCrsUnresolved(
                     f"Source DEM CRS is unresolved or unsupported: {source_dem_crs}"
                 )
+            _require_extent_intersection(
+                prepared_route_summary.get("extent"),
+                (source_dem_inspection.get("summary") or {}).get("extent"),
+            )
             run = self._complete_step(run, current_step)
             self._persist(run)
             self._check_cancel(cancel_event)
@@ -1027,7 +1161,10 @@ class QgisWorkerService:
                 raise _WorkerProcessingFailed(
                     "QGIS temporary project was not saved before GRASS main-thread processing"
                 )
-            discovered = self._discover_grass_terrain_capabilities()
+            discovered = [
+                *route_capabilities,
+                *self._discover_grass_terrain_capabilities(),
+            ]
             run = self._complete_step(run, current_step).model_copy(
                 update={
                     "audit_trail": [
@@ -1070,24 +1207,93 @@ class QgisWorkerService:
             self._check_cancel(cancel_event)
 
             current_step = "geomorphon_generated"
-            self._run_processing_outputs(
-                worker_run_id=run.worker_run_id,
-                algorithm="grass:r.geomorphon",
-                parameters={
-                    "elevation": str(dem_input),
-                    "search": 10,
-                    "skip": 0,
-                    "flat": 1.0,
-                    "dist": 0.0,
-                    "forms": str(geomorphon_path),
-                    "-m": False,
-                    "-e": False,
-                    "GRASS_REGION_CELLSIZE_PARAMETER": 0.0,
-                },
-                output_paths=(geomorphon_path,),
-                cancel_event=cancel_event,
-                added_layers=added_layers,
-            )
+            geomorphon_paths = {
+                "fine": geomorphon_fine_path,
+                "medium": geomorphon_path,
+                "coarse": geomorphon_coarse_path,
+            }
+            for scale_name, search_cells in _GEOMORPHON_SCALES:
+                self._run_processing_outputs(
+                    worker_run_id=run.worker_run_id,
+                    algorithm="grass:r.geomorphon",
+                    parameters={
+                        "elevation": str(dem_input),
+                        "search": search_cells,
+                        "skip": 0,
+                        "flat": 1.0,
+                        "dist": 0.0,
+                        "forms": str(geomorphon_paths[scale_name]),
+                        "-m": False,
+                        "-e": False,
+                        "GRASS_REGION_CELLSIZE_PARAMETER": 0.0,
+                    },
+                    output_paths=(geomorphon_paths[scale_name],),
+                    cancel_event=cancel_event,
+                    added_layers=added_layers,
+                )
+            run = self._complete_step(run, current_step)
+            self._persist(run)
+            self._check_cancel(cancel_event)
+
+            current_step = "ridge_valley_vectorized"
+            for expression, consensus_path, thin_path, vector_path in (
+                (
+                    QGIS_MCP_GEOMORPHON_RIDGE_CONSENSUS_EXPRESSION,
+                    ridge_consensus_path,
+                    ridge_thin_path,
+                    ridge_projected_path,
+                ),
+                (
+                    QGIS_MCP_GEOMORPHON_VALLEY_CONSENSUS_EXPRESSION,
+                    valley_consensus_path,
+                    valley_thin_path,
+                    valley_projected_path,
+                ),
+            ):
+                self._run_processing_outputs(
+                    worker_run_id=run.worker_run_id,
+                    algorithm="grass:r.mapcalc.simple",
+                    parameters={
+                        "a": str(geomorphon_fine_path),
+                        "b": str(geomorphon_path),
+                        "c": str(geomorphon_coarse_path),
+                        "expression": expression,
+                        "output": str(consensus_path),
+                    },
+                    output_paths=(consensus_path,),
+                    cancel_event=cancel_event,
+                    added_layers=added_layers,
+                )
+                self._run_processing_outputs(
+                    worker_run_id=run.worker_run_id,
+                    algorithm="grass:r.thin",
+                    parameters={
+                        "input": str(consensus_path),
+                        "iterations": 200,
+                        "output": str(thin_path),
+                    },
+                    output_paths=(thin_path,),
+                    cancel_event=cancel_event,
+                    added_layers=added_layers,
+                )
+                self._run_processing_outputs(
+                    worker_run_id=run.worker_run_id,
+                    algorithm="grass:r.to.vect",
+                    parameters={
+                        "input": str(thin_path),
+                        "type": 0,
+                        "column": "class_code",
+                        "-s": False,
+                        "-v": True,
+                        "-z": False,
+                        "-b": False,
+                        "-t": False,
+                        "output": str(vector_path),
+                    },
+                    output_paths=(vector_path,),
+                    cancel_event=cancel_event,
+                    added_layers=added_layers,
+                )
             run = self._complete_step(run, current_step)
             self._persist(run)
             self._check_cancel(cancel_event)
@@ -1098,7 +1304,7 @@ class QgisWorkerService:
                 algorithm="grass:r.watershed",
                 parameters={
                     "elevation": str(dem_input),
-                    "threshold": 50,
+                    "threshold": 25,
                     "convergence": 5,
                     "memory": 256,
                     "-s": False,
@@ -1117,12 +1323,67 @@ class QgisWorkerService:
             self._persist(run)
             self._check_cancel(cancel_event)
 
+            current_step = "stream_network_extracted"
+            self._run_processing_outputs(
+                worker_run_id=run.worker_run_id,
+                algorithm="grass:r.mapcalc.simple",
+                parameters={
+                    "a": str(accumulation_path),
+                    "expression": QGIS_MCP_FLOW_CHANNEL_CANDIDATE_EXPRESSION,
+                    "output": str(stream_raster_path),
+                },
+                output_paths=(stream_raster_path,),
+                cancel_event=cancel_event,
+                added_layers=added_layers,
+            )
+            self._run_processing_outputs(
+                worker_run_id=run.worker_run_id,
+                algorithm="grass:r.thin",
+                parameters={
+                    "input": str(stream_raster_path),
+                    "iterations": 200,
+                    "output": str(stream_thin_path),
+                },
+                output_paths=(stream_thin_path,),
+                cancel_event=cancel_event,
+                added_layers=added_layers,
+            )
+            self._run_processing_outputs(
+                worker_run_id=run.worker_run_id,
+                algorithm="grass:r.to.vect",
+                parameters={
+                    "input": str(stream_thin_path),
+                    "type": 0,
+                    "column": "class_code",
+                    "-s": False,
+                    "-v": True,
+                    "-z": False,
+                    "-b": False,
+                    "-t": False,
+                    "output": str(stream_projected_path),
+                },
+                output_paths=(stream_projected_path,),
+                cancel_event=cancel_event,
+                added_layers=added_layers,
+            )
+            run = self._complete_step(run, current_step)
+            self._persist(run)
+            self._check_cancel(cancel_event)
+
             current_step = "crs_normalized"
             for output_path in (
                 slope_path,
                 aspect_path,
+                geomorphon_fine_path,
                 geomorphon_path,
+                geomorphon_coarse_path,
+                ridge_consensus_path,
+                valley_consensus_path,
+                ridge_thin_path,
+                valley_thin_path,
                 accumulation_path,
+                stream_raster_path,
+                stream_thin_path,
             ):
                 self._run_processing_outputs(
                     worker_run_id=run.worker_run_id,
@@ -1136,6 +1397,47 @@ class QgisWorkerService:
             self._persist(run)
             self._check_cancel(cancel_event)
 
+            current_step = "candidate_vectors_exported"
+            candidate_vectors: dict[str, dict[str, Any]] = {}
+            candidate_vector_layer_ids: dict[str, str] = {}
+            for vector_name, projected_path, geojson_path, kind, label in (
+                (
+                    "ridge",
+                    ridge_projected_path,
+                    ridge_geojson_path,
+                    "qgis_candidate_ridge_line",
+                    "Multiscale ridge-line candidate",
+                ),
+                (
+                    "valley",
+                    valley_projected_path,
+                    valley_geojson_path,
+                    "qgis_candidate_valley_line",
+                    "Multiscale valley-line candidate",
+                ),
+                (
+                    "stream",
+                    stream_projected_path,
+                    stream_geojson_path,
+                    "qgis_candidate_stream_network",
+                    "DEM-derived stream-network candidate",
+                ),
+            ):
+                payload, layer_id = self._export_candidate_terrain_vector(
+                    run=run,
+                    vector_name=vector_name,
+                    projected_path=projected_path,
+                    output_path=geojson_path,
+                    kind=kind,
+                    label=label,
+                    added_layers=added_layers,
+                )
+                candidate_vectors[vector_name] = payload
+                candidate_vector_layer_ids[vector_name] = layer_id
+            run = self._complete_step(run, current_step)
+            self._persist(run)
+            self._check_cancel(cancel_event)
+
             current_step = "route_feature_sampling"
             route_samples_payload = self._sample_terrain_features_along_route(
                 run=run,
@@ -1143,7 +1445,9 @@ class QgisWorkerService:
                 raster_paths={
                     "slope_degrees": slope_path,
                     "aspect_degrees": aspect_path,
+                    "geomorphon_fine_code": geomorphon_fine_path,
                     "geomorphon_code": geomorphon_path,
+                    "geomorphon_coarse_code": geomorphon_coarse_path,
                     "flow_accumulation_cells": accumulation_path,
                 },
                 output_path=route_samples_path,
@@ -1155,7 +1459,7 @@ class QgisWorkerService:
             self._check_cancel(cancel_event)
 
             manifest_payload = {
-                "schema_version": "scout_terrain_feature_stack.v0_1",
+                "schema_version": "scout_terrain_feature_stack.v0_2",
                 "workflow_id": TERRAIN_FEATURE_STACK_WORKFLOW_ID,
                 "workflow_run_id": run.worker_run_id,
                 "engine": "qgis_processing_grass",
@@ -1163,9 +1467,21 @@ class QgisWorkerService:
                 "artifacts": {
                     "slope": slope_path.name,
                     "aspect": aspect_path.name,
-                    "geomorphon_landforms": geomorphon_path.name,
+                    "geomorphon_fine": geomorphon_fine_path.name,
+                    "geomorphon_medium": geomorphon_path.name,
+                    "geomorphon_coarse": geomorphon_coarse_path.name,
+                    "geomorphon_ridge_consensus": ridge_consensus_path.name,
+                    "geomorphon_valley_consensus": valley_consensus_path.name,
+                    "ridge_lines": ridge_geojson_path.name,
+                    "valley_lines": valley_geojson_path.name,
                     "flow_accumulation": accumulation_path.name,
+                    "stream_network_raster": stream_raster_path.name,
+                    "stream_network_vector": stream_geojson_path.name,
                     "route_feature_samples": route_samples_path.name,
+                },
+                "candidate_vector_feature_counts": {
+                    name: len(payload.get("features") or [])
+                    for name, payload in candidate_vectors.items()
                 },
                 "source_refs": request.source_refs,
                 "source_hashes": request.source_hashes,
@@ -1173,12 +1489,33 @@ class QgisWorkerService:
                 "source_crs": source_dem_crs,
                 "source_dem_inspection": source_dem_inspection,
                 "parameters": {
-                    "geomorphon_search_cells": 10,
+                    "route_preparation_tool": "qgis_vector_export",
+                    "route_output_crs": "EPSG:3826",
+                    "route_runtime_crs_assignment": (
+                        route_crs_assignment.get("assignment") or {}
+                    ),
+                    "route_export_file_crs": "UNKNOWN",
+                    "geomorphon_search_cells": {
+                        scale_name: search_cells
+                        for scale_name, search_cells in _GEOMORPHON_SCALES
+                    },
                     "geomorphon_skip_cells": 0,
                     "geomorphon_flat_degrees": 1.0,
-                    "watershed_threshold_cells": 50,
+                    "geomorphon_consensus_minimum_scales": 2,
+                    "ridge_geomorphon_code": 3,
+                    "valley_geomorphon_code": 9,
+                    "ridge_valley_thin_iterations": 200,
+                    "ridge_valley_vector_type": "line",
+                    "watershed_threshold_cells": 25,
                     "watershed_memory_mb": 256,
                     "watershed_disk_swap": True,
+                    "stream_network_algorithm": (
+                        "grass:r.watershed accumulation + fixed grass:r.mapcalc.simple "
+                        "+ grass:r.thin + grass:r.to.vect"
+                    ),
+                    "stream_network_threshold_cells": 25,
+                    "stream_network_thin_iterations": 200,
+                    "candidate_vector_output_crs": "EPSG:4326",
                     "qgis_main_thread_processing": True,
                     "temporary_project_ref": project_path.name,
                     "crs_metadata_normalization": "gdal:assignprojection EPSG:3826",
@@ -1188,8 +1525,9 @@ class QgisWorkerService:
                 "operational": False,
                 "adds_source_resolution": False,
                 "interpretation": (
-                    "Terrain feature rasters are candidate spatial evidence; they do not "
-                    "establish hazard, navigability, route, trail, or safety truth."
+                    "Multiscale terrain forms and derived ridge, valley, and stream lines "
+                    "are candidate spatial evidence. They do not establish observed water, "
+                    "hazard, navigability, route, trail, or safety truth."
                 ),
             }
             _write_private_json(manifest_path, manifest_payload)
@@ -1197,9 +1535,25 @@ class QgisWorkerService:
             current_step = "map_rendered"
             screenshot, render_bytes, slope_inspection = self._render_feature_stack_preview(
                 run=run,
-                route_path=route_path,
+                route_source=(
+                    f"{projected_route_path}|layername={exported_layer_name}"
+                ),
                 route_layer_id=route_layer_id,
                 slope_path=slope_path,
+                candidate_vector_sources={
+                    "stream": (
+                        candidate_vector_layer_ids["stream"],
+                        stream_projected_path,
+                    ),
+                    "valley": (
+                        candidate_vector_layer_ids["valley"],
+                        valley_projected_path,
+                    ),
+                    "ridge": (
+                        candidate_vector_layer_ids["ridge"],
+                        ridge_projected_path,
+                    ),
+                },
                 visual_context_path=visual_context_path,
                 manifest_payload=manifest_payload,
                 added_layers=added_layers,
@@ -1228,12 +1582,68 @@ class QgisWorkerService:
                 geomorphon_path,
                 "image/tiff",
             )
+            geomorphon_fine_artifact = _artifact(
+                run.worker_run_id,
+                "grass-geomorphon-fine",
+                "geomorphon_fine_raster",
+                geomorphon_fine_path,
+                "image/tiff",
+            )
+            geomorphon_coarse_artifact = _artifact(
+                run.worker_run_id,
+                "grass-geomorphon-coarse",
+                "geomorphon_coarse_raster",
+                geomorphon_coarse_path,
+                "image/tiff",
+            )
+            ridge_consensus_artifact = _artifact(
+                run.worker_run_id,
+                "grass-geomorphon-ridge-consensus",
+                "geomorphon_consensus_ridge_raster",
+                ridge_consensus_path,
+                "image/tiff",
+            )
+            valley_consensus_artifact = _artifact(
+                run.worker_run_id,
+                "grass-geomorphon-valley-consensus",
+                "geomorphon_consensus_valley_raster",
+                valley_consensus_path,
+                "image/tiff",
+            )
             accumulation_artifact = _artifact(
                 run.worker_run_id,
                 "grass-flow-accumulation",
                 "flow_accumulation_raster",
                 accumulation_path,
                 "image/tiff",
+            )
+            stream_raster_artifact = _artifact(
+                run.worker_run_id,
+                "grass-stream-network-raster",
+                "stream_network_raster",
+                stream_raster_path,
+                "image/tiff",
+            )
+            ridge_vector_artifact = _artifact(
+                run.worker_run_id,
+                "ridge-lines-vector",
+                "ridge_lines_vector",
+                ridge_geojson_path,
+                "application/geo+json",
+            )
+            valley_vector_artifact = _artifact(
+                run.worker_run_id,
+                "valley-lines-vector",
+                "valley_lines_vector",
+                valley_geojson_path,
+                "application/geo+json",
+            )
+            stream_vector_artifact = _artifact(
+                run.worker_run_id,
+                "stream-network-vector",
+                "stream_network_vector",
+                stream_geojson_path,
+                "application/geo+json",
             )
             route_samples_artifact = _artifact(
                 run.worker_run_id,
@@ -1270,8 +1680,16 @@ class QgisWorkerService:
             artifacts = [
                 slope_artifact,
                 aspect_artifact,
+                geomorphon_fine_artifact,
                 geomorphon_artifact,
+                geomorphon_coarse_artifact,
+                ridge_consensus_artifact,
+                valley_consensus_artifact,
                 accumulation_artifact,
+                stream_raster_artifact,
+                ridge_vector_artifact,
+                valley_vector_artifact,
+                stream_vector_artifact,
                 route_samples_artifact,
                 manifest_artifact,
                 render_artifact,
@@ -1282,6 +1700,9 @@ class QgisWorkerService:
                 *(["gdal:buildvirtualraster"] if len(dem_refs) > 1 else []),
                 "grass:r.slope.aspect",
                 "grass:r.geomorphon",
+                "grass:r.mapcalc.simple",
+                "grass:r.thin",
+                "grass:r.to.vect",
                 "grass:r.watershed",
                 "gdal:assignprojection",
             ]
@@ -1294,6 +1715,20 @@ class QgisWorkerService:
                     slope_artifact.artifact_id,
                     route_samples_geojson=route_samples_payload,
                     route_samples_artifact_id=route_samples_artifact.artifact_id,
+                    candidate_vector_geojsons={
+                        "ridge": (
+                            candidate_vectors["ridge"],
+                            ridge_vector_artifact.artifact_id,
+                        ),
+                        "valley": (
+                            candidate_vectors["valley"],
+                            valley_vector_artifact.artifact_id,
+                        ),
+                        "stream": (
+                            candidate_vectors["stream"],
+                            stream_vector_artifact.artifact_id,
+                        ),
+                    },
                 ),
                 artifacts=artifacts,
                 qgis_version=qgis_version,
@@ -1317,7 +1752,8 @@ class QgisWorkerService:
                 processing_parameters=manifest_payload["parameters"],
                 warnings=[
                     "GRASS/QGIS execution success confirms processing only; it does not establish terrain or safety truth.",
-                    "Geomorphon and flow accumulation are candidate terrain features, not automatic ridge, valley, hazard, trail, or navigability conclusions.",
+                    "Multiscale geomorphons and extracted ridge, valley, and stream lines are candidate terrain morphology, not observed route, water, hazard, trail, or navigability conclusions.",
+                    "Flow-channel candidates use absolute accumulation because corridor-edge negative values may indicate underestimated outside-region inflow; water presence is not confirmed.",
                     "Rendered appearance and interpolation do not add source resolution.",
                 ],
             )
@@ -1440,7 +1876,6 @@ class QgisWorkerService:
                 self._threads.pop(run.worker_run_id, None)
 
     def _discover_grass_terrain_capabilities(self) -> list[dict[str, Any]]:
-        discovered: list[dict[str, Any]] = []
         contracts = {
             **{
                 algorithm: {**contract, "provider": "grass"}
@@ -1448,6 +1883,13 @@ class QgisWorkerService:
             },
             **_TERRAIN_FEATURE_NORMALIZATION_SCHEMAS,
         }
+        return self._discover_processing_capabilities(contracts)
+
+    def _discover_processing_capabilities(
+        self,
+        contracts: dict[str, dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        discovered: list[dict[str, Any]] = []
         for algorithm, contract in contracts.items():
             provider = str(contract["provider"])
             search = self._call(
@@ -1525,6 +1967,111 @@ class QgisWorkerService:
                 f"{algorithm} did not create outputs: {', '.join(missing)}"
             )
 
+    def _export_candidate_terrain_vector(
+        self,
+        *,
+        run: QgisWorkerRun,
+        vector_name: str,
+        projected_path: Path,
+        output_path: Path,
+        kind: str,
+        label: str,
+        added_layers: list[str],
+    ) -> tuple[dict[str, Any], str]:
+        layer_name = (
+            f"Scout_candidate_terrain_vector_source_{vector_name}_"
+            f"{run.worker_run_id[-10:]}"
+        )
+        layer = self._call(
+            "qgis_project_action",
+            {
+                "action": "add_vector",
+                "source": str(projected_path),
+                "name": layer_name,
+                "provider": "ogr",
+            },
+        )
+        layer_id = str(layer.get("id") or layer.get("layer_id") or "")
+        if not layer_id.startswith("Scout_candidate_terrain_vector_source_"):
+            raise _WorkerProcessingFailed(
+                f"QGIS did not return a bounded {vector_name} candidate layer ID"
+            )
+        added_layers.append(layer_id)
+        crs_assignment = self._call(
+            "qgis_crs",
+            {
+                "action": "assign_layer",
+                "layer": layer_id,
+                "target": "EPSG:3826",
+                "value": "EPSG:3826",
+            },
+        )
+        inspection = self._call(
+            "qgis_layer_inspect",
+            {
+                "layer": layer_id,
+                "include": ["metadata"],
+                "sample_limit": 0,
+            },
+        )
+        source_crs = str(
+            (inspection.get("summary") or {}).get("crs") or "UNKNOWN"
+        ).upper()
+        if source_crs not in {"3826", "EPSG:3826"}:
+            raise _WorkerCrsUnresolved(
+                f"Candidate {vector_name} source CRS is unresolved: {source_crs}"
+            )
+        exported = self._call(
+            "qgis_vector_export",
+            {
+                "layer": layer_id,
+                "path": str(output_path),
+                "format": "geojson",
+                "encoding": "UTF-8",
+                "selected_only": False,
+                "destination_crs": "EPSG:4326",
+                "overwrite": False,
+                "create_parent": False,
+                "include_z": False,
+                "save_metadata": True,
+            },
+        )
+        exported_path = str(exported.get("path") or "")
+        feature_count = int(exported.get("feature_count", -1))
+        if (
+            not output_path.is_file()
+            or Path(exported_path).resolve(strict=False)
+            != output_path.resolve(strict=False)
+            or not 0 <= feature_count <= _MAX_CANDIDATE_VECTOR_FEATURES
+        ):
+            raise _WorkerProcessingFailed(
+                f"QGIS did not export a bounded {vector_name} candidate GeoJSON"
+            )
+        if output_path.stat().st_size > 16 * 1024 * 1024:
+            raise _WorkerProcessingFailed(
+                f"QGIS {vector_name} candidate GeoJSON exceeded the Scout limit"
+            )
+        try:
+            raw_payload = json.loads(output_path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise _WorkerProcessingFailed(
+                f"QGIS {vector_name} candidate GeoJSON was malformed"
+            ) from exc
+        payload = _normalize_candidate_terrain_vector_geojson(
+            raw_payload,
+            worker_run_id=run.worker_run_id,
+            vector_name=vector_name,
+            kind=kind,
+            label=label,
+            crs_assignment=crs_assignment.get("assignment") or {},
+        )
+        if len(payload["features"]) != feature_count:
+            raise _WorkerProcessingFailed(
+                f"QGIS {vector_name} candidate feature count changed during export"
+            )
+        _write_private_json(output_path, payload)
+        return payload, layer_id
+
     def _sample_terrain_features_along_route(
         self,
         *,
@@ -1583,8 +2130,20 @@ class QgisWorkerService:
             )
             if available_fields:
                 complete_value_count += 1
-            geomorphon_value = sampled_values["geomorphon_code"]
-            geomorphon_code = _geomorphon_code(geomorphon_value)
+            geomorphon_fine_code = _geomorphon_code(
+                sampled_values["geomorphon_fine_code"]
+            )
+            geomorphon_code = _geomorphon_code(sampled_values["geomorphon_code"])
+            geomorphon_coarse_code = _geomorphon_code(
+                sampled_values["geomorphon_coarse_code"]
+            )
+            geomorphon_consensus_code = _geomorphon_consensus_code(
+                (
+                    geomorphon_fine_code,
+                    geomorphon_code,
+                    geomorphon_coarse_code,
+                )
+            )
             accumulation = sampled_values["flow_accumulation_cells"]
             properties = {
                 "sample_id": (
@@ -1598,8 +2157,21 @@ class QgisWorkerService:
                 "distance_m": sample["distance_m"],
                 "slope_degrees": sampled_values["slope_degrees"],
                 "aspect_degrees": sampled_values["aspect_degrees"],
+                "geomorphon_fine_code": geomorphon_fine_code,
+                "geomorphon_fine_label": _GEOMORPHON_LABELS.get(
+                    geomorphon_fine_code
+                ),
                 "geomorphon_code": geomorphon_code,
                 "geomorphon_label": _GEOMORPHON_LABELS.get(geomorphon_code),
+                "geomorphon_coarse_code": geomorphon_coarse_code,
+                "geomorphon_coarse_label": _GEOMORPHON_LABELS.get(
+                    geomorphon_coarse_code
+                ),
+                "geomorphon_consensus_code": geomorphon_consensus_code,
+                "geomorphon_consensus_label": _GEOMORPHON_LABELS.get(
+                    geomorphon_consensus_code
+                ),
+                "geomorphon_consensus_minimum_scales": 2,
                 "flow_accumulation_cells": accumulation,
                 "flow_accumulation_abs_cells": (
                     abs(accumulation) if accumulation is not None else None
@@ -1641,6 +2213,10 @@ class QgisWorkerService:
                 "sample_count": len(features),
                 "sample_limit": _MAX_TERRAIN_FEATURE_ROUTE_SAMPLES,
                 "sampled_raster_fields": list(raster_paths),
+                "geomorphon_scales": {
+                    scale_name: {"search_cells": search_cells}
+                    for scale_name, search_cells in _GEOMORPHON_SCALES
+                },
                 "geomorphon_labels": {
                     str(code): label for code, label in _GEOMORPHON_LABELS.items()
                 },
@@ -1664,9 +2240,10 @@ class QgisWorkerService:
         self,
         *,
         run: QgisWorkerRun,
-        route_path: Path,
+        route_source: str,
         route_layer_id: str,
         slope_path: Path,
+        candidate_vector_sources: dict[str, tuple[str, Path]],
         visual_context_path: Path,
         manifest_payload: dict[str, Any],
         added_layers: list[str],
@@ -1709,6 +2286,58 @@ class QgisWorkerService:
             raise _WorkerRenderFailed(
                 f"GRASS slope output CRS is unresolved or unsupported: {slope_crs}"
             )
+        vector_render_styles = {
+            "stream": ("#1769aa", 2.2),
+            "valley": ("#38a7c7", 2.0),
+            "ridge": ("#ffb000", 2.0),
+        }
+        render_vector_layer_ids: list[str] = []
+        render_vector_inspections: dict[str, Any] = {}
+        for vector_name, (source_layer_id, source_path) in candidate_vector_sources.items():
+            self._call(
+                "qgis_project_action",
+                {"action": "remove_layer", "layer": source_layer_id},
+            )
+            vector_layer = self._call(
+                "qgis_project_action",
+                {
+                    "action": "add_vector",
+                    "source": str(source_path),
+                    "name": (
+                        f"Scout candidate render {vector_name} "
+                        f"{run.worker_run_id[-10:]}"
+                    ),
+                    "provider": "ogr",
+                },
+            )
+            vector_layer_id = str(
+                vector_layer.get("id") or vector_layer.get("layer_id") or ""
+            )
+            if not vector_layer_id:
+                raise _WorkerRenderFailed(
+                    f"QGIS did not return the {vector_name} candidate render layer"
+                )
+            added_layers.append(vector_layer_id)
+            render_vector_layer_ids.append(vector_layer_id)
+            color, width = vector_render_styles[vector_name]
+            self._call(
+                "qgis_style_apply",
+                {
+                    "layer": vector_layer_id,
+                    "mode": "simple",
+                    "color": color,
+                    "opacity": 0.92,
+                    "width": width,
+                },
+            )
+            render_vector_inspections[vector_name] = self._call(
+                "qgis_layer_inspect",
+                {
+                    "layer": vector_layer_id,
+                    "include": ["metadata", "style"],
+                    "sample_limit": 0,
+                },
+            )
         self._call(
             "qgis_project_action",
             {"action": "remove_layer", "layer": route_layer_id},
@@ -1717,8 +2346,9 @@ class QgisWorkerService:
             "qgis_project_action",
             {
                 "action": "add_vector",
-                "source": str(route_path),
+                "source": route_source,
                 "name": f"Scout candidate route {run.worker_run_id[-10:]}",
+                "provider": "ogr",
             },
         )
         render_route_layer_id = str(
@@ -1727,7 +2357,21 @@ class QgisWorkerService:
         if not render_route_layer_id:
             raise _WorkerRenderFailed("QGIS did not return a route layer ID for render")
         added_layers.append(render_route_layer_id)
-        for layer_id in (slope_layer_id, render_route_layer_id):
+        self._call(
+            "qgis_style_apply",
+            {
+                "layer": render_route_layer_id,
+                "mode": "simple",
+                "color": "#ff365e",
+                "opacity": 1.0,
+                "width": 2.4,
+            },
+        )
+        for layer_id in (
+            slope_layer_id,
+            *render_vector_layer_ids,
+            render_route_layer_id,
+        ):
             self._call(
                 "qgis_layer_manage",
                 {"action": "set_visibility", "layer": layer_id, "visible": False},
@@ -1758,6 +2402,7 @@ class QgisWorkerService:
             "qgis_canvas",
             {"action": "set_extent", "extent": review_extent},
         )
+        self._call("qgis_project_action", {"action": "refresh"})
         visual_context_payload = {
             "schema_version": "scout_qgis_visual_context.v0_1",
             "workflow_id": TERRAIN_FEATURE_STACK_WORKFLOW_ID,
@@ -1765,8 +2410,9 @@ class QgisWorkerService:
             "candidate_only": True,
             "runtime_safety_truth": False,
             "operational": False,
-            "rendered_feature": "grass_slope_candidate",
+            "rendered_feature": "grass_slope_with_candidate_terrain_lines",
             "slope_layer": slope_inspection,
+            "candidate_vector_layers": render_vector_inspections,
             "route_layer": route_inspection,
             "terrain_feature_manifest": manifest_payload,
             "session": self._call("qgis_session_snapshot", {"detail": "summary"}),
@@ -1898,10 +2544,36 @@ class QgisWorkerService:
                 if state == "cancelled":
                     raise _WorkerCancelled("QGIS operation was cancelled")
                 error = status.get("error")
+                detail_parts: list[str] = []
+                if isinstance(error, dict) and error.get("message"):
+                    detail_parts.append(str(error["message"]))
+                issues = (
+                    error.get("issues")
+                    if isinstance(error, dict)
+                    else None
+                ) or (
+                    status.get("validation", {}).get("issues")
+                    if isinstance(status.get("validation"), dict)
+                    else None
+                )
+                if isinstance(issues, list) and issues:
+                    detail_parts.append(
+                        "issues="
+                        + json.dumps(
+                            issues[:8],
+                            ensure_ascii=True,
+                            sort_keys=True,
+                            separators=(",", ":"),
+                        )
+                    )
+                feedback_log = status.get("feedback_log")
+                if isinstance(feedback_log, str) and feedback_log.strip():
+                    detail_parts.append(
+                        "feedback=" + " ".join(feedback_log.split())[-1500:]
+                    )
                 raise _WorkerProcessingFailed(
-                    str(error.get("message"))
-                    if isinstance(error, dict) and error.get("message")
-                    else "QGIS Processing operation failed"
+                    "; ".join(detail_parts)
+                    or "QGIS Processing operation failed"
                 )
             if time.monotonic() >= deadline:
                 raise QgisMcpTimeout(f"QGIS operation timed out: {operation_id}")
@@ -2209,9 +2881,12 @@ def _initial_steps(workflow_id: str = TERRAIN_CONTEXT_PREVIEW_WORKFLOW_ID) -> li
             ("dem_loaded", "DEM loaded", SpatialCapabilityCategory.RASTER),
             ("capability_discovery", "GRASS capability discovery", SpatialCapabilityCategory.PROCESSING),
             ("slope_aspect_generated", "Slope and aspect generated", SpatialCapabilityCategory.TERRAIN),
-            ("geomorphon_generated", "Geomorphon landforms generated", SpatialCapabilityCategory.TERRAIN),
+            ("geomorphon_generated", "Multiscale geomorphons generated", SpatialCapabilityCategory.TERRAIN),
+            ("ridge_valley_vectorized", "Ridge and valley candidates vectorized", SpatialCapabilityCategory.TERRAIN),
             ("hydrology_generated", "Flow accumulation generated", SpatialCapabilityCategory.HYDROLOGY),
+            ("stream_network_extracted", "Stream-network candidate extracted", SpatialCapabilityCategory.HYDROLOGY),
             ("crs_normalized", "CRS metadata normalized", SpatialCapabilityCategory.PROCESSING),
+            ("candidate_vectors_exported", "Candidate lines exported for MapLibre", SpatialCapabilityCategory.VECTOR),
             ("route_feature_sampling", "Route terrain features sampled", SpatialCapabilityCategory.TERRAIN),
             ("map_rendered", "Map rendered", SpatialCapabilityCategory.RENDER),
             ("evidence_review_pending", "Evidence review pending", SpatialCapabilityCategory.CARTOGRAPHY),
@@ -2314,11 +2989,15 @@ def _crop_png_to_content(
         width, height, color_type, rows = _decode_png_rows(raw)
     except (ValueError, zlib.error, struct.error) as exc:
         raise _WorkerRenderFailed("QGIS screenshot PNG could not be cropped") from exc
+    if width < 3 or height < 3:
+        raise _WorkerRenderFailed("QGIS screenshot PNG is too small for review")
     channels = {2: 3, 6: 4}[color_type]
     background = tuple(rows[1][channels : channels * 2])
     content: list[tuple[int, int]] = []
-    for y, row in enumerate(rows):
-        for x in range(width):
+    frame_margin = 2 if width >= 5 and height >= 5 else 1
+    for y in range(frame_margin, height - frame_margin):
+        row = rows[y]
+        for x in range(frame_margin, width - frame_margin):
             offset = x * channels
             pixel = tuple(row[offset : offset + channels])
             if channels == 4 and pixel[3] <= 8:
@@ -2331,6 +3010,7 @@ def _crop_png_to_content(
             "reason": "no_content_bbox",
             "original_width": width,
             "original_height": height,
+            "ignored_frame_margin_px": frame_margin,
             "adds_source_resolution": False,
         }
     left = max(0, min(item[0] for item in content) - padding_px)
@@ -2345,6 +3025,7 @@ def _crop_png_to_content(
             "reason": "content_uses_full_frame",
             "original_width": width,
             "original_height": height,
+            "ignored_frame_margin_px": frame_margin,
             "adds_source_resolution": False,
         }
     cropped_rows = [
@@ -2364,6 +3045,7 @@ def _crop_png_to_content(
         "crop_bbox_px": [left, top, right, bottom],
         "cropped_width": cropped_width,
         "cropped_height": cropped_height,
+        "ignored_frame_margin_px": frame_margin,
         "resampled": False,
         "adds_source_resolution": False,
     }
@@ -2390,7 +3072,10 @@ def _encode_png_rows(
     scanlines = b"".join(b"\x00" + row for row in rows)
     return (
         b"\x89PNG\r\n\x1a\n"
-        + chunk("IHDR".encode(), struct.pack(">IIBBBBB", width, height, 8, color_type, 0, 0, 0))
+        + chunk(
+            "IHDR".encode(),
+            struct.pack(">IIBBBBB", width, height, 8, color_type, 0, 0, 0),
+        )
         + chunk("IDAT".encode(), zlib.compress(scanlines))
         + chunk("IEND".encode(), b"")
     )
@@ -2513,6 +3198,58 @@ def _paeth(left: int, up: int, upper_left: int) -> int:
     return upper_left
 
 
+def _extent_values(value: Any, *, label: str) -> tuple[float, float, float, float]:
+    if not isinstance(value, dict):
+        raise _WorkerCrsUnresolved(f"{label} extent is unavailable")
+    try:
+        xmin, ymin, xmax, ymax = (
+            float(value[key]) for key in ("xmin", "ymin", "xmax", "ymax")
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise _WorkerCrsUnresolved(f"{label} extent is invalid") from exc
+    if (
+        not all(math.isfinite(item) for item in (xmin, ymin, xmax, ymax))
+        or xmin > xmax
+        or ymin > ymax
+        or (xmin == xmax and ymin == ymax)
+    ):
+        raise _WorkerCrsUnresolved(f"{label} extent is invalid")
+    return xmin, ymin, xmax, ymax
+
+
+def _validate_projected_route_extent(value: Any) -> None:
+    xmin, ymin, xmax, ymax = _extent_values(value, label="Prepared route")
+    if (
+        max(abs(xmin), abs(xmax)) < 10_000
+        or max(abs(ymin), abs(ymax)) < 10_000
+        or xmax - xmin > 100_000
+        or ymax - ymin > 100_000
+    ):
+        raise _WorkerCrsUnresolved(
+            "Prepared route coordinates do not match bounded projected EPSG:3826 values"
+        )
+
+
+def _require_extent_intersection(route_extent: Any, dem_extent: Any) -> None:
+    route_xmin, route_ymin, route_xmax, route_ymax = _extent_values(
+        route_extent,
+        label="Prepared route",
+    )
+    dem_xmin, dem_ymin, dem_xmax, dem_ymax = _extent_values(
+        dem_extent,
+        label="Source DEM",
+    )
+    if (
+        route_xmax < dem_xmin
+        or route_xmin > dem_xmax
+        or route_ymax < dem_ymin
+        or route_ymin > dem_ymax
+    ):
+        raise _WorkerCrsUnresolved(
+            "Prepared route extent does not intersect the source DEM extent"
+        )
+
+
 def _route_line_coordinates(route_geojson: dict[str, Any]) -> list[list[float]]:
     try:
         raw = route_geojson["features"][0]["geometry"]["coordinates"]
@@ -2597,6 +3334,152 @@ def _geomorphon_code(value: float | None) -> int | None:
     return code
 
 
+def _geomorphon_consensus_code(values: tuple[int | None, ...]) -> int | None:
+    available = [value for value in values if value is not None]
+    for code in sorted(set(available)):
+        if available.count(code) >= 2:
+            return code
+    return None
+
+
+def _normalize_candidate_terrain_vector_geojson(
+    payload: Any,
+    *,
+    worker_run_id: str,
+    vector_name: str,
+    kind: str,
+    label: str,
+    crs_assignment: dict[str, Any],
+) -> dict[str, Any]:
+    if not isinstance(payload, dict) or payload.get("type") != "FeatureCollection":
+        raise _WorkerProcessingFailed(
+            f"QGIS {vector_name} candidate output is not a FeatureCollection"
+        )
+    features = payload.get("features")
+    if not isinstance(features, list) or len(features) > _MAX_CANDIDATE_VECTOR_FEATURES:
+        raise _WorkerProcessingFailed(
+            f"QGIS {vector_name} candidate feature count is outside the bounded limit"
+        )
+    normalized: list[dict[str, Any]] = []
+    coordinate_count = 0
+    for ordinal, feature in enumerate(features):
+        geometry = feature.get("geometry") if isinstance(feature, dict) else None
+        if not isinstance(geometry, dict) or geometry.get("type") not in {
+            "LineString",
+            "MultiLineString",
+        }:
+            raise _WorkerProcessingFailed(
+                f"QGIS {vector_name} candidate contains non-line geometry"
+            )
+        coordinate_count += _validate_wgs84_line_geometry(geometry)
+        if coordinate_count > 500_000:
+            raise _WorkerProcessingFailed(
+                f"QGIS {vector_name} candidate contains too many coordinates"
+            )
+        source_properties = feature.get("properties")
+        properties = dict(source_properties) if isinstance(source_properties, dict) else {}
+        properties.update(
+            {
+                "id": f"{worker_run_id}.{vector_name}.{ordinal:05d}",
+                "kind": kind,
+                "feature_class": kind,
+                "label": label,
+                "workflow_run_id": worker_run_id,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "operational": False,
+                "risk_score_applied": False,
+                "fixture": False,
+                "synthetic": False,
+                "adds_source_resolution": False,
+                "terrain_interpretation_only": True,
+                "observed": False,
+            }
+        )
+        if vector_name in {"ridge", "valley"}:
+            properties.update(
+                {
+                    "derivation": "multiscale_geomorphon_consensus",
+                    "minimum_scale_votes": 2,
+                }
+            )
+        if vector_name == "stream":
+            properties.update(
+                {
+                    "derivation": (
+                        "grass_r_watershed_accumulation_threshold_thin_to_vect"
+                    ),
+                    "water_presence_confirmed": False,
+                    "outside_region_flow_may_be_underestimated": True,
+                }
+            )
+        normalized.append(
+            {
+                "type": "Feature",
+                "geometry": geometry,
+                "properties": properties,
+            }
+        )
+    return {
+        "type": "FeatureCollection",
+        "metadata": {
+            "schema_version": "scout_qgis_candidate_terrain_vector.v0_1",
+            "workflow_id": TERRAIN_FEATURE_STACK_WORKFLOW_ID,
+            "workflow_run_id": worker_run_id,
+            "vector_name": vector_name,
+            "feature_count": len(normalized),
+            "coordinate_count": coordinate_count,
+            "crs": "EPSG:4326",
+            "source_file_crs": "UNKNOWN",
+            "source_runtime_crs_assignment": crs_assignment,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "operational": False,
+            "risk_score_applied": False,
+            "fixture": False,
+            "synthetic": False,
+            "adds_source_resolution": False,
+            "interpretation": (
+                "DEM-derived terrain morphology candidate only; not observed route, "
+                "water, navigability, hazard, or safety truth."
+            ),
+        },
+        "features": normalized,
+    }
+
+
+def _validate_wgs84_line_geometry(geometry: dict[str, Any]) -> int:
+    geometry_type = geometry.get("type")
+    coordinates = geometry.get("coordinates")
+    lines = [coordinates] if geometry_type == "LineString" else coordinates
+    if not isinstance(lines, list) or not lines:
+        raise _WorkerProcessingFailed("Candidate terrain line geometry is empty")
+    coordinate_count = 0
+    for line in lines:
+        if not isinstance(line, list) or len(line) < 2:
+            raise _WorkerProcessingFailed("Candidate terrain line has too few coordinates")
+        for coordinate in line:
+            if not isinstance(coordinate, list) or len(coordinate) < 2:
+                raise _WorkerProcessingFailed("Candidate terrain coordinate is malformed")
+            try:
+                lon, lat = float(coordinate[0]), float(coordinate[1])
+            except (TypeError, ValueError) as exc:
+                raise _WorkerProcessingFailed(
+                    "Candidate terrain coordinate is not numeric"
+                ) from exc
+            if (
+                not math.isfinite(lon)
+                or not math.isfinite(lat)
+                or not -180 <= lon <= 180
+                or not -90 <= lat <= 90
+            ):
+                raise _WorkerProcessingFailed(
+                    "Candidate terrain coordinate is outside EPSG:4326"
+                )
+            coordinate_count += 1
+    return coordinate_count
+
+
 def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     radius_m = 6_371_000.0
     phi1 = math.radians(lat1)
@@ -2619,6 +3502,7 @@ def _maplibre_result(
     *,
     route_samples_geojson: dict[str, Any] | None = None,
     route_samples_artifact_id: str | None = None,
+    candidate_vector_geojsons: dict[str, tuple[dict[str, Any], str]] | None = None,
 ) -> dict[str, Any]:
     coordinates = route_geojson["features"][0]["geometry"]["coordinates"]
     route = {
@@ -2674,9 +3558,22 @@ def _maplibre_result(
             properties = dict(feature.get("properties") or {})
             properties["artifact_id"] = route_samples_artifact_id
             sample_features.append({**feature, "properties": properties})
+    candidate_vector_features: list[dict[str, Any]] = []
+    for payload, artifact_id in (candidate_vector_geojsons or {}).values():
+        for feature in payload.get("features") or []:
+            if not isinstance(feature, dict):
+                continue
+            properties = dict(feature.get("properties") or {})
+            properties["artifact_id"] = artifact_id
+            candidate_vector_features.append({**feature, "properties": properties})
     return {
         "type": "FeatureCollection",
-        "features": [coverage, route, *sample_features],
+        "features": [
+            coverage,
+            *candidate_vector_features,
+            route,
+            *sample_features,
+        ],
         "properties": {
             "schema_version": "scout_qgis_maplibre_geojson.v0_1",
             "workflow_run_id": worker_run_id,

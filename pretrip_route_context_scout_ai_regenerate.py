@@ -19,9 +19,10 @@ from assistant_model_config import load_assistant_model_config
 from pydantic_ai_runtime_compat import (
     build_chat_model,
     pydantic_agent_runtime_kwargs,
+    pydantic_native_research_capabilities_for_model,
+    pydantic_native_research_trace,
 )
 from scout_env import load_scout_env_files
-
 
 ROOT = Path(__file__).resolve().parent
 EVIDENCE_SCHEMA_VERSION = "scout.route_context_regeneration_evidence.v1"
@@ -434,6 +435,7 @@ def regenerate_route_context_briefing(
     prompt = active_prompt
     prompt_sha256 = _sha256_text(prompt)
     aggregate_usage = _aggregate_usage(call_results)
+    native_research_trace = _aggregate_native_research_trace(call_results)
 
     generated_at = generated_at or _utc_now()
     briefing_ref = Path(
@@ -474,6 +476,7 @@ def regenerate_route_context_briefing(
         "plan": plan.model_dump(mode="json"),
         "usage": aggregate_usage,
         "response_metadata": _string_mapping(call_result.get("response_metadata")),
+        "native_research": native_research_trace,
         "attempts": attempts,
         "editorial_contract": _editorial_contract_receipt(evidence),
         "boundary": _boundary(),
@@ -508,6 +511,7 @@ def regenerate_route_context_briefing(
         "editorial_plan_ref": EDITORIAL_PLAN_REF.as_posix(),
         "model_usage": model_record["usage"],
         "model_request_count": len(attempts),
+        "native_research": native_research_trace,
         "editorial_contract": model_record["editorial_contract"],
         "boundary": _boundary(),
     }
@@ -1133,6 +1137,26 @@ def _build_prompt(
         if evidence.current_status.operability == "closed"
         else None
     )
+    unknown_route_contract = (
+        {
+            "decision_heading": (
+                "must say the current official status is unknown, pending, or "
+                "requires rechecking"
+            ),
+            "forbidden_status_claims": [
+                "currently closed",
+                "not open",
+                "reopened",
+                "awaiting reopening",
+            ],
+            "closing_note": (
+                "must require checking the official opening status without "
+                "presuming whether it is open or closed"
+            ),
+        }
+        if evidence.current_status.operability == "unknown"
+        else None
+    )
     payload = {
         "evidence_packet": evidence.model_dump(mode="json"),
         "workspace_summary": {
@@ -1144,6 +1168,7 @@ def _build_prompt(
         "required_section_ids": list(SECTION_IDS),
         "blocked_visible_terms": list(BLOCKED_EDITORIAL_TERMS),
         "closed_route_editorial_contract": closed_route_contract,
+        "unknown_route_editorial_contract": unknown_route_contract,
         "skill_contract": skill_text,
     }
     return (
@@ -1154,6 +1179,8 @@ def _build_prompt(
         "section_order 與 section_headings 必須各自完整涵蓋 required_section_ids，"
         "不得新增或省略。可見文字不得出現 blocked_visible_terms。"
         "title 必須逐字等於 evidence_packet.display_name，不得改名、加副標或縮寫。"
+        "若 evidence_packet.current_status.operability 是 unknown，首節必須明說狀態待查、"
+        "尚未確認或必須重新查核；不得寫成目前未開放、封閉、等待重開或已恢復。"
         "decision_snapshot 必須排第一。若目前未開放，章節標題不能只寫『狀態先於行程』，"
         "而要明說『目前未開放』或『不可直接成行』。舊實走章節要明說只作歷史參考。"
         "reader_questions 必須合計涵蓋目前官方狀態、路線身分或歷史差異、舊紀錄是否代表"
@@ -1181,7 +1208,7 @@ def _build_repair_prompt(
     }
     return (
         base_prompt
-        + "\n\n上一版未通過 deterministic closed-route editorial contract。"
+        + "\n\n上一版未通過 deterministic route-status editorial contract。"
         "請只修正列出的問題，重新輸出完整結構；不得刪除章節、改寫證據事實或降低"
         "未開放與待查缺口的醒目程度。\n"
         + json.dumps(repair_packet, ensure_ascii=False, sort_keys=True)
@@ -1208,8 +1235,14 @@ def _call_live_model(
         output_type=EditorialPlan,
         instructions=(
             "Return only the requested structured editorial plan. "
-            "Do not write HTML and do not invent route facts."
+            "Before returning the plan, call WebSearch at least once to discover "
+            "current public route context and WebFetch at least once to read a "
+            "selected source. Search snippets are not evidence. If a fetched URL "
+            "fails, select another public result from WebSearch and continue; a "
+            "single unavailable page must not end the research stage. Do not write "
+            "HTML and do not invent route facts."
         ),
+        capabilities=pydantic_native_research_capabilities_for_model(model_name),
         **pydantic_agent_runtime_kwargs(),
     )
     try:
@@ -1225,10 +1258,20 @@ def _call_live_model(
             "Scout AI cloud regeneration failed: "
             + _redact_error(str(exc), api_key)
         ) from exc
+    native_research = pydantic_native_research_trace(result)
+    if (
+        native_research["web_search_call_count"] < 1
+        or native_research["web_fetch_call_count"] < 1
+    ):
+        raise RouteContextRegenerationError(
+            "Scout AI route-context generation did not complete the required "
+            "WebSearch -> WebFetch research handoff"
+        )
     return {
         "plan": result.output.model_dump(mode="json"),
         "usage": _serialize_usage(result),
         "response_metadata": _serialize_response_metadata(result),
+        "native_research": native_research,
     }
 
 
@@ -1267,6 +1310,8 @@ def _validate_editorial_plan_for_workspace(
                 "visual_essay heading mislabels non-P2 imagery: "
                 + ", ".join(found)
             )
+    if evidence.current_status.operability == "unknown":
+        _validate_unknown_route_editorial_contract(plan)
     if evidence.current_status.operability != "closed":
         return
 
@@ -1358,6 +1403,55 @@ def _validate_editorial_plan_for_workspace(
         )
 
 
+def _validate_unknown_route_editorial_contract(plan: EditorialPlan) -> None:
+    violations: list[str] = []
+    if plan.section_order[0] != "decision_snapshot":
+        violations.append("decision_snapshot must be the first section")
+
+    decision_heading = plan.section_headings["decision_snapshot"]
+    if not _contains_any(
+        decision_heading,
+        ("待查", "查核", "未知", "未確認", "尚未確認", "不能推定", "不可推定"),
+    ):
+        violations.append("decision heading must preserve unknown route status")
+
+    status_copy = " ".join(
+        (
+            plan.eyebrow,
+            plan.subtitle,
+            decision_heading,
+            plan.closing_note,
+        )
+    )
+    unsupported_claims = tuple(
+        term
+        for term in (
+            "目前未開放",
+            "現在未開放",
+            "已封閉",
+            "目前封閉",
+            "路線封閉",
+            "禁止通行",
+            "不可通行",
+            "等待重開",
+            "等待恢復",
+            "官方恢復",
+            "官方重開",
+        )
+        if term in status_copy
+    )
+    if unsupported_claims:
+        violations.append(
+            "unknown status cannot be rewritten as closed or reopened: "
+            + ", ".join(unsupported_claims)
+        )
+
+    if violations:
+        raise RouteContextRegenerationError(
+            "unknown-route editorial contract failed: " + "; ".join(violations)
+        )
+
+
 def _contains_any(value: str, terms: tuple[str, ...]) -> bool:
     folded = value.casefold()
     return any(term.casefold() in folded for term in terms)
@@ -1367,11 +1461,14 @@ def _editorial_contract_receipt(
     evidence: RegenerationEvidence,
 ) -> dict[str, object]:
     closed_route = evidence.current_status.operability == "closed"
+    unknown_route = evidence.current_status.operability == "unknown"
     return {
         "status": "PASS",
         "mode": (
             "closed_route_non_regression"
             if closed_route
+            else "unknown_route_non_regression"
+            if unknown_route
             else "standard_route_editorial"
         ),
         "checks": (
@@ -1386,6 +1483,13 @@ def _editorial_contract_receipt(
                 "human_facing_section_copy",
             ]
             if closed_route
+            else [
+                "title_binding",
+                "visual_evidence_label",
+                "unknown_status_preserved",
+                "decision_first",
+            ]
+            if unknown_route
             else ["title_binding", "visual_evidence_label"]
         ),
     }
@@ -1608,6 +1712,41 @@ def _aggregate_usage(call_results: list[dict[str, object]]) -> dict[str, int]:
     return aggregate
 
 
+def _aggregate_native_research_trace(
+    call_results: list[dict[str, object]],
+) -> dict[str, object]:
+    count_fields = (
+        "tool_call_count",
+        "tool_return_count",
+        "native_tool_call_count",
+        "web_search_call_count",
+        "web_fetch_call_count",
+    )
+    counts = {field: 0 for field in count_fields}
+    tool_names: set[str] = set()
+    for result in call_results:
+        trace = result.get("native_research")
+        if not isinstance(trace, dict):
+            continue
+        for field in count_fields:
+            value = trace.get(field)
+            if isinstance(value, int):
+                counts[field] += value
+        names = trace.get("tool_names")
+        if isinstance(names, list):
+            tool_names.update(str(name) for name in names if str(name))
+    return {
+        "enabled": True,
+        "performed": (
+            counts["web_search_call_count"] > 0
+            or counts["web_fetch_call_count"] > 0
+        ),
+        **counts,
+        "tool_names": sorted(tool_names),
+        "content_embedded": False,
+    }
+
+
 def _model_attempt_record(
     *,
     attempt_number: int,
@@ -1622,6 +1761,7 @@ def _model_attempt_record(
         "status": status,
         "usage": _integer_mapping(call_result.get("usage")),
         "response_metadata": _string_mapping(call_result.get("response_metadata")),
+        "native_research": call_result.get("native_research") or {},
     }
     if validation_error:
         record["validation_error"] = validation_error

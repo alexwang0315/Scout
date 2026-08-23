@@ -451,6 +451,58 @@ def test_partial_jsonl_tail_degrades_but_preserves_the_valid_prefix(
     ]
 
 
+def test_query_reuses_unchanged_event_files_and_reloads_only_changed_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path / "audit"
+    ended = FileRuntimeAuditLedger(
+        root=root,
+        runtime_instance_id="runtime-ended",
+    )
+    ended.start(application="scout-dashboard", runtime_profile="test")
+    ended.stop(reason="clean-shutdown")
+    active = FileRuntimeAuditLedger(
+        root=root,
+        runtime_instance_id="runtime-active",
+    )
+    active.start(application="scout-dashboard", runtime_profile="test")
+
+    reads: list[Path] = []
+    original = active._read_event_file
+
+    def counted(path: Path):
+        reads.append(path)
+        return original(path)
+
+    monkeypatch.setattr(active, "_read_event_file", counted)
+
+    first = active.query(limit=100)
+    first_read_count = len(reads)
+    verification_sizes: list[int] = []
+    original_verify = active._verify_grouped_events
+
+    def counted_verify(events, *, errors):
+        materialized = list(events)
+        verification_sizes.append(len(materialized))
+        return original_verify(materialized, errors=errors)
+
+    monkeypatch.setattr(active, "_verify_grouped_events", counted_verify)
+    reads.clear()
+    second = active.query(limit=100)
+    unchanged_reads = list(reads)
+    reads.clear()
+    active.append(_record(record_count=1))
+    third = active.query(limit=100)
+
+    assert first_read_count == 2
+    assert unchanged_reads == []
+    assert reads == [active.instance_dir / "events-0001.jsonl"]
+    assert verification_sizes == [2]
+    assert first.summary.total_events == second.summary.total_events
+    assert third.summary.total_events == first.summary.total_events + 1
+
+
 def test_new_runtime_marks_previous_unclosed_instance_interrupted(
     tmp_path: Path,
 ) -> None:

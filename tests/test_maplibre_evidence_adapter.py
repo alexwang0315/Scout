@@ -44,6 +44,11 @@ const routeFeature = adapter.createEvidenceFeature({
 });
 const featureCollection = adapter.createEvidenceFeatureCollection([routeFeature]);
 const style = adapter.createEvidenceStyle(featureCollection);
+const lineColorExpression = style.layers.find(layer => layer.id === adapter.layerIds.line).paint["line-color"];
+const evidenceColors = {};
+for (let index = 2; index < lineColorExpression.length - 1; index += 2) {
+  evidenceColors[lineColorExpression[index]] = lineColorExpression[index + 1];
+}
 const rasterLayer = adapter.normalizeRasterLayer({
   layer_id: "rudy-twmap",
   source_id: "happyman_rudy_twmap",
@@ -96,7 +101,8 @@ const result = {
     version: style.version,
     sourceType: style.sources[adapter.sourceId].type,
     sourceFeatureCount: style.sources[adapter.sourceId].data.features.length,
-    layerIds: style.layers.map(layer => layer.id)
+    layerIds: style.layers.map(layer => layer.id),
+    evidenceColors
   },
   rasterLayer,
   terrainImageLayer,
@@ -239,17 +245,21 @@ def test_geojson_adapter_builds_bounded_sources_and_layers() -> None:
     assert feature["properties"]["candidate_only"] is True
     assert feature["properties"]["runtime_safety_truth"] is False
     assert result["collectionFeatureCount"] == 1
-    assert result["style"] == {
-        "version": 8,
-        "sourceType": "geojson",
-        "sourceFeatureCount": 1,
-        "layerIds": [
-            "scout-evidence-background",
-            "scout-evidence-fill",
-            "scout-evidence-line",
-            "scout-evidence-point",
-        ],
-    }
+    assert result["style"]["version"] == 8
+    assert result["style"]["sourceType"] == "geojson"
+    assert result["style"]["sourceFeatureCount"] == 1
+    assert result["style"]["layerIds"] == [
+        "scout-evidence-background",
+        "scout-evidence-fill",
+        "scout-evidence-line",
+        "scout-evidence-point",
+    ]
+    assert result["style"]["evidenceColors"] | {
+        "qgis-route": "#e00067",
+        "qgis-ridge-lines": "#ffb000",
+        "qgis-valley-lines": "#38a7c7",
+        "qgis-stream-network": "#1769aa",
+    } == result["style"]["evidenceColors"]
     assert result["collectionBounds"] == [121, 24, 121.1, 24.1]
     assert result["geometryError"] == "unsupported_geometry_type:GeometryCollection"
 

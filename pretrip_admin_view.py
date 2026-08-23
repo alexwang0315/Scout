@@ -734,6 +734,9 @@ def build_pretrip_admin_view(
     risk_heatmap_metadata = _load_optional_json(
         artifacts.get("calibrated_risk_heatmap_metadata")
     )
+    qgis_spatial_risk_inputs = _load_optional_json(
+        artifacts.get("qgis_spatial_risk_inputs")
+    )
     cwa_weather_evidence = _load_optional_json(artifacts.get("cwa_weather_evidence"))
     cwa_warnings_geojson = _load_optional_json(artifacts.get("cwa_warnings_geojson"))
     cwa_observations_geojson = _load_optional_json(
@@ -1019,6 +1022,11 @@ def build_pretrip_admin_view(
                 "calibrated_risk_heatmap_metadata",
                 "",
             ),
+        ),
+        "qgis_spatial_risk_inputs": _qgis_spatial_risk_inputs_summary(
+            project_id,
+            qgis_spatial_risk_inputs,
+            source_path=source_refs.get("qgis_spatial_risk_inputs", ""),
         ),
         "overpass_evidence": _overpass_evidence_summary(
             overpass_evidence,
@@ -1428,6 +1436,7 @@ def build_pretrip_admin_view(
         "risk_ribbon": planning_tab["risk_ribbon"],
         "risk_heatmap": planning_tab["risk_heatmap"],
         "risk_delta": planning_tab["risk_delta"],
+        "qgis_spatial_risk_inputs": planning_tab["qgis_spatial_risk_inputs"],
         "overpass_evidence": planning_tab["overpass_evidence"],
         "osm_pbf_evidence": planning_tab["osm_pbf_evidence"],
         "gis_perception": planning_tab["gis_perception"],
@@ -1618,6 +1627,10 @@ def resolve_pretrip_project_artifacts(
         "risk_ribbon_metadata": "risk_ribbon_metadata_ref",
         "calibrated_risk_heatmap": "calibrated_risk_heatmap_ref",
         "calibrated_risk_heatmap_metadata": "calibrated_risk_heatmap_metadata_ref",
+        "qgis_spatial_risk_inputs": "qgis_spatial_risk_inputs_ref",
+        "qgis_spatial_risk_inputs_metadata": (
+            "qgis_spatial_risk_inputs_metadata_ref"
+        ),
         "risk_score_points": "risk_score_points_ref",
         "risk_score_points_metadata": "risk_score_points_metadata_ref",
         "terrain_visualization": "terrain_visualization_ref",
@@ -1949,6 +1962,9 @@ def load_pretrip_debug_projection_view(
     risk_heatmap_metadata_raw = _load_optional_json(
         optional_project_path("calibrated_risk_heatmap_metadata_ref")
     )
+    qgis_spatial_risk_inputs_raw = _load_optional_json(
+        optional_project_path("qgis_spatial_risk_inputs_ref")
+    )
     cwa_weather_evidence_raw = _load_optional_json(
         optional_project_path("cwa_weather_evidence_ref")
     )
@@ -2113,6 +2129,10 @@ def load_pretrip_debug_projection_view(
         "calibrated_risk_heatmap": project.get("calibrated_risk_heatmap_ref", ""),
         "calibrated_risk_heatmap_metadata": project.get(
             "calibrated_risk_heatmap_metadata_ref",
+            "",
+        ),
+        "qgis_spatial_risk_inputs": project.get(
+            "qgis_spatial_risk_inputs_ref",
             "",
         ),
         "gis_perception": project.get("gis_perception_candidates_ref", ""),
@@ -2337,6 +2357,11 @@ def load_pretrip_debug_projection_view(
             source_path=source_refs["calibrated_risk_heatmap"],
             metadata_source_path=source_refs["calibrated_risk_heatmap_metadata"],
         ),
+        "qgis_spatial_risk_inputs": _qgis_spatial_risk_inputs_summary(
+            project_id,
+            qgis_spatial_risk_inputs_raw,
+            source_path=source_refs["qgis_spatial_risk_inputs"],
+        ),
         "map_layers": build_pretrip_map_layers(
             source_refs=source_refs,
             weather={
@@ -2511,6 +2536,7 @@ def load_pretrip_debug_projection_view(
         "risk_ribbon": view["risk_ribbon"],
         "risk_heatmap": view["risk_heatmap"],
         "risk_delta": view["risk_delta"],
+        "qgis_spatial_risk_inputs": view["qgis_spatial_risk_inputs"],
         "cwa_qpf": view["cwa_qpf"],
         "cwa_weather": view["cwa_weather"],
         "cwa_weather_imagery": view["cwa_weather_imagery"],
@@ -7954,6 +7980,117 @@ def _overpass_candidate_provenance(
         or (
             f"{evidence_type} normalized from Overpass/OSM tags; "
             "pretrip candidate-only map evidence, not runtime safety truth."
+        ),
+    }
+
+
+def _qgis_spatial_risk_inputs_summary(
+    project_id: str,
+    payload: dict[str, Any] | None,
+    *,
+    source_path: str,
+) -> dict[str, Any]:
+    metadata = payload.get("metadata") if isinstance(payload, dict) else None
+    features = payload.get("features") if isinstance(payload, dict) else None
+    authority_valid = bool(
+        isinstance(metadata, dict)
+        and metadata.get("candidate_only") is True
+        and metadata.get("runtime_safety_truth") is False
+        and metadata.get("operational") is False
+        and metadata.get("risk_score_applied") is False
+    )
+    samples: list[dict[str, Any]] = []
+    if authority_valid and isinstance(features, list):
+        for index, feature in enumerate(features[:1000]):
+            geometry = feature.get("geometry") if isinstance(feature, dict) else None
+            coordinates = geometry.get("coordinates") if isinstance(geometry, dict) else None
+            properties = feature.get("properties") if isinstance(feature, dict) else None
+            if (
+                not isinstance(coordinates, list)
+                or len(coordinates) < 2
+                or not isinstance(properties, dict)
+                or properties.get("candidate_only") is not True
+                or properties.get("runtime_safety_truth") is not False
+                or properties.get("operational") is not False
+                or properties.get("risk_score_applied") is not False
+            ):
+                continue
+            sample_id = str(
+                properties.get("spatial_input_id")
+                or properties.get("route_sample_id")
+                or f"qgis-spatial-risk-input.{index:05d}"
+            )
+            samples.append(
+                {
+                    "candidate_id": sample_id,
+                    "source_id": sample_id,
+                    "evidence_type": "pretrip_qgis_spatial_risk_input",
+                    "source_path": source_path,
+                    "source_profile": "qgis_grass_reviewed_risk_v2_input",
+                    "label": (
+                        f"{properties.get('geomorphon_label') or 'terrain'} · "
+                        f"slope {properties.get('slope_degrees') if properties.get('slope_degrees') is not None else '-'}"
+                    ),
+                    "lat": coordinates[1],
+                    "lon": coordinates[0],
+                    "distance_m": properties.get("distance_m"),
+                    "alignment_status": properties.get("alignment_status"),
+                    "qgis_sample_distance_m": properties.get(
+                        "qgis_sample_distance_m"
+                    ),
+                    "baseline_pretrip_risk": properties.get(
+                        "baseline_pretrip_risk"
+                    ),
+                    "slope_degrees": properties.get("slope_degrees"),
+                    "aspect_degrees": properties.get("aspect_degrees"),
+                    "geomorphon_code": properties.get("geomorphon_code"),
+                    "geomorphon_label": properties.get("geomorphon_label"),
+                    "flow_accumulation_cells": properties.get(
+                        "flow_accumulation_cells"
+                    ),
+                    "flow_accumulation_likely_underestimated": properties.get(
+                        "flow_accumulation_likely_underestimated"
+                    ),
+                    "risk_v2_status": properties.get("risk_v2_status"),
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                    "operational": False,
+                    "risk_score_applied": False,
+                }
+            )
+    status = (
+        str(metadata.get("status") or "candidate_only")
+        if authority_valid
+        else "invalid_or_unavailable"
+    )
+    return {
+        "source_id": f"scout_qgis_spatial_risk_inputs.{project_id}",
+        "source_path": source_path,
+        "evidence_type": "pretrip_qgis_spatial_risk_inputs",
+        "artifact_kind": "scout_qgis_spatial_risk_inputs",
+        "status": status,
+        "counts": {
+            "sample_count": len(samples),
+            "aligned_sample_count": (
+                int(metadata.get("aligned_sample_count", 0) or 0)
+                if authority_valid
+                else 0
+            ),
+        },
+        "samples": samples,
+        "qgis_workflow_run_id": (
+            metadata.get("qgis_workflow_run_id") if authority_valid else None
+        ),
+        "risk_v2_status": "calibration_required",
+        "boundary": _summary_boundary(
+            {
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "operational": False,
+                "risk_score_applied": False,
+                "baseline_scores_modified": False,
+                "reviewed_evidence_required": True,
+            }
         ),
     }
 

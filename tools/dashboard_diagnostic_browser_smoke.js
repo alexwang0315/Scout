@@ -101,6 +101,47 @@ async function readNativeRudyTileState(viewport) {
   });
 }
 
+async function readNativeRudyTileCoverage(viewport) {
+  return viewport.evaluate(node => {
+    const layer = node.querySelector('[data-dashboard-rudy-tile-layer="true"]');
+    const activeGeneration = layer?.querySelector(
+      '[data-dashboard-rudy-tile-generation="active"]',
+    );
+    const images = activeGeneration
+      ? Array.from(activeGeneration.querySelectorAll("image"))
+      : Array.from(layer?.children || []).filter(
+          child => child.tagName.toLowerCase() === "image",
+        );
+    const viewportRect = node.getBoundingClientRect();
+    const tileRects = images.map(image => {
+      const rect = image.getBoundingClientRect();
+      return {left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom};
+    });
+    const columns = 48;
+    const rows = 32;
+    let coveredSamples = 0;
+    for (let row = 0; row < rows; row += 1) {
+      for (let column = 0; column < columns; column += 1) {
+        const x = viewportRect.left + (column + .5) * viewportRect.width / columns;
+        const y = viewportRect.top + (row + .5) * viewportRect.height / rows;
+        if (tileRects.some(rect => (
+          x >= rect.left - .5
+          && x <= rect.right + .5
+          && y >= rect.top - .5
+          && y <= rect.bottom + .5
+        ))) coveredSamples += 1;
+      }
+    }
+    const sampleCount = columns * rows;
+    return {
+      coveredRatio: sampleCount ? coveredSamples / sampleCount : 0,
+      coveredSamples,
+      imageCount: images.length,
+      sampleCount,
+    };
+  });
+}
+
 async function readEmbeddedRudyTileState(frame) {
   return frame.locator('[data-layer-group="rudy-twmap"]').evaluate(group => {
     const activeGeneration = group.querySelector('[data-tile-generation="active"]');
@@ -260,6 +301,9 @@ async function inspectNativeDashboardMap(page, surface, rudyTileRequests) {
         surface.label,
       )
     : null;
+  const highTileCoverage = surface.dynamicTileMatrix
+    ? await readNativeRudyTileCoverage(viewport)
+    : null;
   const dynamicTileMatrix = surface.dynamicTileMatrix
     ? {
         initialMatrix: initialTileState.matrix,
@@ -267,6 +311,7 @@ async function inspectNativeDashboardMap(page, surface, rudyTileRequests) {
         preparedMatrix: surface.preparedMatrix,
         activeMatrix: highTileState.matrix,
         activeMatrices: highTileState.matrices,
+        viewportCoverage: highTileCoverage,
         mapZoomAfterCrossing: Number(await viewport.getAttribute("data-map-zoom")),
         ...dynamicTileNetworkEvidence(
           rudyTileRequests,
@@ -279,6 +324,10 @@ async function inspectNativeDashboardMap(page, surface, rudyTileRequests) {
   if (surface.dynamicTileMatrix) {
     assert(zoomedTileState.matrix === surface.preparedMatrix, `${surface.label} first Zoom in did not activate prepared Z${surface.preparedMatrix}.`);
     assert(highTileState.matrix === surface.targetMatrix, `${surface.label} did not activate verified target Z${surface.targetMatrix}.`);
+    assert(
+      highTileCoverage.coveredRatio >= 0.99,
+      `${surface.label} active Z${surface.targetMatrix} tiles cover only ${(highTileCoverage.coveredRatio * 100).toFixed(1)}% of the visible viewport.`,
+    );
     assert(
       dynamicTileMatrix.networkTileMatrices.includes(surface.preparedMatrix)
         && dynamicTileMatrix.networkTileMatrices.includes(surface.targetMatrix),
@@ -563,9 +612,14 @@ async function main() {
       "Dashboard map registry must have eight Rudy+TW-only maps.",
     );
 
-    const dash001 = page.locator('[data-diagnostic-case="DASH-001"]');
-    workspaceRouteMode = "delay";
-    await dash001.locator('[data-diagnostic-action="retest"]').click();
+    let snapshot = {
+      summary: {total: 0, passed: 0, failed: 0, running: 0, idle: 0},
+      results: {},
+    };
+    if (!dynamicTilesOnly) {
+      const dash001 = page.locator('[data-diagnostic-case="DASH-001"]');
+      workspaceRouteMode = "delay";
+      await dash001.locator('[data-diagnostic-action="retest"]').click();
     await page.waitForFunction(() => (
       document.querySelector('[data-diagnostic-case="DASH-001"]')?.dataset.diagnosticStatus === "running"
     ), null, { timeout: 5000 });
@@ -593,7 +647,7 @@ async function main() {
         && snapshot.summary.passed + snapshot.summary.failed === expectedCount;
     }, expectedDiagnosticCount, { timeout: 480000 });
 
-    const snapshot = await page.evaluate(() => window.scoutDashboardDiagnostics.snapshot());
+      snapshot = await page.evaluate(() => window.scoutDashboardDiagnostics.snapshot());
     assert(snapshot.summary.total === expectedDiagnosticCount, `Diag all summary total is not ${expectedDiagnosticCount}.`);
     assert(snapshot.summary.running === 0, "Diag all left a running case.");
     assert(snapshot.summary.idle === 0, "Diag all left an untested case.");
@@ -642,10 +696,11 @@ async function main() {
     assert(mobileLayout.caseWidth <= mobileLayout.clientWidth, "Diagnostic case exceeds the mobile viewport.");
     assert(mobileLayout.buttonWidth > 0, "Diagnostic retest button is not measurable on mobile.");
 
-    await page.screenshot({
-      path: "/tmp/scout-dashboard-diagnostic-mobile.png",
-      fullPage: true,
-    });
+      await page.screenshot({
+        path: "/tmp/scout-dashboard-diagnostic-mobile.png",
+        fullPage: true,
+      });
+    }
     await page.setViewportSize({ width: 1440, height: 1000 });
     const browserMapChecks = [];
     const dynamicTileFailures = [];

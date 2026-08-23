@@ -2620,6 +2620,7 @@
       focusedLabelIds: new Set(),
       mapKeyboardActive: false,
       hoveredMapTarget: null,
+      assistantQueryAttemptCount: 0,
       osmPbfVector: null,
       osmPbfVectorStatus: "not_loaded",
       osmCartoPaletteStatus: "not_loaded",
@@ -5823,6 +5824,11 @@
       document.getElementById("mobileIngressSummary").className = unavailable
         ? "pill bad"
         : (activityCount ? "pill ok" : "pill info");
+      const resetButton = document.getElementById("mobileIngressResetButton");
+      resetButton.disabled = unavailable;
+      resetButton.title = unavailable
+        ? "Reset unavailable because the mobile/wearable ingress projection is unavailable"
+        : "Reset MQTT ingress counters only";
       document.getElementById("mobileIngressSelectionContext").textContent = selectedEvent
         ? `Mobile/wearable ingress 是獨立 evidence projection；目前 timeline 選取 #${text(selectedEvent.sequence)}。`
         : "Mobile/wearable ingress 是獨立 evidence projection，不因 timeline 選取改變。";
@@ -6140,7 +6146,11 @@
       renderAssistantList("assistantContextList", items);
     }
 
-    function renderAssistantResponse(payload, queryPayload = assistantQueryPayload("")) {
+    function renderAssistantResponse(
+      payload,
+      queryPayload = assistantQueryPayload(""),
+      attempt = debugPageState.assistantQueryAttemptCount
+    ) {
       document.getElementById("assistantAnswerText").textContent = payload.answer || "No assistant answer returned.";
       renderAssistantContext(payload, queryPayload);
       window.ScoutAssistantUI.renderOfflineFallback(payload);
@@ -6154,9 +6164,9 @@
         window.ScoutAssistantUI.sourceItems(payload)
       );
       setAssistantStatus(
-        payload.read_only && payload.model_interpretation
+        `${payload.read_only && payload.model_interpretation
           ? "Read-only model interpretation returned."
-          : "Assistant response returned without expected read-only labels.",
+          : "Assistant response returned without expected read-only labels."} · attempt ${attempt}`,
         payload.read_only && payload.model_interpretation ? "" : "error"
       );
     }
@@ -6173,7 +6183,10 @@
       }
       document.getElementById("assistantQuestionInput").value = resolvedQuestion;
       document.getElementById("assistantAskButton").disabled = true;
-      setAssistantStatus("Querying read-only assistant...");
+      const attempt = ++debugPageState.assistantQueryAttemptCount;
+      const setAttemptStatus = (message, tone = "") =>
+        setAssistantStatus(`${message} · attempt ${attempt}`, tone);
+      setAttemptStatus("Querying read-only assistant...");
       try {
         const queryPayload = assistantQueryPayload(resolvedQuestion);
         const uiActionResult = await window.ScoutAssistantUI.tryHandleUiActionRequest({
@@ -6181,11 +6194,11 @@
           requestText: resolvedQuestion,
           queryPayload,
           apiBase,
-          setStatus: setAssistantStatus
+          setStatus: setAttemptStatus
         });
         if (uiActionResult.handled) return;
         const payload = await postJson("/assistant/query", queryPayload);
-        renderAssistantResponse(payload, queryPayload);
+        renderAssistantResponse(payload, queryPayload, attempt);
       } catch (error) {
         document.getElementById("assistantAnswerText").textContent =
           "Assistant query failed safely. No debug, safety, outbound, Brain, or hardware state was changed.";
@@ -6199,7 +6212,7 @@
         ]);
         window.ScoutAssistantUI.renderOfflineFallback({});
         window.ScoutAssistantUI.renderWorkflowSummary({});
-        setAssistantStatus("Assistant query failed", "error");
+        setAttemptStatus("Assistant query failed", "error");
       } finally {
         document.getElementById("assistantAskButton").disabled = false;
       }
@@ -7273,13 +7286,26 @@
         <div class="timeline-group" data-timeline-group="${escapeHtml(group.groupId)}">
           ${renderTimelineEventNode(event, index, { title, summary, groupMeta, group: true })}
           <details class="timeline-group-details">
-            <summary>Show ${escapeHtml(group.count)} events in ${escapeHtml(timelineGroupRange(group.events))}</summary>
+            <summary><span data-timeline-disclosure-label data-event-count="${escapeHtml(group.count)}" data-event-range="${escapeHtml(timelineGroupRange(group.events))}">Show ${escapeHtml(group.count)} events in ${escapeHtml(timelineGroupRange(group.events))}</span></summary>
             <div class="timeline-group-children">
               ${childEvents}
             </div>
           </details>
         </div>
       `;
+    }
+
+    function bindTimelineGroupDisclosureLabels() {
+      document.querySelectorAll(".timeline-group-details").forEach((details) => {
+        const label = details.querySelector("[data-timeline-disclosure-label]");
+        if (!label) return;
+        const updateLabel = () => {
+          const verb = details.open ? "Hide" : "Show";
+          label.textContent = `${verb} ${label.dataset.eventCount} events in ${label.dataset.eventRange}`;
+        };
+        details.addEventListener("toggle", updateLabel);
+        updateLabel();
+      });
     }
 
     function renderEvents(events) {
@@ -7293,6 +7319,7 @@
       document.getElementById("timeline").innerHTML = events.length
         ? timelineGroups.map(renderTimelineGroup).join("")
         : empty("No debug events reported.");
+      bindTimelineGroupDisclosureLabels();
       bindTimelineNodes();
       if (orderedEvents.length) {
         const selectedIndex = Math.max(orderedEvents.findIndex((event) => event.event_id === debugPageState.selectedEventId), 0);

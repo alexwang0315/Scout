@@ -445,8 +445,11 @@
       "mcp", "#146c57",
       "boss-points", "#684b9a",
       "qgis-candidate", "#66589a",
-      "qgis-route", "#8b6914",
+      "qgis-route", "#e00067",
       "qgis-slope", "#247d78",
+      "qgis-ridge-lines", "#ffb000",
+      "qgis-valley-lines", "#38a7c7",
+      "qgis-stream-network", "#1769aa",
       "#3e6077",
     ];
   }

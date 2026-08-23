@@ -247,6 +247,57 @@ def test_regeneration_rejects_model_route_rename(
         )
 
 
+def test_regeneration_repairs_closed_claim_for_unknown_route_status(
+    tmp_path: Path,
+) -> None:
+    project_root = _write_project(tmp_path)
+    evidence_path = _write_evidence(project_root)
+    evidence = json.loads(evidence_path.read_text(encoding="utf-8"))
+    evidence["current_status"].update(
+        {
+            "operability": "unknown",
+            "label": "本次狀態待查",
+            "summary": "尚未取得足以判定開放或封閉的最新官方證據。",
+            "reason": "必須重新查核官方公告。",
+        }
+    )
+    evidence_path.write_text(
+        json.dumps(evidence, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    closed_claim = _editorial_plan()
+    corrected = _editorial_plan()
+    corrected["section_headings"]["decision_snapshot"] = "目前狀態待查：先確認官方公告"
+    corrected["subtitle"] = "路線資料已綁定，開放狀態仍待官方查核"
+    corrected["closing_note"] = "出發前重查官方開放狀態、路況與接駁安排"
+    calls = 0
+
+    def fake_model_caller(**_: object) -> dict[str, object]:
+        nonlocal calls
+        calls += 1
+        return {
+            "plan": closed_claim if calls == 1 else corrected,
+            "usage": {"requests": 1},
+            "response_metadata": {"provider_name": "openrouter"},
+        }
+
+    result = regenerate_route_context_briefing(
+        project_root=project_root,
+        evidence_path=evidence_path,
+        model_config_path=_write_model_config(tmp_path),
+        skill_path=_write_skill(tmp_path),
+        model_caller=fake_model_caller,
+    )
+
+    assert calls == 2
+    assert result["editorial_contract"]["mode"] == "unknown_route_non_regression"
+    html = (
+        project_root / "outputs" / "briefings" / "route_context_briefing.html"
+    ).read_text(encoding="utf-8")
+    assert "目前狀態待查：先確認官方公告" in html
+    assert "目前未開放：不可直接成行" not in html
+
+
 def test_regeneration_repairs_a_weak_closed_route_editorial_plan(
     tmp_path: Path,
 ) -> None:

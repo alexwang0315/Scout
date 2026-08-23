@@ -2245,7 +2245,7 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
         'data-navigation-evidence-gaps="true"',
         "Workspace DEM + candidate morphology",
         "2D Evidence",
-        "3D Terrain",
+        "3D Local Detail",
         "Split Review",
         "地形判讀與人工審核工作台",
         "不增加 DEM 原始解析度",
@@ -2308,11 +2308,13 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
     assert 'hillshadeLayer,\n        ...(revealObservedContext ? [rudyLayer] : [])' in html
     assert 'mode === "3d" ? "terrain" : "flat"' in html
     assert 'data-navigation-rudy-opacity="${navigationTerrainRudyOpacity(mode)}"' in html
-    assert 'function navigationTerrainMinimumReviewZoom(dem, mode)' in html
-    assert 'return mode === "3d" ? sourceZoom : Math.max(5, sourceZoom - 2);' in html
-    assert 'data-navigation-terrain-min-review-zoom="${navigationTerrainMinimumReviewZoom(dem, mode)}"' in html
-    assert 'const terrainZoomFloor = navigationTerrainMapLibreRuntime.maps.reduce(' in html
-    assert 'source floor · ${rudyBlend}' in html
+    assert 'function navigationTerrainCameraMinimumZoom(dem, mode)' in html
+    assert 'mode === "3d" ? Math.min(22, sourceZoom + 1)' in html
+    assert ': Math.max(5, sourceZoom - 5);' in html
+    assert 'data-navigation-terrain-camera-min-zoom="${navigationTerrainCameraMinimumZoom(dem, mode)}"' in html
+    assert 'data-navigation-terrain-source-min-zoom="${valueOrDash(dem.minzoom)}"' in html
+    assert 'const terrainZoomFloor = navigationTerrainMapLibreRuntime.maps.reduce(' not in html
+    assert 'FULL GOLDEN ROUTE · independent 2D scale' in html
     assert 'data-dashboard-map-screen-stroke="7"' in html
     assert 'data-dashboard-map-screen-stroke="4.5"' in html
     assert 'data-navigation-structure-label-visibility="selected-only"' in html
@@ -2434,6 +2436,44 @@ def test_navigation_maplibre_uses_the_canvas_as_its_single_keyboard_surface() ->
     assert "host.focus({preventScroll: true});" not in initializer
 
 
+def test_navigation_maplibre_fit_uses_full_golden_route_without_dem_zoom_lock() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    bounds_helpers = html.split(
+        "function navigationTerrainGoldenRouteBounds", 1
+    )[1].split("function navigationTerrainRudyTileTemplate", 1)[0]
+    fit_and_sync = html.split(
+        "function fitNavigationTerrainMapLibre", 1
+    )[1].split("async function initializeNavigationTerrainMapLibre", 1)[0]
+    initializer = html.split(
+        "async function initializeNavigationTerrainMapLibre()", 1
+    )[1].split("function navigationTerrainSelectedHierarchyEdge", 1)[0]
+
+    assert "snapshot?.route_samples?.points" in bounds_helpers
+    assert "navigationTerrainGoldenRouteBounds(snapshot)" in bounds_helpers
+    assert "navigationTerrainMapLibreBounds(snapshot?.terrain_raster_dem || {})" in bounds_helpers
+    assert 'const bounds = mode === "3d"' in fit_and_sync
+    assert "navigationTerrainFitBounds(snapshot);" in fit_and_sync
+    assert "map.getZoom() < minimumCameraZoom" in fit_and_sync
+    assert "terrainZoomFloor" not in fit_and_sync
+    assert "const zoom = sourceEntry.map.getZoom();" in fit_and_sync
+    assert "const synchronizeZoom = entry.mode === sourceEntry.mode;" in fit_and_sync
+    assert "...(synchronizeZoom ? {zoom} : {})" in fit_and_sync
+    assert "fitNavigationTerrainMapLibre(map, snapshot, mode);" in initializer
+    assert "minZoom: navigationTerrainCameraMinimumZoom(dem, mode)" in initializer
+    assert 'isTerrain ? "prepared-dem-local-detail" : "golden-route"' in html
+    assert 'isTerrain ? "Reset prepared DEM local detail" : "Fit entire Golden Route"' in html
+    assert "3D LOCAL DETAIL" in html
+    assert "中心同步 / 尺度獨立" in html
+    assert "PARTIAL DEM COVERAGE" in html
+    assert "map.queryTerrainElevation(cameraCenter)" in initializer
+    assert "host.dataset.navigationTerrainElevationStatus" in initializer
+    assert "DEM DECODED" in initializer
+    assert "MAPLIBRE 3D TERRAIN · DEGRADED" in initializer
+    assert "navigationTerrainVerticalExaggeration: 1," in html
+    assert "bilinear display smoothing" in html
+    assert "adds source resolution: no" in html
+
+
 def test_navigation_uses_vector_map_when_terrain_rgb_is_not_prepared() -> None:
     html = PAGE.read_text(encoding="utf-8")
     workbench = html.split(
@@ -2500,6 +2540,7 @@ def test_navigation_workspace_map_uses_dynamic_rudy_tw_tiles_with_shared_box_zoo
         "function navigationRudyBaseZoom(",
         "function navigationRudyTileUrl(",
         "function navigationRudyTileImages(",
+        "function dashboardMapSvgVisibleRatios(",
         "function navigationRudyVisibleBounds(",
         "function renderDashboardRudyTileLayer(",
         "function stageDashboardRudyTileGeneration(",
@@ -2541,6 +2582,9 @@ def test_navigation_workspace_map_uses_dynamic_rudy_tw_tiles_with_shared_box_zoo
     )
     assert "Math.ceil(Math.log2(viewState.zoom))" in tile_refresh
     assert "Math.round(Math.log2(viewState.zoom))" not in tile_refresh
+    assert "svg.getScreenCTM()" in html
+    assert "matrix.inverse()" in html
+    assert "dashboardMapSvgVisibleRatios(viewport)" in html
     assert '"/admin/tiles/imagery"' in html
     assert "encodeURIComponent(projectId())" in html
     assert "source_id=${encodeURIComponent(NAVIGATION_RUDY_TILE_SOURCE.sourceId)}&native=1" in html
@@ -2988,6 +3032,59 @@ def test_scout_dashboard_pace_fit_removes_low_information_blocks() -> None:
     assert "pace-cp-timeline" in html
     assert "pace-mini-map" in html
     assert "Data confidence" not in html
+
+
+def test_scout_dashboard_pace_fit_is_map_first_and_discloses_supporting_info() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    renderer = html.split("function renderPaceFitPage", 1)[1].split(
+        "function bodyIndexMetrics", 1
+    )[0]
+    pace_css = html.split(".pace-fit-dashboard {", 1)[1].split(
+        ".body-index-dashboard {", 1
+    )[0]
+
+    assert 'data-pace-map-primary="true"' in renderer
+    assert 'data-pace-supporting-details="true"' in renderer
+    assert (
+        '<details class="pace-supporting-details" data-pace-supporting-details="true">'
+        in renderer
+    )
+    assert "pace-spatial-workbench" in renderer
+    assert "pace-cp-inspector" in renderer
+    assert renderer.index("renderPaceFitPrimaryMap") < renderer.index(
+        "Risk Budget Calculator"
+    )
+    assert renderer.index("renderPaceFitPrimaryMap") < renderer.index(
+        "Pace Parameters"
+    )
+    assert "function paceFitCheckpointContext()" in html
+    assert "function paceFitCheckpointMapPoints(" in html
+    assert "function bindPaceFitControls()" in html
+    assert 'preserveAspectRatio="xMidYMid slice"' in html
+    assert 'data-pace-checkpoint-select="${escapeHtml(point.id)}"' in html
+    assert "{minimumZoom: 2}" in html
+    assert (
+        'project: ["home", "timeline", "features-lbs"' in html
+        and '"outdoor-pace-fit"' in html.split("const ROUTE_DATA_SCOPES", 1)[1].split(
+            "});", 1
+        )[0]
+    )
+    assert "23.120456, 120.832156" not in html
+    assert "min-height: clamp(520px, 62vh, 760px)" in pace_css
+    assert "height: 210px" not in pace_css
+
+
+def test_dashboard_truth_metadata_uses_progressive_disclosure() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    renderer = html.split("function renderTruthStrip(route)", 1)[1].split(
+        "function setRoute", 1
+    )[0]
+
+    assert 'class="dashboard-truth-details"' in renderer
+    assert 'id="dashboardTruthSummary"' in renderer
+    assert 'class="dashboard-truth-panel"' in renderer
+    assert '<details class="dashboard-truth-details">' in renderer
+    assert '<details class="dashboard-truth-details" open>' not in renderer
 
 
 def test_scout_dashboard_pace_fit_body_index_dashboard_contract() -> None:
@@ -4799,6 +4896,31 @@ def test_dashboard_diagnostic_classifies_expected_runtime_gaps_without_false_red
         assert "return diagnosticWarning(" in check
 
 
+def test_dashboard_diagnostic_gives_known_slow_read_endpoints_bounded_headroom() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+
+    assert (
+        "function diagnosticWorkspaceContext() {\n"
+        "      return diagnosticJson(`/admin/dashboard/workspaces/${encodeURIComponent(projectId())}`, 180000);"
+    ) in html
+    check_001 = html.split(
+        "async function diagnosticCheck001()", 1
+    )[1].split("async function diagnosticCheck002()", 1)[0]
+    check_010 = html.split(
+        "async function diagnosticCheck010()", 1
+    )[1].split("async function diagnosticCheck011()", 1)[0]
+    check_012 = html.split(
+        "async function diagnosticCheck012()", 1
+    )[1].split("async function diagnosticCheck013()", 1)[0]
+
+    assert "diagnosticJson(`${projectPath}/debug-projection`, 180000)" in check_001
+    assert (
+        "diagnosticJson(`/admin/pretrip/projects/${project}/debug-projection`, 180000)"
+        in check_010
+    )
+    assert "operation-requests`, 180000)" in check_012
+
+
 def test_dashboard_diagnostic_checks_probe_runtime_data_and_rendered_behavior() -> None:
     html = PAGE.read_text(encoding="utf-8")
     browser_smoke = (
@@ -4894,6 +5016,11 @@ def test_dashboard_diagnostic_checks_probe_runtime_data_and_rendered_behavior() 
     assert "networkTileMatrices" in browser_smoke
     assert "firstActiveMatrix" in browser_smoke
     assert "function advancePastPreparedTileMatrix(" in browser_smoke
+    assert "function readNativeRudyTileCoverage(" in browser_smoke
+    assert "viewportCoverage: highTileCoverage" in browser_smoke
+    assert "coveredRatio >= 0.99" in browser_smoke
+    assert "if (!dynamicTilesOnly) {" in browser_smoke
+    assert "let snapshot = {" in browser_smoke
     assert "activeMatrix: highTileState.matrix" in browser_smoke
     assert "networkTileMatrices.includes(surface.targetMatrix)" in browser_smoke
     assert "dynamicTileFailures" in browser_smoke
@@ -4945,15 +5072,23 @@ def test_dashboard_approved_qualification_visual_repairs_are_explicit() -> None:
     living_mobile_rule = html.split(
         "/* qualification-living-mobile-header */", 1
     )[1].split("}", 1)[0]
-    architecture_containment_rule = html.split(
-        "/* qualification-architecture-sticky-containment */", 1
+    architecture_lens_rule = html.split(
+        "/* qualification-architecture-lens-flush-sticky */", 1
     )[1].split("}", 1)[0]
     assert "display: block" in mobile_nav_rule
     assert "min-height: 0" in mobile_nav_rule
     assert "overflow-y: auto" in mobile_nav_rule
     assert ".nav-section:not([open]) > .nav-subtree" in html
     assert "flex-direction: column" in living_mobile_rule
-    assert "overflow: visible" in architecture_containment_rule
+    assert "position: sticky" in architecture_lens_rule
+    assert "top: var(--architecture-sticky-flush-offset" in architecture_lens_rule
+    assert "--architecture-sticky-flush-offset: -18px" in html
+    assert "--architecture-sticky-flush-offset: -12px" in html
+    assert "qualification-architecture-sticky-containment" not in html
+    architecture_rerender_rule = html.split(
+        "/* qualification-architecture-no-rerender-shift */", 1
+    )[1].split("}", 1)[0]
+    assert "animation: none" in architecture_rerender_rule
 
     debug_table_rule = html.split(".debug-table {", 1)[1].split("}", 1)[0]
     debug_table_wrap_rule = html.split(".debug-table-wrap {", 1)[1].split("}", 1)[0]
@@ -4969,7 +5104,7 @@ def test_dashboard_approved_qualification_visual_repairs_are_explicit() -> None:
     assert "pointer-events: bounding-box" in html
     assert "qualification-six-axis-tabs-visible" in html
     assert "qualification-mobile-nav-scroll" in html
-    assert "qualification-architecture-lens-sticky" in html
+    assert "qualification-architecture-lens-flush-sticky" in html
 
 
 def test_dashboard_q0056_map_hints_and_q0059_navigation_controls_are_explicit() -> None:
@@ -5027,7 +5162,19 @@ def test_dashboard_q0060_shared_readability_and_q0061_living_containment() -> No
         ".field-instrument-theme .truth-item > span",
         ".dashboard-map-controls output",
         ".permission-eyebrow",
+        ".permission-node small",
+        ".permission-node code",
+        ".permission-policy",
+        ".permission-summary-tile span",
+        ".permission-summary-tile small",
+        ".permission-day-map figcaption",
+        ".permission-day-map-source",
         ".permission-day-label",
+        ".permission-day-location small",
+        ".permission-day-route code",
+        ".permission-day-meta",
+        ".permission-day-evidence",
+        ".permission-simulation-form label",
         ".weather-layer-control small",
         ".navigation-terrain-boundary-chips span",
         ".runtime-log-index-button small",
@@ -5180,12 +5327,113 @@ def test_dashboard_route_architecture_intelligence_workbench_contract() -> None:
     assert 'data-architecture-route-distance-m="${' in html
 
 
+def test_dashboard_architecture_map_focuses_distance_bound_evidence() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+
+    hit_target_rule = html.split(
+        '.architecture-map-canvas [data-architecture-selection-surface="map-bin"] {',
+        1,
+    )[1].split("}", 1)[0]
+    assert "pointer-events: stroke" in hit_target_rule
+    assert "scroll-margin-top: 84px" in hit_target_rule
+
+    map_slices = html.split("function architectureMapSlices", 1)[1].split(
+        "function architectureMapCheckpointPoints", 1
+    )[0]
+    assert "dashboardMapMeasuredCoordinateSegments" in map_slices
+    assert "measured.totalDistanceM" in map_slices
+    assert "dashboardMapDistanceM" in map_slices
+    assert "pairIndex" not in map_slices
+    assert "totalPairs" not in map_slices
+    assert "const orderedGroups = [" in map_slices
+    assert "...groups.filter(group => !group.selected)" in map_slices
+    assert "...groups.filter(group => group.selected)" in map_slices
+    assert "return orderedGroups.map(group =>" in map_slices
+
+    map_controller = html.split("function createDashboardMapViewportController", 1)[
+        1
+    ].split("function bindDashboardMapViewports", 1)[0]
+    assert "const minimumZoom = Math.max(" in map_controller
+    assert "Math.max(viewState.zoom, minimumZoom)" in map_controller
+
+    architecture_binding = html.split("function bindArchitectureControls", 1)[
+        1
+    ].split("function embeddedPretripLayerInput", 1)[0]
+    assert '"Architecture selection focused on map."' in architecture_binding
+    assert "{minimumZoom: 4}" in architecture_binding
+    assert 'centerMap: state.architectureMobileView === "map"' in architecture_binding
+
+
+def test_dashboard_architecture_distance_measurement_uses_geometry_not_point_count() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    distance_helper = "function dashboardMapCoordinateDistanceMeters" + html.split(
+        "function dashboardMapCoordinateDistanceMeters", 1
+    )[1].split("function dashboardMapMeasuredCoordinateSegments", 1)[0]
+    measurement_helper = "function dashboardMapMeasuredCoordinateSegments" + html.split(
+        "function dashboardMapMeasuredCoordinateSegments", 1
+    )[1].split("function dashboardMapPointPosition", 1)[0]
+    node_program = "\n".join(
+        (
+            "const asArray = value => Array.isArray(value) ? value : [];",
+            distance_helper,
+            measurement_helper,
+            """
+const denseStart = [[
+  {lat: 0, lon: 0},
+  {lat: 0, lon: 0.0002},
+  {lat: 0, lon: 0.0004},
+  {lat: 0, lon: 0.0006},
+  {lat: 0, lon: 0.0008},
+  {lat: 0, lon: 0.0010},
+  {lat: 0, lon: 0.0100},
+]];
+const measured = dashboardMapMeasuredCoordinateSegments(denseStart);
+const disconnected = dashboardMapMeasuredCoordinateSegments([
+  [{lat: 0, lon: 0}, {lat: 0, lon: 0.001}],
+  [{lat: 1, lon: 1}, {lat: 1, lon: 1.001}],
+]);
+process.stdout.write(JSON.stringify({
+  total: measured.totalDistanceM,
+  densePrefix: measured.coordinateSegments[0][5].dashboardMapDistanceM,
+  last: measured.coordinateSegments[0][6].dashboardMapDistanceM,
+  disconnectedTotal: disconnected.totalDistanceM,
+  sourceMutated: Object.prototype.hasOwnProperty.call(
+    denseStart[0][5],
+    "dashboardMapDistanceM",
+  ),
+}));
+""",
+        )
+    )
+
+    result = subprocess.run(
+        ["node"],
+        input=node_program,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert 1100 < payload["total"] < 1125
+    assert 105 < payload["densePrefix"] < 117
+    assert payload["last"] == payload["total"]
+    assert 210 < payload["disconnectedTotal"] < 225
+    assert payload["sourceMutated"] is False
+
+
 def test_dashboard_qgis_feature_samples_remain_candidate_only_and_toggleable() -> None:
     html = PAGE.read_text(encoding="utf-8")
 
     assert "qgis_terrain_feature_sample" in html
     assert 'data-qgis-layer-toggle="features"' in html
-    assert 'if (!["route", "slope", "features"].includes(key)) return;' in html
+    assert (
+        'if (!["route", "slope", "features", "ridges", "valleys", "streams"].includes(key)) return;'
+        in html
+    )
+    assert 'data-qgis-layer-toggle="ridges"' in html
+    assert 'data-qgis-layer-toggle="valleys"' in html
+    assert 'data-qgis-layer-toggle="streams"' in html
     assert "scout-qgis-terrain-feature-samples" in html
     assert 'artifact_id: properties.artifact_id || sourceArtifact?.artifact_id' in html
     qgis_projection = html.split("function qgisSpatialMaplibreFeatures", 1)[1].split(
@@ -5194,3 +5442,6 @@ def test_dashboard_qgis_feature_samples_remain_candidate_only_and_toggleable() -
     assert "candidate_only: true" in qgis_projection
     assert "runtime_safety_truth: false" in qgis_projection
     assert "operational: false" in qgis_projection
+    assert '"QGIS render artifact"' in html
+    assert "live QGIS render artifact" not in html
+    assert "QGIS outputs require artifact review" in html

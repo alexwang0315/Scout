@@ -9,16 +9,25 @@ import zlib
 from pathlib import Path
 from typing import Any
 
+import pytest
 from fastapi.testclient import TestClient
 
-from qgis_worker import QgisWorkerConfig, create_qgis_worker_app
+from qgis_worker import (
+    QgisWorkerConfig,
+    _WorkerCrsUnresolved,
+    _crop_png_to_content,
+    _decode_png_rows,
+    _require_extent_intersection,
+    _validate_projected_route_extent,
+    create_qgis_worker_app,
+)
 
 
 def _test_access_value() -> str:
     return "".join(("test-qgis-", "worker-access-", "0123456789abcdef"))
 
 
-def _rgb_png(*, blank: bool) -> bytes:
+def _rgb_png(*, blank: bool, canvas_border: bool = False) -> bytes:
     width = 10
     height = 10
     rows = []
@@ -26,7 +35,13 @@ def _rgb_png(*, blank: bool) -> bytes:
         row = bytearray()
         for x in range(width):
             dark = not blank and 3 <= x <= 6 and 3 <= y <= 6
-            row.extend((30, 60, 90) if dark else (255, 255, 255))
+            border = canvas_border and (x in {0, width - 1} or y in {0, height - 1})
+            if dark:
+                row.extend((30, 60, 90))
+            elif border:
+                row.extend((205, 205, 205))
+            else:
+                row.extend((255, 255, 255))
         rows.append(b"\x00" + bytes(row))
 
     def chunk(kind: bytes, payload: bytes) -> bytes:
@@ -62,8 +77,11 @@ class FakeQgisMcpClient:
             "gdal:assignprojection",
             "gdal:buildvirtualraster",
             "gdal:slope",
+            "grass:r.mapcalc.simple",
             "grass:r.slope.aspect",
             "grass:r.geomorphon",
+            "grass:r.thin",
+            "grass:r.to.vect",
             "grass:r.watershed",
         }
 
@@ -88,8 +106,11 @@ class FakeQgisMcpClient:
                     {"id": "gdal:buildvirtualraster"},
                     {"id": "gdal:assignprojection"},
                     {"id": "gdal:slope"},
+                    {"id": "grass:r.mapcalc.simple"},
                     {"id": "grass:r.slope.aspect"},
                     {"id": "grass:r.geomorphon"},
+                    {"id": "grass:r.thin"},
+                    {"id": "grass:r.to.vect"},
                     {"id": "grass:r.watershed"},
                 ],
             }
@@ -122,6 +143,21 @@ class FakeQgisMcpClient:
                     "elevation": {"type": "string"},
                     "forms": {"type": "string", "x-qgis-output-destination": True},
                 },
+                "grass:r.mapcalc.simple": {
+                    "a": {"type": "string"},
+                    "b": {"type": "string"},
+                    "c": {"type": "string"},
+                    "expression": {"type": "string"},
+                    "output": {"type": "string", "x-qgis-output-destination": True},
+                },
+                "grass:r.thin": {
+                    "input": {"type": "string"},
+                    "output": {"type": "string", "x-qgis-output-destination": True},
+                },
+                "grass:r.to.vect": {
+                    "input": {"type": "string"},
+                    "output": {"type": "string", "x-qgis-output-destination": True},
+                },
                 "grass:r.watershed": {
                     "elevation": {"type": "string"},
                     "accumulation": {"type": "string", "x-qgis-output-destination": True},
@@ -146,6 +182,20 @@ class FakeQgisMcpClient:
                 project_path.write_bytes(b"fixture-qgis-project")
                 return {"file": str(project_path), "saved": True}
             if action == "add_vector":
+                if str(arguments.get("name") or "").startswith(
+                    "Scout candidate route source"
+                ):
+                    return {
+                        "id": "Scout_candidate_route_source_fixture",
+                        "name": arguments.get("name"),
+                    }
+                if str(arguments.get("name") or "").startswith(
+                    "Scout_candidate_terrain_vector_source_"
+                ):
+                    return {
+                        "id": str(arguments["name"]).replace(" ", "_"),
+                        "name": arguments.get("name"),
+                    }
                 return {"id": "route-layer", "name": arguments.get("name")}
             if action == "add_raster":
                 name = str(arguments.get("name") or "")
@@ -159,11 +209,63 @@ class FakeQgisMcpClient:
             return {"removed": action == "remove_layer"}
         if tool == "qgis_raster_style":
             return {"layer_id": arguments["layer"], "styled": True}
+        if tool == "qgis_style_apply":
+            return {"layer_id": arguments["layer"], "styled": True}
+        if tool == "qgis_vector_export":
+            path = Path(arguments["path"])
+            if arguments["format"] == "geojson":
+                vector_kind = (
+                    "ridge"
+                    if "ridge" in path.name
+                    else "valley"
+                    if "valley" in path.name
+                    else "stream"
+                )
+                path.write_text(
+                    json.dumps(
+                        {
+                            "type": "FeatureCollection",
+                            "features": [
+                                {
+                                    "type": "Feature",
+                                    "geometry": {
+                                        "type": "LineString",
+                                        "coordinates": [
+                                            [121.21, 24.05],
+                                            [121.22, 24.04],
+                                        ],
+                                    },
+                                    "properties": {"fixture_kind": vector_kind},
+                                }
+                            ],
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                return {
+                    "path": str(path),
+                    "layer_name": arguments["layer"],
+                    "feature_count": 1,
+                    "driver": "GeoJSON",
+                }
+            path.write_text("{}", encoding="utf-8")
+            return {
+                "path": str(path),
+                "layer_name": "Scout candidate route source fixture",
+                "feature_count": 1,
+                "driver": "GPKG",
+            }
+        if tool == "qgis_crs":
+            return {
+                "id": arguments["layer"],
+                "crs": "EPSG:3826",
+                "assignment": {"changed": True, "reason": "explicit_assignment"},
+            }
         if tool == "qgis_layer_inspect":
             return {
                 "summary": {
                     "id": arguments["layer"],
-                    "crs": "EPSG:4326" if arguments["layer"] == "route-layer" else "EPSG:3826",
+                    "crs": "EPSG:3826",
                     "extent": {
                         "xmin": 260_000,
                         "ymin": 2_640_000,
@@ -182,7 +284,9 @@ class FakeQgisMcpClient:
             values = {
                 "raster-grass_slope": 12.5,
                 "raster-grass_aspect": 180.0,
+                "raster-grass_geomorphon_fine": 3.0,
                 "raster-grass_geomorphon_landforms": 3.0,
+                "raster-grass_geomorphon_coarse": 6.0,
                 "raster-grass_flow_accumulation": -42.0,
             }
             return {
@@ -207,6 +311,9 @@ class FakeQgisMcpClient:
                 "gdal:slope": ("OUTPUT",),
                 "grass:r.slope.aspect": ("slope", "aspect"),
                 "grass:r.geomorphon": ("forms",),
+                "grass:r.mapcalc.simple": ("output",),
+                "grass:r.thin": ("output",),
+                "grass:r.to.vect": ("output",),
                 "grass:r.watershed": ("accumulation",),
             }[arguments["algorithm"]]
             outputs = {
@@ -422,18 +529,28 @@ def test_qgis_worker_persists_grass_terrain_feature_stack_candidate_artifacts(
     result = payload["result"]
     assert set(result["processing_algorithms"]) >= {
         "gdal:assignprojection",
+        "grass:r.mapcalc.simple",
         "grass:r.slope.aspect",
         "grass:r.geomorphon",
+        "grass:r.thin",
+        "grass:r.to.vect",
         "grass:r.watershed",
     }
     assert {artifact["artifact_type"] for artifact in result["artifacts"]} == {
         "slope_raster",
         "aspect_raster",
         "geomorphon_raster",
+        "geomorphon_fine_raster",
+        "geomorphon_coarse_raster",
+        "geomorphon_consensus_ridge_raster",
+        "geomorphon_consensus_valley_raster",
         "flow_accumulation_raster",
+        "stream_network_raster",
+        "ridge_lines_vector",
+        "valley_lines_vector",
+        "stream_network_vector",
         "terrain_feature_route_samples",
         "terrain_feature_manifest",
-        "terrain_feature_route_samples",
         "qgis_render_preview",
         "qgis_visual_context",
     }
@@ -449,8 +566,11 @@ def test_qgis_worker_persists_grass_terrain_feature_stack_candidate_artifacts(
         if tool == "qgis_capabilities_search"
     } == {
         "gdal:assignprojection",
+        "grass:r.mapcalc.simple",
         "grass:r.slope.aspect",
         "grass:r.geomorphon",
+        "grass:r.thin",
+        "grass:r.to.vect",
         "grass:r.watershed",
     }
     assert all(
@@ -465,6 +585,43 @@ def test_qgis_worker_persists_grass_terrain_feature_stack_candidate_artifacts(
         and arguments.get("path", "").endswith("terrain_feature_stack.qgz")
         for tool, arguments in mcp.calls
     )
+    assert any(
+        tool == "qgis_vector_export"
+        and arguments["destination_crs"] == "EPSG:3826"
+        and arguments["format"] == "gpkg"
+        and arguments["selected_only"] is False
+        for tool, arguments in mcp.calls
+    )
+    terrain_vector_exports = [
+        arguments
+        for tool, arguments in mcp.calls
+        if tool == "qgis_vector_export"
+        and arguments["destination_crs"] == "EPSG:4326"
+    ]
+    assert len(terrain_vector_exports) == 3
+    assert all(arguments["format"] == "geojson" for arguments in terrain_vector_exports)
+    assert any(
+        tool == "qgis_crs"
+        and arguments["action"] == "assign_layer"
+        and arguments["target"] == "EPSG:3826"
+        and arguments["value"] == "EPSG:3826"
+        for tool, arguments in mcp.calls
+    )
+    assert any(
+        tool == "qgis_style_apply"
+        and arguments == {
+            "layer": "route-layer",
+            "mode": "simple",
+            "color": "#ff365e",
+            "opacity": 1.0,
+            "width": 2.4,
+        }
+        for tool, arguments in mcp.calls
+    )
+    assert (
+        "qgis_project_action",
+        {"action": "refresh"},
+    ) in mcp.calls
     identify_calls = [arguments for tool, arguments in mcp.calls if tool == "qgis_identify"]
     assert len(identify_calls) == 2
     assert all(arguments["crs"] == "EPSG:4326" for arguments in identify_calls)
@@ -480,12 +637,24 @@ def test_qgis_worker_persists_grass_terrain_feature_stack_candidate_artifacts(
     samples = sample_response.json()
     assert samples["metadata"]["risk_score_applied"] is False
     assert samples["features"][0]["properties"]["geomorphon_label"] == "ridge"
+    assert samples["features"][0]["properties"]["geomorphon_fine_label"] == "ridge"
+    assert samples["features"][0]["properties"]["geomorphon_coarse_label"] == "slope"
+    assert samples["features"][0]["properties"]["geomorphon_consensus_label"] == "ridge"
     assert (
         samples["features"][0]["properties"][
             "flow_accumulation_likely_underestimated"
         ]
         is True
     )
+    map_kinds = {
+        feature["properties"]["kind"]
+        for feature in result["maplibre_geojson"]["features"]
+    }
+    assert {
+        "qgis_candidate_ridge_line",
+        "qgis_candidate_valley_line",
+        "qgis_candidate_stream_network",
+    }.issubset(map_kinds)
     assert all(tool != "qgis_capability_invoke" for tool, _ in mcp.calls)
 
 
@@ -493,7 +662,10 @@ def test_qgis_worker_feature_stack_fails_closed_without_required_grass_capabilit
     tmp_path: Path,
 ) -> None:
     mcp = FakeQgisMcpClient(
-        available_algorithms={"grass:r.slope.aspect", "grass:r.geomorphon"}
+        available_algorithms={
+            "grass:r.slope.aspect",
+            "grass:r.geomorphon",
+        }
     )
     client, source_root = _client(tmp_path, mcp)
     dem = source_root / "dem.tif"
@@ -508,7 +680,7 @@ def test_qgis_worker_feature_stack_fails_closed_without_required_grass_capabilit
     assert payload["state"] == "failed"
     assert payload["processing_status"] == "failed"
     assert payload["error"]["code"] == "UNSUPPORTED_TOOL"
-    assert "grass:r.watershed" in payload["error"]["detail"]
+    assert "grass:r.mapcalc.simple" in payload["error"]["detail"]
 
 
 def test_qgis_worker_uses_bounded_screenshot_fallback(tmp_path: Path) -> None:
@@ -535,6 +707,41 @@ def test_qgis_worker_fails_closed_on_blank_render(tmp_path: Path) -> None:
     assert payload["render_status"] == "failed"
     assert payload["error"]["code"] == "RENDER_FAILED"
     assert "visual content" in payload["error"]["detail"]
+
+
+def test_qgis_worker_crop_ignores_qgis_canvas_frame() -> None:
+    cropped, crop = _crop_png_to_content(
+        _rgb_png(blank=False, canvas_border=True),
+        padding_px=1,
+    )
+    width, height, _, _ = _decode_png_rows(cropped)
+
+    assert crop["applied"] is True
+    assert crop["ignored_frame_margin_px"] == 2
+    assert crop["crop_bbox_px"] == [2, 2, 7, 7]
+    assert (width, height) == (6, 6)
+
+
+def test_qgis_worker_rejects_crs_label_without_projected_route_coordinates() -> None:
+    with pytest.raises(_WorkerCrsUnresolved):
+        _validate_projected_route_extent(
+            {"xmin": 121.17, "ymin": 23.94, "xmax": 121.18, "ymax": 23.95}
+        )
+    with pytest.raises(_WorkerCrsUnresolved):
+        _require_extent_intersection(
+            {
+                "xmin": 267_000,
+                "ymin": 2_649_000,
+                "xmax": 268_000,
+                "ymax": 2_650_000,
+            },
+            {
+                "xmin": 300_000,
+                "ymin": 2_700_000,
+                "xmax": 301_000,
+                "ymax": 2_701_000,
+            },
+        )
 
 
 def _start_and_wait(

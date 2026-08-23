@@ -45,6 +45,10 @@ from pretrip_overpass_ingest import (
     import_overpass_evidence_candidates,
 )
 from pretrip_source_ingest import wgs84_to_twd97
+from pretrip_spatial_risk_inputs import (
+    QGIS_SPATIAL_RISK_INPUT_REFS,
+    sync_reviewed_qgis_spatial_risk_inputs,
+)
 
 
 LAYER_PREPARATION_VERSION = "0.1.0"
@@ -2474,6 +2478,10 @@ def _build_layer_preparation_manifest(
             project_root=project_root,
             project=project,
         )
+        project = sync_reviewed_qgis_spatial_risk_inputs(
+            project_root=project_root,
+            project=project,
+        )
     if workspace_file_mutation_allowed and "overpass" in normalized_layers:
         _stamp_overpass_evidence_provenance(project_root=project_root, project=project)
     overpass_route_alignment: dict[str, Any] | None = None
@@ -3919,13 +3927,25 @@ def _risk_ribbon_layer_record(
         else:
             warnings.append(f"risk_ribbon_ref points to a missing file: {ribbon_ref}")
 
+    qgis_refs, qgis_counts, qgis_warnings = _qgis_spatial_risk_input_context(
+        project_root=project_root,
+        project=project,
+    )
+    source_refs.extend(qgis_refs)
+    counts.update(qgis_counts)
+    warnings.extend(qgis_warnings)
+
     record = {
         **common,
         "status": status,
         "source_refs": source_refs,
         "output_refs": {
             key: project.get(key, "")
-            for key in ("risk_ribbon_ref", "risk_ribbon_metadata_ref")
+            for key in (
+                "risk_ribbon_ref",
+                "risk_ribbon_metadata_ref",
+                *QGIS_SPATIAL_RISK_INPUT_REFS.keys(),
+            )
             if project.get(key)
         },
         "counts": counts,
@@ -3985,13 +4005,24 @@ def _risk_heatmap_layer_record(
         else:
             warnings.append(f"{ref_key} points to a missing file: {ref}")
 
+    qgis_refs, qgis_counts, qgis_warnings = _qgis_spatial_risk_input_context(
+        project_root=project_root,
+        project=project,
+    )
+    source_refs.extend(qgis_refs)
+    counts.update(qgis_counts)
+    warnings.extend(qgis_warnings)
+
     record = {
         **common,
         "status": status,
         "source_refs": source_refs,
         "output_refs": {
             key: project.get(key, "")
-            for key in CALIBRATED_RISK_OUTPUT_REFS
+            for key in (
+                *CALIBRATED_RISK_OUTPUT_REFS.keys(),
+                *QGIS_SPATIAL_RISK_INPUT_REFS.keys(),
+            )
             if project.get(key)
         },
         "counts": counts,
@@ -4061,6 +4092,14 @@ def _risk_delta_layer_record(
             "Risk delta requires both risk-ribbon and calibrated risk heatmap artifacts."
         )
 
+    qgis_refs, qgis_counts, qgis_warnings = _qgis_spatial_risk_input_context(
+        project_root=project_root,
+        project=project,
+    )
+    source_refs.extend(qgis_refs)
+    counts.update(qgis_counts)
+    warnings.extend(qgis_warnings)
+
     record = {
         **common,
         "status": status,
@@ -4072,6 +4111,7 @@ def _risk_delta_layer_record(
                 "risk_ribbon_metadata_ref",
                 "calibrated_risk_heatmap_ref",
                 "calibrated_risk_heatmap_metadata_ref",
+                *QGIS_SPATIAL_RISK_INPUT_REFS.keys(),
             )
             if project.get(key)
         },
@@ -4082,6 +4122,42 @@ def _risk_delta_layer_record(
         "score_profile": "scout_risk_engine_delta_comparison",
     }
     return _with_lifecycle(record)
+
+
+def _qgis_spatial_risk_input_context(
+    *,
+    project_root: Path,
+    project: dict[str, Any],
+) -> tuple[list[dict[str, Any]], dict[str, Any], list[str]]:
+    status = str(project.get("qgis_spatial_risk_input_status") or "not_available")
+    refs: list[dict[str, Any]] = []
+    for ref_key in (
+        "qgis_spatial_risk_inputs_ref",
+        "qgis_spatial_risk_inputs_metadata_ref",
+    ):
+        ref = project.get(ref_key)
+        if not isinstance(ref, str) or not ref:
+            continue
+        path = project_root / ref
+        if path.is_file():
+            refs.append(_source_ref(ref, path, ref_key))
+    counts = {
+        "qgis_spatial_risk_input_status": status,
+        "qgis_spatial_risk_input_aligned_count": int(
+            project.get("qgis_spatial_risk_input_aligned_count", 0) or 0
+        ),
+        "qgis_spatial_risk_input_score_applied": False,
+    }
+    warnings: list[str] = []
+    if status == "ready_for_calibration":
+        warnings.append(
+            "Reviewed QGIS/GRASS terrain features are attached as risk-v2 inputs; current risk scores remain unchanged pending calibration."
+        )
+    elif status == "failed":
+        warnings.append(
+            "Reviewed QGIS/GRASS terrain inputs failed normalization; existing Scout risk outputs remain in use."
+        )
+    return refs, counts, warnings
 
 
 def _overpass_layer_record(
@@ -4948,6 +5024,7 @@ def _project_state_output_refs(project: dict[str, Any]) -> dict[str, Any]:
     keys = (
         *SCOUT_RISK_OUTPUT_REFS.keys(),
         *CALIBRATED_RISK_OUTPUT_REFS.keys(),
+        *QGIS_SPATIAL_RISK_INPUT_REFS.keys(),
         "cwa_weather_evidence_ref",
         "cwa_warnings_geojson_ref",
         "cwa_observations_geojson_ref",
@@ -4974,6 +5051,14 @@ def _project_state_output_refs(project: dict[str, Any]) -> dict[str, Any]:
         "calibrated_risk_heatmap_warning_cp_overlay_count",
         "risk_attribution_diagnostic_checkpoint_count",
         "calibrated_risk_heatmap_sync_error",
+        "qgis_spatial_risk_input_status",
+        "qgis_spatial_risk_input_reason",
+        "qgis_spatial_risk_input_aligned_count",
+        "qgis_spatial_risk_input_workflow_run_id",
+        "qgis_spatial_risk_input_candidate_only",
+        "qgis_spatial_risk_input_runtime_safety_truth",
+        "qgis_spatial_risk_input_operational",
+        "qgis_spatial_risk_input_score_applied",
     )
     return {key: project[key] for key in keys if key in project}
 

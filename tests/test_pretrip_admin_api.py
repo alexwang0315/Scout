@@ -11,6 +11,7 @@ import admin_api
 from admin_api import (
     _compact_pretrip_project_view,
     _ensure_scout_src_on_path,
+    _route_context_research_source_records,
     _route_context_briefing_max_tokens,
     _run_route_context_briefing_scout_ai,
     create_admin_app,
@@ -151,6 +152,21 @@ def test_debug_projection_events_are_stamped_by_server_ingestion_channel() -> No
     assert {
         event["provenance_contract"]["ingestion_channel"] for event in payload["events"]
     } == {"fixture_replay"}
+
+
+def test_debug_projection_events_resolve_repo_fixture_without_workspace_root() -> None:
+    client = TestClient(create_admin_app())
+
+    response = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/debug-projection-events"
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["events"]
+    assert {event["event_provenance"] for event in payload["events"]} == {
+        "fixture_replay"
+    }
 
 
 def _write_small_gpx(
@@ -1077,11 +1093,13 @@ def test_pretrip_project_route_context_briefing_regenerate_calls_scout_ai(
     )
     assert "route_context_pack.json" in str(captured["prompt"])
     assert "P0 as official baseline" in str(captured["prompt"])
-    assert "Do not call tools" in str(captured["prompt"])
+    assert "WebSearch" in str(captured["prompt"])
+    assert "WebFetch" in str(captured["prompt"])
+    assert "Do not call tools" not in str(captured["prompt"])
     assert "Workspace summary" in str(captured["prompt"])
     assert (
         payload["route_context_intelligence_contract"]["generation_mode"]
-        == "scout_ai_plan_plus_offline_workspace_compiler"
+        == "scout_ai_native_research_plus_verified_workspace_cache_plus_compiler"
     )
 
     project = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
@@ -1515,7 +1533,7 @@ def test_route_context_briefing_runner_adds_src_to_python_path(
     assert sys.path[0] == src_path
 
 
-def test_route_context_briefing_runner_disables_native_research_tools(
+def test_route_context_briefing_runner_enables_native_research_tools(
     monkeypatch,
 ) -> None:
     import assistant_pydantic_provider
@@ -1538,7 +1556,7 @@ def test_route_context_briefing_runner_disables_native_research_tools(
     )
 
     output = _run_route_context_briefing_scout_ai(
-        "Generate the deterministic route-context plan without tools.",
+        "Research and generate the deterministic route-context plan.",
         model_name="nvidia:z-ai/glm-5.2",
         timeout_seconds=45,
         runner=None,
@@ -1548,8 +1566,44 @@ def test_route_context_briefing_runner_disables_native_research_tools(
     runner_kwargs = captured["runner_kwargs"]
     assert isinstance(runner_kwargs, dict)
     assert runner_kwargs["model_name"] == "nvidia:z-ai/glm-5.2"
-    assert runner_kwargs["workspace_tools_enabled"] is False
+    assert runner_kwargs["workspace_tools_enabled"] is True
     assert captured["timeout_seconds"] == 45
+
+
+def test_route_context_research_sources_accept_only_public_http_urls() -> None:
+    plan = {
+        "status": "parsed",
+        "payload": {
+            "researched_sources": [
+                {
+                    "url": "https://www.taroko.gov.tw/example",
+                    "label": "官方路線資訊",
+                },
+                {
+                    "url": "https://hiking.biji.co/example",
+                    "label": "路線紀錄",
+                },
+                {"url": "file:///tmp/private", "label": "invalid"},
+                {"url": "https://user:secret@example.com/a", "label": "invalid"},
+                {"url": "http://127.0.0.1/private", "label": "invalid"},
+                {"url": "http://localhost/private", "label": "invalid"},
+                {"url": "http://10.0.0.2/private", "label": "invalid"},
+            ]
+        },
+    }
+
+    records = _route_context_research_source_records(plan)
+
+    assert records == [
+        {
+            "url": "https://www.taroko.gov.tw/example",
+            "label": "官方路線資訊",
+        },
+        {
+            "url": "https://hiking.biji.co/example",
+            "label": "路線紀錄",
+        },
+    ]
 
 
 def test_route_context_briefing_max_tokens_defaults_above_short_answer_limit(

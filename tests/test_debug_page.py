@@ -744,6 +744,31 @@ class DebugPageTests(unittest.TestCase):
         self.assertIn("debugPageState.timelineGroups = timelineGroups", html)
         self.assertIn("if (group.count > 1) return [group];", html)
 
+    def test_timeline_group_disclosure_gives_visible_open_and_closed_feedback(self):
+        html = PAGE_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("data-timeline-disclosure-label", html)
+        self.assertIn("function bindTimelineGroupDisclosureLabels", html)
+        self.assertIn('details.addEventListener("toggle", updateLabel)', html)
+        self.assertIn('details.open ? "Hide" : "Show"', html)
+
+    def test_unavailable_mobile_ingress_disables_reset_and_layer_label_is_readable(self):
+        html = PAGE_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("const resetButton = document.getElementById(\"mobileIngressResetButton\")", html)
+        self.assertIn("resetButton.disabled = unavailable", html)
+        self.assertIn(".layer-menu-header small {", html)
+        layer_small = html.split(".layer-menu-header small {", 1)[1].split("}", 1)[0]
+        self.assertIn("font-size: 11px;", layer_small)
+
+    def test_assistant_retries_keep_a_visible_attempt_receipt(self):
+        html = PAGE_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("assistantQueryAttemptCount: 0", html)
+        self.assertIn("const attempt = ++debugPageState.assistantQueryAttemptCount", html)
+        self.assertIn("· attempt ${attempt}", html)
+        self.assertIn("renderAssistantResponse(payload, queryPayload, attempt)", html)
+
     def test_static_debug_page_renders_physio_timeline_projection_contract(self):
         html = PAGE_PATH.read_text(encoding="utf-8")
 
