@@ -84,6 +84,10 @@ from scout.services.mser_pipeline import (
     compact_pipeline_context,
     mser_enforcement_errors,
 )
+from scout.nextgen.runtime_shadow import (
+    maybe_build_assistant_runtime_shadow_trace,
+    runtime_shadow_enabled,
+)
 from scout_ai_context_registry import discover_scout_ai_context_sources
 from scout_ai_tool_contracts import (
     ScoutAiToolImplementationStatus,
@@ -6922,6 +6926,7 @@ class PydanticAIAssistantProvider:
             else None
         )
         self.startup_connection_status: str = "not_checked"
+        self.last_runtime_shadow_trace: dict[str, object] = {}
 
     def connect(self) -> None:
         connector = getattr(self.runner, "connect", None)
@@ -6962,6 +6967,22 @@ class PydanticAIAssistantProvider:
             query,
             sources=resolved_sources,
             max_context_chars=self.max_context_chars,
+        )
+        runtime_shadow_trace = (
+            maybe_build_assistant_runtime_shadow_trace(
+                task=f"assistant.{query.surface.value}",
+                runtime_preference=(
+                    query.runtime_preference.value if query.runtime_preference else None
+                ),
+                estimated_context_tokens=max(1, estimate_tokens(prompt)),
+            )
+            if runtime_shadow_enabled()
+            else None
+        )
+        self.last_runtime_shadow_trace = (
+            runtime_shadow_trace.model_dump(mode="json")
+            if runtime_shadow_trace is not None
+            else {}
         )
         tool_context = ScoutWorkspaceToolContext(
             query=query,

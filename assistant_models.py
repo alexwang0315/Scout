@@ -6,6 +6,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from scout.schemas.agent_runtime import AgentRequestLedger
+from scout.nextgen.runtime_shadow import ModelRuntimeShadowTrace
 
 
 class AssistantSurface(str, Enum):
@@ -96,6 +97,7 @@ class AssistantObservability(BaseModel):
     retry_count: int | None = Field(default=None, ge=0)
     repair_count: int | None = Field(default=None, ge=0, le=1)
     request_ledger: list[AgentRequestLedger] = Field(default_factory=list)
+    runtime_shadow: ModelRuntimeShadowTrace | None = None
 
 
 class AssistantOfflineFallbackSummary(BaseModel):

@@ -1,0 +1,49 @@
+{
+  "items": [
+    {
+      "evidence_id": "ev-qualification-route",
+      "source_ref": "route:http-qualification",
+      "source_type": "route_geometry",
+      "content_hash": "route-http-qualification-hash",
+      "summary": "Reviewed route geometry used as read-only qualification input.",
+      "attributes": {}
+    },
+    {
+      "evidence_id": "ev-qualification-dem",
+      "source_ref": "dem:http-qualification",
+      "source_type": "prepared_dem",
+      "content_hash": "dem-http-qualification-hash",
+      "summary": "Prepared DEM candidate artifact for qualification.",
+      "attributes": {
+        "candidate_features": [
+          {
+            "kind": "ridge",
+            "claim": "A ridge candidate is present near CP2.",
+            "confidence": 0.7
+          },
+          {
+            "kind": "saddle",
+            "claim": "A saddle candidate is present near CP3.",
+            "confidence": 0.6
+          }
+        ]
+      }
+    },
+    {
+      "evidence_id": "ev-qualification-qgis",
+      "source_ref": "qgis:http-qualification",
+      "source_type": "qgis_candidate_artifact",
+      "content_hash": "qgis-http-qualification-hash",
+      "summary": "QGIS slope candidate artifact for qualification.",
+      "attributes": {
+        "candidate_features": [
+          {
+            "kind": "steep_terrain",
+            "claim": "Steep terrain is a candidate feature in the route corridor.",
+            "confidence": 0.8
+          }
+        ]
+      }
+    }
+  ]
+}
