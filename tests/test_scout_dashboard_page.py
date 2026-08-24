@@ -2176,7 +2176,6 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
         'data-navigation-terrain-intelligence="true"',
         'data-terrain-contour-map="true"',
         'data-terrain-feature-detail="true"',
-        'data-terrain-reading-checklist="true"',
         'data-navigation-boundary="candidate-only"',
         "function navigationTerrainFeatures()",
         "function renderNavigationTerrainMap(",
@@ -2185,6 +2184,7 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
         "bindNavigationTerrainControls();",
         "navigationSelectedFeatureId",
         "navigationSelectedLivePointId",
+        "navigationSelectedPressurePointId",
         "navigationSelectedStructurePointId",
         "navigationSelectedTerrainEventId",
         "navigationTerrainLens",
@@ -2192,7 +2192,6 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
         "navigationTerrainViewMode",
         "navigationTerrainEvidenceDomain",
         "navigationTerrainVerticalExaggeration",
-        "navigationTerrainReviewArtifactFingerprint",
         "navigationSelectedHierarchyEdgeId",
             "navigationTerrainData",
             "terrain_validation",
@@ -2218,6 +2217,9 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
         "function navigationTerrainUncertaintyBandStrokeWidth(",
         "function renderNavigationTerrainEventTimeline(",
         "function renderNavigationTerrainEventDetail(",
+        "function navigationTerrainSelectionModel(",
+        "function renderNavigationCandidateNavigator(",
+        "function setNavigationTerrainSelection(",
         'data-navigation-workspace-map="true"',
         'data-navigation-terrain-review-workbench="true"',
         'data-navigation-terrain-view="',
@@ -2246,25 +2248,25 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
         "Workspace DEM + candidate morphology",
         "2D Evidence",
         "3D Local Detail",
-        "Split Review",
-        "地形判讀與人工審核工作台",
+        "Split View",
+        "Golden Route 地形脈絡",
         "不增加 DEM 原始解析度",
         "Observed Passage Pattern Prior",
         "Unknown ≠ negative",
         "Terrain Evidence Only",
         "Reveal Observed Context",
         "Reveal Learned Prior",
-        "CANDIDATE-ONLY TERRAIN REVIEW",
+        "CANDIDATE-ONLY · RUNTIME SAFETY TRUTH = FALSE · OPERATIONAL = FALSE",
         "MAPLIBRE 3D TERRAIN",
         "MAPLIBRE 2D EVIDENCE",
-        "UNSAVED LOCAL DRAFT",
+        "MAP MARKER",
         "SOURCE SUPPORT / RENDER AUDIT",
         "External-context overlap: non-causal",
         "no external basemap loaded",
         "Prepared DTM + GPX source ledger",
         "候選支持區",
-        "Shadow 事件假說",
-        "僅供離線複核",
+        "Shadow 關係說明",
+        "不需要逐筆審核",
         "/navigation-terrain-intelligence",
         "Workspace terrain projection is preparing.",
         "scheduleNavigationTerrainPolling",
@@ -2278,6 +2280,9 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
     assert "回復檢查" not in navigation
     assert "formatDistanceKm(event.route_distance_m)" not in navigation
     assert "navigation-terrain-hierarchy-edge" not in navigation
+    assert "function renderNavigationReviewQueue(" not in html
+    assert "data-navigation-review-decision" not in html
+    assert "UNSAVED LOCAL DRAFT" not in html
     assert "navigation-terrain-hierarchy-band" in html
     assert "--navigation-route: #d1005d;" in html
     assert "--navigation-ridge: #ef5b0c;" in html
@@ -2320,7 +2325,7 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
     assert 'data-navigation-structure-label-visibility="selected-only"' in html
     assert 'point.id === selectedStructurePoint?.id ? "8" : "4"' in html
     assert 'data-navigation-terrain-event-label-visibility="selected-only"' in html
-    assert 'event.id === selectedEvent?.id ? "8" : "4"' in html
+    assert 'location.id === selectedEventLocation?.id ? "8" : "4"' in html
     assert "overflow-wrap: anywhere;" in html
     assert 'class="navigation-live-metrics is-boundary"' in html
 
@@ -2329,12 +2334,12 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
         "橘色稜脊",
         "深藍主谷",
         "藍綠支谷",
-        "紅色事件點",
+        "紅色位置群",
     ):
         assert legend_label in navigation
 
-    assert "集水骨幹候選" in navigation
-    assert "連通谷地候選 · 未水文複核" in navigation
+    assert "DEM 集水骨幹推估" in navigation
+    assert "DEM 連通谷地推估 · 非現地地形確認" in navigation
 
     for lens, label in (
         ("structure", "地形結構"),
@@ -2372,7 +2377,8 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
 
     assert "safe route" not in navigation.lower()
     assert "不能單獨證明步道存在" in navigation
-    assert "需要來源與人工複核" in navigation
+    assert "不要求使用者逐筆驗真或修正等高線" in navigation
+    assert "點選只用於查看計算來源" in html
     assert 'role="listitem"\n                class="navigation-event-card"' not in navigation
     assert "void loadConnectedPreparationStatus();" in html
     assert 'triggerDashboardConnectedPreparation("dashboard-open")' not in html
@@ -2385,12 +2391,8 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
     assert ".dashboard-shell.is-page-header-hidden .dashboard-frame {" in html
     assert 'class="navigation-terrain-brief"' not in navigation
     assert "data-navigation-terrain-source=" not in navigation
-    assert 'class="navigation-reading-header"' in html
-    assert '<summary class="navigation-reading-summary">' in html
-    assert navigation.count("${renderNavigationReadingChecklist()}") == 1
-    assert navigation.index("${renderNavigationReadingChecklist()}") < navigation.index(
-        'class="navigation-terrain-lenses"'
-    )
+    assert "${renderNavigationReadingChecklist()}" not in navigation
+    assert "Map Literacy Checklist" not in navigation
     assert 'class="navigation-terrain-primary"' in navigation
     assert ".navigation-terrain-primary {" in html
     assert (
@@ -2411,6 +2413,74 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
     assert "reference GPX 不自動升格成替代路線" in html
 
 
+def test_navigation_page_is_a_map_first_reference_workspace() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    navigation = html.split("function renderNavigationPage", 1)[1].split(
+        "function architectureSnapshot", 1
+    )[0]
+
+    assert 'navigationTerrainViewMode: "map"' in html
+    assert 'data-navigation-command-center="true"' in navigation
+    assert 'data-navigation-primary-stage="true"' in navigation
+    assert 'data-navigation-context-inspector="true"' in navigation
+    assert 'data-navigation-utility-drawer="qgis"' in navigation
+    assert 'data-navigation-utility-drawer="qgis-run-receipt"' in navigation
+    assert 'data-navigation-utility-drawer="artifact-metadata"' in navigation
+    assert 'data-navigation-supporting-evidence="true"' in navigation
+    assert 'data-navigation-map-legend="true"' in navigation
+    assert 'class="route-tabs ${activeRoute === "outdoor-navigation" ? "is-navigation-active" : ""}"' in html
+    assert "routeTabs.scrollLeft = Math.max" in html
+
+    command_center = navigation.split(
+        'data-navigation-command-center="true"', 1
+    )[1].split('data-navigation-primary-stage="true"', 1)[0]
+    context_inspector = navigation.split(
+        'data-navigation-context-inspector="true"', 1
+    )[1].split('data-navigation-supporting-evidence="true"', 1)[0]
+    assert 'class="navigation-terrain-lenses"' in command_center
+    assert context_inspector.index("renderNavigationWorkspaceDetail") < (
+        context_inspector.index("renderQgisAnalysisPanel")
+    )
+    assert context_inspector.index("renderNavigationCandidateNavigator") < (
+        context_inspector.index("renderNavigationWorkspaceDetail")
+    )
+    assert context_inspector.index("renderNavigationCandidateNavigator") < (
+        context_inspector.index("renderQgisAnalysisPanel")
+    )
+    assert '<details class="navigation-utility-drawer"' in context_inspector
+    assert '<details class="navigation-supporting-evidence"' in navigation
+    assert "Map Literacy Checklist" not in navigation
+
+
+def test_navigation_terrain_derivatives_do_not_create_a_human_map_correction_queue() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    navigation = html.split("function renderNavigationPage", 1)[1].split(
+        "function architectureSnapshot", 1
+    )[0]
+    terrain_detail = html.split("function renderNavigationWorkspaceDetail", 1)[1].split(
+        "function renderNavigationTerrainEventTimeline", 1
+    )[0]
+    qgis_panel = html.split("function renderQgisAnalysisPanel", 1)[1].split(
+        "function renderQgisArtifactMetadata", 1
+    )[0]
+
+    assert "自動衍生圖層只協助閱讀 Golden Route 周邊的地形脈絡" in navigation
+    assert "不是待辦清單" in navigation
+    assert "不要求登山者驗真" in terrain_detail
+    assert "data-qgis-review-evidence" not in html
+    assert "function reviewQgisSpatialEvidence" not in html
+    for misleading_review_text in (
+        "Record Evidence Review",
+        "Evidence review pending",
+        "QGIS visual review",
+        "comparison pending",
+        "下一個證據",
+        "人工複核地形候選",
+        "審核清單",
+    ):
+        assert misleading_review_text not in navigation + terrain_detail + qgis_panel
+
+
 def test_navigation_maplibre_uses_the_canvas_as_its_single_keyboard_surface() -> None:
     html = PAGE.read_text(encoding="utf-8")
     keyboard_surface = html.split(
@@ -2419,7 +2489,6 @@ def test_navigation_maplibre_uses_the_canvas_as_its_single_keyboard_surface() ->
     initializer = html.split(
         "async function initializeNavigationTerrainMapLibre()", 1
     )[1].split("function navigationTerrainSelectedHierarchyEdge", 1)[0]
-
     assert 'const canvas = map.getCanvas();' in keyboard_surface
     assert 'host.removeAttribute("tabindex");' in keyboard_surface
     assert 'host.removeAttribute("role");' in keyboard_surface
@@ -2434,6 +2503,173 @@ def test_navigation_maplibre_uses_the_canvas_as_its_single_keyboard_surface() ->
     )
     assert "keyboardSurface.focus({preventScroll: true});" in initializer
     assert "host.focus({preventScroll: true});" not in initializer
+
+
+def test_navigation_terrain_event_locations_are_shared_by_map_and_evidence() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    location_helpers = html.split(
+        "function navigationTerrainEventLocations", 1
+    )[1].split("function navigationTerrainHierarchyPath", 1)[0]
+    feature_collection = html.split(
+        "function navigationTerrainMapLibreEventFeatureCollection", 1
+    )[1].split("function navigationTerrainMapLibreBounds", 1)[0]
+    timeline = html.split(
+        "function renderNavigationTerrainEventTimeline", 1
+    )[1].split("function renderNavigationSourceLedger", 1)[0]
+    initializer = html.split(
+        "async function initializeNavigationTerrainMapLibre()", 1
+    )[1].split("function navigationTerrainSelectedHierarchyEdge", 1)[0]
+    event_layers = html.split(
+        'id: "scout-terrain-event-clusters"', 1
+    )[1].split('id: "scout-terrain-event-location-label"', 1)[0]
+
+    assert "const NAVIGATION_TERRAIN_EVENT_LOCATION_CLUSTER_M = 30;" in html
+    assert "navigationTerrainEventLocations(snapshot)" in feature_collection
+    assert 'kind: "terrain_event_location"' in feature_collection
+    assert '"scout-terrain-event-locations"' in html
+    assert 'cluster: true' in html
+    assert 'id: "scout-terrain-event-clusters"' in html
+    assert 'id: "scout-terrain-event-cluster-count"' in html
+    assert 'id: "scout-terrain-events"' in html
+    assert '"circle-radius": [\n              "interpolate"' in event_layers
+    assert '["zoom"]' in event_layers
+    assert '["case", ["==", ["get", "selected"], true], 9, 5]' in event_layers
+    assert "navigationTerrainEventLocations(snapshot)" in timeline
+    assert 'data-navigation-terrain-location-id="' in timeline
+    assert "個地圖位置" in timeline
+    assert "條已載入關係" in timeline
+    assert "條未投影" in timeline
+    assert "eventProjection.rendered_count || events.length" not in timeline
+    assert "navigationTerrainEventLocationForEvent" in location_helpers
+    assert "focusNavigationTerrainEventLocation" in html
+    assert '"scout-terrain-event-clusters"' in initializer
+    assert '"scout-terrain-events"' in initializer
+    assert "getClusterExpansionZoom" in initializer
+    assert "state.navigationSelectedTerrainEventId = eventId;" in initializer
+    assert (
+        'evidenceDomain === "observed" && lens === "events" '
+        '? renderNavigationTerrainEventTimeline(snapshot, selectedTerrainEvent)'
+        in html
+    )
+
+
+def test_navigation_maplibre_maps_do_not_show_pointer_following_hints() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    maplibre_host = html.split(
+        "function renderNavigationTerrainMapLibreHost", 1
+    )[1].split("function renderNavigationTerrainReviewWorkbench", 1)[0]
+    workbench = html.split(
+        "function renderNavigationTerrainReviewWorkbench", 1
+    )[1].split("function navigationTerrainMapLibreCoordinates", 1)[0]
+
+    assert "data-dashboard-map-hint-title" not in maplibre_host
+    assert "data-dashboard-map-hint-summary" not in maplibre_host
+    assert "data-dashboard-map-hint-source" not in maplibre_host
+    assert 'class="navigation-terrain-review-status"' in workbench
+    assert 'data-navigation-terrain-header-status="dem"' in workbench
+    assert 'data-navigation-terrain-header-status="coverage"' in workbench
+    assert 'data-navigation-terrain-header-status="scope"' in workbench
+
+
+def test_navigation_maplibre_controls_do_not_trigger_a_lens_rerender() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    controls = html.split("function bindNavigationTerrainControls()", 1)[1].split(
+        "function renderOutdoorPage", 1
+    )[0]
+
+    assert 'shell.querySelectorAll("button[data-navigation-terrain-lens]")' in controls
+    assert 'shell.querySelectorAll("[data-navigation-terrain-lens]")' not in controls
+    assert 'root.querySelectorAll("button[data-navigation-terrain-lens]")' in html
+    assert 'rerenderNavigation(`button[data-navigation-terrain-lens="${cssEscape(state.navigationTerrainLens)}"]`)' in controls
+    assert 'data-navigation-terrain-lens="${escapeHtml(lens)}"' in html
+
+
+def test_navigation_maplibre_preserves_independent_cameras_across_rerenders() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    helpers = (
+        "function navigationTerrainMapLibreCameraScope"
+        + html.split("function navigationTerrainMapLibreCameraScope", 1)[1].split(
+            "function destroyNavigationTerrainMapLibre", 1
+        )[0]
+    )
+    lifecycle = html.split("function destroyNavigationTerrainMapLibre", 1)[1].split(
+        "function navigationTerrainSelectedHierarchyEdge", 1
+    )[0]
+
+    for marker in (
+        "cameraByMode: {}",
+        "function navigationTerrainMapLibreCameraScope",
+        "function navigationTerrainMapLibreCameraSnapshot",
+        "function navigationTerrainMapLibreStoredCamera",
+        "function rememberNavigationTerrainMapLibreCamera",
+        "rememberNavigationTerrainMapLibreCamera(entry);",
+        "const storedCamera = navigationTerrainMapLibreStoredCamera(snapshot, mode);",
+        "if (!storedCamera) fitNavigationTerrainMapLibre(map, snapshot, mode);",
+    ):
+        assert marker in html
+
+    node_program = "\n".join(
+        (
+            "const navigationTerrainMapLibreRuntime = {cameraByMode: {}};",
+            'const projectId = () => "project-a";',
+            helpers,
+            """
+const snapshotA = {
+  project_id: "project-a",
+  projection_compilation: {input_fingerprint: "route-a"},
+  terrain_raster_dem: {source_fingerprint: "dem-a"},
+};
+const snapshotB = {
+  project_id: "project-a",
+  projection_compilation: {input_fingerprint: "route-b"},
+  terrain_raster_dem: {source_fingerprint: "dem-a"},
+};
+const map = camera => ({
+  getCenter: () => ({lng: camera.center[0], lat: camera.center[1]}),
+  getZoom: () => camera.zoom,
+  getPitch: () => camera.pitch,
+  getBearing: () => camera.bearing,
+});
+const scopeKey = navigationTerrainMapLibreCameraScope(snapshotA);
+rememberNavigationTerrainMapLibreCamera({
+  mode: "2d",
+  map: map({center: [121.25, 24.05], zoom: 13.75, pitch: 0, bearing: 0}),
+  scopeKey,
+});
+rememberNavigationTerrainMapLibreCamera({
+  mode: "3d",
+  map: map({center: [121.27, 24.07], zoom: 17, pitch: 58, bearing: -28}),
+  scopeKey,
+});
+process.stdout.write(JSON.stringify({
+  twoD: navigationTerrainMapLibreStoredCamera(snapshotA, "2d"),
+  threeD: navigationTerrainMapLibreStoredCamera(snapshotA, "3d"),
+  changedProjection: navigationTerrainMapLibreStoredCamera(snapshotB, "2d"),
+  modes: Object.keys(navigationTerrainMapLibreRuntime.cameraByMode).sort(),
+}));
+""",
+        )
+    )
+    result = subprocess.run(
+        ["node"],
+        input=node_program,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload["twoD"]["zoom"] == 13.75
+    assert payload["threeD"]["zoom"] == 17
+    assert payload["twoD"]["center"] == [121.27, 24.07]
+    assert payload["threeD"]["center"] == [121.27, 24.07]
+    assert payload["twoD"]["pitch"] == 0
+    assert payload["threeD"]["pitch"] == 58
+    assert payload["changedProjection"] is None
+    assert payload["modes"] == ["2d", "3d"]
+    assert lifecycle.index("rememberNavigationTerrainMapLibreCamera(entry);") < lifecycle.index(
+        "entry.map.remove();"
+    )
 
 
 def test_navigation_maplibre_fit_uses_full_golden_route_without_dem_zoom_lock() -> None:
@@ -4729,7 +4965,7 @@ process.stdout.write(JSON.stringify({{assistantCases, weatherCases, invalid, fai
     assert payload["successReceipt"]["reloadDisabled"] is False
 
 
-def test_dashboard_diagnostic_page_runs_37_read_only_checks() -> None:
+def test_dashboard_diagnostic_page_runs_38_read_only_checks() -> None:
     html = PAGE.read_text(encoding="utf-8")
 
     settings_nav = (
@@ -4744,15 +4980,15 @@ def test_dashboard_diagnostic_page_runs_37_read_only_checks() -> None:
     assert diagnostic_nav in html
     assert html.index(diagnostic_nav) > html.index(settings_nav)
     assert '"diagnostic": Object.freeze' in html
-    assert 'diagnostic: ["Diagnostic", "37 read-only Dashboard checks"]' in html
+    assert 'diagnostic: ["Diagnostic", "38 read-only Dashboard checks"]' in html
     assert 'if (route === "diagnostic") return renderDiagnosticPage();' in html
 
     case_source = html.split(
         "const DASHBOARD_DIAGNOSTIC_CASES = Object.freeze([", 1
     )[1].split("]);", 1)[0]
-    for index in range(1, 38):
+    for index in range(1, 39):
         assert f'id: "DASH-{index:03d}"' in case_source
-    assert case_source.count('id: "DASH-') == 37
+    assert case_source.count('id: "DASH-') == 38
     assert "postJson(" not in case_source
 
     for marker in (
@@ -4768,6 +5004,7 @@ def test_dashboard_diagnostic_page_runs_37_read_only_checks() -> None:
         "async function diagnosticCheck035()",
         "async function diagnosticCheck036()",
         "async function diagnosticCheck037()",
+        "async function diagnosticCheck038()",
         "所有 Dashboard 地圖 evidence hover hint",
         "所有 Dashboard 地圖框選縮放與鍵盤平移",
         "所有 Dashboard 地圖圖磚、向量與單圖例外政策",
@@ -4780,6 +5017,7 @@ def test_dashboard_diagnostic_page_runs_37_read_only_checks() -> None:
         "Contextual Permission Evidence lineage 與隱私邊界",
         "Candidate Simulation 明確觸發與 no-write contract",
         "Navigation、Architecture、Weather 動態圖磚倍率切換",
+        "Navigation MapLibre 2D/3D 鏡頭持久化",
         "DASHBOARD_MAP_APPROVED_SINGLE_IMAGE_THEMES",
         "const DASHBOARD_MAP_SURFACES = Object.freeze([",
         "diagnosticMapSurfaceSources",
@@ -4882,7 +5120,9 @@ def test_dashboard_diagnostic_classifies_expected_runtime_gaps_without_false_red
     )[1].split("function diagnosticSourceText(", 1)[0]
     assert 'data-navigation-maplibre-shell="2d"' in check_025
     assert 'data-navigation-maplibre-shell="3d"' in check_025
-    assert "dual MapLibre terrain maps rendered" in check_025
+    assert 'Boolean(map || mapLibre2d)' in check_025
+    assert "MapLibre 2D primary terrain map rendered" in check_025
+    assert "Navigation Map Literacy Checklist is missing" not in check_025
 
     permission_ready = html.split(
         "function diagnosticRequirePermissionReady(", 1
@@ -4969,6 +5209,7 @@ def test_dashboard_diagnostic_checks_probe_runtime_data_and_rendered_behavior() 
         "async function diagnosticCheck035()",
         "async function diagnosticCheck036()",
         "async function diagnosticCheck037()",
+        "async function diagnosticCheck038()",
         'artifact_kind === "contextual_permission_dashboard_projection"',
         'schema_version === "contextualPermissionDashboard.v1"',
         'data-contextual-permission-workbench="ready"',
@@ -4982,6 +5223,10 @@ def test_dashboard_diagnostic_checks_probe_runtime_data_and_rendered_behavior() 
         "NAVIGATION_RUDY_TILE_SOURCE.preparedMaxZoom + 1",
         "request URL/TILEMATRIX contract crosses prepared Z14",
         "definition.initialMaxZoom + Math.ceil(Math.log2(Math.max(1, state.zoom)))",
+        "navigationTerrainMapLibreStoredCamera",
+        "rememberNavigationTerrainMapLibreCamera",
+        "changedProjection === null",
+        "2D Z13.75 · 3D Z17",
     ):
         assert marker in diagnostic_source
 
@@ -5009,8 +5254,16 @@ def test_dashboard_diagnostic_checks_probe_runtime_data_and_rendered_behavior() 
         "DASH-035",
     ):
         assert f'"{case_id}"' in browser_smoke
-    assert "const expectedDiagnosticCount = 37" in browser_smoke
+    assert "const expectedDiagnosticCount = 38" in browser_smoke
     assert '"DASH-037"' in browser_smoke
+    assert '"DASH-038"' in browser_smoke
+    assert "async function inspectNavigationMapLibreCameraPersistence(" in browser_smoke
+    assert "async function inspectNavigationMapMarkerFocus(" in browser_smoke
+    assert "navigationCameraPersistence" in browser_smoke
+    assert "navigationMapMarkerFocus" in browser_smoke
+    assert "SCOUT_DIAGNOSTIC_CAMERA_ONLY" in browser_smoke
+    assert '"camera-persistence-only"' in browser_smoke
+    assert 'cameraPersistenceCase: snapshot.results["DASH-038"]' in browser_smoke
     assert "function tileMatrixFromUrl(" in browser_smoke
     assert "dynamicTileMatrix" in browser_smoke
     assert "networkTileMatrices" in browser_smoke
@@ -5030,6 +5283,55 @@ def test_dashboard_diagnostic_checks_probe_runtime_data_and_rendered_behavior() 
     assert "dataDependentDiagnosticIds" in browser_smoke
     assert "implementation check failed" in browser_smoke
     assert r"\bis not defined\b|ReferenceError|TypeError:" in browser_smoke
+
+
+def test_navigation_maplibre_camera_fail_case_and_diagnostic_gate_are_documented() -> None:
+    failure_log = (ROOT / "docs" / "admin" / "scout-dashboard-v0.1.md").read_text(
+        encoding="utf-8"
+    )
+    checklist = (
+        ROOT / "docs" / "admin" / "scout-dashboard-100-item-functional-verification-checklist.md"
+    ).read_text(encoding="utf-8")
+
+    for marker in (
+        "DASH-MAP-REG-003",
+        "Navigation 2D/3D camera reset after MapLibre interaction",
+        "中心同步、尺度獨立",
+        "候選點、lens、Evidence、垂直誇張或 2D／3D／Split",
+        "Only explicit Fit / Reset may reset the corresponding camera",
+        "test_navigation_maplibre_preserves_independent_cameras_across_rerenders",
+    ):
+        assert marker in failure_log
+
+    for marker in (
+        "目前版本：38 / 100",
+        "DASH-001～DASH-038",
+        "### DASH-038 Navigation MapLibre 2D/3D 鏡頭持久化",
+        "DASH-MAP-REG-003",
+        "下一個可用編號為 `DASH-039`",
+    ):
+        assert marker in checklist
+
+
+def test_dashboard_recommended_local_startup_uses_available_python_path() -> None:
+    dashboard_doc = (ROOT / "docs" / "admin" / "scout-dashboard-v0.1.md").read_text(
+        encoding="utf-8"
+    )
+    runbook = (
+        ROOT / "docs" / "specs" / "scout-pretrip-full-preparation-runbook.md"
+    ).read_text(encoding="utf-8")
+    recommended = dashboard_doc.split("Recommended local startup:", 1)[1].split(
+        "Required checks before providing a Dashboard URL:", 1
+    )[0]
+    binding_check = runbook.split("the Dashboard factory with the workspace parent root:", 1)[1].split(
+        "Verify the binding before opening the Dashboard:", 1
+    )[0]
+
+    for startup in (recommended, binding_check):
+        assert "PYTHONPATH=src" in startup
+        assert "python3 -m uvicorn" in startup
+        assert "admin_api:create_dashboard_app" in startup
+        assert "./venv/bin/python" not in startup
 
 
 def test_dashboard_route_context_variants_index_uses_canonical_file_query_links() -> None:
@@ -5107,11 +5409,14 @@ def test_dashboard_approved_qualification_visual_repairs_are_explicit() -> None:
     assert "qualification-architecture-lens-flush-sticky" in html
 
 
-def test_dashboard_q0056_map_hints_and_q0059_navigation_controls_are_explicit() -> None:
+def test_dashboard_q0056_navigation_hints_are_fixed_and_weather_hints_remain() -> None:
     html = PAGE.read_text(encoding="utf-8")
     navigation_host = html.split(
         "function renderNavigationTerrainMapLibreHost", 1
     )[1].split("function renderNavigationTerrainReviewWorkbench", 1)[0]
+    navigation_workbench = html.split(
+        "function renderNavigationTerrainReviewWorkbench", 1
+    )[1].split("function navigationTerrainMapLibreCoordinates", 1)[0]
     weather_adapter = html.split("function applyWeatherCwaMapFrame", 1)[1].split(
         "function bindWeatherCwaMapFrame", 1
     )[0]
@@ -5121,7 +5426,9 @@ def test_dashboard_q0056_map_hints_and_q0059_navigation_controls_are_explicit() 
         "data-dashboard-map-hint-summary",
         "data-dashboard-map-hint-source",
     ):
-        assert attribute in navigation_host
+        assert attribute not in navigation_host
+    for status in ("dem", "coverage", "scope"):
+        assert f'data-navigation-terrain-header-status="{status}"' in navigation_workbench
     assert "bindWeatherCwaEvidenceHints(frame)" in weather_adapter
     assert "data-evidence-type" in html.split(
         "function bindWeatherCwaEvidenceHints", 1
@@ -5426,22 +5733,258 @@ def test_dashboard_qgis_feature_samples_remain_candidate_only_and_toggleable() -
     html = PAGE.read_text(encoding="utf-8")
 
     assert "qgis_terrain_feature_sample" in html
-    assert 'data-qgis-layer-toggle="features"' in html
+    assert 'key: "features", kind: "qgis_terrain_feature_sample"' in html
+    assert 'data-qgis-layer-toggle="${escapeHtml(definition.key)}"' in html
     assert (
-        'if (!["route", "slope", "features", "ridges", "valleys", "streams"].includes(key)) return;'
+        'if (!["slope", "features", "ridges", "valleys", "streams"].includes(key)) return;'
         in html
     )
-    assert 'data-qgis-layer-toggle="ridges"' in html
-    assert 'data-qgis-layer-toggle="valleys"' in html
-    assert 'data-qgis-layer-toggle="streams"' in html
+    assert 'key: "ridges", kind: "qgis_candidate_ridge_line"' in html
+    assert 'key: "valleys", kind: "qgis_candidate_valley_line"' in html
+    assert 'key: "streams", kind: "qgis_candidate_stream_network"' in html
+    assert "definition.count > 0" in html
     assert "scout-qgis-terrain-feature-samples" in html
-    assert 'artifact_id: properties.artifact_id || sourceArtifact?.artifact_id' in html
-    qgis_projection = html.split("function qgisSpatialMaplibreFeatures", 1)[1].split(
-        "function qgisSpatialMaplibreSourceArtifact", 1
+    assert "features.push(...qgisSpatialMaplibreFeatures());" in html
+    qgis_projection = html.split("function qgisSpatialWorkflowFeatures", 1)[1].split(
+        "function qgisSpatialMaplibreFeatures", 1
     )[0]
+    assert 'kind !== "qgis_candidate_route"' in qgis_projection
+    assert 'kind !== "qgis_analysis_input_route"' in qgis_projection
     assert "candidate_only: true" in qgis_projection
     assert "runtime_safety_truth: false" in qgis_projection
     assert "operational: false" in qgis_projection
     assert '"QGIS render artifact"' in html
     assert "live QGIS render artifact" not in html
-    assert "QGIS outputs require artifact review" in html
+    assert "QGIS outputs remain derived reference layers" in html
+
+
+def test_dashboard_terrain_candidates_use_golden_route_start_corridor() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+
+    assert "const QGIS_GOLDEN_ROUTE_START_DISTANCE_M = 10;" in html
+    assert "qgisSpatialAnalysisRoute" in html
+    assert "async function loadQgisSpatialAnalysisRoute" in html
+    assert "function navigationTerrainCandidateStartsWithinGoldenRouteCorridor" in html
+    assert "hidden_by_start_corridor" in html
+
+    distance_helper = (
+        "function navigationTerrainPointToSegmentDistanceM"
+        + html.split("function navigationTerrainPointToSegmentDistanceM", 1)[1].split(
+            "function navigationTerrainFeatureStartCoordinate", 1
+        )[0]
+    )
+    start_helper = (
+        "function navigationTerrainFeatureStartCoordinate"
+        + html.split("function navigationTerrainFeatureStartCoordinate", 1)[1].split(
+            "function navigationTerrainGoldenRouteCorridorIndex", 1
+        )[0]
+    )
+    index_helper = (
+        "function navigationTerrainGoldenRouteCorridorIndex"
+        + html.split("function navigationTerrainGoldenRouteCorridorIndex", 1)[1].split(
+            "function navigationTerrainCandidateStartsWithinGoldenRouteCorridor", 1
+        )[0]
+    )
+    corridor_helper = (
+        "function navigationTerrainCandidateStartsWithinGoldenRouteCorridor"
+        + html.split(
+            "function navigationTerrainCandidateStartsWithinGoldenRouteCorridor", 1
+        )[1].split("function qgisSpatialWorkflowFeatures", 1)[0]
+    )
+    node_program = "\n".join(
+        (
+            "const QGIS_GOLDEN_ROUTE_START_DISTANCE_M = 10;",
+            distance_helper,
+            start_helper,
+            index_helper,
+            corridor_helper,
+            """
+const route = [[121, 24], [121.01, 24]];
+const corridorIndex = navigationTerrainGoldenRouteCorridorIndex(route);
+const near = {geometry: {type: "LineString", coordinates: [[121.001, 24.000045], [121.002, 24.000045]]}};
+const far = {geometry: {type: "LineString", coordinates: [[121.001, 24.000180], [121.002, 24.000180]]}};
+const nearPolygon = {geometry: {type: "Polygon", coordinates: [[[121.001, 24.000045], [121.002, 24.000045], [121.001, 24.000045]]]}};
+const farPolygon = {geometry: {type: "Polygon", coordinates: [[[121.001, 24.000180], [121.002, 24.000180], [121.001, 24.000180]]]}};
+process.stdout.write(JSON.stringify({
+  near: navigationTerrainCandidateStartsWithinGoldenRouteCorridor(near, route),
+  far: navigationTerrainCandidateStartsWithinGoldenRouteCorridor(far, route),
+  nearPolygon: navigationTerrainCandidateStartsWithinGoldenRouteCorridor(nearPolygon, route),
+  farPolygon: navigationTerrainCandidateStartsWithinGoldenRouteCorridor(farPolygon, route),
+  nearIndexed: navigationTerrainCandidateStartsWithinGoldenRouteCorridor(near, route, 10, corridorIndex),
+  farIndexed: navigationTerrainCandidateStartsWithinGoldenRouteCorridor(far, route, 10, corridorIndex),
+}));
+""",
+        )
+    )
+    result = subprocess.run(
+        ["node"],
+        input=node_program,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    assert json.loads(result.stdout) == {
+        "near": True,
+        "far": False,
+        "nearPolygon": True,
+        "farPolygon": False,
+        "nearIndexed": True,
+        "farIndexed": False,
+    }
+
+
+def test_scout_terrain_lines_use_route_corridor_touch_not_extraction_start() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    feature_collection = html.split(
+        "function navigationTerrainMapLibreFeatureCollection", 1
+    )[1].split("function navigationTerrainMapLibreEventFeatureCollection", 1)[0]
+    qgis_projection = html.split("function qgisSpatialWorkflowFeatures", 1)[1].split(
+        "function qgisSpatialMaplibreFeatures", 1
+    )[0]
+
+    assert "function navigationTerrainCandidateTouchesGoldenRouteCorridor" in html
+    assert "navigationTerrainCandidateTouchesGoldenRouteCorridor(" in feature_collection
+    assert "navigationTerrainCandidateStartsWithinGoldenRouteCorridor(" in qgis_projection
+    assert "function navigationTerrainMapLibreVisibilitySummary" in html
+    assert "displayed_line_count" in html
+    assert "raw_line_count" in html
+    assert 'navigationTerrainCandidateScope: "route"' in html
+    assert 'data-navigation-terrain-candidate-scope="${mode}"' in html
+    assert 'navigationTerrainCandidateScope() === "all"' in feature_collection
+    assert 'querySelectorAll("button[data-navigation-terrain-candidate-scope]")' in html
+
+    helpers = (
+        "function navigationTerrainPointToSegmentDistanceM"
+        + html.split("function navigationTerrainPointToSegmentDistanceM", 1)[1].split(
+            "function qgisSpatialWorkflowFeatures", 1
+        )[0]
+    )
+    node_program = "\n".join(
+        (
+            "const QGIS_GOLDEN_ROUTE_START_DISTANCE_M = 10;",
+            helpers,
+            """
+const route = [[121, 24], [121.01, 24]];
+const corridorIndex = navigationTerrainGoldenRouteCorridorIndex(route);
+const touchesLater = {geometry: {type: "LineString", coordinates: [[121.001, 24.000180], [121.002, 24.000045]]}};
+const alwaysFar = {geometry: {type: "LineString", coordinates: [[121.001, 24.000180], [121.002, 24.000180]]}};
+process.stdout.write(JSON.stringify({
+  startOnly: navigationTerrainCandidateStartsWithinGoldenRouteCorridor(touchesLater, route, 10, corridorIndex),
+  touchesLater: navigationTerrainCandidateTouchesGoldenRouteCorridor(touchesLater, route, 10, corridorIndex),
+  alwaysFar: navigationTerrainCandidateTouchesGoldenRouteCorridor(alwaysFar, route, 10, corridorIndex),
+}));
+""",
+        )
+    )
+    result = subprocess.run(
+        ["node"],
+        input=node_program,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    assert json.loads(result.stdout) == {
+        "startOnly": False,
+        "touchesLater": True,
+        "alwaysFar": False,
+    }
+
+
+def test_navigation_maplibre_lenses_drive_distinct_bounded_overlay_features() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    lens_features = html.split(
+        "function navigationTerrainMapLibreLensOverlayFeatures", 1
+    )[1].split("function navigationTerrainMapLibreFeatureCollection", 1)[0]
+    style = html.split("function navigationTerrainMapLibreStyle", 1)[1].split(
+        "function destroyNavigationTerrainMapLibre", 1
+    )[0]
+    initializer = html.split(
+        "async function initializeNavigationTerrainMapLibre()", 1
+    )[1].split("function navigationTerrainSelectedHierarchyEdge", 1)[0]
+
+    for lens in ("structure", "pressure", "risk", "retreat", "events"):
+        assert f'case "{lens}"' in lens_features
+    for feature_kind in (
+        "terrain_structure_sample",
+        "route_pressure_sample",
+        "terrain_risk_candidate",
+        "retreat_route",
+        "retreat_origin",
+        "retreat_destination",
+    ):
+        assert feature_kind in lens_features
+    for layer_id in (
+        "scout-terrain-structure-samples",
+        "scout-route-pressure-samples",
+        "scout-terrain-risk-candidates",
+        "scout-retreat-route",
+        "scout-retreat-endpoints",
+    ):
+        assert f'id: "{layer_id}"' in style
+
+    assert "function navigationTerrainMapLibreLensSummary" in html
+    assert "lensSummary.status_text" in initializer
+    assert 'map.once("idle", markTwoDimensionalMapReady);' in initializer
+    assert "map.areTilesLoaded()" in initializer
+    assert 'feature?.properties?.feature_class === "terrain_structure_sample"' in html
+    assert 'feature?.properties?.feature_class === "terrain_risk_candidate"' in html
+    assert "candidate_only: true" in lens_features
+    assert "runtime_safety_truth: false" in lens_features
+    assert "operational: false" in lens_features
+
+
+def test_navigation_candidate_selection_is_explicit_navigable_and_map_linked() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    initializer = html.split(
+        "async function initializeNavigationTerrainMapLibre()", 1
+    )[1].split("function navigationTerrainSelectedHierarchyEdge", 1)[0]
+    controls = html.split("function bindNavigationTerrainControls()", 1)[1].split(
+        "function renderOutdoorPage", 1
+    )[0]
+
+    for marker in (
+        "function navigationTerrainSelectionModel(",
+        "function setNavigationTerrainSelection(",
+        "function navigationTerrainSelectionFocusTarget(",
+        "function focusNavigationTerrainSelection(",
+        "function renderNavigationCandidateNavigator(",
+        'data-navigation-candidate-select="true"',
+        'data-navigation-selection-step="-1"',
+        'data-navigation-selection-step="1"',
+        'data-navigation-selection-current="',
+        "navigationSelectedPressurePointId",
+    ):
+        assert marker in html
+
+    assert '"scout-route-pressure-samples"' in initializer
+    assert 'feature?.properties?.feature_class === "route_pressure_sample"' in initializer
+    assert "state.navigationSelectedPressurePointId = pressureId" in initializer
+    assert "navigationTerrainClickHitBox(event.point)" in initializer
+    assert "setNavigationTerrainSelection(lens, select.value)" in controls
+    assert "setNavigationTerrainSelection(lens, target.id)" in controls
+    assert "focusNavigationTerrainSelection(lens, select.value)" in controls
+    assert "focusNavigationTerrainSelection(lens, target.id)" in controls
+    assert "requestedGeneration = navigationTerrainMapLibreRuntime.generation" in html
+    assert "requestedGeneration !== navigationTerrainMapLibreRuntime.generation" in html
+    assert 'focusNavigationTerrainSelection("structure", structureId)' in initializer
+    assert 'focusNavigationTerrainSelection("pressure", pressureId)' in initializer
+    assert 'focusNavigationTerrainSelection("risk", riskId)' in initializer
+    assert 'id: "scout-selected-marker-halo"' in html
+    assert 'id: "scout-selected-event-halo"' in html
+    assert 'host.dataset.navigationTerrainFocusedSelectionId = target.id' in html
+    assert 'const minimumZoom = entry.mode === "3d" ? 16 : 15' in html
+    assert "pitch: entry.map.getPitch()" in html
+    assert "bearing: entry.map.getBearing()" in html
+    assert "function renderNavigationReviewQueue(" not in html
+    assert "data-navigation-review-decision" not in html
+    assert "UNSAVED LOCAL DRAFT" not in html
+
+
+def test_dashboard_qgis_render_is_collapsed_audit_receipt_not_map_comparison() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+
+    assert "QGIS 執行快照" in html
+    assert "AUDIT RECEIPT · NOT MAP COMPARISON" in html
+    assert "地形比對請使用上方 MapLibre 互動疊圖" in html
+    assert '<details class="qgis-render-evidence">' in html
+    assert '<details class="qgis-render-evidence" open>' not in html

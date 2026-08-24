@@ -3167,11 +3167,16 @@ preview with Workspace Operations and Connected Preparation available, launch
 the Dashboard factory with the workspace parent root:
 
 ```bash
-SCOUT_PRETRIP_WORKSPACE_ROOT=/Users/alexwang0315/workspace \
-  ./venv/bin/python -m uvicorn \
+PYTHONPATH=src \
+  SCOUT_PRETRIP_WORKSPACE_ROOT=/Users/alexwang0315/workspace \
+  python3 -m uvicorn \
   admin_api:create_dashboard_app \
   --factory --host 127.0.0.1 --port 9099
 ```
+
+Run the command from `/Users/alexwang0315/scout-fusion`. This checkout does not
+currently include `./venv`; the explicit `PYTHONPATH=src` keeps the local Scout
+package importable when using the installed `python3` runtime.
 
 `phase4_admin_runtime:create_phase4_admin_runtime_app` can read the workspace,
 but it does not inject the Dashboard Connected Preparation manager. Using it

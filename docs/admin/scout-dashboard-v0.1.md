@@ -278,6 +278,72 @@ Verification:
   ceiling so the UI does not fabricate extra detail by stretching the last
   available tile matrix.
 
+### 2026-08-24 - Navigation 2D/3D camera reset after MapLibre interaction
+
+Defect ID: `DASH-MAP-REG-003`.
+
+User report:
+
+- Zooming the Navigation 2D map could immediately return it to Fit.
+- Moving the 3D terrain map could cause the synchronized 2D map to return to
+  its Fit zoom instead of retaining the operator-selected scale.
+- 候選點、lens、Evidence、垂直誇張或 2D／3D／Split 任何切換都可能重建兩張
+  地圖並丟失 camera state。
+
+Root cause:
+
+- The broad `[data-navigation-terrain-lens]` listener also matched the MapLibre
+  host. A MapLibre control click bubbled to that host and triggered a full
+  Dashboard render.
+- Dashboard renders destroy and recreate the MapLibre instances. The load
+  handler always called Fit because no route-scoped camera state was retained.
+- 2D and 3D require `中心同步、尺度獨立`: center changes must follow each
+  other, while zoom, pitch, and bearing remain mode-specific. The old runtime
+  had no contract for preserving that distinction across a rerender or a
+  single-view transition.
+
+Correction:
+
+- Lens controls now bind only to `button[data-navigation-terrain-lens]`.
+- The Navigation MapLibre runtime records center, zoom, pitch, and bearing
+  before map removal and after camera movement. Records are scoped to project,
+  route projection fingerprint, and DEM source fingerprint.
+- The latest center is propagated across stored 2D and 3D cameras, while each
+  mode keeps its own zoom, pitch, and bearing.
+- A stored camera is restored after candidate, lens, Evidence, vertical
+  exaggeration, or 2D/3D/Split rerenders. A changed route or DEM scope starts
+  with a new Fit instead of reusing stale camera state.
+
+Permanent acceptance gate:
+
+1. In Split view, Fit/Reset both maps, zoom 2D and 3D independently, then drag
+   or keyboard-pan 3D. Both centers must match; neither zoom may change because
+   the other map moved.
+2. Trigger rerenders through a candidate selection and at least one lens,
+   Evidence, vertical exaggeration, and view-mode switch. The recreated maps
+   must restore the same mode-specific zoom and the shared center.
+3. In 3D-only view, pan the terrain map and switch to 2D-only. The 2D center
+   must equal the latest 3D center while its previous 2D zoom is retained.
+4. Only explicit Fit / Reset may reset the corresponding camera. Fit on 2D
+   must not reset 3D zoom; Reset on 3D must not reset 2D zoom.
+5. A route-projection or DEM fingerprint change must invalidate the stored
+   camera and use the new bounded Fit.
+6. Preserve
+   `test_navigation_maplibre_preserves_independent_cameras_across_rerenders`
+   and the `DASH-038` real-browser interaction smoke.
+
+Verification at correction time:
+
+- 2D zoom remained `12.745` while 3D moved and while candidate/lens/Evidence/
+  vertical-exaggeration/view
+  rerenders completed; 3D independently advanced from Z16 to Z17.
+- A 3D-only keyboard pan followed by a switch to 2D restored the exact center
+  and retained the previous 2D zoom.
+- Dashboard page tests passed `115`; the focused browser run had no console
+  errors, failed responses, or POST requests.
+- This camera behavior is presentation state only and does not create route,
+  terrain, operational, or runtime safety authority.
+
 ### 2026-07-28 - Repair false zero Evidence counts and explain empty states
 
 User request:
@@ -876,10 +942,15 @@ Consequences:
 Recommended local startup:
 
 ```bash
-SCOUT_PRETRIP_WORKSPACE_ROOT=/Users/alexwang0315/workspace \
-  ./venv/bin/python -m uvicorn admin_api:create_dashboard_app \
+PYTHONPATH=src \
+  SCOUT_PRETRIP_WORKSPACE_ROOT=/Users/alexwang0315/workspace \
+  python3 -m uvicorn admin_api:create_dashboard_app \
   --factory --host 127.0.0.1 --port 9099
 ```
+
+Run this command from `/Users/alexwang0315/scout-fusion`. The current checkout
+does not contain `./venv`; `PYTHONPATH=src` makes the local `scout` package
+importable without installing it globally.
 
 Required checks before providing a Dashboard URL:
 
@@ -1873,7 +1944,7 @@ Implementation:
 Local launch:
 
 ```bash
-./venv/bin/python -m uvicorn admin_api:create_dashboard_app \
+PYTHONPATH=src python3 -m uvicorn admin_api:create_dashboard_app \
   --factory --host 127.0.0.1 --port 9099
 ```
 
