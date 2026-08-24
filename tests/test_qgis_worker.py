@@ -27,7 +27,12 @@ def _test_access_value() -> str:
     return "".join(("test-qgis-", "worker-access-", "0123456789abcdef"))
 
 
-def _rgb_png(*, blank: bool, canvas_border: bool = False) -> bytes:
+def _rgb_png(
+    *,
+    blank: bool,
+    canvas_border: bool = False,
+    canvas_border_px: int = 1,
+) -> bytes:
     width = 10
     height = 10
     rows = []
@@ -35,7 +40,12 @@ def _rgb_png(*, blank: bool, canvas_border: bool = False) -> bytes:
         row = bytearray()
         for x in range(width):
             dark = not blank and 3 <= x <= 6 and 3 <= y <= 6
-            border = canvas_border and (x in {0, width - 1} or y in {0, height - 1})
+            border = canvas_border and (
+                x < canvas_border_px
+                or x >= width - canvas_border_px
+                or y < canvas_border_px
+                or y >= height - canvas_border_px
+            )
             if dark:
                 row.extend((30, 60, 90))
             elif border:
@@ -77,6 +87,7 @@ class FakeQgisMcpClient:
             "gdal:assignprojection",
             "gdal:buildvirtualraster",
             "gdal:slope",
+            "gdal:warpreproject",
             "grass:r.mapcalc.simple",
             "grass:r.slope.aspect",
             "grass:r.geomorphon",
@@ -106,6 +117,7 @@ class FakeQgisMcpClient:
                     {"id": "gdal:buildvirtualraster"},
                     {"id": "gdal:assignprojection"},
                     {"id": "gdal:slope"},
+                    {"id": "gdal:warpreproject"},
                     {"id": "grass:r.mapcalc.simple"},
                     {"id": "grass:r.slope.aspect"},
                     {"id": "grass:r.geomorphon"},
@@ -133,6 +145,16 @@ class FakeQgisMcpClient:
                 "gdal:assignprojection": {
                     "INPUT": {"type": "string"},
                     "CRS": {"type": "string"},
+                },
+                "gdal:warpreproject": {
+                    "INPUT": {"type": "string"},
+                    "SOURCE_CRS": {"type": "string"},
+                    "TARGET_CRS": {"type": "string"},
+                    "TARGET_RESOLUTION": {"type": "number"},
+                    "OUTPUT": {
+                        "type": "string",
+                        "x-qgis-output-destination": True,
+                    },
                 },
                 "grass:r.slope.aspect": {
                     "elevation": {"type": "string"},
@@ -309,6 +331,7 @@ class FakeQgisMcpClient:
                 "gdal:assignprojection": (),
                 "gdal:buildvirtualraster": ("OUTPUT",),
                 "gdal:slope": ("OUTPUT",),
+                "gdal:warpreproject": ("OUTPUT",),
                 "grass:r.slope.aspect": ("slope", "aspect"),
                 "grass:r.geomorphon": ("forms",),
                 "grass:r.mapcalc.simple": ("output",),
@@ -458,10 +481,34 @@ def test_qgis_worker_persists_completed_candidate_artifacts(tmp_path: Path) -> N
     assert payload["candidate_only"] is True
     assert payload["runtime_safety_truth"] is False
     assert payload["operational"] is False
+    assert "gdal:warpreproject" in payload["result"]["processing_algorithms"]
+    warp_call = next(
+        arguments
+        for tool, arguments in mcp.calls
+        if tool == "qgis_processing_start"
+        and arguments["algorithm"] == "gdal:warpreproject"
+    )
+    assert warp_call["parameters"]["SOURCE_CRS"] == "EPSG:3826"
+    assert warp_call["parameters"]["TARGET_CRS"] == "EPSG:3826"
+    assert warp_call["parameters"]["TARGET_RESOLUTION"] == 20.0
+    assert warp_call["parameters"]["RESAMPLING"] == 0
+    assert warp_call["parameters"]["EXTRA"] == ""
+    assert warp_call["add_to_project"] is False
     assert payload["result"]["maplibre_geojson"]["features"]
     assert payload["result"]["maplibre_geojson"]["properties"]["operational"] is False
     assert all(
         feature["properties"]["operational"] is False
+        for feature in payload["result"]["maplibre_geojson"]["features"]
+    )
+    route_reference = next(
+        feature
+        for feature in payload["result"]["maplibre_geojson"]["features"]
+        if feature["properties"].get("input_reference") is True
+    )
+    assert route_reference["properties"]["kind"] == "qgis_analysis_input_route"
+    assert route_reference["properties"]["generated_by_qgis"] is False
+    assert all(
+        feature["properties"]["kind"] != "qgis_candidate_route"
         for feature in payload["result"]["maplibre_geojson"]["features"]
     )
     assert {artifact["artifact_type"] for artifact in payload["result"]["artifacts"]} == {
@@ -491,6 +538,17 @@ def test_qgis_worker_persists_completed_candidate_artifacts(tmp_path: Path) -> N
         tool == "qgis_canvas" and arguments.get("action") == "set_extent"
         for tool, arguments in mcp.calls
     )
+    refresh_index = next(
+        index
+        for index, (tool, arguments) in enumerate(mcp.calls)
+        if tool == "qgis_canvas" and arguments.get("action") == "refresh"
+    )
+    review_index = next(
+        index
+        for index, (tool, _) in enumerate(mcp.calls)
+        if tool == "qgis_visual_review"
+    )
+    assert refresh_index < review_index
     slope_call = next(
         arguments
         for tool, arguments in mcp.calls
@@ -501,7 +559,37 @@ def test_qgis_worker_persists_completed_candidate_artifacts(tmp_path: Path) -> N
         tool == "qgis_project_action" and arguments.get("action") == "add_raster"
         for tool, arguments in mcp.calls
     )
+    assert any(
+        tool == "qgis_vector_export"
+        and arguments["format"] == "gpkg"
+        and arguments["destination_crs"] == "EPSG:3826"
+        and arguments["selected_only"] is False
+        for tool, arguments in mcp.calls
+    )
+    assert any(
+        tool == "qgis_project_action"
+        and arguments.get("action") == "add_vector"
+        and "route_epsg3826.gpkg|layername=" in arguments.get("source", "")
+        for tool, arguments in mcp.calls
+    )
+    assert any(
+        tool == "qgis_crs"
+        and arguments["action"] == "assign_layer"
+        and arguments["target"] == "EPSG:3826"
+        for tool, arguments in mcp.calls
+    )
     assert any(tool == "qgis_raster_style" for tool, _ in mcp.calls)
+    assert any(
+        tool == "qgis_style_apply"
+        and arguments == {
+            "layer": "route-layer",
+            "mode": "simple",
+            "color": "#ff365e",
+            "opacity": 1.0,
+            "width": 2.4,
+        }
+        for tool, arguments in mcp.calls
+    )
     assert sum(tool == "qgis_layer_manage" for tool, _ in mcp.calls) == 4
 
 
@@ -655,6 +743,8 @@ def test_qgis_worker_persists_grass_terrain_feature_stack_candidate_artifacts(
         "qgis_candidate_valley_line",
         "qgis_candidate_stream_network",
     }.issubset(map_kinds)
+    assert "qgis_analysis_input_route" in map_kinds
+    assert "qgis_candidate_route" not in map_kinds
     assert all(tool != "qgis_capability_invoke" for tool, _ in mcp.calls)
 
 
@@ -709,6 +799,28 @@ def test_qgis_worker_fails_closed_on_blank_render(tmp_path: Path) -> None:
     assert "visual content" in payload["error"]["detail"]
 
 
+def test_qgis_worker_fails_closed_on_blank_render_with_canvas_frame(
+    tmp_path: Path,
+) -> None:
+    mcp = FakeQgisMcpClient(
+        screenshot_bytes=_rgb_png(
+            blank=True,
+            canvas_border=True,
+            canvas_border_px=2,
+        )
+    )
+    client, source_root = _client(tmp_path, mcp)
+    dem = source_root / "dem.grd"
+    dem.write_bytes(b"fixture-dem")
+
+    payload = _start_and_wait(client, dem)
+
+    assert payload["state"] == "failed"
+    assert payload["render_status"] == "failed"
+    assert payload["error"]["code"] == "RENDER_FAILED"
+    assert "visual content" in payload["error"]["detail"]
+
+
 def test_qgis_worker_crop_ignores_qgis_canvas_frame() -> None:
     cropped, crop = _crop_png_to_content(
         _rgb_png(blank=False, canvas_border=True),
@@ -720,6 +832,20 @@ def test_qgis_worker_crop_ignores_qgis_canvas_frame() -> None:
     assert crop["ignored_frame_margin_px"] == 2
     assert crop["crop_bbox_px"] == [2, 2, 7, 7]
     assert (width, height) == (6, 6)
+
+
+def test_qgis_worker_crop_does_not_treat_canvas_frame_as_map_content() -> None:
+    raw = _rgb_png(
+        blank=True,
+        canvas_border=True,
+        canvas_border_px=2,
+    )
+
+    cropped, crop = _crop_png_to_content(raw, padding_px=1)
+
+    assert cropped == raw
+    assert crop["applied"] is False
+    assert crop["reason"] == "no_content_bbox"
 
 
 def test_qgis_worker_rejects_crs_label_without_projected_route_coordinates() -> None:

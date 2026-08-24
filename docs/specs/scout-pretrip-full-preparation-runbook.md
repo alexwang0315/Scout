@@ -3968,6 +3968,32 @@ review. Recording evidence review changes artifact status to
 `reviewed_evidence`; it does not change candidate, operational, or runtime
 safety authority.
 
+### 2026-08-23 macOS live terrain preview repair
+
+The Chilai workspace's DTM summary still referenced a retired repository path.
+Before a live run, copy only the hash-matched `.grd`/`.hdr` pairs into the
+project-bounded `sources/dtm/` tree and update the summary to those bounded
+paths. Do not weaken the worker source-root policy to follow stale paths.
+
+The government XYZ grids report a positive north/south pixel step. GDAL VRT
+mosaicking rejects that orientation, so `terrain_context_preview.v1` now uses
+the exact allowlisted `gdal:warpreproject` contract to create 20 m north-up
+GeoTIFF inputs with nearest-neighbour resampling before mosaicking. This changes
+row orientation only and records `adds_source_resolution=false`.
+
+The preview also exports the WGS84 route through the existing bounded QGIS
+vector-export path to an EPSG:3826 GeoPackage before canvas rendering. Loading
+the WGS84 route directly into the EPSG:3826 capture canvas left the layer in the
+project tree but did not paint it in this QGIS MCP session.
+
+On the observed macOS AppTranslocation session, the MCP plugin's QWidget canvas
+capture returned a framed blank image while QGIS was fully occluded. Scout now
+rejects that frame-only image using the dominant interior background and keeps
+the run as `RENDER_FAILED`. The successful live capture required QGIS to be
+foregrounded outside Scout; no OS activation, arbitrary UI invocation, Python,
+or shell capability was added to the worker. A layout/offscreen render path is
+future promotion work.
+
 ### Qualification and constrained-host benchmark
 
 Reusable preparation-only benchmark:

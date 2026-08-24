@@ -11,6 +11,7 @@ import struct
 import threading
 import time
 import zlib
+from collections import Counter
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -457,6 +458,7 @@ class QgisWorkerService:
         run = queued
         run_root = self._run_root(run.worker_run_id)
         route_path = run_root / "route.geojson"
+        projected_route_path = run_root / "route_epsg3826.gpkg"
         slope_path = run_root / "slope.tif"
         render_path = run_root / "qgis_render_preview.png"
         visual_context_path = run_root / "qgis_visual_context.json"
@@ -516,20 +518,117 @@ class QgisWorkerService:
 
             current_step = "route_preparation"
             _write_private_json(route_path, request.route_geojson)
+            source_route_layer = self._call(
+                "qgis_project_action",
+                {
+                    "action": "add_vector",
+                    "source": str(route_path),
+                    "name": f"Scout candidate route source {run.worker_run_id[-10:]}",
+                },
+            )
+            source_route_layer_id = str(
+                source_route_layer.get("id")
+                or source_route_layer.get("layer_id")
+                or ""
+            )
+            if not source_route_layer_id:
+                raise _WorkerProcessingFailed(
+                    "QGIS did not return a source route layer ID"
+                )
+            added_layers.append(source_route_layer_id)
+            route_export = self._call(
+                "qgis_vector_export",
+                {
+                    "layer": source_route_layer_id,
+                    "path": str(projected_route_path),
+                    "format": "gpkg",
+                    "encoding": "UTF-8",
+                    "selected_only": False,
+                    "destination_crs": "EPSG:3826",
+                    "overwrite": False,
+                    "create_parent": False,
+                    "include_z": False,
+                    "save_metadata": True,
+                },
+            )
+            exported_path = str(route_export.get("path") or "")
+            projected_route_layer_name = str(route_export.get("layer_name") or "")
+            if (
+                not projected_route_path.is_file()
+                or Path(exported_path).resolve(strict=False)
+                != projected_route_path.resolve(strict=False)
+                or int(route_export.get("feature_count", -1)) != 1
+                or not projected_route_layer_name.startswith(
+                    "Scout candidate route source "
+                )
+            ):
+                raise _WorkerProcessingFailed(
+                    "QGIS did not export exactly one projected route feature"
+                )
+            self._call(
+                "qgis_project_action",
+                {"action": "remove_layer", "layer": source_route_layer_id},
+            )
             route_layer = self._call(
                 "qgis_project_action",
-                {"action": "add_vector", "source": str(route_path), "name": f"Scout candidate route {run.worker_run_id[-10:]}"},
+                {
+                    "action": "add_vector",
+                    "source": (
+                        f"{projected_route_path}|layername="
+                        f"{projected_route_layer_name}"
+                    ),
+                    "name": f"Scout candidate route {run.worker_run_id[-10:]}",
+                    "provider": "ogr",
+                },
             )
-            route_layer_id = str(route_layer.get("id") or route_layer.get("layer_id") or "")
+            route_layer_id = str(
+                route_layer.get("id") or route_layer.get("layer_id") or ""
+            )
             if not route_layer_id:
                 raise _WorkerProcessingFailed("QGIS did not return a route layer ID")
             added_layers.append(route_layer_id)
+            self._call(
+                "qgis_crs",
+                {
+                    "action": "assign_layer",
+                    "layer": route_layer_id,
+                    "target": "EPSG:3826",
+                    "value": "EPSG:3826",
+                },
+            )
+            prepared_route_inspection = self._call(
+                "qgis_layer_inspect",
+                {
+                    "layer": route_layer_id,
+                    "include": ["metadata"],
+                    "sample_limit": 0,
+                },
+            )
+            prepared_route_summary = prepared_route_inspection.get("summary") or {}
+            prepared_route_crs = str(
+                prepared_route_summary.get("crs") or "UNKNOWN"
+            ).upper()
+            if prepared_route_crs not in {"3826", "EPSG:3826"}:
+                raise _WorkerCrsUnresolved(
+                    "Prepared route CRS is unresolved or unsupported: "
+                    f"{prepared_route_crs}"
+                )
+            _validate_projected_route_extent(prepared_route_summary.get("extent"))
             run = self._complete_step(run, current_step)
             self._persist(run)
             self._check_cancel(cancel_event)
 
             current_step = "dem_loaded"
-            dem_input = self._prepare_dem(run.worker_run_id, dem_refs, cancel_event)
+            (
+                dem_input,
+                dem_normalized_source_count,
+                dem_normalization_resolution_m,
+            ) = self._prepare_dem(
+                run.worker_run_id,
+                dem_refs,
+                request.source_resolution,
+                cancel_event,
+            )
             run = self._complete_step(run, current_step)
             self._persist(run)
 
@@ -613,8 +712,12 @@ class QgisWorkerService:
                     "qgis_project_action",
                     {
                         "action": "add_vector",
-                        "source": str(route_path),
+                        "source": (
+                            f"{projected_route_path}|layername="
+                            f"{projected_route_layer_name}"
+                        ),
                         "name": f"Scout candidate route {run.worker_run_id[-10:]}",
+                        "provider": "ogr",
                     },
                 )
                 route_layer_id = str(
@@ -625,6 +728,25 @@ class QgisWorkerService:
                         "QGIS did not return a route layer ID for visual review"
                     )
                 added_layers.append(route_layer_id)
+                self._call(
+                    "qgis_crs",
+                    {
+                        "action": "assign_layer",
+                        "layer": route_layer_id,
+                        "target": "EPSG:3826",
+                        "value": "EPSG:3826",
+                    },
+                )
+            self._call(
+                "qgis_style_apply",
+                {
+                    "layer": route_layer_id,
+                    "mode": "simple",
+                    "color": "#ff365e",
+                    "opacity": 1.0,
+                    "width": 2.4,
+                },
+            )
             for layer_id in (slope_layer_id, route_layer_id):
                 self._call(
                     "qgis_layer_manage",
@@ -660,6 +782,7 @@ class QgisWorkerService:
                 "qgis_canvas",
                 {"action": "set_extent", "extent": review_extent},
             )
+            self._call("qgis_canvas", {"action": "refresh"})
             visual_snapshot = self._call(
                 "qgis_session_snapshot",
                 {"detail": "summary"},
@@ -719,6 +842,10 @@ class QgisWorkerService:
                 screenshot = {**screenshot, **fallback}
                 fallback_used = True
             render_bytes = _decode_screenshot(screenshot)
+            render_bytes, crop = _crop_png_to_content(
+                render_bytes,
+                padding_px=12,
+            )
             render_quality = _png_visual_quality(render_bytes)
             if not render_quality["passed"]:
                 raise _WorkerRenderFailed(
@@ -729,6 +856,12 @@ class QgisWorkerService:
             visual_context_payload["render_quality"] = {
                 **render_quality,
                 "fallback_screenshot_used": fallback_used,
+                "content_crop": crop,
+            }
+            screenshot = {
+                **screenshot,
+                "width": render_quality["width"],
+                "height": render_quality["height"],
             }
             _write_private_json(visual_context_path, visual_context_payload)
             _write_private_bytes(render_path, render_bytes)
@@ -781,13 +914,37 @@ class QgisWorkerService:
                     "render_width_px": render_artifact.width_px,
                     "render_height_px": render_artifact.height_px,
                 },
-                processing_algorithms=(
-                    ["gdal:buildvirtualraster", "gdal:slope"]
-                    if len(dem_refs) > 1
-                    else ["gdal:slope"]
-                ),
+                processing_algorithms=[
+                    *(
+                        ["gdal:warpreproject"]
+                        if dem_normalized_source_count
+                        else []
+                    ),
+                    *(["gdal:buildvirtualraster"] if len(dem_refs) > 1 else []),
+                    "gdal:slope",
+                ],
                 processing_parameters={
                     "dem_source_count": len(dem_refs),
+                    "source_orientation_normalization": {
+                        "applied": bool(dem_normalized_source_count),
+                        "source_count": dem_normalized_source_count,
+                        "algorithm": (
+                            "gdal:warpreproject"
+                            if dem_normalized_source_count
+                            else None
+                        ),
+                        "source_crs": (
+                            "EPSG:3826" if dem_normalized_source_count else None
+                        ),
+                        "target_crs": (
+                            "EPSG:3826" if dem_normalized_source_count else None
+                        ),
+                        "target_resolution_m": dem_normalization_resolution_m,
+                        "resampling": (
+                            "nearest" if dem_normalized_source_count else None
+                        ),
+                        "adds_source_resolution": False,
+                    },
                     "slope_band": 1,
                     "slope_scale": 1.0,
                     "as_percent": False,
@@ -796,6 +953,13 @@ class QgisWorkerService:
                     "corridor_m": request.corridor_m,
                 },
                 warnings=[
+                    *(
+                        [
+                            "Allowlisted QGIS GDAL Warp normalized south-up XYZ DEM row orientation to north-up GeoTIFF without adding source resolution."
+                        ]
+                        if dem_normalized_source_count
+                        else []
+                    ),
                     "QGIS Processing success confirms execution only; it does not establish terrain or safety truth.",
                     "MapLibre slope coverage geometry is visualization-only and does not add source resolution.",
                 ],
@@ -869,6 +1033,14 @@ class QgisWorkerService:
                 current_step,
                 SpatialAnalysisErrorCode.RENDER_FAILED,
                 "QGIS render failed.",
+                detail=str(exc),
+            )
+        except _WorkerCrsUnresolved as exc:
+            self._fail_run(
+                run,
+                current_step,
+                SpatialAnalysisErrorCode.CRS_UNRESOLVED,
+                "QGIS route CRS could not be resolved.",
                 detail=str(exc),
             )
         except _WorkerProcessingFailed as exc:
@@ -1113,7 +1285,16 @@ class QgisWorkerService:
             self._check_cancel(cancel_event)
 
             current_step = "dem_loaded"
-            dem_input = self._prepare_dem(run.worker_run_id, dem_refs, cancel_event)
+            (
+                dem_input,
+                dem_normalized_source_count,
+                dem_normalization_resolution_m,
+            ) = self._prepare_dem(
+                run.worker_run_id,
+                dem_refs,
+                request.source_resolution,
+                cancel_event,
+            )
             dem_layer = self._call(
                 "qgis_project_action",
                 {
@@ -1495,6 +1676,26 @@ class QgisWorkerService:
                         route_crs_assignment.get("assignment") or {}
                     ),
                     "route_export_file_crs": "UNKNOWN",
+                    "source_orientation_normalization": {
+                        "applied": bool(dem_normalized_source_count),
+                        "source_count": dem_normalized_source_count,
+                        "algorithm": (
+                            "gdal:warpreproject"
+                            if dem_normalized_source_count
+                            else None
+                        ),
+                        "source_crs": (
+                            "EPSG:3826" if dem_normalized_source_count else None
+                        ),
+                        "target_crs": (
+                            "EPSG:3826" if dem_normalized_source_count else None
+                        ),
+                        "target_resolution_m": dem_normalization_resolution_m,
+                        "resampling": (
+                            "nearest" if dem_normalized_source_count else None
+                        ),
+                        "adds_source_resolution": False,
+                    },
                     "geomorphon_search_cells": {
                         scale_name: search_cells
                         for scale_name, search_cells in _GEOMORPHON_SCALES
@@ -1697,6 +1898,11 @@ class QgisWorkerService:
             ]
             completed_at = self._now_iso()
             processing_algorithms = [
+                *(
+                    ["gdal:warpreproject"]
+                    if dem_normalized_source_count
+                    else []
+                ),
                 *(["gdal:buildvirtualraster"] if len(dem_refs) > 1 else []),
                 "grass:r.slope.aspect",
                 "grass:r.geomorphon",
@@ -1751,6 +1957,13 @@ class QgisWorkerService:
                 processing_algorithms=processing_algorithms,
                 processing_parameters=manifest_payload["parameters"],
                 warnings=[
+                    *(
+                        [
+                            "Allowlisted QGIS GDAL Warp normalized south-up XYZ DEM row orientation to north-up GeoTIFF without adding source resolution."
+                        ]
+                        if dem_normalized_source_count
+                        else []
+                    ),
                     "GRASS/QGIS execution success confirms processing only; it does not establish terrain or safety truth.",
                     "Multiscale geomorphons and extracted ridge, valley, and stream lines are candidate terrain morphology, not observed route, water, hazard, trail, or navigability conclusions.",
                     "Flow-channel candidates use absolute accumulation because corridor-edge negative values may indicate underestimated outside-region inflow; water presence is not confirmed.",
@@ -2481,17 +2694,74 @@ class QgisWorkerService:
         self,
         worker_run_id: str,
         dem_refs: tuple[Path, ...],
+        source_resolution: dict[str, Any],
         cancel_event: threading.Event,
-    ) -> Path:
-        if len(dem_refs) == 1:
-            return dem_refs[0]
+    ) -> tuple[Path, int, float | None]:
+        normalized_refs: list[Path] = []
+        normalization_resolution_m: float | None = None
+        normalized_source_count = 0
+        for index, dem_ref in enumerate(dem_refs):
+            if dem_ref.suffix.casefold() != ".grd":
+                normalized_refs.append(dem_ref)
+                continue
+            if normalization_resolution_m is None:
+                normalization_resolution_m = _square_source_resolution(
+                    source_resolution
+                )
+            output_path = (
+                self._run_root(worker_run_id)
+                / f"dem_source_{index + 1:02d}_north_up.tif"
+            )
+            operation = self._call(
+                "qgis_processing_start",
+                {
+                    "algorithm": "gdal:warpreproject",
+                    "parameters": {
+                        "INPUT": str(dem_ref),
+                        "SOURCE_CRS": "EPSG:3826",
+                        "TARGET_CRS": "EPSG:3826",
+                        "RESAMPLING": 0,
+                        "NODATA": None,
+                        "TARGET_RESOLUTION": normalization_resolution_m,
+                        "CREATION_OPTIONS": "",
+                        "DATA_TYPE": 0,
+                        "TARGET_EXTENT": None,
+                        "TARGET_EXTENT_CRS": None,
+                        "MULTITHREADING": False,
+                        "EXTRA": "",
+                        "OUTPUT": str(output_path),
+                    },
+                    "retain_outputs": True,
+                    "add_to_project": False,
+                    "allow_main_thread": False,
+                },
+            )
+            self._poll_operation(
+                worker_run_id,
+                _operation_id(operation),
+                cancel_event,
+            )
+            if not output_path.is_file():
+                raise _WorkerProcessingFailed(
+                    "QGIS XYZ north-up normalization output file was not created"
+                )
+            normalized_refs.append(output_path)
+            normalized_source_count += 1
+
+        prepared_refs = tuple(normalized_refs)
+        if len(prepared_refs) == 1:
+            return (
+                prepared_refs[0],
+                normalized_source_count,
+                normalization_resolution_m,
+            )
         vrt_path = self._run_root(worker_run_id) / "dem_mosaic.vrt"
         operation = self._call(
             "qgis_processing_start",
             {
                 "algorithm": "gdal:buildvirtualraster",
                 "parameters": {
-                    "INPUT": [str(path) for path in dem_refs],
+                    "INPUT": [str(path) for path in prepared_refs],
                     "RESOLUTION": 0,
                     "SEPARATE": False,
                     "PROJ_DIFFERENCE": False,
@@ -2510,7 +2780,7 @@ class QgisWorkerService:
         self._poll_operation(worker_run_id, _operation_id(operation), cancel_event)
         if not vrt_path.is_file():
             raise _WorkerProcessingFailed("QGIS DEM mosaic output file was not created")
-        return vrt_path
+        return vrt_path, normalized_source_count, normalization_resolution_m
 
     def _poll_operation(
         self,
@@ -2992,9 +3262,26 @@ def _crop_png_to_content(
     if width < 3 or height < 3:
         raise _WorkerRenderFailed("QGIS screenshot PNG is too small for review")
     channels = {2: 3, 6: 4}[color_type]
-    background = tuple(rows[1][channels : channels * 2])
     content: list[tuple[int, int]] = []
     frame_margin = 2 if width >= 5 and height >= 5 else 1
+    background_counts: Counter[tuple[int, ...]] = Counter()
+    for row in rows[frame_margin : height - frame_margin]:
+        for x in range(frame_margin, width - frame_margin):
+            offset = x * channels
+            pixel = tuple(row[offset : offset + channels])
+            if channels == 4 and pixel[3] <= 8:
+                continue
+            background_counts[pixel[:3]] += 1
+    if not background_counts:
+        return raw, {
+            "applied": False,
+            "reason": "no_opaque_pixels",
+            "original_width": width,
+            "original_height": height,
+            "ignored_frame_margin_px": frame_margin,
+            "adds_source_resolution": False,
+        }
+    background = background_counts.most_common(1)[0][0]
     for y in range(frame_margin, height - frame_margin):
         row = rows[y]
         for x in range(frame_margin, width - frame_margin):
@@ -3089,24 +3376,30 @@ def _png_visual_quality(raw: bytes) -> dict[str, Any]:
     if width < 3 or height < 3:
         raise _WorkerRenderFailed("QGIS screenshot PNG is too small for review")
     channels = {2: 3, 6: 4}[color_type]
-    background_offset = channels
-    background = tuple(rows[1][background_offset : background_offset + channels])
-    interior_pixels = (width - 2) * (height - 2)
-    content_pixels = 0
-    for row in rows[1:-1]:
-        for x in range(1, width - 1):
+    frame_margin = 2 if width >= 5 and height >= 5 else 1
+    interior: list[tuple[int, ...]] = []
+    for row in rows[frame_margin : height - frame_margin]:
+        for x in range(frame_margin, width - frame_margin):
             offset = x * channels
             pixel = tuple(row[offset : offset + channels])
             if channels == 4 and pixel[3] <= 8:
                 continue
-            if any(abs(pixel[index] - background[index]) > 12 for index in range(3)):
-                content_pixels += 1
+            interior.append(pixel)
+    if not interior:
+        raise _WorkerRenderFailed("QGIS screenshot PNG has no opaque review pixels")
+    background = Counter(pixel[:3] for pixel in interior).most_common(1)[0][0]
+    interior_pixels = len(interior)
+    content_pixels = 0
+    for pixel in interior:
+        if any(abs(pixel[index] - background[index]) > 12 for index in range(3)):
+            content_pixels += 1
     required = max(4, math.ceil(interior_pixels * 0.001))
     return {
         "passed": content_pixels >= required,
         "width": width,
         "height": height,
-        "background_rgba": list(background),
+        "background_rgb": list(background),
+        "ignored_frame_margin_px": frame_margin,
         "interior_pixel_count": interior_pixels,
         "content_pixel_count": content_pixels,
         "content_ratio": round(content_pixels / interior_pixels, 6),
@@ -3510,11 +3803,14 @@ def _maplibre_result(
         "geometry": {"type": "LineString", "coordinates": coordinates},
         "properties": {
             "id": f"{worker_run_id}.route",
-            "kind": "qgis_candidate_route",
-            "feature_class": "qgis_candidate_route",
-            "label": "QGIS candidate route context",
+            "kind": "qgis_analysis_input_route",
+            "feature_class": "qgis_analysis_input_route",
+            "label": "Golden Route analysis input reference",
             "project_id": project_id,
             "workflow_run_id": worker_run_id,
+            "input_reference": True,
+            "generated_by_qgis": False,
+            "visualization_only": True,
             "candidate_only": True,
             "runtime_safety_truth": False,
             "operational": False,
@@ -3677,6 +3973,27 @@ def _int_or_none(value: Any) -> int | None:
     except (TypeError, ValueError):
         return None
     return number if number > 0 else None
+
+
+def _square_source_resolution(source_resolution: dict[str, Any]) -> float:
+    try:
+        x_m = float(source_resolution["x_m"])
+        y_m = float(source_resolution["y_m"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise _WorkerProcessingFailed(
+            "XYZ DEM normalization requires reported x/y source resolution"
+        ) from exc
+    if (
+        not math.isfinite(x_m)
+        or not math.isfinite(y_m)
+        or not 0 < x_m <= 1000
+        or not 0 < y_m <= 1000
+        or not math.isclose(x_m, y_m, rel_tol=1e-9, abs_tol=1e-9)
+    ):
+        raise _WorkerProcessingFailed(
+            "XYZ DEM normalization requires a bounded square source resolution"
+        )
+    return x_m
 
 
 def _env_bool(name: str, *, default: bool) -> bool:

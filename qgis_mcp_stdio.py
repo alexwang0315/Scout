@@ -41,6 +41,7 @@ QGIS_MCP_ALLOWED_ALGORITHMS = frozenset(
         "gdal:buildvirtualraster",
         "gdal:assignprojection",
         "gdal:slope",
+        "gdal:warpreproject",
         "grass:r.geomorphon",
         "grass:r.mapcalc.simple",
         "grass:r.slope.aspect",
@@ -94,6 +95,23 @@ _PROCESSING_PARAMETER_KEYS = {
             "AS_PERCENT",
             "COMPUTE_EDGES",
             "ZEVENBERGEN",
+            "OUTPUT",
+        }
+    ),
+    "gdal:warpreproject": frozenset(
+        {
+            "INPUT",
+            "SOURCE_CRS",
+            "TARGET_CRS",
+            "RESAMPLING",
+            "NODATA",
+            "TARGET_RESOLUTION",
+            "CREATION_OPTIONS",
+            "DATA_TYPE",
+            "TARGET_EXTENT",
+            "TARGET_EXTENT_CRS",
+            "MULTITHREADING",
+            "EXTRA",
             "OUTPUT",
         }
     ),
@@ -194,6 +212,7 @@ _PROCESSING_INPUT_KEYS = {
     "gdal:assignprojection": ("INPUT",),
     "gdal:buildvirtualraster": ("INPUT",),
     "gdal:slope": ("INPUT",),
+    "gdal:warpreproject": ("INPUT",),
     "grass:r.slope.aspect": ("elevation",),
     "grass:r.geomorphon": ("elevation",),
     "grass:r.mapcalc.simple": ("a",),
@@ -205,6 +224,7 @@ _PROCESSING_OUTPUT_KEYS = {
     "gdal:assignprojection": (),
     "gdal:buildvirtualraster": ("OUTPUT",),
     "gdal:slope": ("OUTPUT",),
+    "gdal:warpreproject": ("OUTPUT",),
     "grass:r.slope.aspect": ("slope", "aspect"),
     "grass:r.geomorphon": ("forms",),
     "grass:r.mapcalc.simple": ("output",),
@@ -377,7 +397,12 @@ class QgisMcpStdioClient:
                 )
         elif tool == "qgis_canvas":
             action = arguments.get("action")
-            if action == "set_crs":
+            if action == "status":
+                if set(arguments) != {"action"}:
+                    raise QgisMcpToolRejected(
+                        "QGIS review canvas status accepts no additional arguments"
+                    )
+            elif action == "set_crs":
                 if str(arguments.get("crs", "")).upper() not in {
                     "3826",
                     "EPSG:3826",
@@ -407,9 +432,14 @@ class QgisMcpStdioClient:
                     raise QgisMcpToolRejected(
                         "QGIS review canvas extent is outside the bounded limit"
                     )
+            elif action == "refresh":
+                if set(arguments) != {"action"}:
+                    raise QgisMcpToolRejected(
+                        "QGIS review canvas refresh accepts no additional arguments"
+                    )
             else:
                 raise QgisMcpToolRejected(
-                    "Only bounded QGIS review canvas CRS/extent changes are allowed"
+                    "Only bounded QGIS review canvas status/CRS/extent/refresh actions are allowed"
                 )
         elif tool in {"qgis_screenshot", "qgis_visual_review"}:
             if arguments.get("target", "canvas") != "canvas":
@@ -873,6 +903,58 @@ class QgisMcpStdioClient:
             }:
                 raise QgisMcpToolRejected(
                     "QGIS projection normalization is limited to EPSG:3826"
+                )
+        elif algorithm == "gdal:warpreproject":
+            if set(parameters) != _PROCESSING_PARAMETER_KEYS[algorithm]:
+                raise QgisMcpToolRejected(
+                    "QGIS XYZ normalization requires the complete bounded parameter set"
+                )
+            if str(parameters.get("SOURCE_CRS", "")).upper() not in {
+                "3826",
+                "EPSG:3826",
+            } or str(parameters.get("TARGET_CRS", "")).upper() not in {
+                "3826",
+                "EPSG:3826",
+            }:
+                raise QgisMcpToolRejected(
+                    "QGIS XYZ normalization is limited to EPSG:3826"
+                )
+            resolution = float(parameters.get("TARGET_RESOLUTION", 0.0))
+            if not math.isfinite(resolution) or not 0 < resolution <= 1000:
+                raise QgisMcpToolRejected(
+                    "QGIS XYZ normalization resolution is outside the bounded range"
+                )
+            if int(parameters.get("RESAMPLING", -1)) != 0:
+                raise QgisMcpToolRejected(
+                    "QGIS XYZ normalization must use nearest-neighbour resampling"
+                )
+            if parameters.get("NODATA") is not None:
+                raise QgisMcpToolRejected(
+                    "QGIS XYZ normalization may not invent a nodata value"
+                )
+            if parameters.get("TARGET_EXTENT") is not None:
+                raise QgisMcpToolRejected(
+                    "QGIS XYZ normalization may not alter the source extent"
+                )
+            if parameters.get("TARGET_EXTENT_CRS") is not None:
+                raise QgisMcpToolRejected(
+                    "QGIS XYZ normalization may not override the extent CRS"
+                )
+            if parameters.get("CREATION_OPTIONS") != "" or parameters.get("EXTRA") != "":
+                raise QgisMcpToolRejected(
+                    "QGIS XYZ normalization does not allow extra GDAL options"
+                )
+            if int(parameters.get("DATA_TYPE", -1)) != 0:
+                raise QgisMcpToolRejected(
+                    "QGIS XYZ normalization must preserve the input data type"
+                )
+            if parameters.get("MULTITHREADING") is not False:
+                raise QgisMcpToolRejected(
+                    "QGIS XYZ normalization must use deterministic single-threaded warping"
+                )
+            if Path(str(parameters.get("OUTPUT", ""))).suffix.casefold() != ".tif":
+                raise QgisMcpToolRejected(
+                    "QGIS XYZ normalization output must be a GeoTIFF"
                 )
         cell_size = float(parameters.get("GRASS_REGION_CELLSIZE_PARAMETER", 0.0))
         if not math.isfinite(cell_size) or not 0 <= cell_size <= 1000:
