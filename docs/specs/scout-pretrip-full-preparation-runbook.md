@@ -4216,6 +4216,22 @@ features, and 160 flow-channel features; the combined MapLibre collection held
 verified locally. Processing and render completed, while visual and human
 review remain pending.
 
+#### 2026-08-23 current Golden Route comparison gate
+
+The macOS QGIS LTR profile had `grassprovider=true`, but the application bundle
+and host PATH contained no GRASS executable. MCP capability discovery therefore
+returned no `grass:*` algorithms, and the live `terrain_feature_stack.v1` run
+failed closed at `capability_discovery` with `UNSUPPORTED_TOOL` for
+`grass:r.slope.aspect`.
+
+Do not substitute the earlier Pi `r42` vectors for the current Dashboard route.
+Its request route starts near `121.183556, 23.948778`, while the current Golden
+Route starts near `121.211673, 24.053151`; they are different evidence scopes.
+Any cross-engine comparison must bind the exact filtered Golden GPX hash, DEM
+hash or manifest fingerprint, corridor, algorithm parameters, and output CRS.
+When those bindings differ, the QGIS layers are stale/incomparable and must not
+be shown as a competing route or current terrain comparison.
+
 References:
 
 - GRASS `r.watershed`: https://grass.osgeo.org/grass-stable/manuals/r.watershed.html
