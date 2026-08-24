@@ -19,7 +19,8 @@ const baseUrl = process.env.SCOUT_DASHBOARD_DIAGNOSTIC_URL
   || "http://127.0.0.1:9099/admin/dashboard?projectId=chilai_nanhua_day1_scoutAI#diagnostic";
 const browserExecutablePath = process.env.SCOUT_BROWSER_EXECUTABLE || undefined;
 const dynamicTilesOnly = process.env.SCOUT_DIAGNOSTIC_DYNAMIC_TILES_ONLY === "1";
-const expectedDiagnosticCount = 37;
+const cameraPersistenceOnly = process.env.SCOUT_DIAGNOSTIC_CAMERA_ONLY === "1";
+const expectedDiagnosticCount = 38;
 const dataDependentDiagnosticIds = new Set([
   "DASH-009",
   "DASH-018",
@@ -522,7 +523,505 @@ async function inspectEmbeddedDashboardMap(page, surface, rudyTileRequests) {
   };
 }
 
+function navigationCameraValuesClose(left, right, tolerance = 0.01) {
+  return Number.isFinite(left)
+    && Number.isFinite(right)
+    && Math.abs(left - right) <= tolerance;
+}
+
+function navigationCameraCentersClose(left, right, tolerance = 0.00001) {
+  return Array.isArray(left)
+    && Array.isArray(right)
+    && left.length === 2
+    && right.length === 2
+    && navigationCameraValuesClose(left[0], right[0], tolerance)
+    && navigationCameraValuesClose(left[1], right[1], tolerance);
+}
+
+async function readNavigationMapLibreCamera(page, mode) {
+  const selector = `[data-navigation-maplibre-map="${mode}"]`;
+  await page.waitForFunction(currentSelector => {
+    const host = document.querySelector(currentSelector);
+    const center = String(host?.dataset.navigationMaplibreCenter || "")
+      .split(",")
+      .map(Number);
+    return Boolean(
+      host?.querySelector("canvas.maplibregl-canvas")
+      && Number.isFinite(Number(host.dataset.navigationMaplibreZoom))
+      && center.length === 2
+      && center.every(Number.isFinite),
+    );
+  }, selector, {timeout: 120000});
+  return page.locator(selector).evaluate((host, currentMode) => ({
+    mode: currentMode,
+    status: host.dataset.navigationMaplibreStatus || "unknown",
+    restoreMode: host.dataset.navigationMaplibreCamera || "unknown",
+    center: String(host.dataset.navigationMaplibreCenter || "").split(",").map(Number),
+    zoom: Number(host.dataset.navigationMaplibreZoom),
+    pitch: Number(host.dataset.navigationMaplibrePitch),
+    bearing: Number(host.dataset.navigationMaplibreBearing),
+  }), mode);
+}
+
+async function readNavigationMapLibrePair(page) {
+  return {
+    twoDimensional: await readNavigationMapLibreCamera(page, "2d"),
+    threeDimensional: await readNavigationMapLibreCamera(page, "3d"),
+  };
+}
+
+function assertNavigationCameraPreserved(actual, expected, label) {
+  assert(
+    navigationCameraCentersClose(actual.center, expected.center),
+    `${label} center changed from ${expected.center.join(",")} to ${actual.center.join(",")}.`,
+  );
+  assert(
+    navigationCameraValuesClose(actual.zoom, expected.zoom),
+    `${label} zoom changed from ${expected.zoom} to ${actual.zoom}.`,
+  );
+  assert(
+    navigationCameraValuesClose(actual.pitch, expected.pitch, 0.1),
+    `${label} pitch changed from ${expected.pitch} to ${actual.pitch}.`,
+  );
+  assert(
+    navigationCameraValuesClose(actual.bearing, expected.bearing, 0.1),
+    `${label} bearing changed from ${expected.bearing} to ${actual.bearing}.`,
+  );
+}
+
+async function waitForNavigationCameraChange(page, mode, previous, description) {
+  const deadline = Date.now() + 15000;
+  while (Date.now() < deadline) {
+    const camera = await readNavigationMapLibreCamera(page, mode);
+    if (
+      !navigationCameraCentersClose(camera.center, previous.center)
+      || !navigationCameraValuesClose(camera.zoom, previous.zoom)
+    ) return camera;
+    await page.waitForTimeout(150);
+  }
+  throw new Error(`${description} did not change the ${mode} camera.`);
+}
+
+async function waitForNavigationCentersToSynchronize(page, expectedCenter = null) {
+  const deadline = Date.now() + 15000;
+  while (Date.now() < deadline) {
+    const pair = await readNavigationMapLibrePair(page);
+    if (
+      navigationCameraCentersClose(
+        pair.twoDimensional.center,
+        pair.threeDimensional.center,
+      )
+      && (!expectedCenter || navigationCameraCentersClose(
+        pair.twoDimensional.center,
+        expectedCenter,
+      ))
+    ) return pair;
+    await page.waitForTimeout(150);
+  }
+  throw new Error("Navigation MapLibre 2D/3D centers did not synchronize.");
+}
+
+async function selectNavigationMapLibreView(page, mode) {
+  await page.locator(`button[data-navigation-terrain-view="${mode}"]`).click();
+  await page.waitForFunction(expectedMode => (
+    document.querySelector(".navigation-terrain-review-stage")
+      ?.dataset.navigationTerrainView === expectedMode
+  ), mode, {timeout: 15000});
+  if (["map", "split"].includes(mode)) {
+    await readNavigationMapLibreCamera(page, "2d");
+  }
+  if (["terrain", "split"].includes(mode)) {
+    await readNavigationMapLibreCamera(page, "3d");
+  }
+}
+
+async function clickNavigationControlAndWaitForRerender(page, selector, label) {
+  const previousCanvas = await page.locator(
+    '[data-navigation-maplibre-map="2d"] canvas.maplibregl-canvas',
+  ).elementHandle();
+  assert(Boolean(previousCanvas), `${label} has no current 2D MapLibre canvas.`);
+  await page.locator(selector).first().click();
+  await page.waitForFunction(canvas => !canvas?.isConnected, previousCanvas, {timeout: 15000});
+  await previousCanvas.dispose();
+  const cameras = await readNavigationMapLibrePair(page);
+  assert(
+    cameras.twoDimensional.restoreMode === "restored"
+      && cameras.threeDimensional.restoreMode === "restored",
+    `${label} rebuilt a Navigation map without restoring its camera.`,
+  );
+  return cameras;
+}
+
+async function inspectNavigationMapLibreCameraPersistence(page) {
+  await openDashboardRoute(page, "outdoor-navigation");
+  await page.waitForTimeout(500);
+  await selectNavigationMapLibreView(page, "split");
+
+  await page.locator('[data-navigation-maplibre-fit="2d"]').click();
+  await page.locator('[data-navigation-maplibre-fit="3d"]').click();
+  await page.waitForTimeout(500);
+  const fitted = await readNavigationMapLibrePair(page);
+
+  await page.locator(
+    '[data-navigation-maplibre-map="2d"] button.maplibregl-ctrl-zoom-in',
+  ).click();
+  const twoDimensionalZoomed = await waitForNavigationCameraChange(
+    page,
+    "2d",
+    fitted.twoDimensional,
+    "2D Zoom in",
+  );
+  const threeDimensionalBeforeZoom = await readNavigationMapLibreCamera(page, "3d");
+  assertNavigationCameraPreserved(
+    threeDimensionalBeforeZoom,
+    fitted.threeDimensional,
+    "3D camera after 2D Zoom in",
+  );
+
+  await page.locator(
+    '[data-navigation-maplibre-map="3d"] button.maplibregl-ctrl-zoom-in',
+  ).click();
+  const threeDimensionalZoomed = await waitForNavigationCameraChange(
+    page,
+    "3d",
+    threeDimensionalBeforeZoom,
+    "3D Zoom in",
+  );
+  const twoDimensionalAfterZoom = await readNavigationMapLibreCamera(page, "2d");
+  assertNavigationCameraPreserved(
+    twoDimensionalAfterZoom,
+    twoDimensionalZoomed,
+    "2D camera after 3D Zoom in",
+  );
+
+  const threeDimensionalCanvas = page.locator(
+    '[data-navigation-maplibre-map="3d"] canvas.maplibregl-canvas',
+  );
+  await threeDimensionalCanvas.scrollIntoViewIfNeeded();
+  await threeDimensionalCanvas.focus();
+  await threeDimensionalCanvas.press("ArrowRight");
+  const threeDimensionalMoved = await waitForNavigationCameraChange(
+    page,
+    "3d",
+    threeDimensionalZoomed,
+    "3D keyboard pan",
+  );
+  const synchronizedAfterMove = await waitForNavigationCentersToSynchronize(
+    page,
+    threeDimensionalMoved.center,
+  );
+  assert(
+    navigationCameraValuesClose(
+      synchronizedAfterMove.twoDimensional.zoom,
+      twoDimensionalZoomed.zoom,
+    ),
+    "3D movement reset the 2D zoom.",
+  );
+  assert(
+    navigationCameraValuesClose(
+      synchronizedAfterMove.threeDimensional.zoom,
+      threeDimensionalZoomed.zoom,
+    ),
+    "3D movement changed the 3D zoom.",
+  );
+
+  const rerenderChecks = [];
+  const rerenderControls = [
+    {
+      selector: '[data-navigation-terrain-candidate-scope]:not([aria-pressed="true"])',
+      label: "Candidate scope",
+    },
+    {
+      selector: '[data-navigation-terrain-evidence-domain="observed"]',
+      label: "Evidence domain",
+    },
+    {
+      selector: '[data-navigation-terrain-vertical-exaggeration]:not([aria-pressed="true"])',
+      label: "Vertical exaggeration",
+    },
+    {
+      selector: 'button[data-navigation-terrain-lens]:not([aria-pressed="true"])',
+      label: "Terrain lens",
+    },
+  ];
+  let expectedPair = synchronizedAfterMove;
+  for (const control of rerenderControls) {
+    assert(await page.locator(control.selector).count() > 0, `${control.label} toggle is missing.`);
+    const restored = await clickNavigationControlAndWaitForRerender(
+      page,
+      control.selector,
+      control.label,
+    );
+    assertNavigationCameraPreserved(
+      restored.twoDimensional,
+      expectedPair.twoDimensional,
+      `2D camera after ${control.label}`,
+    );
+    assertNavigationCameraPreserved(
+      restored.threeDimensional,
+      expectedPair.threeDimensional,
+      `3D camera after ${control.label}`,
+    );
+    rerenderChecks.push({label: control.label, cameras: restored});
+    expectedPair = restored;
+  }
+
+  await selectNavigationMapLibreView(page, "terrain");
+  const threeDimensionalOnly = await readNavigationMapLibreCamera(page, "3d");
+  assertNavigationCameraPreserved(
+    threeDimensionalOnly,
+    expectedPair.threeDimensional,
+    "3D-only camera",
+  );
+  const terrainOnlyCanvas = page.locator(
+    '[data-navigation-maplibre-map="3d"] canvas.maplibregl-canvas',
+  );
+  await terrainOnlyCanvas.scrollIntoViewIfNeeded();
+  await terrainOnlyCanvas.focus();
+  await terrainOnlyCanvas.press("ArrowRight");
+  const threeDimensionalOnlyMoved = await waitForNavigationCameraChange(
+    page,
+    "3d",
+    threeDimensionalOnly,
+    "3D-only keyboard pan",
+  );
+
+  await selectNavigationMapLibreView(page, "map");
+  const twoDimensionalOnly = await readNavigationMapLibreCamera(page, "2d");
+  assert(
+    navigationCameraCentersClose(
+      twoDimensionalOnly.center,
+      threeDimensionalOnlyMoved.center,
+    ),
+    "2D-only view did not adopt the latest shared 3D center.",
+  );
+  assert(
+    navigationCameraValuesClose(twoDimensionalOnly.zoom, twoDimensionalZoomed.zoom),
+    "2D-only view did not retain its independent zoom.",
+  );
+
+  await selectNavigationMapLibreView(page, "split");
+  const restoredSplit = await waitForNavigationCentersToSynchronize(
+    page,
+    threeDimensionalOnlyMoved.center,
+  );
+  assert(
+    navigationCameraValuesClose(restoredSplit.twoDimensional.zoom, twoDimensionalZoomed.zoom),
+    "Split restore reset the 2D zoom.",
+  );
+  assert(
+    navigationCameraValuesClose(restoredSplit.threeDimensional.zoom, threeDimensionalZoomed.zoom),
+    "Split restore reset the 3D zoom.",
+  );
+
+  await page.locator('[data-navigation-maplibre-fit="2d"]').click();
+  const twoDimensionalReset = await waitForNavigationCameraChange(
+    page,
+    "2d",
+    restoredSplit.twoDimensional,
+    "Explicit 2D Fit",
+  );
+  const threeDimensionalAfterTwoDimensionalFit = await readNavigationMapLibreCamera(page, "3d");
+  assert(
+    navigationCameraValuesClose(
+      threeDimensionalAfterTwoDimensionalFit.zoom,
+      restoredSplit.threeDimensional.zoom,
+    ),
+    "Explicit 2D Fit reset the 3D zoom.",
+  );
+
+  await page.locator('[data-navigation-maplibre-fit="3d"]').click();
+  const threeDimensionalReset = await waitForNavigationCameraChange(
+    page,
+    "3d",
+    threeDimensionalAfterTwoDimensionalFit,
+    "Explicit 3D Reset",
+  );
+  const twoDimensionalAfterThreeDimensionalReset = await readNavigationMapLibreCamera(page, "2d");
+  assert(
+    navigationCameraValuesClose(
+      twoDimensionalAfterThreeDimensionalReset.zoom,
+      twoDimensionalReset.zoom,
+    ),
+    "Explicit 3D Reset reset the 2D zoom.",
+  );
+
+  return {
+    contract: "shared-center-independent-scale",
+    fitted,
+    independentlyZoomed: {
+      twoDimensional: twoDimensionalZoomed,
+      threeDimensional: threeDimensionalZoomed,
+    },
+    synchronizedAfterThreeDimensionalMove: synchronizedAfterMove,
+    rerenderChecks,
+    singleViewRoundTrip: {
+      threeDimensionalOnlyMoved,
+      twoDimensionalOnly,
+      restoredSplit,
+    },
+    explicitReset: {
+      twoDimensional: twoDimensionalReset,
+      threeDimensional: threeDimensionalReset,
+    },
+  };
+}
+
+async function inspectNavigationMapMarkerFocus(page) {
+  await openDashboardRoute(page, "outdoor-navigation");
+  const observedEvidence = page.locator(
+    '[data-navigation-terrain-evidence-domain="observed"]',
+  );
+  if (await observedEvidence.getAttribute("aria-pressed") !== "true") {
+    await observedEvidence.click();
+  }
+  const structureLens = page.locator(
+    'button[data-navigation-terrain-lens="structure"]',
+  );
+  if (await structureLens.getAttribute("aria-pressed") !== "true") {
+    await structureLens.click();
+  }
+  await selectNavigationMapLibreView(page, "split");
+  await page.locator('[data-navigation-maplibre-fit="2d"]').click();
+  await page.locator('[data-navigation-maplibre-fit="3d"]').click();
+  await page.waitForTimeout(500);
+  const before = await readNavigationMapLibrePair(page);
+
+  const selector = page.locator('select[data-navigation-candidate-select="true"]');
+  const optionCount = await selector.locator("option").count();
+  assert(optionCount >= 3, `MAP MARKER exposes only ${optionCount} options.`);
+  const targetId = await selector.locator("option").nth(2).getAttribute("value");
+  assert(Boolean(targetId), "MAP MARKER third option has no stable id.");
+  await selector.selectOption(targetId);
+  await page.waitForFunction(expectedId => (
+    document.querySelector("[data-navigation-candidate-navigator]")
+      ?.dataset.navigationSelectionCurrent === expectedId
+  ), targetId, {timeout: 15000});
+
+  const waitForMarkerFocus = async (expectedId, previousCamera) => {
+    const deadline = Date.now() + 30000;
+    let camera = null;
+    let center = null;
+    while (Date.now() < deadline) {
+      camera = await readNavigationMapLibrePair(page);
+      center = await page.locator(
+        '[data-navigation-maplibre-map="2d"]',
+      ).evaluate(host => (
+        String(host.dataset.navigationTerrainFocusedSelectionCenter || "")
+          .split(",")
+          .map(Number)
+      ));
+      const focusedIds = await page.locator("[data-navigation-maplibre-map]").evaluateAll(
+        hosts => hosts.map(host => host.dataset.navigationTerrainFocusedSelectionId || ""),
+      );
+      if (
+        center.length === 2
+        && center.every(Number.isFinite)
+        && focusedIds.length === 2
+        && focusedIds.every(id => id === expectedId)
+        && navigationCameraCentersClose(camera.twoDimensional.center, center)
+        && navigationCameraCentersClose(camera.threeDimensional.center, center)
+        && camera.twoDimensional.zoom >= 15
+        && camera.threeDimensional.zoom >= 16
+        && navigationCameraValuesClose(
+          camera.twoDimensional.pitch,
+          previousCamera.twoDimensional.pitch,
+          0.1,
+        )
+        && navigationCameraValuesClose(
+          camera.threeDimensional.pitch,
+          previousCamera.threeDimensional.pitch,
+          0.1,
+        )
+        && navigationCameraValuesClose(
+          camera.twoDimensional.bearing,
+          previousCamera.twoDimensional.bearing,
+          0.1,
+        )
+        && navigationCameraValuesClose(
+          camera.threeDimensional.bearing,
+          previousCamera.threeDimensional.bearing,
+          0.1,
+        )
+      ) return {camera, center};
+      await page.waitForTimeout(150);
+    }
+    return {camera, center};
+  };
+
+  const firstFocus = await waitForMarkerFocus(targetId, before);
+  const after = firstFocus.camera;
+  const targetCenter = firstFocus.center;
+
+  assert(Boolean(after && targetCenter), "MAP MARKER focus produced no camera evidence.");
+  assert(
+    !navigationCameraCentersClose(before.twoDimensional.center, after.twoDimensional.center),
+    "MAP MARKER selection did not move the 2D map center.",
+  );
+  assert(
+    after.twoDimensional.zoom > before.twoDimensional.zoom,
+    `MAP MARKER did not zoom 2D in from Z${before.twoDimensional.zoom}.`,
+  );
+  assert(
+    navigationCameraCentersClose(after.twoDimensional.center, targetCenter)
+      && navigationCameraCentersClose(after.threeDimensional.center, targetCenter),
+    `MAP MARKER cameras did not land on ${targetCenter.join(",")}.`,
+  );
+  assert(
+    after.twoDimensional.zoom >= 15 && after.threeDimensional.zoom >= 16,
+    `MAP MARKER detail floors are 2D Z${after.twoDimensional.zoom}, 3D Z${after.threeDimensional.zoom}.`,
+  );
+  assert(
+    navigationCameraValuesClose(after.twoDimensional.pitch, before.twoDimensional.pitch, 0.1)
+      && navigationCameraValuesClose(after.threeDimensional.pitch, before.threeDimensional.pitch, 0.1)
+      && navigationCameraValuesClose(after.twoDimensional.bearing, before.twoDimensional.bearing, 0.1)
+      && navigationCameraValuesClose(after.threeDimensional.bearing, before.threeDimensional.bearing, 0.1),
+    "MAP MARKER focus changed a mode-specific pitch or bearing.",
+  );
+
+  const consecutiveSelector = page.locator(
+    'select[data-navigation-candidate-select="true"]',
+  );
+  const consecutiveTargetId = await consecutiveSelector.locator("option").nth(1).getAttribute("value");
+  assert(Boolean(consecutiveTargetId), "MAP MARKER second option has no stable id.");
+  await consecutiveSelector.selectOption(consecutiveTargetId);
+  await page.waitForFunction(expectedId => (
+    document.querySelector("[data-navigation-candidate-navigator]")
+      ?.dataset.navigationSelectionCurrent === expectedId
+  ), consecutiveTargetId, {timeout: 15000});
+  const consecutiveFocus = await waitForMarkerFocus(consecutiveTargetId, after);
+  assert(Boolean(consecutiveFocus.camera && consecutiveFocus.center),
+    "Consecutive MAP MARKER focus produced no camera evidence.");
+  assert(
+    navigationCameraCentersClose(consecutiveFocus.camera.twoDimensional.center, consecutiveFocus.center)
+      && navigationCameraCentersClose(consecutiveFocus.camera.threeDimensional.center, consecutiveFocus.center),
+    `Consecutive MAP MARKER selection did not land on ${consecutiveFocus.center.join(",")}.`,
+  );
+  assert(
+    !navigationCameraCentersClose(after.twoDimensional.center, consecutiveFocus.camera.twoDimensional.center),
+    "Consecutive MAP MARKER selection stayed on the previous marker.",
+  );
+
+  return {
+    targetId,
+    targetCenter,
+    optionCount,
+    before,
+    after,
+    consecutiveFocus: {
+      targetId: consecutiveTargetId,
+      targetCenter: consecutiveFocus.center,
+      after: consecutiveFocus.camera,
+    },
+    selectedHaloLayers: ["scout-selected-marker-halo", "scout-selected-event-halo"],
+  };
+}
+
 async function main() {
+  assert(
+    !(dynamicTilesOnly && cameraPersistenceOnly),
+    "Dynamic tile and camera-persistence focused modes cannot run together.",
+  );
   const browser = await chromium.launch({
     headless: true,
     ...(browserExecutablePath ? {executablePath: browserExecutablePath} : {}),
@@ -616,7 +1115,36 @@ async function main() {
       summary: {total: 0, passed: 0, failed: 0, running: 0, idle: 0},
       results: {},
     };
-    if (!dynamicTilesOnly) {
+    let mobileLayout = null;
+    let navigationCameraPersistence = null;
+    let navigationMapMarkerFocus = null;
+    if (cameraPersistenceOnly) {
+      const dash038 = page.locator('[data-diagnostic-case="DASH-038"]');
+      await dash038.locator('[data-diagnostic-action="retest"]').click();
+      await page.waitForFunction(() => {
+        const status = document.querySelector(
+          '[data-diagnostic-case="DASH-038"]',
+        )?.dataset.diagnosticStatus;
+        return status === "passed" || status === "failed";
+      }, null, {timeout: 30000});
+      snapshot = await page.evaluate(() => window.scoutDashboardDiagnostics.snapshot());
+      assert(
+        snapshot.summary.total === expectedDiagnosticCount,
+        `Focused camera diagnostic total is not ${expectedDiagnosticCount}.`,
+      );
+      assert(
+        snapshot.results["DASH-038"]?.status === "passed",
+        `DASH-038 failed: ${snapshot.results["DASH-038"]?.detail || "missing result"}`,
+      );
+      assert(
+        snapshot.results["DASH-038"].detail.includes("2D Z13.75 · 3D Z17"),
+        "DASH-038 did not report independent camera evidence.",
+      );
+      assert(
+        postRequests.length === 0,
+        `Focused camera Diagnostic issued unexpected POST requests: ${postRequests.join(", ")}`,
+      );
+    } else if (!dynamicTilesOnly) {
       const dash001 = page.locator('[data-diagnostic-case="DASH-001"]');
       workspaceRouteMode = "delay";
       await dash001.locator('[data-diagnostic-action="retest"]').click();
@@ -673,6 +1201,8 @@ async function main() {
     for (const label of ["Navigation", "Architecture", "Weather"]) {
       assert(snapshot.results["DASH-037"].detail.includes(`${label} Z`), `DASH-037 did not report ${label} matrix evidence.`);
     }
+    assert(snapshot.results["DASH-038"]?.status === "passed", `DASH-038 failed: ${snapshot.results["DASH-038"]?.detail || "missing result"}`);
+    assert(snapshot.results["DASH-038"].detail.includes("2D Z13.75 · 3D Z17"), "DASH-038 did not report independent camera evidence.");
     assert(postRequests.length === 0, `Diagnostic issued unexpected POST requests: ${postRequests.join(", ")}`);
 
     await page.screenshot({
@@ -680,7 +1210,7 @@ async function main() {
       fullPage: true,
     });
     await page.setViewportSize({ width: 390, height: 844 });
-    const mobileLayout = await page.evaluate(() => {
+    mobileLayout = await page.evaluate(() => {
       const firstCase = document.querySelector("[data-diagnostic-case]");
       const retest = firstCase?.querySelector('[data-diagnostic-action="retest"]');
       const caseRect = firstCase?.getBoundingClientRect();
@@ -702,6 +1232,28 @@ async function main() {
       });
     }
     await page.setViewportSize({ width: 1440, height: 1000 });
+    if (!dynamicTilesOnly) {
+      navigationCameraPersistence = await inspectNavigationMapLibreCameraPersistence(page);
+      navigationMapMarkerFocus = await inspectNavigationMapMarkerFocus(page);
+    }
+    if (cameraPersistenceOnly) {
+      const screenshot = "/tmp/scout-dashboard-navigation-camera-persistence.png";
+      await page.screenshot({path: screenshot, fullPage: true});
+      process.stdout.write(JSON.stringify({
+        ok: true,
+        mode: "camera-persistence-only",
+        url: baseUrl,
+        summary: snapshot.summary,
+        cameraPersistenceCase: snapshot.results["DASH-038"],
+        navigationCameraPersistence,
+        navigationMapMarkerFocus,
+        postRequestCount: postRequests.length,
+        consoleErrors,
+        failedResponses,
+        screenshots: [screenshot],
+      }, null, 2));
+      return;
+    }
     const browserMapChecks = [];
     const dynamicTileFailures = [];
     const nativeMapSurfaces = [
@@ -790,6 +1342,9 @@ async function main() {
           .map(id => [id, snapshot.results[id]]),
       ),
       dynamicTileCase: snapshot.results["DASH-037"],
+      cameraPersistenceCase: snapshot.results["DASH-038"],
+      navigationCameraPersistence,
+      navigationMapMarkerFocus,
       dashboardMapSurfaces,
       browserMapChecks,
       dynamicTileChecks,

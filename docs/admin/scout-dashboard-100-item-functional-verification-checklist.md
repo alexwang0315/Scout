@@ -7,7 +7,7 @@
 空狀態、跨頁一致性，以及操作後不應發生的副作用。
 
 - 目標：100 個可執行、可判定、可留證據的主檢查項目。
-- 目前版本：37 / 100。
+- 目前版本：38 / 100。
 - 維護狀態：持續記錄中。
 - 起始日期：2026-07-28。
 - 維護方式：本對話串中新增或修改的檢查項目，持續追加到本文件。
@@ -50,14 +50,14 @@
 ## Dashboard Diagnostic UI
 
 Dashboard 已在 `System → Diagnostic`（位於 Settings 之後）放入目前的
-`DASH-001～DASH-037`。
+`DASH-001～DASH-038`。
 
 - 尚未測試：灰燈。
 - 測試中：黃燈與 `測試中`。
 - 測試通過：綠燈與 `測試通過`。
 - 測試失敗：紅燈與 `測試失敗`，並顯示失敗原因。
 - 每題都有獨立的 `重新測試`。
-- 頁首 `Diag all` 依序執行 37 題，避免大型 project projection API
+- 頁首 `Diag all` 依序執行 38 題，避免大型 project projection API
   同時被大量呼叫。
 
 Diagnostic UI 是即時、read-only 的快速診斷層。它只使用 UI contract、
@@ -75,7 +75,7 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 |---|---|
 | 全域與 Overview | DASH-001、DASH-002、DASH-011 |
 | Plan Trip 與 Workspace | DASH-003、DASH-007、DASH-012～DASH-014 |
-| Map & Evidence | DASH-004～DASH-006、DASH-016、DASH-017、DASH-026～DASH-030、DASH-037 |
+| Map & Evidence | DASH-004～DASH-006、DASH-016、DASH-017、DASH-026～DASH-030、DASH-037～DASH-038 |
 | Exploring for Six Axis | DASH-008、DASH-018～DASH-025、DASH-031～DASH-036 |
 | Assistant、System 與 Safety / Emergency | DASH-009、DASH-010、DASH-015 |
 
@@ -84,7 +84,7 @@ candidate/shadow prototype 可收錄，但必須把 no-authority 邊界當成必
 通過條件；只有具備可操作 UI、API／artifact 與明確 PASS／FAIL 證據的功能
 才會成為正式檢查項目。
 
-## 目前可驗收的 37 項功能
+## 目前可驗收的 38 項功能
 
 ### DASH-001 Dashboard 啟動、入口與必要 API 可用
 
@@ -1326,9 +1326,51 @@ candidate/shadow prototype 可收錄，但必須把 no-authority 邊界當成必
 - 缺陷編號：`DASH-MAP-REG-002`（未修正；Z cap regression 已排除，剩餘為
   Z15 單磚取得失敗導致 Navigation／Weather 無法完成 generation swap）。
 
+### DASH-038 Navigation MapLibre 2D/3D 鏡頭持久化
+
+- 頁面／範圍：Exploring for Six Axis → Navigation。
+- 頁面分類：Map & Evidence。
+- 優先級：P1。
+- 對應 fail case：`DASH-MAP-REG-003`。
+
+檢查步驟：
+
+1. 開啟 Split，對 2D 與 3D 分別按 `Fit`／`Reset`，記錄兩邊 center、zoom、
+   pitch 與 bearing。
+2. 2D、3D 各按一次 `+`，確認兩邊倍率各自增加，另一張圖的 zoom 不變。
+3. 拖曳或以方向鍵移動 3D；確認 2D/3D center 同步，但 2D 與 3D zoom 都維持
+   操作前數值。
+4. 依序觸發候選點、lens、Evidence、垂直誇張或 2D／3D／Split 切換所造成的
+   Dashboard rerender，等待新 MapLibre instances ready。
+5. 比較重建前後 camera；center 必須一致，2D 與 3D 的 zoom、pitch、bearing
+   必須各自恢復，不得回到 Fit。
+6. 在 3D-only 移動後切到 2D-only；確認 2D 採用最新共享 center，同時保留
+   先前的 2D zoom。
+7. 明確按 2D `Fit`，確認只重設 2D；再按 3D `Reset`，確認只重設 3D。
+8. 以不同 route projection fingerprint 執行 deterministic probe；舊 camera
+   必須失效並回傳未命中，不能跨路線沿用。
+
+通過條件：
+
+- 契約維持「中心同步、尺度獨立」；3D 移動不會把 2D zoom 拉回 Fit。
+- 候選點與所有 Navigation 顯示切換造成的 rerender 都不會遺失有效 camera。
+- 只有明確 Fit／Reset 可重設對應 map，且不連帶重設另一個 mode 的 zoom。
+- route／DEM scope 改變時 fail closed，不沿用舊 camera。
+- Diagnostic probe 不發送 POST、不寫 workspace，也不建立 terrain 或 safety truth。
+
+證據／結果：
+
+- 結果：`PASS`（2026-08-24，Chromium，真實 Dashboard runtime）。
+- Deterministic 證據：2D Z13.75 與 3D Z17 各自保存；3D 最新 center 同步到
+  2D；變更 projection fingerprint 後 stored camera 未命中。
+- 瀏覽器證據：Split 內 2D `11.745→12.745`、3D `16→17`；3D 移動、候選點、
+  lens、Evidence、垂直誇張與 view rerender 後倍率未回 Fit。3D-only 平移後切回
+  2D，center 相同且 2D 保留 Z12.745；console error、失敗 response 與 POST 都是 0。
+- 缺陷編號：`DASH-MAP-REG-003`（已修正，保留永久回歸門檻）。
+
 ## 後續項目收錄門檻
 
-下一個可用編號為 `DASH-038`。新項目只有在功能已實作，且具備可操作 UI、
+下一個可用編號為 `DASH-039`。新項目只有在功能已實作，且具備可操作 UI、
 API／artifact、測試資料與明確 PASS／FAIL 條件時才加入。未完成、未接線、
 preview placeholder 或只存在於未來規劃的能力不列入正式項目。
 
@@ -1336,6 +1378,7 @@ preview placeholder 或只存在於未來規劃的能力不列入正式項目。
 
 | 日期 | 變更 |
 |---|---|
+| 2026-08-24 | 新增 DASH-038 與 DASH-MAP-REG-003，驗證 Navigation MapLibre 在 3D 移動、候選／lens／Evidence／垂直誇張及 2D／3D／Split rerender 後維持中心同步、尺度獨立，且只有明確 Fit／Reset 可重設對應 camera。 |
 | 2026-08-14 | Q0038 規格決策：Architecture mode bar 明確允許元件內水平捲動；所有 mode 仍須可達且不得造成頁面級溢出。 |
 | 2026-08-07 | Q0017：DASH-030 將具合理 typed reason 的真實零值改列黃燈；只有無法解釋或 `fixture_or_projection_omission` 的零值列紅燈，且禁止捏造正數。 |
 | 2026-08-06 | 內部 qualification remediation：Weather 的 Fit→第一次 `+` 完成 Z13→Z14 active generation；ready fixture 補齊本地可推導 Evidence 與五份 candidate-only Route Context variants；所有 Evidence 零值加入 typed reason，zero-evidence fixture 改為只讀 200 空投影。 |
