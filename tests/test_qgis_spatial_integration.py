@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -181,6 +183,7 @@ def test_qgis_capability_catalog_is_allowlisted_and_blocks_dangerous_tools() -> 
     assert TERRAIN_FEATURE_STACK_WORKFLOW_ID in catalog.workflow_allowlist
     assert "qgis.processing.slope" in catalog.tool_allowlist
     assert "qgis.processing.grass.geomorphon" in catalog.tool_allowlist
+    assert "qgis.processing.gdal.warp_reproject" in catalog.tool_allowlist
     assert "arbitrary_python" in catalog.blocked_capabilities
     assert "shell" in catalog.blocked_capabilities
     assert all(capability.dangerous is False for capability in catalog.capabilities)
@@ -227,9 +230,22 @@ def test_qgis_fixture_workflow_persists_candidate_artifacts(tmp_path: Path) -> N
     assert run.operational is False
     assert run.maplibre_geojson["features"]
     assert {feature["properties"]["kind"] for feature in run.maplibre_geojson["features"]} == {
-        "qgis_candidate_route",
         "qgis_slope_candidate",
     }
+    route_artifact = next(
+        artifact for artifact in run.artifacts if artifact.artifact_type == "route_geometry"
+    )
+    _, route_path = backend.artifact_path(
+        project_root=project_root,
+        workflow_run_id=run.workflow_run_id,
+        artifact_id=route_artifact.artifact_id,
+    )
+    route_payload = json.loads(route_path.read_text(encoding="utf-8"))
+    assert route_payload["features"][0]["properties"]["kind"] == (
+        "qgis_analysis_input_route"
+    )
+    assert route_payload["features"][0]["properties"]["input_reference"] is True
+    assert route_payload["features"][0]["properties"]["generated_by_qgis"] is False
     assert all(artifact.candidate_only for artifact in run.artifacts)
     assert all(not artifact.runtime_safety_truth for artifact in run.artifacts)
     persisted = backend.get_run(
@@ -245,6 +261,45 @@ def test_qgis_fixture_workflow_persists_candidate_artifacts(tmp_path: Path) -> N
     )
     assert artifact.media_type == "image/svg+xml"
     assert "synthetic / non-runtime / candidate-only" in render_path.read_text(encoding="utf-8")
+
+
+def test_qgis_route_projection_source_is_hash_bound(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_root, project = _workspace(tmp_path)
+    projection_ref = "outputs/navigation/navigation_terrain_intelligence.json"
+    projection_path = project_root / projection_ref
+    projection_path.parent.mkdir(parents=True, exist_ok=True)
+    projection_bytes = b'{"schema_version":"navigation_terrain_intelligence.v0"}\n'
+    projection_path.write_bytes(projection_bytes)
+    project = {**project, "navigation_terrain_projection_ref": projection_ref}
+    route_points = [
+        {"lat": 24.0506539, "lon": 121.2152310},
+        {"lat": 24.0525377, "lon": 121.2181223},
+        {"lat": 24.0495210, "lon": 121.2202911},
+    ]
+    monkeypatch.setattr(
+        "qgis_spatial_backend.inspect_navigation_terrain_projection",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            payload={"route_samples": {"points": route_points}}
+        ),
+    )
+
+    run = QgisSpatialBackend(
+        config=QgisSpatialBackendConfig(enabled=True, fixture_mode=True),
+        now_factory=_fixed_now,
+    ).start_workflow(
+        project_id="qgis_demo",
+        project_root=project_root,
+        project=project,
+        request=SpatialAnalysisRequest(project_id="qgis_demo"),
+    )
+
+    assert f"{projection_ref}#route_samples" in run.source_refs
+    assert run.source_hashes[projection_ref] == hashlib.sha256(
+        projection_bytes
+    ).hexdigest()
 
 
 def test_qgis_fixture_terrain_feature_stack_never_fabricates_rasters(
@@ -428,6 +483,13 @@ def test_qgis_api_status_workflow_artifacts_and_render(tmp_path: Path, monkeypat
     assert state_response.status_code == 200
     assert state_response.json()["workflow_run_id"] == run_id
 
+    latest_response = client.get(
+        "/admin/pretrip/projects/qgis_demo/spatial/qgis/workflows/latest"
+    )
+    assert latest_response.status_code == 200
+    assert latest_response.json()["workflow_run_id"] == run_id
+    assert latest_response.json()["runtime_safety_truth"] is False
+
     artifacts_response = client.get(
         f"/admin/pretrip/projects/qgis_demo/spatial/qgis/workflows/{run_id}/artifacts"
     )
@@ -507,34 +569,53 @@ def test_dashboard_qgis_panel_contract_is_backend_only() -> None:
     html = Path("docs/admin/scout-dashboard-v0.1.html").read_text(encoding="utf-8")
     assert 'src="/admin/scout-maplibre-evidence.js"' in html
     assert 'data-qgis-spatial-panel="true"' in html
-    assert 'data-qgis-maplibre-preview="true"' in html
-    assert 'data-scout-maplibre-evidence="qgis"' in html
-    assert "qgisSpatialEvidenceFeatureCollection" in html
-    assert "adapter.createEvidenceFeature" in html
-    assert 'const layerId = kind === "qgis_candidate_route"' in html
-    assert '? "qgis-route"' in html
-    assert ': kind === "qgis_terrain_feature_sample"' in html
-    assert '? "qgis-terrain-samples"' in html
+    assert 'data-qgis-maplibre-preview="true"' not in html
+    assert 'data-scout-maplibre-evidence="qgis"' not in html
+    assert "renderQgisMapLibrePreview" not in html
+    assert "features.push(...qgisSpatialMaplibreFeatures());" in html
+    assert "function qgisSpatialWorkflowFeatures()" in html
+    assert 'kind !== "qgis_candidate_route"' in html
+    assert 'kind !== "qgis_analysis_input_route"' in html
+    assert "return qgisSpatialWorkflowFeatures()" in html
+    assert "qgisSpatialMaplibreFeatureCounts" in html
+    assert "qgisSpatialAvailableLayerControls" in html
+    assert "qgisSpatialWorkflowFeatures().reduce" in html
+    assert "Scout lines ${formatInteger(visibility.displayed_line_count)}" in html
+    assert "QGIS ${formatInteger(qgisCount)}" in html
+    assert "qgis_count: qgisCount" in html
+    assert "attributionControl: false" in html
+    assert "new maplibregl.AttributionControl({compact: true})" in html
     assert 'kind === "qgis_candidate_ridge_line"' in html
-    assert '"qgis-ridge-lines"' in html
     assert 'kind === "qgis_candidate_valley_line"' in html
-    assert '"qgis-valley-lines"' in html
     assert 'kind === "qgis_candidate_stream_network"' in html
-    assert '"qgis-stream-network"' in html
     assert 'id: "scout-qgis-ridge-candidate"' in html
     assert 'id: "scout-qgis-valley-candidate"' in html
     assert 'id: "scout-qgis-stream-network-candidate"' in html
-    assert 'data-qgis-layer-toggle="ridges"' in html
-    assert 'data-qgis-layer-toggle="valleys"' in html
-    assert 'data-qgis-layer-toggle="streams"' in html
+    assert 'key: "ridges", kind: "qgis_candidate_ridge_line"' in html
+    assert 'key: "valleys", kind: "qgis_candidate_valley_line"' in html
+    assert 'key: "streams", kind: "qgis_candidate_stream_network"' in html
+    assert 'key: "route", kind: "qgis_candidate_route"' not in html
+    assert 'label: "QGIS route"' not in html
+    assert 'data-qgis-layer-toggle="${escapeHtml(definition.key)}"' in html
+    assert "definition.count > 0" in html
+    assert "QGIS 執行快照" in html
+    assert "AUDIT RECEIPT · NOT MAP COMPARISON" in html
     assert "scout-qgis-route-preview" not in html
     assert "scout-qgis-slope-preview" not in html
     assert "qgisSpatialBasePath()" in html
-    assert 'data-qgis-review-evidence="true"' in html
+    assert "`${basePath}/workflows/latest`" in html
+    qgis_state_loader = html.split("async function loadQgisSpatialData", 1)[1].split(
+        "async function startQgisSpatialWorkflow", 1
+    )[0]
+    assert 'let workflowRunId = "";' in qgis_state_loader
+    assert "state.qgisSpatialWorkflow?.workflow_run_id" in qgis_state_loader
+    assert "rememberedQgisSpatialWorkflowRunId()" in qgis_state_loader
+    assert 'data-qgis-review-evidence="true"' not in html
     assert 'data-qgis-visual-review="not-started"' in html
     assert 'data-qgis-visual-review="render-unavailable"' in html
     assert "QGIS integration is disabled. No workflow or rendered evidence artifact exists." in html
-    assert "Visual review cannot begin." in html
+    assert "Visual review cannot begin." not in html
+    assert "地形比對請使用上方 MapLibre 互動疊圖" in html
     assert 'data-qgis-terrain-features="true"' in html
     assert 'startQgisSpatialWorkflow("terrain_feature_stack.v1")' in html
     assert "GRASS capability discovery" in html

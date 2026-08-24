@@ -5014,6 +5014,35 @@ def create_admin_router(
             },
         )
 
+    @router.get("/pretrip/projects/{project_id}/spatial/qgis/workflows/latest")
+    def pretrip_project_qgis_spatial_latest_workflow(
+        project_id: str,
+        workflow_id: str | None = None,
+    ) -> JSONResponse:
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        try:
+            run = qgis_spatial_backend.get_latest_run(
+                project_root=project_root,
+                workflow_id=workflow_id,
+            )
+        except QgisSpatialNotFound as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except QgisSpatialBackendError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return JSONResponse(
+            content=run.model_dump(mode="json"),
+            headers={
+                "Cache-Control": "no-store",
+                "X-Scout-Candidate-Only": "true",
+                "X-Scout-Runtime-Safety-Truth": "false",
+            },
+        )
+
     @router.get(
         "/pretrip/projects/{project_id}/spatial/qgis/workflows/{workflow_run_id}"
     )

@@ -19,7 +19,10 @@ from uuid import uuid4
 
 from pydantic import ValidationError
 
-from navigation_terrain_projection_store import inspect_navigation_terrain_projection
+from navigation_terrain_projection_store import (
+    NAVIGATION_TERRAIN_PROJECTION_REF,
+    inspect_navigation_terrain_projection,
+)
 from qgis_spatial_contracts import (
     TERRAIN_CONTEXT_PREVIEW_WORKFLOW_ID,
     TERRAIN_CONTEXT_PREVIEW_WORKFLOW_VERSION,
@@ -67,6 +70,7 @@ QGIS_ALLOWED_TOOL_IDS = (
     "qgis.processing.grass.raster_to_vector",
     "qgis.processing.grass.watershed",
     "qgis.processing.gdal.assign_projection",
+    "qgis.processing.gdal.warp_reproject",
     "qgis.raster.identify",
     "qgis.vector.export_candidate_geojson",
     "qgis.render.map_preview",
@@ -455,6 +459,7 @@ class QgisSpatialBackend:
                         "qgis.processing.grass.raster_to_vector",
                         "qgis.processing.grass.watershed",
                         "qgis.processing.gdal.assign_projection",
+                        "qgis.processing.gdal.warp_reproject",
                         "qgis.raster.identify",
                         "qgis.vector.export_candidate_geojson",
                         "qgis.render.map_preview",
@@ -548,6 +553,48 @@ class QgisSpatialBackend:
         ):
             return self._poll_worker_run(project_root=project_root, run=run)
         return run
+
+    def get_latest_run(
+        self,
+        *,
+        project_root: Path,
+        workflow_id: str | None = None,
+    ) -> SpatialWorkflowRun:
+        if workflow_id is not None and workflow_id not in QGIS_ALLOWED_WORKFLOWS:
+            raise QgisSpatialBackendError("QGIS workflow is not allowlisted")
+        root = _safe_project_path(project_root, QGIS_WORKFLOW_ROOT_REF)
+        if not root.is_dir():
+            raise QgisSpatialNotFound("QGIS spatial workflow run not found")
+        runs: list[SpatialWorkflowRun] = []
+        for child in root.iterdir():
+            if not child.is_dir():
+                continue
+            try:
+                _validate_safe_id(child.name, "workflow_run_id")
+                run = self._load_run(
+                    project_root=project_root,
+                    workflow_run_id=child.name,
+                )
+            except (
+                OSError,
+                ValueError,
+                ValidationError,
+                json.JSONDecodeError,
+                QgisSpatialBackendError,
+            ):
+                continue
+            if workflow_id is None or run.workflow_id == workflow_id:
+                runs.append(run)
+        if not runs:
+            raise QgisSpatialNotFound("QGIS spatial workflow run not found")
+        latest = max(
+            runs,
+            key=lambda item: (item.created_at, item.updated_at, item.workflow_run_id),
+        )
+        return self.get_run(
+            project_root=project_root,
+            workflow_run_id=latest.workflow_run_id,
+        )
 
     def _load_run(self, *, project_root: Path, workflow_run_id: str) -> SpatialWorkflowRun:
         path = self._run_root(project_root, workflow_run_id) / "workflow_run.json"
@@ -758,7 +805,6 @@ class QgisSpatialBackend:
         selected_capability = (
             "terrain_feature_stack" if feature_stack else "terrain_context_preview"
         )
-        workflow_slug = "terrain_feature_stack" if feature_stack else "terrain_context_preview"
         workflow_run_id = self._new_workflow_run_id()
         request_id = request.request_id or f"qgis-request-{uuid4().hex[:12]}"
         route_points, source_refs, source_hashes, route_warning = self._route_points(
@@ -777,13 +823,16 @@ class QgisSpatialBackend:
             self._persist_run(project_root, run)
             return run
         sampled_points = _sample_route_points(route_points, maximum=96)
-        feature_collection = self._fixture_geojson(
+        worker_feature_collection = self._fixture_geojson(
             project_id=project_id,
             workflow_run_id=workflow_run_id,
             route_points=sampled_points,
             corridor_m=request.corridor_m,
         )
-        geojson_ref = f"{QGIS_WORKFLOW_ROOT_REF}/{workflow_run_id}/{workflow_slug}.geojson"
+        feature_collection, route_geometry = _partition_qgis_analysis_input_route(
+            worker_feature_collection
+        )
+        geojson_ref = f"{QGIS_WORKFLOW_ROOT_REF}/{workflow_run_id}/route_geometry.geojson"
         render_ref = f"{QGIS_WORKFLOW_ROOT_REF}/{workflow_run_id}/qgis_render_preview.fixture.svg"
         metadata_ref = f"{QGIS_WORKFLOW_ROOT_REF}/{workflow_run_id}/artifact_metadata.json"
         feature_manifest_ref = (
@@ -791,7 +840,7 @@ class QgisSpatialBackend:
             if feature_stack
             else None
         )
-        geojson_bytes = _json_bytes(feature_collection)
+        geojson_bytes = _json_bytes(route_geometry)
         render_svg = self._fixture_render_svg(
             project_id=project_id,
             workflow_run_id=workflow_run_id,
@@ -815,8 +864,8 @@ class QgisSpatialBackend:
             warnings.append(route_warning)
         created_at = now
         geojson_artifact = SpatialArtifact(
-            artifact_id=f"{workflow_run_id}.maplibre_geojson",
-            artifact_type="maplibre_geojson",
+            artifact_id=f"{workflow_run_id}.route_geometry",
+            artifact_type="route_geometry",
             workflow_id=workflow_id,
             workflow_version=workflow_version,
             workflow_run_id=workflow_run_id,
@@ -1056,6 +1105,8 @@ class QgisSpatialBackend:
             artifacts=fixture_artifacts,
             render_artifacts=[render_artifact],
             artifact_refs=fixture_refs,
+            source_refs=source_refs,
+            source_hashes=source_hashes,
             maplibre_geojson=feature_collection,
             warnings=warnings,
             audit_trail=[
@@ -1409,7 +1460,12 @@ class QgisSpatialBackend:
                 local_run=local_run,
                 worker_run=worker_run,
             )
-        feature_collection = _validated_candidate_geojson(result.maplibre_geojson)
+        worker_feature_collection = _validated_candidate_geojson(
+            result.maplibre_geojson
+        )
+        feature_collection, route_geometry = _partition_qgis_analysis_input_route(
+            worker_feature_collection
+        )
         slope_worker = next(
             (item for item in result.artifacts if item.artifact_type == "slope_raster"),
             None,
@@ -1432,7 +1488,7 @@ class QgisSpatialBackend:
         slope_ref = f"{QGIS_WORKFLOW_ROOT_REF}/{run_id}/slope.tif"
         render_ref = f"{QGIS_WORKFLOW_ROOT_REF}/{run_id}/qgis_render_preview.png"
         metadata_ref = f"{QGIS_WORKFLOW_ROOT_REF}/{run_id}/artifact_metadata.json"
-        route_bytes = _json_bytes(feature_collection)
+        route_bytes = _json_bytes(route_geometry)
         processing_algorithm = (
             "gdal:slope"
             if "gdal:slope" in result.processing_algorithms
@@ -1606,7 +1662,12 @@ class QgisSpatialBackend:
         result = worker_run.result
         if result is None:
             raise QgisSpatialBackendError("QGIS terrain feature result is unavailable")
-        feature_collection = _validated_candidate_geojson(result.maplibre_geojson)
+        worker_feature_collection = _validated_candidate_geojson(
+            result.maplibre_geojson
+        )
+        feature_collection, route_geometry = _partition_qgis_analysis_input_route(
+            worker_feature_collection
+        )
         required_types = (
             "slope_raster",
             "aspect_raster",
@@ -1723,7 +1784,7 @@ class QgisSpatialBackend:
             "terrain_feature_manifest": "scout.artifact.normalize",
             "qgis_visual_context": "qgis.visual_context",
         }
-        route_bytes = _json_bytes(feature_collection)
+        route_bytes = _json_bytes(route_geometry)
         created_at = worker_run.completed_at or self._now_iso()
         provenance = {
             "schema_version": "scout_qgis_spatial_provenance.v0_1",
@@ -2186,7 +2247,16 @@ class QgisSpatialBackend:
             snapshot = {}
         points = _extract_points(snapshot.get("route_samples", {}).get("points"))
         if points:
-            source_refs.append("outputs/navigation/navigation_terrain_intelligence.json#route_samples")
+            raw_projection_ref = project.get("navigation_terrain_projection_ref")
+            projection_ref = (
+                str(raw_projection_ref).strip()
+                if isinstance(raw_projection_ref, str) and raw_projection_ref.strip()
+                else NAVIGATION_TERRAIN_PROJECTION_REF
+            )
+            projection_path = _safe_project_path(project_root, projection_ref)
+            source_refs.append(f"{projection_ref}#route_samples")
+            if projection_path.is_file():
+                source_hashes[projection_ref] = _sha256_file(projection_path)
             return points, source_refs, source_hashes, None
         route_ref = project.get("compiled_mission_graph_reviewed_ref") or project.get(
             "compiled_mission_graph_candidate_ref"
@@ -2215,13 +2285,17 @@ class QgisSpatialBackend:
         route_feature = _line_geojson(route_points)["features"][0]
         route_feature["properties"] = {
             "id": f"{workflow_run_id}.route",
-            "kind": "qgis_candidate_route",
-            "feature_class": "qgis_candidate_route",
-            "label": "QGIS candidate route context",
+            "kind": "qgis_analysis_input_route",
+            "feature_class": "qgis_analysis_input_route",
+            "label": "Golden Route analysis input reference",
             "project_id": project_id,
             "workflow_run_id": workflow_run_id,
+            "input_reference": True,
+            "generated_by_qgis": False,
+            "visualization_only": True,
             "candidate_only": True,
             "runtime_safety_truth": False,
+            "operational": False,
             "fixture": True,
             "synthetic": True,
         }
@@ -2679,6 +2753,58 @@ def _validated_candidate_geojson(payload: dict[str, Any]) -> dict[str, Any]:
         }
     )
     return value
+
+
+def _partition_qgis_analysis_input_route(
+    feature_collection: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    input_route_kinds = {"qgis_candidate_route", "qgis_analysis_input_route"}
+    route_features: list[dict[str, Any]] = []
+    result_features: list[dict[str, Any]] = []
+    for feature in feature_collection["features"]:
+        properties = feature.get("properties") or {}
+        if properties.get("kind") not in input_route_kinds:
+            result_features.append(feature)
+            continue
+        normalized_properties = {
+            **properties,
+            "kind": "qgis_analysis_input_route",
+            "feature_class": "qgis_analysis_input_route",
+            "label": "Golden Route analysis input reference",
+            "input_reference": True,
+            "generated_by_qgis": False,
+            "visualization_only": True,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "operational": False,
+        }
+        route_features.append({**feature, "properties": normalized_properties})
+    if len(route_features) != 1:
+        raise QgisSpatialBackendError(
+            "QGIS workflow must return exactly one Golden Route input reference"
+        )
+    root_properties = dict(feature_collection.get("properties") or {})
+    display_collection = {
+        **feature_collection,
+        "features": result_features,
+        "properties": {
+            **root_properties,
+            "contains_analysis_input_route": False,
+        },
+    }
+    route_collection = {
+        "type": "FeatureCollection",
+        "features": route_features,
+        "properties": {
+            **root_properties,
+            "artifact_role": "analysis_input_reference",
+            "generated_by_qgis": False,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "operational": False,
+        },
+    }
+    return display_collection, route_collection
 
 
 def _validate_terrain_feature_route_samples_bytes(raw: bytes) -> None:

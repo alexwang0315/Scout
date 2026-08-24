@@ -201,6 +201,52 @@ def test_qgis_mcp_stdio_rejects_non_allowlisted_algorithm_and_output_path(
         )
 
 
+def test_qgis_mcp_stdio_bounds_xyz_north_up_normalization(tmp_path: Path) -> None:
+    run_root = tmp_path / "runs"
+    source_root = tmp_path / "source"
+    run_root.mkdir()
+    source_root.mkdir()
+    dem = source_root / "south-up.grd"
+    dem.write_text("0 0 1\n", encoding="utf-8")
+    output = run_root / "north-up.tif"
+    client = QgisMcpStdioClient(
+        QgisMcpClientConfig(
+            command=(sys.executable, str(tmp_path / "unused.py")),
+            run_root=run_root,
+            source_roots=(source_root,),
+        )
+    )
+    parameters = {
+        "INPUT": str(dem),
+        "SOURCE_CRS": "EPSG:3826",
+        "TARGET_CRS": "EPSG:3826",
+        "RESAMPLING": 0,
+        "NODATA": None,
+        "TARGET_RESOLUTION": 20.0,
+        "CREATION_OPTIONS": "",
+        "DATA_TYPE": 0,
+        "TARGET_EXTENT": None,
+        "TARGET_EXTENT_CRS": None,
+        "MULTITHREADING": False,
+        "EXTRA": "",
+        "OUTPUT": str(output),
+    }
+
+    client.validate_tool_call(
+        "qgis_processing_start",
+        {"algorithm": "gdal:warpreproject", "parameters": parameters},
+    )
+
+    with pytest.raises(QgisMcpToolRejected):
+        client.validate_tool_call(
+            "qgis_processing_start",
+            {
+                "algorithm": "gdal:warpreproject",
+                "parameters": {**parameters, "EXTRA": "--config CPL_DEBUG ON"},
+            },
+        )
+
+
 def test_qgis_mcp_stdio_bounds_slope_cartography(tmp_path: Path) -> None:
     client = QgisMcpStdioClient(
         QgisMcpClientConfig(
@@ -507,14 +553,26 @@ def test_qgis_mcp_stdio_bounds_review_canvas(tmp_path: Path) -> None:
     client.validate_tool_call(
         "qgis_canvas", {"action": "set_crs", "crs": "EPSG:3826"}
     )
+    client.validate_tool_call("qgis_canvas", {"action": "status"})
     client.validate_tool_call(
         "qgis_canvas",
         {"action": "set_extent", "extent": [260_000, 2_640_000, 270_000, 2_650_000]},
     )
+    client.validate_tool_call("qgis_canvas", {"action": "refresh"})
     with pytest.raises(QgisMcpToolRejected):
         client.validate_tool_call(
             "qgis_canvas", {"action": "set_crs", "crs": "EPSG:4326"}
         )
+    with pytest.raises(QgisMcpToolRejected):
+        client.validate_tool_call(
+            "qgis_canvas", {"action": "refresh", "extent": [0, 0, 1, 1]}
+        )
+    with pytest.raises(QgisMcpToolRejected):
+        client.validate_tool_call(
+            "qgis_canvas", {"action": "status", "view": "secondary"}
+        )
+    with pytest.raises(QgisMcpToolRejected):
+        client.validate_tool_call("qgis_canvas", {"action": "zoom_in"})
 
 
 def test_qgis_mcp_stdio_bounds_processing_capability_discovery(tmp_path: Path) -> None:
