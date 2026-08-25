@@ -63,6 +63,11 @@ from dashboard_workspace_operations import (
     append_workspace_operation_request,
     load_workspace_operation_requests,
 )
+from dashboard_workspace_clone import (
+    WorkspaceCloneRequest,
+    WorkspaceClonePreparationError,
+    clone_pretrip_workspace_from_inputs,
+)
 from dashboard_workspace_publication import dashboard_project_id_from_read_path
 from navigation_terrain_projection import (
     NavigationTerrainProjectionError,
@@ -1523,6 +1528,10 @@ class PreTripImportGpxRequest(BaseModel):
         default=DEFAULT_MAX_REASONABLE_SPEED_KMH,
         gt=0,
     )
+    max_previous_gpx_speed_ratio: float = Field(default=8.0, gt=0)
+    material_root: str | None = Field(default=None, min_length=1)
+    dtm_dirs: list[str] = Field(default_factory=list)
+    mcp_named_point_evidence: str | None = Field(default=None, min_length=1)
     import_timestamp: str | None = None
     import_stage: Literal["pretrip"] = "pretrip"
     overwrite: bool = False
@@ -1536,6 +1545,15 @@ class PreTripImportGpxRequest(BaseModel):
             if self.template_project_root
             else None
         )
+        self.material_root = (
+            self.material_root.strip() or None if self.material_root else None
+        )
+        self.mcp_named_point_evidence = (
+            self.mcp_named_point_evidence.strip() or None
+            if self.mcp_named_point_evidence
+            else None
+        )
+        self.dtm_dirs = [path.strip() for path in self.dtm_dirs if path.strip()]
         combined = [
             path.strip()
             for path in [*self.reference_gpx_paths, *self.reference_gpx]
@@ -1578,6 +1596,30 @@ class DashboardWorkspaceOperationRequest(BaseModel):
         return normalized or None
 
 
+class DashboardWorkspaceCloneRunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    target_project_id: str = Field(
+        min_length=1,
+        max_length=120,
+        pattern=r"^[A-Za-z0-9_.-]+$",
+    )
+    confirm_clone: bool = False
+    requested_by: str = Field(
+        default="dashboard_operator",
+        min_length=1,
+        max_length=80,
+    )
+
+    @field_validator("target_project_id", "requested_by")
+    @classmethod
+    def normalize_clone_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("clone text fields must not be blank")
+        return normalized
+
+
 class PreTripPrepareLayersRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -1590,13 +1632,51 @@ class PreTripPrepareLayersRequest(BaseModel):
     allow_network_fetch: bool = False
     prepare_cwa_imagery: bool = False
     route_corridor_m: float = Field(default=500.0, gt=0)
+    reference_track_corridor_m: float = Field(default=300.0, gt=0)
     bbox: dict[str, Any] | None = None
+    route_evidence_bundle: str | None = Field(default=None, min_length=1)
+    ai_mode: Literal["fixture-or-precomputed", "pydantic-cloud-explicit"] = (
+        "fixture-or-precomputed"
+    )
+    ai_output_policy: str = Field(default="hash-and-summary", min_length=1)
+    imagery_min_zoom: int = Field(default=12, ge=0, le=24)
+    imagery_max_zoom: int = Field(default=17, ge=0, le=24)
+    seed_imagery_cache: bool = False
+    imagery_provider_allows_offline_prefetch: bool = False
+    imagery_seed_max_tiles: int | None = Field(default=None, gt=0)
+    imagery_cache_fallback_project_ids: list[str] = Field(default_factory=list)
+    osm_pbf_path: str | None = Field(default=None, min_length=1)
+    osm_pbf_source_url: str | None = Field(default=None, min_length=1)
+    osm_pbf_cache_ttl_days: int = Field(default=30, gt=0)
+    osmium_bin: str = Field(default="osmium", min_length=1)
     prepared_at: str | None = None
 
     @model_validator(mode="after")
     def normalize_layers_and_workspace(self) -> "PreTripPrepareLayersRequest":
         self.layers = [layer.strip() for layer in self.layers if layer.strip()]
         self.workspace_root = self.workspace_root.strip() or None if self.workspace_root else None
+        self.route_evidence_bundle = (
+            self.route_evidence_bundle.strip() or None
+            if self.route_evidence_bundle
+            else None
+        )
+        self.osm_pbf_path = (
+            self.osm_pbf_path.strip() or None if self.osm_pbf_path else None
+        )
+        self.osm_pbf_source_url = (
+            self.osm_pbf_source_url.strip() or None
+            if self.osm_pbf_source_url
+            else None
+        )
+        self.osmium_bin = self.osmium_bin.strip()
+        self.ai_output_policy = self.ai_output_policy.strip()
+        self.imagery_cache_fallback_project_ids = [
+            project_id.strip()
+            for project_id in self.imagery_cache_fallback_project_ids
+            if project_id.strip()
+        ]
+        if self.imagery_min_zoom > self.imagery_max_zoom:
+            raise ValueError("imagery_min_zoom must not exceed imagery_max_zoom")
         return self
 
 
@@ -2757,6 +2837,7 @@ def create_admin_router(
             "capabilities": {
                 "switch": True,
                 "read": True,
+                "clone_from_import_inputs": workspace_backed,
                 "record_operation_request": workspace_backed,
                 "import_preview": True,
                 "connected_preparation_refresh": workspace_backed,
@@ -2885,6 +2966,73 @@ def create_admin_router(
             "persisted": True,
             "executed": False,
             "source_ref": str(WORKSPACE_OPERATION_REQUESTS_REF),
+        }
+
+    @router.post(
+        "/dashboard/workspaces/{project_id}/clone",
+        status_code=201,
+    )
+    def scout_dashboard_workspace_clone(
+        project_id: str,
+        request: DashboardWorkspaceCloneRunRequest,
+    ) -> dict[str, Any]:
+        if not request.confirm_clone:
+            raise HTTPException(
+                status_code=400,
+                detail="confirm_clone=true is required",
+            )
+        context = dashboard_workspace_context(project_id)
+        if not context["workspace_backed"] or pretrip_workspace_root is None:
+            raise HTTPException(
+                status_code=409,
+                detail="clone requires a workspace-backed source project",
+            )
+        try:
+            result = clone_pretrip_workspace_from_inputs(
+                WorkspaceCloneRequest(
+                    source_project_id=context["project_id"],
+                    target_project_id=request.target_project_id,
+                    source_project_root=Path(context["resolved_project_root"]),
+                    workspace_root=Path(pretrip_workspace_root),
+                    requested_by=request.requested_by,
+                )
+            )
+        except FileExistsError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (
+            ValueError,
+            OSError,
+            ValidationError,
+            ParseError,
+            WorkspaceClonePreparationError,
+        ) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        if runtime_audit is not None:
+            runtime_audit.record_workspace_io(
+                operation="clone-import-and-prepare",
+                workspace_id=request.target_project_id,
+                artifact_kind="dashboard_workspace_clone_receipt",
+                artifact_ref="outputs/workspace_clone_receipt.json",
+                record_count=1,
+                byte_count=None,
+                module="admin-api",
+                feature="workspace-clone",
+                summary="Workspace cloned by clean GPX import and map preparation",
+            )
+        return {
+            **result,
+            "persisted": True,
+            "executed": True,
+            "mutation": {
+                "source_workspace_mutated": False,
+                "target_workspace_created": True,
+                "target_workspace_overwritten": False,
+                "runtime_mutated": False,
+                "phase1_runtime_mutated": False,
+            },
         }
 
     @router.post("/dashboard/body-index/import")
@@ -6422,6 +6570,17 @@ def create_admin_router(
                     checkpoint_spacing_m=request.checkpoint_spacing_m,
                     max_reference_display_points=request.max_reference_display_points,
                     max_reasonable_gpx_speed_kmh=request.max_reasonable_gpx_speed_kmh,
+                    max_previous_gpx_speed_ratio=request.max_previous_gpx_speed_ratio,
+                    material_root=_optional_path_from_admin_request(
+                        request.material_root
+                    ),
+                    dtm_dirs=tuple(
+                        _path_from_admin_request(path)
+                        for path in request.dtm_dirs
+                    ),
+                    mcp_named_point_evidence=_optional_path_from_admin_request(
+                        request.mcp_named_point_evidence
+                    ),
                     overwrite=request.overwrite,
                     import_timestamp=request.import_timestamp,
                     import_stage="pretrip",
@@ -6829,10 +6988,16 @@ def create_admin_router(
         y: int,
         source_id: str | None = None,
         native: bool = False,
+        refresh: bool = False,
+        cache_only: bool = False,
     ) -> Response:
         try:
             if native and not source_id:
                 raise ValueError("native tile fetch requires source_id")
+            if refresh and not native:
+                raise ValueError("refresh tile fetch requires native=true")
+            if cache_only and native:
+                raise ValueError("cache_only and native cannot both be enabled")
             project = _pretrip_project_payload_for_tiles(
                 pretrip_workspace_root,
                 project_id=project_id,
@@ -6856,9 +7021,14 @@ def create_admin_router(
                 fallback_enabled=_raster_tile_fallback_enabled_from_env(),
                 imagery_source=imagery_source,
                 allow_remote_fetch=(
-                    native or _imagery_remote_fetch_enabled_from_env()
+                    native
+                    or (
+                        not cache_only
+                        and _imagery_remote_fetch_enabled_from_env()
+                    )
                 ),
                 prefer_native_zoom=native,
+                force_remote_refresh=refresh,
                 remote_fetch_timeout_seconds=(
                     min(_imagery_remote_fetch_timeout_from_env(), 3.0)
                     if native
@@ -7758,6 +7928,24 @@ def _build_pretrip_import_gpx_preview(
     if template_root is not None and not template_root.is_dir():
         raise ValueError(f"template project root is not a directory: {template_root}")
 
+    material_root = _optional_path_from_admin_request(request.material_root)
+    if material_root is not None and not material_root.is_dir():
+        raise FileNotFoundError(f"material root not found: {material_root}")
+    dtm_dirs = tuple(_path_from_admin_request(path) for path in request.dtm_dirs)
+    for dtm_dir in dtm_dirs:
+        if not dtm_dir.is_dir():
+            raise FileNotFoundError(f"DTM directory not found: {dtm_dir}")
+    mcp_named_point_evidence = _optional_path_from_admin_request(
+        request.mcp_named_point_evidence
+    )
+    if (
+        mcp_named_point_evidence is not None
+        and not mcp_named_point_evidence.is_file()
+    ):
+        raise FileNotFoundError(
+            f"MCP named-point evidence not found: {mcp_named_point_evidence}"
+        )
+
     reference_paths = _pretrip_import_reference_paths(
         request,
         golden_route=golden_route,
@@ -7804,6 +7992,7 @@ def _build_pretrip_import_gpx_preview(
             "checkpoint_spacing_m": request.checkpoint_spacing_m,
             "max_reference_display_points": request.max_reference_display_points,
             "max_reasonable_gpx_speed_kmh": request.max_reasonable_gpx_speed_kmh,
+            "max_previous_gpx_speed_ratio": request.max_previous_gpx_speed_ratio,
             "golden_route_count": 1,
             "reference_track_count": len(reference_paths),
             "source_file_count": 1 + len(reference_paths),
@@ -7813,6 +8002,13 @@ def _build_pretrip_import_gpx_preview(
             "golden_route_gpx": golden_source_record,
             "reference_tracks": reference_source_records,
             "template_project_root": str(template_root) if template_root else None,
+            "material_root": str(material_root) if material_root else None,
+            "dtm_dirs": [str(path) for path in dtm_dirs],
+            "mcp_named_point_evidence": (
+                str(mcp_named_point_evidence)
+                if mcp_named_point_evidence is not None
+                else None
+            ),
         },
         "provenance": {
             "golden_route_gpx": {
@@ -7832,6 +8028,7 @@ def _build_pretrip_import_gpx_preview(
             "checkpoint_spacing_m": request.checkpoint_spacing_m,
             "max_reference_display_points": request.max_reference_display_points,
             "max_reasonable_gpx_speed_kmh": request.max_reasonable_gpx_speed_kmh,
+            "max_previous_gpx_speed_ratio": request.max_previous_gpx_speed_ratio,
         },
         "gpx_speed_filter": {
             "enabled": True,
@@ -7919,7 +8116,27 @@ def _pretrip_prepare_layers_request(
         allow_network_fetch=request.allow_network_fetch,
         prepare_cwa_imagery=request.prepare_cwa_imagery,
         bbox=request.bbox,
+        route_evidence_bundle=_optional_path_from_admin_request(
+            request.route_evidence_bundle
+        ),
         route_corridor_m=request.route_corridor_m,
+        reference_track_corridor_m=request.reference_track_corridor_m,
+        ai_mode=request.ai_mode,
+        ai_output_policy=request.ai_output_policy,
+        imagery_min_zoom=request.imagery_min_zoom,
+        imagery_max_zoom=request.imagery_max_zoom,
+        seed_imagery_cache=request.seed_imagery_cache,
+        imagery_provider_allows_offline_prefetch=(
+            request.imagery_provider_allows_offline_prefetch
+        ),
+        imagery_seed_max_tiles=request.imagery_seed_max_tiles,
+        imagery_cache_fallback_project_ids=tuple(
+            request.imagery_cache_fallback_project_ids
+        ),
+        osm_pbf_path=_optional_path_from_admin_request(request.osm_pbf_path),
+        osm_pbf_source_url=request.osm_pbf_source_url,
+        osm_pbf_cache_ttl_days=request.osm_pbf_cache_ttl_days,
+        osmium_bin=request.osmium_bin,
         prepared_at=request.prepared_at,
     )
 

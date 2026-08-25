@@ -555,6 +555,7 @@ class DashboardConnectedPreparationManager:
             prepare_cwa_imagery=True,
             run_post_layer_enrichments=False,
             run_map_preparation_spec_artifacts=False,
+            publish_preparation_outputs=False,
             route_corridor_m=500.0,
             reference_track_corridor_m=300.0,
             ai_mode="fixture-or-precomputed",

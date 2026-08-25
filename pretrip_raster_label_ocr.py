@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
+import io
 import json
 import os
 import shutil
+import subprocess
 from collections.abc import Callable, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -31,6 +35,7 @@ DEFAULT_RASTER_LABEL_PLAN_REF = "outputs/layers/plans/raster_label_plan.json"
 DEFAULT_TESSERACT_LANG = "chi_tra+eng"
 DEFAULT_MIN_CONFIDENCE = 0.35
 DEFAULT_TESSERACT_TIMEOUT_S = 10.0
+DEFAULT_OCR_MAX_WORKERS = 4
 DEFAULT_OCR_SOURCE_IDS = ("happyman_rudy_twmap", "happyman_rudy")
 CELLULAR_KEYWORDS = ("通訊點", "通信點", "遠傳", "台哥大", "台灣大", "中華", "亞太", "台灣之星", "112")
 CONTOUR_TEXT_MIN = 100
@@ -50,6 +55,7 @@ def extract_raster_label_ocr(
     min_confidence: float = DEFAULT_MIN_CONFIDENCE,
     source_ids: Sequence[str] | None = None,
     max_tiles: int | None = None,
+    max_workers: int | None = None,
     dry_run: bool = False,
     ocr_runner: OcrRunner | None = None,
     collected_at: str | None = None,
@@ -134,18 +140,24 @@ def extract_raster_label_ocr(
     cache_hit_count = 0
     cache_miss_count = 0
     cache_write_count = 0
-    for tile_index, tile in enumerate(tile_records, start=1):
+    worker_count = _ocr_worker_count(
+        max_workers if max_workers is not None or ocr_runner is None else 1,
+        tile_count=len(tile_records),
+    )
+
+    def process_tile(item: tuple[int, dict[str, Any]]) -> dict[str, Any]:
+        tile_index, tile = item
         image_path = _resolve_project_path(root, str(tile.get("image_path") or ""))
         if not image_path.is_file():
-            skipped_tiles.append(
-                {
+            return {
+                "status": "skipped",
+                "skipped_tile": {
                     "tile_index": tile_index,
                     "reason": "tile_image_missing",
                     "image_path": str(tile.get("image_path") or ""),
                     "tile_id": _tile_id(tile),
-                }
-            )
-            continue
+                },
+            }
         image_hash = _sha256(image_path)
         cached_labels = _read_cached_tile_ocr(
             cache_dir,
@@ -154,13 +166,21 @@ def extract_raster_label_ocr(
             tesseract_lang=tesseract_lang,
             runner_kind=runner_kind,
         )
-        if cached_labels is None:
-            cache_miss_count += 1
-            try:
-                raw_labels = [dict(item) for item in runner(image_path)]
-            except Exception as exc:  # pragma: no cover - runtime OCR guard.
-                skipped_tiles.append(
-                    {
+        if cached_labels is not None:
+            return {
+                "status": "cache_hit",
+                "tile_index": tile_index,
+                "tile": tile,
+                "image_path": image_path,
+                "image_hash": image_hash,
+                "raw_labels": cached_labels,
+            }
+        try:
+            raw_labels = [dict(raw_label) for raw_label in runner(image_path)]
+        except Exception as exc:  # pragma: no cover - runtime OCR guard.
+            return {
+                "status": "cache_miss_failed",
+                "skipped_tile": {
                         "tile_index": tile_index,
                         "reason": (
                             "ocr_timeout"
@@ -171,46 +191,79 @@ def extract_raster_label_ocr(
                         "tile_id": _tile_id(tile),
                         "error_type": type(exc).__name__,
                         "error_summary": _safe_error_summary(exc),
-                    }
-                )
+                },
+            }
+        return {
+            "status": "cache_miss",
+            "tile_index": tile_index,
+            "tile": tile,
+            "image_path": image_path,
+            "image_hash": image_hash,
+            "raw_labels": raw_labels,
+        }
+
+    indexed_tiles = list(enumerate(tile_records, start=1))
+    if worker_count == 1:
+        processed_tiles = map(process_tile, indexed_tiles)
+    else:
+        executor = ThreadPoolExecutor(max_workers=worker_count)
+        processed_tiles = executor.map(process_tile, indexed_tiles)
+    try:
+        for processed in processed_tiles:
+            status = str(processed["status"])
+            if status == "skipped":
+                skipped_tiles.append(processed["skipped_tile"])
                 continue
-            if not dry_run:
-                _write_cached_tile_ocr(
-                    cache_dir,
-                    image_hash=image_hash,
-                    engine=engine,
-                    tesseract_lang=tesseract_lang,
-                    runner_kind=runner_kind,
-                    raw_labels=raw_labels,
-                    image_path=_project_ref_for_path(root, image_path),
-                    tile=tile,
-                    collected_at=collected_at,
-                )
-                cache_write_count += 1
-        else:
-            cache_hit_count += 1
-            raw_labels = cached_labels
-        for label_index, raw_label in enumerate(raw_labels, start=1):
-            label = _label_from_ocr_record(raw_label)
-            confidence = _confidence_from_ocr_record(raw_label)
-            if not label:
+            if status == "cache_miss_failed":
+                cache_miss_count += 1
+                skipped_tiles.append(processed["skipped_tile"])
                 continue
-            if confidence is not None and confidence < min_confidence:
-                continue
-            labels.append(
-                _label_record(
-                    raw_label,
-                    label=label,
-                    confidence=confidence,
-                    project_root=root,
-                    image_path=image_path,
-                    image_hash=image_hash,
-                    tile=tile,
-                    tile_index=tile_index,
-                    label_index=label_index,
-                    collected_at=collected_at,
+            tile_index = int(processed["tile_index"])
+            tile = processed["tile"]
+            image_path = processed["image_path"]
+            image_hash = str(processed["image_hash"])
+            raw_labels = processed["raw_labels"]
+            if status == "cache_hit":
+                cache_hit_count += 1
+            else:
+                cache_miss_count += 1
+                if not dry_run:
+                    _write_cached_tile_ocr(
+                        cache_dir,
+                        image_hash=image_hash,
+                        engine=engine,
+                        tesseract_lang=tesseract_lang,
+                        runner_kind=runner_kind,
+                        raw_labels=raw_labels,
+                        image_path=_project_ref_for_path(root, image_path),
+                        tile=tile,
+                        collected_at=collected_at,
+                    )
+                    cache_write_count += 1
+            for label_index, raw_label in enumerate(raw_labels, start=1):
+                label = _label_from_ocr_record(raw_label)
+                confidence = _confidence_from_ocr_record(raw_label)
+                if not label:
+                    continue
+                if confidence is not None and confidence < min_confidence:
+                    continue
+                labels.append(
+                    _label_record(
+                        raw_label,
+                        label=label,
+                        confidence=confidence,
+                        project_root=root,
+                        image_path=image_path,
+                        image_hash=image_hash,
+                        tile=tile,
+                        tile_index=tile_index,
+                        label_index=label_index,
+                        collected_at=collected_at,
+                    )
                 )
-            )
+    finally:
+        if worker_count > 1:
+            executor.shutdown(wait=True)
 
     payload = {
         "artifact_kind": "pretrip_raster_label_ocr_output",
@@ -229,6 +282,7 @@ def extract_raster_label_ocr(
             "runtime_dependency_status": "available" if ocr_runner is None else "injected_runner",
             "missing_dependencies": [],
             "min_confidence": min_confidence,
+            "worker_count": worker_count,
         },
         "source_plan_ref": _project_ref_for_path(root, plan_path),
         "tile_manifest_ref": tile_manifest_ref,
@@ -236,6 +290,7 @@ def extract_raster_label_ocr(
         "labels": labels,
         "counts": {
             "tile_record_count": len(tile_records),
+            "ocr_worker_count": worker_count,
             "tile_skipped_count": len(skipped_tiles),
             "ocr_cache_hit_count": cache_hit_count,
             "ocr_cache_miss_count": cache_miss_count,
@@ -454,7 +509,26 @@ def _build_ocr_runner(
 ) -> tuple[OcrRunner | None, list[str]]:
     if engine != "tesseract":
         return None, [f"unsupported_ocr_engine:{engine}"]
-    missing = []
+    tesseract_bin = shutil.which("tesseract")
+    if tesseract_bin is None:
+        return None, ["tesseract"]
+
+    runner, missing = _build_pytesseract_runner(
+        tesseract_lang=tesseract_lang,
+    )
+    if runner is not None:
+        return runner, []
+    return _build_tesseract_cli_runner(
+        tesseract_bin=Path(tesseract_bin),
+        tesseract_lang=tesseract_lang,
+    ), []
+
+
+def _build_pytesseract_runner(
+    *,
+    tesseract_lang: str,
+) -> tuple[OcrRunner | None, list[str]]:
+    missing: list[str] = []
     try:
         from PIL import Image
     except Exception:  # pragma: no cover - environment dependent
@@ -465,8 +539,6 @@ def _build_ocr_runner(
     except Exception:  # pragma: no cover - environment dependent
         pytesseract = None  # type: ignore[assignment]
         missing.append("pytesseract")
-    if shutil.which("tesseract") is None:
-        missing.append("tesseract")
     if missing:
         return None, missing
 
@@ -496,6 +568,80 @@ def _build_ocr_runner(
         return records
 
     return _run, []
+
+
+def _build_tesseract_cli_runner(
+    *,
+    tesseract_bin: Path,
+    tesseract_lang: str,
+) -> OcrRunner:
+    def _run(image_path: Path) -> list[dict[str, Any]]:
+        result = subprocess.run(
+            [
+                str(tesseract_bin),
+                str(image_path),
+                "stdout",
+                "-l",
+                tesseract_lang,
+                "tsv",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=_tesseract_timeout_s(),
+        )
+        if result.returncode != 0:
+            error = (result.stderr or "tesseract CLI failed").replace("\n", " ")[:200]
+            raise RuntimeError(error)
+        return _tesseract_tsv_records(result.stdout)
+
+    return _run
+
+
+def _tesseract_tsv_records(payload: str) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    for row in csv.DictReader(io.StringIO(payload), delimiter="\t"):
+        text = str(row.get("text") or "").strip()
+        if not text:
+            continue
+        left = _int_or_zero(row.get("left"))
+        top = _int_or_zero(row.get("top"))
+        width = _int_or_zero(row.get("width"))
+        height = _int_or_zero(row.get("height"))
+        records.append(
+            {
+                "label_text": text,
+                "confidence": row.get("conf"),
+                "bbox_px": [left, top, left + width, top + height],
+                "ocr_engine": "tesseract_cli",
+            }
+        )
+    return records
+
+
+def _int_or_zero(value: Any) -> int:
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _ocr_worker_count(requested: int | None, *, tile_count: int) -> int:
+    if tile_count <= 1:
+        return 1
+    value: int | None = requested
+    if value is None:
+        raw = os.environ.get("SCOUT_RASTER_LABEL_OCR_WORKERS")
+        if raw and raw.strip():
+            try:
+                value = int(raw)
+            except ValueError:
+                value = None
+    if value is None:
+        value = min(DEFAULT_OCR_MAX_WORKERS, os.cpu_count() or 1)
+    if value <= 0:
+        raise ValueError("max_workers must be positive")
+    return min(value, tile_count)
 
 
 def _tesseract_timeout_s() -> float:
@@ -740,6 +886,7 @@ def _resolve_plan_ref(project: Mapping[str, Any], override: Path | str | None) -
 def _resolve_tile_manifest_ref(project: Mapping[str, Any], override: Path | str | None) -> str:
     return str(
         override
+        or project.get("raster_label_tile_cache_plan_ref")
         or project.get("imagery_tile_cache_plan_ref")
         or project.get("raster_tile_manifest_ref")
         or ""

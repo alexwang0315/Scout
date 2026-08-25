@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import http.client
 import json
 import math
 import os
@@ -10,13 +11,19 @@ import shutil
 import statistics
 import subprocess
 import sys
+import threading
+import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Literal
+
+from scout_layer_contract import SCOUT_PREPARATION_LAYER_IDS
 
 from admin_imagery_sources import (
     DEFAULT_REGISTRY_ID,
@@ -54,30 +61,25 @@ from pretrip_spatial_risk_inputs import (
 LAYER_PREPARATION_VERSION = "0.1.0"
 RISK_PROVENANCE_STAMP_VERSION = "pretrip_risk_provenance.v0.1"
 DEFAULT_OSM_PBF_CACHE_TTL_DAYS = 30
+OVERPASS_FETCH_MAX_ATTEMPTS = 3
+DEFAULT_NAVIGATION_TERRAIN_DEM_ZOOMS = (13, 14, 15)
+WORKSPACE_RASTER_CACHE_SEED_WORKERS = 4
+WORKSPACE_RASTER_CACHE_SOURCE_IDS: tuple[tuple[str, str | None], ...] = (
+    ("imagery", None),
+    ("rudy", "happyman_rudy"),
+    ("rudy-twmap", "happyman_rudy_twmap"),
+    ("relief", "happyman_colorrelief"),
+    ("geology", "happyman_geo2016"),
+    ("topo-5k", "happyman_tw5k2000"),
+    ("forest", "happyman_forest"),
+    ("historical-fandi-1916", "sinica_jm50k_1916"),
+)
 LayerProfile = Literal["mac-workstation", "pi-offline", "pi-online-explicit"]
 NetworkMode = Literal["no-network", "explicit-fetch"]
 AiMode = Literal["fixture-or-precomputed", "pydantic-cloud-explicit"]
 DEFAULT_SCOUT_DATA_ROOT = Path("/data/scout")
 
-DEFAULT_LAYERS = (
-    "osm",
-    "overpass",
-    "terrain",
-    "risk-score",
-    "risk-ribbon",
-    "risk-heatmap",
-    "risk-delta",
-    "cwa-qpf",
-    "soil-moisture",
-    "antecedent-rain",
-    "cwa-weather",
-    "weather",
-    "reference-tracks",
-    "route",
-    "segments",
-    "checkpoints",
-    "mcp",
-)
+DEFAULT_LAYERS = SCOUT_PREPARATION_LAYER_IDS
 OUTPUT_REFS = {
     "layer_preparation_manifest_ref": "outputs/layers/layer_preparation_manifest.json",
     "layer_preparation_job_ref": "outputs/layers/layer_preparation_job.json",
@@ -422,8 +424,10 @@ class LayerPreparationRequest:
     seed_imagery_cache: bool = False
     run_post_layer_enrichments: bool = True
     run_map_preparation_spec_artifacts: bool = True
+    publish_preparation_outputs: bool = True
     imagery_provider_allows_offline_prefetch: bool = False
     imagery_seed_max_tiles: int | None = None
+    imagery_cache_root: Path | None = None
     imagery_cache_fallback_project_ids: tuple[str, ...] = ()
     osm_pbf_path: Path | None = None
     osm_pbf_source_url: str | None = None
@@ -468,20 +472,39 @@ def run_layer_preparation(request: LayerPreparationRequest) -> dict[str, Any]:
         semantic_judgements=semantic_judgements,
     )
 
-    _write_json(project_root / outputs["layer_preparation_manifest_ref"], manifest)
-    _write_json(project_root / outputs["layer_preparation_job_ref"], job_payload)
-    _write_json(project_root / outputs["layer_preparation_summary_ref"], summary)
-    _write_json(project_root / outputs["map_preparation_summary_ref"], map_preparation_summary)
-    _write_json(project_root / outputs["layer_adapter_manifest_ref"], adapter_manifest)
-    _write_json(project_root / outputs["layer_validation_report_ref"], manifest["validation"])
-    _write_json(project_root / outputs["gis_semantic_input_bundle_ref"], semantic_input_bundle)
-    _write_json(project_root / outputs["gis_perception_ai_judgements_ref"], semantic_judgements)
-    for ref_key, artifact in layer_candidate_artifacts.items():
-        _write_json(project_root / outputs[ref_key], artifact)
-    _write_json(project_root / outputs["layer_map_projection_ref"], map_projection)
-    _write_jsonl(project_root / outputs["layer_debug_projection_events_ref"], debug_events)
-    _write_layer_plan_files(project_root, manifest)
-    if request.run_map_preparation_spec_artifacts:
+    if request.publish_preparation_outputs:
+        _write_json(project_root / outputs["layer_preparation_manifest_ref"], manifest)
+        _write_json(project_root / outputs["layer_preparation_job_ref"], job_payload)
+        _write_json(project_root / outputs["layer_preparation_summary_ref"], summary)
+        _write_json(
+            project_root / outputs["map_preparation_summary_ref"],
+            map_preparation_summary,
+        )
+        _write_json(project_root / outputs["layer_adapter_manifest_ref"], adapter_manifest)
+        _write_json(
+            project_root / outputs["layer_validation_report_ref"],
+            manifest["validation"],
+        )
+        _write_json(
+            project_root / outputs["gis_semantic_input_bundle_ref"],
+            semantic_input_bundle,
+        )
+        _write_json(
+            project_root / outputs["gis_perception_ai_judgements_ref"],
+            semantic_judgements,
+        )
+        for ref_key, artifact in layer_candidate_artifacts.items():
+            _write_json(project_root / outputs[ref_key], artifact)
+        _write_json(project_root / outputs["layer_map_projection_ref"], map_projection)
+        _write_jsonl(
+            project_root / outputs["layer_debug_projection_events_ref"],
+            debug_events,
+        )
+        _write_layer_plan_files(project_root, manifest)
+    if (
+        request.publish_preparation_outputs
+        and request.run_map_preparation_spec_artifacts
+    ):
         _write_map_preparation_spec_artifacts(project_root, manifest)
         map_preparation_spec_artifacts = {
             "status": "completed",
@@ -492,8 +515,14 @@ def run_layer_preparation(request: LayerPreparationRequest) -> dict[str, Any]:
             "map_preparation_spec_artifacts"
         )
     manifest["map_preparation_spec_artifacts"] = map_preparation_spec_artifacts
-    outputs.update(_write_planned_overpass_evidence(project_root, manifest))
-    _update_project_refs(project_root / "project.json", project, outputs, manifest["finished_at"])
+    if request.publish_preparation_outputs:
+        outputs.update(_write_planned_overpass_evidence(project_root, manifest))
+        _update_project_refs(
+            project_root / "project.json",
+            project,
+            outputs,
+            manifest["finished_at"],
+        )
     raster_label_preparation = (
         _run_raster_label_preparation_after_layer_preparation(
             project_root=project_root,
@@ -564,6 +593,34 @@ def run_layer_preparation(request: LayerPreparationRequest) -> dict[str, Any]:
             outputs,
             manifest["finished_at"],
         )
+    reference_segment_timing = (
+        _run_reference_segment_timing_after_layer_preparation(
+            project_root=project_root,
+            manifest=manifest,
+        )
+        if request.run_post_layer_enrichments
+        else _skipped_connected_refresh_post_enrichment(
+            "reference_segment_timing"
+        )
+    )
+    manifest["reference_segment_timing"] = reference_segment_timing
+    if reference_segment_timing.get("status") == "completed":
+        outputs.update(reference_segment_timing.get("output_refs", {}))
+        timing_counts = reference_segment_timing.get("counts", {})
+        outputs["reference_segment_timing_segment_count"] = timing_counts.get(
+            "usable_segment_count",
+            0,
+        )
+        outputs["reference_segment_timing_measurement_count"] = timing_counts.get(
+            "measurement_count",
+            0,
+        )
+        _update_project_refs(
+            project_root / "project.json",
+            project,
+            outputs,
+            manifest["finished_at"],
+        )
     architecture_preparation = (
         _run_architecture_preparation_after_layer_preparation(
             project_root=project_root,
@@ -576,6 +633,26 @@ def run_layer_preparation(request: LayerPreparationRequest) -> dict[str, Any]:
     )
     manifest["architecture_preparation"] = architecture_preparation
     outputs.update(architecture_preparation.get("output_refs", {}))
+    navigation_terrain_dem = (
+        _run_navigation_terrain_dem_after_layer_preparation(
+            project_root=project_root,
+            manifest=manifest,
+        )
+        if request.run_post_layer_enrichments
+        and request.run_map_preparation_spec_artifacts
+        else _skipped_connected_refresh_post_enrichment(
+            "navigation_terrain_dem"
+        )
+    )
+    manifest["navigation_terrain_dem"] = navigation_terrain_dem
+    if navigation_terrain_dem.get("status") == "completed":
+        outputs.update(navigation_terrain_dem.get("output_refs", {}))
+        _update_project_refs(
+            project_root / "project.json",
+            project,
+            outputs,
+            manifest["finished_at"],
+        )
     navigation_terrain_projection = (
         _run_navigation_terrain_projection_after_layer_preparation(
             project_root=project_root,
@@ -602,13 +679,20 @@ def run_layer_preparation(request: LayerPreparationRequest) -> dict[str, Any]:
     map_projection = _map_projection_from_manifest(manifest)
     debug_events = _debug_events_from_manifest(manifest)
     job_payload = _job_payload_from_manifest(manifest)
-    _write_json(project_root / outputs["layer_preparation_manifest_ref"], manifest)
-    _write_json(project_root / outputs["layer_preparation_job_ref"], job_payload)
-    _write_json(project_root / outputs["layer_preparation_summary_ref"], summary)
-    _write_json(project_root / outputs["map_preparation_summary_ref"], map_preparation_summary)
-    _write_json(project_root / outputs["layer_adapter_manifest_ref"], adapter_manifest)
-    _write_json(project_root / outputs["layer_map_projection_ref"], map_projection)
-    _write_jsonl(project_root / outputs["layer_debug_projection_events_ref"], debug_events)
+    if request.publish_preparation_outputs:
+        _write_json(project_root / outputs["layer_preparation_manifest_ref"], manifest)
+        _write_json(project_root / outputs["layer_preparation_job_ref"], job_payload)
+        _write_json(project_root / outputs["layer_preparation_summary_ref"], summary)
+        _write_json(
+            project_root / outputs["map_preparation_summary_ref"],
+            map_preparation_summary,
+        )
+        _write_json(project_root / outputs["layer_adapter_manifest_ref"], adapter_manifest)
+        _write_json(project_root / outputs["layer_map_projection_ref"], map_projection)
+        _write_jsonl(
+            project_root / outputs["layer_debug_projection_events_ref"],
+            debug_events,
+        )
     return manifest
 
 
@@ -2482,6 +2566,7 @@ def _build_layer_preparation_manifest(
             project_root=project_root,
             project=project,
         )
+        _write_json(project_path, project)
     if workspace_file_mutation_allowed and "overpass" in normalized_layers:
         _stamp_overpass_evidence_provenance(project_root=project_root, project=project)
     overpass_route_alignment: dict[str, Any] | None = None
@@ -2569,11 +2654,17 @@ def _build_layer_preparation_manifest(
             or project.get("gee_external_api_calls_made")
         )
     )
-    boundary = _boundary(
-        request,
-        workspace_file_mutation_allowed=workspace_file_mutation_allowed,
-        external_api_calls_made=network_calls_made,
-    )
+    boundary = {
+        **_boundary(
+            request,
+            workspace_file_mutation_allowed=workspace_file_mutation_allowed,
+            external_api_calls_made=network_calls_made,
+        ),
+        "primary_preparation_outputs_published": (
+            workspace_file_mutation_allowed
+            and request.publish_preparation_outputs
+        ),
+    }
     network_policy = _network_policy(request, network_calls_made=network_calls_made)
     stage_statuses = _stage_statuses(layers)
     outputs = {
@@ -2593,6 +2684,7 @@ def _build_layer_preparation_manifest(
         "run_map_preparation_spec_artifacts": (
             request.run_map_preparation_spec_artifacts
         ),
+        "publish_preparation_outputs": request.publish_preparation_outputs,
         "requested_layers": list(request.layers),
         "normalized_layers": normalized_layers,
         "started_at": prepared_at,
@@ -3628,7 +3720,7 @@ def _imagery_layer_record(
                 "local_raster_tile_url_template": (
                     f"/admin/tiles/imagery/{request.project_id}/imagery/{{z}}/{{x}}/{{y}}.png"
                 ),
-                "tile_delivery": "local_cache_then_wmts_runtime",
+                "tile_delivery": "workspace_cache_first",
             }
         )
         raster_bbox = _normalized_optional_bbox(plan.get("bbox_wgs84"))
@@ -3657,7 +3749,7 @@ def _imagery_layer_record(
             for warning in record["warnings"]
             if "Imagery tile cache was not seeded" not in warning
         ]
-        record["raster_tile_delivery"] = "local_cache_then_wmts_runtime"
+        record["raster_tile_delivery"] = "workspace_cache_first"
         record["remote_fetch_requires_explicit_enable"] = True
     return _with_lifecycle(record)
 
@@ -3741,85 +3833,168 @@ def _maybe_seed_imagery_tile_cache(
         _normalized_optional_bbox(project.get("imagery_bbox_wgs84"))
         or _expand_bbox_by_meters(route_bbox, request.route_corridor_m)
     )
-    imagery_source = imagery_source_for_project(
-        {
-            **project,
-            "imagery_source_id": _imagery_seed_source_id(project),
-        }
-    )
-    plan = build_imagery_tile_cache_plan(
-        bbox,
-        project_id=request.project_id or project_root.name,
-        layer_id="imagery",
-        imagery_source=imagery_source,
-        cache_root=_imagery_tile_cache_root(),
-        min_zoom=request.imagery_min_zoom,
-        max_zoom=request.imagery_max_zoom,
-    )
-    seed_summary = seed_imagery_tile_cache(
-        plan,
-        imagery_source=imagery_source,
-        provider_allows_offline_prefetch=True,
-        dry_run=False,
-        max_tiles=request.imagery_seed_max_tiles,
-        fallback_cache_project_ids=request.imagery_cache_fallback_project_ids,
-    )
     project_id = request.project_id or str(project.get("project_id") or project_root.name)
-    plan_ref = f"outputs/layers/manifests/{project_id}.imagery_tile_cache_plan.json"
-    manifest_ref = f"outputs/layers/manifests/{project_id}.imagery_tile_cache_manifest.json"
-    tile_manifest = {
-        "artifact_kind": "pretrip_imagery_tile_cache_manifest",
-        "schema_version": "route_corridor_map_preparation.v1",
+    generated_at = request.prepared_at or _utc_now()
+    cache_root = _imagery_tile_cache_root(request, project_root=project_root)
+    layer_manifest_refs: dict[str, str] = {}
+    layer_source_ids: dict[str, str] = {}
+    layer_manifests: dict[str, dict[str, Any]] = {}
+    planned_layers: list[tuple[str, dict[str, Any], dict[str, Any]]] = []
+
+    for layer_id, source_id in WORKSPACE_RASTER_CACHE_SOURCE_IDS:
+        imagery_source = imagery_source_for_project(
+            project,
+            layer_id=layer_id,
+            source_id=source_id,
+        )
+        plan = build_imagery_tile_cache_plan(
+            bbox,
+            project_id=project_id,
+            layer_id=layer_id,
+            imagery_source=imagery_source,
+            cache_root=cache_root,
+            min_zoom=request.imagery_min_zoom,
+            max_zoom=request.imagery_max_zoom,
+        )
+        planned_layers.append((layer_id, imagery_source, plan))
+
+    with ThreadPoolExecutor(
+        max_workers=min(WORKSPACE_RASTER_CACHE_SEED_WORKERS, len(planned_layers))
+    ) as executor:
+        seed_futures = {
+            layer_id: executor.submit(
+                seed_imagery_tile_cache,
+                plan,
+                imagery_source=imagery_source,
+                provider_allows_offline_prefetch=True,
+                dry_run=False,
+                max_tiles=request.imagery_seed_max_tiles,
+                fallback_cache_project_ids=request.imagery_cache_fallback_project_ids,
+            )
+            for layer_id, imagery_source, plan in planned_layers
+        }
+        seed_summaries = {
+            layer_id: seed_futures[layer_id].result()
+            for layer_id, _imagery_source, _plan in planned_layers
+        }
+
+    for layer_id, imagery_source, plan in planned_layers:
+        seed_summary = seed_summaries[layer_id]
+        plan_ref = (
+            f"outputs/layers/manifests/{project_id}.{layer_id}."
+            "raster_tile_cache_plan.json"
+        )
+        manifest_ref = (
+            f"outputs/layers/manifests/{project_id}.{layer_id}."
+            "raster_tile_cache_manifest.json"
+        )
+        tile_manifest = {
+            "artifact_kind": "pretrip_workspace_raster_tile_cache_manifest",
+            "schema_version": "route_corridor_map_preparation.v2",
+            "project_id": project_id,
+            "layer_id": layer_id,
+            "generated_at": generated_at,
+            "source_path": manifest_ref,
+            "plan_ref": plan_ref,
+            "plan": plan,
+            "seed_summary": seed_summary,
+            "imagery_source_id": imagery_source.get("source_id"),
+            "imagery_source_kind": imagery_source.get("source_kind"),
+            "imagery_cache_fallback_project_ids": list(
+                request.imagery_cache_fallback_project_ids
+            ),
+            "delivery_policy": "workspace_cache_first_explicit_remote_refresh",
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "raw_tile_embedded": False,
+            "downloads_tiles_into_workspace": True,
+            "downloads_tiles_into_repo": False,
+        }
+        _write_json(project_root / plan_ref, plan)
+        _write_json(project_root / manifest_ref, tile_manifest)
+        layer_manifest_refs[layer_id] = manifest_ref
+        layer_source_ids[layer_id] = str(imagery_source["source_id"])
+        layer_manifests[layer_id] = tile_manifest
+
+    bundle_ref = (
+        f"outputs/layers/manifests/{project_id}.workspace_raster_tile_cache_bundle.json"
+    )
+    bundle = {
+        "artifact_kind": "pretrip_workspace_raster_tile_cache_bundle",
+        "schema_version": "route_corridor_map_preparation.v2",
         "project_id": project_id,
-        "generated_at": request.prepared_at or _utc_now(),
-        "source_path": manifest_ref,
-        "plan_ref": plan_ref,
-        "plan": plan,
-        "seed_summary": seed_summary,
-        "imagery_source_id": imagery_source.get("source_id"),
-        "imagery_source_kind": imagery_source.get("source_kind"),
-        "imagery_cache_fallback_project_ids": list(
-            request.imagery_cache_fallback_project_ids
-        ),
+        "generated_at": generated_at,
+        "source_path": bundle_ref,
+        "cache_root": str(cache_root),
+        "layer_manifest_refs": layer_manifest_refs,
+        "layer_source_ids": layer_source_ids,
+        "layer_count": len(layer_manifests),
+        "seed_statuses": {
+            layer_id: manifest["seed_summary"].get("status")
+            for layer_id, manifest in layer_manifests.items()
+        },
+        "delivery_policy": "workspace_cache_first_explicit_remote_refresh",
         "candidate_only": True,
         "runtime_safety_truth": False,
-        "raw_tile_embedded": False,
-        "downloads_tiles_into_repo": False,
+        "weather_and_geology_refreshable": True,
     }
-    _write_json(project_root / plan_ref, plan)
-    _write_json(project_root / manifest_ref, tile_manifest)
+    _write_json(project_root / bundle_ref, bundle)
+
+    imagery_manifest = layer_manifests["imagery"]
+    imagery_plan = imagery_manifest["plan"]
+    imagery_seed = imagery_manifest["seed_summary"]
+    ocr_manifest = layer_manifests["rudy-twmap"]
     updated = {
         **project,
-        "imagery_tile_cache_plan_ref": plan_ref,
-        "imagery_tile_cache_manifest_ref": manifest_ref,
-        "imagery_tile_cache_root": plan.get("cache_root"),
-        "imagery_tile_cache_source_id": imagery_source.get("source_id"),
-        "imagery_tile_cache_source_role": "raster_label_ocr_preferred_source",
-        "imagery_tile_cache_plan_tile_count": plan.get("total_tile_count", 0),
-        "imagery_tile_cache_seed_status": seed_summary.get("status"),
-        "imagery_tile_cache_seed_tiles_seen": seed_summary.get("tiles_seen", 0),
-        "imagery_tile_cache_seed_tiles_written": seed_summary.get("tiles_written", 0),
-        "imagery_tile_cache_seed_tiles_skipped_existing": seed_summary.get(
+        "raster_layer_manifest_refs": {
+            **(
+                project.get("raster_layer_manifest_refs")
+                if isinstance(project.get("raster_layer_manifest_refs"), dict)
+                else {}
+            ),
+            **layer_manifest_refs,
+        },
+        "raster_layer_source_ids": layer_source_ids,
+        "workspace_raster_tile_cache_bundle_ref": bundle_ref,
+        "workspace_raster_tile_cache_root": str(cache_root),
+        "workspace_raster_tile_cache_layer_count": len(layer_manifests),
+        "workspace_raster_tile_cache_delivery_policy": (
+            "workspace_cache_first_explicit_remote_refresh"
+        ),
+        "imagery_tile_cache_plan_ref": imagery_manifest["plan_ref"],
+        "imagery_tile_cache_manifest_ref": layer_manifest_refs["imagery"],
+        "imagery_tile_cache_root": imagery_plan.get("cache_root"),
+        "imagery_tile_cache_source_id": imagery_manifest.get("imagery_source_id"),
+        "imagery_tile_cache_source_role": "workspace_imagery_basemap_source",
+        "imagery_tile_cache_plan_tile_count": imagery_plan.get("total_tile_count", 0),
+        "imagery_tile_cache_seed_status": imagery_seed.get("status"),
+        "imagery_tile_cache_seed_tiles_seen": imagery_seed.get("tiles_seen", 0),
+        "imagery_tile_cache_seed_tiles_written": imagery_seed.get("tiles_written", 0),
+        "imagery_tile_cache_seed_tiles_skipped_existing": imagery_seed.get(
             "tiles_skipped_existing",
             0,
         ),
+        "imagery_tile_cache_seed_tiles_copied_from_fallback_cache": (
+            imagery_seed.get("tiles_copied_from_fallback_cache", 0)
+        ),
+        "imagery_tile_cache_seed_tiles_failed": imagery_seed.get("tiles_failed", 0),
+        "imagery_tile_cache_ttl_days": imagery_seed.get("tile_ttl_days"),
+        "raster_label_tile_cache_plan_ref": ocr_manifest["plan_ref"],
+        "raster_label_tile_cache_manifest_ref": layer_manifest_refs["rudy-twmap"],
+        "raster_label_tile_cache_source_id": ocr_manifest.get("imagery_source_id"),
     }
     _write_json(project_path, updated)
-    return tile_manifest
+    return bundle
 
 
-def _imagery_seed_source_id(project: dict[str, Any]) -> str:
-    source_id = str(project.get("imagery_source_id") or "").strip()
-    if source_id in RASTER_LABEL_PREFERRED_OCR_SOURCE_IDS:
-        return source_id
-    return RASTER_LABEL_PREFERRED_OCR_SOURCE_IDS[0]
-
-
-def _imagery_tile_cache_root() -> Path:
-    value = os.getenv("SCOUT_ADMIN_RASTER_TILE_CACHE_ROOT")
-    if value and value.strip():
-        return Path(value).expanduser()
-    return DEFAULT_SCOUT_DATA_ROOT / "raster-tiles"
+def _imagery_tile_cache_root(
+    request: LayerPreparationRequest,
+    *,
+    project_root: Path,
+) -> Path:
+    if request.imagery_cache_root is not None:
+        return request.imagery_cache_root.expanduser().resolve()
+    return (project_root / "cache" / "raster-tiles").resolve()
 
 
 def _risk_score_layer_record(
@@ -4520,6 +4695,10 @@ def _summary_from_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
         "raster_label_preparation": manifest.get("raster_label_preparation"),
         "boss_point_synthesis": manifest.get("boss_point_synthesis"),
         "mileage_tag_alignment": manifest.get("mileage_tag_alignment"),
+        "navigation_terrain_dem": manifest.get("navigation_terrain_dem"),
+        "navigation_terrain_projection": manifest.get(
+            "navigation_terrain_projection"
+        ),
         "boundary": manifest["boundary"],
         "notes": manifest["notes"],
     }
@@ -4585,6 +4764,8 @@ def _map_preparation_summary_from_manifest(manifest: dict[str, Any]) -> dict[str
                 "route_pressure_profile_geojson_ref",
                 "mileage_tag_alignment_ref",
                 "mileage_tag_alignment_geojson_ref",
+                "navigation_terrain_dem_manifest_ref",
+                "navigation_terrain_projection_ref",
             )
             if key in outputs
         },
@@ -4593,6 +4774,10 @@ def _map_preparation_summary_from_manifest(manifest: dict[str, Any]) -> dict[str
         "raster_label_preparation": manifest.get("raster_label_preparation"),
         "boss_point_synthesis": manifest.get("boss_point_synthesis"),
         "mileage_tag_alignment": manifest.get("mileage_tag_alignment"),
+        "navigation_terrain_dem": manifest.get("navigation_terrain_dem"),
+        "navigation_terrain_projection": manifest.get(
+            "navigation_terrain_projection"
+        ),
         "network_policy": manifest["network_policy"],
         "boundary": {
             **manifest["boundary"],
@@ -5201,6 +5386,244 @@ def _run_navigation_terrain_projection_after_layer_preparation(
     }
 
 
+def _run_navigation_terrain_dem_after_layer_preparation(
+    *,
+    project_root: Path,
+    manifest: dict[str, Any],
+) -> dict[str, Any]:
+    boundary = {
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "human_review_required": True,
+        "unsupported_cells_encoded_as_terrain": False,
+        "phase1_runtime_mutation_allowed": False,
+        "workspace_file_mutation_allowed": True,
+    }
+    if "terrain" not in set(manifest.get("normalized_layers") or []):
+        return {
+            "status": "not_requested",
+            "reason": "terrain_layer_not_requested",
+            "trigger": "prepare_layers_with_terrain",
+            "boundary": boundary,
+        }
+
+    try:
+        from navigation_terrain_raster_dem import (
+            DEFAULT_TERRAIN_DEM_MANIFEST_REF,
+            TerrainDemPreparationError,
+            prepare_navigation_terrain_dem_tiles,
+        )
+    except Exception as exc:  # pragma: no cover - dependency import guard.
+        return {
+            "status": "failed",
+            "trigger": "prepare_layers_with_terrain",
+            "error": f"{type(exc).__name__}: terrain DEM adapter unavailable",
+            "attempts": [],
+            "boundary": boundary,
+        }
+
+    attempts: list[dict[str, Any]] = []
+    successful_candidates: list[dict[str, Any]] = []
+    for zoom in DEFAULT_NAVIGATION_TERRAIN_DEM_ZOOMS:
+        try:
+            terrain_manifest = prepare_navigation_terrain_dem_tiles(
+                project_root,
+                project_id=str(manifest.get("project_id") or project_root.name),
+                zoom=zoom,
+                prepared_at=manifest.get("finished_at"),
+            )
+        except TerrainDemPreparationError as exc:
+            reason = str(exc)
+            if "no fully-supported terrain DEM tiles" not in reason:
+                return {
+                    "status": "failed",
+                    "trigger": "prepare_layers_with_terrain",
+                    "error": reason,
+                    "attempts": attempts,
+                    "boundary": boundary,
+                }
+            attempts.append(
+                {
+                    "zoom": zoom,
+                    "status": "no_complete_tile_block",
+                    "reason": reason,
+                }
+            )
+            continue
+        except Exception as exc:  # pragma: no cover - defensive dependency guard.
+            return {
+                "status": "failed",
+                "trigger": "prepare_layers_with_terrain",
+                "error": f"{type(exc).__name__}: terrain DEM preparation failed",
+                "attempts": attempts,
+                "boundary": boundary,
+            }
+
+        route_coverage = _navigation_terrain_route_dem_coverage(
+            project_root=project_root,
+            preparation_manifest=manifest,
+            terrain_manifest=terrain_manifest,
+        )
+        attempts.append(
+            {
+                "zoom": zoom,
+                "status": "completed",
+                "tile_count": terrain_manifest.get("tile_count", 0),
+                "route_dem_coverage": route_coverage,
+            }
+        )
+        successful_candidates.append(
+            {
+                "zoom": zoom,
+                "manifest": terrain_manifest,
+                "route_dem_coverage": route_coverage,
+            }
+        )
+
+    if not successful_candidates:
+        return {
+            "status": "unavailable_no_complete_tile_block",
+            "trigger": "prepare_layers_with_terrain",
+            "reason": "no fully-supported Terrain RGB tile block at zoom 13-15",
+            "attempts": attempts,
+            "boundary": boundary,
+        }
+
+    candidates_with_coverage = [
+        candidate
+        for candidate in successful_candidates
+        if candidate["route_dem_coverage"] is not None
+    ]
+    if candidates_with_coverage:
+        selected = max(
+            candidates_with_coverage,
+            key=lambda candidate: (
+                candidate["route_dem_coverage"]["ratio"],
+                candidate["route_dem_coverage"]["supported_count"],
+                -candidate["zoom"],
+            ),
+        )
+        selection_policy = "highest_route_sample_coverage_then_lowest_zoom"
+    else:
+        selected = min(successful_candidates, key=lambda candidate: candidate["zoom"])
+        selection_policy = "lowest_supported_zoom_no_route_samples"
+
+    selected_zoom = int(selected["zoom"])
+    terrain_manifest = selected["manifest"]
+    if selected_zoom != int(successful_candidates[-1]["zoom"]):
+        try:
+            terrain_manifest = prepare_navigation_terrain_dem_tiles(
+                project_root,
+                project_id=str(manifest.get("project_id") or project_root.name),
+                zoom=selected_zoom,
+                prepared_at=manifest.get("finished_at"),
+            )
+        except Exception as exc:  # pragma: no cover - defensive restore boundary.
+            return {
+                "status": "failed",
+                "trigger": "prepare_layers_with_terrain",
+                "error": (
+                    f"{type(exc).__name__}: selected terrain DEM could not be restored"
+                ),
+                "attempts": attempts,
+                "boundary": boundary,
+            }
+        attempts.append(
+            {
+                "zoom": selected_zoom,
+                "status": "restored_selected_candidate",
+                "tile_count": terrain_manifest.get("tile_count", 0),
+                "route_dem_coverage": selected["route_dem_coverage"],
+            }
+        )
+
+    manifest_ref = str(
+        terrain_manifest.get("manifest_ref") or DEFAULT_TERRAIN_DEM_MANIFEST_REF
+    )
+    return {
+        "status": "completed",
+        "trigger": "prepare_layers_with_terrain",
+        "selected_zoom": selected_zoom,
+        "selection_policy": selection_policy,
+        "route_dem_coverage": selected["route_dem_coverage"],
+        "tile_count": terrain_manifest.get("tile_count", 0),
+        "source_cell_resolution_m": terrain_manifest.get(
+            "source_cell_resolution_m"
+        ),
+        "attempts": attempts,
+        "output_refs": {
+            "navigation_terrain_dem_manifest_ref": manifest_ref,
+        },
+        "boundary": terrain_manifest.get("boundary") or boundary,
+    }
+
+
+def _navigation_terrain_route_dem_coverage(
+    *,
+    project_root: Path,
+    preparation_manifest: dict[str, Any],
+    terrain_manifest: dict[str, Any],
+) -> dict[str, Any] | None:
+    bounds = terrain_manifest.get("bounds_wgs84")
+    if not isinstance(bounds, dict):
+        return None
+    try:
+        west = float(bounds["west"])
+        south = float(bounds["south"])
+        east = float(bounds["east"])
+        north = float(bounds["north"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not all(math.isfinite(value) for value in (west, south, east, north)):
+        return None
+
+    outputs = preparation_manifest.get("outputs") or {}
+    route_samples_ref = outputs.get("terrain_route_samples_ref")
+    if not isinstance(route_samples_ref, str) or not route_samples_ref:
+        return None
+    route_samples_path = _safe_project_relative_path(
+        project_root,
+        route_samples_ref,
+    )
+    if route_samples_path is None or not route_samples_path.is_file():
+        return None
+    try:
+        route_samples = _load_json(route_samples_path)
+    except (OSError, json.JSONDecodeError):
+        return None
+
+    coordinates: list[tuple[float, float]] = []
+    for feature in route_samples.get("features") or []:
+        if not isinstance(feature, dict):
+            continue
+        geometry = feature.get("geometry") or {}
+        coordinate = geometry.get("coordinates")
+        if geometry.get("type") != "Point" or not isinstance(coordinate, list):
+            continue
+        if len(coordinate) < 2:
+            continue
+        try:
+            lon = float(coordinate[0])
+            lat = float(coordinate[1])
+        except (TypeError, ValueError):
+            continue
+        if math.isfinite(lon) and math.isfinite(lat):
+            coordinates.append((lon, lat))
+    if not coordinates:
+        return None
+
+    supported_count = sum(
+        west <= lon <= east and south <= lat <= north
+        for lon, lat in coordinates
+    )
+    total_count = len(coordinates)
+    return {
+        "supported_count": supported_count,
+        "total_count": total_count,
+        "ratio": supported_count / total_count,
+    }
+
+
 def _run_raster_label_preparation_after_layer_preparation(
     *,
     project_root: Path,
@@ -5215,6 +5638,15 @@ def _run_raster_label_preparation_after_layer_preparation(
         "workspace_file_mutation_allowed": True,
         "safety_api_called": False,
     }
+    if "imagery" not in set(manifest.get("normalized_layers") or []):
+        return {
+            "status": "not_requested",
+            "reason": "imagery_layer_not_requested",
+            "trigger": "prepare_layers_rudy_tw_ocr_route_context",
+            "output_refs": {},
+            "project_refs_updated": False,
+            "boundary": boundary,
+        }
     project_path = project_root / "project.json"
     if not project_path.exists():
         return {
@@ -5558,6 +5990,51 @@ def _run_mileage_tag_alignment_after_layer_preparation(
     }
 
 
+def _run_reference_segment_timing_after_layer_preparation(
+    *,
+    project_root: Path,
+    manifest: dict[str, Any],
+) -> dict[str, Any]:
+    boundary = {
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "review_gated": True,
+        "phase1_runtime_mutation_allowed": False,
+        "phase2_brain_writeback_allowed": False,
+        "workspace_file_mutation_allowed": True,
+    }
+    try:
+        from pretrip_reference_segment_timing import (
+            DEFAULT_OUTPUT_REF,
+            write_reference_segment_timing,
+        )
+
+        output_path = write_reference_segment_timing(
+            project_root,
+            project_id=str(manifest.get("project_id") or project_root.name),
+        )
+        payload = _load_json(output_path)
+    except Exception as exc:
+        return {
+            "status": "failed",
+            "trigger": "prepare_layers_workspace_reference_timing",
+            "error": str(exc),
+            "boundary": boundary,
+        }
+    return {
+        "status": "completed",
+        "evidence_status": payload.get("status"),
+        "trigger": "prepare_layers_workspace_reference_timing",
+        "artifact_kind": payload.get("artifact_kind"),
+        "schema_version": payload.get("schema_version"),
+        "counts": payload.get("counts") or {},
+        "output_refs": {
+            "reference_segment_timing_ref": DEFAULT_OUTPUT_REF,
+        },
+        "boundary": payload.get("boundary") or boundary,
+    }
+
+
 def _run_architecture_preparation_after_layer_preparation(
     *,
     project_root: Path,
@@ -5598,22 +6075,29 @@ class _wall_clock_timeout:
         self.seconds = max(0.0, float(seconds))
         self._previous_handler: Any = None
         self._previous_timer: tuple[float, float] | None = None
+        self._armed = False
 
     def __enter__(self) -> None:
-        if self.seconds <= 0 or not hasattr(signal, "SIGALRM"):
+        if (
+            self.seconds <= 0
+            or not hasattr(signal, "SIGALRM")
+            or threading.current_thread() is not threading.main_thread()
+        ):
             return None
         self._previous_handler = signal.getsignal(signal.SIGALRM)
         signal.signal(signal.SIGALRM, self._raise_timeout)
         self._previous_timer = signal.setitimer(signal.ITIMER_REAL, self.seconds)
+        self._armed = True
         return None
 
     def __exit__(self, exc_type: Any, exc: Any, traceback: Any) -> bool:
-        if self.seconds > 0 and hasattr(signal, "SIGALRM"):
+        if self._armed:
             signal.setitimer(signal.ITIMER_REAL, 0)
             if self._previous_timer is not None and self._previous_timer[0] > 0:
                 signal.setitimer(signal.ITIMER_REAL, *self._previous_timer)
             if self._previous_handler is not None:
                 signal.signal(signal.SIGALRM, self._previous_handler)
+            self._armed = False
         return False
 
     @staticmethod
@@ -9443,7 +9927,8 @@ def _dtm_corridor_bitmap_terrain_visualization(
         "slope_method": "dtm_grid_20m_central_difference",
         "hillshade_method": "dtm_slope_proxy_grayscale",
         "elevation_tint_method": "dtm_elevation_band",
-        "contour_method": "dtm_near_interval_cell_marker",
+        "contour_method": "bounded_marching_squares_linear_interpolation",
+        "contour_adds_source_resolution": False,
         "missing_dtm_corridor_underlay": True,
         "full_raster_hillshade_generated": False,
         "raw_dem_embedded_in_json": False,
@@ -9453,6 +9938,14 @@ def _dtm_corridor_bitmap_terrain_visualization(
         "feature_count": 0,
         "bitmap_overlay_count": len(overlays),
         "cell_count": len(cells),
+        "contour_segment_count": next(
+            (
+                int(overlay.get("contour_segment_count", 0))
+                for overlay in overlays
+                if overlay.get("mode") == "contours"
+            ),
+            0,
+        ),
         "rendered_dom_cell_count": 0,
         "source_dtm_tile_count": len(candidate_tiles),
         "source_dtm_grid_cell_count": len(elevation_by_xy),
@@ -9850,6 +10343,117 @@ def _twd97_to_wgs84(x: float, y: float) -> tuple[float, float]:
     return lat, lon
 
 
+def _dtm_contour_segments(
+    cells: list[dict[str, Any]],
+    *,
+    bbox_twd97: dict[str, float],
+    resolution_m: float,
+    interval_m: float,
+    output_scale: int = 1,
+) -> list[tuple[float, tuple[float, float], tuple[float, float]]]:
+    if not cells or resolution_m <= 0 or interval_m <= 0 or output_scale < 1:
+        return []
+    origin_x = min(float(cell["x"]) for cell in cells)
+    origin_y = min(float(cell["y"]) for cell in cells)
+    elevation_by_grid = {
+        (
+            int(round((float(cell["x"]) - origin_x) / resolution_m)),
+            int(round((float(cell["y"]) - origin_y) / resolution_m)),
+        ): float(cell["elevation_m"])
+        for cell in cells
+        if isinstance(cell.get("elevation_m"), (int, float))
+    }
+    if len(elevation_by_grid) < 4:
+        return []
+
+    def pixel_position(grid_x: int, grid_y: int) -> tuple[float, float]:
+        projected_x = origin_x + grid_x * resolution_m
+        projected_y = origin_y + grid_y * resolution_m
+        return (
+            (projected_x - bbox_twd97["min_x"]) / resolution_m * output_scale,
+            (bbox_twd97["max_y"] - projected_y) / resolution_m * output_scale,
+        )
+
+    def intersection(
+        start: tuple[float, float],
+        start_elevation: float,
+        end: tuple[float, float],
+        end_elevation: float,
+        level: float,
+    ) -> tuple[float, float] | None:
+        if math.isclose(start_elevation, end_elevation):
+            return None
+        crosses = (
+            start_elevation < level <= end_elevation
+            or end_elevation < level <= start_elevation
+        )
+        if not crosses:
+            return None
+        ratio = (level - start_elevation) / (end_elevation - start_elevation)
+        return (
+            start[0] + (end[0] - start[0]) * ratio,
+            start[1] + (end[1] - start[1]) * ratio,
+        )
+
+    segments: list[tuple[float, tuple[float, float], tuple[float, float]]] = []
+    for grid_x, grid_y in sorted(elevation_by_grid):
+        corner_keys = (
+            (grid_x, grid_y),
+            (grid_x + 1, grid_y),
+            (grid_x + 1, grid_y + 1),
+            (grid_x, grid_y + 1),
+        )
+        if not all(key in elevation_by_grid for key in corner_keys):
+            continue
+        elevations = [elevation_by_grid[key] for key in corner_keys]
+        positions = [pixel_position(*key) for key in corner_keys]
+        minimum = min(elevations)
+        maximum = max(elevations)
+        level = math.floor(minimum / interval_m) * interval_m
+        if level <= minimum + 1e-9:
+            level += interval_m
+        while level <= maximum + 1e-9:
+            intersections = []
+            for edge_index, (start_index, end_index) in enumerate(
+                ((0, 1), (1, 2), (2, 3), (3, 0))
+            ):
+                point = intersection(
+                    positions[start_index],
+                    elevations[start_index],
+                    positions[end_index],
+                    elevations[end_index],
+                    level,
+                )
+                if point is None:
+                    continue
+                if any(
+                    math.dist(point, existing[1]) < 1e-9
+                    for existing in intersections
+                ):
+                    continue
+                intersections.append((edge_index, point))
+            if len(intersections) == 2:
+                segments.append((float(level), intersections[0][1], intersections[1][1]))
+            elif len(intersections) == 4:
+                pairings = (
+                    ((0, 1), (2, 3)),
+                    ((0, 3), (1, 2)),
+                )
+                pairing = min(
+                    pairings,
+                    key=lambda pairs: sum(
+                        math.dist(intersections[left][1], intersections[right][1])
+                        for left, right in pairs
+                    ),
+                )
+                for left, right in pairing:
+                    segments.append(
+                        (float(level), intersections[left][1], intersections[right][1])
+                    )
+            level += interval_m
+    return segments
+
+
 def _write_dtm_corridor_bitmap_overlays(
     *,
     project_root: Path,
@@ -9870,11 +10474,16 @@ def _write_dtm_corridor_bitmap_overlays(
     height = int(round((bbox_twd97["max_y"] - bbox_twd97["min_y"]) / TERRAIN_DTM_CELL_RESOLUTION_M))
     width = max(1, width)
     height = max(1, height)
+    contour_output_scale = 2
     images = {
         "hillshade": Image.new("RGBA", (width, height), (0, 0, 0, 0)),
         "elevation_tint": Image.new("RGBA", (width, height), (0, 0, 0, 0)),
         "slope_shading": Image.new("RGBA", (width, height), (0, 0, 0, 0)),
-        "contours": Image.new("RGBA", (width, height), (0, 0, 0, 0)),
+        "contours": Image.new(
+            "RGBA",
+            (width * contour_output_scale, height * contour_output_scale),
+            (0, 0, 0, 0),
+        ),
     }
     pixels = {mode: image.load() for mode, image in images.items()}
     route_pixels = _terrain_route_pixels(route_points, bbox_twd97)
@@ -9923,8 +10532,21 @@ def _write_dtm_corridor_bitmap_overlays(
             str(cell["slope_class"]["color"]),
             alpha=188,
         )
-        if cell.get("contour_marker"):
-            pixels["contours"][col, row] = (17, 24, 39, 230)
+    contour_draw = ImageDraw.Draw(images["contours"])
+    contour_segments = _dtm_contour_segments(
+        cells,
+        bbox_twd97=bbox_twd97,
+        resolution_m=TERRAIN_DTM_CELL_RESOLUTION_M,
+        interval_m=TERRAIN_CONTOUR_INTERVAL_M,
+        output_scale=contour_output_scale,
+    )
+    for level, start, end in contour_segments:
+        index_contour = math.isclose(level % 100.0, 0.0, abs_tol=1e-9)
+        contour_draw.line(
+            (start, end),
+            fill=(248, 247, 239, 222 if index_contour else 190),
+            width=2 if index_contour else 1,
+        )
 
     overlay_defs = [
         ("hillshade", "terrain_hillshade_overlay_ref", True, 0.28),
@@ -9937,7 +10559,9 @@ def _write_dtm_corridor_bitmap_overlays(
         source_ref = manifest["outputs"][ref_key]
         output_path = project_root / source_ref
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        images[mode].save(output_path, format="PNG")
+        output_image = images[mode]
+        output_image.save(output_path, format="PNG")
+        output_scale = output_image.width / width
         overlays.append(
             {
                 "overlay_id": mode,
@@ -9951,14 +10575,21 @@ def _write_dtm_corridor_bitmap_overlays(
                 "sha256": _sha256_file(output_path),
                 "bbox_wgs84": bbox_wgs84,
                 "bbox_twd97": bbox_twd97,
-                "pixel_width": width,
-                "pixel_height": height,
+                "pixel_width": output_image.width,
+                "pixel_height": output_image.height,
                 "cell_resolution_m": TERRAIN_DTM_CELL_RESOLUTION_M,
+                "visual_pixel_resolution_m": (
+                    TERRAIN_DTM_CELL_RESOLUTION_M / output_scale
+                ),
+                "adds_source_resolution": False,
+                "contour_segment_count": (
+                    len(contour_segments) if mode == "contours" else 0
+                ),
                 "corridor_half_width_m": TERRAIN_DTM_CORRIDOR_HALF_WIDTH_M,
                 "corridor_total_width_m": TERRAIN_DTM_CORRIDOR_TOTAL_WIDTH_M,
                 "default_visible": default_visible,
                 "opacity": opacity,
-                "image_rendering": "pixelated",
+                "image_rendering": "auto" if mode == "contours" else "pixelated",
                 "candidate_only": True,
                 "runtime_safety_truth": False,
                 "raw_dem_embedded_in_json": False,
@@ -10397,8 +11028,30 @@ def _fetch_overpass_raw_payload(planned_request: dict[str, Any]) -> tuple[bytes,
         },
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=120) as response:
-        return response.read(), int(response.status)
+    for attempt_index in range(OVERPASS_FETCH_MAX_ATTEMPTS):
+        try:
+            with urllib.request.urlopen(request, timeout=120) as response:
+                return response.read(), int(response.status)
+        except (
+            ConnectionResetError,
+            TimeoutError,
+            http.client.IncompleteRead,
+            http.client.RemoteDisconnected,
+            urllib.error.URLError,
+        ) as exc:
+            if isinstance(exc, urllib.error.HTTPError) and exc.code not in {
+                408,
+                429,
+                500,
+                502,
+                503,
+                504,
+            }:
+                raise
+            if attempt_index + 1 >= OVERPASS_FETCH_MAX_ATTEMPTS:
+                raise
+            time.sleep(float(2**attempt_index))
+    raise RuntimeError("Overpass fetch retry loop ended without a response")
 
 
 def _reject_fixture_fetch(project_root: Path) -> None:

@@ -1143,9 +1143,12 @@ def test_scout_dashboard_workspace_tab_exposes_structure_cache_and_operations() 
     ):
         assert label in html
 
-    for action in ("clone", "transfer", "pack", "restore", "delete"):
+    for action in ("transfer", "pack", "restore", "delete"):
         assert f'data-workspace-action="{action}"' in html
 
+    assert 'id="workspaceCloneTargetInput"' in html
+    assert 'id="workspaceCloneProject"' in html
+    assert 'data-workspace-clone="true"' in html
     assert 'data-workspace-structure="true"' in html
     assert 'data-workspace-cache="true"' in html
     assert 'data-workspace-operations="true"' in html
@@ -1153,8 +1156,12 @@ def test_scout_dashboard_workspace_tab_exposes_structure_cache_and_operations() 
     assert 'id="workspaceRedirectProjectInput"' in html
     assert 'id="workspaceSwitchProject"' in html
     assert 'id="workspaceRefreshExternalEvidence"' in html
-    assert "operator intent only" in html
-    assert "Only an append-only request record is written by this dashboard." in html
+    assert "operator-triggered" in html
+    assert "Clone creates a new target with one clean GPX import" in html
+    assert "refuses to overwrite an existing target" in html
+    assert "/clone`" in html
+    assert "confirm_clone: true" in html
+    assert "WORKSPACE_CLONE_TIMEOUT_MS" in html
     assert "Delete requires an explicit destructive approval outside this dashboard." in html
     assert 'fetchJson("/admin/dashboard/workspaces")' in html
     assert "/operation-requests" in html
@@ -1171,7 +1178,14 @@ def test_scout_dashboard_workspace_tab_exposes_structure_cache_and_operations() 
         "The current published snapshot stays readable while refresh is running;"
         in html
     )
-    assert "“Refresh evidence” may use CWA, GEE and Overpass" in html
+    assert "CWA, GEE and Overpass stay refreshable" in html
+    assert "geology stays a runtime provider" in html
+    assert "summaryCache.imagery_tile_cache_seed_tiles_seen" in html
+    assert "summaryCounts.raster_label_ocr_label_count" in html
+    assert "planned / ${formatInteger(imageryReady)} ready" in html
+    assert "candidate labels / ${formatInteger(ocrHits)} cached" in html
+    assert "summaryCache.imagery_tile_cache_manifest_ref" in html
+    assert "summaryCache.raster_label_ocr_cache_ref" in html
     assert "state.connectedPreparation?.nextRunAt" in html
     assert "preparation.publicationStatus" in html
     assert "preparation.recoveryJournalStatus" in html
@@ -1358,6 +1372,12 @@ def test_scout_dashboard_import_new_trip_tab_contract() -> None:
     assert "/import-gpx-preview" in html
     assert "/import-gpx`" in html
     assert "confirm_import: true" in html
+    assert "max_previous_gpx_speed_ratio: maxPreviousSpeedRatio" in html
+    assert "importPayload.material_root = materialRoot" in html
+    assert "importPayload.dtm_dirs = dtmDirs" in html
+    assert "importPayload.mcp_named_point_evidence = mcpNamedPointEvidence" in html
+    assert "imagery,osm,overpass,terrain" in html
+    assert "mcp,pois,hazards,corridors,retreat,route-notes" in html
     assert "validateWorkspaceSelection(nextProjectId)" in html
     assert 'id="importWorkspaceRoot"' in html
     assert 'placeholder="Load the server workspace catalog" readonly' in html
@@ -1813,8 +1833,18 @@ def test_weather_embedded_map_defaults_to_rudy_tw_and_cwa_imagery_only() -> None
     )
     assert 'sourceKind: "scout_proxy_tile"' in pretrip_html
     assert 'sourceId: "happyman_rudy_twmap"' in pretrip_html
-    assert 'cacheLayerId: "imagery"' in pretrip_html
+    assert 'cacheLayerId: "rudy-twmap"' in pretrip_html
     assert "renderRasterBasemapLayers(state.view);" in map_viewport_adapter
+    assert (
+        '#mapRendererShell[data-map-renderer-active="maplibre"] #map '
+        "{ display:none !important; }"
+        in weather_frame_adapter
+    )
+    assert (
+        '#mapRendererShell[data-map-renderer-active="svg"] #mapLibreEvidenceMap '
+        "{ display:none !important; }"
+        in weather_frame_adapter
+    )
 
 
 def test_weather_embedded_map_loads_cwa_imagery_only_after_layer_enable() -> None:
@@ -2166,6 +2196,17 @@ def test_scout_dashboard_outdoor_six_forces_subtree_contract() -> None:
         assert decision in html
 
 
+def test_navigation_ordered_clues_describes_named_point_route_positions() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    renderer = html.split("function renderNavigationOrderedClues", 1)[1].split(
+        "function renderNavigationTopology", 1
+    )[0]
+
+    assert 'ledger.ordered_clue_chain_kind === "named_point_route_positions"' in renderer
+    assert "依 Golden Route 路程排序的命名地點線索" in renderer
+    assert "僅供閱讀，不代表已確認歷史路線" in renderer
+
+
 def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() -> None:
     html = PAGE.read_text(encoding="utf-8")
     navigation = html.split("function renderNavigationPage", 1)[1].split(
@@ -2305,12 +2346,12 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
     assert 'source: "scout-terrain-hillshade-dem"' in html
     assert 'source: "scout-terrain-candidates"' in html
     assert 'function navigationTerrainRudyOpacity(mode)' in html
-    assert 'return mode === "3d" ? .38 : 1;' in html
+    assert 'return mode === "3d" ? .46 : .74;' in html
     assert '"raster-opacity": navigationTerrainRudyOpacity(mode)' in html
     assert '"raster-fade-duration": 0' in html
     assert '"raster-contrast": mode === "3d" ? .24 : 0' in html
     assert '"raster-saturation": mode === "3d" ? -.14 : 0' in html
-    assert 'hillshadeLayer,\n        ...(revealObservedContext ? [rudyLayer] : [])' in html
+    assert '...(revealObservedContext ? [rudyLayer] : []),\n        ...terrainRasterLayers' in html
     assert 'mode === "3d" ? "terrain" : "flat"' in html
     assert 'data-navigation-rudy-opacity="${navigationTerrainRudyOpacity(mode)}"' in html
     assert 'function navigationTerrainCameraMinimumZoom(dem, mode)' in html
@@ -2411,6 +2452,88 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
     assert "尚未由目前 terrain pipeline 抽取" in html
     assert "P0、P1、P2 不合併成一個安全分數" in html
     assert "reference GPX 不自動升格成替代路線" in html
+
+
+def test_navigation_maplibre_composes_shared_2d_and_3d_terrain_layers() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    style = html.split(
+        "function navigationTerrainMapLibreStyle", 1
+    )[1].split("function navigationTerrainMapLibreCameraScope", 1)[0]
+
+    for helper in (
+        "function navigationTerrainRasterOverlay(",
+        "function navigationTerrainRasterImageSource(",
+        "function navigationTerrainLayerVisibility(",
+        "function navigationTerrainMapLayerIds(",
+        "function setNavigationTerrainMapLayerVisibility(",
+    ):
+        assert helper in html
+
+    for source_id in (
+        "scout-terrain-elevation-tint",
+        "scout-terrain-contours",
+        "scout-terrain-slope-shading",
+    ):
+        assert source_id in style
+
+    assert 'type: "image"' in style
+    assert 'type: "raster"' in style
+    assert 'type: "hillshade"' in style
+    assert 'const terrainRasterLayers = [' in style
+    assert style.index("rudyLayer") < style.index("...terrainRasterLayers")
+    assert style.index('id: "scout-terrain-elevation-tint"') < style.index(
+        'id: "scout-terrain-contours"'
+    )
+    assert '"raster-resampling": "linear"' in style
+    assert style.count('"raster-resampling": "linear"') >= 3
+    assert 'navigationTerrainLayerVisible("elevation")' in style
+    assert 'navigationTerrainLayerVisible("hillshade")' in style
+    assert 'navigationTerrainLayerVisible("contours")' in style
+    assert 'navigationTerrainLayerVisible("slope")' in style
+    assert 'navigationTerrainLayerVisible("basemap")' in style
+    assert 'navigationTerrainLayerVisible("route")' in style
+    assert 'navigationTerrainLayerVisible("candidates")' in style
+    assert 'terrain: {' in style
+    assert 'source: "scout-terrain-dem"' in style
+
+
+def test_navigation_map_layer_controls_do_not_recreate_or_refit_maps() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    setter = html.split(
+        "function setNavigationTerrainMapLayerVisibility", 1
+    )[1].split("function navigationTerrainMapLibreEventFeatureCollection", 1)[0]
+    binder = html.split(
+        "function bindNavigationTerrainControls", 1
+    )[1].split("function bindSettingsControls", 1)[0]
+
+    assert 'navigationTerrainLayerVisibility: {' in html
+    assert 'navigationTerrainInspectorExpanded: false' in html
+    assert 'data-navigation-terrain-layer-toggle="' in html
+    assert 'data-navigation-terrain-inspector-toggle="true"' in html
+    assert 'data-navigation-inspector-expanded="${String(inspectorExpanded)}"' in html
+    assert 'hidden="${inspectorExpanded ? "" : "hidden"}"' not in html
+    assert '${inspectorExpanded ? "" : "hidden"}' in html
+    assert 'map.setLayoutProperty(layerId, "visibility", visibility);' in setter
+    assert "navigationTerrainMapLibreStyle" not in setter
+    assert "fitNavigationTerrainMapLibre" not in setter
+    assert "render()" not in setter
+    assert 'button.setAttribute("aria-pressed", String(visible));' in setter
+    assert 'state.navigationTerrainLayerVisibility = {' in setter
+    assert 'shell.querySelectorAll("button[data-navigation-terrain-layer-toggle]")' in binder
+    assert 'setNavigationTerrainMapLayerVisibility(layerKey, !current);' in binder
+
+
+def test_navigation_2d_and_3d_sync_center_without_cross_mode_zoom_reset() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    synchronizer = html.split(
+        "function synchronizeNavigationTerrainMapLibre", 1
+    )[1].split("function navigationTerrainSelectionFocusTarget", 1)[0]
+
+    assert "const center = sourceEntry.map.getCenter();" in synchronizer
+    assert "const zoom = sourceEntry.map.getZoom();" in synchronizer
+    assert "const synchronizeZoom = entry.mode === sourceEntry.mode;" in synchronizer
+    assert "entry.map.jumpTo({center, ...(synchronizeZoom ? {zoom} : {})});" in synchronizer
+    assert "fitNavigationTerrainMapLibre" not in synchronizer
 
 
 def test_navigation_page_is_a_map_first_reference_workspace() -> None:
@@ -4343,7 +4466,7 @@ def test_dashboard_weather_route_consumes_cache_only_live_cwa_data() -> None:
         "Candidate evidence only.",
         "Weather decision reference",
         "example rules",
-        'loadDataForRoute("outdoor-weather", {force: true})',
+        'triggerDashboardConnectedPreparation("operator-refresh", {force: true})',
         "function triggerDashboardConnectedPreparation",
         "function connectedPreparationActivityLabel",
         "preparationInProgress",
@@ -4395,6 +4518,54 @@ def test_dashboard_weather_route_consumes_cache_only_live_cwa_data() -> None:
     assert "Weather is not a forecast." not in weather_page
     assert "It is a route constraint." not in weather_page
     assert ".weather-field-hero" not in html
+
+
+def test_dashboard_weather_refresh_runs_server_connected_preparation() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    actions = html.split("function renderWeatherActions", 1)[1].split(
+        "function renderWeatherExampleRules", 1
+    )[0]
+    handler = html.split(
+        'document.querySelector("[data-weather-recheck]")?.addEventListener', 1
+    )[1].split('document.querySelector("[data-debug-retry]")', 1)[0]
+
+    assert 'data-weather-refresh-status="true"' in actions
+    assert "更新 CWA 現況" in actions
+    assert "正在向 CWA 更新" in actions
+    assert "const evidenceFetchedAt = snapshot.preferredRainfall?.fetchedAt" in actions
+    assert "目前 workspace 快取更新於" in actions
+    assert "const button = event.currentTarget;" in handler
+    assert 'triggerDashboardConnectedPreparation("operator-refresh", {force: true})' in handler
+    assert 'loadDataForRoute("outdoor-weather", {force: true})' not in handler
+    assert "connectedPreparation: state.connectedPreparation || weather.connectedPreparation" in html
+    assert "function formatCwaTimestampOr(value, fallback)" in html
+    assert 'formatCwaTimestampOr(preparation.completedAt, "not completed")' in html
+    assert 'formatCwaTimestampOr(snapshot.preferredRainfall?.validUntil, "unresolved")' in html
+    assert 'formatCwaTimestampOr(radarSourceTimestamp, "awaiting frame")' in html
+    assert "scheduleConnectedPreparationPolling" in html
+    assert "status.completedAt !== priorCompletedAt" in html
+    assert "await loadWeatherData();" in html
+
+
+def test_dashboard_weather_location_action_reports_cached_sampling_result() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    location_flow = html.split(
+        "function weatherRainfallTrendResultText", 1
+    )[1].split("function renderWeatherDecisionEvidence", 1)[0]
+    location_panel = html.split(
+        'data-weather-location-trend="true"', 1
+    )[1].split("</section>", 1)[0]
+
+    assert "以目前位置重算降雨趨勢" in location_panel
+    assert 'data-weather-location-mode="cached-sampling"' in location_panel
+    assert "不更新 CWA" in location_panel
+    assert "trend.sourceTimestamps?.next1hQpf" in location_flow
+    assert "trend.currentPosition" in location_flow
+    assert "trend.target" in location_flow
+    assert "未下載新 CWA" in location_flow
+    assert "座標未保存" in location_flow
+    assert "rawCoordinatesPersisted=" not in location_flow
+    assert "瀏覽器未允許位置存取" in html
 
 
 def test_dashboard_uses_weather_field_instrument_design_system_across_routes() -> None:
@@ -4774,14 +4945,14 @@ def test_dashboard_joint_review_information_architecture_and_qa_contract() -> No
     html = PAGE.read_text(encoding="utf-8")
 
     for copy in (
-        "Record clone request",
+        "Clone and prepare workspace",
         "Record transfer request",
         "Record package request",
         "Record restore request",
         "Request deletion review",
         "Preview Import",
         "Create Workspace",
-        "Only an append-only request record is written by this dashboard.",
+        "Clone creates a new target with one clean GPX import",
         "32 canonical layers",
         "completed-track is after-action only",
         "Remaining Mission Projection",
@@ -5756,6 +5927,22 @@ def test_dashboard_qgis_feature_samples_remain_candidate_only_and_toggleable() -
     assert '"QGIS render artifact"' in html
     assert "live QGIS render artifact" not in html
     assert "QGIS outputs remain derived reference layers" in html
+
+
+def test_dashboard_qgis_disabled_state_skips_empty_latest_run_discovery() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    loader = html.split("async function loadQgisSpatialData", 1)[1].split(
+        "async function loadQgisSpatialWorkflow", 1
+    )[0]
+
+    assert (
+        'const shouldDiscoverLatestWorkflow = state.qgisSpatialStatus?.availability !== "disabled";'
+        in loader
+    )
+    assert "if (shouldDiscoverLatestWorkflow)" in loader
+    assert "state.qgisSpatialWorkflow?.workflow_run_id" in loader
+    assert "rememberedQgisSpatialWorkflowRunId()" in loader
+    assert "`${basePath}/workflows/latest`" in loader
 
 
 def test_dashboard_terrain_candidates_use_golden_route_start_corridor() -> None:

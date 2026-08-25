@@ -1,9 +1,11 @@
 import inspect
+import http.client
 import json
 import os
 import shutil
 import subprocess
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -24,6 +26,36 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURE_PROJECT_ROOT = (
     ROOT / "tests" / "fixtures" / "pretrip" / "projects" / "chilai_nanhua_day1"
 )
+
+
+def test_dtm_contour_segments_interpolate_continuous_isolines() -> None:
+    cells = [
+        {"x": 0.0, "y": 0.0, "elevation_m": 90.0},
+        {"x": 20.0, "y": 0.0, "elevation_m": 110.0},
+        {"x": 20.0, "y": 20.0, "elevation_m": 130.0},
+        {"x": 0.0, "y": 20.0, "elevation_m": 110.0},
+    ]
+
+    segments = pretrip_layer_preparation._dtm_contour_segments(
+        cells,
+        bbox_twd97={"min_x": 0.0, "min_y": 0.0, "max_x": 20.0, "max_y": 20.0},
+        resolution_m=20.0,
+        interval_m=20.0,
+        output_scale=2,
+    )
+
+    assert [segment[0] for segment in segments] == [100.0, 120.0]
+    assert segments[0][1:] == ((1.0, 2.0), (0.0, 1.0))
+    assert segments[1][1:] == ((2.0, 1.0), (1.0, 0.0))
+
+
+def test_wall_clock_timeout_is_noop_outside_main_thread() -> None:
+    def run_in_worker() -> str:
+        with pretrip_layer_preparation._wall_clock_timeout(0.1):
+            return "completed"
+
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        assert executor.submit(run_in_worker).result(timeout=2) == "completed"
 
 
 def test_layer_preparation_preview_is_metadata_only_and_no_write(
@@ -129,6 +161,15 @@ def test_same_run_overpass_alignment_precedes_cwa_preparation(
         "_maybe_prepare_environment_evidence",
         prepare_environment,
     )
+    monkeypatch.setattr(
+        pretrip_layer_preparation,
+        "_run_raster_label_preparation_after_layer_preparation",
+        lambda **_kwargs: {
+            "status": "not_requested",
+            "output_refs": {},
+            "project_refs_updated": False,
+        },
+    )
 
     run_layer_preparation(
         LayerPreparationRequest(
@@ -147,6 +188,15 @@ def test_connected_refresh_skips_non_weather_post_layer_enrichments(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     project_root = _copy_fixture_project(tmp_path)
+    primary_manifest_path = (
+        project_root / "outputs" / "layers" / "layer_preparation_manifest.json"
+    )
+    primary_manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    primary_manifest_path.write_text(
+        json.dumps({"normalized_layers": ["route", "terrain", "weather"]}),
+        encoding="utf-8",
+    )
+    primary_manifest_before = primary_manifest_path.read_bytes()
 
     def unexpected_post_enrichment(**_kwargs):
         pytest.fail("connected weather refresh must not run post-layer enrichment")
@@ -155,7 +205,9 @@ def test_connected_refresh_skips_non_weather_post_layer_enrichments(
         "_run_raster_label_preparation_after_layer_preparation",
         "_run_boss_point_synthesis_after_layer_preparation",
         "_run_mileage_tag_alignment_after_layer_preparation",
+        "_run_reference_segment_timing_after_layer_preparation",
         "_run_architecture_preparation_after_layer_preparation",
+        "_run_navigation_terrain_dem_after_layer_preparation",
         "_run_navigation_terrain_projection_after_layer_preparation",
         "_write_map_preparation_spec_artifacts",
     ):
@@ -172,6 +224,7 @@ def test_connected_refresh_skips_non_weather_post_layer_enrichments(
             layers=("weather",),
             run_post_layer_enrichments=False,
             run_map_preparation_spec_artifacts=False,
+            publish_preparation_outputs=False,
             prepared_at="2026-07-23T04:00:00+00:00",
         )
     )
@@ -180,11 +233,16 @@ def test_connected_refresh_skips_non_weather_post_layer_enrichments(
         "raster_label_preparation",
         "boss_point_synthesis",
         "mileage_tag_alignment",
+        "reference_segment_timing",
         "architecture_preparation",
+        "navigation_terrain_dem",
         "navigation_terrain_projection",
         "map_preparation_spec_artifacts",
     ):
         assert manifest[key]["status"] == "skipped_connected_refresh"
+    assert manifest["publish_preparation_outputs"] is False
+    assert manifest["boundary"]["primary_preparation_outputs_published"] is False
+    assert primary_manifest_path.read_bytes() == primary_manifest_before
 
 
 def test_layer_preparation_architecture_stage_follows_mileage_and_projects_result(
@@ -196,6 +254,8 @@ def test_layer_preparation_architecture_stage_follows_mileage_and_projects_resul
     source = inspect.getsource(pretrip_layer_preparation.run_layer_preparation)
     assert source.index(
         "_run_mileage_tag_alignment_after_layer_preparation"
+    ) < source.index(
+        "_run_reference_segment_timing_after_layer_preparation"
     ) < source.index("_run_architecture_preparation_after_layer_preparation")
 
     def fake_prepare(project_root: Path, **_kwargs):
@@ -257,12 +317,32 @@ def test_terrain_preparation_compiles_and_registers_navigation_projection(
     project_root = _copy_fixture_project(tmp_path)
     projection_ref = "outputs/navigation/navigation_terrain_intelligence.json"
     compile_calls: list[Path] = []
+    stage_order: list[str] = []
+
+    def prepare_terrain_dem(
+        *,
+        project_root: Path,
+        manifest: dict[str, object],
+    ) -> dict[str, object]:
+        stage_order.append("terrain_dem")
+        assert "terrain" in manifest["normalized_layers"]
+        return {
+            "status": "completed",
+            "selected_zoom": 13,
+            "tile_count": 4,
+            "output_refs": {
+                "navigation_terrain_dem_manifest_ref": (
+                    "outputs/navigation/terrain_rgb/manifest.json"
+                ),
+            },
+        }
 
     def compile_projection(
         *,
         project_root: Path,
         manifest: dict[str, object],
     ) -> dict[str, object]:
+        stage_order.append("projection")
         compile_calls.append(project_root)
         assert "terrain" in manifest["normalized_layers"]
         return {
@@ -273,6 +353,11 @@ def test_terrain_preparation_compiles_and_registers_navigation_projection(
             },
         }
 
+    monkeypatch.setattr(
+        pretrip_layer_preparation,
+        "_run_navigation_terrain_dem_after_layer_preparation",
+        prepare_terrain_dem,
+    )
     monkeypatch.setattr(
         pretrip_layer_preparation,
         "_run_navigation_terrain_projection_after_layer_preparation",
@@ -298,6 +383,11 @@ def test_terrain_preparation_compiles_and_registers_navigation_projection(
         "_run_mileage_tag_alignment_after_layer_preparation",
         lambda **_kwargs: {"status": "not_requested"},
     )
+    monkeypatch.setattr(
+        pretrip_layer_preparation,
+        "_run_reference_segment_timing_after_layer_preparation",
+        lambda **_kwargs: {"status": "not_requested"},
+    )
 
     manifest = run_layer_preparation(
         LayerPreparationRequest(
@@ -309,11 +399,199 @@ def test_terrain_preparation_compiles_and_registers_navigation_projection(
     )
 
     assert compile_calls == [project_root]
+    assert stage_order == ["terrain_dem", "projection"]
+    assert manifest["navigation_terrain_dem"]["status"] == "completed"
+    assert manifest["outputs"]["navigation_terrain_dem_manifest_ref"] == (
+        "outputs/navigation/terrain_rgb/manifest.json"
+    )
     assert manifest["navigation_terrain_projection"]["status"] == "completed"
     assert manifest["outputs"]["navigation_terrain_projection_ref"] == projection_ref
     assert _load(project_root / "project.json")[
         "navigation_terrain_projection_ref"
     ] == projection_ref
+
+
+def test_navigation_terrain_dem_preparation_selects_supported_zoom_after_lower_failures(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import navigation_terrain_raster_dem
+
+    attempted_zooms: list[int] = []
+
+    def prepare_dem(_project_root: Path, **kwargs: object) -> dict[str, object]:
+        zoom = int(kwargs["zoom"])
+        attempted_zooms.append(zoom)
+        if zoom < 15:
+            raise navigation_terrain_raster_dem.TerrainDemPreparationError(
+                "no fully-supported terrain DEM tiles are available at the requested zoom"
+            )
+        return {
+            "status": "ready",
+            "minzoom": zoom,
+            "maxzoom": zoom,
+            "tile_count": 14,
+            "source_cell_resolution_m": 20.0,
+            "manifest_ref": "outputs/navigation/terrain_rgb/manifest.json",
+            "boundary": {
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            },
+        }
+
+    monkeypatch.setattr(
+        navigation_terrain_raster_dem,
+        "prepare_navigation_terrain_dem_tiles",
+        prepare_dem,
+    )
+
+    result = (
+        pretrip_layer_preparation._run_navigation_terrain_dem_after_layer_preparation(
+            project_root=tmp_path,
+            manifest={
+                "normalized_layers": ["terrain"],
+                "finished_at": "2026-08-24T00:00:00Z",
+                "project_id": "terrain-demo",
+            },
+        )
+    )
+
+    assert attempted_zooms == [13, 14, 15]
+    assert result["status"] == "completed"
+    assert result["selected_zoom"] == 15
+    assert result["tile_count"] == 14
+    assert [attempt["status"] for attempt in result["attempts"]] == [
+        "no_complete_tile_block",
+        "no_complete_tile_block",
+        "completed",
+    ]
+    assert result["output_refs"] == {
+        "navigation_terrain_dem_manifest_ref": (
+            "outputs/navigation/terrain_rgb/manifest.json"
+        )
+    }
+
+
+def test_navigation_terrain_dem_preparation_selects_highest_route_coverage(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import navigation_terrain_raster_dem
+
+    route_samples_ref = "outputs/layers/normalized/terrain_route_samples.geojson"
+    route_samples_path = tmp_path / route_samples_ref
+    route_samples_path.parent.mkdir(parents=True)
+    route_samples_path.write_text(
+        json.dumps(
+            {
+                "type": "FeatureCollection",
+                "features": [
+                    {
+                        "type": "Feature",
+                        "geometry": {
+                            "type": "Point",
+                            "coordinates": [lon, 23.5],
+                        },
+                        "properties": {},
+                    }
+                    for lon in (120.9, 121.1, 121.2)
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    attempted_zooms: list[int] = []
+    bounds_by_zoom = {
+        13: {"west": 121.0, "south": 23.4, "east": 121.15, "north": 23.6},
+        14: {"west": 120.95, "south": 23.4, "east": 121.15, "north": 23.6},
+        15: {"west": 120.85, "south": 23.4, "east": 121.25, "north": 23.6},
+    }
+
+    def prepare_dem(_project_root: Path, **kwargs: object) -> dict[str, object]:
+        zoom = int(kwargs["zoom"])
+        attempted_zooms.append(zoom)
+        return {
+            "status": "ready",
+            "minzoom": zoom,
+            "maxzoom": zoom,
+            "tile_count": zoom,
+            "source_cell_resolution_m": 20.0,
+            "bounds_wgs84": bounds_by_zoom[zoom],
+            "manifest_ref": "outputs/navigation/terrain_rgb/manifest.json",
+            "boundary": {
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            },
+        }
+
+    monkeypatch.setattr(
+        navigation_terrain_raster_dem,
+        "prepare_navigation_terrain_dem_tiles",
+        prepare_dem,
+    )
+
+    result = (
+        pretrip_layer_preparation._run_navigation_terrain_dem_after_layer_preparation(
+            project_root=tmp_path,
+            manifest={
+                "normalized_layers": ["terrain"],
+                "finished_at": "2026-08-24T00:00:00Z",
+                "project_id": "terrain-demo",
+                "outputs": {"terrain_route_samples_ref": route_samples_ref},
+            },
+        )
+    )
+
+    assert attempted_zooms == [13, 14, 15]
+    assert result["selected_zoom"] == 15
+    assert result["route_dem_coverage"] == {
+        "supported_count": 3,
+        "total_count": 3,
+        "ratio": 1.0,
+    }
+    assert result["selection_policy"] == (
+        "highest_route_sample_coverage_then_lowest_zoom"
+    )
+
+
+def test_raster_label_preparation_skips_when_imagery_is_not_requested(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_root = _copy_fixture_project(tmp_path)
+    ocr_called = False
+
+    def unexpected_ocr(*_args, **_kwargs):
+        nonlocal ocr_called
+        ocr_called = True
+        return {
+            "status": "failed",
+            "output_ref": "outputs/layers/normalized/raster_label_ocr.json",
+        }
+
+    monkeypatch.setattr(
+        "pretrip_raster_label_ocr.extract_raster_label_ocr",
+        unexpected_ocr,
+    )
+
+    result = (
+        pretrip_layer_preparation._run_raster_label_preparation_after_layer_preparation(
+            project_root=project_root,
+            manifest={
+                "normalized_layers": ["overpass"],
+                "finished_at": "2026-08-24T00:00:00+00:00",
+                "outputs": {
+                    "raster_label_plan_ref": (
+                        "outputs/layers/plans/raster_label_plan.json"
+                    ),
+                },
+            },
+        )
+    )
+
+    assert result["status"] == "not_requested"
+    assert result["reason"] == "imagery_layer_not_requested"
+    assert ocr_called is False
 
 
 def test_project_source_refs_accept_directory_refs(tmp_path: Path) -> None:
@@ -1670,7 +1948,7 @@ def test_layer_preparation_seeds_imagery_cache_for_raster_ocr_pipeline(
     project.pop("imagery_manifest_ref", None)
     project.pop("local_raster_manifest_ref", None)
     project.pop("raster_tile_manifest_ref", None)
-    project["imagery_source_id"] = "happyman_rudy"
+    project["imagery_source_id"] = "nlsc_photo2"
     project["imagery_bbox_wgs84"] = {
         "west": 121.2,
         "south": 24.03,
@@ -1681,7 +1959,16 @@ def test_layer_preparation_seeds_imagery_cache_for_raster_ocr_pipeline(
     project["raster_label_evidence_count"] = 99
     project_path.write_text(json.dumps(project, ensure_ascii=False), encoding="utf-8")
 
+    seed_calls = []
+
     def fake_seed(plan, **kwargs):
+        seed_calls.append(
+            {
+                "layer_id": plan["layer_id"],
+                "source_id": kwargs["imagery_source"]["source_id"],
+                "cache_root": plan["cache_root"],
+            }
+        )
         return {
             "status": "seed_complete",
             "dry_run": False,
@@ -1789,11 +2076,49 @@ def test_layer_preparation_seeds_imagery_cache_for_raster_ocr_pipeline(
         "imagery"
     ]
 
+    assert {
+        call["layer_id"]: call["source_id"] for call in seed_calls
+    } == {
+        "imagery": "nlsc_photo2",
+        "rudy": "happyman_rudy",
+        "rudy-twmap": "happyman_rudy_twmap",
+        "relief": "happyman_colorrelief",
+        "geology": "happyman_geo2016",
+        "topo-5k": "happyman_tw5k2000",
+        "forest": "happyman_forest",
+        "historical-fandi-1916": "sinica_jm50k_1916",
+    }
+    assert {call["cache_root"] for call in seed_calls} == {
+        str((project_root / "cache" / "raster-tiles").resolve())
+    }
+    assert set(project["raster_layer_manifest_refs"]) == {
+        "imagery",
+        "rudy",
+        "rudy-twmap",
+        "relief",
+        "geology",
+        "topo-5k",
+        "forest",
+        "historical-fandi-1916",
+    }
+    assert project["workspace_raster_tile_cache_root"] == str(
+        (project_root / "cache" / "raster-tiles").resolve()
+    )
+    assert project["workspace_raster_tile_cache_layer_count"] == 8
+    assert project["raster_layer_source_ids"]["historical-fandi-1916"] == (
+        "sinica_jm50k_1916"
+    )
+    assert project["imagery_tile_cache_source_id"] == "nlsc_photo2"
+    assert project["raster_label_tile_cache_source_id"] == "happyman_rudy_twmap"
+    assert project["raster_label_tile_cache_plan_ref"].endswith(
+        ".rudy-twmap.raster_tile_cache_plan.json"
+    )
     assert project["imagery_tile_cache_seed_status"] == "seed_complete"
     assert imagery_layer["raster_bbox_wgs84"] == project["imagery_bbox_wgs84"]
     assert imagery_layer["raster_coverage_policy"] == "render_intersecting_tiles_only"
     assert imagery_layer["raster_tile_zoom_range"] == "12-12"
     assert imagery_layer["raster_tile_count"] == 2
+    assert imagery_layer["raster_tile_delivery"] == "workspace_cache_first"
     assert imagery_layer["output_refs"]["local_raster_tile_url_template"] == (
         "/admin/tiles/imagery/chilai_nanhua_day1/imagery/{z}/{x}/{y}.png"
     )
@@ -2504,43 +2829,28 @@ def test_layer_preparation_syncs_scout_risk_score_outputs(
     assert terrain_samples["features"][0]["properties"]["runtime_safety_truth"] is False
     terrain_visualization = _load(project_root / project["terrain_visualization_ref"])
     assert terrain_visualization["artifact_kind"] == "pretrip_terrain_visualization"
-    assert terrain_visualization["status"] == "ready_from_dtm_20m_corridor_bitmap"
+    assert terrain_visualization["status"] == "ready_from_risk_route_profile"
     assert terrain_visualization["visualization_spec"]["modes"] == [
         "hillshade",
         "elevation_tint",
         "slope_shading",
         "contours",
     ]
-    assert terrain_visualization["visualization_spec"]["route_aligned_proxy"] is False
-    assert terrain_visualization["visualization_spec"]["bitmap_overlay"] is True
-    assert terrain_visualization["visualization_spec"]["preferred_processor"] == "gdal"
-    assert terrain_visualization["visualization_spec"]["actual_processor"] == (
-        "python_dtm_bitmap_fallback"
-    )
-    assert (
-        terrain_visualization["visualization_spec"]["bitmap_cell_resolution_m"] == 20.0
-    )
-    assert terrain_visualization["visualization_spec"]["corridor_half_width_m"] == 500.0
+    assert terrain_visualization["visualization_spec"]["route_aligned_proxy"] is True
     assert terrain_visualization["visualization_spec"]["risk_heat_layer"] is False
     assert (
         terrain_visualization["visualization_spec"]["raw_dem_embedded_in_json"] is False
     )
-    assert terrain_visualization["counts"]["feature_count"] == 0
-    assert terrain_visualization["counts"]["cell_count"] > 0
-    assert terrain_visualization["counts"]["bitmap_overlay_count"] == 4
+    assert terrain_visualization["counts"]["feature_count"] == 3
     assert terrain_visualization["counts"]["runtime_safety_truth_count"] == 0
-    assert terrain_visualization["features"] == []
-    overlays = {
-        overlay["mode"]: overlay for overlay in terrain_visualization["raster_overlays"]
-    }
-    assert set(overlays) == {"hillshade", "elevation_tint", "slope_shading", "contours"}
-    assert overlays["slope_shading"]["cell_resolution_m"] == 20.0
-    assert overlays["slope_shading"]["corridor_half_width_m"] == 500.0
-    assert overlays["slope_shading"]["runtime_href"] == (
-        "/admin/pretrip/projects/chilai_nanhua_day1/terrain-overlays/slope_shading.png"
+    assert "raster_overlays" not in terrain_visualization
+    assert terrain_visualization["features"][0]["properties"]["source_risk_ref"] == (
+        project["risk_route_profile_ref"]
     )
-    assert overlays["slope_shading"]["runtime_safety_truth"] is False
-    assert (project_root / overlays["slope_shading"]["source_path"]).is_file()
+    assert (
+        terrain_visualization["features"][0]["properties"]["runtime_safety_truth"]
+        is False
+    )
     _assert_risk_features_have_pretrip_provenance(
         project_root / project["risk_route_profile_ref"],
         expected_evidence_type="pretrip_route_risk_sample",
@@ -2618,6 +2928,19 @@ def test_layer_preparation_generates_workspace_risk_before_terrain_bitmap(
     assert terrain_visualization["counts"]["bitmap_overlay_count"] == 4
     assert terrain_visualization["counts"]["source_dtm_tile_count"] == 1
     assert terrain_visualization["counts"]["cell_count"] > 0
+    assert terrain_visualization["visualization_spec"]["contour_method"] == (
+        "bounded_marching_squares_linear_interpolation"
+    )
+    contour_overlay = next(
+        overlay
+        for overlay in terrain_visualization["raster_overlays"]
+        if overlay["mode"] == "contours"
+    )
+    assert contour_overlay["visual_pixel_resolution_m"] == 10.0
+    assert contour_overlay["adds_source_resolution"] is False
+    assert contour_overlay["contour_segment_count"] == terrain_visualization[
+        "counts"
+    ]["contour_segment_count"]
     assert terrain_visualization["dtm_grid"]["source_tile_count"] == 1
     assert terrain_visualization["boundary"]["runtime_safety_truth"] is False
 
@@ -2673,19 +2996,18 @@ def test_layer_preparation_terrain_can_fallback_to_risk_ribbon_lines(
         "outputs/risk/risk_ribbon.geojson"
     )
     assert terrain_samples["features"][0]["properties"]["runtime_safety_truth"] is False
-    assert terrain_visualization["status"] == "ready_from_dtm_20m_corridor_bitmap"
-    assert terrain_visualization["counts"]["bitmap_overlay_count"] == 4
+    assert terrain_visualization["status"] == "ready_from_risk_ribbon"
+    assert terrain_visualization["counts"]["feature_count"] == 2
+    assert terrain_visualization["visualization_spec"]["route_aligned_proxy"] is True
+    assert terrain_visualization["visualization_spec"]["risk_heat_layer"] is False
+    assert "raster_overlays" not in terrain_visualization
+    assert terrain_visualization["features"][0]["properties"]["source_risk_ref"] == (
+        "outputs/risk/risk_ribbon.geojson"
+    )
     assert (
-        terrain_visualization["visualization_spec"]["bitmap_cell_resolution_m"] == 20.0
+        terrain_visualization["features"][0]["properties"]["runtime_safety_truth"]
+        is False
     )
-    assert terrain_visualization["visualization_spec"]["corridor_half_width_m"] == 500.0
-    overlays = {
-        overlay["mode"]: overlay for overlay in terrain_visualization["raster_overlays"]
-    }
-    assert overlays["hillshade"]["runtime_href"] == (
-        "/admin/pretrip/projects/chilai_nanhua_day1/terrain-overlays/hillshade.png"
-    )
-    assert (project_root / overlays["hillshade"]["source_path"]).is_file()
 
 
 def test_layer_preparation_explicit_fetch_normalizes_overpass_with_fixture_fetcher(
@@ -2765,6 +3087,52 @@ def test_layer_preparation_explicit_fetch_normalizes_overpass_with_fixture_fetch
         project_root / "outputs" / "layers" / "plans" / "overpass_query.ql"
     ).is_file()
     assert "<trkpt" not in json.dumps(evidence, ensure_ascii=False).lower()
+
+
+def test_overpass_fetch_retries_incomplete_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payload = b'{"elements": []}'
+    calls = 0
+    delays: list[float] = []
+
+    class Response:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self) -> bytes:
+            return payload
+
+    def flaky_urlopen(*_args, **_kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise http.client.IncompleteRead(b'{"elements":', 4)
+        return Response()
+
+    monkeypatch.setattr(
+        pretrip_layer_preparation.urllib.request,
+        "urlopen",
+        flaky_urlopen,
+    )
+    monkeypatch.setattr(pretrip_layer_preparation.time, "sleep", delays.append)
+
+    raw_bytes, status = pretrip_layer_preparation._fetch_overpass_raw_payload(
+        {
+            "endpoint": "https://overpass-api.de/api/interpreter",
+            "query_body": "[out:json];node(0,0,0,0);out;",
+        }
+    )
+
+    assert raw_bytes == payload
+    assert status == 200
+    assert calls == 2
+    assert delays == [1.0]
 
 
 def test_layer_preparation_blocks_explicit_fetch_without_network_flag(

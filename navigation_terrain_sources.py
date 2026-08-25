@@ -6,6 +6,7 @@ import json
 import math
 from pathlib import Path
 from typing import Any, Sequence
+from urllib.parse import urlparse
 
 from navigation_terrain_dem import WorkspaceTerrainEvidenceError
 
@@ -50,6 +51,10 @@ def build_workspace_source_ledger(
         project,
         "historical_route_source_ledger_ref",
     )
+    named_point_evidence_ref = _optional_project_ref(
+        project,
+        "mcp_named_point_evidence_ref",
+    )
     route_notes_ref = _optional_project_ref(
         project,
         "normalized_route_note_candidates_ref",
@@ -57,6 +62,10 @@ def build_workspace_source_ledger(
     coverage = _read_if_present(project_root, coverage_ref)
     source_index = _read_if_present(project_root, source_index_ref)
     narrative_ledger = _read_if_present(project_root, narrative_ledger_ref)
+    named_point_evidence = _read_if_present(
+        project_root,
+        named_point_evidence_ref,
+    )
     route_notes = _read_if_present(project_root, route_notes_ref)
 
     sources: list[dict[str, Any]] = []
@@ -105,6 +114,14 @@ def build_workspace_source_ledger(
             source_ref=narrative_ledger_ref,
         )
     )
+    if not narrative_ledger:
+        sources.extend(
+            _project_named_point_evidence_pages(
+                named_point_evidence,
+                source_ref=named_point_evidence_ref,
+                project_id=project_id,
+            )
+        )
     sources.extend(
         _project_gpx_sources(
             source_index,
@@ -119,6 +136,17 @@ def build_workspace_source_ledger(
         source_ref=route_notes_ref,
         limit=max_ordered_clues,
     )
+    ordered_clue_chain_kind = "gpx_waypoint_clues"
+    if not ordered_clues:
+        ordered_clues = _ordered_named_point_clues(
+            named_point_evidence,
+            source_ref=named_point_evidence_ref,
+            project_id=project_id,
+            limit=max_ordered_clues,
+        )
+        ordered_clue_chain_kind = (
+            "named_point_route_positions" if ordered_clues else "not_prepared"
+        )
     tier_counts = {
         tier: sum(source["tier"] == tier for source in sources)
         for tier in ("P0", "P1", "P2")
@@ -161,9 +189,7 @@ def build_workspace_source_ledger(
         "sources": sources,
         "source_tier_counts": tier_counts,
         "source_count": len(sources),
-        "ordered_clue_chain_kind": (
-            "gpx_waypoint_clues" if ordered_clues else "not_prepared"
-        ),
+        "ordered_clue_chain_kind": ordered_clue_chain_kind,
         "ordered_clues": ordered_clues,
         "coordinate_audit": {
             "dtm": {
@@ -274,12 +300,18 @@ def _project_gpx_sources(
     if not isinstance(raw_sources, list):
         return []
     projected = []
+    seen_hashes: set[str] = set()
     for item in raw_sources[:limit]:
         if not isinstance(item, dict):
             continue
         source_id = str(item.get("source_id") or "")
         if not source_id:
             continue
+        digest = _sha256_or_none(item.get("sha256"))
+        if digest and digest in seen_hashes:
+            continue
+        if digest:
+            seen_hashes.add(digest)
         provider = str(item.get("provider") or "unknown")
         projected.append(
             {
@@ -290,7 +322,7 @@ def _project_gpx_sources(
                 "source_ref": source_ref,
                 "role": str(item.get("role") or "reference_track"),
                 "route_role": str(item.get("route_role") or "reference_track"),
-                "sha256": _sha256_or_none(item.get("sha256")),
+                "sha256": digest,
                 "retrieved_at": item.get("imported_at"),
                 "coordinate_reference_system": "EPSG:4326",
                 "claim": "A GPX file was supplied as candidate route evidence.",
@@ -303,6 +335,158 @@ def _project_gpx_sources(
             }
         )
     return projected
+
+
+def _project_named_point_evidence_pages(
+    payload: dict[str, Any],
+    *,
+    source_ref: str | None,
+    project_id: str,
+) -> list[dict[str, Any]]:
+    if not payload:
+        return []
+    _validate_named_point_evidence(payload, project_id=project_id)
+    raw_pages = payload.get("evidence_pages", [])
+    if not isinstance(raw_pages, list):
+        return []
+    search_profile = payload.get("search_profile", {})
+    fixture_backed = bool(
+        isinstance(search_profile, dict)
+        and search_profile.get("fixture_backed") is True
+    )
+    live_network_performed = bool(
+        isinstance(search_profile, dict)
+        and search_profile.get("live_network_performed") is True
+    )
+    projected = []
+    for item in raw_pages[:100]:
+        if not isinstance(item, dict) or item.get("accepted") is not True:
+            continue
+        url = _bounded_http_url(item.get("canonical_url") or item.get("url"))
+        page_id = str(item.get("page_id") or "").strip()
+        if not page_id or not url:
+            continue
+        hostname = (urlparse(url).hostname or "").casefold()
+        official = hostname.endswith(".gov.tw") or hostname == "gov.tw"
+        title = _bounded_text(item.get("title"), 200) or page_id
+        relevance = _bounded_text(item.get("route_relevance"), 40) or "unknown"
+        limitations = (
+            "Only source-page metadata and a bounded snippet hash are preserved; "
+            "the page was not treated as current access or safety truth."
+        )
+        if fixture_backed and not live_network_performed:
+            limitations += (
+                " This evidence set is fixture or precomputed input and was not "
+                "refreshed from the network during preparation."
+            )
+        raw_hash = str(item.get("snippet_hash") or "")
+        if raw_hash.startswith("sha256:"):
+            raw_hash = raw_hash.removeprefix("sha256:")
+        projected.append(
+            {
+                "id": page_id,
+                "tier": "P0" if official else "P1",
+                "family": (
+                    "official_historical_baseline"
+                    if official
+                    else "public_route_report"
+                ),
+                "provider": hostname,
+                "url": url,
+                "source_location": title,
+                "source_ref": source_ref,
+                "retrieved_at": _bounded_text(item.get("retrieved_at"), 40),
+                "publication_date": None,
+                "coordinate_reference_system": None,
+                "claim": (
+                    f"{title} was accepted as {relevance} route-relevance "
+                    "metadata in the named-point evidence set."
+                ),
+                "sha256": _sha256_or_none(raw_hash),
+                "limitations": limitations,
+                "stale_risk": _bounded_text(item.get("stale_risk"), 40),
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        )
+    return projected
+
+
+def _ordered_named_point_clues(
+    payload: dict[str, Any],
+    *,
+    source_ref: str | None,
+    project_id: str,
+    limit: int,
+) -> list[dict[str, Any]]:
+    if not payload:
+        return []
+    _validate_named_point_evidence(payload, project_id=project_id)
+    raw_points = payload.get("named_points", [])
+    if not isinstance(raw_points, list):
+        return []
+    candidates = []
+    for item in raw_points[:100]:
+        if not isinstance(item, dict):
+            continue
+        route_position = item.get("route_position")
+        if not isinstance(route_position, dict):
+            continue
+        distance_m = _finite_number(route_position.get("distance_m"))
+        label = str(item.get("canonical_name") or "").strip()
+        point_id = str(item.get("named_point_id") or "").strip()
+        if distance_m is None or not label or not point_id:
+            continue
+        point_classes = [
+            str(value)
+            for value in item.get("point_class", [])
+            if isinstance(value, str) and value.strip()
+        ]
+        refs = [
+            str(value)
+            for value in item.get("mention_page_ids", [])
+            if isinstance(value, str) and value.strip()
+        ]
+        if source_ref:
+            refs.append(source_ref)
+        candidates.append(
+            {
+                "id": point_id,
+                "label": label,
+                "distance_m": distance_m,
+                "clue_type": point_classes[0] if point_classes else "named_point",
+                "elevation_m": None,
+                "source_refs": list(dict.fromkeys(refs)),
+                "evidence_kind": "named_point_route_position",
+                "requires_human_review": True,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        )
+    candidates.sort(key=lambda item: (item["distance_m"], item["id"]))
+    for index, item in enumerate(candidates):
+        item["order"] = index
+    return candidates[:limit]
+
+
+def _validate_named_point_evidence(
+    payload: dict[str, Any],
+    *,
+    project_id: str,
+) -> None:
+    boundary = payload.get("boundary")
+    if not isinstance(boundary, dict) or (
+        boundary.get("candidate_only") is not True
+        or boundary.get("phase1_runtime_safety_truth") is not False
+    ):
+        raise WorkspaceTerrainEvidenceError(
+            "named-point evidence violates candidate boundary"
+        )
+    payload_project_id = str(payload.get("project_id") or "").strip()
+    if payload_project_id and payload_project_id != project_id:
+        raise WorkspaceTerrainEvidenceError(
+            "named-point evidence project_id does not match workspace"
+        )
 
 
 def _ordered_waypoint_clues(

@@ -47,6 +47,49 @@ def _happyman_wmts_metadata(layer_id: str) -> dict[str, Any]:
     }
 
 
+def _historical_map_source(
+    source_id: str,
+    *,
+    label: str,
+    label_zh: str,
+    provider: str,
+    url_template: str,
+    year: int,
+    min_zoom: int = 5,
+    max_zoom: int = 18,
+    media_type: str = "image/jpeg",
+    source_kind: str = "xyz_tile",
+    tile_order: str = "z_x_y",
+    attribution: str = "Academia Sinica Taiwan History and Culture in Time and Space",
+) -> dict[str, Any]:
+    return {
+        "source_id": source_id,
+        "label": label,
+        "label_zh": label_zh,
+        "provider": provider,
+        "source_kind": source_kind,
+        "url_template": url_template,
+        "tile_order": tile_order,
+        "media_type": media_type,
+        "min_zoom": min_zoom,
+        "max_zoom": max_zoom,
+        "attribution": attribution,
+        "cache_policy": "local_cache_then_remote_fetch_when_explicit",
+        "requires_explicit_remote_fetch": True,
+        "theme_group": "historical_map",
+        "theme_year": year,
+        "historical_map": True,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "operational": False,
+        "visualization_only": True,
+        "notes_zh": [
+            "歷史圖只作為路線比對與 pretrip 視覺脈絡，不直接成為安全判定。",
+            "Scout 只透過 allowlist proxy/cache 取得圖磚，遠端更新必須由使用者明確啟用。",
+        ],
+    }
+
+
 DEFAULT_IMAGERY_SOURCE_REGISTRY: dict[str, Any] = {
     "artifact_kind": "scout_imagery_source_registry",
     "schema_version": "1.0",
@@ -239,6 +282,13 @@ DEFAULT_IMAGERY_SOURCE_REGISTRY: dict[str, Any] = {
             "attribution": "Happyman WMTS",
             "cache_policy": "local_cache_then_remote_fetch_when_explicit",
             "requires_explicit_remote_fetch": True,
+            "theme_group": "historical_map",
+            "theme_year": 2000,
+            "historical_map": True,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "operational": False,
+            "visualization_only": True,
             "notes_zh": [
                 "1/5000 topo map（地形圖）可作登山細節參考。",
             ],
@@ -267,6 +317,187 @@ DEFAULT_IMAGERY_SOURCE_REGISTRY: dict[str, Any] = {
                 "林班界 forest compartment overlay（林班界覆蓋層），供 pretrip context 使用。",
             ],
         },
+        "sinica_jm20k_1904": _historical_map_source(
+            "sinica_jm20k_1904",
+            label="Taiwan Fortress Map 1904",
+            label_zh="堡圖 1904",
+            provider="Academia Sinica",
+            url_template=(
+                "https://gis.sinica.edu.tw/tileserver/file-exists.php?"
+                "img=JM20K_1904-jpg-{z}-{x}-{y}"
+            ),
+            year=1904,
+            max_zoom=18,
+        ),
+        "sinica_jm20k_1904_triangulation": _historical_map_source(
+            "sinica_jm20k_1904_triangulation",
+            label="Taiwan triangulation points 1904",
+            label_zh="三角點 1904",
+            provider="Academia Sinica",
+            url_template=(
+                "https://gis.sinica.edu.tw/tileserver/file-exists.php?"
+                "img=JM20K_1904_triangulation-png-{z}-{x}-{y}"
+            ),
+            year=1904,
+            max_zoom=16,
+            media_type="image/png",
+        ),
+        "sinica_jm50k_1916": _historical_map_source(
+            "sinica_jm50k_1916",
+            label="Aboriginal Territory Map 1916",
+            label_zh="蕃地 1916",
+            provider="Academia Sinica",
+            url_template=(
+                "https://gis.sinica.edu.tw/tileserver/file-exists.php?"
+                "img=JM50K_1916-jpg-{z}-{x}-{y}"
+            ),
+            year=1916,
+            max_zoom=17,
+        ),
+        "sinica_jm20k_1921": _historical_map_source(
+            "sinica_jm20k_1921",
+            label="Taiwan Fortress Map 1921",
+            label_zh="堡圖 1921",
+            provider="Academia Sinica",
+            url_template=(
+                "https://gis.sinica.edu.tw/tileserver/file-exists.php?"
+                "img=JM20K_1921-jpg-{z}-{x}-{y}"
+            ),
+            year=1921,
+            max_zoom=18,
+        ),
+        "sinica_jm50k_1924": _historical_map_source(
+            "sinica_jm50k_1924",
+            label="Japanese Imperial Land Survey 1924",
+            label_zh="陸測 1924",
+            provider="Academia Sinica",
+            url_template=(
+                "https://gis.sinica.edu.tw/tileserver/file-exists.php?"
+                "img=JM50K_1924-jpg-{z}-{x}-{y}"
+            ),
+            year=1924,
+            max_zoom=17,
+        ),
+        "sinica_jm50k_1924_new": _historical_map_source(
+            "sinica_jm50k_1924_new",
+            label="Japanese Imperial Land Survey 1924 new",
+            label_zh="陸測 1924 新",
+            provider="Academia Sinica",
+            url_template=(
+                "https://gis.sinica.edu.tw/tileserver/file-exists.php?"
+                "img=JM50K_1924_new-jpg-{z}-{x}-{y}"
+            ),
+            year=1924,
+            max_zoom=17,
+        ),
+        "sinica_ttfb3_0603": _historical_map_source(
+            "sinica_ttfb3_0603",
+            label="Shinko District National Forest Map",
+            label_zh="新港郡林野圖",
+            provider="Academia Sinica",
+            url_template=(
+                "https://gis.sinica.edu.tw/taitung/map_TFB3_0603/"
+                "Layers/_alllayers/L{z2}/R{y_hex8}/C{x_hex8}.png"
+            ),
+            year=1925,
+            max_zoom=19,
+            media_type="image/png",
+            source_kind="arcgis_exploded_tile",
+            tile_order="arcgis_Lz_Ryhex_Cxhex",
+        ),
+        "sinica_ttfb3_0602": _historical_map_source(
+            "sinica_ttfb3_0602",
+            label="Kanzan District National Forest Map",
+            label_zh="關山郡林野圖",
+            provider="Academia Sinica",
+            url_template=(
+                "https://gis.sinica.edu.tw/taitung/map_TFB3_0602/"
+                "Layers/_alllayers/L{z2}/R{y_hex8}/C{x_hex8}.png"
+            ),
+            year=1925,
+            max_zoom=19,
+            media_type="image/png",
+            source_kind="arcgis_exploded_tile",
+            tile_order="arcgis_Lz_Ryhex_Cxhex",
+        ),
+        "sinica_ttfb3_0601": _historical_map_source(
+            "sinica_ttfb3_0601",
+            label="Taito District National Forest Map",
+            label_zh="台東郡林野圖",
+            provider="Academia Sinica",
+            url_template=(
+                "https://gis.sinica.edu.tw/taitung/map_TFB3_0601/"
+                "Layers/_alllayers/L{z2}/R{y_hex8}/C{x_hex8}.png"
+            ),
+            year=1925,
+            max_zoom=19,
+            media_type="image/png",
+            source_kind="arcgis_exploded_tile",
+            tile_order="arcgis_Lz_Ryhex_Cxhex",
+        ),
+        "sinica_tm50k_1956": _historical_map_source(
+            "sinica_tm50k_1956",
+            label="Taiwan 1:50,000 map 1956",
+            label_zh="老五萬 1956",
+            provider="Academia Sinica",
+            url_template=(
+                "https://gis.sinica.edu.tw/tileserver/file-exists.php?"
+                "img=TM50K_1956-jpg-{z}-{x}-{y}"
+            ),
+            year=1956,
+            max_zoom=17,
+        ),
+        "sinica_tm50k_1966": _historical_map_source(
+            "sinica_tm50k_1966",
+            label="Water resources map 1966",
+            label_zh="水利 1966",
+            provider="Academia Sinica",
+            url_template=(
+                "https://gis.sinica.edu.tw/tileserver/file-exists.php?"
+                "img=TM50K_1966-jpg-{z}-{x}-{y}"
+            ),
+            year=1966,
+            max_zoom=18,
+        ),
+        "sinica_tm25k_1989": _historical_map_source(
+            "sinica_tm25k_1989",
+            label="Economic Planning Map first edition 1989",
+            label_zh="經建一版 1989",
+            provider="Academia Sinica",
+            url_template=(
+                "https://gis.sinica.edu.tw/tileserver/file-exists.php?"
+                "img=TM25K_1989-jpg-{z}-{x}-{y}"
+            ),
+            year=1989,
+            max_zoom=15,
+        ),
+        "happyman_tri1999": _historical_map_source(
+            "happyman_tri1999",
+            label="Lin Chung-Hsiung Taiwan mountains map 1999",
+            label_zh="林崇雄百岳圖 1999",
+            provider="Happyman / Lin Chung-Hsiung",
+            url_template=(
+                "https://tile.happyman.idv.tw/map/tri1999/{z}/{x}/{y}.png"
+            ),
+            year=1999,
+            max_zoom=15,
+            media_type="image/png",
+            attribution="Happyman / Lin Chung-Hsiung",
+        ),
+        "happyman_tw25k2001": _historical_map_source(
+            "happyman_tw25k2001",
+            label="Economic Planning Map third edition 2001",
+            label_zh="經建三版 2001",
+            provider="Happyman / Academia Sinica",
+            url_template=(
+                "https://tile.happyman.idv.tw/map/tw25k2001/{z}/{x}/{y}.png"
+            ),
+            year=2001,
+            min_zoom=10,
+            max_zoom=17,
+            media_type="image/png",
+            attribution="Happyman / Academia Sinica",
+        ),
     },
 }
 
@@ -348,11 +579,21 @@ def imagery_tile_url(source: Mapping[str, Any], z: int, x: int, y: int) -> str:
     template = str(source.get("url_template") or "")
     if not template:
         raise ValueError("imagery source is missing url_template")
-    return template.format(z=tile["z"], x=tile["x"], y=tile["y"])
+    return template.format(
+        z=tile["z"],
+        x=tile["x"],
+        y=tile["y"],
+        z2=f"{tile['z']:02d}",
+        x_hex8=f"{tile['x']:08x}",
+        y_hex8=f"{tile['y']:08x}",
+    )
 
 
 def wmts_source_metadata(source: Mapping[str, Any]) -> dict[str, Any]:
-    if source.get("source_kind") != "wmts_kvp_tile":
+    if (
+        source.get("source_kind") != "wmts_kvp_tile"
+        and not source.get("wmts_layer")
+    ):
         return {}
     return {
         "wmts_endpoint_sha256": hashlib.sha256(
@@ -475,6 +716,12 @@ def _validate_source(source_id: str, source: Mapping[str, Any]) -> None:
         endpoint = str(source.get("wmts_endpoint") or "")
         if not endpoint.startswith(("https://", "http://")):
             raise ValueError(f"source {source_id} wmts_endpoint must be http(s)")
+    elif source.get("source_kind") == "arcgis_exploded_tile":
+        for placeholder in ("{z2}", "{x_hex8}", "{y_hex8}"):
+            if placeholder not in template:
+                raise ValueError(
+                    f"source {source_id} url_template must contain {placeholder}"
+                )
     elif "{z}" not in template or "{x}" not in template or "{y}" not in template:
         raise ValueError(f"source {source_id} url_template must contain z/x/y")
     if template and not template.startswith(("https://", "http://")):
@@ -515,6 +762,17 @@ def _source_public_contract(source: Mapping[str, Any]) -> dict[str, Any]:
                 "map_label_evidence_policy": source.get("map_label_evidence_policy"),
             }
         )
+    for key in (
+        "theme_group",
+        "theme_year",
+        "historical_map",
+        "candidate_only",
+        "runtime_safety_truth",
+        "operational",
+        "visualization_only",
+    ):
+        if key in source:
+            contract[key] = source[key]
     contract.update(wmts_source_metadata(source))
     return contract
 

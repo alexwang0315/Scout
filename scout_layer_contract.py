@@ -533,6 +533,7 @@ SCOUT_SURFACE_LAYER_IDS = {
 }
 
 SCOUT_PREPARATION_LAYER_IDS = (
+    "imagery",
     "osm",
     "overpass",
     "terrain",
@@ -550,6 +551,11 @@ SCOUT_PREPARATION_LAYER_IDS = (
     "segments",
     "checkpoints",
     "mcp",
+    "pois",
+    "hazards",
+    "corridors",
+    "retreat",
+    "route-notes",
 )
 
 SCOUT_LAYER_HTML_FILES = {

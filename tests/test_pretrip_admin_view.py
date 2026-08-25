@@ -30,6 +30,7 @@ from pretrip_mileage_tag_alignment import align_pretrip_workspace_mileage_tags
 from pretrip_admin_view import (
     _geojson_line_coordinates,
     _mileage_tag_alignment_summary,
+    _project_summary,
     _reference_segment_timing_summary,
     build_pretrip_admin_view,
     list_pretrip_admin_projects,
@@ -46,6 +47,42 @@ WEARABLE_FIXTURES = [
     WEARABLE_FIXTURE_ROOT / "apple_health_missing_hr_interval.json",
     WEARABLE_FIXTURE_ROOT / "garmin_body_battery_provider_values.json",
 ]
+
+
+def test_project_summary_projects_workspace_cache_metadata() -> None:
+    summary = _project_summary(
+        {
+            "project_id": PROJECT_ID,
+            "imagery_tile_cache_root": "/data/scout/raster-tiles",
+            "imagery_tile_cache_manifest_ref": "outputs/layers/imagery_manifest.json",
+            "imagery_tile_cache_plan_ref": "outputs/layers/imagery_plan.json",
+            "imagery_tile_cache_seed_status": "seed_complete",
+            "imagery_tile_cache_seed_tiles_seen": 402,
+            "imagery_tile_cache_seed_tiles_written": 52,
+            "imagery_tile_cache_seed_tiles_copied_from_fallback_cache": 350,
+            "raster_label_ocr_cache_ref": "outputs/layers/cache/raster_label_ocr_tiles",
+            "raster_label_ocr_status": "completed",
+            "raster_label_ocr_label_count": 16,
+        },
+        {"route_name": "Chilai Nanhua"},
+        {
+            "package_id": "pretrip.chilai_nanhua_day1.v0",
+            "status": "candidate",
+            "version": "0.1.0",
+        },
+        {"project": "project.json"},
+    )
+
+    assert summary["imagery_tile_cache_seed_status"] == "seed_complete"
+    assert summary["imagery_tile_cache_seed_tiles_seen"] == 402
+    assert summary["imagery_tile_cache_manifest_ref"].endswith(
+        "imagery_manifest.json"
+    )
+    assert summary["raster_label_ocr_status"] == "completed"
+    assert summary["raster_label_ocr_cache_ref"].endswith(
+        "raster_label_ocr_tiles"
+    )
+    assert summary["counts"]["raster_label_ocr_label_count"] == 16
 
 
 def test_geojson_line_coordinates_tolerates_extra_nested_segments():
@@ -951,7 +988,7 @@ def test_admin_view_bounds_overpass_aligned_segment_geometry_payload(
     assert view["map_layers"][0]["label_zh"].startswith("影像圖層")
     _assert_pretrip_candidate_metadata(view["map_layers"][0])
     assert view["map_layers"][0]["local_raster_manifest_supported"] is False
-    assert view["map_layers"][0]["raster_tile_delivery"] == "direct_wmts_runtime"
+    assert view["map_layers"][0]["raster_tile_delivery"] == "workspace_cache_missing"
     assert view["map_layers"][0]["external_network_required"] is True
     terrain_layer = next(layer for layer in view["map_layers"] if layer["layer_id"] == "terrain")
     assert terrain_layer["terrain_visualization_layer"] is True
@@ -1110,11 +1147,18 @@ def test_map_layers_expose_local_raster_coverage_metadata(tmp_path: Path) -> Non
         "outputs/layers/manifests/"
         "raster_tile_manifest.happyman_rudy_twmap.z12-z14.json"
     )
+    imagery_cache_ref = (
+        "outputs/layers/manifests/"
+        "raster_tile_manifest.nlsc_photo2.z12-z14.json"
+    )
     project_path = project_root / "project.json"
     project = json.loads(project_path.read_text(encoding="utf-8"))
     project["local_raster_manifest_ref"] = raster_ref
     project["raster_tile_manifest_ref"] = tile_ref
-    project["raster_layer_manifest_refs"] = {"rudy-twmap": rudy_twmap_ref}
+    project["raster_layer_manifest_refs"] = {
+        "imagery": imagery_cache_ref,
+        "rudy-twmap": rudy_twmap_ref,
+    }
     project_path.write_text(json.dumps(project, sort_keys=True), encoding="utf-8")
     (project_root / raster_ref).write_text(
         json.dumps(
@@ -1150,26 +1194,56 @@ def test_map_layers_expose_local_raster_coverage_metadata(tmp_path: Path) -> Non
         ),
         encoding="utf-8",
     )
+    imagery_plan = {
+        "artifact_kind": "admin_imagery_tile_cache_plan",
+        "bbox_wgs84": {
+            "west": 121.22,
+            "south": 24.04,
+            "east": 121.3,
+            "north": 24.06,
+        },
+        "zoom_range": "12-14",
+        "min_zoom": 12,
+        "max_zoom": 14,
+        "cache_root": "/workspace/chilai_nanhua_day1/cache/raster-tiles",
+        "total_tile_count": 25,
+        "source_id": "nlsc_photo2",
+        "source_kind": "wmts_tile",
+        "runtime_tile_url_template": (
+            "/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png"
+        ),
+    }
+    (project_root / imagery_cache_ref).write_text(
+        json.dumps(
+            {
+                "artifact_kind": "pretrip_workspace_raster_tile_cache_manifest",
+                "plan": imagery_plan,
+                "seed_summary": {
+                    "status": "seed_complete",
+                    "tiles_written": 20,
+                    "tiles_skipped_existing": 5,
+                },
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    rudy_twmap_plan = {
+        **imagery_plan,
+        "layer_id": "rudy-twmap",
+        "source_id": "happyman_rudy_twmap",
+        "source_kind": "xyz_tile",
+    }
     (project_root / rudy_twmap_ref).write_text(
         json.dumps(
             {
-                "artifact_kind": "admin_imagery_tile_cache_plan",
-                "bbox_wgs84": {
-                    "west": 121.22,
-                    "south": 24.04,
-                    "east": 121.3,
-                    "north": 24.06,
+                "artifact_kind": "pretrip_workspace_raster_tile_cache_manifest",
+                "plan": rudy_twmap_plan,
+                "seed_summary": {
+                    "status": "seed_complete",
+                    "tiles_written": 21,
+                    "tiles_skipped_existing": 4,
                 },
-                "zoom_range": "12-14",
-                "min_zoom": 12,
-                "max_zoom": 14,
-                "cache_root": "/data/scout/raster-tiles",
-                "total_tile_count": 25,
-                "source_id": "happyman_rudy_twmap",
-                "source_kind": "wmts_kvp_tile",
-                "runtime_tile_url_template": (
-                    "/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png"
-                ),
             },
             sort_keys=True,
         ),
@@ -1185,16 +1259,89 @@ def test_map_layers_expose_local_raster_coverage_metadata(tmp_path: Path) -> Non
 
     for layer_set in (view["map_layers"], debug["map_layers"]):
         imagery = next(layer for layer in layer_set if layer["layer_id"] == "imagery")
-        assert imagery["raster_tile_delivery"] == "direct_wmts_runtime"
-        assert imagery["raster_coverage_policy"] == "render_visible_wmts_tiles_only"
-        assert "raster_bbox_wgs84" not in imagery
-        assert "local_raster_manifest_ref" not in imagery
-        assert "raster_tile_manifest_ref" not in imagery
-        assert "raster_layer_manifest_refs" not in imagery
-        assert "raster_layer_manifests" not in imagery
+        assert imagery["raster_tile_delivery"] == "workspace_cache_first"
+        assert imagery["raster_coverage_policy"] == "workspace_cache_bounds"
+        assert imagery["raster_bbox_wgs84"] == imagery_plan["bbox_wgs84"]
+        assert imagery["raster_tile_cached_count"] == 25
+        assert imagery["local_raster_tile_url_template"].endswith(
+            "/imagery/{z}/{x}/{y}.png?source_id=nlsc_photo2&cache_only=1"
+        )
         rudy_twmap = next(layer for layer in layer_set if layer["layer_id"] == "rudy-twmap")
-        assert rudy_twmap["raster_tile_delivery"] == "direct_wmts_runtime"
+        assert rudy_twmap["raster_tile_delivery"] == "workspace_cache_first"
         assert rudy_twmap["imagery_source_id"] == "happyman_rudy_twmap"
+        assert rudy_twmap["raster_tile_cached_count"] == 25
+        assert rudy_twmap["local_raster_tile_url_template"].endswith(
+            "/rudy-twmap/{z}/{x}/{y}.png?source_id=happyman_rudy_twmap&cache_only=1"
+        )
+
+
+def test_map_layers_reuse_legacy_rudy_twmap_imagery_cache(tmp_path: Path) -> None:
+    project_root = tmp_path / PROJECT_ID
+    shutil.copytree(
+        ROOT / "tests" / "fixtures" / "pretrip" / "projects" / PROJECT_ID,
+        project_root,
+    )
+    manifest_ref = (
+        "outputs/layers/manifests/"
+        "chilai_nanhua_day1.imagery_tile_cache_manifest.json"
+    )
+    project_path = project_root / "project.json"
+    project = json.loads(project_path.read_text(encoding="utf-8"))
+    project.pop("raster_layer_manifest_refs", None)
+    project["imagery_tile_cache_manifest_ref"] = manifest_ref
+    project_path.write_text(json.dumps(project, sort_keys=True), encoding="utf-8")
+    manifest_path = project_root / manifest_ref
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(
+        json.dumps(
+            {
+                "artifact_kind": "pretrip_imagery_tile_cache_manifest",
+                "plan": {
+                    "layer_id": "imagery",
+                    "source_id": "happyman_rudy_twmap",
+                    "source_kind": "wmts_kvp_tile",
+                    "runtime_tile_url_template": (
+                        "/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png"
+                    ),
+                    "bbox_wgs84": {
+                        "west": 121.22,
+                        "south": 24.04,
+                        "east": 121.3,
+                        "north": 24.06,
+                    },
+                    "zoom_range": "5-14",
+                    "min_zoom": 5,
+                    "max_zoom": 14,
+                    "total_tile_count": 250,
+                },
+                "seed_summary": {
+                    "status": "seed_complete",
+                    "tiles_written": 0,
+                    "tiles_skipped_existing": 250,
+                },
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+
+    view = build_pretrip_admin_view(PROJECT_ID, root=ROOT, project_root=project_root)
+    imagery = next(
+        layer for layer in view["map_layers"] if layer["layer_id"] == "imagery"
+    )
+    rudy_twmap = next(
+        layer for layer in view["map_layers"] if layer["layer_id"] == "rudy-twmap"
+    )
+
+    assert imagery["raster_tile_delivery"] == "workspace_cache_missing"
+    assert rudy_twmap["raster_tile_delivery"] == "workspace_cache_first"
+    assert rudy_twmap["imagery_source_id"] == "happyman_rudy_twmap"
+    assert rudy_twmap["raster_tile_cached_count"] == 250
+    assert rudy_twmap["raster_tile_cache_layer_id"] == "imagery"
+    assert rudy_twmap["raster_cache_compatibility"] == "legacy_imagery_namespace"
+    assert rudy_twmap["local_raster_tile_url_template"].endswith(
+        "/imagery/{z}/{x}/{y}.png?source_id=happyman_rudy_twmap&cache_only=1"
+    )
 
 
 def test_osm_map_layer_exposes_workspace_local_render_extract(
@@ -2530,28 +2677,22 @@ def test_admin_view_exposes_workspace_risk_score_layer(
     ]
     assert view["risk_score"]["boundary"]["runtime_safety_truth"] is False
     assert view["terrain_visualization"]["status"] == "candidate_only"
-    assert view["terrain_visualization"]["counts"]["feature_count"] == 0
-    assert view["terrain_visualization"]["counts"]["bitmap_overlay_count"] == 4
-    assert view["terrain_visualization"]["counts"]["source_dtm_tile_count"] > 0
-    assert view["terrain_visualization"]["dtm_grid"]["source_tile_count"] == (
-        view["terrain_visualization"]["counts"]["source_dtm_tile_count"]
-    )
-    assert view["terrain_visualization"]["counts"]["cell_count"] > 0
+    assert view["terrain_visualization"]["counts"]["feature_count"] == 3
     assert view["terrain_visualization"]["visualization_spec"]["modes"] == [
         "hillshade",
         "elevation_tint",
         "slope_shading",
         "contours",
     ]
-    assert view["terrain_visualization"]["visualization_spec"]["bitmap_overlay"] is True
-    assert view["terrain_visualization"]["visualization_spec"]["bitmap_cell_resolution_m"] == 20.0
-    overlays = {overlay["mode"]: overlay for overlay in view["terrain_visualization"]["raster_overlays"]}
-    assert set(overlays) == {"hillshade", "elevation_tint", "slope_shading", "contours"}
-    assert overlays["slope_shading"]["cell_resolution_m"] == 20.0
-    assert overlays["slope_shading"]["corridor_half_width_m"] == 500.0
-    assert overlays["slope_shading"]["terrain_visualization_layer"] is True
-    assert overlays["slope_shading"]["risk_heat_layer"] is False
-    assert overlays["slope_shading"]["runtime_safety_truth"] is False
+    assert (
+        view["terrain_visualization"]["visualization_spec"]["route_aligned_proxy"]
+        is True
+    )
+    assert view["terrain_visualization"]["raster_overlays"] == []
+    assert (
+        view["terrain_visualization"]["samples"][0]["runtime_safety_truth"]
+        is False
+    )
     risk_layer = next(layer for layer in view["map_layers"] if layer["layer_id"] == "risk-score")
     assert risk_layer["default_enabled"] is False
     sections = {

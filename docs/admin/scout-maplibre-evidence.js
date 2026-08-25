@@ -10,8 +10,10 @@
     fill: "scout-evidence-fill",
     line: "scout-evidence-line",
     point: "scout-evidence-point",
+    overlayFill: "scout-evidence-overlay-fill",
   });
   const RASTER_NETWORK_SCOPES = new Set(["same_origin", "explicit_remote"]);
+  const RASTER_RENDER_POSITIONS = new Set(["base", "overlay"]);
   const RASTER_LAYER_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,79}$/;
   const MAX_RASTER_TILE_TEMPLATES = 4;
   let mapLibreModulePromise = null;
@@ -239,6 +241,12 @@
     );
     const tileSize = Number(definition.tile_size || definition.tileSize) === 512 ? 512 : 256;
     const opacity = Math.max(0, Math.min(1, Number(definition.opacity ?? 1)));
+    const renderPosition = String(
+      definition.render_position || definition.renderPosition || "base",
+    ).trim();
+    if (!RASTER_RENDER_POSITIONS.has(renderPosition)) {
+      throw new Error("invalid_raster_render_position");
+    }
     return Object.freeze({
       layer_id: layerId,
       control_layer_id: controlLayerId,
@@ -258,6 +266,7 @@
       attribution: String(definition.attribution || "").slice(0, 500),
       opacity,
       visible: definition.visible !== false,
+      render_position: renderPosition,
       network_scope: networkScope,
       candidate_only: candidateOnly,
       runtime_safety_truth: false,
@@ -282,6 +291,72 @@
       seen.add(normalized.layer_id);
       return normalized;
     }));
+  }
+
+  function rasterSourceDefinition(layer) {
+    return layer.source_type === "image"
+      ? {
+        type: "image",
+        url: layer.image_url,
+        coordinates: layer.image_coordinates.map(pair => [...pair]),
+      }
+      : {
+        type: "raster",
+        tiles: [...layer.tiles],
+        tileSize: layer.tile_size,
+        minzoom: layer.minzoom,
+        maxzoom: layer.maxzoom,
+        ...(layer.bounds ? {bounds: [...layer.bounds]} : {}),
+        ...(layer.attribution ? {attribution: layer.attribution} : {}),
+      };
+  }
+
+  function rasterStyleLayerDefinition(layer) {
+    return {
+      id: layer.map_layer_id,
+      type: "raster",
+      source: layer.map_source_id,
+      layout: {visibility: layer.visible ? "visible" : "none"},
+      paint: {
+        "raster-opacity": layer.opacity,
+        ...(layer.source_type === "image" ? {"raster-resampling": "nearest"} : {}),
+      },
+      metadata: {
+        "scout:layer_id": layer.layer_id,
+        "scout:control_layer_id": layer.control_layer_id,
+        "scout:source_type": layer.source_type,
+        "scout:render_position": layer.render_position,
+        "scout:candidate_only": layer.candidate_only,
+        "scout:runtime_safety_truth": false,
+        "scout:visualization_only": true,
+        "scout:adds_source_resolution": false,
+        "scout:source_resolution": layer.source_resolution,
+        "scout:artifact_hash": layer.artifact_hash,
+      },
+    };
+  }
+
+  function rasterLayersSignature(layers) {
+    return JSON.stringify(layers.map(layer => ({
+      layer_id: layer.layer_id,
+      control_layer_id: layer.control_layer_id,
+      source_id: layer.source_id,
+      source_type: layer.source_type,
+      tiles: [...layer.tiles],
+      image_url: layer.image_url,
+      image_coordinates: layer.image_coordinates,
+      tile_size: layer.tile_size,
+      minzoom: layer.minzoom,
+      maxzoom: layer.maxzoom,
+      bounds: layer.bounds,
+      attribution: layer.attribution,
+      opacity: layer.opacity,
+      visible: layer.visible,
+      render_position: layer.render_position,
+      network_scope: layer.network_scope,
+      source_resolution: layer.source_resolution,
+      artifact_hash: layer.artifact_hash,
+    })));
   }
 
   function rasterLayerEventPatch(current = {}, eventKind = "") {
@@ -464,43 +539,14 @@
     const normalizedRasterLayers = normalizeRasterLayers(rasterLayers);
     const rasterSources = Object.fromEntries(normalizedRasterLayers.map(layer => [
       layer.map_source_id,
-      layer.source_type === "image"
-        ? {
-          type: "image",
-          url: layer.image_url,
-          coordinates: layer.image_coordinates.map(pair => [...pair]),
-        }
-        : {
-          type: "raster",
-          tiles: [...layer.tiles],
-          tileSize: layer.tile_size,
-          minzoom: layer.minzoom,
-          maxzoom: layer.maxzoom,
-          ...(layer.bounds ? {bounds: [...layer.bounds]} : {}),
-          ...(layer.attribution ? {attribution: layer.attribution} : {}),
-        },
+      rasterSourceDefinition(layer),
     ]));
-    const rasterStyleLayers = normalizedRasterLayers.map(layer => ({
-      id: layer.map_layer_id,
-      type: "raster",
-      source: layer.map_source_id,
-      layout: {visibility: layer.visible ? "visible" : "none"},
-      paint: {
-        "raster-opacity": layer.opacity,
-        ...(layer.source_type === "image" ? {"raster-resampling": "nearest"} : {}),
-      },
-      metadata: {
-        "scout:layer_id": layer.layer_id,
-        "scout:control_layer_id": layer.control_layer_id,
-        "scout:source_type": layer.source_type,
-        "scout:candidate_only": layer.candidate_only,
-        "scout:runtime_safety_truth": false,
-        "scout:visualization_only": true,
-        "scout:adds_source_resolution": false,
-        "scout:source_resolution": layer.source_resolution,
-        "scout:artifact_hash": layer.artifact_hash,
-      },
-    }));
+    const baseRasterStyleLayers = normalizedRasterLayers
+      .filter(layer => layer.render_position === "base")
+      .map(rasterStyleLayerDefinition);
+    const overlayRasterStyleLayers = normalizedRasterLayers
+      .filter(layer => layer.render_position === "overlay")
+      .map(rasterStyleLayerDefinition);
     const visibleFilter = ["==", ["get", "_scout_visible"], true];
     return {
       version: 8,
@@ -517,12 +563,17 @@
           type: "background",
           paint: {"background-color": "#e8eef2"},
         },
-        ...rasterStyleLayers,
+        ...baseRasterStyleLayers,
         {
           id: EVIDENCE_LAYER_IDS.fill,
           type: "fill",
           source: EVIDENCE_SOURCE_ID,
-          filter: ["all", visibleFilter, ["==", ["geometry-type"], "Polygon"]],
+          filter: [
+            "all",
+            visibleFilter,
+            ["==", ["geometry-type"], "Polygon"],
+            ["!=", ["get", "render_position"], "overlay"],
+          ],
           paint: {
             "fill-color": evidenceLayerColorExpression(),
             "fill-opacity": ["case", ["boolean", ["feature-state", "selected"], false], 0.5, 0.24],
@@ -554,6 +605,28 @@
             "circle-opacity": 0.95,
           },
         },
+        {
+          id: EVIDENCE_LAYER_IDS.overlayFill,
+          type: "fill",
+          source: EVIDENCE_SOURCE_ID,
+          filter: [
+            "all",
+            visibleFilter,
+            ["==", ["geometry-type"], "Polygon"],
+            ["==", ["get", "render_position"], "overlay"],
+          ],
+          paint: {
+            "fill-color": ["coalesce", ["get", "render_color"], "#00a8f3"],
+            "fill-opacity": [
+              "case",
+              ["boolean", ["feature-state", "selected"], false],
+              0.72,
+              ["coalesce", ["get", "render_opacity"], 0.5],
+            ],
+            "fill-outline-color": "rgba(255,255,255,0.48)",
+          },
+        },
+        ...overlayRasterStyleLayers,
       ],
     };
   }
@@ -614,6 +687,7 @@
       this.onStatus = typeof onStatus === "function" ? onStatus : null;
       this.onRasterStatus = typeof onRasterStatus === "function" ? onRasterStatus : null;
       this.rasterLayers = normalizeRasterLayers(rasterLayers);
+      this.rasterLayerSignature = rasterLayersSignature(this.rasterLayers);
       this.rasterLayerStates = new Map(this.rasterLayers.map(layer => [
         layer.layer_id,
         Object.freeze({
@@ -699,6 +773,61 @@
       });
     }
 
+    setRasterLayers(definitions = []) {
+      const nextLayers = normalizeRasterLayers(definitions);
+      const nextSignature = rasterLayersSignature(nextLayers);
+      if (nextSignature === this.rasterLayerSignature) return false;
+
+      const previousLayers = this.rasterLayers;
+      if (this.map) {
+        [...previousLayers].reverse().forEach(layer => {
+          if (this.map.getLayer(layer.map_layer_id)) this.map.removeLayer(layer.map_layer_id);
+        });
+        previousLayers.forEach(layer => {
+          if (this.map.getSource(layer.map_source_id)) this.map.removeSource(layer.map_source_id);
+        });
+      }
+
+      this.rasterLayers = nextLayers;
+      this.rasterLayerSignature = nextSignature;
+      this.rasterLayerStates = new Map(nextLayers.map(layer => [
+        layer.layer_id,
+        Object.freeze({
+          layer_id: layer.layer_id,
+          source_id: layer.source_id,
+          state: layer.visible ? "loading" : "hidden",
+          reason: layer.visible ? "tiles_loading" : "layer_hidden",
+          visible: layer.visible,
+          error_count: 0,
+        }),
+      ]));
+
+      if (this.map) {
+        nextLayers.forEach(layer => {
+          this.map.addSource(layer.map_source_id, rasterSourceDefinition(layer));
+        });
+        nextLayers.filter(layer => layer.render_position === "base").forEach(layer => {
+          this.map.addLayer(
+            rasterStyleLayerDefinition(layer),
+            this.map.getLayer(EVIDENCE_LAYER_IDS.fill) ? EVIDENCE_LAYER_IDS.fill : undefined,
+          );
+        });
+        nextLayers.filter(layer => layer.render_position === "overlay").forEach(layer => {
+          this.map.addLayer(rasterStyleLayerDefinition(layer));
+        });
+      }
+
+      const states = [...this.rasterLayerStates.values()];
+      const aggregate = states.some(state => state.state === "loading")
+        ? "loading"
+        : states.length
+          ? "configured"
+          : "not_configured";
+      this.container.dataset.maplibreRasterState = aggregate;
+      if (this.onRasterStatus) this.onRasterStatus(null, states);
+      return true;
+    }
+
     emitStatus(state, reason, detail = "") {
       this.status = Object.freeze({state, reason, detail});
       this.container.dataset.maplibreState = state;
@@ -750,7 +879,12 @@
     }
 
     bindFeatureInteractions() {
-      [EVIDENCE_LAYER_IDS.fill, EVIDENCE_LAYER_IDS.line, EVIDENCE_LAYER_IDS.point].forEach(layerId => {
+      [
+        EVIDENCE_LAYER_IDS.fill,
+        EVIDENCE_LAYER_IDS.line,
+        EVIDENCE_LAYER_IDS.point,
+        EVIDENCE_LAYER_IDS.overlayFill,
+      ].forEach(layerId => {
         this.map.on("click", layerId, event => {
           if (Date.now() < this.suppressFeatureClickUntil) return;
           const renderedFeature = event?.features?.[0];
@@ -1229,6 +1363,11 @@
         raster_layer_states: Object.freeze(Object.fromEntries(
           [...this.rasterLayerStates.entries()].map(([layerId, state]) => [layerId, state]),
         )),
+        raster_layer_order: Object.freeze(this.rasterLayers.map(layer => Object.freeze({
+          layer_id: layer.layer_id,
+          control_layer_id: layer.control_layer_id,
+          render_position: layer.render_position,
+        }))),
         zoom: this.map?.getZoom?.() ?? null,
         center: this.map?.getCenter?.()?.toArray?.() ?? null,
       });

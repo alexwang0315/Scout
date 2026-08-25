@@ -10,13 +10,138 @@ Use this file when a rerun must include all of:
 - GPX import;
 - route-corridor map preparation;
 - Overpass vector fetch and segment alignment;
-- Rudy/Rudy+TW tile cache seeding with TTL behavior;
+- workspace-owned imagery, Rudy, Rudy+TW, relief, geology, Topo 5K, forest, and
+  default historical-map tile cache seeding with TTL behavior;
 - OCR and raster label adapter output;
 - route context, K anchors, mileage tag alignment;
 - terrain/risk/MCP/Boss synthesis;
 - Scout admin map layer gates and browser smoke checks.
 
 If any required step is skipped, report the run as partial.
+
+### 2026-08-25 Workspace raster-cache preparation repair
+
+The blank-layer report on
+`dongqing_batongguan_historic_trail_newImport_v2` exposed a preparation and
+renderer contract mismatch:
+
+- Map preparation seeded only one cache namespace and used Rudy+TW as the
+  `imagery` source even when the project imagery source was NLSC PHOTO2. The
+  cache path therefore did not preserve layer/source identity.
+- MapLibre registered only `rudy-twmap` and `osm`; the controls for imagery,
+  Rudy, relief, geology, Topo 5K, and forest had no MapLibre raster source.
+- The normal page path silently used runtime WMTS URLs, while OSM's offline SVG
+  fallback was presented as a raster tile and could fail MapLibre decoding.
+
+Required behavior from this repair onward:
+
+1. A connected clone or map-preparation run seeds eight independent allowlisted
+   raster namespaces at zoom 5-14 under
+   `<project-root>/cache/raster-tiles/<project-id>/<layer-id>/...` and writes one
+   plan plus one seed manifest per layer to the project workspace.
+2. `project.json` records all eight refs in `raster_layer_manifest_refs` and a
+   bundle ref. NLSC/project imagery remains `imagery`; Rudy+TW remains the OCR
+   source in its own `rudy-twmap` namespace.
+3. Dashboard load is cache-only. It must create all eight MapLibre raster
+   sources through the same-origin Scout tile API and must not fetch WMTS merely
+   because a layer is checked.
+4. The Layers panel exposes an explicit raster-refresh control. Only that
+   operator action may add `native=1&refresh=1`; refreshed bytes replace the
+   workspace tile, while a failed refresh retains the last cached tile.
+5. Geology remains refreshable through this explicit control. Weather/CWA APIs
+   retain their connected refresh workflow and are not frozen by raster seeding.
+6. Public OpenStreetMap tiles are not bulk-prefetched. Use a local OSM extract
+   when available; otherwise the local OSM raster endpoint returns a valid
+   transparent PNG so OSM failure cannot blank or poison the other raster and
+   vector layers.
+7. Raster-label OCR cache misses run with a bounded worker pool (default at most
+   four workers and never more than the available tile count). OCR computation
+   may run concurrently, but cache JSON is serialized by the caller so two
+   workers cannot corrupt the same artifact. Set
+   `SCOUT_RASTER_LABEL_OCR_WORKERS` only for an explicit hardware-specific
+   override; hash cache hits remain the first path on every rerun.
+8. WMTS seeding retries each failed tile up to five times in the same
+   preparation request with bounded backoff. This limit was raised after the
+   2026-08-25 Dongqing run recovered three transient failures but still left
+   Relief `z5/26/13` missing after its third timeout. The seed manifest records
+   attempt, recovery, and final failure counts; the explicit post-load refresh
+   remains an operator update path, not a substitute for preparation seeding.
+
+This is the normal one-pass import/preparation contract. A `_v2` workspace is
+not a required second stage; suffixes remain useful only for a deliberate clean
+comparison or when preserving an already-created target.
+
+### 2026-08-24 Dashboard clean-clone preparation repair
+
+Before creating `dongqing_batongguan_historic_trail_newImport`, the Dashboard
+path had three preparation drifts that must not be repeated:
+
+- Workspace `Clone` only appended an intent receipt and performed no clone.
+  The repaired action must refuse an existing target, read the source inbox GPX
+  corpus, run a clean import under the new project id, and then run map
+  preparation. It must not copy stale project-bound artifacts or mutate the
+  source workspace.
+- The importer and Dashboard defaults exposed only 18 layers even though this
+  runbook requires the 23 preparation layers. The shared default must include
+  `imagery`, `pois`, `hazards`, `corridors`, `retreat`, and `route-notes` in
+  addition to the existing route, terrain, risk, environment, and MCP layers.
+- Connected CWA/GEE/Overpass refresh previously republished the six dynamic
+  layers as the canonical layer-preparation manifest. A connected refresh must
+  update provider-backed evidence without replacing the complete 23-layer
+  preparation manifest. Weather remains refreshable after import. Geology is a
+  runtime provider layer and must not be frozen into, or falsely represented as
+  produced by, GPX import or map preparation.
+- Source MCP named-point evidence is project-bound. Clone preparation must load
+  the typed evidence, verify the source identity, create an ephemeral copy with
+  only `project_id` rebound to the target, and record both hashes. Direct reuse
+  fails closed; broad text replacement is not an acceptable identity change.
+- A configured local OSM PBF is usable only when either the `osmium` CLI or the
+  Python `osmium` package is available. If neither parser exists and explicit
+  network fetch is allowed, record the skipped local input and continue the same
+  preparation through Overpass. Do not let an unusable cache prevent all other
+  layers from being prepared.
+- Dashboard clone execution runs in an API worker thread. Signal-based
+  post-process timers must be armed only on the main interpreter thread;
+  otherwise Boss/route-pressure and mileage alignment fail even though their
+  inputs are ready. Worker-thread preparation runs those bounded candidate
+  enrichments without a process signal timer.
+- Same-run risk refs must be persisted before Overpass route alignment reloads
+  `project.json`. Reference-segment timing must also be produced before route
+  architecture so the first Dashboard projection can consume every available
+  historical GPX timing measurement.
+- Overpass may terminate a large corridor response with `IncompleteRead` or a
+  transient connection reset. The explicit fetch path retries these transport
+  failures up to three total attempts with bounded backoff; malformed evidence
+  is never accepted from a partial response.
+- A clean Dashboard clone must prewarm all eight allowlisted route raster layers
+  at zoom 5-14 before raster-label OCR. Each target owns its cache under the
+  project workspace, never inside the repository. Rudy+TW is the OCR source but
+  does not replace project imagery. Geology updates remain available through
+  the explicit post-load refresh control. Tile count is route-bbox specific: do
+  not copy Chilai's count of 31 into a longer route as a fixed target.
+- `pytesseract` is an optional wrapper, not the OCR capability boundary. When
+  the allowlisted `tesseract` binary and requested language data are available,
+  preparation may consume its TSV output directly with a subprocess timeout and
+  no shell. If neither wrapper nor CLI is available, retain the typed
+  `blocked_dependency_missing` result; never fabricate labels.
+- OCR completion and raw label count do not prove semantic map-label quality.
+  The 2026-08-24 Dongqing v2 run processed all 402 cached tiles without timeout
+  and emitted 16 labels, but review found that most were low-zoom Rudy map
+  attribution fragments; the current Chilai labels have the same limitation.
+  Keep them named `candidate labels`, require review, and do not promote them to
+  named points, K anchors, hazards, or safety truth without a later quality
+  filter or higher-resolution region OCR pass.
+- Clone import may add unique GPX files only from a `gpx_corpus` path explicitly
+  declared by the material manifest. Deduplicate additions by SHA-256 and retain
+  source provenance. A route with four declared reference tracks must remain
+  four rather than being inflated to match another workspace's count; KML map
+  sheets are not timed reference GPX tracks.
+
+For this clean-clone path, the source inbox GPX checksums and the material-root
+manifest are inputs. The new target receives its own project identity and clone
+receipt. GRASS/QGIS ridge, valley, and flow-channel artifacts remain separate,
+route-bound candidate evidence; never copy an older terrain feature stack into
+a new route scope merely to fill a Dashboard panel.
 
 ## Required Specs To Read First
 
@@ -697,18 +822,18 @@ The raster tile cache default TTL is 30 days
 (`DEFAULT_IMAGERY_TILE_CACHE_TTL_DAYS = 30`). Do not delete the cache to force
 refresh.
 
-`SCOUT_PRETRIP_RASTER_TILE_CACHE_ROOT` must point at the shared raster tile
-root, for example `/Users/alexwang0315/workspace/scout-local-data/raster-tiles`
-or `/tmp/scout-local-data/raster-tiles`. Do not set it to
-`.../raster-tiles/<project-id>` because the cache writer already appends the
-project namespace and layer id. The wrapper normalizes this mistake, but manual
-commands must avoid it.
+`SCOUT_PRETRIP_RASTER_TILE_CACHE_ROOT` must point inside the selected project,
+for example `<project-root>/cache/raster-tiles`. Do not append the project id or
+layer id because the cache writer adds both namespaces. Dashboard clone supplies
+this path automatically. A normal preparation must not place the target's
+primary cache under a sibling shared-data directory.
 
-For `tryimport`, suffix-test, or from-zero comparison runs that must reuse
-unchanged Rudy/Rudy+TW raw tiles without replaying old workspace artifacts, set
+For `tryimport`, suffix-test, or from-zero comparison runs that may reuse
+unchanged source-correct raw tiles without replaying old workspace artifacts, set
 `SCOUT_PRETRIP_RASTER_TILE_CACHE_FALLBACK_PROJECT_IDS` to one or more stable
 raw tile cache namespaces, comma-separated. The seeding step copies only fresh
-raw PNG tiles according to TTL before remote fetch; it does not copy OCR,
+raw PNG tiles for the same layer id according to TTL before remote fetch; it
+does not copy OCR,
 Overpass, risk, mileage, or other derived workspace artifacts.
 
 Expected behavior when `--seed-imagery-cache` is used:
@@ -732,6 +857,10 @@ from pathlib import Path
 root = Path(os.environ["PROJECT_ROOT"])
 project = json.loads((root / "project.json").read_text())
 for key in [
+    "workspace_raster_tile_cache_bundle_ref",
+    "workspace_raster_tile_cache_root",
+    "workspace_raster_tile_cache_layer_count",
+    "raster_layer_manifest_refs",
     "imagery_tile_cache_manifest_ref",
     "imagery_tile_cache_plan_ref",
     "imagery_tile_cache_seed_status",
@@ -743,6 +872,10 @@ for key in [
     print(key, project.get(key))
 PY
 ```
+
+`workspace_raster_tile_cache_layer_count` must be `7`, and the manifest-ref
+mapping must contain `imagery`, `rudy`, `rudy-twmap`, `relief`, `geology`,
+`topo-5k`, and `forest` before the workspace is considered raster-prepared.
 
 `seed_status` must not be silently absent on a connected full-prep run unless
 imagery prefetch was intentionally not allowed and reported as
@@ -3607,7 +3740,10 @@ manually. A successful or safely rejected run removes its session directory.
 Crash recovery:
 
 - A `staging` journal with the original generation still published discards the
-  abandoned staged session.
+  abandoned staged session. If an external legacy writer changed only live
+  `project.json` while retaining that generation marker, recovery reports
+  `discarded-staging-after-live-update`; the unpublished staging session is
+  removed and the newer live workspace is left untouched.
 - A `prepared` journal with the original generation still published discards
   the unpublished staged generation.
 - A `prepared` or `exchanged` journal whose staged generation is live keeps the
@@ -3877,6 +4013,126 @@ Browser qualification on an isolated fresh-code runtime (`127.0.0.1:9101`):
 - Console errors/warnings: none. Terrain DEM tile responses: HTTP 200.
 - Focused Dashboard/MapLibre/DEM tests: 113 passed. Pre-trip API tests:
   101 passed. Ruff and diff checks: passed.
+
+## Run Log: 2026-08-24 Dongqing Navigation Preparation Repair
+
+Target workspace:
+
+```text
+/Users/alexwang0315/workspace/dongqing_batongguan_historic_trail_newImport_v2
+```
+
+Observed defect before repair:
+
+- `normalized/terrain/dtm_coverage_summary.json` catalogued 146 intersecting
+  20 m DTM candidate tiles, but
+  `outputs/navigation/terrain_rgb/manifest.json` was absent.
+- Navigation therefore reported Golden Route DEM coverage `0/240`, while the
+  vector-only projection still exposed ridge, valley, saddle, slope, and risk
+  candidates. The combined display looked prepared even though the elevation
+  sampling and 3D terrain path were unavailable.
+- The workspace also had accepted precomputed named-point evidence, but the
+  Navigation source ledger only projected the DTM and GPX refs. Historical
+  source pages and ordered route-position clues were omitted.
+- QGIS remained disabled and no QGIS/GRASS/GDAL runtime was available. This is
+  a separate explicit capability gap and must not be represented as prepared
+  GIS evidence.
+
+Root cause and preparation correction:
+
+1. Full layer preparation compiled the Navigation vector projection but did
+   not invoke `navigation_terrain_raster_dem.py`. It now runs Terrain RGB before
+   projection whenever `terrain` is requested.
+2. Terrain RGB preparation evaluates zoom 13, 14, and 15, measures displayed
+   Golden Route sample coverage for every ready candidate, and retains the
+   highest-coverage result. Coverage ties prefer the lower zoom. The selection
+   retains the no-nodata rule and continues to disclose the 20 m source-cell
+   resolution.
+3. If a dedicated historical-route ledger is absent, accepted HTTP pages from
+   the existing named-point evidence package are projected as bounded source
+   metadata. Named points ordered by route distance become fallback clues.
+   Fixture/precomputed and no-live-refresh limitations remain explicit.
+4. Clone removes reference GPX inputs whose content hash matches the Golden
+   Route or an earlier reference. It does not delete files from an existing
+   workspace or mutate the source workspace.
+5. Raster-label OCR now runs only when `imagery` is part of the preparation
+   request. Connected weather/geology refreshes and other partial layer updates
+   do not freeze or unnecessarily recompute Navigation evidence.
+
+Bounded recovery plan:
+
+- Repair the existing v2 workspace in place by generating only its Terrain RGB
+  artifact and recompiling its Navigation projection. Do not create v3, rerun
+  GPX import, or overwrite the source workspace.
+- Preserve CWA and geology as refreshable runtime evidence. This repair is
+  limited to static imported/prepared route evidence.
+- Keep QGIS state `DISABLED` / `NOT_STARTED` until an authorized, reachable
+  QGIS worker and reviewed GRASS/GDAL path exist; never fabricate those
+  artifacts to make the page look complete.
+
+Repair attempt 1:
+
+```text
+Zoom: 13
+Result: READY
+Complete Terrain RGB tiles: 20
+Golden Route displayed samples inside DEM bounds: 142/240 (59.2%)
+Source cell resolution: 20 m
+Unsupported cells encoded as terrain: false
+```
+
+The first supported zoom is valid but does not provide enough route coverage
+for this long east-west route. Before accepting the workspace, compare zoom 14
+and 15 with the same complete-tile/no-nodata rule and retain the result with the
+highest displayed Golden Route sample coverage. A lower zoom is not preferred
+when its selected complete rectangle leaves materially more of the route
+outside DEM bounds.
+
+Repair attempt 2:
+
+```text
+Zoom: 14
+Result: READY
+Complete Terrain RGB tiles: 110
+Golden Route displayed samples inside DEM bounds: 150/240 (62.5%)
+Source cell resolution: 20 m
+Unsupported cells encoded as terrain: false
+```
+
+Zoom 14 improves route coverage by only eight displayed samples. Continue with
+the bounded zoom-15 comparison before selecting the final artifact.
+
+Repair attempt 3 and selected result:
+
+```text
+Zoom: 15
+Result: READY and selected
+Complete Terrain RGB tiles: 506
+Complete candidate tiles before rectangular-block selection: 598
+Golden Route displayed samples inside DEM bounds: 168/240 (70.0%)
+Source cell resolution: 20 m
+Unsupported cells encoded as terrain: false
+```
+
+Live verification on a fresh-code Dashboard runtime at `127.0.0.1:9103`:
+
+- Navigation API: HTTP 200, `ready_with_terrain_hierarchy`, projection `ready`.
+- Source ledger: 15 sources (`P0=4`, `P1=7`, `P2=4`) and seven ordered
+  `named_point_route_positions` clues. The UI now labels these as route-distance
+  ordered named-place clues instead of incorrectly saying no chain exists.
+- 2D status: `DEM READY · 506 TILES · 20m`; displayed Golden Route coverage
+  `168/240 · 70%`.
+- 3D status: `MAPLIBRE 3D TERRAIN · DEM DECODED`; sampled Terrain RGB network
+  requests returned HTTP 200 and the canvas rendered nonblank.
+- Structure, slope pressure, risk terrain, retreat direction, and Shadow event
+  lenses all retained the same ready DEM while exposing distinct bounded data.
+- QGIS remained `DISABLED · NOT_STARTED` with zero QGIS artifacts. Its missing
+  latest-workflow request remains an expected HTTP 404 and is not a DEM failure.
+- Source GPX hashes before and after repair were identical. No v3 workspace was
+  created and the source workspace was not mutated.
+- The real-workspace 32-layer contract verifier passed all 32 layers with no
+  errors or warnings.
+- Final focused regressions: 25 passed. Ruff and scoped diff checks also passed.
 
 ## 2026-08-21 MapLibre and QGIS MCP evidence slice v0.1
 
@@ -4236,3 +4492,76 @@ References:
 
 - GRASS `r.watershed`: https://grass.osgeo.org/grass-stable/manuals/r.watershed.html
 - GRASS `r.stream.extract`: https://grass.osgeo.org/grass-stable/manuals/r.stream.extract.html
+
+### Navigation MapLibre terrain refresh (2026-08-25)
+
+Before changing the Navigation 2D/3D composition, inspect the read-only
+`navigation-terrain-intelligence` response and the Terrain RGB manifest
+separately. A stale projection does not mean the DEM is unavailable. The
+Dongqing runtime returned `persisted_projection_stale_or_invalid` after
+`mcp_named_point_evidence_ref` became part of the projection fingerprint, while
+the bounded Terrain RGB source remained ready.
+
+For this refresh:
+
+- rebuild `outputs/navigation/terrain_rgb/manifest.json` with the current
+  `bilinear_elevation` visual resampling contract;
+- preserve `adds_source_resolution=false` and never fill unsupported cells;
+- compile the Navigation projection only after all fingerprinted source refs
+  are stable;
+- verify the API reports a persisted ready projection and the same Terrain RGB
+  fingerprint before browser qualification;
+- retain 2D full-route fit and 3D local DEM fit as separate camera authorities.
+
+This refresh changes presentation evidence only. Elevation tint, hillshade,
+contours, ridge/valley candidates, and visual interpolation remain
+`candidate_only=true`, `runtime_safety_truth=false`, and do not establish route
+existence, walkability, safety, or an operational event.
+
+The former Python fallback painted each near-contour DTM cell as one raster
+pixel. At high MapLibre zoom that became a field of square markers rather than
+readable contour lines. The bounded fallback now interpolates 20 m DTM cells
+with marching squares and draws continuous 20 m isolines into a 2x visual
+raster. Record `visual_pixel_resolution_m=10` only as rendering density and
+always retain `adds_source_resolution=false`; interpolation does not create new
+elevation observations. The Dongqing artifact remains a 500 m route corridor,
+and the current Terrain RGB support covers 117/240 displayed Golden Route
+samples. Do not stretch either artifact into unsupported full-area terrain.
+
+### Historical map preparation and theme cache (2026-08-25)
+
+The Dashboard historical-map control is one presentation layer with an
+allowlisted theme selector, not 15 new canonical safety layers. Map preparation
+must pre-seed `sinica_jm50k_1916` into the distinct
+`historical-fandi-1916` workspace cache namespace. This is the default because
+the 1916 Aboriginal Territory map has mountain coverage along the Dongqing
+Batongguan route; the 1904 fortress map legitimately returns blank tiles across
+much of that corridor.
+
+Keep the control marked `data-layer-contract="auxiliary"`. The deterministic
+32-layer verifier otherwise treats its UI-only `historical-map` ID as an
+unknown canonical layer. Auxiliary marking preserves the existing layer IDs and
+order without weakening checks for unmarked unknown controls.
+
+Each alternate historical theme must use its own `historical-*` cache layer ID.
+Never reuse one cache directory while changing `source_id`, because a cache-only
+request could otherwise display a tile from the wrong year. The page remains
+cache-only on load. Persist the selected theme under a project-scoped browser
+key; a global preference can select an uncached alternate theme when a newly
+prepared workspace first opens. The existing explicit raster update button may
+fetch the currently selected allowlisted theme and persist those visible tiles
+into the workspace. Google, satellite, terrain, and other differently licensed
+or already represented current basemaps are not proxied as historical themes.
+
+The three Taitung national-forest themes use ArcGIS exploded tile paths with
+zero-padded zoom and eight-character hexadecimal row/column names. Historical
+tiles remain `candidate_only=true`, `runtime_safety_truth=false`,
+`operational=false`, and `visualization_only=true`; they provide comparison
+context and never prove route existence, access, navigability, or safety.
+
+The imagery source registry is imported when the Dashboard process starts.
+After adding or changing an allowlisted source, restart the actual user-facing
+`127.0.0.1:9099` process before browser qualification. Testing only a newly
+started alternate port can hide a stale-runtime `422 unknown imagery source_id`
+failure and leave every historical theme reporting `raster unavailable` in the
+Dashboard the user is actually running.

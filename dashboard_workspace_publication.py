@@ -782,8 +782,9 @@ class DashboardWorkspacePublication:
         live_project_sha256 = _project_json_sha256_or_none(live_root)
         old_generation_id = str(journal["liveGenerationId"])
         new_generation_id = journal.get("stagedGenerationId")
+        same_live_generation = live_generation_id == old_generation_id
         old_generation_matches = (
-            live_generation_id == old_generation_id
+            same_live_generation
             and live_project_sha256 == journal["liveProjectSha256"]
         )
         new_generation_matches = (
@@ -791,14 +792,20 @@ class DashboardWorkspacePublication:
             and live_project_sha256 == journal.get("stagedProjectSha256")
         )
         if state == "staging":
-            if not old_generation_matches:
+            if not old_generation_matches and not (
+                same_live_generation and live_project_sha256 is not None
+            ):
                 raise WorkspaceRecoveryError(
                     "live workspace changed during abandoned staging"
                 )
             _remove_directory_tree_durably(session_root)
             _delete_file_durably(journal_path)
             return {
-                "status": "discarded-staging",
+                "status": (
+                    "discarded-staging"
+                    if old_generation_matches
+                    else "discarded-staging-after-live-update"
+                ),
                 "journalState": state,
                 "recoveredAt": _utc_now(),
             }

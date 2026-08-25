@@ -384,6 +384,8 @@ def seed_imagery_tile_cache(
     tile_ttl_days: float | None = DEFAULT_IMAGERY_TILE_CACHE_TTL_DAYS,
     fallback_cache_project_ids: Sequence[str] | None = None,
     fetch_tile: ImageryTileFetch | None = None,
+    max_fetch_attempts: int = 5,
+    retry_backoff_seconds: float = 0.25,
 ) -> dict[str, Any]:
     if plan.get("artifact_kind") != "admin_imagery_tile_cache_plan":
         raise ValueError("plan must be an admin_imagery_tile_cache_plan")
@@ -391,6 +393,10 @@ def seed_imagery_tile_cache(
         raise ValueError("imagery tile cache plan exceeds capacity limit")
     if not provider_allows_offline_prefetch:
         raise ValueError("provider_allows_offline_prefetch must be true before seeding")
+    if max_fetch_attempts < 1:
+        raise ValueError("max_fetch_attempts must be at least 1")
+    if retry_backoff_seconds < 0:
+        raise ValueError("retry_backoff_seconds must be non-negative")
 
     fetcher = fetch_tile or _default_imagery_tile_fetch
     cache_root = Path(str(plan["cache_root"])).expanduser()
@@ -401,6 +407,8 @@ def seed_imagery_tile_cache(
     tiles_skipped_existing = 0
     tiles_copied_from_fallback_cache = 0
     tiles_failed = 0
+    tile_fetch_attempts = 0
+    tiles_recovered_after_retry = 0
     tile_error_samples: list[dict[str, Any]] = []
     bytes_written = 0
     now = time.time()
@@ -445,14 +453,25 @@ def seed_imagery_tile_cache(
                 tiles_refreshed += 1
             bytes_written += path.stat().st_size
             continue
-        try:
-            remote_tile = fetcher(
-                imagery_source,
-                int(tile["z"]),
-                int(tile["x"]),
-                int(tile["y"]),
-            )
-        except Exception as exc:
+        remote_tile = None
+        fetch_error: Exception | None = None
+        attempts = 0
+        for attempt in range(1, max_fetch_attempts + 1):
+            attempts = attempt
+            tile_fetch_attempts += 1
+            try:
+                remote_tile = fetcher(
+                    imagery_source,
+                    int(tile["z"]),
+                    int(tile["x"]),
+                    int(tile["y"]),
+                )
+                break
+            except Exception as exc:
+                fetch_error = exc
+                if attempt < max_fetch_attempts and retry_backoff_seconds:
+                    time.sleep(retry_backoff_seconds * attempt)
+        if remote_tile is None:
             tiles_failed += 1
             if len(tile_error_samples) < 20:
                 tile_error_samples.append(
@@ -460,11 +479,14 @@ def seed_imagery_tile_cache(
                         "z": int(tile["z"]),
                         "x": int(tile["x"]),
                         "y": int(tile["y"]),
-                        "error_type": type(exc).__name__,
-                        "error": str(exc)[:240],
+                        "attempts": attempts,
+                        "error_type": type(fetch_error).__name__,
+                        "error": str(fetch_error)[:240],
                     }
                 )
             continue
+        if attempts > 1:
+            tiles_recovered_after_retry += 1
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(remote_tile.body)
         tiles_written += 1
@@ -484,6 +506,9 @@ def seed_imagery_tile_cache(
         tiles_refreshed=tiles_refreshed,
         tiles_skipped_existing=tiles_skipped_existing,
         tiles_failed=tiles_failed,
+        tile_fetch_attempts=tile_fetch_attempts,
+        tiles_recovered_after_retry=tiles_recovered_after_retry,
+        max_fetch_attempts=max_fetch_attempts,
         tiles_copied_from_fallback_cache=tiles_copied_from_fallback_cache,
         tile_error_samples=tile_error_samples,
         tile_ttl_days=tile_ttl_days,
@@ -590,6 +615,7 @@ def load_or_build_raster_tile_payload(
     imagery_source: Mapping[str, Any] | None = None,
     allow_remote_fetch: bool = False,
     prefer_native_zoom: bool = False,
+    force_remote_refresh: bool = False,
     remote_fetch_timeout_seconds: float = 10.0,
     remote_fetcher: Any = fetch_remote_imagery_tile,
 ) -> AdminRasterTilePayload:
@@ -601,21 +627,21 @@ def load_or_build_raster_tile_payload(
         y,
         cache_root=cache_root,
     )
-    if cache_path.exists():
-        body = cache_path.read_bytes()
+    cached_body = cache_path.read_bytes() if cache_path.exists() else None
+    if cached_body is not None and not force_remote_refresh:
         return AdminRasterTilePayload(
-            body=body,
-            media_type=_tile_media_type(body, default="image/png"),
+            body=cached_body,
+            media_type=_tile_media_type(cached_body, default="image/png"),
             source="local_cache",
             cache_path=cache_path,
-            body_sha256=hashlib.sha256(body).hexdigest(),
+            body_sha256=hashlib.sha256(cached_body).hexdigest(),
             imagery_source_id=(
                 str(imagery_source.get("source_id"))
                 if isinstance(imagery_source, Mapping) and imagery_source.get("source_id")
                 else None
             ),
         )
-    def fetch_native_payload() -> AdminRasterTilePayload:
+    def fetch_native_payload(*, source: str = "remote_fetch_cache_fill") -> AdminRasterTilePayload:
         remote_tile = remote_fetcher(
             imagery_source,
             int(z),
@@ -631,7 +657,7 @@ def load_or_build_raster_tile_payload(
                 remote_tile.body,
                 default=remote_tile.media_type,
             ),
-            source="remote_fetch_cache_fill",
+            source=source,
             cache_path=cache_path,
             body_sha256=remote_tile.body_sha256,
             imagery_source_id=remote_tile.source_id,
@@ -640,7 +666,32 @@ def load_or_build_raster_tile_payload(
             ).hexdigest(),
         )
 
-    if prefer_native_zoom and allow_remote_fetch and imagery_source is not None:
+    remote_refresh_failed = False
+    if force_remote_refresh:
+        if not allow_remote_fetch or imagery_source is None:
+            raise ValueError("force_remote_refresh requires an enabled imagery source")
+        try:
+            return fetch_native_payload(source="remote_refresh_cache_replace")
+        except Exception:
+            if cached_body is not None:
+                return AdminRasterTilePayload(
+                    body=cached_body,
+                    media_type=_tile_media_type(cached_body, default="image/png"),
+                    source="stale_cache_after_remote_error",
+                    cache_path=cache_path,
+                    body_sha256=hashlib.sha256(cached_body).hexdigest(),
+                    imagery_source_id=str(imagery_source.get("source_id") or "") or None,
+                )
+            if not fallback_enabled:
+                raise
+            remote_refresh_failed = True
+
+    if (
+        not remote_refresh_failed
+        and prefer_native_zoom
+        and allow_remote_fetch
+        and imagery_source is not None
+    ):
         return fetch_native_payload()
 
     parent_payload = _parent_raster_cache_tile_payload(
@@ -655,7 +706,11 @@ def load_or_build_raster_tile_payload(
     )
     if parent_payload is not None:
         return parent_payload
-    if allow_remote_fetch and imagery_source is not None:
+    if (
+        not remote_refresh_failed
+        and allow_remote_fetch
+        and imagery_source is not None
+    ):
         try:
             return fetch_native_payload()
         except Exception:
@@ -921,6 +976,9 @@ def _imagery_seed_summary(
     tiles_refreshed: int,
     tiles_skipped_existing: int,
     tiles_failed: int,
+    tile_fetch_attempts: int,
+    tiles_recovered_after_retry: int,
+    max_fetch_attempts: int,
     tiles_copied_from_fallback_cache: int,
     tile_error_samples: list[dict[str, Any]] | None,
     tile_ttl_days: float | None,
@@ -942,6 +1000,9 @@ def _imagery_seed_summary(
         "tiles_skipped_existing": tiles_skipped_existing,
         "tiles_copied_from_fallback_cache": tiles_copied_from_fallback_cache,
         "tiles_failed": tiles_failed,
+        "tile_fetch_attempts": tile_fetch_attempts,
+        "tiles_recovered_after_retry": tiles_recovered_after_retry,
+        "max_fetch_attempts": max_fetch_attempts,
         "tile_error_samples": tile_error_samples or [],
         "tile_ttl_days": tile_ttl_days,
         "bytes_written": bytes_written,
