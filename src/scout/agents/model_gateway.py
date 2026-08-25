@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import time
+import re
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from dataclasses import dataclass, field
@@ -281,10 +282,10 @@ class ModelSlaGateway:
                 future.cancel()
                 error = f"model call exceeded {self.policy.timeout_seconds:g}s"
                 self.health_monitor.record_failure(error)
-                if attempt < max_retries and self.health_monitor.before_call_allowed():
-                    executor.shutdown(wait=False, cancel_futures=True)
-                    continue
-                executor.shutdown(wait=False, cancel_futures=True)
+                # Python cannot safely kill an active thread. Drain this attempt
+                # before returning so a timed-out provider call cannot outlive
+                # its receipt or overlap a retry.
+                executor.shutdown(wait=True, cancel_futures=True)
                 return self._fallback_or_terminal(
                     operation=operation,
                     started_at=started_at,
@@ -296,7 +297,7 @@ class ModelSlaGateway:
                     attempts=attempts,
                 )
             except Exception as exc:
-                error = str(exc)
+                error = _redact_model_error(str(exc))
                 self.health_monitor.record_failure(error)
                 if attempt < max_retries and self.health_monitor.before_call_allowed():
                     executor.shutdown(wait=False, cancel_futures=True)
@@ -404,6 +405,39 @@ class ModelSlaGateway:
             telemetry=telemetry,
             error=error,
         )
+
+
+_ERROR_KEY_VALUE_PATTERN = re.compile(
+    r"(?ix)"
+    r"(?P<prefix>['\"]?(?:"
+    r"authorization|proxy[_-]?authorization|x[_-]?api[_-]?key|"
+    r"[a-z0-9_-]*api[_-]?key|"
+    r"(?:access[_-]?token|refresh[_-]?token|auth[_-]?token|token)|"
+    r"secret|password|private[_-]?key|credential"
+    r")[\"']?\s*[:=]\s*)"
+    r"(?P<quote>[\"']?)"
+    r"(?:(?:bearer|basic|token)\s+)?"
+    r"[^\"'\s,}\]]+"
+    r"(?P=quote)"
+)
+
+_ERROR_REDACTION_PATTERNS = (
+    re.compile(r"(?i)\b(?:bearer|basic)\s+[A-Za-z0-9._~+/=-]{6,}"),
+    re.compile(
+        r"(?i)\b(?:sk-|nvapi-|gh[pousr]_|github_pat_|xox[baprs]-)"
+        r"[A-Za-z0-9_-]{8,}"
+    ),
+)
+
+
+def _redact_model_error(error: str) -> str:
+    redacted = _ERROR_KEY_VALUE_PATTERN.sub(
+        lambda match: f"{match.group('prefix')}[REDACTED]",
+        error,
+    )
+    for pattern in _ERROR_REDACTION_PATTERNS:
+        redacted = pattern.sub("[REDACTED]", redacted)
+    return redacted
 
 
 __all__ = [

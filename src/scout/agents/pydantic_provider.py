@@ -57,7 +57,6 @@ class PydanticScoutAgentProvider:
                 output_type=request.output_type,
                 instructions=_typed_output_instructions(request),
                 name=request.agent_name,
-                retries={"output": 3},
                 tools=_read_only_tools(request),
                 capabilities=pydantic_native_research_capabilities(self._model_policy),
                 **pydantic_agent_runtime_kwargs(),
@@ -136,11 +135,21 @@ def _read_only_tools(request: ScoutAgentRequest) -> list[Callable[..., Any]]:
     def get_capability(name: str) -> dict[str, Any] | None:
         return request.tools.get_capability(name)
 
+    tools_by_name = {
+        "search_memory": search_memory,
+        "search_capabilities": search_capabilities,
+        "get_active_context": get_active_context,
+        "get_capability": get_capability,
+    }
     return [
-        search_memory,
-        search_capabilities,
-        get_active_context,
-        get_capability,
+        tools_by_name[name]
+        for name in (
+            "search_memory",
+            "search_capabilities",
+            "get_active_context",
+            "get_capability",
+        )
+        if name in request.tools.allowed_tools
     ]
 
 

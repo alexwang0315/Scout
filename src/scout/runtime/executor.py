@@ -8,7 +8,7 @@ from typing import Any
 
 from scout.runtime.actions import ActionExecutor
 from scout.runtime.triggers import TriggerEvaluator
-from scout.schemas.workflow import WorkflowLifecycle
+from scout.schemas.workflow import TriggerType, WorkflowLifecycle
 from scout.services.permission_gate import PermissionGate
 from scout.services.workflow_store import WorkflowRecord, WorkflowStore
 
@@ -70,7 +70,10 @@ class RuntimeExecutor:
                 status="paused",
                 events=[{"permission": decision.model_dump(mode="json")}],
             )
-        if decision.requires_user_approval:
+        if (
+            decision.requires_user_approval
+            and not self._workflow_store.is_approved(record.id)
+        ):
             self._workflow_store.pause(record.id, decision.reason)
             return WorkflowRunResult(
                 workflow_id=record.id,
@@ -86,6 +89,11 @@ class RuntimeExecutor:
             action_events = []
             for action in record.workflow.actions:
                 payload = self._action_executor.execute(record, action)
+                if payload.get("status") == "unsupported":
+                    raise RuntimeError(
+                        "unsupported action result: "
+                        + str(payload.get("message") or action.type.value)
+                    )
                 self._workflow_store.record_event(
                     record.id,
                     "action.executed",
@@ -97,7 +105,10 @@ class RuntimeExecutor:
                 self._workflow_store.complete(record.id)
                 status = "completed"
             else:
-                self._workflow_store.set_next_run_at(record.id, run_time + timedelta(hours=1))
+                self._workflow_store.set_next_run_at(
+                    record.id,
+                    _next_run_at(record, run_time),
+                )
                 status = "scheduled"
             return WorkflowRunResult(
                 workflow_id=record.id,
@@ -111,6 +122,20 @@ class RuntimeExecutor:
                 status="failed",
                 events=[{"error": str(exc)}],
             )
+
+
+def _next_run_at(record: WorkflowRecord, run_time: datetime) -> datetime:
+    recurrence = record.workflow.trigger.config.get("recurrence")
+    if (
+        record.workflow.trigger.type is TriggerType.TIME
+        and recurrence == "daily"
+        and record.next_run_at is not None
+    ):
+        next_run_at = record.next_run_at
+        while next_run_at <= run_time:
+            next_run_at += timedelta(days=1)
+        return next_run_at
+    return run_time + timedelta(hours=1)
 
 
 __all__ = ["RuntimeExecutor", "RuntimeTickResult", "WorkflowRunResult"]

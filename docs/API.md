@@ -28,6 +28,12 @@ GET  /runtime/scheduler
 permissions, saves pending workflows when approval is required, installs
 low-risk workflows, and stores reviewable learning candidates.
 
+When the typed execution plan identifies one allowlisted, low-risk missing
+capability, `POST /requests` may return `capability_needs_approval`. The API
+builds and sandbox-tests a generated package, persists candidate metadata, and
+does not create or execute a workflow. Generated runtime code remains
+sandbox-only even after metadata approval.
+
 Before workflow compilation, `POST /requests` applies the deterministic
 application router. Obvious session-local UI commands return
 `ui_action_planned` with a `scout_ui_action_plan.v0` payload instead of creating
@@ -53,9 +59,25 @@ The background loop is disabled by default and can be enabled by
 candidate, runs sandbox verification, evaluates install permission, and stores
 passing generated packages as `candidate` metadata. `POST
 /capabilities/{name}/approve` approves that generated metadata into the
-registry. Generated packages are rejected before execution when they exceed
-the MVP file-count or byte-size limits. Generated code is not installed into
-the runtime execution path.
+registry. Candidates are bound to the requesting user and retain a package
+hash plus sandbox receipt; approval records the approving user and note.
+Existing capability names cannot be replaced through this route. Generated
+packages are rejected before execution when they exceed the MVP file-count or
+byte-size limits. Generated approval reports `runtime_available=false` and does
+not make the capability visible to planner/runtime lookup; a separate,
+deterministic runtime registration is required. Generated code is not installed
+into the runtime execution path.
+
+`GET /workflows/{id}` and `GET /learning-artifacts` require `user_id`; workflow,
+learning-artifact, and generated-capability approval paths reject a different
+user identifier. This is an MVP ownership namespace, not authentication. A
+network-exposed deployment still requires a trusted authentication layer that
+derives the principal server-side instead of accepting caller-supplied identity.
+
+The default `scout.main:app` persists SQLite state at
+`$SCOUT_AI_OS_DATABASE_PATH`, or under `$XDG_STATE_HOME/scout-ai-os`, falling
+back to `~/.local/state/scout-ai-os`. Tests and isolated callers may continue to
+construct an in-memory app explicitly.
 
 The Mac-side Pydantic AI smoke path uses a typed model policy: explicit
 `--model` first, then `SCOUT_AI_OS_MODEL`, then local `FunctionModel`. Missing
@@ -90,10 +112,13 @@ runtime API.
 
 - The API does not call a live LLM by default.
 - The API does not install generated capability code outside the sandbox flow;
-  generated approval is registry metadata only, and the sandbox is not an
-  OS-level/container isolation boundary.
+  generated approval is registry metadata only. Sandbox test execution requires
+  a supported OS backend (macOS Seatbelt or Linux bubblewrap) and fails closed
+  when none is available; this is not production container attestation.
 - Live external notification transports are not implemented; the MVP ships
   stdout, memory, and dry-run-only notification providers.
 - Runtime tick handles deterministic MVP trigger/action support only.
 - UI action plans are session-local intents; the API does not apply browser
   actions by itself.
+- `user_id` is caller-supplied in the local MVP and must not be treated as an
+  authenticated principal on an untrusted network.

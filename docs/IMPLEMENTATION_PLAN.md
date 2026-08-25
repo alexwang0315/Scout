@@ -138,6 +138,12 @@ Deliverables:
 - provider-backed `LearningAgent`;
 - deterministic no-LLM provider for tests and local MVP behavior.
 
+Qualification refresh (2026-08-25): specialist facades now receive only their
+declared read-only tools, the raw dependency container is absent from model
+requests, unsupported model providers fail closed, sensitive learning content
+is rejected, and the Pydantic AI 2.33.0 path is verified without deterministic
+fallback.
+
 ## Phase 6: Sandbox
 
 Status: implemented.
@@ -145,11 +151,19 @@ Status: implemented.
 Deliverables:
 
 - generated capability package static checks;
+- Python AST import/call allowlisting;
 - safe relative-path validation;
-- temporary-directory pytest execution with timeout;
+- temporary-directory pytest execution with timeout and process-group cleanup;
+- fail-closed macOS Seatbelt/Linux bubblewrap isolation selection;
 - practical network blocker for sandbox tests;
 - generated package file-count and byte-size guards;
 - `SandboxResult` outputs.
+
+Qualification refresh (2026-08-25): focused tests cover secret-environment
+scrubbing, AST obfuscation, sandbox-external file-read denial, network-blocker
+injection, timeout, output limits, path validation, static findings, and
+generated-package pytest execution. Execution fails closed without a supported
+OS backend; this remains qualification isolation, not production attestation.
 
 ## Phase 7: API
 
@@ -175,6 +189,14 @@ Deliverables:
 `scout.ui.action_plan` and boundary-forbidden safety/outbound/hardware prompts
 to a refusal response before workflow compilation. Non-UI workflow automation
 continues through the original compiler/planner/permission flow.
+
+Qualification refresh (2026-08-25): time workflows persist their first due
+time, approval is owner-bound and receipt-backed, terminal workflows cannot be
+reactivated by approval, generated capability candidates retain owner/hash/
+sandbox provenance, metadata-only capability approval is not runtime
+availability, learning artifacts are user-bound and migration-backed, ambiguous
+time requests fail closed, ownerless legacy learning rows are quarantined, and
+the default app is CWD-independent with persistent SQLite state.
 
 ## Phase 8: Learning Loop
 

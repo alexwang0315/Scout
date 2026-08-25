@@ -143,6 +143,11 @@ def resolve_model_policy(
 
     normalized_model = _normalize_external_model(requested)
     provider = _provider_for_model(normalized_model)
+    if provider is None:
+        raise ValueError(
+            f"unsupported Scout model provider for {requested!r}; "
+            "use openrouter:, nvidia:, or openai-chat:"
+        )
     provider_model_id = _provider_model_id(normalized_model)
     required_credential_env = _required_credential_env(normalized_model)
     missing_credential_env = [

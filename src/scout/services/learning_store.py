@@ -28,6 +28,7 @@ class LearningArtifactRecord:
     status: str
     source_workflow_id: str | None
     created_at: datetime
+    user_id: str
 
 
 class LearningStore:
@@ -48,6 +49,7 @@ class LearningStore:
         bundle: LearningBundle,
         *,
         source_workflow_id: str | None = None,
+        user_id: str = "legacy",
     ) -> list[str]:
         ids = []
         for artifact in bundle.artifacts:
@@ -55,6 +57,7 @@ class LearningStore:
                 self.save_artifact(
                     artifact,
                     source_workflow_id=source_workflow_id,
+                    user_id=user_id,
                 )
             )
         return ids
@@ -65,15 +68,16 @@ class LearningStore:
         *,
         source_workflow_id: str | None = None,
         status: str = "pending_review",
+        user_id: str = "legacy",
     ) -> str:
         artifact_id = str(uuid4())
         self._connection.execute(
             """
             INSERT INTO learning_artifacts (
                 id, artifact_type, source_workflow_id, content_json,
-                status, created_at
+                status, created_at, user_id
             )
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 artifact_id,
@@ -82,17 +86,34 @@ class LearningStore:
                 artifact.model_dump_json(),
                 status,
                 _now_iso(),
+                user_id,
             ),
         )
         self._connection.commit()
         return artifact_id
 
-    def list_artifacts(self, status: str | None = None) -> list[LearningArtifactRecord]:
-        if status is None:
+    def list_artifacts(
+        self,
+        status: str | None = None,
+        *,
+        user_id: str | None = None,
+    ) -> list[LearningArtifactRecord]:
+        if user_id == "legacy":
+            return []
+        if status is None and user_id is None:
             rows = self._connection.execute(
                 "SELECT * FROM learning_artifacts ORDER BY created_at ASC, id ASC"
             ).fetchall()
-        else:
+        elif status is None:
+            rows = self._connection.execute(
+                """
+                SELECT * FROM learning_artifacts
+                WHERE user_id = ?
+                ORDER BY created_at ASC, id ASC
+                """,
+                (user_id,),
+            ).fetchall()
+        elif user_id is None:
             rows = self._connection.execute(
                 """
                 SELECT * FROM learning_artifacts
@@ -100,6 +121,15 @@ class LearningStore:
                 ORDER BY created_at ASC, id ASC
                 """,
                 (status,),
+            ).fetchall()
+        else:
+            rows = self._connection.execute(
+                """
+                SELECT * FROM learning_artifacts
+                WHERE status = ? AND user_id = ?
+                ORDER BY created_at ASC, id ASC
+                """,
+                (status, user_id),
             ).fetchall()
         return [self._row_to_record(row) for row in rows]
 
@@ -122,6 +152,12 @@ class LearningStore:
         record = self.get_artifact(artifact_id)
         if record is None:
             raise KeyError(f"learning artifact not found: {artifact_id}")
+        if record.user_id == "legacy":
+            raise PermissionError(
+                "learning artifact is missing its authority binding"
+            )
+        if record.user_id != user_id:
+            raise PermissionError("learning artifact belongs to another user")
         if record.status != "pending_review":
             return {"status": record.status, "action": "already_processed"}
 
@@ -169,6 +205,7 @@ class LearningStore:
             status=row["status"],
             source_workflow_id=row["source_workflow_id"],
             created_at=datetime.fromisoformat(row["created_at"]),
+            user_id=row["user_id"],
         )
 
 

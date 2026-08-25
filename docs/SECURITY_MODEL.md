@@ -15,6 +15,9 @@ API routes, and reviewable learning approvals.
   require approval.
 - Destructive, payment, credential, production database write, and unrestricted
   shell automation is denied by default in the MVP.
+- Agent facades receive explicit least-privilege read-only tool scopes; model
+  requests do not receive the raw runtime dependency container.
+- Model-provider errors are redacted before they enter SLA telemetry.
 
 ## Generated Code Policy
 
@@ -28,19 +31,44 @@ Generated code may only be installed after:
 6. permission gate approval;
 7. user approval during early MVP.
 
+In the current MVP, approval promotes generated capability metadata only. The
+candidate is bound to an owner, package hash, sandbox receipt, approving user,
+and approval note. It cannot overwrite an existing built-in or candidate name,
+and its generated Python remains unavailable to the active runtime dispatcher.
+Candidate and metadata-only approved records report `runtime_available=false`
+and are excluded from planner/action lookup.
+
 ## Sandbox Limitations
 
-The MVP sandbox is a practical test isolation layer, not a complete security
-boundary. It:
+The MVP sandbox is a layered qualification boundary, not a production-grade
+generated-code runtime. It:
 
 - rejects disallowed source patterns before execution;
+- parses Python AST and allowlists imports/calls while rejecting dynamic import,
+  dunder escape paths, and file/process mutation APIs;
 - validates safe relative paths;
 - writes generated package files to a temporary directory;
-- runs pytest with timeout and a reduced environment;
+- runs pytest with timeout, process-group termination, and a reduced environment;
+- requires macOS Seatbelt or Linux bubblewrap and fails closed without an OS
+  isolation backend;
 - adds a practical socket blocker through `sitecustomize.py`.
 
-It does not provide OS-level isolation, container isolation, syscall filtering,
-or a complete network/file-system security boundary.
+Seatbelt and bubblewrap are qualification backends, not portable container
+attestation. Production generated-code dispatch still requires a reviewed,
+versioned isolation profile, host-level resource controls, and deployment
+qualification. Metadata approval never enables dispatch.
+
+## API Identity Limitation
+
+Workflow, learning-artifact, and generated-capability operations enforce
+ownership against the supplied `user_id`. This prevents accidental cross-user
+access in the local MVP, but it is not authentication. Any remote or shared
+deployment must derive identity from a trusted authentication boundary and must
+not trust a client-provided user identifier.
+
+Legacy learning rows recover ownership from `source_workflow_id` when possible.
+Rows without a recoverable owner are quarantined, hidden from user-scoped
+listing, and cannot be approved through the user API.
 
 ## Hardware Smoke Policy
 

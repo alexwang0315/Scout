@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from threading import Event
 from pathlib import Path
 
 from scout.agents import (
@@ -54,8 +55,11 @@ def test_model_sla_gateway_timeout_fallback() -> None:
         },
     )
 
+    provider_completed = Event()
+
     def slow_provider_call() -> str:
-        time.sleep(0.1)
+        time.sleep(0.03)
+        provider_completed.set()
         return "provider"
 
     result = ModelSlaGateway(
@@ -65,11 +69,13 @@ def test_model_sla_gateway_timeout_fallback() -> None:
         "timeout-test",
         slow_provider_call,
         fallback_call=lambda: "fallback",
+        max_retries=0,
     )
 
     assert result.output == "fallback"
     assert result.status == "timeout_fallback"
     assert result.fallback_used is True
+    assert provider_completed.is_set()
 
 
 def test_model_sla_gateway_retries_and_records_telemetry() -> None:
@@ -102,6 +108,57 @@ def test_model_sla_gateway_retries_and_records_telemetry() -> None:
     assert result.provider_health["state"] == "healthy"
     assert result.telemetry is not None
     assert result.telemetry.attempts == 2
+
+
+def test_model_sla_gateway_redacts_credentials_from_error_telemetry() -> None:
+    policy = resolve_model_policy(
+        "openrouter:openai/gpt-4o-mini",
+        env={"OPENROUTER_API_KEY": "configured"},
+    )
+
+    def failing_provider_call() -> str:
+        raise RuntimeError("Authorization: Bearer super-secret-token-value")
+
+    result = ModelSlaGateway(policy).run_sync(
+        "redaction-test",
+        failing_provider_call,
+        fallback_call=lambda: "fallback",
+        max_retries=0,
+    )
+
+    assert result.error is not None
+    assert "super-secret-token-value" not in result.error
+    assert "[REDACTED]" in result.error
+    assert result.telemetry is not None
+    assert result.telemetry.error == result.error
+
+
+def test_model_sla_gateway_redacts_common_credential_representations() -> None:
+    policy = resolve_model_policy(
+        "openrouter:openai/gpt-4o-mini",
+        env={"OPENROUTER_API_KEY": "configured"},
+    )
+    examples = (
+        "headers={'X-Api-Key': 'fixture-plain-value-123456'}",
+        "NVIDIA_API_KEY=nvapi-fixture-value-123456",
+        "Authorization: 'Token fixture-authorization-value-123456'",
+    )
+
+    for index, error_text in enumerate(examples):
+        result = ModelSlaGateway(policy).run_sync(
+            f"redaction-variant-{index}",
+            lambda error_text=error_text: (_ for _ in ()).throw(
+                RuntimeError(error_text)
+            ),
+            fallback_call=lambda: "fallback",
+            max_retries=0,
+        )
+
+        assert result.error is not None
+        assert "fixture-plain-value" not in result.error
+        assert "nvapi-fixture-value" not in result.error
+        assert "fixture-authorization-value" not in result.error
+        assert "[REDACTED]" in result.error
 
 
 def test_model_sla_gateway_circuit_breaker_fallback_skips_provider_call() -> None:

@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from scout.agents import PydanticScoutAgentProvider
 from scout.api.routes import create_app
 from scout.cli.pydantic_smoke import run_smoke
+from scout.main import create_default_app
 
 
 def make_client(tmp_path: Path) -> TestClient:
@@ -41,8 +42,42 @@ def test_request_installs_low_risk_workflow_and_learning_artifact(
     workflows = client.get("/workflows", params={"user_id": "user-1"}).json()
     assert workflows["workflows"][0]["id"] == workflow_id
 
-    artifact_payload = client.get("/learning-artifacts").json()
+    artifact_payload = client.get(
+        "/learning-artifacts",
+        params={"user_id": "user-1"},
+    ).json()
     assert artifact_payload["learning_artifacts"]
+
+
+def test_default_app_is_cwd_independent_and_persists_restart_state(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    database_path = tmp_path / "state" / "scout-ai-os.sqlite"
+    monkeypatch.setenv("SCOUT_AI_OS_DATABASE_PATH", str(database_path))
+    monkeypatch.chdir(tmp_path)
+
+    first = TestClient(create_default_app())
+    created = first.post(
+        "/requests",
+        json={
+            "user_id": "user-1",
+            "user_text": "Remind me in 10 minutes.",
+            "active_context": {"now": "2026-06-08T00:00:00+00:00"},
+        },
+    ).json()
+    assert created["status"] == "installed"
+    assert first.get("/capabilities").json()["capabilities"]
+
+    restarted = TestClient(create_default_app())
+    workflows = restarted.get(
+        "/workflows",
+        params={"user_id": "user-1"},
+    ).json()["workflows"]
+
+    assert database_path.exists()
+    assert [workflow["id"] for workflow in workflows] == [created["workflow_id"]]
+    assert restarted.get("/capabilities").json()["capabilities"]
 
 
 def test_request_can_use_pydantic_ai_provider(tmp_path: Path) -> None:
@@ -89,8 +124,177 @@ def test_request_needing_approval_saves_pending_workflow(tmp_path: Path) -> None
         json={"user_id": "user-1", "approval_note": "Trip only."},
     )
     assert approve.status_code == 200
-    loaded = client.get(f"/workflows/{workflow_id}").json()
+    loaded = client.get(
+        f"/workflows/{workflow_id}",
+        params={"user_id": "user-1"},
+    ).json()
     assert loaded["workflow"]["status"] == "active"
+
+
+def test_approved_permanent_time_workflow_executes_with_approval_receipt(
+    tmp_path: Path,
+) -> None:
+    client = make_client(tmp_path)
+    created = client.post(
+        "/requests",
+        json={
+            "user_id": "user-1",
+            "user_text": "Always remind me in 10 minutes.",
+            "active_context": {"now": "2026-06-08T00:00:00+00:00"},
+        },
+    ).json()
+    assert created["status"] == "needs_approval"
+
+    approved = client.post(
+        f"/workflows/{created['workflow_id']}/approve",
+        json={"user_id": "user-1", "approval_note": "Approved recurring reminder."},
+    )
+    tick = client.post("/runtime/tick")
+
+    assert approved.status_code == 200
+    assert tick.json()["ran"] == 1
+    assert tick.json()["paused"] == 0
+    loaded = client.get(
+        f"/workflows/{created['workflow_id']}",
+        params={"user_id": "user-1"},
+    ).json()
+    assert loaded["workflow"]["status"] == "active"
+    assert {event["event_type"] for event in loaded["events"]} >= {
+        "workflow.approved",
+        "notification.sent",
+    }
+
+
+def test_workflow_lookup_and_approval_fail_closed_across_users(
+    tmp_path: Path,
+) -> None:
+    client = make_client(tmp_path)
+    created = client.post(
+        "/requests",
+        json={
+            "user_id": "user-1",
+            "user_text": "Notify me 100 meters before the next campsite.",
+            "active_context": {},
+        },
+    ).json()
+
+    lookup = client.get(
+        f"/workflows/{created['workflow_id']}",
+        params={"user_id": "user-2"},
+    )
+    approval = client.post(
+        f"/workflows/{created['workflow_id']}/approve",
+        json={"user_id": "user-2", "approval_note": "Not the owner."},
+    )
+
+    assert lookup.status_code == 403
+    assert approval.status_code == 403
+
+
+def test_cancelled_workflow_cannot_be_reactivated_by_approval(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    created = client.post(
+        "/requests",
+        json={
+            "user_id": "user-1",
+            "user_text": "Notify me 100 meters before the next campsite.",
+            "active_context": {},
+        },
+    ).json()
+    client.post(
+        f"/workflows/{created['workflow_id']}/cancel",
+        json={"user_id": "user-1", "reason": "Cancelled before approval."},
+    )
+
+    approval = client.post(
+        f"/workflows/{created['workflow_id']}/approve",
+        json={"user_id": "user-1", "approval_note": "Too late."},
+    )
+
+    assert approval.status_code == 409
+
+
+def test_request_builds_and_sandboxes_missing_low_risk_capability(
+    tmp_path: Path,
+) -> None:
+    client = make_client(tmp_path)
+
+    response = client.post(
+        "/requests",
+        json={
+            "user_id": "user-1",
+            "user_text": "Generate a parser for this CSV format.",
+            "active_context": {},
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "capability_needs_approval"
+    assert payload["workflow_id"] is None
+    assert payload["capability"]["name"] == "csv_parser"
+    assert payload["capability"]["status"] == "candidate"
+    assert payload["sandbox"]["passed"] is True
+    assert client.get(
+        "/workflows",
+        params={"user_id": "user-1"},
+    ).json()["workflows"] == []
+
+    repeated = client.post(
+        "/requests",
+        json={
+            "user_id": "user-1",
+            "user_text": "Generate a parser for this CSV format.",
+            "active_context": {},
+        },
+    )
+    assert repeated.status_code == 409
+    assert client.get(
+        "/workflows",
+        params={"user_id": "user-1"},
+    ).json()["workflows"] == []
+
+    approved = client.post(
+        "/capabilities/csv_parser/approve",
+        json={"user_id": "user-1", "approval_note": "Metadata reviewed."},
+    )
+    assert approved.status_code == 200
+    assert approved.json()["capability"]["runtime_available"] is False
+
+    after_approval = client.post(
+        "/requests",
+        json={
+            "user_id": "user-1",
+            "user_text": "Generate a parser for this CSV format.",
+            "active_context": {},
+        },
+    )
+    assert after_approval.status_code == 409
+    assert client.get(
+        "/workflows",
+        params={"user_id": "user-1"},
+    ).json()["workflows"] == []
+
+
+def test_ambiguous_time_request_fails_closed_without_workflow(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+
+    response = client.post(
+        "/requests",
+        json={
+            "user_id": "user-1",
+            "user_text": "Remind me later.",
+            "active_context": {},
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "refused"
+    assert "run_at" in response.json()["message"]
+    assert client.get(
+        "/workflows",
+        params={"user_id": "user-1"},
+    ).json()["workflows"] == []
 
 
 def test_cancel_workflow_and_list_capabilities(tmp_path: Path) -> None:
@@ -156,12 +360,54 @@ def test_generated_capability_candidate_requires_approval_then_installs_metadata
     assert approved_payload["status"] == "approved"
     assert approved_payload["capability"]["status"] == "installed"
     assert approved_payload["capability"]["source"] == "generated_approved"
+    assert approved_payload["capability"]["runtime_available"] is False
 
     capabilities = client.get("/capabilities").json()["capabilities"]
     payload_echo = next(
         capability for capability in capabilities if capability["name"] == "payload_echo"
     )
     assert payload_echo["status"] == "installed"
+    assert payload_echo["runtime_available"] is False
+
+
+def test_generated_capability_owner_and_builtin_name_are_protected(
+    tmp_path: Path,
+) -> None:
+    client = make_client(tmp_path)
+    candidate = client.post(
+        "/capabilities/build-candidate",
+        json={
+            "user_id": "user-1",
+            "capability_name": "owned_parser",
+            "purpose": "Parse a bounded local payload.",
+            "input_schema": {"type": "object"},
+            "output_schema": {"type": "object"},
+            "risk_level": "low",
+        },
+    )
+    assert candidate.status_code == 200
+
+    wrong_owner = client.post(
+        "/capabilities/owned_parser/approve",
+        json={"user_id": "user-2", "approval_note": "Not the owner."},
+    )
+    collision = client.post(
+        "/capabilities/build-candidate",
+        json={
+            "user_id": "user-1",
+            "capability_name": "manual_notification",
+            "purpose": "Attempt to replace a built-in.",
+            "input_schema": {"type": "object"},
+            "output_schema": {"type": "object"},
+            "risk_level": "low",
+        },
+    )
+
+    assert wrong_owner.status_code == 403
+    assert collision.status_code == 409
+    builtins = client.get("/capabilities").json()["capabilities"]
+    manual = next(item for item in builtins if item["name"] == "manual_notification")
+    assert manual["source"] == "builtin"
 
 
 def test_generated_capability_candidate_denies_non_low_risk_request(
@@ -197,7 +443,10 @@ def test_learning_artifact_approval_endpoint_appends_eval_case(
             "active_context": {"now": "2026-06-08T00:00:00+00:00"},
         },
     )
-    artifact = client.get("/learning-artifacts").json()["learning_artifacts"][0]
+    artifact = client.get(
+        "/learning-artifacts",
+        params={"user_id": "user-1"},
+    ).json()["learning_artifacts"][0]
 
     approved = client.post(
         f"/learning-artifacts/{artifact['id']}/approve",
@@ -209,6 +458,35 @@ def test_learning_artifact_approval_endpoint_appends_eval_case(
     assert (tmp_path / "evals" / "workflow_compiler.jsonl").exists()
 
 
+def test_learning_artifacts_are_bound_to_their_user(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    client.post(
+        "/requests",
+        json={
+            "user_id": "user-1",
+            "user_text": "Remind me in 10 minutes.",
+            "active_context": {"now": "2026-06-08T00:00:00+00:00"},
+        },
+    )
+    artifact = client.get(
+        "/learning-artifacts",
+        params={"user_id": "user-1"},
+    ).json()["learning_artifacts"][0]
+
+    hidden = client.get(
+        "/learning-artifacts",
+        params={"user_id": "user-2"},
+    )
+    approval = client.post(
+        f"/learning-artifacts/{artifact['id']}/approve",
+        json={"user_id": "user-2", "approval_note": "Not the owner."},
+    )
+
+    assert hidden.status_code == 200
+    assert hidden.json()["learning_artifacts"] == []
+    assert approval.status_code == 403
+
+
 def test_runtime_tick_endpoint_returns_summary(tmp_path: Path) -> None:
     client = make_client(tmp_path)
 
@@ -216,6 +494,33 @@ def test_runtime_tick_endpoint_returns_summary(tmp_path: Path) -> None:
 
     assert response.status_code == 200
     assert response.json()["checked"] == 0
+
+
+def test_runtime_tick_executes_due_notification_through_api(tmp_path: Path) -> None:
+    client = make_client(tmp_path)
+    created = client.post(
+        "/requests",
+        json={
+            "user_id": "user-1",
+            "user_text": "Remind me in 10 minutes.",
+            "active_context": {"now": "2026-06-08T00:00:00+00:00"},
+        },
+    ).json()
+
+    tick = client.post("/runtime/tick")
+
+    assert tick.status_code == 200
+    assert tick.json()["checked"] == 1
+    assert tick.json()["ran"] == 1
+    loaded = client.get(
+        f"/workflows/{created['workflow_id']}",
+        params={"user_id": "user-1"},
+    ).json()
+    assert loaded["workflow"]["status"] == "completed"
+    assert any(
+        event["event_type"] == "notification.sent"
+        for event in loaded["events"]
+    )
 
 
 def test_background_scheduler_status_disabled_by_default(tmp_path: Path) -> None:

@@ -38,6 +38,7 @@ from scout.services import (
     open_database,
 )
 from scout.schemas.capability import CapabilityBuildRequest, CapabilityRisk
+from scout.schemas.runtime import PlanMode
 from scout.services.docs_search import DocsSearch
 from scout.services.sandbox_runner import SandboxRunner
 
@@ -210,8 +211,41 @@ def create_router(services: ScoutApiServices) -> APIRouter:
             }
 
         deps = services.deps(payload.user_id, payload.active_context)
-        workflow = services.workflow_compiler.compile(payload.user_text, deps)
+        try:
+            workflow = services.workflow_compiler.compile(payload.user_text, deps)
+        except ValueError as exc:
+            return {
+                "status": "refused",
+                "workflow_id": None,
+                "message": str(exc),
+            }
         plan = services.execution_planner.plan(workflow, deps)
+        if plan.mode is PlanMode.BUILD_NEW_CAPABILITY:
+            if plan.build_request is None:
+                return {
+                    "status": "refused",
+                    "workflow_id": None,
+                    "message": "Capability generation plan is missing its typed build request.",
+                    "plan": plan.model_dump(mode="json"),
+                }
+            response = _build_capability_candidate(
+                services,
+                build_request=CapabilityBuildRequest.model_validate(plan.build_request),
+                deps=deps,
+                user_id=payload.user_id,
+            )
+            response["workflow_id"] = None
+            response["plan"] = plan.model_dump(mode="json")
+            if response["status"] == "needs_approval":
+                response["status"] = "capability_needs_approval"
+            return response
+        if plan.mode is PlanMode.REFUSE_AUTOMATION:
+            return {
+                "status": "refused",
+                "workflow_id": None,
+                "message": plan.reason,
+                "plan": plan.model_dump(mode="json"),
+            }
         decision = services.permission_gate.evaluate_workflow(workflow)
 
         if not decision.allowed:
@@ -244,6 +278,7 @@ def create_router(services: ScoutApiServices) -> APIRouter:
         learning_artifact_ids = services.learning_store.save_bundle(
             bundle,
             source_workflow_id=workflow_id,
+            user_id=payload.user_id,
         )
         return {
             "status": "installed",
@@ -277,10 +312,15 @@ def create_router(services: ScoutApiServices) -> APIRouter:
         return {"workflows": workflows}
 
     @router.get("/workflows/{workflow_id}")
-    def get_workflow(workflow_id: str) -> dict[str, Any]:
+    def get_workflow(
+        workflow_id: str,
+        user_id: str = Query(...),
+    ) -> dict[str, Any]:
         record = services.workflow_store.get_workflow(workflow_id)
         if record is None:
             raise HTTPException(status_code=404, detail="workflow not found")
+        if record.user_id != user_id:
+            raise HTTPException(status_code=403, detail="workflow belongs to another user")
         return {
             "workflow": _workflow_record_to_dict(record),
             "events": services.workflow_store.list_events(workflow_id),
@@ -296,7 +336,16 @@ def create_router(services: ScoutApiServices) -> APIRouter:
             raise HTTPException(status_code=404, detail="workflow not found")
         if record.user_id != payload.user_id:
             raise HTTPException(status_code=403, detail="workflow belongs to another user")
-        services.workflow_store.activate(workflow_id, payload.approval_note)
+        try:
+            services.workflow_store.approve(
+                workflow_id,
+                user_id=payload.user_id,
+                approval_note=payload.approval_note,
+            )
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         return {"status": "approved", "workflow_id": workflow_id}
 
     @router.post("/workflows/{workflow_id}/cancel")
@@ -323,64 +372,30 @@ def create_router(services: ScoutApiServices) -> APIRouter:
 
     @router.post("/capabilities/build-candidate")
     def build_capability_candidate(payload: CapabilityBuildInput) -> dict[str, Any]:
-        build_request = payload.to_build_request()
-        deps = services.deps(payload.user_id, payload.active_context)
-        try:
-            package = services.code_builder.build(build_request, deps)
-        except ValueError as exc:
-            return {"status": "refused", "message": str(exc)}
-
-        sandbox_result = services.sandbox.verify(package)
-        if not sandbox_result.passed:
-            return {
-                "status": "sandbox_failed",
-                "capability_name": package.spec.name,
-                "sandbox": sandbox_result.model_dump(mode="json"),
-                "message": "Generated capability candidate failed sandbox verification.",
-            }
-
-        decision = services.permission_gate.evaluate_capability_install(package)
-        if not decision.allowed:
-            return {
-                "status": "refused",
-                "capability_name": package.spec.name,
-                "permission": decision.model_dump(mode="json"),
-                "sandbox": sandbox_result.model_dump(mode="json"),
-                "message": decision.user_message,
-            }
-
-        services.capability_registry.install(package, status="candidate")
-        record = services.capability_registry.get_record(package.spec.name)
-        return {
-            "status": (
-                "needs_approval"
-                if decision.requires_user_approval
-                else "installed"
-            ),
-            "capability": _capability_record_to_dict(record) if record else None,
-            "permission": decision.model_dump(mode="json"),
-            "sandbox": sandbox_result.model_dump(mode="json"),
-            "message": (
-                "Generated capability candidate is sandboxed and awaiting approval."
-                if decision.requires_user_approval
-                else "Generated capability metadata installed."
-            ),
-        }
+        return _build_capability_candidate(
+            services,
+            build_request=payload.to_build_request(),
+            deps=services.deps(payload.user_id, payload.active_context),
+            user_id=payload.user_id,
+        )
 
     @router.post("/capabilities/{capability_name}/approve")
     def approve_generated_capability(
         capability_name: str,
         payload: ApprovalInput,
     ) -> dict[str, Any]:
-        del payload
         try:
             record = services.capability_registry.approve_generated_candidate(
-                capability_name
+                capability_name,
+                user_id=payload.user_id,
+                approval_note=payload.approval_note,
             )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="capability not found") from exc
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
         return {
             "status": "approved",
             "capability": _capability_record_to_dict(record),
@@ -389,12 +404,16 @@ def create_router(services: ScoutApiServices) -> APIRouter:
 
     @router.get("/learning-artifacts")
     def list_learning_artifacts(
+        user_id: str = Query(...),
         status: str | None = Query("pending_review"),
     ) -> dict[str, Any]:
         return {
             "learning_artifacts": [
                 _learning_record_to_dict(record)
-                for record in services.learning_store.list_artifacts(status)
+                for record in services.learning_store.list_artifacts(
+                    status,
+                    user_id=user_id,
+                )
             ]
         }
 
@@ -411,6 +430,8 @@ def create_router(services: ScoutApiServices) -> APIRouter:
             )
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="learning artifact not found") from exc
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
         return {"artifact_id": artifact_id, **result}
 
     @router.post("/runtime/tick")
@@ -431,6 +452,60 @@ def create_router(services: ScoutApiServices) -> APIRouter:
         return services.background_scheduler.status()
 
     return router
+
+
+def _build_capability_candidate(
+    services: ScoutApiServices,
+    *,
+    build_request: CapabilityBuildRequest,
+    deps: ScoutDeps,
+    user_id: str,
+) -> dict[str, Any]:
+    if services.capability_registry.get_record(build_request.capability_name) is not None:
+        raise HTTPException(
+            status_code=409,
+            detail=f"capability name already exists: {build_request.capability_name}",
+        )
+    try:
+        package = services.code_builder.build(build_request, deps)
+    except ValueError as exc:
+        return {"status": "refused", "message": str(exc)}
+
+    sandbox_result = services.sandbox.verify(package)
+    sandbox_payload = sandbox_result.model_dump(mode="json")
+    if not sandbox_result.passed:
+        return {
+            "status": "sandbox_failed",
+            "capability_name": package.spec.name,
+            "sandbox": sandbox_payload,
+            "message": "Generated capability candidate failed sandbox verification.",
+        }
+
+    decision = services.permission_gate.evaluate_capability_install(package)
+    if not decision.allowed:
+        return {
+            "status": "refused",
+            "capability_name": package.spec.name,
+            "permission": decision.model_dump(mode="json"),
+            "sandbox": sandbox_payload,
+            "message": decision.user_message,
+        }
+
+    try:
+        record = services.capability_registry.install_generated_candidate(
+            package,
+            owner_user_id=user_id,
+            sandbox_receipt=sandbox_payload,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {
+        "status": "needs_approval",
+        "capability": _capability_record_to_dict(record),
+        "permission": decision.model_dump(mode="json"),
+        "sandbox": sandbox_payload,
+        "message": "Generated capability candidate is sandboxed and awaiting approval.",
+    }
 
 
 def create_app(
@@ -500,6 +575,7 @@ def _learning_record_to_dict(record: Any) -> dict[str, Any]:
         "status": record.status,
         "source_workflow_id": record.source_workflow_id,
         "created_at": record.created_at.isoformat(),
+        "user_id": record.user_id,
     }
 
 
@@ -509,6 +585,10 @@ def _capability_record_to_dict(record: Any) -> dict[str, Any]:
         "status": record.status,
         "source": record.source,
         "installed_at": record.installed_at,
+        "owner_user_id": record.owner_user_id,
+        "package_hash": record.package_hash,
+        "approved_by": record.approved_by,
+        "runtime_available": record.runtime_available,
     }
 
 
