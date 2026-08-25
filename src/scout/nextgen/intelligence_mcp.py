@@ -19,6 +19,7 @@ from scout.nextgen.intelligence_gateway import (
     GatewayValidationResult,
     IntelligenceRequest,
     IntelligenceResponse,
+    IntelligenceTaskType,
     PydanticContractGateway,
     WorkspaceBinding,
     degraded_intelligence_response,
@@ -27,6 +28,10 @@ from scout.schemas.base import SchemaModel
 
 MCP_PROTOCOL_VERSION = "2026-07-28"
 INTELLIGENCE_TOOL_NAME = "scout_analyze_route_terrain_candidate"
+DEEP_RESEARCH_TOOL_NAME = "scout_deep_research_candidate"
+INTELLIGENCE_TOOL_NAMES = frozenset(
+    {INTELLIGENCE_TOOL_NAME, DEEP_RESEARCH_TOOL_NAME}
+)
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 _SHELL_EXECUTABLES = frozenset(
     {"sh", "bash", "zsh", "fish", "dash", "cmd", "cmd.exe", "powershell", "pwsh"}
@@ -117,7 +122,7 @@ class IntelligenceMcpClientConfig:
 
 
 class IntelligenceMcpStdioClient:
-    """Single-process stdio MCP client with a one-tool allowlist."""
+    """Single-process stdio MCP client with a bounded tool allowlist."""
 
     def __init__(self, config: IntelligenceMcpClientConfig) -> None:
         self.config = config
@@ -159,7 +164,7 @@ class IntelligenceMcpStdioClient:
             result = self._rpc(
                 "tools/call",
                 {
-                    "name": INTELLIGENCE_TOOL_NAME,
+                    "name": _tool_name_for_request(request),
                     "arguments": {"request": request.model_dump(mode="json")},
                 },
             )
@@ -486,8 +491,16 @@ def _tool_error_message(result: dict[str, Any]) -> str | None:
     return None
 
 
+def _tool_name_for_request(request: IntelligenceRequest) -> str:
+    if request.task_type is IntelligenceTaskType.DEEP_RESEARCH:
+        return DEEP_RESEARCH_TOOL_NAME
+    return INTELLIGENCE_TOOL_NAME
+
+
 __all__ = [
+    "DEEP_RESEARCH_TOOL_NAME",
     "INTELLIGENCE_TOOL_NAME",
+    "INTELLIGENCE_TOOL_NAMES",
     "IntelligenceGatewayExecution",
     "IntelligenceMcpClientConfig",
     "IntelligenceMcpCommandRejected",

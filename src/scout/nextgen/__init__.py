@@ -22,10 +22,18 @@ from scout.nextgen.intelligence_gateway import (
     PydanticContractGateway,
     StubIntelligenceGateway,
     Uncertainty,
+    WebEvidenceProvenance,
+    WebResearchScope,
     WorkspaceBinding,
     degraded_intelligence_response,
     intelligence_response_hash,
     seal_intelligence_response,
+)
+from scout.nextgen.web_research import (
+    BoundedLiveWebResearchTools,
+    WebResearchArtifact,
+    WebResearchRun,
+    WebSearchHit,
 )
 from scout.nextgen.intelligence_mcp import (
     IntelligenceGatewayExecution,
@@ -151,6 +159,7 @@ __all__ = [
     "AUTHORITATIVE_STATE_SURFACES",
     "BackendInferenceFailure",
     "BackendInferenceResult",
+    "BoundedLiveWebResearchTools",
     "CapabilityBroker",
     "CapabilityGrant",
     "CloudEscalationPolicy",
@@ -229,6 +238,11 @@ __all__ = [
     "SyntheticCorpusBundle",
     "SyntheticScenarioGenerator",
     "Uncertainty",
+    "WebEvidenceProvenance",
+    "WebResearchArtifact",
+    "WebResearchRun",
+    "WebResearchScope",
+    "WebSearchHit",
     "WorkspaceBinding",
     "WorkspaceAnswerBehavior",
     "WorkspaceAuthority",

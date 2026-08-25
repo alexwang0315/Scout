@@ -5,12 +5,13 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import ipaddress
+import socket
 from collections import OrderedDict
 from datetime import UTC, datetime
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from pydantic_ai import RunContext
 from pydantic_ai.exceptions import ModelRetry
@@ -32,6 +33,7 @@ def _validate_url(
     *,
     allowed_domains: list[str] | None,
     blocked_domains: list[str] | None,
+    resolve_hostname: bool = False,
 ) -> None:
     parsed = urlsplit(url)
     hostname = (parsed.hostname or "").lower()
@@ -49,6 +51,12 @@ def _validate_url(
         _domain_matches(hostname, pattern) for pattern in allowed_domains
     ):
         raise ValueError(f"Web fetch host is not allowed: {hostname}")
+    if resolve_hostname:
+        try:
+            port = parsed.port or (443 if parsed.scheme == "https" else 80)
+        except ValueError as exc:
+            raise ValueError("Web fetch URL contains an invalid port") from exc
+        _require_public_dns_resolution(hostname, port)
 
 
 def _public_hostname(hostname: str) -> bool:
@@ -66,6 +74,79 @@ def _public_hostname(hostname: str) -> bool:
     return address.is_global
 
 
+def _require_public_dns_resolution(hostname: str, port: int) -> None:
+    try:
+        addresses = socket.getaddrinfo(hostname, port, type=socket.SOCK_STREAM)
+    except socket.gaierror as exc:
+        raise ValueError(f"Web fetch host could not be resolved: {hostname}") from exc
+    resolved = {
+        str(address[4][0]).split("%", 1)[0]
+        for address in addresses
+        if address[4]
+    }
+    if not resolved:
+        raise ValueError(f"Web fetch host resolved to no addresses: {hostname}")
+    non_public = sorted(
+        address
+        for address in resolved
+        if not ipaddress.ip_address(address).is_global
+    )
+    if non_public:
+        raise ValueError(
+            "Web fetch host must resolve only to public IP addresses: "
+            + ", ".join(non_public)
+        )
+
+
+class _SafeRedirectHandler(HTTPRedirectHandler):
+    def __init__(
+        self,
+        *,
+        allowed_domains: list[str] | None,
+        blocked_domains: list[str] | None,
+        resolve_hostname: bool,
+    ) -> None:
+        super().__init__()
+        self.allowed_domains = allowed_domains
+        self.blocked_domains = blocked_domains
+        self.resolve_hostname = resolve_hostname
+
+    def redirect_request(
+        self,
+        req: Request,
+        fp: Any,
+        code: int,
+        msg: str,
+        headers: Any,
+        newurl: str,
+    ) -> Request | None:
+        _validate_url(
+            newurl,
+            allowed_domains=self.allowed_domains,
+            blocked_domains=self.blocked_domains,
+            resolve_hostname=self.resolve_hostname,
+        )
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
+def _open_url(
+    request: Request,
+    *,
+    timeout_seconds: float | None,
+    allowed_domains: list[str] | None,
+    blocked_domains: list[str] | None,
+    resolve_hostname: bool,
+) -> Any:
+    opener = build_opener(
+        _SafeRedirectHandler(
+            allowed_domains=allowed_domains,
+            blocked_domains=blocked_domains,
+            resolve_hostname=resolve_hostname,
+        )
+    )
+    return opener.open(request, timeout=timeout_seconds)
+
+
 def _fetch_url(
     url: str,
     *,
@@ -73,11 +154,13 @@ def _fetch_url(
     blocked_domains: list[str] | None,
     max_content_tokens: int | None,
     timeout_seconds: float | None,
+    resolve_hostname: bool = True,
 ) -> dict[str, Any]:
     _validate_url(
         url,
         allowed_domains=allowed_domains,
         blocked_domains=blocked_domains,
+        resolve_hostname=resolve_hostname,
     )
     request = Request(
         url,
@@ -86,12 +169,19 @@ def _fetch_url(
             "User-Agent": "ScoutAI/1.0 trusted-research-fetch",
         },
     )
-    with urlopen(request, timeout=timeout_seconds) as response:
+    with _open_url(
+        request,
+        timeout_seconds=timeout_seconds,
+        allowed_domains=allowed_domains,
+        blocked_domains=blocked_domains,
+        resolve_hostname=resolve_hostname,
+    ) as response:
         final_url = response.geturl()
         _validate_url(
             final_url,
             allowed_domains=allowed_domains,
             blocked_domains=blocked_domains,
+            resolve_hostname=resolve_hostname,
         )
         if max_content_tokens is None:
             payload = response.read()

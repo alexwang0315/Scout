@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections.abc import Iterable, Mapping, Sequence
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
@@ -59,6 +60,38 @@ class GeoScope(SchemaModel):
     bbox_wgs84: tuple[float, float, float, float] | None = None
     corridor_meters: float | None = Field(default=None, ge=0, le=5000)
     crs: NonEmptyStr = "EPSG:4326"
+
+
+class WebResearchScope(SchemaModel):
+    """Server-owned network scope for one candidate-only research request."""
+
+    allowed_domains: tuple[NonEmptyStr, ...] = Field(min_length=1, max_length=32)
+    blocked_domains: tuple[NonEmptyStr, ...] = ()
+    max_search_results: int = Field(default=8, ge=1, le=50)
+    max_fetches: int = Field(default=3, ge=1, le=50)
+    max_content_characters: int = Field(default=20_000, ge=1_000, le=200_000)
+    search_timeout_seconds: float = Field(default=15.0, ge=0.25, le=120.0)
+    fetch_timeout_seconds: float = Field(default=15.0, ge=0.25, le=120.0)
+
+    @model_validator(mode="after")
+    def validate_domains(self) -> "WebResearchScope":
+        allowed = tuple(_normalized_domain(item) for item in self.allowed_domains)
+        blocked = tuple(_normalized_domain(item) for item in self.blocked_domains)
+        allowed_roots = tuple(item.removeprefix("*.") for item in allowed)
+        blocked_roots = tuple(item.removeprefix("*.") for item in blocked)
+        if len(allowed_roots) != len(set(allowed_roots)):
+            raise ValueError("web research allowed domains must be unique")
+        if len(blocked_roots) != len(set(blocked_roots)):
+            raise ValueError("web research blocked domains must be unique")
+        overlap = set(allowed_roots).intersection(blocked_roots)
+        if overlap:
+            names = ", ".join(sorted(overlap))
+            raise ValueError(
+                f"web research domains cannot be both allowed and blocked: {names}"
+            )
+        self.allowed_domains = allowed
+        self.blocked_domains = blocked
+        return self
 
 
 class WorkspaceBinding(SchemaModel):
@@ -117,6 +150,7 @@ class IntelligenceRequest(SchemaModel):
     workspace_binding: WorkspaceBinding
     capability_grant: CapabilityGrant
     geographic_scope: GeoScope | None = None
+    web_research_scope: WebResearchScope | None = None
     evidence_refs: tuple[NonEmptyStr, ...] = ()
     max_runtime_seconds: int | None = Field(default=None, ge=1)
     max_model_requests: int | None = Field(default=None, ge=10)
@@ -153,7 +187,38 @@ class IntelligenceRequest(SchemaModel):
             and self.max_runtime_seconds > grant.max_runtime_seconds
         ):
             raise ValueError("request runtime budget exceeds capability grant")
+        if self.task_type is IntelligenceTaskType.DEEP_RESEARCH:
+            if self.web_research_scope is None:
+                raise ValueError("deep_research requires a bounded web research scope")
+            required = {"web.search", "web.fetch"}
+            missing = required.difference(grant.allowed_capabilities)
+            if missing:
+                names = ", ".join(sorted(missing))
+                raise ValueError(
+                    f"deep_research capability grant is missing: {names}"
+                )
+            required_tool_calls = 1 + self.web_research_scope.max_fetches
+            if required_tool_calls > grant.max_tool_calls:
+                raise ValueError(
+                    "deep_research web scope exceeds the capability tool budget"
+                )
+        elif self.web_research_scope is not None:
+            raise ValueError("web research scope is only valid for deep_research")
         return self
+
+
+class WebEvidenceProvenance(SchemaModel):
+    query: NonEmptyStr
+    url: NonEmptyStr
+    title: NonEmptyStr
+    search_provider: NonEmptyStr
+    search_rank: int = Field(ge=1)
+    fetched_at: datetime
+    http_status: int = Field(ge=100, le=599)
+    content_type: NonEmptyStr
+    content_bytes: int = Field(ge=0)
+    truncated: bool = False
+    prompt_injection_treated_as_data: Literal[True] = True
 
 
 class Evidence(SchemaModel):
@@ -166,8 +231,19 @@ class Evidence(SchemaModel):
     resolution: str | None = None
     content_hash: NonEmptyStr
     summary: NonEmptyStr
+    web: WebEvidenceProvenance | None = None
     candidate_only: Literal[True] = True
     runtime_safety_truth: Literal[False] = False
+
+    @model_validator(mode="after")
+    def validate_web_provenance(self) -> "Evidence":
+        if self.web is None:
+            return self
+        if not self.source_type.startswith("web_"):
+            raise ValueError("web evidence must use a web_* source type")
+        if self.source_ref != self.web.url:
+            raise ValueError("web evidence source_ref must match fetched URL")
+        return self
 
 
 class Finding(SchemaModel):
@@ -559,6 +635,25 @@ def _as_utc(value: datetime) -> datetime:
     return value.astimezone(UTC)
 
 
+_DOMAIN_PATTERN = re.compile(
+    r"^(?:\*\.)?(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+"
+    r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$",
+    re.IGNORECASE,
+)
+
+
+def _normalized_domain(value: str) -> str:
+    normalized = value.strip().casefold().rstrip(".")
+    if not normalized or not _DOMAIN_PATTERN.fullmatch(normalized):
+        raise ValueError(f"invalid web research domain: {value!r}")
+    hostname = normalized.removeprefix("*.")
+    if hostname == "localhost" or hostname.endswith(
+        (".localhost", ".local", ".internal")
+    ):
+        raise ValueError(f"private web research domain is forbidden: {value!r}")
+    return normalized
+
+
 __all__ = [
     "CapabilityBroker",
     "CapabilityGrant",
@@ -578,6 +673,8 @@ __all__ = [
     "StubIntelligenceGateway",
     "Uncertainty",
     "WorkspaceBinding",
+    "WebEvidenceProvenance",
+    "WebResearchScope",
     "degraded_intelligence_response",
     "intelligence_response_hash",
     "seal_intelligence_response",
