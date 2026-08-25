@@ -1,4 +1,5 @@
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -134,13 +135,56 @@ def test_pretrip_maplibre_reuses_bounded_raster_tile_sources():
     script = MAPLIBRE_EVIDENCE_SCRIPT.read_text(encoding="utf-8")
 
     assert "function pretripMapLibreRasterLayers(view)" in html
-    assert 'layerId === "rudy-twmap"' in html
+    assert "RASTER_SOURCE_LAYER_DEFINITIONS.map(definition => definition.layerId)" in html
     assert 'layerId === "osm"' in html
+    assert "rasterTileTemplate(view, layerId)" in html
+    assert "cache_only=1" in html
+    assert 'if (!/[?&]v=/.test(url))' in html
+    assert 'if (!/[?&]fallback=/.test(url))' in html
     assert "rasterLayers: pretripMapLibreRasterLayers(state.view)" in html
     assert "function normalizeRasterLayer(" in script
     assert 'throw new Error("unsupported_raster_tile_url")' in script
     assert "rasterLayerStates" in script
     assert "bindRasterStatus()" in script
+
+
+def test_pretrip_maplibre_places_cached_cwa_imagery_above_rudy() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+
+    cwa_layers = html.split(
+        "function pretripMapLibreCwaImageLayers()", 1
+    )[1].split("function pretripMapLibreRasterLayers(view)", 1)[0]
+    raster_layers = html.split(
+        "function pretripMapLibreRasterLayers(view)", 1
+    )[1].split("function localOsmPbfVectorUrl(view)", 1)[0]
+    map_sync = html.split(
+        "function syncPretripMapLibreEvidence(view)", 1
+    )[1].split("async function activatePretripMapLibreRenderer", 1)[0]
+    svg_layer_ranks = html.split("const MAP_LAYER_RANKS = {", 1)[1].split("};", 1)[0]
+
+    assert '["satellite", "radar"].flatMap' in cwa_layers
+    assert 'control_layer_id: "cwa-weather"' in cwa_layers
+    assert 'source_type: "image"' in cwa_layers
+    assert "const expectedAssetPrefix =" in cwa_layers
+    assert 'frame.assetUrl.startsWith(expectedAssetPrefix)' in cwa_layers
+    assert 'network_scope: "same_origin"' in cwa_layers
+    assert 'render_position: "overlay"' in cwa_layers
+    assert "candidate_only: true" in cwa_layers
+    assert "runtime_safety_truth: false" in cwa_layers
+    assert "...pretripMapLibreCwaImageLayers()" in raster_layers
+    assert "setRasterLayers(pretripMapLibreRasterLayers(view))" in map_sync
+    assert '(view.cwa_qpf?.grid_cells || [])' in html
+    assert 'cell.grid_kind === cwaImageryUi.rainfallProduct' in html
+    assert 'append({...cell, source_id: cell.cell_id}, "cwa-qpf"' in html
+    assert 'render_position: "overlay"' in html
+    assert "render_color: cwaRainfallColor(cell.rainfall_mm)" in html
+    def layer_rank(layer_id: str) -> float:
+        match = re.search(rf'"{re.escape(layer_id)}":\s*([0-9.]+)', svg_layer_ranks)
+        assert match is not None
+        return float(match.group(1))
+
+    assert layer_rank("weather-api") < layer_rank("cwa-qpf")
+    assert layer_rank("cwa-qpf") < layer_rank("cwa-weather")
 
 
 def test_pretrip_maplibre_binds_mileage_hints_box_zoom_and_terrain_images():
@@ -844,6 +888,10 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert 'data-layer="geology"' in html
     assert 'data-layer="topo-5k"' in html
     assert 'data-layer="forest"' in html
+    assert 'data-layer="historical-map" data-layer-contract="auxiliary"' in html
+    assert 'data-historical-map-source' in html
+    assert 'data-historical-map-fetch' in html
+    assert 'document.querySelector("[data-historical-map-fetch]")' in html
     assert 'data-layer="osm"' in html
     assert 'data-layer="terrain"' in html
     assert 'data-layer="terrain" checked' in html
@@ -870,7 +918,7 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert "RASTER_TILE_CACHE_BUST" in html
     assert "function rasterTileCacheBustedUrl" in html
     assert "/admin/tiles/osm/{z}/{x}/{y}.png" in html
-    assert "/admin/tiles/osm/{z}/{x}/{y}.png?fallback=offline" in html
+    assert "/admin/tiles/osm/{z}/{x}/{y}.png?fallback=transparent" in html
     assert "function osmTileTemplate" in html
     assert "function isLocalOsmTileMode" in html
     assert 'return requested === "public" ? OSM_PUBLIC_TILE_URL_TEMPLATE : OSM_LOCAL_TILE_URL_TEMPLATE' in html
@@ -878,6 +926,11 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert "function tileCountForZoom" in html
     assert "tileCountForZoom(bounds, zoom) > maxTiles" in html
     assert "function rasterTileTemplate" in html
+    assert 'id="refreshRasterTiles"' in html
+    assert "function toggleRasterRemoteRefresh" in html
+    assert 'params.set("refresh", "1")' in html
+    assert 'params.set("native", "1")' in html
+    assert 'params.set("cache_only", "1")' in html
     assert "function rasterLayerFor" in html
     assert "RASTER_SOURCE_LAYER_DEFINITIONS" in html
     assert "RASTER_OVERLAY_LAYER_DEFINITIONS" in html
@@ -888,6 +941,13 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert 'sourceId: "happyman_rudy"' in html
     assert 'sourceId: "happyman_geo2016"' in html
     assert 'sourceId: "happyman_forest"' in html
+    assert 'sourceId: "sinica_jm50k_1916"' in html
+    assert "function historicalMapStorageKey" in html
+    assert "`scout.historicalMapSource.${PROJECT_ID}`" in html
+    assert "localStorage.setItem(historicalMapStorageKey(), requested)" in html
+    assert "function selectedHistoricalMapDefinition" in html
+    assert "definition.cacheLayerId || layerId" in html
+    assert "function handleHistoricalMapSourceChange" in html
     assert "function rasterZoomRangeFor" in html
     assert "function chooseRasterZoom" in html
     assert "const preferredZoom = zoom ?? chooseRasterZoom(view, bounds, RASTER_MAX_TILES, layerId)" in html
@@ -930,6 +990,7 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert "function rasterTileCoverage" in html
     assert "function rasterBoundsFor" in html
     assert "function isDirectRuntimeRasterLayer" in html
+    assert "layer?.local_raster_tile_url_template" in html
     assert 'layer?.raster_tile_delivery === "direct_wmts_runtime"' in html
     assert '["wmts_tile", "wmts_kvp_tile", "xyz_tile"].includes(sourceKind)' in html
     assert "function boundsIntersect" in html
@@ -1171,7 +1232,7 @@ def test_weather_rudy_twmap_uses_scout_cache_proxy_instead_of_direct_wmts():
 
     assert 'sourceKind: "scout_proxy_tile"' in definition
     assert 'sourceId: "happyman_rudy_twmap"' in definition
-    assert 'cacheLayerId: "imagery"' in definition
+    assert 'cacheLayerId: "rudy-twmap"' in definition
     assert 'initialMaxZoom: 13' in definition
     assert 'preparedMaxZoom: 14' in definition
     assert 'maxZoom: 20' in definition
@@ -1188,9 +1249,10 @@ def test_weather_rudy_twmap_uses_scout_cache_proxy_instead_of_direct_wmts():
     assert 'document.getElementById("zoomIn")' in html
     assert 'state.zoom >= mapInteractionMaxZoom() - 0.001' in html
     assert 'layerInputChecked("rudy-twmap")' in html
-    assert 'if (definition.sourceKind === "scout_proxy_tile")' in html
-    assert '"admin/tiles/imagery"' in html
-    assert "source_id=${encodeURIComponent(definition.sourceId)}&native=1" in html
+    assert "rasterTileTemplate(view, definition.layerId)" in html
+    assert 'params.set("cache_only", "1")' in html
+    assert 'params.set("native", "1")' in html
+    assert 'params.set("refresh", "1")' in html
 
 
 def test_pretrip_admin_page_renders_overpass_evidence_layer_and_tree():

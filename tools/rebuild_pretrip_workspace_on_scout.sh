@@ -114,7 +114,7 @@ if [[ -n "${SCOUT_PRETRIP_RASTER_TILE_CACHE_ROOT:-}" && -z "${SCOUT_ADMIN_RASTER
 fi
 BACKUP_ROOT="${SCOUT_PRETRIP_BACKUP_ROOT:-${WORKSPACE_ROOT}}"
 LOG_ROOT="${SCOUT_PRETRIP_REBUILD_LOG_ROOT:-/tmp}"
-LAYERS="${SCOUT_PRETRIP_LAYERS:-osm,overpass,terrain,risk-score,risk-ribbon,risk-heatmap,risk-delta,cwa-qpf,soil-moisture,antecedent-rain,cwa-weather,imagery,weather,reference-tracks,route,segments,checkpoints,pois,hazards,corridors,retreat,route-notes}"
+LAYERS="${SCOUT_PRETRIP_LAYERS:-imagery,osm,overpass,terrain,risk-score,risk-ribbon,risk-heatmap,risk-delta,cwa-qpf,soil-moisture,antecedent-rain,cwa-weather,weather,reference-tracks,route,segments,checkpoints,mcp,pois,hazards,corridors,retreat,route-notes}"
 SCOUT_ENV_FILE="${SCOUT_ENV_FILE:-}"
 if [[ -z "${SCOUT_ENV_FILE}" ]]; then
   for candidate in "./.env" "/home/alexwang0315/scout-fusion/.env" "/data/scout/config/.env"; do

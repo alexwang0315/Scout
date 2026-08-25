@@ -132,6 +132,103 @@ def test_seeds_wmts_imagery_tile_cache_with_fixture_fetcher(tmp_path):
     assert cached_path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
 
 
+def test_wmts_imagery_tile_cache_retries_transient_fetch_failures(tmp_path):
+    source = imagery_source_for_project({"imagery_source_id": "happyman_rudy"})
+    plan = build_imagery_tile_cache_plan(
+        {
+            "west": 121.2,
+            "south": 24.03,
+            "east": 121.2,
+            "north": 24.03,
+        },
+        project_id="chilai_nanhua_day1",
+        layer_id="rudy",
+        imagery_source=source,
+        cache_root=tmp_path / "imagery-tiles",
+        min_zoom=12,
+        max_zoom=12,
+    )
+    calls = 0
+
+    def flaky_fetch(imagery_source, z, x, y):
+        nonlocal calls
+        calls += 1
+        if calls < 3:
+            raise TimeoutError("temporary WMTS timeout")
+        return RemoteImageryTile(
+            body=b"\x89PNG\r\n\x1a\nwmts-fixture",
+            media_type="image/png",
+            source_id=imagery_source["source_id"],
+            url="https://example.test/wmts",
+            body_sha256="fixture-hash",
+        )
+
+    summary = seed_imagery_tile_cache(
+        plan,
+        imagery_source=source,
+        provider_allows_offline_prefetch=True,
+        dry_run=False,
+        fetch_tile=flaky_fetch,
+        max_fetch_attempts=3,
+        retry_backoff_seconds=0,
+    )
+
+    assert summary["status"] == "seed_complete"
+    assert summary["tiles_written"] == 1
+    assert summary["tiles_failed"] == 0
+    assert summary["tile_fetch_attempts"] == 3
+    assert summary["tiles_recovered_after_retry"] == 1
+    assert summary["max_fetch_attempts"] == 3
+
+
+def test_wmts_imagery_tile_cache_default_recovers_after_three_timeouts(tmp_path):
+    source = imagery_source_for_project({"imagery_source_id": "happyman_rudy"})
+    plan = build_imagery_tile_cache_plan(
+        {
+            "west": 121.2,
+            "south": 24.03,
+            "east": 121.2,
+            "north": 24.03,
+        },
+        project_id="chilai_nanhua_day1",
+        layer_id="rudy",
+        imagery_source=source,
+        cache_root=tmp_path / "imagery-tiles",
+        min_zoom=12,
+        max_zoom=12,
+    )
+    calls = 0
+
+    def flaky_fetch(imagery_source, z, x, y):
+        nonlocal calls
+        calls += 1
+        if calls < 5:
+            raise TimeoutError("temporary WMTS timeout")
+        return RemoteImageryTile(
+            body=b"\x89PNG\r\n\x1a\nwmts-fixture",
+            media_type="image/png",
+            source_id=imagery_source["source_id"],
+            url="https://example.test/wmts",
+            body_sha256="fixture-hash",
+        )
+
+    summary = seed_imagery_tile_cache(
+        plan,
+        imagery_source=source,
+        provider_allows_offline_prefetch=True,
+        dry_run=False,
+        fetch_tile=flaky_fetch,
+        retry_backoff_seconds=0,
+    )
+
+    assert summary["status"] == "seed_complete"
+    assert summary["tiles_written"] == 1
+    assert summary["tiles_failed"] == 0
+    assert summary["tile_fetch_attempts"] == 5
+    assert summary["tiles_recovered_after_retry"] == 1
+    assert summary["max_fetch_attempts"] == 5
+
+
 def test_wmts_imagery_tile_cache_uses_30_day_ttl(tmp_path):
     source = imagery_source_for_project({"imagery_source_id": "happyman_rudy"})
     plan = build_imagery_tile_cache_plan(
@@ -378,6 +475,33 @@ def test_raster_tile_proxy_detects_cached_jpeg_media_type(tmp_path):
 
     assert payload.media_type == "image/jpeg"
     assert payload.source == "local_cache"
+
+
+def test_raster_tile_proxy_failed_explicit_refresh_does_not_retry_remote(tmp_path):
+    source = imagery_source_for_project({"imagery_source_id": "nlsc_photo2"})
+    calls = 0
+
+    def failing_fetcher(*_args, **_kwargs):
+        nonlocal calls
+        calls += 1
+        raise TimeoutError("WMTS unavailable")
+
+    payload = load_or_build_raster_tile_payload(
+        "chilai_nanhua_day1",
+        "imagery",
+        5,
+        26,
+        13,
+        cache_root=tmp_path,
+        imagery_source=source,
+        allow_remote_fetch=True,
+        prefer_native_zoom=True,
+        force_remote_refresh=True,
+        remote_fetcher=failing_fetcher,
+    )
+
+    assert calls == 1
+    assert payload.source == "transparent_remote_error_fallback"
 
 
 def test_raster_tile_proxy_serves_cropped_parent_cache_fallback(tmp_path):

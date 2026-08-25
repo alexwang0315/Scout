@@ -247,6 +247,40 @@
       padding: 4px 6px;
       white-space: nowrap;
     }
+    .historical-map-control {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: minmax(116px, .65fr) minmax(0, 1.35fr);
+      gap: 6px;
+    }
+    .historical-map-control label {
+      min-width: 0;
+      white-space: normal;
+    }
+    .historical-map-control select {
+      flex: 1 1 auto;
+      width: auto;
+      min-width: 0;
+      border: 0;
+      background: transparent;
+      color: var(--ink);
+      font: inherit;
+    }
+    .historical-map-control label span {
+      flex: 0 0 auto;
+    }
+    .historical-map-theme-actions {
+      min-width: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 28px;
+      gap: 6px;
+    }
+    .historical-map-status {
+      grid-column: 1 / -1;
+      min-height: 18px;
+      color: var(--muted);
+      font-size: 10px;
+    }
     .tool-disclosure {
       border-top: 1px solid var(--line);
       padding-top: 4px;
@@ -321,7 +355,7 @@
     }
     .layer-menu-header {
       display: flex;
-      align-items: baseline;
+      align-items: center;
       justify-content: space-between;
       gap: 10px;
       margin-bottom: 6px;
@@ -337,6 +371,30 @@
     .layer-menu-header small {
       font-size: 11px;
       line-height: 1.25;
+    }
+    .layer-menu-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .layer-refresh-button {
+      width: 28px;
+      height: 28px;
+      display: inline-grid;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--ink);
+      padding: 0;
+      font-size: 17px;
+      line-height: 1;
+      cursor: pointer;
+    }
+    .layer-refresh-button[aria-pressed="true"] {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: var(--accent-soft);
     }
     .layer-preset-row {
       display: grid;
@@ -1739,7 +1797,10 @@
                 <div class="layer-menu-panel" aria-label="Map layer controls">
                   <div class="layer-menu-header">
                     <span>Layers</span>
-                    <small>map evidence</small>
+                    <div class="layer-menu-header-actions">
+                      <small>map evidence</small>
+                      <button id="refreshRasterTiles" class="layer-refresh-button" type="button" title="Update checked raster layers from WMTS" aria-label="Update checked raster layers from WMTS" aria-pressed="false">↻</button>
+                    </div>
                   </div>
                   <div class="layer-preset-row" aria-label="Layer presets">
                     <button class="layer-preset-button" type="button" data-layer-preset="risk-review">Risk Review</button>
@@ -1758,6 +1819,14 @@
                     <label title="Taiwan geology 2016 layer"><input type="checkbox" data-layer="geology"> Geology</label>
                     <label title="Taiwan 1/5000 topographic layer"><input type="checkbox" data-layer="topo-5k"> Topo 5K</label>
                     <label title="Taiwan forest compartment boundary layer"><input type="checkbox" data-layer="forest"> Forest</label>
+                    <div class="historical-map-control" role="group" aria-label="Historical map theme">
+                      <label title="Historical map comparison layer"><input type="checkbox" data-layer="historical-map" data-layer-contract="auxiliary"> 古地圖</label>
+                      <div class="historical-map-theme-actions">
+                        <label title="Historical map theme"><span>主題</span><select data-historical-map-source aria-label="Historical map theme"></select></label>
+                        <button class="layer-refresh-button" type="button" data-historical-map-fetch title="Update selected historical map and cache it in this workspace" aria-label="Update selected historical map and cache it in this workspace" aria-pressed="false">↻</button>
+                      </div>
+                      <output class="historical-map-status" data-historical-map-status aria-live="polite">蕃地 1916 · cache only</output>
+                    </div>
                     <label title="OpenStreetMap layer"><input type="checkbox" data-layer="osm"> OSM</label>
                     <label title="Terrain layer"><input type="checkbox" data-layer="terrain" checked> Terrain</label>
                     <label title="Scout Risk Engine pretrip risk score point layer"><input type="checkbox" data-layer="risk-score"> Risk pts</label>
@@ -1942,11 +2011,11 @@
             <span>Prepare Layers</span>
             <small>workspace job</small>
           </div>
-          <p class="import-gpx-copy">LayerPreparationJob（圖層準備工作）checks local map, OSM, Overpass, DEM, weather, and reference evidence for this pre-trip workspace. Imagery tiles（影像圖磚）are displayed from WMTS at runtime and are not prepared here.</p>
+          <p class="import-gpx-copy">LayerPreparationJob（圖層準備工作）prepares map, OSM, DEM, weather, reference evidence, and the route raster cache in this workspace. Weather and geology can still be updated after preparation.</p>
           <form id="prepareLayersForm" class="import-gpx-form">
             <div class="import-gpx-field">
               <label for="prepareLayersList">Layer ids</label>
-              <input id="prepareLayersList" type="text" autocomplete="off" value="osm,overpass,terrain,weather,reference-tracks,route,segments,checkpoints">
+              <input id="prepareLayersList" type="text" autocomplete="off" value="imagery,osm,overpass,terrain,risk-score,risk-ribbon,risk-heatmap,risk-delta,cwa-qpf,soil-moisture,antecedent-rain,cwa-weather,weather,reference-tracks,route,segments,checkpoints,mcp,pois,hazards,corridors,retreat,route-notes">
               <small>Comma-separated ids; aliases dem/dtm map to terrain.</small>
             </div>
             <div class="import-gpx-grid">
@@ -2270,7 +2339,7 @@
     const TERRAIN_FALLBACK_CELL_GAP_PX = 1;
     const MAP_ZOOM_STEP_FACTOR = 1.25;
     const OSM_PUBLIC_TILE_URL_TEMPLATE = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-    const OSM_LOCAL_TILE_URL_TEMPLATE = `${apiBase()}/admin/tiles/osm/{z}/{x}/{y}.png?fallback=offline`;
+    const OSM_LOCAL_TILE_URL_TEMPLATE = `${apiBase()}/admin/tiles/osm/{z}/{x}/{y}.png?fallback=transparent`;
     const OSM_TILE_URL_TEMPLATE = OSM_PUBLIC_TILE_URL_TEMPLATE;
     const OSM_TARGET_ZOOM = 17;
     const OSM_MAX_TILES = 64;
@@ -2279,7 +2348,8 @@
     const OSM_MIN_ZOOM = 8;
     const OSM_MAX_ZOOM = 20;
     const OSM_TILE_CACHE_BUST = "offline-fallback-v13";
-    const RASTER_TILE_CACHE_BUST = "wmts-runtime-v1";
+    const RASTER_TILE_CACHE_BUST = "workspace-cache-v2";
+    const RASTER_WORKSPACE_CACHE_QUERY = "cache_only=1";
     const RASTER_TILE_SWAP_TIMEOUT_MS = 12000;
     const OSM_ATTRIBUTION = "OpenStreetMap contributors";
     const HAPPYMAN_WMTS_ENDPOINT = "https://tile.happyman.idv.tw/mp/service";
@@ -2294,10 +2364,37 @@
       minZoom: 5,
       maxZoom: 20
     };
+    const HISTORICAL_MAP_LAYER_ID = "historical-map";
+    const DEFAULT_HISTORICAL_MAP_SOURCE_ID = "sinica_jm50k_1916";
+    const HISTORICAL_MAP_SOURCE_DEFINITIONS = Object.freeze([
+      {sourceId: "sinica_jm20k_1904", cacheLayerId: "historical-jm20k-1904", label: "Fortress 1904", labelZh: "堡圖 1904", minZoom: 5, maxZoom: 18, opacity: 0.9, attribution: "Academia Sinica Taiwan historical maps"},
+      {sourceId: "sinica_jm20k_1904_triangulation", cacheLayerId: "historical-triangulation-1904", label: "Triangulation 1904", labelZh: "三角點 1904", minZoom: 5, maxZoom: 16, opacity: 0.86, attribution: "Academia Sinica Taiwan historical maps"},
+      {sourceId: "sinica_jm50k_1916", cacheLayerId: "historical-fandi-1916", label: "Aboriginal Territory 1916", labelZh: "蕃地 1916", minZoom: 5, maxZoom: 17, opacity: 0.9, attribution: "Academia Sinica Taiwan historical maps"},
+      {sourceId: "sinica_jm20k_1921", cacheLayerId: "historical-jm20k-1921", label: "Fortress 1921", labelZh: "堡圖 1921", minZoom: 5, maxZoom: 18, opacity: 0.9, attribution: "Academia Sinica Taiwan historical maps"},
+      {sourceId: "sinica_jm50k_1924", cacheLayerId: "historical-jm50k-1924", label: "Land Survey 1924", labelZh: "陸測 1924", minZoom: 5, maxZoom: 17, opacity: 0.9, attribution: "Academia Sinica Taiwan historical maps"},
+      {sourceId: "sinica_jm50k_1924_new", cacheLayerId: "historical-jm50k-1924-new", label: "Land Survey 1924 new", labelZh: "陸測 1924 新", minZoom: 5, maxZoom: 17, opacity: 0.9, attribution: "Academia Sinica Taiwan historical maps"},
+      {sourceId: "sinica_ttfb3_0603", cacheLayerId: "historical-shinko-forest", label: "Shinko Forest", labelZh: "新港郡林野圖", minZoom: 5, maxZoom: 19, opacity: 0.88, attribution: "Academia Sinica Taiwan historical maps"},
+      {sourceId: "sinica_ttfb3_0602", cacheLayerId: "historical-kanzan-forest", label: "Kanzan Forest", labelZh: "關山郡林野圖", minZoom: 5, maxZoom: 19, opacity: 0.88, attribution: "Academia Sinica Taiwan historical maps"},
+      {sourceId: "sinica_ttfb3_0601", cacheLayerId: "historical-taito-forest", label: "Taito Forest", labelZh: "台東郡林野圖", minZoom: 5, maxZoom: 19, opacity: 0.88, attribution: "Academia Sinica Taiwan historical maps"},
+      {sourceId: "sinica_tm50k_1956", cacheLayerId: "historical-tm50k-1956", label: "Taiwan 1:50K 1956", labelZh: "老五萬 1956", minZoom: 5, maxZoom: 17, opacity: 0.9, attribution: "Academia Sinica Taiwan historical maps"},
+      {sourceId: "sinica_tm50k_1966", cacheLayerId: "historical-water-1966", label: "Water Resources 1966", labelZh: "水利 1966", minZoom: 5, maxZoom: 18, opacity: 0.88, attribution: "Academia Sinica Taiwan historical maps"},
+      {sourceId: "sinica_tm25k_1989", cacheLayerId: "historical-economic-1989", label: "Economic Map 1989", labelZh: "經建一版 1989", minZoom: 5, maxZoom: 15, opacity: 0.9, attribution: "Academia Sinica Taiwan historical maps"},
+      {sourceId: "happyman_tri1999", cacheLayerId: "historical-lin-1999", label: "Lin Mountains 1999", labelZh: "林崇雄百岳圖 1999", minZoom: 5, maxZoom: 15, opacity: 0.86, attribution: "Happyman / Lin Chung-Hsiung"},
+      {sourceId: "happyman_tw5k2000", cacheLayerId: "historical-tw5k-2000", label: "TW5K 2000", labelZh: "TW5K 2000", minZoom: 5, maxZoom: 20, opacity: 0.9, attribution: "Happyman WMTS"},
+      {sourceId: "happyman_tw25k2001", cacheLayerId: "historical-economic-2001", label: "Economic Map 2001", labelZh: "經建三版 2001", minZoom: 10, maxZoom: 17, opacity: 0.9, attribution: "Happyman / Academia Sinica"}
+    ].map(definition => Object.freeze({
+      layerId: HISTORICAL_MAP_LAYER_ID,
+      sourceKind: "scout_proxy_tile",
+      ...definition
+    })));
+    const HISTORICAL_MAP_SOURCE_BY_ID = Object.freeze(Object.fromEntries(
+      HISTORICAL_MAP_SOURCE_DEFINITIONS.map(definition => [definition.sourceId, definition])
+    ));
     const RASTER_SOURCE_LAYER_DEFINITIONS = [
       {layerId: "imagery", sourceId: "nlsc_photo2", label: "Imagery", sourceKind: "wmts_tile", urlTemplate: "https://wmts.nlsc.gov.tw/wmts/PHOTO2/default/EPSG:3857/{z}/{y}/{x}", tileOrder: "z_y_x", minZoom: 5, maxZoom: 19, opacity: 0.92},
+      {...HISTORICAL_MAP_SOURCE_BY_ID[DEFAULT_HISTORICAL_MAP_SOURCE_ID]},
       {layerId: "rudy", sourceId: "happyman_rudy", label: "Rudy", wmtsLayer: "rudy", opacity: 0.94, ...HAPPYMAN_WMTS_BASE},
-      {layerId: "rudy-twmap", sourceId: "happyman_rudy_twmap", label: "Rudy+TW", sourceKind: "scout_proxy_tile", cacheLayerId: "imagery", initialMaxZoom: 13, preparedMaxZoom: 14, minZoom: 5, maxZoom: 20, opacity: 0.9},
+      {layerId: "rudy-twmap", sourceId: "happyman_rudy_twmap", label: "Rudy+TW", sourceKind: "scout_proxy_tile", cacheLayerId: "rudy-twmap", initialMaxZoom: 13, preparedMaxZoom: 14, minZoom: 5, maxZoom: 20, opacity: 0.9},
       {layerId: "relief", sourceId: "happyman_colorrelief", label: "Relief", wmtsLayer: "colorrelief", opacity: 0.58, ...HAPPYMAN_WMTS_BASE},
       {layerId: "geology", sourceId: "happyman_geo2016", label: "Geology", wmtsLayer: "geo2016", opacity: 0.52, ...HAPPYMAN_WMTS_BASE},
       {layerId: "topo-5k", sourceId: "happyman_tw5k2000", label: "Topo 5K", wmtsLayer: "tw5k2000", opacity: 0.82, ...HAPPYMAN_WMTS_BASE},
@@ -2311,7 +2408,7 @@
       "mcp-review": ["imagery", "osm", "route", "checkpoints", "mcp", "boss-points", "route-notes", "pois", "hazards", "overpass"],
       "route-clean": ["imagery", "osm", "route", "reference-tracks", "retreat", "segments", "checkpoints"],
       "debug-replay": ["imagery", "osm", "route", "reference-tracks", "segments", "checkpoints", "events", "overpass", "cwa-qpf", "soil-moisture", "antecedent-rain", "cwa-weather", "mcp", "boss-points"],
-      "raster-check": ["imagery", "rudy", "rudy-twmap", "relief", "geology", "topo-5k", "forest", "osm", "route"]
+      "raster-check": ["imagery", "historical-map", "rudy", "rudy-twmap", "relief", "geology", "topo-5k", "forest", "osm", "route"]
     };
     const DETAIL_TAB_IDS = new Set(["pre_trip_planning", "post_analysis", "review_workspace", "import_gpx", "wearables", "agent_skills"]);
     const EVIDENCE_TREE_TABS = [
@@ -2353,7 +2450,10 @@
         reason: "renderer_not_initialized",
       }),
       mapLibreRenderer: null,
-      mapLibreLoadResult: null
+      mapLibreLoadResult: null,
+      historicalMapSourceId: initialHistoricalMapSourceId(),
+      rasterRemoteRefreshEnabled: false,
+      rasterRefreshNonce: 0
     };
     let pretripProjectBridgeSnapshot = Object.freeze({
       status: "idle",
@@ -2438,6 +2538,7 @@
     function syncPretripMapLibreEvidence(view) {
       if (!state.mapLibreRenderer || !view) return null;
       const featureCollection = pretripMapLibreFeatureCollection(view);
+      state.mapLibreRenderer.setRasterLayers(pretripMapLibreRasterLayers(view));
       state.mapLibreRenderer.setFeatureCollection(featureCollection);
       document.querySelectorAll("[data-layer]").forEach(input => {
         state.mapLibreRenderer.setLayerVisibility(input.dataset.layer, input.checked);
@@ -2570,6 +2671,7 @@
     let treeClickFocusTimer = null;
     const MAP_LAYER_RANKS = {
       imagery: 0,
+      "historical-map": 2,
       "rudy": 4,
       "rudy-twmap": 4,
       relief: 4,
@@ -2589,6 +2691,7 @@
       "risk-delta": 56,
       "soil-moisture": 57,
       "antecedent-rain": 58,
+      "weather-api": 58.5,
       "cwa-qpf": 59,
       "risk-score": 60,
       checkpoints: 62,
@@ -2598,8 +2701,7 @@
       "cwa-weather": 67,
       mcp: 68,
       "boss-points": 70,
-      events: 72,
-      "weather-api": 80
+      events: 72
     };
 
     function apiBase() {
@@ -2608,6 +2710,25 @@
       if (override) return override.replace(/\/$/, "");
       if (location.protocol === "file:") return "http://scout.local:9100";
       return "";
+    }
+    function historicalMapStorageKey() {
+      return `scout.historicalMapSource.${PROJECT_ID}`;
+    }
+    function initialHistoricalMapSourceId() {
+      const params = new URLSearchParams(window.location.search);
+      const requested = params.get("historicalMap")
+        || localStorage.getItem(historicalMapStorageKey());
+      return HISTORICAL_MAP_SOURCE_BY_ID[requested]
+        ? requested
+        : DEFAULT_HISTORICAL_MAP_SOURCE_ID;
+    }
+    function selectedHistoricalMapDefinition(sourceId = state.historicalMapSourceId) {
+      return HISTORICAL_MAP_SOURCE_BY_ID[sourceId]
+        || HISTORICAL_MAP_SOURCE_BY_ID[DEFAULT_HISTORICAL_MAP_SOURCE_ID];
+    }
+    function rasterDefinitionForLayerId(layerId) {
+      if (layerId === HISTORICAL_MAP_LAYER_ID) return selectedHistoricalMapDefinition();
+      return RASTER_SOURCE_LAYER_BY_ID[layerId];
     }
     function applyOsmCartoPalette(payload) {
       const variables = payload?.css_variables || {};
@@ -2646,7 +2767,7 @@
     }
     function rasterLayerFor(view, layerId = "imagery") {
       const explicitLayer = mapLayerById(view, layerId);
-      const definition = RASTER_SOURCE_LAYER_BY_ID[layerId];
+      const definition = rasterDefinitionForLayerId(layerId);
       if (explicitLayer.layer_id) {
         return {
           ...explicitLayer,
@@ -2657,7 +2778,28 @@
       }
       if (!definition) return mapLayerById(view, "imagery");
       const imageryLayer = mapLayerById(view, "imagery");
-      const layerManifest = imageryLayer.raster_layer_manifests?.[layerId] || {};
+      const manifestLayerId = definition.cacheLayerId || layerId;
+      const layerManifest = imageryLayer.raster_layer_manifests?.[manifestLayerId] || {};
+      if (layerId === HISTORICAL_MAP_LAYER_ID) {
+        return {
+          ...layerManifest,
+          layer_id: HISTORICAL_MAP_LAYER_ID,
+          label: definition.labelZh || definition.label,
+          source_kind: layerManifest.imagery_source_kind || definition.sourceKind,
+          imagery_source_id: definition.sourceId,
+          raster_layer_opacity: definition.opacity,
+          raster_bbox_wgs84: layerManifest.raster_bbox_wgs84
+            || imageryLayer.raster_bbox_wgs84
+            || imageryLayer.imagery_bbox_wgs84,
+          raster_tile_min_zoom: layerManifest.raster_tile_min_zoom ?? definition.minZoom,
+          raster_tile_max_zoom: layerManifest.raster_tile_max_zoom ?? definition.maxZoom,
+          attribution: definition.attribution,
+          candidate_only: true,
+          runtime_safety_truth: false,
+          operational: false,
+          visualization_only: true
+        };
+      }
       return {
         ...imageryLayer,
         ...layerManifest,
@@ -2666,6 +2808,7 @@
         source_kind: layerManifest.imagery_source_kind || definition.sourceKind,
         imagery_source_id: layerManifest.imagery_source_id || definition.sourceId,
         raster_layer_opacity: definition.opacity,
+        attribution: layerManifest.attribution || definition.attribution || imageryLayer.attribution,
         candidate_only: true,
         runtime_safety_truth: false
       };
@@ -2678,14 +2821,38 @@
     }
     function rasterSourceDefinitionFor(layerId, layer = {}) {
       const sourceId = layer.imagery_source_id || layer.source_id;
-      return RASTER_SOURCE_LAYER_BY_ID[layerId]
+      return rasterDefinitionForLayerId(layerId)
         || RASTER_SOURCE_LAYER_DEFINITIONS.find(definition => definition.sourceId === sourceId)
         || RASTER_SOURCE_LAYER_BY_ID.imagery;
     }
     function rasterTileTemplate(view, layerId = "imagery") {
       const layer = rasterLayerFor(view, layerId);
       const definition = rasterSourceDefinitionFor(layerId, layer);
-      return definition.urlTemplate || "";
+      const configuredTemplate = layerId === HISTORICAL_MAP_LAYER_ID
+        ? `/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png`
+        : layer.local_raster_tile_url_template
+          || `/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png`;
+      const cacheLayerId = definition.cacheLayerId || layerId;
+      const resolvedTemplate = apiUrlTemplate(configuredTemplate
+        .replaceAll("{project_id}", encodeURIComponent(PROJECT_ID))
+        .replaceAll("{layer_id}", encodeURIComponent(cacheLayerId)));
+      const queryIndex = resolvedTemplate.indexOf("?");
+      const path = queryIndex >= 0 ? resolvedTemplate.slice(0, queryIndex) : resolvedTemplate;
+      const query = queryIndex >= 0 ? resolvedTemplate.slice(queryIndex + 1) : RASTER_WORKSPACE_CACHE_QUERY;
+      const params = new URLSearchParams(query);
+      params.set("source_id", definition.sourceId);
+      if (state.rasterRemoteRefreshEnabled) {
+        params.delete("cache_only");
+        params.set("native", "1");
+        params.set("refresh", "1");
+        params.set("v", `${RASTER_TILE_CACHE_BUST}-${state.rasterRefreshNonce}`);
+      } else {
+        params.delete("native");
+        params.delete("refresh");
+        params.set("cache_only", "1");
+        params.set("v", RASTER_TILE_CACHE_BUST);
+      }
+      return `${path}?${params.toString()}`;
     }
     function normalizeRasterBounds(value) {
       if (!value) return null;
@@ -2703,6 +2870,8 @@
       return normalizeRasterBounds(layer.raster_bbox_wgs84 || layer.bbox_wgs84 || layer.georeference?.bbox_wgs84);
     }
     function isDirectRuntimeRasterLayer(layer) {
+      if (layer?.local_raster_tile_url_template
+        || String(layer?.raster_tile_delivery || "").startsWith("workspace_cache")) return false;
       const sourceKind = String(layer?.source_kind || layer?.imagery_source_kind || "");
       return layer?.raster_tile_delivery === "direct_wmts_runtime"
         || layer?.render_mode === "wmts_raster_tile"
@@ -2720,13 +2889,8 @@
       const layer = rasterLayerFor(view, layerId);
       const definition = rasterSourceDefinitionFor(layerId, layer);
       const parsed = parseZoomRange(layer.raster_tile_zoom_range || layer.zoom_range);
-      const forceDefinitionRange = layerId === "rudy-twmap";
-      const min = Number(forceDefinitionRange
-        ? definition?.minZoom
-        : layer.raster_tile_min_zoom ?? layer.min_zoom ?? parsed?.min ?? definition?.minZoom ?? OSM_MIN_ZOOM);
-      const max = Number(forceDefinitionRange
-        ? definition?.maxZoom
-        : layer.raster_tile_max_zoom ?? layer.max_zoom ?? parsed?.max ?? definition?.maxZoom ?? OSM_TARGET_ZOOM);
+      const min = Number(layer.raster_tile_min_zoom ?? layer.min_zoom ?? parsed?.min ?? definition?.minZoom ?? OSM_MIN_ZOOM);
+      const max = Number(layer.raster_tile_max_zoom ?? layer.max_zoom ?? parsed?.max ?? definition?.maxZoom ?? OSM_TARGET_ZOOM);
       const safeMin = Number.isFinite(min) ? clamp(Math.round(min), OSM_MIN_ZOOM, OSM_MAX_ZOOM) : OSM_MIN_ZOOM;
       const safeMax = Number.isFinite(max) ? clamp(Math.round(max), safeMin, OSM_MAX_ZOOM) : OSM_TARGET_ZOOM;
       return {min: safeMin, max: safeMax};
@@ -2737,8 +2901,12 @@
     }
     function rasterTileCacheBustedUrl(url) {
       if (url.startsWith("http://") || url.startsWith("https://")) return url;
+      const additions = [];
+      if (!/[?&]fallback=/.test(url)) additions.push("fallback=transparent");
+      if (!/[?&]v=/.test(url)) additions.push(`v=${RASTER_TILE_CACHE_BUST}`);
+      if (!additions.length) return url;
       const separator = url.includes("?") ? "&" : "?";
-      return `${url}${separator}fallback=transparent&v=${RASTER_TILE_CACHE_BUST}`;
+      return `${url}${separator}${additions.join("&")}`;
     }
     function osmTileCacheBustedUrl(url) {
       if (url.startsWith("http://") || url.startsWith("https://")) return url;
@@ -3244,42 +3412,19 @@
         .replaceAll("{x}", String(x))
         .replaceAll("{y}", String(y));
     }
-    function wmtsTileUrl(definition, z, x, y) {
-      if (definition.sourceKind === "scout_proxy_tile") {
-        const tileBase = location.protocol === "file:" ? apiBase() : location.origin;
-        const path = [
-          tileBase,
-          "admin/tiles/imagery",
-          encodeURIComponent(PROJECT_ID),
-          encodeURIComponent(definition.cacheLayerId),
-          String(z),
-          String(x),
-          `${String(y)}.png`
-        ].join("/");
-        return `${path}?source_id=${encodeURIComponent(definition.sourceId)}&native=1`;
-      }
-      if (definition.sourceKind === "wmts_kvp_tile") {
-        const params = new URLSearchParams({
-          SERVICE: "WMTS",
-          REQUEST: "GetTile",
-          VERSION: definition.wmtsVersion || "1.0.0",
-          LAYER: definition.wmtsLayer,
-          STYLE: definition.wmtsStyle || "default",
-          TILEMATRIXSET: definition.wmtsTileMatrixSet,
-          TILEMATRIX: wmtsTileMatrixId(definition, z),
-          TILEROW: String(y),
-          TILECOL: String(x),
-          FORMAT: definition.wmtsFormat || "image/png"
-        });
-        return `${definition.wmtsEndpoint}?${params.toString()}`;
-      }
-      return replaceTilePlaceholders(definition.urlTemplate || rasterTileTemplate(null, definition.layerId), z, x, y);
+    function wmtsTileUrl(definition, z, x, y, view = state.view) {
+      return replaceTilePlaceholders(
+        rasterTileTemplate(view, definition.layerId),
+        z,
+        x,
+        y
+      );
     }
     function rasterTileUrl(view, requestedLayerId, z, x, y) {
       const layer = rasterLayerFor(view, requestedLayerId);
       const resolvedLayerId = layer.layer_id || "imagery";
       const definition = rasterSourceDefinitionFor(resolvedLayerId, layer);
-      return rasterTileCacheBustedUrl(wmtsTileUrl(definition, z, x, y));
+      return rasterTileCacheBustedUrl(wmtsTileUrl(definition, z, x, y, view));
     }
     function mapLibreRasterNetworkScope(template) {
       if (String(template || "").startsWith("/")) return "same_origin";
@@ -3332,15 +3477,51 @@
         }];
       });
     }
+    function pretripMapLibreCwaImageLayers() {
+      if (!layerInputChecked("cwa-weather")) return [];
+      const expectedAssetPrefix = `/admin/pretrip/projects/${encodeURIComponent(PROJECT_ID)}/weather-imagery/`;
+      return ["satellite", "radar"].flatMap(family => {
+        const frame = selectedCwaImageryFrame(family);
+        const imageCoordinates = mapLibreImageCoordinates(frame?.bboxWgs84);
+        if (!frame?.assetUrl
+          || !frame.assetUrl.startsWith(expectedAssetPrefix)
+          || !imageCoordinates
+          || frame.mapOverlaySupported === false) return [];
+        const imageUrl = frame.assetUrl;
+        return [{
+          layer_id: `cwa-weather-${family}`,
+          control_layer_id: "cwa-weather",
+          source_id: frame.frameId || frame.productId || `cwa-weather-${family}`,
+          source_type: "image",
+          image_url: imageUrl,
+          image_coordinates: imageCoordinates,
+          opacity: family === "radar" ? cwaImageryUi.radarOpacity : cwaImageryUi.satelliteOpacity,
+          visible: true,
+          render_position: "overlay",
+          network_scope: "same_origin",
+          candidate_only: true,
+          runtime_safety_truth: false,
+          operational: false,
+          visualization_only: true,
+          adds_source_resolution: false,
+          source_resolution: frame.sourceResolution || "unavailable",
+          sha256: frame.sha256 || frame.artifactHash || null,
+        }];
+      });
+    }
     function pretripMapLibreRasterLayers(view) {
-      const tiledLayers = ["rudy-twmap", "osm"].map(layerId => {
+      const rasterLayerIds = [
+        ...RASTER_SOURCE_LAYER_DEFINITIONS.map(definition => definition.layerId),
+        "osm"
+      ];
+      const tiledLayers = rasterLayerIds.map(layerId => {
         const layer = layerId === "osm" ? mapLayerById(view, "osm") : rasterLayerFor(view, layerId);
         const definition = layerId === "osm"
           ? null
           : rasterSourceDefinitionFor(layerId, layer);
         const template = layerId === "osm"
           ? osmTileTemplate()
-          : wmtsTileUrl(definition, "{z}", "{x}", "{y}");
+          : rasterTileTemplate(view, layerId);
         const range = layerId === "osm"
           ? {min: OSM_MIN_ZOOM, max: OSM_MAX_ZOOM}
           : rasterZoomRangeFor(view, layerId);
@@ -3363,7 +3544,11 @@
           adds_source_resolution: false,
         };
       });
-      return [...tiledLayers, ...pretripMapLibreTerrainImageLayers(view)];
+      return [
+        ...tiledLayers,
+        ...pretripMapLibreTerrainImageLayers(view),
+        ...pretripMapLibreCwaImageLayers(),
+      ];
     }
     function localOsmPbfVectorUrl(view) {
       const layer = mapLayerById(view, "osm");
@@ -6160,13 +6345,20 @@
         .split(",")
         .map(layer => layer.trim())
         .filter(Boolean);
+      const networkMode = importGpxInputValue("prepareLayersNetworkMode") || "no-network";
+      const allowNetworkFetch = document.getElementById("prepareAllowNetworkFetch").checked;
+      const seedWorkspaceRasterCache = networkMode === "explicit-fetch" && allowNetworkFetch;
       return {
         layers,
         workspace_root: optionalImportGpxInputValue("prepareLayersWorkspaceRoot"),
         profile: importGpxInputValue("prepareLayersProfile") || "pi-offline",
-        network_mode: importGpxInputValue("prepareLayersNetworkMode") || "no-network",
-        allow_network_fetch: document.getElementById("prepareAllowNetworkFetch").checked,
-        route_corridor_m: importGpxPositiveNumber("prepareRouteCorridorM")
+        network_mode: networkMode,
+        allow_network_fetch: allowNetworkFetch,
+        route_corridor_m: importGpxPositiveNumber("prepareRouteCorridorM"),
+        imagery_min_zoom: 5,
+        imagery_max_zoom: 14,
+        seed_imagery_cache: seedWorkspaceRasterCache,
+        imagery_provider_allows_offline_prefetch: seedWorkspaceRasterCache
       };
     }
     function prepareLayersValidationErrors(payload) {
@@ -7185,6 +7377,21 @@
       (view.risk_delta?.segments || []).forEach(segment => {
         append(segment, "risk-delta", mapLibreLineGeometry(segment.coordinates));
       });
+      (view.cwa_qpf?.grid_cells || [])
+        .filter(cell => (
+          cell.grid_kind === cwaImageryUi.rainfallProduct
+          && Number(cell.rainfall_mm || 0) > 0
+        ))
+        .forEach(cell => {
+          append({...cell, source_id: cell.cell_id}, "cwa-qpf", mapLibrePolygonGeometry(cell.coordinates), {
+            display_label: `${cell.grid_kind} · ${Number(cell.rainfall_mm || 0)} mm`,
+            render_position: "overlay",
+            render_color: cwaRainfallColor(cell.rainfall_mm),
+            render_opacity: cwaImageryUi.rainfallOpacity,
+            rainfall_mm: Number(cell.rainfall_mm || 0),
+            grid_kind: cell.grid_kind,
+          });
+        });
       (view.map_candidates?.poi_candidates || []).forEach(candidate => {
         append(candidate, "pois", mapLibrePointGeometry(candidate));
       });
@@ -8248,6 +8455,77 @@
       highlightTreeNode(state.selected);
       syncLayerPresetButtons();
     }
+    function syncHistoricalMapControls() {
+      const definition = selectedHistoricalMapDefinition();
+      const select = document.querySelector("[data-historical-map-source]");
+      const status = document.querySelector("[data-historical-map-status]");
+      if (select) select.value = definition.sourceId;
+      if (status) {
+        status.dataset.sourceId = definition.sourceId;
+        status.dataset.cacheLayerId = definition.cacheLayerId;
+        status.textContent = `${definition.labelZh} · ${state.rasterRemoteRefreshEnabled ? "updating + caching" : "cache only"}`;
+      }
+    }
+    function handleHistoricalMapSourceChange(event) {
+      const requested = String(event.currentTarget.value || "");
+      if (!HISTORICAL_MAP_SOURCE_BY_ID[requested]) return;
+      state.historicalMapSourceId = requested;
+      state.rasterRefreshNonce += 1;
+      localStorage.setItem(historicalMapStorageKey(), requested);
+      const layerInput = document.querySelector(`[data-layer="${HISTORICAL_MAP_LAYER_ID}"]`);
+      if (layerInput) layerInput.checked = true;
+      syncHistoricalMapControls();
+      if (state.mapLibreRenderer && state.view) {
+        state.mapLibreRenderer.setRasterLayers(pretripMapLibreRasterLayers(state.view));
+      }
+      updateLayers();
+    }
+    function bindHistoricalMapControls() {
+      const select = document.querySelector("[data-historical-map-source]");
+      if (!select) return;
+      const options = HISTORICAL_MAP_SOURCE_DEFINITIONS.map(definition => {
+        const option = document.createElement("option");
+        option.value = definition.sourceId;
+        option.textContent = definition.labelZh;
+        return option;
+      });
+      select.replaceChildren(...options);
+      select.addEventListener("change", handleHistoricalMapSourceChange);
+      syncHistoricalMapControls();
+    }
+    function syncRasterRefreshButton() {
+      const enabled = state.rasterRemoteRefreshEnabled;
+      const buttons = [
+        document.getElementById("refreshRasterTiles"),
+        document.querySelector("[data-historical-map-fetch]"),
+      ].filter(Boolean);
+      buttons.forEach(button => {
+        const historicalOnly = button.hasAttribute("data-historical-map-fetch");
+        button.setAttribute("aria-pressed", enabled ? "true" : "false");
+        button.title = enabled
+          ? "Stop map updates and use workspace cache only"
+          : historicalOnly
+            ? "Update selected historical map and cache it in this workspace"
+            : "Update checked raster layers from WMTS";
+        button.setAttribute("aria-label", button.title);
+      });
+    }
+    function toggleRasterRemoteRefresh() {
+      state.rasterRemoteRefreshEnabled = !state.rasterRemoteRefreshEnabled;
+      state.rasterRefreshNonce += 1;
+      syncRasterRefreshButton();
+      syncHistoricalMapControls();
+      if (state.mapLibreRenderer && state.view) {
+        state.mapLibreRenderer.setRasterLayers(pretripMapLibreRasterLayers(state.view));
+      }
+      if (state.view) renderRasterBasemapLayers(state.view);
+      const statusOutput = document.getElementById("mapRendererStatus");
+      if (statusOutput) {
+        statusOutput.textContent = state.rasterRemoteRefreshEnabled
+          ? "Updating checked raster layers from WMTS; refreshed tiles are saved to this workspace."
+          : "Workspace raster cache only; remote WMTS updates are off.";
+      }
+    }
     function checkedLayerIds() {
       return new Set([...document.querySelectorAll("[data-layer]:not(:disabled)")].filter(input => input.checked).map(input => input.dataset.layer));
     }
@@ -8310,10 +8588,14 @@
     function bindControls() {
       bindLayerMenuDismiss();
       bindAssistantControls();
+      bindHistoricalMapControls();
       document.querySelectorAll("[data-layer]").forEach(input => input.addEventListener("change", handleLayerChange));
       document.querySelectorAll("[data-layer-preset]").forEach(button => {
         button.addEventListener("click", () => applyLayerPreset(button.dataset.layerPreset));
       });
+      document.getElementById("refreshRasterTiles").addEventListener("click", toggleRasterRemoteRefresh);
+      document.querySelector("[data-historical-map-fetch]").addEventListener("click", toggleRasterRemoteRefresh);
+      syncRasterRefreshButton();
       document.querySelectorAll(".tab-button").forEach(button => button.addEventListener("click", () => setActiveTab(button.dataset.tab)));
       document.getElementById("zoomIn").addEventListener("click", () => zoomActiveMap(1));
       document.getElementById("zoomOut").addEventListener("click", () => zoomActiveMap(-1));

@@ -157,7 +157,7 @@ async function runSmoke({ baseUrl, workspaceRoot }) {
       () => localStorage.getItem("scout.dashboardProjectId"),
     );
 
-    await page.locator('[data-workspace-action="clone"]').click();
+    await page.locator('[data-workspace-action="pack"]').click();
     await page.waitForFunction(
       () => document.getElementById("workspaceOperationStatus")?.textContent.includes("appended"),
       null,
@@ -200,7 +200,7 @@ async function runSmoke({ baseUrl, workspaceRoot }) {
       catalogResolvedProjectRoot: resolvedRoot?.trim() === expectedResolvedRoot,
       noAutomaticConnectedPreparationPost: initialPostCount === 0,
       invalidSwitchPreservesWorkspace: retainedProject === projectId,
-      operationRequestPersisted: operationRecord.operation === "clone",
+      operationRequestPersisted: operationRecord.operation === "package",
       operationWasNotExecuted: operationRecord.execution_performed === false,
       explicitRefreshPostsOnce: connectedPreparationPosts.length === 1,
       explicitRefreshReason:

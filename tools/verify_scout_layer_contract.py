@@ -198,9 +198,13 @@ def _check_html_surfaces(
         html_path = repo_root / relative_path
         text = html_path.read_text()
         controls = {
-            match
-            for match in re.findall(r'<input[^>]+data-layer="([^"]+)"', text)
-            if "$" not in match
+            match.group(2)
+            for match in re.finditer(
+                r'<input(?P<attrs>[^>]+)data-layer="([^"]+)"[^>]*>',
+                text,
+            )
+            if "$" not in match.group(2)
+            and 'data-layer-contract="auxiliary"' not in match.group(0)
         }
         ranks = _extract_map_layer_ranks(text)
         groups = _extract_static_layer_groups(text)

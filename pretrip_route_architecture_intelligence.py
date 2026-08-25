@@ -1151,8 +1151,7 @@ def _checkpoint_passage_timing_projection(
             node_kind = "mcp"
             selection_role = "route_micro_checkpoint"
             display_priority = "context"
-        nodes.append(
-            {
+        node = {
                 "node_id": str(raw.get("node_id") or f"passage.{len(nodes) + 1}"),
                 "source_node_kind": source_node_kind,
                 "node_kind": node_kind,
@@ -1234,6 +1233,22 @@ def _checkpoint_passage_timing_projection(
                 "candidate_only": True,
                 "runtime_safety_truth": False,
             }
+        nodes.append(
+            _with_candidate_metadata(
+                node,
+                source_ref=default_source_ref,
+                confidence=_quality_confidence(str(node["data_quality"])),
+                stale_risk="medium",
+                review_state="candidate",
+                method=(
+                    "pretrip_route_architecture_intelligence."
+                    "checkpoint_passage_timing"
+                ),
+                summary=(
+                    "Historical checkpoint passage timing projection; candidate-only "
+                    "planning evidence, not runtime safety truth."
+                ),
+            )
         )
     nodes = _promote_difficulty_cp_nodes(
         nodes,

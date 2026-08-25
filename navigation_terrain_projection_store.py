@@ -33,6 +33,7 @@ NAVIGATION_TERRAIN_PROJECTION_INPUT_REF_KEYS = (
     "dtm_coverage_summary_ref",
     "historical_gpx_source_index_ref",
     "historical_route_source_ledger_ref",
+    "mcp_named_point_evidence_ref",
     "normalized_route_note_candidates_ref",
     "historical_route_hypothesis_ref",
     "terrain_expert_annotation_refs",

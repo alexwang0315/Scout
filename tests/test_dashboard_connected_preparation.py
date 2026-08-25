@@ -124,6 +124,7 @@ def test_connected_preparation_uses_mac_explicit_fetch_and_redacts_credentials(
     assert request.prepare_cwa_imagery is True
     assert request.run_post_layer_enrichments is False
     assert request.run_map_preparation_spec_artifacts is False
+    assert request.publish_preparation_outputs is False
     assert request.layers == CONNECTED_DASHBOARD_LAYERS
     assert set(request.layers) == {
         "overpass",

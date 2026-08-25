@@ -2425,6 +2425,24 @@
     .weather-route-trend-card strong { margin: 7px 0 4px; }
     .weather-route-trend-card span { color: var(--muted); font-size: 12px; }
 
+    .weather-location-action-row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    [data-weather-location-status] {
+      min-height: 18px;
+      margin: 9px 0 0;
+      font-family: var(--mono);
+      overflow-wrap: anywhere;
+    }
+
+    [data-weather-location-status="requesting"] { color: var(--warn); }
+    [data-weather-location-status="ready"] { color: var(--ok); }
+    [data-weather-location-status="error"] { color: var(--bad); }
+
     .weather-terrain-rule-list {
       display: grid;
       gap: 7px;
@@ -7003,6 +7021,12 @@
       align-items: start;
     }
 
+    .navigation-terrain-workspace[data-navigation-inspector-expanded="false"] {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .navigation-terrain-side[hidden] { display: none; }
+
     .navigation-terrain-primary {
       display: grid;
       gap: 10px;
@@ -7026,12 +7050,19 @@
 
     .navigation-terrain-review-bar {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      gap: 12px;
-      align-items: center;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 8px;
+      align-items: start;
       padding: 9px 11px;
       border-bottom: 1px solid var(--terrain-rule);
       background: #0d1713;
+    }
+
+    .navigation-terrain-review-title {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px 10px;
+      align-items: center;
     }
 
     .navigation-terrain-review-title small,
@@ -7135,8 +7166,9 @@
       display: flex;
       gap: 7px;
       align-items: flex-end;
-      justify-content: flex-end;
+      justify-content: flex-start;
       flex-wrap: wrap;
+      min-width: 0;
     }
 
     .navigation-terrain-view-switch,
@@ -7145,14 +7177,23 @@
     .navigation-terrain-scope-switch {
       display: flex;
       gap: 5px;
+      flex-wrap: nowrap;
+      justify-content: flex-start;
+    }
+
+    .navigation-terrain-layer-switch {
+      display: flex;
+      gap: 5px;
       flex-wrap: wrap;
-      justify-content: flex-end;
+      justify-content: flex-start;
     }
 
     .navigation-terrain-view-switch button,
     .navigation-terrain-z-switch button,
     .navigation-terrain-domain-switch button,
-    .navigation-terrain-scope-switch button {
+    .navigation-terrain-scope-switch button,
+    .navigation-terrain-layer-switch button,
+    .navigation-inspector-toggle {
       min-height: 30px;
       padding: 5px 8px;
       border: 1px solid rgba(233, 234, 220, .17);
@@ -7165,11 +7206,36 @@
     .navigation-terrain-view-switch button[aria-pressed="true"],
     .navigation-terrain-z-switch button[aria-pressed="true"],
     .navigation-terrain-domain-switch button[aria-pressed="true"],
-    .navigation-terrain-scope-switch button[aria-pressed="true"] {
+    .navigation-terrain-scope-switch button[aria-pressed="true"],
+    .navigation-terrain-layer-switch button[aria-pressed="true"],
+    .navigation-inspector-toggle[aria-expanded="true"] {
       border-color: var(--terrain-lime);
       color: #f0f4de;
       background: #26331e;
       box-shadow: inset 0 -2px 0 var(--terrain-lime);
+    }
+
+    .navigation-terrain-layer-switch button {
+      position: relative;
+      min-width: 52px;
+      padding-left: 18px;
+    }
+
+    .navigation-terrain-layer-switch button::before {
+      content: "";
+      position: absolute;
+      left: 7px;
+      top: 50%;
+      width: 6px;
+      height: 14px;
+      border: 1px solid rgba(244, 246, 235, .42);
+      background: var(--terrain-layer-swatch, #82958b);
+      transform: translateY(-50%);
+    }
+
+    .navigation-terrain-layer-switch button[aria-pressed="false"]::before {
+      background: transparent;
+      opacity: .48;
     }
 
     .navigation-terrain-domain-switch button[aria-pressed="true"] {
@@ -7236,9 +7302,7 @@
       width: 100%;
       min-height: 460px;
       overflow: hidden;
-      background:
-        radial-gradient(circle at 72% 12%, rgba(183, 207, 99, .12), transparent 31%),
-        linear-gradient(155deg, #15241d, #050a07 72%);
+      background: #07100c;
     }
 
     .navigation-terrain-maplibre-map {
@@ -7253,7 +7317,7 @@
     .navigation-terrain-maplibre-shell,
     .navigation-terrain-review-stage:not([data-navigation-terrain-view="split"])
     .navigation-terrain-maplibre-map {
-      min-height: 640px;
+      min-height: clamp(580px, 70vh, 820px);
     }
 
     .navigation-terrain-maplibre-state {
@@ -7356,9 +7420,7 @@
       width: 100%;
       min-height: 400px;
       aspect-ratio: 432 / 169;
-      background:
-        radial-gradient(circle at 72% 12%, rgba(183, 207, 99, .08), transparent 30%),
-        linear-gradient(155deg, #101d17, #050a07 72%);
+      background: #07100c;
     }
 
     .navigation-terrain-mesh svg {
@@ -10746,6 +10808,7 @@
     const NAVIGATION_TERRAIN_EVENT_LOCATION_CLUSTER_M = 30;
     const NAVIGATION_TERRAIN_EVENT_FOCUS_MAX_ATTEMPTS = 30;
     const PRETRIP_PROJECT_FETCH_TIMEOUT_MS = 180000;
+    const WORKSPACE_CLONE_TIMEOUT_MS = 1800000;
     const MAP_EVIDENCE_FOCUS_MAX_ATTEMPTS = 45;
     const BODY_INDEX_FETCH_TIMEOUT_MS = 180000;
     const BODY_INDEX_STATUS_PATH = "/admin/dashboard/body-index";
@@ -11383,7 +11446,7 @@
       connectedPreparationPollTimer: null,
       weatherLocationTrendStatus: {
         status: "idle",
-        text: "位置尚未授權；目前不會讀取或保存隊伍座標。",
+        text: "位置尚未授權；此動作只使用目前 CWA 快取，未授權前不會讀取位置。",
       },
       weatherTargetCheckpointId: "",
       weatherTimelineIndex: 0,
@@ -11462,6 +11525,16 @@
       navigationTerrainEvidenceDomain: "observed",
       navigationTerrainCandidateScope: "route",
       navigationTerrainVerticalExaggeration: 1,
+      navigationTerrainInspectorExpanded: false,
+      navigationTerrainLayerVisibility: {
+        basemap: true,
+        elevation: true,
+        hillshade: true,
+        contours: true,
+        slope: false,
+        route: true,
+        candidates: true,
+      },
       navigationSelectedHierarchyEdgeId: "",
       navigationTerrainData: null,
       navigationTerrainPollTimer: null,
@@ -11568,7 +11641,7 @@
         maxReasonableGpxSpeedKmh: "120",
         maxPreviousGpxSpeedRatio: "8",
         overwrite: false,
-        prepareLayers: "osm,overpass,terrain,risk-score,risk-ribbon,risk-heatmap,risk-delta,cwa-qpf,soil-moisture,antecedent-rain,cwa-weather,weather,reference-tracks,route,segments,checkpoints,mcp",
+        prepareLayers: "imagery,osm,overpass,terrain,risk-score,risk-ribbon,risk-heatmap,risk-delta,cwa-qpf,soil-moisture,antecedent-rain,cwa-weather,weather,reference-tracks,route,segments,checkpoints,mcp,pois,hazards,corridors,retreat,route-notes",
         prepareWorkspaceRoot: "",
         prepareProjectRoot: "",
         prepareBBox: "",
@@ -12705,24 +12778,26 @@
       } else {
         state.qgisSpatialCapabilities = null;
       }
-      let workflowRunId = "";
-      try {
-        const latestRun = await fetchJson(
-          `${basePath}/workflows/latest`,
-          {timeoutMs: QGIS_SPATIAL_FETCH_TIMEOUT_MS},
-        );
-        state.qgisSpatialWorkflow = latestRun;
-        rememberQgisSpatialWorkflow(latestRun);
-        state.qgisSpatialArtifacts = [
-          ...asArray(latestRun.artifacts),
-          ...asArray(latestRun.render_artifacts),
-        ];
-        state.qgisSpatialSelectedArtifactId = state.qgisSpatialArtifacts[0]?.artifact_id || "";
-        workflowRunId = latestRun.workflow_run_id || "";
-      } catch {
-        // Preserve reconnect behavior when latest-run discovery is temporarily unavailable.
-        workflowRunId = state.qgisSpatialWorkflow?.workflow_run_id
-          || rememberedQgisSpatialWorkflowRunId();
+      let workflowRunId = state.qgisSpatialWorkflow?.workflow_run_id
+        || rememberedQgisSpatialWorkflowRunId();
+      const shouldDiscoverLatestWorkflow = state.qgisSpatialStatus?.availability !== "disabled";
+      if (shouldDiscoverLatestWorkflow) {
+        try {
+          const latestRun = await fetchJson(
+            `${basePath}/workflows/latest`,
+            {timeoutMs: QGIS_SPATIAL_FETCH_TIMEOUT_MS},
+          );
+          state.qgisSpatialWorkflow = latestRun;
+          rememberQgisSpatialWorkflow(latestRun);
+          state.qgisSpatialArtifacts = [
+            ...asArray(latestRun.artifacts),
+            ...asArray(latestRun.render_artifacts),
+          ];
+          state.qgisSpatialSelectedArtifactId = state.qgisSpatialArtifacts[0]?.artifact_id || "";
+          workflowRunId = latestRun.workflow_run_id || "";
+        } catch {
+          // Preserve reconnect behavior when latest-run discovery is temporarily unavailable.
+        }
       }
       if (workflowRunId) {
         try {
@@ -14482,12 +14557,19 @@
       `;
     }
 
+    function defaultCloneTargetProjectId(sourceProjectId = projectId()) {
+      const source = String(sourceProjectId || "").trim();
+      const base = source.endsWith("_scoutAI") ? source.slice(0, -8) : source;
+      return `${base}_newImport`;
+    }
+
     function renderWorkspaceOperationConsole() {
       const context = state.workspaceContext || workspaceContextForProject(projectId());
       const projects = state.workspaceCatalog?.projects || [];
       const requestCount = state.workspaceOperationRequests.length;
       const latestRequest = state.workspaceOperationRequests[0] || null;
       const operationDisabled = context?.capabilities?.record_operation_request ? "" : "disabled";
+      const cloneDisabled = context?.capabilities?.clone_from_import_inputs ? "" : "disabled";
       const refreshIntervalMinutes = Math.max(
         1,
         Math.round(Number(state.connectedPreparation?.refreshIntervalSeconds || 600) / 60),
@@ -14513,12 +14595,18 @@
         <section class="panel workspace-command-panel" data-workspace-operations="true">
           <div class="panel-header">
             <h3>Workspace Operations</h3>
-            <span class="chip warn">operator intent only</span>
+            <span class="chip warn">operator-triggered</span>
           </div>
           <div class="panel-body">
             <div class="workspace-ops">
+              <div class="workspace-switch-row" data-workspace-clone="true">
+                <label class="workspace-field" for="workspaceCloneTargetInput">
+                  <span>New workspace name</span>
+                  <input id="workspaceCloneTargetInput" value="${escapeHtml(defaultCloneTargetProjectId())}" placeholder="new_workspace_id" ${cloneDisabled}>
+                </label>
+                <button type="button" id="workspaceCloneProject" aria-label="Clone and prepare workspace" title="Clone and prepare workspace" ${cloneDisabled}>Clone</button>
+              </div>
               <div class="workspace-action-grid" aria-label="Workspace operation actions">
-                <button type="button" data-workspace-action="clone" aria-label="Record clone request" title="Record clone request" ${operationDisabled}>Clone</button>
                 <button type="button" data-workspace-action="transfer" aria-label="Record transfer request" title="Record transfer request" ${operationDisabled}>Transfer</button>
                 <button type="button" data-workspace-action="pack" aria-label="Record package request" title="Record package request" ${operationDisabled}>Package</button>
                 <button type="button" data-workspace-action="restore" aria-label="Record restore request" title="Record restore request" ${operationDisabled}>Restore</button>
@@ -14540,10 +14628,10 @@
                 <button type="button" id="workspaceSwitchProject">Open workspace</button>
               </div>
               <p class="workspace-status" id="workspaceOperationStatus">
-                Only an append-only request record is written by this dashboard. It does not execute the operation or change runtime safety truth. ${requestCount} request${requestCount === 1 ? "" : "s"} recorded${latestRequest ? `; latest ${escapeHtml(latestRequest.operation)} · ${escapeHtml(latestRequest.request_id)}` : ""}. Delete requires an explicit destructive approval outside this dashboard.
+                Clone creates a new target with one clean GPX import followed by the full map preparation defaults, and refuses to overwrite an existing target. Transfer, Package, Restore and Delete review remain append-only requests. ${requestCount} request${requestCount === 1 ? "" : "s"} recorded${latestRequest ? `; latest ${escapeHtml(latestRequest.operation)} · ${escapeHtml(latestRequest.request_id)}` : ""}. Delete requires an explicit destructive approval outside this dashboard.
               </p>
               <p class="workspace-status">
-                Dashboard startup and status GETs read cached evidence only and never schedule a writer. The current published snapshot stays readable while refresh is running; a validated generation replaces it only after completion. After an explicit “Refresh evidence” or Scout AI weather refresh, the server may continue every ${refreshIntervalMinutes} min; next ${escapeHtml(nextScheduledRefresh)}; last ${escapeHtml(lastConnectedRefresh)}. Cross-process lock: ${escapeHtml(crossProcessLock)}; Recovery journal: ${escapeHtml(recoveryJournalStatus)}; startup recovery: ${escapeHtml(startupRecovery)}. “Refresh evidence” may use CWA, GEE and Overpass and update candidate evidence.
+                Dashboard startup and status GETs read cached evidence only and never schedule a writer. The current published snapshot stays readable while refresh is running; a validated generation replaces it only after completion. After an explicit “Refresh evidence” or Scout AI weather refresh, the server may continue every ${refreshIntervalMinutes} min; next ${escapeHtml(nextScheduledRefresh)}; last ${escapeHtml(lastConnectedRefresh)}. Cross-process lock: ${escapeHtml(crossProcessLock)}; Recovery journal: ${escapeHtml(recoveryJournalStatus)}; startup recovery: ${escapeHtml(startupRecovery)}. CWA, GEE and Overpass stay refreshable without replacing the full prepared-layer manifest; geology stays a runtime provider and is not frozen into the import snapshot.
               </p>
             </div>
           </div>
@@ -15068,28 +15156,31 @@
 
     function workspaceCacheRows() {
       const project = state.project || {};
+      const summaryCache = project.summary || {};
       const summaryCounts = project.summary?.counts || {};
       const imageryPlanTiles = numberValue(project.imagery_tile_cache_plan_tile_count, summaryCounts.imagery_tile_cache_plan_tile_count);
-      const imagerySeen = numberValue(project.imagery_tile_cache_seed_tiles_seen, summaryCounts.imagery_tile_cache_seed_tiles_seen);
+      const imagerySeen = numberValue(project.imagery_tile_cache_seed_tiles_seen, summaryCache.imagery_tile_cache_seed_tiles_seen);
       const imagerySkipped = numberValue(project.imagery_tile_cache_seed_tiles_skipped_existing, summaryCounts.imagery_tile_cache_seed_tiles_skipped_existing);
+      const imageryReady = numberValue(imagerySeen, imagerySkipped);
       const ocrHits = numberValue(project.raster_label_ocr_cache_hit_count, summaryCounts.raster_label_ocr_cache_hit_count);
       const ocrMisses = numberValue(project.raster_label_ocr_cache_miss_count, summaryCounts.raster_label_ocr_cache_miss_count);
+      const ocrLabels = numberValue(project.raster_label_ocr_label_count, summaryCounts.raster_label_ocr_label_count);
       const osmFeatures = numberValue(project.osm_pbf_feature_index_feature_count, summaryCounts.osm_pbf_feature_index_feature_count);
       const counts = projectCounts();
       return {
-        imageryTiles: `${formatInteger(imageryPlanTiles || imagerySeen)} planned / ${formatInteger(imagerySkipped)} existing`,
-        rasterOcr: `${formatInteger(ocrHits)} hits / ${formatInteger(ocrMisses)} misses`,
+        imageryTiles: `${formatInteger(imageryPlanTiles || imagerySeen)} planned / ${formatInteger(imageryReady)} ready`,
+        rasterOcr: `${formatInteger(ocrLabels)} candidate labels / ${formatInteger(ocrHits)} cached / ${formatInteger(ocrMisses)} processed`,
         osmPbf: `${project.osm_pbf_cache_status || "unknown"}; ${formatInteger(osmFeatures)} features`,
         terrainTiles: `${formatInteger(counts.terrainTiles)} terrain tiles`,
-        cacheRoot: project.imagery_tile_cache_root || "not declared",
-        imageryTtl: project.imagery_tile_cache_policy || "cache-first policy; TTL not declared",
+        cacheRoot: project.imagery_tile_cache_root || summaryCache.imagery_tile_cache_root || "not declared",
+        imageryTtl: project.imagery_tile_cache_policy || summaryCache.imagery_tile_cache_policy || "cache-first policy; TTL not declared",
         osmPbfTtl: formatTtl(project.osm_pbf_cache_ttl_days ? project.osm_pbf_cache_ttl_days * 86400 : null, project.osm_pbf_cache_expires_at),
         cwaTtl: formatTtl(project.cwa_ttl_seconds ?? project.cwa_cache_policy?.ttl_seconds, null, project.cwa_cache_policy?.must_refetch_on_prepare),
         geeTtl: formatTtl(project.gee_numeric_ttl_seconds ?? project.gee_cache_policy?.ttl_seconds, null, project.gee_cache_policy?.must_refetch_on_prepare),
         weatherCacheable: `CWA ${formatBoolean(project.cwa_cacheable ?? project.cwa_cache_policy?.cacheable)} / GEE ${formatBoolean(project.gee_numeric_cacheable ?? project.gee_cache_policy?.cacheable)}`,
-        imageryManifest: project.imagery_tile_cache_manifest_ref || "not declared",
-        imageryPlan: project.imagery_tile_cache_plan_ref || "not declared",
-        ocrCache: project.raster_label_ocr_cache_ref || "not declared",
+        imageryManifest: project.imagery_tile_cache_manifest_ref || summaryCache.imagery_tile_cache_manifest_ref || "not declared",
+        imageryPlan: project.imagery_tile_cache_plan_ref || summaryCache.imagery_tile_cache_plan_ref || "not declared",
+        ocrCache: project.raster_label_ocr_cache_ref || summaryCache.raster_label_ocr_cache_ref || "not declared",
         osmRenderExtract: project.osm_pbf_render_extract_manifest_ref || "not declared",
         layerManifest: project.layer_preparation_manifest_ref || "outputs/layers/layer_preparation_manifest.json",
       };
@@ -17421,13 +17512,16 @@
       diagnosticRequire(!unsafe, "An operation request claims execution or runtime safety truth.");
       const root = diagnosticMarkupRoot(renderWorkspacePage());
       diagnosticRequire(Boolean(root.querySelector('[data-workspace-operations="true"]')), "Workspace Operations panel is missing.");
-      for (const action of ["clone", "transfer", "pack", "restore", "delete"]) {
+      diagnosticRequire(context.capabilities?.clone_from_import_inputs === true, "Workspace clone capability is unavailable.");
+      diagnosticRequire(Boolean(root.querySelector("#workspaceCloneProject")), "Workspace Clone action is missing.");
+      diagnosticRequire(Boolean(root.querySelector("#workspaceCloneTargetInput")), "Workspace Clone target input is missing.");
+      for (const action of ["transfer", "pack", "restore", "delete"]) {
         diagnosticRequire(Boolean(root.querySelector(`[data-workspace-action="${action}"]`)), `Workspace operation ${action} is missing.`);
       }
       diagnosticRequire(Boolean(root.querySelector('[data-route="features-import-new-trip"]')), "Import trip action is missing.");
       diagnosticRequire(Boolean(root.querySelector("#workspaceRefreshExternalEvidence")), "Refresh evidence action is missing.");
       diagnosticRequire(Boolean(root.querySelector("#workspaceSwitchProject")), "Open workspace action is missing.");
-      return `${payload.requests.length} intent receipts · seven operation controls · execution_performed=false`;
+      return `${payload.requests.length} intent receipts · clean Clone plus six operation controls · source overwrite disabled`;
     }
 
     async function diagnosticCheck013() {
@@ -18407,6 +18501,8 @@
         const controlsSource = diagnosticCompactSource(bindNavigationTerrainControls);
         const selectionFocusSource = diagnosticCompactSource(focusNavigationTerrainSelection);
         const styleSource = diagnosticCompactSource(navigationTerrainMapLibreStyle);
+        const visibilitySource = diagnosticCompactSource(setNavigationTerrainMapLayerVisibility);
+        const synchronizerSource = diagnosticCompactSource(synchronizeNavigationTerrainMapLibre);
         diagnosticRequire(
           destroySource.indexOf("rememberNavigationTerrainMapLibreCamera(entry)") >= 0
             && destroySource.indexOf("rememberNavigationTerrainMapLibreCamera(entry)") < destroySource.indexOf("entry.map.remove()"),
@@ -18441,7 +18537,34 @@
             && styleSource.includes('id: "scout-selected-event-halo"'),
           "MAP MARKER selected halo layers are missing.",
         );
-        return "2D Z13.75 · 3D Z17 · shared center 121.27,24.07 · marker focus Z15/Z16 + halo · changed projection Fit gate · rerender restore wired";
+        diagnosticRequire(
+          styleSource.includes('id: "scout-terrain-elevation-tint"')
+            && styleSource.includes('id: "scout-terrain-hillshade"')
+            && styleSource.includes('id: "scout-terrain-contours"')
+            && styleSource.includes('id: "scout-terrain-slope-shading"'),
+          "Navigation 2D/3D terrain layer composition is incomplete.",
+        );
+        diagnosticRequire(
+          styleSource.indexOf("rudyLayer") < styleSource.indexOf("...terrainRasterLayers"),
+          "Rudy+TW is painted above terrain evidence layers.",
+        );
+        diagnosticRequire(
+          visibilitySource.includes('map.setLayoutProperty(layerId, "visibility", visibility)')
+            && !visibilitySource.includes("fitNavigationTerrainMapLibre")
+            && !visibilitySource.includes("navigationTerrainMapLibreStyle"),
+          "A Navigation layer toggle rebuilds or refits the map instead of changing layer visibility in place.",
+        );
+        diagnosticRequire(
+          controlsSource.includes('button[data-navigation-terrain-layer-toggle]')
+            && controlsSource.includes('data-navigation-terrain-inspector-toggle="true"'),
+          "Navigation terrain layer or detail-inspector controls are not bound.",
+        );
+        diagnosticRequire(
+          synchronizerSource.includes("const synchronizeZoom = entry.mode === sourceEntry.mode")
+            && !synchronizerSource.includes("fitNavigationTerrainMapLibre"),
+          "Navigation 2D/3D synchronization can still reset cross-mode zoom.",
+        );
+        return "2D Z13.75 · 3D Z17 · shared center / independent scale · elevation + hillshade + contours + optional slope · in-place layer toggles · marker focus Z15/Z16 + halo · changed projection Fit gate · rerender restore wired";
       } finally {
         navigationTerrainMapLibreRuntime.cameraByMode = originalCameraByMode;
       }
@@ -19537,7 +19660,7 @@
         routeRisk: weather.routeRisk || null,
         routeTrend: weather.routeTrend || null,
         loraAlert: weather.loraAlert || null,
-        connectedPreparation: weather.connectedPreparation || state.connectedPreparation,
+        connectedPreparation: state.connectedPreparation || weather.connectedPreparation,
         statusMeta,
         weather,
       };
@@ -19615,6 +19738,14 @@
       return weatherNumberLabel(number * 100, "%", digits);
     }
 
+    function weatherBrowserPositionErrorText(error) {
+      const code = Number(error?.code);
+      if (code === 1) return "瀏覽器未允許位置存取；請允許後再重試。";
+      if (code === 2) return "瀏覽器暫時無法取得目前位置。";
+      if (code === 3) return "取得目前位置逾時；請確認定位服務後再重試。";
+      return String(error?.message || "目前位置無法取得。");
+    }
+
     function weatherTrendTargets() {
       return asArray(state.project?.checkpoints)
         .filter(item => item && Number.isFinite(Number(item.lat)) && Number.isFinite(Number(item.lon)))
@@ -19639,10 +19770,34 @@
       return new Promise((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(
           position => resolve(position),
-          error => reject(new Error(error?.message || "Location access was not approved")),
+          error => reject(new Error(weatherBrowserPositionErrorText(error))),
           {enableHighAccuracy: true, timeout: 15000, maximumAge: 60000},
         );
       });
+    }
+
+    function weatherRainfallTrendResultText(target, trend = {}) {
+      const current = trend.currentPosition || {};
+      const targetResult = trend.target || {};
+      const sourceTimestamp = trend.sourceTimestamps?.next1hQpf
+        || trend.sourceTimestamps?.past1hQpe;
+      const pointSummary = item => {
+        const past = weatherNumberLabel(item?.past1hMm, "", 1);
+        const next = weatherNumberLabel(item?.next1hMm, "", 1);
+        if (past === "UNKNOWN" && next === "UNKNOWN") {
+          return String(item?.status || "unknown");
+        }
+        return `${past}→${next} mm`;
+      };
+      const targetLabel = String(target?.label || targetResult.id || "目標");
+      return [
+        `${targetLabel} 已重算`,
+        `CWA ${formatCwaTimestampOr(sourceTimestamp, "來源時間未知")}`,
+        `目前位置 ${pointSummary(current)}`,
+        `${targetLabel} ${pointSummary(targetResult)}`,
+        "未下載新 CWA",
+        "座標未保存；結果僅保留本頁",
+      ].join(" · ");
     }
 
     async function requestAuthorizedRainfallTrend() {
@@ -19654,7 +19809,7 @@
       }
       state.weatherLocationTrendStatus = {
         status: "requesting",
-        text: "等待瀏覽器位置授權；原始座標不會寫入 workspace。",
+        text: "等待瀏覽器位置授權；將以目前 CWA 快取重算，不會下載新資料。",
       };
       refreshCurrentDataView();
       try {
@@ -19688,12 +19843,12 @@
         state.weatherData = {...state.weatherData, routeTrend: trend};
         state.weatherLocationTrendStatus = {
           status: "ready",
-          text: `${target.label} 趨勢已更新；rawCoordinatesPersisted=${trend.boundary?.rawCoordinatesPersisted === true ? "true" : "false"}。`,
+          text: weatherRainfallTrendResultText(target, trend),
         };
       } catch (error) {
         state.weatherLocationTrendStatus = {
           status: "error",
-          text: String(error?.message || error || "位置雨量趨勢更新失敗"),
+          text: `重算失敗：${String(error?.message || error || "位置雨量趨勢更新失敗")}`,
         };
       }
       refreshCurrentDataView();
@@ -19722,7 +19877,7 @@
       ];
       const trendTargets = weatherTrendTargets();
       const selectedTarget = selectedWeatherTrendTarget();
-      const locationStatus = state.weatherLocationTrendStatus || {status: "idle", text: "位置尚未授權。"};
+      const locationStatus = state.weatherLocationTrendStatus || {status: "idle", text: "位置尚未授權；此動作不更新 CWA。"};
       const routeTrendCard = (label, item, fallbackId = "") => `
         <div class="weather-route-trend-card">
           <small>${escapeHtml(label)}</small>
@@ -19754,7 +19909,10 @@
             <label class="metric-row"><span>趨勢目標</span><select data-weather-target-checkpoint="true">
               ${trendTargets.map(item => `<option value="${escapeHtml(item.id)}" ${item.id === selectedTarget?.id ? "selected" : ""}>${escapeHtml(item.label)} · ${escapeHtml(item.id)}</option>`).join("")}
             </select></label>
-            <button type="button" data-weather-authorize-location="true" ${locationStatus.status === "requesting" || !selectedTarget ? "disabled" : ""}>授權目前位置並更新降雨趨勢</button>
+            <div class="weather-location-action-row">
+              <button type="button" data-weather-authorize-location="true" data-weather-location-mode="cached-sampling" ${locationStatus.status === "requesting" || !selectedTarget ? "disabled" : ""}>以目前位置重算降雨趨勢</button>
+              <span class="chip info">不更新 CWA</span>
+            </div>
             <p class="small-note" data-weather-location-status="${escapeHtml(locationStatus.status)}">${escapeHtml(locationStatus.text)}</p>
           </div>
           ${interactions.length ? `<div class="weather-terrain-rule-list">${interactions.map(item => `<div class="weather-terrain-rule"><strong>${escapeHtml(item.ruleCode || "weather-terrain")}</strong><span>${escapeHtml(item.segmentId || "segment unresolved")} · TEII ${escapeHtml(weatherNumberLabel(item.teii_20m))}</span></div>`).join("")}</div>` : ""}
@@ -19782,7 +19940,8 @@
               <div class="metric-row"><span>Fetch policy</span><strong>${escapeHtml(`${preparation.profile || "mac-workstation"} · ${preparation.networkMode || "explicit-fetch"} · allow=${preparation.allowNetworkFetch === true}`)}</strong></div>
               <div class="metric-row"><span>CWA request attempted</span><strong>${escapeHtml(connectedPreparationActivityLabel(preparation.cwaApiRequestAttempted, preparation.status))}</strong></div>
               <div class="metric-row"><span>External API calls</span><strong>${escapeHtml(connectedPreparationActivityLabel(preparation.externalApiCallsMade, preparation.status))}</strong></div>
-              <div class="metric-row"><span>Next server refresh</span><strong>${escapeHtml(formatCwaTimestamp(preparation.nextRunAt, "pending"))}</strong></div>
+              <div class="metric-row"><span>Last server refresh</span><strong>${escapeHtml(formatCwaTimestampOr(preparation.completedAt, "not completed"))}</strong></div>
+              <div class="metric-row"><span>Next server refresh</span><strong>${escapeHtml(formatCwaTimestampOr(preparation.nextRunAt, "pending"))}</strong></div>
               <div class="metric-row"><span>API contract</span><strong>${escapeHtml(weather.schemaVersion || "weatherDecisionDashboard.v1")}</strong></div>
               <div class="metric-row"><span>Route risk</span><strong>${escapeHtml(routeRisk?.status || "not_prepared")}</strong></div>
               <div class="metric-row"><span>Position / target trend</span><strong>${escapeHtml(routeTrend?.status || "not_prepared")}</strong></div>
@@ -19815,15 +19974,15 @@
       const selectedIndex = Math.min(Math.max(0, Number(state.weatherTimelineIndex || 0)), maxIndex);
       const selectedFrame = frames[selectedIndex] || (state.weatherCwaProduct === "satellite" ? satellite : radar);
       const steps = [
-        ["Rainfall basis", formatCwaTimestamp(snapshot.preferredRainfall?.sourceTimestamp, "not available"), snapshot.preferredRainfall?.gridKind || "no product", ""],
-        [`${state.weatherCwaProduct} frame`, formatCwaTimestamp(selectedFrame?.sourceTimestamp, "not available"), selectedFrame ? `${selectedIndex + 1} / ${frames.length || 1} cached frame` : "no cached frame", "is-current"],
-        ["Satellite frame", formatCwaTimestamp(satellite?.sourceTimestamp, "not available"), satellite ? "latest cached frame" : "no cached frame", ""],
-        ["Evidence valid until", formatCwaTimestamp(snapshot.preferredRainfall?.validUntil, "unresolved"), "recheck after this boundary", "is-expiry"],
+        ["Rainfall basis", formatCwaTimestampOr(snapshot.preferredRainfall?.sourceTimestamp, "not available"), snapshot.preferredRainfall?.gridKind || "no product", ""],
+        [`${state.weatherCwaProduct} frame`, formatCwaTimestampOr(selectedFrame?.sourceTimestamp, "not available"), selectedFrame ? `${selectedIndex + 1} / ${frames.length || 1} cached frame` : "no cached frame", "is-current"],
+        ["Satellite frame", formatCwaTimestampOr(satellite?.sourceTimestamp, "not available"), satellite ? "latest cached frame" : "no cached frame", ""],
+        ["Evidence valid until", formatCwaTimestampOr(snapshot.preferredRainfall?.validUntil, "unresolved"), "recheck after this boundary", "is-expiry"],
       ];
       return `
         <div class="weather-map-timeline" data-weather-timeline="true">
           <div class="weather-map-time-labels">
-            <strong data-weather-evidence-time="true">Evidence timeline · ${escapeHtml(formatCwaTimestamp(selectedFrame?.sourceTimestamp, `no cached ${state.weatherCwaProduct} frames`))}</strong>
+            <strong data-weather-evidence-time="true">Evidence timeline · ${escapeHtml(formatCwaTimestampOr(selectedFrame?.sourceTimestamp, `no cached ${state.weatherCwaProduct} frames`))}</strong>
             <span data-weather-evidence-count="true">${frames.length > 1 ? `${frames.length} cache frames · slider enabled` : "one or zero frames · animation unavailable"}</span>
           </div>
           <input type="range" min="0" max="${maxIndex}" value="${selectedIndex}" step="1" data-weather-evidence-timeline="true" aria-label="Select cached radar evidence frame" ${frames.length < 2 ? "disabled" : ""}>
@@ -19965,6 +20124,21 @@
         ? `${snapshot.availableCells} route-bbox cells available`
         : snapshot.coverageStatus;
       const decision = snapshot.decision || {};
+      const preparation = snapshot.connectedPreparation || {};
+      const evidenceFetchedAt = snapshot.preferredRainfall?.fetchedAt
+        || snapshot.weather?.imagery?.generatedAt
+        || snapshot.imageryFamilies.find(item => item.current?.fetchedAt)?.current?.fetchedAt;
+      const refreshInProgress = ["queued", "running"].includes(preparation.status);
+      const refreshFailed = ["failed", "error"].includes(preparation.status);
+      const refreshStatus = refreshInProgress
+        ? `正在向 CWA 更新 · ${preparation.status}`
+        : refreshFailed
+          ? `CWA 更新失敗 · ${preparation.lastError?.message || "請查看 server diagnostics"}`
+          : preparation.completedAt
+            ? `上次 server 更新 ${formatCwaTimestamp(preparation.completedAt)} · ${preparation.status || "completed"}`
+            : evidenceFetchedAt
+              ? `目前 workspace 快取更新於 ${formatCwaTimestamp(evidenceFetchedAt)} · ${snapshot.derived}；按下後由 Scout server 向 CWA 取回新資料。`
+              : "目前沒有可辨識時間的 workspace 天氣快取；按下後由 Scout server 向 CWA 取回新資料。";
       return `
         <section class="panel" data-weather-actions="true">
           <div class="panel-header"><h3>Do next</h3><span class="chip warn">operator review</span></div>
@@ -19975,7 +20149,8 @@
               <div class="weather-action-item"><b>3</b><div><strong>Recheck before committing</strong><span>A new cache read may change the candidate posture; it never mutates runtime safety truth.</span></div></div>
             </div>
             <div style="height:10px"></div>
-            <button type="button" data-weather-recheck="true">Recheck candidate evidence</button>
+            <button type="button" data-weather-recheck="true" ${refreshInProgress ? "disabled" : ""}>${refreshInProgress ? "正在向 CWA 更新…" : "更新 CWA 現況"}</button>
+            <p class="status ${refreshFailed ? "error" : refreshInProgress ? "warn" : ""}" data-weather-refresh-status="true" role="status" aria-live="polite">${escapeHtml(refreshStatus)}</p>
           </div>
         </section>
       `;
@@ -20011,8 +20186,9 @@
       const arrivalMinutes = snapshot.routeRisk?.imageryFeatures?.estimatedRainArrivalMinutes;
       const criticalWindow = arrivalMinutes !== null && arrivalMinutes !== undefined && Number.isFinite(Number(arrivalMinutes))
         ? `${Number(arrivalMinutes)} min estimated arrival`
-        : formatCwaTimestamp(snapshot.preferredRainfall?.validUntil, "unresolved");
-      const radarTime = formatCwaTimestamp(snapshot.imageryFamilies.find(item => item.family === "radar")?.current?.sourceTimestamp, "awaiting frame");
+        : formatCwaTimestampOr(snapshot.preferredRainfall?.validUntil, "unresolved");
+      const radarSourceTimestamp = snapshot.imageryFamilies.find(item => item.family === "radar")?.current?.sourceTimestamp;
+      const radarTime = formatCwaTimestampOr(radarSourceTimestamp, "awaiting frame");
       return `
         ${outdoorTabs(force.route)}
         <section class="panel weather-decision-band" data-weather-decision-band="true">
@@ -21430,7 +21606,7 @@
     }
 
     function navigationTerrainRudyOpacity(mode) {
-      return mode === "3d" ? .38 : 1;
+      return mode === "3d" ? .46 : .74;
     }
 
     function navigationTerrainCameraMinimumZoom(dem, mode) {
@@ -21475,13 +21651,16 @@
       const sourceLabel = evidenceDomain === "observed"
         ? isTerrain
           ? `Rudy+TW ${(rudyOpacity * 100).toFixed(0)}% terrain texture + prepared DEM`
-          : "Rudy+TW flat evidence map"
+          : "Rudy+TW + DEM evidence layers"
         : evidenceDomain === "prior"
           ? "Prepared DEM + non-spatial learned prior"
           : "Prepared DEM only";
-      const stateText = ready
+      const stateDetail = ready
         ? `${lensSummary.title_text} · ${scaleText} · ${formatInteger(dem.tile_count)} complete Terrain RGB tiles · ${valueOrDash(dem.source_cell_resolution_m)}m source cells · ${interpolationText} · ${routeCoverageText} · ${sourceLabel}`
         : "Prepared Terrain RGB tiles are unavailable. The workbench will not synthesize a flat or gap-filled surface.";
+      const stateText = ready
+        ? `${valueOrDash(dem.source_cell_resolution_m)}m DEM · ${isTerrain ? "LOCAL 3D" : "FULL ROUTE 2D"} · CANDIDATE-ONLY`
+        : stateDetail;
       return `
         <div
           class="navigation-terrain-maplibre-shell"
@@ -21523,6 +21702,7 @@
           <div
             class="navigation-terrain-maplibre-state"
             data-navigation-maplibre-state="${ready ? "loading" : "failed"}"
+            title="${escapeHtml(stateDetail)}"
             aria-live="polite"
           ><strong>${isTerrain ? "MAPLIBRE 3D TERRAIN" : "MAPLIBRE 2D EVIDENCE"}</strong>${escapeHtml(stateText)}</div>
         </div>
@@ -21542,6 +21722,8 @@
       const verticalExaggeration = Number(state.navigationTerrainVerticalExaggeration || 1);
       const evidenceDomain = navigationTerrainEvidenceDomain();
       const lens = state.navigationTerrainLens || "structure";
+      const inspectorExpanded = state.navigationTerrainInspectorExpanded === true;
+      const layerVisibility = navigationTerrainLayerVisibility();
       const candidateFeatureCollection = navigationTerrainMapLibreFeatureCollection(snapshot);
       const terrainVisibility = navigationTerrainMapLibreVisibilitySummary(
         snapshot,
@@ -21607,6 +21789,28 @@
                 ].map(([mode, label, title]) => `<button type="button" data-navigation-terrain-view="${mode}" aria-label="${title}" title="${title}" aria-pressed="${viewMode === mode ? "true" : "false"}">${label}</button>`).join("")}
               </div>
             </div>
+            <div class="navigation-terrain-control-group">
+              <small>Layers</small>
+              <div class="navigation-terrain-layer-switch" role="group" aria-label="Terrain map layers">
+                ${[
+                  ["basemap", "底圖", "#8e9b86"],
+                  ["elevation", "高程", "#70a867"],
+                  ["hillshade", "陰影", "#f2ead5"],
+                  ["contours", "等高線", "#ffffff"],
+                  ["slope", "坡度", "#d66a2e"],
+                  ["route", "路線", "#e00067"],
+                  ["candidates", "候選", "#1fa4c4"],
+                ].map(([layerKey, label, swatch]) => `
+                  <button
+                    type="button"
+                    data-navigation-terrain-layer-toggle="${layerKey}"
+                    aria-label="切換${label}圖層"
+                    aria-pressed="${layerVisibility[layerKey] ? "true" : "false"}"
+                    style="--terrain-layer-swatch:${swatch}"
+                  >${label}</button>
+                `).join("")}
+              </div>
+            </div>
             ${["structure", "events"].includes(lens) ? `<div class="navigation-terrain-control-group">
               <small>Scout lines</small>
               <div class="navigation-terrain-scope-switch" role="group" aria-label="Scout terrain candidate display scope">
@@ -21634,6 +21838,13 @@
                 </div>
               </div>
             `}
+            <button
+              type="button"
+              class="navigation-inspector-toggle"
+              data-navigation-terrain-inspector-toggle="true"
+              aria-controls="navigationTerrainContextInspector"
+              aria-expanded="${String(inspectorExpanded)}"
+            >詳細資料</button>
           </div>
         </div>
         <div class="navigation-terrain-boundary-strip" data-navigation-candidate-only-strip="true">
@@ -22238,6 +22449,128 @@
       }
     }
 
+    function navigationTerrainLayerVisibility() {
+      return {
+        basemap: true,
+        elevation: true,
+        hillshade: true,
+        contours: true,
+        slope: false,
+        route: true,
+        candidates: true,
+        ...(state.navigationTerrainLayerVisibility || {}),
+      };
+    }
+
+    function navigationTerrainLayerVisible(layerKey) {
+      return navigationTerrainLayerVisibility()[layerKey] !== false;
+    }
+
+    function navigationTerrainRasterOverlay(snapshot, mode) {
+      const overlay = asArray(snapshot?.terrain_surface?.overlays).find(
+        item => item?.mode === mode,
+      );
+      if (!overlay) return null;
+      if (
+        overlay.candidate_only !== true
+        || overlay.runtime_safety_truth !== false
+      ) return null;
+      const bounds = navigationRudyBounds(overlay.bbox_wgs84);
+      const runtimeHref = String(overlay.runtime_href || "");
+      const expectedPrefix = `/admin/pretrip/projects/${encodeURIComponent(projectId())}/terrain-overlays/`;
+      if (!bounds || !runtimeHref.startsWith(expectedPrefix)) return null;
+      return {...overlay, bounds, runtimeHref};
+    }
+
+    function navigationTerrainRasterImageSource(snapshot, mode) {
+      const overlay = navigationTerrainRasterOverlay(snapshot, mode);
+      if (!overlay) return null;
+      const version = String(overlay.sha256 || "").slice(0, 16);
+      const url = version
+        ? `${overlay.runtimeHref}${overlay.runtimeHref.includes("?") ? "&" : "?"}v=${encodeURIComponent(version)}`
+        : overlay.runtimeHref;
+      return {
+        type: "image",
+        url,
+        coordinates: [
+          [overlay.bounds.west, overlay.bounds.north],
+          [overlay.bounds.east, overlay.bounds.north],
+          [overlay.bounds.east, overlay.bounds.south],
+          [overlay.bounds.west, overlay.bounds.south],
+        ],
+      };
+    }
+
+    function navigationTerrainMapLayerIds(layerKey) {
+      const groups = {
+        basemap: ["scout-rudy-tw"],
+        elevation: ["scout-terrain-elevation-tint"],
+        hillshade: ["scout-terrain-hillshade"],
+        contours: ["scout-terrain-contours"],
+        slope: ["scout-terrain-slope-shading"],
+        route: ["scout-route-halo", "scout-route"],
+        candidates: [
+          "scout-drainage-trunk",
+          "scout-drainage-tributary",
+          "scout-ridge-main",
+          "scout-ridge-spur",
+          "scout-terrain-structure-samples",
+          "scout-route-pressure-samples",
+          "scout-terrain-risk-candidates",
+          "scout-selected-marker-halo",
+          "scout-retreat-route",
+          "scout-retreat-endpoints",
+          "scout-qgis-slope-candidate",
+          "scout-qgis-stream-network-candidate",
+          "scout-qgis-valley-candidate",
+          "scout-qgis-ridge-candidate",
+          "scout-qgis-terrain-feature-samples",
+          "scout-saddles",
+          "scout-terrain-event-clusters",
+          "scout-terrain-event-cluster-count",
+          "scout-terrain-events",
+          "scout-selected-event-halo",
+          "scout-terrain-event-location-label",
+        ],
+      };
+      return groups[layerKey] || [];
+    }
+
+    function navigationTerrainMapLayerKey(layerId) {
+      return [
+        "basemap",
+        "elevation",
+        "hillshade",
+        "contours",
+        "slope",
+        "route",
+        "candidates",
+      ].find(layerKey => navigationTerrainMapLayerIds(layerKey).includes(layerId)) || "";
+    }
+
+    function setNavigationTerrainMapLayerVisibility(layerKey, requestedVisible) {
+      if (!navigationTerrainMapLayerIds(layerKey).length) return false;
+      const visible = Boolean(requestedVisible);
+      state.navigationTerrainLayerVisibility = {
+        ...navigationTerrainLayerVisibility(),
+        [layerKey]: visible,
+      };
+      const visibility = visible ? "visible" : "none";
+      navigationTerrainMapLibreRuntime.maps.forEach(entry => {
+        navigationTerrainMapLayerIds(layerKey).forEach(layerId => {
+          if (entry.map?.getLayer?.(layerId)) {
+            entry.map.setLayoutProperty(layerId, "visibility", visibility);
+          }
+        });
+      });
+      document.querySelectorAll(
+        `button[data-navigation-terrain-layer-toggle="${cssEscape(layerKey)}"]`,
+      ).forEach(button => {
+        button.setAttribute("aria-pressed", String(visible));
+      });
+      return true;
+    }
+
     function navigationTerrainMapLibreEventFeatureCollection(snapshot) {
       const locations = navigationTerrainEvidenceDomain() === "observed"
         && state.navigationTerrainLens === "events"
@@ -22345,6 +22678,9 @@
       const evidenceDomain = navigationTerrainEvidenceDomain();
       const revealObservedContext = evidenceDomain === "observed";
       const demBounds = navigationRudyBounds(dem.bounds_wgs84);
+      const elevationTintSource = navigationTerrainRasterImageSource(snapshot, "elevation_tint");
+      const contourSource = navigationTerrainRasterImageSource(snapshot, "contours");
+      const slopeSource = navigationTerrainRasterImageSource(snapshot, "slope_shading");
       const sources = {
         "scout-terrain-dem": {
           type: "raster-dem",
@@ -22391,6 +22727,24 @@
           attribution: "Rudy+TW",
         };
       }
+      if (elevationTintSource) {
+        sources["scout-terrain-elevation-tint"] = {
+          ...elevationTintSource,
+          type: "image",
+        };
+      }
+      if (contourSource) {
+        sources["scout-terrain-contours"] = {
+          ...contourSource,
+          type: "image",
+        };
+      }
+      if (slopeSource) {
+        sources["scout-terrain-slope-shading"] = {
+          ...slopeSource,
+          type: "image",
+        };
+      }
       const lineWidth = (thin, thick) => [
         "interpolate",
         ["linear"],
@@ -22404,18 +22758,24 @@
         id: "scout-terrain-hillshade",
         type: "hillshade",
         source: "scout-terrain-hillshade-dem",
+        layout: {
+          visibility: navigationTerrainLayerVisible("hillshade") ? "visible" : "none",
+        },
         paint: {
-          "hillshade-exaggeration": mode === "3d" ? 1 : .9,
+          "hillshade-exaggeration": mode === "3d" ? .72 : .62,
           "hillshade-illumination-direction": 315,
-          "hillshade-shadow-color": "#07110e",
-          "hillshade-highlight-color": revealObservedContext ? "#fff8d9" : "#d9edbb",
-          "hillshade-accent-color": "#d56a16",
+          "hillshade-shadow-color": "rgba(4, 13, 9, .78)",
+          "hillshade-highlight-color": "rgba(255, 250, 218, .55)",
+          "hillshade-accent-color": "rgba(90, 68, 31, .58)",
         },
       };
       const rudyLayer = {
         id: "scout-rudy-tw",
         type: "raster",
         source: "scout-rudy-tw",
+        layout: {
+          visibility: navigationTerrainLayerVisible("basemap") ? "visible" : "none",
+        },
         paint: {
           "raster-opacity": navigationTerrainRudyOpacity(mode),
           "raster-fade-duration": 0,
@@ -22425,14 +22785,58 @@
           "raster-saturation": mode === "3d" ? -.14 : 0,
         },
       };
+      const terrainRasterLayers = [
+        ...(elevationTintSource ? [{
+          id: "scout-terrain-elevation-tint",
+          type: "raster",
+          source: "scout-terrain-elevation-tint",
+          layout: {
+            visibility: navigationTerrainLayerVisible("elevation") ? "visible" : "none",
+          },
+          paint: {
+            "raster-opacity": mode === "3d" ? .76 : revealObservedContext ? .66 : .88,
+            "raster-fade-duration": 0,
+            "raster-resampling": "linear",
+            "raster-saturation": mode === "3d" ? -.08 : .06,
+            "raster-contrast": mode === "3d" ? .08 : .04,
+          },
+        }] : []),
+        hillshadeLayer,
+        ...(slopeSource ? [{
+          id: "scout-terrain-slope-shading",
+          type: "raster",
+          source: "scout-terrain-slope-shading",
+          layout: {
+            visibility: navigationTerrainLayerVisible("slope") ? "visible" : "none",
+          },
+          paint: {
+            "raster-opacity": mode === "3d" ? .48 : .54,
+            "raster-fade-duration": 0,
+            "raster-resampling": "linear",
+          },
+        }] : []),
+        ...(contourSource ? [{
+          id: "scout-terrain-contours",
+          type: "raster",
+          source: "scout-terrain-contours",
+          layout: {
+            visibility: navigationTerrainLayerVisible("contours") ? "visible" : "none",
+          },
+          paint: {
+            "raster-opacity": mode === "3d" ? .38 : .44,
+            "raster-fade-duration": 0,
+            "raster-resampling": "linear",
+          },
+        }] : []),
+      ];
       const layers = [
         {
           id: "scout-terrain-background",
           type: "background",
           paint: {"background-color": revealObservedContext ? "#d9ddd6" : "#193227"},
         },
-        hillshadeLayer,
         ...(revealObservedContext ? [rudyLayer] : []),
+        ...terrainRasterLayers,
         {
           id: "scout-drainage-trunk",
           type: "line",
@@ -22794,10 +23198,30 @@
           },
         },
       ];
+      const configuredVisibility = {
+        basemap: navigationTerrainLayerVisible("basemap"),
+        elevation: navigationTerrainLayerVisible("elevation"),
+        hillshade: navigationTerrainLayerVisible("hillshade"),
+        contours: navigationTerrainLayerVisible("contours"),
+        slope: navigationTerrainLayerVisible("slope"),
+        route: navigationTerrainLayerVisible("route"),
+        candidates: navigationTerrainLayerVisible("candidates"),
+      };
+      const resolvedLayers = layers.map(layer => {
+        const layerKey = navigationTerrainMapLayerKey(layer.id);
+        if (!layerKey) return layer;
+        return {
+          ...layer,
+          layout: {
+            ...(layer.layout || {}),
+            visibility: configuredVisibility[layerKey] ? "visible" : "none",
+          },
+        };
+      });
       return {
         version: 8,
         sources,
-        layers,
+        layers: resolvedLayers,
         ...(mode === "3d" ? {
           terrain: {
             source: "scout-terrain-dem",
@@ -23123,8 +23547,8 @@
           };
           const rudyBlend = host.dataset.navigationEvidenceDomain === "observed"
             ? mode === "3d"
-              ? `Rudy+TW ${Math.round(navigationTerrainRudyOpacity(mode) * 100)}% terrain texture`
-              : "Rudy+TW 100% flat map · DEM shading hidden"
+              ? `Rudy+TW ${Math.round(navigationTerrainRudyOpacity(mode) * 100)}% terrain texture + shared DEM evidence layers`
+              : `Rudy+TW ${Math.round(navigationTerrainRudyOpacity(mode) * 100)}% context + elevation tint + hillshade + contours`
             : "Rudy+TW off";
           const qgisOverlay = qgisFeatureCount
             ? ` · QGIS overlay: ${qgisSpatialLayerSummary()}`
@@ -23144,7 +23568,8 @@
                 ? ` · center rendered elevation ${terrainElevation.toFixed(1)}m (visualization only)`
                 : "";
               status.title = `${mapScopeText} · ${formatInteger(dem.tile_count)} complete Terrain RGB tiles · ${routeCoverageText} · ${terrainScopeText} · ${rudyBlend}${qgisOverlay} · ${valueOrDash(dem.source_cell_resolution_m)}m source cells · ${interpolationText}${terrainEvidence}`;
-              status.innerHTML = `<strong>${mode === "3d" ? "MAPLIBRE 3D TERRAIN · DEM DECODED" : "MAPLIBRE 2D · READY"}</strong>${escapeHtml(lensSummary.status_text)}`;
+              status.setAttribute("aria-label", lensSummary.status_text);
+              status.innerHTML = `<strong>${mode === "3d" ? "MAPLIBRE 3D · DEM DECODED" : "MAPLIBRE 2D · READY"}</strong>${escapeHtml(`${valueOrDash(dem.source_cell_resolution_m)}m DEM · ${mode === "3d" ? "local terrain" : "full Golden Route"} · candidate-only`)}`;
             }
           };
           const verifyTerrainElevation = (attempt, verificationSequence) => {
@@ -23283,6 +23708,7 @@
             if (eventId) {
               state.navigationSelectedTerrainEventId = eventId;
               state.navigationTerrainLens = "events";
+              state.navigationTerrainInspectorExpanded = true;
               window.setTimeout(() => {
                 render();
                 window.requestAnimationFrame(() => {
@@ -23299,6 +23725,7 @@
               if (!structureId) return;
               state.navigationSelectedStructurePointId = structureId;
               state.navigationTerrainLens = "structure";
+              state.navigationTerrainInspectorExpanded = true;
               window.setTimeout(() => {
                 render();
                 focusNavigationTerrainSelection("structure", structureId);
@@ -23310,6 +23737,7 @@
               if (!pressureId) return;
               state.navigationSelectedPressurePointId = pressureId;
               state.navigationTerrainLens = "pressure";
+              state.navigationTerrainInspectorExpanded = true;
               window.setTimeout(() => {
                 render();
                 focusNavigationTerrainSelection("pressure", pressureId);
@@ -23321,6 +23749,7 @@
               if (!riskId) return;
               state.navigationSelectedLivePointId = riskId;
               state.navigationTerrainLens = "risk";
+              state.navigationTerrainInspectorExpanded = true;
               window.setTimeout(() => {
                 render();
                 focusNavigationTerrainSelection("risk", riskId);
@@ -23330,6 +23759,7 @@
             const edgeId = String(feature?.properties?.id || "");
             if (!edgeId) return;
             state.navigationSelectedHierarchyEdgeId = edgeId;
+            state.navigationTerrainInspectorExpanded = true;
             window.setTimeout(() => render(), 0);
           });
           host.addEventListener("keydown", event => {
@@ -23896,10 +24326,17 @@
     function renderNavigationOrderedClues(snapshot) {
       const ledger = snapshot?.source_ledger || {};
       const clues = asArray(ledger.ordered_clues);
+      const clueDescription = ledger.ordered_clue_chain_kind === "gpx_waypoint_clues"
+        ? "GPX waypoint 線索，不冒充歷史敘事。"
+        : ledger.ordered_clue_chain_kind === "named_point_route_positions"
+          ? "依 Golden Route 路程排序的命名地點線索；僅供閱讀，不代表已確認歷史路線。"
+          : clues.length
+            ? "有序候選線索已準備；來源類型尚未分類。"
+            : "沒有可用的有序線索鏈。";
       return `
         <section class="navigation-evidence-panel" data-navigation-ordered-clues="true">
           <h3>Ordered Clue Chain</h3>
-          <p>${escapeHtml(ledger.ordered_clue_chain_kind === "gpx_waypoint_clues" ? "GPX waypoint 線索，不冒充歷史敘事。" : "沒有可用的有序線索鏈。")}</p>
+          <p>${escapeHtml(clueDescription)}</p>
           <div class="navigation-evidence-list">
             ${clues.length ? clues.map((clue, index) => `<div class="navigation-evidence-row"><small>${String(index + 1).padStart(2, "0")} · ${escapeHtml(clue.clue_type || "waypoint")}</small><strong>${escapeHtml(clue.label || clue.id || "clue")}</strong><em>${escapeHtml(clue.elevation_m === null || clue.elevation_m === undefined ? "elevation unavailable" : `${clue.elevation_m}m · human review`)}</em></div>`).join("") : '<div class="navigation-evidence-row"><small>not prepared</small><strong>No ordered clues</strong><em>保留為 evidence gap。</em></div>'}
           </div>
@@ -24375,6 +24812,7 @@
       const qgisRenderState = qgisSpatialRenderArtifact() ? "render ready" : "not started";
       const sourceCount = asArray(snapshot?.source_ledger?.sources).length;
       const evidenceGapCount = asArray(snapshot?.source_ledger?.evidence_gaps).length;
+      const inspectorExpanded = state.navigationTerrainInspectorExpanded === true;
       return `
         ${outdoorTabs(force.route)}
         <section class="navigation-terrain-shell" data-navigation-terrain-intelligence="true" data-navigation-boundary="candidate-only">
@@ -24391,7 +24829,11 @@
               `).join("")}
             </div>
           </header>
-          <div class="navigation-terrain-workspace" data-navigation-primary-stage="true">
+          <div
+            class="navigation-terrain-workspace"
+            data-navigation-primary-stage="true"
+            data-navigation-inspector-expanded="${String(inspectorExpanded)}"
+          >
             <div class="navigation-terrain-primary">
               <section class="navigation-terrain-map-panel">
                 ${sourceMode === "training"
@@ -24457,7 +24899,12 @@
               </section>
               ${sourceMode === "workspace" && liveReady && evidenceDomain === "observed" && lens === "events" ? renderNavigationTerrainEventTimeline(snapshot, selectedTerrainEvent) : ""}
             </div>
-            <aside class="navigation-terrain-side" data-navigation-context-inspector="true">
+            <aside
+              id="navigationTerrainContextInspector"
+              class="navigation-terrain-side"
+              data-navigation-context-inspector="true"
+              ${inspectorExpanded ? "" : "hidden"}
+            >
               <div class="navigation-context-heading">
                 <small>MAP CONTEXT</small>
                 <strong>${escapeHtml(activeLensLabel)}</strong>
@@ -28054,6 +28501,10 @@
       return `${prefix}${formatted} Asia/Taipei`;
     }
 
+    function formatCwaTimestampOr(value, fallback) {
+      return value ? formatCwaTimestamp(value) : fallback;
+    }
+
     function dashboardCwaRainfallStatusText(imagery = {}) {
       if (!imagery.bridgeReady) return "Connecting to prepared rainfall grids.";
       const rainfall = imagery.rainfallCurrent;
@@ -29003,6 +29454,30 @@
           );
         });
       });
+      shell.querySelectorAll("button[data-navigation-terrain-layer-toggle]").forEach(button => {
+        button.addEventListener("click", () => {
+          const layerKey = button.dataset.navigationTerrainLayerToggle || "";
+          const current = navigationTerrainLayerVisible(layerKey);
+          setNavigationTerrainMapLayerVisibility(layerKey, !current);
+        });
+      });
+      const inspectorToggle = shell.querySelector(
+        'button[data-navigation-terrain-inspector-toggle="true"]',
+      );
+      inspectorToggle?.addEventListener("click", () => {
+        const inspectorExpanded = state.navigationTerrainInspectorExpanded !== true;
+        state.navigationTerrainInspectorExpanded = inspectorExpanded;
+        inspectorToggle.setAttribute("aria-expanded", String(inspectorExpanded));
+        const workspace = shell.querySelector("[data-navigation-primary-stage]");
+        const inspector = shell.querySelector("[data-navigation-context-inspector]");
+        if (workspace) {
+          workspace.dataset.navigationInspectorExpanded = String(inspectorExpanded);
+        }
+        if (inspector) inspector.hidden = !inspectorExpanded;
+        window.requestAnimationFrame(() => {
+          navigationTerrainMapLibreRuntime.maps.forEach(entry => entry.map?.resize?.());
+        });
+      });
       shell.querySelectorAll("button[data-navigation-terrain-candidate-scope]").forEach(button => {
         button.addEventListener("click", () => {
           const scope = button.dataset.navigationTerrainCandidateScope || "route";
@@ -29043,6 +29518,7 @@
         select.addEventListener("change", () => {
           const lens = select.dataset.navigationSelectionLens || state.navigationTerrainLens;
           if (!setNavigationTerrainSelection(lens, select.value)) return;
+          state.navigationTerrainInspectorExpanded = true;
           rerenderNavigation('select[data-navigation-candidate-select="true"]');
           focusNavigationTerrainSelection(lens, select.value);
         });
@@ -29058,6 +29534,7 @@
           );
           const target = model.items[targetIndex];
           if (!target || !setNavigationTerrainSelection(lens, target.id)) return;
+          state.navigationTerrainInspectorExpanded = true;
           rerenderNavigation(
             `button[data-navigation-selection-step="${step}"]`,
           );
@@ -29068,6 +29545,7 @@
         const selectHierarchyEdge = event => {
           event.stopPropagation();
           state.navigationSelectedHierarchyEdgeId = target.dataset.navigationTerrainSelectEdge || "";
+          state.navigationTerrainInspectorExpanded = true;
           rerenderNavigation(
             `[data-navigation-selected-edge="${cssEscape(state.navigationSelectedHierarchyEdgeId)}"]`,
           );
@@ -29083,6 +29561,7 @@
         const selectLivePoint = () => {
           const selectionId = target.dataset.navigationLivePointId || "";
           state.navigationSelectedLivePointId = selectionId;
+          state.navigationTerrainInspectorExpanded = true;
           rerenderNavigation(
             `[data-navigation-live-point-id="${cssEscape(state.navigationSelectedLivePointId)}"]`,
           );
@@ -29099,6 +29578,7 @@
         const selectPressurePoint = () => {
           const selectionId = target.dataset.navigationPressurePointId || "";
           state.navigationSelectedPressurePointId = selectionId;
+          state.navigationTerrainInspectorExpanded = true;
           rerenderNavigation(
             `[data-navigation-pressure-point-id="${cssEscape(state.navigationSelectedPressurePointId)}"]`,
           );
@@ -29115,6 +29595,7 @@
         const selectStructurePoint = () => {
           const selectionId = target.dataset.navigationStructurePointId || "";
           state.navigationSelectedStructurePointId = selectionId;
+          state.navigationTerrainInspectorExpanded = true;
           rerenderNavigation(
             `[data-navigation-structure-point-id="${cssEscape(state.navigationSelectedStructurePointId)}"]`,
           );
@@ -29132,6 +29613,7 @@
           const eventId = target.dataset.navigationTerrainEventId || "";
           state.navigationSelectedTerrainEventId = eventId;
           state.navigationTerrainLens = "events";
+          state.navigationTerrainInspectorExpanded = true;
           rerenderNavigation(
             `[data-navigation-terrain-event-id="${cssEscape(eventId)}"]`,
           );
@@ -29671,6 +30153,8 @@
           .toolbar-row[aria-label="Map tools"] { display:flex !important; justify-content:flex-end !important; gap:4px !important; padding:5px !important; border:1px solid rgba(42,64,74,.7) !important; border-radius:8px !important; background:rgba(247,250,252,.94) !important; box-shadow:0 8px 24px rgba(0,0,0,.25) !important; pointer-events:auto !important; }
           .map-wrap { position:absolute !important; inset:0 !important; width:100% !important; height:100% !important; min-height:0 !important; }
           #map { display:block !important; width:100% !important; height:100% !important; min-height:100% !important; }
+          #mapRendererShell[data-map-renderer-active="maplibre"] #map { display:none !important; }
+          #mapRendererShell[data-map-renderer-active="svg"] #mapLibreEvidenceMap { display:none !important; }
           #hoverHint {
             max-width:min(330px, calc(100vw - 24px)) !important;
             border:1px solid rgba(98,184,198,.62) !important;
@@ -30731,14 +31215,13 @@
         state.weatherTimelineIndex = Number(event.currentTarget.value || 0);
         invokeWeatherCwaMap("setFrameIndex", state.weatherTimelineIndex);
       });
-      document.querySelector("[data-weather-recheck]")?.addEventListener("click", async (button) => {
+      document.querySelector("[data-weather-recheck]")?.addEventListener("click", async (event) => {
+        const button = event.currentTarget;
         button.disabled = true;
-        button.textContent = "Rechecking…";
-        try {
-          await loadDataForRoute("outdoor-weather", {force: true});
-        } finally {
-          if (state.route === "outdoor-weather") render();
-        }
+        button.textContent = "正在向 CWA 更新…";
+        const result = await triggerDashboardConnectedPreparation("operator-refresh", {force: true});
+        if (!["queued", "running"].includes(result?.status)) await loadWeatherData();
+        if (state.route === "outdoor-weather") render();
       });
       document.querySelector("[data-debug-retry]")?.addEventListener("click", () => {
         void loadDataForRoute("debug", {force: true});
@@ -31135,7 +31618,7 @@
     }
 
     function importTripDefaultLayerIds() {
-      return "osm,overpass,terrain,risk-score,risk-ribbon,risk-heatmap,risk-delta,cwa-qpf,soil-moisture,antecedent-rain,cwa-weather,weather,reference-tracks,route,segments,checkpoints,mcp";
+      return "imagery,osm,overpass,terrain,risk-score,risk-ribbon,risk-heatmap,risk-delta,cwa-qpf,soil-moisture,antecedent-rain,cwa-weather,weather,reference-tracks,route,segments,checkpoints,mcp,pois,hazards,corridors,retreat,route-notes";
     }
 
     function setImportTripStatus(message, tone = "info") {
@@ -31331,6 +31814,7 @@
           const checkpointSpacing = Number(fieldValue("importCheckpointSpacingM"));
           const maxDisplayPoints = Number(fieldValue("importMaxReferenceDisplayPoints"));
           const maxReasonableSpeed = Number(fieldValue("importMaxReasonableGpxSpeedKmh"));
+          const maxPreviousSpeedRatio = Number(fieldValue("importMaxPreviousGpxSpeedRatio"));
           const routeCorridor = Number(fieldValue("prepareRouteCorridorM"));
           const referenceTrackCorridor = Number(fieldValue("prepareReferenceTrackCorridorM"));
           if (!tripId || !/^[A-Za-z0-9_.-]+$/.test(tripId)) {
@@ -31353,7 +31837,7 @@
             setImportTripStatus("At least one map preparation layer id is required.", "warn");
             return;
           }
-          if (!Number.isFinite(checkpointSpacing) || checkpointSpacing <= 0 || !Number.isFinite(maxDisplayPoints) || maxDisplayPoints <= 0 || !Number.isFinite(maxReasonableSpeed) || maxReasonableSpeed <= 0) {
+          if (!Number.isFinite(checkpointSpacing) || checkpointSpacing <= 0 || !Number.isFinite(maxDisplayPoints) || maxDisplayPoints <= 0 || !Number.isFinite(maxReasonableSpeed) || maxReasonableSpeed <= 0 || !Number.isFinite(maxPreviousSpeedRatio) || maxPreviousSpeedRatio <= 0) {
             setImportTripStatus("GPX import numeric parameters must be greater than 0.", "warn");
             return;
           }
@@ -31410,11 +31894,18 @@
             checkpoint_spacing_m: checkpointSpacing,
             max_reference_display_points: maxDisplayPoints,
             max_reasonable_gpx_speed_kmh: maxReasonableSpeed,
+            max_previous_gpx_speed_ratio: maxPreviousSpeedRatio,
             import_stage: "pretrip",
             overwrite: fieldChecked("importOverwriteWorkspace"),
           };
           const templateProjectRoot = fieldValue("importTemplateProjectRoot");
           if (templateProjectRoot) importPayload.template_project_root = templateProjectRoot;
+          const materialRoot = fieldValue("importMaterialRoot");
+          if (materialRoot) importPayload.material_root = materialRoot;
+          const dtmDirs = fieldValue("importDtmDirs").split(/[,\n]+/).map((path) => path.trim()).filter(Boolean);
+          if (dtmDirs.length) importPayload.dtm_dirs = dtmDirs;
+          const mcpNamedPointEvidence = fieldValue("importMcpNamedPointEvidence");
+          if (mcpNamedPointEvidence) importPayload.mcp_named_point_evidence = mcpNamedPointEvidence;
           if (referenceSources.mode === "directory") {
             importPayload.reference_dir = referenceSources.entries[0];
           } else if (referenceSources.mode === "explicit_gpx_paths") {
@@ -31515,18 +32006,72 @@
 
     function bindWorkspaceControls() {
       const status = document.getElementById("workspaceOperationStatus");
+      const cloneButton = document.getElementById("workspaceCloneProject");
+      const cloneTargetInput = document.getElementById("workspaceCloneTargetInput");
+      if (cloneButton && cloneTargetInput) {
+        cloneButton.addEventListener("click", async () => {
+          const targetProjectId = cloneTargetInput.value.trim();
+          if (!targetProjectId || !/^[A-Za-z0-9_.-]+$/.test(targetProjectId)) {
+            if (status) {
+              status.textContent = "New workspace name must use letters, numbers, underscore, dash or dot only.";
+              status.dataset.status = "bad";
+            }
+            return;
+          }
+          if (targetProjectId === projectId()) {
+            if (status) {
+              status.textContent = "Clone target must be different from the current workspace.";
+              status.dataset.status = "bad";
+            }
+            return;
+          }
+          cloneButton.disabled = true;
+          cloneTargetInput.disabled = true;
+          if (status) {
+            status.textContent = `Creating ${targetProjectId}: one clean GPX import, then full map preparation. The source workspace will remain unchanged.`;
+            status.dataset.status = "warn";
+          }
+          try {
+            const result = await postJson(
+              `/admin/dashboard/workspaces/${encodeURIComponent(projectId())}/clone`,
+              {
+                target_project_id: targetProjectId,
+                confirm_clone: true,
+                requested_by: "dashboard_operator",
+              },
+              {timeoutMs: WORKSPACE_CLONE_TIMEOUT_MS},
+            );
+            await loadWorkspaceCatalog();
+            localStorage.setItem("scout.dashboardProjectId", targetProjectId);
+            const url = new URL(window.location.href);
+            url.searchParams.set("projectId", targetProjectId);
+            url.hash = "features-workspace";
+            if (status) {
+              const layerCount = result.map_preparation?.normalized_layers?.length || 0;
+              status.textContent = `${targetProjectId} created and prepared with ${layerCount} layers. Opening the new workspace...`;
+              status.dataset.status = "ok";
+            }
+            window.location.href = url.toString();
+          } catch (error) {
+            if (status) {
+              status.textContent = `Clone failed without overwriting the source: ${error.message || error}`;
+              status.dataset.status = "bad";
+            }
+            cloneButton.disabled = false;
+            cloneTargetInput.disabled = false;
+          }
+        });
+      }
       document.querySelectorAll("[data-workspace-action]").forEach((button) => {
         button.addEventListener("click", async () => {
           const action = button.dataset.workspaceAction || "workspace";
           const labels = {
-            clone: "Record clone request",
             transfer: "Record transfer request",
             pack: "Record package request",
             restore: "Record restore request",
             delete: "Request deletion review",
           };
           const operationName = {
-            clone: "clone",
             transfer: "transfer",
             pack: "package",
             restore: "restore",

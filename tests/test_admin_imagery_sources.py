@@ -28,6 +28,20 @@ def test_default_registry_exposes_allowlisted_sources_without_raw_urls():
         "happyman_geo2016",
         "happyman_tw5k2000",
         "happyman_forest",
+        "sinica_jm20k_1904",
+        "sinica_jm20k_1904_triangulation",
+        "sinica_jm50k_1916",
+        "sinica_jm20k_1921",
+        "sinica_jm50k_1924",
+        "sinica_jm50k_1924_new",
+        "sinica_ttfb3_0603",
+        "sinica_ttfb3_0602",
+        "sinica_ttfb3_0601",
+        "sinica_tm50k_1956",
+        "sinica_tm50k_1966",
+        "sinica_tm25k_1989",
+        "happyman_tri1999",
+        "happyman_tw25k2001",
     }
     assert all("url_template" not in source for source in contract["sources"])
     assert all(source["url_template_sha256"] for source in contract["sources"])
@@ -62,6 +76,16 @@ def test_default_registry_exposes_allowlisted_sources_without_raw_urls():
     assert "cellular_communication_point" in rudy_twmap["label_extraction_roles"]
     assert "trail_name_label" in rudy_twmap["label_extraction_roles"]
 
+    historical_sources = [
+        source
+        for source in contract["sources"]
+        if source.get("theme_group") == "historical_map"
+    ]
+    assert len(historical_sources) == 15
+    assert all(source["historical_map"] is True for source in historical_sources)
+    assert all(source["candidate_only"] is True for source in historical_sources)
+    assert all(source["runtime_safety_truth"] is False for source in historical_sources)
+
 
 def test_imagery_tile_url_preserves_source_specific_tile_order():
     nlsc = imagery_source_for_project({"imagery_source_id": "nlsc_photo2"})
@@ -85,6 +109,20 @@ def test_imagery_tile_url_preserves_source_specific_tile_order():
     assert "TILEMATRIX=05" in imagery_tile_url(rudy, 5, 26, 13)
     assert imagery_tile_url(rudy_twmap, 15, 27418, 14126).endswith(
         "/map/moi_osm/15/27418/14126.png"
+    )
+
+
+def test_historical_map_tile_urls_support_query_and_arcgis_exploded_layouts():
+    fandi = imagery_source_for_project({}, source_id="sinica_jm50k_1916")
+    taitung_forest = imagery_source_for_project({}, source_id="sinica_ttfb3_0601")
+
+    assert imagery_tile_url(fandi, 14, 13703, 7093) == (
+        "https://gis.sinica.edu.tw/tileserver/file-exists.php?"
+        "img=JM50K_1916-jpg-14-13703-7093"
+    )
+    assert imagery_tile_url(taitung_forest, 14, 13703, 7093) == (
+        "https://gis.sinica.edu.tw/taitung/map_TFB3_0601/"
+        "Layers/_alllayers/L14/R00001bb5/C00003587.png"
     )
 
 

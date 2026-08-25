@@ -2121,6 +2121,74 @@ def test_admin_imagery_tile_proxy_api_can_fill_named_rudy_layer_from_source_id(
     assert cached_path.read_bytes() == remote_body
 
 
+def test_admin_imagery_tile_proxy_api_caches_historical_theme_in_its_own_namespace(
+    monkeypatch,
+    tmp_path,
+):
+    workspace_root = tmp_path / "workspaces"
+    project_id = "dongqing_batongguan_historic_trail_newImport"
+    project_root = workspace_root / project_id
+    cache_root = tmp_path / "raster-tiles"
+    project_root.mkdir(parents=True)
+    (project_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": project_id,
+                "imagery_tile_cache_root": str(cache_root),
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    remote_body = b"\xff\xd8\xff\xdbscout-historical-map"
+    requested = []
+
+    class FakeResponse:
+        headers = {"Content-Type": "image/jpeg"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return remote_body
+
+    def fake_urlopen(request, timeout):
+        requested.append((request.full_url, timeout))
+        return FakeResponse()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.get(
+        f"/admin/tiles/imagery/{project_id}/historical-fandi-1916/"
+        "14/13703/7093.png?source_id=sinica_jm50k_1916&native=true&refresh=true"
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/jpeg")
+    assert response.headers["x-scout-tile-source"] == "remote_refresh_cache_replace"
+    assert response.headers["x-scout-imagery-source-id"] == "sinica_jm50k_1916"
+    assert requested == [
+        (
+            "https://gis.sinica.edu.tw/tileserver/file-exists.php?"
+            "img=JM50K_1916-jpg-14-13703-7093",
+            3.0,
+        )
+    ]
+    cached_path = raster_tile_cache_path(
+        project_id,
+        "historical-fandi-1916",
+        14,
+        13703,
+        7093,
+        cache_root=cache_root,
+    )
+    assert cached_path.read_bytes() == remote_body
+
+
 def test_admin_imagery_tile_proxy_api_native_zoom_uses_explicit_xyz_source(
     monkeypatch,
     tmp_path,
@@ -2177,6 +2245,88 @@ def test_admin_imagery_tile_proxy_api_native_zoom_uses_explicit_xyz_source(
             3.0,
         )
     ]
+
+
+def test_admin_imagery_tile_proxy_explicit_refresh_replaces_cached_tile(
+    monkeypatch,
+    tmp_path,
+):
+    workspace_root = tmp_path / "workspaces"
+    project_id = "chilai_nanhua_day1"
+    project_root = workspace_root / project_id
+    cache_root = project_root / "cache" / "raster-tiles"
+    project_root.mkdir(parents=True)
+    (project_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": project_id,
+                "imagery_tile_cache_root": str(cache_root),
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    cached_path = raster_tile_cache_path(
+        project_id,
+        "geology",
+        13,
+        6853,
+        3534,
+        cache_root=cache_root,
+    )
+    cached_path.parent.mkdir(parents=True)
+    cached_path.write_bytes(b"\x89PNG\r\n\x1a\nstale-geology")
+    remote_body = b"\x89PNG\r\n\x1a\nrefreshed-geology"
+
+    class FakeResponse:
+        headers = {"Content-Type": "image/png"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return remote_body
+
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda request, timeout: FakeResponse(),
+    )
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.get(
+        f"/admin/tiles/imagery/{project_id}/geology/13/6853/3534.png"
+        "?source_id=happyman_geo2016&native=1&refresh=1"
+    )
+
+    assert response.status_code == 200
+    assert response.headers["x-scout-tile-source"] == "remote_refresh_cache_replace"
+    assert response.content == remote_body
+    assert cached_path.read_bytes() == remote_body
+
+
+def test_admin_imagery_tile_proxy_cache_only_never_fetches_missing_tile(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setenv("SCOUT_ADMIN_RASTER_TILE_CACHE_ROOT", str(tmp_path))
+    monkeypatch.setenv("SCOUT_ADMIN_IMAGERY_REMOTE_FETCH", "true")
+
+    def unexpected_urlopen(request, timeout):
+        raise AssertionError("cache_only tile request must not fetch WMTS")
+
+    monkeypatch.setattr("urllib.request.urlopen", unexpected_urlopen)
+    client = TestClient(create_admin_app())
+
+    response = client.get(
+        "/admin/tiles/imagery/chilai_nanhua_day1/geology/13/6853/3534.png"
+        "?source_id=happyman_geo2016&cache_only=1"
+    )
+
+    assert response.status_code == 200
+    assert response.headers["x-scout-tile-source"] == "transparent_fallback"
 
 
 def test_admin_imagery_tile_proxy_api_rejects_invalid_identity():
@@ -2265,6 +2415,7 @@ def test_dashboard_workspace_catalog_resolves_server_owned_workspace_root(tmp_pa
         (workspace_root / PROJECT_ID).resolve()
     )
     assert project["capabilities"]["switch"] is True
+    assert project["capabilities"]["clone_from_import_inputs"] is True
     assert project["capabilities"]["record_operation_request"] is True
 
 
@@ -2276,6 +2427,70 @@ def test_dashboard_workspace_context_rejects_unknown_project(tmp_path):
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Dashboard workspace not found"
+
+
+def test_dashboard_workspace_clone_runs_clean_import_and_preparation(
+    tmp_path,
+    monkeypatch,
+):
+    workspace_root = _copy_pretrip_workspace(tmp_path)
+    source_root = workspace_root / PROJECT_ID
+    source_project_bytes = (source_root / "project.json").read_bytes()
+    captured = []
+
+    def fake_clone(request):
+        captured.append(request)
+        return {
+            "source_project_id": request.source_project_id,
+            "target_project_id": request.target_project_id,
+            "project_root": str(workspace_root / request.target_project_id),
+            "status": "completed",
+            "receipt": {"boundary": {"runtime_safety_truth": False}},
+            "map_preparation": {
+                "normalized_layers": list(request.layers),
+            },
+            "boundary": {"runtime_safety_truth": False},
+        }
+
+    monkeypatch.setattr(admin_api, "clone_pretrip_workspace_from_inputs", fake_clone)
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.post(
+        f"/admin/dashboard/workspaces/{PROJECT_ID}/clone",
+        json={
+            "target_project_id": "dongqing_newImport",
+            "confirm_clone": True,
+        },
+    )
+
+    assert response.status_code == 201
+    assert len(captured) == 1
+    assert captured[0].source_project_id == PROJECT_ID
+    assert captured[0].target_project_id == "dongqing_newImport"
+    assert captured[0].source_project_root == source_root.resolve()
+    assert len(captured[0].layers) == 23
+    assert response.json()["executed"] is True
+    assert response.json()["mutation"] == {
+        "source_workspace_mutated": False,
+        "target_workspace_created": True,
+        "target_workspace_overwritten": False,
+        "runtime_mutated": False,
+        "phase1_runtime_mutated": False,
+    }
+    assert (source_root / "project.json").read_bytes() == source_project_bytes
+
+
+def test_dashboard_workspace_clone_requires_confirmation(tmp_path):
+    workspace_root = _copy_pretrip_workspace(tmp_path)
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.post(
+        f"/admin/dashboard/workspaces/{PROJECT_ID}/clone",
+        json={"target_project_id": "new_workspace", "confirm_clone": False},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "confirm_clone=true is required"
 
 
 def test_dashboard_workspace_operation_request_requires_explicit_confirmation(
@@ -2462,6 +2677,12 @@ def test_pretrip_import_gpx_preview_validates_paths_without_writing(tmp_path):
     golden_route = inbox / "golden-route.gpx"
     explicit_reference = inbox / "reference-explicit.gpx"
     directory_reference = reference_dir / "reference-dir.gpx"
+    material_root = tmp_path / "materials"
+    dtm_dir = material_root / "sources" / "dtm" / "hualien"
+    mcp_evidence = material_root / "sources" / "mcp" / "named_points.json"
+    dtm_dir.mkdir(parents=True)
+    mcp_evidence.parent.mkdir(parents=True)
+    mcp_evidence.write_text("{}", encoding="utf-8")
     _write_small_gpx(
         golden_route,
         name="api preview golden route",
@@ -2492,6 +2713,10 @@ def test_pretrip_import_gpx_preview_validates_paths_without_writing(tmp_path):
             "profile": "pi-offline",
             "checkpoint_spacing_m": 500.0,
             "max_reference_display_points": 3,
+            "max_previous_gpx_speed_ratio": 6.0,
+            "material_root": str(material_root),
+            "dtm_dirs": [str(dtm_dir)],
+            "mcp_named_point_evidence": str(mcp_evidence),
         },
     )
 
@@ -2504,6 +2729,10 @@ def test_pretrip_import_gpx_preview_validates_paths_without_writing(tmp_path):
     assert payload["plan"]["source_file_count"] == 3
     assert payload["plan"]["golden_route_count"] == 1
     assert payload["plan"]["reference_track_count"] == 2
+    assert payload["plan"]["max_previous_gpx_speed_ratio"] == 6.0
+    assert payload["inputs"]["material_root"] == str(material_root)
+    assert payload["inputs"]["dtm_dirs"] == [str(dtm_dir)]
+    assert payload["inputs"]["mcp_named_point_evidence"] == str(mcp_evidence)
     assert payload["provenance"]["golden_route_gpx"]["role"] == "golden_route_reference"
     assert payload["provenance"]["golden_route_gpx"]["route_summary"]["route_name"] == (
         "api preview golden route"
@@ -2730,6 +2959,37 @@ def test_pretrip_prepare_layers_preview_is_workspace_metadata_only(tmp_path):
     assert workspace_bytes_after == workspace_bytes_before
     assert "<trkpt" not in response.text.lower()
     assert _repo_fixture_bytes() == original_fixture_bytes
+
+
+def test_pretrip_prepare_layers_api_defaults_to_full_preparation_contract():
+    request = admin_api.PreTripPrepareLayersRequest()
+
+    assert len(request.layers) == 23
+    assert request.layers == [
+        "imagery",
+        "osm",
+        "overpass",
+        "terrain",
+        "risk-score",
+        "risk-ribbon",
+        "risk-heatmap",
+        "risk-delta",
+        "cwa-qpf",
+        "soil-moisture",
+        "antecedent-rain",
+        "cwa-weather",
+        "weather",
+        "reference-tracks",
+        "route",
+        "segments",
+        "checkpoints",
+        "mcp",
+        "pois",
+        "hazards",
+        "corridors",
+        "retreat",
+        "route-notes",
+    ]
 
 
 def test_pretrip_prepare_layers_run_writes_workspace_and_feeds_admin_debug(tmp_path):

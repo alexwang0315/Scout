@@ -471,6 +471,61 @@ def test_startup_recovery_discards_staging_left_by_crashed_process(
     assert publication.startup_recovery[PROJECT_ID]["status"] == "discarded-staging"
 
 
+def test_startup_recovery_discards_unpublished_staging_after_live_metadata_update(
+    tmp_path: Path,
+) -> None:
+    workspace_root = tmp_path / "workspaces"
+    live_root = _write_project(workspace_root)
+    publication = DashboardWorkspacePublication(workspace_root)
+    publication.publish(publication.stage(PROJECT_ID))
+
+    abandoned = publication.stage(PROJECT_ID)
+    (live_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": PROJECT_ID,
+                "generation": "externally-updated",
+            }
+        ),
+        encoding="utf-8",
+    )
+    abandoned.preparation_lease.release()
+
+    recovered = DashboardWorkspacePublication(workspace_root)
+
+    assert _read_generation(live_root) == "externally-updated"
+    assert abandoned.session_root.exists() is False
+    assert abandoned.journal_path.exists() is False
+    assert recovered.startup_recovery[PROJECT_ID]["status"] == (
+        "discarded-staging-after-live-update"
+    )
+
+
+def test_startup_recovery_keeps_staging_blocked_after_live_generation_change(
+    tmp_path: Path,
+) -> None:
+    workspace_root = tmp_path / "workspaces"
+    live_root = _write_project(workspace_root)
+    publication = DashboardWorkspacePublication(workspace_root)
+    publication.publish(publication.stage(PROJECT_ID))
+
+    abandoned = publication.stage(PROJECT_ID)
+    generation_path = live_root / ".scout-workspace-generation.json"
+    generation = json.loads(generation_path.read_text(encoding="utf-8"))
+    generation_path.write_text(
+        json.dumps({**generation, "generationId": "f" * 32}),
+        encoding="utf-8",
+    )
+    abandoned.preparation_lease.release()
+
+    recovered = DashboardWorkspacePublication(workspace_root)
+
+    assert abandoned.session_root.exists()
+    assert abandoned.journal_path.exists()
+    assert recovered.startup_recovery[PROJECT_ID]["status"] == "blocked"
+    assert recovered.recovery_status(PROJECT_ID)["journalStatus"] == "blocked"
+
+
 def test_startup_recovery_keeps_new_generation_after_crash_during_publish(
     tmp_path: Path,
 ) -> None:
