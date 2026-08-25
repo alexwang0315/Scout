@@ -12,10 +12,13 @@ from typing import Any, Protocol
 from scout.nextgen.intelligence_gateway import (
     IntelligenceRequest,
     IntelligenceResponse,
+    IntelligenceTaskType,
     StubIntelligenceGateway,
 )
 from scout.nextgen.intelligence_mcp import (
+    DEEP_RESEARCH_TOOL_NAME,
     INTELLIGENCE_TOOL_NAME,
+    INTELLIGENCE_TOOL_NAMES,
     MCP_PROTOCOL_VERSION,
     MAX_RESPONSE_BYTES,
 )
@@ -29,6 +32,7 @@ from scout.nextgen.praison_service import (
     PraisonIntelligenceService,
     build_praison_model_replay_runtime,
 )
+from scout.nextgen.web_research import BoundedLiveWebResearchTools
 
 SUPPORTED_PROTOCOL_VERSIONS = frozenset({"2025-11-25", MCP_PROTOCOL_VERSION})
 
@@ -44,6 +48,7 @@ def build_parser() -> argparse.ArgumentParser:
         choices=(
             "stub",
             "praison-replay",
+            "praison-live-web",
             "praison-model-replay",
             "praison-openai-compatible",
         ),
@@ -79,6 +84,10 @@ def build_service(
         )
     elif mode == "praison-model-replay":
         runtime = build_praison_model_replay_runtime()
+    elif mode == "praison-live-web":
+        runtime = PraisonAgentTeamRuntime(
+            web_research_tools=BoundedLiveWebResearchTools()
+        )
     else:
         runtime = PraisonAgentTeamRuntime()
     return PraisonIntelligenceService(
@@ -136,7 +145,12 @@ def _dispatch(
     if method == "ping":
         return {}
     if method == "tools/list":
-        return {"tools": [_tool_description()]}
+        return {
+            "tools": [
+                _tool_description(service, INTELLIGENCE_TOOL_NAME),
+                _tool_description(service, DEEP_RESEARCH_TOOL_NAME),
+            ]
+        }
     if method == "tools/call":
         return _call_tool(service, params)
     raise ValueError(f"unsupported MCP method: {method}")
@@ -146,8 +160,9 @@ def _call_tool(
     service: IntelligenceService,
     params: Any,
 ) -> dict[str, Any]:
-    if not isinstance(params, dict) or params.get("name") != INTELLIGENCE_TOOL_NAME:
+    if not isinstance(params, dict) or params.get("name") not in INTELLIGENCE_TOOL_NAMES:
         return _tool_error("Scout Intelligence tool is not allowlisted")
+    tool_name = str(params["name"])
     arguments = params.get("arguments")
     if not isinstance(arguments, dict) or "request" not in arguments:
         return _tool_error("Scout Intelligence tool requires a typed request")
@@ -155,6 +170,15 @@ def _call_tool(
         request = IntelligenceRequest.model_validate(arguments["request"])
     except Exception:
         return _tool_error("Scout Intelligence request failed schema validation")
+    expected_task = (
+        IntelligenceTaskType.DEEP_RESEARCH
+        if tool_name == DEEP_RESEARCH_TOOL_NAME
+        else IntelligenceTaskType.TERRAIN_ANALYSIS
+    )
+    if request.task_type is not expected_task:
+        return _tool_error(
+            f"Scout Intelligence tool requires task_type={expected_task.value}"
+        )
     with contextlib.redirect_stdout(sys.stderr):
         response = service.execute(request)
     payload = response.model_dump(mode="json")
@@ -170,15 +194,28 @@ def _call_tool(
     }
 
 
-def _tool_description() -> dict[str, Any]:
+def _tool_description(
+    service: IntelligenceService,
+    tool_name: str,
+) -> dict[str, Any]:
     request_schema = IntelligenceRequest.model_json_schema()
     request_defs = request_schema.pop("$defs", {})
+    deep_research = tool_name == DEEP_RESEARCH_TOOL_NAME
     return {
-        "name": INTELLIGENCE_TOOL_NAME,
-        "title": "Analyze route terrain candidates",
+        "name": tool_name,
+        "title": (
+            "Run bounded Scout deep research"
+            if deep_research
+            else "Analyze route terrain candidates"
+        ),
         "description": (
-            "Analyze task-bound route and terrain evidence. Results are always "
-            "candidate-only and never runtime safety truth."
+            (
+                "Run explicitly scoped live web search and fetch through the "
+                "Praison Research specialist."
+                if deep_research
+                else "Analyze task-bound route and terrain evidence."
+            )
+            + " Results are always candidate-only and never runtime safety truth."
         ),
         "inputSchema": {
             "type": "object",
@@ -192,7 +229,9 @@ def _tool_description() -> dict[str, Any]:
             "readOnlyHint": True,
             "destructiveHint": False,
             "idempotentHint": True,
-            "openWorldHint": False,
+            "openWorldHint": bool(
+                deep_research and getattr(service, "supports_live_web", False)
+            ),
         },
     }
 
