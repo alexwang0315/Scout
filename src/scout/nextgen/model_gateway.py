@@ -15,7 +15,9 @@ from pydantic import BaseModel, Field, ValidationError
 
 from scout.nextgen.intelligence_gateway import ModelExecutionRecord
 from scout.nextgen.model_runtime import (
+    AcceleratorKind,
     Locality,
+    ModelRuntimeHostKind,
     ModelRuntimeCapability,
     ModelRuntimeProfile,
     ModelRuntimeRequest,
@@ -48,6 +50,28 @@ _PRIORITY_RANK = {
     ModelInferencePriority.NORMAL: 10,
     ModelInferencePriority.BACKGROUND: 20,
 }
+
+
+class ModelRuntimeCapabilityMatrixEntry(SchemaModel):
+    """Queryable Scout-owned view of one registered runtime's bounded role."""
+
+    schema_version: Literal["scout.model_runtime_capability.v0"] = (
+        "scout.model_runtime_capability.v0"
+    )
+    runtime_id: NonEmptyStr
+    provider: NonEmptyStr
+    model_id: NonEmptyStr
+    tier: ModelRuntimeTier
+    locality: Locality
+    required_host_kind: ModelRuntimeHostKind
+    accelerator: AcceleratorKind
+    capabilities: frozenset[ModelRuntimeCapability]
+    recommended_priority: ModelInferencePriority
+    context_limit_tokens: int = Field(ge=1)
+    max_concurrency: int = Field(ge=1)
+    offline_capable: bool
+    candidate_only: Literal[True] = True
+    runtime_safety_truth: Literal[False] = False
 
 
 class ModelGatewayError(RuntimeError):
@@ -355,17 +379,45 @@ class ScoutModelGateway:
         *,
         parent_request_id: UUID,
         max_model_requests: int = 10,
+        cancellation_event: threading.Event | None = None,
     ) -> "ModelGatewaySession":
         return ModelGatewaySession(
             gateway=self,
             parent_request_id=parent_request_id,
             max_model_requests=max_model_requests,
+            cancellation_event=cancellation_event,
         )
 
     def scheduler_snapshots(
         self,
     ) -> tuple[InferenceSchedulerSnapshot, InferenceSchedulerSnapshot]:
         return self._local_scheduler.snapshot(), self._cloud_scheduler.snapshot()
+
+    def capability_matrix(self) -> tuple[ModelRuntimeCapabilityMatrixEntry, ...]:
+        """Return immutable routing facts without probing or invoking a model."""
+
+        return tuple(
+            ModelRuntimeCapabilityMatrixEntry(
+                runtime_id=profile.runtime_id,
+                provider=profile.provider,
+                model_id=profile.model_id,
+                tier=profile.tier,
+                locality=profile.locality,
+                required_host_kind=profile.required_host_kind,
+                accelerator=profile.accelerator,
+                capabilities=profile.capabilities,
+                recommended_priority=(
+                    ModelInferencePriority.BACKGROUND
+                    if ModelRuntimeCapability.SLOW_BACKGROUND_REASONING
+                    in profile.capabilities
+                    else ModelInferencePriority.NORMAL
+                ),
+                context_limit_tokens=profile.context_limit_tokens,
+                max_concurrency=profile.max_concurrency,
+                offline_capable=profile.offline_capable,
+            )
+            for profile in self._router.profiles
+        )
 
     def _infer(
         self,
@@ -568,6 +620,7 @@ class ModelGatewaySession:
         gateway: ScoutModelGateway,
         parent_request_id: UUID,
         max_model_requests: int,
+        cancellation_event: threading.Event | None = None,
     ) -> None:
         if max_model_requests < 10:
             raise ValueError("model request ceiling cannot be below 10")
@@ -578,7 +631,7 @@ class ModelGatewaySession:
         self._records: list[ModelExecutionRecord] = []
         self._call_lock = threading.Lock()
         self._state_lock = threading.Lock()
-        self._cancellation_event = threading.Event()
+        self._cancellation_event = cancellation_event or threading.Event()
 
     @property
     def records(self) -> tuple[ModelExecutionRecord, ...]:
@@ -728,6 +781,7 @@ __all__ = [
     "ModelGatewayExecutionError",
     "ModelGatewayResult",
     "ModelGatewaySession",
+    "ModelRuntimeCapabilityMatrixEntry",
     "ModelInferenceBackpressure",
     "ModelInferenceCancelled",
     "ModelInferencePriority",

@@ -8,9 +8,10 @@ Scout Core to validate again through :class:`PydanticContractGateway`.
 from __future__ import annotations
 
 import json
+import inspect
 import threading
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
@@ -55,12 +56,21 @@ SERVICE_VERSION = "0.1"
 MAX_CATALOG_BYTES = 2 * 1024 * 1024
 SUPPORTED_TASKS = frozenset({IntelligenceTaskType.TERRAIN_ANALYSIS})
 SPECIALIST_INPUT_MARKER = "SCOUT_SPECIALIST_INPUT_JSON="
+PraisonProgressCallback = Callable[[str, int], None]
 
 
 class SpecialistRole(StrEnum):
     TERRAIN = "terrain"
     QGIS = "qgis"
     RESEARCH = "research"
+
+
+def _specialist_progress_percent(role: SpecialistRole) -> int:
+    return {
+        SpecialistRole.TERRAIN: 35,
+        SpecialistRole.QGIS: 55,
+        SpecialistRole.RESEARCH: 75,
+    }[role]
 
 
 class SpecialistRoutePlan(SchemaModel):
@@ -113,6 +123,10 @@ class PraisonRuntimeUnavailable(RuntimeError):
     ) -> None:
         super().__init__(message)
         self.model_execution_records = tuple(model_execution_records)
+
+
+class PraisonRuntimeCancelled(PraisonRuntimeUnavailable):
+    pass
 
 
 class EvidenceCatalogItem(SchemaModel):
@@ -379,6 +393,32 @@ def _has_bound_conflict_evidence(
     return False
 
 
+def _emit_progress(
+    callback: PraisonProgressCallback | None,
+    stage: str,
+    percent: int,
+) -> None:
+    if callback is None:
+        return
+    try:
+        callback(stage, max(0, min(100, percent)))
+    except Exception:
+        # Telemetry must not gain authority over intelligence execution.
+        return
+
+
+def _raise_if_cancelled(
+    cancellation_event: threading.Event | None,
+    *,
+    model_execution_records: Sequence[ModelExecutionRecord] = (),
+) -> None:
+    if cancellation_event is not None and cancellation_event.is_set():
+        raise PraisonRuntimeCancelled(
+            "PraisonAI candidate execution was cancelled",
+            model_execution_records=model_execution_records,
+        )
+
+
 class PraisonRuntime(Protocol):
     runtime_id: str
 
@@ -388,6 +428,8 @@ class PraisonRuntime(Protocol):
         request: IntelligenceRequest,
         evidence: tuple[EvidenceCatalogItem, ...],
         capabilities: CapabilitySession,
+        cancellation_event: threading.Event | None = None,
+        progress_callback: PraisonProgressCallback | None = None,
     ) -> PraisonRunResult: ...
 
 
@@ -515,7 +557,10 @@ class PraisonAgentTeamRuntime:
         request: IntelligenceRequest,
         evidence: tuple[EvidenceCatalogItem, ...],
         capabilities: CapabilitySession,
+        cancellation_event: threading.Event | None = None,
+        progress_callback: PraisonProgressCallback | None = None,
     ) -> PraisonRunResult:
+        _raise_if_cancelled(cancellation_event)
         try:
             from praisonaiagents import Agent, AgentTeam, Task
         except ImportError as exc:
@@ -571,7 +616,9 @@ class PraisonAgentTeamRuntime:
             process="sequential",
             name="Scout Intelligence Orchestrator",
         )
+        _emit_progress(progress_callback, "running_specialists", 25)
         team.start(return_dict=True)
+        _raise_if_cancelled(cancellation_event)
         reports: list[SpecialistReport] = []
         for task in tasks:
             raw = getattr(getattr(task, "result", None), "raw", None)
@@ -605,14 +652,44 @@ class PraisonModelGatewayRuntime:
         prefer_local: bool = True,
         allow_cloud: bool = False,
         requires_offline: bool = True,
+        specialist_output_mode: Literal[
+            "full_report",
+            "compact_advisory",
+        ] = "full_report",
+        required_capabilities: frozenset[ModelRuntimeCapability] = frozenset(
+            {
+                ModelRuntimeCapability.CHAT,
+                ModelRuntimeCapability.STRUCTURED_OUTPUT,
+            }
+        ),
+        inference_priority: ModelInferencePriority = ModelInferencePriority.NORMAL,
     ) -> None:
         if not allowed_tiers:
             raise ValueError("Praison model gateway requires at least one model tier")
+        if ModelRuntimeCapability.CHAT not in required_capabilities:
+            raise ValueError("Praison model runtime requires chat capability")
+        typed_capabilities = {
+            ModelRuntimeCapability.STRUCTURED_OUTPUT,
+            ModelRuntimeCapability.SMALL_TYPED_OUTPUT,
+        }.intersection(required_capabilities)
+        if len(typed_capabilities) != 1:
+            raise ValueError(
+                "Praison model runtime requires exactly one typed output capability"
+            )
+        if (
+            ModelRuntimeCapability.SLOW_BACKGROUND_REASONING
+            in required_capabilities
+            and inference_priority is not ModelInferencePriority.BACKGROUND
+        ):
+            raise ValueError("slow background reasoning requires background priority")
         self.gateway = gateway
         self.allowed_tiers = allowed_tiers
         self.prefer_local = prefer_local
         self.allow_cloud = allow_cloud
         self.requires_offline = requires_offline
+        self.specialist_output_mode = specialist_output_mode
+        self.required_capabilities = required_capabilities
+        self.inference_priority = inference_priority
 
     def close(self) -> None:
         self.gateway.close()
@@ -623,7 +700,10 @@ class PraisonModelGatewayRuntime:
         request: IntelligenceRequest,
         evidence: tuple[EvidenceCatalogItem, ...],
         capabilities: CapabilitySession,
+        cancellation_event: threading.Event | None = None,
+        progress_callback: PraisonProgressCallback | None = None,
     ) -> PraisonRunResult:
+        _raise_if_cancelled(cancellation_event)
         try:
             from praisonaiagents import Agent, AgentTeam, Task
         except ImportError as exc:
@@ -645,6 +725,7 @@ class PraisonModelGatewayRuntime:
         session = self.gateway.open_session(
             parent_request_id=request.request_id,
             max_model_requests=model_budget,
+            cancellation_event=cancellation_event,
         )
         deadline = time.monotonic() + float(request.max_runtime_seconds or 30)
 
@@ -692,12 +773,7 @@ class PraisonModelGatewayRuntime:
                         task=f"{self._role.value} candidate analysis",
                         prompt=model_prompt,
                         structured_input=model_input.model_dump(mode="json"),
-                        required_capabilities=frozenset(
-                            {
-                                ModelRuntimeCapability.CHAT,
-                                ModelRuntimeCapability.STRUCTURED_OUTPUT,
-                            }
-                        ),
+                        required_capabilities=runtime.required_capabilities,
                         allowed_tiers=runtime.allowed_tiers,
                         prefer_local=runtime.prefer_local,
                         allow_cloud=cloud_allowed,
@@ -707,7 +783,7 @@ class PraisonModelGatewayRuntime:
                         min_context_tokens=max(1, len(model_prompt) // 4),
                         estimated_input_tokens=max(1, len(model_prompt) // 4),
                         timeout_seconds=max(0.01, remaining_seconds),
-                        priority=ModelInferencePriority.NORMAL,
+                        priority=runtime.inference_priority,
                     ),
                     output_type=output_type,
                 )
@@ -747,7 +823,12 @@ class PraisonModelGatewayRuntime:
             name="Scout Intelligence Orchestrator",
         )
         try:
+            _emit_progress(progress_callback, "running_specialists", 25)
             team.start(return_dict=True)
+            _raise_if_cancelled(
+                cancellation_event,
+                model_execution_records=session.records,
+            )
             reports: list[SpecialistReport] = []
             for task in tasks:
                 raw = getattr(getattr(task, "result", None), "raw", None)
@@ -756,6 +837,8 @@ class PraisonModelGatewayRuntime:
                         f"PraisonAI task did not return output: {task.name}"
                     )
                 reports.append(SpecialistReport.model_validate_json(raw))
+        except PraisonRuntimeCancelled:
+            raise
         except Exception as exc:
             records = session.records
             if isinstance(exc, PraisonRuntimeUnavailable):
@@ -1166,6 +1249,46 @@ def _research_candidate_report(
     )
 
 
+def _acquire_inference_slot(
+    slot: threading.BoundedSemaphore,
+    *,
+    timeout_seconds: float,
+    cancellation_event: threading.Event,
+) -> Literal["acquired", "cancelled", "timed_out"]:
+    deadline = time.monotonic() + timeout_seconds
+    while True:
+        if cancellation_event.is_set():
+            return "cancelled"
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return "timed_out"
+        if slot.acquire(timeout=min(0.05, remaining)):
+            return "acquired"
+
+
+def _run_praison_runtime(
+    runtime: PraisonRuntime,
+    *,
+    request: IntelligenceRequest,
+    evidence: tuple[EvidenceCatalogItem, ...],
+    capabilities: CapabilitySession,
+    cancellation_event: threading.Event,
+    progress_callback: PraisonProgressCallback | None,
+) -> PraisonRunResult:
+    parameters = inspect.signature(runtime.run).parameters
+    controls: dict[str, Any] = {}
+    if "cancellation_event" in parameters:
+        controls["cancellation_event"] = cancellation_event
+    if "progress_callback" in parameters:
+        controls["progress_callback"] = progress_callback
+    return runtime.run(
+        request=request,
+        evidence=evidence,
+        capabilities=capabilities,
+        **controls,
+    )
+
+
 class PraisonIntelligenceService:
     def __init__(
         self,
@@ -1185,7 +1308,18 @@ class PraisonIntelligenceService:
         if callable(close_runtime):
             close_runtime()
 
-    def execute(self, request: IntelligenceRequest) -> IntelligenceResponse:
+    def execute(
+        self,
+        request: IntelligenceRequest,
+        *,
+        cancellation_event: threading.Event | None = None,
+        progress_callback: PraisonProgressCallback | None = None,
+    ) -> IntelligenceResponse:
+        cancellation = cancellation_event or threading.Event()
+        _emit_progress(progress_callback, "validating_request", 5)
+        if cancellation.is_set():
+            _emit_progress(progress_callback, "cancelled", 100)
+            return self._cancelled(request)
         if request.task_type not in SUPPORTED_TASKS:
             return self._degraded(
                 request,
@@ -1202,6 +1336,7 @@ class PraisonIntelligenceService:
                 ("fresh_capability_grant",),
                 "no specialist work was executed",
             )
+        _emit_progress(progress_callback, "resolving_evidence", 15)
         evidence, missing_refs = self.evidence_catalog.resolve(request.evidence_refs)
         if not evidence:
             return self._degraded(
@@ -1211,8 +1346,20 @@ class PraisonIntelligenceService:
                 missing_refs or request.evidence_refs,
                 "terrain candidates cannot be generated",
             )
+        if cancellation.is_set():
+            _emit_progress(progress_callback, "cancelled", 100)
+            return self._cancelled(request)
         timeout = float(request.max_runtime_seconds or 30)
-        if not self._inference_slot.acquire(timeout=timeout):
+        _emit_progress(progress_callback, "waiting_for_inference_slot", 20)
+        slot_status = _acquire_inference_slot(
+            self._inference_slot,
+            timeout_seconds=timeout,
+            cancellation_event=cancellation,
+        )
+        if slot_status == "cancelled":
+            _emit_progress(progress_callback, "cancelled", 100)
+            return self._cancelled(request)
+        if slot_status != "acquired":
             return self._degraded(
                 request,
                 "intelligence_backpressure",
@@ -1222,10 +1369,21 @@ class PraisonIntelligenceService:
             )
         capabilities = CapabilitySession(request)
         try:
-            run = self.runtime.run(
+            _emit_progress(progress_callback, "running_specialists", 25)
+            run = _run_praison_runtime(
+                self.runtime,
                 request=request,
                 evidence=evidence,
                 capabilities=capabilities,
+                cancellation_event=cancellation,
+                progress_callback=progress_callback,
+            )
+        except PraisonRuntimeCancelled as exc:
+            _emit_progress(progress_callback, "cancelled", 100)
+            return self._cancelled(
+                request,
+                tools_called=capabilities.tools_called,
+                model_execution_records=exc.model_execution_records,
             )
         except IntelligenceCapabilityViolation as exc:
             return self._degraded(
@@ -1237,6 +1395,13 @@ class PraisonIntelligenceService:
                 tools_called=capabilities.tools_called,
             )
         except PraisonRuntimeUnavailable as exc:
+            if cancellation.is_set():
+                _emit_progress(progress_callback, "cancelled", 100)
+                return self._cancelled(
+                    request,
+                    tools_called=capabilities.tools_called,
+                    model_execution_records=exc.model_execution_records,
+                )
             return self._degraded(
                 request,
                 "praison_runtime_unavailable",
@@ -1256,6 +1421,13 @@ class PraisonIntelligenceService:
                 if isinstance(failed_record, ModelExecutionRecord)
                 else ()
             )
+            if cancellation.is_set():
+                _emit_progress(progress_callback, "cancelled", 100)
+                return self._cancelled(
+                    request,
+                    tools_called=capabilities.tools_called,
+                    model_execution_records=failed_records,
+                )
             return self._degraded(
                 request,
                 "intelligence_execution_failed",
@@ -1267,14 +1439,24 @@ class PraisonIntelligenceService:
             )
         finally:
             self._inference_slot.release()
+        if cancellation.is_set():
+            _emit_progress(progress_callback, "cancelled", 100)
+            return self._cancelled(
+                request,
+                tools_called=capabilities.tools_called,
+                model_execution_records=run.model_execution_records,
+            )
         try:
-            return self._build_response(
+            _emit_progress(progress_callback, "validating_response", 90)
+            response = self._build_response(
                 request=request,
                 evidence=evidence,
                 missing_refs=missing_refs,
                 run=run,
                 tools_called=capabilities.tools_called,
             )
+            _emit_progress(progress_callback, "completed", 100)
+            return response
         except Exception:
             return self._degraded(
                 request,
@@ -1340,6 +1522,23 @@ class PraisonIntelligenceService:
         return seal_intelligence_response(response)
 
     @staticmethod
+    def _cancelled(
+        request: IntelligenceRequest,
+        *,
+        tools_called: Sequence[str] = (),
+        model_execution_records: Sequence[ModelExecutionRecord] = (),
+    ) -> IntelligenceResponse:
+        return PraisonIntelligenceService._degraded(
+            request,
+            "intelligence_cancelled",
+            "Background candidate intelligence was cancelled by Scout.",
+            ("completed_candidate_intelligence",),
+            "partial model or specialist output was discarded",
+            tools_called=tools_called,
+            model_execution_records=model_execution_records,
+        )
+
+    @staticmethod
     def _degraded(
         request: IntelligenceRequest,
         uncertainty_id: str,
@@ -1401,8 +1600,10 @@ __all__ = [
     "PraisonAgentTeamRuntime",
     "PraisonIntelligenceService",
     "PraisonModelGatewayRuntime",
+    "PraisonProgressCallback",
     "PraisonRunResult",
     "PraisonRuntime",
+    "PraisonRuntimeCancelled",
     "PraisonRuntimeUnavailable",
     "SpecialistModelInput",
     "SpecialistReport",

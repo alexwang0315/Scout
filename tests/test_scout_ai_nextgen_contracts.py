@@ -19,6 +19,7 @@ from scout.nextgen import (
     Locality,
     ModelExecutionRecord,
     ModelRuntimeCapability,
+    ModelRuntimeHostKind,
     ModelRuntimeProfile,
     ModelRuntimeRequest,
     ModelRuntimeTier,
@@ -176,6 +177,111 @@ def test_default_runtime_router_keeps_hailo_and_max_as_siblings() -> None:
     )
 
 
+def test_runtime_capability_matrix_separates_hailo_and_cpu_ollama() -> None:
+    profiles = default_runtime_profiles()
+    hailo = next(
+        profile for profile in profiles if profile.tier is ModelRuntimeTier.HAILO_LOCAL
+    )
+    cpu_ollama = next(
+        profile
+        for profile in profiles
+        if profile.provider == "ollama" and profile.accelerator is AcceleratorKind.CPU
+    )
+
+    assert hailo.capabilities == frozenset(
+        {
+            ModelRuntimeCapability.CHAT,
+            ModelRuntimeCapability.SMALL_TYPED_OUTPUT,
+            ModelRuntimeCapability.OFFLINE,
+        }
+    )
+    assert cpu_ollama.capabilities == frozenset(
+        {
+            ModelRuntimeCapability.CHAT,
+            ModelRuntimeCapability.STRUCTURED_OUTPUT,
+            ModelRuntimeCapability.SLOW_BACKGROUND_REASONING,
+            ModelRuntimeCapability.OFFLINE,
+        }
+    )
+    assert cpu_ollama.runtime_id == "edge.pi.ollama.cpu.background"
+    assert cpu_ollama.locality is Locality.EDGE
+    assert cpu_ollama.endpoint == "http://127.0.0.1:11434/v1"
+    assert cpu_ollama.required_host_kind is ModelRuntimeHostKind.RASPBERRY_PI
+    assert all(
+        not (
+            profile.provider == "ollama"
+            and profile.accelerator is AcceleratorKind.CPU
+            and profile.locality is Locality.MAC_SERVER
+        )
+        for profile in profiles
+    )
+
+    router = ScoutModelRuntimeRouter(
+        profiles,
+        current_host_kind=ModelRuntimeHostKind.RASPBERRY_PI,
+    )
+    small_typed = router.select(
+        ModelRuntimeRequest(
+            request_id=uuid4(),
+            task="small typed terrain advisory",
+            required_capabilities=frozenset(
+                {
+                    ModelRuntimeCapability.CHAT,
+                    ModelRuntimeCapability.SMALL_TYPED_OUTPUT,
+                }
+            ),
+            prefer_local=True,
+            allow_cloud=False,
+            requires_offline=True,
+        )
+    )
+    background = router.select(
+        ModelRuntimeRequest(
+            request_id=uuid4(),
+            task="slow background terrain reasoning",
+            required_capabilities=frozenset(
+                {
+                    ModelRuntimeCapability.CHAT,
+                    ModelRuntimeCapability.STRUCTURED_OUTPUT,
+                    ModelRuntimeCapability.SLOW_BACKGROUND_REASONING,
+                }
+            ),
+            prefer_local=True,
+            allow_cloud=False,
+            requires_offline=True,
+        )
+    )
+
+    assert small_typed.selected_runtime == hailo
+    assert background.selected_runtime == cpu_ollama
+
+    non_pi_router = ScoutModelRuntimeRouter(
+        profiles,
+        current_host_kind=ModelRuntimeHostKind.GENERIC,
+    )
+    blocked_background = non_pi_router.select(
+        ModelRuntimeRequest(
+            request_id=uuid4(),
+            task="slow background terrain reasoning",
+            required_capabilities=frozenset(
+                {
+                    ModelRuntimeCapability.CHAT,
+                    ModelRuntimeCapability.STRUCTURED_OUTPUT,
+                    ModelRuntimeCapability.SLOW_BACKGROUND_REASONING,
+                }
+            ),
+            prefer_local=True,
+            allow_cloud=False,
+            requires_offline=True,
+        )
+    )
+    assert blocked_background.selected is False
+    assert (
+        blocked_background.rejected_reasons[cpu_ollama.runtime_id]
+        == "runtime requires host kind raspberry_pi"
+    )
+
+
 def test_model_runtime_router_local_first_and_cloud_explicit() -> None:
     router = ScoutModelRuntimeRouter(default_runtime_profiles())
     request_id = uuid4()
@@ -231,6 +337,30 @@ def test_model_runtime_profile_rejects_max_on_hailo() -> None:
             accelerator=AcceleratorKind.HAILO_10H,
             capabilities=frozenset({ModelRuntimeCapability.CHAT}),
             context_limit_tokens=4096,
+        )
+
+
+def test_model_runtime_profile_rejects_mac_cpu_background_reasoning() -> None:
+    with pytest.raises(ValidationError, match="Raspberry Pi edge runtime"):
+        ModelRuntimeProfile(
+            runtime_id="server.mac.ollama.cpu.background",
+            tier=ModelRuntimeTier.LOCAL_REASONING,
+            provider="ollama",
+            model_id="qwen3:1.7b",
+            locality=Locality.MAC_SERVER,
+            accelerator=AcceleratorKind.CPU,
+            endpoint="http://127.0.0.1:11434/v1",
+            required_host_kind=ModelRuntimeHostKind.GENERIC,
+            capabilities=frozenset(
+                {
+                    ModelRuntimeCapability.CHAT,
+                    ModelRuntimeCapability.STRUCTURED_OUTPUT,
+                    ModelRuntimeCapability.SLOW_BACKGROUND_REASONING,
+                    ModelRuntimeCapability.OFFLINE,
+                }
+            ),
+            context_limit_tokens=4096,
+            offline_capable=True,
         )
 
 

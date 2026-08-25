@@ -11,7 +11,9 @@ from __future__ import annotations
 from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime
 from enum import StrEnum
+from pathlib import Path
 from typing import Literal
+from urllib.parse import urlsplit
 from uuid import UUID
 
 from pydantic import Field, model_validator
@@ -37,6 +39,30 @@ class Locality(StrEnum):
     CLOUD = "cloud"
 
 
+class ModelRuntimeHostKind(StrEnum):
+    """Execution host required by a runtime profile."""
+
+    GENERIC = "generic"
+    RASPBERRY_PI = "raspberry_pi"
+
+
+def detect_model_runtime_host_kind() -> ModelRuntimeHostKind:
+    """Detect a Raspberry Pi without trusting a caller-provided environment flag."""
+
+    try:
+        model = Path("/proc/device-tree/model").read_text(
+            encoding="utf-8",
+            errors="ignore",
+        )
+    except OSError:
+        return ModelRuntimeHostKind.GENERIC
+    return (
+        ModelRuntimeHostKind.RASPBERRY_PI
+        if "raspberry pi" in model.lower()
+        else ModelRuntimeHostKind.GENERIC
+    )
+
+
 class AcceleratorKind(StrEnum):
     CPU = "cpu"
     GPU = "gpu"
@@ -48,6 +74,8 @@ class ModelRuntimeCapability(StrEnum):
     CHAT = "chat"
     STREAMING = "streaming"
     STRUCTURED_OUTPUT = "structured_output"
+    SMALL_TYPED_OUTPUT = "small_typed_output"
+    SLOW_BACKGROUND_REASONING = "slow_background_reasoning"
     TOOL_CALLING = "tool_calling"
     VISION = "vision"
     AUDIO = "audio"
@@ -97,6 +125,7 @@ class ModelRuntimeProfile(SchemaModel):
     provider: NonEmptyStr
     model_id: NonEmptyStr
     locality: Locality
+    required_host_kind: ModelRuntimeHostKind = ModelRuntimeHostKind.GENERIC
     accelerator: AcceleratorKind = AcceleratorKind.NONE
     endpoint: str | None = None
     capabilities: frozenset[ModelRuntimeCapability]
@@ -113,6 +142,11 @@ class ModelRuntimeProfile(SchemaModel):
 
     @model_validator(mode="after")
     def validate_runtime_boundary(self) -> "ModelRuntimeProfile":
+        if (
+            self.required_host_kind is ModelRuntimeHostKind.RASPBERRY_PI
+            and self.locality is not Locality.EDGE
+        ):
+            raise ValueError("Raspberry Pi runtimes must declare edge locality")
         if self.locality == Locality.CLOUD and self.offline_capable:
             raise ValueError("cloud model runtimes cannot be offline_capable")
         if self.tier == ModelRuntimeTier.HAILO_LOCAL:
@@ -120,6 +154,17 @@ class ModelRuntimeProfile(SchemaModel):
                 raise ValueError("hailo_local runtimes must declare HAILO_10H")
             if not self.offline_capable:
                 raise ValueError("hailo_local runtimes must be offline capable")
+            if not {
+                ModelRuntimeCapability.CHAT,
+                ModelRuntimeCapability.SMALL_TYPED_OUTPUT,
+            }.issubset(self.capabilities):
+                raise ValueError(
+                    "hailo_local runtimes require chat and small typed output"
+                )
+            if ModelRuntimeCapability.STRUCTURED_OUTPUT in self.capabilities:
+                raise ValueError(
+                    "hailo_local runtimes cannot claim unrestricted structured output"
+                )
         if (
             self.tier == ModelRuntimeTier.MAX_LOCAL_OR_SERVER
             and self.accelerator == AcceleratorKind.HAILO_10H
@@ -127,6 +172,21 @@ class ModelRuntimeProfile(SchemaModel):
             raise ValueError("MAX and Hailo are sibling runtime backends")
         if self.offline_capable and ModelRuntimeCapability.OFFLINE not in self.capabilities:
             raise ValueError("offline_capable profiles must include OFFLINE capability")
+        if ModelRuntimeCapability.SLOW_BACKGROUND_REASONING in self.capabilities:
+            if (
+                self.provider.lower() != "ollama"
+                or self.accelerator != AcceleratorKind.CPU
+                or self.locality != Locality.EDGE
+                or self.required_host_kind is not ModelRuntimeHostKind.RASPBERRY_PI
+            ):
+                raise ValueError(
+                    "slow background reasoning is reserved for a Raspberry Pi edge runtime"
+                )
+            endpoint_host = urlsplit(self.endpoint or "").hostname
+            if endpoint_host not in {"127.0.0.1", "localhost", "::1"}:
+                raise ValueError(
+                    "Raspberry Pi CPU background reasoning must use loopback Ollama"
+                )
         if len(self.capability_attestation_refs) != len(
             set(self.capability_attestation_refs)
         ):
@@ -175,13 +235,21 @@ class ModelRuntimeSelection(SchemaModel):
 class ScoutModelRuntimeRouter:
     """Deterministically pick a runtime profile without invoking a model."""
 
-    def __init__(self, profiles: Sequence[ModelRuntimeProfile]) -> None:
+    def __init__(
+        self,
+        profiles: Sequence[ModelRuntimeProfile],
+        *,
+        current_host_kind: ModelRuntimeHostKind | None = None,
+    ) -> None:
         if not profiles:
             raise ValueError("at least one model runtime profile is required")
         ids = [profile.runtime_id for profile in profiles]
         if len(set(ids)) != len(ids):
             raise ValueError("model runtime profile ids must be unique")
         self._profiles = tuple(profiles)
+        self._current_host_kind = (
+            current_host_kind or detect_model_runtime_host_kind()
+        )
 
     @property
     def profiles(self) -> tuple[ModelRuntimeProfile, ...]:
@@ -193,6 +261,14 @@ class ScoutModelRuntimeRouter:
         eligible: list[ModelRuntimeProfile] = []
         for profile in self._profiles:
             considered.append(profile.runtime_id)
+            if (
+                profile.required_host_kind is not ModelRuntimeHostKind.GENERIC
+                and profile.required_host_kind is not self._current_host_kind
+            ):
+                rejected[profile.runtime_id] = (
+                    f"runtime requires host kind {profile.required_host_kind.value}"
+                )
+                continue
             reason = _rejection_reason(profile, request)
             if reason:
                 rejected[profile.runtime_id] = reason
@@ -253,16 +329,39 @@ def default_runtime_profiles() -> tuple[ModelRuntimeProfile, ...]:
             provider="hailo_ollama",
             model_id="hailo:qwen3:1.7b",
             locality=Locality.EDGE,
+            required_host_kind=ModelRuntimeHostKind.RASPBERRY_PI,
             accelerator=AcceleratorKind.HAILO_10H,
             endpoint="http://127.0.0.1:18000",
             capabilities=frozenset(
                 {
                     ModelRuntimeCapability.CHAT,
-                    ModelRuntimeCapability.STRUCTURED_OUTPUT,
+                    ModelRuntimeCapability.SMALL_TYPED_OUTPUT,
                     ModelRuntimeCapability.OFFLINE,
                 }
             ),
             context_limit_tokens=8192,
+            max_concurrency=1,
+            offline_capable=True,
+            privacy_preserving=True,
+        ),
+        ModelRuntimeProfile(
+            runtime_id="edge.pi.ollama.cpu.background",
+            tier=ModelRuntimeTier.LOCAL_REASONING,
+            provider="ollama",
+            model_id="configured-by-ollama",
+            locality=Locality.EDGE,
+            required_host_kind=ModelRuntimeHostKind.RASPBERRY_PI,
+            accelerator=AcceleratorKind.CPU,
+            endpoint="http://127.0.0.1:11434/v1",
+            capabilities=frozenset(
+                {
+                    ModelRuntimeCapability.CHAT,
+                    ModelRuntimeCapability.STRUCTURED_OUTPUT,
+                    ModelRuntimeCapability.SLOW_BACKGROUND_REASONING,
+                    ModelRuntimeCapability.OFFLINE,
+                }
+            ),
+            context_limit_tokens=4096,
             max_concurrency=1,
             offline_capable=True,
             privacy_preserving=True,

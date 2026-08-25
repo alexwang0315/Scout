@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import ipaddress
+import json
 import os
 import re
 import threading
@@ -14,10 +15,12 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import urlsplit
 
+import httpx
 from pydantic import BaseModel, Field, model_validator
 
 from scout.nextgen.model_gateway import (
     BackendInferenceResult,
+    ModelInferencePriority,
     ModelInferenceRequest,
     ModelThinkingSetting,
     PydanticAIStructuredBackend,
@@ -27,6 +30,7 @@ from scout.nextgen.model_runtime import (
     AcceleratorKind,
     Locality,
     ModelRuntimeCapability,
+    ModelRuntimeHostKind,
     ModelRuntimeProfile,
     ModelRuntimeTier,
 )
@@ -39,6 +43,7 @@ LOCAL_PLACEHOLDER_API_KEY = "scout-local-openai-compatible"
 MAX_RUNTIME_CONFIG_BYTES = 64 * 1024
 _ENV_NAME_PATTERN = re.compile(r"^SCOUT_[A-Z0-9_]*(?:KEY|TOKEN)$")
 _LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
+_MAX_UNIX_TIMESTAMP_SECONDS = 253_402_300_799
 
 
 class OpenAICompatibleTransportScope(StrEnum):
@@ -59,6 +64,7 @@ class OpenAICompatibleBackendConfig(SchemaModel):
     transport_scope: OpenAICompatibleTransportScope
     tier: ModelRuntimeTier
     locality: Locality
+    required_host_kind: ModelRuntimeHostKind = ModelRuntimeHostKind.GENERIC
     accelerator: AcceleratorKind = AcceleratorKind.NONE
     context_limit_tokens: int = Field(ge=1)
     max_concurrency: int = Field(default=1, ge=1)
@@ -71,7 +77,19 @@ class OpenAICompatibleBackendConfig(SchemaModel):
     thinking: ModelThinkingSetting | None = None
     supports_reasoning_control: bool = False
     uses_max_completion_tokens: bool = True
-    structured_output_mode: Literal["tool", "native"] = "tool"
+    structured_output_mode: Literal["tool", "native", "prompted"] = "tool"
+    specialist_output_mode: Literal[
+        "full_report",
+        "compact_advisory",
+    ] = "full_report"
+    request_message_control_mode: Literal[
+        "preserve",
+        "replace_controls_with_spaces",
+    ] = "preserve"
+    response_created_timestamp_mode: Literal[
+        "unix_seconds",
+        "auto_to_seconds",
+    ] = "unix_seconds"
     experimental: Literal[True] = True
     candidate_only: Literal[True] = True
     runtime_safety_truth: Literal[False] = False
@@ -126,6 +144,20 @@ class OpenAICompatibleBackendConfig(SchemaModel):
             OpenAICompatibleTransportScope.REMOTE_HTTPS
         ):
             raise ValueError("remote_https backends cannot be offline capable")
+        if (
+            self.response_created_timestamp_mode == "auto_to_seconds"
+            and self.provider.lower() != "hailo_ollama"
+        ):
+            raise ValueError(
+                "timestamp auto-normalization is only available for hailo_ollama"
+            )
+        if (
+            self.request_message_control_mode == "replace_controls_with_spaces"
+            and self.provider.lower() != "hailo_ollama"
+        ):
+            raise ValueError(
+                "request control normalization is only available for hailo_ollama"
+            )
         if self.locality is not Locality.CLOUD and self.max_concurrency != 1:
             raise ValueError("edge and local-server model concurrency must be one")
         self.to_runtime_profile()
@@ -143,10 +175,13 @@ class OpenAICompatibleBackendConfig(SchemaModel):
         return self.base_url.rstrip("/")
 
     def to_runtime_profile(self) -> ModelRuntimeProfile:
-        capabilities = {
-            ModelRuntimeCapability.CHAT,
-            ModelRuntimeCapability.STRUCTURED_OUTPUT,
-        }
+        capabilities = {ModelRuntimeCapability.CHAT}
+        if self.tier is ModelRuntimeTier.HAILO_LOCAL:
+            capabilities.add(ModelRuntimeCapability.SMALL_TYPED_OUTPUT)
+        else:
+            capabilities.add(ModelRuntimeCapability.STRUCTURED_OUTPUT)
+        if self.provider.lower() == "ollama" and self.accelerator is AcceleratorKind.CPU:
+            capabilities.add(ModelRuntimeCapability.SLOW_BACKGROUND_REASONING)
         if self.offline_capable:
             capabilities.add(ModelRuntimeCapability.OFFLINE)
         return ModelRuntimeProfile(
@@ -155,6 +190,7 @@ class OpenAICompatibleBackendConfig(SchemaModel):
             provider=self.provider,
             model_id=self.model_id,
             locality=self.locality,
+            required_host_kind=self.required_host_kind,
             accelerator=self.accelerator,
             endpoint=self.normalized_base_url,
             capabilities=frozenset(capabilities),
@@ -196,10 +232,30 @@ class OpenAICompatiblePydanticBackend:
         self.runtime_id = config.runtime_id
         self.model_id = config.model_id
         api_key = _resolve_api_key(config, environ if environ is not None else os.environ)
+        needs_compatibility_transport = (
+            config.response_created_timestamp_mode == "auto_to_seconds"
+            or config.request_message_control_mode
+            == "replace_controls_with_spaces"
+        )
+        http_client = None
+        if needs_compatibility_transport:
+            http_client = httpx.AsyncClient(
+                transport=_HailoCompatibilityTransport(
+                    normalize_created_timestamp=(
+                        config.response_created_timestamp_mode == "auto_to_seconds"
+                    ),
+                    normalize_message_controls=(
+                        config.request_message_control_mode
+                        == "replace_controls_with_spaces"
+                    ),
+                ),
+                trust_env=False,
+            )
         self._client = AsyncOpenAI(
             base_url=config.normalized_base_url,
             api_key=api_key,
             max_retries=0,
+            http_client=http_client,
         )
         provider = OpenAIProvider(openai_client=self._client)
         provider_model = OpenAIChatModel(
@@ -265,8 +321,30 @@ def build_praison_openai_compatible_runtime(
         config=config,
         environ=environ,
     )
+    profile = config.to_runtime_profile()
+    small_typed_output = (
+        ModelRuntimeCapability.SMALL_TYPED_OUTPUT in profile.capabilities
+    )
+    slow_background_reasoning = (
+        ModelRuntimeCapability.SLOW_BACKGROUND_REASONING in profile.capabilities
+    )
+    required_capabilities = frozenset(
+        {
+            ModelRuntimeCapability.CHAT,
+            (
+                ModelRuntimeCapability.SMALL_TYPED_OUTPUT
+                if small_typed_output
+                else ModelRuntimeCapability.STRUCTURED_OUTPUT
+            ),
+            *(
+                (ModelRuntimeCapability.SLOW_BACKGROUND_REASONING,)
+                if slow_background_reasoning
+                else ()
+            ),
+        }
+    )
     gateway = ScoutModelGateway(
-        profiles=(config.to_runtime_profile(),),
+        profiles=(profile,),
         backends=(backend,),
         max_local_concurrency=1,
         max_cloud_concurrency=(
@@ -279,6 +357,13 @@ def build_praison_openai_compatible_runtime(
         prefer_local=config.locality is not Locality.CLOUD,
         allow_cloud=config.locality is Locality.CLOUD,
         requires_offline=config.offline_capable,
+        specialist_output_mode=config.specialist_output_mode,
+        required_capabilities=required_capabilities,
+        inference_priority=(
+            ModelInferencePriority.BACKGROUND
+            if slow_background_reasoning
+            else ModelInferencePriority.NORMAL
+        ),
     )
 
 
@@ -308,6 +393,143 @@ def _is_private_network_host(hostname: str) -> bool:
     except ValueError:
         return False
     return address.is_private or address.is_link_local
+
+
+class _HailoCompatibilityTransport(httpx.AsyncBaseTransport):
+    """Apply explicit Hailo Ollama 5.3 request and response compatibility."""
+
+    def __init__(
+        self,
+        *,
+        normalize_created_timestamp: bool,
+        normalize_message_controls: bool,
+    ) -> None:
+        self._inner = httpx.AsyncHTTPTransport(retries=0)
+        self._normalize_created_timestamp = normalize_created_timestamp
+        self._normalize_message_controls = normalize_message_controls
+
+    async def handle_async_request(
+        self,
+        request: httpx.Request,
+    ) -> httpx.Response:
+        if (
+            self._normalize_message_controls
+            and request.url.path.endswith("/chat/completions")
+        ):
+            request = await _normalize_hailo_chat_request(request)
+        response = await self._inner.handle_async_request(request)
+        if (
+            not self._normalize_created_timestamp
+            or not request.url.path.endswith("/chat/completions")
+        ):
+            return response
+        try:
+            content = await response.aread()
+            payload = json.loads(content)
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            return response
+        if not isinstance(payload, dict):
+            return response
+        created = payload.get("created")
+        normalized = _normalize_created_timestamp(created)
+        if normalized is None or normalized == created:
+            return response
+        payload["created"] = normalized
+        encoded = json.dumps(
+            payload,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        headers = response.headers.copy()
+        for header in ("content-encoding", "content-length", "transfer-encoding"):
+            headers.pop(header, None)
+        extensions = dict(response.extensions)
+        await response.aclose()
+        return httpx.Response(
+            status_code=response.status_code,
+            headers=headers,
+            content=encoded,
+            extensions=extensions,
+            request=request,
+        )
+
+    async def aclose(self) -> None:
+        await self._inner.aclose()
+
+
+async def _normalize_hailo_chat_request(request: httpx.Request) -> httpx.Request:
+    try:
+        content = await request.aread()
+        payload = json.loads(content)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return request
+    normalized = _normalize_hailo_chat_payload(payload)
+    if normalized is None:
+        return request
+    encoded = json.dumps(
+        normalized,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    headers = request.headers.copy()
+    for header in ("content-encoding", "content-length", "transfer-encoding"):
+        headers.pop(header, None)
+    return httpx.Request(
+        method=request.method,
+        url=request.url,
+        headers=headers,
+        content=encoded,
+        extensions=dict(request.extensions),
+    )
+
+
+def _normalize_hailo_chat_payload(payload: object) -> dict[str, Any] | None:
+    if not isinstance(payload, dict):
+        return None
+    messages = payload.get("messages")
+    if not isinstance(messages, list):
+        return None
+    normalized_messages = [_normalize_hailo_message(message) for message in messages]
+    if normalized_messages == messages:
+        return None
+    return {**payload, "messages": normalized_messages}
+
+
+def _normalize_hailo_message(message: object) -> object:
+    if not isinstance(message, dict):
+        return message
+    content = message.get("content")
+    if isinstance(content, str):
+        return {**message, "content": _normalize_hailo_chat_content(content)}
+    if not isinstance(content, list):
+        return message
+    normalized_parts = [_normalize_hailo_content_part(part) for part in content]
+    if normalized_parts == content:
+        return message
+    return {**message, "content": normalized_parts}
+
+
+def _normalize_hailo_content_part(part: object) -> object:
+    if not isinstance(part, dict):
+        return part
+    text = part.get("text")
+    if not isinstance(text, str):
+        return part
+    return {**part, "text": _normalize_hailo_chat_content(text)}
+
+
+def _normalize_hailo_chat_content(content: str) -> str:
+    content = content.replace('\\"', "＂")
+    return re.sub(r"[\x00-\x1f\x7f-\x9f]+", " ", content).strip()
+
+
+def _normalize_created_timestamp(value: object) -> int | None:
+    if not isinstance(value, int) or isinstance(value, bool):
+        return None
+    normalized = value
+    while abs(normalized) > _MAX_UNIX_TIMESTAMP_SECONDS:
+        normalized //= 1000
+    return normalized
 
 
 def _RequestCountingModel(inner_model: Any) -> Any:  # noqa: N802 - model factory

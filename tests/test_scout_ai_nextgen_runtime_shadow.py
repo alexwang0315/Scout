@@ -8,6 +8,7 @@ from assistant_api import create_assistant_app
 from assistant_pydantic_provider import PydanticAIAssistantProvider
 from scout.nextgen.model_runtime import (
     ModelRuntimeCapability,
+    ModelRuntimeHostKind,
     ModelRuntimeRequest,
     ModelRuntimeTier,
     ScoutModelRuntimeRouter,
@@ -37,7 +38,7 @@ def test_runtime_router_can_exclude_non_answer_runtime_tiers() -> None:
         required_capabilities=frozenset(
             {
                 ModelRuntimeCapability.CHAT,
-                ModelRuntimeCapability.STRUCTURED_OUTPUT,
+                ModelRuntimeCapability.SMALL_TYPED_OUTPUT,
                 ModelRuntimeCapability.OFFLINE,
             }
         ),
@@ -45,7 +46,10 @@ def test_runtime_router_can_exclude_non_answer_runtime_tiers() -> None:
         requires_offline=True,
     )
 
-    selection = ScoutModelRuntimeRouter(default_runtime_profiles()).select(request)
+    selection = ScoutModelRuntimeRouter(
+        default_runtime_profiles(),
+        current_host_kind=ModelRuntimeHostKind.RASPBERRY_PI,
+    ).select(request)
 
     assert selection.selected_runtime is not None
     assert selection.selected_runtime.runtime_id == "edge.hailo.local"
@@ -63,18 +67,21 @@ def test_assistant_runtime_shadow_routes_by_preference_and_context() -> None:
         runtime_preference=None,
         estimated_context_tokens=2_000,
         environ=enabled,
+        current_host_kind=ModelRuntimeHostKind.RASPBERRY_PI,
     )
     max_server = maybe_build_assistant_runtime_shadow_trace(
         task="assistant.pretrip",
         runtime_preference=None,
         estimated_context_tokens=10_000,
         environ=enabled,
+        current_host_kind=ModelRuntimeHostKind.RASPBERRY_PI,
     )
     cloud = maybe_build_assistant_runtime_shadow_trace(
         task="assistant.debug",
         runtime_preference="cloud",
         estimated_context_tokens=2_000,
         environ=enabled,
+        current_host_kind=ModelRuntimeHostKind.RASPBERRY_PI,
     )
 
     assert edge is not None
@@ -97,6 +104,10 @@ def test_assistant_api_exposes_shadow_trace_without_changing_provider_execution(
     monkeypatch,
 ) -> None:
     monkeypatch.setenv(RUNTIME_SHADOW_ENV, "true")
+    monkeypatch.setattr(
+        "scout.nextgen.model_runtime.detect_model_runtime_host_kind",
+        lambda: ModelRuntimeHostKind.RASPBERRY_PI,
+    )
     runner = RecordingRunner()
     provider = PydanticAIAssistantProvider(runner=runner)
     app = create_assistant_app(

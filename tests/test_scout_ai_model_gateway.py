@@ -26,9 +26,11 @@ from scout.nextgen.model_runtime import (
     AcceleratorKind,
     Locality,
     ModelRuntimeCapability,
+    ModelRuntimeHostKind,
     ModelRuntimeProfile,
     ModelRuntimeRequest,
     ModelRuntimeTier,
+    default_runtime_profiles,
 )
 
 
@@ -94,10 +96,14 @@ class _RecordingBackend:
     def __init__(
         self,
         *,
+        runtime_id: str = "local.fast.function",
+        model_id: str = "resident-replay-model",
         delay_seconds: float = 0,
         output: dict[str, Any] | None = None,
         model_request_count: int = 1,
     ) -> None:
+        self.runtime_id = runtime_id
+        self.model_id = model_id
         self.delay_seconds = delay_seconds
         self.output = output
         self.model_request_count = model_request_count
@@ -163,6 +169,51 @@ def test_model_gateway_selects_registered_local_backend_and_records_execution() 
     assert result.execution_record.model_request_count == 1
     assert result.execution_record.status == "completed"
     assert session.remaining_model_requests == 9
+
+
+def test_model_gateway_exposes_queryable_runtime_capability_matrix() -> None:
+    selected_profiles = tuple(
+        profile
+        for profile in default_runtime_profiles()
+        if profile.tier
+        in {ModelRuntimeTier.HAILO_LOCAL, ModelRuntimeTier.LOCAL_REASONING}
+    )
+    backends = tuple(
+        _RecordingBackend(
+            runtime_id=profile.runtime_id,
+            model_id=profile.model_id,
+        )
+        for profile in selected_profiles
+    )
+
+    with ScoutModelGateway(
+        profiles=selected_profiles,
+        backends=backends,
+    ) as gateway:
+        matrix = gateway.capability_matrix()
+
+    by_tier = {entry.tier: entry for entry in matrix}
+    hailo = by_tier[ModelRuntimeTier.HAILO_LOCAL]
+    ollama = by_tier[ModelRuntimeTier.LOCAL_REASONING]
+    assert hailo.capabilities == frozenset(
+        {
+            ModelRuntimeCapability.CHAT,
+            ModelRuntimeCapability.SMALL_TYPED_OUTPUT,
+            ModelRuntimeCapability.OFFLINE,
+        }
+    )
+    assert hailo.recommended_priority is ModelInferencePriority.NORMAL
+    assert ollama.capabilities.issuperset(
+        {
+            ModelRuntimeCapability.CHAT,
+            ModelRuntimeCapability.STRUCTURED_OUTPUT,
+            ModelRuntimeCapability.SLOW_BACKGROUND_REASONING,
+        }
+    )
+    assert ollama.runtime_id == "edge.pi.ollama.cpu.background"
+    assert ollama.locality is Locality.EDGE
+    assert ollama.required_host_kind is ModelRuntimeHostKind.RASPBERRY_PI
+    assert ollama.recommended_priority is ModelInferencePriority.BACKGROUND
 
 
 def test_model_gateway_rejects_backend_model_identity_mismatch() -> None:

@@ -139,3 +139,23 @@ and compare latency and grounding errors without changing production routing.
 Hailo remains a sibling `ScoutModelRuntime` path. This experiment does not imply
 MAX-to-Hailo compatibility and must not be used to bypass the dedicated Hailo
 runtime qualification.
+
+## Raspberry Pi Native Follow-Up - 2026-08-23
+
+The checked-in Pi-only loopback profile subsequently passed the complete v1
+qualification natively on Raspberry Pi 5 using CPU Ollama and `qwen3:1.7b`:
+
+- basic chat: 5594 ms, one model request;
+- typed output: 8021 ms, one model request;
+- independent tool calling: 26316 ms, two model requests and one read tool;
+- Praison MCP: 66246 ms, one model request and three read-only Scout tools;
+- authority boundary: pass;
+- report hash:
+  `a257615303513a16640d212a073d2713bf6cd0d38509b7df420c9e94c70528bc`.
+
+A second native run used real Chilai Nanhua route/QGIS evidence and passed with
+report hash
+`bae7bd88407db67c267fb86a837db67bd93c9430c68dc76e9ff6a10f0a4d524d`.
+This changes the Pi CPU classification from `UNAVAILABLE` to
+`ACCEPTED EXPERIMENTAL BACKGROUND`; it does not change the historical Intel Mac
+result, production routing, or the separate MAX branch.
