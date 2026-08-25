@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from scout.agents.deps import (
@@ -56,8 +57,7 @@ class LearningAgent:
                 outcome_summary=outcome_summary,
             ),
             output_type=LearningBundle,
-            deps=deps,
-            tools=build_toolbox(deps),
+            tools=build_toolbox(deps, allowed_tools=()),
             context={
                 "workflow": workflow.model_dump(mode="json"),
                 "execution_plan": (
@@ -102,6 +102,42 @@ def _learning_prompt(
 def _assert_learning_bundle_reviewable(bundle: LearningBundle) -> None:
     if any(not artifact.requires_review for artifact in bundle.artifacts):
         raise ValueError("LearningAgent artifacts must require review in Phase 5.")
+    if _contains_sensitive_content(bundle.model_dump(mode="json")):
+        raise ValueError("LearningAgent candidate contains sensitive content.")
+
+
+_SENSITIVE_KEY_PARTS = (
+    "api_key",
+    "authorization",
+    "credential",
+    "password",
+    "private_key",
+    "secret",
+    "token",
+)
+_SENSITIVE_VALUES = (
+    re.compile(r"(?i)\b(?:bearer|basic)\s+[A-Za-z0-9._~+/=-]{6,}"),
+    re.compile(
+        r"(?i)\b(?:sk-|nvapi-|gh[pousr]_|github_pat_|xox[baprs]-)"
+        r"[A-Za-z0-9_-]{8,}"
+    ),
+    re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----"),
+)
+
+
+def _contains_sensitive_content(value: Any, *, key: str = "") -> bool:
+    if any(part in key.casefold() for part in _SENSITIVE_KEY_PARTS):
+        return True
+    if isinstance(value, dict):
+        return any(
+            _contains_sensitive_content(item, key=str(item_key))
+            for item_key, item in value.items()
+        )
+    if isinstance(value, list):
+        return any(_contains_sensitive_content(item, key=key) for item in value)
+    if isinstance(value, str):
+        return any(pattern.search(value) for pattern in _SENSITIVE_VALUES)
+    return False
 
 
 __all__ = ["LearningAgent", "LEARNING_AGENT_INSTRUCTIONS"]

@@ -37,7 +37,12 @@ CREATE TABLE IF NOT EXISTS capabilities (
     spec_json TEXT NOT NULL,
     status TEXT NOT NULL,
     installed_at TEXT NOT NULL,
-    source TEXT NOT NULL DEFAULT 'builtin'
+    source TEXT NOT NULL DEFAULT 'builtin',
+    owner_user_id TEXT,
+    package_hash TEXT,
+    sandbox_receipt_json TEXT,
+    approved_by TEXT,
+    approval_note TEXT
 );
 
 CREATE TABLE IF NOT EXISTS learning_artifacts (
@@ -46,7 +51,8 @@ CREATE TABLE IF NOT EXISTS learning_artifacts (
     source_workflow_id TEXT,
     content_json TEXT NOT NULL,
     status TEXT NOT NULL,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    user_id TEXT NOT NULL DEFAULT 'legacy'
 );
 
 CREATE TABLE IF NOT EXISTS memory_items (
@@ -91,7 +97,56 @@ def initialize_database(connection: sqlite3.Connection) -> None:
     """Create required tables if they do not already exist."""
 
     connection.executescript(SCHEMA_SQL)
+    _ensure_column(connection, "capabilities", "owner_user_id", "TEXT")
+    _ensure_column(connection, "capabilities", "package_hash", "TEXT")
+    _ensure_column(connection, "capabilities", "sandbox_receipt_json", "TEXT")
+    _ensure_column(connection, "capabilities", "approved_by", "TEXT")
+    _ensure_column(connection, "capabilities", "approval_note", "TEXT")
+    _ensure_column(
+        connection,
+        "learning_artifacts",
+        "user_id",
+        "TEXT NOT NULL DEFAULT 'legacy'",
+    )
+    connection.execute(
+        """
+        UPDATE learning_artifacts
+        SET user_id = (
+            SELECT workflow_instances.user_id
+            FROM workflow_instances
+            WHERE workflow_instances.id = learning_artifacts.source_workflow_id
+        )
+        WHERE user_id = 'legacy'
+          AND source_workflow_id IS NOT NULL
+          AND EXISTS (
+              SELECT 1
+              FROM workflow_instances
+              WHERE workflow_instances.id = learning_artifacts.source_workflow_id
+          )
+        """
+    )
+    connection.execute(
+        """
+        UPDATE learning_artifacts
+        SET status = 'quarantined'
+        WHERE user_id = 'legacy'
+          AND status = 'pending_review'
+        """
+    )
     connection.commit()
+
+
+def _ensure_column(
+    connection: sqlite3.Connection,
+    table: str,
+    column: str,
+    declaration: str,
+) -> None:
+    existing = {
+        row["name"] for row in connection.execute(f"PRAGMA table_info({table})")
+    }
+    if column not in existing:
+        connection.execute(f"ALTER TABLE {table} ADD COLUMN {column} {declaration}")
 
 
 def open_database(path: str | Path) -> sqlite3.Connection:

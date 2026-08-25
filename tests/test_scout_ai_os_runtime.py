@@ -455,6 +455,39 @@ def test_runtime_tick_executes_due_one_shot_notification(tmp_path: Path) -> None
     assert record.status == "completed"
 
 
+def test_runtime_tick_reschedules_daily_trigger_for_next_day(tmp_path: Path) -> None:
+    workflow_store, executor = make_runtime(tmp_path)
+    now = datetime(2026, 8, 25, 8, 1, tzinfo=UTC)
+    first_run_at = now - timedelta(minutes=1)
+    workflow_id = workflow_store.save_pending(
+        make_workflow(
+            lifecycle=WorkflowLifecycle.PERMANENT,
+            trigger=TriggerSpec(
+                type=TriggerType.TIME,
+                description="Daily time trigger",
+                config={
+                    "run_at": first_run_at.isoformat(),
+                    "recurrence": "daily",
+                },
+            ),
+        ),
+        user_id="user-1",
+    )
+    workflow_store.approve(
+        workflow_id,
+        user_id="user-1",
+        approval_note="Daily reminder approved for this test.",
+    )
+
+    result = Scheduler(executor).tick(now)
+
+    assert result.ran == 1
+    assert result.results[0].status == "scheduled"
+    record = workflow_store.get_workflow(workflow_id)
+    assert record is not None
+    assert record.next_run_at == first_run_at + timedelta(days=1)
+
+
 def test_runtime_tick_pauses_workflow_requiring_approval(tmp_path: Path) -> None:
     workflow_store, executor = make_runtime(tmp_path)
     workflow_id = workflow_store.install(
@@ -501,6 +534,33 @@ def test_runtime_executes_low_risk_builtin_capability(tmp_path: Path) -> None:
     result = executor.tick(now)
 
     assert result.results[0].events[0]["payload"] == {"ok": True}
+
+
+def test_runtime_fails_closed_for_unsupported_action_result(tmp_path: Path) -> None:
+    workflow_store, executor = make_runtime(tmp_path)
+    workflow_id = workflow_store.install(
+        make_workflow(
+            actions=[
+                ActionSpec(
+                    type=ActionType.RUN_CAPABILITY,
+                    description="Legacy capability dispatch without a runtime handler.",
+                    config={"capability": "scout.ui.action_plan", "input": {}},
+                )
+            ]
+        ),
+        user_id="user-1",
+    )
+    now = datetime.now(UTC)
+    workflow_store.set_next_run_at(workflow_id, now - timedelta(seconds=1))
+
+    result = executor.tick(now)
+
+    assert result.failed == 1
+    assert result.results[0].status == "failed"
+    record = workflow_store.get_workflow(workflow_id)
+    assert record is not None
+    assert record.retry_count == 1
+    assert "unsupported action result" in (record.last_error or "")
 
 
 def test_runtime_executes_ui_action_as_session_local_plan(tmp_path: Path) -> None:

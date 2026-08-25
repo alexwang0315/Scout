@@ -4,6 +4,8 @@ import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import pytest
+
 from scout.schemas import (
     ActionSpec,
     ActionType,
@@ -161,17 +163,19 @@ def test_capability_registry_load_search_get_and_install(tmp_path: Path) -> None
         ),
         source="test",
     )
-    assert registry.get("route_summary") is not None
+    route_summary = registry.get_record("route_summary")
+    assert route_summary is not None
+    assert route_summary.runtime_available is False
+    assert registry.get("route_summary") is None
 
 
-def test_capability_registry_records_generated_package_as_candidate(
+def test_capability_registry_rejects_unbound_generated_package(
     tmp_path: Path,
 ) -> None:
     connection = open_temp_database(tmp_path)
     registry = CapabilityRegistry(connection)
 
-    registry.install(
-        GeneratedCapabilityPackage(
+    package = GeneratedCapabilityPackage(
             spec=CapabilitySpec(
                 name="generated_candidate",
                 description="Generated package metadata candidate.",
@@ -183,21 +187,36 @@ def test_capability_registry_records_generated_package_as_candidate(
             files={"implementation.py": "def run(payload): return payload"},
             tests={"test_implementation.py": "def test_run(): assert True"},
             install_notes="Metadata candidate only.",
-        )
     )
 
-    row = connection.execute(
-        "SELECT status, source FROM capabilities WHERE name = ?",
-        ("generated_candidate",),
-    ).fetchone()
-    assert row["status"] == "candidate"
-    assert row["source"] == "generated_candidate"
+    with pytest.raises(ValueError, match="install_generated_candidate"):
+        registry.install(package)
 
-    approved = registry.approve_generated_candidate("generated_candidate")
+    assert registry.get_record("generated_candidate") is None
 
-    assert approved.status == "installed"
-    assert approved.source == "generated_approved"
-    assert registry.get_record("generated_candidate").status == "installed"
+
+def test_capability_registry_rejects_approval_without_authority_binding(
+    tmp_path: Path,
+) -> None:
+    registry = CapabilityRegistry(open_temp_database(tmp_path))
+    registry.install(
+        CapabilitySpec(
+            name="legacy_candidate",
+            description="Legacy candidate without owner or receipt.",
+            runtime=CapabilityRuntime.PYTHON,
+            risk_level=CapabilityRisk.LOW,
+            input_schema={"type": "object"},
+            output_schema={"type": "object"},
+        ),
+        status="candidate",
+        source="generated_candidate",
+    )
+
+    with pytest.raises(PermissionError, match="authority binding"):
+        registry.approve_generated_candidate(
+            "legacy_candidate",
+            user_id="claiming-user",
+        )
 
 
 def test_memory_store_add_list_get_and_search(tmp_path: Path) -> None:

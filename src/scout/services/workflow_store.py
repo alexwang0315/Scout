@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
 
-from scout.schemas.workflow import WorkflowSpec
+from scout.schemas.workflow import TriggerType, WorkflowSpec
 
 
 def _now_iso() -> str:
@@ -57,13 +57,14 @@ class WorkflowStore:
         workflow_id = workflow.id or str(uuid4())
         stored_workflow = workflow.model_copy(update={"id": workflow_id})
         timestamp = _now_iso()
+        next_run_at = _initial_next_run_at(stored_workflow)
         self._connection.execute(
             """
             INSERT INTO workflow_instances (
                 id, user_id, name, status, lifecycle, runtime, workflow_json,
-                created_at, updated_at
+                next_run_at, created_at, updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 workflow_id,
@@ -73,6 +74,7 @@ class WorkflowStore:
                 stored_workflow.lifecycle.value,
                 stored_workflow.runtime.value,
                 stored_workflow.model_dump_json(),
+                next_run_at,
                 timestamp,
                 timestamp,
             ),
@@ -108,7 +110,6 @@ class WorkflowStore:
         if row is None:
             return None
         return self._row_to_record(row)
-
     def cancel(self, workflow_id: str, reason: str) -> None:
         self._set_status(workflow_id, "cancelled", "workflow.cancelled", reason)
 
@@ -120,6 +121,43 @@ class WorkflowStore:
 
     def activate(self, workflow_id: str, reason: str = "") -> None:
         self._set_status(workflow_id, "active", "workflow.activated", reason)
+
+    def approve(self, workflow_id: str, *, user_id: str, approval_note: str = "") -> None:
+        record = self.get_workflow(workflow_id)
+        if record is None:
+            raise KeyError(f"workflow not found: {workflow_id}")
+        if record.user_id != user_id:
+            raise PermissionError("workflow belongs to another user")
+        if record.status != "pending":
+            raise ValueError("only pending workflows can be approved")
+        cursor = self._connection.execute(
+            """
+            UPDATE workflow_instances
+            SET status = 'active', updated_at = ?
+            WHERE id = ? AND status = 'pending'
+            """,
+            (_now_iso(), workflow_id),
+        )
+        if cursor.rowcount != 1:
+            raise ValueError("workflow approval lost its pending precondition")
+        self.record_event(
+            workflow_id,
+            "workflow.approved",
+            {"user_id": user_id, "approval_note": approval_note},
+            commit=False,
+        )
+        self._connection.commit()
+
+    def is_approved(self, workflow_id: str) -> bool:
+        row = self._connection.execute(
+            """
+            SELECT 1 FROM workflow_events
+            WHERE workflow_id = ? AND event_type = 'workflow.approved'
+            LIMIT 1
+            """,
+            (workflow_id,),
+        ).fetchone()
+        return row is not None
 
     def set_next_run_at(self, workflow_id: str, next_run_at: datetime | None) -> None:
         serialized = None
@@ -257,6 +295,25 @@ class WorkflowStore:
             updated_at=datetime.fromisoformat(row["updated_at"]),
             last_error=row["last_error"],
         )
+
+
+def _initial_next_run_at(workflow: WorkflowSpec) -> str | None:
+    if workflow.trigger.type is TriggerType.MANUAL:
+        return _now_iso()
+    if workflow.trigger.type is not TriggerType.TIME:
+        return None
+    raw_run_at = workflow.trigger.config.get("run_at")
+    if raw_run_at is None:
+        return None
+    if not isinstance(raw_run_at, str):
+        raise ValueError("time trigger run_at must be an ISO-8601 string")
+    try:
+        run_at = datetime.fromisoformat(raw_run_at)
+    except ValueError as exc:
+        raise ValueError("time trigger run_at must be valid ISO-8601") from exc
+    if run_at.tzinfo is None:
+        raise ValueError("time trigger run_at must include a timezone")
+    return run_at.astimezone(UTC).isoformat()
 
 
 __all__ = ["WorkflowRecord", "WorkflowStore"]

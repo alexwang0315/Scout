@@ -120,8 +120,9 @@ Implemented services:
 - `scout.services.notification_gateway`: provider-based local, dry-run, and
   explicitly configured external transports, including a standing-grant
   wrapper that rechecks typed intents before transport invocation.
-- `scout.services.sandbox_runner`: generated package static checks and tempdir
-  pytest verification with file-count and byte-size guards.
+- `scout.services.sandbox_runner`: generated package substring/AST checks,
+  file-count and byte-size guards, and tempdir pytest verification behind a
+  fail-closed macOS Seatbelt or Linux bubblewrap backend.
 
 The runtime exposes a manual `/runtime/tick` endpoint and an optional
 background scheduler lifecycle. The background loop is disabled by default and
@@ -210,7 +211,8 @@ continue to the next case.
 
 This MVP does not implement:
 
-- OS-level or container-grade sandbox isolation;
+- production container-grade sandbox attestation (the MVP uses Seatbelt or
+  bubblewrap qualification backends and refuses execution without one);
 - automatic creation, renewal, or expansion of outbound standing grants;
 - default-on deployment of live external notification transports;
 - generated capability runtime code installation outside sandbox metadata;

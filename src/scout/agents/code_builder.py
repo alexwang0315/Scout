@@ -17,6 +17,7 @@ from scout.schemas.capability import (
     CapabilityRisk,
     GeneratedCapabilityPackage,
 )
+from scout.services.sandbox_runner import package_security_findings
 
 
 CODE_BUILDER_INSTRUCTIONS = """\
@@ -52,8 +53,7 @@ class CodeBuilderAgent:
             instructions=CODE_BUILDER_INSTRUCTIONS,
             prompt=_build_prompt(build_request=build_request, deps=deps),
             output_type=GeneratedCapabilityPackage,
-            deps=deps,
-            tools=build_toolbox(deps),
+            tools=build_toolbox(deps, allowed_tools=()),
             context={
                 "build_request": build_request.model_dump(mode="json"),
                 "active_context": dict(deps.active_context),
@@ -63,7 +63,7 @@ class CodeBuilderAgent:
             self._provider.run(request),
             GeneratedCapabilityPackage,
         )
-        _assert_package_allowed(package)
+        _assert_package_allowed(package, build_request)
         return package
 
 
@@ -84,15 +84,40 @@ def _build_prompt(
 def _assert_build_request_allowed(build_request: CapabilityBuildRequest) -> None:
     if build_request.risk_level is not CapabilityRisk.LOW:
         raise ValueError("CodeBuilderAgent only accepts low-risk build requests.")
+    purpose = build_request.purpose.casefold()
+    forbidden = (
+        "payment",
+        "delete",
+        "credential",
+        "password",
+        "secret",
+        "production database",
+        "send message",
+        "notification",
+        "shell",
+    )
+    if any(term in purpose for term in forbidden):
+        raise ValueError("CodeBuilderAgent refuses prohibited capability purposes.")
 
 
-def _assert_package_allowed(package: GeneratedCapabilityPackage) -> None:
+def _assert_package_allowed(
+    package: GeneratedCapabilityPackage,
+    build_request: CapabilityBuildRequest,
+) -> None:
+    if package.spec.name != build_request.capability_name:
+        raise ValueError("CodeBuilderAgent output name must match the build request.")
     if package.spec.risk_level is not CapabilityRisk.LOW:
         raise ValueError("CodeBuilderAgent output must remain low-risk.")
     if not package.files:
         raise ValueError("CodeBuilderAgent output must include implementation files.")
     if not package.tests:
         raise ValueError("CodeBuilderAgent output must include tests.")
+    findings = package_security_findings(package)
+    if findings:
+        raise ValueError(
+            "CodeBuilderAgent output contains a disallowed pattern: "
+            + "; ".join(findings)
+        )
 
 
 __all__ = ["CodeBuilderAgent", "CODE_BUILDER_INSTRUCTIONS"]

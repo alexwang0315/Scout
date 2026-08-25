@@ -44,8 +44,10 @@ class ExecutionPlannerAgent:
             instructions=EXECUTION_PLANNER_INSTRUCTIONS,
             prompt=_planning_prompt(workflow=workflow, deps=deps),
             output_type=ExecutionPlan,
-            deps=deps,
-            tools=build_toolbox(deps),
+            tools=build_toolbox(
+                deps,
+                allowed_tools={"search_capabilities", "get_capability"},
+            ),
             context={
                 "workflow": workflow.model_dump(mode="json"),
                 "active_context": dict(deps.active_context),
@@ -80,6 +82,7 @@ def _repair_execution_plan(plan: ExecutionPlan) -> ExecutionPlan:
     if plan.mode not in {
         PlanMode.ASK_PERMISSION,
         PlanMode.ASK_CLARIFICATION,
+        PlanMode.BUILD_NEW_CAPABILITY,
         PlanMode.REFUSE_AUTOMATION,
     }:
         updates["mode"] = PlanMode.ASK_PERMISSION

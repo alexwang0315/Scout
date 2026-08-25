@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from datetime import UTC, datetime, timedelta
 from dataclasses import dataclass, field
 import re
@@ -12,6 +12,15 @@ from pydantic import BaseModel
 
 
 OutputT = TypeVar("OutputT", bound=BaseModel)
+
+READ_ONLY_TOOL_NAMES = frozenset(
+    {
+        "search_memory",
+        "search_capabilities",
+        "get_active_context",
+        "get_capability",
+    }
+)
 
 
 @dataclass
@@ -42,6 +51,7 @@ class ScoutToolbox:
     search_capabilities: Callable[[str], list[dict[str, Any]]]
     get_active_context: Callable[[], dict[str, Any]]
     get_capability: Callable[[str], dict[str, Any] | None]
+    allowed_tools: frozenset[str]
 
 
 @dataclass(frozen=True)
@@ -52,7 +62,6 @@ class ScoutAgentRequest:
     instructions: str
     prompt: str
     output_type: type[BaseModel]
-    deps: ScoutDeps
     tools: ScoutToolbox
     context: dict[str, Any]
 
@@ -76,10 +85,26 @@ def validate_provider_output(output: Any, output_type: type[OutputT]) -> OutputT
     return output_type.model_validate(output)
 
 
-def build_toolbox(deps: ScoutDeps) -> ScoutToolbox:
-    """Create the read-only tool surface described in the Phase 5 spec."""
+def build_toolbox(
+    deps: ScoutDeps,
+    *,
+    allowed_tools: Iterable[str] = READ_ONLY_TOOL_NAMES,
+) -> ScoutToolbox:
+    """Create a least-privilege read-only tool surface for one facade."""
+
+    allowed = frozenset(allowed_tools)
+    unknown = allowed - READ_ONLY_TOOL_NAMES
+    if unknown:
+        raise ValueError(f"unknown Scout read-only tools: {sorted(unknown)}")
+
+    def require_allowed(tool_name: str) -> None:
+        if tool_name not in allowed:
+            raise PermissionError(
+                f"Scout agent tool {tool_name!r} is outside this facade's scope."
+            )
 
     def search_memory(query: str) -> list[str]:
+        require_allowed("search_memory")
         memory_store = deps.memory_store
         if memory_store is None or not hasattr(memory_store, "search"):
             return []
@@ -87,6 +112,7 @@ def build_toolbox(deps: ScoutDeps) -> ScoutToolbox:
         return [getattr(item, "content", str(item)) for item in matches]
 
     def search_capabilities(query: str) -> list[dict[str, Any]]:
+        require_allowed("search_capabilities")
         registry = deps.capability_registry
         if registry is None or not hasattr(registry, "search"):
             return []
@@ -94,9 +120,11 @@ def build_toolbox(deps: ScoutDeps) -> ScoutToolbox:
         return [_to_plain_dict(match) for match in matches]
 
     def get_active_context() -> dict[str, Any]:
+        require_allowed("get_active_context")
         return dict(deps.active_context)
 
     def get_capability(name: str) -> dict[str, Any] | None:
+        require_allowed("get_capability")
         registry = deps.capability_registry
         if registry is None or not hasattr(registry, "get"):
             return None
@@ -110,6 +138,7 @@ def build_toolbox(deps: ScoutDeps) -> ScoutToolbox:
         search_capabilities=search_capabilities,
         get_active_context=get_active_context,
         get_capability=get_capability,
+        allowed_tools=allowed,
     )
 
 
@@ -133,7 +162,6 @@ class DeterministicScoutAgentProvider:
             ActionSpec,
             ActionType,
             RuntimeTarget,
-            TriggerSpec,
             TriggerType,
             WorkflowLifecycle,
             WorkflowSpec,
@@ -141,8 +169,43 @@ class DeterministicScoutAgentProvider:
 
         utterance = str(request.context.get("utterance") or "").strip()
         lowered = utterance.casefold()
-        trigger = _infer_trigger(lowered, request.deps.active_context)
+        generated_capability = _low_risk_capability_from_utterance(lowered)
+        active_context = request.context.get("active_context")
+        trigger = _infer_trigger(
+            lowered,
+            active_context if isinstance(active_context, dict) else {},
+        )
         lifecycle = _infer_lifecycle(lowered, trigger.type)
+        if generated_capability is not None:
+            return WorkflowSpec(
+                name=_name_from_utterance(utterance),
+                source_utterance=utterance,
+                user_goal=utterance,
+                trigger=trigger,
+                actions=[
+                    ActionSpec(
+                        type=ActionType.RUN_CAPABILITY,
+                        description=f"Run the candidate {generated_capability} capability.",
+                        config={
+                            "capability": generated_capability,
+                            "input": {},
+                        },
+                    )
+                ],
+                lifecycle=lifecycle,
+                runtime=RuntimeTarget.SANDBOX,
+                permissions=PermissionSpec(
+                    required=["generated_capability.review"],
+                    approval_required=True,
+                    reason="Generated capability must be sandboxed and reviewed.",
+                ),
+                fallback_policy={"generated_code_runtime_enabled": False},
+                verification_plan=[
+                    "Run sandbox verification before storing candidate metadata.",
+                    "Do not install generated runtime code from this request.",
+                ],
+                learning_candidates=["eval_case"],
+            )
         required = ["notification.send"]
         if trigger.type is TriggerType.LOCATION:
             required.append("location.read")
@@ -204,10 +267,16 @@ class DeterministicScoutAgentProvider:
             for capability in required
             if request.tools.get_capability(capability) is None
         ]
-        if workflow.permissions.approval_required:
+        build_request = None
+        if missing:
+            build_request = _low_risk_build_request(workflow, missing)
+            mode = (
+                PlanMode.BUILD_NEW_CAPABILITY
+                if build_request is not None
+                else PlanMode.REFUSE_AUTOMATION
+            )
+        elif workflow.permissions.approval_required:
             mode = PlanMode.ASK_PERMISSION
-        elif missing:
-            mode = PlanMode.BUILD_NEW_CAPABILITY
         else:
             mode = PlanMode.USE_EXISTING
         return ExecutionPlan(
@@ -216,6 +285,11 @@ class DeterministicScoutAgentProvider:
             workflow=workflow,
             required_capabilities=required,
             missing_capabilities=missing,
+            build_request=(
+                build_request.model_dump(mode="json")
+                if build_request is not None
+                else None
+            ),
             approval_message=(
                 "Approve this workflow before installation."
                 if workflow.permissions.approval_required
@@ -308,6 +382,7 @@ def _to_plain_dict(value: Any) -> dict[str, Any]:
 
 __all__ = [
     "DeterministicScoutAgentProvider",
+    "READ_ONLY_TOOL_NAMES",
     "ScoutAgentProvider",
     "ScoutAgentRequest",
     "ScoutDeps",
@@ -320,6 +395,34 @@ __all__ = [
 def _infer_trigger(lowered: str, active_context: dict[str, Any]) -> Any:
     from scout.schemas.workflow import TriggerSpec, TriggerType
 
+    if any(term in lowered for term in ("every day", "daily", "every night")):
+        match = re.search(
+            r"at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?",
+            lowered,
+        )
+        now_value = active_context.get("now")
+        now = (
+            datetime.fromisoformat(now_value)
+            if isinstance(now_value, str)
+            else datetime.now(UTC)
+        )
+        if now.tzinfo is None:
+            now = now.replace(tzinfo=UTC)
+        hour = int(match.group(1)) if match else 8
+        minute = int(match.group(2) or 0) if match else 0
+        meridiem = match.group(3) if match else None
+        if meridiem == "pm" and hour < 12:
+            hour += 12
+        elif meridiem == "am" and hour == 12:
+            hour = 0
+        run_at = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        if run_at <= now:
+            run_at += timedelta(days=1)
+        return TriggerSpec(
+            type=TriggerType.TIME,
+            description="Daily time trigger",
+            config={"run_at": run_at.isoformat(), "recurrence": "daily"},
+        )
     if any(term in lowered for term in ("100 meters", "campsite", "near ", "location")):
         return TriggerSpec(type=TriggerType.LOCATION, description="Location trigger")
     if "email" in lowered:
@@ -346,7 +449,18 @@ def _infer_trigger(lowered: str, active_context: dict[str, Any]) -> Any:
 def _infer_lifecycle(lowered: str, trigger_type: Any) -> Any:
     from scout.schemas.workflow import TriggerType, WorkflowLifecycle
 
-    if any(term in lowered for term in ("whenever", "always", "permanent", "watch ")):
+    if any(
+        term in lowered
+        for term in (
+            "whenever",
+            "always",
+            "permanent",
+            "watch ",
+            "every day",
+            "daily",
+            "every night",
+        )
+    ):
         return WorkflowLifecycle.PERMANENT
     if trigger_type is TriggerType.LOCATION:
         return WorkflowLifecycle.TRIP_SCOPED
@@ -361,3 +475,41 @@ def _name_from_utterance(utterance: str) -> str:
     if len(utterance) <= 60:
         return utterance.rstrip(".")
     return utterance[:57].rstrip() + "..."
+
+
+def _low_risk_capability_from_utterance(lowered: str) -> str | None:
+    if "parser" in lowered and "csv" in lowered:
+        return "csv_parser"
+    return None
+
+
+def _low_risk_build_request(
+    workflow: Any,
+    missing: list[str],
+) -> Any | None:
+    from scout.schemas.capability import CapabilityBuildRequest, CapabilityRisk
+
+    if len(missing) != 1:
+        return None
+    capability_name = missing[0]
+    allowed_terms = (
+        "parser",
+        "formatter",
+        "classifier",
+        "calculator",
+        "validator",
+        "transform",
+    )
+    if not any(term in capability_name.casefold() for term in allowed_terms):
+        return None
+    return CapabilityBuildRequest(
+        capability_name=capability_name,
+        purpose=workflow.user_goal,
+        input_schema={"type": "object"},
+        output_schema={"type": "object"},
+        constraints=[
+            "No network, shell, secrets, outbound messages, or host writes.",
+        ],
+        test_cases=[],
+        risk_level=CapabilityRisk.LOW,
+    )

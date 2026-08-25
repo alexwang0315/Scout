@@ -823,6 +823,8 @@ def _check_external_model_sla_gate(model_policy: dict[str, Any]) -> HardwareSmok
     policy = ModelPolicy.model_validate(model_policy)
     enforced_policy = policy.model_copy(
         update={
+            "aggressive_construction_mode": False,
+            "resource_limits_enforced": True,
             "max_cost_usd": 0.0,
             "estimated_call_cost_usd": 0.001,
         }

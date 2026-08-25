@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import subprocess
+import sys
 from pathlib import Path
+
+import pytest
 
 from scout.schemas.capability import (
     CapabilityRisk,
@@ -12,6 +16,8 @@ from scout.services.sandbox_runner import (
     MAX_FILE_BYTES,
     MAX_PACKAGE_FILES,
     SandboxRunner,
+    _macos_sandbox_profile,
+    _sandbox_env,
 )
 
 
@@ -59,6 +65,8 @@ def test_sandbox_runner_passes_valid_generated_package() -> None:
     assert result.security_findings == []
     assert "passed" in result.test_summary
     assert result.resource_usage["files_written"] == 2
+    if sys.platform == "darwin":
+        assert result.resource_usage["isolation_backend"] == "macos-seatbelt"
 
 
 def test_sandbox_runner_does_not_install_generated_code() -> None:
@@ -124,6 +132,113 @@ def test_sandbox_runner_blocks_disallowed_patterns_before_execution() -> None:
     assert "before execution" in result.test_summary
     assert any("subprocess" in finding for finding in result.security_findings)
     assert result.resource_usage["files_written"] == 0
+
+
+def test_sandbox_environment_scrubs_parent_secret(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("SCOUT_PHASE6_TEST_SECRET", "must-not-cross-boundary")
+    env = _sandbox_env(tmp_path)
+
+    assert "SCOUT_PHASE6_TEST_SECRET" not in env
+    assert "must-not-cross-boundary" not in str(env)
+
+
+def test_sandbox_runner_blocks_dynamic_import_before_execution() -> None:
+    result = SandboxRunner().run(
+        make_package(
+            files={
+                "implementation.py": (
+                    "def run(payload):\n"
+                    "    module = __import__('o' + 's')\n"
+                    "    values = getattr(module, 'environ')\n"
+                    "    return values.get('SCOUT_PHASE6_TEST_' + 'SE' + 'CRET')\n"
+                )
+            },
+            tests={
+                "test_implementation.py": (
+                    "from implementation import run\n\n"
+                    "def test_parent_value_is_not_available():\n"
+                    "    assert run({}) is None\n"
+                )
+            },
+        )
+    )
+
+    assert result.passed is False
+    assert any("__import__" in finding for finding in result.security_findings)
+    assert result.resource_usage["files_written"] == 0
+
+
+def test_sandbox_runner_blocks_ast_obfuscation_and_file_write() -> None:
+    result = SandboxRunner().run(
+        make_package(
+            files={
+                "implementation.py": (
+                    "from pathlib import Path\n"
+                    "from importlib import import_module\n\n"
+                    "def run(payload):\n"
+                    "    Path('/tmp/scout-escape').write_text('escaped')\n"
+                    "    return import_module('sub' + 'process')\n"
+                )
+            }
+        )
+    )
+
+    assert result.passed is False
+    assert result.resource_usage["files_written"] == 0
+    assert any("pathlib" in finding for finding in result.security_findings)
+    assert any("importlib" in finding for finding in result.security_findings)
+    assert any("write_text" in finding for finding in result.security_findings)
+
+
+@pytest.mark.skipif(sys.platform != "darwin", reason="macOS Seatbelt proof")
+def test_macos_sandbox_profile_blocks_host_file_read(tmp_path: Path) -> None:
+    outside_file = tmp_path / "outside-secret.txt"
+    outside_file.write_text("must-not-be-readable", encoding="utf-8")
+    sandbox_path = tmp_path / "sandbox"
+    sandbox_path.mkdir()
+    profile = _macos_sandbox_profile(
+        sandbox_path,
+        python_executable=sys.executable,
+    )
+    assert profile is not None
+
+    completed = subprocess.run(
+        [
+            "/usr/bin/sandbox-exec",
+            "-p",
+            profile,
+            str(Path(sys.executable).resolve()),
+            "-c",
+            f"print(open({str(outside_file)!r}).read())",
+        ],
+        cwd=sandbox_path,
+        env=_sandbox_env(sandbox_path),
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=10,
+    )
+
+    assert completed.returncode != 0
+    assert "must-not-be-readable" not in completed.stdout
+
+
+def test_sandbox_runner_installs_runtime_network_blocker() -> None:
+    result = SandboxRunner().run(
+        make_package(
+            tests={
+                "test_network_blocker.py": (
+                    "import pytest\n"
+                    "import sitecustomize\n\n"
+                    "def test_network_is_blocked():\n"
+                    "    with pytest.raises(RuntimeError, match='blocks network'):\n"
+                    "        sitecustomize._blocked()\n"
+                )
+            }
+        )
+    )
+
+    assert result.passed is True
 
 
 def test_sandbox_runner_blocks_unsafe_paths_before_writing() -> None:
