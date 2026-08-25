@@ -4,6 +4,7 @@ import json
 import importlib.util
 import socket
 import sys
+import re
 import threading
 import time
 from collections.abc import Iterator
@@ -22,6 +23,7 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from scout.nextgen.model_gateway import (
     ModelGatewayExecutionError,
+    ModelInferencePriority,
     ModelInferenceRequest,
     PydanticAIStructuredBackend,
     ScoutModelGateway,
@@ -43,6 +45,7 @@ from scout.nextgen.model_runtime import (
     AcceleratorKind,
     Locality,
     ModelRuntimeCapability,
+    ModelRuntimeHostKind,
     ModelRuntimeProfile,
     ModelRuntimeTier,
 )
@@ -78,10 +81,12 @@ class _ReplayState:
         output_arguments: dict[str, Any] | None = None,
         failure_status: int | None = None,
         responder: Any | None = None,
+        created_timestamp: int | None = None,
     ) -> None:
         self.output_arguments = output_arguments or {"value": "http-replay-ok"}
         self.failure_status = failure_status
         self.responder = responder
+        self.created_timestamp = created_timestamp
         self.requests: list[dict[str, Any]] = []
         self.paths: list[str] = []
         self.lock = threading.Lock()
@@ -93,11 +98,13 @@ def _openai_replay_server(
     output_arguments: dict[str, Any] | None = None,
     failure_status: int | None = None,
     responder: Any | None = None,
+    created_timestamp: int | None = None,
 ) -> Iterator[tuple[str, _ReplayState]]:
     state = _ReplayState(
         output_arguments=output_arguments,
         failure_status=failure_status,
         responder=responder,
+        created_timestamp=created_timestamp,
     )
 
     class Handler(BaseHTTPRequestHandler):
@@ -151,7 +158,7 @@ def _openai_replay_server(
             body = {
                 "id": "chatcmpl-scout-replay",
                 "object": "chat.completion",
-                "created": int(time.time()),
+                "created": state.created_timestamp or int(time.time()),
                 "model": payload["model"],
                 "choices": [
                     {
@@ -206,10 +213,8 @@ def _config(
         "offline_capable": True,
         "privacy_preserving": True,
     }
-    return OpenAICompatibleBackendConfig(
-        **payload,
-        **overrides,
-    )
+    payload.update(overrides)
+    return OpenAICompatibleBackendConfig(**payload)
 
 
 def _request(parent_request_id: UUID) -> ModelInferenceRequest:
@@ -402,6 +407,82 @@ def test_openai_compatible_backend_executes_native_json_schema_output() -> None:
     assert result.output == _ProbeOutput(value="http-replay-ok")
     assert payload.get("tools") is None
     assert payload["response_format"]["type"] == "json_schema"
+
+
+def test_hailo_timestamp_mode_normalizes_nanoseconds_before_pydantic_ai() -> None:
+    with _openai_replay_server(
+        created_timestamp=1_787_463_187_012_202_212,
+    ) as (base_url, state):
+        config = _config(
+            base_url,
+            provider="hailo_ollama",
+            response_created_timestamp_mode="auto_to_seconds",
+        )
+        backend = OpenAICompatiblePydanticBackend(config=config, environ={})
+        with ScoutModelGateway(
+            profiles=(config.to_runtime_profile(),),
+            backends=(backend,),
+            max_local_concurrency=1,
+        ) as gateway:
+            session = gateway.open_session(
+                parent_request_id=uuid4(),
+                max_model_requests=10,
+            )
+            result = session.infer(
+                _request(session.parent_request_id),
+                output_type=_ProbeOutput,
+            )
+
+    assert result.output == _ProbeOutput(value="http-replay-ok")
+    assert state.requests[0]["model"] == config.model_id
+
+
+def test_timestamp_normalization_is_restricted_to_hailo_provider() -> None:
+    with pytest.raises(ValidationError, match="only available for hailo_ollama"):
+        _config(
+            "http://127.0.0.1:8000/v1",
+            response_created_timestamp_mode="auto_to_seconds",
+        )
+
+
+def test_hailo_prompted_output_flattens_message_control_characters() -> None:
+    with _openai_replay_server() as (base_url, state):
+        config = _config(
+            base_url,
+            provider="hailo_ollama",
+            structured_output_mode="prompted",
+            request_message_control_mode="replace_controls_with_spaces",
+        )
+        backend = OpenAICompatiblePydanticBackend(config=config, environ={})
+        with ScoutModelGateway(
+            profiles=(config.to_runtime_profile(),),
+            backends=(backend,),
+            max_local_concurrency=1,
+        ) as gateway:
+            session = gateway.open_session(
+                parent_request_id=uuid4(),
+                max_model_requests=10,
+            )
+            request = _request(session.parent_request_id).model_copy(
+                update={"prompt": "Return\nthis\ttyped replay result."}
+            )
+            result = session.infer(request, output_type=_ProbeOutput)
+
+    assert result.output == _ProbeOutput(value="http-replay-ok")
+    assert state.requests[0].get("tools") is None
+    message_text = json.dumps(
+        state.requests[0]["messages"],
+        ensure_ascii=False,
+    )
+    assert re.search(r"[\x00-\x1f\x7f-\x9f]", message_text) is None
+
+
+def test_hailo_request_control_mode_is_restricted_to_hailo_provider() -> None:
+    with pytest.raises(ValidationError, match="only available for hailo_ollama"):
+        _config(
+            "http://127.0.0.1:8000/v1",
+            request_message_control_mode="replace_controls_with_spaces",
+        )
 
 
 def test_openai_compatible_backend_applies_bounded_inference_defaults() -> None:
@@ -781,6 +862,72 @@ def test_checked_in_max_runtime_example_stays_valid_and_candidate_only() -> None
     assert config.max_concurrency == 1
     assert config.candidate_only is True
     assert config.runtime_safety_truth is False
+
+
+def test_hailo_config_declares_only_chat_and_small_typed_output() -> None:
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "configs"
+        / "scout-nextgen-openai-compatible.hailo-qwen3-1.7b.json"
+    )
+    config = OpenAICompatibleBackendConfig.from_json_file(path)
+    profile = config.to_runtime_profile()
+    runtime = build_praison_openai_compatible_runtime(config=config, environ={})
+    try:
+        assert profile.capabilities == frozenset(
+            {
+                ModelRuntimeCapability.CHAT,
+                ModelRuntimeCapability.SMALL_TYPED_OUTPUT,
+                ModelRuntimeCapability.OFFLINE,
+            }
+        )
+        assert runtime.required_capabilities == frozenset(
+            {
+                ModelRuntimeCapability.CHAT,
+                ModelRuntimeCapability.SMALL_TYPED_OUTPUT,
+            }
+        )
+        assert runtime.inference_priority is ModelInferencePriority.NORMAL
+    finally:
+        runtime.close()
+
+
+def test_pi_cpu_ollama_config_is_background_reasoning_runtime() -> None:
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "configs"
+        / "scout-nextgen-openai-compatible.pi-cpu-ollama-qwen3-1.7b.json"
+    )
+    old_mac_path = (
+        Path(__file__).resolve().parents[1]
+        / "configs"
+        / "scout-nextgen-openai-compatible.ollama-qwen3-1.7b.json"
+    )
+    config = OpenAICompatibleBackendConfig.from_json_file(path)
+    profile = config.to_runtime_profile()
+    runtime = build_praison_openai_compatible_runtime(config=config, environ={})
+    try:
+        assert old_mac_path.exists() is False
+        assert config.transport_scope is OpenAICompatibleTransportScope.LOOPBACK
+        assert config.base_url == "http://127.0.0.1:11434/v1"
+        assert profile.runtime_id == "edge.pi.ollama.cpu.background"
+        assert profile.locality is Locality.EDGE
+        assert profile.accelerator is AcceleratorKind.CPU
+        assert profile.required_host_kind is ModelRuntimeHostKind.RASPBERRY_PI
+        assert profile.capabilities.issuperset(
+            {
+                ModelRuntimeCapability.CHAT,
+                ModelRuntimeCapability.STRUCTURED_OUTPUT,
+                ModelRuntimeCapability.SLOW_BACKGROUND_REASONING,
+                ModelRuntimeCapability.OFFLINE,
+            }
+        )
+        assert ModelRuntimeCapability.SLOW_BACKGROUND_REASONING in (
+            runtime.required_capabilities
+        )
+        assert runtime.inference_priority is ModelInferencePriority.BACKGROUND
+    finally:
+        runtime.close()
 
 
 @pytest.mark.skipif(

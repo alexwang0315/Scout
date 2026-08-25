@@ -116,3 +116,16 @@ rollback_strategy: >
 - Live PraisonAI CPU latency improvement: `PASS`, 16.2 percent.
 - Full qualification wall-time improvement: `NEUTRAL`, due to the new gate.
 - Production promotion: `NOT REQUESTED`.
+
+## Raspberry Pi Real-Route Follow-Up - 2026-08-23
+
+The same route policy passed natively on Raspberry Pi 5 CPU/Ollama against the
+real Chilai Nanhua Day 1 route and normalized QGIS/GRASS evidence. The MCP
+candidate path used one Terrain model request and deterministic QGIS ingestion;
+Research was absent from the agent path. It called only `route.read`, `dem.read`,
+and `qgis.processing.slope`, produced four grounded findings plus explicit
+saddle uncertainty, and passed the authority gate in 126177 ms. The complete
+report is
+`artifacts/scout-ai-nextgen/phase3-chilai-nanhua/model-runtime-qualification-pi-native-real-route.json`
+with report hash
+`bae7bd88407db67c267fb86a837db67bd93c9430c68dc76e9ff6a10f0a4d524d`.

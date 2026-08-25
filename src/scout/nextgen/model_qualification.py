@@ -244,6 +244,7 @@ def run_openai_compatible_qualification(
     python_executable: str = sys.executable,
     pythonpath: str | None = None,
     stop_after: Literal["basic_chat", "typed_output", "tool_calling"] | None = None,
+    continue_after_tool_failure: bool = False,
 ) -> ModelRuntimeQualificationReport:
     started_monotonic = time.monotonic()
     rss_before = _peak_rss_bytes()
@@ -349,7 +350,10 @@ def run_openai_compatible_qualification(
     finally:
         tool_backend.close()
     checks.append(tool_check)
-    if tool_check.status is not ModelQualificationStatus.PASSED:
+    if (
+        tool_check.status is not ModelQualificationStatus.PASSED
+        and (not continue_after_tool_failure or stop_after == "tool_calling")
+    ):
         checks.extend(
             _not_run_checks(
                 "tool calling qualification did not pass",
@@ -402,10 +406,18 @@ def run_openai_compatible_qualification(
     checks.append(mcp_check)
     authority_check = _authority_check(execution)
     checks.append(authority_check)
+    failed_check = next(
+        (
+            check
+            for check in checks
+            if check.status is not ModelQualificationStatus.PASSED
+        ),
+        None,
+    )
     disposition = (
         ModelQualificationDisposition.PASSED
-        if all(check.status is ModelQualificationStatus.PASSED for check in checks)
-        else _failure_disposition(mcp_check.status)
+        if failed_check is None
+        else _failure_disposition(failed_check.status)
     )
     return _build_report(
         config=config,
@@ -623,12 +635,26 @@ def _run_typed_output_probe(
         parent_request_id=parent_request_id,
         max_model_requests=case.max_model_requests,
     )
+    profile = config.to_runtime_profile()
+    typed_output_capability = (
+        ModelRuntimeCapability.SMALL_TYPED_OUTPUT
+        if ModelRuntimeCapability.SMALL_TYPED_OUTPUT in profile.capabilities
+        else ModelRuntimeCapability.STRUCTURED_OUTPUT
+    )
     request = ModelInferenceRequest(
         parent_request_id=parent_request_id,
         task="Scout OpenAI-compatible typed output qualification",
         prompt=(
-            "Return the typed marker SCOUT_TYPED_OUTPUT_OK. Keep candidate_only true "
-            "and runtime_safety_truth false."
+            "Return exactly one JSON object: "
+            '{"marker":"SCOUT_TYPED_OUTPUT_OK","candidate_only":true,'
+            '"runtime_safety_truth":false}. '
+            "Do not include Markdown or any text before or after the object."
+        ),
+        required_capabilities=frozenset(
+            {
+                ModelRuntimeCapability.CHAT,
+                typed_output_capability,
+            }
         ),
         allowed_tiers=frozenset({config.tier}),
         prefer_local=config.locality.value != "cloud",
@@ -941,6 +967,8 @@ def _run_praison_mcp_probe(
         started_monotonic=started_monotonic,
         config=config,
         request_count=request_count,
+        tool_call_count=len(tools),
+        tools_called=tuple(sorted(tools)),
         input_tokens=_sum_optional(record.input_tokens for record in records),
         output_tokens=_sum_optional(record.output_tokens for record in records),
         observed_model_id=observed_model_id,

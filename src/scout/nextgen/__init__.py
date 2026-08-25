@@ -48,11 +48,13 @@ from scout.nextgen.model_runtime import (
     Locality,
     ModelCapabilityAttestation,
     ModelRuntimeCapability,
+    ModelRuntimeHostKind,
     ModelRuntimeProfile,
     ModelRuntimeRequest,
     ModelRuntimeSelection,
     ModelRuntimeTier,
     ScoutModelRuntimeRouter,
+    detect_model_runtime_host_kind,
     default_runtime_profiles,
 )
 from scout.nextgen.model_gateway import (
@@ -70,10 +72,14 @@ from scout.nextgen.model_gateway import (
     ModelOutputValidationError,
     ModelRequestBudgetExceeded,
     ModelRuntimeBackend,
+    ModelRuntimeCapabilityMatrixEntry,
     ModelRuntimeUnavailable,
     ModelSessionCancelled,
     PydanticAIStructuredBackend,
     ScoutModelGateway,
+)
+from scout.nextgen.praison_background_queue import (
+    PraisonBackgroundIntelligenceQueue,
 )
 from scout.nextgen.openai_compatible_backend import (
     OpenAICompatibleBackendConfig,
@@ -183,6 +189,7 @@ __all__ = [
     "Locality",
     "ModelCapabilityAttestation",
     "ModelRuntimeCapability",
+    "ModelRuntimeHostKind",
     "ModelGatewayError",
     "ModelGatewayExecutionError",
     "ModelGatewayResult",
@@ -195,6 +202,7 @@ __all__ = [
     "ModelOutputValidationError",
     "ModelRequestBudgetExceeded",
     "ModelRuntimeBackend",
+    "ModelRuntimeCapabilityMatrixEntry",
     "ModelRuntimeProfile",
     "ModelRuntimeRequest",
     "ModelRuntimeSelection",
@@ -210,6 +218,7 @@ __all__ = [
     "OpenAICompatibleTransportScope",
     "PydanticContractGateway",
     "PydanticAIStructuredBackend",
+    "PraisonBackgroundIntelligenceQueue",
     "RUNTIME_SHADOW_ENV",
     "RuntimeShadowStatus",
     "ScoutModelRuntimeRouter",
@@ -239,6 +248,7 @@ __all__ = [
     "WorkspaceSnapshotMode",
     "build_workspace_benchmark_cases",
     "default_runtime_profiles",
+    "detect_model_runtime_host_kind",
     "build_praison_openai_compatible_runtime",
     "build_nextgen_failure_matrix",
     "degraded_intelligence_response",
