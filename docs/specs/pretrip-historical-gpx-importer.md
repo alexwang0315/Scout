@@ -1,6 +1,7 @@
 # Spec: Pretrip Historical GPX Importer
 
 Date: 2026-06-02
+Last updated: 2026-08-26
 
 ## Objective
 
@@ -25,6 +26,13 @@ current user has walked the route. It is a planning stand-in chosen from
 historical evidence. The actual walked route belongs to post-analysis after the
 trip returns safely.
 
+For GPX import and Dashboard clone behavior, this dated spec and
+`docs/specs/pretrip-layer-preparation.md` are normative. Older run logs,
+temporary workarounds, or remembered trajectories that used importer-only
+completion, a second preparation pass, manual artifact repair, or a `_v2`
+workspace remain incident evidence only and must not be reintroduced as the
+standard operating procedure.
+
 ## Role In The Pipeline
 
 The importer must run before route-corridor map preparation:
@@ -42,7 +50,122 @@ historical/open-download GPX corpus
 
 The route evidence bundle is the source of truth for map preparation scope. Map
 preparation must not perform route-independent OSM/GIS/web searches for this
-project when a valid importer route bundle exists.
+project when a valid importer route bundle exists. The receiving preparation
+contract is `docs/specs/pretrip-layer-preparation.md`.
+
+## Dashboard Workspace Clone And Single-Pass Contract
+
+The normal Dashboard user flow for producing a new route workspace is the
+Workspace page `Clone` action, backed by:
+
+```text
+POST /admin/dashboard/workspaces/{source_project_id}/clone
+```
+
+with `confirm_clone=true` and a new `target_project_id`. This is not a filesystem
+copy operation. The canonical transaction is:
+
+```text
+read-only source workspace and material manifest
+  -> validate all source identities, hashes, paths, and required tools
+  -> one clean GPX import into a new target (`overwrite=false`)
+  -> one full map preparation run using that target route bundle
+  -> post-layer enrichments and map-preparation spec artifacts
+  -> `outputs/workspace_clone_receipt.json`
+  -> expose/open the target workspace only as prepared or explicitly degraded
+```
+
+The source workspace is an input catalog, not a derived-artifact template. The
+clone flow must preserve these invariants:
+
+- source and target project ids differ;
+- source and target are direct children of the configured workspace root;
+- the target does not already exist and is never overwritten;
+- the source `project.json` and `inbox/source_manifest.json` project ids match
+  the requested source id;
+- the source inbox declares exactly one golden route and at least one reference
+  GPX;
+- every declared GPX exists inside the source workspace and matches its SHA-256;
+- additional GPX files declared by the material corpus are deduplicated by
+  content hash against the golden route and existing references;
+- source-derived semantic outputs, CP templates, route architecture, risk
+  layers, and Navigation results are not copied into the target;
+- a hash/provider/tile-key verified raster cache may be reused as a cache
+  optimization, but it is never route truth and must be recorded as fallback
+  provenance;
+- source MCP named-point evidence may be rebound only through its typed schema,
+  with only `project_id` changed and both source and rebound hashes recorded.
+
+The target must be built from the declared raw/source material. It must not be
+made to resemble `chilai_nanhua_day1_scoutAI` by copying Chilai-specific
+checkpoints, ridges, valleys, route notes, reference timing, or risk evidence.
+Feature parity means that the same preparation mechanisms run for the new
+route; it does not mean that every route receives identical facts or counts.
+
+### Material And Runtime Preflight
+
+All failures that can be discovered without writing the target must be checked
+before GPX import creates the target directory. Preflight includes:
+
+- GPX source existence, roles, project identity, SHA-256, and corpus
+  deduplication;
+- material manifest schema and declared source paths;
+- local OSM PBF path, SHA-256/source metadata, and cache policy when configured;
+- Python `osmium` importability in the same interpreter that runs the Dashboard;
+- the persistent `osmium` CLI binding used by preparation;
+- DTM directories and declared full-route GeoTIFF sources, including hash, CRS,
+  CRS evidence, and source resolution;
+- typed MCP named-point evidence identity;
+- writable workspace root and non-existent target path.
+
+The supported workstation entrypoint is the project-owned runtime established
+once by `tools/setup_dashboard_workspace_runtime.sh` and subsequently launched
+through `scout-dashboard` or `tools/run_dashboard_workspace.sh`. A parser found
+only in a legacy venv or an unrelated shell PATH does not satisfy this
+preflight. The launch command must never install dependencies implicitly.
+
+If a configured PBF exists but Python `osmium` is unavailable in the active
+Dashboard interpreter, clone fails before import and no target workspace is
+created. Falling back to Overpass does not satisfy the configured local-PBF
+contract because it would leave the workspace without its required offline OSM
+render extract.
+
+### Single-Pass Handoff And Failure State
+
+Importer success alone is not Workspace Clone success. The importer writes the
+route evidence bundle, then the same user operation immediately invokes Layer
+Preparation with the selected target, route corridor, material root, DTM refs,
+local PBF refs, raster-cache policy, and post-process switches. The successful
+receipt must identify both stages:
+
+```text
+stages.gpx_import.status = completed
+stages.map_preparation.status = ready | ready_with_warnings | completed
+clone_strategy = clean_import_from_source_inbox_then_map_preparation
+dynamic_evidence_policy.weather_cwa_gee_overpass_refreshable = true
+dynamic_evidence_policy.connected_refresh_rewrites_primary_layer_manifest = false
+dynamic_evidence_policy.geology_runtime_provider_refreshable = true
+dynamic_evidence_policy.geology_frozen_at_preparation = false
+boundary.source_workspace_mutated = false
+boundary.target_overwrite_allowed = false
+```
+
+If preparation fails after import, an `imported_preparation_failed` receipt may
+remain for diagnosis, but the target is incomplete: it must not be advertised
+as ready, selected automatically, or used as a departure workspace. Fix the
+workflow/tool dependency and replay the same declared import-plus-preparation
+transaction. Do not normalize a manual post-import repair or a newly named
+`_v2` workspace as the standard path. A one-off repair can recover evidence for
+debugging, but it is not acceptance proof until the original single-pass user
+flow succeeds reproducibly.
+
+A failed clone must not permanently consume the requested target id. The
+preferred implementation imports and prepares in an operation-scoped staging
+directory, writes the completed receipt last, and atomically publishes the
+target only after validation. If a legacy implementation has already exposed a
+partial target, Dashboard must provide an explicit resume or confirmed
+discard-and-retry operation for the same target id. Asking the operator to add
+`_v2` is not the recovery contract.
 
 ## Source Policy
 
@@ -83,6 +206,28 @@ for the intended start-to-finish trip. It defines the Architecture mileage axis
 from `0K` to finish. Downstream crowd coverage may mark bins
 `insufficient_evidence`, but must not trim a sparse prefix, move the origin, or
 replace this scope with a crowd-derived axis.
+
+Multi-track and multi-`trkseg` inputs require an explicit route-identity check
+before the golden route is accepted. The importer must inspect each part's
+start/end coordinates, candidate order, direction, cross-part gap, timestamp
+monotonicity, and intended trip direction. File/XML order must not be assumed to
+be route order. A large endpoint jump is a route-identity blocker or reviewed
+resume gap, not an ordinary segment. Display geometry must preserve legitimate
+part boundaries and must not draw a synthetic connector between unrelated
+tracks.
+
+The route evidence bundle must persist the resulting route identity, including
+an ordered part list, direction for each part, endpoint/gap diagnostics, source
+hashes, and a deterministic route-identity fingerprint. Downstream preparation
+records that fingerprint as an input and must reject route-derived artifacts
+whose fingerprint belongs to a different order, direction, or route.
+
+Once the golden route order or identity changes, every route-dependent output
+must be regenerated from that route: route summary, CP/segments, retreat route,
+reference timing, terrain, ridges/valleys, mileage/K alignment, Architecture,
+risk, weather projection, Navigation, and map-preparation corridor. Passing a
+layer-count or file-existence gate does not prove that these artifacts use the
+correct route identity.
 
 Golden geometry and statistical observation are separate roles. The golden GPX
 also remains in `historical_gpx_source_index.json` as one equal-weight
@@ -158,6 +303,22 @@ curl -X POST http://127.0.0.1:9099/admin/pretrip/projects/nenggao_andongjun_alph
   }'
 ```
 
+The preferred end-user execution remains the Dashboard Workspace Clone action:
+
+```bash
+curl -X POST \
+  http://127.0.0.1:9099/admin/dashboard/workspaces/source_workspace_id/clone \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "target_project_id": "new_workspace_id",
+    "confirm_clone": true,
+    "requested_by": "dashboard_operator"
+  }'
+```
+
+Direct importer CLI calls are supported for development and fixture replay,
+but a CLI import by itself is not proof of the Dashboard clone workflow.
+
 ## Output Structure
 
 The importer writes under the selected workspace:
@@ -185,6 +346,7 @@ The importer writes under the selected workspace:
     gis_checkpoint_candidates.json
   outputs/
     import_manifest.json
+    workspace_clone_receipt.json  # Dashboard clone orchestration only
     mcp/
       named_point_evidence.json
       mcp_retrieval_plan.json
@@ -232,6 +394,12 @@ This lets operators rerun importer plus map preparation on Scout without losing
 readiness, ETA, resource planning, departure bundle, route-comparison, or
 timeline evidence that is still needed by `/admin/pretrip`, `/admin/debug`, and
 handoff review surfaces.
+
+Workspace Clone is stricter than an operator-approved rebuild: it always uses a
+new target and `overwrite=false`. It must not rename a failed target to preserve
+the requested name, replace the source, or silently restore semantic route
+artifacts from a previous target. Any diagnostic partial target remains clearly
+failed until an explicit cleanup/resume transaction is implemented and invoked.
 
 ## MCP Synthesis Integration
 
@@ -322,6 +490,13 @@ The bundle separates:
 - `route_corridor_m`: along-track semantic filter around the golden route;
 - `reference_track_corridor_m`: along-track support filter around historical
   reference tracks.
+
+Reference segment timing must be generated against the current target
+workspace's reviewed CP/MCP candidates, segments, and golden-route distance.
+Names from GPX waypoints are supporting evidence, not join keys that authorize
+reuse of another route's fixed checkpoint or timing template. Matching should
+prefer route-distance windows and retain unmatched/low-quality tracks as
+reviewable geometry rather than fabricating timing support.
 
 ## Five GPX Filter Mechanisms
 
@@ -626,7 +801,18 @@ Test cases:
 - route evidence bundle contains bbox and along-track corridor policy;
 - raw GPX XML is not embedded in normalized JSON;
 - admin/debug projections are read-only and boundary-tagged;
-- `pi-offline` records `network_calls_allowed: false`.
+- `pi-offline` records `network_calls_allowed: false`;
+- Dashboard clone rejects an existing target and never mutates the source;
+- missing active-interpreter Python `osmium` blocks before importer invocation
+  and leaves no target directory;
+- a configured local PBF is forwarded into the same preparation request;
+- additional material-corpus GPX files are hash-deduplicated;
+- a discontinuous or wrongly ordered multi-track golden route cannot silently
+  become ordinary connected segments;
+- preparation failure is recorded as incomplete and is never projected as a
+  successful clone;
+- the successful clone receipt proves one import plus one preparation run,
+  without a manual repair or `_v2` target.
 
 Suggested command:
 
@@ -648,7 +834,11 @@ Always:
 - apply the five GPX filter mechanisms before route summary, CP/segment
   generation, and map-preparation handoff;
 - emit `route_evidence_bundle.json` for map preparation;
-- keep outputs candidate-only and review-gated.
+- keep outputs candidate-only and review-gated;
+- treat Dashboard Clone as one import-plus-preparation operation and keep its
+  source workspace read-only;
+- preflight all discoverable material/tool failures before target creation;
+- regenerate all route-dependent outputs when golden route identity changes.
 
 Ask first:
 
@@ -666,7 +856,11 @@ Never:
 - compile final `MissionGraph`;
 - treat historical GPX as actual current-user walked truth;
 - hide route sections that have no historical support;
-- embed raw GPX XML in Scout normalized artifacts.
+- embed raw GPX XML in Scout normalized artifacts;
+- copy another route's CP, ridge/valley, timing, Navigation, risk, or
+  Architecture artifacts to manufacture feature parity;
+- present an import-only or post-repaired partial target as a successful clone;
+- require a second `_v2` workspace to finish the normal user flow.
 
 ## Success Criteria
 
@@ -679,6 +873,12 @@ Never:
   corridor policy.
 - `/admin/pretrip`, `/admin`, and `/admin/debug` can read projection artifacts.
 - Focused tests pass without network.
+- The Dashboard Workspace Clone user flow creates a new target without
+  overwriting the source and completes importer plus preparation in one
+  operation.
+- All discoverable parser/material failures stop before target creation.
+- The successful receipt and live workspace prove that no manual post-import
+  repair or `_v2` replacement was required.
 
 ## Open Questions
 
