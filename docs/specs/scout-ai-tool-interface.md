@@ -6,10 +6,10 @@ knowledge.
 
 ## Implementation Update 2026-08-22
 
-Scout AI now runs against Pydantic AI v2.33.0 on the Mac and Pi dependency
+Scout AI now runs against Pydantic AI v2.35.0 on the Mac and Pi dependency
 tracks. Tool execution remains deterministic and read-only by default:
 
-- `pydantic-ai-slim[duckduckgo,mcp,openai,openrouter]` is pinned to v2.33.0 for Pi
+- `pydantic-ai-slim[duckduckgo,mcp,openai,openrouter]` is pinned to v2.35.0 for Pi
   admin/live runtimes and the local development venv.
 - Scout keeps `pydantic_ai.Agent(end_strategy="early")` for typed Scout
   provider calls. This intentionally avoids Pydantic AI v2's default graceful
@@ -31,18 +31,26 @@ tracks. Tool execution remains deterministic and read-only by default:
   legacy v5 role, OpenRouter annotation preservation, and timeout enforcement
   for blocking synchronous tools. Scout does not opt into instrumentation v6
   until its trace consumers accept the role change.
-- The v2.33.0 smoke rejects nested synchronous agent runs from framework-managed
+- The v2.35.0 smoke rejects nested synchronous agent runs from framework-managed
   sync callbacks. Delegated Scout agents must use an async callback and
   `await agent.run(...)`, avoiding the former deadlock path.
 - Pydantic AI v2.32 uses `httpx2` for compatible clients. Provider smoke must
   cover OpenRouter/OpenAI-compatible construction without exposing headers or
   credentials.
 - Pydantic AI v2.32.2 normalizes DeepSeek Responses function-call replay. The
-  v2.33.0 compatibility smoke keeps the OpenRouter/DeepSeek tool replay path in
+  v2.35.0 compatibility smoke keeps the OpenRouter/DeepSeek tool replay path in
   scope so a provider handoff cannot lose tool-call/result pairing.
-- Pydantic AI v2.33.0 supports `anthropic>=1.0.0`; a custom Anthropic provider
+- Pydantic AI v2.35.0 supports `anthropic>=1.0.0`; a custom Anthropic provider
   client must be an `httpx2.AsyncClient`. Scout does not construct or log such
   a client unless the Anthropic provider is explicitly configured.
+- Pydantic AI v2.35.0 deprecates `RunContext.capability_loaded` and
+  `available_capability_ids`; Scout integrations must use `capability_active` and
+  `active_capability_ids`. The compatibility smoke verifies the replacement
+  contract and preserves explicitly empty `Tool.description` values.
+- Live compatibility smoke keeps shell values at highest priority. An explicit
+  `--env-file` or `SCOUT_ENV_FILE` is authoritative; otherwise it loads the
+  optional repo `.env` followed by the persistent `~/.scout/.env`. Offline
+  smoke and hermetic tests do not load operator credentials.
 - OpenRouter's native web plugin may complete without exposing a source or tool
   trace. A successful transport response is not accepted as grounded evidence;
   Scout keeps the local traced search/fetch path as the OpenRouter default.

@@ -60,12 +60,12 @@ def _workspace_root(tmp_path: Path) -> Path:
     return workspace_root
 
 
-def test_dashboard_default_cloud_model_is_openrouter_deepseek_v3_2() -> None:
+def test_dashboard_default_cloud_model_is_openrouter_deepseek_v4_flash_0731() -> None:
     config = json.loads(
         DEFAULT_DASHBOARD_ASSISTANT_CONFIG.read_text(encoding="utf-8")
     )
 
-    assert config["cloud_model"]["model_name"] == "deepseek/deepseek-v3.2"
+    assert config["cloud_model"]["model_name"] == "deepseek/deepseek-v4-flash-0731"
     assert config["cloud_model"]["base_url"] == "https://openrouter.ai/api/v1"
 
 

@@ -1180,7 +1180,7 @@ def test_pretrip_project_route_context_quality_cycle_promotes_reviewed_briefing(
                     "summary": "可供領隊與隊員順序閱讀。",
                     "findings": [],
                     "priority_revisions": [],
-                    "model": "deepseek/deepseek-v3.2",
+                    "model": "deepseek/deepseek-v4-flash-0731",
                     "provider": "openrouter",
                     "reviewed_at": "2026-08-02T04:00:00Z",
                 },
@@ -1201,7 +1201,7 @@ def test_pretrip_project_route_context_quality_cycle_promotes_reviewed_briefing(
             "canonical_promoted": True,
             "rejected_candidate_ref": None,
             "generation": {
-                "model": "deepseek/deepseek-v3.2",
+                "model": "deepseek/deepseek-v4-flash-0731",
                 "provider": "openrouter",
                 "receipt_ref": "outputs/route_context_regeneration/regeneration_receipt.json",
                 "model_request_count": 2,
@@ -1217,7 +1217,7 @@ def test_pretrip_project_route_context_quality_cycle_promotes_reviewed_briefing(
                 "findings": [],
                 "priority_revisions": [],
                 "finding_count": 0,
-                "model": "deepseek/deepseek-v3.2",
+                "model": "deepseek/deepseek-v4-flash-0731",
                 "provider": "openrouter",
                 "semantic_review_ref": review_ref,
             },
@@ -1242,7 +1242,7 @@ def test_pretrip_project_route_context_quality_cycle_promotes_reviewed_briefing(
         json={
             "confirm_regenerate": True,
             "operator_alias": "dashboard_operator",
-            "model": "deepseek/deepseek-v3.2",
+            "model": "deepseek/deepseek-v4-flash-0731",
             "timeout_seconds": 240,
         },
     )
@@ -1257,7 +1257,7 @@ def test_pretrip_project_route_context_quality_cycle_promotes_reviewed_briefing(
     assert payload["generation"]["editorial_contract"]["status"] == "PASS"
     assert payload["operator_triggered"] is True
     assert payload["iframe_src"].endswith(f"?v={payload['briefing_sha256'][:16]}")
-    assert captured["model_name"] == "deepseek/deepseek-v3.2"
+    assert captured["model_name"] == "deepseek/deepseek-v4-flash-0731"
     assert captured["timeout_seconds"] == 240
 
     status = client.get(
@@ -1266,7 +1266,7 @@ def test_pretrip_project_route_context_quality_cycle_promotes_reviewed_briefing(
     assert status["content_reviewed"] is True
     assert status["content_review_verdict"] == "PASS"
     assert status["readability_score"] == 5
-    assert status["content_review_model"] == "deepseek/deepseek-v3.2"
+    assert status["content_review_model"] == "deepseek/deepseek-v4-flash-0731"
 
     briefing_response = client.get(
         f"/admin/pretrip/projects/{PROJECT_ID}/briefings/route-context"

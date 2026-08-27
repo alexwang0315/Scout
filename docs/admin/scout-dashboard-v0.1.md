@@ -1928,7 +1928,7 @@ Implementation:
   still read server-side from environment variables and are never returned to
   the browser.
 - The active cloud profile uses OpenRouter model
-  `deepseek/deepseek-v3.2`; the AI HAT+2 local profile remains available as the
+  `deepseek/deepseek-v4-flash-0731`; the AI HAT+2 local profile remains available as the
   explicit fallback.
 - The context resolver uses `SCOUT_PRETRIP_WORKSPACE_ROOT` when configured and
   otherwise discovers the conventional `~/workspace` root.

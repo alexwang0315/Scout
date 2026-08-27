@@ -6,8 +6,10 @@ from pathlib import Path
 import pytest
 
 from scout.cli.pydantic_compat_smoke import (
+    REPO_ROOT,
     REQUIRED_VERSION,
     _bounded_text,
+    _live_env_candidates,
     _normalize_openrouter_model,
     _redact_error,
     run_compatibility_smoke,
@@ -25,7 +27,7 @@ def test_offline_pydantic_ai_compatibility_smoke_passes() -> None:
     assert report["live_openrouter_requested"] is False
     assert {item["name"] for item in report["checks"]} == {
         "runtime_versions",
-        "v232_capability_contract",
+        "v235_capability_contract",
         "openrouter_web_search_annotations",
         "instrumentation_v6_tool_role",
         "function_tool_call",
@@ -53,21 +55,39 @@ def test_live_smoke_fails_closed_without_openrouter_key(
     report = asyncio.run(
         run_compatibility_smoke(
             live_openrouter=True,
-            model_name="deepseek/deepseek-v3.2",
+            model_name="deepseek/deepseek-v4-flash-0731",
             env_file=tmp_path / "missing.env",
         )
     )
 
     assert report["status"] == "failed"
-    assert report["model"] == "openrouter:deepseek/deepseek-v3.2"
+    assert report["model"] == "openrouter:deepseek/deepseek-v4-flash-0731"
     assert report["openrouter_credential_present"] is False
     assert report["failed_count"] == 1
     assert report["checks"][-1]["error_type"] == "MissingCredential"
 
 
+def test_live_env_defaults_to_repo_then_persistent_scout_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("SCOUT_ENV_FILE", raising=False)
+
+    candidates = _live_env_candidates(None)
+
+    assert candidates == (REPO_ROOT / ".env", Path.home() / ".scout" / ".env")
+
+
+def test_explicit_live_env_file_does_not_fall_through_to_operator_secrets(
+    tmp_path: Path,
+) -> None:
+    explicit = tmp_path / "fixture.env"
+
+    assert _live_env_candidates(explicit) == (explicit,)
+
+
 def test_normalizes_openrouter_model_without_changing_vendor_model_id() -> None:
-    assert _normalize_openrouter_model("deepseek/deepseek-v3.2") == (
-        "openrouter:deepseek/deepseek-v3.2"
+    assert _normalize_openrouter_model("deepseek/deepseek-v4-flash-0731") == (
+        "openrouter:deepseek/deepseek-v4-flash-0731"
     )
     assert _normalize_openrouter_model("openrouter:z-ai/glm-5.2") == (
         "openrouter:z-ai/glm-5.2"

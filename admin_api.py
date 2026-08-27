@@ -259,7 +259,7 @@ DEFAULT_ROUTE_CONTEXT_BRIEFING_REF = "outputs/briefings/route_context_briefing.h
 DEFAULT_ROUTE_CONTEXT_BRIEFING_REGENERATION_REF = (
     "outputs/scout_ai/route_context_briefing_regeneration.json"
 )
-DEFAULT_ROUTE_CONTEXT_BRIEFING_QUALITY_MODEL = "deepseek/deepseek-v3.2"
+DEFAULT_ROUTE_CONTEXT_BRIEFING_QUALITY_MODEL = "deepseek/deepseek-v4-flash-0731"
 DEFAULT_ROUTE_CONTEXT_BRIEFING_CONTENT_REVIEW_REF = (
     "outputs/route_context_pipeline/scout_ai_semantic_review_result.json"
 )

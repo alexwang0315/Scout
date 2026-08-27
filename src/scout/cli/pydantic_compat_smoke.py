@@ -42,9 +42,11 @@ from scout.agents.pydantic_ai_compat import (
     pydantic_native_research_capabilities,
 )
 
-REQUIRED_VERSION = "2.33.0"
-DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v3.2"
+REQUIRED_VERSION = "2.35.0"
+DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4-flash-0731"
 DEFAULT_TIMEOUT_SECONDS = 120.0
+REPO_ROOT = Path(__file__).resolve().parents[3]
+PERSISTENT_SCOUT_ENV = Path.home() / ".scout" / ".env"
 
 
 class StructuredSmokeOutput(BaseModel):
@@ -75,15 +77,18 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--env-file",
-        default=".env",
-        help="Server-side env file used only to load the OpenRouter credential.",
+        default=None,
+        help=(
+            "Explicit server-side env file. By default live smoke loads the repo "
+            ".env followed by ~/.scout/.env without overriding process values."
+        ),
     )
     args = parser.parse_args(argv)
     report = asyncio.run(
         run_compatibility_smoke(
             live_openrouter=args.live_openrouter,
             model_name=args.model,
-            env_file=Path(args.env_file),
+            env_file=Path(args.env_file) if args.env_file else None,
         )
     )
     print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
@@ -96,8 +101,9 @@ async def run_compatibility_smoke(
     model_name: str | None = None,
     env_file: Path | None = None,
 ) -> dict[str, Any]:
-    if env_file is not None:
-        _load_env_file(env_file)
+    loaded_env_files: tuple[str, ...] = ()
+    if live_openrouter:
+        loaded_env_files = _load_live_env_files(env_file)
     checks = await _run_checks(_offline_checks())
     resolved_model = _normalize_openrouter_model(
         model_name or os.getenv("SCOUT_AI_OS_MODEL") or DEFAULT_OPENROUTER_MODEL
@@ -125,6 +131,7 @@ async def run_compatibility_smoke(
         "package_versions": _package_versions(),
         "live_openrouter_requested": live_openrouter,
         "openrouter_credential_present": bool(os.getenv("OPENROUTER_API_KEY")),
+        "loaded_env_files": list(loaded_env_files),
         "model": resolved_model if live_openrouter else None,
         "check_count": len(checks),
         "passed_count": len(checks) - len(failed),
@@ -136,7 +143,7 @@ async def run_compatibility_smoke(
 def _offline_checks() -> list[tuple[str, Callable[[], Any]]]:
     return [
         ("runtime_versions", _offline_runtime_versions),
-        ("v232_capability_contract", _offline_v232_capability_contract),
+        ("v235_capability_contract", _offline_v235_capability_contract),
         ("openrouter_web_search_annotations", _offline_openrouter_annotations),
         ("instrumentation_v6_tool_role", _offline_instrumentation_v6_tool_role),
         ("function_tool_call", _offline_function_tool_call),
@@ -199,7 +206,7 @@ def _offline_runtime_versions() -> dict[str, str]:
     return versions
 
 
-def _offline_v232_capability_contract() -> dict[str, Any]:
+def _offline_v235_capability_contract() -> dict[str, Any]:
     from pydantic_ai import RunContext
     from pydantic_ai.mcp import MCPToolset
     from pydantic_ai.toolsets._tool_search import ToolSearchToolset
@@ -216,6 +223,19 @@ def _offline_v232_capability_contract() -> dict[str, Any]:
         hasattr(RunContext, "is_tool_available"),
         "RunContext.is_tool_available is unavailable",
     )
+    _require(
+        hasattr(RunContext, "capability_active"),
+        "RunContext.capability_active is unavailable",
+    )
+    _require(
+        hasattr(RunContext, "active_capability_ids"),
+        "RunContext.active_capability_ids is unavailable",
+    )
+    explicit_empty_description = Tool(lambda: None, description="")
+    _require(
+        explicit_empty_description.description == "",
+        "Tool explicit empty description was not preserved",
+    )
     _require("prefer_tasks" in mcp_parameters, "MCP prefer_tasks is unavailable")
     _require(
         "max_retries" in tool_search_parameters,
@@ -228,6 +248,8 @@ def _offline_v232_capability_contract() -> dict[str, Any]:
     return {
         "per_request_input_tokens_limit": None,
         "run_context_tool_availability": True,
+        "run_context_active_capability_contract": True,
+        "explicit_empty_tool_description_preserved": True,
         "mcp_prefer_tasks_default": mcp_parameters["prefer_tasks"].default,
         "tool_search_max_retries": True,
         "agent_web_allowed_hosts": True,
@@ -542,7 +564,7 @@ async def _offline_mcp_instructions() -> dict[str, Any]:
 
 def _offline_web_capabilities() -> dict[str, Any]:
     policy = resolve_model_policy(
-        "openrouter:deepseek/deepseek-v3.2",
+        "openrouter:deepseek/deepseek-v4-flash-0731",
         env={"SCOUT_AI_OS_NATIVE_RESEARCH": "1"},
     )
     search, fetch = pydantic_native_research_capabilities(policy)
@@ -961,6 +983,23 @@ def _load_env_file(path: Path) -> bool:
         if key:
             os.environ.setdefault(key, value.strip().strip('"').strip("'"))
     return True
+
+
+def _load_live_env_files(env_file: Path | None) -> tuple[str, ...]:
+    loaded: list[str] = []
+    for candidate in _live_env_candidates(env_file):
+        if _load_env_file(candidate):
+            loaded.append(str(candidate))
+    return tuple(loaded)
+
+
+def _live_env_candidates(env_file: Path | None) -> tuple[Path, ...]:
+    if env_file is not None:
+        return (Path(env_file).expanduser(),)
+    configured = str(os.getenv("SCOUT_ENV_FILE") or "").strip()
+    if configured:
+        return (Path(configured).expanduser(),)
+    return (REPO_ROOT / ".env", PERSISTENT_SCOUT_ENV)
 
 
 def _redact_error(message: str) -> str:

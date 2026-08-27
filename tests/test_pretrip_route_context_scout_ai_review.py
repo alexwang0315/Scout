@@ -82,7 +82,7 @@ def test_scout_ai_review_writes_hash_bound_deepseek_comparison_artifacts(
             },
             "response_metadata": {
                 "provider_name": "openrouter",
-                "model_name": "deepseek/deepseek-v3.2",
+                "model_name": "deepseek/deepseek-v4-flash-0731",
             },
         }
 
@@ -96,7 +96,7 @@ def test_scout_ai_review_writes_hash_bound_deepseek_comparison_artifacts(
     assert result["verdict"] == "NEEDS_WORK"
     assert result["reviewer"] == "scout-ai-cloud"
     assert result["provider"] == "openrouter"
-    assert result["model"] == "deepseek/deepseek-v3.2"
+    assert result["model"] == "deepseek/deepseek-v4-flash-0731"
 
     packet = json.loads(
         (project_root / result["review_packet_ref"]).read_text(encoding="utf-8")
@@ -122,7 +122,7 @@ def test_scout_ai_review_writes_hash_bound_deepseek_comparison_artifacts(
     assert review["review_packet_sha256"] == result["review_packet_sha256"]
     assert review["reviewer"] == "scout-ai-cloud"
     assert review["provider"] == "openrouter"
-    assert review["model"] == "deepseek/deepseek-v3.2"
+    assert review["model"] == "deepseek/deepseek-v4-flash-0731"
     assert review["boundary"]["candidate_only"] is True
     assert review["boundary"]["runtime_safety_truth"] is False
     assert comparison["comparison_status"] == "awaiting_chatgpt_pro"
@@ -131,7 +131,7 @@ def test_scout_ai_review_writes_hash_bound_deepseek_comparison_artifacts(
     assert "Scout AI / DeepSeek" in comparison_report
     assert "等待 ChatGPT Pro" in comparison_report
     assert "NEEDS_WORK" in comparison_report
-    assert captured["model_name"] == "deepseek/deepseek-v3.2"
+    assert captured["model_name"] == "deepseek/deepseek-v4-flash-0731"
     assert "測試古道行前說明" in str(captured["prompt"])
     assert "OPENROUTER_API_KEY" not in json.dumps(
         packet,
@@ -467,7 +467,7 @@ def _write_model_config(tmp_path: Path) -> Path:
             "active_profile": "cloud",
             "cloud_model": {
                 "profile": "cloud",
-                "model_name": "deepseek/deepseek-v3.2",
+                "model_name": "deepseek/deepseek-v4-flash-0731",
                 "base_url": "https://openrouter.ai/api/v1",
                 "backend": "openai_compatible",
                 "token_env_var": "OPENROUTER_API_KEY",

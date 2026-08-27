@@ -20,13 +20,13 @@ def test_quality_cycle_promotes_only_a_deepseek_pass(tmp_path: Path) -> None:
 
     def regenerate(**kwargs: object) -> dict[str, object]:
         assert kwargs["evidence_path"] == evidence_path
-        assert kwargs["model_name"] == "deepseek/deepseek-v3.2"
+        assert kwargs["model_name"] == "deepseek/deepseek-v4-flash-0731"
         briefing_path = project_root / "outputs/briefings/route_context_briefing.html"
         briefing_path.write_text(candidate, encoding="utf-8")
         return {
             "status": "completed",
             "project_id": "dongqing",
-            "model": "deepseek/deepseek-v3.2",
+            "model": "deepseek/deepseek-v4-flash-0731",
             "provider": "openrouter",
             "briefing_ref": "outputs/briefings/route_context_briefing.html",
             "briefing_sha256": candidate_sha256,
@@ -44,7 +44,7 @@ def test_quality_cycle_promotes_only_a_deepseek_pass(tmp_path: Path) -> None:
         }
 
     def review(**kwargs: object) -> dict[str, object]:
-        assert kwargs["model_name"] == "deepseek/deepseek-v3.2"
+        assert kwargs["model_name"] == "deepseek/deepseek-v4-flash-0731"
         review_ref = "outputs/route_context_pipeline/scout_ai_semantic_review_result.json"
         _write_json(
             project_root / review_ref,
@@ -56,7 +56,7 @@ def test_quality_cycle_promotes_only_a_deepseek_pass(tmp_path: Path) -> None:
                 "summary": "可供領隊與隊員順序閱讀。",
                 "findings": [],
                 "priority_revisions": [],
-                "model": "deepseek/deepseek-v3.2",
+                "model": "deepseek/deepseek-v4-flash-0731",
                 "provider": "openrouter",
                 "reviewed_at": "2026-08-02T04:00:00Z",
             },
@@ -68,7 +68,7 @@ def test_quality_cycle_promotes_only_a_deepseek_pass(tmp_path: Path) -> None:
             "verdict": "PASS",
             "readability_score": 5,
             "finding_count": 0,
-            "model": "deepseek/deepseek-v3.2",
+            "model": "deepseek/deepseek-v4-flash-0731",
             "provider": "openrouter",
             "review_packet_ref": "outputs/route_context_pipeline/scout_ai_content_review_packet.json",
             "semantic_review_ref": review_ref,
@@ -79,7 +79,7 @@ def test_quality_cycle_promotes_only_a_deepseek_pass(tmp_path: Path) -> None:
 
     result = run_route_context_briefing_quality_cycle(
         project_root=project_root,
-        model_name="deepseek/deepseek-v3.2",
+        model_name="deepseek/deepseek-v4-flash-0731",
         regenerate_runner=regenerate,
         review_runner=review,
     )
@@ -122,7 +122,7 @@ def test_quality_cycle_keeps_previous_canonical_when_review_needs_work(
         return {
             "status": "completed",
             "project_id": "dongqing",
-            "model": "deepseek/deepseek-v3.2",
+            "model": "deepseek/deepseek-v4-flash-0731",
             "provider": "openrouter",
             "briefing_ref": "outputs/briefings/route_context_briefing.html",
             "briefing_sha256": candidate_sha256,
@@ -155,7 +155,7 @@ def test_quality_cycle_keeps_previous_canonical_when_review_needs_work(
                     }
                 ],
                 "priority_revisions": ["先重排行程閱讀順序。"],
-                "model": "deepseek/deepseek-v3.2",
+                "model": "deepseek/deepseek-v4-flash-0731",
                 "provider": "openrouter",
                 "reviewed_at": "2026-08-02T04:05:00Z",
             },
@@ -167,7 +167,7 @@ def test_quality_cycle_keeps_previous_canonical_when_review_needs_work(
             "verdict": "NEEDS_WORK",
             "readability_score": 2,
             "finding_count": 1,
-            "model": "deepseek/deepseek-v3.2",
+            "model": "deepseek/deepseek-v4-flash-0731",
             "provider": "openrouter",
             "review_packet_ref": "outputs/route_context_pipeline/scout_ai_content_review_packet.json",
             "semantic_review_ref": review_ref,

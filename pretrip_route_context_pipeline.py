@@ -330,6 +330,7 @@ class SemanticReviewResult(_FrozenModel):
     priority_revisions: tuple[str, ...] = ()
     usage: dict[str, int] = Field(default_factory=dict)
     response_metadata: dict[str, str] = Field(default_factory=dict)
+    native_research: dict[str, Any] = Field(default_factory=dict)
     reviewed_at: str
     boundary: dict[str, bool] | None = None
 

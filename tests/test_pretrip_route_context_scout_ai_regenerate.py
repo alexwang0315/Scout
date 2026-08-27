@@ -36,7 +36,7 @@ def test_regeneration_archives_baseline_and_deterministically_renders_evidence(
             },
             "response_metadata": {
                 "provider_name": "openrouter",
-                "model_name": "deepseek/deepseek-v3.2",
+                "model_name": "deepseek/deepseek-v4-flash-0731",
             },
         }
 
@@ -50,7 +50,7 @@ def test_regeneration_archives_baseline_and_deterministically_renders_evidence(
     )
 
     assert result["status"] == "completed"
-    assert result["model"] == "deepseek/deepseek-v3.2"
+    assert result["model"] == "deepseek/deepseek-v4-flash-0731"
     assert result["briefing_sha256"] != baseline_sha256
     assert result["baseline_sha256"] == baseline_sha256
     assert result["boundary"] == {
@@ -103,7 +103,7 @@ def test_regeneration_archives_baseline_and_deterministically_renders_evidence(
         evidence_path.read_bytes()
     ).hexdigest()
     assert "evidence_packet" in str(captured["prompt"])
-    assert captured["model_name"] == "deepseek/deepseek-v3.2"
+    assert captured["model_name"] == "deepseek/deepseek-v4-flash-0731"
 
 
 def test_regeneration_can_create_a_missing_canonical_briefing(tmp_path: Path) -> None:
@@ -662,7 +662,7 @@ def _write_model_config(tmp_path: Path) -> Path:
             "active_profile": "cloud",
             "cloud_model": {
                 "profile": "cloud",
-                "model_name": "deepseek/deepseek-v3.2",
+                "model_name": "deepseek/deepseek-v4-flash-0731",
                 "base_url": "https://openrouter.ai/api/v1",
                 "backend": "openai_compatible",
                 "token_env_var": "OPENROUTER_API_KEY",

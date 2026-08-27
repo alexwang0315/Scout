@@ -17,7 +17,7 @@ from pretrip_route_context_scout_ai_review import run_scout_ai_review
 
 
 SCHEMA_VERSION = "scout.route_context_quality_cycle.v1"
-DEFAULT_MODEL_NAME = "deepseek/deepseek-v3.2"
+DEFAULT_MODEL_NAME = "deepseek/deepseek-v4-flash-0731"
 DEFAULT_BRIEFING_REF = Path("outputs/briefings/route_context_briefing.html")
 DEFAULT_EVIDENCE_REF = Path("inputs/route_context_regeneration_evidence.json")
 DEFAULT_SEMANTIC_REVIEW_REF = Path(

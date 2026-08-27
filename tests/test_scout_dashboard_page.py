@@ -3983,7 +3983,7 @@ def test_scout_dashboard_route_context_embeds_skill_trip_briefing() -> None:
     assert "single Scout AI model call" in html
     assert "canonical briefing unchanged" in html
     assert "輸入契約 → 證據收集 → 確定性編譯 → DeepSeek 內容審核" in html
-    assert 'model: "deepseek/deepseek-v3.2"' in html
+    assert 'model: "deepseek/deepseek-v4-flash-0731"' in html
     assert "canonical_promoted" in html
     assert 'payload.review?.verdict === "PASS"' in html
     assert "payload.generation?.editorial_contract?.status" in html
