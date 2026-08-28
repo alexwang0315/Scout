@@ -95,11 +95,12 @@ path had three preparation drifts that must not be repeated:
   the typed evidence, verify the source identity, create an ephemeral copy with
   only `project_id` rebound to the target, and record both hashes. Direct reuse
   fails closed; broad text replacement is not an acceptable identity change.
-- A configured local OSM PBF is usable only when either the `osmium` CLI or the
-  Python `osmium` package is available. If neither parser exists and explicit
-  network fetch is allowed, record the skipped local input and continue the same
-  preparation through Overpass. Do not let an unusable cache prevent all other
-  layers from being prepared.
+- The current local OSM PBF conversion path requires the Python `osmium`
+  package in the same interpreter that runs Dashboard preparation. The
+  `osmium` CLI alone is insufficient because the extracted PBF still passes
+  through the Python streaming/filter stage. A clean Dashboard clone with a
+  configured local PBF must fail before import when that package is unavailable;
+  Overpass is not a substitute for the missing workspace OSM render extract.
 - Dashboard clone execution runs in an API worker thread. Signal-based
   post-process timers must be armed only on the main interpreter thread;
   otherwise Boss/route-pressure and mileage alignment fail even though their
@@ -128,6 +129,43 @@ path had three preparation drifts that must not be repeated:
   The 2026-08-24 Dongqing v2 run processed all 402 cached tiles without timeout
   and emitted 16 labels, but review found that most were low-zoom Rudy map
   attribution fragments; the current Chilai labels have the same limitation.
+
+### 2026-08-26 OSM PBF Dashboard runtime binding repair
+
+`dongqing_batongguan_historic_trail_newImport` exposed a runtime dependency
+drift: `taiwan-260624.osm.pbf` was discovered and hashed, but clone recorded
+`local_pbf_skipped_parser_unavailable`, completed through Overpass, and left
+`osm_pbf_render_geojson_ref` absent. The live OSM toggle consequently had no
+source-backed vector layer.
+
+The parser was already installed in a legacy repository venv and in the
+separate `scout-osmium` micromamba environment. The live `9099` process used the
+system Python 3.12 interpreter, so neither installation was importable. PATH or
+an `osmium` executable alone cannot repair that interpreter mismatch.
+
+Use the project-owned runtime consistently:
+
+```bash
+tools/setup_dashboard_workspace_runtime.sh
+tools/run_dashboard_workspace.sh --port 9099 \
+  --workspace-root /Users/alexwang0315/workspace
+```
+
+The setup command is idempotent and installs the `pretrip-workstation` optional
+extra into `./venv`; it is not part of every launch. A stored `pyproject.toml`
+hash skips package installation entirely when the configured runtime is already
+complete and unchanged. Setup also creates persistent
+`~/.local/bin/scout-dashboard` and `~/.local/bin/osmium` shortcuts plus the
+project-local `./venv/bin/osmium` binding. It also owns the fixed
+`~/.local/share/scout-tools/micromamba/envs/scout-grass` environment and creates
+`~/.local/bin/grass` plus `./venv/bin/grass` bindings. The run command never
+installs packages, refuses an incomplete runtime, and puts `./venv/bin` first
+on its process PATH. Workspace clone now also refuses a configured PBF before
+creating the target when Python `osmium` is unavailable.
+
+When processing `taiwan-260624.osm.pbf`, retain its source hash and stale
+snapshot warning. The operator-approved existing snapshot remains usable, but
+must not be represented as a fresh Taiwan extract.
   Keep them named `candidate labels`, require review, and do not promote them to
   named points, K anchors, hazards, or safety truth without a later quality
   filter or higher-resolution region OCR pass.
@@ -4495,6 +4533,10 @@ References:
 
 ### Navigation MapLibre terrain refresh (2026-08-25)
 
+This section records the former presentation path. The Python bitmap terrain
+fallback described below was superseded by the 2026-08-26 QGIS/GRASS activation
+and must not be selected as an active terrain processor.
+
 Before changing the Navigation 2D/3D composition, inspect the read-only
 `navigation-terrain-intelligence` response and the Terrain RGB manifest
 separately. A stale projection does not mean the DEM is unavailable. The
@@ -4518,17 +4560,78 @@ contours, ridge/valley candidates, and visual interpolation remain
 `candidate_only=true`, `runtime_safety_truth=false`, and do not establish route
 existence, walkability, safety, or an operational event.
 
-The former Python fallback painted each near-contour DTM cell as one raster
-pixel. At high MapLibre zoom that became a field of square markers rather than
-readable contour lines. The bounded fallback now interpolates 20 m DTM cells
-with marching squares and draws continuous 20 m isolines into a 2x visual
-raster. Record `visual_pixel_resolution_m=10` only as rendering density and
-always retain `adds_source_resolution=false`; interpolation does not create new
-elevation observations. The Dongqing artifact remains a 500 m route corridor,
-and the current Terrain RGB support covers 117/240 displayed Golden Route
-samples. Do not stretch either artifact into unsupported full-area terrain.
+The former Python fallback painted local DTM cells into route-corridor bitmaps.
+It is retained only as historical diagnosis and is no longer an authorized
+terrain-analysis path. Standard terrain raster layers now require the bounded
+QGIS Processing + GRASS/GDAL workflow. When that worker is unavailable,
+preparation remains `awaiting_qgis_grass_processor` and emits no synthetic
+terrain raster. When the full DEM source itself is absent, preparation reports
+`source_unavailable`; it does not fall back to route-aligned or bitmap terrain
+inference.
+
+### QGIS/GRASS standard rectangle activation (2026-08-26)
+
+The Dongqing Golden Route was processed on the Raspberry Pi through the
+Scout-owned worker and fixed tool allowlists. The real successful worker run is:
+
+```text
+workflow run: qgis-worker-20260826T075524298258Z-9cbb89b355
+QGIS: 3.44.13
+GRASS: 8.4.1
+GDAL: 3.10.3
+QGIS Agent MCP plugin: 0.4.9
+input DEM SHA-256: 59e5e980000d6e3f5a7734c6af197934a1a5432482b6caa789a1ec90b624015d
+input DEM: EPSG:3826, 20 m
+```
+
+The output rectangle is TWD97 `241980..278320` by `2580580..2606540`, or
+WGS84 `120.9214363680,23.3275359875,121.2774205418,23.5621855416`.
+Elevation tint, hillshade, slope shading, and contours share that exact extent.
+The raster grid is `1817 x 1298` cells; contour display is `3634 x 2596` pixels
+without claiming additional source resolution.
+
+Actual allowlisted processors were `gdal:cliprasterbyextent`,
+`grass:r.slope.aspect`, `grass:r.relief`, `grass:r.contour`,
+`gdal:rasterize`, `gdal:colorrelief`, `native:extractbyexpression`, and
+`native:dissolve`. The run exported 27 artifacts. Processing and render status
+are completed; visual and human review remain pending. Every artifact remains
+`candidate_only=true`, `runtime_safety_truth=false`, and `operational=false`.
+Post-run Pi telemetry showed `48.8 C`, 6.2 GiB available memory, and 7 MiB swap
+in use. The isolated process RSS was about 624 MiB for QGIS, 151 MiB for the
+Scout worker, 59 MiB for Xvfb, and 28 MiB for the MCP bridge. The test container
+was removed after its worker receipt was copied; no public MCP listener remains.
+
+The active project terrain ref now points to this run. Navigation compilation
+takes about 1.5 seconds because it consumes the standard artifacts and marks
+the legacy local Python morphology comparator `not_run`; the prior comparator
+attempt was interrupted after more than 13 minutes. The Dashboard applies the
+fixed 10 m Golden Route start-distance filter per multipart line. In the browser
+this displays 7 ridge and 7 stream-network segments, 0 valley segments, and 128
+terrain samples from 14,754 raw candidate elements. These are display
+candidates, not accepted terrain truth.
+
+Mapbox Terrain RGB is regenerated from the same GRASS-bound source artifact and
+records `visualization_packaging_processor=scout_mapbox_terrain_rgb_encoder.v1`
+and `visualization_packaging_only=true`. This is encoding for MapLibre, not a
+second terrain-analysis engine. Its fail-closed complete-tile policy currently
+covers 117 of 240 displayed Golden Route samples (49%); therefore 3D remains
+explicitly local/partial while the four 2D GRASS raster overlays cover the full
+route rectangle.
+
+Evidence:
+
+```text
+API: http://127.0.0.1:9099/admin/pretrip/projects/dongqing_batongguan_historic_trail_scoutAI/navigation-terrain-intelligence
+Pi evidence: artifacts/qgis-grass-standard-20260826/remote-evidence/
+2D browser: artifacts/qgis-grass-standard-20260826/browser-navigation-grass-2d-final.png
+3D browser: artifacts/qgis-grass-standard-20260826/browser-navigation-grass-3d-final.png
+```
 
 ### Historical map preparation and theme cache (2026-08-25)
+
+This dated single-theme baseline is superseded by
+`2026-08-28 full historical catalog and QGIS risk adapter` below. Keep it only
+as incident history; do not restore one-theme-only preparation.
 
 The Dashboard historical-map control is one presentation layer with an
 allowlisted theme selector, not 15 new canonical safety layers. Map preparation
@@ -4565,3 +4668,405 @@ After adding or changing an allowlisted source, restart the actual user-facing
 started alternate port can hide a stale-runtime `422 unknown imagery source_id`
 failure and leave every historical theme reporting `raster unavailable` in the
 Dashboard the user is actually running.
+
+## 2026-08-28 Import-Owned QGIS/GRASS Terrain Integration
+
+This entry supersedes any procedure that completes GPX import first and repairs
+terrain or Navigation after the workspace is opened. The discovered defect was
+an orchestration gap: the QGIS worker and its artifact contracts existed, but
+the normal `run_layer_preparation()` / Dashboard Clone transaction did not own
+the worker run. Terrain RGB and Navigation could therefore execute against
+missing or stale QGIS refs, making a second preparation pass or `_v2` workspace
+appear necessary.
+
+The canonical sequence is now:
+
+```text
+one clean GPX import
+  -> route_evidence_bundle.json with filtered Golden GPX ref + SHA-256
+  -> base map preparation and source refs
+  -> terrain_feature_stack.v1 through Scout-owned QGIS worker
+  -> typed/hash/processor/authority/extent/grid validation
+  -> project.json QGIS terrain activation
+  -> Terrain RGB visualization packaging only
+  -> final Navigation terrain projection
+  -> clone receipt and workspace exposure
+```
+
+Implementation ownership:
+
+- `pretrip_import.py` records the exact filtered Golden GPX SHA-256;
+- `pretrip_layer_preparation.py` dispatches, polls, times out/cancels, validates,
+  activates, and records the QGIS terrain stage before Terrain RGB/Navigation;
+- `qgis_spatial_backend.py` selects and verifies that exact Golden GPX, validates
+  full-rectangle grid alignment, and rejects a source-manifest fallback after an
+  authoritative filtered route has been declared;
+- `dashboard_workspace_clone.py` enables the same stage in the user's Clone
+  path and records it in the clone receipt;
+- `docs/admin/scout-dashboard-v0.1.html` exposes separate ridge, valley, and
+  flow-channel toggles plus `ROUTE_CONNECTED` / `RECTANGLE_ALL` counts.
+
+The persisted stage receipt is
+`outputs/spatial/qgis/map_preparation_status.json`. A successful activation must
+say `actual_processor=qgis_processing_grass`, `fallback_used=false`, and
+`python_dtm_processing_used=false`. The candidate authority remains
+`candidate_only=true`, `runtime_safety_truth=false`, `operational=false`, and
+`adds_source_resolution=false`.
+
+The fixed worker allowlist covers the current standard stack:
+
+```text
+gdal:buildvirtualraster
+gdal:assignprojection
+gdal:cliprasterbyextent
+gdal:rasterize
+gdal:colorrelief
+gdal:warpreproject
+grass:r.slope.aspect
+grass:r.relief
+grass:r.contour
+grass:r.geomorphon
+grass:r.watershed
+grass:r.mapcalc.simple
+grass:r.thin
+grass:r.to.vect
+native:extractbyexpression
+native:dissolve
+```
+
+There is no arbitrary Python, arbitrary PyQGIS, shell, browser-direct MCP, or
+generic MCP forwarding path. Python still parses GPX, orchestrates the job,
+validates schemas/hashes/provenance, and packages an accepted DEM as Mapbox
+Terrain RGB. The encoder is visualization packaging only and cannot produce
+slope, relief, contours, morphology, or hydrology evidence.
+
+All analysis begins from the prepared DEM rectangle, not a Golden Route ribbon.
+Every raster shares the declared CRS, extent, and aligned grid. Dashboard's 10 m
+route scope uses complete segment-to-segment distance/intersection: contact at
+any point retains the candidate's complete outward geometry and never rewrites
+the immutable rectangle artifact.
+
+Fail-closed states include disabled, not configured, unavailable, required
+algorithm missing, cancelled, timeout, worker failure, hash mismatch, extent
+misalignment, and artifact/authority validation failure. Fixture or synthetic
+worker output is recorded as `fixture_non_runtime` and is not activated. Terrain
+RGB remains `awaiting_qgis_grass_processor`; no Python bitmap or route-sample
+substitute is generated. Non-GIS Dashboard and importer outputs remain usable,
+and weather/CWA/GEE plus geology stay independently refreshable.
+Dashboard Clone records this case as `completed_with_degraded_terrain`, with the
+typed QGIS blocker retained in `stages.qgis_terrain_feature_stack`; it does not
+mislabel the terrain workspace as fully completed.
+
+Focused verification on 2026-08-28:
+
+```text
+252 passed, 1 warning
+tests: clone, importer, layer preparation, QGIS backend/worker,
+       Terrain RGB, Navigation projection, MapLibre adapter, Dashboard page
+browser console errors/warnings: 0
+```
+
+The live persisted Dongqing workspace rendered the prior real QGIS/GRASS run
+and exposed `ROUTE_CONNECTED=153` (`39` ridges, `28` valleys, `86` streams) and
+`RECTANGLE_ALL=14,625` (`2,828`, `3,036`, `8,761`). Removing the valley toggle
+removed valley features from the actual MapLibre GeoJSON source while preserving
+route and other morphology features. A 2D camera at zoom `12.504105962680786`
+survived a switch to the independent 3D camera and back without an automatic
+fit reset.
+
+New real single-pass GRASS execution was not available on this workstation.
+Local QGIS `3.44.13` and GDAL `3.12.3` were discoverable, but the QGIS Processing
+catalog exposed no `grass:*` provider, so the correct result is fail closed.
+The Scout Pi SSH endpoint also timed out, so there is no new Pi resource sample.
+The 2026-08-26 Pi run and its resource observations remain historical evidence;
+that run did not bind the current filtered Golden GPX SHA-256
+`8e8d47221f152e0f9787c62a4524d1f36bb5299c496a9ddf8b2a2f7bc00712ec`
+inside worker `source_hashes`, so it is not acceptance proof for this new
+single-pass integration. Do not mutate an existing imported workspace after the
+fact and present it as such proof; rerun the original Clone/import-preparation
+flow when a GRASS-capable worker is reachable.
+
+The deterministic layer-contract verifier still reports the pre-existing
+unrelated mismatch `pretrip:weather-api: MAP_LAYER_RANKS 58 != contract 80`.
+That contract-order defect is not evidence of a QGIS terrain failure and must be
+closed separately.
+
+### 2026-08-28 local GRASS workstation binding
+
+The Intel macOS workstation now keeps GRASS GIS 8.5.0 in the dedicated
+`scout-grass` micromamba environment. Homebrew core does not provide the GRASS
+formula on this host, so the supported persistent bindings are:
+
+```text
+runtime: ~/.local/share/scout-tools/micromamba/envs/scout-grass
+user command: ~/.local/bin/grass
+Dashboard command: ./venv/bin/grass
+```
+
+`tools/setup_dashboard_workspace_runtime.sh` creates the environment only when
+missing and refreshes both shortcuts. `tools/run_dashboard_workspace.sh`
+exports a macOS-supported UTF-8 locale and the bundled QGIS GDAL/PROJ data
+paths. The Scout MCP subprocess environment preserves only these named GIS
+runtime variables in addition to its existing narrow allowlist; unrelated
+environment values remain excluded.
+
+Installation is not accepted from `grass --version` alone. The local acceptance
+probe required QGIS 3.44.13 Processing to expose `grass:r.slope.aspect` and to
+execute it against a real EPSG:3826 raster. The resulting slope and aspect
+GeoTIFFs were 408 x 145 pixels at 20 m resolution, reported GRASS 8.5.0 with
+GDAL 3.12.3, and contained valid non-constant statistics. This proves the local
+QGIS/GRASS execution boundary; it does not yet prove the full one-import plus
+one-preparation transaction, terrain interpretation, route existence, or
+safety.
+
+### 2026-08-28 clean-Clone acceptance root causes (historical, superseded)
+
+The first real Dashboard acceptance target,
+`dongqing_batongguan_historic_trail_grassImport_20260828`, was intentionally
+preserved as failed-run evidence. It completed the clean GPX import, local OSM
+PBF route extraction, and 8-layer workspace raster cache (including
+`historical-fandi-1916`), but the browser aborted the still-running synchronous
+Clone request after the fixed 1,800 second limit. The server worker continued,
+so the message "Clone failed" was false and could encourage an unsafe duplicate
+retry. Dashboard now waits up to 7,200 seconds; a browser-side timeout says that
+the server may still be preparing the named workspace and disables an immediate
+retry instead of claiming the backend failed.
+
+The same run exposed a more important architecture violation before QGIS was
+called. Missing risk artifacts caused `_generate_scout_risk_outputs_from_workspace()`
+to import Scout Risk and execute Python `build_dem_from_dtm_coverage()` plus
+`compute_teii_from_dem()`. This was both the long-running stage and a forbidden
+formal Python DEM/TEII engine. The run was stopped without deleting or
+overwriting any workspace. The canonical path now fails closed with
+`awaiting_qgis_grass_processor`, `fallback_used=false`, and
+`python_dtm_processing_used=false`. After QGIS terrain succeeds, a missing
+QGIS-derived risk adapter becomes typed `unavailable` with
+`qgis_grass_risk_profile_adapter_not_available`; Python must never fill that
+gap. A fresh Dashboard Clone under a different unused workspace name is
+required for acceptance after this correction. Do not rename the partial run or
+repair it as `_v2` and present it as a clean import.
+
+The next fresh target,
+`dongqing_batongguan_historic_trail_qgisGrass_20260828`, proved that removing
+the Python DEM/TEII stage allowed the base preparation manifest to appear
+immediately after raster caching. It still ended as
+`completed_with_degraded_terrain`: a single QGIS worker preflight exceeded the
+Dashboard backend's 5 second HTTP timeout even though QGIS remained alive and
+the same bridge subsequently completed ten consecutive status checks in
+0.03-0.05 seconds. This target is also preserved as failed-run evidence and is
+not repaired after the fact.
+
+The canonical preparation now retries only typed retryable QGIS preflight
+failures, up to three attempts with a one-second interval, and records
+`preflight_attempt_count`. The persistent Dashboard launcher defaults
+`SCOUT_QGIS_TIMEOUT` to 30 seconds. Disabled, missing configuration, missing
+algorithms, non-retryable errors, and exhausted retries still fail closed with
+`fallback_used=false` and `python_dtm_processing_used=false`. Acceptance must
+therefore use another unused target name and repeat the original Dashboard
+Clone flow from `dongqing_batongguan_historic_trail_scoutAI`.
+
+### 2026-08-28 full historical catalog and QGIS risk adapter
+
+This section supersedes every earlier instruction that seeds only
+`historical-fandi-1916` or leaves the four risk layers unavailable after a
+successful QGIS run.
+
+Root causes:
+
+1. `WORKSPACE_RASTER_CACHE_SOURCE_IDS` listed one historical theme even though
+   the Dashboard selector and allowlisted registry exposed 15. The selected UI
+   theme was incorrectly treated as the preparation set.
+2. A successful `terrain_feature_stack.v1` ended in a hard-coded
+   `qgis_grass_risk_profile_adapter_not_available` state. This prevented
+   risk-score, risk-ribbon, risk-heatmap, risk-delta, and dependent boss-point
+   synthesis despite valid QGIS/GRASS route samples.
+3. The tile seeder counted blank white/transparent provider images as success
+   and retried permanent HTTP 404/410 no-coverage responses five times.
+
+Canonical correction:
+
+- Full import preparation creates 22 raster cache manifests: seven current
+  raster sources plus all 15 historical themes from
+  `HISTORICAL_MAP_CACHE_SOURCE_IDS`. Each historical theme has an independent
+  `historical-*` namespace and source id.
+- Blank/transparent tiles and HTTP 404/410 are typed no-coverage. Permanent
+  no-coverage is not retried; usable, blank, no-coverage, and failed counts stay
+  separate. A provider with no route coverage does not fail other themes and is
+  never marked cache-ready.
+- The QGIS worker samples elevation together with slope, aspect, multiscale
+  geomorphon, and flow accumulation and records
+  `actual_processor=qgis_processing_grass` in
+  `terrain_feature_route_samples`.
+- `scout_qgis_grass_risk_profile_adapter.v1` verifies the current workflow id,
+  receipt authority, artifact hash, fixture/synthetic flags, and required
+  slope values. It never reads a DEM or calls Python DEM/TEII processing.
+- The adapter applies the versioned candidate profile
+  `qgis_grass_terrain_candidate_score.v1`, repeats the nearest sparse QGIS
+  sample by reference-route progress onto the existing Overpass route base, and
+  records `adds_source_resolution=false`. This is contract/display packaging,
+  not new terrain resolution or operational risk truth.
+- Route-risk, point, ribbon, calibrated heatmap, and delta artifacts are
+  written before boss-point synthesis in the same preparation call. Successful
+  project state must contain `actual_processor=qgis_processing_grass`,
+  `fallback_used=false`, and `python_dtm_processing_used=false`.
+- Missing, malformed, hash-mismatched, fixture/synthetic, or failed adapter
+  input becomes typed `qgis_grass_risk_profile_adapter_failed` (or a more
+  specific input reason). Never restore the legacy Python terrain fallback.
+
+Focused regression commands:
+
+```bash
+./venv/bin/python -m pytest tests/test_pretrip_qgis_risk_adapter.py -q
+./venv/bin/python -m pytest tests/test_admin_local_raster_tiles.py -q
+./venv/bin/python -m pytest tests/test_admin_imagery_sources.py -q
+./venv/bin/python -m pytest tests/test_qgis_worker.py -q
+./venv/bin/python -m pytest tests/test_pretrip_layer_preparation.py -k 'qgis or risk or imagery_cache' -q
+```
+
+Real acceptance still uses the Dashboard Workspace flow. Preserve the source
+workspace, record source hashes, rerun importer plus preparation in the named
+target explicitly authorized by the operator, and verify the clone/import
+receipt, all historical theme statuses, current QGIS run/hash, four risk layer
+refs, boss-point refs, MapLibre toggles, and source hashes. Weather/CWA/GEE and
+geology remain runtime-refreshable after preparation.
+
+### 2026-08-28 Terrain Route Hypothesis Navigation integration
+
+The candidate-only terrain route stage now runs immediately after an immutable
+`terrain_feature_stack.v1` activation and before the persisted Navigation
+projection. It does not replace the Golden GPX, observed-passage evidence,
+official trail data, route truth, or any runtime safety authority.
+
+The fixed processing chain is:
+
+```text
+validated DEM rectangle
+  -> grass:r.slope.aspect
+  -> versioned nonlinear slope friction through grass:r.mapcalc.simple
+  -> anisotropic minimum model-cost trace with grass:r.walk.coords
+  -> one candidate LineString trace with grass:r.path
+  -> full-extent symmetric cost-from-A and cost-from-B with grass:r.cost
+  -> relative corridor C_A + C_B - C_AB
+  -> pure 5/10/20 finite-cell percentiles of symmetric macro-terrain detour cost
+  -> independent raw trace-in-band containment audit; no path union
+  -> hash-bound hypothesis, visualization, overlay, and processing manifests
+  -> persisted Navigation projection
+```
+
+Every persisted or HTTP projection carries `authority=candidate_only`,
+`source_type=terrain_hypothesis`, `runtime_safety_truth=false`,
+`operational=false`, `promotion_allowed=false`, and
+`safe_or_walkable=not_determined`. The Dashboard displays a permanent
+`CANDIDATE / TERRAIN HYPOTHESIS / NOT A VERIFIED TRAIL` strip, an independent
+minimum anisotropic model-cost trace source, independent 5/10/20 symmetric
+macro-terrain corridor image sources, evidence,
+unknowns, DEM resolution, model version, and provenance. Removing or
+invalidating either hash-bound route artifact yields an empty candidate source;
+the prior geometry is not retained.
+
+The route cache is content-addressed from DEM hash, extent, resolution,
+endpoints, algorithm/model versions, weights, and optional evidence hashes.
+Derived terrain, friction, cost raster, and final hypothesis cache keys remain
+separate. Activation occurs only after all worker artifacts match declared byte
+counts and SHA-256 hashes. The stage never writes an official-trail, route-truth,
+or safety-truth store.
+
+Two real QGIS 3.44.13 / GRASS 8.5.0 integration defects were found and fixed:
+
+1. `grass:r.cost` with `stop_coordinates` stopped after reaching the opposite
+   endpoint and left 666 of 2,500 synthetic cells as NoData. Corridor runs now
+   omit the stop coordinate and cover the complete analysis extent; `C_AB` is
+   still sampled at B.
+2. Current `grass:r.univar` emits a pipe table headed by
+   `non_null_cells|null_cells|...`. The bounded parser now accepts both this
+   observed format and the legacy key/value report while continuing to reject
+   missing, non-finite, fractional, or negative cell counts.
+3. GPT Pro review identified that the anisotropic trace and symmetric corridor
+   bands are separate model products, not one confidence surface. Schema v0.2,
+   cache keys, provenance, Navigation projection, and Dashboard wording now
+   preserve that distinction. Percentile masks no longer union trace cells.
+
+The local qualification evidence is under
+`artifacts/terrain-route-qualification-20260828/`. A deterministic 20 m
+two-peaks-plus-saddle DEM produced one 809.44 m candidate LineString, a complete
+2,500-cell relative-cost surface, monotonically expanding corridor bands of
+125, 249, and 499 cells. A raw pre-union audit found zero trace cells outside
+the 5th-percentile mask. Regenerated no-union TIFF and PNG artifacts are
+byte-identical to the prior fixture outputs, showing that union had not changed
+this fixture's pixels even though its semantics were incorrect.
+The persisted qualification manifest records hashes, versions, modules,
+parameters, findings, and confidence limits. This proves the local QGIS
+Processing/GRASS algorithm chain and Dashboard projection path. A live
+QGIS-agent-MCP plugin transport was not present, so the complete worker-over-MCP
+transaction remains `UNKNOWN` rather than inferred from CLI execution.
+
+At 20 m resolution the output is `macro_terrain_only`. Vegetation, trail
+surface, meter-scale cliffs and structures, recent landslides, water state,
+legal access, bridges, ropes, stairs, tunnels, and other engineered-trail facts
+remain unknown. None of those unknowns may be converted into safety,
+passability, legality, or route-existence claims.
+
+### 2026-08-29 one-pass risk and historical-map acceptance
+
+The `dongqing_batongguan_historic_trail_qgisGrass_clean_20260828` rerun exposed
+six additional one-pass defects after the adapter and historical catalog had
+already been added:
+
+1. Dashboard loaded `/workflows/latest` without a workflow filter. A later
+   failed auxiliary run hid the completed primary morphology artifacts.
+2. QGIS risk points were written after the original terrain-risk candidate
+   file, so Navigation compiled a valid but empty risk lens.
+3. the Dashboard restart script did not restore QGIS enablement, worker URL,
+   or token reference, so a restart silently changed preparation capability;
+4. the pretrip page kept `weather-api` rank 58.5 while the machine contract had
+   rank 80, causing the final 32-layer gate to fail.
+5. Clone did not persist source P0/P1 URL identity into the target before
+   preparation. Route-context collection could therefore reuse inherited
+   evidence without proving a live source refresh in the new workspace.
+6. raster/OCR route-context collection did not require a newly written HTML
+   briefing, so a prepared target could open without
+   `route_context_briefing_ref`.
+
+Canonical behavior now is:
+
+- query latest QGIS state with `workflow_id=terrain_feature_stack.v1`;
+- after every successful primary run, require the risk adapter receipt to have
+  the same run id, rebuild canonical risk candidates, then synthesize Boss
+  points and compile Navigation;
+- persist the loopback worker token in an owner-only file and start Dashboard
+  and QGIS worker through the repository launchers without logging its value;
+- keep `weather-api` at z/rank 80 and run both repository and real-workspace
+  layer-contract gates;
+- after import and before preparation, write the target-owned
+  `inputs/route_context_source_records.json` handoff from validated source P0/P1
+  records, then perform the explicit connected refresh in preparation;
+- write and project `outputs/briefings/route_context_briefing.html` during that
+  same preparation generation.
+
+The accepted primary run was
+`qgis-worker-20260828T161714108162Z-88505f2081`. It completed all 23 requested
+preparation layers, produced 3,182 QGIS/GRASS terrain-risk candidates and five
+Boss points, and recorded `actual_processor=qgis_processing_grass`,
+`fallback_used=false`, and `python_dtm_processing_used=false` for both terrain
+and risk. Dashboard showed 164 `ROUTE_CONNECTED` morphology candidates and
+14,237 `RECTANGLE_ALL` candidates, plus 30 of 50 bounded risk candidates.
+This later run used the live local QGIS-agent-MCP bridge and closes the earlier
+`UNKNOWN` transport status for the primary `terrain_feature_stack.v1` path.
+The same preparation consumed five target handoff records, recorded
+`live_network_refreshed` with four accepted web evidence items, generated 39
+route-context points, and wrote a 226,558-byte HTML briefing before the
+workspace was reopened.
+
+Raster preparation wrote manifests for seven current and 15 historical
+sources. Fourteen historical themes had usable route coverage and served local
+HTTP 200 tiles; `historical-taito-forest` returned no usable tile for all 402
+planned cells and remains typed `seed_no_coverage`. This is provider coverage,
+not a preparation error. Across all sources the final seed summaries recorded
+7,266 usable cached plan tiles, 1,570 no-coverage cells, and zero failed cells.
+
+One bridge timeout was observed before the accepted run. The failed receipt
+remained fail-closed with no synthetic fallback. Restarting QGIS plus the local
+worker and rerunning the same preparation produced the accepted receipt. The
+auxiliary `terrain_route_hypothesis.v1` remains an independent typed failure at
+`dem_loaded`; it does not replace, invalidate, or become the Dashboard source
+for the completed primary terrain stack.

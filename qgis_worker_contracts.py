@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from qgis_spatial_contracts import (
     TERRAIN_CONTEXT_PREVIEW_WORKFLOW_ID,
+    TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_ID,
     QgisBackendAvailability,
     SpatialAnalysisError,
     SpatialAuthorityBoundary,
@@ -13,6 +14,8 @@ from qgis_spatial_contracts import (
     SpatialWorkflowStep,
     qgis_candidate_boundary,
 )
+from terrain_route_hypothesis_artifacts import TerrainRouteCacheKeys
+from terrain_route_hypothesis_models import TerrainRoutingCostConfig
 
 
 QGIS_WORKER_SCHEMA_VERSION = "scout_qgis_worker.v0_1"
@@ -20,6 +23,7 @@ QGIS_WORKER_REQUEST_SCHEMA_VERSION = "scout_qgis_worker_request.v0_1"
 QgisWorkerWorkflowId = Literal[
     "terrain_context_preview.v1",
     "terrain_feature_stack.v1",
+    "terrain_route_hypothesis.v1",
 ]
 
 
@@ -66,6 +70,10 @@ class QgisWorkerWorkflowRequest(BaseModel):
     source_refs: list[str] = Field(default_factory=list, max_length=64)
     source_hashes: dict[str, str] = Field(default_factory=dict)
     source_resolution: dict[str, Any] = Field(default_factory=dict)
+    terrain_routing_cost_config: TerrainRoutingCostConfig = Field(
+        default_factory=TerrainRoutingCostConfig
+    )
+    terrain_route_cache_keys: TerrainRouteCacheKeys | None = None
     candidate_only: Literal[True] = True
     runtime_safety_truth: Literal[False] = False
     operational: Literal[False] = False
@@ -100,8 +108,16 @@ class QgisWorkerArtifact(BaseModel):
 
     artifact_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,159}$")
     artifact_type: Literal[
+        "dem_route_bbox_raster",
         "slope_raster",
         "aspect_raster",
+        "hillshade_raster",
+        "elevation_tint_overlay",
+        "hillshade_overlay",
+        "slope_shading_overlay",
+        "contour_lines_vector",
+        "contours_overlay",
+        "terrain_surface_manifest",
         "geomorphon_raster",
         "geomorphon_fine_raster",
         "geomorphon_coarse_raster",
@@ -116,6 +132,21 @@ class QgisWorkerArtifact(BaseModel):
         "terrain_feature_manifest",
         "qgis_render_preview",
         "qgis_visual_context",
+        "terrain_route_hypothesis",
+        "terrain_route_best_path_vector",
+        "terrain_route_slope_raster",
+        "terrain_route_friction_raster",
+        "terrain_route_walk_cost_raster",
+        "terrain_route_walk_direction_raster",
+        "terrain_route_cost_from_a_raster",
+        "terrain_route_cost_from_b_raster",
+        "terrain_route_cost_direction_a_raster",
+        "terrain_route_cost_direction_b_raster",
+        "terrain_route_corridor_raster",
+        "terrain_route_corridor_band_raster",
+        "terrain_route_corridor_overlay",
+        "terrain_route_quantiles",
+        "terrain_route_processing_manifest",
     ]
     relative_ref: str
     media_type: str

@@ -13,6 +13,13 @@ from qgis_mcp_stdio import (
     QgisMcpToolRejected,
     QgisMcpToolError,
 )
+from terrain_route_hypothesis_artifacts import (
+    build_corridor_threshold_expression,
+    build_path_outside_band_expression,
+    build_relative_corridor_expression,
+    build_slope_friction_expression,
+)
+from terrain_route_hypothesis_models import TerrainRoutingCostConfig
 
 
 def _fake_mcp_server(path: Path) -> Path:
@@ -60,6 +67,30 @@ for line in sys.stdin:
         encoding="utf-8",
     )
     return path
+
+
+def test_qgis_mcp_stdio_preserves_gis_runtime_environment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("GDAL_DATA", "/opt/qgis/gdal")
+    monkeypatch.setenv("GISBASE", "/opt/grass")
+    monkeypatch.setenv("PROJ_LIB", "/opt/qgis/proj")
+    monkeypatch.setenv("SCOUT_TEST_SECRET", "must-not-cross-worker-boundary")
+    client = QgisMcpStdioClient(
+        QgisMcpClientConfig(
+            command=(sys.executable, str(tmp_path / "unused.py")),
+            run_root=tmp_path / "runs",
+            source_roots=(tmp_path / "source",),
+        )
+    )
+
+    env = client._subprocess_env()
+
+    assert env["GDAL_DATA"] == "/opt/qgis/gdal"
+    assert env["GISBASE"] == "/opt/grass"
+    assert env["PROJ_LIB"] == "/opt/qgis/proj"
+    assert "SCOUT_TEST_SECRET" not in env
 
 
 def test_qgis_mcp_stdio_initializes_and_wraps_allowlisted_specialist_tool(
@@ -243,6 +274,49 @@ def test_qgis_mcp_stdio_bounds_xyz_north_up_normalization(tmp_path: Path) -> Non
             {
                 "algorithm": "gdal:warpreproject",
                 "parameters": {**parameters, "EXTRA": "--config CPL_DEBUG ON"},
+            },
+        )
+
+
+def test_qgis_mcp_stdio_allows_only_bounded_color_relief_alpha(tmp_path: Path) -> None:
+    run_root = tmp_path / "runs"
+    source_root = tmp_path / "source"
+    run_root.mkdir()
+    source_root.mkdir()
+    dem = source_root / "dem.tif"
+    dem.write_bytes(b"fixture-dem")
+    color_table = run_root / "elevation-colors.txt"
+    color_table.write_text("0 23 92 52 190\n", encoding="ascii")
+    output = run_root / "elevation.png"
+    client = QgisMcpStdioClient(
+        QgisMcpClientConfig(
+            command=(sys.executable, str(tmp_path / "unused.py")),
+            run_root=run_root,
+            source_roots=(source_root,),
+        )
+    )
+    parameters = {
+        "INPUT": str(dem),
+        "BAND": 1,
+        "COMPUTE_EDGES": False,
+        "COLOR_TABLE": str(color_table),
+        "MATCH_MODE": 2,
+        "CREATION_OPTIONS": "",
+        "EXTRA": "-alpha",
+        "OUTPUT": str(output),
+    }
+
+    client.validate_tool_call(
+        "qgis_processing_start",
+        {"algorithm": "gdal:colorrelief", "parameters": parameters},
+    )
+
+    with pytest.raises(QgisMcpToolRejected):
+        client.validate_tool_call(
+            "qgis_processing_start",
+            {
+                "algorithm": "gdal:colorrelief",
+                "parameters": {**parameters, "EXTRA": "-alpha --config CPL_DEBUG ON"},
             },
         )
 
@@ -644,6 +718,8 @@ def test_qgis_mcp_stdio_allows_only_bounded_grass_feature_outputs(
     )
     assert {
         "gdal:assignprojection",
+        "native:dissolve",
+        "native:extractbyexpression",
         "grass:r.mapcalc.simple",
         "grass:r.slope.aspect",
         "grass:r.geomorphon",
@@ -658,6 +734,8 @@ def test_qgis_mcp_stdio_allows_only_bounded_grass_feature_outputs(
     ridge_mask = run_root / "ridge_consensus.tif"
     ridge_thin = run_root / "ridge_thin.tif"
     ridge_vector = run_root / "ridge_lines.gpkg"
+    ridge_filtered = run_root / "ridge_lines_min160m.gpkg"
+    ridge_dissolved = run_root / "ridge_lines_min160m_dissolved.gpkg"
     stream_raster = run_root / "stream_network.tif"
     stream_vector = run_root / "stream_network.gpkg"
     for path in (fine, medium, coarse):
@@ -673,6 +751,30 @@ def test_qgis_mcp_stdio_allows_only_bounded_grass_feature_outputs(
                 "c": str(coarse),
                 "expression": "if(((A == 3) + (B == 3) + (C == 3)) >= 2, 1, null())",
                 "output": str(ridge_mask),
+            },
+        },
+    )
+    client.validate_tool_call(
+        "qgis_processing_start",
+        {
+            "algorithm": "native:extractbyexpression",
+            "parameters": {
+                "INPUT": str(ridge_vector),
+                "EXPRESSION": "$length >= 160",
+                "OUTPUT": str(ridge_filtered),
+                "FAIL_OUTPUT": None,
+            },
+        },
+    )
+    client.validate_tool_call(
+        "qgis_processing_start",
+        {
+            "algorithm": "native:dissolve",
+            "parameters": {
+                "INPUT": str(ridge_filtered),
+                "FIELD": [],
+                "SEPARATE_DISJOINT": False,
+                "OUTPUT": str(ridge_dissolved),
             },
         },
     )
@@ -770,6 +872,15 @@ def test_qgis_mcp_stdio_allows_only_bounded_grass_feature_outputs(
                 "stream_vector": str(stream_vector),
             },
         },
+        {
+            "algorithm": "native:extractbyexpression",
+            "parameters": {
+                "INPUT": str(ridge_vector),
+                "EXPRESSION": "$length >= 0",
+                "OUTPUT": str(ridge_filtered),
+                "FAIL_OUTPUT": None,
+            },
+        },
     )
     for arguments in forbidden_processing:
         with pytest.raises(QgisMcpToolRejected):
@@ -813,6 +924,222 @@ def test_qgis_mcp_stdio_allows_only_bounded_grass_feature_outputs(
                     "INPUT": str(dem),
                     "OUTPUT": str(run_root / "gdal-slope.tif"),
                 },
+            },
+        )
+
+
+def test_qgis_mcp_allows_only_compiled_terrain_route_processing(tmp_path: Path) -> None:
+    run_root = tmp_path / "runs"
+    source_root = tmp_path / "sources"
+    run_root.mkdir()
+    source_root.mkdir()
+    dem = source_root / "dem.tif"
+    dem.write_bytes(b"dem")
+    slope = run_root / "slope.tif"
+    friction = run_root / "friction.tif"
+    cost_a = run_root / "cost-a.tif"
+    cost_b = run_root / "cost-b.tif"
+    direction_a = run_root / "direction-a.tif"
+    direction_b = run_root / "direction-b.tif"
+    walk_cost = run_root / "walk-cost.tif"
+    walk_direction = run_root / "walk-direction.tif"
+    corridor = run_root / "corridor.tif"
+    band = run_root / "corridor-5.tif"
+    path_outside_band = run_root / "path-outside-corridor-5.tif"
+    destination = run_root / "destination.gpkg"
+    path_raster = run_root / "path.tif"
+    path_vector = run_root / "path.gpkg"
+    quantiles = run_root / "quantiles.html"
+    univar = run_root / "univar.html"
+    for path in (slope, cost_a, cost_b, direction_a, direction_b, walk_direction, destination):
+        path.write_bytes(b"fixture")
+    client = QgisMcpStdioClient(
+        QgisMcpClientConfig(
+            command=(sys.executable, str(tmp_path / "unused.py")),
+            run_root=run_root,
+            source_roots=(source_root,),
+        )
+    )
+    assert {
+        "grass:r.walk.coords",
+        "grass:r.cost",
+        "grass:r.path",
+        "grass:r.quantile",
+        "grass:r.univar",
+    }.issubset(QGIS_MCP_ALLOWED_ALGORITHMS)
+
+    client.validate_tool_call(
+        "qgis_processing_start",
+        {
+            "algorithm": "grass:r.mapcalc.simple",
+            "allow_main_thread": True,
+            "parameters": {
+                "a": str(slope),
+                "expression": build_slope_friction_expression(TerrainRoutingCostConfig()),
+                "output": str(friction),
+            },
+        },
+    )
+    walk_parameters = {
+        "elevation": str(dem),
+        "friction": str(friction),
+        "start_coordinates": "260000,2640000",
+        "stop_coordinates": "260500,2640500",
+        "walk_coeff": "0.72,6.0,1.9998,-1.9998",
+        "lambda": 1.0,
+        "slope_factor": -0.2125,
+        "max_cost": 0.0,
+        "null_cost": None,
+        "memory": 300,
+        "-k": True,
+        "-n": False,
+        "output": str(walk_cost),
+        "outdir": str(walk_direction),
+        "GRASS_REGION_CELLSIZE_PARAMETER": 0.0,
+    }
+    client.validate_tool_call(
+        "qgis_processing_start",
+        {
+            "algorithm": "grass:r.walk.coords",
+            "allow_main_thread": True,
+            "parameters": walk_parameters,
+        },
+    )
+    cost_parameters = {
+        "input": str(friction),
+        "start_coordinates": "260000,2640000",
+        "stop_coordinates": "260500,2640500",
+        "-k": True,
+        "-n": True,
+        "max_cost": 0.0,
+        "null_cost": None,
+        "memory": 300,
+        "output": str(cost_a),
+        "outdir": str(direction_a),
+        "GRASS_REGION_CELLSIZE_PARAMETER": 0.0,
+    }
+    client.validate_tool_call(
+        "qgis_processing_start",
+        {
+            "algorithm": "grass:r.cost",
+            "allow_main_thread": True,
+            "parameters": cost_parameters,
+        },
+    )
+    client.validate_tool_call(
+        "qgis_processing_start",
+        {
+            "algorithm": "grass:r.path",
+            "allow_main_thread": True,
+            "parameters": {
+                "input": str(walk_direction),
+                "format": 0,
+                "values": None,
+                "raster_path": str(path_raster),
+                "vector_path": str(path_vector),
+                "start_points": str(destination),
+                "-c": False,
+                "-a": False,
+                "-n": False,
+                "GRASS_REGION_CELLSIZE_PARAMETER": 0.0,
+                "GRASS_SNAP_TOLERANCE_PARAMETER": -1.0,
+                "GRASS_MIN_AREA_PARAMETER": 0.0001,
+                "GRASS_OUTPUT_TYPE_PARAMETER": 2,
+                "GRASS_VECTOR_EXPORT_NOCAT": False,
+            },
+        },
+    )
+    client.validate_tool_call(
+        "qgis_processing_start",
+        {
+            "algorithm": "grass:r.mapcalc.simple",
+            "allow_main_thread": True,
+            "parameters": {
+                "a": str(cost_a),
+                "b": str(cost_b),
+                "expression": build_relative_corridor_expression(1234.5),
+                "output": str(corridor),
+            },
+        },
+    )
+    client.validate_tool_call(
+        "qgis_processing_start",
+        {
+            "algorithm": "grass:r.mapcalc.simple",
+            "allow_main_thread": True,
+            "parameters": {
+                "a": str(corridor),
+                "expression": build_corridor_threshold_expression(87.25),
+                "output": str(band),
+            },
+        },
+    )
+    client.validate_tool_call(
+        "qgis_processing_start",
+        {
+            "algorithm": "grass:r.mapcalc.simple",
+            "allow_main_thread": True,
+            "parameters": {
+                "a": str(path_raster),
+                "b": str(band),
+                "expression": build_path_outside_band_expression(),
+                "output": str(path_outside_band),
+            },
+        },
+    )
+    client.validate_tool_call(
+        "qgis_processing_start",
+        {
+            "algorithm": "grass:r.quantile",
+            "allow_main_thread": True,
+            "parameters": {
+                "input": str(corridor),
+                "quantiles": 4,
+                "percentiles": "5,10,20",
+                "bins": 1_000_000,
+                "-r": False,
+                "file": str(quantiles),
+                "GRASS_REGION_CELLSIZE_PARAMETER": 0.0,
+            },
+        },
+    )
+    client.validate_tool_call(
+        "qgis_processing_start",
+        {
+            "algorithm": "grass:r.univar",
+            "allow_main_thread": True,
+            "parameters": {
+                "map": [str(dem)],
+                "zones": None,
+                "percentile": "",
+                "separator": "pipe",
+                "-e": False,
+                "output": str(univar),
+                "GRASS_REGION_CELLSIZE_PARAMETER": 0.0,
+            },
+        },
+    )
+
+    with pytest.raises(QgisMcpToolRejected):
+        client.validate_tool_call(
+            "qgis_processing_start",
+            {
+                "algorithm": "grass:r.mapcalc.simple",
+                "allow_main_thread": True,
+                "parameters": {
+                    "a": str(slope),
+                    "expression": "system('touch /tmp/not-allowed')",
+                    "output": str(friction),
+                },
+            },
+        )
+    with pytest.raises(QgisMcpToolRejected):
+        client.validate_tool_call(
+            "qgis_processing_start",
+            {
+                "algorithm": "grass:r.walk.coords",
+                "allow_main_thread": True,
+                "parameters": {**walk_parameters, "start_coordinates": "121.2,24.0"},
             },
         )
 

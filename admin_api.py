@@ -5526,6 +5526,139 @@ def create_admin_router(
             },
         )
 
+    @router.get(
+        "/pretrip/projects/{project_id}/terrain-route-overlays/{mode}.png"
+    )
+    def pretrip_project_terrain_route_overlay(
+        project_id: str,
+        mode: str,
+    ) -> Response:
+        allowed_modes = {
+            "top_5_percent_corridor",
+            "top_10_percent_corridor",
+            "top_20_percent_corridor",
+        }
+        if mode not in allowed_modes:
+            raise HTTPException(
+                status_code=422,
+                detail="unsupported terrain route corridor mode",
+            )
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        try:
+            project = json.loads(
+                (project_root / "project.json").read_text(encoding="utf-8")
+            )
+        except (json.JSONDecodeError, OSError) as exc:
+            raise HTTPException(
+                status_code=422, detail="invalid pre-trip project"
+            ) from exc
+        if (
+            not isinstance(project, dict)
+            or project.get("terrain_route_hypothesis_authority")
+            != "candidate_only"
+            or project.get("terrain_route_hypothesis_candidate_only") is not True
+            or project.get("terrain_route_hypothesis_runtime_safety_truth") is not False
+            or project.get("terrain_route_hypothesis_status") != "completed"
+        ):
+            raise HTTPException(
+                status_code=404,
+                detail="terrain route hypothesis not prepared",
+            )
+        visualization_path = _safe_pretrip_project_ref_path(
+            project_root,
+            project.get("terrain_route_hypothesis_visualization_ref"),
+        )
+        if visualization_path is None or not visualization_path.is_file():
+            raise HTTPException(
+                status_code=404,
+                detail="terrain route visualization artifact missing",
+            )
+        visualization_bytes = visualization_path.read_bytes()
+        if hashlib.sha256(visualization_bytes).hexdigest() != project.get(
+            "terrain_route_hypothesis_visualization_sha256"
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="terrain route visualization hash mismatch",
+            )
+        try:
+            visualization = json.loads(visualization_bytes.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise HTTPException(
+                status_code=422,
+                detail="invalid terrain route visualization",
+            ) from exc
+        boundary = visualization.get("boundary")
+        if (
+            visualization.get("artifact_kind")
+            != "terrain_route_hypothesis_visualization"
+            or visualization.get("authority") != "candidate_only"
+            or visualization.get("source_type") != "terrain_hypothesis"
+            or visualization.get("candidate_only") is not True
+            or visualization.get("runtime_safety_truth") is not False
+            or visualization.get("operational") is not False
+            or not isinstance(boundary, dict)
+            or boundary.get("promotion_allowed") is not False
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="terrain route visualization authority is invalid",
+            )
+        overlay = next(
+            (
+                item
+                for item in visualization.get("raster_overlays", [])
+                if isinstance(item, dict) and item.get("mode") == mode
+            ),
+            None,
+        )
+        if (
+            not isinstance(overlay, dict)
+            or overlay.get("candidate_only") is not True
+            or overlay.get("runtime_safety_truth") is not False
+            or overlay.get("operational") is not False
+            or overlay.get("contains_best_path") is not True
+        ):
+            raise HTTPException(
+                status_code=404,
+                detail="terrain route corridor overlay not available",
+            )
+        overlay_path = _safe_pretrip_project_ref_path(
+            project_root,
+            overlay.get("source_path"),
+        )
+        if overlay_path is None or not overlay_path.is_file():
+            raise HTTPException(
+                status_code=404,
+                detail="terrain route corridor overlay file missing",
+            )
+        overlay_bytes = overlay_path.read_bytes()
+        actual_hash = hashlib.sha256(overlay_bytes).hexdigest()
+        if actual_hash != overlay.get("sha256"):
+            raise HTTPException(
+                status_code=422,
+                detail="terrain route corridor overlay hash mismatch",
+            )
+        return Response(
+            overlay_bytes,
+            media_type="image/png",
+            headers={
+                "Cache-Control": "no-cache, max-age=0, must-revalidate",
+                "X-Scout-Terrain-Route-Corridor": mode,
+                "X-Scout-Terrain-Route-Overlay-Hash": actual_hash,
+                "X-Scout-Authority": "candidate_only",
+                "X-Scout-Source-Type": "terrain_hypothesis",
+                "X-Scout-Candidate-Only": "true",
+                "X-Scout-Runtime-Safety-Truth": "false",
+                "X-Scout-Operational": "false",
+            },
+        )
+
     @router.get("/pretrip/projects/{project_id}/osm-pbf-vector.geojson")
     def pretrip_project_osm_pbf_vector(project_id: str) -> Response:
         project_root = _pretrip_workspace_project_root(
@@ -10447,6 +10580,20 @@ def _navigation_terrain_dem_public_manifest(
         "visual_interpolation": manifest.get("visual_interpolation"),
         "interpolation_domain": manifest.get("interpolation_domain"),
         "adds_source_resolution": manifest.get("adds_source_resolution"),
+        "source_analysis_processor": manifest.get("source_analysis_processor"),
+        "source_standard_processor_completed": manifest.get(
+            "source_standard_processor_completed"
+        ),
+        "source_fallback_used": manifest.get("source_fallback_used"),
+        "source_python_dtm_processing_used": manifest.get(
+            "source_python_dtm_processing_used"
+        ),
+        "visualization_packaging_processor": manifest.get(
+            "visualization_packaging_processor"
+        ),
+        "visualization_packaging_only": manifest.get(
+            "visualization_packaging_only"
+        ),
         "tile_size": manifest.get("tile_size"),
         "minzoom": manifest.get("minzoom"),
         "maxzoom": manifest.get("maxzoom"),

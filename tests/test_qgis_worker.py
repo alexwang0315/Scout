@@ -17,10 +17,29 @@ from qgis_worker import (
     _WorkerCrsUnresolved,
     _crop_png_to_content,
     _decode_png_rows,
+    _parse_grass_univar_report,
     _require_extent_intersection,
     _validate_projected_route_extent,
     create_qgis_worker_app,
 )
+
+
+def test_parse_grass_univar_report_accepts_qgis_pipe_table(tmp_path: Path) -> None:
+    report = tmp_path / "univar.html"
+    report.write_text(
+        "non_null_cells|null_cells|min|max|mean\n"
+        "2500|0|0|600.886495697407|137.723594578299\n",
+        encoding="utf-8",
+    )
+
+    assert _parse_grass_univar_report(report) == {
+        "n": 2500,
+        "null_cells": 0,
+        "cells": 2500,
+        "min": 0.0,
+        "max": 600.886495697407,
+        "mean": 137.723594578299,
+    }
 
 
 def _test_access_value() -> str:
@@ -83,16 +102,30 @@ class FakeQgisMcpClient:
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.screenshot_bytes = screenshot_bytes or _rgb_png(blank=False)
         self.omit_visual_review_image = omit_visual_review_image
+        self.analysis_cell_count = 12_726
+        self.terrain_route_mode = False
         self.available_algorithms = available_algorithms or {
             "gdal:assignprojection",
             "gdal:buildvirtualraster",
+            "gdal:cliprasterbyextent",
+            "gdal:colorrelief",
+            "gdal:rasterize",
             "gdal:slope",
             "gdal:warpreproject",
+            "native:dissolve",
+            "native:extractbyexpression",
+            "grass:r.contour",
+            "grass:r.cost",
             "grass:r.mapcalc.simple",
+            "grass:r.path",
+            "grass:r.quantile",
+            "grass:r.relief",
             "grass:r.slope.aspect",
             "grass:r.geomorphon",
             "grass:r.thin",
             "grass:r.to.vect",
+            "grass:r.univar",
+            "grass:r.walk.coords",
             "grass:r.watershed",
         }
 
@@ -111,18 +144,32 @@ class FakeQgisMcpClient:
                 "revision": 7,
             }
         if tool == "qgis_context":
+            if "hypothesis" in str(arguments.get("task", "")).casefold():
+                self.terrain_route_mode = True
             return {
                 "snapshot": {"qgis_version": "3.44.12", "revision": 7},
                 "runtime_matches": [
                     {"id": "gdal:buildvirtualraster"},
                     {"id": "gdal:assignprojection"},
+                    {"id": "gdal:cliprasterbyextent"},
+                    {"id": "gdal:colorrelief"},
+                    {"id": "gdal:rasterize"},
                     {"id": "gdal:slope"},
                     {"id": "gdal:warpreproject"},
+                    {"id": "native:dissolve"},
+                    {"id": "native:extractbyexpression"},
+                    {"id": "grass:r.contour"},
+                    {"id": "grass:r.cost"},
                     {"id": "grass:r.mapcalc.simple"},
+                    {"id": "grass:r.path"},
+                    {"id": "grass:r.quantile"},
+                    {"id": "grass:r.relief"},
                     {"id": "grass:r.slope.aspect"},
                     {"id": "grass:r.geomorphon"},
                     {"id": "grass:r.thin"},
                     {"id": "grass:r.to.vect"},
+                    {"id": "grass:r.univar"},
+                    {"id": "grass:r.walk.coords"},
                     {"id": "grass:r.watershed"},
                 ],
             }
@@ -146,6 +193,13 @@ class FakeQgisMcpClient:
                     "INPUT": {"type": "string"},
                     "CRS": {"type": "string"},
                 },
+                "gdal:buildvirtualraster": {
+                    "INPUT": {"type": "array"},
+                    "OUTPUT": {
+                        "type": "string",
+                        "x-qgis-output-destination": True,
+                    },
+                },
                 "gdal:warpreproject": {
                     "INPUT": {"type": "string"},
                     "SOURCE_CRS": {"type": "string"},
@@ -155,6 +209,59 @@ class FakeQgisMcpClient:
                         "type": "string",
                         "x-qgis-output-destination": True,
                     },
+                },
+                "gdal:cliprasterbyextent": {
+                    "INPUT": {"type": "string"},
+                    "PROJWIN": {"type": "string"},
+                    "OUTPUT": {
+                        "type": "string",
+                        "x-qgis-output-destination": True,
+                    },
+                },
+                "gdal:colorrelief": {
+                    "INPUT": {"type": "string"},
+                    "COLOR_TABLE": {"type": "string"},
+                    "OUTPUT": {
+                        "type": "string",
+                        "x-qgis-output-destination": True,
+                    },
+                },
+                "gdal:rasterize": {
+                    "INPUT": {"type": "string"},
+                    "EXTENT": {"type": "string"},
+                    "OUTPUT": {
+                        "type": "string",
+                        "x-qgis-output-destination": True,
+                    },
+                },
+                "native:extractbyexpression": {
+                    "INPUT": {"type": "string"},
+                    "EXPRESSION": {"type": "string"},
+                    "OUTPUT": {
+                        "type": "string",
+                        "x-qgis-output-destination": True,
+                    },
+                    "FAIL_OUTPUT": {
+                        "type": "string",
+                        "x-qgis-output-destination": True,
+                    },
+                },
+                "native:dissolve": {
+                    "INPUT": {"type": "string"},
+                    "FIELD": {"type": "array"},
+                    "SEPARATE_DISJOINT": {"type": "boolean"},
+                    "OUTPUT": {
+                        "type": "string",
+                        "x-qgis-output-destination": True,
+                    },
+                },
+                "grass:r.contour": {
+                    "input": {"type": "string"},
+                    "output": {"type": "string", "x-qgis-output-destination": True},
+                },
+                "grass:r.relief": {
+                    "input": {"type": "string"},
+                    "output": {"type": "string", "x-qgis-output-destination": True},
                 },
                 "grass:r.slope.aspect": {
                     "elevation": {"type": "string"},
@@ -170,6 +277,34 @@ class FakeQgisMcpClient:
                     "b": {"type": "string"},
                     "c": {"type": "string"},
                     "expression": {"type": "string"},
+                    "output": {"type": "string", "x-qgis-output-destination": True},
+                },
+                "grass:r.walk.coords": {
+                    "elevation": {"type": "string"},
+                    "friction": {"type": "string"},
+                    "start_coordinates": {"type": "string"},
+                    "output": {"type": "string", "x-qgis-output-destination": True},
+                    "outdir": {"type": "string", "x-qgis-output-destination": True},
+                },
+                "grass:r.cost": {
+                    "input": {"type": "string"},
+                    "start_coordinates": {"type": "string"},
+                    "output": {"type": "string", "x-qgis-output-destination": True},
+                    "outdir": {"type": "string", "x-qgis-output-destination": True},
+                },
+                "grass:r.path": {
+                    "input": {"type": "string"},
+                    "start_points": {"type": "string"},
+                    "raster_path": {"type": "string", "x-qgis-output-destination": True},
+                    "vector_path": {"type": "string", "x-qgis-output-destination": True},
+                },
+                "grass:r.quantile": {
+                    "input": {"type": "string"},
+                    "percentiles": {"type": "string"},
+                    "file": {"type": "string", "x-qgis-output-destination": True},
+                },
+                "grass:r.univar": {
+                    "map": {"type": "array"},
                     "output": {"type": "string", "x-qgis-output-destination": True},
                 },
                 "grass:r.thin": {
@@ -241,6 +376,8 @@ class FakeQgisMcpClient:
                     if "ridge" in path.name
                     else "valley"
                     if "valley" in path.name
+                    else "contour"
+                    if "contour" in path.name
                     else "stream"
                 )
                 path.write_text(
@@ -284,16 +421,28 @@ class FakeQgisMcpClient:
                 "assignment": {"changed": True, "reason": "explicit_assignment"},
             }
         if tool == "qgis_layer_inspect":
+            extent = (
+                {
+                    "xmin": 271_000,
+                    "ymin": 2_659_000,
+                    "xmax": 272_500,
+                    "ymax": 2_661_000,
+                }
+                if self.terrain_route_mode
+                else {
+                    "xmin": 260_000,
+                    "ymin": 2_640_000,
+                    "xmax": 270_000,
+                    "ymax": 2_650_000,
+                }
+            )
             return {
                 "summary": {
                     "id": arguments["layer"],
                     "crs": "EPSG:3826",
-                    "extent": {
-                        "xmin": 260_000,
-                        "ymin": 2_640_000,
-                        "xmax": 270_000,
-                        "ymax": 2_650_000,
-                    },
+                    "extent": extent,
+                    "width": 500,
+                    "height": 500,
                 },
                 "style": {"renderer": "fixture"},
             }
@@ -303,7 +452,8 @@ class FakeQgisMcpClient:
                 "visible": arguments["visible"],
             }
         if tool == "qgis_identify":
-            values = {
+            fixed_values = {
+                "raster-dem_route_bbox": 2500.0,
                 "raster-grass_slope": 12.5,
                 "raster-grass_aspect": 180.0,
                 "raster-grass_geomorphon_fine": 3.0,
@@ -311,11 +461,25 @@ class FakeQgisMcpClient:
                 "raster-grass_geomorphon_coarse": 6.0,
                 "raster-grass_flow_accumulation": -42.0,
             }
+            def raster_value(layer_id: str) -> float:
+                if layer_id in fixed_values:
+                    return fixed_values[layer_id]
+                if "cost_from_a" in layer_id:
+                    return 1234.5
+                if "walk_cost_from_a" in layer_id:
+                    return 1400.25
+                if "elevation" in layer_id or "dem_route_bbox" in layer_id:
+                    return 2500.0
+                if "slope" in layer_id:
+                    return 12.5
+                if "friction" in layer_id:
+                    return 3.4
+                return 1.0
             return {
                 "results": [
                     {
                         "layer": {"id": layer_id},
-                        "values": {"band_1": values[layer_id]},
+                        "values": {"band_1": raster_value(layer_id)},
                     }
                     for layer_id in arguments["layers"]
                 ]
@@ -330,11 +494,23 @@ class FakeQgisMcpClient:
             output_keys = {
                 "gdal:assignprojection": (),
                 "gdal:buildvirtualraster": ("OUTPUT",),
+                "gdal:cliprasterbyextent": ("OUTPUT",),
+                "gdal:colorrelief": ("OUTPUT",),
+                "gdal:rasterize": ("OUTPUT",),
                 "gdal:slope": ("OUTPUT",),
                 "gdal:warpreproject": ("OUTPUT",),
+                "native:dissolve": ("OUTPUT",),
+                "native:extractbyexpression": ("OUTPUT",),
+                "grass:r.contour": ("output",),
                 "grass:r.slope.aspect": ("slope", "aspect"),
+                "grass:r.relief": ("output",),
                 "grass:r.geomorphon": ("forms",),
                 "grass:r.mapcalc.simple": ("output",),
+                "grass:r.walk.coords": ("output", "outdir"),
+                "grass:r.cost": ("output", "outdir"),
+                "grass:r.path": ("raster_path", "vector_path"),
+                "grass:r.quantile": ("file",),
+                "grass:r.univar": ("output",),
                 "grass:r.thin": ("output",),
                 "grass:r.to.vect": ("output",),
                 "grass:r.watershed": ("accumulation",),
@@ -343,9 +519,43 @@ class FakeQgisMcpClient:
                 key: str(arguments["parameters"][key])
                 for key in output_keys
             }
+            if arguments["algorithm"] == "gdal:cliprasterbyextent":
+                xmin, xmax, ymin, ymax = (
+                    float(value)
+                    for value in str(arguments["parameters"]["PROJWIN"]).split(",")
+                )
+                self.analysis_cell_count = int(round((xmax - xmin) / 20.0)) * int(
+                    round((ymax - ymin) / 20.0)
+                )
             for output in outputs.values():
                 Path(output).parent.mkdir(parents=True, exist_ok=True)
-                Path(output).write_bytes(b"fixture-qgis-output")
+                output_path = Path(output)
+                if arguments["algorithm"] == "grass:r.quantile":
+                    output_path.write_text(
+                        "0:5.000000:10.0\n1:10.000000:20.0\n2:20.000000:40.0\n",
+                        encoding="utf-8",
+                    )
+                elif arguments["algorithm"] == "grass:r.univar":
+                    name = output_path.name
+                    if "path_outside" in name:
+                        finite_count = 0
+                    elif "top_5" in name:
+                        finite_count = 100
+                    elif "top_10" in name:
+                        finite_count = 200
+                    elif "top_20" in name:
+                        finite_count = 400
+                    else:
+                        finite_count = self.analysis_cell_count
+                    output_path.write_text(
+                        f"n={finite_count}\n"
+                        f"null_cells={self.analysis_cell_count if finite_count == 0 else 0}\n"
+                        f"cells={self.analysis_cell_count if finite_count == 0 else finite_count}\n"
+                        "min=0\nmax=40\nmean=5\n",
+                        encoding="utf-8",
+                    )
+                else:
+                    output_path.write_bytes(b"fixture-qgis-output")
             self.operation_outputs[operation_id] = outputs
             return {"id": operation_id, "status": "queued"}
         if tool == "qgis_operation":
@@ -593,6 +803,138 @@ def test_qgis_worker_persists_completed_candidate_artifacts(tmp_path: Path) -> N
     assert sum(tool == "qgis_layer_manage" for tool, _ in mcp.calls) == 4
 
 
+def test_qgis_worker_persists_candidate_only_terrain_route_hypothesis(
+    tmp_path: Path,
+) -> None:
+    mcp = FakeQgisMcpClient()
+    client, source_root = _client(tmp_path, mcp)
+    dem = source_root / "dem.tif"
+    dem.write_bytes(b"fixture-dem")
+    request_payload = _request(
+        dem,
+        workflow_id="terrain_route_hypothesis.v1",
+    )
+    parent_ref = (
+        "outputs/spatial/qgis/parent-run/terrain_feature_manifest.json"
+    )
+    request_payload["source_refs"] = [parent_ref, "normalized/terrain/dtm_coverage_summary.json"]
+    request_payload["source_hashes"] = {
+        parent_ref: "a" * 64,
+        "normalized/terrain/dtm_coverage_summary.json": "b" * 64,
+    }
+
+    payload = _start_and_wait(
+        client,
+        dem,
+        workflow_id="terrain_route_hypothesis.v1",
+        request_payload=request_payload,
+    )
+
+    assert payload["state"] == "completed", payload.get("error")
+    assert payload["workflow_id"] == "terrain_route_hypothesis.v1"
+    assert payload["candidate_only"] is True
+    assert payload["runtime_safety_truth"] is False
+    assert payload["operational"] is False
+    result = payload["result"]
+    assert set(result["processing_algorithms"]) >= {
+        "grass:r.slope.aspect",
+        "grass:r.mapcalc.simple",
+        "grass:r.walk.coords",
+        "grass:r.path",
+        "grass:r.cost",
+        "grass:r.quantile",
+        "grass:r.univar",
+        "gdal:colorrelief",
+    }
+    artifact_types = [item["artifact_type"] for item in result["artifacts"]]
+    assert artifact_types.count("terrain_route_hypothesis") == 1
+    assert artifact_types.count("terrain_route_best_path_vector") == 1
+    assert artifact_types.count("terrain_route_corridor_raster") == 1
+    assert artifact_types.count("terrain_route_corridor_band_raster") == 3
+    assert artifact_types.count("terrain_route_corridor_overlay") == 3
+    assert all(
+        item["candidate_only"] is True
+        and item["runtime_safety_truth"] is False
+        and item["operational"] is False
+        for item in result["artifacts"]
+    )
+    assert sum(
+        tool == "qgis_processing_start"
+        and arguments["algorithm"] == "grass:r.walk.coords"
+        for tool, arguments in mcp.calls
+    ) == 1
+    cost_calls = [
+        arguments
+        for tool, arguments in mcp.calls
+        if tool == "qgis_processing_start"
+        and arguments["algorithm"] == "grass:r.cost"
+    ]
+    assert len(cost_calls) == 2
+    assert all(
+        "stop_coordinates" not in call["parameters"] for call in cost_calls
+    )
+    threshold_calls = [
+        arguments["parameters"]
+        for tool, arguments in mcp.calls
+        if tool == "qgis_processing_start"
+        and arguments["algorithm"] == "grass:r.mapcalc.simple"
+        and str(arguments["parameters"].get("expression", "")).startswith(
+            "if(A<="
+        )
+    ]
+    assert len(threshold_calls) == 3
+    assert all("b" not in parameters for parameters in threshold_calls)
+    containment_calls = [
+        arguments["parameters"]
+        for tool, arguments in mcp.calls
+        if tool == "qgis_processing_start"
+        and arguments["algorithm"] == "grass:r.mapcalc.simple"
+        and arguments["parameters"].get("expression")
+        == "if(!isnull(A)&&isnull(B),1,null())"
+    ]
+    assert len(containment_calls) == 3
+    assert all("b" in parameters and "c" not in parameters for parameters in containment_calls)
+    assert result["processing_parameters"]["corridor_semantics"] == (
+        "finite_symmetric_macro_terrain_relative_cost_cell_percentile"
+    )
+    assert result["processing_parameters"]["best_path_union_applied"] is False
+    assert all(
+        feature["properties"]["source_type"] == "terrain_hypothesis"
+        and feature["properties"]["candidate_only"] is True
+        and feature["properties"]["runtime_safety_truth"] is False
+        for feature in result["maplibre_geojson"]["features"]
+    )
+    hypothesis_artifact = next(
+        item
+        for item in result["artifacts"]
+        if item["artifact_type"] == "terrain_route_hypothesis"
+    )
+    artifact_response = client.get(
+        f"/workflows/{payload['worker_run_id']}/artifacts/{hypothesis_artifact['artifact_id']}",
+        headers={"Authorization": f"Bearer {_test_access_value()}"},
+    )
+    assert artifact_response.status_code == 200
+    hypothesis_run = artifact_response.json()
+    assert hypothesis_run["status"] == "completed"
+    hypothesis = hypothesis_run["hypotheses"][0]
+    assert hypothesis["authority"] == "candidate_only"
+    assert hypothesis["source_type"] == "terrain_hypothesis"
+    assert hypothesis["safe_or_walkable"] == "not_determined"
+    assert hypothesis["best_path"]["crs"] == "EPSG:4326"
+    assert hypothesis["path_model"] == "anisotropic_walk"
+    assert hypothesis["path_semantics"] == "minimum_anisotropic_model_cost_trace"
+    assert all(
+        band["contains_best_path"] is True
+        for band in hypothesis["corridor"]["bands"]
+    )
+    assert hypothesis["provenance"]["processing_manifest"]["corridor_cost_symmetric"] is True
+    assert hypothesis["provenance"]["processing_manifest"]["best_path_cost_symmetric"] is False
+    assert hypothesis["provenance"]["processing_manifest"]["best_path_union_applied"] is False
+    assert parent_ref == hypothesis["provenance"]["processing_manifest"][
+        "parent_terrain_feature_manifest_ref"
+    ]
+
+
 def test_qgis_worker_persists_grass_terrain_feature_stack_candidate_artifacts(
     tmp_path: Path,
 ) -> None:
@@ -617,16 +959,55 @@ def test_qgis_worker_persists_grass_terrain_feature_stack_candidate_artifacts(
     result = payload["result"]
     assert set(result["processing_algorithms"]) >= {
         "gdal:assignprojection",
+        "gdal:cliprasterbyextent",
+        "gdal:colorrelief",
+        "gdal:rasterize",
+        "native:dissolve",
+        "native:extractbyexpression",
+        "grass:r.contour",
         "grass:r.mapcalc.simple",
+        "grass:r.relief",
         "grass:r.slope.aspect",
         "grass:r.geomorphon",
         "grass:r.thin",
         "grass:r.to.vect",
         "grass:r.watershed",
     }
+    line_filter_calls = [
+        arguments
+        for tool, arguments in mcp.calls
+        if tool == "qgis_processing_start"
+        and arguments["algorithm"] == "native:extractbyexpression"
+    ]
+    assert len(line_filter_calls) == 3
+    assert all(
+        arguments["parameters"]["EXPRESSION"] == "$length >= 160"
+        and arguments["parameters"]["FAIL_OUTPUT"] is None
+        for arguments in line_filter_calls
+    )
+    dissolve_calls = [
+        arguments
+        for tool, arguments in mcp.calls
+        if tool == "qgis_processing_start"
+        and arguments["algorithm"] == "native:dissolve"
+    ]
+    assert len(dissolve_calls) == 3
+    assert all(
+        arguments["parameters"]["FIELD"] == []
+        and arguments["parameters"]["SEPARATE_DISJOINT"] is False
+        for arguments in dissolve_calls
+    )
     assert {artifact["artifact_type"] for artifact in result["artifacts"]} == {
+        "dem_route_bbox_raster",
         "slope_raster",
         "aspect_raster",
+        "hillshade_raster",
+        "elevation_tint_overlay",
+        "hillshade_overlay",
+        "slope_shading_overlay",
+        "contour_lines_vector",
+        "contours_overlay",
+        "terrain_surface_manifest",
         "geomorphon_raster",
         "geomorphon_fine_raster",
         "geomorphon_coarse_raster",
@@ -652,9 +1033,18 @@ def test_qgis_worker_persists_grass_terrain_feature_stack_candidate_artifacts(
         arguments["query"]
         for tool, arguments in mcp.calls
         if tool == "qgis_capabilities_search"
-    } == {
-        "gdal:assignprojection",
+        } == {
+            "gdal:assignprojection",
+            "gdal:buildvirtualraster",
+            "gdal:cliprasterbyextent",
+            "gdal:colorrelief",
+            "gdal:rasterize",
+            "gdal:warpreproject",
+            "native:dissolve",
+        "native:extractbyexpression",
+        "grass:r.contour",
         "grass:r.mapcalc.simple",
+        "grass:r.relief",
         "grass:r.slope.aspect",
         "grass:r.geomorphon",
         "grass:r.thin",
@@ -686,8 +1076,36 @@ def test_qgis_worker_persists_grass_terrain_feature_stack_candidate_artifacts(
         if tool == "qgis_vector_export"
         and arguments["destination_crs"] == "EPSG:4326"
     ]
-    assert len(terrain_vector_exports) == 3
+    assert len(terrain_vector_exports) == 4
     assert all(arguments["format"] == "geojson" for arguments in terrain_vector_exports)
+    clip_call = next(
+        arguments
+        for tool, arguments in mcp.calls
+        if tool == "qgis_processing_start"
+        and arguments["algorithm"] == "gdal:cliprasterbyextent"
+    )
+    assert clip_call["parameters"]["PROJWIN"] == (
+        "259740,270260,2639740,2650260"
+    )
+    contour_call = next(
+        arguments
+        for tool, arguments in mcp.calls
+        if tool == "qgis_processing_start"
+        and arguments["algorithm"] == "grass:r.contour"
+    )
+    assert contour_call["parameters"]["step"] == 100.0
+    assert contour_call["parameters"]["cut"] == 2
+    color_relief_calls = [
+        arguments
+        for tool, arguments in mcp.calls
+        if tool == "qgis_processing_start"
+        and arguments["algorithm"] == "gdal:colorrelief"
+    ]
+    assert len(color_relief_calls) == 4
+    assert all(
+        arguments["parameters"]["EXTRA"] == "-alpha"
+        for arguments in color_relief_calls
+    )
     assert any(
         tool == "qgis_crs"
         and arguments["action"] == "assign_layer"
@@ -724,6 +1142,9 @@ def test_qgis_worker_persists_grass_terrain_feature_stack_candidate_artifacts(
     )
     samples = sample_response.json()
     assert samples["metadata"]["risk_score_applied"] is False
+    assert samples["metadata"]["actual_processor"] == "qgis_processing_grass"
+    assert "elevation_m" in samples["metadata"]["sampled_raster_fields"]
+    assert samples["features"][0]["properties"]["elevation_m"] == 2500.0
     assert samples["features"][0]["properties"]["geomorphon_label"] == "ridge"
     assert samples["features"][0]["properties"]["geomorphon_fine_label"] == "ridge"
     assert samples["features"][0]["properties"]["geomorphon_coarse_label"] == "slope"
@@ -743,6 +1164,7 @@ def test_qgis_worker_persists_grass_terrain_feature_stack_candidate_artifacts(
         "qgis_candidate_valley_line",
         "qgis_candidate_stream_network",
     }.issubset(map_kinds)
+    assert "qgis_candidate_contour_line" not in map_kinds
     assert "qgis_analysis_input_route" in map_kinds
     assert "qgis_candidate_route" not in map_kinds
     assert all(tool != "qgis_capability_invoke" for tool, _ in mcp.calls)
@@ -770,7 +1192,7 @@ def test_qgis_worker_feature_stack_fails_closed_without_required_grass_capabilit
     assert payload["state"] == "failed"
     assert payload["processing_status"] == "failed"
     assert payload["error"]["code"] == "UNSUPPORTED_TOOL"
-    assert "grass:r.mapcalc.simple" in payload["error"]["detail"]
+    assert "grass:r.contour" in payload["error"]["detail"]
 
 
 def test_qgis_worker_uses_bounded_screenshot_fallback(tmp_path: Path) -> None:
@@ -875,11 +1297,12 @@ def _start_and_wait(
     dem: Path,
     *,
     workflow_id: str = "terrain_context_preview.v1",
+    request_payload: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     response = client.post(
         f"/workflows/{workflow_id}",
         headers={"Authorization": f"Bearer {_test_access_value()}"},
-        json=_request(dem, workflow_id=workflow_id),
+        json=request_payload or _request(dem, workflow_id=workflow_id),
     )
     assert response.status_code == 202
     worker_run_id = response.json()["worker_run_id"]

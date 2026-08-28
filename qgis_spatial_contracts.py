@@ -6,12 +6,16 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from terrain_route_hypothesis_models import TerrainRoutingCostConfig
+
 
 QGIS_SPATIAL_SCHEMA_VERSION = "scout_qgis_spatial.v0_1"
 TERRAIN_CONTEXT_PREVIEW_WORKFLOW_ID = "terrain_context_preview.v1"
 TERRAIN_CONTEXT_PREVIEW_WORKFLOW_VERSION = "0.1"
 TERRAIN_FEATURE_STACK_WORKFLOW_ID = "terrain_feature_stack.v1"
 TERRAIN_FEATURE_STACK_WORKFLOW_VERSION = "0.1"
+TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_ID = "terrain_route_hypothesis.v1"
+TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_VERSION = "0.1"
 
 
 def utc_now_iso() -> str:
@@ -70,9 +74,16 @@ class SpatialAnalysisErrorCode(str, Enum):
     BACKEND_NOT_CONFIGURED = "BACKEND_NOT_CONFIGURED"
     QGIS_UNAVAILABLE = "QGIS_UNAVAILABLE"
     MCP_UNAVAILABLE = "MCP_UNAVAILABLE"
+    GRASS_UNAVAILABLE = "GRASS_UNAVAILABLE"
     PROJECT_UNAVAILABLE = "PROJECT_UNAVAILABLE"
     INVALID_INPUT = "INVALID_INPUT"
     CRS_UNRESOLVED = "CRS_UNRESOLVED"
+    DEM_RESOLUTION_TOO_LOW = "DEM_RESOLUTION_TOO_LOW"
+    NODATA_PRESENT = "NODATA_PRESENT"
+    ENDPOINT_OUTSIDE_DEM = "ENDPOINT_OUTSIDE_DEM"
+    ENDPOINTS_COINCIDENT = "ENDPOINTS_COINCIDENT"
+    COST_SURFACE_INCOMPLETE = "COST_SURFACE_INCOMPLETE"
+    NO_CONNECTED_SOLUTION = "NO_CONNECTED_SOLUTION"
     SOURCE_UNAVAILABLE = "SOURCE_UNAVAILABLE"
     PROCESSING_FAILED = "PROCESSING_FAILED"
     RENDER_FAILED = "RENDER_FAILED"
@@ -187,6 +198,9 @@ class SpatialAnalysisRequest(BaseModel):
     corridor_m: float = 250.0
     requested_by: str = "dashboard_operator"
     request_id: str | None = None
+    terrain_routing_cost_config: TerrainRoutingCostConfig = Field(
+        default_factory=TerrainRoutingCostConfig
+    )
 
     @field_validator("corridor_m")
     @classmethod

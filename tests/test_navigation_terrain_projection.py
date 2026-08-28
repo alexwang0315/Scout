@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -18,6 +19,10 @@ from navigation_terrain_projection import (
 def _write_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload), encoding="utf-8")
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
 def _workspace(tmp_path: Path, *, sample_count: int = 300) -> tuple[Path, dict]:
@@ -58,6 +63,9 @@ def _workspace(tmp_path: Path, *, sample_count: int = 300) -> tuple[Path, dict]:
                 {
                     "mode": "contours",
                     "source_path": "outputs/layers/normalized/terrain_contours.png",
+                    "alpha_channel": True,
+                    "opacity": 0.72,
+                    "compositing": "source-over",
                     "bbox_wgs84": {
                         "west": 121.1,
                         "south": 24.0,
@@ -137,6 +145,238 @@ def _workspace(tmp_path: Path, *, sample_count: int = 300) -> tuple[Path, dict]:
     return project_root, project
 
 
+def _attach_terrain_route_hypothesis(
+    project_root: Path,
+    project: dict,
+) -> tuple[str, str]:
+    hypothesis_ref = "outputs/spatial/qgis/terrain-route-cache/cache-1/hypothesis.json"
+    visualization_ref = (
+        "outputs/spatial/qgis/terrain-route-cache/cache-1/visualization.json"
+    )
+    path_coordinates = [[121.11, 24.01], [121.15, 24.05], [121.19, 24.09]]
+    overlay_hashes = {
+        "top_5_percent_corridor": "5" * 64,
+        "top_10_percent_corridor": "a" * 64,
+        "top_20_percent_corridor": "f" * 64,
+    }
+    bands = []
+    overlays = []
+    for percentile in (5, 10, 20):
+        mode = f"top_{percentile}_percent_corridor"
+        overlay_ref = f"outputs/spatial/qgis/terrain-route-cache/cache-1/{mode}.png"
+        bands.append(
+            {
+                "name": mode,
+                "percentile": percentile,
+                "max_relative_corridor_cost": percentile / 10,
+                "cell_count": percentile * 10,
+                "contains_best_path": percentile != 5,
+                "overlay_ref": {
+                    "artifact_ref": overlay_ref,
+                    "sha256": overlay_hashes[mode],
+                    "media_type": "image/png",
+                    "crs": "EPSG:3826",
+                    "bbox_wgs84": {
+                        "west": 121.1,
+                        "south": 24.0,
+                        "east": 121.2,
+                        "north": 24.1,
+                    },
+                },
+            }
+        )
+        overlays.append(
+            {
+                "mode": mode,
+                "source_path": overlay_ref,
+                "sha256": overlay_hashes[mode],
+                "bbox_wgs84": {
+                    "west": 121.1,
+                    "south": 24.0,
+                    "east": 121.2,
+                    "north": 24.1,
+                },
+                "pixel_width": 64,
+                "pixel_height": 64,
+                "percentile": percentile,
+                "default_visible": percentile == 10,
+                "opacity": {5: 0.58, 10: 0.44, 20: 0.3}[percentile],
+                "threshold_semantics": (
+                    "finite_symmetric_macro_terrain_relative_cost_cell_percentile"
+                ),
+                "contains_best_path": percentile != 5,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "operational": False,
+            }
+        )
+    hypothesis = {
+        "schema_version": "scout_terrain_route_hypothesis.v0_2",
+        "artifact_kind": "terrain_route_hypothesis_run",
+        "status": "completed",
+        "created_at": "2026-08-28T00:00:00Z",
+        "hypotheses": [
+            {
+                "id": "route-demo.terrain-route.R1",
+                "label": "R1 terrain route hypothesis",
+                "start": {"x": 121.11, "y": 24.01, "crs": "EPSG:4326"},
+                "destination": {"x": 121.19, "y": 24.09, "crs": "EPSG:4326"},
+                "best_path": {
+                    "type": "LineString",
+                    "coordinates": path_coordinates,
+                    "crs": "EPSG:4326",
+                },
+                "path_model": "anisotropic_walk",
+                "path_semantics": "minimum_anisotropic_model_cost_trace",
+                "corridor": {"bands": bands},
+                "metrics": {
+                    "relative_score": 0.69,
+                    "relative_cost": 0.31,
+                    "distance_m": 1234,
+                    "elevation_gain_m": 240,
+                    "elevation_loss_m": 80,
+                    "max_slope_degrees": 31,
+                    "median_slope_degrees": 16,
+                    "high_cost_fraction": 0.08,
+                },
+                "reasons": [
+                    {
+                        "code": "moderate_slope",
+                        "polarity": "positive",
+                        "description": "Most sampled cells have moderate modeled slope cost.",
+                    },
+                    {
+                        "code": "short_high_slope_section",
+                        "polarity": "negative",
+                        "description": "A short section has high modeled slope cost.",
+                    },
+                ],
+                "unknowns": [
+                    {
+                        "code": "legal_access_unknown",
+                        "description": "Terrain data does not establish legal access.",
+                    }
+                ],
+                "dem_resolution_m": 20,
+                "resolution_class": "macro_terrain_only",
+                "confidence_limits": ["microterrain_not_resolved"],
+                "cost_model_version": "terrain_routing_cost.v0_1",
+                "provenance": {
+                    "dem_dataset_id": "dem-demo",
+                    "dem_sha256": "d" * 64,
+                    "dem_resolution_m": 20,
+                    "dem_crs": "EPSG:3826",
+                    "dem_extent": {
+                        "x_min": 0,
+                        "y_min": 0,
+                        "x_max": 1000,
+                        "y_max": 1000,
+                    },
+                    "input_endpoints": {
+                        "start": {"x": 121.11, "y": 24.01},
+                        "destination": {"x": 121.19, "y": 24.09},
+                    },
+                    "cost_model_version": "terrain_routing_cost.v0_1",
+                    "weights": {"slope_weight": 1.0},
+                    "weights_hash": "e" * 64,
+                    "grass_version": "8.5.0",
+                    "qgis_version": "3.44.13",
+                    "backend_id": "grass-qgis-worker",
+                    "modules_executed": ["r.slope.aspect", "r.walk", "r.path", "r.cost"],
+                    "timestamp": "2026-08-28T00:00:00Z",
+                    "algorithm_version": "terrain_route_hypothesis.v0_2",
+                    "processing_manifest": {
+                        "workflow": "terrain_route_hypothesis.v0_2",
+                        "path_model": {
+                            "id": "anisotropic_walk",
+                            "semantics": "minimum_anisotropic_model_cost_trace",
+                        },
+                        "band_model": {
+                            "id": "symmetric_macro_terrain_cost",
+                            "semantics": "finite_symmetric_macro_terrain_relative_cost_cell_percentile",
+                        },
+                        "path_band_relationship": "separate_model_not_path_confidence_band",
+                    },
+                    "cache_key": "cache-1",
+                    "cache_keys": {"route_hypothesis": "cache-1"},
+                },
+            }
+        ],
+    }
+    visualization = {
+        "schema_version": "scout_terrain_route_visualization.v0_2",
+        "artifact_kind": "terrain_route_hypothesis_visualization",
+        "authority": "candidate_only",
+        "source_type": "terrain_hypothesis",
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "operational": False,
+        "display_labels": [
+            "CANDIDATE",
+            "TERRAIN HYPOTHESIS",
+            "NOT A VERIFIED TRAIL",
+        ],
+        "path_model": {
+            "id": "anisotropic_walk",
+            "semantics": "minimum_anisotropic_model_cost_trace",
+            "display_name": "minimum anisotropic model-cost trace",
+        },
+        "band_model": {
+            "id": "symmetric_macro_terrain_cost",
+            "semantics": "finite_symmetric_macro_terrain_relative_cost_cell_percentile",
+            "display_name": "symmetric macro-terrain detour-score percentile cells",
+        },
+        "path_band_relationship": "separate_model_not_path_confidence_band",
+        "features": [
+            {
+                "type": "Feature",
+                "geometry": {"type": "LineString", "coordinates": path_coordinates},
+                "properties": {
+                    "id": "route-demo.terrain-route.R1",
+                    "kind": "terrain_route_hypothesis_best_path",
+                    "feature_class": "terrain_route_hypothesis_best_path",
+                    "path_model": "anisotropic_walk",
+                    "path_semantics": "minimum_anisotropic_model_cost_trace",
+                    "path_band_relationship": "separate_model_not_path_confidence_band",
+                    "authority": "candidate_only",
+                    "source_type": "terrain_hypothesis",
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                    "operational": False,
+                    "observed": False,
+                    "official": False,
+                    "human_verified": False,
+                },
+            }
+        ],
+        "raster_overlays": overlays,
+        "boundary": {
+            "promotion_allowed": False,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "operational": False,
+        },
+    }
+    _write_json(project_root / hypothesis_ref, hypothesis)
+    _write_json(project_root / visualization_ref, visualization)
+    project.update(
+        {
+            "terrain_route_hypothesis_ref": hypothesis_ref,
+            "terrain_route_hypothesis_sha256": _sha256(project_root / hypothesis_ref),
+            "terrain_route_hypothesis_visualization_ref": visualization_ref,
+            "terrain_route_hypothesis_visualization_sha256": _sha256(
+                project_root / visualization_ref
+            ),
+            "terrain_route_hypothesis_cache_key": "cache-1",
+            "terrain_route_hypothesis_status": "completed",
+            "terrain_route_hypothesis_authority": "candidate_only",
+            "terrain_route_hypothesis_candidate_only": True,
+            "terrain_route_hypothesis_runtime_safety_truth": False,
+        }
+    )
+    return hypothesis_ref, visualization_ref
+
+
 def test_projection_is_bounded_candidate_only_and_reports_structure_gaps(
     tmp_path: Path,
 ) -> None:
@@ -154,6 +394,10 @@ def test_projection_is_bounded_candidate_only_and_reports_structure_gaps(
         "contours",
         "slope_shading",
     ]
+    contour_overlay = result["terrain_surface"]["overlays"][0]
+    assert contour_overlay["alpha_channel"] is True
+    assert contour_overlay["opacity"] == 0.72
+    assert contour_overlay["compositing"] == "source-over"
     assert result["terrain_mesh"]["status"] == "not_prepared"
     assert result["terrain_mesh"]["boundary"]["visualization_only"] is True
     assert result["terrain_passage_prior"]["status"] == "not_prepared"
@@ -209,6 +453,239 @@ def test_projection_returns_explicit_unavailable_without_artifacts(
     assert result["terrain_validation"]["validation_state"] == (
         "blocked_pending_reference"
     )
+
+
+def test_projection_exposes_hash_bound_candidate_only_terrain_route_hypothesis(
+    tmp_path: Path,
+) -> None:
+    project_root, project = _workspace(tmp_path, sample_count=4)
+    hypothesis_ref, visualization_ref = _attach_terrain_route_hypothesis(
+        project_root,
+        project,
+    )
+
+    result = build_navigation_terrain_projection(
+        project_root,
+        project,
+        project_id="route-demo",
+    )
+
+    candidate = result["terrain_route_hypothesis"]
+    assert candidate["status"] == "candidate_ready"
+    assert candidate["candidate"] == "route-demo.terrain-route.R1"
+    assert candidate["display_labels"] == [
+        "CANDIDATE",
+        "TERRAIN HYPOTHESIS",
+        "NOT A VERIFIED TRAIL",
+    ]
+    assert candidate["boundary"] == {
+        "authority": "candidate_only",
+        "source_type": "terrain_hypothesis",
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "operational": False,
+        "safe_or_walkable": "not_determined",
+        "promotion_allowed": False,
+        "human_review_required": True,
+    }
+    assert candidate["positive_evidence"] == ["moderate_slope"]
+    assert candidate["negative_evidence"] == ["short_high_slope_section"]
+    assert candidate["unknowns"][0]["code"] == "legal_access_unknown"
+    assert candidate["resolution_class"] == "macro_terrain_only"
+    assert candidate["path_model"] == {
+        "id": "anisotropic_walk",
+        "semantics": "minimum_anisotropic_model_cost_trace",
+        "display_name": "minimum anisotropic model-cost trace",
+    }
+    assert candidate["corridor"]["band_model"]["id"] == (
+        "symmetric_macro_terrain_cost"
+    )
+    assert candidate["corridor"]["path_relationship"] == (
+        "separate_model_not_path_confidence_band"
+    )
+    assert [band["percentile"] for band in candidate["corridor"]["bands"]] == [
+        5.0,
+        10.0,
+        20.0,
+    ]
+    assert all(
+        band["runtime_href"].startswith(
+            "/admin/pretrip/projects/route-demo/terrain-route-overlays/"
+        )
+        for band in candidate["corridor"]["bands"]
+    )
+    assert candidate["corridor"]["bands"][0]["contains_best_path"] is False
+    assert all(
+        band["best_path_union_applied"] is False
+        for band in candidate["corridor"]["bands"]
+    )
+    assert hypothesis_ref in result["source_refs"]
+    assert visualization_ref in result["source_refs"]
+    assert "不表示實地存在步道、可通行或安全" in candidate[
+        "uncertainty_statement"
+    ]
+
+
+def test_projection_fails_closed_when_terrain_route_visualization_hash_drifts(
+    tmp_path: Path,
+) -> None:
+    project_root, project = _workspace(tmp_path, sample_count=4)
+    _, visualization_ref = _attach_terrain_route_hypothesis(project_root, project)
+    visualization_path = project_root / visualization_ref
+    visualization_path.write_text("{}", encoding="utf-8")
+
+    result = build_navigation_terrain_projection(
+        project_root,
+        project,
+        project_id="route-demo",
+    )
+
+    candidate = result["terrain_route_hypothesis"]
+    assert candidate["status"] == "unavailable"
+    assert candidate["reason"] == "terrain_route_hypothesis_validation_failed"
+    assert candidate["source_refs"] == []
+    assert candidate["boundary"]["authority"] == "candidate_only"
+    assert candidate["boundary"]["promotion_allowed"] is False
+
+
+def test_projection_prefers_qgis_grass_vectors_over_local_morphology_comparator(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_root, project = _workspace(tmp_path, sample_count=4)
+    terrain_path = project_root / project["terrain_visualization_ref"]
+    terrain = json.loads(terrain_path.read_text(encoding="utf-8"))
+    terrain["features"] = [
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "MultiLineString",
+                "coordinates": [[[121.11, 24.01], [121.12, 24.02]]],
+            },
+            "properties": {
+                "kind": "qgis_candidate_ridge_line",
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "operational": False,
+            },
+        }
+    ]
+    _write_json(terrain_path, terrain)
+    monkeypatch.setattr(
+        navigation_terrain_projection,
+        "_workspace_structure_projection",
+        lambda *_args, **_kwargs: {
+            "status": "ready",
+            "counts": {"ridge": 4, "valley": 0, "saddle": 0},
+            "rendered_counts": {"ridge": 1, "valley": 0, "saddle": 0},
+            "points": [{"id": "local-ridge", "feature_kind": "ridge"}],
+            "error": None,
+            "boundary": {},
+        },
+    )
+
+    result = build_navigation_terrain_projection(
+        project_root,
+        project,
+        project_id="route-demo",
+    )
+
+    ridge = result["feature_extraction"]["ridge"]
+    assert ridge["status"] == "candidate_vectors"
+    assert ridge["source"] == "qgis_processing_grass"
+    assert ridge["count"] == 1
+    assert ridge["comparison_point_count"] == 1
+    assert ridge["runtime_safety_truth"] is False
+
+
+def test_standard_grass_projection_does_not_rebuild_python_dtm_analysis(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_root, project = _workspace(tmp_path, sample_count=4)
+    project["terrain_visualization_processor"] = "qgis_processing_grass"
+    terrain_path = project_root / project["terrain_visualization_ref"]
+    terrain = json.loads(terrain_path.read_text(encoding="utf-8"))
+    terrain["visualization_spec"] = {
+        "actual_processor": "qgis_processing_grass",
+        "standard_processor_completed": True,
+        "fallback_used": False,
+        "python_dtm_processing_used": False,
+    }
+    terrain["boundary"] = {
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "operational": False,
+        "visualization_only": True,
+    }
+    terrain["features"] = [
+        {
+            "type": "Feature",
+            "geometry": {
+                "type": "MultiLineString",
+                "coordinates": [[[121.11, 24.01], [121.12, 24.02]]],
+            },
+            "properties": {
+                "kind": "qgis_candidate_ridge_line",
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "operational": False,
+            },
+        }
+    ]
+    _write_json(terrain_path, terrain)
+
+    def fail_python_dtm(*_args: object, **_kwargs: object) -> object:
+        pytest.fail("standard GRASS projection must not rebuild Python DTM analysis")
+
+    monkeypatch.setattr(
+        navigation_terrain_projection,
+        "load_workspace_terrain_grid",
+        fail_python_dtm,
+    )
+    monkeypatch.setattr(
+        navigation_terrain_projection,
+        "_workspace_structure_projection",
+        fail_python_dtm,
+    )
+    monkeypatch.setattr(
+        navigation_terrain_projection,
+        "_workspace_terrain_mesh_projection",
+        fail_python_dtm,
+    )
+    monkeypatch.setattr(
+        navigation_terrain_projection,
+        "_workspace_terrain_bundle",
+        fail_python_dtm,
+    )
+    monkeypatch.setattr(
+        navigation_terrain_projection,
+        "_workspace_terrain_passage_prior",
+        fail_python_dtm,
+    )
+
+    result = build_navigation_terrain_projection(
+        project_root,
+        project,
+        project_id="route-demo",
+    )
+
+    assert result["terrain_processing"] == {
+        "primary_processor": "qgis_processing_grass",
+        "standard_processor_completed": True,
+        "fallback_used": False,
+        "python_dtm_processing_used": False,
+        "local_python_comparator": "not_run",
+    }
+    assert result["terrain_structures"]["status"] == "standard_gis_primary"
+    assert result["terrain_structures"]["counts"]["ridge"] == 1
+    assert result["terrain_mesh"]["status"] == "not_prepared"
+    assert result["terrain_passage_prior"]["status"] == "not_prepared"
+    assert result["feature_extraction"]["ridge"]["source"] == (
+        "qgis_processing_grass"
+    )
+    assert result["boundary"]["candidate_only"] is True
+    assert result["boundary"]["runtime_safety_truth"] is False
 
 
 def test_projection_rejects_artifact_reference_outside_project(

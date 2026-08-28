@@ -27,6 +27,7 @@ from scout_layer_contract import SCOUT_PREPARATION_LAYER_IDS
 
 from admin_imagery_sources import (
     DEFAULT_REGISTRY_ID,
+    HISTORICAL_MAP_CACHE_SOURCE_IDS,
     imagery_source_for_project,
     load_imagery_source_registry,
     wmts_source_metadata,
@@ -56,6 +57,7 @@ from pretrip_spatial_risk_inputs import (
     QGIS_SPATIAL_RISK_INPUT_REFS,
     sync_reviewed_qgis_spatial_risk_inputs,
 )
+from pretrip_qgis_risk_adapter import prepare_qgis_grass_risk_outputs
 
 
 LAYER_PREPARATION_VERSION = "0.1.0"
@@ -63,6 +65,43 @@ RISK_PROVENANCE_STAMP_VERSION = "pretrip_risk_provenance.v0.1"
 DEFAULT_OSM_PBF_CACHE_TTL_DAYS = 30
 OVERPASS_FETCH_MAX_ATTEMPTS = 3
 DEFAULT_NAVIGATION_TERRAIN_DEM_ZOOMS = (13, 14, 15)
+QGIS_TERRAIN_PREPARATION_REF = (
+    "outputs/spatial/qgis/map_preparation_status.json"
+)
+QGIS_TERRAIN_ROUTE_PREPARATION_REF = (
+    "outputs/spatial/qgis/terrain_route_preparation_status.json"
+)
+QGIS_TERRAIN_PROJECT_REF_KEYS = (
+    "terrain_visualization_ref",
+    "terrain_visualization_processor",
+    "terrain_visualization_workflow_run_id",
+    "terrain_dem_route_bbox_raster_ref",
+    "terrain_hillshade_raster_ref",
+    "terrain_hillshade_overlay_ref",
+    "terrain_elevation_tint_overlay_ref",
+    "terrain_slope_shading_overlay_ref",
+    "terrain_contours_overlay_ref",
+    "terrain_contour_lines_vector_ref",
+    "terrain_surface_manifest_ref",
+    "terrain_feature_manifest_ref",
+    "qgis_ridge_lines_vector_ref",
+    "qgis_valley_lines_vector_ref",
+    "qgis_stream_network_vector_ref",
+)
+QGIS_TERRAIN_ROUTE_PROJECT_REF_KEYS = (
+    "terrain_route_hypothesis_ref",
+    "terrain_route_hypothesis_sha256",
+    "terrain_route_hypothesis_cache_key",
+    "terrain_route_hypothesis_visualization_ref",
+    "terrain_route_hypothesis_visualization_sha256",
+    "terrain_route_hypothesis_best_path_ref",
+    "terrain_route_hypothesis_processing_manifest_ref",
+    "terrain_route_hypothesis_workflow_run_id",
+    "terrain_route_hypothesis_status",
+    "terrain_route_hypothesis_authority",
+    "terrain_route_hypothesis_candidate_only",
+    "terrain_route_hypothesis_runtime_safety_truth",
+)
 WORKSPACE_RASTER_CACHE_SEED_WORKERS = 4
 WORKSPACE_RASTER_CACHE_SOURCE_IDS: tuple[tuple[str, str | None], ...] = (
     ("imagery", None),
@@ -72,7 +111,7 @@ WORKSPACE_RASTER_CACHE_SOURCE_IDS: tuple[tuple[str, str | None], ...] = (
     ("geology", "happyman_geo2016"),
     ("topo-5k", "happyman_tw5k2000"),
     ("forest", "happyman_forest"),
-    ("historical-fandi-1916", "sinica_jm50k_1916"),
+    *HISTORICAL_MAP_CACHE_SOURCE_IDS,
 )
 LayerProfile = Literal["mac-workstation", "pi-offline", "pi-online-explicit"]
 NetworkMode = Literal["no-network", "explicit-fetch"]
@@ -433,6 +472,14 @@ class LayerPreparationRequest:
     osm_pbf_source_url: str | None = None
     osm_pbf_cache_ttl_days: int = DEFAULT_OSM_PBF_CACHE_TTL_DAYS
     osmium_bin: str = "osmium"
+    run_qgis_terrain_workflow: bool = True
+    qgis_status_retry_attempts: int = 3
+    qgis_status_retry_interval_s: float = 1.0
+    qgis_terrain_analysis_margin_m: float = 250.0
+    qgis_route_contact_distance_m: float = 10.0
+    qgis_terrain_workflow_timeout_s: float = 1_800.0
+    qgis_terrain_poll_interval_s: float = 0.5
+    qgis_requested_by: str = "map_preparation"
     prepared_at: str | None = None
 
 
@@ -517,6 +564,91 @@ def run_layer_preparation(request: LayerPreparationRequest) -> dict[str, Any]:
     manifest["map_preparation_spec_artifacts"] = map_preparation_spec_artifacts
     if request.publish_preparation_outputs:
         outputs.update(_write_planned_overpass_evidence(project_root, manifest))
+        _update_project_refs(
+            project_root / "project.json",
+            project,
+            outputs,
+            manifest["finished_at"],
+        )
+    route_context_source_refresh = (
+        _run_route_context_source_refresh_after_map_preparation(
+            project_root=project_root,
+            manifest=manifest,
+            request=request,
+        )
+        if request.publish_preparation_outputs
+        and request.run_post_layer_enrichments
+        and request.run_map_preparation_spec_artifacts
+        else _skipped_connected_refresh_post_enrichment(
+            "route_context_source_refresh"
+        )
+    )
+    manifest["route_context_source_refresh"] = route_context_source_refresh
+    outputs.update(route_context_source_refresh.get("output_refs", {}))
+    if route_context_source_refresh.get("status") == "completed":
+        _update_project_refs(
+            project_root / "project.json",
+            project,
+            outputs,
+            manifest["finished_at"],
+        )
+    qgis_terrain_feature_stack = (
+        _run_qgis_terrain_feature_stack_after_layer_preparation(
+            project_root=project_root,
+            manifest=manifest,
+            request=request,
+        )
+        if request.publish_preparation_outputs
+        and request.run_post_layer_enrichments
+        and request.run_map_preparation_spec_artifacts
+        and request.run_qgis_terrain_workflow
+        else _qgis_terrain_preparation_not_run(request, manifest)
+    )
+    manifest["qgis_terrain_feature_stack"] = qgis_terrain_feature_stack
+    manifest["qgis_dependent_risk"] = _finalize_qgis_dependent_risk_state(
+        project_root=project_root,
+        manifest=manifest,
+        qgis_terrain_feature_stack=qgis_terrain_feature_stack,
+    )
+    manifest["terrain_risk_candidate_refresh"] = (
+        _refresh_terrain_risk_candidate_artifact_after_qgis_risk(
+            project_root=project_root,
+            manifest=manifest,
+        )
+    )
+    outputs.update(
+        _project_state_output_refs(_load_json(project_root / "project.json"))
+    )
+    outputs.update(qgis_terrain_feature_stack.get("output_refs", {}))
+    if request.publish_preparation_outputs:
+        _update_project_refs(
+            project_root / "project.json",
+            project,
+            outputs,
+            manifest["finished_at"],
+        )
+    terrain_route_hypothesis = (
+        _run_qgis_terrain_route_hypothesis_after_layer_preparation(
+            project_root=project_root,
+            manifest=manifest,
+            request=request,
+            qgis_terrain_feature_stack=qgis_terrain_feature_stack,
+        )
+        if request.publish_preparation_outputs
+        and request.run_post_layer_enrichments
+        and request.run_map_preparation_spec_artifacts
+        and request.run_qgis_terrain_workflow
+        else _terrain_route_hypothesis_not_run(
+            request=request,
+            qgis_terrain_feature_stack=qgis_terrain_feature_stack,
+        )
+    )
+    manifest["terrain_route_hypothesis"] = terrain_route_hypothesis
+    outputs.update(terrain_route_hypothesis.get("output_refs", {}))
+    outputs.update(
+        _project_state_output_refs(_load_json(project_root / "project.json"))
+    )
+    if request.publish_preparation_outputs:
         _update_project_refs(
             project_root / "project.json",
             project,
@@ -633,17 +765,20 @@ def run_layer_preparation(request: LayerPreparationRequest) -> dict[str, Any]:
     )
     manifest["architecture_preparation"] = architecture_preparation
     outputs.update(architecture_preparation.get("output_refs", {}))
-    navigation_terrain_dem = (
-        _run_navigation_terrain_dem_after_layer_preparation(
-            project_root=project_root,
-            manifest=manifest,
+    qgis_terrain_ready = qgis_terrain_feature_stack.get("status") == "completed"
+    if request.run_post_layer_enrichments and request.run_map_preparation_spec_artifacts:
+        navigation_terrain_dem = (
+            _run_navigation_terrain_dem_after_layer_preparation(
+                project_root=project_root,
+                manifest=manifest,
+            )
+            if qgis_terrain_ready
+            else _navigation_terrain_dem_waiting_for_qgis(qgis_terrain_feature_stack)
         )
-        if request.run_post_layer_enrichments
-        and request.run_map_preparation_spec_artifacts
-        else _skipped_connected_refresh_post_enrichment(
+    else:
+        navigation_terrain_dem = _skipped_connected_refresh_post_enrichment(
             "navigation_terrain_dem"
         )
-    )
     manifest["navigation_terrain_dem"] = navigation_terrain_dem
     if navigation_terrain_dem.get("status") == "completed":
         outputs.update(navigation_terrain_dem.get("output_refs", {}))
@@ -2986,6 +3121,50 @@ def main(argv: list[str] | None = None) -> None:
         default="osmium",
         help="osmium CLI binary used with --osm-pbf-path.",
     )
+    parser.add_argument(
+        "--disable-qgis-terrain-workflow",
+        action="store_true",
+        help=(
+            "Skip the QGIS/GRASS terrain workflow. Terrain artifacts remain "
+            "typed unavailable; no Python terrain fallback is produced."
+        ),
+    )
+    parser.add_argument(
+        "--qgis-status-retry-attempts",
+        type=int,
+        default=3,
+        help="Bounded health-check attempts before QGIS/GRASS preparation fails closed.",
+    )
+    parser.add_argument(
+        "--qgis-status-retry-interval-s",
+        type=float,
+        default=1.0,
+        help="Delay between retryable QGIS/GRASS health checks.",
+    )
+    parser.add_argument(
+        "--qgis-terrain-analysis-margin-m",
+        type=float,
+        default=250.0,
+        help="Rectangle expansion around the imported Golden Route for terrain analysis.",
+    )
+    parser.add_argument(
+        "--qgis-route-contact-distance-m",
+        type=float,
+        default=10.0,
+        help="Dashboard ROUTE_CONNECTED candidate contact distance.",
+    )
+    parser.add_argument(
+        "--qgis-terrain-workflow-timeout-s",
+        type=float,
+        default=1_800.0,
+        help="Maximum wait for the bounded QGIS/GRASS terrain workflow.",
+    )
+    parser.add_argument(
+        "--qgis-terrain-poll-interval-s",
+        type=float,
+        default=0.5,
+        help="Polling interval while map preparation waits for the GIS worker.",
+    )
     parser.add_argument("--prepared-at")
     args = parser.parse_args(argv)
 
@@ -3028,6 +3207,13 @@ def main(argv: list[str] | None = None) -> None:
         osm_pbf_source_url=args.osm_pbf_source_url,
         osm_pbf_cache_ttl_days=args.osm_pbf_cache_ttl_days,
         osmium_bin=args.osmium_bin,
+        run_qgis_terrain_workflow=not args.disable_qgis_terrain_workflow,
+        qgis_status_retry_attempts=args.qgis_status_retry_attempts,
+        qgis_status_retry_interval_s=args.qgis_status_retry_interval_s,
+        qgis_terrain_analysis_margin_m=args.qgis_terrain_analysis_margin_m,
+        qgis_route_contact_distance_m=args.qgis_route_contact_distance_m,
+        qgis_terrain_workflow_timeout_s=args.qgis_terrain_workflow_timeout_s,
+        qgis_terrain_poll_interval_s=args.qgis_terrain_poll_interval_s,
         prepared_at=args.prepared_at,
     )
     manifest = run_layer_preparation(request)
@@ -3839,7 +4025,7 @@ def _maybe_seed_imagery_tile_cache(
     layer_manifest_refs: dict[str, str] = {}
     layer_source_ids: dict[str, str] = {}
     layer_manifests: dict[str, dict[str, Any]] = {}
-    planned_layers: list[tuple[str, dict[str, Any], dict[str, Any]]] = []
+    planned_layers: list[tuple[str, dict[str, Any], dict[str, Any], bool]] = []
 
     for layer_id, source_id in WORKSPACE_RASTER_CACHE_SOURCE_IDS:
         imagery_source = imagery_source_for_project(
@@ -3847,16 +4033,43 @@ def _maybe_seed_imagery_tile_cache(
             layer_id=layer_id,
             source_id=source_id,
         )
+        zoom_range = _workspace_raster_source_zoom_range(
+            imagery_source,
+            requested_min_zoom=request.imagery_min_zoom,
+            requested_max_zoom=request.imagery_max_zoom,
+        )
+        if zoom_range is None:
+            plan = _workspace_raster_no_zoom_overlap_plan(
+                bbox=bbox,
+                project_id=project_id,
+                layer_id=layer_id,
+                imagery_source=imagery_source,
+                cache_root=cache_root,
+                requested_min_zoom=request.imagery_min_zoom,
+                requested_max_zoom=request.imagery_max_zoom,
+            )
+            planned_layers.append((layer_id, imagery_source, plan, False))
+            continue
         plan = build_imagery_tile_cache_plan(
             bbox,
             project_id=project_id,
             layer_id=layer_id,
             imagery_source=imagery_source,
             cache_root=cache_root,
-            min_zoom=request.imagery_min_zoom,
-            max_zoom=request.imagery_max_zoom,
+            min_zoom=zoom_range[0],
+            max_zoom=zoom_range[1],
         )
-        planned_layers.append((layer_id, imagery_source, plan))
+        plan["requested_zoom_range"] = (
+            f"{request.imagery_min_zoom}-{request.imagery_max_zoom}"
+        )
+        plan["provider_zoom_range"] = (
+            f"{imagery_source.get('min_zoom')}-{imagery_source.get('max_zoom')}"
+        )
+        plan["zoom_range_clamped_to_provider"] = zoom_range != (
+            request.imagery_min_zoom,
+            request.imagery_max_zoom,
+        )
+        planned_layers.append((layer_id, imagery_source, plan, True))
 
     with ThreadPoolExecutor(
         max_workers=min(WORKSPACE_RASTER_CACHE_SEED_WORKERS, len(planned_layers))
@@ -3871,14 +4084,46 @@ def _maybe_seed_imagery_tile_cache(
                 max_tiles=request.imagery_seed_max_tiles,
                 fallback_cache_project_ids=request.imagery_cache_fallback_project_ids,
             )
-            for layer_id, imagery_source, plan in planned_layers
+            for layer_id, imagery_source, plan, seedable in planned_layers
+            if seedable
         }
         seed_summaries = {
-            layer_id: seed_futures[layer_id].result()
-            for layer_id, _imagery_source, _plan in planned_layers
+            layer_id: (
+                seed_futures[layer_id].result()
+                if seedable
+                else _workspace_raster_no_zoom_overlap_summary(plan)
+            )
+            for layer_id, _imagery_source, plan, seedable in planned_layers
         }
 
-    for layer_id, imagery_source, plan in planned_layers:
+    historical_layer_ids = {
+        layer_id for layer_id, _source_id in HISTORICAL_MAP_CACHE_SOURCE_IDS
+    }
+    historical_seed_summaries = {
+        layer_id: seed_summaries[layer_id]
+        for layer_id in historical_layer_ids
+    }
+    historical_seed_statuses = {
+        layer_id: str(summary.get("status") or "unknown")
+        for layer_id, summary in historical_seed_summaries.items()
+    }
+    historical_ready_count = sum(
+        1
+        for summary in historical_seed_summaries.values()
+        if _raster_seed_summary_has_usable_tiles(summary)
+    )
+    historical_no_coverage_count = sum(
+        1
+        for status in historical_seed_statuses.values()
+        if status == "seed_no_coverage"
+    )
+    historical_error_count = sum(
+        1
+        for status in historical_seed_statuses.values()
+        if status == "seed_completed_with_errors"
+    )
+
+    for layer_id, imagery_source, plan, _seedable in planned_layers:
         seed_summary = seed_summaries[layer_id]
         plan_ref = (
             f"outputs/layers/manifests/{project_id}.{layer_id}."
@@ -3933,6 +4178,16 @@ def _maybe_seed_imagery_tile_cache(
             layer_id: manifest["seed_summary"].get("status")
             for layer_id, manifest in layer_manifests.items()
         },
+        "historical_map_cache_layer_ids": sorted(historical_layer_ids),
+        "historical_map_cache_source_ids": {
+            layer_id: source_id
+            for layer_id, source_id in HISTORICAL_MAP_CACHE_SOURCE_IDS
+        },
+        "historical_map_cache_statuses": historical_seed_statuses,
+        "historical_map_cache_layer_count": len(historical_layer_ids),
+        "historical_map_cache_ready_count": historical_ready_count,
+        "historical_map_cache_no_coverage_count": historical_no_coverage_count,
+        "historical_map_cache_error_count": historical_error_count,
         "delivery_policy": "workspace_cache_first_explicit_remote_refresh",
         "candidate_only": True,
         "runtime_safety_truth": False,
@@ -3961,6 +4216,16 @@ def _maybe_seed_imagery_tile_cache(
         "workspace_raster_tile_cache_delivery_policy": (
             "workspace_cache_first_explicit_remote_refresh"
         ),
+        "historical_map_cache_layer_ids": sorted(historical_layer_ids),
+        "historical_map_cache_source_ids": {
+            layer_id: source_id
+            for layer_id, source_id in HISTORICAL_MAP_CACHE_SOURCE_IDS
+        },
+        "historical_map_cache_statuses": historical_seed_statuses,
+        "historical_map_cache_layer_count": len(historical_layer_ids),
+        "historical_map_cache_ready_count": historical_ready_count,
+        "historical_map_cache_no_coverage_count": historical_no_coverage_count,
+        "historical_map_cache_error_count": historical_error_count,
         "imagery_tile_cache_plan_ref": imagery_manifest["plan_ref"],
         "imagery_tile_cache_manifest_ref": layer_manifest_refs["imagery"],
         "imagery_tile_cache_root": imagery_plan.get("cache_root"),
@@ -3987,6 +4252,88 @@ def _maybe_seed_imagery_tile_cache(
     return bundle
 
 
+def _workspace_raster_source_zoom_range(
+    imagery_source: dict[str, Any],
+    *,
+    requested_min_zoom: int,
+    requested_max_zoom: int,
+) -> tuple[int, int] | None:
+    source_min_zoom = int(imagery_source.get("min_zoom", requested_min_zoom))
+    source_max_zoom = int(imagery_source.get("max_zoom", requested_max_zoom))
+    effective_min_zoom = max(int(requested_min_zoom), source_min_zoom)
+    effective_max_zoom = min(int(requested_max_zoom), source_max_zoom)
+    if effective_min_zoom > effective_max_zoom:
+        return None
+    return effective_min_zoom, effective_max_zoom
+
+
+def _workspace_raster_no_zoom_overlap_plan(
+    *,
+    bbox: dict[str, Any],
+    project_id: str,
+    layer_id: str,
+    imagery_source: dict[str, Any],
+    cache_root: Path,
+    requested_min_zoom: int,
+    requested_max_zoom: int,
+) -> dict[str, Any]:
+    return {
+        "artifact_kind": "admin_imagery_tile_cache_plan",
+        "schema_version": "1.0",
+        "plan_id": f"admin_imagery_tile_cache.{project_id}.{layer_id}.no-overlap",
+        "status": "planned_no_provider_zoom_overlap",
+        "project_id": project_id,
+        "layer_id": layer_id,
+        "source_id": imagery_source.get("source_id"),
+        "source_kind": imagery_source.get("source_kind"),
+        "source_provider": imagery_source.get("provider"),
+        "source_attribution": imagery_source.get("attribution"),
+        "cache_root": str(cache_root),
+        "bbox_wgs84": bbox,
+        "requested_zoom_range": f"{requested_min_zoom}-{requested_max_zoom}",
+        "provider_zoom_range": (
+            f"{imagery_source.get('min_zoom')}-{imagery_source.get('max_zoom')}"
+        ),
+        "min_zoom": None,
+        "max_zoom": None,
+        "zoom_range": None,
+        "within_capacity_limit": True,
+        "estimated_total_bytes": 0,
+        "total_tile_count": 0,
+        "zoom_ranges": [],
+        "external_network_required": False,
+        "remote_fetch_requires_explicit_enable": True,
+        "downloads_tiles_into_repo": False,
+        "raw_raster_committed_to_repo_allowed": False,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+
+
+def _workspace_raster_no_zoom_overlap_summary(
+    plan: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "status": "seed_no_coverage",
+        "reason": "requested_provider_zoom_range_no_overlap",
+        "dry_run": False,
+        "tiles_seen": 0,
+        "tiles_written": 0,
+        "tiles_refreshed": 0,
+        "tiles_skipped_existing": 0,
+        "tiles_copied_from_fallback_cache": 0,
+        "tiles_failed": 0,
+        "tiles_blank_or_transparent": 0,
+        "tiles_provider_no_coverage": 0,
+        "tiles_no_coverage_total": 0,
+        "tile_fetch_attempts": 0,
+        "bytes_written": 0,
+        "cache_root": plan["cache_root"],
+        "requested_zoom_range": plan["requested_zoom_range"],
+        "provider_zoom_range": plan["provider_zoom_range"],
+    }
+
+
 def _imagery_tile_cache_root(
     request: LayerPreparationRequest,
     *,
@@ -3995,6 +4342,17 @@ def _imagery_tile_cache_root(
     if request.imagery_cache_root is not None:
         return request.imagery_cache_root.expanduser().resolve()
     return (project_root / "cache" / "raster-tiles").resolve()
+
+
+def _raster_seed_summary_has_usable_tiles(summary: dict[str, Any]) -> bool:
+    return any(
+        int(summary.get(key, 0) or 0) > 0
+        for key in (
+            "tiles_written",
+            "tiles_skipped_existing",
+            "tiles_copied_from_fallback_cache",
+        )
+    )
 
 
 def _risk_score_layer_record(
@@ -4007,10 +4365,10 @@ def _risk_score_layer_record(
     route_metadata_ref = project.get("risk_route_profile_metadata_ref", "")
     score_ref = project.get("risk_score_points_ref", "")
     route_ref = project.get("risk_route_profile_ref", "")
-    warnings: list[str] = []
+    pending_status, warnings, blockers = _pending_qgis_risk_context(project)
     source_refs: list[dict[str, Any]] = []
     counts: dict[str, Any] = {}
-    status = "missing_source"
+    status = pending_status or "missing_source"
 
     metadata_path = project_root / metadata_ref if metadata_ref else None
     if metadata_path is not None and metadata_path.exists():
@@ -4024,7 +4382,8 @@ def _risk_score_layer_record(
         )
         counts.update(_risk_score_counts(metadata))
         status = "ready_from_project_ref"
-    else:
+        blockers = []
+    elif pending_status is None:
         warnings.append(
             "Scout Risk Engine risk-score metadata is missing; run layer preparation with risk-score after route risk generation."
         )
@@ -4053,7 +4412,7 @@ def _risk_score_layer_record(
         },
         "counts": counts,
         "warnings": warnings,
-        "blockers": [],
+        "blockers": blockers,
         "stale_risk": "medium",
         "score_profile": project.get(
             "risk_score_source_profile",
@@ -4071,10 +4430,10 @@ def _risk_ribbon_layer_record(
 ) -> dict[str, Any]:
     metadata_ref = project.get("risk_ribbon_metadata_ref", "")
     ribbon_ref = project.get("risk_ribbon_ref", "")
-    warnings: list[str] = []
+    pending_status, warnings, blockers = _pending_qgis_risk_context(project)
     source_refs: list[dict[str, Any]] = []
     counts: dict[str, Any] = {}
-    status = "missing_source"
+    status = pending_status or "missing_source"
 
     metadata_path = project_root / metadata_ref if metadata_ref else None
     if metadata_path is not None and metadata_path.exists():
@@ -4088,7 +4447,8 @@ def _risk_ribbon_layer_record(
         )
         counts.update(_risk_ribbon_counts(metadata))
         status = "ready_from_project_ref"
-    else:
+        blockers = []
+    elif pending_status is None:
         warnings.append(
             "Scout Risk Engine risk-ribbon metadata is missing; run layer preparation with risk-ribbon after route risk generation."
         )
@@ -4125,7 +4485,7 @@ def _risk_ribbon_layer_record(
         },
         "counts": counts,
         "warnings": warnings,
-        "blockers": [],
+        "blockers": blockers,
         "stale_risk": "medium",
         "score_profile": project.get(
             "risk_score_source_profile",
@@ -4145,10 +4505,10 @@ def _risk_heatmap_layer_record(
     heatmap_ref = project.get("calibrated_risk_heatmap_ref", "")
     diagnostic_ref = project.get("risk_attribution_diagnostic_ref", "")
     warning_ref = project.get("excluded_extreme_warning_cp_proposals_ref", "")
-    warnings: list[str] = []
+    pending_status, warnings, blockers = _pending_qgis_risk_context(project)
     source_refs: list[dict[str, Any]] = []
     counts: dict[str, Any] = {}
-    status = "missing_source"
+    status = pending_status or "missing_source"
 
     metadata_path = project_root / metadata_ref if metadata_ref else None
     if metadata_path is not None and metadata_path.exists():
@@ -4162,7 +4522,8 @@ def _risk_heatmap_layer_record(
         )
         counts.update(_risk_heatmap_counts(metadata))
         status = "ready_from_project_ref"
-    else:
+        blockers = []
+    elif pending_status is None:
         warnings.append(
             "Calibrated risk heatmap metadata is missing; run layer preparation with risk-heatmap after route risk and attribution diagnostic generation."
         )
@@ -4202,7 +4563,7 @@ def _risk_heatmap_layer_record(
         },
         "counts": counts,
         "warnings": warnings,
-        "blockers": [],
+        "blockers": blockers,
         "stale_risk": "medium",
         "score_profile": "scout_risk_engine_route_specific_calibration",
     }
@@ -4219,10 +4580,10 @@ def _risk_delta_layer_record(
     calibrated_metadata_ref = project.get("calibrated_risk_heatmap_metadata_ref", "")
     baseline_ref = project.get("risk_ribbon_ref", "")
     calibrated_ref = project.get("calibrated_risk_heatmap_ref", "")
-    warnings: list[str] = []
+    pending_status, warnings, blockers = _pending_qgis_risk_context(project)
     source_refs: list[dict[str, Any]] = []
     counts: dict[str, Any] = {}
-    status = "missing_source"
+    status = pending_status or "missing_source"
 
     baseline_metadata = _load_optional_project_json(
         project_root,
@@ -4253,16 +4614,28 @@ def _risk_delta_layer_record(
     if baseline_metadata and calibrated_metadata and baseline_ref and calibrated_ref:
         baseline_count = int(baseline_metadata.get("segment_count", 0) or 0)
         calibrated_count = int(calibrated_metadata.get("segment_count", 0) or 0)
+        formula = calibrated_metadata.get("formula_candidate")
+        direct_qgis_candidate = (
+            isinstance(formula, dict)
+            and formula.get("calibration_kind")
+            == "qgis_grass_direct_candidate_visualization"
+        )
         counts.update(
             {
                 "baseline_segment_count": baseline_count,
                 "calibrated_segment_count": calibrated_count,
                 "segment_count": min(baseline_count, calibrated_count),
-                "score_surface_type": "baseline_vs_calibrated_delta",
+                "score_surface_type": (
+                    "risk_ribbon_vs_qgis_grass_candidate_comparison"
+                    if direct_qgis_candidate
+                    else "baseline_vs_calibrated_delta"
+                ),
+                "semantic_calibration_applied": not direct_qgis_candidate,
             }
         )
         status = "ready_from_project_ref"
-    else:
+        blockers = []
+    elif pending_status is None:
         warnings.append(
             "Risk delta requires both risk-ribbon and calibrated risk heatmap artifacts."
         )
@@ -4292,11 +4665,284 @@ def _risk_delta_layer_record(
         },
         "counts": counts,
         "warnings": warnings,
-        "blockers": [],
+        "blockers": blockers,
         "stale_risk": "medium",
         "score_profile": "scout_risk_engine_delta_comparison",
     }
     return _with_lifecycle(record)
+
+
+def _pending_qgis_risk_context(
+    project: dict[str, Any],
+) -> tuple[str | None, list[str], list[str]]:
+    status = str(project.get("risk_score_generation_status") or "")
+    if status not in {"awaiting_qgis_grass_processor", "unavailable"}:
+        return None, [], []
+    reason = str(
+        project.get("risk_score_generation_skipped_reason")
+        or "qgis_grass_terrain_evidence_unavailable"
+    )
+    warning = (
+        "Terrain-dependent risk evidence is unavailable until the approved "
+        "QGIS/GRASS processor supplies the required artifacts; Python DEM "
+        "analysis is disabled."
+    )
+    return status, [warning], [reason]
+
+
+def _finalize_qgis_dependent_risk_state(
+    *,
+    project_root: Path,
+    manifest: dict[str, Any],
+    qgis_terrain_feature_stack: dict[str, Any],
+) -> dict[str, Any]:
+    project_path = project_root / "project.json"
+    project = _load_json(project_path)
+    risk_generation_status = str(project.get("risk_score_generation_status") or "")
+    workflow_run_id = str(
+        qgis_terrain_feature_stack.get("workflow_run_id") or ""
+    )
+    current_risk_workflow_run_id = str(
+        project.get("risk_score_qgis_workflow_run_id") or ""
+    )
+    qgis_completed = qgis_terrain_feature_stack.get("status") == "completed"
+    refresh_for_new_qgis_run = (
+        qgis_completed
+        and bool(workflow_run_id)
+        and workflow_run_id != current_risk_workflow_run_id
+        and risk_generation_status in {"completed", "unavailable"}
+    )
+    if (
+        risk_generation_status != "awaiting_qgis_grass_processor"
+        and not refresh_for_new_qgis_run
+    ):
+        return {
+            "status": "not_applicable",
+            "reason": (
+                "risk_outputs_already_match_qgis_workflow"
+                if qgis_completed
+                and workflow_run_id == current_risk_workflow_run_id
+                else "risk_generation_not_waiting_for_qgis_grass"
+            ),
+        }
+    if not qgis_completed:
+        return {
+            "status": "awaiting_qgis_grass_processor",
+            "reason": qgis_terrain_feature_stack.get(
+                "reason",
+                "qgis_grass_terrain_evidence_unavailable",
+            ),
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "operational": False,
+        }
+
+    terrain_processor = str(
+        qgis_terrain_feature_stack.get("output_refs", {}).get(
+            "terrain_visualization_processor",
+            "qgis_processing_grass",
+        )
+    )
+    inputs = _workspace_scout_risk_generation_inputs(
+        project_root=project_root,
+        project=project,
+    )
+    if inputs.get("status") != "ready":
+        reason = str(inputs.get("reason") or "qgis_grass_risk_inputs_missing")
+        return _persist_qgis_risk_adapter_failure(
+            project_path=project_path,
+            project=project,
+            manifest=manifest,
+            reason=reason,
+            terrain_processor=terrain_processor,
+            workflow_run_id=workflow_run_id,
+        )
+    try:
+        adapter_result = prepare_qgis_grass_risk_outputs(
+            project_root=project_root,
+            project_id=str(project.get("project_id") or manifest.get("project_id")),
+            qgis_workflow_run_id=workflow_run_id,
+            overpass_geojson_path=Path(inputs["overpass_geojson_path"]),
+            reference_gpx_path=Path(inputs["reference_gpx_path"]),
+            prepared_at=str(manifest.get("finished_at") or _utc_now()),
+            route_corridor_m=float(
+                manifest.get("route_corridor", {}).get("corridor_m")
+                or 500.0
+            ),
+        )
+    except Exception as exc:
+        return _persist_qgis_risk_adapter_failure(
+            project_path=project_path,
+            project=project,
+            manifest=manifest,
+            reason="qgis_grass_risk_profile_adapter_failed",
+            terrain_processor=terrain_processor,
+            workflow_run_id=workflow_run_id,
+            error=f"{type(exc).__name__}: {exc}",
+        )
+    if adapter_result.get("status") != "completed":
+        return _persist_qgis_risk_adapter_failure(
+            project_path=project_path,
+            project=project,
+            manifest=manifest,
+            reason=str(
+                adapter_result.get("reason")
+                or "qgis_grass_risk_profile_adapter_incomplete"
+            ),
+            terrain_processor=terrain_processor,
+            workflow_run_id=workflow_run_id,
+        )
+
+    output_refs = adapter_result.get("output_refs")
+    if not isinstance(output_refs, dict) or any(
+        output_refs.get(key) != ref for key, ref in SCOUT_RISK_OUTPUT_REFS.items()
+    ):
+        return _persist_qgis_risk_adapter_failure(
+            project_path=project_path,
+            project=project,
+            manifest=manifest,
+            reason="qgis_grass_risk_profile_adapter_contract_mismatch",
+            terrain_processor=terrain_processor,
+            workflow_run_id=workflow_run_id,
+        )
+    updated_project = {
+        **project,
+        **output_refs,
+        "risk_score_generation_status": "completed",
+        "risk_score_generation_basis": "qgis_grass_terrain_candidate_evidence",
+        "risk_score_source_profile": "qgis_grass_terrain_candidate_score.v1",
+        "risk_score_terrain_processor": terrain_processor,
+        "risk_score_actual_processor": "qgis_processing_grass",
+        "risk_score_adapter": str(adapter_result.get("adapter") or ""),
+        "risk_score_qgis_workflow_run_id": workflow_run_id,
+        "risk_score_fallback_used": False,
+        "risk_score_python_dtm_processing_used": False,
+        "risk_score_candidate_only": True,
+        "risk_score_runtime_safety_truth": False,
+        "risk_score_operational": False,
+        "risk_score_adds_source_resolution": False,
+        "risk_score_updated_at": str(manifest.get("finished_at") or _utc_now()),
+    }
+    _clear_risk_generation_failure_metadata(updated_project)
+    _stamp_synced_risk_output_provenance(
+        project_root=project_root,
+        project=updated_project,
+    )
+    updated_project = _project_with_scout_risk_metadata_counts(
+        project_root=project_root,
+        project=updated_project,
+        prepared_at=str(manifest.get("finished_at") or _utc_now()),
+        source_profile="qgis_grass_terrain_candidate_score.v1",
+    )
+    updated_project = _sync_calibrated_risk_outputs(
+        project_root=project_root,
+        project=updated_project,
+    )
+    updated_project = sync_reviewed_qgis_spatial_risk_inputs(
+        project_root=project_root,
+        project=updated_project,
+    )
+    _write_json(project_path, updated_project)
+
+    _refresh_qgis_risk_layer_records(
+        project_root=project_root,
+        project=updated_project,
+        manifest=manifest,
+    )
+    return {
+        **adapter_result,
+        "terrain_processor": terrain_processor,
+        "workflow_run_id": workflow_run_id,
+        "output_refs": {
+            **output_refs,
+            **{
+                key: updated_project[key]
+                for key in CALIBRATED_RISK_OUTPUT_REFS
+                if key in updated_project
+            },
+        },
+    }
+
+
+def _persist_qgis_risk_adapter_failure(
+    *,
+    project_path: Path,
+    project: dict[str, Any],
+    manifest: dict[str, Any],
+    reason: str,
+    terrain_processor: str,
+    workflow_run_id: str,
+    error: str | None = None,
+) -> dict[str, Any]:
+    updated_project = {
+        **project,
+        "risk_score_generation_status": "unavailable",
+        "risk_score_generation_skipped_reason": reason,
+        "risk_score_terrain_processor": terrain_processor,
+        "risk_score_actual_processor": "not_run",
+        "risk_score_qgis_workflow_run_id": workflow_run_id,
+        "risk_score_fallback_used": False,
+        "risk_score_python_dtm_processing_used": False,
+    }
+    if error:
+        updated_project["risk_score_generation_error"] = error[:1000]
+    _write_json(project_path, updated_project)
+
+    risk_layer_ids = {"risk-score", "risk-ribbon", "risk-heatmap", "risk-delta"}
+    warning = (
+        "QGIS/GRASS terrain evidence completed, but its typed route-risk "
+        "adapter failed closed."
+    )
+    manifest["layers"] = [
+        {
+            **layer,
+            "status": "unavailable",
+            "warnings": [warning],
+            "blockers": [reason],
+        }
+        if layer.get("layer_id") in risk_layer_ids
+        and layer.get("status") == "awaiting_qgis_grass_processor"
+        else layer
+        for layer in manifest.get("layers", [])
+    ]
+    return {
+        "status": "unavailable",
+        "reason": reason,
+        "terrain_processor": terrain_processor,
+        "workflow_run_id": workflow_run_id,
+        "actual_processor": "not_run",
+        "fallback_used": False,
+        "python_dtm_processing_used": False,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "operational": False,
+        "adds_source_resolution": False,
+        **({"error": error} if error else {}),
+    }
+
+
+def _refresh_qgis_risk_layer_records(
+    *,
+    project_root: Path,
+    project: dict[str, Any],
+    manifest: dict[str, Any],
+) -> None:
+    builders = {
+        "risk-score": _risk_score_layer_record,
+        "risk-ribbon": _risk_ribbon_layer_record,
+        "risk-heatmap": _risk_heatmap_layer_record,
+        "risk-delta": _risk_delta_layer_record,
+    }
+    manifest["layers"] = [
+        builders[layer["layer_id"]](
+            layer,
+            project_root=project_root,
+            project=project,
+        )
+        if layer.get("layer_id") in builders
+        else layer
+        for layer in manifest.get("layers", [])
+    ]
 
 
 def _qgis_spatial_risk_input_context(
@@ -4695,6 +5341,7 @@ def _summary_from_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
         "raster_label_preparation": manifest.get("raster_label_preparation"),
         "boss_point_synthesis": manifest.get("boss_point_synthesis"),
         "mileage_tag_alignment": manifest.get("mileage_tag_alignment"),
+        "qgis_terrain_feature_stack": manifest.get("qgis_terrain_feature_stack"),
         "navigation_terrain_dem": manifest.get("navigation_terrain_dem"),
         "navigation_terrain_projection": manifest.get(
             "navigation_terrain_projection"
@@ -4764,6 +5411,7 @@ def _map_preparation_summary_from_manifest(manifest: dict[str, Any]) -> dict[str
                 "route_pressure_profile_geojson_ref",
                 "mileage_tag_alignment_ref",
                 "mileage_tag_alignment_geojson_ref",
+                "qgis_terrain_preparation_ref",
                 "navigation_terrain_dem_manifest_ref",
                 "navigation_terrain_projection_ref",
             )
@@ -4774,6 +5422,7 @@ def _map_preparation_summary_from_manifest(manifest: dict[str, Any]) -> dict[str
         "raster_label_preparation": manifest.get("raster_label_preparation"),
         "boss_point_synthesis": manifest.get("boss_point_synthesis"),
         "mileage_tag_alignment": manifest.get("mileage_tag_alignment"),
+        "qgis_terrain_feature_stack": manifest.get("qgis_terrain_feature_stack"),
         "navigation_terrain_dem": manifest.get("navigation_terrain_dem"),
         "navigation_terrain_projection": manifest.get(
             "navigation_terrain_projection"
@@ -5210,6 +5859,10 @@ def _project_state_output_refs(project: dict[str, Any]) -> dict[str, Any]:
         *SCOUT_RISK_OUTPUT_REFS.keys(),
         *CALIBRATED_RISK_OUTPUT_REFS.keys(),
         *QGIS_SPATIAL_RISK_INPUT_REFS.keys(),
+        *QGIS_TERRAIN_PROJECT_REF_KEYS,
+        *QGIS_TERRAIN_ROUTE_PROJECT_REF_KEYS,
+        "qgis_terrain_preparation_ref",
+        "qgis_terrain_route_preparation_ref",
         "cwa_weather_evidence_ref",
         "cwa_warnings_geojson_ref",
         "cwa_observations_geojson_ref",
@@ -5232,6 +5885,17 @@ def _project_state_output_refs(project: dict[str, Any]) -> dict[str, Any]:
         "risk_score_generation_basis",
         "risk_score_generation_skipped_reason",
         "risk_score_generation_error",
+        "risk_score_requested_processor",
+        "risk_score_terrain_processor",
+        "risk_score_actual_processor",
+        "risk_score_adapter",
+        "risk_score_qgis_workflow_run_id",
+        "risk_score_fallback_used",
+        "risk_score_python_dtm_processing_used",
+        "risk_score_candidate_only",
+        "risk_score_runtime_safety_truth",
+        "risk_score_operational",
+        "risk_score_adds_source_resolution",
         "calibrated_risk_heatmap_segment_count",
         "calibrated_risk_heatmap_warning_cp_overlay_count",
         "risk_attribution_diagnostic_checkpoint_count",
@@ -5302,6 +5966,868 @@ def _run_overpass_route_alignment_after_layer_preparation(
         "boundary": boundary,
         **result,
     }
+
+
+def _qgis_terrain_preparation_boundary() -> dict[str, Any]:
+    return {
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "operational": False,
+        "adds_source_resolution": False,
+        "arbitrary_python_allowed": False,
+        "arbitrary_pyqgis_allowed": False,
+        "shell_execution_allowed": False,
+        "browser_direct_mcp_allowed": False,
+        "phase1_runtime_mutation_allowed": False,
+        "workspace_file_mutation_allowed": True,
+    }
+
+
+def _qgis_terrain_preparation_not_run(
+    request: LayerPreparationRequest,
+    manifest: dict[str, Any],
+) -> dict[str, Any]:
+    terrain_requested = "terrain" in set(manifest.get("normalized_layers") or [])
+    if not terrain_requested:
+        status = "not_requested"
+        reason = "terrain_layer_not_requested"
+    elif not request.run_qgis_terrain_workflow:
+        status = "disabled_by_request"
+        reason = "run_qgis_terrain_workflow_false"
+    else:
+        status = "not_run"
+        reason = "map_preparation_post_enrichments_disabled"
+    return {
+        "status": status,
+        "reason": reason,
+        "workflow_id": "terrain_feature_stack.v1",
+        "actual_processor": "not_run",
+        "fallback_used": False,
+        "python_dtm_processing_used": False,
+        "route_contact_distance_m": request.qgis_route_contact_distance_m,
+        "analysis_margin_m": request.qgis_terrain_analysis_margin_m,
+        "output_refs": {},
+        "boundary": _qgis_terrain_preparation_boundary(),
+    }
+
+
+def _run_qgis_terrain_feature_stack_after_layer_preparation(
+    *,
+    project_root: Path,
+    manifest: dict[str, Any],
+    request: LayerPreparationRequest,
+    backend: Any | None = None,
+) -> dict[str, Any]:
+    boundary = _qgis_terrain_preparation_boundary()
+    base = {
+        "workflow_id": "terrain_feature_stack.v1",
+        "trigger": "prepare_layers_with_terrain",
+        "requested_by": request.qgis_requested_by,
+        "analysis_scope": "full_route_extent_rectangle",
+        "analysis_margin_m": request.qgis_terrain_analysis_margin_m,
+        "route_connected_scope": "ROUTE_CONNECTED",
+        "rectangle_scope": "RECTANGLE_ALL",
+        "route_contact_distance_m": request.qgis_route_contact_distance_m,
+        "actual_processor": "not_run",
+        "fallback_used": False,
+        "python_dtm_processing_used": False,
+        "output_refs": {},
+        "boundary": boundary,
+    }
+    if "terrain" not in set(manifest.get("normalized_layers") or []):
+        return _persist_qgis_terrain_preparation_result(
+            project_root,
+            {**base, "status": "not_requested", "reason": "terrain_layer_not_requested"},
+        )
+
+    project_path = project_root / "project.json"
+    project_before = _load_json(project_path)
+    try:
+        if backend is None:
+            from qgis_spatial_backend import QgisSpatialBackend
+
+            backend = QgisSpatialBackend.from_env()
+        from qgis_spatial_contracts import (
+            TERRAIN_FEATURE_STACK_WORKFLOW_ID,
+            SpatialAnalysisErrorCode,
+            SpatialAnalysisRequest,
+            SpatialWorkflowState,
+        )
+
+        status = None
+        preflight_attempt_count = 0
+        for preflight_attempt_count in range(1, request.qgis_status_retry_attempts + 1):
+            status = backend.status(
+                project_id=request.project_id,
+                project_root=project_root,
+                project=project_before,
+            )
+            if not _qgis_status_retryable(status):
+                break
+            if preflight_attempt_count >= request.qgis_status_retry_attempts:
+                break
+            if request.qgis_status_retry_interval_s:
+                time.sleep(request.qgis_status_retry_interval_s)
+        assert status is not None
+        availability = _enum_text(status.availability)
+        status_payload = {
+            "availability": availability,
+            "preflight_attempt_count": preflight_attempt_count,
+            "enabled": bool(status.enabled),
+            "configured": bool(status.configured),
+            "reachable": bool(status.reachable),
+            "qgis_application_available": bool(status.qgis_application_available),
+            "plugin_bridge_available": bool(status.plugin_bridge_available),
+            "capabilities_discoverable": bool(status.capabilities_discoverable),
+            "fixture_mode": bool(status.fixture_mode),
+            "qgis_version": str(status.qgis_version),
+            "qgis_mcp_plugin_version": str(status.qgis_mcp_plugin_version),
+        }
+        if availability in {"disabled", "not_configured", "unavailable", "error"}:
+            status_error = status.errors[0] if status.errors else None
+            error = _qgis_preparation_error_payload(
+                status_error,
+                default_code=(
+                    "BACKEND_NOT_CONFIGURED"
+                    if availability in {"disabled", "not_configured"}
+                    else "QGIS_UNAVAILABLE"
+                ),
+                default_message=(
+                    "QGIS/GRASS terrain processor is disabled or not configured."
+                    if availability in {"disabled", "not_configured"}
+                    else "QGIS/GRASS terrain processor is unavailable."
+                ),
+            )
+            return _persist_qgis_terrain_preparation_result(
+                project_root,
+                {
+                    **base,
+                    "status": availability,
+                    "processor_status": status_payload,
+                    "error": error,
+                },
+            )
+
+        job_id = str(manifest.get("job_id") or manifest.get("finished_at") or "")
+        request_id = (
+            f"map-preparation-{request.project_id}-"
+            f"{hashlib.sha256(job_id.encode('utf-8')).hexdigest()[:12]}"
+        )
+        run = backend.start_workflow(
+            project_id=request.project_id,
+            project_root=project_root,
+            project=project_before,
+            request=SpatialAnalysisRequest(
+                workflow_id=TERRAIN_FEATURE_STACK_WORKFLOW_ID,
+                project_id=request.project_id,
+                corridor_m=request.qgis_terrain_analysis_margin_m,
+                requested_by=request.qgis_requested_by,
+                request_id=request_id,
+            ),
+        )
+        deadline = time.monotonic() + request.qgis_terrain_workflow_timeout_s
+        active_states = {
+            SpatialWorkflowState.QUEUED.value,
+            SpatialWorkflowState.RUNNING.value,
+        }
+        while _enum_text(run.state) in active_states:
+            if time.monotonic() >= deadline:
+                backend.cancel_workflow(
+                    project_root=project_root,
+                    workflow_run_id=run.workflow_run_id,
+                    requested_by=request.qgis_requested_by,
+                )
+                return _persist_qgis_terrain_preparation_result(
+                    project_root,
+                    {
+                        **base,
+                        "status": "timeout",
+                        "workflow_run_id": run.workflow_run_id,
+                        "processor_status": status_payload,
+                        "error": {
+                            "code": SpatialAnalysisErrorCode.WORKFLOW_INTERRUPTED.value,
+                            "message": "QGIS/GRASS terrain workflow exceeded the map preparation timeout.",
+                            "retryable": True,
+                        },
+                    },
+                )
+            if request.qgis_terrain_poll_interval_s:
+                time.sleep(
+                    min(
+                        request.qgis_terrain_poll_interval_s,
+                        max(0.0, deadline - time.monotonic()),
+                    )
+                )
+            run = backend.get_run(
+                project_root=project_root,
+                workflow_run_id=run.workflow_run_id,
+            )
+
+        run_state = _enum_text(run.state)
+        if run_state != SpatialWorkflowState.COMPLETED.value:
+            return _persist_qgis_terrain_preparation_result(
+                project_root,
+                {
+                    **base,
+                    "status": run_state or "failed",
+                    "workflow_run_id": run.workflow_run_id,
+                    "processor_status": status_payload,
+                    "error": _qgis_preparation_error_payload(
+                        getattr(run, "error", None),
+                        default_code="PROCESSING_FAILED",
+                        default_message="QGIS/GRASS terrain workflow failed closed.",
+                    ),
+                    "warnings": list(getattr(run, "warnings", []) or []),
+                },
+            )
+
+        artifacts = [
+            *list(getattr(run, "artifacts", []) or []),
+            *list(getattr(run, "render_artifacts", []) or []),
+        ]
+        if status.fixture_mode or any(
+            bool(getattr(artifact, "fixture", False))
+            or bool(getattr(artifact, "synthetic", False))
+            for artifact in artifacts
+        ):
+            return _persist_qgis_terrain_preparation_result(
+                project_root,
+                {
+                    **base,
+                    "status": "fixture_non_runtime",
+                    "workflow_run_id": run.workflow_run_id,
+                    "processor_status": status_payload,
+                    "fixture": True,
+                    "synthetic": True,
+                    "non_runtime": True,
+                    "warnings": [
+                        "Fixture QGIS evidence was persisted but was not activated as terrain analysis."
+                    ],
+                },
+            )
+
+        project_after = _load_json(project_path)
+        output_refs = _validated_qgis_terrain_activation(
+            project_root=project_root,
+            project=project_after,
+            workflow_run_id=str(run.workflow_run_id),
+        )
+        return _persist_qgis_terrain_preparation_result(
+            project_root,
+            {
+                **base,
+                "status": "completed",
+                "workflow_run_id": run.workflow_run_id,
+                "processor_status": status_payload,
+                "actual_processor": "qgis_processing_grass",
+                "artifact_count": len(artifacts),
+                "artifact_refs": [
+                    str(artifact.artifact_ref)
+                    for artifact in artifacts
+                    if getattr(artifact, "artifact_ref", None)
+                ],
+                "warnings": list(getattr(run, "warnings", []) or []),
+                "output_refs": {
+                    **output_refs,
+                    "qgis_terrain_preparation_ref": QGIS_TERRAIN_PREPARATION_REF,
+                },
+            },
+        )
+    except Exception as exc:
+        _restore_qgis_terrain_activation(project_path, project_before)
+        return _persist_qgis_terrain_preparation_result(
+            project_root,
+            {
+                **base,
+                "status": "failed",
+                "error": {
+                    "code": "ARTIFACT_EXPORT_FAILED",
+                    "message": "QGIS/GRASS terrain preparation failed closed.",
+                    "detail": f"{type(exc).__name__}: {exc}",
+                    "retryable": False,
+                },
+            },
+        )
+
+
+def _terrain_route_hypothesis_not_run(
+    *,
+    request: LayerPreparationRequest,
+    qgis_terrain_feature_stack: dict[str, Any],
+) -> dict[str, Any]:
+    if qgis_terrain_feature_stack.get("status") != "completed":
+        reason = "terrain_feature_stack_not_completed"
+        status = "unavailable"
+    elif not request.run_qgis_terrain_workflow:
+        reason = "run_qgis_terrain_workflow_false"
+        status = "disabled_by_request"
+    else:
+        reason = "map_preparation_post_enrichments_disabled"
+        status = "not_run"
+    return {
+        "status": status,
+        "reason": reason,
+        "workflow_id": "terrain_route_hypothesis.v1",
+        "authority": "candidate_only",
+        "source_type": "terrain_hypothesis",
+        "output_refs": {},
+        "boundary": _qgis_terrain_preparation_boundary(),
+    }
+
+
+def _run_qgis_terrain_route_hypothesis_after_layer_preparation(
+    *,
+    project_root: Path,
+    manifest: dict[str, Any],
+    request: LayerPreparationRequest,
+    qgis_terrain_feature_stack: dict[str, Any],
+    backend: Any | None = None,
+) -> dict[str, Any]:
+    base = {
+        "workflow_id": "terrain_route_hypothesis.v1",
+        "trigger": "terrain_feature_stack_completed",
+        "requested_by": request.qgis_requested_by,
+        "analysis_margin_m": request.qgis_terrain_analysis_margin_m,
+        "authority": "candidate_only",
+        "source_type": "terrain_hypothesis",
+        "safe_or_walkable": "not_determined",
+        "actual_processor": "not_run",
+        "fallback_used": False,
+        "python_dtm_processing_used": False,
+        "output_refs": {},
+        "boundary": _qgis_terrain_preparation_boundary(),
+    }
+    if qgis_terrain_feature_stack.get("status") != "completed":
+        return _persist_qgis_terrain_route_preparation_result(
+            project_root,
+            {
+                **base,
+                "status": "unavailable",
+                "reason": "terrain_feature_stack_not_completed",
+                "parent_status": qgis_terrain_feature_stack.get("status"),
+                "error": qgis_terrain_feature_stack.get("error"),
+            },
+        )
+    project_path = project_root / "project.json"
+    project_before = _load_json(project_path)
+    parent_ref = project_before.get("terrain_feature_manifest_ref")
+    dem_ref = project_before.get("terrain_dem_route_bbox_raster_ref")
+    if not (
+        isinstance(parent_ref, str)
+        and parent_ref.endswith("terrain_feature_manifest.json")
+        and isinstance(dem_ref, str)
+        and dem_ref.endswith((".tif", ".tiff"))
+    ):
+        _clear_qgis_terrain_route_activation(project_path)
+        return _persist_qgis_terrain_route_preparation_result(
+            project_root,
+            {
+                **base,
+                "status": "unavailable",
+                "reason": "parent_terrain_artifacts_unavailable",
+                "error": {
+                    "code": "SOURCE_UNAVAILABLE",
+                    "message": (
+                        "Terrain route hypothesis requires the active DEM and immutable "
+                        "terrain-feature parent manifest."
+                    ),
+                    "retryable": False,
+                },
+            },
+        )
+    try:
+        if backend is None:
+            from qgis_spatial_backend import QgisSpatialBackend
+
+            backend = QgisSpatialBackend.from_env()
+        from qgis_spatial_contracts import (
+            TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_ID,
+            SpatialAnalysisErrorCode,
+            SpatialAnalysisRequest,
+            SpatialWorkflowState,
+        )
+
+        status = None
+        preflight_attempt_count = 0
+        for preflight_attempt_count in range(1, request.qgis_status_retry_attempts + 1):
+            status = backend.status(
+                project_id=request.project_id,
+                project_root=project_root,
+                project=project_before,
+            )
+            if not _qgis_status_retryable(status):
+                break
+            if preflight_attempt_count >= request.qgis_status_retry_attempts:
+                break
+            if request.qgis_status_retry_interval_s:
+                time.sleep(request.qgis_status_retry_interval_s)
+        assert status is not None
+        availability = _enum_text(status.availability)
+        status_payload = {
+            "availability": availability,
+            "preflight_attempt_count": preflight_attempt_count,
+            "enabled": bool(status.enabled),
+            "configured": bool(status.configured),
+            "reachable": bool(status.reachable),
+            "qgis_application_available": bool(status.qgis_application_available),
+            "plugin_bridge_available": bool(status.plugin_bridge_available),
+            "capabilities_discoverable": bool(status.capabilities_discoverable),
+            "fixture_mode": bool(status.fixture_mode),
+            "qgis_version": str(status.qgis_version),
+            "qgis_mcp_plugin_version": str(status.qgis_mcp_plugin_version),
+        }
+        if availability in {"disabled", "not_configured", "unavailable", "error"}:
+            _clear_qgis_terrain_route_activation(project_path)
+            status_error = status.errors[0] if status.errors else None
+            return _persist_qgis_terrain_route_preparation_result(
+                project_root,
+                {
+                    **base,
+                    "status": availability,
+                    "processor_status": status_payload,
+                    "error": _qgis_preparation_error_payload(
+                        status_error,
+                        default_code=(
+                            "BACKEND_NOT_CONFIGURED"
+                            if availability in {"disabled", "not_configured"}
+                            else "GRASS_UNAVAILABLE"
+                        ),
+                        default_message=(
+                            "QGIS/GRASS terrain-route processor is unavailable."
+                        ),
+                    ),
+                },
+            )
+        job_id = str(manifest.get("job_id") or manifest.get("finished_at") or "")
+        request_id = (
+            f"terrain-route-{request.project_id}-"
+            f"{hashlib.sha256(job_id.encode('utf-8')).hexdigest()[:12]}"
+        )
+        run = backend.start_workflow(
+            project_id=request.project_id,
+            project_root=project_root,
+            project=project_before,
+            request=SpatialAnalysisRequest(
+                workflow_id=TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_ID,
+                project_id=request.project_id,
+                dem_ref=dem_ref,
+                corridor_m=request.qgis_terrain_analysis_margin_m,
+                requested_by=request.qgis_requested_by,
+                request_id=request_id,
+            ),
+        )
+        deadline = time.monotonic() + request.qgis_terrain_workflow_timeout_s
+        active_states = {
+            SpatialWorkflowState.QUEUED.value,
+            SpatialWorkflowState.RUNNING.value,
+        }
+        while _enum_text(run.state) in active_states:
+            if time.monotonic() >= deadline:
+                backend.cancel_workflow(
+                    project_root=project_root,
+                    workflow_run_id=run.workflow_run_id,
+                    requested_by=request.qgis_requested_by,
+                )
+                _clear_qgis_terrain_route_activation(project_path)
+                return _persist_qgis_terrain_route_preparation_result(
+                    project_root,
+                    {
+                        **base,
+                        "status": "timeout",
+                        "workflow_run_id": run.workflow_run_id,
+                        "processor_status": status_payload,
+                        "error": {
+                            "code": SpatialAnalysisErrorCode.WORKFLOW_INTERRUPTED.value,
+                            "message": (
+                                "QGIS/GRASS terrain-route workflow exceeded the "
+                                "map preparation timeout."
+                            ),
+                            "retryable": True,
+                        },
+                    },
+                )
+            if request.qgis_terrain_poll_interval_s:
+                time.sleep(
+                    min(
+                        request.qgis_terrain_poll_interval_s,
+                        max(0.0, deadline - time.monotonic()),
+                    )
+                )
+            run = backend.get_run(
+                project_root=project_root,
+                workflow_run_id=run.workflow_run_id,
+            )
+        run_state = _enum_text(run.state)
+        if run_state != SpatialWorkflowState.COMPLETED.value:
+            _clear_qgis_terrain_route_activation(project_path)
+            return _persist_qgis_terrain_route_preparation_result(
+                project_root,
+                {
+                    **base,
+                    "status": run_state or "failed",
+                    "workflow_run_id": run.workflow_run_id,
+                    "processor_status": status_payload,
+                    "error": _qgis_preparation_error_payload(
+                        getattr(run, "error", None),
+                        default_code="PROCESSING_FAILED",
+                        default_message=(
+                            "QGIS/GRASS terrain-route workflow failed closed."
+                        ),
+                    ),
+                    "warnings": list(getattr(run, "warnings", []) or []),
+                },
+            )
+        artifacts = list(getattr(run, "artifacts", []) or [])
+        if status.fixture_mode or any(
+            bool(getattr(artifact, "fixture", False))
+            or bool(getattr(artifact, "synthetic", False))
+            for artifact in artifacts
+        ):
+            _clear_qgis_terrain_route_activation(project_path)
+            return _persist_qgis_terrain_route_preparation_result(
+                project_root,
+                {
+                    **base,
+                    "status": "fixture_non_runtime",
+                    "workflow_run_id": run.workflow_run_id,
+                    "processor_status": status_payload,
+                    "error": {
+                        "code": "GRASS_UNAVAILABLE",
+                        "message": (
+                            "Fixture evidence cannot become a terrain route hypothesis."
+                        ),
+                        "retryable": False,
+                    },
+                },
+            )
+        project_after = _load_json(project_path)
+        output_refs = _validated_qgis_terrain_route_activation(
+            project_root=project_root,
+            project=project_after,
+            workflow_run_id=str(run.workflow_run_id),
+        )
+        return _persist_qgis_terrain_route_preparation_result(
+            project_root,
+            {
+                **base,
+                "status": "completed",
+                "workflow_run_id": run.workflow_run_id,
+                "processor_status": status_payload,
+                "actual_processor": "qgis_processing_grass",
+                "artifact_count": len(artifacts),
+                "artifact_refs": [
+                    str(artifact.artifact_ref)
+                    for artifact in artifacts
+                    if getattr(artifact, "artifact_ref", None)
+                ],
+                "warnings": list(getattr(run, "warnings", []) or []),
+                "output_refs": {
+                    **output_refs,
+                    "qgis_terrain_route_preparation_ref": (
+                        QGIS_TERRAIN_ROUTE_PREPARATION_REF
+                    ),
+                },
+            },
+        )
+    except Exception as exc:
+        _clear_qgis_terrain_route_activation(project_path)
+        return _persist_qgis_terrain_route_preparation_result(
+            project_root,
+            {
+                **base,
+                "status": "failed",
+                "error": {
+                    "code": "ARTIFACT_EXPORT_FAILED",
+                    "message": (
+                        "QGIS/GRASS terrain-route preparation failed closed."
+                    ),
+                    "detail": f"{type(exc).__name__}: {exc}",
+                    "retryable": False,
+                },
+            },
+        )
+
+
+def _enum_text(value: Any) -> str:
+    return str(getattr(value, "value", value) or "")
+
+
+def _qgis_status_retryable(status: Any) -> bool:
+    if _enum_text(getattr(status, "availability", None)) not in {
+        "unavailable",
+        "degraded",
+        "error",
+    }:
+        return False
+    return any(bool(getattr(error, "retryable", False)) for error in status.errors)
+
+
+def _qgis_preparation_error_payload(
+    error: Any,
+    *,
+    default_code: str,
+    default_message: str,
+) -> dict[str, Any]:
+    code = _enum_text(getattr(error, "code", None)) or default_code
+    message = str(getattr(error, "message", None) or default_message)
+    payload: dict[str, Any] = {
+        "code": code,
+        "message": message,
+        "retryable": bool(getattr(error, "retryable", False)),
+    }
+    detail = getattr(error, "detail", None)
+    if isinstance(detail, str) and detail:
+        payload["detail"] = detail
+    at_step = getattr(error, "at_step", None)
+    if isinstance(at_step, str) and at_step:
+        payload["at_step"] = at_step
+    return payload
+
+
+def _validated_qgis_terrain_activation(
+    *,
+    project_root: Path,
+    project: dict[str, Any],
+    workflow_run_id: str,
+) -> dict[str, Any]:
+    if project.get("terrain_visualization_processor") != "qgis_processing_grass":
+        raise ValueError("QGIS terrain processor was not activated in project.json")
+    if project.get("terrain_visualization_workflow_run_id") != workflow_run_id:
+        raise ValueError("QGIS terrain workflow identity was not activated")
+    output_refs = {
+        key: project[key]
+        for key in QGIS_TERRAIN_PROJECT_REF_KEYS
+        if key in project
+    }
+    missing = [key for key in QGIS_TERRAIN_PROJECT_REF_KEYS if key not in output_refs]
+    if missing:
+        raise ValueError(
+            "QGIS terrain activation omitted project refs: " + ", ".join(missing)
+        )
+    for key, ref in output_refs.items():
+        if not key.endswith("_ref"):
+            continue
+        ref_path = Path(str(ref))
+        if ref_path.is_absolute() or ".." in ref_path.parts:
+            raise ValueError(f"QGIS terrain activation ref is unsafe: {key}")
+        path = (project_root / ref_path).resolve()
+        try:
+            path.relative_to(project_root.resolve())
+        except ValueError as exc:
+            raise ValueError(f"QGIS terrain activation ref escaped workspace: {key}") from exc
+        if not path.is_file():
+            raise ValueError(f"QGIS terrain activation ref is unavailable: {key}")
+    terrain = _load_json(project_root / str(output_refs["terrain_visualization_ref"]))
+    spec = terrain.get("visualization_spec")
+    artifact_boundary = terrain.get("boundary")
+    if not isinstance(spec, dict) or not isinstance(artifact_boundary, dict):
+        raise ValueError("QGIS terrain visualization contract is malformed")
+    if not (
+        spec.get("actual_processor") == "qgis_processing_grass"
+        and spec.get("standard_processor_completed") is True
+        and spec.get("fallback_used") is False
+        and spec.get("python_dtm_processing_used") is False
+        and artifact_boundary.get("candidate_only") is True
+        and artifact_boundary.get("runtime_safety_truth") is False
+        and artifact_boundary.get("operational") is False
+        and artifact_boundary.get("adds_source_resolution") is False
+    ):
+        raise ValueError("QGIS terrain visualization failed the standard processor boundary")
+    return output_refs
+
+
+def _restore_qgis_terrain_activation(
+    project_path: Path,
+    project_before: dict[str, Any],
+) -> None:
+    if not project_path.is_file():
+        return
+    current = _load_json(project_path)
+    for key in QGIS_TERRAIN_PROJECT_REF_KEYS:
+        if key in project_before:
+            current[key] = project_before[key]
+        else:
+            current.pop(key, None)
+    _write_json(project_path, current)
+
+
+def _persist_qgis_terrain_preparation_result(
+    project_root: Path,
+    result: dict[str, Any],
+) -> dict[str, Any]:
+    payload = {
+        "schema_version": "scout_qgis_map_preparation.v1",
+        "artifact_kind": "qgis_terrain_map_preparation_status",
+        **result,
+    }
+    payload["output_refs"] = {
+        **payload.get("output_refs", {}),
+        "qgis_terrain_preparation_ref": QGIS_TERRAIN_PREPARATION_REF,
+    }
+    _write_json(project_root / QGIS_TERRAIN_PREPARATION_REF, payload)
+    project_path = project_root / "project.json"
+    if project_path.is_file():
+        project = _load_json(project_path)
+        updated = {
+            **project,
+            "qgis_terrain_preparation_ref": QGIS_TERRAIN_PREPARATION_REF,
+            "qgis_terrain_preparation_status": payload.get("status"),
+            "qgis_terrain_preparation_workflow_id": payload.get("workflow_id"),
+            "qgis_terrain_preparation_workflow_run_id": payload.get(
+                "workflow_run_id"
+            ),
+            "qgis_terrain_preparation_fallback_used": False,
+            "qgis_terrain_preparation_python_dtm_processing_used": False,
+        }
+        _write_json(project_path, updated)
+    return payload
+
+
+def _validated_qgis_terrain_route_activation(
+    *,
+    project_root: Path,
+    project: dict[str, Any],
+    workflow_run_id: str,
+) -> dict[str, Any]:
+    from terrain_route_hypothesis_models import (
+        TerrainRouteHypothesisRun,
+        TerrainRouteRunStatus,
+    )
+
+    if (
+        project.get("terrain_route_hypothesis_workflow_run_id") != workflow_run_id
+        or project.get("terrain_route_hypothesis_status") != "completed"
+        or project.get("terrain_route_hypothesis_authority") != "candidate_only"
+        or project.get("terrain_route_hypothesis_candidate_only") is not True
+        or project.get("terrain_route_hypothesis_runtime_safety_truth") is not False
+    ):
+        raise ValueError(
+            "Terrain route hypothesis activation violated identity or authority"
+        )
+    output_refs = {
+        key: project[key]
+        for key in QGIS_TERRAIN_ROUTE_PROJECT_REF_KEYS
+        if key in project
+    }
+    missing = [
+        key for key in QGIS_TERRAIN_ROUTE_PROJECT_REF_KEYS if key not in output_refs
+    ]
+    if missing:
+        raise ValueError(
+            "Terrain route hypothesis activation omitted project refs: "
+            + ", ".join(missing)
+        )
+    for key, ref in output_refs.items():
+        if not key.endswith("_ref"):
+            continue
+        ref_path = Path(str(ref))
+        if ref_path.is_absolute() or ".." in ref_path.parts:
+            raise ValueError(f"Terrain route activation ref is unsafe: {key}")
+        path = (project_root / ref_path).resolve()
+        try:
+            path.relative_to(project_root.resolve())
+        except ValueError as exc:
+            raise ValueError(
+                f"Terrain route activation ref escaped workspace: {key}"
+            ) from exc
+        if not path.is_file():
+            raise ValueError(f"Terrain route activation ref is unavailable: {key}")
+    hypothesis_path = project_root / str(output_refs["terrain_route_hypothesis_ref"])
+    visualization_path = project_root / str(
+        output_refs["terrain_route_hypothesis_visualization_ref"]
+    )
+    if (
+        _sha256_file(hypothesis_path)
+        != output_refs["terrain_route_hypothesis_sha256"]
+        or _sha256_file(visualization_path)
+        != output_refs["terrain_route_hypothesis_visualization_sha256"]
+    ):
+        raise ValueError("Terrain route activation artifact hash mismatch")
+    hypothesis = TerrainRouteHypothesisRun.model_validate(
+        _load_json(hypothesis_path)
+    )
+    if (
+        hypothesis.status is not TerrainRouteRunStatus.COMPLETED
+        or len(hypothesis.hypotheses) != 1
+        or hypothesis.hypotheses[0].provenance.cache_key
+        != output_refs["terrain_route_hypothesis_cache_key"]
+    ):
+        raise ValueError("Terrain route activation typed hypothesis is invalid")
+    visualization = _load_json(visualization_path)
+    required_labels = {
+        "CANDIDATE",
+        "TERRAIN HYPOTHESIS",
+        "NOT A VERIFIED TRAIL",
+    }
+    boundary = visualization.get("boundary")
+    if (
+        visualization.get("artifact_kind")
+        != "terrain_route_hypothesis_visualization"
+        or visualization.get("authority") != "candidate_only"
+        or visualization.get("source_type") != "terrain_hypothesis"
+        or visualization.get("candidate_only") is not True
+        or visualization.get("runtime_safety_truth") is not False
+        or visualization.get("operational") is not False
+        or not required_labels.issubset(set(visualization.get("display_labels") or []))
+        or not isinstance(boundary, dict)
+        or boundary.get("promotion_allowed") is not False
+    ):
+        raise ValueError(
+            "Terrain route visualization violated display or authority invariants"
+        )
+    return output_refs
+
+
+def _clear_qgis_terrain_route_activation(project_path: Path) -> None:
+    if not project_path.is_file():
+        return
+    project = _load_json(project_path)
+    previous_ref = project.get("terrain_route_hypothesis_ref")
+    for key in QGIS_TERRAIN_ROUTE_PROJECT_REF_KEYS:
+        project.pop(key, None)
+    if isinstance(previous_ref, str) and previous_ref:
+        project["terrain_route_hypothesis_previous_ref"] = previous_ref
+    project["terrain_route_hypothesis_status"] = "unavailable"
+    project["terrain_route_hypothesis_candidate_only"] = True
+    project["terrain_route_hypothesis_runtime_safety_truth"] = False
+    _write_json(project_path, project)
+
+
+def _persist_qgis_terrain_route_preparation_result(
+    project_root: Path,
+    result: dict[str, Any],
+) -> dict[str, Any]:
+    payload = {
+        "schema_version": "scout_qgis_terrain_route_preparation.v0_1",
+        "artifact_kind": "terrain_route_hypothesis_preparation_status",
+        **result,
+    }
+    payload["output_refs"] = {
+        **payload.get("output_refs", {}),
+        "qgis_terrain_route_preparation_ref": QGIS_TERRAIN_ROUTE_PREPARATION_REF,
+    }
+    _write_json(project_root / QGIS_TERRAIN_ROUTE_PREPARATION_REF, payload)
+    project_path = project_root / "project.json"
+    if project_path.is_file():
+        project = _load_json(project_path)
+        project.update(
+            {
+                "qgis_terrain_route_preparation_ref": (
+                    QGIS_TERRAIN_ROUTE_PREPARATION_REF
+                ),
+                "qgis_terrain_route_preparation_status": payload.get("status"),
+                "qgis_terrain_route_preparation_workflow_id": payload.get(
+                    "workflow_id"
+                ),
+                "qgis_terrain_route_preparation_workflow_run_id": payload.get(
+                    "workflow_run_id"
+                ),
+                "qgis_terrain_route_preparation_candidate_only": True,
+                "qgis_terrain_route_preparation_runtime_safety_truth": False,
+            }
+        )
+        _write_json(project_path, project)
+    return payload
 
 
 def _skipped_connected_refresh_post_enrichment(name: str) -> dict[str, Any]:
@@ -5383,6 +6909,34 @@ def _run_navigation_terrain_projection_after_layer_preparation(
             "navigation_terrain_projection_ref": NAVIGATION_TERRAIN_PROJECTION_REF,
         },
         "boundary": projection.get("boundary") or boundary,
+    }
+
+
+def _navigation_terrain_dem_waiting_for_qgis(
+    qgis_stage: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "status": "awaiting_qgis_grass_processor",
+        "trigger": "prepare_layers_with_terrain",
+        "reason": (
+            "Terrain RGB packaging requires a completed standard QGIS/GRASS "
+            "terrain artifact; no Python terrain analysis fallback was selected."
+        ),
+        "qgis_terrain_status": qgis_stage.get("status"),
+        "workflow_run_id": qgis_stage.get("workflow_run_id"),
+        "fallback_used": False,
+        "python_dtm_processing_used": False,
+        "output_refs": {},
+        "boundary": {
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "human_review_required": True,
+            "unsupported_cells_encoded_as_terrain": False,
+            "visualization_packaging_only": True,
+            "adds_source_resolution": False,
+            "phase1_runtime_mutation_allowed": False,
+            "workspace_file_mutation_allowed": False,
+        },
     }
 
 
@@ -5723,7 +7277,7 @@ def _run_raster_label_preparation_after_layer_preparation(
                 project_root,
                 include_route_notes=True,
                 route_note_point_policy="seed_only",
-                write_briefing=False,
+                write_briefing=True,
                 collected_at=manifest.get("finished_at"),
             )
         except Exception as exc:  # pragma: no cover - defensive manifest reporting
@@ -5752,6 +7306,9 @@ def _run_raster_label_preparation_after_layer_preparation(
                 ),
                 "route_context_media_manifest_ref": route_context_outputs.get(
                     "route_context_media_manifest_ref"
+                ),
+                "route_context_briefing_ref": route_context_outputs.get(
+                    "route_context_briefing_ref"
                 ),
                 "route_context_points_ref": route_context_outputs.get(
                     "route_context_points_ref"
@@ -5807,6 +7364,106 @@ def _run_raster_label_preparation_after_layer_preparation(
         "output_refs": output_refs,
         "project_refs_updated": project_refs_updated,
         "boundary": boundary,
+    }
+
+
+def _run_route_context_source_refresh_after_map_preparation(
+    *,
+    project_root: Path,
+    manifest: dict[str, Any],
+    request: LayerPreparationRequest,
+) -> dict[str, Any]:
+    project = _load_json(project_root / "project.json")
+    handoff_ref = project.get("route_context_source_records_ref")
+    if not isinstance(handoff_ref, str) or not handoff_ref:
+        return {
+            "status": "not_configured",
+            "reason": "route_context_source_handoff_missing",
+            "record_count": 0,
+            "network_calls_made": False,
+            "output_refs": {},
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+    handoff_path = _safe_project_relative_path(project_root, handoff_ref)
+    if handoff_path is None or not handoff_path.is_file():
+        return {
+            "status": "failed",
+            "reason": "route_context_source_handoff_unavailable",
+            "record_count": 0,
+            "network_calls_made": False,
+            "output_refs": {},
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+    handoff = _load_json(handoff_path)
+    boundary = handoff.get("boundary")
+    records = handoff.get("records")
+    if (
+        handoff.get("artifact_kind")
+        != "dashboard_workspace_route_context_source_handoff"
+        or handoff.get("project_id") != manifest["project_id"]
+        or not isinstance(boundary, dict)
+        or boundary.get("candidate_only") is not True
+        or boundary.get("runtime_safety_truth") is not False
+        or not isinstance(records, list)
+        or not records
+    ):
+        return {
+            "status": "failed",
+            "reason": "route_context_source_handoff_contract_invalid",
+            "record_count": 0,
+            "network_calls_made": False,
+            "output_refs": {},
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+    normalized_records = [record for record in records if isinstance(record, dict)]
+    if len(normalized_records) != len(records):
+        return {
+            "status": "failed",
+            "reason": "route_context_source_handoff_record_invalid",
+            "record_count": 0,
+            "network_calls_made": False,
+            "output_refs": {},
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+    allow_network_fetch = (
+        request.network_mode == "explicit-fetch" and request.allow_network_fetch
+    )
+    try:
+        from pretrip_p0_p1_source_collection import collect_pretrip_p0_p1_sources
+
+        result = collect_pretrip_p0_p1_sources(
+            project_root,
+            allow_network_fetch=allow_network_fetch,
+            source_records=normalized_records,
+            generated_at=manifest.get("finished_at"),
+        )
+    except Exception as exc:  # pragma: no cover - defensive external path
+        return {
+            "status": "failed",
+            "reason": "route_context_source_refresh_failed",
+            "error_type": type(exc).__name__,
+            "record_count": len(normalized_records),
+            "network_calls_made": False,
+            "output_refs": {},
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+    output_refs = result.get("outputs") if isinstance(result, dict) else {}
+    if not isinstance(output_refs, dict):
+        output_refs = {}
+    return {
+        "status": str(result.get("status") or "unknown"),
+        "handoff_ref": handoff_ref,
+        "record_count": len(normalized_records),
+        "evidence_item_count": int(result.get("evidence_item_count") or 0),
+        "network_calls_made": result.get("network_calls_made") is True,
+        "output_refs": output_refs,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
     }
 
 
@@ -6297,88 +7954,33 @@ def _generate_scout_risk_outputs_from_workspace(
         project_root=project_root,
         project=project,
     )
-    if inputs.get("status") != "ready":
-        return {
-            **project,
-            "risk_score_generation_status": "skipped",
-            "risk_score_generation_skipped_reason": inputs.get(
-                "reason",
-                "workspace_risk_generation_inputs_missing",
-            ),
-        }
-
-    try:
-        _ensure_scout_risk_package_importable()
-        from scout_risk.fusion.pretrip import build_overpass_pretrip_route_profile
-        from scout_risk.route.outputs import write_route_csv, write_route_geojson
-        from scout_risk.route.risk_score_map import (
-            build_risk_ribbon_from_geojson,
-            build_risk_score_point_map_from_geojson,
-            write_risk_ribbon_geojson,
-            write_risk_ribbon_metadata,
-            write_risk_score_csv,
-            write_risk_score_geojson,
-            write_risk_score_metadata,
-            write_risk_score_xyz,
-        )
-
-        refs = SCOUT_RISK_OUTPUT_REFS
-        route_risk_path = project_root / refs["risk_route_profile_ref"]
-        route_csv_path = project_root / refs["risk_route_profile_csv_ref"]
-        route_metadata_path = project_root / refs["risk_route_profile_metadata_ref"]
-        score_geojson_path = project_root / refs["risk_score_points_ref"]
-        score_csv_path = project_root / refs["risk_score_points_csv_ref"]
-        score_xyz_path = project_root / refs["risk_score_points_xyz_ref"]
-        score_metadata_path = project_root / refs["risk_score_points_metadata_ref"]
-        ribbon_path = project_root / refs["risk_ribbon_ref"]
-        ribbon_metadata_path = project_root / refs["risk_ribbon_metadata_ref"]
-
-        profile, route_metadata = build_overpass_pretrip_route_profile(
-            dtm_coverage_path=inputs["dtm_coverage_path"],
-            overpass_geojson_path=inputs["overpass_geojson_path"],
-            reference_gpx_path=inputs["reference_gpx_path"],
-            route_id=f"{project.get('project_id', 'route')}.overpass_risk_ribbon",
-            corridor_m=route_corridor_m,
-        )
-        write_route_geojson(profile, route_risk_path, metadata=route_metadata)
-        write_route_csv(profile, route_csv_path)
-        route_metadata_path.parent.mkdir(parents=True, exist_ok=True)
-        route_metadata_path.write_text(
-            json.dumps(route_metadata, ensure_ascii=False, indent=2, sort_keys=True)
-            + "\n",
-            encoding="utf-8",
-        )
-
-        point_map = build_risk_score_point_map_from_geojson(route_risk_path)
-        write_risk_score_csv(point_map, score_csv_path)
-        write_risk_score_xyz(point_map, score_xyz_path)
-        write_risk_score_geojson(point_map, score_geojson_path)
-        write_risk_score_metadata(point_map, score_metadata_path)
-
-        ribbon = build_risk_ribbon_from_geojson(route_risk_path)
-        write_risk_ribbon_geojson(ribbon, ribbon_path)
-        write_risk_ribbon_metadata(ribbon, ribbon_metadata_path)
-    except Exception as exc:  # pragma: no cover - surfaced in workspace metadata.
-        return {
-            **project,
-            "risk_score_generation_status": "failed",
-            "risk_score_generation_error": str(exc),
-        }
-
-    updated = {
-        **project,
-        **SCOUT_RISK_OUTPUT_REFS,
-        "risk_score_generation_status": "completed",
-        "risk_score_generation_basis": "workspace_dtm_overpass_reference_gpx",
-    }
+    inputs_ready = inputs.get("status") == "ready"
+    updated = dict(project)
     _clear_risk_generation_failure_metadata(updated)
-    _stamp_synced_risk_output_provenance(project_root=project_root, project=updated)
-    return _project_with_scout_risk_metadata_counts(
-        project_root=project_root,
-        project=updated,
-        prepared_at=prepared_at,
-        source_profile="scout_risk_engine_workspace_generated_overpass_route_profile",
+    updated.update(
+        {
+            "risk_score_generation_status": (
+                "awaiting_qgis_grass_processor" if inputs_ready else "unavailable"
+            ),
+            "risk_score_generation_basis": "qgis_grass_terrain_evidence_required",
+            "risk_score_generation_input_status": inputs.get("status", "missing"),
+            "risk_score_generation_skipped_reason": (
+                "python_dem_terrain_analysis_disabled"
+                if inputs_ready
+                else inputs.get("reason", "workspace_risk_generation_inputs_missing")
+            ),
+            "risk_score_requested_processor": "qgis_processing_grass",
+            "risk_score_actual_processor": "not_run",
+            "risk_score_fallback_used": False,
+            "risk_score_python_dtm_processing_used": False,
+            "risk_score_candidate_only": True,
+            "risk_score_runtime_safety_truth": False,
+            "risk_score_operational": False,
+            "risk_score_adds_source_resolution": False,
+            "risk_score_updated_at": prepared_at,
+        }
     )
+    return updated
 
 
 def _clear_risk_generation_failure_metadata(project: dict[str, Any]) -> None:
@@ -6533,6 +8135,10 @@ def _sync_calibrated_risk_outputs(
                 route_note_path if route_note_path and route_note_path.exists() else None
             ),
         )
+        diagnostic = _with_qgis_grass_direct_candidate_formula(
+            diagnostic=diagnostic,
+            project=project,
+        )
         write_diagnostic(diagnostic, diagnostic_path)
         write_warning_cp_proposals(diagnostic, warning_path)
         heatmap = build_calibrated_risk_heatmap(
@@ -6554,19 +8160,96 @@ def _sync_calibrated_risk_outputs(
 
     metadata = heatmap["metadata"]
     updated = {
-        **project,
-        **CALIBRATED_RISK_OUTPUT_REFS,
-        "calibrated_risk_heatmap_segment_count": metadata.get("segment_count", 0),
-        "calibrated_risk_heatmap_warning_cp_overlay_count": metadata.get(
-            "warning_cp_overlay_count",
-            0,
-        ),
-        "risk_attribution_diagnostic_checkpoint_count": diagnostic.get(
-            "counts",
-            {},
-        ).get("semantic_checkpoint_count", 0),
+        key: value
+        for key, value in {
+            **project,
+            **CALIBRATED_RISK_OUTPUT_REFS,
+            "calibrated_risk_heatmap_segment_count": metadata.get(
+                "segment_count", 0
+            ),
+            "calibrated_risk_heatmap_warning_cp_overlay_count": metadata.get(
+                "warning_cp_overlay_count",
+                0,
+            ),
+            "risk_attribution_diagnostic_checkpoint_count": diagnostic.get(
+                "counts",
+                {},
+            ).get("semantic_checkpoint_count", 0),
+        }.items()
+        if key != "calibrated_risk_heatmap_sync_error"
     }
     return updated
+
+
+def _with_qgis_grass_direct_candidate_formula(
+    *,
+    diagnostic: dict[str, Any],
+    project: dict[str, Any],
+) -> dict[str, Any]:
+    factor_analysis = diagnostic.get("factor_analysis")
+    if not isinstance(factor_analysis, dict):
+        return diagnostic
+    formula = factor_analysis.get("formula_candidate")
+    if (
+        isinstance(formula, dict)
+        and formula.get("status") == "candidate_only"
+        and formula.get("terms")
+    ):
+        return diagnostic
+    route_stats = diagnostic.get("route_dimension_stats", {}).get("pretrip_risk")
+    if (
+        project.get("risk_score_generation_status") != "completed"
+        or project.get("risk_score_actual_processor") != "qgis_processing_grass"
+        or project.get("risk_score_adapter")
+        != "scout_qgis_grass_risk_profile_adapter.v1"
+        or not isinstance(route_stats, dict)
+        or int(route_stats.get("n") or 0) <= 0
+    ):
+        return diagnostic
+
+    direct_formula = {
+        "status": "candidate_only",
+        "target_group": (
+            formula.get("target_group") if isinstance(formula, dict) else None
+        ),
+        "selected_dimensions": ["pretrip_risk"],
+        "terms": [
+            {
+                "role": "direct_qgis_grass_candidate_score",
+                "dimension": "pretrip_risk",
+                "raw_weight": 1.0,
+                "normalized_weight": 1.0,
+            }
+        ],
+        "expression": "pretrip_risk",
+        "expression_zh": (
+            "本 workspace 缺少可用的 semantic calibration signal；此圖層直接呈現 "
+            "QGIS/GRASS terrain adapter 的 candidate-only pretrip_risk，不宣稱已完成語意校準。"
+        ),
+        "calibration_kind": "qgis_grass_direct_candidate_visualization",
+        "semantic_calibration_applied": False,
+        "source_score_profile": project.get("risk_score_source_profile"),
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+    warning = (
+        "No semantic factor formula was available; the heatmap visualizes the "
+        "QGIS/GRASS adapter candidate score directly without semantic calibration."
+    )
+    return {
+        **diagnostic,
+        "factor_analysis": {
+            **factor_analysis,
+            "formula_candidate": direct_formula,
+            "direct_candidate_visualization_used": True,
+        },
+        "boundary": {
+            **diagnostic.get("boundary", {}),
+            "semantic_calibration_applied": False,
+            "qgis_grass_direct_candidate_visualization": True,
+        },
+        "warnings": [*diagnostic.get("warnings", []), warning],
+    }
 
 
 def _stamp_synced_risk_output_provenance(
@@ -8630,37 +10313,247 @@ def _terrain_risk_candidates_from_project(
     project: dict[str, Any],
 ) -> list[dict[str, Any]]:
     ref = project.get("excluded_extreme_warning_cp_proposals_ref")
+    candidates: list[dict[str, Any]] = []
+    if isinstance(ref, str) and ref:
+        path = _safe_project_relative_path(project_root, ref)
+        if path is not None and path.exists():
+            payload = _load_json(path)
+            for proposal in payload.get("proposals", []):
+                if not isinstance(proposal, dict):
+                    continue
+                candidates.append(
+                    {
+                        "candidate_id": proposal.get("proposal_id"),
+                        "candidate_kind": "terrain_risk_candidate",
+                        "source_refs": [f"{ref}#{proposal.get('proposal_id')}"],
+                        "source_kind": proposal.get(
+                            "source", "excluded_extreme_risk_dimension"
+                        ),
+                        "lat": proposal.get("lat"),
+                        "lon": proposal.get("lon"),
+                        "reason": proposal.get("reason_zh"),
+                        "risk_dimensions": proposal.get("risk_dimensions", {}),
+                        "confidence": proposal.get("confidence", "medium"),
+                        "stale_risk": proposal.get("stale_risk", "medium"),
+                        "review_state": "needs_review",
+                        "requires_human_review": True,
+                        "candidate_only": True,
+                        "observed_fact": False,
+                        "runtime_safety_truth": False,
+                        "operational": False,
+                        "adds_source_resolution": False,
+                        "phase1_runtime_mutation_allowed": False,
+                    }
+                )
+    candidates.extend(
+        _qgis_grass_risk_candidates_from_project(
+            project_root=project_root,
+            project=project,
+        )
+    )
+    deduplicated = {
+        str(candidate.get("candidate_id") or f"terrain-risk-{index:05d}"): candidate
+        for index, candidate in enumerate(candidates)
+    }
+    return sorted(
+        deduplicated.values(),
+        key=lambda item: (
+            -float(item.get("risk_dimensions", {}).get("pretrip_risk") or 0.0),
+            str(item.get("candidate_id") or ""),
+        ),
+    )
+
+
+def _qgis_grass_risk_candidates_from_project(
+    *,
+    project_root: Path,
+    project: dict[str, Any],
+) -> list[dict[str, Any]]:
+    required_project_state = (
+        project.get("risk_score_generation_status") == "completed"
+        and project.get("risk_score_actual_processor") == "qgis_processing_grass"
+        and project.get("risk_score_fallback_used") is False
+        and project.get("risk_score_python_dtm_processing_used") is False
+        and project.get("risk_score_candidate_only") is True
+        and project.get("risk_score_runtime_safety_truth") is False
+        and project.get("risk_score_operational") is False
+        and project.get("risk_score_adds_source_resolution") is False
+    )
+    if not required_project_state:
+        return []
+
+    ref = project.get("risk_score_points_ref")
     if not isinstance(ref, str) or not ref:
         return []
-    path = project_root / ref
-    if not path.exists():
+    path = _safe_project_relative_path(project_root, ref)
+    if path is None or not path.exists():
         return []
     payload = _load_json(path)
+    metadata = payload.get("metadata", {}) if isinstance(payload, dict) else {}
+    boundary = metadata.get("boundary", {}) if isinstance(metadata, dict) else {}
+    if (
+        not isinstance(metadata, dict)
+        or metadata.get("actual_processor")
+        not in (None, "qgis_processing_grass")
+        or metadata.get("fallback_used") not in (None, False)
+        or metadata.get("python_dtm_processing_used") not in (None, False)
+        or metadata.get("candidate_only") is not True
+        or metadata.get("runtime_safety_truth") is not False
+        or metadata.get("operational") not in (None, False)
+        or metadata.get("adds_source_resolution") not in (None, False)
+        or not isinstance(boundary, dict)
+        or boundary.get("candidate_only") is not True
+        or boundary.get("runtime_safety_truth") is not False
+    ):
+        return []
+
+    metadata_ref = project.get("risk_score_points_metadata_ref")
     candidates: list[dict[str, Any]] = []
-    for proposal in payload.get("proposals", []):
-        if not isinstance(proposal, dict):
+    for index, feature in enumerate(payload.get("features", [])):
+        if not isinstance(feature, dict):
             continue
+        geometry = feature.get("geometry", {})
+        coordinates = geometry.get("coordinates") if isinstance(geometry, dict) else None
+        if (
+            not isinstance(coordinates, list)
+            or len(coordinates) < 2
+            or not all(
+                isinstance(value, (int, float)) and math.isfinite(float(value))
+                for value in coordinates[:2]
+            )
+        ):
+            continue
+        properties = feature.get("properties", {})
+        if not isinstance(properties, dict):
+            continue
+        if properties.get("candidate_only") is False:
+            continue
+        if properties.get("runtime_safety_truth") is True:
+            continue
+        score = _finite_risk_candidate_number(
+            properties.get("pretrip_risk", properties.get("rs"))
+        )
+        if score is None:
+            continue
+        candidate_id = str(
+            properties.get("candidate_id")
+            or properties.get("sample_id")
+            or f"qgis-grass-terrain-risk-{index:05d}"
+        )
+        dimensions = {
+            "pretrip_risk": score,
+            **{
+                key: value
+                for key in ("teii_20m", "tri", "lec", "sri", "scp")
+                if (value := _finite_risk_candidate_number(properties.get(key)))
+                is not None
+            },
+        }
+        source_refs = [f"{ref}#{candidate_id}"]
+        if isinstance(metadata_ref, str) and metadata_ref:
+            source_refs.append(metadata_ref)
         candidates.append(
             {
-                "candidate_id": proposal.get("proposal_id"),
+                "candidate_id": candidate_id,
                 "candidate_kind": "terrain_risk_candidate",
-                "source_refs": [f"{ref}#{proposal.get('proposal_id')}"],
-                "source_kind": proposal.get("source", "excluded_extreme_risk_dimension"),
-                "lat": proposal.get("lat"),
-                "lon": proposal.get("lon"),
-                "reason": proposal.get("reason_zh"),
-                "risk_dimensions": proposal.get("risk_dimensions", {}),
-                "confidence": proposal.get("confidence", "medium"),
-                "stale_risk": proposal.get("stale_risk", "medium"),
-                "review_state": "needs_review",
+                "source_refs": source_refs,
+                "source_kind": "qgis_grass_route_risk_point",
+                "lat": float(coordinates[1]),
+                "lon": float(coordinates[0]),
+                "reason": (
+                    f"QGIS/GRASS route terrain candidate score {score:.1f}; "
+                    "human review required."
+                ),
+                "risk_dimensions": dimensions,
+                "confidence": str(
+                    properties.get("confidence")
+                    or metadata.get("confidence")
+                    or "medium"
+                ),
+                "stale_risk": str(
+                    properties.get("stale_risk")
+                    or metadata.get("stale_risk")
+                    or "medium"
+                ),
+                "review_state": str(
+                    properties.get("review_state")
+                    or metadata.get("review_state")
+                    or "needs_review"
+                ),
                 "requires_human_review": True,
                 "candidate_only": True,
                 "observed_fact": False,
                 "runtime_safety_truth": False,
+                "operational": False,
+                "adds_source_resolution": False,
                 "phase1_runtime_mutation_allowed": False,
             }
         )
     return candidates
+
+
+def _finite_risk_candidate_number(value: Any) -> float | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    number = float(value)
+    return number if math.isfinite(number) else None
+
+
+def _refresh_terrain_risk_candidate_artifact_after_qgis_risk(
+    *,
+    project_root: Path,
+    manifest: dict[str, Any],
+) -> dict[str, Any]:
+    project = _load_json(project_root / "project.json")
+    candidates = _terrain_risk_candidates_from_project(
+        project_root=project_root,
+        project=project,
+    )
+    output_ref = str(
+        manifest.get("outputs", {}).get("terrain_risk_candidates_ref")
+        or "outputs/layers/candidates/terrain_risk_candidates.json"
+    )
+    output_path = _safe_project_relative_path(project_root, output_ref)
+    if output_path is None:
+        raise ValueError("terrain risk candidate output escaped project root")
+    source_refs = [
+        ref
+        for key in (
+            "excluded_extreme_warning_cp_proposals_ref",
+            "risk_score_points_ref",
+            "risk_score_points_metadata_ref",
+        )
+        if isinstance((ref := project.get(key)), str) and ref
+    ]
+    artifact = _layer_candidate_artifact(
+        manifest=manifest,
+        ref_key="terrain_risk_candidates_ref",
+        artifact_kind="pretrip_layer_terrain_risk_candidates",
+        candidate_key="candidates",
+        candidates=candidates,
+        source_refs=source_refs,
+    )
+    artifact["boundary"] = {
+        **artifact["boundary"],
+        "operational": False,
+        "adds_source_resolution": False,
+    }
+    artifact["generation_basis"] = (
+        "qgis_grass_risk_profile_projection"
+        if project.get("risk_score_generation_status") == "completed"
+        else "typed_non_qgis_candidates_only"
+    )
+    _write_json(output_path, artifact)
+    return {
+        "status": "completed",
+        "source_status": project.get("risk_score_generation_status", "not_prepared"),
+        "candidate_count": len(candidates),
+        "output_ref": output_ref,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "operational": False,
+        "adds_source_resolution": False,
+    }
 
 
 def _layer_candidate_artifact(
@@ -9670,13 +11563,104 @@ def _terrain_visualization_from_project(
     project_root: Path,
     manifest: dict[str, Any],
 ) -> dict[str, Any]:
-    bitmap_artifact = _dtm_corridor_bitmap_terrain_visualization(
+    dtm_ref_record = manifest["inputs"]["source_refs"].get(
+        "dtm_coverage_summary_ref"
+    )
+    dtm_ref = dtm_ref_record.get("ref") if isinstance(dtm_ref_record, dict) else None
+    return _standard_terrain_visualization_pending(
         project_root,
         manifest,
+        dtm_ref_record=dtm_ref_record if isinstance(dtm_ref_record, dict) else None,
+        dtm_ref=dtm_ref if isinstance(dtm_ref, str) and dtm_ref else None,
     )
-    if bitmap_artifact is not None:
-        return bitmap_artifact
-    return _route_aligned_terrain_visualization_from_project(project_root, manifest)
+
+
+def _standard_terrain_visualization_pending(
+    project_root: Path,
+    manifest: dict[str, Any],
+    *,
+    dtm_ref_record: dict[str, Any] | None,
+    dtm_ref: str | None,
+) -> dict[str, Any]:
+    dtm_path = project_root / dtm_ref if dtm_ref else None
+    source_available = bool(dtm_path and dtm_path.is_file())
+    dtm_payload = _load_json(dtm_path) if source_available and dtm_path else {}
+    candidate_tiles = [
+        item
+        for item in dtm_payload.get("candidate_tiles", [])
+        if isinstance(item, dict)
+    ]
+    raster_sources = [
+        item
+        for item in dtm_payload.get("raster_sources", [])
+        if isinstance(item, dict)
+    ]
+    artifact = _empty_geojson_evidence_from_manifest(
+        manifest,
+        artifact_kind="pretrip_terrain_visualization",
+        evidence_type="pretrip_terrain_visualization_standard_processor_pending",
+        status=(
+            "awaiting_qgis_grass_processor"
+            if source_available
+            else "source_unavailable"
+        ),
+        source_plan_ref=None,
+    )
+    artifact["features"] = []
+    artifact["raster_overlays"] = []
+    artifact["visualization_spec"] = {
+        "modes": list(TERRAIN_VISUALIZATION_MODES),
+        "terrain_visualization_layer": True,
+        "risk_heat_layer": False,
+        "coverage_scope": "full_route_extent_rectangle",
+        "preferred_processor": "qgis_processing_grass",
+        "actual_processor": "not_run",
+        "source_available": source_available,
+        "requires_standard_processor": True,
+        "fallback_used": False,
+        "fallback_when_unavailable": None,
+        "required_algorithms": [
+            "gdal:cliprasterbyextent",
+            "grass:r.slope.aspect",
+            "grass:r.relief",
+            "grass:r.contour",
+            "gdal:rasterize",
+            "gdal:colorrelief",
+        ],
+        "full_raster_hillshade_generated": False,
+        "raw_dem_embedded_in_json": False,
+    }
+    artifact["counts"] = {
+        "feature_count": 0,
+        "bitmap_overlay_count": 0,
+        "cell_count": 0,
+        "contour_segment_count": 0,
+        "rendered_dom_cell_count": 0,
+        "source_dtm_tile_count": len(candidate_tiles),
+        "source_dtm_raster_count": len(raster_sources),
+        "mode_count": len(TERRAIN_VISUALIZATION_MODES),
+        "runtime_safety_truth_count": 0,
+    }
+    artifact["source_refs"] = [dtm_ref_record] if dtm_ref_record else []
+    artifact["warnings"] = [
+        (
+            "Terrain raster visualization is pending the allowlisted QGIS/GRASS "
+            "workflow; no Python terrain fallback was generated."
+            if source_available
+            else "Full DEM source is unavailable; QGIS/GRASS terrain processing "
+            "was not started and no Python terrain fallback was generated."
+        )
+    ]
+    artifact["boundary"] = {
+        **artifact["boundary"],
+        "terrain_visualization_layer": True,
+        "risk_heat_layer": False,
+        "bitmap_overlay": False,
+        "pretrip_candidate_evidence_only": True,
+        "runtime_safety_truth": False,
+        "phase1_runtime_mutation_allowed": False,
+    }
+    return artifact
 
 
 def _route_aligned_terrain_visualization_from_project(
@@ -9829,169 +11813,9 @@ def _dtm_corridor_bitmap_terrain_visualization(
     project_root: Path,
     manifest: dict[str, Any],
 ) -> dict[str, Any] | None:
-    dtm_ref_record = manifest["inputs"]["source_refs"].get("dtm_coverage_summary_ref")
-    dtm_ref = dtm_ref_record.get("ref") if isinstance(dtm_ref_record, dict) else None
-    if not isinstance(dtm_ref, str) or not dtm_ref:
-        return None
-    dtm_path = project_root / dtm_ref
-    if not dtm_path.exists():
-        return None
-
-    risk_ref_key, risk_ref_record, risk_ref, risk_path = _terrain_source_ref(
-        project_root,
-        manifest,
-    )
-    if not isinstance(risk_ref, str) or not risk_ref or risk_path is None:
-        return None
-    if not risk_path.exists():
-        return None
-
-    risk_payload = _load_json(risk_path)
-    source_samples = _terrain_source_samples(risk_payload)
-    route_points = _terrain_route_points_twd97(source_samples)
-    if len(route_points) < 2:
-        return None
-
-    dtm_payload = _load_json(dtm_path)
-    candidate_tiles = _dtm_candidate_tiles(
-        dtm_payload,
-        route_points,
-        corridor_half_width_m=TERRAIN_DTM_CORRIDOR_HALF_WIDTH_M,
-    )
-    if not candidate_tiles:
-        return None
-
-    elevation_by_xy = _read_dtm_grid_elevations(candidate_tiles)
-    if not elevation_by_xy:
-        return None
-
-    segment_index = _route_segment_index(
-        route_points,
-        corridor_half_width_m=TERRAIN_DTM_CORRIDOR_HALF_WIDTH_M,
-    )
-    cells = _dtm_corridor_cells(
-        elevation_by_xy,
-        segment_index,
-        corridor_half_width_m=TERRAIN_DTM_CORRIDOR_HALF_WIDTH_M,
-        resolution_m=TERRAIN_DTM_CELL_RESOLUTION_M,
-    )
-    if not cells:
-        return None
-
-    elevation_values = [cell["elevation_m"] for cell in cells]
-    elevation_min = min(elevation_values)
-    elevation_max = max(elevation_values)
-    dtm_cells_bbox_twd97 = _dtm_cells_bbox_twd97(cells)
-    bbox_twd97 = _route_corridor_bbox_twd97(
-        route_points,
-        corridor_half_width_m=TERRAIN_DTM_CORRIDOR_HALF_WIDTH_M,
-    )
-    bbox_wgs84 = _projected_bbox_twd97_to_wgs84(bbox_twd97)
-    slope_counts = Counter(str(cell["slope_class"]["class_id"]) for cell in cells)
-    contour_cell_count = sum(1 for cell in cells if cell["contour_marker"])
-    overlays = _write_dtm_corridor_bitmap_overlays(
-        project_root=project_root,
-        manifest=manifest,
-        cells=cells,
-        route_points=route_points,
-        bbox_twd97=bbox_twd97,
-        bbox_wgs84=bbox_wgs84,
-        elevation_min=elevation_min,
-        elevation_max=elevation_max,
-    )
-    gdal_pipeline = _gdal_terrain_pipeline_availability()
-
-    artifact = _empty_geojson_evidence_from_manifest(
-        manifest,
-        artifact_kind="pretrip_terrain_visualization",
-        evidence_type="pretrip_terrain_visualization_bitmap_overlay",
-        status="ready_from_dtm_20m_corridor_bitmap",
-        source_plan_ref=None,
-    )
-    artifact["features"] = []
-    artifact["raster_overlays"] = overlays
-    artifact["visualization_spec"] = {
-        "modes": list(TERRAIN_VISUALIZATION_MODES),
-        "slope_class_breaks": list(TERRAIN_SLOPE_CLASSES),
-        "contour_interval_m": TERRAIN_CONTOUR_INTERVAL_M,
-        "terrain_visualization_layer": True,
-        "risk_heat_layer": False,
-        "route_aligned_proxy": False,
-        "bitmap_overlay": True,
-        "preferred_processor": "gdal",
-        "actual_processor": "python_dtm_bitmap_fallback",
-        "gdal_pipeline": gdal_pipeline,
-        "bitmap_cell_resolution_m": TERRAIN_DTM_CELL_RESOLUTION_M,
-        "corridor_half_width_m": TERRAIN_DTM_CORRIDOR_HALF_WIDTH_M,
-        "corridor_total_width_m": TERRAIN_DTM_CORRIDOR_TOTAL_WIDTH_M,
-        "slope_method": "dtm_grid_20m_central_difference",
-        "hillshade_method": "dtm_slope_proxy_grayscale",
-        "elevation_tint_method": "dtm_elevation_band",
-        "contour_method": "bounded_marching_squares_linear_interpolation",
-        "contour_adds_source_resolution": False,
-        "missing_dtm_corridor_underlay": True,
-        "full_raster_hillshade_generated": False,
-        "raw_dem_embedded_in_json": False,
-        "raw_dem_committed_to_repo": False,
-    }
-    artifact["counts"] = {
-        "feature_count": 0,
-        "bitmap_overlay_count": len(overlays),
-        "cell_count": len(cells),
-        "contour_segment_count": next(
-            (
-                int(overlay.get("contour_segment_count", 0))
-                for overlay in overlays
-                if overlay.get("mode") == "contours"
-            ),
-            0,
-        ),
-        "rendered_dom_cell_count": 0,
-        "source_dtm_tile_count": len(candidate_tiles),
-        "source_dtm_grid_cell_count": len(elevation_by_xy),
-        "source_risk_feature_count": len(risk_payload.get("features", [])),
-        "mode_count": len(TERRAIN_VISUALIZATION_MODES),
-        "slope_class_counts": dict(sorted(slope_counts.items())),
-        "contour_marker_count": contour_cell_count,
-        "runtime_safety_truth_count": 0,
-    }
-    artifact["source_refs"] = [
-        ref
-        for ref in (
-            dtm_ref_record,
-            risk_ref_record,
-            manifest["inputs"]["source_refs"].get("risk_route_profile_metadata_ref"),
-            manifest["inputs"]["source_refs"].get("risk_score_points_metadata_ref"),
-            manifest["inputs"]["source_refs"].get("segment_dtm_coverage_ref"),
-        )
-        if isinstance(ref, dict)
-    ]
-    artifact["boundary"] = {
-        **artifact["boundary"],
-        "terrain_visualization_layer": True,
-        "risk_heat_layer": False,
-        "route_aligned_proxy": False,
-        "bitmap_overlay": True,
-        "pretrip_candidate_evidence_only": True,
-        "runtime_safety_truth": False,
-        "raw_dem_embedded_in_json": False,
-        "phase1_runtime_mutation_allowed": False,
-    }
-    artifact["dtm_grid"] = {
-        "crs": "TWD97 / TM2 zone 121 (EPSG:3826-compatible)",
-        "cell_resolution_m": TERRAIN_DTM_CELL_RESOLUTION_M,
-        "corridor_half_width_m": TERRAIN_DTM_CORRIDOR_HALF_WIDTH_M,
-        "corridor_total_width_m": TERRAIN_DTM_CORRIDOR_TOTAL_WIDTH_M,
-        "bbox_twd97": bbox_twd97,
-        "bbox_wgs84": bbox_wgs84,
-        "selected_cell_count": len(cells),
-        "source_tile_count": len(candidate_tiles),
-        "dtm_cells_bbox_twd97": dtm_cells_bbox_twd97,
-        "full_route_corridor_bbox_twd97": bbox_twd97,
-        "raw_grid_embedded_in_json": False,
-        "preferred_pipeline": gdal_pipeline,
-    }
-    return artifact
+    """Retained for callers that still probe the removed legacy processor."""
+    del project_root, manifest
+    return None
 
 
 def _terrain_route_points_twd97(
@@ -10641,7 +12465,7 @@ def _gdal_terrain_pipeline_availability() -> dict[str, Any]:
             "gdal_contour -> terrain_contours GeoJSON",
             "gdal2tiles or local tile cutter -> /admin/pretrip display overlays",
         ],
-        "fallback_when_unavailable": "python_dtm_bitmap_fallback",
+        "fallback_when_unavailable": None,
         "candidate_only": True,
         "runtime_safety_truth": False,
     }
@@ -11124,6 +12948,20 @@ def _validate_request(request: LayerPreparationRequest) -> None:
         raise ValueError("imagery_seed_max_tiles must be positive when set")
     if request.osm_pbf_cache_ttl_days <= 0:
         raise ValueError("osm_pbf_cache_ttl_days must be greater than 0")
+    if not 1 <= request.qgis_status_retry_attempts <= 10:
+        raise ValueError("qgis_status_retry_attempts must be between 1 and 10")
+    if not 0 <= request.qgis_status_retry_interval_s <= 30:
+        raise ValueError("qgis_status_retry_interval_s must be between 0 and 30")
+    if not 0 <= request.qgis_terrain_analysis_margin_m <= 5_000:
+        raise ValueError("qgis_terrain_analysis_margin_m must be between 0 and 5000")
+    if not 0 < request.qgis_route_contact_distance_m <= 1_000:
+        raise ValueError("qgis_route_contact_distance_m must be between 0 and 1000")
+    if not 0 <= request.qgis_terrain_workflow_timeout_s <= 7_200:
+        raise ValueError("qgis_terrain_workflow_timeout_s must be between 0 and 7200")
+    if not 0 <= request.qgis_terrain_poll_interval_s <= 5:
+        raise ValueError("qgis_terrain_poll_interval_s must be between 0 and 5")
+    if not request.qgis_requested_by.strip():
+        raise ValueError("qgis_requested_by is required")
 
 
 def _validate_project_id(project_id: str) -> None:

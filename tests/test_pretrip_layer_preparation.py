@@ -5,13 +5,20 @@ import os
 import shutil
 import subprocess
 import sys
+from types import SimpleNamespace
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
-
 import pretrip_layer_preparation
+from qgis_spatial_contracts import (
+    QgisBackendAvailability,
+    QgisBackendStatus,
+    SpatialAnalysisError,
+    SpatialAnalysisErrorCode,
+    SpatialWorkflowState,
+)
 from pretrip_layer_preparation import (
     LayerPreparationRequest,
     build_layer_preparation_preview,
@@ -47,6 +54,16 @@ def test_dtm_contour_segments_interpolate_continuous_isolines() -> None:
     assert [segment[0] for segment in segments] == [100.0, 120.0]
     assert segments[0][1:] == ((1.0, 2.0), (0.0, 1.0))
     assert segments[1][1:] == ((2.0, 1.0), (1.0, 0.0))
+
+
+def test_legacy_dtm_corridor_bitmap_processor_is_disabled(tmp_path: Path) -> None:
+    assert (
+        pretrip_layer_preparation._dtm_corridor_bitmap_terrain_visualization(
+            tmp_path,
+            {},
+        )
+        is None
+    )
 
 
 def test_wall_clock_timeout_is_noop_outside_main_thread() -> None:
@@ -319,6 +336,18 @@ def test_terrain_preparation_compiles_and_registers_navigation_projection(
     compile_calls: list[Path] = []
     stage_order: list[str] = []
 
+    def prepare_qgis_grass(**_kwargs: object) -> dict[str, object]:
+        stage_order.append("qgis_grass")
+        return {
+            "status": "completed",
+            "workflow_id": "terrain_feature_stack.v1",
+            "workflow_run_id": "test-qgis-preparation",
+            "actual_processor": "qgis_processing_grass",
+            "fallback_used": False,
+            "python_dtm_processing_used": False,
+            "output_refs": {},
+        }
+
     def prepare_terrain_dem(
         *,
         project_root: Path,
@@ -353,6 +382,11 @@ def test_terrain_preparation_compiles_and_registers_navigation_projection(
             },
         }
 
+    monkeypatch.setattr(
+        pretrip_layer_preparation,
+        "_run_qgis_terrain_feature_stack_after_layer_preparation",
+        prepare_qgis_grass,
+    )
     monkeypatch.setattr(
         pretrip_layer_preparation,
         "_run_navigation_terrain_dem_after_layer_preparation",
@@ -399,7 +433,8 @@ def test_terrain_preparation_compiles_and_registers_navigation_projection(
     )
 
     assert compile_calls == [project_root]
-    assert stage_order == ["terrain_dem", "projection"]
+    assert stage_order == ["qgis_grass", "terrain_dem", "projection"]
+    assert manifest["qgis_terrain_feature_stack"]["status"] == "completed"
     assert manifest["navigation_terrain_dem"]["status"] == "completed"
     assert manifest["outputs"]["navigation_terrain_dem_manifest_ref"] == (
         "outputs/navigation/terrain_rgb/manifest.json"
@@ -1816,15 +1851,19 @@ def test_layer_preparation_refreshes_gee_derivatives_after_risk_sync(
     first_segment = feature_package["segments"][0]
     gap_families = {item["metric_family"] for item in derivatives["source_metric_gaps"]}
 
-    assert project["risk_score_generation_status"] == "completed"
+    assert project["risk_score_generation_status"] == (
+        "awaiting_qgis_grass_processor"
+    )
+    assert project["risk_score_generation_skipped_reason"] == (
+        "python_dem_terrain_analysis_disabled"
+    )
+    assert project["risk_score_fallback_used"] is False
+    assert project["risk_score_python_dtm_processing_used"] is False
     assert feature_package["status"] == "fetch_failed"
     assert feature_package["blocker_reasons"] == ["gee_route_feature_http_error:400"]
-    assert first_segment["slope_deg"] is not None
-    assert first_segment["terrain_ruggedness"] is not None
-    assert first_segment["metric_source_notes"][0]["source_kind"] == (
-        "scout_risk_engine_route_profile"
-    )
-    assert "terrain" not in gap_families
+    assert first_segment["slope_deg"] is None
+    assert first_segment["terrain_ruggedness"] is None
+    assert "terrain" in gap_families
     assert {"sentinel2", "sentinel1", "dynamic_world", "rainfall"} <= gap_families
 
 
@@ -1955,6 +1994,9 @@ def test_layer_preparation_seeds_imagery_cache_for_raster_ocr_pipeline(
         "east": 121.21,
         "north": 24.04,
     }
+    briefing_ref = project.pop("route_context_briefing_ref", None)
+    if isinstance(briefing_ref, str):
+        (project_root / briefing_ref).unlink(missing_ok=True)
     project["raster_label_ocr_label_count"] = 99
     project["raster_label_evidence_count"] = 99
     project_path.write_text(json.dumps(project, ensure_ascii=False), encoding="utf-8")
@@ -2086,7 +2128,21 @@ def test_layer_preparation_seeds_imagery_cache_for_raster_ocr_pipeline(
         "geology": "happyman_geo2016",
         "topo-5k": "happyman_tw5k2000",
         "forest": "happyman_forest",
+        "historical-jm20k-1904": "sinica_jm20k_1904",
+        "historical-triangulation-1904": "sinica_jm20k_1904_triangulation",
         "historical-fandi-1916": "sinica_jm50k_1916",
+        "historical-jm20k-1921": "sinica_jm20k_1921",
+        "historical-jm50k-1924": "sinica_jm50k_1924",
+        "historical-jm50k-1924-new": "sinica_jm50k_1924_new",
+        "historical-shinko-forest": "sinica_ttfb3_0603",
+        "historical-kanzan-forest": "sinica_ttfb3_0602",
+        "historical-taito-forest": "sinica_ttfb3_0601",
+        "historical-tm50k-1956": "sinica_tm50k_1956",
+        "historical-water-1966": "sinica_tm50k_1966",
+        "historical-economic-1989": "sinica_tm25k_1989",
+        "historical-lin-1999": "happyman_tri1999",
+        "historical-tw5k-2000": "happyman_tw5k2000",
+        "historical-economic-2001": "happyman_tw25k2001",
     }
     assert {call["cache_root"] for call in seed_calls} == {
         str((project_root / "cache" / "raster-tiles").resolve())
@@ -2099,12 +2155,28 @@ def test_layer_preparation_seeds_imagery_cache_for_raster_ocr_pipeline(
         "geology",
         "topo-5k",
         "forest",
+        "historical-jm20k-1904",
+        "historical-triangulation-1904",
         "historical-fandi-1916",
+        "historical-jm20k-1921",
+        "historical-jm50k-1924",
+        "historical-jm50k-1924-new",
+        "historical-shinko-forest",
+        "historical-kanzan-forest",
+        "historical-taito-forest",
+        "historical-tm50k-1956",
+        "historical-water-1966",
+        "historical-economic-1989",
+        "historical-lin-1999",
+        "historical-tw5k-2000",
+        "historical-economic-2001",
     }
     assert project["workspace_raster_tile_cache_root"] == str(
         (project_root / "cache" / "raster-tiles").resolve()
     )
-    assert project["workspace_raster_tile_cache_layer_count"] == 8
+    assert project["workspace_raster_tile_cache_layer_count"] == 22
+    assert project["historical_map_cache_layer_count"] == 15
+    assert project["historical_map_cache_ready_count"] == 15
     assert project["raster_layer_source_ids"]["historical-fandi-1916"] == (
         "sinica_jm50k_1916"
     )
@@ -2141,6 +2213,10 @@ def test_layer_preparation_seeds_imagery_cache_for_raster_ocr_pipeline(
     )
     assert raster_label_evidence["boundary"]["raw_gpx_embedded_in_json"] is False
     assert raster_pipeline["route_context_collection"]["status"] == "completed"
+    assert project["route_context_briefing_ref"] == (
+        "outputs/briefings/route_context_briefing.html"
+    )
+    assert (project_root / project["route_context_briefing_ref"]).is_file()
     assert project["route_mileage_k_anchor_count"] >= 1
     route_mileage_anchors = _load(project_root / project["route_mileage_k_anchors_ref"])
     assert any(
@@ -2149,6 +2225,110 @@ def test_layer_preparation_seeds_imagery_cache_for_raster_ocr_pipeline(
     )
     mileage_tags = _load(project_root / project["mileage_tag_alignment_ref"])
     assert mileage_tags["counts"]["usable_anchor_count"] >= 1
+
+
+def test_workspace_raster_cache_clamps_zoom_to_each_provider_range() -> None:
+    assert pretrip_layer_preparation._workspace_raster_source_zoom_range(
+        {"min_zoom": 10, "max_zoom": 17},
+        requested_min_zoom=5,
+        requested_max_zoom=14,
+    ) == (10, 14)
+    assert pretrip_layer_preparation._workspace_raster_source_zoom_range(
+        {"min_zoom": 16, "max_zoom": 18},
+        requested_min_zoom=5,
+        requested_max_zoom=14,
+    ) is None
+    economic_2001 = pretrip_layer_preparation.imagery_source_for_project(
+        {},
+        layer_id="historical-economic-2001",
+        source_id="happyman_tw25k2001",
+    )
+    assert pretrip_layer_preparation._workspace_raster_source_zoom_range(
+        economic_2001,
+        requested_min_zoom=5,
+        requested_max_zoom=14,
+    ) == (10, 14)
+
+
+def test_route_context_source_refresh_reads_clone_handoff_before_collection(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_root = _copy_fixture_project(tmp_path)
+    handoff_ref = "inputs/route_context_source_records.json"
+    handoff = {
+        "artifact_kind": "dashboard_workspace_route_context_source_handoff",
+        "schema_version": "scout.dashboard.route_context_source_handoff.v1",
+        "project_id": "chilai_nanhua_day1",
+        "record_count": 1,
+        "records": [
+            {
+                "source_id": "official.route.status",
+                "source_tier": "P0",
+                "source_family": "official_status",
+                "label": "Official route status",
+                "url": "https://example.invalid/official-route-status",
+            }
+        ],
+        "boundary": {
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "raw_source_payload_embedded": False,
+        },
+    }
+    _write_json(project_root / handoff_ref, handoff)
+    project = _load(project_root / "project.json")
+    project["route_context_source_records_ref"] = handoff_ref
+    _write_json(project_root / "project.json", project)
+    calls: list[dict[str, object]] = []
+
+    def fake_collect(root: Path, **kwargs: object) -> dict[str, object]:
+        calls.append({"root": root, **kwargs})
+        return {
+            "status": "completed",
+            "network_calls_made": True,
+            "evidence_item_count": 1,
+            "outputs": {
+                "web_case_query_plan_ref": (
+                    "outputs/layers/plans/web_case_query_plan.json"
+                ),
+                "web_case_evidence_ref": (
+                    "outputs/layers/normalized/web_case_evidence.json"
+                ),
+            },
+            "boundary": {
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            },
+        }
+
+    monkeypatch.setattr(
+        "pretrip_p0_p1_source_collection.collect_pretrip_p0_p1_sources",
+        fake_collect,
+    )
+
+    result = (
+        pretrip_layer_preparation._run_route_context_source_refresh_after_map_preparation(
+            project_root=project_root,
+            manifest={
+                "project_id": "chilai_nanhua_day1",
+                "finished_at": "2026-08-29T00:00:00Z",
+            },
+            request=LayerPreparationRequest(
+                project_id="chilai_nanhua_day1",
+                project_root=project_root,
+                layers=("imagery",),
+                network_mode="explicit-fetch",
+                allow_network_fetch=True,
+            ),
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert result["record_count"] == 1
+    assert result["network_calls_made"] is True
+    assert calls[0]["allow_network_fetch"] is True
+    assert calls[0]["source_records"] == handoff["records"]
 
 
 def test_layer_preparation_does_not_copy_known_scout_imagery_manifests(
@@ -2829,28 +3009,33 @@ def test_layer_preparation_syncs_scout_risk_score_outputs(
     assert terrain_samples["features"][0]["properties"]["runtime_safety_truth"] is False
     terrain_visualization = _load(project_root / project["terrain_visualization_ref"])
     assert terrain_visualization["artifact_kind"] == "pretrip_terrain_visualization"
-    assert terrain_visualization["status"] == "ready_from_risk_route_profile"
+    assert terrain_visualization["status"] == "awaiting_qgis_grass_processor"
     assert terrain_visualization["visualization_spec"]["modes"] == [
         "hillshade",
         "elevation_tint",
         "slope_shading",
         "contours",
     ]
-    assert terrain_visualization["visualization_spec"]["route_aligned_proxy"] is True
+    assert terrain_visualization["visualization_spec"]["coverage_scope"] == (
+        "full_route_extent_rectangle"
+    )
+    assert terrain_visualization["visualization_spec"]["preferred_processor"] == (
+        "qgis_processing_grass"
+    )
+    assert terrain_visualization["visualization_spec"]["actual_processor"] == (
+        "not_run"
+    )
+    assert terrain_visualization["visualization_spec"]["fallback_used"] is False
+    assert terrain_visualization["visualization_spec"]["requires_standard_processor"] is True
     assert terrain_visualization["visualization_spec"]["risk_heat_layer"] is False
     assert (
         terrain_visualization["visualization_spec"]["raw_dem_embedded_in_json"] is False
     )
-    assert terrain_visualization["counts"]["feature_count"] == 3
+    assert terrain_visualization["counts"]["feature_count"] == 0
+    assert terrain_visualization["counts"]["bitmap_overlay_count"] == 0
     assert terrain_visualization["counts"]["runtime_safety_truth_count"] == 0
-    assert "raster_overlays" not in terrain_visualization
-    assert terrain_visualization["features"][0]["properties"]["source_risk_ref"] == (
-        project["risk_route_profile_ref"]
-    )
-    assert (
-        terrain_visualization["features"][0]["properties"]["runtime_safety_truth"]
-        is False
-    )
+    assert terrain_visualization["raster_overlays"] == []
+    assert terrain_visualization["features"] == []
     _assert_risk_features_have_pretrip_provenance(
         project_root / project["risk_route_profile_ref"],
         expected_evidence_type="pretrip_route_risk_sample",
@@ -2871,7 +3056,7 @@ def test_layer_preparation_syncs_scout_risk_score_outputs(
     assert manifest["boundary"]["phase1_runtime_mutation_allowed"] is False
 
 
-def test_layer_preparation_generates_workspace_risk_before_terrain_bitmap(
+def test_layer_preparation_fails_closed_instead_of_running_python_dem_risk_engine(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2883,6 +3068,11 @@ def test_layer_preparation_generates_workspace_risk_before_terrain_bitmap(
     project["risk_score_generation_error"] = "No module named 'numpy'"
     _write_json(project_path, project)
     monkeypatch.setattr(pretrip_layer_preparation, "SCOUT_RISK_OUTPUT_SOURCES", {})
+    monkeypatch.setattr(
+        pretrip_layer_preparation,
+        "_ensure_scout_risk_package_importable",
+        lambda: pytest.fail("Python DEM risk engine must not be imported"),
+    )
 
     manifest = run_layer_preparation(
         LayerPreparationRequest(
@@ -2894,58 +3084,632 @@ def test_layer_preparation_generates_workspace_risk_before_terrain_bitmap(
     )
 
     project = _load(project_root / "project.json")
-    assert project["risk_score_generation_status"] == "completed"
+    assert project["risk_score_generation_status"] == (
+        "awaiting_qgis_grass_processor"
+    )
     assert "risk_score_generation_error" not in project
-    assert project["risk_score_source_profile"] == (
-        "scout_risk_engine_workspace_generated_overpass_route_profile"
+    assert project["risk_score_generation_basis"] == (
+        "qgis_grass_terrain_evidence_required"
     )
-    assert (project_root / project["risk_route_profile_ref"]).is_file()
-    assert (project_root / project["risk_score_points_ref"]).is_file()
-    assert (project_root / project["risk_ribbon_ref"]).is_file()
-    route_metadata = _load(project_root / project["risk_route_profile_metadata_ref"])
-    assert route_metadata["route_base"]["sampling_strategy"] == (
-        "reference_progress_projected_to_nearest_overpass_segment.v1"
+    assert project["risk_score_generation_skipped_reason"] == (
+        "python_dem_terrain_analysis_disabled"
     )
-    assert route_metadata["route_base"]["corridor_m"] == 500.0
-    route_risk_geojson = _load(project_root / project["risk_route_profile_ref"])
-    score_geojson = _load(project_root / project["risk_score_points_ref"])
-    score_metadata = _load(project_root / project["risk_score_points_metadata_ref"])
-    ribbon_metadata = _load(project_root / project["risk_ribbon_metadata_ref"])
-    assert route_risk_geojson["metadata"]["route_base"]["sampling_strategy"] == (
-        "reference_progress_projected_to_nearest_overpass_segment.v1"
-    )
-    assert score_geojson["metadata"]["route_base"]["sampling_strategy"] == (
-        "reference_progress_projected_to_nearest_overpass_segment.v1"
-    )
-    assert score_metadata["route_base"]["corridor_m"] == 500.0
-    assert ribbon_metadata["route_base"]["corridor_m"] == 500.0
+    assert project["risk_score_requested_processor"] == "qgis_processing_grass"
+    assert project["risk_score_actual_processor"] == "not_run"
+    assert project["risk_score_fallback_used"] is False
+    assert project["risk_score_python_dtm_processing_used"] is False
+    for ref_key in pretrip_layer_preparation.SCOUT_RISK_OUTPUT_REFS:
+        assert ref_key not in project
 
     layers = {layer["layer_id"]: layer for layer in manifest["layers"]}
-    assert layers["risk-score"]["status"] == "ready_from_project_ref"
+    assert layers["risk-score"]["status"] == "awaiting_qgis_grass_processor"
+    assert layers["risk-ribbon"]["status"] == "awaiting_qgis_grass_processor"
+    assert layers["risk-score"]["blockers"] == [
+        "python_dem_terrain_analysis_disabled"
+    ]
     assert layers["terrain"]["status"] == "ready_from_project_ref"
     terrain_visualization = _load(project_root / project["terrain_visualization_ref"])
-    assert terrain_visualization["status"] == "ready_from_dtm_20m_corridor_bitmap"
-    assert terrain_visualization["counts"]["bitmap_overlay_count"] == 4
+    assert terrain_visualization["status"] == "awaiting_qgis_grass_processor"
+    assert terrain_visualization["counts"]["bitmap_overlay_count"] == 0
     assert terrain_visualization["counts"]["source_dtm_tile_count"] == 1
-    assert terrain_visualization["counts"]["cell_count"] > 0
-    assert terrain_visualization["visualization_spec"]["contour_method"] == (
-        "bounded_marching_squares_linear_interpolation"
+    assert terrain_visualization["counts"]["cell_count"] == 0
+    assert terrain_visualization["raster_overlays"] == []
+    assert terrain_visualization["visualization_spec"]["preferred_processor"] == (
+        "qgis_processing_grass"
     )
-    contour_overlay = next(
-        overlay
-        for overlay in terrain_visualization["raster_overlays"]
-        if overlay["mode"] == "contours"
+    assert terrain_visualization["visualization_spec"]["actual_processor"] == (
+        "not_run"
     )
-    assert contour_overlay["visual_pixel_resolution_m"] == 10.0
-    assert contour_overlay["adds_source_resolution"] is False
-    assert contour_overlay["contour_segment_count"] == terrain_visualization[
-        "counts"
-    ]["contour_segment_count"]
-    assert terrain_visualization["dtm_grid"]["source_tile_count"] == 1
+    assert terrain_visualization["visualization_spec"]["fallback_used"] is False
+    assert terrain_visualization["visualization_spec"]["requires_standard_processor"] is True
     assert terrain_visualization["boundary"]["runtime_safety_truth"] is False
 
 
-def test_layer_preparation_terrain_can_fallback_to_risk_ribbon_lines(
+def test_layer_preparation_runs_qgis_risk_adapter_before_packaging_and_projection(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_root = _write_minimal_overpass_dtm_workspace(tmp_path)
+    call_order: list[str] = []
+    qgis_ref = "outputs/spatial/qgis/preparation-order/terrain_visualization.geojson"
+
+    def run_qgis_stage(**_kwargs: object) -> dict[str, object]:
+        call_order.append("qgis_grass")
+        terrain = {
+            "type": "FeatureCollection",
+            "status": "ready_from_qgis_grass_route_extent_rectangle",
+            "features": [],
+            "raster_overlays": [],
+            "visualization_spec": {
+                "actual_processor": "qgis_processing_grass",
+                "standard_processor_completed": True,
+                "fallback_used": False,
+                "python_dtm_processing_used": False,
+            },
+            "boundary": {
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "operational": False,
+                "adds_source_resolution": False,
+            },
+        }
+        _write_json(project_root / qgis_ref, terrain)
+        project = _load(project_root / "project.json")
+        _write_json(
+            project_root / "project.json",
+            {
+                **project,
+                "terrain_visualization_ref": qgis_ref,
+                "terrain_visualization_processor": "qgis_processing_grass",
+                "terrain_visualization_workflow_run_id": "preparation-order",
+            },
+        )
+        return {
+            "status": "completed",
+            "workflow_id": "terrain_feature_stack.v1",
+            "workflow_run_id": "preparation-order",
+            "output_refs": {
+                "terrain_visualization_ref": qgis_ref,
+                "terrain_visualization_processor": "qgis_processing_grass",
+                "terrain_visualization_workflow_run_id": "preparation-order",
+            },
+            "boundary": terrain["boundary"],
+        }
+
+    def package_terrain(**_kwargs: object) -> dict[str, object]:
+        call_order.append("terrain_rgb")
+        project = _load(project_root / "project.json")
+        assert project["terrain_visualization_ref"] == qgis_ref
+        assert project["terrain_visualization_processor"] == "qgis_processing_grass"
+        return {"status": "completed", "output_refs": {}}
+
+    def compile_projection(**_kwargs: object) -> dict[str, object]:
+        call_order.append("navigation_projection")
+        project = _load(project_root / "project.json")
+        assert project["terrain_visualization_ref"] == qgis_ref
+        risk_candidates = _load(
+            project_root / project["terrain_risk_candidates_ref"]
+        )
+        qgis_risk_candidates = [
+            candidate
+            for candidate in risk_candidates["candidates"]
+            if candidate["source_kind"] == "qgis_grass_route_risk_point"
+        ]
+        assert len(qgis_risk_candidates) == 2
+        assert qgis_risk_candidates[0]["risk_dimensions"] == {
+            "pretrip_risk": 61.2,
+            "teii_20m": 70.0,
+            "tri": 20.0,
+            "lec": 60.0,
+            "sri": 5.0,
+            "scp": 0.0,
+        }
+        assert qgis_risk_candidates[0]["candidate_only"] is True
+        assert qgis_risk_candidates[0]["runtime_safety_truth"] is False
+        assert qgis_risk_candidates[0]["operational"] is False
+        return {"status": "completed", "output_refs": {}}
+
+    def prepare_risk(**_kwargs: object) -> dict[str, object]:
+        call_order.append("risk_adapter")
+        risk_output_root = project_root / "outputs/risk"
+        if not (risk_output_root / "route_risk.geojson").exists():
+            _write_risk_score_outputs(risk_output_root)
+        return {
+            "status": "completed",
+            "actual_processor": "qgis_processing_grass",
+            "adapter": "scout_qgis_grass_risk_profile_adapter.v1",
+            "fallback_used": False,
+            "python_dtm_processing_used": False,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "operational": False,
+            "adds_source_resolution": False,
+            "counts": {
+                "qgis_source_sample_count": 2,
+                "route_risk_sample_count": 3,
+                "risk_score_point_count": 2,
+                "risk_ribbon_segment_count": 1,
+            },
+            "output_refs": dict(pretrip_layer_preparation.SCOUT_RISK_OUTPUT_REFS),
+        }
+
+    monkeypatch.setattr(
+        pretrip_layer_preparation,
+        "_run_qgis_terrain_feature_stack_after_layer_preparation",
+        run_qgis_stage,
+    )
+    monkeypatch.setattr(
+        pretrip_layer_preparation,
+        "_run_navigation_terrain_dem_after_layer_preparation",
+        package_terrain,
+    )
+    monkeypatch.setattr(
+        pretrip_layer_preparation,
+        "_run_navigation_terrain_projection_after_layer_preparation",
+        compile_projection,
+    )
+    monkeypatch.setattr(
+        pretrip_layer_preparation,
+        "prepare_qgis_grass_risk_outputs",
+        prepare_risk,
+    )
+
+    manifest = run_layer_preparation(
+        LayerPreparationRequest(
+            project_id="chilai_nanhua_day1",
+            project_root=project_root,
+            layers=(
+                "terrain",
+                "risk-score",
+                "risk-ribbon",
+                "risk-heatmap",
+                "risk-delta",
+            ),
+            prepared_at="2026-08-28T00:00:00Z",
+        )
+    )
+
+    assert call_order == [
+        "qgis_grass",
+        "risk_adapter",
+        "terrain_rgb",
+        "navigation_projection",
+    ]
+    assert manifest["qgis_terrain_feature_stack"]["status"] == "completed"
+    assert manifest["terrain_risk_candidate_refresh"]["status"] == "completed"
+    assert manifest["terrain_risk_candidate_refresh"]["candidate_count"] >= 2
+    assert manifest["outputs"]["terrain_visualization_ref"] == qgis_ref
+    project = _load(project_root / "project.json")
+    assert project["risk_score_generation_status"] == "completed"
+    assert "risk_score_generation_skipped_reason" not in project
+    assert project["risk_score_terrain_processor"] == "qgis_processing_grass"
+    assert project["risk_score_actual_processor"] == "qgis_processing_grass"
+    assert project["risk_score_adapter"] == (
+        "scout_qgis_grass_risk_profile_adapter.v1"
+    )
+    assert project["risk_score_fallback_used"] is False
+    assert project["risk_score_python_dtm_processing_used"] is False
+    layers = {layer["layer_id"]: layer for layer in manifest["layers"]}
+    assert layers["risk-score"]["status"] == "ready_from_project_ref"
+    assert layers["risk-ribbon"]["status"] == "ready_from_project_ref"
+    assert layers["risk-heatmap"]["status"] == "ready_from_project_ref"
+    assert layers["risk-delta"]["status"] == "ready_from_project_ref"
+    assert layers["risk-score"]["blockers"] == []
+    assert project.get("calibrated_risk_heatmap_sync_error") is None
+    heatmap_metadata = _load(
+        project_root / project["calibrated_risk_heatmap_metadata_ref"]
+    )
+    formula = heatmap_metadata["formula_candidate"]
+    assert formula["calibration_kind"] == (
+        "qgis_grass_direct_candidate_visualization"
+    )
+    assert formula["semantic_calibration_applied"] is False
+    assert formula["selected_dimensions"] == ["pretrip_risk"]
+    assert heatmap_metadata["boundary"]["runtime_safety_truth"] is False
+
+    rerun_result = pretrip_layer_preparation._finalize_qgis_dependent_risk_state(
+        project_root=project_root,
+        manifest=manifest,
+        qgis_terrain_feature_stack={
+            "status": "completed",
+            "workflow_run_id": "preparation-order-rerun",
+            "output_refs": {
+                "terrain_visualization_processor": "qgis_processing_grass"
+            },
+        },
+    )
+
+    assert rerun_result["status"] == "completed"
+    assert call_order[-1] == "risk_adapter"
+    rerun_project = _load(project_root / "project.json")
+    assert rerun_project["risk_score_qgis_workflow_run_id"] == (
+        "preparation-order-rerun"
+    )
+
+
+def test_qgis_risk_adapter_failure_remains_typed_unavailable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_root = _write_minimal_overpass_dtm_workspace(tmp_path)
+    project_path = project_root / "project.json"
+    project = _load(project_path)
+    project["risk_score_generation_status"] = "awaiting_qgis_grass_processor"
+    _write_json(project_path, project)
+
+    def fail_adapter(**_kwargs: object) -> dict[str, object]:
+        raise ValueError("verified route samples are missing")
+
+    monkeypatch.setattr(
+        pretrip_layer_preparation,
+        "prepare_qgis_grass_risk_outputs",
+        fail_adapter,
+    )
+    manifest = {
+        "project_id": "chilai_nanhua_day1",
+        "finished_at": "2026-08-28T00:00:00Z",
+        "route_corridor": {"corridor_m": 500.0},
+        "layers": [
+            {
+                "layer_id": "risk-score",
+                "status": "awaiting_qgis_grass_processor",
+                "warnings": [],
+                "blockers": [],
+            }
+        ],
+    }
+
+    result = pretrip_layer_preparation._finalize_qgis_dependent_risk_state(
+        project_root=project_root,
+        manifest=manifest,
+        qgis_terrain_feature_stack={
+            "status": "completed",
+            "workflow_run_id": "qgis-run-failed-adapter",
+            "output_refs": {
+                "terrain_visualization_processor": "qgis_processing_grass"
+            },
+        },
+    )
+
+    project = _load(project_path)
+    assert result["status"] == "unavailable"
+    assert result["reason"] == "qgis_grass_risk_profile_adapter_failed"
+    assert result["actual_processor"] == "not_run"
+    assert result["fallback_used"] is False
+    assert result["python_dtm_processing_used"] is False
+    assert project["risk_score_generation_status"] == "unavailable"
+    assert project["risk_score_generation_skipped_reason"] == (
+        "qgis_grass_risk_profile_adapter_failed"
+    )
+    assert manifest["layers"][0]["status"] == "unavailable"
+
+
+def test_qgis_preparation_timeout_cancels_without_python_fallback(
+    tmp_path: Path,
+) -> None:
+    project_root = _write_minimal_overpass_dtm_workspace(tmp_path)
+    initial_project = _load(project_root / "project.json")
+    initial_project["terrain_visualization_ref"] = (
+        "outputs/layers/normalized/terrain_visualization.geojson"
+    )
+    _write_json(project_root / "project.json", initial_project)
+    cancelled: list[str] = []
+
+    class RunningBackend:
+        def status(self, **_kwargs: object) -> QgisBackendStatus:
+            return QgisBackendStatus(
+                availability=QgisBackendAvailability.AVAILABLE,
+                enabled=True,
+                configured=True,
+                endpoint_configured=True,
+                reachable=True,
+                qgis_application_available=True,
+                plugin_bridge_available=True,
+                capabilities_discoverable=True,
+            )
+
+        def start_workflow(self, **_kwargs: object) -> SimpleNamespace:
+            return SimpleNamespace(
+                state=SpatialWorkflowState.RUNNING,
+                workflow_run_id="qgis-timeout-run",
+                workflow_id="terrain_feature_stack.v1",
+                artifacts=[],
+                render_artifacts=[],
+                error=None,
+                warnings=[],
+            )
+
+        def get_run(self, **_kwargs: object) -> SimpleNamespace:
+            return self.start_workflow()
+
+        def cancel_workflow(self, **kwargs: object) -> SimpleNamespace:
+            cancelled.append(str(kwargs["workflow_run_id"]))
+            return SimpleNamespace(state=SpatialWorkflowState.CANCELLED)
+
+    result = (
+        pretrip_layer_preparation._run_qgis_terrain_feature_stack_after_layer_preparation(
+            project_root=project_root,
+            manifest={
+                "project_id": "chilai_nanhua_day1",
+                "normalized_layers": ["terrain"],
+                "finished_at": "2026-08-28T00:00:00Z",
+            },
+            request=LayerPreparationRequest(
+                project_id="chilai_nanhua_day1",
+                project_root=project_root,
+                layers=("terrain",),
+                qgis_terrain_workflow_timeout_s=0.0,
+                qgis_terrain_poll_interval_s=0.0,
+            ),
+            backend=RunningBackend(),
+        )
+    )
+
+    assert result["status"] == "timeout"
+    assert result["error"]["code"] == "WORKFLOW_INTERRUPTED"
+    assert result["fallback_used"] is False
+    assert result["python_dtm_processing_used"] is False
+    assert cancelled == ["qgis-timeout-run"]
+    project = _load(project_root / "project.json")
+    assert project["terrain_visualization_ref"] == (
+        "outputs/layers/normalized/terrain_visualization.geojson"
+    )
+    assert project.get("terrain_visualization_processor") != "qgis_processing_grass"
+
+
+def test_qgis_preparation_retries_transient_mcp_status_before_starting_workflow(
+    tmp_path: Path,
+) -> None:
+    project_root = _write_minimal_overpass_dtm_workspace(tmp_path)
+    status_calls = 0
+    workflow_starts = 0
+
+    class RecoveringBackend:
+        def status(self, **_kwargs: object) -> QgisBackendStatus:
+            nonlocal status_calls
+            status_calls += 1
+            if status_calls == 1:
+                return QgisBackendStatus(
+                    availability=QgisBackendAvailability.UNAVAILABLE,
+                    enabled=True,
+                    configured=True,
+                    endpoint_configured=True,
+                    reachable=False,
+                    errors=[
+                        SpatialAnalysisError(
+                            code=SpatialAnalysisErrorCode.MCP_UNAVAILABLE,
+                            message="QGIS worker status timed out.",
+                            retryable=True,
+                        )
+                    ],
+                )
+            return QgisBackendStatus(
+                availability=QgisBackendAvailability.AVAILABLE,
+                enabled=True,
+                configured=True,
+                endpoint_configured=True,
+                reachable=True,
+                qgis_application_available=True,
+                plugin_bridge_available=True,
+                capabilities_discoverable=True,
+            )
+
+        def start_workflow(self, **_kwargs: object) -> SimpleNamespace:
+            nonlocal workflow_starts
+            workflow_starts += 1
+            return SimpleNamespace(
+                state=SpatialWorkflowState.FAILED,
+                workflow_run_id="qgis-recovered-status-run",
+                workflow_id="terrain_feature_stack.v1",
+                artifacts=[],
+                render_artifacts=[],
+                error=SpatialAnalysisError(
+                    code=SpatialAnalysisErrorCode.PROCESSING_FAILED,
+                    message="Intentional post-retry test failure.",
+                ),
+                warnings=[],
+            )
+
+    result = (
+        pretrip_layer_preparation._run_qgis_terrain_feature_stack_after_layer_preparation(
+            project_root=project_root,
+            manifest={
+                "project_id": "chilai_nanhua_day1",
+                "normalized_layers": ["terrain"],
+                "finished_at": "2026-08-28T00:00:00Z",
+            },
+            request=LayerPreparationRequest(
+                project_id="chilai_nanhua_day1",
+                project_root=project_root,
+                layers=("terrain",),
+                qgis_status_retry_attempts=3,
+                qgis_status_retry_interval_s=0.0,
+            ),
+            backend=RecoveringBackend(),
+        )
+    )
+
+    assert status_calls == 2
+    assert workflow_starts == 1
+    assert result["status"] == "failed"
+    assert result["processor_status"]["preflight_attempt_count"] == 2
+    assert result["fallback_used"] is False
+    assert result["python_dtm_processing_used"] is False
+
+
+def test_qgis_preparation_bounds_retryable_mcp_status_failures(
+    tmp_path: Path,
+) -> None:
+    project_root = _write_minimal_overpass_dtm_workspace(tmp_path)
+    status_calls = 0
+
+    class UnavailableBackend:
+        def status(self, **_kwargs: object) -> QgisBackendStatus:
+            nonlocal status_calls
+            status_calls += 1
+            return QgisBackendStatus(
+                availability=QgisBackendAvailability.UNAVAILABLE,
+                enabled=True,
+                configured=True,
+                endpoint_configured=True,
+                reachable=False,
+                errors=[
+                    SpatialAnalysisError(
+                        code=SpatialAnalysisErrorCode.MCP_UNAVAILABLE,
+                        message="QGIS worker status timed out.",
+                        retryable=True,
+                    )
+                ],
+            )
+
+        def start_workflow(self, **_kwargs: object) -> SimpleNamespace:
+            raise AssertionError("unavailable QGIS backend must not start a workflow")
+
+    result = (
+        pretrip_layer_preparation._run_qgis_terrain_feature_stack_after_layer_preparation(
+            project_root=project_root,
+            manifest={
+                "project_id": "chilai_nanhua_day1",
+                "normalized_layers": ["terrain"],
+                "finished_at": "2026-08-28T00:00:00Z",
+            },
+            request=LayerPreparationRequest(
+                project_id="chilai_nanhua_day1",
+                project_root=project_root,
+                layers=("terrain",),
+                qgis_status_retry_attempts=3,
+                qgis_status_retry_interval_s=0.0,
+            ),
+            backend=UnavailableBackend(),
+        )
+    )
+
+    assert status_calls == 3
+    assert result["status"] == "unavailable"
+    assert result["processor_status"]["preflight_attempt_count"] == 3
+    assert result["error"]["code"] == "MCP_UNAVAILABLE"
+    assert result["fallback_used"] is False
+    assert result["python_dtm_processing_used"] is False
+
+
+@pytest.mark.parametrize(
+    ("availability", "enabled", "configured", "expected_code"),
+    (
+        (QgisBackendAvailability.DISABLED, False, False, "BACKEND_NOT_CONFIGURED"),
+        (QgisBackendAvailability.UNAVAILABLE, True, True, "QGIS_UNAVAILABLE"),
+    ),
+)
+def test_qgis_preparation_persists_typed_unavailable_without_fallback(
+    tmp_path: Path,
+    availability: QgisBackendAvailability,
+    enabled: bool,
+    configured: bool,
+    expected_code: str,
+) -> None:
+    project_root = _write_minimal_overpass_dtm_workspace(tmp_path)
+
+    class StatusBackend:
+        def status(self, **_kwargs: object) -> QgisBackendStatus:
+            return QgisBackendStatus(
+                availability=availability,
+                enabled=enabled,
+                configured=configured,
+                endpoint_configured=configured,
+                reachable=False,
+            )
+
+        def start_workflow(self, **_kwargs: object) -> SimpleNamespace:
+            raise AssertionError("unavailable QGIS backend must not start a workflow")
+
+    result = (
+        pretrip_layer_preparation._run_qgis_terrain_feature_stack_after_layer_preparation(
+            project_root=project_root,
+            manifest={
+                "project_id": "chilai_nanhua_day1",
+                "normalized_layers": ["terrain"],
+                "finished_at": "2026-08-28T00:00:00Z",
+            },
+            request=LayerPreparationRequest(
+                project_id="chilai_nanhua_day1",
+                project_root=project_root,
+                layers=("terrain",),
+            ),
+            backend=StatusBackend(),
+        )
+    )
+
+    assert result["status"] == availability.value
+    assert result["error"]["code"] == expected_code
+    assert result["fallback_used"] is False
+    assert result["python_dtm_processing_used"] is False
+    receipt = _load(
+        project_root / "outputs/spatial/qgis/map_preparation_status.json"
+    )
+    assert receipt["output_refs"]["qgis_terrain_preparation_ref"] == (
+        "outputs/spatial/qgis/map_preparation_status.json"
+    )
+
+
+def test_qgis_preparation_propagates_missing_algorithm_fail_closed(
+    tmp_path: Path,
+) -> None:
+    project_root = _write_minimal_overpass_dtm_workspace(tmp_path)
+
+    class MissingAlgorithmBackend:
+        def status(self, **_kwargs: object) -> QgisBackendStatus:
+            return QgisBackendStatus(
+                availability=QgisBackendAvailability.AVAILABLE,
+                enabled=True,
+                configured=True,
+                endpoint_configured=True,
+                reachable=True,
+                qgis_application_available=True,
+                plugin_bridge_available=True,
+                capabilities_discoverable=True,
+            )
+
+        def start_workflow(self, **_kwargs: object) -> SimpleNamespace:
+            return SimpleNamespace(
+                state=SpatialWorkflowState.FAILED,
+                workflow_run_id="qgis-missing-algorithm",
+                workflow_id="terrain_feature_stack.v1",
+                artifacts=[],
+                render_artifacts=[],
+                error=SpatialAnalysisError(
+                    code=SpatialAnalysisErrorCode.UNSUPPORTED_TOOL,
+                    message="Required GRASS algorithm is unavailable.",
+                ),
+                warnings=[],
+            )
+
+    result = (
+        pretrip_layer_preparation._run_qgis_terrain_feature_stack_after_layer_preparation(
+            project_root=project_root,
+            manifest={
+                "project_id": "chilai_nanhua_day1",
+                "normalized_layers": ["terrain"],
+                "finished_at": "2026-08-28T00:00:00Z",
+            },
+            request=LayerPreparationRequest(
+                project_id="chilai_nanhua_day1",
+                project_root=project_root,
+                layers=("terrain",),
+            ),
+            backend=MissingAlgorithmBackend(),
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert result["error"] == {
+        "code": "UNSUPPORTED_TOOL",
+        "message": "Required GRASS algorithm is unavailable.",
+        "retryable": False,
+    }
+    assert result["fallback_used"] is False
+    assert result["python_dtm_processing_used"] is False
+
+
+def test_layer_preparation_terrain_samples_can_use_risk_ribbon_without_python_terrain_fallback(
     tmp_path: Path,
 ) -> None:
     project_root = _copy_fixture_project(tmp_path)
@@ -2960,6 +3724,7 @@ def test_layer_preparation_terrain_can_fallback_to_risk_ribbon_lines(
         }
     )
     for key in (
+        "dtm_coverage_summary_ref",
         "risk_route_profile_ref",
         "risk_route_profile_metadata_ref",
         "risk_score_points_ref",
@@ -2996,17 +3761,24 @@ def test_layer_preparation_terrain_can_fallback_to_risk_ribbon_lines(
         "outputs/risk/risk_ribbon.geojson"
     )
     assert terrain_samples["features"][0]["properties"]["runtime_safety_truth"] is False
-    assert terrain_visualization["status"] == "ready_from_risk_ribbon"
-    assert terrain_visualization["counts"]["feature_count"] == 2
-    assert terrain_visualization["visualization_spec"]["route_aligned_proxy"] is True
-    assert terrain_visualization["visualization_spec"]["risk_heat_layer"] is False
-    assert "raster_overlays" not in terrain_visualization
-    assert terrain_visualization["features"][0]["properties"]["source_risk_ref"] == (
-        "outputs/risk/risk_ribbon.geojson"
+    assert terrain_visualization["status"] == "source_unavailable"
+    assert terrain_visualization["counts"]["feature_count"] == 0
+    assert terrain_visualization["counts"]["bitmap_overlay_count"] == 0
+    assert terrain_visualization["visualization_spec"]["preferred_processor"] == (
+        "qgis_processing_grass"
     )
-    assert (
-        terrain_visualization["features"][0]["properties"]["runtime_safety_truth"]
-        is False
+    assert terrain_visualization["visualization_spec"]["actual_processor"] == (
+        "not_run"
+    )
+    assert terrain_visualization["visualization_spec"]["fallback_used"] is False
+    assert terrain_visualization["visualization_spec"]["source_available"] is False
+    assert terrain_visualization["visualization_spec"]["risk_heat_layer"] is False
+    assert terrain_visualization["raster_overlays"] == []
+    assert terrain_visualization["features"] == []
+    assert terrain_visualization["source_refs"] == []
+    assert any(
+        "Full DEM source is unavailable" in warning
+        for warning in terrain_visualization["warnings"]
     )
 
 

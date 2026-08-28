@@ -1664,6 +1664,103 @@ def test_pretrip_project_terrain_overlay_api_serves_workspace_png(tmp_path: Path
     assert response.content == png_bytes
 
 
+def test_pretrip_terrain_route_corridor_api_enforces_candidate_authority_and_hashes(
+    tmp_path: Path,
+) -> None:
+    workspace_root = tmp_path / "pretrip_workspace"
+    project_root = workspace_root / PROJECT_ID
+    overlay_ref = (
+        "outputs/spatial/qgis/terrain-route-cache/cache-1/"
+        "top_10_percent_corridor.png"
+    )
+    visualization_ref = (
+        "outputs/spatial/qgis/terrain-route-cache/cache-1/"
+        "terrain_route_visualization.json"
+    )
+    png_bytes = bytes.fromhex(
+        "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+        "0000000d49444154789c6360606060000000050001a5f645400000000049454e44"
+        "ae426082"
+    )
+    overlay_path = project_root / overlay_ref
+    overlay_path.parent.mkdir(parents=True, exist_ok=True)
+    overlay_path.write_bytes(png_bytes)
+    overlay_sha = hashlib.sha256(png_bytes).hexdigest()
+    visualization = {
+        "artifact_kind": "terrain_route_hypothesis_visualization",
+        "authority": "candidate_only",
+        "source_type": "terrain_hypothesis",
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "operational": False,
+        "boundary": {"promotion_allowed": False},
+        "raster_overlays": [
+            {
+                "mode": "top_10_percent_corridor",
+                "source_path": overlay_ref,
+                "sha256": overlay_sha,
+                "contains_best_path": True,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "operational": False,
+            }
+        ],
+    }
+    visualization_path = project_root / visualization_ref
+    visualization_path.write_text(json.dumps(visualization), encoding="utf-8")
+    project = {
+        "terrain_route_hypothesis_visualization_ref": visualization_ref,
+        "terrain_route_hypothesis_visualization_sha256": hashlib.sha256(
+            visualization_path.read_bytes()
+        ).hexdigest(),
+        "terrain_route_hypothesis_status": "completed",
+        "terrain_route_hypothesis_authority": "candidate_only",
+        "terrain_route_hypothesis_candidate_only": True,
+        "terrain_route_hypothesis_runtime_safety_truth": False,
+    }
+    (project_root / "project.json").write_text(
+        json.dumps(project), encoding="utf-8"
+    )
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/terrain-route-overlays/"
+        "top_10_percent_corridor.png"
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
+    assert response.headers["x-scout-terrain-route-corridor"] == (
+        "top_10_percent_corridor"
+    )
+    assert response.headers["x-scout-authority"] == "candidate_only"
+    assert response.headers["x-scout-source-type"] == "terrain_hypothesis"
+    assert response.headers["x-scout-candidate-only"] == "true"
+    assert response.headers["x-scout-runtime-safety-truth"] == "false"
+    assert response.headers["x-scout-operational"] == "false"
+    assert response.headers["x-scout-terrain-route-overlay-hash"] == overlay_sha
+    assert response.content == png_bytes
+    assert client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/terrain-route-overlays/"
+        "recommended_route.png"
+    ).status_code == 422
+
+    visualization["authority"] = "official_trail"
+    visualization_path.write_text(json.dumps(visualization), encoding="utf-8")
+    project["terrain_route_hypothesis_visualization_sha256"] = hashlib.sha256(
+        visualization_path.read_bytes()
+    ).hexdigest()
+    (project_root / "project.json").write_text(
+        json.dumps(project), encoding="utf-8"
+    )
+    promoted = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/terrain-route-overlays/"
+        "top_10_percent_corridor.png"
+    )
+    assert promoted.status_code == 422
+    assert "authority" in promoted.json()["detail"]
+
+
 def test_pretrip_project_osm_pbf_vector_api_serves_workspace_geojson(tmp_path: Path):
     workspace_root = tmp_path / "pretrip_workspace"
     project_root = workspace_root / PROJECT_ID
