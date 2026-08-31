@@ -8,18 +8,20 @@ import inspect
 import json
 import os
 import re
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel
 from pydantic_ai import Agent, ModelRetry, Tool, ToolFailed, UsageLimits
+from pydantic_ai.capabilities.native_tool import NativeTool
 from pydantic_ai.capabilities.web_fetch import WebFetch
 from pydantic_ai.capabilities.web_search import WebSearch
 from pydantic_ai.exceptions import ModelHTTPError, UserError
 from pydantic_ai.messages import (
     CompactionPart,
+    InstructionPart,
     ModelMessagesTypeAdapter,
     ModelResponse,
     NativeToolCallPart,
@@ -29,7 +31,7 @@ from pydantic_ai.messages import (
     ToolCallPart,
     ToolReturnPart,
 )
-from pydantic_ai.models.function import AgentInfo, FunctionModel
+from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.native_tools import AdvisorTool, WebSearchTool
 
@@ -42,7 +44,7 @@ from scout.agents.pydantic_ai_compat import (
     pydantic_native_research_capabilities,
 )
 
-REQUIRED_VERSION = "2.35.0"
+REQUIRED_VERSION = "2.36.0"
 DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4-flash-0731"
 DEFAULT_TIMEOUT_SECONDS = 120.0
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -143,7 +145,7 @@ async def run_compatibility_smoke(
 def _offline_checks() -> list[tuple[str, Callable[[], Any]]]:
     return [
         ("runtime_versions", _offline_runtime_versions),
-        ("v235_capability_contract", _offline_v235_capability_contract),
+        ("v236_capability_contract", _offline_v236_capability_contract),
         ("openrouter_web_search_annotations", _offline_openrouter_annotations),
         ("instrumentation_v6_tool_role", _offline_instrumentation_v6_tool_role),
         ("function_tool_call", _offline_function_tool_call),
@@ -168,6 +170,10 @@ def _live_checks(model: Any) -> list[tuple[str, Callable[[], Any]]]:
         ("live_openrouter_structured_output", lambda: _live_structured_output(model)),
         ("live_openrouter_mcp", lambda: _live_mcp(model)),
         ("live_openrouter_stream_events", lambda: _live_stream_events(model)),
+        (
+            "live_openrouter_native_web_search",
+            lambda: _live_native_web_search(model),
+        ),
         ("live_openrouter_web_search", lambda: _live_web_search(model)),
         ("live_openrouter_web_fetch", lambda: _live_web_fetch(model)),
         ("live_openrouter_tool_failed", lambda: _live_tool_failed(model)),
@@ -206,8 +212,9 @@ def _offline_runtime_versions() -> dict[str, str]:
     return versions
 
 
-def _offline_v235_capability_contract() -> dict[str, Any]:
+async def _offline_v236_capability_contract() -> dict[str, Any]:
     from pydantic_ai import RunContext
+    from pydantic_ai.capabilities import durable_operation
     from pydantic_ai.mcp import MCPToolset
     from pydantic_ai.toolsets._tool_search import ToolSearchToolset
 
@@ -236,6 +243,34 @@ def _offline_v235_capability_contract() -> dict[str, Any]:
         explicit_empty_description.description == "",
         "Tool explicit empty description was not preserved",
     )
+    instruction = InstructionPart(
+        content="Use bounded Scout evidence.",
+        name="scout-runtime-policy",
+        id="scout-instruction-v236",
+    )
+    _require(
+        instruction.id == "scout-instruction-v236",
+        "InstructionPart stable id is unavailable",
+    )
+
+    @durable_operation("scout.route.read")
+    async def read_route_marker(value: str) -> str:
+        return value
+
+    durable_marker = getattr(
+        read_route_marker,
+        "__pydantic_ai_durable_operation__",
+        None,
+    )
+    _require(durable_marker is not None, "durable operation marker is unavailable")
+    _require(
+        getattr(durable_marker, "name", None) == "scout.route.read",
+        "durable operation name changed",
+    )
+    _require(
+        await read_route_marker("CP-07") == "CP-07",
+        "durable operation changed the wrapped result",
+    )
     _require("prefer_tasks" in mcp_parameters, "MCP prefer_tasks is unavailable")
     _require(
         "max_retries" in tool_search_parameters,
@@ -250,6 +285,8 @@ def _offline_v235_capability_contract() -> dict[str, Any]:
         "run_context_tool_availability": True,
         "run_context_active_capability_contract": True,
         "explicit_empty_tool_description_preserved": True,
+        "instruction_part_id": instruction.id,
+        "durable_operation_name": durable_marker.name,
         "mcp_prefer_tasks_default": mcp_parameters["prefer_tasks"].default,
         "tool_search_max_retries": True,
         "agent_web_allowed_hosts": True,
@@ -297,7 +334,9 @@ def _offline_openrouter_annotations() -> dict[str, Any]:
     )
     model = OpenRouterModel(
         "openai/gpt-4o-mini",
-        provider=OpenRouterProvider(api_key="-".join(("fixture", "value"))),
+        provider=OpenRouterProvider(
+            api_key="-".join(("fixture", "value")),  # noqa: FLY002
+        ),
     )
     mapped = model._process_response(response)
     provider_details = mapped.provider_details or {}
@@ -538,28 +577,57 @@ async def _offline_mcp_instructions() -> dict[str, Any]:
 
     captured_instructions: list[str | None] = []
 
-    def model_function(messages: list[object], info: AgentInfo) -> ModelResponse:
+    async def model_stream(
+        messages: list[object],
+        info: AgentInfo,
+    ) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
         del info
         captured_instructions.extend(
             getattr(message, "instructions", None) for message in messages
         )
         if _has_part(messages, ToolReturnPart):
-            return ModelResponse(parts=[TextPart("CP-07")])
-        return ModelResponse(parts=[ToolCallPart("route_marker", {})])
+            yield "CP-07"
+            return
+        yield {
+            0: DeltaToolCall(
+                name="route_marker",
+                json_args="{}",
+                tool_call_id="scout-mcp-stream-call",
+            )
+        }
 
     agent = Agent(
-        FunctionModel(model_function),
+        FunctionModel(stream_function=model_stream),
         toolsets=[MCPToolset(server, include_instructions=True)],
         **pydantic_agent_runtime_kwargs(),
     )
-    result = await agent.run("Use the MCP route marker.")
+    result = None
+    event_types: list[str] = []
+    async with agent.run_stream_events("Use the MCP route marker.") as events:
+        async for event in events:
+            event_types.append(type(event).__name__)
+            if type(event).__name__ == "AgentRunResultEvent":
+                result = event.result
+    _require(result is not None, "MCP stream omitted the final agent result")
     trace = _message_trace(result)
     _require(
         any(marker in (item or "") for item in captured_instructions),
         "MCP instructions were not added to the model request",
     )
     _require(trace["tool_call_count"] == 1, "MCP tool was not called once")
-    return {**trace, "instructions_present": True}
+    _require(
+        "FunctionToolCallEvent" in event_types,
+        "MCP stream omitted the tool call event",
+    )
+    _require(
+        "FunctionToolResultEvent" in event_types,
+        "MCP stream omitted the tool result event",
+    )
+    return {
+        **trace,
+        "instructions_present": True,
+        "event_types": event_types,
+    }
 
 
 def _offline_web_capabilities() -> dict[str, Any]:
@@ -747,7 +815,22 @@ async def _live_mcp(model: Any) -> dict[str, Any]:
         toolsets=[MCPToolset(server, include_instructions=True)],
         **pydantic_agent_runtime_kwargs(),
     )
-    result = await _live_run(agent, "Which route marker does the MCP server expose?")
+    result = None
+    event_types: list[str] = []
+    async with asyncio.timeout(DEFAULT_TIMEOUT_SECONDS):
+        async with agent.run_stream_events(
+            "Which route marker does the MCP server expose?",
+            usage_limits=UsageLimits(request_limit=10, tool_calls_limit=10),
+            model_settings={
+                "temperature": 0,
+                "timeout": DEFAULT_TIMEOUT_SECONDS,
+            },
+        ) as events:
+            async for event in events:
+                event_types.append(type(event).__name__)
+                if type(event).__name__ == "AgentRunResultEvent":
+                    result = event.result
+    _require(result is not None, "live MCP stream omitted the final agent result")
     trace = _message_trace(result)
     instructions = [
         getattr(message, "instructions", None) for message in result.all_messages()
@@ -757,7 +840,20 @@ async def _live_mcp(model: Any) -> dict[str, Any]:
         "live MCP instructions were not attached",
     )
     _require("route_marker" in trace["tool_names"], "live MCP tool was not called")
-    return {**trace, "output": str(result.output), "instructions_present": True}
+    _require(
+        "FunctionToolCallEvent" in event_types,
+        "live MCP stream omitted the tool call event",
+    )
+    _require(
+        "FunctionToolResultEvent" in event_types,
+        "live MCP stream omitted the tool result event",
+    )
+    return {
+        **trace,
+        "output": str(result.output),
+        "instructions_present": True,
+        "event_types": event_types,
+    }
 
 
 async def _live_stream_events(model: Any) -> dict[str, Any]:
@@ -813,6 +909,34 @@ async def _live_web_search(model: Any) -> dict[str, Any]:
     )
     _require("pydantic" in output.lower(), "web search output lacks Pydantic result")
     return {**trace, "output": output}
+
+
+async def _live_native_web_search(model: Any) -> dict[str, Any]:
+    agent = Agent(
+        model,
+        instructions=(
+            "Use the provider-native web search tool to find the official Pydantic AI "
+            "changelog. Return one result title and its pydantic.dev URL."
+        ),
+        capabilities=[NativeTool(WebSearchTool(max_uses=1))],
+        **pydantic_agent_runtime_kwargs(),
+    )
+    result = await _live_run(
+        agent,
+        "Search the web now for the official Pydantic AI changelog.",
+    )
+    trace = _message_trace(result)
+    output = str(result.output)
+    _require("pydantic" in output.lower(), "native web search lacks Pydantic result")
+    _require(
+        "pydantic.dev" in output.lower(),
+        "native web search lacks the official Pydantic domain",
+    )
+    return {
+        **trace,
+        "output": output,
+        "provider_exposed_native_parts": bool(trace["native_tool_call_count"]),
+    }
 
 
 async def _live_web_fetch(model: Any) -> dict[str, Any]:

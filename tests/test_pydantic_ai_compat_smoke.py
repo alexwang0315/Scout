@@ -27,7 +27,7 @@ def test_offline_pydantic_ai_compatibility_smoke_passes() -> None:
     assert report["live_openrouter_requested"] is False
     assert {item["name"] for item in report["checks"]} == {
         "runtime_versions",
-        "v235_capability_contract",
+        "v236_capability_contract",
         "openrouter_web_search_annotations",
         "instrumentation_v6_tool_role",
         "function_tool_call",
@@ -44,6 +44,13 @@ def test_offline_pydantic_ai_compatibility_smoke_passes() -> None:
         "external_cancellation",
         "model_http_error_retry_metadata",
     }
+    by_name = {item["name"]: item for item in report["checks"]}
+    capability_details = by_name["v236_capability_contract"]["details"]
+    assert capability_details["instruction_part_id"] == "scout-instruction-v236"
+    assert capability_details["durable_operation_name"] == "scout.route.read"
+    mcp_details = by_name["mcp_instructions_and_tool"]["details"]
+    assert "FunctionToolCallEvent" in mcp_details["event_types"]
+    assert "FunctionToolResultEvent" in mcp_details["event_types"]
 
 
 def test_live_smoke_fails_closed_without_openrouter_key(
