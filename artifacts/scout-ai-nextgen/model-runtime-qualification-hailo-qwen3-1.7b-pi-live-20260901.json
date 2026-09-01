@@ -1,0 +1,252 @@
+{
+  "schema_version": "scout.model_runtime_qualification.v1",
+  "experiment_id": "SCOUT-AI-EXP-MODEL-RUNTIME-QUAL-005",
+  "qualification_id": "ac2c81bd-c957-4d20-a71c-b1b8c4454631",
+  "generated_at": "2026-09-01T10:04:00.175360Z",
+  "disposition": "failed",
+  "runtime_id": "experimental.hailo.pi-live.qwen3-1.7b",
+  "provider": "hailo_ollama",
+  "requested_model_id": "qwen3:1.7b",
+  "accepted_observed_model_ids": [
+    "qwen3:1.7b"
+  ],
+  "transport_scope": "loopback",
+  "locality": "edge",
+  "accelerator": "hailo_10h",
+  "endpoint_sha256": "87459d11adee7bce23cb37e9d210800e77403ecd52229858300b9215af0ed0fd",
+  "runtime_config_sha256": "073778770d94db541990de386194191f2ba89d747ce55fee89d0d007f9ce522c",
+  "case_sha256": "e4b38ccf43cb71f9c6eb849f822a220d1432a832ba98412159501160eb7c7d3c",
+  "evidence_catalog_sha256": "846199ce7c8bb6567a0442659eebe39a532050a3d1c06bd2aebe816b07de7e32",
+  "case_id": "terrain-http-qualification-hailo-live-20260901",
+  "request_id": "2efb10b1-68a7-43e7-8f16-e5708d125666",
+  "workspace_binding": {
+    "workspace_id": "workspace-http-qualification",
+    "workspace_revision": "workspace-revision-1",
+    "mission_id": "mission-http-qualification",
+    "mission_version": "mission-version-1",
+    "route_id": "route-http-qualification",
+    "route_version": "route-version-1",
+    "input_hash": "93fba956c1f43d99d1cd380e899548c63b8f1ce8f50c14ce5e7a93071eba4d42",
+    "generated_at": "2026-09-01T09:59:42.560480Z"
+  },
+  "checks": [
+    {
+      "check_id": "configuration",
+      "status": "passed",
+      "summary": "Typed runtime configuration passed Scout validation.",
+      "started_at": "2026-09-01T09:59:42.560581Z",
+      "completed_at": "2026-09-01T09:59:42.560581Z",
+      "latency_ms": 0,
+      "model_request_count": 0,
+      "tool_call_count": 0,
+      "tools_called": [],
+      "input_tokens": null,
+      "output_tokens": null,
+      "requested_model_id": "qwen3:1.7b",
+      "observed_model_id": null,
+      "output_hash": null,
+      "error_type": null,
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "check_id": "basic_chat",
+      "status": "passed",
+      "summary": "Basic chat transport and observed model identity passed.",
+      "started_at": "2026-09-01T09:59:42.938890Z",
+      "completed_at": "2026-09-01T09:59:52.650256Z",
+      "latency_ms": 9711,
+      "model_request_count": 1,
+      "tool_call_count": 0,
+      "tools_called": [],
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "requested_model_id": "qwen3:1.7b",
+      "observed_model_id": "qwen3:1.7b",
+      "output_hash": "8240a872c5eeb1419e19ce0b0e890a795deafa72a613b0ba4f51be28d2aa17d2",
+      "error_type": null,
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "check_id": "typed_output",
+      "status": "passed",
+      "summary": "Structured output, Pydantic validation, and typed authority flags passed.",
+      "started_at": "2026-09-01T09:59:52.663367Z",
+      "completed_at": "2026-09-01T09:59:57.636206Z",
+      "latency_ms": 4972,
+      "model_request_count": 1,
+      "tool_call_count": 0,
+      "tools_called": [],
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "requested_model_id": "qwen3:1.7b",
+      "observed_model_id": "qwen3:1.7b",
+      "output_hash": "d0337979d12a7a2680f3ccc948c99197abd5e6f9d058fc3714581ed2f70f1a5b",
+      "error_type": null,
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "check_id": "tool_calling",
+      "status": "failed",
+      "summary": "The model returned the marker without the exact bounded tool call.",
+      "started_at": "2026-09-01T09:59:57.654957Z",
+      "completed_at": "2026-09-01T10:00:00.160895Z",
+      "latency_ms": 2505,
+      "model_request_count": 1,
+      "tool_call_count": 0,
+      "tools_called": [],
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "requested_model_id": "qwen3:1.7b",
+      "observed_model_id": "qwen3:1.7b",
+      "output_hash": "e0e8a29bc26ff36ddb586d9df44f0e2e620ec6b6f462a252d780dd0d3917eef7",
+      "error_type": "ToolCallingProbeNotExecuted",
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "check_id": "praison_mcp",
+      "status": "failed",
+      "summary": "The PraisonAI MCP intelligence probe did not satisfy the fixed corpus.",
+      "started_at": "2026-09-01T10:00:00.161494Z",
+      "completed_at": "2026-09-01T10:04:00.175256Z",
+      "latency_ms": 240013,
+      "model_request_count": 3,
+      "tool_call_count": 2,
+      "tools_called": [
+        "dem.read",
+        "route.read"
+      ],
+      "input_tokens": null,
+      "output_tokens": null,
+      "requested_model_id": "qwen3:1.7b",
+      "observed_model_id": null,
+      "output_hash": "0dbdd76e37bfb5172b00db6ee5aeca709d6087521a42e76d4a9f698fb5d07d38",
+      "error_type": "ModelHTTPError",
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "check_id": "authority_boundary",
+      "status": "passed",
+      "summary": "Pydantic Contract Gateway preserved the candidate-only authority boundary.",
+      "started_at": "2026-09-01T10:04:00.175330Z",
+      "completed_at": "2026-09-01T10:04:00.175338Z",
+      "latency_ms": 0,
+      "model_request_count": 0,
+      "tool_call_count": 0,
+      "tools_called": [],
+      "input_tokens": null,
+      "output_tokens": null,
+      "requested_model_id": null,
+      "observed_model_id": null,
+      "output_hash": "0dbdd76e37bfb5172b00db6ee5aeca709d6087521a42e76d4a9f698fb5d07d38",
+      "error_type": null,
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    }
+  ],
+  "resources": {
+    "wall_latency_ms": 257615,
+    "parent_peak_rss_bytes_before": 143261696,
+    "parent_peak_rss_bytes_after": 163708928,
+    "memory_scope": "qualification_parent_ru_maxrss"
+  },
+  "intelligence_execution": {
+    "status": "ok",
+    "response": {
+      "request_id": "2efb10b1-68a7-43e7-8f16-e5708d125666",
+      "findings": [],
+      "evidence": [],
+      "uncertainties": [
+        {
+          "uncertainty_id": "praison_runtime_unavailable",
+          "description": "The PraisonAI intelligence runtime was unavailable or failed before producing a valid candidate.",
+          "missing_evidence": [
+            "successful_praison_execution"
+          ],
+          "impact": "multi-agent candidate analysis was discarded",
+          "recommended_next_evidence": []
+        }
+      ],
+      "conflicts": [],
+      "provenance": {
+        "request_id": "2efb10b1-68a7-43e7-8f16-e5708d125666",
+        "service_name": "scout.praison_intelligence_service",
+        "service_version": "0.1",
+        "agent_path": [
+          "praisonai.orchestrator",
+          "degraded"
+        ],
+        "tools_called": [
+          "route.read",
+          "dem.read"
+        ],
+        "model_runtimes": [
+          "experimental.hailo.pi-live.qwen3-1.7b"
+        ],
+        "model_execution_records": [
+          {
+            "execution_id": "3a1a1015-6013-41f2-8255-6f5eb1506e00",
+            "parent_request_id": "2efb10b1-68a7-43e7-8f16-e5708d125666",
+            "inference_id": "b488b4eb-d064-4895-93c6-31edf79fea6f",
+            "runtime_id": "experimental.hailo.pi-live.qwen3-1.7b",
+            "provider": "hailo_ollama",
+            "model_id": "qwen3:1.7b",
+            "observed_model_id": null,
+            "locality": "edge",
+            "started_at": "2026-09-01T10:00:03.496774Z",
+            "completed_at": "2026-09-01T10:04:00.166892Z",
+            "latency_ms": 236670,
+            "model_request_count": 3,
+            "input_tokens": null,
+            "output_tokens": null,
+            "status": "failed",
+            "selection_reason": "selected experimental.hailo.pi-live.qwen3-1.7b by local-first typed runtime routing; tier=hailo_local, locality=edge",
+            "error_type": "ModelHTTPError",
+            "fallback_used": false
+          }
+        ],
+        "capability_grant_id": "e0d25f55-3895-40c2-993c-a921626c74f9",
+        "workspace_binding": {
+          "workspace_id": "workspace-http-qualification",
+          "workspace_revision": "workspace-revision-1",
+          "mission_id": "mission-http-qualification",
+          "mission_version": "mission-version-1",
+          "route_id": "route-http-qualification",
+          "route_version": "route-version-1",
+          "input_hash": "93fba956c1f43d99d1cd380e899548c63b8f1ce8f50c14ce5e7a93071eba4d42",
+          "generated_at": "2026-09-01T09:59:42.560480Z"
+        },
+        "output_hash": "0dbdd76e37bfb5172b00db6ee5aeca709d6087521a42e76d4a9f698fb5d07d38",
+        "generated_at": "2026-09-01T10:04:00.167042Z",
+        "candidate_only": true,
+        "runtime_safety_truth": false
+      },
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    "service_reached": true,
+    "degraded": true,
+    "failure_reason": null,
+    "remote_validation": {
+      "disposition": "accepted_candidate",
+      "request_id": "2efb10b1-68a7-43e7-8f16-e5708d125666",
+      "accepted": true,
+      "reasons": [
+        "response accepted as candidate evidence only"
+      ],
+      "output_hash": "0dbdd76e37bfb5172b00db6ee5aeca709d6087521a42e76d4a9f698fb5d07d38",
+      "validated_at": "2026-09-01T10:04:00.167848Z",
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    "candidate_only": true,
+    "runtime_safety_truth": false
+  },
+  "report_hash": "5cc29b8bded2a9aa0eb651368a368a9c809b4ac152079ba28bff3235407110ef",
+  "candidate_only": true,
+  "runtime_safety_truth": false
+}
