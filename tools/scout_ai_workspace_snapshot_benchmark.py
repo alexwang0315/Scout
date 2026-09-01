@@ -16,6 +16,7 @@ from scout.nextgen.intelligence_gateway import (
 from scout.nextgen.model_qualification import ModelRuntimeQualificationCase
 from scout.nextgen.praison_service import EvidenceCatalog
 from scout.nextgen.workspace_snapshot import (
+    WorkspaceBenchmarkArtifactRole,
     WorkspaceContextCompiler,
     build_workspace_benchmark_cases,
 )
@@ -31,6 +32,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--as-of", required=True)
     parser.add_argument("--context-budget-tokens", type=int, default=4096)
     parser.add_argument("--stale-after-seconds", type=int, default=3600)
+    parser.add_argument(
+        "--artifact-role",
+        choices=tuple(role.value for role in WorkspaceBenchmarkArtifactRole),
+        default=WorkspaceBenchmarkArtifactRole.MODEL_EVALUATION.value,
+    )
     return parser
 
 
@@ -57,9 +63,16 @@ def main() -> int:
         evidence_catalog=normalized_catalog,
         compiler=compiler,
         now=as_of,
+        case_id_prefix=(
+            f"{case.case_id}-synthetic-seed"
+            if args.artifact_role
+            == WorkspaceBenchmarkArtifactRole.SYNTHETIC_SEED.value
+            else "terrain-workspace"
+        ),
     )
     artifact = {
         "schema_version": "scout.workspace_snapshot_benchmark.v0",
+        "artifact_role": args.artifact_role,
         "generated_at": as_of.isoformat(),
         "source_case": str(args.case),
         "source_case_sha256": _file_hash(args.case),

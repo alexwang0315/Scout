@@ -30,6 +30,11 @@ class WorkspaceSnapshotMode(StrEnum):
     NO_WORKSPACE = "no_workspace"
 
 
+class WorkspaceBenchmarkArtifactRole(StrEnum):
+    MODEL_EVALUATION = "model_evaluation"
+    SYNTHETIC_SEED = "synthetic_seed"
+
+
 class WorkspaceAnswerBehavior(StrEnum):
     ANSWER_WITH_EVIDENCE = "answer_with_evidence"
     MORE_EVIDENCE_REQUIRED = "more_evidence_required"
@@ -321,7 +326,11 @@ def build_workspace_benchmark_cases(
     evidence_catalog: EvidenceCatalog,
     compiler: WorkspaceContextCompiler,
     now: datetime,
+    case_id_prefix: str = "terrain-workspace",
 ) -> tuple[WorkspaceBenchmarkCase, ...]:
+    normalized_case_id_prefix = case_id_prefix.strip()
+    if not normalized_case_id_prefix:
+        raise ValueError("workspace benchmark case ID prefix cannot be empty")
     route_items = tuple(
         item
         for item in evidence_catalog.items
@@ -375,7 +384,7 @@ def build_workspace_benchmark_cases(
         )
         cases.append(
             WorkspaceBenchmarkCase(
-                case_id=f"terrain-workspace-{mode.value}-v0",
+                case_id=f"{normalized_case_id_prefix}-{mode.value}-v0",
                 mode=mode,
                 expected_behavior=snapshot.sufficiency.behavior,
                 snapshot=snapshot,
@@ -547,6 +556,7 @@ __all__ = [
     "ScoutWorkspaceSnapshot",
     "WorkspaceAnswerBehavior",
     "WorkspaceAuthority",
+    "WorkspaceBenchmarkArtifactRole",
     "WorkspaceBenchmarkCase",
     "WorkspaceCandidateFeature",
     "WorkspaceContextBudgetExceeded",

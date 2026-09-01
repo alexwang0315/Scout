@@ -1,0 +1,49 @@
+{
+  "items": [
+    {
+      "evidence_id": "ev-training-route",
+      "source_ref": "route:training-counterfactual",
+      "source_type": "route_geometry",
+      "content_hash": "route-training-counterfactual-hash",
+      "summary": "Hypothetical route geometry created only for controlled training research.",
+      "attributes": {}
+    },
+    {
+      "evidence_id": "ev-training-dem",
+      "source_ref": "dem:training-counterfactual",
+      "source_type": "prepared_dem",
+      "content_hash": "dem-training-counterfactual-hash",
+      "summary": "Synthetic DEM facts for a counterfactual training-only terrain pattern.",
+      "attributes": {
+        "candidate_features": [
+          {
+            "kind": "convex_spur",
+            "claim": "A convex spur candidate appears east of the hypothetical route midpoint.",
+            "confidence": 0.65
+          },
+          {
+            "kind": "drainage",
+            "claim": "A drainage candidate intersects the southern analysis corridor.",
+            "confidence": 0.55
+          }
+        ]
+      }
+    },
+    {
+      "evidence_id": "ev-training-qgis",
+      "source_ref": "qgis:training-counterfactual",
+      "source_type": "qgis_candidate_artifact",
+      "content_hash": "qgis-training-counterfactual-hash",
+      "summary": "Synthetic QGIS slope evidence for the counterfactual training-only workspace.",
+      "attributes": {
+        "candidate_features": [
+          {
+            "kind": "steep_slope",
+            "claim": "A steep slope candidate is present near the northern corridor boundary.",
+            "confidence": 0.75
+          }
+        ]
+      }
+    }
+  ]
+}

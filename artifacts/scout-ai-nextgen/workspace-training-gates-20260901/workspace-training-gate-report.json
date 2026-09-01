@@ -1,0 +1,86 @@
+{
+  "schema_version": "scout.workspace_training_gate.v0",
+  "gate_id": "SCOUT-WORKSPACE-TRAINING-GATE-V0",
+  "generated_at": "2026-09-01T10:50:00Z",
+  "frozen_benchmark_sha256": "7e43e1154325bf83f22d6e0f713e02b68bfa2e692846413a5db39d205130312e",
+  "model_report_hash": "d43aea58015a93479ad972f4ea982e05f16b5567d8f3d0ff51ff6ae77ec235b7",
+  "model_runtime_id": "edge.pi.ollama.cpu.background",
+  "model_id": "qwen3:1.7b",
+  "training_artifact_sha256": "c0eccf64c5012c0f53d0401919459cf0568b82cbb747d11a8b8ebdb750ee1f3f",
+  "training_source_benchmark_sha256": "d608d9bd0b6127da76431aaea33f60560ab4de2877683b2c6dca573ab5215396",
+  "training_source_benchmark_role": "synthetic_seed",
+  "training_record_count": 5,
+  "training_eligible_count": 0,
+  "checks": [
+    {
+      "check_id": "authority_boundary",
+      "status": "passed",
+      "summary": "Frozen, model, and corpus evidence remain candidate-only."
+    },
+    {
+      "check_id": "frozen_benchmark_binding",
+      "status": "passed",
+      "summary": "The model report is hash-bound to the frozen benchmark artifact."
+    },
+    {
+      "check_id": "frozen_mode_coverage",
+      "status": "passed",
+      "summary": "Frozen evaluation covers each Workspace dependency mode exactly once."
+    },
+    {
+      "check_id": "source_role_is_synthetic_seed",
+      "status": "passed",
+      "summary": "Training candidates originate from an explicit synthetic-seed artifact."
+    },
+    {
+      "check_id": "source_lineage_disjoint",
+      "status": "passed",
+      "summary": "Training candidates do not originate from the frozen benchmark artifact."
+    },
+    {
+      "check_id": "case_lineage_disjoint",
+      "status": "passed",
+      "summary": "Training source case IDs do not overlap frozen evaluation case IDs."
+    },
+    {
+      "check_id": "snapshot_lineage_disjoint",
+      "status": "passed",
+      "summary": "Training source snapshot hashes do not overlap frozen evaluation snapshots."
+    },
+    {
+      "check_id": "semantic_lineage_disjoint",
+      "status": "passed",
+      "summary": "Training snapshots are not renamed semantic copies of frozen cases."
+    },
+    {
+      "check_id": "model_baseline_quality",
+      "status": "failed",
+      "summary": "A strong model passes every frozen Workspace dependency case."
+    },
+    {
+      "check_id": "corpus_verification",
+      "status": "passed",
+      "summary": "Every training candidate has an accepted hash-bound verifier receipt."
+    },
+    {
+      "check_id": "training_split_only",
+      "status": "passed",
+      "summary": "Only TRAIN records are presented to the training gate."
+    },
+    {
+      "check_id": "human_review_promotion",
+      "status": "failed",
+      "summary": "Every record has explicit human review and training eligibility."
+    }
+  ],
+  "failed_check_ids": [
+    "model_baseline_quality",
+    "human_review_promotion"
+  ],
+  "disposition": "blocked_model_quality",
+  "ready_for_experimental_training": false,
+  "production_promotion_allowed": false,
+  "report_hash": "786b6bb53896b4220dcdff222bed9b2c11e1c242ea3c8a184787039f12316812",
+  "candidate_only": true,
+  "runtime_safety_truth": false
+}

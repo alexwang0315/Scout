@@ -41,15 +41,16 @@ authority or a full Workspace contract owner.
 | Persistent Praison background queue | WORKING PROTOTYPE | SQLite jobs/events, restart interruption, cancellation, stale revalidation, and submit/start resource backpressure pass focused tests |
 | Model capability attestation | WORKING PROTOTYPE | Server-owned, expiring tool-calling attestation |
 | ScoutWorkspaceSnapshot v0 | WORKING PROTOTYPE | Five dependency modes and bounded compiler |
-| Training corpus and leakage policy | WORKING PROTOTYPE | Typed candidate corpus, Frozen Gold isolation, human promotion gate |
-| Controlled synthetic generator | WORKING PROTOTYPE | Five deterministically verified, non-training-eligible records |
+| Training corpus and leakage policy | WORKING PROTOTYPE | Explicit evaluation/seed roles, four lineage checks, Frozen isolation, human promotion gate |
+| Controlled synthetic generator | WORKING PROTOTYPE | Five disjoint counterfactual records, deterministic receipts, zero training-eligible |
+| Workspace training aggregate gate | WORKING PROTOTYPE / CLOSED | Pi model baseline 0/5 and no human-reviewed records; experimental training correctly blocked |
 | Failure qualification matrix | WORKING PROTOTYPE | 13 scenarios, 13 executable probes |
 | Full Workspace contract literacy in qwen3:1.7b | FAILED / SWM-001 | Native mode 0/5; tool mode failed |
 | Deterministic-envelope Workspace path | WORKING PROTOTYPE | 5/5 contract pass; narrative remains reviewable |
-| Live MAX server | NOT PROVEN | Adapter/config exists; no running MAX endpoint was qualified |
+| Live MAX server | CURRENT HOSTS INCOMPATIBLE | Intel Mac and Pi preflights fail deterministically; zero model requests; supported host still required |
 | NextGen Hailo runtime | ACCEPTED EXPERIMENTAL | Pi AI HAT+2 passed chat and small typed output; tool calling and Praison specialist synthesis were rejected |
-| Live QGIS workstation through Intelligence Service | PARTIAL | A real QGIS/GRASS candidate artifact passed normalized MCP/Praison ingestion; new raw/heavy QGIS execution remains separate and review-gated |
-| Dashboard NextGen telemetry | NOT IMPLEMENTED | Contracts and artifacts exist; no UI promotion was requested |
+| Live QGIS workstation through Intelligence Service | PARTIAL | Live 20 m DEM slope processing passed; 320x180 render gate passes a 500x346 rerun, human terrain legibility remains review-gated |
+| Dashboard NextGen telemetry | WORKING PROTOTYPE | Read-only request/job/runtime/validation telemetry; no raw question or promotion action |
 | Mojo kernels | NOT STARTED | Benchmark-first candidate only |
 
 ## A. Current Architecture Map

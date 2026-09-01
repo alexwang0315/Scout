@@ -32,6 +32,7 @@ from scout.nextgen.openai_compatible_backend import (
 from scout.nextgen.workspace_snapshot import (
     ScoutWorkspaceSnapshot,
     WorkspaceAnswerBehavior,
+    WorkspaceBenchmarkArtifactRole,
     WorkspaceBenchmarkCase,
     WorkspaceDomain,
     WorkspaceSnapshotMode,
@@ -452,6 +453,11 @@ def _build_report(
 def _validate_workspace_benchmark_artifact(payload: dict[str, object]) -> None:
     if payload.get("schema_version") != "scout.workspace_snapshot_benchmark.v0":
         raise ValueError("unsupported Workspace benchmark schema")
+    if (
+        payload.get("artifact_role")
+        != WorkspaceBenchmarkArtifactRole.MODEL_EVALUATION.value
+    ):
+        raise ValueError("Workspace model benchmark requires model-evaluation data")
     if payload.get("candidate_only") is not True:
         raise ValueError("Workspace benchmark must remain candidate-only")
     if payload.get("runtime_safety_truth") is not False:

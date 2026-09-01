@@ -249,3 +249,17 @@ def test_workspace_benchmark_cases_cover_five_dependency_modes() -> None:
     )
     assert all(isinstance(case.snapshot, ScoutWorkspaceSnapshot) for case in cases)
     assert len({case.snapshot.snapshot_hash for case in cases}) == len(cases)
+
+
+def test_workspace_benchmark_cases_support_disjoint_lineage_namespace() -> None:
+    cases = build_workspace_benchmark_cases(
+        request=_request(),
+        evidence_catalog=_catalog(),
+        compiler=_compiler(),
+        now=NOW,
+        case_id_prefix="training-seed-alpha",
+    )
+
+    assert tuple(case.case_id for case in cases) == tuple(
+        f"training-seed-alpha-{mode.value}-v0" for mode in WorkspaceSnapshotMode
+    )
