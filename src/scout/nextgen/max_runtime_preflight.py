@@ -227,9 +227,7 @@ def probe_max_endpoint(
 ) -> MaxEndpointObservation:
     headers = {"accept": "application/json"}
     if config.api_key_env is not None:
-        token = (environ if environ is not None else os.environ).get(
-            config.api_key_env
-        )
+        token = (environ if environ is not None else os.environ).get(config.api_key_env)
         if not token:
             return MaxEndpointObservation(error_type="CredentialUnavailable")
         headers["authorization"] = f"Bearer {token}"
@@ -323,9 +321,7 @@ def run_max_runtime_preflight(
         environ=environ,
     )
     endpoint_latency_ms = int((time.monotonic() - endpoint_started) * 1000)
-    local_process = (
-        config.transport_scope is OpenAICompatibleTransportScope.LOOPBACK
-    )
+    local_process = config.transport_scope is OpenAICompatibleTransportScope.LOOPBACK
     checks = _build_checks(
         config=config,
         host=host,
@@ -359,7 +355,9 @@ def run_max_runtime_preflight(
         qualification_inputs=qualification_inputs,
         report_hash="pending",
     )
-    return report.model_copy(update={"report_hash": max_runtime_readiness_report_hash(report)})
+    return report.model_copy(
+        update={"report_hash": max_runtime_readiness_report_hash(report)}
+    )
 
 
 def max_runtime_readiness_report_hash(report: MaxRuntimeReadinessReport) -> str:
@@ -381,12 +379,16 @@ def _build_checks(
         host_compatible, host_summary = _host_compatibility(host)
         host_check = _check(
             "host_compatibility",
-            MaxReadinessCheckStatus.PASSED if host_compatible else MaxReadinessCheckStatus.FAILED,
+            MaxReadinessCheckStatus.PASSED
+            if host_compatible
+            else MaxReadinessCheckStatus.FAILED,
             host_summary,
         )
         cli_check = _check(
             "cli_availability",
-            MaxReadinessCheckStatus.PASSED if cli.available else MaxReadinessCheckStatus.UNAVAILABLE,
+            MaxReadinessCheckStatus.PASSED
+            if cli.available
+            else MaxReadinessCheckStatus.UNAVAILABLE,
             "MAX CLI is available for a managed local launch."
             if cli.available
             else "MAX CLI is not installed on the local host.",
@@ -403,7 +405,9 @@ def _build_checks(
             "An external MAX service does not require a client-side MAX CLI.",
         )
 
-    health_passed = endpoint.health_status_code == 200 and endpoint.health_path is not None
+    health_passed = (
+        endpoint.health_status_code == 200 and endpoint.health_path is not None
+    )
     health_check = _check(
         "endpoint_health",
         MaxReadinessCheckStatus.PASSED
@@ -504,9 +508,15 @@ def _disposition(
         return MaxRuntimeReadinessDisposition.READY_FOR_BEHAVIOR_QUALIFICATION
     if by_id["model_inventory"].status is MaxReadinessCheckStatus.FAILED:
         return MaxRuntimeReadinessDisposition.MODEL_MISMATCH
-    if local_process and by_id["host_compatibility"].status is MaxReadinessCheckStatus.FAILED:
+    if (
+        local_process
+        and by_id["host_compatibility"].status is MaxReadinessCheckStatus.FAILED
+    ):
         return MaxRuntimeReadinessDisposition.HOST_INCOMPATIBLE
-    if local_process and by_id["cli_availability"].status is MaxReadinessCheckStatus.UNAVAILABLE:
+    if (
+        local_process
+        and by_id["cli_availability"].status is MaxReadinessCheckStatus.UNAVAILABLE
+    ):
         return MaxRuntimeReadinessDisposition.CLI_UNAVAILABLE
     if by_id["endpoint_health"].status is not MaxReadinessCheckStatus.PASSED:
         return MaxRuntimeReadinessDisposition.ENDPOINT_UNAVAILABLE
@@ -606,10 +616,17 @@ def _total_memory_bytes() -> int | None:
 def _linux_cpu_facts() -> tuple[str | None, tuple[str, ...]]:
     path = Path("/proc/cpuinfo")
     try:
-        text = path.read_text(encoding="utf-8", errors="replace")[:1024 * 1024]
+        text = path.read_text(encoding="utf-8", errors="replace")[: 1024 * 1024]
     except OSError:
         return None, ()
-    model: str | None = None
+    model, features = _parse_linux_cpu_facts(text)
+    return model or _collect_lscpu_model(), features
+
+
+def _parse_linux_cpu_facts(text: str) -> tuple[str | None, tuple[str, ...]]:
+    model_name: str | None = None
+    hardware: str | None = None
+    processor_name: str | None = None
     features: set[str] = set()
     for line in text.splitlines():
         key, separator, value = line.partition(":")
@@ -617,11 +634,61 @@ def _linux_cpu_facts() -> tuple[str | None, tuple[str, ...]]:
             continue
         normalized_key = key.strip().lower()
         normalized_value = value.strip()
-        if model is None and normalized_key in {"model name", "processor"}:
-            model = normalized_value[:512] or None
+        if model_name is None and normalized_key in {"model name", "cpu model"}:
+            model_name = normalized_value[:512] or None
+        elif hardware is None and normalized_key == "hardware":
+            hardware = normalized_value[:512] or None
+        elif (
+            processor_name is None
+            and normalized_key == "processor"
+            and not normalized_value.isdigit()
+        ):
+            processor_name = normalized_value[:512] or None
         if normalized_key in {"flags", "features"}:
             features.update(normalized_value.lower().split())
-    return model, tuple(sorted(features))
+    return model_name or hardware or processor_name, tuple(sorted(features))
+
+
+def _collect_lscpu_model() -> str | None:
+    executable = shutil.which("lscpu")
+    if executable is None:
+        return None
+    try:
+        result = subprocess.run(
+            [executable, "--json"],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+            env={"PATH": os.environ.get("PATH", "")},
+        )
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    return _parse_lscpu_model(result.stdout[:MAX_PREFLIGHT_RESPONSE_BYTES])
+
+
+def _parse_lscpu_model(text: str) -> str | None:
+    try:
+        payload = json.loads(text)
+    except (json.JSONDecodeError, TypeError):
+        return None
+    if not isinstance(payload, dict) or not isinstance(payload.get("lscpu"), list):
+        return None
+    for item in payload["lscpu"]:
+        if not isinstance(item, dict):
+            continue
+        field = item.get("field")
+        data = item.get("data")
+        if (
+            isinstance(field, str)
+            and field.rstrip(":").strip().lower() == "model name"
+            and isinstance(data, str)
+            and data.strip()
+        ):
+            return data.strip()[:512]
+    return None
 
 
 def _version_tuple(value: str) -> tuple[int, ...] | None:
