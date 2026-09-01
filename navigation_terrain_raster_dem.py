@@ -19,8 +19,6 @@ from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
 from admin_local_raster_tiles import tile_bounds_wgs84
-
-
 DEFAULT_TERRAIN_DEM_MANIFEST_REF = "outputs/navigation/terrain_rgb/manifest.json"
 DEFAULT_TERRAIN_DEM_ZOOM = 13
 DEFAULT_TERRAIN_DEM_TILE_SIZE = 256
@@ -141,6 +139,14 @@ def prepare_navigation_terrain_dem_tiles(
     coverage_path = _project_path(root, coverage_ref)
     terrain = _read_json_object(terrain_path, "terrain visualization")
     coverage = _read_json_object(coverage_path, "DTM coverage")
+    visualization_spec = terrain.get("visualization_spec")
+    if not isinstance(visualization_spec, Mapping):
+        visualization_spec = {}
+    source_analysis_processor = visualization_spec.get("actual_processor")
+    if not isinstance(source_analysis_processor, str) or not source_analysis_processor.strip():
+        source_analysis_processor = None
+    else:
+        source_analysis_processor = source_analysis_processor.strip()
     dtm_grid = terrain.get("dtm_grid")
     if not isinstance(dtm_grid, Mapping):
         raise TerrainDemPreparationError("terrain visualization has no dtm_grid")
@@ -248,6 +254,18 @@ def prepare_navigation_terrain_dem_tiles(
         "visual_interpolation": "bilinear",
         "interpolation_domain": "elevation_m_before_terrain_rgb_encoding",
         "adds_source_resolution": False,
+        "source_analysis_processor": source_analysis_processor,
+        "source_standard_processor_completed": (
+            visualization_spec.get("standard_processor_completed") is True
+        ),
+        "source_fallback_used": visualization_spec.get("fallback_used"),
+        "source_python_dtm_processing_used": visualization_spec.get(
+            "python_dtm_processing_used"
+        ),
+        "visualization_packaging_processor": (
+            "scout_mapbox_terrain_rgb_encoder.v1"
+        ),
+        "visualization_packaging_only": True,
         "tile_size": tile_size,
         "minzoom": zoom,
         "maxzoom": zoom,

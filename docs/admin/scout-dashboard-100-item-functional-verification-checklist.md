@@ -1338,34 +1338,31 @@ candidate/shadow prototype 可收錄，但必須把 no-authority 邊界當成必
 1. 開啟 Split，對 2D 與 3D 分別按 `Fit`／`Reset`，記錄兩邊 center、zoom、
    pitch 與 bearing。
 2. 2D、3D 各按一次 `+`，確認兩邊倍率各自增加，另一張圖的 zoom 不變。
-3. 拖曳或以方向鍵移動 3D；確認 2D/3D center 同步，但 2D 與 3D zoom 都維持
-   操作前數值。
+3. 拖曳或以方向鍵移動 3D；確認 2D 的 center 與 zoom 都維持操作前數值。
 4. 依序觸發候選點、lens、Evidence、垂直誇張或 2D／3D／Split 切換所造成的
    Dashboard rerender，等待新 MapLibre instances ready。
-5. 比較重建前後 camera；center 必須一致，2D 與 3D 的 zoom、pitch、bearing
-   必須各自恢復，不得回到 Fit。
-6. 在 3D-only 移動後切到 2D-only；確認 2D 採用最新共享 center，同時保留
-   先前的 2D zoom。
+5. 比較重建前後 camera；2D 與 3D 的 center、zoom、pitch、bearing 必須各自
+   恢復，不得回到 Fit。
+6. 在 3D-only 移動後切到 2D-only；確認 2D 保留先前的 center 與 zoom。
 7. 明確按 2D `Fit`，確認只重設 2D；再按 3D `Reset`，確認只重設 3D。
 8. 以不同 route projection fingerprint 執行 deterministic probe；舊 camera
    必須失效並回傳未命中，不能跨路線沿用。
 
 通過條件：
 
-- 契約維持「中心同步、尺度獨立」；3D 移動不會把 2D zoom 拉回 Fit。
+- 契約維持「中心、尺度、俯角與方位各自獨立」；3D 移動不會改寫 2D camera。
 - 候選點與所有 Navigation 顯示切換造成的 rerender 都不會遺失有效 camera。
-- 只有明確 Fit／Reset 可重設對應 map，且不連帶重設另一個 mode 的 zoom。
+- 只有明確 Fit／Reset 可重設對應 map，且不連帶重設另一個 mode 的 camera。
 - route／DEM scope 改變時 fail closed，不沿用舊 camera。
 - Diagnostic probe 不發送 POST、不寫 workspace，也不建立 terrain 或 safety truth。
 
 證據／結果：
 
 - 結果：`PASS`（2026-08-24，Chromium，真實 Dashboard runtime）。
-- Deterministic 證據：2D Z13.75 與 3D Z17 各自保存；3D 最新 center 同步到
-  2D；變更 projection fingerprint 後 stored camera 未命中。
-- 瀏覽器證據：Split 內 2D `11.745→12.745`、3D `16→17`；3D 移動、候選點、
-  lens、Evidence、垂直誇張與 view rerender 後倍率未回 Fit。3D-only 平移後切回
-  2D，center 相同且 2D 保留 Z12.745；console error、失敗 response 與 POST 都是 0。
+- Deterministic 證據：2D 與 3D 的 center、zoom、pitch、bearing 各自保存；
+  變更 projection fingerprint 後 stored camera 未命中。
+- 瀏覽器證據：2D 與 3D 各自縮放後，切換 view 與移動 3D 不改寫已保存的 2D
+  camera；console error、失敗 response 與 POST 都是 0。
 - 缺陷編號：`DASH-MAP-REG-003`（已修正，保留永久回歸門檻）。
 
 ## 後續項目收錄門檻

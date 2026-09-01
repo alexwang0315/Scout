@@ -1,6 +1,7 @@
 import io
 import os
 import time
+import urllib.error
 from pathlib import Path
 
 import pytest
@@ -130,6 +131,100 @@ def test_seeds_wmts_imagery_tile_cache_with_fixture_fetcher(tmp_path):
         cache_root=tmp_path / "imagery-tiles",
     )
     assert cached_path.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+
+
+def test_imagery_tile_cache_records_blank_provider_tiles_as_no_coverage(tmp_path):
+    source = imagery_source_for_project(
+        {},
+        layer_id="historical-jm20k-1904",
+        source_id="sinica_jm20k_1904",
+    )
+    plan = build_imagery_tile_cache_plan(
+        {
+            "west": 121.2,
+            "south": 24.03,
+            "east": 121.2,
+            "north": 24.03,
+        },
+        project_id="dongqing_new_import",
+        layer_id="historical-jm20k-1904",
+        imagery_source=source,
+        cache_root=tmp_path / "imagery-tiles",
+        min_zoom=12,
+        max_zoom=12,
+    )
+
+    def blank_fetch(imagery_source, z, x, y):
+        return RemoteImageryTile(
+            body=_solid_png((255, 255, 255, 255)),
+            media_type="image/png",
+            source_id=imagery_source["source_id"],
+            url="https://example.test/historical-blank",
+            body_sha256="blank-fixture-hash",
+        )
+
+    summary = seed_imagery_tile_cache(
+        plan,
+        imagery_source=source,
+        provider_allows_offline_prefetch=True,
+        dry_run=False,
+        fetch_tile=blank_fetch,
+    )
+
+    assert summary["status"] == "seed_no_coverage"
+    assert summary["tiles_blank_or_transparent"] == 1
+    assert summary["tiles_written"] == 0
+    assert summary["tiles_failed"] == 0
+    assert not list((tmp_path / "imagery-tiles").glob("**/*.png"))
+
+
+def test_imagery_tile_cache_does_not_retry_provider_no_coverage_404(tmp_path):
+    source = imagery_source_for_project(
+        {},
+        layer_id="historical-kanzan-forest",
+        source_id="sinica_ttfb3_0602",
+    )
+    plan = build_imagery_tile_cache_plan(
+        {
+            "west": 121.2,
+            "south": 24.03,
+            "east": 121.2,
+            "north": 24.03,
+        },
+        project_id="dongqing_new_import",
+        layer_id="historical-kanzan-forest",
+        imagery_source=source,
+        cache_root=tmp_path / "imagery-tiles",
+        min_zoom=12,
+        max_zoom=12,
+    )
+    calls = 0
+
+    def no_coverage_fetch(imagery_source, z, x, y):
+        nonlocal calls
+        calls += 1
+        raise urllib.error.HTTPError(
+            "https://example.test/missing.png",
+            404,
+            "Not Found",
+            {},
+            None,
+        )
+
+    summary = seed_imagery_tile_cache(
+        plan,
+        imagery_source=source,
+        provider_allows_offline_prefetch=True,
+        dry_run=False,
+        fetch_tile=no_coverage_fetch,
+        max_fetch_attempts=5,
+        retry_backoff_seconds=0,
+    )
+
+    assert calls == 1
+    assert summary["status"] == "seed_no_coverage"
+    assert summary["tiles_provider_no_coverage"] == 1
+    assert summary["tiles_failed"] == 0
 
 
 def test_wmts_imagery_tile_cache_retries_transient_fetch_failures(tmp_path):
@@ -592,6 +687,76 @@ def test_raster_tile_proxy_prefers_requested_native_zoom_before_parent_fallback(
     assert calls == [("nlsc_photo2", 2, 3, 2, 1.5)]
 
 
+def test_native_imagery_cache_does_not_reuse_a_different_source_layer_tile(tmp_path):
+    legacy_path = raster_tile_cache_path(
+        "chilai_nanhua_day1",
+        "imagery",
+        11,
+        1712,
+        886,
+        cache_root=tmp_path,
+    )
+    legacy_body = b"\xff\xd8\xfflegacy-aerial-imagery"
+    legacy_path.parent.mkdir(parents=True)
+    legacy_path.write_bytes(legacy_body)
+    source = imagery_source_for_project(
+        {},
+        source_id="happyman_rudy_twmap",
+    )
+    remote_body = b"\x89PNG\r\n\x1a\nrudy-twmap"
+    calls = []
+
+    def fake_fetcher(imagery_source, z, x, y, *, timeout_seconds):
+        calls.append((imagery_source["source_id"], z, x, y, timeout_seconds))
+        return RemoteImageryTile(
+            body=remote_body,
+            media_type="image/png",
+            source_id="happyman_rudy_twmap",
+            url="https://example.test/rudy-twmap/11/1712/886.png",
+            body_sha256="rudy-twmap-sha",
+        )
+
+    payload = load_or_build_raster_tile_payload(
+        "chilai_nanhua_day1",
+        "imagery",
+        11,
+        1712,
+        886,
+        cache_root=tmp_path,
+        imagery_source=source,
+        allow_remote_fetch=True,
+        prefer_native_zoom=True,
+        remote_fetch_timeout_seconds=1.5,
+        remote_fetcher=fake_fetcher,
+    )
+
+    assert payload.source == "remote_fetch_cache_fill"
+    assert payload.body == remote_body
+    assert payload.cache_path != legacy_path
+    assert "happyman_rudy_twmap" in payload.cache_path.parts
+    assert legacy_path.read_bytes() == legacy_body
+    assert calls == [("happyman_rudy_twmap", 11, 1712, 886, 1.5)]
+
+    cached = load_or_build_raster_tile_payload(
+        "chilai_nanhua_day1",
+        "imagery",
+        11,
+        1712,
+        886,
+        cache_root=tmp_path,
+        imagery_source=source,
+        allow_remote_fetch=False,
+        prefer_native_zoom=True,
+        remote_fetcher=lambda *_args, **_kwargs: pytest.fail(
+            "source-scoped cache should satisfy the second request"
+        ),
+    )
+
+    assert cached.source == "local_source_cache"
+    assert cached.body == remote_body
+    assert cached.cache_path == payload.cache_path
+
+
 def test_raster_tile_proxy_never_substitutes_parent_for_native_zoom(tmp_path):
     parent_path = raster_tile_cache_path(
         "chilai_nanhua_day1",
@@ -729,6 +894,15 @@ def _quadrant_png() -> bytes:
     for box, color in colors.items():
         patch = Image.new("RGBA", (box[2] - box[0], box[3] - box[1]), color)
         image.paste(patch, box[:2])
+    output = io.BytesIO()
+    image.save(output, format="PNG")
+    return output.getvalue()
+
+
+def _solid_png(color: tuple[int, int, int, int]) -> bytes:
+    from PIL import Image
+
+    image = Image.new("RGBA", (256, 256), color)
     output = io.BytesIO()
     image.save(output, format="PNG")
     return output.getvalue()

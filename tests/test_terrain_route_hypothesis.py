@@ -22,6 +22,10 @@ from terrain_route_hypothesis import (
     TerrainResolutionClass,
     slope_cost_for_degrees,
 )
+from terrain_route_hypothesis_models import (
+    TerrainRouteHypothesisCatalog,
+    TerrainRouteHypothesisCatalogEntry,
+)
 
 
 FIXED_TIME = "2026-08-28T00:00:00Z"
@@ -65,6 +69,66 @@ def _request(dem: TerrainDemRaster | None) -> TerrainRouteHypothesisRequest:
         destination=_point(dem, dem.shape[0] - 1, dem.shape[1] - 1),
         requested_at=FIXED_TIME,
     )
+
+
+def _catalog_entry(**overrides: object) -> TerrainRouteHypothesisCatalogEntry:
+    values = {
+        "id": "full-route-r1",
+        "label": "Full route R1",
+        "scope": "full_route",
+        "focus_mode": "route_union",
+        "start_label": "A",
+        "destination_label": "B",
+        "hypothesis_ref": "outputs/spatial/qgis/cache/full/hypothesis.json",
+        "hypothesis_sha256": "a" * 64,
+        "visualization_ref": "outputs/spatial/qgis/cache/full/visualization.json",
+        "visualization_sha256": "b" * 64,
+        "cache_key": "c" * 64,
+    }
+    values.update(overrides)
+    return TerrainRouteHypothesisCatalogEntry.model_validate(values)
+
+
+def test_terrain_route_catalog_preserves_candidate_only_selection_contract() -> None:
+    full_route = _catalog_entry()
+    local = _catalog_entry(
+        id="iroko-1148-to-station",
+        label="1148 saddle to Iroko station",
+        scope="local",
+        focus_mode="hypothesis",
+        start_label="1148 saddle",
+        destination_label="Iroko station",
+        hypothesis_ref="outputs/spatial/qgis/cache/local/hypothesis.json",
+        hypothesis_sha256="d" * 64,
+        visualization_ref="outputs/spatial/qgis/cache/local/visualization.json",
+        visualization_sha256="e" * 64,
+        cache_key="f" * 64,
+    )
+
+    catalog = TerrainRouteHypothesisCatalog(
+        project_id="route-demo",
+        default_id=full_route.id,
+        entries=[full_route, local],
+    )
+
+    assert catalog.candidate_only is True
+    assert catalog.runtime_safety_truth is False
+    assert catalog.operational is False
+    assert catalog.default_id == "full-route-r1"
+    assert catalog.entries[1].focus_mode == "hypothesis"
+    assert catalog.entries[1].start_label == "1148 saddle"
+
+
+def test_terrain_route_catalog_fails_closed_on_promotion_or_unbound_default() -> None:
+    with pytest.raises(ValidationError):
+        _catalog_entry(label="safe_route")
+
+    with pytest.raises(ValidationError):
+        TerrainRouteHypothesisCatalog(
+            project_id="route-demo",
+            default_id="missing",
+            entries=[_catalog_entry()],
+        )
 
 
 def _path_cells(hypothesis: TerrainRouteHypothesis, dem: TerrainDemRaster) -> list[tuple[int, int]]:

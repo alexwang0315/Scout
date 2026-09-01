@@ -5067,6 +5067,94 @@ not a preparation error. Across all sources the final seed summaries recorded
 One bridge timeout was observed before the accepted run. The failed receipt
 remained fail-closed with no synthetic fallback. Restarting QGIS plus the local
 worker and rerunning the same preparation produced the accepted receipt. The
-auxiliary `terrain_route_hypothesis.v1` remains an independent typed failure at
-`dem_loaded`; it does not replace, invalidate, or become the Dashboard source
-for the completed primary terrain stack.
+auxiliary `terrain_route_hypothesis.v1` failed independently at `dem_loaded`
+during this acceptance. It did not replace or invalidate the completed primary
+terrain stack. The bounded recovery and later successful candidate activation
+are recorded below.
+
+### 2026-08-29 Terrain Route Dashboard recovery
+
+The real `dongqing_batongguan_historic_trail_qgisGrass_clean_20260828`
+terrain-route run exposed three fail-closed integration defects after the
+primary terrain stack had completed:
+
+1. Selecting the active clipped GeoTIFF bypassed declared source-resolution
+   discovery. Terrain-route submission now requires the hash-bound parent
+   terrain-feature manifest to report square resolution, EPSG:3826, matching
+   analysis resolution, and the exact active DEM filename.
+2. The MCP validator still required `stop_coordinates` for `grass:r.cost`,
+   even though a symmetric corridor requires both cumulative surfaces to cover
+   the full analysis extent. The validator now rejects a stop coordinate for
+   this fixed recipe and continues to reject alternate start/allocation inputs.
+3. The planned 20 m rectangle was aligned to integer coordinates, while GDAL
+   retained the source DEM's half-cell grid and produced one additional row and
+   column. Completeness now binds to the inspected clipped DEM grid and its
+   zero-NoData cell inventory. Provenance preserves both the requested grid and
+   the actual source-aligned grid; a resolution or cell-count mismatch still
+   fails closed.
+
+Run `qgis-worker-20260828T233229646326Z-a7d0f0dd24` then completed the real
+MCP/GRASS path: slope, nonlinear friction, anisotropic `r.walk`/`r.path`, two
+full-extent `r.cost` surfaces, the relative corridor, and 5/10/20 percentile
+bands. The actual grid is 1,792 by 1,252 at 20 m, with 2,243,584 finite cells
+and zero NoData cells. The bands contain 112,180, 224,359, and 448,716 cells;
+each independently contains the minimum anisotropic model-cost trace without
+unioning path cells into the masks.
+
+Activation wrote only content-addressed candidate artifacts and then compiled
+the persisted Navigation projection. Dashboard browser verification showed the
+R1 hypothesis, all three corridor controls, a nonblank decoded 3D DEM canvas,
+and simultaneous nonblank 2D/3D split canvases. The hypothesis layer toggle
+removed and restored only candidate visualization. Narrow-screen verification
+kept the hypothesis, terrain-candidate, elevation, and map-control overlays
+non-overlapping. The route bundle, filtered GPX, and parent DEM retained their
+pre-run SHA-256 hashes. Human review remains pending; the result is not an
+observed, official, verified, safe, passable, legal, or recommended route.
+
+### 2026-09-01 Arbitrary A/B TRH Dashboard stabilization
+
+The Navigation Dashboard now accepts two explicit WGS84 map points and a bounded
+analysis margin, then submits `terrain_route_hypothesis.v1` through the existing
+spatial service boundary. A/B drafts persist per project, but no candidate is
+published until the QGIS worker reaches `completed` and the resulting
+content-addressed artifacts pass hash validation.
+
+The first arbitrary-point UI exposed three integration failures:
+
+1. the 2.5-second workflow poll rebuilt the complete Navigation map, causing
+   MapLibre to flicker and lose or stale its candidate projection;
+2. A/B and generate controls unlocked while a long run was still queued or
+   running, allowing duplicate submissions;
+3. path metrics issued as many as 240 sequential raster-identify calls and
+   could fail late at `hypothesis_validated`, while an empty MCP exception
+   message produced no useful UI detail.
+
+The bounded behavior is now:
+
+- active TRH polling updates only progress/status controls and performs one
+  Navigation reload after a terminal state;
+- all endpoint, margin, clear, generate, and competing workflow controls stay
+  locked for the full queued/running lifecycle;
+- a previous completed candidate may remain visible only with explicit wording
+  that the new evidence has not been published;
+- path metrics use at most 80 deterministic evenly spaced vertices while
+  preserving endpoints, and the manifest states that sampled maximum slope is
+  not a full-path-cell maximum;
+- typed MCP failure detail is always non-empty;
+- an unavailable optional corridor PNG does not blank the Rudy+TW base map or
+  the vector hypothesis.
+
+Real local run `qgis-worker-20260901T044232408212Z-11dc300da9` completed on
+QGIS 3.44.13 / GRASS 8.5.0 in about 116 seconds for a previously failing A/B
+area. The 20 m result contained an 89-vertex candidate trace, 80 deterministic
+metric samples, and nested 5/10/20 corridor bands of 1,720, 3,439, and 6,878
+cells. Each band independently contained the trace. Dashboard verification
+showed stable Rudy+TW context, candidate line, corridor, A/B markers, decoded
+3D DEM, reload persistence, and no browser-console errors.
+
+This remains `macro_terrain_only`, `candidate_only`, non-operational evidence.
+Portable macOS/Scout execution is exposed through
+`tools/run_terrain_route_hypothesis_worker.py`, which records the actual host in
+its receipt. A real execution receipt from the currently unreachable Scout host
+remains `UNKNOWN`. The normative subsystem description is maintained in
+[Scout Terrain Route Hypothesis Engine](scout-terrain-route-hypothesis.md).

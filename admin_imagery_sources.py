@@ -90,6 +90,25 @@ def _historical_map_source(
     }
 
 
+HISTORICAL_MAP_CACHE_SOURCE_IDS: tuple[tuple[str, str], ...] = (
+    ("historical-jm20k-1904", "sinica_jm20k_1904"),
+    ("historical-triangulation-1904", "sinica_jm20k_1904_triangulation"),
+    ("historical-fandi-1916", "sinica_jm50k_1916"),
+    ("historical-jm20k-1921", "sinica_jm20k_1921"),
+    ("historical-jm50k-1924", "sinica_jm50k_1924"),
+    ("historical-jm50k-1924-new", "sinica_jm50k_1924_new"),
+    ("historical-shinko-forest", "sinica_ttfb3_0603"),
+    ("historical-kanzan-forest", "sinica_ttfb3_0602"),
+    ("historical-taito-forest", "sinica_ttfb3_0601"),
+    ("historical-tm50k-1956", "sinica_tm50k_1956"),
+    ("historical-water-1966", "sinica_tm50k_1966"),
+    ("historical-economic-1989", "sinica_tm25k_1989"),
+    ("historical-lin-1999", "happyman_tri1999"),
+    ("historical-tw5k-2000", "happyman_tw5k2000"),
+    ("historical-economic-2001", "happyman_tw25k2001"),
+)
+
+
 DEFAULT_IMAGERY_SOURCE_REGISTRY: dict[str, Any] = {
     "artifact_kind": "scout_imagery_source_registry",
     "schema_version": "1.0",

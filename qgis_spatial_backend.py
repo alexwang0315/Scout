@@ -21,6 +21,7 @@ from pydantic import ValidationError
 
 from navigation_terrain_projection_store import (
     NAVIGATION_TERRAIN_PROJECTION_REF,
+    compile_navigation_terrain_projection,
     inspect_navigation_terrain_projection,
 )
 from qgis_spatial_contracts import (
@@ -1232,11 +1233,49 @@ class QgisSpatialBackend:
         status: QgisBackendStatus,
     ) -> SpatialWorkflowRun:
         terrain_route = request.workflow_id == TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_ID
-        route_points, source_refs, source_hashes, route_warning = self._route_points(
-            project_root,
-            project,
-            project_id=project_id,
-        )
+        endpoint_selection = request.terrain_route_endpoints if terrain_route else None
+        if endpoint_selection is not None:
+            endpoint_source_ref = "request://terrain-route-endpoints.v1"
+            endpoint_identity = {
+                "schema_version": "scout_terrain_route_endpoint_selection.v0_1",
+                "start": {
+                    "x": endpoint_selection.start.x,
+                    "y": endpoint_selection.start.y,
+                    "crs": endpoint_selection.start.crs,
+                },
+                "destination": {
+                    "x": endpoint_selection.destination.x,
+                    "y": endpoint_selection.destination.y,
+                    "crs": endpoint_selection.destination.crs,
+                },
+            }
+            route_points = [
+                {
+                    "lon": endpoint_selection.start.x,
+                    "lat": endpoint_selection.start.y,
+                },
+                {
+                    "lon": endpoint_selection.destination.x,
+                    "lat": endpoint_selection.destination.y,
+                },
+            ]
+            source_refs = [endpoint_source_ref]
+            source_hashes = {
+                endpoint_source_ref: _sha256_bytes(
+                    _compact_json_bytes(endpoint_identity)
+                )
+            }
+            route_warning = (
+                "Terrain route endpoints came from an explicit candidate-only "
+                "request; no GPX trail or safety authority was inferred."
+            )
+        else:
+            endpoint_source_ref = None
+            route_points, source_refs, source_hashes, route_warning = self._route_points(
+                project_root,
+                project,
+                project_id=project_id,
+            )
         if len(route_points) < 2:
             run = self._failed_run(
                 project_id=project_id,
@@ -1296,6 +1335,24 @@ class QgisSpatialBackend:
                     message=(
                         "Terrain route workflow requires one immutable live "
                         "terrain-feature parent manifest."
+                    ),
+                    status=status,
+                )
+                self._persist_run(project_root, run)
+                return run
+            source_resolution = _terrain_route_parent_source_resolution(
+                project_root=project_root,
+                parent_ref=parent_ref,
+                dem_ref=dem_ref,
+            )
+            if source_resolution is None:
+                run = self._failed_run(
+                    project_id=project_id,
+                    request=request.model_copy(update={"request_id": request_id}),
+                    code=SpatialAnalysisErrorCode.SOURCE_UNAVAILABLE,
+                    message=(
+                        "Terrain route workflow requires hash-bound DEM resolution "
+                        "and CRS metadata from its terrain-feature parent manifest."
                     ),
                     status=status,
                 )
@@ -1477,6 +1534,12 @@ class QgisSpatialBackend:
                     ),
                     "source_count": len(dem_refs),
                     "tool_allowlist": list(QGIS_ALLOWED_TOOL_IDS),
+                    "endpoint_selection_source": (
+                        endpoint_selection.selection_source
+                        if endpoint_selection is not None
+                        else "workspace_route_geometry"
+                    ),
+                    "endpoint_source_ref": endpoint_source_ref,
                 },
                 *worker_run.audit_trail,
             ],
@@ -2068,6 +2131,18 @@ class QgisSpatialBackend:
             best_path_ref=best_path_ref,
             processing_manifest_ref=manifest_ref,
         )
+        navigation_projection = _refresh_navigation_projection_after_terrain_route(
+            project_root=project_root,
+            project_id=local_run.project_id,
+        )
+        navigation_warnings = (
+            []
+            if navigation_projection["status"] == "ready"
+            else [
+                "Terrain route evidence was preserved, but the Navigation projection "
+                "could not be refreshed and remains unavailable for map display."
+            ]
+        )
 
         created_at = worker_run.completed_at or self._now_iso()
         provenance = {
@@ -2201,7 +2276,13 @@ class QgisSpatialBackend:
                 "artifact_refs": artifact_refs,
                 "maplibre_geojson": feature_collection,
                 "warnings": list(
-                    dict.fromkeys([*local_run.warnings, *result.warnings])
+                    dict.fromkeys(
+                        [
+                            *local_run.warnings,
+                            *result.warnings,
+                            *navigation_warnings,
+                        ]
+                    )
                 ),
                 "error": None,
                 "audit_trail": _merge_audit_trail(
@@ -2216,6 +2297,13 @@ class QgisSpatialBackend:
                             "candidate_only": True,
                             "runtime_safety_truth": False,
                             "operational": False,
+                        },
+                        {
+                            "event": "navigation_terrain_projection_refreshed",
+                            "at": self._now_iso(),
+                            **navigation_projection,
+                            "candidate_only": True,
+                            "runtime_safety_truth": False,
                         }
                     ],
                 ),
@@ -2271,6 +2359,10 @@ class QgisSpatialBackend:
             or run.state is not SpatialWorkflowState.COMPLETED
         ):
             return None
+        _refresh_navigation_projection_after_terrain_route(
+            project_root=project_root,
+            project_id=run.project_id,
+        )
         return run
 
     def _materialize_terrain_feature_stack_result(
@@ -4323,6 +4415,72 @@ def _terrain_route_parent_manifest_binding(
     return value, _sha256_file(path)
 
 
+def _terrain_route_parent_source_resolution(
+    *,
+    project_root: Path,
+    parent_ref: str,
+    dem_ref: str | None,
+) -> dict[str, Any] | None:
+    if not dem_ref:
+        return None
+    parent_path = Path(parent_ref)
+    dem_path = Path(dem_ref)
+    if (
+        parent_path.parent != dem_path.parent
+        or dem_path.suffix.casefold() not in {".tif", ".tiff"}
+    ):
+        return None
+    try:
+        payload = _read_json(_safe_project_path(project_root, parent_ref))
+        source_resolution = payload["source_resolution"]
+        artifacts = payload["artifacts"]
+        analysis_extent = payload["parameters"]["analysis_extent"]
+        x_m = float(source_resolution["x_m"])
+        y_m = float(source_resolution["y_m"])
+        analysis_resolution_m = float(analysis_extent["resolution_m"])
+        crs = str(source_resolution["crs"]).upper()
+    except (
+        KeyError,
+        OSError,
+        TypeError,
+        ValueError,
+        json.JSONDecodeError,
+        QgisSpatialBackendError,
+    ):
+        return None
+    if (
+        not isinstance(payload, dict)
+        or not isinstance(source_resolution, dict)
+        or not isinstance(artifacts, dict)
+        or artifacts.get("dem_route_bbox") != dem_path.name
+        or source_resolution.get("status") != "reported"
+        or source_resolution.get("adds_source_resolution") is not False
+        or crs not in {"3826", "EPSG:3826"}
+        or not math.isfinite(x_m)
+        or not math.isfinite(y_m)
+        or not math.isfinite(analysis_resolution_m)
+        or not 0 < x_m <= 1000
+        or not math.isclose(x_m, y_m, rel_tol=1e-9, abs_tol=1e-9)
+        or not math.isclose(
+            x_m,
+            analysis_resolution_m,
+            rel_tol=1e-9,
+            abs_tol=1e-9,
+        )
+    ):
+        return None
+    return {
+        "status": "reported",
+        "source_kind": "active_terrain_feature_dem",
+        "x_m": x_m,
+        "y_m": y_m,
+        "crs": "EPSG:3826",
+        "crs_evidence": source_resolution.get("crs_evidence") or "unavailable",
+        "adds_source_resolution": False,
+        "parent_terrain_feature_manifest_ref": parent_ref,
+    }
+
+
 _TERRAIN_ROUTE_ACTIVE_PROJECT_KEYS = frozenset(
     {
         "terrain_route_hypothesis_ref",
@@ -4362,6 +4520,64 @@ def _deactivate_terrain_route_hypothesis(*, project_root: Path) -> None:
         }
     )
     _write_bytes(project_path, _json_bytes(updated))
+
+
+def _refresh_navigation_projection_after_terrain_route(
+    *,
+    project_root: Path,
+    project_id: str,
+) -> dict[str, Any]:
+    try:
+        project = _read_json(project_root / "project.json")
+        if not isinstance(project, dict):
+            raise QgisSpatialBackendError("Scout project metadata must be an object")
+        current = inspect_navigation_terrain_projection(
+            project_root,
+            project,
+            project_id=project_id,
+        )
+        if current.payload.get("projection_state") == "ready":
+            compilation = current.payload.get("projection_compilation") or {}
+            return {
+                "status": "ready",
+                "source_ref": NAVIGATION_TERRAIN_PROJECTION_REF,
+                "input_fingerprint": compilation.get("input_fingerprint"),
+                "served_from": "persisted_workspace_artifact",
+            }
+        compiled = compile_navigation_terrain_projection(
+            project_root,
+            project=project,
+            project_id=project_id,
+        )
+        boundary = compiled.get("boundary")
+        if (
+            not isinstance(boundary, dict)
+            or boundary.get("candidate_only") is not True
+            or boundary.get("runtime_safety_truth") is not False
+        ):
+            raise QgisSpatialBackendError(
+                "Navigation terrain projection violated candidate-only authority"
+            )
+        compilation = compiled.get("projection_compilation") or {}
+        return {
+            "status": "ready",
+            "source_ref": NAVIGATION_TERRAIN_PROJECTION_REF,
+            "input_fingerprint": compilation.get("input_fingerprint"),
+            "served_from": "compiled_after_terrain_route_materialization",
+        }
+    except (
+        OSError,
+        ValueError,
+        ValidationError,
+        json.JSONDecodeError,
+        QgisSpatialBackendError,
+    ) as exc:
+        return {
+            "status": "unavailable",
+            "source_ref": NAVIGATION_TERRAIN_PROJECTION_REF,
+            "error_type": type(exc).__name__,
+            "served_from": "typed_failure",
+        }
 
 
 def _activate_terrain_route_hypothesis(

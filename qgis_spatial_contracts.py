@@ -6,7 +6,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from terrain_route_hypothesis_models import TerrainRoutingCostConfig
+from terrain_route_hypothesis_models import GeoPoint, TerrainRoutingCostConfig
 
 
 QGIS_SPATIAL_SCHEMA_VERSION = "scout_qgis_spatial.v0_1"
@@ -188,6 +188,39 @@ class SpatialCapabilityCatalog(BaseModel):
     boundary: SpatialAuthorityBoundary = Field(default_factory=qgis_candidate_boundary)
 
 
+class TerrainRouteEndpointSelection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    start: GeoPoint
+    destination: GeoPoint
+    selection_source: Literal["api_request", "dashboard_map_selection"] = (
+        "api_request"
+    )
+    candidate_only: Literal[True] = True
+    runtime_safety_truth: Literal[False] = False
+    operational: Literal[False] = False
+    safe_or_walkable: Literal["not_determined"] = "not_determined"
+
+    @model_validator(mode="after")
+    def validate_wgs84_endpoints(self) -> "TerrainRouteEndpointSelection":
+        for name, point in (
+            ("start", self.start),
+            ("destination", self.destination),
+        ):
+            if point.crs != "EPSG:4326":
+                raise ValueError(
+                    f"terrain route {name} must use EPSG:4326 for the QGIS worker"
+                )
+            if not -180 <= point.x <= 180 or not -90 <= point.y <= 90:
+                raise ValueError(f"terrain route {name} is outside WGS84 bounds")
+        if (self.start.x, self.start.y) == (
+            self.destination.x,
+            self.destination.y,
+        ):
+            raise ValueError("terrain route start and destination must differ")
+        return self
+
+
 class SpatialAnalysisRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -198,9 +231,14 @@ class SpatialAnalysisRequest(BaseModel):
     corridor_m: float = 250.0
     requested_by: str = "dashboard_operator"
     request_id: str | None = None
+    terrain_route_endpoints: TerrainRouteEndpointSelection | None = None
     terrain_routing_cost_config: TerrainRoutingCostConfig = Field(
         default_factory=TerrainRoutingCostConfig
     )
+    candidate_only: Literal[True] = True
+    runtime_safety_truth: Literal[False] = False
+    operational: Literal[False] = False
+    safe_or_walkable: Literal["not_determined"] = "not_determined"
 
     @field_validator("corridor_m")
     @classmethod
@@ -217,6 +255,17 @@ class SpatialAnalysisRequest(BaseModel):
         if not workflow_id:
             raise ValueError("workflow_id is required")
         return workflow_id
+
+    @model_validator(mode="after")
+    def validate_terrain_route_endpoints_scope(self) -> "SpatialAnalysisRequest":
+        if (
+            self.terrain_route_endpoints is not None
+            and self.workflow_id != TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_ID
+        ):
+            raise ValueError(
+                "terrain_route_endpoints are only valid for terrain_route_hypothesis.v1"
+            )
+        return self
 
 
 class SpatialEvidenceReviewRequest(BaseModel):

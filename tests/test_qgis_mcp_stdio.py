@@ -1008,7 +1008,6 @@ def test_qgis_mcp_allows_only_compiled_terrain_route_processing(tmp_path: Path) 
     cost_parameters = {
         "input": str(friction),
         "start_coordinates": "260000,2640000",
-        "stop_coordinates": "260500,2640500",
         "-k": True,
         "-n": True,
         "max_cost": 0.0,
@@ -1026,6 +1025,18 @@ def test_qgis_mcp_allows_only_compiled_terrain_route_processing(tmp_path: Path) 
             "parameters": cost_parameters,
         },
     )
+    with pytest.raises(QgisMcpToolRejected, match="complete analysis extent"):
+        client.validate_tool_call(
+            "qgis_processing_start",
+            {
+                "algorithm": "grass:r.cost",
+                "allow_main_thread": True,
+                "parameters": {
+                    **cost_parameters,
+                    "stop_coordinates": "260500,2640500",
+                },
+            },
+        )
     client.validate_tool_call(
         "qgis_processing_start",
         {

@@ -6,9 +6,11 @@ import hmac
 import json
 import math
 import os
+import platform
 import re
 import shutil
 import struct
+import subprocess
 import threading
 import time
 import zlib
@@ -64,8 +66,8 @@ from qgis_worker_contracts import (
 from terrain_route_hypothesis import default_route_unknowns, resolution_confidence_limits
 from terrain_route_hypothesis_artifacts import (
     TERRAIN_ROUTE_CORRIDOR_SEMANTICS,
+    TERRAIN_ROUTE_PROVENANCE_REVISION,
     TERRAIN_ROUTE_VISUALIZATION_REVISION,
-    TerrainRouteCacheKeys,
     build_corridor_threshold_expression,
     build_live_terrain_route_cache_keys,
     build_path_outside_band_expression,
@@ -82,7 +84,6 @@ from terrain_route_hypothesis_models import (
     GeoPoint,
     RouteEvidence,
     RouteEvidencePolarity,
-    TerrainEvidenceSourceType,
     TerrainHypothesisMetrics,
     TerrainHypothesisProvenance,
     TerrainRasterReference,
@@ -226,7 +227,7 @@ _MAX_TERRAIN_SURFACE_CELLS = 4_000_000
 _MAX_TERRAIN_SURFACE_DIMENSION = 4096
 _TERRAIN_CONTOUR_INTERVAL_M = 100.0
 _MAX_TERRAIN_ROUTE_PATH_COORDINATES = 20_000
-_MAX_TERRAIN_ROUTE_METRIC_SAMPLES = 240
+_MAX_TERRAIN_ROUTE_METRIC_SAMPLES = 80
 _TERRAIN_ROUTE_CORRIDOR_COLORS = {
     5.0: "nv 0 0 0 0\n0 0 0 0 0\n1 23 144 125 155\n",
     10.0: "nv 0 0 0 0\n0 0 0 0 0\n1 36 112 177 130\n",
@@ -473,6 +474,8 @@ class QgisWorkerService:
                 **base,
             )
         qgis_version = _find_version(snapshot, "qgis")
+        if qgis_version == "unavailable":
+            qgis_version = _bridge_qgis_version()
         project_loaded = bool(
             _nested_value(snapshot, ("project", "file"))
             or _nested_value(snapshot, ("project", "layer_count"))
@@ -1380,9 +1383,17 @@ class QgisWorkerService:
             qgis_version = _find_version(session_snapshot, "qgis")
             if qgis_version == "unavailable":
                 qgis_version = _find_version(context, "qgis")
+            qgis_version_source = "qgis_session_or_context"
             grass_version = _find_version(session_snapshot, "grass")
             if grass_version == "unavailable":
                 grass_version = _find_version(context, "grass")
+            grass_version_source = "qgis_session_or_context"
+            if grass_version == "unavailable":
+                grass_version = _host_grass_version()
+                grass_version_source = "bounded_host_cli_probe"
+            if qgis_version == "unavailable":
+                qgis_version = _bridge_qgis_version()
+                qgis_version_source = "qgis_bridge_registration"
             mcp_version = _nested_text(
                 initialized, ("serverInfo", "version")
             ) or _mcp_version(self.mcp)
@@ -1591,6 +1602,10 @@ class QgisWorkerService:
                 raise _WorkerCrsUnresolved(
                     f"Terrain route DEM CRS is unresolved: {dem_crs}"
                 )
+            dem_analysis_extent = _terrain_route_raster_analysis_extent(
+                dem_analysis_extent,
+                dem_summary,
+            )
             _require_route_endpoints_inside_extent(
                 (start_x, start_y),
                 (destination_x, destination_y),
@@ -1614,6 +1629,13 @@ class QgisWorkerService:
                 raise _WorkerTerrainRouteUnavailable(
                     SpatialAnalysisErrorCode.NODATA_PRESENT,
                     "The bounded terrain route DEM contains NoData cells.",
+                )
+            if int(dem_stats.get("n", 0)) != int(
+                dem_analysis_extent["cell_count"]
+            ):
+                raise _WorkerTerrainRouteUnavailable(
+                    SpatialAnalysisErrorCode.SOURCE_UNAVAILABLE,
+                    "The bounded terrain route DEM cell inventory is incomplete.",
                 )
             run = self._complete_step(run, current_step)
             self._persist(run)
@@ -1812,7 +1834,7 @@ class QgisWorkerService:
                 corridor_stats_path,
             )
             corridor_stats = _parse_grass_univar_report(corridor_stats_path)
-            expected_cell_count = int(dem_analysis_extent["cell_count"])
+            expected_cell_count = int(dem_stats["n"])
             if (
                 int(corridor_stats.get("null_cells", 0)) > 0
                 or int(corridor_stats.get("n", 0)) != expected_cell_count
@@ -1960,7 +1982,7 @@ class QgisWorkerService:
             self._check_cancel(cancel_event)
 
             current_step = "hypothesis_validated"
-            metrics = self._terrain_route_path_metrics(
+            metrics, metric_sample_count = self._terrain_route_path_metrics(
                 run=run,
                 best_path_coordinates=best_path_coordinates,
                 rasters={
@@ -2080,10 +2102,23 @@ class QgisWorkerService:
                 "bands_nested": True,
                 "best_path_union_applied": False,
                 "visualization_revision": TERRAIN_ROUTE_VISUALIZATION_REVISION,
+                "provenance_revision": TERRAIN_ROUTE_PROVENANCE_REVISION,
+                "execution_host": platform.node() or "unknown",
+                "execution_architecture": platform.machine() or "unknown",
+                "qgis_version_source": qgis_version_source,
+                "grass_version_source": grass_version_source,
                 "path_orientation": "A_TO_B",
                 "endpoint_coordinate_semantics": "original_wgs84_coordinate",
                 "endpoint_snap_distance_m": 0.0,
                 "endpoint_tolerance_m": max(dem_resolution_m * 1.5, 1.0),
+                "metric_sampling": {
+                    "method": "deterministic_evenly_spaced_path_vertices",
+                    "route_vertex_count": len(best_path_coordinates),
+                    "sample_count": metric_sample_count,
+                    "maximum_sample_count": _MAX_TERRAIN_ROUTE_METRIC_SAMPLES,
+                    "statistics_scope": "sampled_path_cells",
+                    "max_slope_semantics": "maximum_of_sampled_cells_not_full_path_maximum",
+                },
                 "search_complete": True,
                 "connectivity": "knight_move_enabled",
                 "friction_expression": friction_expression,
@@ -2469,7 +2504,7 @@ class QgisWorkerService:
                 current_step,
                 code,
                 "Terrain route QGIS/GRASS execution failed; no hypothesis was published.",
-                detail=str(exc),
+                detail=_bounded_mcp_exception_detail(exc),
                 retryable=code
                 in {
                     SpatialAnalysisErrorCode.QGIS_UNAVAILABLE,
@@ -2555,7 +2590,7 @@ class QgisWorkerService:
         high_cost_threshold: float,
         relative_cost: float,
         added_layers: list[str],
-    ) -> TerrainHypothesisMetrics:
+    ) -> tuple[TerrainHypothesisMetrics, int]:
         layer_ids: dict[str, str] = {}
         for role, path in rasters.items():
             layer = self._call(
@@ -2619,21 +2654,24 @@ class QgisWorkerService:
                 best_path_coordinates[1:],
             )
         )
-        return TerrainHypothesisMetrics(
-            relative_score=None,
-            relative_cost=float(relative_cost),
-            distance_m=float(distance),
-            elevation_gain_m=float(gain),
-            elevation_loss_m=float(loss),
-            max_slope_degrees=max(slopes),
-            median_slope_degrees=float(median(slopes)),
-            high_cost_fraction=(
-                sum(value >= high_cost_threshold for value in frictions)
-                / len(frictions)
+        return (
+            TerrainHypothesisMetrics(
+                relative_score=None,
+                relative_cost=float(relative_cost),
+                distance_m=float(distance),
+                elevation_gain_m=float(gain),
+                elevation_loss_m=float(loss),
+                max_slope_degrees=max(slopes),
+                median_slope_degrees=float(median(slopes)),
+                high_cost_fraction=(
+                    sum(value >= high_cost_threshold for value in frictions)
+                    / len(frictions)
+                ),
+                ridge_fraction=None,
+                valley_fraction=None,
+                teii_stats={},
             ),
-            ridge_fraction=None,
-            valley_fraction=None,
-            teii_stats={},
+            len(samples),
         )
 
     def _execute_terrain_feature_stack(
@@ -5243,6 +5281,28 @@ def _mcp_failure_code(
     return SpatialAnalysisErrorCode.PROCESSING_FAILED
 
 
+def _bounded_mcp_exception_detail(exc: QgisMcpError) -> str:
+    details: list[str] = []
+
+    def append(value: Any) -> None:
+        text = str(value or "").strip()
+        if text and text not in details:
+            details.append(text[:500])
+
+    append(str(exc))
+    if isinstance(exc, QgisMcpToolError):
+        error = exc.payload.get("error")
+        if isinstance(error, dict):
+            append(error.get("code"))
+            append(error.get("message"))
+            data = error.get("data")
+            if isinstance(data, dict):
+                append(data.get("reason"))
+                append(data.get("detail"))
+    suffix = "; ".join(details)
+    return f"{type(exc).__name__}: {suffix}" if suffix else type(exc).__name__
+
+
 def _artifact(
     worker_run_id: str,
     suffix: str,
@@ -5623,6 +5683,99 @@ def _route_rectangle_extent(
         "qgis_extent": ",".join(
             _compact_number(item)
             for item in (bounded_xmin, bounded_xmax, bounded_ymin, bounded_ymax)
+        ),
+    }
+
+
+def _terrain_route_raster_analysis_extent(
+    requested_extent: dict[str, Any],
+    raster_summary: dict[str, Any],
+) -> dict[str, Any]:
+    try:
+        width_number = float(raster_summary.get("width"))
+        height_number = float(raster_summary.get("height"))
+    except (TypeError, ValueError) as exc:
+        raise _WorkerTerrainRouteUnavailable(
+            SpatialAnalysisErrorCode.SOURCE_UNAVAILABLE,
+            "The clipped terrain route DEM grid dimensions are unavailable.",
+        ) from exc
+    if (
+        not math.isfinite(width_number)
+        or not math.isfinite(height_number)
+        or width_number < 1
+        or height_number < 1
+        or not width_number.is_integer()
+        or not height_number.is_integer()
+    ):
+        raise _WorkerTerrainRouteUnavailable(
+            SpatialAnalysisErrorCode.SOURCE_UNAVAILABLE,
+            "The clipped terrain route DEM grid dimensions are invalid.",
+        )
+    width = int(width_number)
+    height = int(height_number)
+    if (
+        width > _MAX_TERRAIN_SURFACE_DIMENSION
+        or height > _MAX_TERRAIN_SURFACE_DIMENSION
+        or width * height > _MAX_TERRAIN_SURFACE_CELLS
+    ):
+        raise _WorkerTerrainRouteUnavailable(
+            SpatialAnalysisErrorCode.SOURCE_UNAVAILABLE,
+            "The clipped terrain route DEM grid exceeds bounded dimensions.",
+        )
+
+    xmin, ymin, xmax, ymax = _extent_values(
+        raster_summary.get("extent"),
+        label="Clipped terrain route DEM",
+    )
+    expected_resolution = float(requested_extent["resolution_m"])
+    x_resolution = (xmax - xmin) / width
+    y_resolution = (ymax - ymin) / height
+    if not (
+        math.isclose(x_resolution, expected_resolution, rel_tol=1e-6, abs_tol=1e-6)
+        and math.isclose(y_resolution, expected_resolution, rel_tol=1e-6, abs_tol=1e-6)
+    ):
+        raise _WorkerTerrainRouteUnavailable(
+            SpatialAnalysisErrorCode.INVALID_INPUT,
+            "The clipped terrain route DEM grid resolution does not match provenance.",
+        )
+
+    corners = [
+        twd97_to_wgs84(x, y)
+        for x, y in (
+            (xmin, ymin),
+            (xmin, ymax),
+            (xmax, ymin),
+            (xmax, ymax),
+        )
+    ]
+    latitudes = [lat for lat, _lon in corners]
+    longitudes = [lon for _lat, lon in corners]
+    return {
+        **requested_extent,
+        "grid_alignment": "source_dem_grid",
+        "requested_grid": {
+            "width": int(requested_extent["width"]),
+            "height": int(requested_extent["height"]),
+            "cell_count": int(requested_extent["cell_count"]),
+            "bbox_twd97": dict(requested_extent["bbox_twd97"]),
+        },
+        "width": width,
+        "height": height,
+        "cell_count": width * height,
+        "bbox_twd97": {
+            "min_x": xmin,
+            "min_y": ymin,
+            "max_x": xmax,
+            "max_y": ymax,
+        },
+        "bbox_wgs84": {
+            "west": min(longitudes),
+            "south": min(latitudes),
+            "east": max(longitudes),
+            "north": max(latitudes),
+        },
+        "qgis_extent": ",".join(
+            _compact_number(item) for item in (xmin, xmax, ymin, ymax)
         ),
     }
 
@@ -6475,6 +6628,66 @@ def _find_version(value: Any, keyword: str) -> str:
             if result != "unavailable":
                 return result
     return "unavailable"
+
+
+def _bridge_qgis_version(path: Path | None = None) -> str:
+    configured = _env_str("QGIS_MCP_CONNECTION_FILE")
+    target = path or (
+        Path(configured).expanduser()
+        if configured
+        else Path.home() / ".qgis-mcp" / "connection.json"
+    )
+    try:
+        if not target.is_file() or target.stat().st_size > 64 * 1024:
+            return "unavailable"
+        payload = json.loads(target.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return "unavailable"
+    version = payload.get("qgis_version") if isinstance(payload, dict) else None
+    if not isinstance(version, str):
+        return "unavailable"
+    normalized = version.strip()
+    if not normalized or len(normalized) > 120 or not re.fullmatch(
+        r"[A-Za-z0-9][A-Za-z0-9._ +()-]*",
+        normalized,
+    ):
+        return "unavailable"
+    return normalized
+
+
+def _parse_grass_version_output(output: str) -> str:
+    match = re.search(
+        r"\bGRASS(?: GIS)?\s+([0-9]+(?:\.[0-9]+){1,2})\b",
+        str(output),
+    )
+    return match.group(1) if match else "unavailable"
+
+
+def _host_grass_version() -> str:
+    configured = _env_str("SCOUT_GRASS_COMMAND") or "grass"
+    executable = shutil.which(configured)
+    if executable is None:
+        return "unavailable"
+    environment = {
+        "HOME": os.environ.get("HOME", str(Path.home())),
+        "PATH": os.environ.get("PATH", os.defpath),
+        "LANG": "C",
+        "LC_ALL": "C",
+    }
+    try:
+        completed = subprocess.run(
+            [executable, "--version"],
+            capture_output=True,
+            check=False,
+            env=environment,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return "unavailable"
+    return _parse_grass_version_output(
+        "\n".join((completed.stdout, completed.stderr))
+    )
 
 
 def _mcp_version(client: QgisMcpClient | None) -> str:

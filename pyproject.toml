@@ -26,6 +26,15 @@ pydantic-ai-smoke = [
 nextgen-intelligence = [
     "praisonaiagents==1.7.0",
 ]
+pretrip-osm = [
+    "osmium==4.3.1",
+]
+pretrip-workstation = [
+    "numpy==2.5.0",
+    "osmium==4.3.1",
+    "pillow==12.2.0",
+    "pytesseract==0.3.13",
+]
 
 [project.scripts]
 scout-ai-os-pydantic-smoke = "scout.cli.pydantic_smoke:main"

@@ -48,6 +48,7 @@ from terrain_route_hypothesis_models import (
     TERRAIN_ROUTE_PATH_BAND_RELATIONSHIP,
     TERRAIN_ROUTE_PATH_MODEL,
     TERRAIN_ROUTE_PATH_SEMANTICS,
+    TerrainRouteHypothesisCatalog,
     TerrainRouteHypothesisRun,
     TerrainRouteRunStatus,
 )
@@ -329,6 +330,178 @@ def _terrain_route_hypothesis_projection(
     *,
     project_id: str,
 ) -> dict[str, Any]:
+    hypothesis_ref = _optional_ref(project.get("terrain_route_hypothesis_ref"))
+    visualization_ref = _optional_ref(
+        project.get("terrain_route_hypothesis_visualization_ref")
+    )
+    if not hypothesis_ref or not visualization_ref:
+        return _terrain_route_hypothesis_unavailable(
+            status=(
+                "unavailable"
+                if project.get("terrain_route_hypothesis_status") == "unavailable"
+                else "not_prepared"
+            ),
+            reason=(
+                "typed_terrain_route_hypothesis_unavailable"
+                if project.get("terrain_route_hypothesis_status") == "unavailable"
+                else "terrain_route_hypothesis_not_prepared"
+            ),
+        )
+
+    active = _terrain_route_hypothesis_candidate_projection(
+        project_root,
+        project,
+        project_id=project_id,
+        hypothesis_ref=hypothesis_ref,
+        visualization_ref=visualization_ref,
+        hypothesis_sha=_sha256_or_none(
+            project.get("terrain_route_hypothesis_sha256")
+        ),
+        visualization_sha=_sha256_or_none(
+            project.get("terrain_route_hypothesis_visualization_sha256")
+        ),
+        expected_cache_key=_optional_ref(
+            project.get("terrain_route_hypothesis_cache_key")
+        ),
+        require_project_activation=True,
+    )
+    catalog_ref = _optional_ref(
+        project.get("terrain_route_hypothesis_catalog_ref")
+    )
+    if not catalog_ref or active.get("status") != "candidate_ready":
+        return active
+
+    try:
+        catalog_path = _bounded_project_ref_path(project_root, catalog_ref)
+        catalog_sha = _sha256_or_none(
+            project.get("terrain_route_hypothesis_catalog_sha256")
+        )
+        if catalog_sha is None or _file_sha256(catalog_path) != catalog_sha:
+            raise NavigationTerrainProjectionError(
+                "terrain route hypothesis catalog hash mismatch"
+            )
+        catalog = TerrainRouteHypothesisCatalog.model_validate(
+            _read_json_ref(project_root, catalog_ref)
+        )
+        if catalog.project_id != project_id:
+            raise NavigationTerrainProjectionError(
+                "terrain route hypothesis catalog project mismatch"
+            )
+
+        options: list[dict[str, Any]] = []
+        source_refs = [*active.get("source_refs", []), catalog_ref]
+        for entry in catalog.entries:
+            option = _terrain_route_hypothesis_candidate_projection(
+                project_root,
+                project,
+                project_id=project_id,
+                hypothesis_ref=entry.hypothesis_ref,
+                visualization_ref=entry.visualization_ref,
+                hypothesis_sha=entry.hypothesis_sha256,
+                visualization_sha=entry.visualization_sha256,
+                expected_cache_key=entry.cache_key,
+                require_project_activation=False,
+                hypothesis_id=entry.id,
+            )
+            option = {
+                **option,
+                "selection_id": entry.id,
+                "selection_label": entry.label,
+                "selection_scope": entry.scope,
+                "focus_mode": entry.focus_mode,
+                "endpoint_labels": {
+                    "start": entry.start_label,
+                    "destination": entry.destination_label,
+                },
+            }
+            options.append(option)
+            if option.get("status") == "candidate_ready":
+                source_refs.extend(option.get("source_refs", []))
+
+        options, default_id = _terrain_route_selection_with_active(
+            active=active,
+            catalog_options=options,
+        )
+        selection_status = (
+            "candidate_ready"
+            if all(option.get("status") == "candidate_ready" for option in options)
+            else "partially_available"
+        )
+        return {
+            **active,
+            "selection": {
+                "status": selection_status,
+                "default_id": default_id,
+                "options": options,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "operational": False,
+            },
+            "source_refs": list(dict.fromkeys(source_refs)),
+        }
+    except (
+        OSError,
+        ValueError,
+        ValidationError,
+        NavigationTerrainProjectionError,
+    ):
+        return {
+            **active,
+            "selection": {
+                "status": "unavailable",
+                "reason": "terrain_route_hypothesis_catalog_validation_failed",
+                "default_id": None,
+                "options": [],
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "operational": False,
+            },
+        }
+
+
+def _terrain_route_selection_with_active(
+    *,
+    active: dict[str, Any],
+    catalog_options: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], str]:
+    active_cache_key = str(active.get("provenance", {}).get("cache_key") or "")
+    for option in catalog_options:
+        if option.get("provenance", {}).get("cache_key") == active_cache_key:
+            return catalog_options, str(option["selection_id"])
+
+    active_id_suffix = (
+        active_cache_key[:12]
+        if active_cache_key
+        else hashlib.sha256(
+            json.dumps(active.get("source_refs", []), sort_keys=True).encode("utf-8")
+        ).hexdigest()[:12]
+    )
+    active_option = {
+        **active,
+        "selection_id": f"active-{active_id_suffix}",
+        "selection_label": str(
+            active.get("label") or active.get("candidate") or "Latest A to B candidate"
+        ),
+        "selection_scope": "active_request",
+        "focus_mode": "hypothesis",
+        "endpoint_labels": {"start": "A", "destination": "B"},
+    }
+    return [active_option, *catalog_options], active_option["selection_id"]
+
+
+def _terrain_route_hypothesis_candidate_projection(
+    project_root: Path,
+    project: dict[str, Any],
+    *,
+    project_id: str,
+    hypothesis_ref: str,
+    visualization_ref: str,
+    hypothesis_sha: str | None,
+    visualization_sha: str | None,
+    expected_cache_key: str | None,
+    require_project_activation: bool,
+    hypothesis_id: str | None = None,
+) -> dict[str, Any]:
     boundary = {
         "authority": "candidate_only",
         "source_type": "terrain_hypothesis",
@@ -339,40 +512,10 @@ def _terrain_route_hypothesis_projection(
         "promotion_allowed": False,
         "human_review_required": True,
     }
-    hypothesis_ref = _optional_ref(project.get("terrain_route_hypothesis_ref"))
-    visualization_ref = _optional_ref(
-        project.get("terrain_route_hypothesis_visualization_ref")
-    )
-    if not hypothesis_ref or not visualization_ref:
-        return {
-            "status": (
-                "unavailable"
-                if project.get("terrain_route_hypothesis_status") == "unavailable"
-                else "not_prepared"
-            ),
-            "reason": (
-                "typed_terrain_route_hypothesis_unavailable"
-                if project.get("terrain_route_hypothesis_status") == "unavailable"
-                else "terrain_route_hypothesis_not_prepared"
-            ),
-            "display_labels": [
-                "CANDIDATE",
-                "TERRAIN HYPOTHESIS",
-                "NOT A VERIFIED TRAIL",
-            ],
-            "source_refs": [],
-            "boundary": boundary,
-        }
     try:
         hypothesis_path = _bounded_project_ref_path(project_root, hypothesis_ref)
         visualization_path = _bounded_project_ref_path(
             project_root, visualization_ref
-        )
-        hypothesis_sha = _sha256_or_none(
-            project.get("terrain_route_hypothesis_sha256")
-        )
-        visualization_sha = _sha256_or_none(
-            project.get("terrain_route_hypothesis_visualization_sha256")
         )
         if (
             hypothesis_sha is None
@@ -396,12 +539,19 @@ def _terrain_route_hypothesis_projection(
             )
         hypothesis = hypothesis_run.hypotheses[0]
         if (
-            project.get("terrain_route_hypothesis_cache_key")
-            != hypothesis.provenance.cache_key
-            or project.get("terrain_route_hypothesis_authority")
-            != "candidate_only"
-            or project.get("terrain_route_hypothesis_candidate_only") is not True
-            or project.get("terrain_route_hypothesis_runtime_safety_truth") is not False
+            expected_cache_key != hypothesis.provenance.cache_key
+            or (
+                require_project_activation
+                and (
+                    project.get("terrain_route_hypothesis_cache_key")
+                    != hypothesis.provenance.cache_key
+                    or project.get("terrain_route_hypothesis_authority")
+                    != "candidate_only"
+                    or project.get("terrain_route_hypothesis_candidate_only") is not True
+                    or project.get("terrain_route_hypothesis_runtime_safety_truth")
+                    is not False
+                )
+            )
         ):
             raise NavigationTerrainProjectionError(
                 "terrain route hypothesis project activation is inconsistent"
@@ -410,6 +560,7 @@ def _terrain_route_hypothesis_projection(
         overlays = _normalized_terrain_route_overlays(
             visualization,
             project_id=project_id,
+            hypothesis_id=hypothesis_id,
             expected_bands=hypothesis.corridor.bands
             if hypothesis.corridor is not None
             else (),
@@ -553,17 +704,37 @@ def _terrain_route_hypothesis_projection(
         ValidationError,
         NavigationTerrainProjectionError,
     ):
-        return {
-            "status": "unavailable",
-            "reason": "terrain_route_hypothesis_validation_failed",
-            "display_labels": [
-                "CANDIDATE",
-                "TERRAIN HYPOTHESIS",
-                "NOT A VERIFIED TRAIL",
-            ],
-            "source_refs": [],
-            "boundary": boundary,
-        }
+        return _terrain_route_hypothesis_unavailable(
+            status="unavailable",
+            reason="terrain_route_hypothesis_validation_failed",
+        )
+
+
+def _terrain_route_hypothesis_unavailable(
+    *,
+    status: str,
+    reason: str,
+) -> dict[str, Any]:
+    return {
+        "status": status,
+        "reason": reason,
+        "display_labels": [
+            "CANDIDATE",
+            "TERRAIN HYPOTHESIS",
+            "NOT A VERIFIED TRAIL",
+        ],
+        "source_refs": [],
+        "boundary": {
+            "authority": "candidate_only",
+            "source_type": "terrain_hypothesis",
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "operational": False,
+            "safe_or_walkable": "not_determined",
+            "promotion_allowed": False,
+            "human_review_required": True,
+        },
+    }
 
 
 def _normalized_terrain_route_features(
@@ -647,6 +818,7 @@ def _normalized_terrain_route_overlays(
     visualization: dict[str, Any],
     *,
     project_id: str,
+    hypothesis_id: str | None,
     expected_bands: Any,
 ) -> list[dict[str, Any]]:
     raw_overlays = visualization.get("raster_overlays")
@@ -673,13 +845,18 @@ def _normalized_terrain_route_overlays(
             raise NavigationTerrainProjectionError(
                 "terrain route corridor overlay binding is invalid"
             )
+        runtime_href = (
+            f"/admin/pretrip/projects/{quote(project_id, safe='')}"
+            f"/terrain-route-overlays/{quote(band.name, safe='')}.png"
+        )
+        if hypothesis_id is not None:
+            runtime_href = (
+                f"{runtime_href}?hypothesis_id={quote(hypothesis_id, safe='')}"
+            )
         overlays.append(
             {
                 "mode": band.name,
-                "runtime_href": (
-                    f"/admin/pretrip/projects/{quote(project_id, safe='')}"
-                    f"/terrain-route-overlays/{quote(band.name, safe='')}.png"
-                ),
+                "runtime_href": runtime_href,
                 "source_ref": _source_ref_or_none(item.get("source_path")),
                 "bbox_wgs84": _normalize_bbox(item.get("bbox_wgs84")),
                 "pixel_width": _positive_int_or_none(item.get("pixel_width")),

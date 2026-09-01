@@ -75,6 +75,7 @@ from navigation_terrain_projection import (
 from navigation_terrain_projection_store import (
     inspect_navigation_terrain_projection,
 )
+from terrain_route_hypothesis_models import TerrainRouteHypothesisCatalog
 from navigation_terrain_raster_dem import (
     TerrainDemPreparationError,
     load_navigation_terrain_dem_manifest,
@@ -5532,6 +5533,12 @@ def create_admin_router(
     def pretrip_project_terrain_route_overlay(
         project_id: str,
         mode: str,
+        hypothesis_id: str | None = Query(
+            default=None,
+            min_length=1,
+            max_length=80,
+            pattern=r"^[a-z0-9][a-z0-9._-]{0,79}$",
+        ),
     ) -> Response:
         allowed_modes = {
             "top_5_percent_corridor",
@@ -5559,19 +5566,91 @@ def create_admin_router(
             ) from exc
         if (
             not isinstance(project, dict)
-            or project.get("terrain_route_hypothesis_authority")
-            != "candidate_only"
             or project.get("terrain_route_hypothesis_candidate_only") is not True
             or project.get("terrain_route_hypothesis_runtime_safety_truth") is not False
-            or project.get("terrain_route_hypothesis_status") != "completed"
         ):
             raise HTTPException(
                 status_code=404,
                 detail="terrain route hypothesis not prepared",
             )
+        if hypothesis_id is None and (
+            project.get("terrain_route_hypothesis_authority")
+            != "candidate_only"
+            or project.get("terrain_route_hypothesis_status") != "completed"
+        ):
+            raise HTTPException(
+                status_code=404,
+                detail="active terrain route hypothesis not prepared",
+            )
+        visualization_ref = project.get(
+            "terrain_route_hypothesis_visualization_ref"
+        )
+        visualization_sha = project.get(
+            "terrain_route_hypothesis_visualization_sha256"
+        )
+        if hypothesis_id is not None:
+            catalog_path = _safe_pretrip_project_ref_path(
+                project_root,
+                project.get("terrain_route_hypothesis_catalog_ref"),
+            )
+            if catalog_path is None or not catalog_path.is_file():
+                raise HTTPException(
+                    status_code=404,
+                    detail="terrain route hypothesis catalog not prepared",
+                )
+            catalog_bytes = catalog_path.read_bytes()
+            if hashlib.sha256(catalog_bytes).hexdigest() != project.get(
+                "terrain_route_hypothesis_catalog_sha256"
+            ):
+                raise HTTPException(
+                    status_code=422,
+                    detail="terrain route hypothesis catalog hash mismatch",
+                )
+            try:
+                catalog = TerrainRouteHypothesisCatalog.model_validate_json(
+                    catalog_bytes
+                )
+            except ValidationError as exc:
+                raise HTTPException(
+                    status_code=422,
+                    detail="invalid terrain route hypothesis catalog",
+                ) from exc
+            if catalog.project_id != project_id:
+                raise HTTPException(
+                    status_code=422,
+                    detail="terrain route hypothesis catalog project mismatch",
+                )
+            entry = next(
+                (item for item in catalog.entries if item.id == hypothesis_id),
+                None,
+            )
+            if entry is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail="terrain route hypothesis selection not found",
+                )
+            hypothesis_path = _safe_pretrip_project_ref_path(
+                project_root,
+                entry.hypothesis_ref,
+            )
+            if hypothesis_path is None or not hypothesis_path.is_file():
+                raise HTTPException(
+                    status_code=404,
+                    detail="terrain route hypothesis artifact missing",
+                )
+            if hashlib.sha256(hypothesis_path.read_bytes()).hexdigest() != (
+                entry.hypothesis_sha256
+            ):
+                raise HTTPException(
+                    status_code=422,
+                    detail="terrain route hypothesis hash mismatch",
+                )
+            visualization_ref = entry.visualization_ref
+            visualization_sha = entry.visualization_sha256
+
         visualization_path = _safe_pretrip_project_ref_path(
             project_root,
-            project.get("terrain_route_hypothesis_visualization_ref"),
+            visualization_ref,
         )
         if visualization_path is None or not visualization_path.is_file():
             raise HTTPException(
@@ -5579,9 +5658,7 @@ def create_admin_router(
                 detail="terrain route visualization artifact missing",
             )
         visualization_bytes = visualization_path.read_bytes()
-        if hashlib.sha256(visualization_bytes).hexdigest() != project.get(
-            "terrain_route_hypothesis_visualization_sha256"
-        ):
+        if hashlib.sha256(visualization_bytes).hexdigest() != visualization_sha:
             raise HTTPException(
                 status_code=422,
                 detail="terrain route visualization hash mismatch",
@@ -5644,19 +5721,22 @@ def create_admin_router(
                 status_code=422,
                 detail="terrain route corridor overlay hash mismatch",
             )
+        headers = {
+            "Cache-Control": "no-cache, max-age=0, must-revalidate",
+            "X-Scout-Terrain-Route-Corridor": mode,
+            "X-Scout-Terrain-Route-Overlay-Hash": actual_hash,
+            "X-Scout-Authority": "candidate_only",
+            "X-Scout-Source-Type": "terrain_hypothesis",
+            "X-Scout-Candidate-Only": "true",
+            "X-Scout-Runtime-Safety-Truth": "false",
+            "X-Scout-Operational": "false",
+        }
+        if hypothesis_id is not None:
+            headers["X-Scout-Terrain-Route-Hypothesis"] = hypothesis_id
         return Response(
             overlay_bytes,
             media_type="image/png",
-            headers={
-                "Cache-Control": "no-cache, max-age=0, must-revalidate",
-                "X-Scout-Terrain-Route-Corridor": mode,
-                "X-Scout-Terrain-Route-Overlay-Hash": actual_hash,
-                "X-Scout-Authority": "candidate_only",
-                "X-Scout-Source-Type": "terrain_hypothesis",
-                "X-Scout-Candidate-Only": "true",
-                "X-Scout-Runtime-Safety-Truth": "false",
-                "X-Scout-Operational": "false",
-            },
+            headers=headers,
         )
 
     @router.get("/pretrip/projects/{project_id}/osm-pbf-vector.geojson")

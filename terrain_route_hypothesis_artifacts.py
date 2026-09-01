@@ -26,6 +26,7 @@ TERRAIN_ROUTE_CORRIDOR_EXPRESSION_KIND = "symmetric_relative_corridor"
 TERRAIN_ROUTE_THRESHOLD_EXPRESSION_KIND = "finite_cell_percentile_mask"
 TERRAIN_ROUTE_PATH_OUTSIDE_BAND_EXPRESSION_KIND = "path_outside_percentile_band"
 TERRAIN_ROUTE_VISUALIZATION_REVISION = "candidate_corridor_overlay.v0_2"
+TERRAIN_ROUTE_PROVENANCE_REVISION = "runtime_versions_and_host.v0_2"
 
 _DECIMAL = r"(?:0|[1-9][0-9]*)(?:\.[0-9]+)?"
 _CORRIDOR_EXPRESSION = re.compile(rf"^max\(0,A\+B-({_DECIMAL})\)$")
@@ -107,6 +108,7 @@ def build_live_terrain_route_cache_keys(
             "threshold_tie_handling": "include_all_cells_equal_to_threshold",
             "best_path_union_applied": False,
             "visualization_revision": TERRAIN_ROUTE_VISUALIZATION_REVISION,
+            "provenance_revision": TERRAIN_ROUTE_PROVENANCE_REVISION,
             "optional_evidence_hashes": evidence_hashes,
         }
     )
@@ -278,6 +280,7 @@ def _stable_hash(payload: Any) -> str:
 __all__ = [
     "TERRAIN_ROUTE_CACHE_SCHEMA_VERSION",
     "TERRAIN_ROUTE_CORRIDOR_SEMANTICS",
+    "TERRAIN_ROUTE_PROVENANCE_REVISION",
     "TERRAIN_ROUTE_VISUALIZATION_REVISION",
     "TerrainRouteCacheKeys",
     "build_corridor_threshold_expression",

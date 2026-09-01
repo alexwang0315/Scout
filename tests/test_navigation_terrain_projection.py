@@ -148,12 +148,24 @@ def _workspace(tmp_path: Path, *, sample_count: int = 300) -> tuple[Path, dict]:
 def _attach_terrain_route_hypothesis(
     project_root: Path,
     project: dict,
+    *,
+    cache_key: str = "cache-1",
+    candidate_id: str = "route-demo.terrain-route.R1",
+    label: str = "R1 terrain route hypothesis",
+    path_coordinates: list[list[float]] | None = None,
+    activate: bool = True,
 ) -> tuple[str, str]:
-    hypothesis_ref = "outputs/spatial/qgis/terrain-route-cache/cache-1/hypothesis.json"
-    visualization_ref = (
-        "outputs/spatial/qgis/terrain-route-cache/cache-1/visualization.json"
+    hypothesis_ref = (
+        f"outputs/spatial/qgis/terrain-route-cache/{cache_key}/hypothesis.json"
     )
-    path_coordinates = [[121.11, 24.01], [121.15, 24.05], [121.19, 24.09]]
+    visualization_ref = (
+        f"outputs/spatial/qgis/terrain-route-cache/{cache_key}/visualization.json"
+    )
+    path_coordinates = path_coordinates or [
+        [121.11, 24.01],
+        [121.15, 24.05],
+        [121.19, 24.09],
+    ]
     overlay_hashes = {
         "top_5_percent_corridor": "5" * 64,
         "top_10_percent_corridor": "a" * 64,
@@ -163,7 +175,9 @@ def _attach_terrain_route_hypothesis(
     overlays = []
     for percentile in (5, 10, 20):
         mode = f"top_{percentile}_percent_corridor"
-        overlay_ref = f"outputs/spatial/qgis/terrain-route-cache/cache-1/{mode}.png"
+        overlay_ref = (
+            f"outputs/spatial/qgis/terrain-route-cache/{cache_key}/{mode}.png"
+        )
         bands.append(
             {
                 "name": mode,
@@ -217,10 +231,18 @@ def _attach_terrain_route_hypothesis(
         "created_at": "2026-08-28T00:00:00Z",
         "hypotheses": [
             {
-                "id": "route-demo.terrain-route.R1",
-                "label": "R1 terrain route hypothesis",
-                "start": {"x": 121.11, "y": 24.01, "crs": "EPSG:4326"},
-                "destination": {"x": 121.19, "y": 24.09, "crs": "EPSG:4326"},
+                "id": candidate_id,
+                "label": label,
+                "start": {
+                    "x": path_coordinates[0][0],
+                    "y": path_coordinates[0][1],
+                    "crs": "EPSG:4326",
+                },
+                "destination": {
+                    "x": path_coordinates[-1][0],
+                    "y": path_coordinates[-1][1],
+                    "crs": "EPSG:4326",
+                },
                 "best_path": {
                     "type": "LineString",
                     "coordinates": path_coordinates,
@@ -273,8 +295,14 @@ def _attach_terrain_route_hypothesis(
                         "y_max": 1000,
                     },
                     "input_endpoints": {
-                        "start": {"x": 121.11, "y": 24.01},
-                        "destination": {"x": 121.19, "y": 24.09},
+                        "start": {
+                            "x": path_coordinates[0][0],
+                            "y": path_coordinates[0][1],
+                        },
+                        "destination": {
+                            "x": path_coordinates[-1][0],
+                            "y": path_coordinates[-1][1],
+                        },
                     },
                     "cost_model_version": "terrain_routing_cost.v0_1",
                     "weights": {"slope_weight": 1.0},
@@ -297,8 +325,8 @@ def _attach_terrain_route_hypothesis(
                         },
                         "path_band_relationship": "separate_model_not_path_confidence_band",
                     },
-                    "cache_key": "cache-1",
-                    "cache_keys": {"route_hypothesis": "cache-1"},
+                    "cache_key": cache_key,
+                    "cache_keys": {"route_hypothesis": cache_key},
                 },
             }
         ],
@@ -332,7 +360,7 @@ def _attach_terrain_route_hypothesis(
                 "type": "Feature",
                 "geometry": {"type": "LineString", "coordinates": path_coordinates},
                 "properties": {
-                    "id": "route-demo.terrain-route.R1",
+                    "id": candidate_id,
                     "kind": "terrain_route_hypothesis_best_path",
                     "feature_class": "terrain_route_hypothesis_best_path",
                     "path_model": "anisotropic_walk",
@@ -359,22 +387,99 @@ def _attach_terrain_route_hypothesis(
     }
     _write_json(project_root / hypothesis_ref, hypothesis)
     _write_json(project_root / visualization_ref, visualization)
+    if activate:
+        project.update(
+            {
+                "terrain_route_hypothesis_ref": hypothesis_ref,
+                "terrain_route_hypothesis_sha256": _sha256(
+                    project_root / hypothesis_ref
+                ),
+                "terrain_route_hypothesis_visualization_ref": visualization_ref,
+                "terrain_route_hypothesis_visualization_sha256": _sha256(
+                    project_root / visualization_ref
+                ),
+                "terrain_route_hypothesis_cache_key": cache_key,
+                "terrain_route_hypothesis_status": "completed",
+                "terrain_route_hypothesis_authority": "candidate_only",
+                "terrain_route_hypothesis_candidate_only": True,
+                "terrain_route_hypothesis_runtime_safety_truth": False,
+            }
+        )
+    return hypothesis_ref, visualization_ref
+
+
+def _attach_terrain_route_hypothesis_catalog(
+    project_root: Path,
+    project: dict,
+) -> tuple[str, str]:
+    full_key = "1" * 64
+    local_key = "2" * 64
+    full_refs = _attach_terrain_route_hypothesis(
+        project_root,
+        project,
+        cache_key=full_key,
+    )
+    local_refs = _attach_terrain_route_hypothesis(
+        project_root,
+        project,
+        cache_key=local_key,
+        candidate_id="route-demo.terrain-route.R2",
+        label="1148 saddle to Iroko station terrain hypothesis",
+        path_coordinates=[
+            [121.256226, 23.34452],
+            [121.244, 23.348],
+            [121.230419, 23.352571],
+        ],
+        activate=False,
+    )
+    catalog_ref = "outputs/spatial/qgis/terrain-route-hypothesis-catalog.json"
+    catalog = {
+        "schema_version": "scout_terrain_route_hypothesis_catalog.v0_1",
+        "artifact_kind": "terrain_route_hypothesis_catalog",
+        "project_id": "route-demo",
+        "default_id": "full-route-r1",
+        "entries": [
+            {
+                "id": "full-route-r1",
+                "label": "Full route R1",
+                "scope": "full_route",
+                "focus_mode": "route_union",
+                "start_label": "A",
+                "destination_label": "B",
+                "hypothesis_ref": full_refs[0],
+                "hypothesis_sha256": _sha256(project_root / full_refs[0]),
+                "visualization_ref": full_refs[1],
+                "visualization_sha256": _sha256(project_root / full_refs[1]),
+                "cache_key": full_key,
+            },
+            {
+                "id": "iroko-1148-to-station",
+                "label": "1148 saddle to Iroko station",
+                "scope": "local",
+                "focus_mode": "hypothesis",
+                "start_label": "1148 saddle",
+                "destination_label": "Iroko station",
+                "hypothesis_ref": local_refs[0],
+                "hypothesis_sha256": _sha256(project_root / local_refs[0]),
+                "visualization_ref": local_refs[1],
+                "visualization_sha256": _sha256(project_root / local_refs[1]),
+                "cache_key": local_key,
+            },
+        ],
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "operational": False,
+    }
+    _write_json(project_root / catalog_ref, catalog)
     project.update(
         {
-            "terrain_route_hypothesis_ref": hypothesis_ref,
-            "terrain_route_hypothesis_sha256": _sha256(project_root / hypothesis_ref),
-            "terrain_route_hypothesis_visualization_ref": visualization_ref,
-            "terrain_route_hypothesis_visualization_sha256": _sha256(
-                project_root / visualization_ref
+            "terrain_route_hypothesis_catalog_ref": catalog_ref,
+            "terrain_route_hypothesis_catalog_sha256": _sha256(
+                project_root / catalog_ref
             ),
-            "terrain_route_hypothesis_cache_key": "cache-1",
-            "terrain_route_hypothesis_status": "completed",
-            "terrain_route_hypothesis_authority": "candidate_only",
-            "terrain_route_hypothesis_candidate_only": True,
-            "terrain_route_hypothesis_runtime_safety_truth": False,
         }
     )
-    return hypothesis_ref, visualization_ref
+    return full_refs[0], local_refs[0]
 
 
 def test_projection_is_bounded_candidate_only_and_reports_structure_gaps(
@@ -524,6 +629,119 @@ def test_projection_exposes_hash_bound_candidate_only_terrain_route_hypothesis(
     assert "不表示實地存在步道、可通行或安全" in candidate[
         "uncertainty_statement"
     ]
+
+
+def test_projection_exposes_hash_bound_candidate_only_hypothesis_catalog(
+    tmp_path: Path,
+) -> None:
+    project_root, project = _workspace(tmp_path, sample_count=4)
+    full_ref, local_ref = _attach_terrain_route_hypothesis_catalog(
+        project_root,
+        project,
+    )
+
+    result = build_navigation_terrain_projection(
+        project_root,
+        project,
+        project_id="route-demo",
+    )
+
+    candidate = result["terrain_route_hypothesis"]
+    selection = candidate["selection"]
+    assert selection["status"] == "candidate_ready"
+    assert selection["default_id"] == "full-route-r1"
+    assert [option["selection_id"] for option in selection["options"]] == [
+        "full-route-r1",
+        "iroko-1148-to-station",
+    ]
+    local = selection["options"][1]
+    assert local["status"] == "candidate_ready"
+    assert local["selection_label"] == "1148 saddle to Iroko station"
+    assert local["selection_scope"] == "local"
+    assert local["focus_mode"] == "hypothesis"
+    assert local["endpoint_labels"] == {
+        "start": "1148 saddle",
+        "destination": "Iroko station",
+    }
+    assert local["boundary"]["authority"] == "candidate_only"
+    assert local["boundary"]["promotion_allowed"] is False
+    assert all(
+        "hypothesis_id=iroko-1148-to-station" in band["runtime_href"]
+        for band in local["corridor"]["bands"]
+    )
+    assert full_ref in result["source_refs"]
+    assert local_ref in result["source_refs"]
+    assert project["terrain_route_hypothesis_catalog_ref"] in result["source_refs"]
+
+
+def test_projection_selects_new_active_hypothesis_not_yet_in_catalog(
+    tmp_path: Path,
+) -> None:
+    project_root, project = _workspace(tmp_path, sample_count=4)
+    _attach_terrain_route_hypothesis_catalog(project_root, project)
+    active_key = "3" * 64
+    active_ref, _ = _attach_terrain_route_hypothesis(
+        project_root,
+        project,
+        cache_key=active_key,
+        candidate_id="route-demo.terrain-route.R3",
+        label="Latest A to B terrain route hypothesis",
+        path_coordinates=[
+            [121.22, 23.31],
+            [121.23, 23.32],
+            [121.24, 23.33],
+        ],
+    )
+
+    result = build_navigation_terrain_projection(
+        project_root,
+        project,
+        project_id="route-demo",
+    )
+
+    candidate = result["terrain_route_hypothesis"]
+    selection = candidate["selection"]
+    active_id = f"active-{active_key[:12]}"
+    assert candidate["candidate"] == "route-demo.terrain-route.R3"
+    assert selection["default_id"] == active_id
+    assert [option["selection_id"] for option in selection["options"]] == [
+        active_id,
+        "full-route-r1",
+        "iroko-1148-to-station",
+    ]
+    active = selection["options"][0]
+    assert active["selection_label"] == "Latest A to B terrain route hypothesis"
+    assert active["selection_scope"] == "active_request"
+    assert active["focus_mode"] == "hypothesis"
+    assert active["endpoint_labels"] == {"start": "A", "destination": "B"}
+    assert active["boundary"]["candidate_only"] is True
+    assert active["boundary"]["runtime_safety_truth"] is False
+    assert active_ref in result["source_refs"]
+
+
+def test_projection_fails_closed_for_hash_drifted_catalog_entry(
+    tmp_path: Path,
+) -> None:
+    project_root, project = _workspace(tmp_path, sample_count=4)
+    _, local_ref = _attach_terrain_route_hypothesis_catalog(project_root, project)
+    (project_root / local_ref).write_text("{}", encoding="utf-8")
+
+    result = build_navigation_terrain_projection(
+        project_root,
+        project,
+        project_id="route-demo",
+    )
+
+    candidate = result["terrain_route_hypothesis"]
+    selection = candidate["selection"]
+    assert selection["status"] == "partially_available"
+    local = selection["options"][1]
+    assert local["selection_id"] == "iroko-1148-to-station"
+    assert local["status"] == "unavailable"
+    assert local["reason"] == "terrain_route_hypothesis_validation_failed"
+    assert local["source_refs"] == []
+    assert local["boundary"]["authority"] == "candidate_only"
+    assert local["boundary"]["promotion_allowed"] is False
 
 
 def test_projection_fails_closed_when_terrain_route_visualization_hash_drifts(

@@ -16,7 +16,11 @@ from admin_api import (
     _run_route_context_briefing_scout_ai,
     create_admin_app,
 )
-from admin_local_raster_tiles import raster_tile_cache_path
+from admin_imagery_sources import imagery_source_for_project
+from admin_local_raster_tiles import (
+    imagery_source_raster_tile_cache_path,
+    raster_tile_cache_path,
+)
 
 
 PROJECT_ID = "chilai_nanhua_day1"
@@ -1761,6 +1765,148 @@ def test_pretrip_terrain_route_corridor_api_enforces_candidate_authority_and_has
     assert "authority" in promoted.json()["detail"]
 
 
+def test_pretrip_terrain_route_corridor_api_serves_hash_bound_catalog_selection(
+    tmp_path: Path,
+) -> None:
+    workspace_root = tmp_path / "pretrip_workspace"
+    project_root = workspace_root / PROJECT_ID
+    cache_key = "2" * 64
+    overlay_ref = (
+        f"outputs/spatial/qgis/terrain-route-cache/{cache_key}/"
+        "top_10_percent_corridor.png"
+    )
+    visualization_ref = (
+        f"outputs/spatial/qgis/terrain-route-cache/{cache_key}/"
+        "terrain_route_visualization.json"
+    )
+    png_bytes = bytes.fromhex(
+        "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+        "0000000d49444154789c6360606060000000050001a5f645400000000049454e44"
+        "ae426082"
+    )
+    overlay_path = project_root / overlay_ref
+    overlay_path.parent.mkdir(parents=True, exist_ok=True)
+    overlay_path.write_bytes(png_bytes)
+    overlay_sha = hashlib.sha256(png_bytes).hexdigest()
+    visualization = {
+        "artifact_kind": "terrain_route_hypothesis_visualization",
+        "authority": "candidate_only",
+        "source_type": "terrain_hypothesis",
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "operational": False,
+        "boundary": {"promotion_allowed": False},
+        "raster_overlays": [
+            {
+                "mode": "top_10_percent_corridor",
+                "source_path": overlay_ref,
+                "sha256": overlay_sha,
+                "contains_best_path": True,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "operational": False,
+            }
+        ],
+    }
+    visualization_path = project_root / visualization_ref
+    visualization_path.write_text(json.dumps(visualization), encoding="utf-8")
+    visualization_sha = hashlib.sha256(visualization_path.read_bytes()).hexdigest()
+    hypothesis_ref = "outputs/spatial/qgis/local-hypothesis.json"
+    hypothesis_path = project_root / hypothesis_ref
+    hypothesis_path.parent.mkdir(parents=True, exist_ok=True)
+    hypothesis_path.write_text("{}", encoding="utf-8")
+    hypothesis_sha = hashlib.sha256(hypothesis_path.read_bytes()).hexdigest()
+    catalog_ref = "outputs/spatial/qgis/terrain-route-hypothesis-catalog.json"
+    catalog = {
+        "schema_version": "scout_terrain_route_hypothesis_catalog.v0_1",
+        "artifact_kind": "terrain_route_hypothesis_catalog",
+        "project_id": PROJECT_ID,
+        "default_id": "iroko-1148-to-station",
+        "entries": [
+            {
+                "id": "iroko-1148-to-station",
+                "label": "1148 saddle to Iroko station",
+                "scope": "local",
+                "focus_mode": "hypothesis",
+                "start_label": "1148 saddle",
+                "destination_label": "Iroko station",
+                "hypothesis_ref": hypothesis_ref,
+                "hypothesis_sha256": hypothesis_sha,
+                "visualization_ref": visualization_ref,
+                "visualization_sha256": visualization_sha,
+                "cache_key": cache_key,
+            }
+        ],
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "operational": False,
+    }
+    catalog_path = project_root / catalog_ref
+    catalog_path.parent.mkdir(parents=True, exist_ok=True)
+    catalog_path.write_text(json.dumps(catalog), encoding="utf-8")
+    project = {
+        "terrain_route_hypothesis_visualization_ref": visualization_ref,
+        "terrain_route_hypothesis_visualization_sha256": visualization_sha,
+        "terrain_route_hypothesis_status": "completed",
+        "terrain_route_hypothesis_authority": "candidate_only",
+        "terrain_route_hypothesis_candidate_only": True,
+        "terrain_route_hypothesis_runtime_safety_truth": False,
+        "terrain_route_hypothesis_catalog_ref": catalog_ref,
+        "terrain_route_hypothesis_catalog_sha256": hashlib.sha256(
+            catalog_path.read_bytes()
+        ).hexdigest(),
+    }
+    (project_root / "project.json").write_text(
+        json.dumps(project), encoding="utf-8"
+    )
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/terrain-route-overlays/"
+        "top_10_percent_corridor.png?hypothesis_id=iroko-1148-to-station"
+    )
+
+    assert response.status_code == 200
+    assert response.content == png_bytes
+    assert response.headers["x-scout-terrain-route-hypothesis"] == (
+        "iroko-1148-to-station"
+    )
+    assert response.headers["x-scout-authority"] == "candidate_only"
+
+    project.pop("terrain_route_hypothesis_visualization_ref")
+    project.pop("terrain_route_hypothesis_visualization_sha256")
+    project.pop("terrain_route_hypothesis_authority")
+    project["terrain_route_hypothesis_status"] = "pending"
+    (project_root / "project.json").write_text(
+        json.dumps(project), encoding="utf-8"
+    )
+    pending_catalog = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/terrain-route-overlays/"
+        "top_10_percent_corridor.png?hypothesis_id=iroko-1148-to-station"
+    )
+    assert pending_catalog.status_code == 200
+    assert pending_catalog.content == png_bytes
+    assert client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/terrain-route-overlays/"
+        "top_10_percent_corridor.png"
+    ).status_code == 404
+
+    catalog["entries"][0]["visualization_sha256"] = "f" * 64
+    catalog_path.write_text(json.dumps(catalog), encoding="utf-8")
+    project["terrain_route_hypothesis_catalog_sha256"] = hashlib.sha256(
+        catalog_path.read_bytes()
+    ).hexdigest()
+    (project_root / "project.json").write_text(
+        json.dumps(project), encoding="utf-8"
+    )
+    drifted = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/terrain-route-overlays/"
+        "top_10_percent_corridor.png?hypothesis_id=iroko-1148-to-station"
+    )
+    assert drifted.status_code == 422
+    assert "hash mismatch" in drifted.json()["detail"]
+
+
 def test_pretrip_project_osm_pbf_vector_api_serves_workspace_geojson(tmp_path: Path):
     workspace_root = tmp_path / "pretrip_workspace"
     project_root = workspace_root / PROJECT_ID
@@ -2275,9 +2421,10 @@ def test_admin_imagery_tile_proxy_api_caches_historical_theme_in_its_own_namespa
             3.0,
         )
     ]
-    cached_path = raster_tile_cache_path(
+    cached_path = imagery_source_raster_tile_cache_path(
         project_id,
         "historical-fandi-1916",
+        imagery_source_for_project({}, source_id="sinica_jm50k_1916"),
         14,
         13703,
         7093,
@@ -2363,7 +2510,7 @@ def test_admin_imagery_tile_proxy_explicit_refresh_replaces_cached_tile(
         ),
         encoding="utf-8",
     )
-    cached_path = raster_tile_cache_path(
+    legacy_path = raster_tile_cache_path(
         project_id,
         "geology",
         13,
@@ -2371,6 +2518,17 @@ def test_admin_imagery_tile_proxy_explicit_refresh_replaces_cached_tile(
         3534,
         cache_root=cache_root,
     )
+    cached_path = imagery_source_raster_tile_cache_path(
+        project_id,
+        "geology",
+        imagery_source_for_project({}, source_id="happyman_geo2016"),
+        13,
+        6853,
+        3534,
+        cache_root=cache_root,
+    )
+    legacy_path.parent.mkdir(parents=True)
+    legacy_path.write_bytes(b"\x89PNG\r\n\x1a\nlegacy-other-source")
     cached_path.parent.mkdir(parents=True)
     cached_path.write_bytes(b"\x89PNG\r\n\x1a\nstale-geology")
     remote_body = b"\x89PNG\r\n\x1a\nrefreshed-geology"
@@ -2402,6 +2560,7 @@ def test_admin_imagery_tile_proxy_explicit_refresh_replaces_cached_tile(
     assert response.headers["x-scout-tile-source"] == "remote_refresh_cache_replace"
     assert response.content == remote_body
     assert cached_path.read_bytes() == remote_body
+    assert legacy_path.read_bytes() == b"\x89PNG\r\n\x1a\nlegacy-other-source"
 
 
 def test_admin_imagery_tile_proxy_cache_only_never_fetches_missing_tile(

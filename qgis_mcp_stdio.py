@@ -1297,7 +1297,10 @@ class QgisMcpStdioClient:
                 raise QgisMcpToolRejected("GRASS walk outputs must be GeoTIFF")
         elif algorithm == "grass:r.cost":
             _bounded_projected_coordinate(parameters.get("start_coordinates"))
-            _bounded_projected_coordinate(parameters.get("stop_coordinates"))
+            if parameters.get("stop_coordinates") is not None:
+                raise QgisMcpToolRejected(
+                    "GRASS terrain corridor cost must cover the complete analysis extent"
+                )
             if any(parameters.get(key) is not None for key in ("start_points", "stop_points", "start_raster", "nearest", "null_cost")):
                 raise QgisMcpToolRejected("GRASS terrain corridor cost may not use alternate start or allocation inputs")
             if (

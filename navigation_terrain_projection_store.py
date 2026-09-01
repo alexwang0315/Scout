@@ -25,12 +25,16 @@ NAVIGATION_TERRAIN_PROJECTION_REF = (
 NAVIGATION_TERRAIN_PROJECTION_STATUS_ARTIFACT_KIND = (
     "navigation_terrain_intelligence_projection_status"
 )
+NAVIGATION_TERRAIN_PROJECTION_COMPILER = (
+    "navigation_terrain_projection_store.v1_1"
+)
 NAVIGATION_TERRAIN_PROJECTION_INPUT_REF_KEYS = (
     "terrain_visualization_ref",
     "terrain_route_samples_ref",
     "terrain_risk_candidates_ref",
     "terrain_route_hypothesis_ref",
     "terrain_route_hypothesis_visualization_ref",
+    "terrain_route_hypothesis_catalog_ref",
     "qgis_terrain_route_preparation_ref",
     "terrain_slope_shading_overlay_ref",
     "dtm_coverage_summary_ref",
@@ -192,7 +196,7 @@ def compile_navigation_terrain_projection(
             "compiled_at": evaluated_at,
             "input_fingerprint": fingerprint,
             "source_ref": NAVIGATION_TERRAIN_PROJECTION_REF,
-            "compiler": "navigation_terrain_projection_store.v1",
+            "compiler": NAVIGATION_TERRAIN_PROJECTION_COMPILER,
             "candidate_only": True,
             "runtime_safety_truth": False,
         },
@@ -360,7 +364,10 @@ def navigation_terrain_input_fingerprint(
                 }
             )
     encoded = json.dumps(
-        states,
+        {
+            "compiler": NAVIGATION_TERRAIN_PROJECTION_COMPILER,
+            "inputs": states,
+        },
         ensure_ascii=True,
         separators=(",", ":"),
         sort_keys=True,

@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from admin_imagery_sources import (
+    HISTORICAL_MAP_CACHE_SOURCE_IDS,
     build_imagery_source_registry_contract,
     imagery_source_for_project,
     imagery_tile_url,
@@ -82,6 +83,10 @@ def test_default_registry_exposes_allowlisted_sources_without_raw_urls():
         if source.get("theme_group") == "historical_map"
     ]
     assert len(historical_sources) == 15
+    assert len(HISTORICAL_MAP_CACHE_SOURCE_IDS) == 15
+    assert {source_id for _layer_id, source_id in HISTORICAL_MAP_CACHE_SOURCE_IDS} == {
+        source["source_id"] for source in historical_sources
+    }
     assert all(source["historical_map"] is True for source in historical_sources)
     assert all(source["candidate_only"] is True for source in historical_sources)
     assert all(source["runtime_safety_truth"] is False for source in historical_sources)

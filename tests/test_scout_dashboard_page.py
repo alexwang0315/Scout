@@ -2366,9 +2366,9 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
     assert 'function navigationTerrainRudyOpacity(mode)' in html
     assert 'function navigationTerrainUsesStandardGrass(snapshot)' in html
     assert 'processing.primary_processor === "qgis_processing_grass"' in html
-    assert '${scopeIsAll ? "矩形全域" : "路線外伸"} GRASS' in html
-    assert '任一處與 Golden Route ${formatInteger(routeFilter.maximum_contact_distance_m)}m' in html
-    assert "GPX 僅作接入錨點" in html
+    assert '${scopeIsAll ? "矩形全域" : "接觸 GPX"} GRASS 形態線' in html
+    assert '任一處與 Golden Route GPX 距離 ≤ ${formatInteger(routeFilter.maximum_contact_distance_m)}m' in html
+    assert "GPX 只作接觸篩選錨點" in html
     assert 'local_python_comparator === "not_run"' in html
     assert 'return mode === "3d" ? .82 : 1;' in html
     assert 'function navigationTerrainRasterOpacity(snapshot, overlayMode, mode)' in html
@@ -2395,7 +2395,7 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
     assert 'data-navigation-terrain-camera-min-zoom="${navigationTerrainCameraMinimumZoom(dem, mode)}"' in html
     assert 'data-navigation-terrain-source-min-zoom="${valueOrDash(dem.minzoom)}"' in html
     assert 'const terrainZoomFloor = navigationTerrainMapLibreRuntime.maps.reduce(' not in html
-    assert 'FULL GOLDEN ROUTE · independent 2D scale' in html
+    assert 'COMPLETE GPX + R1 · independent 2D scale' in html
     assert 'data-dashboard-map-screen-stroke="7"' in html
     assert 'data-dashboard-map-screen-stroke="4.5"' in html
     assert 'data-navigation-structure-label-visibility="selected-only"' in html
@@ -2576,6 +2576,33 @@ def test_navigation_map_layer_controls_do_not_recreate_or_refit_maps() -> None:
     assert 'setNavigationTerrainMapLayerVisibility(layerKey, !current);' in binder
 
 
+def test_navigation_map_exposes_clear_rudy_tw_and_terrain_overlay_presets() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    initial_visibility = html.split(
+        "navigationTerrainLayerVisibility: {", 1
+    )[1].split("},", 1)[0]
+    binder = html.split(
+        "function bindNavigationTerrainControls", 1
+    )[1].split("function bindSettingsControls", 1)[0]
+
+    assert 'basemap: true' in initial_visibility
+    assert 'elevation: false' in initial_visibility
+    assert 'hillshade: false' in initial_visibility
+    assert 'contours: false' in initial_visibility
+    assert '["basemap", "Rudy+TW", "#8e9b86"]' in html
+    assert 'data-navigation-terrain-visual-preset="rudy"' in html
+    assert 'data-navigation-terrain-visual-preset="terrain"' in html
+    assert "Rudy+TW 原圖" in html
+    assert "地形疊圖" in html
+    assert "function navigationTerrainVisualPreset(" in html
+    assert "function applyNavigationTerrainVisualPreset(" in html
+    assert "Rudy+TW 原圖 · 高程/陰影/等高線疊圖關閉" in html
+    assert 'state.navigationTerrainEvidenceDomain = "observed";' in html
+    assert 'shell.querySelectorAll("button[data-navigation-terrain-visual-preset]")' in binder
+    assert "const preset = applyNavigationTerrainVisualPreset(" in binder
+    assert "rerenderNavigation(" in binder
+
+
 def test_navigation_map_renders_candidate_only_terrain_route_hypothesis_layers() -> None:
     html = PAGE.read_text(encoding="utf-8")
     helpers = html.split(
@@ -2634,8 +2661,85 @@ def test_navigation_map_renders_candidate_only_terrain_route_hypothesis_layers()
     assert 'data-navigation-terrain-route-hypothesis-inspector="true"' in html
     assert "UNKNOWNS PRESERVED" in html
     assert "NO SAFETY AUTHORITY" in html
+    assert "ACTIVE COST TERMS" in html
+    assert "NOT INCLUDED IN V0.1" in html
+    assert "zero weight means disabled, not a terrain measurement of zero" in html
     assert 'data-navigation-legend-kind="hypothesis"' in page
     assert "renderNavigationTerrainRouteHypothesisInspector(snapshot)" in page
+
+
+def test_navigation_map_selects_local_hash_bound_terrain_hypothesis_without_promotion() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    helpers = html.split(
+        "function navigationTerrainRouteHypothesisBandLabel", 1
+    )[1].split("function navigationTerrainRasterOpacity", 1)[0]
+    binder = html.split(
+        "function bindNavigationTerrainControls", 1
+    )[1].split("function bindSettingsControls", 1)[0]
+    bounds_helpers = html.split(
+        "function navigationTerrainRouteHypothesisBounds", 1
+    )[1].split("function navigationTerrainRudyTileTemplate", 1)[0]
+    completed_refresh = html.split(
+        "async function refreshNavigationTerrainAfterCompletedRouteHypothesis", 1
+    )[1].split("async function loadQgisSpatialWorkflow", 1)[0]
+
+    assert 'navigationTerrainHypothesisId: ""' in html
+    assert "function navigationTerrainRouteHypothesisOptions(snapshot)" in helpers
+    assert "function navigationTerrainRouteHypothesisSelectionId(snapshot)" in helpers
+    assert "root?.selection?.default_id" in helpers
+    assert 'data-navigation-terrain-hypothesis-select="true"' in html
+    assert "option.selection_label" in html
+    assert "hypothesis.endpoint_labels" in helpers
+    assert 'focus_mode === "hypothesis"' in bounds_helpers
+    assert "return hypothesisBounds" in bounds_helpers
+    assert "hypothesis_id=iroko-1148-to-station" not in html
+    assert 'shell.querySelector("select[data-navigation-terrain-hypothesis-select' in binder
+    assert "state.navigationTerrainHypothesisId = select.value;" in binder
+    assert "state.navigationTerrainHypothesisBand = \"\";" in binder
+    assert 'state.navigationTerrainHypothesisId = "";' in completed_refresh
+    assert 'state.navigationTerrainHypothesisBand = "";' in completed_refresh
+    assert "fetchJson" not in binder.split(
+        'shell.querySelector("select[data-navigation-terrain-hypothesis-select', 1
+    )[1].split(
+        'shell.querySelectorAll("button[data-navigation-terrain-hypothesis-band]")', 1
+    )[0]
+    assert "observed_trail" not in binder
+    assert "official_trail" not in binder
+    assert "safe_route" not in binder
+    assert "recommended_route" not in binder
+
+
+def test_navigation_map_always_compares_typed_known_gpx_with_candidate_r1() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    style = html.split(
+        "function navigationTerrainMapLibreStyle", 1
+    )[1].split("function navigationTerrainMapLibreCameraScope", 1)[0]
+    gpx_helper = html.split(
+        "function navigationTerrainKnownGpxReferenceFeatureCollection", 1
+    )[1].split("function navigationTerrainRouteHypothesisFeatureCollection", 1)[0]
+
+    assert "navigationTerrainGoldenRouteFilterCoordinates(snapshot)" in gpx_helper
+    assert 'kind: "known_gpx_reference"' in gpx_helper
+    assert 'source_type: "known_gpx"' in gpx_helper
+    assert 'label: "Golden Route GPX · REFERENCE ONLY"' in gpx_helper
+    assert "runtime_safety_truth: false" in gpx_helper
+    assert "operational: false" in gpx_helper
+    assert '"scout-known-gpx-reference": {' in style
+    assert 'data: navigationTerrainKnownGpxReferenceFeatureCollection(snapshot)' in style
+    assert 'source: "scout-known-gpx-reference"' in style
+    assert "function navigationTerrainRouteAnnotationModels" in html
+    assert "function addNavigationTerrainRouteAnnotations" in html
+    assert 'label: "KNOWN GPX · REFERENCE ONLY"' in html
+    assert 'label: `${navigationTerrainRouteHypothesisDisplayLabel(hypothesis)} · TERRAIN HYPOTHESIS`' in html
+    assert 'element.dataset.navigationTerrainRouteAnnotation = annotation.kind' in html
+    assert 'const routeAnnotations = addNavigationTerrainRouteAnnotations(' in html
+    assert 'const entry = {map, mode, host, scopeKey, routeAnnotations};' in html
+    assert 'asArray(entry.routeAnnotations).forEach(annotation => annotation.remove());' in html
+    assert 'data-navigation-terrain-route-map-key="true"' in html
+    assert "Golden Route GPX" in html
+    assert 'terrain hypothesis</b><em>candidate_only · not verified' in html
+    assert "known_gpx · reference only" in html
+    assert "candidate_only · not verified" in html
 
 
 def test_navigation_terrain_hypothesis_band_switch_rebuilds_without_promotion() -> None:
@@ -2879,6 +2983,8 @@ def test_navigation_maplibre_preserves_independent_cameras_across_rerenders() ->
         (
             "const navigationTerrainMapLibreRuntime = {cameraByMode: {}};",
             'const projectId = () => "project-a";',
+            'let selectedHypothesisId = "full-route-r1";',
+            "const navigationTerrainRouteHypothesisSelectionId = () => selectedHypothesisId;",
             helpers,
             """
 const snapshotA = {
@@ -2912,6 +3018,10 @@ process.stdout.write(JSON.stringify({
   twoD: navigationTerrainMapLibreStoredCamera(snapshotA, "2d"),
   threeD: navigationTerrainMapLibreStoredCamera(snapshotA, "3d"),
   changedProjection: navigationTerrainMapLibreStoredCamera(snapshotB, "2d"),
+  changedHypothesis: (() => {
+    selectedHypothesisId = "iroko-1148-to-station";
+    return navigationTerrainMapLibreStoredCamera(snapshotA, "2d");
+  })(),
   modes: Object.keys(navigationTerrainMapLibreRuntime.cameraByMode).sort(),
 }));
 """,
@@ -2933,6 +3043,7 @@ process.stdout.write(JSON.stringify({
     assert payload["twoD"]["pitch"] == 0
     assert payload["threeD"]["pitch"] == 58
     assert payload["changedProjection"] is None
+    assert payload["changedHypothesis"] is None
     assert payload["modes"] == ["2d", "3d"]
     assert lifecycle.index("rememberNavigationTerrainMapLibreCamera(entry);") < lifecycle.index(
         "entry.map.remove();"
@@ -2940,7 +3051,7 @@ process.stdout.write(JSON.stringify({
     assert "entry.mode !== sourceEntry.mode" in lifecycle
 
 
-def test_navigation_maplibre_fit_uses_full_golden_route_without_dem_zoom_lock() -> None:
+def test_navigation_maplibre_fit_uses_complete_gpx_and_hypothesis_without_dem_zoom_lock() -> None:
     html = PAGE.read_text(encoding="utf-8")
     bounds_helpers = html.split(
         "function navigationTerrainGoldenRouteBounds", 1
@@ -2952,10 +3063,13 @@ def test_navigation_maplibre_fit_uses_full_golden_route_without_dem_zoom_lock() 
         "async function initializeNavigationTerrainMapLibre()", 1
     )[1].split("function navigationTerrainSelectedHierarchyEdge", 1)[0]
 
-    assert "snapshot?.route_samples?.points" in bounds_helpers
+    assert "navigationTerrainGoldenRouteFilterCoordinates(snapshot)" in bounds_helpers
     assert "navigationTerrainGoldenRouteBounds(snapshot)" in bounds_helpers
+    assert "navigationTerrainRouteHypothesisBounds(snapshot)" in bounds_helpers
+    assert "navigationTerrainUnionBounds(routeBounds, hypothesisBounds)" in bounds_helpers
     assert "navigationTerrainMapLibreBounds(snapshot?.terrain_raster_dem || {})" in bounds_helpers
-    assert 'const bounds = mode === "3d"' in fit_and_sync
+    assert 'const localHypothesisFocus = navigationTerrainRouteHypothesis(snapshot)?.focus_mode === "hypothesis"' in fit_and_sync
+    assert "const bounds = localHypothesisFocus" in fit_and_sync
     assert "navigationTerrainFitBounds(snapshot);" in fit_and_sync
     assert "map.getZoom() < minimumCameraZoom" in fit_and_sync
     assert "terrainZoomFloor" not in fit_and_sync
@@ -2964,8 +3078,8 @@ def test_navigation_maplibre_fit_uses_full_golden_route_without_dem_zoom_lock() 
     assert "entry.map.jumpTo({center, zoom});" in fit_and_sync
     assert "fitNavigationTerrainMapLibre(map, snapshot, mode);" in initializer
     assert "minZoom: navigationTerrainCameraMinimumZoom(dem, mode)" in initializer
-    assert 'isTerrain ? "prepared-dem-local-detail" : "golden-route"' in html
-    assert 'isTerrain ? "Reset prepared DEM local detail" : "Fit entire Golden Route"' in html
+    assert 'isTerrain ? "prepared-dem-local-detail" : "known-gpx-plus-terrain-hypothesis"' in html
+    assert 'isTerrain ? "Reset prepared DEM local detail" : "Fit complete GPX + R1 result"' in html
     assert "3D LOCAL DETAIL" in html
     assert "2D / 3D 視角各自獨立" in html
     assert "PARTIAL DEM COVERAGE" in html
@@ -2977,11 +3091,11 @@ def test_navigation_maplibre_fit_uses_full_golden_route_without_dem_zoom_lock() 
     assert "bilinear display smoothing" in html
 
 
-def test_navigation_3d_local_detail_centers_on_nearest_golden_route_point() -> None:
+def test_navigation_3d_local_detail_centers_on_gpx_hypothesis_comparison() -> None:
     html = PAGE.read_text(encoding="utf-8")
     helper = (
-        "function navigationTerrainMapLibreLocalDetailCenter"
-        + html.split("function navigationTerrainMapLibreLocalDetailCenter", 1)[1].split(
+        "function navigationTerrainRouteComparisonLocalDetail"
+        + html.split("function navigationTerrainRouteComparisonLocalDetail", 1)[1].split(
             "function fitNavigationTerrainMapLibre", 1
         )[0]
     )
@@ -2994,9 +3108,12 @@ def test_navigation_3d_local_detail_centers_on_nearest_golden_route_point() -> N
 
     node_program = "\n".join(
         (
-            "const navigationTerrainGoldenRouteFilterCoordinates = () => [[121,24],[121.045,24.052],[121.09,24.09]];",
+            "const asArray = value => Array.isArray(value) ? value : [];",
+            "const NAVIGATION_TERRAIN_ROUTE_COMPARISON_TARGET_M = 700;",
+            "const navigationTerrainGoldenRouteFilterCoordinates = () => [[121,24],[121.01,24]];",
+            'const navigationTerrainRouteHypothesisFeatureCollection = () => ({features:[{geometry:{type:"LineString",coordinates:[[121,24.00633],[121.01,24.00633]]}}]});',
             helper,
-            "process.stdout.write(JSON.stringify(navigationTerrainMapLibreLocalDetailCenter({}, [[121,24],[121.1,24.1]])));",
+            "process.stdout.write(JSON.stringify({comparison:navigationTerrainRouteComparisonLocalDetail({}, [[121,23.99],[121.02,24.02]]),center:navigationTerrainMapLibreLocalDetailCenter({}, [[121,23.99],[121.02,24.02]])}));",
         )
     )
     result = subprocess.run(
@@ -3007,10 +3124,16 @@ def test_navigation_3d_local_detail_centers_on_nearest_golden_route_point() -> N
         check=True,
     )
 
-    assert json.loads(result.stdout) == [121.045, 24.052]
+    payload = json.loads(result.stdout)
+    assert payload["center"] == [121, 24.003165]
+    assert payload["comparison"]["routeCoordinate"] == [121, 24]
+    assert payload["comparison"]["hypothesisCoordinate"] == [121, 24.00633]
+    assert abs(payload["comparison"]["separationM"] - 699.934) < 0.01
     assert "const localDetailCenter = mode === \"3d\"" in fit_and_sync
     assert "center: localDetailCenter || map.getCenter()" in fit_and_sync
     assert "navigationTerrainMapLibreLocalDetailCenter(snapshot, bounds)" in initializer
+    assert '"route-comparison-camera.v2"' in html
+    assert "navigationTerrainRouteComparisonLocalDetail(" in html
     assert "adds source resolution: no" in html
 
 
@@ -3043,6 +3166,26 @@ def test_navigation_partial_states_preserve_truthful_map_control_shell() -> None
     assert "Rudy+TW orientation basemap only" in loading_renderer
     assert "No terrain vectors or terrain tiles are claimed" in loading_renderer
     assert "No terrain projection has been prepared" in loading_renderer
+
+
+def test_navigation_preserves_3d_workbench_for_ready_dem_when_projection_is_stale() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    renderer = html.split(
+        "function renderNavigationPage(force)", 1
+    )[1].split("function renderPaceDashboard", 1)[0]
+
+    assert (
+        "const terrainWorkbenchReady = liveReady || navigationTerrainDemReady(snapshot);"
+        in renderer
+    )
+    assert "terrainWorkbenchReady\n                    ? renderNavigationTerrainReviewWorkbench(" in renderer
+    assert "liveReady && evidenceDomain === \"observed\" && lens === \"events\"" in renderer
+    assert (
+        ".navigation-terrain-hypothesis-map-key {\n"
+        "        top: 72px;\n"
+        "        right: 56px;\n"
+        "        bottom: auto;"
+    ) in html
 
 
 def test_navigation_workspace_map_uses_dynamic_rudy_tw_tiles_with_shared_box_zoom() -> None:
@@ -6116,6 +6259,60 @@ def test_dashboard_qgis_feature_samples_remain_candidate_only_and_toggleable() -
     assert "QGIS outputs remain derived reference layers" in html
 
 
+def test_dashboard_can_submit_arbitrary_ab_terrain_route_hypothesis() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+
+    assert 'const QGIS_TERRAIN_ROUTE_WORKFLOW_ID = "terrain_route_hypothesis.v1";' in html
+    assert "qgisTerrainRouteEndpoints" in html
+    assert "qgisTerrainRouteDraftStorageKey" in html
+    assert 'data-qgis-terrain-route-select="start"' in html
+    assert 'data-qgis-terrain-route-select="destination"' in html
+    assert 'data-qgis-terrain-route-generate="true"' in html
+    assert 'data-qgis-terrain-route-reset="true"' in html
+    assert 'data-qgis-terrain-route-margin="true"' in html
+    assert 'selection_source: "dashboard_map_selection"' in html
+    assert "terrain_route_endpoints:" in html
+    assert "candidate_only: true" in html
+    assert "runtime_safety_truth: false" in html
+    assert "operational: false" in html
+    assert 'safe_or_walkable: "not_determined"' in html
+    assert '"scout-terrain-route-draft-endpoints"' in html
+    assert 'feature_class: "terrain_route_endpoint_draft"' in html
+    assert "setQgisTerrainRouteEndpointFromMap(event.lngLat)" in html
+    assert "await refreshNavigationTerrainAfterCompletedRouteHypothesis(run)" in html
+    assert 'const workflowMessage = String(state.qgisSpatialMessage || "").trim();' in html
+    assert "Completed evidence remains optional when no persisted workflow exists." in html
+    assert "if (!workflowRunId)" in html
+    assert "NOT A VERIFIED TRAIL" in html
+
+
+def test_dashboard_keeps_trh_map_stable_and_locks_ab_controls_while_running() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    polling = html.split("function scheduleQgisSpatialPolling", 1)[1].split(
+        "async function loadQgisSpatialData", 1
+    )[0]
+    builder = html.split("function renderQgisTerrainRouteBuilder", 1)[1].split(
+        "function renderQgisAnalysisPanel", 1
+    )[0]
+
+    assert "function qgisTerrainRouteWorkflowActive(" in html
+    assert "function qgisTerrainRouteWorkflowProgress(" in html
+    assert "function updateQgisTerrainRouteBuilderWorkflowState(" in html
+    assert "qgisTerrainRouteWorkflowActive(polledWorkflow)" in polling
+    assert "updateQgisTerrainRouteBuilderWorkflowState();" in polling
+    assert "refreshCurrentDataView();" in polling
+    assert polling.index("qgisTerrainRouteWorkflowActive(polledWorkflow)") < polling.index(
+        "refreshCurrentDataView();"
+    )
+    assert 'data-qgis-terrain-route-status="true"' in builder
+    assert 'data-qgis-terrain-route-workflow-state="${escapeHtml(workflowState)}"' in builder
+    assert "const controlsLocked = state.qgisSpatialBusy || workflowActive;" in builder
+    assert '${controlsLocked ? "disabled" : ""}' in builder
+    assert "const canGenerate = backendReady && endpointsReady && !controlsLocked;" in builder
+    assert "分析中" in builder
+    assert "地圖暫留上一個已完成候選" in html
+
+
 def test_dashboard_grass_outward_candidates_replace_route_morphology_ribbon() -> None:
     html = PAGE.read_text(encoding="utf-8")
 
@@ -6126,8 +6323,9 @@ def test_dashboard_grass_outward_candidates_replace_route_morphology_ribbon() ->
     assert "data-navigation-terrain-outward-key" in html
     assert 'if (layerKey === "candidates")' in html
     assert "outwardKey.hidden = !visible" in html
-    assert "GPX 外伸地形候選" in html
-    assert "保留完整外伸線" in html
+    assert "接觸 GPX 的 GRASS 形態線" in html
+    assert "保留完整形態線" in html
+    assert "不是 R1 路線與 GPX 的距離" in html
     assert "並非獸徑、舊路或可通行性證明" in html
     assert "features: false" in html
 
@@ -6321,6 +6519,9 @@ def test_navigation_exposes_separate_grass_morphology_toggles_in_map_toolbar() -
     assert '["valleys", "谷線", qgisScopeCounts.valley' in workbench
     assert '["streams", "水系", qgisScopeCounts.stream' in workbench
     assert 'data-qgis-layer-toggle="${layerKey}"' in workbench
+    assert "GRASS 形態範圍" in workbench
+    assert "接觸 GPX ≤" in workbench
+    assert "低成本 10%" in workbench
     assert 'candidateScope === "all"' in workbench
     assert 'qgisRawCounts' in workbench
     assert 'qgisConnectedCounts' in workbench
@@ -6368,6 +6569,23 @@ def test_navigation_maplibre_lenses_drive_distinct_bounded_overlay_features() ->
     assert "candidate_only: true" in lens_features
     assert "runtime_safety_truth: false" in lens_features
     assert "operational: false" in lens_features
+
+
+def test_navigation_optional_corridor_error_does_not_fail_the_whole_map() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    initializer = html.split(
+        "async function initializeNavigationTerrainMapLibre()", 1
+    )[1].split("function navigationTerrainSelectedHierarchyEdge", 1)[0]
+    error_handler = initializer.split('map.on("error", event => {', 1)[1].split(
+        "});", 1
+    )[0]
+
+    assert "function navigationTerrainOptionalOverlayError(" in html
+    assert 'sourceId.startsWith("scout-terrain-route-corridor-")' in html
+    assert "navigationTerrainOptionalOverlayError(event)" in error_handler
+    assert 'navigationMaplibreOptionalOverlayStatus = "unavailable"' in error_handler
+    assert "return;" in error_handler
+    assert 'navigationMaplibreStatus = "failed"' in error_handler
 
 
 def test_navigation_candidate_selection_is_explicit_navigable_and_map_linked() -> None:

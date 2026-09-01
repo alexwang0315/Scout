@@ -14,14 +14,51 @@ from fastapi.testclient import TestClient
 
 from qgis_worker import (
     QgisWorkerConfig,
+    _MAX_TERRAIN_ROUTE_METRIC_SAMPLES,
     _WorkerCrsUnresolved,
+    _bounded_mcp_exception_detail,
+    _bounded_route_sample_positions,
+    _bridge_qgis_version,
     _crop_png_to_content,
     _decode_png_rows,
+    _parse_grass_version_output,
     _parse_grass_univar_report,
     _require_extent_intersection,
     _validate_projected_route_extent,
     create_qgis_worker_app,
 )
+from qgis_mcp_stdio import QgisMcpToolError
+
+
+def test_bridge_qgis_version_reads_only_bounded_registration_metadata(
+    tmp_path: Path,
+) -> None:
+    connection = tmp_path / "connection.json"
+    connection.write_text(
+        json.dumps(
+            {
+                "host": "127.0.0.1",
+                "port": 51234,
+                "token": "not-returned-by-version-probe-0123456789abcdef",
+                "qgis_version": "3.44.13-Solothurn",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert _bridge_qgis_version(connection) == "3.44.13-Solothurn"
+
+
+@pytest.mark.parametrize(
+    ("output", "expected"),
+    [
+        ("GRASS 8.5.0\nGeographic Resources Analysis Support System", "8.5.0"),
+        ("locale warning\nGRASS GIS 8.4.2\n", "8.4.2"),
+        ("command unavailable", "unavailable"),
+    ],
+)
+def test_parse_grass_version_output(output: str, expected: str) -> None:
+    assert _parse_grass_version_output(output) == expected
 
 
 def test_parse_grass_univar_report_accepts_qgis_pipe_table(tmp_path: Path) -> None:
@@ -40,6 +77,47 @@ def test_parse_grass_univar_report_accepts_qgis_pipe_table(tmp_path: Path) -> No
         "max": 600.886495697407,
         "mean": 137.723594578299,
     }
+
+
+def test_terrain_route_metric_sampling_is_bounded_deterministic_and_keeps_endpoints() -> None:
+    coordinates = [
+        [121.0 + index * 0.00001, 23.0 + index * 0.00001]
+        for index in range(1000)
+    ]
+
+    first = _bounded_route_sample_positions(
+        coordinates,
+        max_samples=_MAX_TERRAIN_ROUTE_METRIC_SAMPLES,
+    )
+    second = _bounded_route_sample_positions(
+        coordinates,
+        max_samples=_MAX_TERRAIN_ROUTE_METRIC_SAMPLES,
+    )
+
+    assert _MAX_TERRAIN_ROUTE_METRIC_SAMPLES == 80
+    assert first == second
+    assert len(first) == _MAX_TERRAIN_ROUTE_METRIC_SAMPLES
+    assert first[0]["coordinate"] == coordinates[0]
+    assert first[-1]["coordinate"] == coordinates[-1]
+    assert len({sample["vertex_index"] for sample in first}) == len(first)
+
+
+def test_mcp_failure_detail_never_disappears_when_exception_message_is_empty() -> None:
+    error = QgisMcpToolError(
+        "",
+        payload={
+            "error": {
+                "code": "PROCESSING_ERROR",
+                "message": "Raster identify failed",
+                "data": {"reason": "bridge_registration_expired"},
+            }
+        },
+    )
+
+    assert _bounded_mcp_exception_detail(error) == (
+        "QgisMcpToolError: PROCESSING_ERROR; Raster identify failed; "
+        "bridge_registration_expired"
+    )
 
 
 def _test_access_value() -> str:
@@ -96,6 +174,7 @@ class FakeQgisMcpClient:
         screenshot_bytes: bytes | None = None,
         omit_visual_review_image: bool = False,
         available_algorithms: set[str] | None = None,
+        clip_grid_padding: tuple[int, int] = (0, 0),
     ) -> None:
         self.processing_count = 0
         self.operation_outputs: dict[str, dict[str, str]] = {}
@@ -103,6 +182,15 @@ class FakeQgisMcpClient:
         self.screenshot_bytes = screenshot_bytes or _rgb_png(blank=False)
         self.omit_visual_review_image = omit_visual_review_image
         self.analysis_cell_count = 12_726
+        self.analysis_width = 126
+        self.analysis_height = 101
+        self.analysis_extent = {
+            "xmin": 270_740.0,
+            "ymin": 2_658_740.0,
+            "xmax": 273_260.0,
+            "ymax": 2_660_760.0,
+        }
+        self.clip_grid_padding = clip_grid_padding
         self.terrain_route_mode = False
         self.available_algorithms = available_algorithms or {
             "gdal:assignprojection",
@@ -421,6 +509,17 @@ class FakeQgisMcpClient:
                 "assignment": {"changed": True, "reason": "explicit_assignment"},
             }
         if tool == "qgis_layer_inspect":
+            if arguments["layer"] == "source-dem-layer" and self.terrain_route_mode:
+                return {
+                    "summary": {
+                        "id": arguments["layer"],
+                        "crs": "EPSG:3826",
+                        "extent": self.analysis_extent,
+                        "width": self.analysis_width,
+                        "height": self.analysis_height,
+                    },
+                    "style": {"renderer": "fixture"},
+                }
             extent = (
                 {
                     "xmin": 271_000,
@@ -524,9 +623,20 @@ class FakeQgisMcpClient:
                     float(value)
                     for value in str(arguments["parameters"]["PROJWIN"]).split(",")
                 )
-                self.analysis_cell_count = int(round((xmax - xmin) / 20.0)) * int(
-                    round((ymax - ymin) / 20.0)
+                width_padding, height_padding = self.clip_grid_padding
+                self.analysis_width = (
+                    int(round((xmax - xmin) / 20.0)) + width_padding
                 )
+                self.analysis_height = (
+                    int(round((ymax - ymin) / 20.0)) + height_padding
+                )
+                self.analysis_cell_count = self.analysis_width * self.analysis_height
+                self.analysis_extent = {
+                    "xmin": xmin,
+                    "ymin": ymin,
+                    "xmax": xmin + self.analysis_width * 20.0,
+                    "ymax": ymin + self.analysis_height * 20.0,
+                }
             for output in outputs.values():
                 Path(output).parent.mkdir(parents=True, exist_ok=True)
                 output_path = Path(output)
@@ -806,7 +916,9 @@ def test_qgis_worker_persists_completed_candidate_artifacts(tmp_path: Path) -> N
 def test_qgis_worker_persists_candidate_only_terrain_route_hypothesis(
     tmp_path: Path,
 ) -> None:
-    mcp = FakeQgisMcpClient()
+    # GDAL may preserve the source DEM grid and expand a requested clip by one
+    # row/column when its origin is half a cell off the requested extent.
+    mcp = FakeQgisMcpClient(clip_grid_padding=(1, 1))
     client, source_root = _client(tmp_path, mcp)
     dem = source_root / "dem.tif"
     dem.write_bytes(b"fixture-dem")
@@ -930,6 +1042,20 @@ def test_qgis_worker_persists_candidate_only_terrain_route_hypothesis(
     assert hypothesis["provenance"]["processing_manifest"]["corridor_cost_symmetric"] is True
     assert hypothesis["provenance"]["processing_manifest"]["best_path_cost_symmetric"] is False
     assert hypothesis["provenance"]["processing_manifest"]["best_path_union_applied"] is False
+    assert hypothesis["provenance"]["processing_manifest"]["analysis_extent"][
+        "cell_count"
+    ] == mcp.analysis_cell_count
+    metric_sampling = hypothesis["provenance"]["processing_manifest"][
+        "metric_sampling"
+    ]
+    assert metric_sampling == {
+        "method": "deterministic_evenly_spaced_path_vertices",
+        "route_vertex_count": 2,
+        "sample_count": 2,
+        "maximum_sample_count": 80,
+        "statistics_scope": "sampled_path_cells",
+        "max_slope_semantics": "maximum_of_sampled_cells_not_full_path_maximum",
+    }
     assert parent_ref == hypothesis["provenance"]["processing_manifest"][
         "parent_terrain_feature_manifest_ref"
     ]

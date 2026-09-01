@@ -19,11 +19,13 @@ from qgis_spatial_backend import (
 from qgis_spatial_contracts import (
     TERRAIN_CONTEXT_PREVIEW_WORKFLOW_ID,
     TERRAIN_FEATURE_STACK_WORKFLOW_ID,
+    TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_ID,
     QgisBackendAvailability,
     SpatialAnalysisRequest,
     SpatialArtifact,
     SpatialArtifactStatus,
     SpatialEvidenceReviewRequest,
+    TerrainRouteEndpointSelection,
     SpatialWorkflowState,
 )
 
@@ -88,6 +90,56 @@ def _workspace(root: Path, project_id: str = "qgis_demo") -> tuple[Path, dict[st
         encoding="utf-8",
     )
     return project_root, project
+
+
+def test_qgis_backend_default_status_timeout_allows_desktop_bridge_scheduling() -> None:
+    assert QgisSpatialBackendConfig().timeout_s == 30.0
+
+
+def test_terrain_route_endpoint_selection_is_typed_and_candidate_only() -> None:
+    endpoints = TerrainRouteEndpointSelection(
+        start={"x": 121.215, "y": 24.051, "crs": "EPSG:4326", "label": "A"},
+        destination={"x": 121.223, "y": 24.047, "crs": "EPSG:4326", "label": "B"},
+        selection_source="dashboard_map_selection",
+    )
+    request = SpatialAnalysisRequest(
+        workflow_id=TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_ID,
+        terrain_route_endpoints=endpoints,
+    )
+
+    assert request.terrain_route_endpoints == endpoints
+    assert request.candidate_only is True
+    assert request.runtime_safety_truth is False
+    assert request.operational is False
+    assert request.safe_or_walkable == "not_determined"
+
+    with pytest.raises(ValidationError, match="only valid for terrain_route_hypothesis"):
+        SpatialAnalysisRequest(
+            workflow_id=TERRAIN_CONTEXT_PREVIEW_WORKFLOW_ID,
+            terrain_route_endpoints=endpoints,
+        )
+    with pytest.raises(ValidationError, match="EPSG:4326"):
+        TerrainRouteEndpointSelection(
+            start={"x": 250000, "y": 2600000, "crs": "EPSG:3826"},
+            destination={"x": 250020, "y": 2600020, "crs": "EPSG:3826"},
+        )
+    with pytest.raises(ValidationError, match="must differ"):
+        TerrainRouteEndpointSelection(
+            start={"x": 121.215, "y": 24.051, "crs": "EPSG:4326"},
+            destination={"x": 121.215, "y": 24.051, "crs": "EPSG:4326"},
+        )
+    with pytest.raises(ValidationError):
+        SpatialAnalysisRequest(
+            workflow_id=TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_ID,
+            terrain_route_endpoints=endpoints,
+            candidate_only=False,
+        )
+    with pytest.raises(ValidationError):
+        SpatialAnalysisRequest(
+            workflow_id=TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_ID,
+            terrain_route_endpoints=endpoints,
+            runtime_safety_truth=True,
+        )
 
 
 def test_qgis_backend_disabled_and_not_configured_are_typed() -> None:
@@ -564,6 +616,60 @@ def test_qgis_api_disabled_does_not_require_worker_config(tmp_path: Path, monkey
     assert workflow_response.json()["error"]["code"] == "BACKEND_NOT_CONFIGURED"
     assert workflow_response.json()["runtime_safety_truth"] is False
 
+    terrain_route_response = client.post(
+        "/admin/pretrip/projects/qgis_demo/spatial/qgis/workflows",
+        json={
+            "project_id": "qgis_demo",
+            "workflow_id": TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_ID,
+            "corridor_m": 1000,
+            "terrain_route_endpoints": {
+                "start": {
+                    "x": 121.215,
+                    "y": 24.051,
+                    "crs": "EPSG:4326",
+                    "label": "A",
+                },
+                "destination": {
+                    "x": 121.223,
+                    "y": 24.047,
+                    "crs": "EPSG:4326",
+                    "label": "B",
+                },
+                "selection_source": "dashboard_map_selection",
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "operational": False,
+                "safe_or_walkable": "not_determined",
+            },
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "operational": False,
+            "safe_or_walkable": "not_determined",
+        },
+    )
+    assert terrain_route_response.status_code == 201
+    assert terrain_route_response.json()["state"] == "failed"
+    assert terrain_route_response.json()["error"]["code"] == (
+        "BACKEND_NOT_CONFIGURED"
+    )
+    assert terrain_route_response.json()["candidate_only"] is True
+    assert terrain_route_response.json()["runtime_safety_truth"] is False
+    assert terrain_route_response.json()["operational"] is False
+
+    promotion_response = client.post(
+        "/admin/pretrip/projects/qgis_demo/spatial/qgis/workflows",
+        json={
+            "project_id": "qgis_demo",
+            "workflow_id": TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_ID,
+            "terrain_route_endpoints": {
+                "start": {"x": 121.215, "y": 24.051, "crs": "EPSG:4326"},
+                "destination": {"x": 121.223, "y": 24.047, "crs": "EPSG:4326"},
+            },
+            "candidate_only": False,
+        },
+    )
+    assert promotion_response.status_code == 422
+
 
 def test_dashboard_qgis_panel_contract_is_backend_only() -> None:
     html = Path("docs/admin/scout-dashboard-v0.1.html").read_text(encoding="utf-8")
@@ -600,16 +706,25 @@ def test_dashboard_qgis_panel_contract_is_backend_only() -> None:
     assert "definition.count > 0" in html
     assert "QGIS 執行快照" in html
     assert "AUDIT RECEIPT · NOT MAP COMPARISON" in html
+    assert 'availability === "disabled" && workflowState === "completed"' in html
+    assert "WORKER OFFLINE · EVIDENCE LOADED" in html
     assert "scout-qgis-route-preview" not in html
     assert "scout-qgis-slope-preview" not in html
     assert "qgisSpatialBasePath()" in html
-    assert "`${basePath}/workflows/latest`" in html
+    assert (
+        "`${basePath}/workflows/latest?workflow_id=${encodeURIComponent(QGIS_NAVIGATION_PRIMARY_WORKFLOW_ID)}`"
+        in html
+    )
+    assert 'const QGIS_NAVIGATION_PRIMARY_WORKFLOW_ID = "terrain_feature_stack.v1";' in html
     qgis_state_loader = html.split("async function loadQgisSpatialData", 1)[1].split(
         "async function startQgisSpatialWorkflow", 1
     )[0]
-    assert 'let workflowRunId = "";' in qgis_state_loader
+    assert "let workflowRunId = state.qgisSpatialWorkflow?.workflow_run_id" in (
+        qgis_state_loader
+    )
     assert "state.qgisSpatialWorkflow?.workflow_run_id" in qgis_state_loader
     assert "rememberedQgisSpatialWorkflowRunId()" in qgis_state_loader
+    assert "shouldDiscoverLatestWorkflow" not in qgis_state_loader
     assert 'data-qgis-review-evidence="true"' not in html
     assert 'data-qgis-visual-review="not-started"' in html
     assert 'data-qgis-visual-review="render-unavailable"' in html

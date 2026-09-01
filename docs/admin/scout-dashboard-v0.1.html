@@ -7079,6 +7079,23 @@
       gap: 3px;
     }
 
+    .navigation-terrain-hypothesis-select {
+      width: min(300px, 68vw);
+      min-height: 30px;
+      padding: 5px 28px 5px 8px;
+      border: 1px solid rgba(233, 234, 220, .17);
+      border-radius: 3px;
+      background: #0c1712;
+      color: #d9f4ed;
+      font: 800 9px var(--mono);
+      letter-spacing: 0;
+    }
+
+    .navigation-terrain-hypothesis-select:focus-visible {
+      outline: 2px solid var(--terrain-lime);
+      outline-offset: 2px;
+    }
+
     .navigation-terrain-boundary-strip {
       display: flex;
       flex-wrap: wrap;
@@ -7492,9 +7509,10 @@
     .navigation-terrain-hypothesis-map-key {
       position: absolute;
       z-index: 8;
-      right: 12px;
-      bottom: 42px;
-      max-width: min(285px, calc(100% - 24px));
+      top: 12px;
+      right: 58px;
+      bottom: auto;
+      max-width: min(370px, calc(100% - 24px));
       padding: 8px 10px;
       border: 1px solid rgba(88, 212, 200, .58);
       border-left: 3px solid #58d4c8;
@@ -7504,25 +7522,97 @@
       backdrop-filter: blur(6px);
     }
 
-    .navigation-terrain-hypothesis-map-key strong,
-    .navigation-terrain-hypothesis-map-key span {
+    .navigation-terrain-hypothesis-map-key > strong,
+    .navigation-terrain-hypothesis-map-key > small {
       display: block;
       font-family: var(--mono);
       letter-spacing: 0;
     }
 
-    .navigation-terrain-hypothesis-map-key strong {
+    .navigation-terrain-hypothesis-map-key > strong {
       font-size: 9px;
     }
 
-    .navigation-terrain-hypothesis-map-key span {
+    .navigation-terrain-hypothesis-map-key > small {
       margin-top: 3px;
       color: #97b8af;
       font-size: 8px;
       line-height: 1.4;
     }
 
+    .navigation-terrain-route-key-items {
+      display: grid;
+      gap: 4px;
+      margin-top: 6px;
+    }
+
+    .navigation-terrain-route-key-items span {
+      display: grid;
+      grid-template-columns: 23px minmax(0, 1fr);
+      gap: 0 6px;
+      align-items: center;
+      color: #f4f4e9;
+      font-family: var(--mono);
+      letter-spacing: 0;
+    }
+
+    .navigation-terrain-route-key-items i {
+      grid-row: 1 / span 2;
+      width: 22px;
+      height: 0;
+      border-top: 4px solid #e00067;
+    }
+
+    .navigation-terrain-route-key-items i[data-navigation-route-key-swatch="hypothesis"] {
+      border-top-color: #58d4c8;
+      border-top-style: dashed;
+    }
+
+    .navigation-terrain-route-key-items i[data-navigation-route-key-swatch="corridor"] {
+      height: 9px;
+      border: 1px solid rgba(88, 212, 200, .78);
+      background: rgba(31, 108, 166, .72);
+    }
+
+    .navigation-terrain-route-key-items b {
+      overflow-wrap: anywhere;
+      font-size: 8px;
+    }
+
+    .navigation-terrain-route-key-items em {
+      color: #97b8af;
+      font-size: 7px;
+      font-style: normal;
+      line-height: 1.35;
+    }
+
     .navigation-terrain-hypothesis-map-key[hidden] {
+      display: none;
+    }
+
+    .navigation-terrain-route-annotation {
+      padding: 4px 6px;
+      border: 1px solid rgba(255, 211, 228, .78);
+      border-left: 4px solid #e00067;
+      border-radius: 2px;
+      background: rgba(24, 3, 13, .92);
+      color: #ffd3e4;
+      font: 900 9px var(--mono);
+      letter-spacing: 0;
+      line-height: 1.2;
+      white-space: nowrap;
+      pointer-events: none;
+      box-shadow: 0 1px 5px rgba(0, 0, 0, .42);
+    }
+
+    .navigation-terrain-route-annotation[data-navigation-terrain-route-annotation="hypothesis"] {
+      border-color: rgba(88, 212, 200, .8);
+      border-left-color: #58d4c8;
+      background: rgba(5, 25, 21, .93);
+      color: #dff7f2;
+    }
+
+    .navigation-terrain-route-annotation[hidden] {
       display: none;
     }
 
@@ -7981,6 +8071,135 @@
       padding: 10px;
       border-bottom: 1px solid var(--terrain-rule);
       background: #0d1713;
+    }
+
+    .qgis-terrain-route-builder {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px 14px;
+      padding: 10px 12px;
+      border-top: 1px solid var(--terrain-rule);
+      border-bottom: 1px solid var(--terrain-rule);
+      background: #0d1713;
+      color: #dfe8e2;
+    }
+
+    .qgis-terrain-route-builder-copy {
+      min-width: 0;
+    }
+
+    .qgis-terrain-route-builder-copy strong,
+    .qgis-terrain-route-builder-copy small {
+      display: block;
+      overflow-wrap: anywhere;
+    }
+
+    .qgis-terrain-route-builder-copy strong {
+      color: #f4f6ec;
+      font-size: 11px;
+    }
+
+    .qgis-terrain-route-builder-copy small {
+      margin-top: 3px;
+      color: #8fa198;
+      font-size: 9px;
+      line-height: 1.45;
+    }
+
+    .qgis-terrain-route-endpoints {
+      display: grid;
+      grid-column: 1 / -1;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1px;
+      background: var(--terrain-rule);
+    }
+
+    .qgis-terrain-route-endpoint {
+      min-width: 0;
+      padding: 9px 10px;
+      background: #101d17;
+    }
+
+    .qgis-terrain-route-endpoint small,
+    .qgis-terrain-route-endpoint strong {
+      display: block;
+      overflow-wrap: anywhere;
+    }
+
+    .qgis-terrain-route-endpoint small {
+      color: #8fa198;
+      font: 800 8px var(--mono);
+      letter-spacing: 0;
+    }
+
+    .qgis-terrain-route-endpoint strong {
+      margin-top: 4px;
+      color: #f1f3e8;
+      font: 800 10px var(--mono);
+      letter-spacing: 0;
+    }
+
+    .qgis-terrain-route-controls {
+      display: flex;
+      flex-wrap: wrap;
+      grid-column: 1 / -1;
+      gap: 7px;
+      align-items: end;
+    }
+
+    .qgis-terrain-route-controls button,
+    .qgis-terrain-route-controls input {
+      min-height: 34px;
+      border: 1px solid rgba(233, 234, 220, .18);
+      background: #14211b;
+      color: #dfe8e2;
+      font-size: 10px;
+    }
+
+    .qgis-terrain-route-controls button {
+      padding: 7px 10px;
+    }
+
+    .qgis-terrain-route-controls button[aria-pressed="true"] {
+      border-color: #f6e27a;
+      box-shadow: inset 0 -2px 0 #f6e27a;
+      color: #fff8ca;
+    }
+
+    .qgis-terrain-route-controls button:not(:disabled):hover,
+    .qgis-terrain-route-controls button:focus-visible,
+    .qgis-terrain-route-controls input:focus-visible {
+      border-color: #58d4c8;
+      outline: none;
+    }
+
+    .qgis-terrain-route-controls button:disabled {
+      opacity: .38;
+    }
+
+    .qgis-terrain-route-margin {
+      display: grid;
+      grid-template-columns: auto 76px auto;
+      gap: 6px;
+      align-items: center;
+      color: #8fa198;
+      font-size: 9px;
+    }
+
+    .qgis-terrain-route-margin input {
+      width: 76px;
+      padding: 6px;
+      font-family: var(--mono);
+    }
+
+    @media (max-width: 720px) {
+      .qgis-terrain-route-builder {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .qgis-terrain-route-endpoints {
+        grid-template-columns: minmax(0, 1fr);
+      }
     }
 
     .qgis-actions button,
@@ -9378,9 +9597,10 @@
         min-height: 430px;
       }
       .navigation-terrain-hypothesis-map-key {
-        right: 8px;
-        bottom: 38px;
-        max-width: min(230px, calc(100% - 16px));
+        top: 72px;
+        right: 56px;
+        bottom: auto;
+        max-width: min(230px, calc(100% - 68px));
       }
       .navigation-feature-gap-grid,
       .navigation-live-metrics { grid-template-columns: 1fr; }
@@ -11056,7 +11276,10 @@
     const NAVIGATION_TERRAIN_FETCH_TIMEOUT_MS = 60000;
     const QGIS_SPATIAL_FETCH_TIMEOUT_MS = 45000;
     const QGIS_NAVIGATION_PRIMARY_WORKFLOW_ID = "terrain_feature_stack.v1";
+    const QGIS_TERRAIN_ROUTE_WORKFLOW_ID = "terrain_route_hypothesis.v1";
+    const QGIS_TERRAIN_ROUTE_DEFAULT_MARGIN_M = 1000;
     const QGIS_GOLDEN_ROUTE_CONTACT_DISTANCE_M = 10;
+    const NAVIGATION_TERRAIN_ROUTE_COMPARISON_TARGET_M = 700;
     const NAVIGATION_TERRAIN_EVENT_LOCATION_CLUSTER_M = 30;
     const NAVIGATION_TERRAIN_EVENT_FOCUS_MAX_ATTEMPTS = 30;
     const PRETRIP_PROJECT_FETCH_TIMEOUT_MS = 180000;
@@ -11777,14 +12000,15 @@
       navigationTerrainViewMode: "map",
       navigationTerrainEvidenceDomain: "observed",
       navigationTerrainCandidateScope: "route",
+      navigationTerrainHypothesisId: "",
       navigationTerrainHypothesisBand: "top_10_percent_corridor",
       navigationTerrainVerticalExaggeration: 1,
       navigationTerrainInspectorExpanded: false,
       navigationTerrainLayerVisibility: {
         basemap: true,
-        elevation: true,
-        hillshade: true,
-        contours: true,
+        elevation: false,
+        hillshade: false,
+        contours: false,
         slope: false,
         route: true,
         candidates: true,
@@ -11801,6 +12025,10 @@
       qgisSpatialBusy: false,
       qgisSpatialMessage: "",
       qgisSpatialPollTimer: null,
+      qgisTerrainRouteDraftProjectId: "",
+      qgisTerrainRouteEndpoints: {start: null, destination: null},
+      qgisTerrainRouteSelectionTarget: "",
+      qgisTerrainRouteCorridorM: QGIS_TERRAIN_ROUTE_DEFAULT_MARGIN_M,
       qgisSpatialLayerVisibility: {
         route: true,
         slope: true,
@@ -12964,6 +13192,171 @@
       return `scout.qgisSpatialWorkflowRunId.${candidateProjectId}`;
     }
 
+    function qgisTerrainRouteDraftStorageKey(candidateProjectId = projectId()) {
+      return `scout.qgisTerrainRouteDraft.${candidateProjectId}`;
+    }
+
+    function normalizeQgisTerrainRoutePoint(point, label) {
+      const rawX = point?.x ?? point?.lng ?? point?.lon;
+      const rawY = point?.y ?? point?.lat;
+      if (rawX === null || rawX === undefined || rawX === "") return null;
+      if (rawY === null || rawY === undefined || rawY === "") return null;
+      const x = Number(rawX);
+      const y = Number(rawY);
+      if (
+        !Number.isFinite(x)
+        || !Number.isFinite(y)
+        || x < -180
+        || x > 180
+        || y < -90
+        || y > 90
+      ) return null;
+      return {
+        x: Number(x.toFixed(8)),
+        y: Number(y.toFixed(8)),
+        crs: "EPSG:4326",
+        label,
+      };
+    }
+
+    function restoreQgisTerrainRouteDraft() {
+      const candidateProjectId = projectId();
+      if (state.qgisTerrainRouteDraftProjectId === candidateProjectId) return;
+      let draft = null;
+      try {
+        draft = JSON.parse(
+          localStorage.getItem(qgisTerrainRouteDraftStorageKey(candidateProjectId)) || "null",
+        );
+      } catch {
+        draft = null;
+      }
+      const start = normalizeQgisTerrainRoutePoint(draft?.start, "A");
+      const destination = normalizeQgisTerrainRoutePoint(draft?.destination, "B");
+      const margin = Number(draft?.corridor_m);
+      state.qgisTerrainRouteDraftProjectId = candidateProjectId;
+      state.qgisTerrainRouteEndpoints = {start, destination};
+      state.qgisTerrainRouteSelectionTarget = "";
+      state.qgisTerrainRouteCorridorM = Number.isFinite(margin) && margin >= 100 && margin <= 5000
+        ? margin
+        : QGIS_TERRAIN_ROUTE_DEFAULT_MARGIN_M;
+    }
+
+    function rememberQgisTerrainRouteDraft() {
+      try {
+        localStorage.setItem(
+          qgisTerrainRouteDraftStorageKey(),
+          JSON.stringify({
+            ...state.qgisTerrainRouteEndpoints,
+            corridor_m: state.qgisTerrainRouteCorridorM,
+            candidate_only: true,
+            runtime_safety_truth: false,
+            operational: false,
+          }),
+        );
+      } catch {
+        // Browser-local endpoint drafts are optional; submitted jobs remain backend-owned.
+      }
+    }
+
+    function qgisTerrainRouteEndpointsReady() {
+      const endpoints = state.qgisTerrainRouteEndpoints || {};
+      return Boolean(
+        normalizeQgisTerrainRoutePoint(endpoints.start, "A")
+        && normalizeQgisTerrainRoutePoint(endpoints.destination, "B")
+        && (
+          endpoints.start.x !== endpoints.destination.x
+          || endpoints.start.y !== endpoints.destination.y
+        ),
+      );
+    }
+
+    function qgisTerrainRouteSelectionTarget() {
+      return ["start", "destination"].includes(state.qgisTerrainRouteSelectionTarget)
+        ? state.qgisTerrainRouteSelectionTarget
+        : "";
+    }
+
+    function qgisTerrainRouteEndpointText(point) {
+      const normalized = normalizeQgisTerrainRoutePoint(point, point?.label || "");
+      return normalized
+        ? `${normalized.y.toFixed(6)}, ${normalized.x.toFixed(6)}`
+        : "尚未選取";
+    }
+
+    function selectQgisTerrainRouteEndpoint(target) {
+      if (!["start", "destination"].includes(target)) return;
+      if (qgisTerrainRouteWorkflowActive()) {
+        state.qgisSpatialMessage = qgisTerrainRouteWorkflowStatusText();
+        updateQgisTerrainRouteBuilderWorkflowState();
+        return;
+      }
+      state.qgisTerrainRouteSelectionTarget = qgisTerrainRouteSelectionTarget() === target
+        ? ""
+        : target;
+      state.qgisSpatialMessage = state.qgisTerrainRouteSelectionTarget
+        ? `請在 2D 或 3D 地圖點選${target === "start" ? "起點 A" : "終點 B"}`
+        : "地圖選點已取消";
+      render();
+    }
+
+    function setQgisTerrainRouteEndpointFromMap(lngLat) {
+      const target = qgisTerrainRouteSelectionTarget();
+      if (!target) return false;
+      const point = normalizeQgisTerrainRoutePoint(
+        {x: lngLat?.lng, y: lngLat?.lat},
+        target === "start" ? "A" : "B",
+      );
+      if (!point) {
+        state.qgisSpatialMessage = "地圖座標無法轉成 WGS84 A/B 端點";
+        return false;
+      }
+      const endpoints = {
+        ...(state.qgisTerrainRouteEndpoints || {}),
+        [target]: point,
+      };
+      state.qgisTerrainRouteEndpoints = endpoints;
+      state.qgisTerrainRouteSelectionTarget = target === "start" && !endpoints.destination
+        ? "destination"
+        : "";
+      state.qgisSpatialMessage = state.qgisTerrainRouteSelectionTarget
+        ? `起點 A 已記錄 · 請點選終點 B`
+        : `${target === "start" ? "起點 A" : "終點 B"} 已記錄 · 尚未執行分析`;
+      rememberQgisTerrainRouteDraft();
+      render();
+      return true;
+    }
+
+    function resetQgisTerrainRouteDraft() {
+      if (qgisTerrainRouteWorkflowActive()) {
+        state.qgisSpatialMessage = qgisTerrainRouteWorkflowStatusText();
+        updateQgisTerrainRouteBuilderWorkflowState();
+        return;
+      }
+      state.qgisTerrainRouteEndpoints = {start: null, destination: null};
+      state.qgisTerrainRouteSelectionTarget = "";
+      state.qgisSpatialMessage = "A/B 草稿已清除 · 已完成的候選 evidence 未受影響";
+      rememberQgisTerrainRouteDraft();
+      render();
+    }
+
+    function updateQgisTerrainRouteMargin(value) {
+      if (qgisTerrainRouteWorkflowActive()) {
+        state.qgisSpatialMessage = qgisTerrainRouteWorkflowStatusText();
+        updateQgisTerrainRouteBuilderWorkflowState();
+        return;
+      }
+      const margin = Number(value);
+      if (!Number.isFinite(margin) || margin < 100 || margin > 5000) {
+        state.qgisSpatialMessage = "DEM 分析邊界必須介於 100–5000 公尺";
+        render();
+        return;
+      }
+      state.qgisTerrainRouteCorridorM = margin;
+      state.qgisSpatialMessage = `DEM 分析邊界設為 ${formatInteger(margin)}m · 不是路線寬度或安全距離`;
+      rememberQgisTerrainRouteDraft();
+      render();
+    }
+
     function rememberQgisSpatialWorkflow(workflow) {
       const runId = workflow?.workflow_run_id;
       if (!runId) return;
@@ -12983,6 +13376,102 @@
       }
     }
 
+    function qgisTerrainRouteWorkflowActive(workflow = state.qgisSpatialWorkflow) {
+      return workflow?.workflow_id === QGIS_TERRAIN_ROUTE_WORKFLOW_ID
+        && ["queued", "running"].includes(workflow?.state);
+    }
+
+    function qgisTerrainRouteWorkflowProgress(workflow = state.qgisSpatialWorkflow) {
+      const steps = asArray(workflow?.steps);
+      const completed = steps.filter(step => step?.status === "completed").length;
+      const current = steps.find(step => step?.status === "running")
+        || steps.find(step => step?.status === "failed")
+        || steps.find(step => step?.status === "pending")
+        || steps[steps.length - 1]
+        || null;
+      return {
+        completed,
+        total: steps.length || 11,
+        label: String(current?.label || current?.step_id || "等待 Worker 回報"),
+      };
+    }
+
+    function qgisTerrainRouteWorkflowStatusText(workflow = state.qgisSpatialWorkflow) {
+      const progress = qgisTerrainRouteWorkflowProgress(workflow);
+      const hasRetainedCandidate = Boolean(
+        navigationTerrainRouteHypothesis(state.navigationTerrainData),
+      );
+      return `TRH 分析中 · ${progress.completed}/${progress.total} · ${progress.label}${
+        hasRetainedCandidate
+          ? "；地圖暫留上一個已完成候選，尚未切換"
+          : "；新候選尚未發布"
+      }`;
+    }
+
+    function qgisSpatialWorkflowFailureText(workflow) {
+      const error = workflow?.error || {};
+      const failedStep = asArray(workflow?.steps).find(step => step?.status === "failed");
+      const parts = [
+        workflow?.workflow_id === QGIS_TERRAIN_ROUTE_WORKFLOW_ID ? "TRH 分析失敗" : "Workflow failed",
+        error.code || "UNKNOWN",
+        failedStep?.label || failedStep?.step_id || "stage unknown",
+        error.detail || error.message || "原因未回報",
+      ];
+      return parts.map(String).filter(Boolean).join(" · ");
+    }
+
+    function updateQgisTerrainRouteBuilderWorkflowState() {
+      const builder = document.querySelector("[data-qgis-terrain-route-builder]");
+      if (!builder) return;
+      const workflow = state.qgisSpatialWorkflow;
+      const workflowActive = qgisTerrainRouteWorkflowActive(workflow);
+      const controlsLocked = state.qgisSpatialBusy || workflowActive;
+      const progress = qgisTerrainRouteWorkflowProgress(workflow);
+      const workflowState = workflowActive
+        ? String(workflow?.state || "running")
+        : state.qgisSpatialBusy
+          ? "starting"
+          : String(workflow?.state || "idle");
+      builder.dataset.qgisTerrainRouteWorkflowState = workflowState;
+      const status = builder.querySelector("[data-qgis-terrain-route-status]");
+      if (status) {
+        const message = String(state.qgisSpatialMessage || "").trim()
+          || (workflowActive ? qgisTerrainRouteWorkflowStatusText(workflow) : "");
+        status.textContent = `${message}。結果只代表 DEM / GRASS 地形模型的相對候選，不代表步道存在、可通行、安全或合法進入。`;
+      }
+      builder.querySelectorAll(
+        "[data-qgis-terrain-route-select], [data-qgis-terrain-route-reset], [data-qgis-terrain-route-margin]",
+      ).forEach(control => { control.disabled = controlsLocked; });
+      document.querySelectorAll(
+        "[data-qgis-terrain-preview], [data-qgis-terrain-features]",
+      ).forEach(control => { control.disabled = controlsLocked; });
+      const cancel = document.querySelector("[data-qgis-cancel-workflow]");
+      if (cancel) cancel.disabled = !workflowActive;
+      const generate = builder.querySelector("[data-qgis-terrain-route-generate]");
+      if (generate) {
+        generate.disabled = controlsLocked || !qgisTerrainRouteEndpointsReady();
+        generate.textContent = workflowActive
+          ? `分析中 ${progress.completed}/${progress.total}`
+          : "產生候選 TRH";
+      }
+      const chip = builder.querySelector("[data-qgis-terrain-route-worker-chip]");
+      if (chip && workflowActive) {
+        chip.className = "chip warn";
+        chip.textContent = "ANALYSIS RUNNING";
+      }
+      const workflowChip = document.querySelector("[data-qgis-workflow-state-chip]");
+      if (workflowChip && workflowActive) {
+        workflowChip.className = "chip warn";
+        workflowChip.textContent = `Workflow · ${String(workflow?.state || "running").toUpperCase()}`;
+      }
+      const workflowStatus = document.querySelector("[data-qgis-workflow-status]");
+      if (workflowStatus && workflowActive) {
+        workflowStatus.textContent = `processing ${progress.completed}/${progress.total} · ${progress.label}`;
+      }
+      const workflowMessage = document.querySelector("[data-qgis-workflow-message]");
+      if (workflowMessage) workflowMessage.textContent = state.qgisSpatialMessage || "";
+    }
+
     function stopQgisSpatialPolling() {
       if (!state.qgisSpatialPollTimer) return;
       window.clearTimeout(state.qgisSpatialPollTimer);
@@ -12997,19 +13486,56 @@
       state.qgisSpatialPollTimer = window.setTimeout(async () => {
         state.qgisSpatialPollTimer = null;
         if (projectId() !== expectedProjectId) return;
+        let shouldRefreshView = false;
         try {
-          await loadQgisSpatialWorkflow(workflow.workflow_run_id);
-          state.qgisSpatialMessage = "";
+          const polledWorkflow = await loadQgisSpatialWorkflow(workflow.workflow_run_id);
+          if (qgisTerrainRouteWorkflowActive(polledWorkflow)) {
+            state.qgisSpatialMessage = qgisTerrainRouteWorkflowStatusText(polledWorkflow);
+            updateQgisTerrainRouteBuilderWorkflowState();
+          } else {
+            if (
+              polledWorkflow?.workflow_id === QGIS_TERRAIN_ROUTE_WORKFLOW_ID
+              && ["failed", "cancelled"].includes(polledWorkflow?.state)
+            ) {
+              try {
+                await loadNavigationTerrainData();
+              } catch {
+                // The terminal workflow receipt remains the fail-closed source of truth.
+              }
+              state.qgisSpatialMessage = qgisSpatialWorkflowFailureText(polledWorkflow);
+            } else if (
+              polledWorkflow?.workflow_id === QGIS_TERRAIN_ROUTE_WORKFLOW_ID
+              && polledWorkflow?.state === "completed"
+            ) {
+              state.qgisSpatialMessage = "TRH 候選已完成 · Navigation 已切換至新 evidence";
+            }
+            shouldRefreshView = true;
+          }
         } catch (error) {
-          state.qgisSpatialMessage = `QGIS workflow polling failed · ${String(error?.message || error)}`;
+          state.qgisSpatialMessage = `QGIS 狀態更新暫時失敗 · ${String(error?.message || error)} · 分析結果仍待確認`;
+          updateQgisTerrainRouteBuilderWorkflowState();
         } finally {
-          if (state.route === "outdoor-navigation") refreshCurrentDataView();
+          if (state.route === "outdoor-navigation" && shouldRefreshView) {
+            refreshCurrentDataView();
+          } else if (state.route === "outdoor-navigation") {
+            updateQgisTerrainRouteBuilderWorkflowState();
+          }
           scheduleQgisSpatialPolling();
         }
       }, 2500);
     }
 
     async function loadQgisSpatialData() {
+      restoreQgisTerrainRouteDraft();
+      if (
+        state.qgisSpatialWorkflow?.project_id
+        && state.qgisSpatialWorkflow.project_id !== projectId()
+      ) {
+        state.qgisSpatialWorkflow = null;
+        state.qgisSpatialArtifacts = [];
+        state.qgisSpatialAnalysisRoute = null;
+        state.qgisSpatialSelectedArtifactId = "";
+      }
       const basePath = qgisSpatialBasePath();
       const [statusResult, capabilitiesResult] = await Promise.allSettled([
         fetchJson(`${basePath}/status`, {timeoutMs: QGIS_SPATIAL_FETCH_TIMEOUT_MS}),
@@ -13041,21 +13567,23 @@
       }
       let workflowRunId = state.qgisSpatialWorkflow?.workflow_run_id
         || rememberedQgisSpatialWorkflowRunId();
-      try {
-        const latestRun = await fetchJson(
-          `${basePath}/workflows/latest?workflow_id=${encodeURIComponent(QGIS_NAVIGATION_PRIMARY_WORKFLOW_ID)}`,
-          {timeoutMs: QGIS_SPATIAL_FETCH_TIMEOUT_MS},
-        );
-        state.qgisSpatialWorkflow = latestRun;
-        rememberQgisSpatialWorkflow(latestRun);
-        state.qgisSpatialArtifacts = [
-          ...asArray(latestRun.artifacts),
-          ...asArray(latestRun.render_artifacts),
-        ];
-        state.qgisSpatialSelectedArtifactId = state.qgisSpatialArtifacts[0]?.artifact_id || "";
-        workflowRunId = latestRun.workflow_run_id || "";
-      } catch {
-        // Completed evidence remains optional when no persisted workflow exists.
+      if (!workflowRunId) {
+        try {
+          const latestRun = await fetchJson(
+            `${basePath}/workflows/latest?workflow_id=${encodeURIComponent(QGIS_NAVIGATION_PRIMARY_WORKFLOW_ID)}`,
+            {timeoutMs: QGIS_SPATIAL_FETCH_TIMEOUT_MS},
+          );
+          state.qgisSpatialWorkflow = latestRun;
+          rememberQgisSpatialWorkflow(latestRun);
+          state.qgisSpatialArtifacts = [
+            ...asArray(latestRun.artifacts),
+            ...asArray(latestRun.render_artifacts),
+          ];
+          state.qgisSpatialSelectedArtifactId = state.qgisSpatialArtifacts[0]?.artifact_id || "";
+          workflowRunId = latestRun.workflow_run_id || "";
+        } catch {
+          // Completed evidence remains optional when no persisted workflow exists.
+        }
       }
       if (workflowRunId) {
         try {
@@ -13075,27 +13603,47 @@
       return state.qgisSpatialStatus;
     }
 
-    async function startQgisSpatialWorkflow(workflowId) {
-      if (state.qgisSpatialBusy) return;
+    async function startQgisSpatialWorkflow(workflowId, requestOverrides = {}) {
+      if (state.qgisSpatialBusy) return null;
+      if (["queued", "running"].includes(state.qgisSpatialWorkflow?.state)) {
+        state.qgisSpatialMessage = qgisTerrainRouteWorkflowActive()
+          ? qgisTerrainRouteWorkflowStatusText()
+          : "已有 QGIS workflow 執行中，請等待目前工作結束";
+        updateQgisTerrainRouteBuilderWorkflowState();
+        return state.qgisSpatialWorkflow;
+      }
       const allowedWorkflows = asArray(
         state.qgisSpatialCapabilities?.workflow_allowlist,
       );
       if (!allowedWorkflows.includes(workflowId)) {
         state.qgisSpatialMessage = `Workflow unavailable · ${workflowId}`;
         if (state.route === "outdoor-navigation") refreshCurrentDataView();
-        return;
+        return null;
       }
       state.qgisSpatialBusy = true;
-      state.qgisSpatialMessage = `Starting ${workflowId}…`;
-      if (state.route === "outdoor-navigation") render();
+      state.qgisSpatialMessage = workflowId === QGIS_TERRAIN_ROUTE_WORKFLOW_ID
+        ? "TRH 已送出 · 等待 Worker 建立執行紀錄"
+        : `Starting ${workflowId}…`;
+      if (state.route === "outdoor-navigation") {
+        if (workflowId === QGIS_TERRAIN_ROUTE_WORKFLOW_ID) {
+          updateQgisTerrainRouteBuilderWorkflowState();
+        } else {
+          render();
+        }
+      }
       try {
         const run = await postJson(
           `${qgisSpatialBasePath()}/workflows`,
           {
+            ...requestOverrides,
             workflow_id: workflowId,
             project_id: projectId(),
-            corridor_m: 250,
+            corridor_m: Number(requestOverrides.corridor_m ?? 250),
             requested_by: "dashboard_operator",
+            candidate_only: true,
+            runtime_safety_truth: false,
+            operational: false,
+            safe_or_walkable: "not_determined",
           },
           {timeoutMs: QGIS_SPATIAL_FETCH_TIMEOUT_MS},
         );
@@ -13106,16 +13654,29 @@
           ...asArray(run.render_artifacts),
         ];
         await loadQgisSpatialAnalysisRoute(run);
+        const navigationRefreshed = await refreshNavigationTerrainAfterCompletedRouteHypothesis(run);
         state.qgisSpatialSelectedArtifactId = state.qgisSpatialArtifacts[0]?.artifact_id || "";
-        state.qgisSpatialMessage = run.state === "failed"
-          ? `Workflow failed · ${run.error?.code || "UNKNOWN"}`
-          : "Workflow recorded · review pending";
+        if (run.state === "failed") {
+          state.qgisSpatialMessage = qgisSpatialWorkflowFailureText(run);
+        } else if (qgisTerrainRouteWorkflowActive(run)) {
+          state.qgisSpatialMessage = qgisTerrainRouteWorkflowStatusText(run);
+        } else if (navigationRefreshed !== false) {
+          state.qgisSpatialMessage = "Workflow recorded · review pending";
+        }
         scheduleQgisSpatialPolling();
+        return run;
       } catch (error) {
         state.qgisSpatialMessage = `QGIS workflow unavailable · ${String(error?.message || error)}`;
+        return null;
       } finally {
         state.qgisSpatialBusy = false;
-        if (state.route === "outdoor-navigation") refreshCurrentDataView();
+        if (state.route === "outdoor-navigation") {
+          if (qgisTerrainRouteWorkflowActive()) {
+            updateQgisTerrainRouteBuilderWorkflowState();
+          } else {
+            refreshCurrentDataView();
+          }
+        }
       }
     }
 
@@ -13125,6 +13686,59 @@
 
     async function startQgisTerrainFeatureStack() {
       return startQgisSpatialWorkflow("terrain_feature_stack.v1");
+    }
+
+    async function startQgisTerrainRouteHypothesis() {
+      restoreQgisTerrainRouteDraft();
+      if (qgisTerrainRouteWorkflowActive()) {
+        state.qgisSpatialMessage = qgisTerrainRouteWorkflowStatusText();
+        updateQgisTerrainRouteBuilderWorkflowState();
+        return state.qgisSpatialWorkflow;
+      }
+      if (!qgisTerrainRouteEndpointsReady()) {
+        state.qgisSpatialMessage = "請先在地圖選取不同的起點 A 與終點 B";
+        refreshCurrentDataView();
+        return null;
+      }
+      const start = normalizeQgisTerrainRoutePoint(
+        state.qgisTerrainRouteEndpoints.start,
+        "A",
+      );
+      const destination = normalizeQgisTerrainRoutePoint(
+        state.qgisTerrainRouteEndpoints.destination,
+        "B",
+      );
+      state.qgisTerrainRouteSelectionTarget = "";
+      return startQgisSpatialWorkflow(QGIS_TERRAIN_ROUTE_WORKFLOW_ID, {
+        corridor_m: state.qgisTerrainRouteCorridorM,
+        terrain_route_endpoints: {
+          start,
+          destination,
+          selection_source: "dashboard_map_selection",
+          candidate_only: true,
+          runtime_safety_truth: false,
+          operational: false,
+          safe_or_walkable: "not_determined",
+        },
+      });
+    }
+
+    async function refreshNavigationTerrainAfterCompletedRouteHypothesis(run) {
+      if (
+        run?.workflow_id !== QGIS_TERRAIN_ROUTE_WORKFLOW_ID
+        || run?.state !== "completed"
+      ) return null;
+      try {
+        state.navigationTerrainHypothesisId = "";
+        state.navigationTerrainHypothesisBand = "";
+        await loadNavigationTerrainData();
+        return true;
+      } catch (error) {
+        state.qgisSpatialMessage = (
+          `TRH evidence 已保存，但 Navigation 更新失敗 · ${String(error?.message || error)}`
+        );
+        return false;
+      }
     }
 
     async function loadQgisSpatialWorkflow(workflowRunId) {
@@ -13140,6 +13754,7 @@
         ...asArray(run.render_artifacts),
       ];
       await loadQgisSpatialAnalysisRoute(run);
+      await refreshNavigationTerrainAfterCompletedRouteHypothesis(run);
       if (!state.qgisSpatialSelectedArtifactId) {
         state.qgisSpatialSelectedArtifactId = state.qgisSpatialArtifacts[0]?.artifact_id || "";
       }
@@ -21925,6 +22540,8 @@
       const lensSummary = navigationTerrainMapLibreLensSummary(snapshot);
       const terrainRouteHypothesis = navigationTerrainRouteHypothesis(snapshot);
       const terrainRouteBand = navigationTerrainRouteHypothesisBand(snapshot);
+      const terrainRouteLabel = navigationTerrainRouteHypothesisDisplayLabel(terrainRouteHypothesis);
+      const localHypothesisFocus = terrainRouteHypothesis?.focus_mode === "hypothesis";
       const outwardCounts = qgisSpatialOutwardCandidateCounts();
       const outwardLegend = [
         ["ridge", "山脊線", "#ff9d00"],
@@ -21932,23 +22549,32 @@
         ["stream", "水系", "#1769aa"],
       ].filter(([kind]) => Number(outwardCounts[kind] || 0) > 0);
       const outwardScopeAll = navigationTerrainCandidateScope() === "all";
-      const fitAuthority = isTerrain ? "prepared-dem-local-detail" : "golden-route";
-      const fitLabel = isTerrain ? "Reset prepared DEM local detail" : "Fit entire Golden Route";
-      const scaleText = isTerrain
-        ? `3D LOCAL DETAIL · Z${navigationTerrainCameraMinimumZoom(dem, mode)} camera floor for decoded Z${valueOrDash(dem.minzoom)} DEM`
-        : "FULL GOLDEN ROUTE · independent 2D scale";
+      const fitAuthority = localHypothesisFocus
+        ? "selected-local-terrain-hypothesis"
+        : isTerrain ? "prepared-dem-local-detail" : "known-gpx-plus-terrain-hypothesis";
+      const fitLabel = localHypothesisFocus
+        ? `Fit ${terrainRouteLabel}`
+        : isTerrain ? "Reset prepared DEM local detail" : "Fit complete GPX + R1 result";
+      const scaleText = localHypothesisFocus
+        ? `LOCAL TRH · ${terrainRouteLabel}`
+        : isTerrain
+          ? `3D LOCAL DETAIL · Z${navigationTerrainCameraMinimumZoom(dem, mode)} camera floor for decoded Z${valueOrDash(dem.minzoom)} DEM`
+          : "COMPLETE GPX + R1 · independent 2D scale";
+      const observedSourceLabel = navigationTerrainVisualPreset() === "rudy"
+        ? "Rudy+TW 原圖 · 高程/陰影/等高線疊圖關閉"
+        : "Rudy+TW 100% context + elevation tint + hillshade + contours";
       const sourceLabel = evidenceDomain === "observed"
         ? isTerrain
-          ? `Rudy+TW ${(rudyOpacity * 100).toFixed(0)}% terrain texture + prepared DEM`
-          : "Rudy+TW + DEM evidence layers"
+          ? `${observedSourceLabel} · ${(rudyOpacity * 100).toFixed(0)}% terrain texture + prepared DEM`
+          : observedSourceLabel
         : evidenceDomain === "prior"
           ? "Prepared DEM + non-spatial learned prior"
-          : "Prepared DEM only";
+          : "Prepared DEM + known GPX input reference";
       const stateDetail = ready
         ? `${lensSummary.title_text} · ${scaleText} · ${formatInteger(dem.tile_count)} complete Terrain RGB tiles · ${valueOrDash(dem.source_cell_resolution_m)}m source cells · ${interpolationText} · ${routeCoverageText} · ${sourceLabel}`
         : "Prepared Terrain RGB tiles are unavailable. The workbench will not synthesize a flat or gap-filled surface.";
       const stateText = ready
-        ? `${valueOrDash(dem.source_cell_resolution_m)}m DEM · ${isTerrain ? "LOCAL 3D" : "FULL ROUTE 2D"} · CANDIDATE-ONLY`
+        ? `${valueOrDash(dem.source_cell_resolution_m)}m DEM · ${localHypothesisFocus ? terrainRouteLabel : isTerrain ? "LOCAL 3D" : "COMPLETE GPX + R1"} · CANDIDATE-ONLY`
         : stateDetail;
       return `
         <div
@@ -21961,6 +22587,7 @@
             class="navigation-terrain-maplibre-map"
             data-navigation-maplibre-map="${escapeHtml(mode)}"
             data-navigation-terrain-lens="${escapeHtml(lens)}"
+            data-qgis-terrain-route-selection-target="${escapeHtml(qgisTerrainRouteSelectionTarget())}"
             data-navigation-maplibre-status="${ready ? "pending" : "not-prepared"}"
             data-navigation-evidence-domain="${escapeHtml(evidenceDomain)}"
             data-navigation-rudy-opacity="${navigationTerrainRudyOpacity(mode)}"
@@ -21998,26 +22625,32 @@
             <div
               class="navigation-terrain-outward-key"
               data-navigation-terrain-outward-key="true"
-              aria-label="GRASS 路線外伸地形候選圖例"
+              aria-label="GRASS 地形形態候選圖例"
               ${navigationTerrainLayerVisible("candidates") ? "" : "hidden"}
             >
-              <strong>${outwardScopeAll ? "GRASS 矩形全域候選" : "GPX 外伸地形候選"} · ${formatInteger(outwardCounts.total)}</strong>
+              <strong>${outwardScopeAll ? "GRASS 矩形全域形態線" : "接觸 GPX 的 GRASS 形態線"} · ${formatInteger(outwardCounts.total)}</strong>
               ${outwardLegend.map(([kind, label, color]) => `
                 <span><i style="--terrain-outward-color:${color}"></i>${escapeHtml(label)} ${formatInteger(outwardCounts[kind])}</span>
               `).join("")}
               <em>${outwardScopeAll
                 ? "完整矩形 DEM 範圍；並非獸徑、舊路或可通行性證明"
-                : `任一處接觸 Golden Route ${formatInteger(QGIS_GOLDEN_ROUTE_CONTACT_DISTANCE_M)}m 走廊後，保留完整外伸線；並非獸徑、舊路或可通行性證明`}</em>
+                : `與 Golden Route GPX 距離 ≤ ${formatInteger(QGIS_GOLDEN_ROUTE_CONTACT_DISTANCE_M)}m 只決定是否顯示；通過篩選後保留完整形態線。這不是 R1 路線與 GPX 的距離，也不是獸徑、舊路或可通行性證明。`}</em>
             </div>
           ` : ""}
           ${terrainRouteHypothesis ? `
             <div
               class="navigation-terrain-hypothesis-map-key"
               data-navigation-terrain-hypothesis-map-key="true"
+              data-navigation-terrain-route-map-key="true"
               ${navigationTerrainLayerVisible("hypothesis") ? "" : "hidden"}
             >
-              <strong>CANDIDATE · TERRAIN HYPOTHESIS · NOT A VERIFIED TRAIL</strong>
-              <span>${escapeHtml(terrainRouteHypothesis.candidate || "R1")} · minimum anisotropic model-cost trace · ${escapeHtml(terrainRouteBand.replaceAll("_", " "))} symmetric macro-terrain cells · separate models, not a confidence band</span>
+              <strong>GPX ↔ ${escapeHtml(terrainRouteLabel)} TERRAIN COMPARISON</strong>
+              <div class="navigation-terrain-route-key-items">
+                <span><i data-navigation-route-key-swatch="gpx"></i><b>Golden Route GPX</b><em>known_gpx · reference only</em></span>
+                <span><i data-navigation-route-key-swatch="hypothesis"></i><b>${escapeHtml(terrainRouteLabel)} terrain hypothesis</b><em>candidate_only · not verified</em></span>
+                <span><i data-navigation-route-key-swatch="corridor"></i><b>${escapeHtml(navigationTerrainRouteHypothesisBandLabel(terrainRouteBand))} corridor</b><em>macro-terrain cells · separate models, not a confidence band</em></span>
+              </div>
+              <small>CANDIDATE · TERRAIN HYPOTHESIS · NOT A VERIFIED TRAIL</small>
             </div>
           ` : ""}
           ${navigationTerrainRasterOverlay(snapshot, "elevation_tint") ? `
@@ -22051,6 +22684,7 @@
       const lens = state.navigationTerrainLens || "structure";
       const inspectorExpanded = state.navigationTerrainInspectorExpanded === true;
       const layerVisibility = navigationTerrainLayerVisibility();
+      const visualPreset = navigationTerrainVisualPreset();
       const candidateFeatureCollection = navigationTerrainMapLibreFeatureCollection(snapshot);
       const terrainVisibility = navigationTerrainMapLibreVisibilitySummary(
         snapshot,
@@ -22064,6 +22698,9 @@
       const candidateScope = navigationTerrainCandidateScope();
       const standardGrass = navigationTerrainUsesStandardGrass(snapshot);
       const terrainRouteHypothesis = navigationTerrainRouteHypothesis(snapshot);
+      const terrainRouteOptions = navigationTerrainRouteHypothesisOptions(snapshot);
+      const selectedTerrainRouteId = navigationTerrainRouteHypothesisSelectionId(snapshot);
+      const terrainRouteLabel = navigationTerrainRouteHypothesisDisplayLabel(terrainRouteHypothesis);
       const terrainRouteBand = navigationTerrainRouteHypothesisBand(snapshot);
       const qgisRouteFilter = qgisSpatialRouteFilterSummary();
       const qgisConnectedCounts = qgisRouteFilter.connected_counts;
@@ -22112,10 +22749,20 @@
               <span data-navigation-terrain-header-status="dem" data-navigation-terrain-header-state="${terrainDemReady ? "ready" : "unavailable"}">${escapeHtml(demHeaderStatus)}</span>
               <span data-navigation-terrain-header-status="coverage" data-navigation-terrain-header-state="${escapeHtml(routeDemCoverage.status)}">${escapeHtml(coverageHeaderStatus)}</span>
               <span data-navigation-terrain-header-status="scope" data-navigation-terrain-header-state="ready">${escapeHtml(scopeHeaderStatus)}</span>
-              <span data-navigation-terrain-header-status="hypothesis" data-navigation-terrain-header-state="${terrainRouteHypothesis ? "ready" : "unavailable"}">${terrainRouteHypothesis ? `${escapeHtml(terrainRouteHypothesis.candidate || "R1")} TERRAIN HYPOTHESIS · CANDIDATE` : "TERRAIN HYPOTHESIS · UNAVAILABLE"}</span>
+              <span data-navigation-terrain-header-status="hypothesis" data-navigation-terrain-header-state="${terrainRouteHypothesis ? "ready" : "unavailable"}">${terrainRouteHypothesis ? `${escapeHtml(terrainRouteLabel)} · TERRAIN HYPOTHESIS · CANDIDATE` : "TERRAIN HYPOTHESIS · UNAVAILABLE"}</span>
             </div>
           </div>
           <div class="navigation-terrain-review-controls" aria-label="證據域明示 · 2D / 3D 視角各自獨立 · Z exaggeration 明示">
+            ${terrainRouteOptions.length > 1 ? `<div class="navigation-terrain-control-group">
+              <small>Route hypothesis</small>
+              <select
+                class="navigation-terrain-hypothesis-select"
+                data-navigation-terrain-hypothesis-select="true"
+                aria-label="選擇候選地形路線假說"
+              >
+                ${terrainRouteOptions.map(option => `<option value="${escapeHtml(option.selection_id)}" ${option.selection_id === selectedTerrainRouteId ? "selected" : ""}>${escapeHtml(option.selection_label || option.label || option.candidate)}</option>`).join("")}
+              </select>
+            </div>` : ""}
             <div class="navigation-terrain-control-group">
               <small>View</small>
               <div class="navigation-terrain-view-switch" role="group" aria-label="Terrain view">
@@ -22130,7 +22777,7 @@
               <small>Layers</small>
               <div class="navigation-terrain-layer-switch" role="group" aria-label="Terrain map layers">
                 ${[
-                  ["basemap", "底圖", "#8e9b86"],
+                  ["basemap", "Rudy+TW", "#8e9b86"],
                   ["elevation", "高程", "#70a867"],
                   ["hillshade", "陰影", "#f2ead5"],
                   ["contours", "等高線", "#ffffff"],
@@ -22149,25 +22796,28 @@
                 `).join("")}
               </div>
             </div>
+            <div class="navigation-terrain-control-group">
+              <small>Map style</small>
+              <div class="navigation-terrain-domain-switch" role="group" aria-label="Navigation map visual preset">
+                <button type="button" data-navigation-terrain-visual-preset="rudy" aria-pressed="${visualPreset === "rudy" ? "true" : "false"}">Rudy+TW 原圖</button>
+                <button type="button" data-navigation-terrain-visual-preset="terrain" aria-pressed="${visualPreset === "terrain" ? "true" : "false"}">地形疊圖</button>
+              </div>
+            </div>
             ${terrainRouteHypothesis ? `<div class="navigation-terrain-control-group">
-              <small>Corridor</small>
+              <small>Terrain corridor</small>
               <div class="navigation-terrain-hypothesis-band-switch" role="group" aria-label="Terrain route hypothesis corridor percentile">
-                ${[
-                  ["top_5_percent_corridor", "Lowest 5th pct."],
-                  ["top_10_percent_corridor", "Lowest 10th pct."],
-                  ["top_20_percent_corridor", "Lowest 20th pct."],
-                ].map(([band, label]) => `<button type="button" data-navigation-terrain-hypothesis-band="${band}" aria-pressed="${terrainRouteBand === band ? "true" : "false"}">${label}</button>`).join("")}
+                ${NAVIGATION_TERRAIN_ROUTE_CORRIDOR_MODES.map(band => `<button type="button" data-navigation-terrain-hypothesis-band="${band}" aria-pressed="${terrainRouteBand === band ? "true" : "false"}">${escapeHtml(navigationTerrainRouteHypothesisBandLabel(band))}</button>`).join("")}
               </div>
             </div>` : ""}
             ${["structure", "events"].includes(lens) ? `<div class="navigation-terrain-control-group">
-              <small>${standardGrass ? "GRASS extent" : "Scout lines"}</small>
+              <small>${standardGrass ? "GRASS 形態範圍" : "Scout lines"}</small>
               <div class="navigation-terrain-scope-switch" role="group" aria-label="Terrain candidate display scope">
                 ${[
                   ["route", standardGrass
-                    ? `接線 ${formatInteger(qgisRouteFilter.maximum_contact_distance_m)}m · ${formatInteger(qgisConnectedCounts.total)}`
+                    ? `接觸 GPX ≤ ${formatInteger(qgisRouteFilter.maximum_contact_distance_m)}m · ${formatInteger(qgisConnectedCounts.total)}`
                     : `路線 ${formatInteger(terrainVisibility.corridor_distance_m)}m`],
                   ["all", standardGrass
-                    ? `矩形全域 · ${formatInteger(qgisRawCounts.total)}`
+                    ? `DEM 矩形全域 · ${formatInteger(qgisRawCounts.total)}`
                     : `全部 ${formatInteger(terrainVisibility.raw_line_count)}`],
                 ].map(([mode, label]) => `<button type="button" data-navigation-terrain-candidate-scope="${mode}" aria-pressed="${candidateScope === mode ? "true" : "false"}">${label}</button>`).join("")}
               </div>
@@ -22217,6 +22867,7 @@
             >詳細資料</button>
           </div>
         </div>
+        ${renderQgisTerrainRouteBuilder()}
         <div class="navigation-terrain-boundary-strip" data-navigation-candidate-only-strip="true">
           <strong>CANDIDATE-ONLY · RUNTIME SAFETY TRUTH = FALSE · OPERATIONAL = FALSE</strong>
           <div class="navigation-terrain-boundary-chips">
@@ -22232,7 +22883,7 @@
               <strong>CANDIDATE · TERRAIN HYPOTHESIS · NOT A VERIFIED TRAIL</strong>
               <small>${escapeHtml(terrainRouteHypothesis.uncertainty_statement || "This terrain-model candidate does not establish a trail, access, passability, or safety.")}</small>
             </div>
-            <span>${escapeHtml(terrainRouteHypothesis.candidate || "R1")} · ${valueOrDash(terrainRouteHypothesis.dem_resolution_m)} m macro-terrain model · not trail-scale geometry</span>
+            <span>${escapeHtml(terrainRouteLabel)} · ${valueOrDash(terrainRouteHypothesis.dem_resolution_m)} m macro-terrain model · not trail-scale geometry</span>
           </div>
         ` : ""}
         <div class="navigation-terrain-review-stage" data-navigation-terrain-view="${viewMode}">
@@ -22934,26 +23585,6 @@
           });
       }
       features.push(...navigationTerrainMapLibreLensOverlayFeatures(snapshot, lens));
-      if (navigationTerrainEvidenceDomain() === "observed") {
-        const routeCoordinates = navigationTerrainMapLibreCoordinates(
-          snapshot?.route_samples?.points,
-        );
-        if (routeCoordinates.length >= 2) {
-          features.push({
-            type: "Feature",
-            geometry: {type: "LineString", coordinates: routeCoordinates},
-            properties: {
-              id: "prepared-route-baseline",
-              kind: "observed_route",
-              feature_class: "observed_route",
-              label: "Prepared GPX baseline",
-              candidate_only: true,
-              runtime_safety_truth: false,
-              operational: false,
-            },
-          });
-        }
-      }
       if (lens === "structure") {
         features.push(...qgisSpatialMaplibreFeatures());
       }
@@ -23064,13 +23695,13 @@
             return {
               lens: "structure",
               qgis_count: qgisCandidateCount,
-              header_text: `${scopeIsAll ? "矩形全域" : "路線外伸"} GRASS · 山脊 ${formatInteger(ridgeCount)} · 谷線 ${formatInteger(valleyCount)} · 水系 ${formatInteger(streamCount)}`,
+              header_text: `${scopeIsAll ? "矩形全域" : "接觸 GPX"} GRASS 形態線 · 山脊 ${formatInteger(ridgeCount)} · 谷線 ${formatInteger(valleyCount)} · 水系 ${formatInteger(streamCount)}`,
               status_text: scopeIsAll
                 ? `GRASS 矩形 DEM 全域候選 ${formatInteger(visibleLineCount)} · route samples ${formatInteger(terrainSampleCount)} 預設隱藏 · candidate-only`
-                : `任一處與 Golden Route ${formatInteger(routeFilter.maximum_contact_distance_m)}m 走廊相接並保留完整外伸幾何 · 山脊 ${formatInteger(ridgeCount)} / 谷線 ${formatInteger(valleyCount)} / 水系 ${formatInteger(streamCount)} · candidate-only`,
-              pane_text: `${scopeIsAll ? "矩形全域地形" : "路線外伸地形"} · 山脊 ${formatInteger(ridgeCount)} · 谷線 ${formatInteger(valleyCount)} · 水系 ${formatInteger(streamCount)}`,
-              legend_text: `${formatInteger(visibleLineCount)} 條 GRASS 地形延伸候選 · GPX 僅作接入錨點`,
-              title_text: `GRASS 多尺度 geomorphon 與 watershed 地形形態候選；${scopeIsAll ? "顯示矩形 DEM 全域" : `任一處接觸 Golden Route ${formatInteger(routeFilter.maximum_contact_distance_m)}m 走廊後保留完整線`}；並非獸徑、舊路、可通行性或安全結論`,
+                : `任一處與 Golden Route GPX 距離 ≤ ${formatInteger(routeFilter.maximum_contact_distance_m)}m 即通過顯示篩選，並保留完整形態幾何 · 山脊 ${formatInteger(ridgeCount)} / 谷線 ${formatInteger(valleyCount)} / 水系 ${formatInteger(streamCount)} · candidate-only`,
+              pane_text: `${scopeIsAll ? "矩形全域地形" : "接觸 GPX 的地形形態"} · 山脊 ${formatInteger(ridgeCount)} · 谷線 ${formatInteger(valleyCount)} · 水系 ${formatInteger(streamCount)}`,
+              legend_text: `${formatInteger(visibleLineCount)} 條 GRASS 地形形態候選 · GPX 只作接觸篩選錨點`,
+              title_text: `GRASS 多尺度 geomorphon 與 watershed 地形形態候選；${scopeIsAll ? "顯示矩形 DEM 全域" : `與 Golden Route GPX 距離 ≤ ${formatInteger(routeFilter.maximum_contact_distance_m)}m 只決定是否顯示，通過後保留完整形態線；不是 R1 路線與 GPX 的距離`}；並非獸徑、舊路、可通行性或安全結論`,
             };
           }
           return {
@@ -23093,15 +23724,42 @@
     function navigationTerrainLayerVisibility() {
       return {
         basemap: true,
-        elevation: true,
-        hillshade: true,
-        contours: true,
+        elevation: false,
+        hillshade: false,
+        contours: false,
         slope: false,
         route: true,
         candidates: true,
         hypothesis: true,
         ...(state.navigationTerrainLayerVisibility || {}),
       };
+    }
+
+    function navigationTerrainVisualPreset() {
+      const visibility = navigationTerrainLayerVisibility();
+      if (
+        navigationTerrainEvidenceDomain() !== "observed"
+        || visibility.basemap === false
+      ) return "custom";
+      return ["elevation", "hillshade", "contours", "slope"]
+        .some(layerKey => visibility[layerKey] !== false)
+        ? "terrain"
+        : "rudy";
+    }
+
+    function applyNavigationTerrainVisualPreset(preset) {
+      const normalizedPreset = preset === "terrain" ? "terrain" : "rudy";
+      const showTerrainOverlays = normalizedPreset === "terrain";
+      state.navigationTerrainEvidenceDomain = "observed";
+      state.navigationTerrainLayerVisibility = {
+        ...navigationTerrainLayerVisibility(),
+        basemap: true,
+        elevation: showTerrainOverlays,
+        hillshade: showTerrainOverlays,
+        contours: showTerrainOverlays,
+        slope: false,
+      };
+      return normalizedPreset;
     }
 
     function navigationTerrainLayerVisible(layerKey) {
@@ -23149,8 +23807,29 @@
       "top_20_percent_corridor",
     ];
 
-    function navigationTerrainRouteHypothesis(snapshot) {
-      const hypothesis = snapshot?.terrain_route_hypothesis;
+    function navigationTerrainRouteHypothesisBandLabel(mode) {
+      return {
+        top_5_percent_corridor: "低成本 5%",
+        top_10_percent_corridor: "低成本 10%",
+        top_20_percent_corridor: "低成本 20%",
+      }[mode] || "候選 corridor";
+    }
+
+    function navigationTerrainRouteCandidateDisplayLabel(hypothesis) {
+      const candidate = String(hypothesis?.candidate || "R1");
+      const numbered = candidate.match(/(?:^|-)r(\d+)(?:-|$)/i);
+      return numbered ? `R${numbered[1]}` : candidate;
+    }
+
+    function navigationTerrainRouteHypothesisDisplayLabel(hypothesis) {
+      return String(
+        hypothesis?.selection_label
+        || hypothesis?.label
+        || navigationTerrainRouteCandidateDisplayLabel(hypothesis),
+      );
+    }
+
+    function navigationTerrainRouteHypothesisCandidate(hypothesis) {
       const boundary = hypothesis?.boundary || {};
       const labels = new Set(asArray(hypothesis?.display_labels).map(String));
       if (
@@ -23172,6 +23851,75 @@
         || !labels.has("NOT A VERIFIED TRAIL")
       ) return null;
       return hypothesis;
+    }
+
+    function navigationTerrainRouteHypothesisOptions(snapshot) {
+      const root = snapshot?.terrain_route_hypothesis;
+      const selection = root?.selection;
+      if (
+        !selection
+        || selection.candidate_only !== true
+        || selection.runtime_safety_truth !== false
+        || selection.operational !== false
+      ) return [];
+      return asArray(selection.options)
+        .map(option => navigationTerrainRouteHypothesisCandidate(option))
+        .filter(Boolean);
+    }
+
+    function navigationTerrainRouteHypothesisSelectionId(snapshot) {
+      const root = snapshot?.terrain_route_hypothesis;
+      const options = navigationTerrainRouteHypothesisOptions(snapshot);
+      const requestedId = String(state.navigationTerrainHypothesisId || "");
+      if (options.some(option => option.selection_id === requestedId)) {
+        return requestedId;
+      }
+      const defaultId = String(root?.selection?.default_id || "");
+      if (options.some(option => option.selection_id === defaultId)) {
+        return defaultId;
+      }
+      return String(options[0]?.selection_id || "");
+    }
+
+    function navigationTerrainRouteHypothesis(snapshot) {
+      const options = navigationTerrainRouteHypothesisOptions(snapshot);
+      if (options.length) {
+        const selectionId = navigationTerrainRouteHypothesisSelectionId(snapshot);
+        return options.find(option => option.selection_id === selectionId) || null;
+      }
+      return navigationTerrainRouteHypothesisCandidate(
+        snapshot?.terrain_route_hypothesis,
+      );
+    }
+
+    function navigationTerrainKnownGpxReferenceFeatureCollection(snapshot) {
+      const coordinates = navigationTerrainGoldenRouteFilterCoordinates(snapshot);
+      if (coordinates.length < 2) {
+        return {type: "FeatureCollection", features: []};
+      }
+      return {
+        type: "FeatureCollection",
+        features: [{
+          type: "Feature",
+          geometry: {type: "LineString", coordinates},
+          properties: {
+            id: "golden-route-known-gpx-reference",
+            kind: "known_gpx_reference",
+            feature_class: "known_gpx_reference",
+            label: "Golden Route GPX · REFERENCE ONLY",
+            authority: "candidate_only",
+            source_type: "known_gpx",
+            candidate_only: true,
+            reference_only: true,
+            runtime_safety_truth: false,
+            operational: false,
+            observed_trail: false,
+            official_trail: false,
+            human_verified: false,
+            safe_or_walkable: "not_determined",
+          },
+        }],
+      };
     }
 
     function navigationTerrainRouteHypothesisFeatureCollection(snapshot) {
@@ -23202,9 +23950,10 @@
         return {type: "FeatureCollection", features: []};
       }
       const coordinates = features[0].geometry.coordinates;
+      const endpointLabels = hypothesis.endpoint_labels || {};
       const endpoints = [
-        ["start", "A", coordinates[0]],
-        ["destination", "B", coordinates[coordinates.length - 1]],
+        ["start", String(endpointLabels.start || "A"), coordinates[0]],
+        ["destination", String(endpointLabels.destination || "B"), coordinates[coordinates.length - 1]],
       ].map(([kind, label, point]) => ({
         type: "Feature",
         geometry: {type: "Point", coordinates: point},
@@ -23268,7 +24017,7 @@
       const version = String(overlay.sha256).slice(0, 16);
       return {
         type: "image",
-        url: `${overlay.runtimeHref}?v=${encodeURIComponent(version)}`,
+        url: `${overlay.runtimeHref}${overlay.runtimeHref.includes("?") ? "&" : "?"}v=${encodeURIComponent(version)}`,
         coordinates: [
           [overlay.bounds.west, overlay.bounds.north],
           [overlay.bounds.east, overlay.bounds.north],
@@ -23415,6 +24164,13 @@
           hypothesisKey.hidden = !visible;
         });
       }
+      if (["route", "hypothesis"].includes(layerKey)) {
+        document.querySelectorAll(
+          `[data-navigation-terrain-route-annotation="${cssEscape(layerKey)}"]`,
+        ).forEach(annotation => {
+          annotation.hidden = !visible;
+        });
+      }
       return true;
     }
 
@@ -23455,9 +24211,7 @@
     }
 
     function navigationTerrainGoldenRouteBounds(snapshot) {
-      const coordinates = navigationTerrainMapLibreCoordinates(
-        snapshot?.route_samples?.points,
-      );
+      const coordinates = navigationTerrainGoldenRouteFilterCoordinates(snapshot);
       if (coordinates.length < 2) return null;
       const bounds = coordinates.reduce((result, coordinate) => ({
         west: Math.min(result.west, coordinate[0]),
@@ -23473,9 +24227,112 @@
       return [[bounds.west, bounds.south], [bounds.east, bounds.north]];
     }
 
+    function navigationTerrainRouteHypothesisBounds(snapshot) {
+      const path = asArray(
+        navigationTerrainRouteHypothesisFeatureCollection(snapshot)?.features,
+      ).find(feature => feature?.geometry?.type === "LineString");
+      const coordinates = asArray(path?.geometry?.coordinates)
+        .map(coordinate => [Number(coordinate?.[0]), Number(coordinate?.[1])])
+        .filter(coordinate => coordinate.every(Number.isFinite));
+      if (coordinates.length < 2) return null;
+      const bounds = coordinates.reduce((result, coordinate) => ({
+        west: Math.min(result.west, coordinate[0]),
+        south: Math.min(result.south, coordinate[1]),
+        east: Math.max(result.east, coordinate[0]),
+        north: Math.max(result.north, coordinate[1]),
+      }), {
+        west: Number.POSITIVE_INFINITY,
+        south: Number.POSITIVE_INFINITY,
+        east: Number.NEGATIVE_INFINITY,
+        north: Number.NEGATIVE_INFINITY,
+      });
+      return [[bounds.west, bounds.south], [bounds.east, bounds.north]];
+    }
+
+    function navigationTerrainUnionBounds(left, right) {
+      if (!left) return right;
+      if (!right) return left;
+      return [
+        [
+          Math.min(Number(left[0][0]), Number(right[0][0])),
+          Math.min(Number(left[0][1]), Number(right[0][1])),
+        ],
+        [
+          Math.max(Number(left[1][0]), Number(right[1][0])),
+          Math.max(Number(left[1][1]), Number(right[1][1])),
+        ],
+      ];
+    }
+
     function navigationTerrainFitBounds(snapshot) {
-      return navigationTerrainGoldenRouteBounds(snapshot)
+      const routeBounds = navigationTerrainGoldenRouteBounds(snapshot);
+      const hypothesisBounds = navigationTerrainRouteHypothesisBounds(snapshot);
+      const hypothesis = navigationTerrainRouteHypothesis(snapshot);
+      if (hypothesis?.focus_mode === "hypothesis") {
+        return hypothesisBounds
+          || navigationTerrainMapLibreBounds(snapshot?.terrain_raster_dem || {});
+      }
+      return navigationTerrainUnionBounds(routeBounds, hypothesisBounds)
         || navigationTerrainMapLibreBounds(snapshot?.terrain_raster_dem || {});
+    }
+
+    function navigationTerrainRouteAnnotationCoordinate(coordinates, fraction) {
+      const points = asArray(coordinates)
+        .map(coordinate => [Number(coordinate?.[0]), Number(coordinate?.[1])])
+        .filter(coordinate => coordinate.every(Number.isFinite));
+      if (!points.length) return null;
+      return points[Math.min(points.length - 1, Math.floor(points.length * fraction))];
+    }
+
+    function navigationTerrainRouteAnnotationModels(snapshot, mode = "2d") {
+      const hypothesis = navigationTerrainRouteHypothesis(snapshot);
+      const hypothesisPath = asArray(
+        navigationTerrainRouteHypothesisFeatureCollection(snapshot)?.features,
+      ).find(feature => feature?.geometry?.type === "LineString");
+      const comparison = mode === "3d"
+        ? navigationTerrainRouteComparisonLocalDetail(
+            snapshot,
+            navigationTerrainMapLibreBounds(snapshot?.terrain_raster_dem || {}),
+          )
+        : null;
+      return [
+        {
+          kind: "route",
+          label: "KNOWN GPX · REFERENCE ONLY",
+          coordinate: comparison?.routeCoordinate
+            || navigationTerrainRouteAnnotationCoordinate(
+              navigationTerrainGoldenRouteFilterCoordinates(snapshot),
+              .58,
+            ),
+          offset: [0, -18],
+        },
+        {
+          kind: "hypothesis",
+          label: `${navigationTerrainRouteHypothesisDisplayLabel(hypothesis)} · TERRAIN HYPOTHESIS`,
+          coordinate: comparison?.hypothesisCoordinate
+            || navigationTerrainRouteAnnotationCoordinate(
+              hypothesisPath?.geometry?.coordinates,
+              .43,
+            ),
+          offset: [0, 18],
+        },
+      ].filter(annotation => Array.isArray(annotation.coordinate));
+    }
+
+    function addNavigationTerrainRouteAnnotations(maplibregl, map, snapshot, mode) {
+      return navigationTerrainRouteAnnotationModels(snapshot, mode).map(annotation => {
+        const element = document.createElement("div");
+        element.className = "navigation-terrain-route-annotation";
+        element.dataset.navigationTerrainRouteAnnotation = annotation.kind;
+        element.textContent = annotation.label;
+        element.hidden = !navigationTerrainLayerVisible(annotation.kind);
+        element.setAttribute("aria-hidden", "true");
+        return new maplibregl.Marker({
+          element,
+          anchor: "center",
+          offset: annotation.offset,
+        }).setLngLat(annotation.coordinate).addTo(map);
+      });
     }
 
     function navigationTerrainRouteDemCoverage(snapshot) {
@@ -23520,6 +24377,34 @@
         + `?source_id=${encodeURIComponent(NAVIGATION_RUDY_TILE_SOURCE.sourceId)}&native=1`;
     }
 
+    function qgisTerrainRouteDraftFeatureCollection() {
+      const endpoints = state.qgisTerrainRouteEndpoints || {};
+      const features = [
+        ["start", "A", endpoints.start],
+        ["destination", "B", endpoints.destination],
+      ].map(([endpointRole, label, value]) => {
+        const point = normalizeQgisTerrainRoutePoint(value, label);
+        if (!point) return null;
+        return {
+          type: "Feature",
+          geometry: {type: "Point", coordinates: [point.x, point.y]},
+          properties: {
+            id: `terrain-route-draft-${endpointRole}`,
+            kind: "terrain_route_endpoint_draft",
+            feature_class: "terrain_route_endpoint_draft",
+            endpoint_role: endpointRole,
+            label,
+            selected_for_edit: qgisTerrainRouteSelectionTarget() === endpointRole,
+            candidate_only: true,
+            runtime_safety_truth: false,
+            operational: false,
+            safe_or_walkable: "not_determined",
+          },
+        };
+      }).filter(Boolean);
+      return {type: "FeatureCollection", features};
+    }
+
     function navigationTerrainMapLibreStyle(snapshot, mode) {
       const dem = snapshot.terrain_raster_dem;
       const evidenceDomain = navigationTerrainEvidenceDomain();
@@ -23549,6 +24434,12 @@
           lineMetrics: true,
           attribution: "Terrain candidates",
         },
+        "scout-known-gpx-reference": {
+          type: "geojson",
+          data: navigationTerrainKnownGpxReferenceFeatureCollection(snapshot),
+          lineMetrics: true,
+          attribution: "Scout known GPX reference; no trail, access, passability, or safety authority",
+        },
         "scout-terrain-event-locations": {
           type: "geojson",
           data: navigationTerrainMapLibreEventFeatureCollection(snapshot),
@@ -23562,6 +24453,11 @@
           data: terrainRouteHypothesisFeatures,
           lineMetrics: true,
           attribution: "Scout candidate-only terrain route hypothesis",
+        },
+        "scout-terrain-route-draft-endpoints": {
+          type: "geojson",
+          data: qgisTerrainRouteDraftFeatureCollection(),
+          attribution: "Unsubmitted candidate-only terrain route endpoint draft",
         },
       };
       if (revealObservedContext) {
@@ -23884,8 +24780,8 @@
         {
           id: "scout-route-halo",
           type: "line",
-          source: "scout-terrain-candidates",
-          filter: ["==", ["get", "kind"], "observed_route"],
+          source: "scout-known-gpx-reference",
+          filter: ["==", ["get", "kind"], "known_gpx_reference"],
           paint: {
             "line-color": "#07110e",
             "line-width": lineWidth(7, 11),
@@ -23896,8 +24792,8 @@
         {
           id: "scout-route",
           type: "line",
-          source: "scout-terrain-candidates",
-          filter: ["==", ["get", "kind"], "observed_route"],
+          source: "scout-known-gpx-reference",
+          filter: ["==", ["get", "kind"], "known_gpx_reference"],
           paint: {
             "line-color": "#e00067",
             "line-width": lineWidth(4, 7),
@@ -24146,6 +25042,54 @@
             "text-halo-width": 1,
           },
         },
+        {
+          id: "scout-terrain-route-draft-endpoint-halo",
+          type: "circle",
+          source: "scout-terrain-route-draft-endpoints",
+          filter: ["==", ["get", "feature_class"], "terrain_route_endpoint_draft"],
+          paint: {
+            "circle-radius": ["case", ["==", ["get", "selected_for_edit"], true], 16, 13],
+            "circle-color": "rgba(0,0,0,0)",
+            "circle-stroke-color": "#f6e27a",
+            "circle-stroke-width": ["case", ["==", ["get", "selected_for_edit"], true], 4, 2],
+            "circle-stroke-opacity": 1,
+          },
+        },
+        {
+          id: "scout-terrain-route-draft-endpoints",
+          type: "circle",
+          source: "scout-terrain-route-draft-endpoints",
+          filter: ["==", ["get", "feature_class"], "terrain_route_endpoint_draft"],
+          paint: {
+            "circle-radius": 8,
+            "circle-color": [
+              "match",
+              ["get", "endpoint_role"],
+              "start", "#ff9d00",
+              "destination", "#58d4c8",
+              "#f6e27a",
+            ],
+            "circle-stroke-color": "#07110e",
+            "circle-stroke-width": 3,
+            "circle-opacity": 1,
+          },
+        },
+        {
+          id: "scout-terrain-route-draft-endpoint-labels",
+          type: "symbol",
+          source: "scout-terrain-route-draft-endpoints",
+          filter: ["==", ["get", "feature_class"], "terrain_route_endpoint_draft"],
+          layout: {
+            "text-field": ["get", "label"],
+            "text-size": 11,
+            "text-allow-overlap": true,
+          },
+          paint: {
+            "text-color": "#07110e",
+            "text-halo-color": "#fff8ca",
+            "text-halo-width": 1,
+          },
+        },
       ];
       const configuredVisibility = {
         basemap: navigationTerrainLayerVisible("basemap"),
@@ -24195,6 +25139,8 @@
         String(snapshot?.project_id || projectId() || "project-unknown"),
         String(snapshot?.projection_compilation?.input_fingerprint || "projection-unknown"),
         String(snapshot?.terrain_raster_dem?.source_fingerprint || "dem-unknown"),
+        String(navigationTerrainRouteHypothesisSelectionId(snapshot) || "active-hypothesis"),
+        "route-comparison-camera.v2",
       ].join("::");
     }
 
@@ -24245,6 +25191,7 @@
       maps.forEach(entry => {
         try {
           rememberNavigationTerrainMapLibreCamera(entry);
+          asArray(entry.routeAnnotations).forEach(annotation => annotation.remove());
           entry.map.remove();
         } catch (_error) {
           // The prior Dashboard render may already have detached the canvas.
@@ -24275,6 +25222,83 @@
       return canvas;
     }
 
+    function navigationTerrainRouteComparisonLocalDetail(snapshot, bounds) {
+      const normalizedBounds = Array.isArray(bounds)
+        && bounds.length === 2
+        && bounds.every(corner => Array.isArray(corner) && corner.length >= 2)
+        ? bounds.map(corner => corner.slice(0, 2).map(Number))
+        : null;
+      if (!normalizedBounds || normalizedBounds.flat().some(value => !Number.isFinite(value))) {
+        return null;
+      }
+      const west = Math.min(normalizedBounds[0][0], normalizedBounds[1][0]);
+      const east = Math.max(normalizedBounds[0][0], normalizedBounds[1][0]);
+      const south = Math.min(normalizedBounds[0][1], normalizedBounds[1][1]);
+      const north = Math.max(normalizedBounds[0][1], normalizedBounds[1][1]);
+      const withinBounds = coordinate => (
+        Array.isArray(coordinate)
+        && Number(coordinate[0]) >= west
+        && Number(coordinate[0]) <= east
+        && Number(coordinate[1]) >= south
+        && Number(coordinate[1]) <= north
+      );
+      const routeCoordinates = navigationTerrainGoldenRouteFilterCoordinates(snapshot)
+        .filter(withinBounds);
+      const hypothesisPath = asArray(
+        navigationTerrainRouteHypothesisFeatureCollection(snapshot)?.features,
+      ).find(feature => feature?.geometry?.type === "LineString");
+      const hypothesisCoordinates = asArray(hypothesisPath?.geometry?.coordinates)
+        .map(coordinate => [Number(coordinate?.[0]), Number(coordinate?.[1])])
+        .filter(withinBounds);
+      if (!routeCoordinates.length || !hypothesisCoordinates.length) return null;
+      const sample = (coordinates, maximum) => {
+        const step = Math.max(1, Math.ceil(coordinates.length / maximum));
+        return coordinates.filter((_, index) => (
+          index % step === 0 || index === coordinates.length - 1
+        ));
+      };
+      const routeSamples = sample(routeCoordinates, 500);
+      const hypothesisSamples = sample(hypothesisCoordinates, 180);
+      const targetSeparationM = NAVIGATION_TERRAIN_ROUTE_COMPARISON_TARGET_M;
+      const best = hypothesisSamples.reduce((selected, hypothesisCoordinate) => {
+        const nearestRoute = routeSamples.reduce((nearest, routeCoordinate) => {
+          const meanLatitude = (
+            Number(hypothesisCoordinate[1]) + Number(routeCoordinate[1])
+          ) / 2;
+          const lonScale = 111320 * Math.cos(meanLatitude * Math.PI / 180);
+          const distanceM = Math.hypot(
+            (Number(hypothesisCoordinate[0]) - Number(routeCoordinate[0])) * lonScale,
+            (Number(hypothesisCoordinate[1]) - Number(routeCoordinate[1])) * 110574,
+          );
+          return distanceM < nearest.distanceM
+            ? {coordinate: routeCoordinate, distanceM}
+            : nearest;
+        }, {coordinate: null, distanceM: Number.POSITIVE_INFINITY});
+        const deltaM = Math.abs(nearestRoute.distanceM - targetSeparationM);
+        return deltaM < selected.deltaM
+          ? {
+              routeCoordinate: nearestRoute.coordinate,
+              hypothesisCoordinate,
+              separationM: nearestRoute.distanceM,
+              deltaM,
+            }
+          : selected;
+      }, {
+        routeCoordinate: null,
+        hypothesisCoordinate: null,
+        separationM: null,
+        deltaM: Number.POSITIVE_INFINITY,
+      });
+      if (!best.routeCoordinate || !best.hypothesisCoordinate) return null;
+      return {
+        ...best,
+        center: [
+          (Number(best.routeCoordinate[0]) + Number(best.hypothesisCoordinate[0])) / 2,
+          (Number(best.routeCoordinate[1]) + Number(best.hypothesisCoordinate[1])) / 2,
+        ],
+      };
+    }
+
     function navigationTerrainMapLibreLocalDetailCenter(snapshot, bounds) {
       const normalizedBounds = Array.isArray(bounds)
         && bounds.length === 2
@@ -24284,6 +25308,11 @@
       if (!normalizedBounds || normalizedBounds.flat().some(value => !Number.isFinite(value))) {
         return null;
       }
+      const comparison = navigationTerrainRouteComparisonLocalDetail(
+        snapshot,
+        normalizedBounds,
+      );
+      if (comparison?.center) return comparison.center;
       const west = Math.min(normalizedBounds[0][0], normalizedBounds[1][0]);
       const east = Math.max(normalizedBounds[0][0], normalizedBounds[1][0]);
       const south = Math.min(normalizedBounds[0][1], normalizedBounds[1][1]);
@@ -24312,9 +25341,12 @@
 
     function fitNavigationTerrainMapLibre(map, snapshot, mode) {
       const dem = snapshot?.terrain_raster_dem || {};
-      const bounds = mode === "3d"
-        ? navigationTerrainMapLibreBounds(dem) || navigationTerrainFitBounds(snapshot)
-        : navigationTerrainFitBounds(snapshot);
+      const localHypothesisFocus = navigationTerrainRouteHypothesis(snapshot)?.focus_mode === "hypothesis";
+      const bounds = localHypothesisFocus
+        ? navigationTerrainFitBounds(snapshot)
+        : mode === "3d"
+          ? navigationTerrainMapLibreBounds(dem) || navigationTerrainFitBounds(snapshot)
+          : navigationTerrainFitBounds(snapshot);
       if (!bounds) return;
       const localDetailCenter = mode === "3d"
         ? navigationTerrainMapLibreLocalDetailCenter(snapshot, bounds)
@@ -24448,6 +25480,15 @@
       ];
     }
 
+    function navigationTerrainOptionalOverlayError(event) {
+      const sourceId = String(event?.sourceId || event?.source?.id || "");
+      const errorMessage = String(event?.error?.message || "");
+      const requestUrl = String(event?.error?.url || event?.url || "");
+      return sourceId.startsWith("scout-terrain-route-corridor-")
+        || errorMessage.includes("/terrain-route-overlays/")
+        || requestUrl.includes("/terrain-route-overlays/");
+    }
+
     async function initializeNavigationTerrainMapLibre() {
       const hosts = [...document.querySelectorAll("[data-navigation-maplibre-map]")];
       if (!hosts.length || state.route !== "outdoor-navigation") return;
@@ -24488,14 +25529,21 @@
       activeHosts.forEach(host => {
         const requestedMode = host.dataset.navigationMaplibreMap;
         const mode = requestedMode === "3d" ? "3d" : "2d";
+        const selectedHypothesis = navigationTerrainRouteHypothesis(snapshot);
+        const localHypothesisFocus = selectedHypothesis?.focus_mode === "hypothesis";
+        const selectedHypothesisLabel = navigationTerrainRouteHypothesisDisplayLabel(selectedHypothesis);
         const scopeKey = navigationTerrainMapLibreCameraScope(snapshot);
         const storedCamera = navigationTerrainMapLibreStoredCamera(snapshot, mode);
-        const mapScopeText = mode === "3d"
-          ? `3D LOCAL DETAIL · Z${navigationTerrainCameraMinimumZoom(dem, mode)} camera floor for decoded Z${formatInteger(dem.minzoom)} DEM`
-          : "FULL GOLDEN ROUTE · independent 2D scale";
-        const bounds = mode === "3d"
-          ? navigationTerrainMapLibreBounds(dem) || navigationTerrainFitBounds(snapshot)
-          : navigationTerrainFitBounds(snapshot);
+        const mapScopeText = localHypothesisFocus
+          ? `LOCAL TRH · ${selectedHypothesisLabel}`
+          : mode === "3d"
+            ? `3D LOCAL DETAIL · Z${navigationTerrainCameraMinimumZoom(dem, mode)} camera floor for decoded Z${formatInteger(dem.minzoom)} DEM`
+            : "COMPLETE GPX + R1 · independent 2D scale";
+        const bounds = localHypothesisFocus
+          ? navigationTerrainFitBounds(snapshot)
+          : mode === "3d"
+            ? navigationTerrainMapLibreBounds(dem) || navigationTerrainFitBounds(snapshot)
+            : navigationTerrainFitBounds(snapshot);
         if (!bounds) return;
         const boundsCenter = [
           (bounds[0][0] + bounds[1][0]) / 2,
@@ -24530,7 +25578,13 @@
             host,
             mode,
           );
-          const entry = {map, mode, host, scopeKey};
+          const routeAnnotations = addNavigationTerrainRouteAnnotations(
+            maplibregl,
+            map,
+            snapshot,
+            mode,
+          );
+          const entry = {map, mode, host, scopeKey, routeAnnotations};
           navigationTerrainMapLibreRuntime.maps.push(entry);
           const updateCameraEvidence = () => {
             const cameraCenter = map.getCenter();
@@ -24540,10 +25594,15 @@
             host.dataset.navigationMaplibrePitch = map.getPitch().toFixed(1);
             host.dataset.navigationMaplibreBearing = map.getBearing().toFixed(1);
           };
+          const rudyVisualPreset = navigationTerrainVisualPreset();
           const rudyBlend = host.dataset.navigationEvidenceDomain === "observed"
-            ? mode === "3d"
-              ? `Rudy+TW ${Math.round(navigationTerrainRudyOpacity(mode) * 100)}% terrain texture + shared DEM evidence layers`
-              : `Rudy+TW ${Math.round(navigationTerrainRudyOpacity(mode) * 100)}% context + elevation tint + hillshade + contours`
+            ? rudyVisualPreset === "rudy"
+              ? mode === "3d"
+                ? `Rudy+TW 原圖 · 高程/陰影/等高線疊圖關閉 · ${Math.round(navigationTerrainRudyOpacity(mode) * 100)}% terrain texture`
+                : "Rudy+TW 原圖 · 高程/陰影/等高線疊圖關閉"
+              : mode === "3d"
+                ? `Rudy+TW ${Math.round(navigationTerrainRudyOpacity(mode) * 100)}% terrain texture + shared DEM evidence layers`
+                : `Rudy+TW ${Math.round(navigationTerrainRudyOpacity(mode) * 100)}% context + elevation tint + hillshade + contours`
             : "Rudy+TW off";
           const qgisOverlay = qgisFeatureCount
             ? ` · QGIS overlay: ${qgisSpatialLayerSummary()}`
@@ -24564,7 +25623,7 @@
                 : "";
               status.title = `${mapScopeText} · ${formatInteger(dem.tile_count)} complete Terrain RGB tiles · ${routeCoverageText} · ${terrainScopeText} · ${rudyBlend}${qgisOverlay} · ${valueOrDash(dem.source_cell_resolution_m)}m source cells · ${interpolationText}${terrainEvidence}`;
               status.setAttribute("aria-label", lensSummary.status_text);
-              status.innerHTML = `<strong>${mode === "3d" ? "MAPLIBRE 3D · DEM DECODED" : "MAPLIBRE 2D · READY"}</strong>${escapeHtml(`${valueOrDash(dem.source_cell_resolution_m)}m DEM · ${mode === "3d" ? "local terrain" : "full Golden Route"} · candidate-only`)}`;
+              status.innerHTML = `<strong>${mode === "3d" ? "MAPLIBRE 3D · DEM DECODED" : "MAPLIBRE 2D · READY"}</strong>${escapeHtml(`${valueOrDash(dem.source_cell_resolution_m)}m DEM · ${localHypothesisFocus ? selectedHypothesisLabel : mode === "3d" ? "local terrain" : "complete GPX + R1"} · candidate-only`)}`;
             }
           };
           const verifyTerrainElevation = (attempt, verificationSequence) => {
@@ -24618,6 +25677,9 @@
           };
           map.scrollZoom.disable();
           map.doubleClickZoom.disable();
+          if (qgisTerrainRouteSelectionTarget()) {
+            map.getCanvas().style.cursor = "crosshair";
+          }
           map.addControl(new maplibregl.NavigationControl({
             visualizePitch: mode === "3d",
             showZoom: true,
@@ -24650,6 +25712,14 @@
             if (mode === "3d") scheduleTerrainElevationVerification();
           });
           map.on("error", event => {
+            if (navigationTerrainOptionalOverlayError(event)) {
+              host.dataset.navigationMaplibreOptionalOverlayStatus = "unavailable";
+              if (status) {
+                const detail = "Candidate corridor overlay is temporarily unavailable; the base map and vector hypothesis remain available for review.";
+                status.title = `${status.title || ""}${status.title ? " · " : ""}${detail}`;
+              }
+              return;
+            }
             host.dataset.navigationMaplibreStatus = "failed";
             if (status) {
               status.dataset.navigationMaplibreState = "failed";
@@ -24664,6 +25734,10 @@
             "scout-terrain-risk-candidates",
           ];
           map.on("mousemove", event => {
+            if (qgisTerrainRouteSelectionTarget()) {
+              map.getCanvas().style.cursor = "crosshair";
+              return;
+            }
             const layers = selectablePointLayers.filter(layerId => map.getLayer(layerId));
             const feature = layers.length
               ? map.queryRenderedFeatures(navigationTerrainClickHitBox(event.point), {layers})[0]
@@ -24674,6 +25748,10 @@
             map.getCanvas().style.cursor = "";
           });
           map.on("click", event => {
+            if (qgisTerrainRouteSelectionTarget()) {
+              setQgisTerrainRouteEndpointFromMap(event.lngLat);
+              return;
+            }
             const layers = [
               ...selectablePointLayers,
               "scout-ridge-main",
@@ -24820,13 +25898,27 @@
         .map(item => item?.code)
         .filter(Boolean)
         .join(" · ") || "UNKNOWN";
-      const weights = Object.entries(provenance.weights || {})
+      const weightEntries = Object.entries(provenance.weights || {});
+      const activeWeights = weightEntries
+        .filter(([, value]) => Number.isFinite(Number(value)) && Number(value) !== 0)
         .map(([key, value]) => `${key}=${value}`)
         .join(" · ") || "UNKNOWN";
+      const inactiveWeights = weightEntries
+        .filter(([, value]) => Number(value) === 0)
+        .map(([key]) => key.replace(/_weight$/, ""))
+        .join(" · ") || "none reported";
+      const grassModules = asArray(provenance.modules_executed)
+        .filter(moduleId => String(moduleId).startsWith("grass:"));
+      const grassVersion = provenance.grass_version
+        && String(provenance.grass_version).toLowerCase() !== "unavailable"
+        ? String(provenance.grass_version)
+        : grassModules.length
+          ? `version UNKNOWN · ${formatInteger(grassModules.length)} GRASS module steps recorded`
+          : "UNKNOWN";
       return `
         <section class="navigation-terrain-hypothesis-inspector" data-navigation-terrain-route-hypothesis-inspector="true">
           <div class="navigation-terrain-inspector-head">
-            <strong>${escapeHtml(hypothesis.candidate || "R1")} · TERRAIN-MODEL RELATIVE PREFERENCE</strong>
+            <strong>${escapeHtml(navigationTerrainRouteHypothesisDisplayLabel(hypothesis))} · TERRAIN-MODEL RELATIVE PREFERENCE</strong>
             <small>CANDIDATE_ONLY · ${escapeHtml(hypothesis.cost_model_version || "UNKNOWN")}</small>
           </div>
           <div class="navigation-terrain-support-meter">
@@ -24846,8 +25938,9 @@
             <div><strong>POSITIVE TERRAIN EVIDENCE</strong><span>${escapeHtml(evidenceCodes(hypothesis.positive_evidence))}</span></div>
             <div><strong>NEGATIVE TERRAIN EVIDENCE</strong><span>${escapeHtml(evidenceCodes(hypothesis.negative_evidence))}</span></div>
             <div><strong>UNKNOWNS PRESERVED</strong><span>${escapeHtml(unknownCodes)}</span></div>
-            <div><strong>PROVENANCE</strong><span>DEM ${escapeHtml(provenance.dem_dataset_id || "UNKNOWN")} · ${escapeHtml(provenance.dem_crs || "UNKNOWN")} · GRASS ${escapeHtml(provenance.grass_version || "UNKNOWN")} · algorithm ${escapeHtml(provenance.algorithm_version || "UNKNOWN")}</span></div>
-            <div><strong>COST WEIGHTS</strong><span>${escapeHtml(weights)}</span></div>
+            <div><strong>PROVENANCE</strong><span>DEM ${escapeHtml(provenance.dem_dataset_id || "UNKNOWN")} · ${escapeHtml(provenance.dem_crs || "UNKNOWN")} · GRASS ${escapeHtml(grassVersion)} · algorithm ${escapeHtml(provenance.algorithm_version || "UNKNOWN")}</span></div>
+            <div><strong>ACTIVE COST TERMS</strong><span>${escapeHtml(activeWeights)}</span></div>
+            <div><strong>NOT INCLUDED IN V0.1</strong><span>${escapeHtml(inactiveWeights)} · zero weight means disabled, not a terrain measurement of zero</span></div>
           </div>
           <div class="navigation-terrain-audit-badges">
             <span>CANDIDATE</span>
@@ -25568,7 +26661,21 @@
 
     function renderQgisWorkflowSteps(workflow) {
       const fallbackSteps = (
-        workflow?.workflow_id === "terrain_feature_stack.v1"
+        workflow?.workflow_id === QGIS_TERRAIN_ROUTE_WORKFLOW_ID
+          ? [
+              ["input_validation", "Input validation"],
+              ["crs_inspection", "CRS inspection"],
+              ["route_preparation", "Route preparation"],
+              ["dem_loaded", "DEM and NoData audit"],
+              ["capability_discovery", "GRASS route capability discovery"],
+              ["slope_friction_generated", "Slope friction generated"],
+              ["walk_path_generated", "Anisotropic walk path generated"],
+              ["corridor_cost_generated", "Symmetric corridor costs generated"],
+              ["corridor_bands_generated", "Candidate corridor bands generated"],
+              ["hypothesis_validated", "Hypothesis and provenance validated"],
+              ["evidence_review_pending", "Evidence review pending"],
+            ]
+          : workflow?.workflow_id === "terrain_feature_stack.v1"
           ? [
               ["input_validation", "Input validation"],
               ["crs_inspection", "CRS inspection"],
@@ -25608,6 +26715,92 @@
             </li>
           `).join("")}
         </ol>
+      `;
+    }
+
+    function renderQgisTerrainRouteBuilder() {
+      const endpoints = state.qgisTerrainRouteEndpoints || {};
+      const selectionTarget = qgisTerrainRouteSelectionTarget();
+      const workflow = state.qgisSpatialWorkflow?.workflow_id === QGIS_TERRAIN_ROUTE_WORKFLOW_ID
+        ? state.qgisSpatialWorkflow
+        : null;
+      const workflowActive = qgisTerrainRouteWorkflowActive(workflow);
+      const workflowState = workflowActive
+        ? String(workflow?.state || "running")
+        : state.qgisSpatialBusy
+          ? "starting"
+          : String(workflow?.state || "idle");
+      const workflowProgress = qgisTerrainRouteWorkflowProgress(workflow);
+      const availability = state.qgisSpatialStatus?.availability || "loading";
+      const workflowAllowlist = asArray(
+        state.qgisSpatialCapabilities?.workflow_allowlist,
+      );
+      const backendReady = ["available", "degraded"].includes(availability)
+        && workflowAllowlist.includes(QGIS_TERRAIN_ROUTE_WORKFLOW_ID);
+      const endpointsReady = qgisTerrainRouteEndpointsReady();
+      const controlsLocked = state.qgisSpatialBusy || workflowActive;
+      const canGenerate = backendReady && endpointsReady && !controlsLocked;
+      const hasDraft = Boolean(endpoints.start || endpoints.destination);
+      const workflowMessage = String(state.qgisSpatialMessage || "").trim();
+      const statusText = workflowActive
+        ? workflowMessage || qgisTerrainRouteWorkflowStatusText(workflow)
+        : selectionTarget
+        ? `地圖點選模式 · ${selectionTarget === "start" ? "設定起點 A" : "設定終點 B"}`
+        : !backendReady
+          ? `Worker ${String(availability).toUpperCase()} · A/B 可先保存，分析暫不可執行`
+          : workflowMessage
+            ? workflowMessage
+          : endpointsReady
+            ? "A/B 已備妥 · 可提交候選地形假說"
+            : "先設定 A 與 B；未提交前不會產生任何路線幾何";
+      return `
+        <section
+          class="qgis-terrain-route-builder"
+          data-qgis-terrain-route-builder="true"
+          data-qgis-terrain-route-worker-state="${escapeHtml(availability)}"
+          data-qgis-terrain-route-draft-state="${endpointsReady ? "ready" : hasDraft ? "partial" : "empty"}"
+          data-qgis-terrain-route-workflow-state="${escapeHtml(workflowState)}"
+        >
+          <div class="qgis-terrain-route-builder-copy">
+            <strong>任意 A → B 地形假說</strong>
+            <small data-qgis-terrain-route-status="true">${escapeHtml(statusText)}。結果只代表 DEM / GRASS 地形模型的相對候選，不代表步道存在、可通行、安全或合法進入。</small>
+          </div>
+          <span class="chip ${workflowActive ? "warn" : backendReady ? "ok" : "warn"}" data-qgis-terrain-route-worker-chip="true">${workflowActive ? "ANALYSIS RUNNING" : backendReady ? "WORKER READY" : "WORKER UNAVAILABLE"}</span>
+          <div class="qgis-terrain-route-endpoints" aria-label="Terrain route hypothesis endpoint draft">
+            <div class="qgis-terrain-route-endpoint" data-qgis-terrain-route-endpoint="start">
+              <small>起點 A · EPSG:4326</small>
+              <strong>${escapeHtml(qgisTerrainRouteEndpointText(endpoints.start))}</strong>
+            </div>
+            <div class="qgis-terrain-route-endpoint" data-qgis-terrain-route-endpoint="destination">
+              <small>終點 B · EPSG:4326</small>
+              <strong>${escapeHtml(qgisTerrainRouteEndpointText(endpoints.destination))}</strong>
+            </div>
+          </div>
+          <div class="qgis-terrain-route-controls">
+            <button type="button" data-qgis-terrain-route-select="start" aria-pressed="${selectionTarget === "start" ? "true" : "false"}" ${controlsLocked ? "disabled" : ""}>設定 A</button>
+            <button type="button" data-qgis-terrain-route-select="destination" aria-pressed="${selectionTarget === "destination" ? "true" : "false"}" ${controlsLocked ? "disabled" : ""}>設定 B</button>
+            <label class="qgis-terrain-route-margin">
+              <span>DEM 邊界</span>
+              <input
+                type="number"
+                min="100"
+                max="5000"
+                step="100"
+                value="${escapeHtml(state.qgisTerrainRouteCorridorM)}"
+                data-qgis-terrain-route-margin="true"
+                aria-label="DEM analysis margin in meters"
+                ${controlsLocked ? "disabled" : ""}
+              >
+              <span>m</span>
+            </label>
+            <button type="button" data-qgis-terrain-route-reset="true" ${hasDraft && !controlsLocked ? "" : "disabled"}>清除 A/B</button>
+            <button type="button" data-qgis-terrain-route-generate="true" ${canGenerate ? "" : "disabled"}>${workflowActive ? `分析中 ${workflowProgress.completed}/${workflowProgress.total}` : "產生候選 TRH"}</button>
+          </div>
+          <div class="qgis-boundary-strip">
+            <strong>CANDIDATE · TERRAIN HYPOTHESIS · NOT A VERIFIED TRAIL</strong>
+            <span>candidate_only=true · runtime_safety_truth=false · operational=false · safe_or_walkable=not_determined</span>
+          </div>
+        </section>
       `;
     }
 
@@ -25661,9 +26854,9 @@
             </div>
           ` : ""}
           <div class="qgis-workflow-summary">
-            <span class="chip ${qgisSpatialWorkflowTone(workflowState)}">Workflow · ${escapeHtml(String(workflowState).toUpperCase())}</span>
-            <strong>${escapeHtml(workflowStatus)}</strong>
-            <small>${escapeHtml(state.qgisSpatialMessage || `run ${runId}`)}</small>
+            <span class="chip ${qgisSpatialWorkflowTone(workflowState)}" data-qgis-workflow-state-chip="true">Workflow · ${escapeHtml(String(workflowState).toUpperCase())}</span>
+            <strong data-qgis-workflow-status="true">${escapeHtml(workflowStatus)}</strong>
+            <small data-qgis-workflow-message="true">${escapeHtml(state.qgisSpatialMessage || `run ${runId}`)}</small>
           </div>
           <details class="qgis-panel-details">
             <summary>Workflow steps</summary>
@@ -25849,6 +27042,7 @@
       const terrainScopeSummary = lensSummary.legend_text;
       const liveReady = !["loading", "unavailable", "preparing", "failed"].includes(snapshot.status)
         && Boolean(snapshot?.terrain_surface?.bbox_wgs84);
+      const terrainWorkbenchReady = liveReady || navigationTerrainDemReady(snapshot);
       const riskPoints = asArray(snapshot?.risk_candidates?.points);
       const selectedLivePoint = riskPoints.find(point => point.id === state.navigationSelectedLivePointId) || riskPoints[0] || null;
       const pressurePoints = navigationTerrainPressureSamples(snapshot);
@@ -25901,7 +27095,7 @@
               <section class="navigation-terrain-map-panel">
                 ${sourceMode === "training"
                   ? renderNavigationTerrainMap(features, selected)
-                  : liveReady
+                  : terrainWorkbenchReady
                     ? renderNavigationTerrainReviewWorkbench(
                         snapshot,
                         selectedLivePoint,
@@ -25956,7 +27150,7 @@
                     <span><strong>琥珀區</strong><br>坡度壓力</span>
                     <span><strong>珊瑚斜線</strong><br>崩壁／曝露風險</span>
                   `}
-                  ${terrainRouteHypothesis ? `<span data-navigation-legend-kind="hypothesis"><strong>青色候選 corridor + 虛線</strong><br>${escapeHtml(terrainRouteHypothesis.candidate || "R1")} terrain hypothesis · not a verified trail</span>` : ""}
+                  ${terrainRouteHypothesis ? `<span data-navigation-legend-kind="hypothesis"><strong>青色候選 corridor + 虛線</strong><br>${escapeHtml(navigationTerrainRouteHypothesisDisplayLabel(terrainRouteHypothesis))} terrain hypothesis · not a verified trail</span>` : ""}
                   ${qgisFeatureCount ? `<span data-navigation-legend-kind="qgis"><strong>QGIS 候選 ${formatInteger(qgisFeatureCount)}</strong><br>${escapeHtml(qgisSpatialLayerSummary())}</span>` : ""}
                   </div>
                 </details>
@@ -30519,6 +31713,15 @@
           );
         });
       });
+      const terrainHypothesisSelect = shell.querySelector("select[data-navigation-terrain-hypothesis-select=\"true\"]");
+      terrainHypothesisSelect?.addEventListener("change", () => {
+        const select = terrainHypothesisSelect;
+        state.navigationTerrainHypothesisId = select.value;
+        state.navigationTerrainHypothesisBand = "";
+        rerenderNavigation(
+          'select[data-navigation-terrain-hypothesis-select="true"]',
+        );
+      });
       shell.querySelectorAll("button[data-navigation-terrain-hypothesis-band]").forEach(button => {
         button.addEventListener("click", () => {
           const band = button.dataset.navigationTerrainHypothesisBand || "";
@@ -30534,6 +31737,16 @@
           const layerKey = button.dataset.navigationTerrainLayerToggle || "";
           const current = navigationTerrainLayerVisible(layerKey);
           setNavigationTerrainMapLayerVisibility(layerKey, !current);
+        });
+      });
+      shell.querySelectorAll("button[data-navigation-terrain-visual-preset]").forEach(button => {
+        button.addEventListener("click", () => {
+          const preset = applyNavigationTerrainVisualPreset(
+            button.dataset.navigationTerrainVisualPreset || "rudy",
+          );
+          rerenderNavigation(
+            `button[data-navigation-terrain-visual-preset="${cssEscape(preset)}"]`,
+          );
         });
       });
       const inspectorToggle = shell.querySelector(
@@ -32112,6 +33325,22 @@
     }
 
     function bindQgisSpatialControls() {
+      document.querySelectorAll("[data-qgis-terrain-route-select]").forEach(button => {
+        button.addEventListener("click", () => {
+          selectQgisTerrainRouteEndpoint(
+            button.dataset.qgisTerrainRouteSelect || "",
+          );
+        });
+      });
+      document.querySelector("[data-qgis-terrain-route-reset]")?.addEventListener("click", () => {
+        resetQgisTerrainRouteDraft();
+      });
+      document.querySelector("[data-qgis-terrain-route-generate]")?.addEventListener("click", () => {
+        void startQgisTerrainRouteHypothesis();
+      });
+      document.querySelector("[data-qgis-terrain-route-margin]")?.addEventListener("change", event => {
+        updateQgisTerrainRouteMargin(event.currentTarget?.value);
+      });
       document.querySelector("[data-qgis-terrain-preview]")?.addEventListener("click", () => {
         void startQgisTerrainContextPreview();
       });

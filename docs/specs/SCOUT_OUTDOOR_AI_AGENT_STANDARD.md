@@ -944,6 +944,221 @@ Scout 應直接輸出：
 
 > 不建議自主前往。可參加有嚮導活動，或先完成離線地圖與地形判讀訓練。
 
+### 11.4 地圖尋徑力（Map-based Terrain Wayfinding Intelligence）
+
+Scout 的地圖力還必須包含「地圖尋徑力」：
+
+> 以已知 Golden GPX 作為接入錨點，在完整矩形 DEM 地形域中辨識山脊、
+> 谷線與水系等地形骨架，保留從已知路線向外延伸的完整幾何，形成可與影像、
+> 歷史地圖、實測軌跡及現地觀察交叉比對的尋徑候選。
+
+這項能力的目的，是協助 Scout 在路徑不清、植被遮蔽或既有路跡湮沒的山區，
+辨識「哪些地形延伸值得再查」。它不是沿 GPX 再畫一條分析帶，也不是從 DEM
+直接宣稱已找到獸徑、舊路、撤退路線或可通行路徑。
+
+Golden GPX 在此扮演已知踏勘／選定路線的**接入錨點**，不是 GIS 演算法要重新
+推論或取代的候選路線。即使 Golden GPX 來自實際踏勘，它也不自動證明當下仍可
+通行、安全或合法進入。
+
+### 11.5 Scout GIS Evidence Stack
+
+地圖尋徑力必須沿用以下責任分工，不得把視覺化、分析與安全判斷混成單一結果：
+
+| 元件 | Scout 中的角色 | 不得宣稱 |
+|---|---|---|
+| Rudy/TW 或其他底圖 | 提供地名、道路、既有圖徵與定位脈絡。 | 底圖上的線必然存在或目前可通行。 |
+| DEM／數值地形 | 提供高程格網與來源解析度。 | 插值、著色或放大產生了新的地形證據。 |
+| Scout-owned QGIS worker | 以 allowlist 呼叫 QGIS Processing、GRASS 與 GDAL，封裝工作流程、狀態、artifact 與 provenance。 | MCP 或 Processing 成功等於地理結論正確。 |
+| GRASS/GDAL | 從矩形 DEM 產生坡度、陰影、等高線及地形骨架候選。 | 山脊／谷線／水系候選就是道路、獸徑或安全路線。 |
+| MapLibre | 疊合 Golden Route、底圖、raster 與候選向量，提供切換、縮放、選取和比較。 | 畫面看起來合理就等於已驗證。 |
+| Scout evidence/authority gate | 保存來源、演算法、解析度、限制與 review 狀態。 | 未經其他證據即可升級成 operational 或 runtime safety truth。 |
+
+因此 Scout GIS 分析的最小組合為：
+
+```text
+底圖脈絡 + 數值地形來源 + QGIS Processing/GRASS/GDAL 分析
+  -> candidate evidence artifacts
+  -> MapLibre 互動判讀
+  -> 後續交叉佐證
+```
+
+QGIS/GRASS 是 Scout 的 Spatial Evidence Engine，不是 Scout 的 Safety Authority。
+
+### 11.6 矩形分析域與路線接入規則
+
+地形骨架必須先在 prepared DEM 的**完整矩形分析域**產生。Golden Route corridor
+只用於決定 Dashboard 預設顯示哪些候選，不得反過來把上游 DEM 或 GRASS 分析
+裁成狹窄的沿線 ribbon。
+
+Scout 至少要提供三種互不混淆的範圍語意：
+
+| 範圍 | 定義 | 用途 |
+|---|---|---|
+| `RECTANGLE_ALL` | 顯示矩形 DEM 內全部山脊、谷線與水系候選。 | 檢視整體地形網絡與未接入 Golden Route 的可能延伸。 |
+| `ROUTE_CONNECTED` | 只顯示任一線段與 Golden Route corridor 接觸的候選部分；一旦接觸，保留該部分的完整外伸幾何。 | 預設尋徑視圖，在可讀性與向外探索間取得平衡。 |
+| `ROUTE_SAMPLE_DIAGNOSTIC` | 沿 Golden Route 的高程、坡度或形態取樣。 | 診斷既有路線，不得冒充向外尋徑候選，預設不得計入候選線總數。 |
+
+`ROUTE_CONNECTED` 的 v0.1 預設 corridor 為 10 公尺，值必須顯示在 UI 並寫入
+projection metadata。接觸判定必須符合：
+
+```text
+connected(candidate_part) =
+  minimum_segment_distance(candidate_part, Golden Route) <= corridor_distance
+```
+
+實作必須檢查候選線與 Golden Route 的所有線段，包括兩條線相交但雙方端點都
+落在 10 公尺外的情況。以下作法禁止使用：
+
+- 只檢查候選線起點是否在 10 公尺內。
+- 只檢查候選線頂點，漏掉線段中途穿越 corridor 的情況。
+- 候選線接入後，只保留 corridor 內的片段。
+- 因 Dashboard 預設採 `ROUTE_CONNECTED`，就刪除或不產生矩形全域 artifact。
+
+對 `MultiLineString`，每個 part 必須獨立判定；接觸的 part 保留完整座標，未接觸
+的 part 只在 `RECTANGLE_ALL` 顯示。這個 display projection 不得改寫原始 GRASS
+artifact。
+
+### 11.7 Standard GRASS Terrain Workflow
+
+`terrain_feature_stack.v1` 是目前地圖尋徑力的 bounded standard workflow。
+它必須由 Scout-owned worker 經 QGIS Processing allowlist 執行，不得把 arbitrary
+Python、PyQGIS、shell 或任意 MCP tool 轉交給 browser 或 agent。
+
+最小處理序列為：
+
+1. 驗證 Golden GPX、DEM、CRS、解析度、矩形 extent 與來源 hash。
+2. 以 GRASS `r.slope.aspect`、`r.relief`、`r.contour` 及 bounded GDAL 步驟產生坡度、陰影、等高線與透明顯示層。
+3. 以 GRASS `r.geomorphon` 的 5、10、20 cell 三尺度結果建立至少二尺度同意的 morphology mask。
+4. v0.1 只把 geomorphon class 3 標成山脊候選、class 9 標成谷線候選，再經 `r.thin` 與 `r.to.vect` 向量化。
+5. 以 `r.watershed` accumulation、固定 threshold、`r.thin` 與 `r.to.vect` 產生 flow-channel candidate；它不是實測河道。
+6. 匯出完整矩形 raster/vector artifacts、MapLibre GeoJSON projection、處理參數、warnings、hash 與 provenance。
+
+支稜、凹谷或其他多尺度地形形態若尚未有明確 GRASS class、參數與 provenance，
+UI 不得用名稱暗示已完成分類。未來新增這些類別時，必須保留原 class、尺度投票、
+最小長度與向量化參數，並以新 artifact/schema version 表達。
+
+`python_dtm_bitmap_fallback` 不得作為 active terrain processor，也不得被標示成
+與 GRASS 等價的分析結果。QGIS/GRASS 不可用時，工作流程必須 fail closed，回報
+`awaiting_qgis_grass_processor`、typed unavailable 或 processing failure；不得自動
+合成看似完整的地形圖層。任何視覺插值或 Terrain RGB packaging 都必須維持：
+
+```text
+adds_source_resolution=false
+```
+
+### 11.8 Candidate Authority Boundary
+
+所有地圖尋徑結果，不論 Processing 與 render 是否成功，都必須維持：
+
+```text
+candidate_only=true
+runtime_safety_truth=false
+operational=false
+```
+
+地形候選可以支持「值得往這個地形方向再查」；單靠候選線不得輸出：
+
+- 此處存在獸徑、舊路、湮沒路徑或可用撤退路線。
+- 此山脊、谷地或水系可以行走、適合通過或安全。
+- 地圖、等高線或 DEM 與現況完全一致。
+- 此處沒有河道、崩塌、斷崖、植被阻斷、土地權利或進入限制。
+- 任何 operational hazard、navigation command 或 safety recommendation。
+
+路徑存在性至少需要與航照／衛星影像、歷史地圖、其他 GPX、植被或地表線索、
+現地觀察等獨立 evidence 交叉比對。即使交叉比對成立，也只能進入 reviewed
+evidence；不得由 QGIS/GRASS candidate 自動升級為 runtime safety truth。
+
+以下狀態必須分開保存：
+
+```text
+processing_status
+render_status
+machine_review_status
+visual_review_status
+human_review_status
+```
+
+`processing_status=completed` 只證明指定工具曾完成執行；不證明地理或安全結論
+為真。使用者也不需要逐筆「修正等高線推論」才能使用 Dashboard；review 的目的
+是記錄是否已加入獨立佐證，不是要求登山者替 GIS 模型畫出正確答案。
+
+### 11.9 Dashboard Interaction Requirements
+
+Navigation/Terrain Intelligence 必須把地圖本身當作主要操作面，不得讓大量固定文字
+壓縮判讀空間。至少應滿足：
+
+- 2D 預設 fit 完整 Golden Route；3D 可使用 prepared DEM local detail，但兩者 camera state 必須獨立。
+- 使用者手動 pan/zoom、切換 2D/3D、圖層、lens 或 evidence 後，不得被非明示事件自動 reset 回 fit。
+- Golden Route 必須位於 candidate overlays 之上；選取 evidence 必須 zoom to 並 highlight 對應 feature，而不是只改右側文字。
+- 高程、陰影、等高線與坡度 overlay 必須可獨立切換，並保留足夠透明度讓底圖地名、道路與定位脈絡可讀。
+- 山脊、谷線、水系候選必須有可辨識的獨立樣式；關閉 candidate layer 時，地圖與圖例必須同步消失。
+- `ROUTE_CONNECTED` 與 `RECTANGLE_ALL` 必須是明示切換，不能靠隱藏的 filter 改變使用者看到的證據範圍。
+- 顯示的候選總數必須等於目前 scope 中實際可見的候選線數；route samples、slope coverage 與其他 diagnostic points 必須另計。
+- 完整矩形 artifact 不得被 UI 裁成 route-shaped raster；route corridor 只影響候選向量的預設可見性。
+
+### 11.10 Correction Cases and Acceptance Tests
+
+以下案例是地圖尋徑力的回歸門檻：
+
+| Case | 錯誤行為 | 必要行為 |
+|---|---|---|
+| `MAP-WAYFIND-001` | 沿 Golden GPX 合成 morphology ribbon，讓結果看起來只是既有路線的副本。 | 先在完整矩形 DEM 執行 GRASS，再把 GPX 當接入錨點。 |
+| `MAP-WAYFIND-002` | 候選起點距 GPX 超過 10 公尺就整條移除。 | 任一候選線段接觸 corridor 即保留該完整外伸 part。 |
+| `MAP-WAYFIND-003` | 候選線穿越 GPX，但因沒有頂點位於 corridor 內而漏掉。 | 使用 segment-to-segment distance 與 intersection 判定。 |
+| `MAP-WAYFIND-004` | 接觸後把候選裁成 10 公尺沿線片段。 | 10 公尺只決定接入資格，不是輸出裁切範圍。 |
+| `MAP-WAYFIND-005` | 將 route samples 與 raster coverage 加入「山脊／谷線總候選」。 | line candidates 與 diagnostic support items 分開計數。 |
+| `MAP-WAYFIND-006` | GRASS 不可用時改用 Python bitmap 並顯示為相同分析。 | fail closed，揭露 unavailable，不產生 synthetic terrain truth。 |
+| `MAP-WAYFIND-007` | 把山脊／谷線／水系候選叫做替代路線、獸徑或安全路線。 | 只稱 terrain morphology candidate，等待獨立 evidence。 |
+| `MAP-WAYFIND-008` | 切換圖層、移動 3D 或選取 evidence 導致 2D 自動回到 fit。 | 只有明示 Fit/Reset 或新的 zoom-to 操作可以改變該 view camera。 |
+
+目前 bounded implementation 對應 `terrain_feature_stack.v1`、Scout-owned QGIS
+worker、GRASS/GDAL artifacts 與 MapLibre projection。實際執行證據、硬體資源與版本
+紀錄放在 [Scout pretrip full preparation runbook](scout-pretrip-full-preparation-runbook.md)；
+該 run 的 feature 數量是 evidence snapshot，不是本 Standard 的固定正確答案。
+
+### 11.11 Terrain Route Hypothesis：任意 A/B 地形候選
+
+地圖力可以使用 `terrain_route_hypothesis.v1`，針對使用者指定的 A/B 端點，從
+DEM 與版本化 terrain-cost model 產生一條 minimum anisotropic model-cost trace，
+以及由 A、B 雙向累積成本形成的 symmetric macro-terrain corridor。這項能力稱為
+**Terrain Route Hypothesis（TRH）**，不得稱為 Trail Generator。
+
+TRH 的規範問題是：
+
+> 在目前已知地形證據下，哪些區域較支持 A 到 B 的候選通行假說？支持程度如何，
+> 哪些資訊仍不知道？
+
+所有 TRH request、run、artifact、catalog、Navigation projection、HTTP 回應與 UI
+都必須維持：
+
+```text
+authority=candidate_only
+source_type=terrain_hypothesis
+runtime_safety_truth=false
+operational=false
+promotion_allowed=false
+safe_or_walkable=not_determined
+```
+
+單一 best-path trace 與 5/10/20 percentile corridor 是兩種不同模型產品。不得把
+trace 稱為已存在步道，也不得把 corridor 稱為安全帶、通行範圍或信心區間；不得
+為了讓 trace 落入 corridor 而把 trace cell 強制 union 進 percentile mask。
+
+Navigation Dashboard 必須遵守原子發布：新 TRH 在 queued/running 時鎖定 A/B 與
+重複送出控制，只更新進度而不週期性重建 MapLibre；舊的 completed candidate 若
+暫留，必須明示尚未切換。只有新 run completed 且 artifact hash 驗證成功後，才能
+切換 Navigation projection。失敗必須顯示 typed stage/detail，不能用閃爍、空白地圖
+或舊結果冒充成功。可選 corridor PNG 失敗時，底圖與 vector hypothesis 仍可供審核，
+但 corridor 必須標示 unavailable。
+
+20 m DEM 的 TRH 一律是 `macro_terrain_only`。植被、meter-scale microterrain、近期
+崩塌、當下水位、路面、合法進入，以及橋梁、繩索、階梯、隧道等 engineered-trail
+資訊都保持 `UNKNOWN`。解析度分類不是 safety confidence，也不得授權 Scout 依 TRH
+自動做前進、撤退、改線或 safety-truth mutation。
+
+完整 schema、cost model、GRASS chain、cache、provenance、Dashboard lifecycle、
+驗證證據與限制見 [Scout Terrain Route Hypothesis Engine](scout-terrain-route-hypothesis.md)。
+
 ---
 
 ## 12. Checkpoint Graph

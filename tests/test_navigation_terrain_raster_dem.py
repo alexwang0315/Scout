@@ -65,6 +65,12 @@ def test_prepare_navigation_terrain_dem_tiles_writes_only_fully_supported_tiles(
     (project_root / terrain_ref).write_text(
         json.dumps(
             {
+                "visualization_spec": {
+                    "actual_processor": "qgis_processing_grass",
+                    "standard_processor_completed": True,
+                    "fallback_used": False,
+                    "python_dtm_processing_used": False,
+                },
                 "dtm_grid": {
                     "cell_resolution_m": 20,
                     "full_route_corridor_bbox_twd97": {
@@ -125,6 +131,13 @@ def test_prepare_navigation_terrain_dem_tiles_writes_only_fully_supported_tiles(
     assert result["visual_interpolation"] == "bilinear"
     assert result["interpolation_domain"] == "elevation_m_before_terrain_rgb_encoding"
     assert result["adds_source_resolution"] is False
+    assert result["source_analysis_processor"] == "qgis_processing_grass"
+    assert result["source_standard_processor_completed"] is True
+    assert result["source_python_dtm_processing_used"] is False
+    assert result["visualization_packaging_processor"] == (
+        "scout_mapbox_terrain_rgb_encoder.v1"
+    )
+    assert result["visualization_packaging_only"] is True
     assert result["nodata_policy"] == "exclude_incomplete_tiles"
     assert result["tile_block"] == {
         "x_min": x,

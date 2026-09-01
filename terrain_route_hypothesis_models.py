@@ -550,6 +550,80 @@ class TerrainRouteHypothesisRequest(BaseModel):
     requested_at: str | None = None
 
 
+class TerrainRouteHypothesisCatalogEntry(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]{0,79}$")
+    label: str = Field(min_length=1, max_length=120)
+    scope: Literal["full_route", "local"]
+    focus_mode: Literal["route_union", "hypothesis"]
+    start_label: str = Field(min_length=1, max_length=80)
+    destination_label: str = Field(min_length=1, max_length=80)
+    hypothesis_ref: str = Field(min_length=1)
+    hypothesis_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    visualization_ref: str = Field(min_length=1)
+    visualization_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    cache_key: str = Field(pattern=r"^[a-f0-9]{64}$")
+    authority: TerrainHypothesisAuthority = TerrainHypothesisAuthority.CANDIDATE_ONLY
+    source_type: Literal["terrain_hypothesis"] = "terrain_hypothesis"
+    candidate_only: Literal[True] = True
+    runtime_safety_truth: Literal[False] = False
+    operational: Literal[False] = False
+    safe_or_walkable: Literal["not_determined"] = "not_determined"
+
+    @field_validator("hypothesis_ref", "visualization_ref")
+    @classmethod
+    def validate_workspace_ref(cls, value: str) -> str:
+        normalized = value.strip()
+        if (
+            not normalized
+            or normalized.startswith(("/", "~"))
+            or ".." in normalized.split("/")
+        ):
+            raise ValueError("terrain route catalog refs must be workspace-relative")
+        return normalized
+
+    @field_validator("label", "start_label", "destination_label")
+    @classmethod
+    def reject_promotional_labels(cls, value: str) -> str:
+        normalized = value.strip()
+        reject_promotional_text(normalized)
+        return normalized
+
+
+class TerrainRouteHypothesisCatalog(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    schema_version: Literal["scout_terrain_route_hypothesis_catalog.v0_1"] = (
+        "scout_terrain_route_hypothesis_catalog.v0_1"
+    )
+    artifact_kind: Literal["terrain_route_hypothesis_catalog"] = (
+        "terrain_route_hypothesis_catalog"
+    )
+    project_id: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+    default_id: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]{0,79}$")
+    entries: tuple[TerrainRouteHypothesisCatalogEntry, ...] = Field(
+        min_length=1,
+        max_length=16,
+    )
+    created_at: str | None = None
+    authority: TerrainHypothesisAuthority = TerrainHypothesisAuthority.CANDIDATE_ONLY
+    source_type: Literal["terrain_hypothesis"] = "terrain_hypothesis"
+    candidate_only: Literal[True] = True
+    runtime_safety_truth: Literal[False] = False
+    operational: Literal[False] = False
+    safe_or_walkable: Literal["not_determined"] = "not_determined"
+
+    @model_validator(mode="after")
+    def validate_selection(self) -> "TerrainRouteHypothesisCatalog":
+        entry_ids = [entry.id for entry in self.entries]
+        if len(entry_ids) != len(set(entry_ids)):
+            raise ValueError("terrain route catalog entry IDs must be unique")
+        if self.default_id not in entry_ids:
+            raise ValueError("terrain route catalog default_id is not an entry")
+        return self
+
+
 def reject_promotional_text(value: str) -> None:
     normalized = value.strip().lower().replace("-", "_").replace(" ", "_")
     if normalized in PROHIBITED_PROMOTION_LABELS:
