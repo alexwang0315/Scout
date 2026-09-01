@@ -14,6 +14,7 @@ from scout.schemas.mser import (
     DimensionRequirement,
     GapKind,
     InformationNeed,
+    MSERAnswerMode,
     MinimalSufficientContext,
     SufficiencyCertificate,
     SufficiencyStatus,
@@ -375,6 +376,93 @@ def test_non_sufficient_context_rejects_even_well_formed_claims() -> None:
         == AnswerVerificationDisposition.BLOCKED_BEFORE_REASONING
     )
     assert ClaimViolationCode.REASONING_NOT_ALLOWED in {
+        item.code for item in verification.violations
+    }
+
+
+def test_non_authoritative_gap_mode_can_explain_unknown_with_delay_only() -> None:
+    context = _context(status=SufficiencyStatus.INSUFFICIENT)
+    verifier = MSERAnswerVerifier()
+    draft = MSERAnswerDraft(
+        answer_text="天氣證據不足，目前保持未知並延後判斷。",
+        answer_mode=MSERAnswerMode.EVIDENCE_GAP_EXPLANATION,
+        decision="DELAY",
+        evidence_gaps=("weather.stability is missing",),
+        claims=(
+            MSERAnswerClaim(
+                claim_id="claim-weather-gap",
+                statement="天氣證據不足，目前保持未知並延後判斷。",
+                signal_ids=("weather-stability",),
+                source_refs=("workspace://weather/stability.json",),
+            ),
+        ),
+    )
+
+    envelope = verifier.prepare_reasoning(
+        context=context,
+        answer_mode=MSERAnswerMode.EVIDENCE_GAP_EXPLANATION,
+        now=NOW,
+    )
+    verification = verifier.verify(
+        context=context,
+        draft=draft,
+        answer_mode=MSERAnswerMode.EVIDENCE_GAP_EXPLANATION,
+        now=NOW,
+    )
+
+    assert envelope.disposition == ReasoningDisposition.READY_TO_EXPLAIN_GAP
+    assert envelope.model_payload is None
+    assert envelope.gap_payload is not None
+    assert verification.passed is True
+
+
+def test_gap_mode_rejects_go_even_with_well_formed_provenance() -> None:
+    context = _context(status=SufficiencyStatus.INSUFFICIENT)
+    draft = MSERAnswerDraft(
+        answer_text="天氣證據不足，但仍可出發。",
+        answer_mode=MSERAnswerMode.EVIDENCE_GAP_EXPLANATION,
+        decision="GO",
+        evidence_gaps=("weather.stability is missing",),
+        claims=(
+            MSERAnswerClaim(
+                claim_id="claim-unsafe-gap",
+                statement="天氣證據不足，但仍可出發。",
+                signal_ids=("weather-stability",),
+                source_refs=("workspace://weather/stability.json",),
+            ),
+        ),
+    )
+
+    verification = MSERAnswerVerifier().verify(
+        context=context,
+        draft=draft,
+        answer_mode=MSERAnswerMode.EVIDENCE_GAP_EXPLANATION,
+        now=NOW,
+    )
+
+    assert verification.passed is False
+    assert ClaimViolationCode.NON_CONSERVATIVE_GAP_DECISION in {
+        item.code for item in verification.violations
+    }
+
+
+def test_factual_lookup_rejects_action_decision() -> None:
+    draft = _draft().model_copy(
+        update={
+            "answer_mode": MSERAnswerMode.FACTUAL_LOOKUP,
+            "decision": "GO",
+        }
+    )
+
+    verification = MSERAnswerVerifier().verify(
+        context=_context(),
+        draft=draft,
+        answer_mode=MSERAnswerMode.FACTUAL_LOOKUP,
+        now=NOW,
+    )
+
+    assert verification.passed is False
+    assert ClaimViolationCode.FACTUAL_LOOKUP_HAS_DECISION in {
         item.code for item in verification.violations
     }
 

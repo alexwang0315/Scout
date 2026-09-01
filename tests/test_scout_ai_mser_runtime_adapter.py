@@ -25,6 +25,8 @@ from scout_ai_tool_contracts import tool_registry_output
 
 RISK_TOOL_ID = "pydantic_ai.tool.search_scout_risk_scores.v0"
 CWA_TOOL_ID = "scout.ai.cwa_environment.assess.v0"
+PACE_TOOL_ID = "scout.ai.pace_guardian.assess.v0"
+ROUTE_TOOL_ID = "pydantic_ai.tool.search_scout_route_structure.v0"
 
 
 def _tool_card(tool_id: str) -> ToolCard:
@@ -77,6 +79,8 @@ def test_registry_builds_known_read_only_capabilities_with_dimension_coverage() 
     assert CompactDimension.SLIP_RISK in by_id[RISK_TOOL_ID].produces_dimensions
     assert CompactDimension.WEATHER_TREND in by_id[CWA_TOOL_ID].produces_dimensions
     assert CompactDimension.DANGER_WINDOW in by_id[CWA_TOOL_ID].produces_dimensions
+    assert CompactDimension.PACE_VARIANCE in by_id[PACE_TOOL_ID].produces_dimensions
+    assert CompactDimension.NEXT_CHECKPOINT in by_id[ROUTE_TOOL_ID].produces_dimensions
     assert all(capability.read_only is True for capability in capabilities)
 
 

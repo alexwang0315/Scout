@@ -81,6 +81,7 @@ TOOL_CAPABILITY_DIMENSIONS: Mapping[str, tuple[CompactDimension, ...]] = (
         {
             "assistant_skill.live_navigation.nmea_route_risk.v0": _dimensions(
                 CompactDimension.GPS_CONFIDENCE,
+                CompactDimension.CURRENT_POSITION,
                 CompactDimension.ROUTE_ALIGNMENT,
                 CompactDimension.ROUTE_PROGRESS,
                 CompactDimension.CURRENT_HAZARD,
@@ -91,6 +92,7 @@ TOOL_CAPABILITY_DIMENSIONS: Mapping[str, tuple[CompactDimension, ...]] = (
             ),
             "pydantic_ai.tool.search_scout_major_points.v0": _dimensions(
                 CompactDimension.ROUTE_PROGRESS,
+                CompactDimension.NEXT_CHECKPOINT,
                 CompactDimension.SHELTER_REACHABILITY,
             ),
             "pydantic_ai.tool.search_scout_map_perception.v0": _dimensions(
@@ -109,6 +111,7 @@ TOOL_CAPABILITY_DIMENSIONS: Mapping[str, tuple[CompactDimension, ...]] = (
             "pydantic_ai.tool.search_scout_route_structure.v0": _dimensions(
                 CompactDimension.ROUTE_ALIGNMENT,
                 CompactDimension.ROUTE_PROGRESS,
+                CompactDimension.NEXT_CHECKPOINT,
                 CompactDimension.ROUTE_FEASIBILITY,
                 CompactDimension.ESCAPE_COST,
                 CompactDimension.SHELTER_REACHABILITY,
@@ -160,11 +163,13 @@ TOOL_CAPABILITY_DIMENSIONS: Mapping[str, tuple[CompactDimension, ...]] = (
             ),
             "scout.ai.ins_dr_trace.analyze.v0": _dimensions(
                 CompactDimension.GPS_CONFIDENCE,
+                CompactDimension.CURRENT_POSITION,
                 CompactDimension.ROUTE_ALIGNMENT,
                 CompactDimension.ROUTE_PROGRESS,
             ),
             "scout.ai.live_navigation_state.assess.v0": _dimensions(
                 CompactDimension.GPS_CONFIDENCE,
+                CompactDimension.CURRENT_POSITION,
                 CompactDimension.ROUTE_ALIGNMENT,
                 CompactDimension.ROUTE_PROGRESS,
                 CompactDimension.CURRENT_HAZARD,
@@ -175,6 +180,7 @@ TOOL_CAPABILITY_DIMENSIONS: Mapping[str, tuple[CompactDimension, ...]] = (
             ),
             "scout.ai.navigation_terrain.assess.v0": _dimensions(
                 CompactDimension.GPS_CONFIDENCE,
+                CompactDimension.CURRENT_POSITION,
                 CompactDimension.ROUTE_ALIGNMENT,
                 CompactDimension.ROUTE_PROGRESS,
                 CompactDimension.EXPOSURE_RISK,
@@ -185,6 +191,7 @@ TOOL_CAPABILITY_DIMENSIONS: Mapping[str, tuple[CompactDimension, ...]] = (
                 CompactDimension.TERRAIN_CONFIDENCE,
             ),
             "scout.ai.pace_guardian.assess.v0": _dimensions(
+                CompactDimension.PACE_VARIANCE,
                 CompactDimension.FATIGUE_INDEX,
                 CompactDimension.ENERGY_RESERVE,
                 CompactDimension.TEAM_DISTANCE,
@@ -252,6 +259,7 @@ TOOL_CAPABILITY_DIMENSIONS: Mapping[str, tuple[CompactDimension, ...]] = (
             ),
             "scout.ai.workspace.query.v1": _dimensions(
                 CompactDimension.ROUTE_PROGRESS,
+                CompactDimension.NEXT_CHECKPOINT,
                 CompactDimension.ROUTE_FEASIBILITY,
                 CompactDimension.MISSION_MARGIN,
                 CompactDimension.HISTORICAL_CONTEXT_RELEVANCE,

@@ -43,6 +43,15 @@ class DecisionCriticality(StrEnum):
     CRITICAL = "critical"
 
 
+class MSERAnswerMode(StrEnum):
+    """Server-owned reasoning scope for one bounded Scout answer."""
+
+    CANDIDATE_ANALYSIS = "candidate_analysis"
+    FACTUAL_LOOKUP = "factual_lookup"
+    EVIDENCE_GAP_EXPLANATION = "evidence_gap_explanation"
+    SAFETY_DECISION = "safety_decision"
+
+
 class CompactDimension(StrEnum):
     EXPOSURE_RISK = "terrain.exposure_risk"
     SLIP_RISK = "terrain.slip_risk"
@@ -64,8 +73,11 @@ class CompactDimension(StrEnum):
     COVERAGE_CONFIDENCE = "communication.coverage_confidence"
     EMERGENCY_REACHABILITY = "communication.emergency_reachability"
     GPS_CONFIDENCE = "navigation.gps_confidence"
+    CURRENT_POSITION = "navigation.current_position"
     ROUTE_ALIGNMENT = "navigation.route_alignment"
     ROUTE_PROGRESS = "navigation.route_progress"
+    NEXT_CHECKPOINT = "navigation.next_checkpoint"
+    PACE_VARIANCE = "human.pace_variance"
     CURRENT_HAZARD = "operation.current_hazard"
     TEAM_DISTANCE = "operation.team_distance"
     REMAINING_DAYLIGHT = "operation.remaining_daylight"
@@ -138,6 +150,34 @@ class CompactSignal(SchemaModel):
         return self
 
 
+class MSERGapEvidenceReceipt(SchemaModel):
+    """Typed proof that a reviewed tool returned a bounded evidence gap."""
+
+    schema_version: Literal["scout.mser.gap_evidence_receipt.v0"] = (
+        "scout.mser.gap_evidence_receipt.v0"
+    )
+    receipt_id: NonEmptyStr
+    tool_id: NonEmptyStr
+    dimensions: tuple[CompactDimension, ...] = Field(min_length=1)
+    signal_ids: tuple[NonEmptyStr, ...] = Field(min_length=1)
+    availability: SignalAvailability
+    missing_fields: tuple[NonEmptyStr, ...] = ()
+    freshness: NonEmptyStr = "unknown"
+    quality: NonEmptyStr = "unknown"
+    observed_at: datetime
+    source_refs: tuple[NonEmptyStr, ...] = Field(min_length=1)
+    candidate_only: Literal[True] = True
+    runtime_safety_truth: Literal[False] = False
+
+    @model_validator(mode="after")
+    def validate_gap_receipt(self) -> "MSERGapEvidenceReceipt":
+        if self.availability == SignalAvailability.AVAILABLE:
+            raise ValueError("gap receipt cannot certify an available signal")
+        if len(self.dimensions) != len(self.signal_ids):
+            raise ValueError("gap receipt dimensions and signal_ids must align")
+        return self
+
+
 class CompactDomainState(SchemaModel):
     """Base class that checks field-to-dimension bindings."""
 
@@ -202,6 +242,7 @@ class HumanLatentState(CompactDomainState):
     cognitive_confidence: CompactSignal | None = None
     safety_margin: CompactSignal | None = None
     medical_urgency: CompactSignal | None = None
+    pace_variance: CompactSignal | None = None
 
     _EXPECTED_DIMENSIONS = {
         "fatigue_index": CompactDimension.FATIGUE_INDEX,
@@ -209,6 +250,7 @@ class HumanLatentState(CompactDomainState):
         "cognitive_confidence": CompactDimension.COGNITIVE_CONFIDENCE,
         "safety_margin": CompactDimension.SAFETY_MARGIN,
         "medical_urgency": CompactDimension.MEDICAL_URGENCY,
+        "pace_variance": CompactDimension.PACE_VARIANCE,
     }
 
 
@@ -226,8 +268,10 @@ class CommunicationLatentState(CompactDomainState):
 
 class OperationalLatentState(CompactDomainState):
     gps_confidence: CompactSignal | None = None
+    current_position: CompactSignal | None = None
     route_alignment: CompactSignal | None = None
     route_progress: CompactSignal | None = None
+    next_checkpoint: CompactSignal | None = None
     current_hazard: CompactSignal | None = None
     team_distance: CompactSignal | None = None
     remaining_daylight: CompactSignal | None = None
@@ -241,8 +285,10 @@ class OperationalLatentState(CompactDomainState):
 
     _EXPECTED_DIMENSIONS = {
         "gps_confidence": CompactDimension.GPS_CONFIDENCE,
+        "current_position": CompactDimension.CURRENT_POSITION,
         "route_alignment": CompactDimension.ROUTE_ALIGNMENT,
         "route_progress": CompactDimension.ROUTE_PROGRESS,
+        "next_checkpoint": CompactDimension.NEXT_CHECKPOINT,
         "current_hazard": CompactDimension.CURRENT_HAZARD,
         "team_distance": CompactDimension.TEAM_DISTANCE,
         "remaining_daylight": CompactDimension.REMAINING_DAYLIGHT,
@@ -291,6 +337,45 @@ class DimensionRequirement(SchemaModel):
     max_age_seconds: int | None = Field(default=None, ge=1)
     mandatory: bool = True
     preserve_conflicts: bool = True
+
+
+class MSERTaskContract(SchemaModel):
+    """Typed, deterministic task scope used to select proof obligations."""
+
+    schema_version: Literal["scout.mser.task_contract.v0"] = (
+        "scout.mser.task_contract.v0"
+    )
+    task_id: NonEmptyStr
+    answer_mode: MSERAnswerMode
+    requirements: tuple[DimensionRequirement, ...] = ()
+    safety_relevant: bool = False
+    classifier: NonEmptyStr = "deterministic_mser_task_router.v0"
+    candidate_only: Literal[True] = True
+    runtime_safety_truth: Literal[False] = False
+
+    @model_validator(mode="after")
+    def validate_authority_and_requirements(self) -> "MSERTaskContract":
+        is_safety = self.answer_mode == MSERAnswerMode.SAFETY_DECISION
+        if self.safety_relevant != is_safety:
+            raise ValueError(
+                "safety_relevant must be true exactly for safety_decision mode"
+            )
+        if is_safety and self.requirements:
+            raise ValueError(
+                "safety decision requirements are server-owned by the full "
+                "decision profile"
+            )
+        if self.answer_mode in {
+            MSERAnswerMode.FACTUAL_LOOKUP,
+            MSERAnswerMode.EVIDENCE_GAP_EXPLANATION,
+        } and not self.requirements:
+            raise ValueError(
+                "factual and evidence-gap tasks require explicit proof obligations"
+            )
+        dimensions = [item.dimension for item in self.requirements]
+        if len(dimensions) != len(set(dimensions)):
+            raise ValueError("task contract requirements must be unique")
+        return self
 
 
 class DecisionCompactProfile(SchemaModel):
@@ -445,6 +530,7 @@ class MSERTransition(SchemaModel):
 
 class MSERDecisionPacket(SchemaModel):
     intent: DecisionIntent
+    task_contract: MSERTaskContract | None = None
     compact_context: MinimalSufficientContext
     tool_plan: MinimalToolPlan
     next_stage: MSERStage
@@ -465,7 +551,10 @@ __all__ = [
     "HumanLatentState",
     "InformationNeed",
     "KnowledgeCandidate",
+    "MSERGapEvidenceReceipt",
     "MSERDecisionPacket",
+    "MSERAnswerMode",
+    "MSERTaskContract",
     "MSERStage",
     "MSERTransition",
     "MemoryEvent",

@@ -21,6 +21,8 @@ from scout.schemas.mser import (
     DecisionType,
     GapKind,
     InformationNeed,
+    MSERAnswerMode,
+    MSERGapEvidenceReceipt,
     MinimalSufficientContext,
     SignalAvailability,
     SufficiencyStatus,
@@ -29,6 +31,7 @@ from scout.schemas.mser import (
 
 class ReasoningDisposition(StrEnum):
     READY_TO_REASON = "ready_to_reason"
+    READY_TO_EXPLAIN_GAP = "ready_to_explain_gap"
     EVIDENCE_GAP = "evidence_gap"
     CONTRADICTION = "contradiction"
     CLARIFICATION_REQUIRED = "clarification_required"
@@ -53,6 +56,14 @@ class ClaimViolationCode(StrEnum):
     CERTIFICATE_INCONSISTENT = "certificate_inconsistent"
     RAW_EVIDENCE_IN_COMPACT_VALUE = "raw_evidence_in_compact_value"
     REASONING_NOT_ALLOWED = "reasoning_not_allowed"
+    MISSING_EVIDENCE_GAP = "missing_evidence_gap"
+    NON_CONSERVATIVE_GAP_DECISION = "non_conservative_gap_decision"
+    ANSWER_MODE_MISMATCH = "answer_mode_mismatch"
+    FACTUAL_LOOKUP_HAS_DECISION = "factual_lookup_has_decision"
+    MISSING_GAP_RECEIPT = "missing_gap_receipt"
+    UNKNOWN_GAP_RECEIPT = "unknown_gap_receipt"
+    GAP_RECEIPT_DIMENSION_MISMATCH = "gap_receipt_dimension_mismatch"
+    SOURCE_NOT_LINKED_TO_GAP_RECEIPT = "source_not_linked_to_gap_receipt"
 
 
 class ModelFacingCompactSignal(SchemaModel):
@@ -112,11 +123,43 @@ class ModelFacingMSERPayload(SchemaModel):
     runtime_safety_truth: Literal[False] = False
 
 
+class ModelFacingEvidenceGapPayload(SchemaModel):
+    """Safe projection for explaining UNKNOWN without normal answer reasoning."""
+
+    schema_version: Literal["scout.mser.gap_context.v0"] = (
+        "scout.mser.gap_context.v0"
+    )
+    context_id: NonEmptyStr
+    question: NonEmptyStr
+    decision_type: DecisionType
+    profile_id: NonEmptyStr
+    information_needs: tuple[InformationNeed, ...] = ()
+    stale_dimensions: tuple[CompactDimension, ...] = ()
+    contradictory_dimensions: tuple[CompactDimension, ...] = ()
+    certificate_source_refs: tuple[NonEmptyStr, ...] = ()
+    gap_evidence_receipts: tuple[MSERGapEvidenceReceipt, ...] = ()
+    allowed_decisions: tuple[
+        Literal["DELAY", "CHANGE_PLAN", "NO_GO", "ESCALATE"], ...
+    ] = ("DELAY",)
+    answer_contract: Literal[
+        "Explain only the typed evidence gap, stale state, or conflict. Preserve "
+        "UNKNOWN, cite certified sources, and do not produce GO or authoritative "
+        "runtime safety truth."
+    ] = (
+        "Explain only the typed evidence gap, stale state, or conflict. Preserve "
+        "UNKNOWN, cite certified sources, and do not produce GO or authoritative "
+        "runtime safety truth."
+    )
+    candidate_only: Literal[True] = True
+    runtime_safety_truth: Literal[False] = False
+
+
 class MSERReasoningEnvelope(SchemaModel):
     disposition: ReasoningDisposition
     certificate_status: SufficiencyStatus
     message: NonEmptyStr
     model_payload: ModelFacingMSERPayload | None = None
+    gap_payload: ModelFacingEvidenceGapPayload | None = None
     information_needs: tuple[InformationNeed, ...] = ()
     stale_dimensions: tuple[CompactDimension, ...] = ()
     contradictory_dimensions: tuple[CompactDimension, ...] = ()
@@ -128,10 +171,17 @@ class MSERReasoningEnvelope(SchemaModel):
     @model_validator(mode="after")
     def enforce_reasoning_gate(self) -> "MSERReasoningEnvelope":
         ready = self.disposition == ReasoningDisposition.READY_TO_REASON
+        gap_ready = self.disposition == ReasoningDisposition.READY_TO_EXPLAIN_GAP
         if ready and self.certificate_status != SufficiencyStatus.SUFFICIENT:
             raise ValueError("only a sufficient certificate can enter reasoning")
         if ready != (self.model_payload is not None):
             raise ValueError("model payload is allowed only for ready_to_reason")
+        if gap_ready != (self.gap_payload is not None):
+            raise ValueError(
+                "gap payload is allowed only for ready_to_explain_gap"
+            )
+        if self.model_payload is not None and self.gap_payload is not None:
+            raise ValueError("normal and gap model payloads are mutually exclusive")
         return self
 
 
@@ -139,6 +189,7 @@ class MSERAnswerClaim(SchemaModel):
     claim_id: NonEmptyStr
     statement: NonEmptyStr
     signal_ids: tuple[NonEmptyStr, ...] = ()
+    gap_receipt_ids: tuple[NonEmptyStr, ...] = ()
     source_refs: tuple[NonEmptyStr, ...] = ()
     candidate_only: Literal[True] = True
     runtime_safety_truth: Literal[False] = False
@@ -147,6 +198,9 @@ class MSERAnswerClaim(SchemaModel):
 class MSERAnswerDraft(SchemaModel):
     answer_text: NonEmptyStr
     claims: tuple[MSERAnswerClaim, ...]
+    answer_mode: MSERAnswerMode = MSERAnswerMode.SAFETY_DECISION
+    decision: str | None = None
+    evidence_gaps: tuple[str, ...] = ()
     candidate_only: Literal[True] = True
     runtime_safety_truth: Literal[False] = False
 
@@ -222,6 +276,8 @@ class MSERAnswerVerifier:
         self,
         *,
         context: MinimalSufficientContext,
+        answer_mode: MSERAnswerMode = MSERAnswerMode.SAFETY_DECISION,
+        gap_evidence_receipts: tuple[MSERGapEvidenceReceipt, ...] = (),
         now: datetime | None = None,
     ) -> MSERReasoningEnvelope:
         reference_time = _as_utc(now or datetime.now(UTC))
@@ -244,6 +300,27 @@ class MSERAnswerVerifier:
             dimensions = _ordered_dimensions(
                 context.certificate.contradictory_dimensions
             )
+            if _allows_gap_explanation(
+                answer_mode,
+                gap_evidence_receipts=gap_evidence_receipts,
+            ):
+                return MSERReasoningEnvelope(
+                    disposition=ReasoningDisposition.READY_TO_EXPLAIN_GAP,
+                    certificate_status=status,
+                    message=(
+                        "Normal reasoning is blocked; only a sourced conflict "
+                        "explanation that preserves UNKNOWN is allowed."
+                    ),
+                    gap_payload=_build_gap_payload(
+                        context,
+                        gap_evidence_receipts=gap_evidence_receipts,
+                    ),
+                    contradictory_dimensions=dimensions,
+                    boundary_issues=tuple(
+                        f"contradictory:{dimension.value}"
+                        for dimension in dimensions
+                    ),
+                )
             return MSERReasoningEnvelope(
                 disposition=ReasoningDisposition.CONTRADICTION,
                 certificate_status=status,
@@ -257,6 +334,30 @@ class MSERAnswerVerifier:
                 ),
             )
         if status != SufficiencyStatus.SUFFICIENT:
+            if _allows_gap_explanation(
+                answer_mode,
+                gap_evidence_receipts=gap_evidence_receipts,
+            ):
+                return MSERReasoningEnvelope(
+                    disposition=ReasoningDisposition.READY_TO_EXPLAIN_GAP,
+                    certificate_status=status,
+                    message=(
+                        "Normal reasoning is blocked; only a sourced evidence-gap "
+                        "explanation that preserves UNKNOWN is allowed."
+                    ),
+                    gap_payload=_build_gap_payload(
+                        context,
+                        gap_evidence_receipts=gap_evidence_receipts,
+                    ),
+                    information_needs=context.information_needs,
+                    stale_dimensions=_ordered_dimensions(
+                        context.certificate.stale_dimensions
+                    ),
+                    boundary_issues=tuple(
+                        f"{need.gap_kind.value}:{need.dimension.value}"
+                        for need in context.information_needs
+                    ),
+                )
             return MSERReasoningEnvelope(
                 disposition=ReasoningDisposition.EVIDENCE_GAP,
                 certificate_status=status,
@@ -316,11 +417,59 @@ class MSERAnswerVerifier:
         *,
         context: MinimalSufficientContext,
         draft: MSERAnswerDraft,
+        answer_mode: MSERAnswerMode = MSERAnswerMode.SAFETY_DECISION,
+        gap_evidence_receipts: tuple[MSERGapEvidenceReceipt, ...] = (),
         now: datetime | None = None,
     ) -> MSERAnswerVerification:
         reference_time = _as_utc(now or datetime.now(UTC))
-        envelope = self.prepare_reasoning(context=context, now=reference_time)
+        if draft.answer_mode != answer_mode:
+            return MSERAnswerVerification(
+                passed=False,
+                disposition=AnswerVerificationDisposition.NEEDS_REPAIR,
+                violations=(
+                    MSERClaimViolation(
+                        code=ClaimViolationCode.ANSWER_MODE_MISMATCH,
+                        message=(
+                            "The answer draft mode does not match the server-owned "
+                            "MSER task contract."
+                        ),
+                    ),
+                ),
+                certificate_source_refs=context.certificate.source_refs,
+            )
+        envelope = self.prepare_reasoning(
+            context=context,
+            answer_mode=answer_mode,
+            gap_evidence_receipts=gap_evidence_receipts,
+            now=reference_time,
+        )
+        if (
+            answer_mode == MSERAnswerMode.FACTUAL_LOOKUP
+            and envelope.disposition == ReasoningDisposition.READY_TO_REASON
+            and str(draft.decision or "").strip()
+        ):
+            return MSERAnswerVerification(
+                passed=False,
+                disposition=AnswerVerificationDisposition.NEEDS_REPAIR,
+                violations=(
+                    MSERClaimViolation(
+                        code=ClaimViolationCode.FACTUAL_LOOKUP_HAS_DECISION,
+                        message=(
+                            "Factual lookup mode cannot emit an action decision; "
+                            "decision must be null."
+                        ),
+                    ),
+                ),
+                certificate_source_refs=context.certificate.source_refs,
+            )
         certificate_refs = context.certificate.source_refs
+        if envelope.disposition == ReasoningDisposition.READY_TO_EXPLAIN_GAP:
+            return self._verify_gap_explanation(
+                context=context,
+                draft=draft,
+                gap_evidence_receipts=gap_evidence_receipts,
+                now=reference_time,
+            )
         if envelope.disposition != ReasoningDisposition.READY_TO_REASON:
             violations = [
                 MSERClaimViolation(
@@ -363,6 +512,94 @@ class MSERAnswerVerifier:
             if not claim_violations:
                 verified_claim_ids.append(claim.claim_id)
 
+        deduped = _dedupe_violations(violations)
+        passed = not deduped and len(verified_claim_ids) == len(draft.claims)
+        return MSERAnswerVerification(
+            passed=passed,
+            disposition=(
+                AnswerVerificationDisposition.VERIFIED_CANDIDATE
+                if passed
+                else AnswerVerificationDisposition.NEEDS_REPAIR
+            ),
+            verified_claim_ids=tuple(verified_claim_ids),
+            violations=deduped,
+            certificate_source_refs=certificate_refs,
+        )
+
+    def _verify_gap_explanation(
+        self,
+        *,
+        context: MinimalSufficientContext,
+        draft: MSERAnswerDraft,
+        gap_evidence_receipts: tuple[MSERGapEvidenceReceipt, ...],
+        now: datetime,
+    ) -> MSERAnswerVerification:
+        certificate_refs = tuple(
+            dict.fromkeys(
+                (
+                    *context.certificate.source_refs,
+                    *(
+                        source_ref
+                        for receipt in gap_evidence_receipts
+                        for source_ref in receipt.source_refs
+                    ),
+                )
+            )
+        )
+        signal_by_id = {signal.signal_id: signal for signal in context.selected_signals}
+        receipt_by_id = {
+            receipt.receipt_id: receipt for receipt in gap_evidence_receipts
+        }
+        violations: list[MSERClaimViolation] = []
+        verified_claim_ids: list[str] = []
+        if not draft.evidence_gaps:
+            violations.append(
+                MSERClaimViolation(
+                    code=ClaimViolationCode.MISSING_EVIDENCE_GAP,
+                    message=(
+                        "A gap explanation must preserve at least one structured "
+                        "evidence gap."
+                    ),
+                )
+            )
+        decision = str(draft.decision or "").strip().upper()
+        allowed_decisions = set(_gap_allowed_decisions(context))
+        if decision and decision not in allowed_decisions:
+            violations.append(
+                MSERClaimViolation(
+                    code=ClaimViolationCode.NON_CONSERVATIVE_GAP_DECISION,
+                    message=(
+                        "Evidence-gap mode permits only no decision, DELAY, or a "
+                        "conservative decision emitted by selected deterministic "
+                        "tool evidence."
+                    ),
+                )
+            )
+        if not draft.claims:
+            violations.append(
+                MSERClaimViolation(
+                    code=ClaimViolationCode.NO_CLAIMS,
+                    message="The gap explanation contains no structured claim.",
+                )
+            )
+        for claim in draft.claims:
+            if receipt_by_id:
+                claim_violations = _verify_gap_receipt_claim(
+                    claim=claim,
+                    receipt_by_id=receipt_by_id,
+                    context=context,
+                )
+            else:
+                claim_violations = self._verify_claim(
+                    claim=claim,
+                    signal_by_id=signal_by_id,
+                    certificate_refs=set(certificate_refs),
+                    context=context,
+                    now=now,
+                )
+            violations.extend(claim_violations)
+            if not claim_violations:
+                verified_claim_ids.append(claim.claim_id)
         deduped = _dedupe_violations(violations)
         passed = not deduped and len(verified_claim_ids) == len(draft.claims)
         return MSERAnswerVerification(
@@ -472,6 +709,201 @@ class MSERAnswerVerifier:
                     )
                 )
         return _dedupe_violations(violations)
+
+
+def _verify_gap_receipt_claim(
+    *,
+    claim: MSERAnswerClaim,
+    receipt_by_id: dict[str, MSERGapEvidenceReceipt],
+    context: MinimalSufficientContext,
+) -> tuple[MSERClaimViolation, ...]:
+    violations: list[MSERClaimViolation] = []
+    if not claim.gap_receipt_ids:
+        violations.append(
+            MSERClaimViolation(
+                code=ClaimViolationCode.MISSING_GAP_RECEIPT,
+                claim_id=claim.claim_id,
+                message=(
+                    "A tool-backed gap explanation must cite at least one typed "
+                    "gap evidence receipt."
+                ),
+            )
+        )
+    if not claim.source_refs:
+        violations.append(
+            MSERClaimViolation(
+                code=ClaimViolationCode.MISSING_SOURCE_REF,
+                claim_id=claim.claim_id,
+                message="Every gap receipt claim must cite a receipt source_ref.",
+            )
+        )
+
+    expected_dimensions = {
+        *(
+            item.requirement.dimension
+            for item in context.certificate.coverage
+        ),
+        *(need.dimension for need in context.information_needs),
+        *context.certificate.missing_dimensions,
+        *context.certificate.stale_dimensions,
+        *context.certificate.low_confidence_dimensions,
+        *context.certificate.contradictory_dimensions,
+    }
+    known_receipts: list[MSERGapEvidenceReceipt] = []
+    for receipt_id in claim.gap_receipt_ids:
+        receipt = receipt_by_id.get(receipt_id)
+        if receipt is None:
+            violations.append(
+                MSERClaimViolation(
+                    code=ClaimViolationCode.UNKNOWN_GAP_RECEIPT,
+                    claim_id=claim.claim_id,
+                    signal_id=receipt_id,
+                    message=f"Claim cites unknown gap receipt {receipt_id!r}.",
+                )
+            )
+            continue
+        known_receipts.append(receipt)
+        if expected_dimensions and not expected_dimensions.intersection(
+            receipt.dimensions
+        ):
+            violations.append(
+                MSERClaimViolation(
+                    code=ClaimViolationCode.GAP_RECEIPT_DIMENSION_MISMATCH,
+                    claim_id=claim.claim_id,
+                    signal_id=receipt.receipt_id,
+                    message=(
+                        f"Gap receipt {receipt.receipt_id!r} does not cover a "
+                        "dimension in the current typed task scope."
+                    ),
+                )
+            )
+
+    signal_by_id = {
+        signal.signal_id: signal for signal in context.selected_signals
+    }
+    known_signals = [
+        signal_by_id[signal_id]
+        for signal_id in claim.signal_ids
+        if signal_id in signal_by_id
+    ]
+    for source_ref in claim.source_refs:
+        linked_to_receipt = any(
+            source_ref in receipt.source_refs for receipt in known_receipts
+        )
+        linked_to_signal = any(
+            source_ref in signal.source_refs for signal in known_signals
+        )
+        if not linked_to_receipt and not linked_to_signal:
+            violations.append(
+                MSERClaimViolation(
+                    code=ClaimViolationCode.SOURCE_NOT_LINKED_TO_GAP_RECEIPT,
+                    claim_id=claim.claim_id,
+                    source_ref=source_ref,
+                    message=(
+                        f"Source ref {source_ref!r} is not linked to a cited gap "
+                        "evidence receipt."
+                    ),
+                )
+            )
+    cited_refs = set(claim.source_refs)
+    for signal in known_signals:
+        if not cited_refs.intersection(signal.source_refs):
+            violations.append(
+                MSERClaimViolation(
+                    code=ClaimViolationCode.SOURCE_NOT_LINKED_TO_SIGNAL,
+                    claim_id=claim.claim_id,
+                    signal_id=signal.signal_id,
+                    message=(
+                        f"Claim cites signal {signal.signal_id!r} without one of "
+                        "its certified provenance refs."
+                    ),
+                )
+            )
+    for receipt in known_receipts:
+        if not cited_refs.intersection(receipt.source_refs):
+            violations.append(
+                MSERClaimViolation(
+                    code=ClaimViolationCode.SOURCE_NOT_LINKED_TO_GAP_RECEIPT,
+                    claim_id=claim.claim_id,
+                    signal_id=receipt.receipt_id,
+                    message=(
+                        f"Claim cites gap receipt {receipt.receipt_id!r} without "
+                        "one of its provenance refs."
+                    ),
+                )
+            )
+    return _dedupe_violations(violations)
+
+
+def _allows_gap_explanation(
+    answer_mode: MSERAnswerMode,
+    *,
+    gap_evidence_receipts: tuple[MSERGapEvidenceReceipt, ...],
+) -> bool:
+    return (
+        answer_mode != MSERAnswerMode.SAFETY_DECISION
+        or bool(gap_evidence_receipts)
+    )
+
+
+_CONSERVATIVE_GAP_DECISION_ORDER = (
+    "DELAY",
+    "CHANGE_PLAN",
+    "NO_GO",
+    "ESCALATE",
+)
+
+
+def _gap_allowed_decisions(
+    context: MinimalSufficientContext,
+) -> tuple[Literal["DELAY", "CHANGE_PLAN", "NO_GO", "ESCALATE"], ...]:
+    supported = {"DELAY"}
+    for signal in context.selected_signals:
+        if signal.availability != SignalAvailability.AVAILABLE:
+            continue
+        value = signal.value
+        if not isinstance(value, dict):
+            continue
+        decision = str(value.get("decision") or "").strip().upper()
+        if decision in _CONSERVATIVE_GAP_DECISION_ORDER:
+            supported.add(decision)
+    return tuple(
+        decision
+        for decision in _CONSERVATIVE_GAP_DECISION_ORDER
+        if decision in supported
+    )
+
+
+def _build_gap_payload(
+    context: MinimalSufficientContext,
+    *,
+    gap_evidence_receipts: tuple[MSERGapEvidenceReceipt, ...] = (),
+) -> ModelFacingEvidenceGapPayload:
+    return ModelFacingEvidenceGapPayload(
+        context_id=context.context_id,
+        question=context.intent.question,
+        decision_type=context.intent.primary_type,
+        profile_id=context.profile_id,
+        information_needs=context.information_needs,
+        stale_dimensions=_ordered_dimensions(context.certificate.stale_dimensions),
+        contradictory_dimensions=_ordered_dimensions(
+            context.certificate.contradictory_dimensions
+        ),
+        certificate_source_refs=tuple(
+            dict.fromkeys(
+                (
+                    *context.certificate.source_refs,
+                    *(
+                        source_ref
+                        for receipt in gap_evidence_receipts
+                        for source_ref in receipt.source_refs
+                    ),
+                )
+            )
+        ),
+        gap_evidence_receipts=gap_evidence_receipts,
+        allowed_decisions=_gap_allowed_decisions(context),
+    )
 
 
 def _build_model_payload(
@@ -886,6 +1318,7 @@ __all__ = [
     "MSERClaimViolation",
     "MSERReasoningEnvelope",
     "ModelFacingCompactSignal",
+    "ModelFacingEvidenceGapPayload",
     "ModelFacingMSERPayload",
     "ModelFacingSufficiencyProof",
     "ReasoningDisposition",

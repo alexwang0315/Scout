@@ -136,6 +136,7 @@ def _scenario_refs(payload: Mapping[str, Any]) -> tuple[str, ...]:
         elif isinstance(role, str) and role:
             refs.append(f"scenario-source://{role}")
     scenario_id = str(payload.get("scenario_id") or "unknown")
+    refs.append(f"scenario://{scenario_id}")
     for overlay in payload.get("condition_overlay_refs") or ():
         if isinstance(overlay, str) and overlay:
             refs.append(f"scenario://{scenario_id}/overlay/{overlay}")
@@ -452,6 +453,12 @@ def _scenario_human(
         None,
         None,
     )
+    pace_variance = _first_number(
+        payload,
+        ("pace_variance_minutes",),
+        ("pace_delta_minutes",),
+        ("current_delay_minutes",),
+    )
 
     def human_signal(
         dimension: CompactDimension,
@@ -500,6 +507,11 @@ def _scenario_human(
             CompactDimension.MEDICAL_URGENCY,
             urgency,
             "medical urgency",
+        ),
+        pace_variance=human_signal(
+            CompactDimension.PACE_VARIANCE,
+            pace_variance,
+            "pace variance",
         ),
     )
 
@@ -594,6 +606,35 @@ def _scenario_operation(
     team_distance = 15.0 if mission_on_schedule else None
     mission_margin = 0.78 if mission_on_schedule else None
     route_feasibility = 0.8 if mission_on_schedule else None
+    current_position = {
+        key: payload.get(key)
+        for key in (
+            "lat",
+            "lon",
+            "elevation_m",
+            "route_progress_m",
+            "nearest_cp_id",
+            "distance_to_boss_along_route_m",
+            "boss_point_id",
+            "heading_deg",
+            "horizontal_accuracy_m",
+            "fix_quality",
+        )
+        if payload.get(key) is not None
+    }
+    next_cp_id = str(payload.get("next_cp_id") or "").strip()
+    next_checkpoint = (
+        {
+            "cp_id": next_cp_id,
+            "distance_m": _first_number(
+                payload,
+                ("distance_to_next_cp_m",),
+                ("next_cp_distance_m",),
+            ),
+        }
+        if next_cp_id
+        else None
+    )
 
     def operation_signal(
         dimension: CompactDimension,
@@ -628,11 +669,23 @@ def _scenario_operation(
             label="GNSS fix confidence",
             force_missing=unknown_fix,
         ),
+        current_position=operation_signal(
+            CompactDimension.CURRENT_POSITION,
+            current_position,
+            label="current route-bound position",
+            force_missing=unknown_fix or not current_position,
+        ),
         route_alignment=operation_signal(
             CompactDimension.ROUTE_ALIGNMENT,
             route_alignment,
             label="nearest-route-distance alignment",
             force_missing=unknown_fix,
+        ),
+        next_checkpoint=operation_signal(
+            CompactDimension.NEXT_CHECKPOINT,
+            next_checkpoint,
+            label="next checkpoint",
+            force_missing=next_checkpoint is None,
         ),
         route_progress=operation_signal(
             CompactDimension.ROUTE_PROGRESS,
@@ -958,6 +1011,13 @@ def _total_info_human(
         ),
         CompactDimension.SAFETY_MARGIN: _score(context.get("safety_margin")),
         CompactDimension.MEDICAL_URGENCY: _score(context.get("medical_urgency")),
+        CompactDimension.PACE_VARIANCE: _first_number(
+            context,
+            ("pace_variance_minutes",),
+            ("pace_delta_minutes",),
+            ("current_delay_minutes",),
+            ("compact_state", "pace_variance_minutes"),
+        ),
     }
 
     def human_signal(dimension: CompactDimension, label: str) -> CompactSignal:
@@ -994,6 +1054,10 @@ def _total_info_human(
         medical_urgency=human_signal(
             CompactDimension.MEDICAL_URGENCY,
             "medical urgency",
+        ),
+        pace_variance=human_signal(
+            CompactDimension.PACE_VARIANCE,
+            "pace variance",
         ),
     )
 
@@ -1080,6 +1144,35 @@ def _total_info_operation(
         if route_distance is not None
         else None
     )
+    current_position = {
+        key: snapshot.get(key)
+        for key in (
+            "lat",
+            "lon",
+            "elevation_m",
+            "route_progress_m",
+            "nearest_cp_id",
+            "distance_to_boss_along_route_m",
+            "boss_point_id",
+            "heading_deg",
+            "horizontal_accuracy_m",
+            "fix_quality",
+        )
+        if snapshot.get(key) is not None
+    }
+    next_cp_id = str(snapshot.get("next_cp_id") or "").strip()
+    next_checkpoint = (
+        {
+            "cp_id": next_cp_id,
+            "distance_m": _first_number(
+                snapshot,
+                ("distance_to_next_cp_m",),
+                ("next_cp_distance_m",),
+            ),
+        }
+        if next_cp_id
+        else None
+    )
 
     def location_signal(
         dimension: CompactDimension,
@@ -1153,6 +1246,11 @@ def _total_info_operation(
             gps_confidence,
             "GNSS confidence",
         ),
+        current_position=location_signal(
+            CompactDimension.CURRENT_POSITION,
+            current_position,
+            "current route-bound position",
+        ),
         route_alignment=location_signal(
             CompactDimension.ROUTE_ALIGNMENT,
             route_alignment,
@@ -1163,6 +1261,11 @@ def _total_info_operation(
             _first_number(snapshot, ("route_progress_m",)),
             "route progress",
             unit="m",
+        ),
+        next_checkpoint=location_signal(
+            CompactDimension.NEXT_CHECKPOINT,
+            next_checkpoint,
+            "next checkpoint",
         ),
         current_hazard=mission_signal(
             CompactDimension.CURRENT_HAZARD,

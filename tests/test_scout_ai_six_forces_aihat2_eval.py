@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -14,6 +15,7 @@ from tools.scout_ai_six_forces_aihat2_eval import (
     _plain_excerpt,
     _write_summaries,
     apply_answer_quality_gate,
+    apply_structured_answer_obligation_recovery,
     assess_six_forces_answer_quality,
     apply_scenario_evidence_overlay,
     canonicalize_output_source_refs,
@@ -23,6 +25,7 @@ from tools.scout_ai_six_forces_aihat2_eval import (
     build_structured_prompt,
     build_three_axis_scorecard,
     compact_evidence_for_model,
+    enrich_compact_evidence_spatial_bindings,
     estimate_hailo_input_tokens,
     expand_case_runs,
     health_guard,
@@ -30,6 +33,7 @@ from tools.scout_ai_six_forces_aihat2_eval import (
     primary_tool_for_question,
     quality_tool_results_for_gaps,
     selected_tool_ids,
+    source_refs_from_evidence,
     snapshot_for_run,
     split_missing_evidence,
     verify_model_output,
@@ -165,6 +169,44 @@ def test_structured_prompt_excludes_reference_and_allowed_decisions() -> None:
     assert run["question_text"] in prompt
     assert "candidate_only" in prompt
     assert "a 必須先原樣摘錄" in prompt
+
+
+def test_navigation_prompt_requires_explicit_scenario_provenance() -> None:
+    run = next(
+        item for item in expand_case_runs(_artifact()) if item["force_code"] == "NAV"
+    )
+    evidence = compact_evidence_for_model(
+        run=run,
+        total_info=None,
+        tool_results=[],
+        missing_tools=[],
+        missing_evidence=[],
+        mser_context={"task": {"answer_mode": "factual_lookup"}},
+        max_chars=None,
+    )
+    prompt = build_structured_prompt(
+        run=run,
+        compact_evidence=evidence,
+        model_profile="cloud",
+    )
+    scenario_ref = f"scenario://{run['scenario_id']}"
+    certified_ref = "workspace://total-info/location_context"
+    evidence["mser"] = {
+        "sufficiency": {
+            "source_refs": [certified_ref],
+        }
+    }
+
+    assert evidence["context_source_refs"] == [scenario_ref]
+    assert scenario_ref in source_refs_from_evidence(run, [])
+    assert certified_ref in source_refs_from_evidence(
+        run,
+        [],
+        compact_evidence=evidence,
+    )
+    assert scenario_ref in prompt
+    assert "evidence.context_source_refs" in prompt
+    assert "decision 必須是 null" in prompt
 
 
 def test_local_prompt_uses_concrete_wire_format_without_echoable_placeholders() -> None:
@@ -758,6 +800,39 @@ def test_parser_extracts_json_and_verifier_checks_scenario() -> None:
     assert verified["status"] == "pass"
 
 
+def test_parser_uses_a_complete_trailing_json_after_an_abandoned_draft() -> None:
+    draft = {
+        "s": "scenario.draft",
+        "d": "NO_GO",
+        "a": "discarded draft",
+    }
+    final = {
+        "s": "scenario.final",
+        "d": "DELAY",
+        "a": "等待補齊比較證據。",
+        "e": [],
+        "o": [],
+        "g": ["缺少改線與原路的同尺度風險比較"],
+        "c": ["取得兩條候選路線的比較證據後重判"],
+        "r": ["scout.ai.route_context.assess.v0"],
+        "cl": ["candidate_only"],
+    }
+    raw = (
+        "I will revise the draft.\n"
+        f"{json.dumps(draft, ensure_ascii=False)}\n"
+        "Final JSON follows.\n"
+        f"{json.dumps(final, ensure_ascii=False)}"
+    )
+
+    parsed, error = parse_model_output(raw)
+
+    assert error is None
+    assert parsed is not None
+    assert parsed["scenario_id"] == "scenario.final"
+    assert parsed["decision"] == "DELAY"
+    assert parsed["answer"] == "等待補齊比較證據。"
+
+
 def test_permission_verifier_rejects_claim_that_shelter_path_does_not_exist() -> None:
     run = next(item for item in expand_case_runs(_artifact()) if item["force_code"] == "PER")
     output = {
@@ -876,6 +951,191 @@ def test_permission_verifier_accepts_simplified_chinese_minute_grounding() -> No
     )
 
     assert verified["status"] == "pass"
+
+
+def test_permission_verifier_rejects_remote_terrain_as_current_location_evidence() -> None:
+    run = next(
+        item
+        for item in expand_case_runs(_artifact())
+        if item["force_code"] == "PER"
+        and item["variant_id"] == "sheltered_flat_time_available"
+    )
+    run["question_id"] = "PER-021"
+    run["question_text"] = "我現在可以在這裡停下來休息嗎？"
+    terrain_answer = (
+        "地形分數判斷：建議 NO_GO。最高候選地形點位於 23.38 km，"
+        "metric=terrain、score=98.94。"
+    )
+    output = {
+        "scenario_id": run["scenario_id"],
+        "decision": "NO_GO",
+        "answer": terrain_answer,
+        "decisive_evidence": [terrain_answer],
+        "opposing_evidence": [],
+        "evidence_gaps": [],
+        "decision_change_conditions": ["取得更新證據後重新判斷"],
+        "source_refs": ["pydantic_ai.tool.search_scout_terrain_scores.v0"],
+        "claims": ["candidate_only"],
+    }
+    compact_evidence = {
+        "location": {"lat": 24.058167201531, "lon": 121.282862139783},
+        "tools": [
+            {
+                "tool_id": "pydantic_ai.tool.search_scout_terrain_scores.v0",
+                "decision": "NO_GO",
+                "field_answer": terrain_answer,
+                "spatial_binding": {
+                    "schema_version": "scout.ai.candidate_spatial_binding.v0",
+                    "relation": "candidate_point_to_current_location",
+                    "current_lat": 24.058167201531,
+                    "current_lon": 121.282862139783,
+                    "candidate_lat": 24.0479215,
+                    "candidate_lon": 121.277183,
+                    "separation_m": 1276.4,
+                    "current_location_scope_m": 250.0,
+                    "within_current_location_scope": False,
+                    "candidate_score": 98.94,
+                    "record_route_distance_km": 23.38,
+                    "record_route_distance_m": 23380.0,
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                },
+            }
+        ],
+    }
+
+    verified = verify_model_output(
+        run=run,
+        output=output,
+        parse_error=None,
+        available_source_refs={
+            "pydantic_ai.tool.search_scout_terrain_scores.v0"
+        },
+        compact_evidence=compact_evidence,
+    )
+
+    assert "spatially_remote_terrain_evidence_used_as_current_location" in verified[
+        "errors"
+    ]
+
+
+def test_spatial_binding_is_derived_from_raw_tool_record_without_mutation() -> None:
+    compact = {
+        "location": {"lat": 24.058167201531, "lon": 121.282862139783},
+        "tools": [
+            {
+                "tool_id": "pydantic_ai.tool.search_scout_terrain_scores.v0",
+                "decision": "NO_GO",
+            }
+        ],
+    }
+
+    enriched = enrich_compact_evidence_spatial_bindings(
+        compact_evidence=compact,
+        tool_results=[
+            {
+                "tool_id": "pydantic_ai.tool.search_scout_terrain_scores.v0",
+                "records": [
+                    {
+                        "score": 98.94,
+                        "distance_km": 23.38,
+                        "distance_m": 23380.0,
+                        "lat": 24.0479215,
+                        "lon": 121.277183,
+                        "candidate_only": True,
+                        "runtime_safety_truth": False,
+                    }
+                ],
+            }
+        ],
+    )
+
+    binding = enriched["tools"][0]["spatial_binding"]
+    assert "spatial_binding" not in compact["tools"][0]
+    assert binding["schema_version"] == "scout.ai.candidate_spatial_binding.v0"
+    assert binding["relation"] == "candidate_point_to_current_location"
+    assert binding["separation_m"] == pytest.approx(1275, abs=25)
+    assert binding["current_location_scope_m"] == 250.0
+    assert binding["within_current_location_scope"] is False
+    assert binding["candidate_score"] == 98.94
+    assert binding["record_route_distance_km"] == 23.38
+    assert binding["candidate_only"] is True
+    assert binding["runtime_safety_truth"] is False
+
+
+def test_permission_verifier_allows_explicitly_remote_terrain_context() -> None:
+    run = next(
+        item
+        for item in expand_case_runs(_artifact())
+        if item["force_code"] == "PER"
+        and item["variant_id"] == "sheltered_flat_time_available"
+    )
+    run["question_id"] = "PER-021"
+    run["question_text"] = "我現在可以在這裡停下來休息嗎？"
+    output = {
+        "scenario_id": run["scenario_id"],
+        "decision": "CHANGE_PLAN",
+        "answer": (
+            "98.94 的候選地形點距目前位置約 1.28 公里，不能代表這裡；"
+            "後隊儲備不足，先前移休息點並重新評估。"
+        ),
+        "decisive_evidence": ["後隊儲備不足"],
+        "opposing_evidence": ["遠端 terrain candidate score=98.94"],
+        "evidence_gaps": [],
+        "decision_change_conditions": ["取得目前位置的直接地形證據"],
+        "source_refs": [
+            "pydantic_ai.tool.search_scout_terrain_scores.v0",
+            "scout.ai.pace_guardian.assess.v0",
+        ],
+        "claims": ["candidate_only"],
+    }
+    compact_evidence = {
+        "location": {"lat": 24.058167201531, "lon": 121.282862139783},
+        "tools": [
+            {
+                "tool_id": "pydantic_ai.tool.search_scout_terrain_scores.v0",
+                "decision": "NO_GO",
+                "field_answer": "最高候選地形 score=98.94。",
+                "spatial_binding": {
+                    "schema_version": "scout.ai.candidate_spatial_binding.v0",
+                    "relation": "candidate_point_to_current_location",
+                    "current_lat": 24.058167201531,
+                    "current_lon": 121.282862139783,
+                    "candidate_lat": 24.0479215,
+                    "candidate_lon": 121.277183,
+                    "separation_m": 1276.4,
+                    "current_location_scope_m": 250.0,
+                    "within_current_location_scope": False,
+                    "candidate_score": 98.94,
+                    "record_route_distance_km": 23.38,
+                    "record_route_distance_m": 23380.0,
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                },
+            },
+            {
+                "tool_id": "scout.ai.pace_guardian.assess.v0",
+                "decision": "CHANGE_PLAN",
+                "field_answer": "後隊儲備不足，先前移休息點。",
+            },
+        ],
+    }
+
+    verified = verify_model_output(
+        run=run,
+        output=output,
+        parse_error=None,
+        available_source_refs={
+            "pydantic_ai.tool.search_scout_terrain_scores.v0",
+            "scout.ai.pace_guardian.assess.v0",
+        },
+        compact_evidence=compact_evidence,
+    )
+
+    assert (
+        "spatially_remote_terrain_evidence_used_as_current_location"
+        not in verified["errors"]
+    )
 
 
 def test_permission_fixture_uses_scenario_time_buffer_as_single_source() -> None:
@@ -1866,6 +2126,405 @@ def test_execute_run_allows_third_progressive_repair_for_repeated_quality_error(
     assert len(calls) == 3
 
 
+def test_execute_run_composes_live_gap_response_without_rewriting_model_output(
+    monkeypatch,
+) -> None:
+    run = next(
+        item
+        for item in expand_case_runs(_artifact())
+        if item["force_code"] == "PER"
+        and item["variant_id"] == "sheltered_flat_time_available"
+    )
+    run["question_text"] = "我現在可以在這裡停下來休息嗎？"
+    run["expected_decisions"] = [
+        "GO",
+        "CONDITIONAL_GO",
+        "CHANGE_PLAN",
+        "DELAY",
+        "NO_GO",
+        "ESCALATE",
+    ]
+    snapshot = snapshot_for_run(run)
+    pace_tool_id = "scout.ai.pace_guardian.assess.v0"
+    weather_tool_id = "scout.ai.weather_window.assess.v0"
+    tool_results = [
+        {
+            "tool_id": pace_tool_id,
+            "status": "completed",
+            "decision": "CHANGE_PLAN",
+            "field_answer": "後隊儲備不足，建議 CHANGE_PLAN。",
+            "field_answer_priority": 100,
+            "field_answer_source_ref": "outputs/team_status.json",
+            "missing_fields": [],
+        },
+        {
+            "tool_id": weather_tool_id,
+            "status": "completed",
+            "decision": "DELAY",
+            "field_answer": "fresh_route_weather_evidence 缺失，建議 DELAY。",
+            "field_answer_priority": 90,
+            "field_answer_source_ref": "outputs/weather/route_weather.json",
+            "missing_fields": ["fresh_route_weather_evidence"],
+        },
+    ]
+    monkeypatch.setattr(
+        eval_module,
+        "selected_tool_ids",
+        lambda **_: [pace_tool_id, weather_tool_id],
+    )
+    monkeypatch.setattr(
+        eval_module,
+        "build_total_info",
+        lambda *_args, **_kwargs: {
+            "location_context": {"live_navigation_snapshot": snapshot}
+        },
+    )
+    monkeypatch.setattr(
+        eval_module,
+        "run_tools",
+        lambda **_: (
+            tool_results,
+            [],
+            [f"{weather_tool_id}:missing:fresh_route_weather_evidence"],
+        ),
+    )
+
+    model_output = {
+        "scenario_id": run["scenario_id"],
+        "decision": "CONDITIONAL_GO",
+        "answer": (
+            "可以限時休息，但 fresh_route_weather_evidence 缺失；"
+            "後隊儲備不足，腳程工具建議 CHANGE_PLAN。"
+        ),
+        "decisive_evidence": ["sheltered candidate"],
+        "opposing_evidence": ["weather gap"],
+        "evidence_gaps": ["fresh_route_weather_evidence"],
+        "decision_change_conditions": ["取得 fresh weather evidence"],
+        "source_refs": [pace_tool_id, weather_tool_id],
+        "claims": ["candidate_only", "runtime_safety_truth=false"],
+    }
+
+    def fake_model_call(**_kwargs):
+        return json.dumps(model_output, ensure_ascii=False), {"provider_run": "fresh"}
+
+    result = eval_module.execute_run(
+        run=run,
+        project_root=Path("/tmp/demo"),
+        endpoint="https://example.invalid/v1",
+        model="provider:test",
+        timeout_seconds=30,
+        max_model_requests=10,
+        guided_retry=False,
+        model_adapter=eval_module.ScoutModelExecutionAdapter(
+            adapter_id="provider.test",
+            profile="cloud",
+            provider="test",
+            transport="test",
+            invoke=fake_model_call,
+        ),
+        mser_mode="enforce",
+        compose_conservative_gap_responses=True,
+    )
+
+    assert result["model_output"] == model_output
+    assert result["raw_model_output"] == json.dumps(model_output, ensure_ascii=False)
+    assert result["model_request_count"] == 1
+    assert result["precomposition_mser_answer_verification"]["passed"] is False
+    assert result["deterministic_response_composition"]["status"] == "composed"
+    assert result["effective_response"]["decision"] == "DELAY"
+    assert result["decision"] == "DELAY"
+    assert result["mser_answer_verification"]["passed"] is True
+    assert result["verifier"]["status"] == "pass"
+    assert result["failure_category"] is None
+    assert result["semantic_stop_reason"] == "server_owned_conservative_composition"
+
+
+def test_execute_run_stops_retry_after_first_composable_gap_response(
+    monkeypatch,
+) -> None:
+    run = next(
+        item
+        for item in expand_case_runs(_artifact())
+        if item["force_code"] == "PER"
+        and item["variant_id"] == "sheltered_flat_time_available"
+    )
+    run["question_text"] = "我現在可以在這裡停下來休息嗎？"
+    run["expected_decisions"] = [
+        "GO",
+        "CONDITIONAL_GO",
+        "CHANGE_PLAN",
+        "DELAY",
+        "NO_GO",
+        "ESCALATE",
+    ]
+    snapshot = snapshot_for_run(run)
+    pace_tool_id = "scout.ai.pace_guardian.assess.v0"
+    weather_tool_id = "scout.ai.weather_window.assess.v0"
+    tool_results = [
+        {
+            "tool_id": pace_tool_id,
+            "status": "completed",
+            "decision": "CHANGE_PLAN",
+            "field_answer": "後隊儲備不足，建議 CHANGE_PLAN。",
+            "field_answer_priority": 100,
+            "field_answer_source_ref": "outputs/team_status.json",
+            "missing_fields": [],
+        },
+        {
+            "tool_id": weather_tool_id,
+            "status": "completed",
+            "decision": "DELAY",
+            "field_answer": "fresh_route_weather_evidence 缺失，建議 DELAY。",
+            "field_answer_priority": 90,
+            "field_answer_source_ref": "outputs/weather/route_weather.json",
+            "missing_fields": ["fresh_route_weather_evidence"],
+        },
+    ]
+    monkeypatch.setattr(
+        eval_module,
+        "selected_tool_ids",
+        lambda **_: [pace_tool_id, weather_tool_id],
+    )
+    monkeypatch.setattr(
+        eval_module,
+        "build_total_info",
+        lambda *_args, **_kwargs: {
+            "location_context": {"live_navigation_snapshot": snapshot}
+        },
+    )
+    monkeypatch.setattr(
+        eval_module,
+        "run_tools",
+        lambda **_: (
+            tool_results,
+            [],
+            [f"{weather_tool_id}:missing:fresh_route_weather_evidence"],
+        ),
+    )
+
+    model_output = {
+        "scenario_id": run["scenario_id"],
+        "decision": "CONDITIONAL_GO",
+        "answer": (
+            "可以限時休息，但 fresh_route_weather_evidence 缺失；"
+            "後隊儲備不足，腳程工具建議 CHANGE_PLAN。"
+        ),
+        "decisive_evidence": ["sheltered candidate"],
+        "opposing_evidence": ["weather gap"],
+        "evidence_gaps": ["fresh_route_weather_evidence"],
+        "decision_change_conditions": ["取得 fresh weather evidence"],
+        "source_refs": [pace_tool_id, weather_tool_id],
+        "claims": ["candidate_only", "runtime_safety_truth=false"],
+    }
+    provider_calls = 0
+
+    def fake_model_call(**_kwargs):
+        nonlocal provider_calls
+        provider_calls += 1
+        if provider_calls > 1:
+            raise AssertionError("composable first attempt must stop guided retry")
+        return json.dumps(model_output, ensure_ascii=False), {"provider_run": "fresh"}
+
+    result = eval_module.execute_run(
+        run=run,
+        project_root=Path("/tmp/demo"),
+        endpoint="https://example.invalid/v1",
+        model="provider:test",
+        timeout_seconds=30,
+        max_model_requests=10,
+        guided_retry=True,
+        model_adapter=eval_module.ScoutModelExecutionAdapter(
+            adapter_id="provider.test",
+            profile="cloud",
+            provider="test",
+            transport="test",
+            invoke=fake_model_call,
+        ),
+        mser_mode="enforce",
+        compose_conservative_gap_responses=True,
+    )
+
+    assert provider_calls == 1
+    assert result["model_request_count"] == 1
+    assert result["model_output"] == model_output
+    assert result["effective_response"]["decision"] == "DELAY"
+    assert result["verifier"]["status"] == "pass"
+    assert result["model_attempts"][0]["attempt_status"] == "server_composed"
+    assert (
+        result["model_attempts"][0]["deterministic_response_composition"]["status"]
+        == "composed"
+    )
+    assert result["semantic_stop_reason"] == "server_owned_conservative_composition"
+
+
+def test_execute_run_discards_late_provider_output_after_total_deadline(
+    monkeypatch,
+) -> None:
+    run = next(
+        item for item in expand_case_runs(_artifact()) if item["force_code"] == "EXP"
+    )
+    snapshot = snapshot_for_run(run)
+    clock = [100.0]
+    cancellation_event = threading.Event()
+    calls: list[dict[str, object]] = []
+
+    monkeypatch.setattr(eval_module.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(eval_module, "selected_tool_ids", lambda **_: ["tool.ref"])
+    monkeypatch.setattr(
+        eval_module,
+        "build_total_info",
+        lambda *_args, **_kwargs: {
+            "location_context": {"live_navigation_snapshot": snapshot}
+        },
+    )
+    monkeypatch.setattr(
+        eval_module,
+        "run_tools",
+        lambda **_: (
+            [
+                {
+                    "tool_id": "tool.ref",
+                    "status": "completed",
+                    "field_answer": "候選路線脈絡。",
+                    "field_answer_priority": 100,
+                    "field_answer_source_ref": "tool.ref",
+                }
+            ],
+            [],
+            [],
+        ),
+    )
+
+    late_output = json.dumps(
+        {
+            "scenario_id": run["scenario_id"],
+            "decision": None,
+            "answer": "這個答案在總期限後才抵達。",
+            "decisive_evidence": ["tool.ref"],
+            "opposing_evidence": [],
+            "evidence_gaps": [],
+            "decision_change_conditions": [],
+            "source_refs": ["tool.ref"],
+            "claims": ["candidate_only", "runtime_safety_truth=false"],
+        },
+        ensure_ascii=False,
+    )
+
+    def slow_model_call(**kwargs):
+        calls.append(kwargs)
+        clock[0] += 2.5
+        return late_output, {"provider_run": "late"}
+
+    result = eval_module.execute_run(
+        run=run,
+        project_root=Path("/tmp/demo"),
+        endpoint="https://example.invalid/v1",
+        model="provider:test",
+        timeout_seconds=30,
+        total_run_timeout_seconds=2.0,
+        max_model_requests=10,
+        guided_retry=True,
+        cancellation_event=cancellation_event,
+        model_adapter=eval_module.ScoutModelExecutionAdapter(
+            adapter_id="provider.test",
+            profile="cloud",
+            provider="test",
+            transport="test",
+            invoke=slow_model_call,
+            supports_run_controls=True,
+        ),
+    )
+
+    assert len(calls) == 1
+    assert calls[0]["run_timeout_seconds"] == pytest.approx(2.0)
+    assert calls[0]["cancellation_event"] is cancellation_event
+    assert cancellation_event.is_set() is True
+    assert result["model_output"] is None
+    assert result["decision"] is None
+    assert result["raw_model_output"] == late_output
+    assert result["model_request_count"] == 1
+    assert (
+        result["model_attempts"][0]["attempt_status"]
+        == "discarded_after_run_control"
+    )
+    assert result["run_cancellation_receipt"]["status"] == "timed_out"
+    assert (
+        result["run_cancellation_receipt"]["checkpoint"] == "after_model_request"
+    )
+    assert (
+        result["run_cancellation_receipt"]["late_provider_output_discarded"] is True
+    )
+    assert result["verifier"]["errors"] == ["total_run_deadline_exceeded"]
+    assert result["failure_category"] == "model_run_timed_out"
+    assert result["candidate_only"] is True
+    assert result["runtime_safety_truth"] is False
+
+
+def test_execute_run_honors_external_cancellation_before_model_request(
+    monkeypatch,
+) -> None:
+    run = next(
+        item for item in expand_case_runs(_artifact()) if item["force_code"] == "EXP"
+    )
+    snapshot = snapshot_for_run(run)
+    cancellation_event = threading.Event()
+    cancellation_event.set()
+    calls: list[dict[str, object]] = []
+
+    monkeypatch.setattr(eval_module, "selected_tool_ids", lambda **_: ["tool.ref"])
+    monkeypatch.setattr(
+        eval_module,
+        "build_total_info",
+        lambda *_args, **_kwargs: {
+            "location_context": {"live_navigation_snapshot": snapshot}
+        },
+    )
+    monkeypatch.setattr(
+        eval_module,
+        "run_tools",
+        lambda **_: (
+            [{"tool_id": "tool.ref", "status": "completed", "field_answer": "A"}],
+            [],
+            [],
+        ),
+    )
+
+    def model_call(**kwargs):
+        calls.append(kwargs)
+        return "{}", {}
+
+    result = eval_module.execute_run(
+        run=run,
+        project_root=Path("/tmp/demo"),
+        endpoint="https://example.invalid/v1",
+        model="provider:test",
+        timeout_seconds=30,
+        total_run_timeout_seconds=30.0,
+        max_model_requests=10,
+        guided_retry=True,
+        cancellation_event=cancellation_event,
+        model_adapter=eval_module.ScoutModelExecutionAdapter(
+            adapter_id="provider.test",
+            profile="cloud",
+            provider="test",
+            transport="test",
+            invoke=model_call,
+            supports_run_controls=True,
+        ),
+    )
+
+    assert calls == []
+    assert result["model_request_count"] == 0
+    assert result["model_attempts"] == []
+    assert result["model_output"] is None
+    assert result["run_cancellation_receipt"]["status"] == "cancelled"
+    assert (
+        result["run_cancellation_receipt"]["checkpoint"] == "before_model_request"
+    )
+    assert result["verifier"]["errors"] == ["model_run_cancelled"]
+    assert result["failure_category"] == "model_run_cancelled"
+
+
 def test_shared_executor_requires_explicit_model_adapter() -> None:
     parameter = inspect.signature(eval_module.execute_run).parameters["model_adapter"]
 
@@ -1899,6 +2558,45 @@ def test_tool_adapter_preserves_top_level_field_answer_with_result_records() -> 
     assert compact["field_answer"] == "15K 位於候選 CP-015 附近。"
     assert compact["field_answer_priority"] == 100
     assert compact["field_answer_source_ref"] == "candidates/route_mileage_k_anchors.json"
+
+
+def test_tool_adapter_preserves_negative_search_receipt_for_mser() -> None:
+    receipt = {
+        "artifact_kind": "scout_negative_search_receipt",
+        "schema_version": "scout.negative_search_receipt.v0",
+        "receipt_id": "negative-search.abc123",
+        "source_ref": "receipts/negative-search/abc123.json",
+        "result_count": 0,
+        "searched_record_count": 42,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+
+    compact = _compact_tool_result(
+        {
+            "tool_id": "pydantic_ai.tool.search_scout_evidence_fulltext.v0",
+            "status": "completed",
+            "missing_fields": ["matching_scoped_evidence"],
+            "payload": {
+                "answerability": "evidence_fulltext_no_match",
+                "summary": "Scoped local search completed with zero matches.",
+                "quality": "verified",
+                "freshness": "workspace_snapshot",
+                "result_count": 0,
+                "searched_record_count": 42,
+                "source_refs": [receipt["source_ref"]],
+                "negative_search_receipt": receipt,
+                "results": [],
+            },
+        }
+    )
+
+    assert compact["negative_search_receipt"] == receipt
+    assert compact["source_refs"] == [receipt["source_ref"]]
+    assert compact["result_count"] == 0
+    assert compact["searched_record_count"] == 42
+    assert compact["quality"] == "verified"
+    assert compact["records"][0]["negative_search_receipt"] == receipt
 
 
 def test_compact_evidence_marks_low_priority_route_context_as_gap() -> None:
@@ -2412,6 +3110,11 @@ def test_summary_requires_verifier_and_quality_acceptance(tmp_path: Path) -> Non
     assert summary["blocking_evidence_gap_count"] == 1
     assert summary["quality_review_count"] == 2
     assert summary["quality_review_reason_summary"] == {}
+    assert summary["run_control_summary"] == {
+        "outcomes": {"completed": 4},
+        "cancellation_receipt_count": 0,
+    }
+    assert summary["mser_summary"]["response_composition"] == {"not_run": 4}
     assert len(json.loads((tmp_path / "failures.json").read_text())) == 1
     assert len(json.loads((tmp_path / "evidence_gap_reviews.json").read_text())) == 1
     assert "strict verifier + quality acceptance: `2/4`" in (
@@ -2432,6 +3135,242 @@ def test_quality_gate_rejects_ungrounded_answer_when_evidence_is_sufficient() ->
     assert verifier["status"] == "fail"
     assert verifier["errors"] == [
         "answer_quality:did_not_preserve_expected_tool_tokens"
+    ]
+
+
+def _candidate_quality_output(
+    run: dict,
+    *,
+    answer: str,
+    decision: str | None,
+    evidence_gaps: list[str] | None = None,
+    source_refs: list[str] | None = None,
+) -> dict:
+    return {
+        "scenario_id": run["scenario_id"],
+        "decision": decision,
+        "answer": answer,
+        "decisive_evidence": [],
+        "opposing_evidence": [],
+        "evidence_gaps": list(evidence_gaps or []),
+        "decision_change_conditions": ["取得更新證據後重新判斷"],
+        "source_refs": list(source_refs or ["tool.primary"]),
+        "claims": ["candidate_only"],
+    }
+
+
+def test_structured_obligations_recover_exp_safe_abstention_without_field_answer() -> None:
+    run = next(item for item in expand_case_runs(_artifact()) if item["force_code"] == "EXP")
+    answer = "工作區未提供題目專屬證據，無法確認這段路線的文化含義，因此不臆測。"
+    tool_results = [
+        {
+            "tool_id": "tool.primary",
+            "field_answer": None,
+            "record": {"lat": 24.06, "lon": 121.28},
+        }
+    ]
+    quality = assess_six_forces_answer_quality(
+        answer,
+        missing_tools=[],
+        blocking_missing_evidence=[],
+        tool_results=tool_results,
+    )
+    output = _candidate_quality_output(
+        run,
+        answer=answer,
+        decision=None,
+        evidence_gaps=["缺少題目專屬文化證據"],
+    )
+
+    recovered = apply_structured_answer_obligation_recovery(
+        quality,
+        run=run,
+        output=output,
+        compact_evidence={
+            "tools": tool_results,
+            "mser": {"task": {"answer_mode": "factual_lookup"}},
+        },
+        verifier={"status": "pass", "errors": []},
+    )
+
+    assert quality["failure_reasons"] == [
+        "did_not_preserve_expected_tool_tokens"
+    ]
+    assert recovered["classification"] == "auto_screen_pass_requires_human_review"
+    assert recovered["failure_reasons"] == []
+    assert recovered["grounding_match_method"] == "structured_answer_obligations"
+    assert recovered["structured_obligation_check"]["recovery_kind"] == (
+        "evidence_void_safe_abstention"
+    )
+
+
+def test_structured_obligations_recover_exposed_shelter_response() -> None:
+    run = next(
+        item
+        for item in expand_case_runs(_artifact())
+        if item["force_code"] == "PER"
+        and item["variant_id"] == "exposed_strong_wind_shelter_ahead"
+    )
+    answer = "強風暴露稜線不宜停留；沿既有路線繼續前行約 180 公尺至背風候選點後重評。"
+    tool_results = [
+        {
+            "tool_id": "tool.primary",
+            "decision": "NO_GO",
+            "field_answer": "地形分數 98.94，建議 NO_GO。",
+        }
+    ]
+    quality = assess_six_forces_answer_quality(
+        answer,
+        missing_tools=[],
+        blocking_missing_evidence=[],
+        tool_results=tool_results,
+    )
+    output = _candidate_quality_output(
+        run,
+        answer=answer,
+        decision="CHANGE_PLAN",
+        source_refs=[f"scenario://{run['scenario_id']}", "tool.primary"],
+    )
+
+    recovered = apply_structured_answer_obligation_recovery(
+        quality,
+        run=run,
+        output=output,
+        compact_evidence={"tools": tool_results},
+        verifier={"status": "pass", "errors": []},
+    )
+
+    assert quality["failure_reasons"] == [
+        "did_not_preserve_expected_tool_tokens"
+    ]
+    assert recovered["failure_reasons"] == []
+    assert recovered["structured_obligation_check"]["recovery_kind"] == (
+        "exposed_shelter_scenario_response"
+    )
+
+
+def test_structured_obligations_recover_stale_gnss_delay_response() -> None:
+    run = next(
+        item
+        for item in expand_case_runs(_artifact())
+        if item["force_code"] == "PER"
+        and item["variant_id"] == "gnss_stale_location_unknown"
+    )
+    answer = "GNSS 定位已過期、位置未知；先重新取得定位並人工確認周邊，再決定是否前進。"
+    tool_results = [
+        {
+            "tool_id": "tool.primary",
+            "decision": "NO_GO",
+            "field_answer": "地形候選分數 99.54。",
+        }
+    ]
+    quality = assess_six_forces_answer_quality(
+        answer,
+        missing_tools=[],
+        blocking_missing_evidence=[],
+        tool_results=tool_results,
+    )
+    output = _candidate_quality_output(
+        run,
+        answer=answer,
+        decision="DELAY",
+        evidence_gaps=["GNSS stale，位置未知"],
+    )
+
+    recovered = apply_structured_answer_obligation_recovery(
+        quality,
+        run=run,
+        output=output,
+        compact_evidence={"tools": tool_results},
+        verifier={"status": "pass", "errors": []},
+    )
+
+    assert quality["failure_reasons"] == [
+        "did_not_preserve_expected_tool_tokens"
+    ]
+    assert recovered["failure_reasons"] == []
+    assert recovered["structured_obligation_check"]["recovery_kind"] == (
+        "stale_location_safe_delay"
+    )
+
+
+def test_structured_obligations_do_not_recover_unsupported_go() -> None:
+    run = next(
+        item
+        for item in expand_case_runs(_artifact())
+        if item["force_code"] == "PER"
+        and item["variant_id"] == "exposed_strong_wind_shelter_ahead"
+    )
+    answer = "強風暴露稜線不宜停留；沿既有路線前移約 180 公尺至背風候選點後重評。"
+    output = _candidate_quality_output(run, answer=answer, decision="GO")
+    compact = {"tools": [{"tool_id": "tool.primary", "decision": "NO_GO"}]}
+    verifier = verify_model_output(
+        run=run,
+        output=output,
+        parse_error=None,
+        available_source_refs={"tool.primary"},
+        compact_evidence=compact,
+    )
+    quality = {
+        "classification": "quality_fail",
+        "failure_reasons": ["did_not_preserve_expected_tool_tokens"],
+    }
+
+    recovered = apply_structured_answer_obligation_recovery(
+        quality,
+        run=run,
+        output=output,
+        compact_evidence=compact,
+        verifier=verifier,
+    )
+
+    assert verifier["status"] == "fail"
+    assert recovered["classification"] == "quality_fail"
+    assert recovered["failure_reasons"] == [
+        "did_not_preserve_expected_tool_tokens"
+    ]
+    assert "core_verifier_not_passed" in recovered["structured_obligation_check"][
+        "errors"
+    ]
+
+
+def test_structured_obligations_do_not_recover_invented_fact() -> None:
+    run = next(item for item in expand_case_runs(_artifact()) if item["force_code"] == "EXP")
+    answer = "工作區未提供足夠的題目專屬證據，無法確認，但山體主要由花崗岩構成。"
+    output = _candidate_quality_output(
+        run,
+        answer=answer,
+        decision=None,
+        evidence_gaps=["question_specific_route_context_evidence_missing"],
+    )
+    compact = {
+        "missing_evidence": ["question_specific_route_context_evidence_missing"],
+        "tools": [{"tool_id": "tool.primary", "field_answer": None}],
+    }
+    verifier = verify_model_output(
+        run=run,
+        output=output,
+        parse_error=None,
+        available_source_refs={"tool.primary"},
+        compact_evidence=compact,
+    )
+    quality = {
+        "classification": "quality_fail",
+        "failure_reasons": ["did_not_preserve_expected_tool_tokens"],
+    }
+
+    recovered = apply_structured_answer_obligation_recovery(
+        quality,
+        run=run,
+        output=output,
+        compact_evidence=compact,
+        verifier=verifier,
+    )
+
+    assert "question_specific_gap_answer_adds_unsupported_detail" in verifier["errors"]
+    assert recovered["classification"] == "quality_fail"
+    assert recovered["failure_reasons"] == [
+        "did_not_preserve_expected_tool_tokens"
     ]
 
 
@@ -2579,9 +3518,19 @@ def test_aihat_eval_defaults_to_guided_retry_with_explicit_single_pass_opt_out()
     single_pass_args = parser.parse_args(
         ["--workspace", "/tmp/demo", "--no-guided-retry"]
     )
+    composer_args = parser.parse_args(
+        ["--workspace", "/tmp/demo", "--compose-conservative-gap-responses"]
+    )
+    bounded_args = parser.parse_args(
+        ["--workspace", "/tmp/demo", "--total-run-timeout-seconds", "90.5"]
+    )
 
     assert default_args.guided_retry is True
+    assert default_args.compose_conservative_gap_responses is False
+    assert default_args.total_run_timeout_seconds == 0
     assert single_pass_args.guided_retry is False
+    assert composer_args.compose_conservative_gap_responses is True
+    assert bounded_args.total_run_timeout_seconds == pytest.approx(90.5)
 
 
 def test_three_axis_scorecard_separates_transport_safety_and_semantics() -> None:
@@ -2768,6 +3717,45 @@ def test_selected_tools_put_force_primary_before_planner_and_defaults(
     assert tools[0] == "scout.ai.pace_guardian.assess.v0"
     assert tools.count("scout.ai.pace_guardian.assess.v0") == 1
     assert "scout.ai.energy_vitals.assess.v0" in tools
+
+
+def test_mser_execution_keeps_contextual_permission_primary_for_here_question() -> None:
+    resolved = eval_module.resolve_execution_tool_ids(
+        force_code="PER",
+        question="我可以在這裡停下來拍照嗎？",
+        legacy_tool_ids=[
+            "scout.ai.contextual_permission.assess.v0",
+            "pydantic_ai.tool.search_scout_terrain_scores.v0",
+        ],
+        mser_tool_ids=[
+            "pydantic_ai.tool.search_scout_terrain_scores.v0",
+            "scout.ai.pace_guardian.assess.v0",
+            "scout.ai.weather_window.assess.v0",
+        ],
+        mser_coverage_complete=True,
+    )
+
+    assert resolved == [
+        "scout.ai.contextual_permission.assess.v0",
+        "pydantic_ai.tool.search_scout_terrain_scores.v0",
+        "scout.ai.pace_guardian.assess.v0",
+        "scout.ai.weather_window.assess.v0",
+    ]
+
+
+def test_mser_execution_does_not_expand_non_current_location_lookup() -> None:
+    resolved = eval_module.resolve_execution_tool_ids(
+        force_code="PER",
+        question="哪些地方要避免停留拍照？",
+        legacy_tool_ids=[
+            "scout.ai.contextual_permission.assess.v0",
+            "pydantic_ai.tool.search_scout_terrain_scores.v0",
+        ],
+        mser_tool_ids=["pydantic_ai.tool.search_scout_terrain_scores.v0"],
+        mser_coverage_complete=True,
+    )
+
+    assert resolved == ["pydantic_ai.tool.search_scout_terrain_scores.v0"]
 
 
 def test_permission_force_keeps_team_status_available_for_distance_questions(

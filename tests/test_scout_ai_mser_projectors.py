@@ -287,6 +287,27 @@ def test_total_info_projection_uses_real_context_shapes_without_safe_defaults() 
         assert signal.valid_until is not None
 
 
+def test_scenario_projects_query_facts_without_inventing_unknown_next_cp() -> None:
+    representation = project_scenario_context(
+        _five_scenarios()["normal"],
+        now=NOW,
+    )
+
+    assert representation.operation.current_position.value["nearest_cp_id"] == "CP-18"
+    assert representation.operation.current_position.value["route_progress_m"] == (
+        18_200.0
+    )
+    assert (
+        representation.operation.next_checkpoint.availability
+        == SignalAvailability.MISSING
+    )
+    assert representation.operation.next_checkpoint.value is None
+    assert representation.human.pace_variance.availability == SignalAvailability.MISSING
+    assert "scenario://scenario-1-normal" in (
+        representation.operation.current_position.source_refs
+    )
+
+
 def test_state_store_publishes_immutable_versioned_snapshots() -> None:
     projected = {
         name: project_scenario_context(scenario, now=NOW)
