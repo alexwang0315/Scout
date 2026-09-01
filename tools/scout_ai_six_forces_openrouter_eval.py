@@ -39,6 +39,13 @@ from scout.agents.model_execution import (  # noqa: E402
     ModelRunCancellationRequested,
     ModelRunDeadlineExceeded,
 )
+from scout.nextgen.exp_praison_bridge import (  # noqa: E402
+    ExpPraisonResearchBridge,
+)
+from scout.nextgen.intelligence_mcp import (  # noqa: E402
+    IntelligenceMcpClientConfig,
+    McpIntelligenceGateway,
+)
 from scout.services.mser_pipeline import (  # noqa: E402
     MSERExecutionMode,
     MSERPipeline,
@@ -107,6 +114,63 @@ def build_openrouter_model_adapter(
 def normalize_openrouter_model(model: str) -> str:
     value = model.strip()
     return value if value.startswith("openrouter:") else f"openrouter:{value}"
+
+
+def build_exp_praison_bridge(
+    args: argparse.Namespace,
+    *,
+    workspace: Path,
+) -> ExpPraisonResearchBridge | None:
+    if not bool(getattr(args, "exp_praison_intelligence", False)):
+        return None
+    python = Path(getattr(args, "exp_praison_python", sys.executable)).expanduser()
+    if not python.is_absolute():
+        python = python.resolve()
+    command = [
+        str(python),
+        "-m",
+        "scout.nextgen.intelligence_mcp_server",
+        "--mode",
+        str(getattr(args, "exp_praison_mode", "praison-replay")),
+    ]
+    evidence_catalog = getattr(args, "exp_praison_evidence_catalog", None)
+    if evidence_catalog is not None:
+        catalog_path = Path(evidence_catalog).expanduser()
+        if not catalog_path.is_absolute():
+            catalog_path = workspace / catalog_path
+        command.extend(("--evidence-catalog", str(catalog_path.resolve())))
+    model_runtime_config = getattr(args, "exp_praison_model_runtime_config", None)
+    if model_runtime_config is not None:
+        config_path = Path(model_runtime_config).expanduser()
+        if not config_path.is_absolute():
+            config_path = workspace / config_path
+        command.extend(("--model-runtime-config", str(config_path.resolve())))
+    timeout_seconds = float(getattr(args, "exp_praison_timeout_seconds", 60))
+    startup_timeout_seconds = float(
+        getattr(args, "exp_praison_startup_timeout_seconds", 30)
+    )
+    mcp = McpIntelligenceGateway(
+        IntelligenceMcpClientConfig(
+            command=tuple(command),
+            timeout_seconds=timeout_seconds,
+            startup_timeout_seconds=startup_timeout_seconds,
+            pythonpath=os.pathsep.join((str(ROOT / "src"), str(ROOT))),
+        )
+    )
+    return ExpPraisonResearchBridge(
+        gateway=mcp,
+        allowed_domains=tuple(
+            getattr(args, "exp_praison_allowed_domain", ()) or ()
+        ),
+        blocked_domains=tuple(
+            getattr(args, "exp_praison_blocked_domain", ()) or ()
+        ),
+        max_runtime_seconds=int(timeout_seconds),
+        max_search_results=int(
+            getattr(args, "exp_praison_max_search_results", 6)
+        ),
+        max_fetches=int(getattr(args, "exp_praison_max_fetches", 2)),
+    )
 
 
 def normalize_thinking_setting(value: str) -> bool | str | None:
@@ -1119,6 +1183,26 @@ def run_eval(args: argparse.Namespace) -> Path:
         "conservative_gap_response_composition_enabled": bool(
             getattr(args, "compose_conservative_gap_responses", False)
         ),
+        "experimental_praison_intelligence": {
+            "enabled": bool(getattr(args, "exp_praison_intelligence", False)),
+            "scope": "exp_deterministic_evidence_void_only",
+            "mode": (
+                str(getattr(args, "exp_praison_mode", "praison-replay"))
+                if getattr(args, "exp_praison_intelligence", False)
+                else None
+            ),
+            "transport": "stdio_mcp",
+            "allowed_domains": list(
+                getattr(args, "exp_praison_allowed_domain", ()) or ()
+            ),
+            "max_search_results": int(
+                getattr(args, "exp_praison_max_search_results", 6)
+            ),
+            "max_fetches": int(getattr(args, "exp_praison_max_fetches", 2)),
+            "silent_routing_allowed": False,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        },
         "deterministic_revalidated_row_count": sum(
             bool(item.get("revalidation")) for item in existing
         ),
@@ -1131,6 +1215,11 @@ def run_eval(args: argparse.Namespace) -> Path:
     manifest_path.write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True),
         encoding="utf-8",
+    )
+
+    experimental_intelligence_bridge = build_exp_praison_bridge(
+        args,
+        workspace=workspace,
     )
 
     thread_local = threading.local()
@@ -1169,6 +1258,7 @@ def run_eval(args: argparse.Namespace) -> Path:
                 compose_conservative_gap_responses=bool(
                     getattr(args, "compose_conservative_gap_responses", False)
                 ),
+                experimental_intelligence_bridge=experimental_intelligence_bridge,
             )
         except Exception as exc:  # noqa: BLE001 - continue the matrix with an audit record.
             result = {
@@ -1195,6 +1285,7 @@ def run_eval(args: argparse.Namespace) -> Path:
                     f"{redact_provider_error(str(exc), secrets=(args.api_key,))}"
                 ),
                 "mser_answer_verification": None,
+                "experimental_intelligence": None,
                 "selected_tools": [],
                 "legacy_selected_tools": [],
                 "completed_tools": [],
@@ -1246,30 +1337,35 @@ def run_eval(args: argparse.Namespace) -> Path:
         for index, run in enumerate(runs, start=1)
         if run["run_case_id"] not in completed_ids
     ]
-    with results_path.open("a", encoding="utf-8") as result_file:
-        with concurrent.futures.ThreadPoolExecutor(
-            max_workers=args.workers
-        ) as executor:
-            futures = {
-                executor.submit(evaluate_one, index, run): (index, run)
-                for index, run in pending
-            }
-            for future in concurrent.futures.as_completed(futures):
-                index, run = futures[future]
-                _, result = future.result()
-                result_file.write(
-                    json.dumps(result, ensure_ascii=False, sort_keys=True) + "\n"
-                )
-                result_file.flush()
-                all_results.append(result)
-                print(
-                    f"[six-forces-openrouter] {index}/{len(runs)} {run['run_case_id']} "
-                    f"verifier={result['verifier']['status']} "
-                    f"identity={result['context_identity_check']['status']} "
-                    f"requests={result['model_request_count']}",
-                    file=sys.stderr,
-                    flush=True,
-                )
+    try:
+        with results_path.open("a", encoding="utf-8") as result_file:
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=args.workers
+            ) as executor:
+                futures = {
+                    executor.submit(evaluate_one, index, run): (index, run)
+                    for index, run in pending
+                }
+                for future in concurrent.futures.as_completed(futures):
+                    index, run = futures[future]
+                    _, result = future.result()
+                    result_file.write(
+                        json.dumps(result, ensure_ascii=False, sort_keys=True) + "\n"
+                    )
+                    result_file.flush()
+                    all_results.append(result)
+                    print(
+                        f"[six-forces-openrouter] {index}/{len(runs)} "
+                        f"{run['run_case_id']} "
+                        f"verifier={result['verifier']['status']} "
+                        f"identity={result['context_identity_check']['status']} "
+                        f"requests={result['model_request_count']}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+    finally:
+        if experimental_intelligence_bridge is not None:
+            experimental_intelligence_bridge.close()
     _write_summaries(run_dir, manifest, all_results)
     if args.revalidate_existing:
         _write_mser_revalidation_integrity_report(
@@ -1345,6 +1441,49 @@ def build_parser() -> argparse.ArgumentParser:
             "non-conservative MSER gap-decision violation."
         ),
     )
+    parser.add_argument(
+        "--exp-praison-intelligence",
+        action="store_true",
+        help=(
+            "Experimental: call the MCP-isolated Praison Research specialist only "
+            "for EXP questions with no deterministic field answer."
+        ),
+    )
+    parser.add_argument(
+        "--exp-praison-mode",
+        choices=(
+            "praison-replay",
+            "praison-live-web",
+            "praison-model-replay",
+            "praison-openai-compatible",
+        ),
+        default="praison-replay",
+    )
+    parser.add_argument(
+        "--exp-praison-python",
+        type=Path,
+        default=Path(sys.executable),
+    )
+    parser.add_argument("--exp-praison-evidence-catalog", type=Path)
+    parser.add_argument("--exp-praison-model-runtime-config", type=Path)
+    parser.add_argument(
+        "--exp-praison-allowed-domain",
+        action="append",
+        default=[],
+    )
+    parser.add_argument(
+        "--exp-praison-blocked-domain",
+        action="append",
+        default=[],
+    )
+    parser.add_argument("--exp-praison-timeout-seconds", type=int, default=60)
+    parser.add_argument(
+        "--exp-praison-startup-timeout-seconds",
+        type=int,
+        default=30,
+    )
+    parser.add_argument("--exp-praison-max-search-results", type=int, default=6)
+    parser.add_argument("--exp-praison-max-fetches", type=int, default=2)
     parser.add_argument("--workers", type=int, default=4)
     return parser
 
@@ -1369,6 +1508,38 @@ def main(argv: list[str] | None = None) -> int:
     if args.refresh_negative_search_receipts and not args.revalidate_existing:
         parser.error(
             "--refresh-negative-search-receipts requires --revalidate-existing"
+        )
+    if args.exp_praison_intelligence and args.revalidate_existing:
+        parser.error(
+            "--exp-praison-intelligence cannot acquire new evidence during "
+            "--revalidate-existing"
+        )
+    if args.exp_praison_intelligence and not args.exp_praison_allowed_domain:
+        parser.error(
+            "--exp-praison-intelligence requires at least one "
+            "--exp-praison-allowed-domain"
+        )
+    if args.exp_praison_timeout_seconds < 1:
+        parser.error("--exp-praison-timeout-seconds must be positive")
+    if args.exp_praison_startup_timeout_seconds < 1:
+        parser.error("--exp-praison-startup-timeout-seconds must be positive")
+    if args.exp_praison_max_search_results < 1:
+        parser.error("--exp-praison-max-search-results must be positive")
+    if not 1 <= args.exp_praison_max_fetches <= 9:
+        parser.error("--exp-praison-max-fetches must be between 1 and 9")
+    if args.exp_praison_max_fetches > args.exp_praison_max_search_results:
+        parser.error(
+            "--exp-praison-max-fetches cannot exceed "
+            "--exp-praison-max-search-results"
+        )
+    if (
+        args.exp_praison_mode == "praison-openai-compatible"
+        and args.exp_praison_intelligence
+        and args.exp_praison_model_runtime_config is None
+    ):
+        parser.error(
+            "--exp-praison-mode praison-openai-compatible requires "
+            "--exp-praison-model-runtime-config"
         )
     if (
         args.compose_conservative_gap_responses

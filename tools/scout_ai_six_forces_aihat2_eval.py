@@ -88,6 +88,7 @@ LOCATION_FIELDS = {
 }
 LOCAL_HAILO_EVIDENCE_MAX_CHARS = 900
 LOCAL_HAILO_INPUT_TOKEN_BUDGET = 1200
+EXP_PRAISON_TOOL_ID = "scout.intelligence.exp_research_candidate.v0"
 CURRENT_LOCATION_TERRAIN_SCOPE_M = 250.0
 TERRAIN_SCORE_TOOL_ID = "pydantic_ai.tool.search_scout_terrain_scores.v0"
 CONTEXTUAL_PERMISSION_TOOL_ID = "scout.ai.contextual_permission.assess.v0"
@@ -3640,6 +3641,37 @@ def apply_local_recovery_grounding_guard(
     return guarded, actions
 
 
+def _experimental_intelligence_injection_rejection(
+    *,
+    run: dict[str, Any],
+    candidate_tool: dict[str, Any] | None,
+    current_tool_count: int,
+) -> str | None:
+    if candidate_tool is None:
+        return None
+    if run.get("force_code") != "EXP":
+        return "candidate_injection_is_limited_to_exp"
+    if current_tool_count >= 10:
+        return "candidate_injection_would_exceed_tool_budget"
+    if candidate_tool.get("tool_id") != EXP_PRAISON_TOOL_ID:
+        return "candidate_tool_id_is_not_allowlisted"
+    if candidate_tool.get("status") != "completed":
+        return "candidate_tool_is_not_completed"
+    if candidate_tool.get("candidate_only") is not True:
+        return "candidate_only_marker_missing"
+    if candidate_tool.get("runtime_safety_truth") is not False:
+        return "runtime_safety_truth_must_be_false"
+    if candidate_tool.get("untrusted_intelligence_output") is not True:
+        return "untrusted_intelligence_marker_missing"
+    if candidate_tool.get("external_instructions_executable") is not False:
+        return "external_intelligence_instructions_must_not_be_executable"
+    if candidate_tool.get("decision") is not None:
+        return "intelligence_candidate_cannot_supply_runtime_decision"
+    if candidate_tool.get("allowed") is not None:
+        return "intelligence_candidate_cannot_supply_permission"
+    return None
+
+
 def execute_run(
     *,
     run: dict[str, Any],
@@ -3654,6 +3686,7 @@ def execute_run(
     cancellation_event: threading.Event | None = None,
     mser_mode: str = "off",
     compose_conservative_gap_responses: bool = False,
+    experimental_intelligence_bridge: Any | None = None,
 ) -> dict[str, Any]:
     started = time.monotonic()
     started_at = datetime.now(timezone.utc)
@@ -3768,6 +3801,63 @@ def execute_run(
             None if model_adapter.profile == "cloud" else LOCAL_HAILO_EVIDENCE_MAX_CHARS
         ),
     )
+    model_tool_ids = list(tool_ids)
+    experimental_intelligence: dict[str, Any] | None = None
+    if experimental_intelligence_bridge is not None:
+        try:
+            bridge_result = experimental_intelligence_bridge.collect(
+                run=run,
+                total_info=total_info,
+                tool_results=tuple(tool_results),
+                mser_context=mser_context,
+            )
+            experimental_intelligence = bridge_result.receipt.model_dump(mode="json")
+            candidate_tool = bridge_result.tool_result
+            local_rejection = _experimental_intelligence_injection_rejection(
+                run=run,
+                candidate_tool=candidate_tool,
+                current_tool_count=len(tool_results),
+            )
+            if candidate_tool is not None and local_rejection is None:
+                candidate_copy = dict(candidate_tool)
+                tool_results = [*tool_results, candidate_copy]
+                candidate_tool_id = str(candidate_copy["tool_id"])
+                if candidate_tool_id not in model_tool_ids:
+                    model_tool_ids.append(candidate_tool_id)
+                compact = compact_evidence_for_model(
+                    run=run,
+                    total_info=total_info,
+                    tool_results=tool_results,
+                    missing_tools=missing_tools,
+                    missing_evidence=missing_evidence,
+                    mser_context=mser_context,
+                    max_chars=(
+                        None
+                        if model_adapter.profile == "cloud"
+                        else LOCAL_HAILO_EVIDENCE_MAX_CHARS
+                    ),
+                )
+                experimental_intelligence = {
+                    **experimental_intelligence,
+                    "local_injection_status": "accepted_candidate",
+                    "candidate_mser_reprojection": False,
+                }
+            elif candidate_tool is not None:
+                experimental_intelligence = {
+                    **experimental_intelligence,
+                    "local_injection_status": "rejected",
+                    "local_rejection_reason": local_rejection,
+                }
+        except Exception as exc:  # Keep deterministic Scout available.
+            experimental_intelligence = {
+                "schema_version": "scout.ai.exp_praison_bridge_receipt.v0",
+                "status": "error",
+                "trigger_reason": "bridge_execution_error",
+                "failure_reason": type(exc).__name__,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "local_injection_status": "not_attempted",
+            }
     effective_missing_evidence = list(compact.get("missing_evidence") or [])
     blocking_missing_evidence = list(compact.get("blocking_missing_evidence") or [])
     supplemental_missing_evidence = list(
@@ -4005,7 +4095,7 @@ def execute_run(
                 raw_answer, model_metadata = model_adapter.invoke_with_context(
                     **invoke_kwargs,
                     evidence_cards=tool_results,
-                    selected_tool_ids=tool_ids,
+                    selected_tool_ids=model_tool_ids,
                 )
             else:
                 raw_answer, model_metadata = model_adapter.invoke(**invoke_kwargs)
@@ -4411,7 +4501,13 @@ def execute_run(
                 }
                 for payload in mser_reprojection_payloads
             ],
-            "selected_tool_ids": tool_ids,
+            "selected_tool_ids": model_tool_ids,
+            "deterministic_selected_tool_ids": tool_ids,
+            "experimental_intelligence_tool_ids": [
+                item
+                for item in model_tool_ids
+                if item not in tool_ids
+            ],
             "legacy_selected_tool_ids": legacy_tool_ids,
             "candidate_only": True,
             "runtime_safety_truth": False,
@@ -4442,8 +4538,9 @@ def execute_run(
         "deterministic_response_composition": deterministic_response_composition,
         "effective_response": effective_response,
         "mser_answer_verification": mser_answer_verification,
-        "selected_tools": tool_ids,
+        "selected_tools": model_tool_ids,
         "legacy_selected_tools": legacy_tool_ids,
+        "experimental_intelligence": experimental_intelligence,
         "completed_tools": completed_tools,
         "missing_tools": missing_tools,
         "missing_evidence": effective_missing_evidence,

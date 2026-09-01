@@ -43,6 +43,29 @@ def test_openrouter_parser_exposes_opt_in_live_composer() -> None:
     assert composer_args.compose_conservative_gap_responses is True
 
 
+def test_openrouter_parser_exposes_exp_only_praison_bridge() -> None:
+    parser = eval_module.build_parser()
+
+    default_args = parser.parse_args([])
+    enabled_args = parser.parse_args(
+        [
+            "--exp-praison-intelligence",
+            "--exp-praison-mode",
+            "praison-live-web",
+            "--exp-praison-python",
+            "/tmp/praison/bin/python",
+            "--exp-praison-allowed-domain",
+            "example.org",
+        ]
+    )
+
+    assert default_args.exp_praison_intelligence is False
+    assert enabled_args.exp_praison_intelligence is True
+    assert enabled_args.exp_praison_mode == "praison-live-web"
+    assert enabled_args.exp_praison_python == Path("/tmp/praison/bin/python")
+    assert enabled_args.exp_praison_allowed_domain == ["example.org"]
+
+
 def test_openrouter_parser_exposes_opt_in_total_run_timeout() -> None:
     parser = eval_module.build_parser()
 

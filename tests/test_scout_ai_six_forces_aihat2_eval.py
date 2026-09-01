@@ -2088,6 +2088,173 @@ def test_execute_run_uses_provider_neutral_model_adapter(
     assert result["model_metadata"]["usage"]["input_tokens"] == 100
 
 
+def test_execute_run_injects_only_candidate_exp_intelligence_card(monkeypatch) -> None:
+    run = next(item for item in expand_case_runs(_artifact()) if item["force_code"] == "EXP")
+    snapshot = snapshot_for_run(run)
+    observed_cards: list[dict] = []
+
+    monkeypatch.setattr(
+        eval_module,
+        "selected_tool_ids",
+        lambda **_: ["pydantic_ai.tool.search_scout_evidence_fulltext.v0"],
+    )
+    monkeypatch.setattr(
+        eval_module,
+        "build_total_info",
+        lambda *_args, **_kwargs: {
+            "location_context": {"live_navigation_snapshot": snapshot}
+        },
+    )
+    monkeypatch.setattr(
+        eval_module,
+        "run_tools",
+        lambda **_: (
+            [
+                {
+                    "tool_id": "pydantic_ai.tool.search_scout_evidence_fulltext.v0",
+                    "status": "completed",
+                    "field_answer": None,
+                    "source_refs": ["workspace://route/summary"],
+                }
+            ],
+            [],
+            [],
+        ),
+    )
+
+    class Receipt:
+        def model_dump(self, *, mode):
+            assert mode == "json"
+            return {
+                "schema_version": "scout.ai.exp_praison_bridge_receipt.v0",
+                "status": "accepted_candidate",
+                "trigger_reason": "exp_deterministic_evidence_void",
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+
+    class Bridge:
+        def collect(self, **_kwargs):
+            return SimpleNamespace(
+                tool_result={
+                    "tool_id": "scout.intelligence.exp_research_candidate.v0",
+                    "status": "completed",
+                    "answerability": "candidate_findings_available",
+                    "field_answer": "候選研究指出豐水期可能較明顯。",
+                    "field_answer_priority": 10,
+                    "field_answer_source_ref": "workspace://research/seasonal-water",
+                    "field_answer_source_refs": [
+                        "workspace://research/seasonal-water"
+                    ],
+                    "source_refs": ["workspace://research/seasonal-water"],
+                    "result_count": 1,
+                    "records": [{"finding_id": "finding.1"}],
+                    "untrusted_intelligence_output": True,
+                    "external_instructions_executable": False,
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                },
+                receipt=Receipt(),
+            )
+
+    def contextual_model_call(**kwargs):
+        observed_cards.extend(kwargs["evidence_cards"])
+        called = [str(item["tool_id"]) for item in kwargs["evidence_cards"]]
+        return (
+            json.dumps(
+                {
+                    "s": run["scenario_id"],
+                    "d": "DELAY",
+                    "a": "候選研究指出豐水期可能較明顯，仍需 reviewer 確認。",
+                    "e": "候選研究證據",
+                    "o": "尚未 review",
+                    "g": "reviewed evidence missing",
+                    "c": "review 後重判",
+                    "r": "workspace://research/seasonal-water",
+                    "cl": "candidate_only",
+                },
+                ensure_ascii=False,
+            ),
+            {
+                "native_tool_trace": {
+                    "called_tool_ids": called,
+                    "tool_call_count": len(called),
+                    "tool_return_count": len(called),
+                    "calls": [],
+                }
+            },
+        )
+
+    result = eval_module.execute_run(
+        run=run,
+        project_root=Path("/tmp/demo"),
+        endpoint="https://openrouter.ai/api/v1",
+        model="openrouter:test/model",
+        timeout_seconds=30,
+        max_model_requests=10,
+        guided_retry=False,
+        model_adapter=eval_module.ScoutModelExecutionAdapter(
+            adapter_id="openrouter.test",
+            profile="cloud",
+            provider="openrouter",
+            transport="test",
+            invoke=lambda **_kwargs: ("{}", {}),
+            invoke_with_context=contextual_model_call,
+        ),
+        experimental_intelligence_bridge=Bridge(),
+    )
+
+    tool_ids = [str(item["tool_id"]) for item in result["tool_evidence_stage"]]
+    assert "scout.intelligence.exp_research_candidate.v0" in tool_ids
+    assert "scout.intelligence.exp_research_candidate.v0" in result["selected_tools"]
+    assert result["experimental_intelligence"]["status"] == "accepted_candidate"
+    assert any(
+        item["tool_id"] == "scout.intelligence.exp_research_candidate.v0"
+        and item["candidate_only"] is True
+        and item["runtime_safety_truth"] is False
+        for item in observed_cards
+    )
+
+
+@pytest.mark.parametrize(
+    ("override", "expected_reason"),
+    [
+        ({"candidate_only": False}, "candidate_only_marker_missing"),
+        ({"runtime_safety_truth": True}, "runtime_safety_truth_must_be_false"),
+        (
+            {"external_instructions_executable": True},
+            "external_intelligence_instructions_must_not_be_executable",
+        ),
+        ({"decision": "GO"}, "intelligence_candidate_cannot_supply_runtime_decision"),
+        ({"allowed": True}, "intelligence_candidate_cannot_supply_permission"),
+    ],
+)
+def test_exp_intelligence_local_injection_rejects_authority_escalation(
+    override,
+    expected_reason,
+) -> None:
+    candidate = {
+        "tool_id": "scout.intelligence.exp_research_candidate.v0",
+        "status": "completed",
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "untrusted_intelligence_output": True,
+        "external_instructions_executable": False,
+        "decision": None,
+        "allowed": None,
+        **override,
+    }
+
+    assert (
+        eval_module._experimental_intelligence_injection_rejection(
+            run={"force_code": "EXP"},
+            candidate_tool=candidate,
+            current_tool_count=1,
+        )
+        == expected_reason
+    )
+
+
 def test_execute_run_allows_third_progressive_repair_for_repeated_quality_error(
     monkeypatch,
 ) -> None:
