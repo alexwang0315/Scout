@@ -21,6 +21,7 @@ from qgis_worker import (
     _bridge_qgis_version,
     _crop_png_to_content,
     _decode_png_rows,
+    _png_visual_quality,
     _parse_grass_version_output,
     _parse_grass_univar_report,
     _require_extent_intersection,
@@ -129,14 +130,18 @@ def _rgb_png(
     blank: bool,
     canvas_border: bool = False,
     canvas_border_px: int = 1,
+    width: int = 10,
+    height: int = 10,
+    content_bbox: tuple[int, int, int, int] = (3, 3, 6, 6),
 ) -> bytes:
-    width = 10
-    height = 10
     rows = []
     for y in range(height):
         row = bytearray()
         for x in range(width):
-            dark = not blank and 3 <= x <= 6 and 3 <= y <= 6
+            dark = not blank and (
+                content_bbox[0] <= x <= content_bbox[2]
+                and content_bbox[1] <= y <= content_bbox[3]
+            )
             border = canvas_border and (
                 x < canvas_border_px
                 or x >= width - canvas_border_px
@@ -179,7 +184,12 @@ class FakeQgisMcpClient:
         self.processing_count = 0
         self.operation_outputs: dict[str, dict[str, str]] = {}
         self.calls: list[tuple[str, dict[str, Any]]] = []
-        self.screenshot_bytes = screenshot_bytes or _rgb_png(blank=False)
+        self.screenshot_bytes = screenshot_bytes or _rgb_png(
+            blank=False,
+            width=640,
+            height=360,
+            content_bbox=(100, 50, 539, 309),
+        )
         self.omit_visual_review_image = omit_visual_review_image
         self.analysis_cell_count = 12_726
         self.analysis_width = 126
@@ -705,10 +715,11 @@ class FakeQgisMcpClient:
             }
         if tool in {"qgis_visual_review", "qgis_screenshot"}:
             raw = self.screenshot_bytes
+            width, height, _, _ = _decode_png_rows(raw)
             result = {
                 "mime_type": "image/png",
-                "width": 10,
-                "height": 10,
+                "width": width,
+                "height": height,
                 "sha256": hashlib.sha256(raw).hexdigest(),
                 "structural_image_analysis": {"blank": False},
                 "automated_review": {"passed": True, "findings": []},
@@ -1405,6 +1416,22 @@ def test_qgis_worker_fails_closed_on_blank_render_with_canvas_frame(
     assert payload["render_status"] == "failed"
     assert payload["error"]["code"] == "RENDER_FAILED"
     assert "visual content" in payload["error"]["detail"]
+
+
+def test_qgis_worker_rejects_tiny_render_even_when_it_has_content() -> None:
+    quality = _png_visual_quality(
+        _rgb_png(
+            blank=False,
+            width=113,
+            height=45,
+            content_bbox=(10, 8, 102, 36),
+        )
+    )
+
+    assert quality["passed"] is False
+    assert quality["dimensions_passed"] is False
+    assert quality["minimum_width_px"] == 320
+    assert quality["minimum_height_px"] == 180
 
 
 def test_qgis_worker_crop_ignores_qgis_canvas_frame() -> None:

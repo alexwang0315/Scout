@@ -5719,8 +5719,16 @@ def _png_visual_quality(raw: bytes) -> dict[str, Any]:
         if any(abs(pixel[index] - background[index]) > 12 for index in range(3)):
             content_pixels += 1
     required = max(4, math.ceil(interior_pixels * 0.001))
+    minimum_width_px = 320
+    minimum_height_px = 180
+    dimensions_passed = (
+        width >= minimum_width_px and height >= minimum_height_px
+    )
     return {
-        "passed": content_pixels >= required,
+        "passed": dimensions_passed and content_pixels >= required,
+        "dimensions_passed": dimensions_passed,
+        "minimum_width_px": minimum_width_px,
+        "minimum_height_px": minimum_height_px,
         "width": width,
         "height": height,
         "background_rgb": list(background),
