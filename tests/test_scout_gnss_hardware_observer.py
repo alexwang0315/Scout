@@ -11,6 +11,7 @@ from scout_gnss_hardware_observer import (
     boundary_fields,
     candidate_from_record,
     load_jsonl_tail,
+    visual_hardware_control_state,
 )
 
 
@@ -202,6 +203,40 @@ def test_load_jsonl_tail_counts_invalid_lines(tmp_path: Path) -> None:
 
     assert records == [{"idx": 2}, {"idx": 3}]
     assert invalid == 1
+
+
+def test_visual_hardware_control_state_reports_real_writes_honestly() -> None:
+    dry_run = visual_hardware_control_state(
+        [{"write_status": "dry_run", "dry_run": True}],
+        [],
+        configured=True,
+    )
+    failed = visual_hardware_control_state(
+        [{"write_status": "error", "dry_run": False}],
+        [],
+        configured=True,
+    )
+    performed = visual_hardware_control_state(
+        [],
+        [{"write_status": "ok", "dry_run": False}],
+        configured=True,
+    )
+
+    assert dry_run == {
+        "hardware_control_allowed": True,
+        "hardware_control_attempted": False,
+        "hardware_control_performed": False,
+    }
+    assert failed == {
+        "hardware_control_allowed": True,
+        "hardware_control_attempted": True,
+        "hardware_control_performed": False,
+    }
+    assert performed == {
+        "hardware_control_allowed": True,
+        "hardware_control_attempted": True,
+        "hardware_control_performed": True,
+    }
 
 
 def test_cli_once_writes_status_and_rejects_invalid_arguments(tmp_path: Path) -> None:

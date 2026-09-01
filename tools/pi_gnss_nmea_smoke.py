@@ -270,6 +270,72 @@ def summarize_gnss_fix(payloads: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
+def build_redacted_gnss_qualification_summary(
+    payloads: list[dict[str, Any]],
+    *,
+    device_ref: str,
+    capture_mode: str,
+) -> dict[str, Any]:
+    if not device_ref.startswith("device://"):
+        raise ValueError("device_ref must use device://")
+
+    fix_summary = summarize_gnss_fix(payloads)
+    signal_summary = summarize_gnss_signal(payloads)
+    max_satellite_count = max(
+        (
+            int(fix_quality["satellites"])
+            for payload in payloads
+            if isinstance(
+                fix_quality := payload.get("fix_quality"),
+                dict,
+            )
+            and _int_or_none(fix_quality.get("satellites")) is not None
+        ),
+        default=None,
+    )
+    observed_at = max(
+        (
+            str(payload["captured_at"])
+            for payload in payloads
+            if payload.get("captured_at")
+        ),
+        default=datetime.now(timezone.utc).isoformat(),
+    )
+    if not payloads:
+        status = "blocked_no_nmea_stream"
+    elif int(fix_summary["checksum_valid_count"]) < 1:
+        status = "blocked_no_checksum_valid_nmea"
+    elif not fix_summary["has_valid_fix"]:
+        status = "blocked_no_live_gnss_fix"
+    else:
+        status = "live_gnss_fix_observed"
+
+    return {
+        "artifact_kind": "scout_redacted_gnss_qualification_summary",
+        "artifact_version": "redacted_gnss_qualification_summary.v0",
+        "status": status,
+        "observed_at": observed_at,
+        "device_ref": device_ref,
+        "capture_mode": capture_mode,
+        "sentence_count": len(payloads),
+        "valid_fix_count": int(fix_summary["valid_fix_count"]),
+        "checksum_valid_count": int(fix_summary["checksum_valid_count"]),
+        "checksum_invalid_count": int(fix_summary["checksum_invalid_count"]),
+        "sentence_type_counts": dict(fix_summary["sentence_type_counts"]),
+        "max_satellite_count": max_satellite_count,
+        "max_cno_dbhz": signal_summary.get("max_cno_dbhz"),
+        "read_only_hardware_access": capture_mode == "serial_device",
+        "raw_nmea_persisted": False,
+        "precise_location_values_persisted": False,
+        "motion_values_persisted": False,
+        "runtime_safety_truth_mutated": False,
+        "phase1_l0_l4_state_mutated": False,
+        "safety_api_called": False,
+        "outbound_transport_invoked": False,
+        "hardware_control_performed": False,
+    }
+
+
 def _payload_has_valid_fix(payload: dict[str, Any]) -> bool:
     if payload.get("checksum_valid") is False:
         return False
@@ -922,6 +988,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--duration-seconds", type=float, default=5.0)
     parser.add_argument("--output-jsonl", type=Path)
     parser.add_argument("--raw-nmea", help="Parse fixture NMEA text instead of opening serial.")
+    parser.add_argument("--redacted-qualification-summary", action="store_true")
+    parser.add_argument("--device-ref", default="device://scout/gnss")
+    parser.add_argument("--allow-live-gnss-read", action="store_true")
     parser.add_argument("--oled-status", action="store_true")
     parser.add_argument("--oled-bus", type=Path, default=Path("/dev/i2c-1"))
     parser.add_argument("--oled-address", type=parse_address, default=parse_address("0x3c"))
@@ -939,6 +1008,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--led-blink-seconds", type=float, default=0.25)
     parser.add_argument("--led-dry-run", action="store_true")
     args = parser.parse_args(argv)
+
+    if args.redacted_qualification_summary and args.output_jsonl is not None:
+        parser.error("--redacted-qualification-summary cannot be combined with --output-jsonl")
+    if args.redacted_qualification_summary and (args.oled_status or args.led_status):
+        parser.error("--redacted-qualification-summary cannot control OLED or LED hardware")
+    if (
+        args.redacted_qualification_summary
+        and args.raw_nmea is None
+        and not args.allow_live_gnss_read
+    ):
+        parser.error("live redacted GNSS capture requires --allow-live-gnss-read")
 
     oled_updates: list[dict[str, Any]] = []
     led_updates: list[dict[str, Any]] = []
@@ -1098,6 +1178,25 @@ def main(argv: list[str] | None = None) -> int:
     except Exception as exc:
         print(f"{type(exc).__name__}: {exc}", file=sys.stderr)
         return 2
+
+    if args.redacted_qualification_summary:
+        print(
+            json.dumps(
+                build_redacted_gnss_qualification_summary(
+                    payloads,
+                    device_ref=args.device_ref,
+                    capture_mode=(
+                        "raw_nmea_argument"
+                        if args.raw_nmea is not None
+                        else "serial_device"
+                    ),
+                ),
+                ensure_ascii=False,
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return 0
 
     append_jsonl(payloads, args.output_jsonl)
     gnss_fix_summary = summarize_gnss_fix(payloads)

@@ -21,6 +21,8 @@ from scout_runtime_safety_gate_models import (
     SafetyLnTransitionCandidate,
 )
 from scout_runtime_safety_reducer import (
+    ProductionGateResidencyAudit,
+    ProductionLiveEvidenceContractAudit,
     RuntimeSafetyPhase1AdapterResult,
     RuntimeSafetyReducerDecision,
     RuntimeSafetyReducerDataQuality,
@@ -30,6 +32,34 @@ from scout_wearable_validator import FORBIDDEN_RAW_KEYS
 
 
 Phase1MutationStatus = Literal["applied_transition", "accepted_no_transition"]
+Phase1RuntimePromotionReadinessStatus = Literal[
+    "blocked_lineage_mismatch",
+    "blocked_adapter_not_prepared",
+    "blocked_production_gate_residency",
+    "blocked_live_evidence_contract",
+    "blocked_runtime_authority_missing",
+    "blocked_operator_review_missing",
+    "ready_for_deterministic_writer",
+]
+Phase1RuntimeWriterInvocationMode = Literal["dry_run", "local_test_writer"]
+Phase1RuntimeWriterInvocationStatus = Literal[
+    "blocked_request_mismatch",
+    "blocked_readiness_not_ready",
+    "blocked_requires_authenticated_operator",
+    "blocked_requires_explicit_confirmation",
+    "dry_run_ready",
+    "local_writer_invoked",
+]
+Phase1RuntimeWriterDeploymentReadinessStatus = Literal[
+    "blocked_writer_invocation_not_ready",
+    "blocked_deployment_lineage_mismatch",
+    "blocked_runtime_boundary_missing",
+    "blocked_rollback_plan_missing",
+    "blocked_operator_review_missing",
+    "ready_for_reviewed_production_deployment",
+]
+
+_PHASE1_RUNTIME_WRITER_CONFIRMATION_PHRASE = "APPLY PHASE 1 LOCAL WRITER"
 
 _PHASE1_LEVEL_BY_CANDIDATE: dict[str, SafetyLevel] = {
     "L0_NORMAL": SafetyLevel.NORMAL,
@@ -365,6 +395,414 @@ class Phase1MutationProjection(BaseModel):
     error: str | None = None
 
 
+class Phase1RuntimePromotionReadinessBoundary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    deterministic_readiness_gate_only: bool = True
+    phase1_writer_invoked: bool = False
+    runtime_safety_truth: bool = False
+    phase1_runtime_safety_truth: bool = False
+    phase1_l0_l4_state_mutated: bool = False
+    safety_api_called: bool = False
+    outbound_alert_sent: bool = False
+    network_connection_attempted: bool = False
+    external_send_performed: bool = False
+    hardware_control_performed: bool = False
+    private_payload_embedded: bool = False
+
+    @model_validator(mode="after")
+    def enforce_readiness_boundary(
+        self,
+    ) -> "Phase1RuntimePromotionReadinessBoundary":
+        if not self.deterministic_readiness_gate_only:
+            raise ValueError("Phase 1 promotion readiness is a deterministic gate only")
+        if (
+            self.phase1_writer_invoked
+            or self.runtime_safety_truth
+            or self.phase1_runtime_safety_truth
+            or self.phase1_l0_l4_state_mutated
+            or self.safety_api_called
+            or self.outbound_alert_sent
+            or self.network_connection_attempted
+            or self.external_send_performed
+            or self.hardware_control_performed
+            or self.private_payload_embedded
+        ):
+            raise ValueError("Phase 1 promotion readiness cannot perform effects")
+        return self
+
+
+class Phase1RuntimePromotionReadinessGate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_kind: str = "scout_phase1_runtime_promotion_readiness_gate"
+    artifact_version: str = "phase1_runtime_promotion_readiness_gate.v0"
+    source_provider: str = "scout_runtime_phase1_mutation"
+    source_path: str
+    sha256: str = Field(min_length=1)
+    status: Phase1RuntimePromotionReadinessStatus
+    reducer_sha256: str = Field(min_length=1)
+    adapter_sha256: str = Field(min_length=1)
+    transition_request_sha256: str = Field(min_length=1)
+    production_gate_residency_audit_sha256: str = Field(min_length=1)
+    live_evidence_contract_audit_sha256: str = Field(min_length=1)
+    runtime_authority_ref: str | None = None
+    runtime_authority_sha256: str | None = None
+    operator_review_ref: str | None = None
+    operator_review_sha256: str | None = None
+    lineage_match: bool = False
+    adapter_prepared: bool = False
+    production_gate_residency_ready: bool = False
+    live_evidence_contract_ready: bool = False
+    runtime_authority_present: bool = False
+    operator_review_present: bool = False
+    deterministic_writer_preconditions_met: bool = False
+    phase1_writer_invocation_performed: bool = False
+    runtime_safety_truth: bool = False
+    phase1_runtime_safety_truth: bool = False
+    phase1_l0_l4_state_mutated: bool = False
+    safety_api_called: bool = False
+    outbound_alert_sent: bool = False
+    network_connection_attempted: bool = False
+    external_send_performed: bool = False
+    hardware_control_performed: bool = False
+    reasons: list[str] = Field(default_factory=list)
+    privacy: Phase1TransitionPrivacy = Field(default_factory=Phase1TransitionPrivacy)
+    boundary: Phase1RuntimePromotionReadinessBoundary = Field(
+        default_factory=Phase1RuntimePromotionReadinessBoundary
+    )
+
+    @model_validator(mode="after")
+    def enforce_promotion_readiness(self) -> "Phase1RuntimePromotionReadinessGate":
+        ready = self.status == "ready_for_deterministic_writer"
+        if self.deterministic_writer_preconditions_met != ready:
+            raise ValueError("promotion readiness flag must match status")
+        if ready and not (
+            self.lineage_match
+            and self.adapter_prepared
+            and self.production_gate_residency_ready
+            and self.live_evidence_contract_ready
+            and self.runtime_authority_present
+            and self.operator_review_present
+        ):
+            raise ValueError("ready promotion gate requires every prerequisite")
+        if (
+            self.phase1_writer_invocation_performed
+            or self.runtime_safety_truth
+            or self.phase1_runtime_safety_truth
+            or self.phase1_l0_l4_state_mutated
+            or self.safety_api_called
+            or self.outbound_alert_sent
+            or self.network_connection_attempted
+            or self.external_send_performed
+            or self.hardware_control_performed
+        ):
+            raise ValueError("promotion readiness gate cannot perform effects")
+        forbidden_paths = _forbidden_key_paths(self.model_dump(mode="json"))
+        if forbidden_paths:
+            raise ValueError(
+                "forbidden Phase 1 promotion readiness fields present: "
+                + ", ".join(forbidden_paths)
+            )
+        return self
+
+
+class Phase1RuntimeWriterInvocationBoundary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    deterministic_invocation_guard: bool = True
+    local_state_machine_only: bool = True
+    production_runtime_write_performed: bool = False
+    production_runtime_safety_truth_mutated: bool = False
+    safety_api_called: bool = False
+    outbound_alert_sent: bool = False
+    network_connection_attempted: bool = False
+    external_send_performed: bool = False
+    hardware_control_performed: bool = False
+    private_payload_embedded: bool = False
+
+    @model_validator(mode="after")
+    def enforce_invocation_boundary(
+        self,
+    ) -> "Phase1RuntimeWriterInvocationBoundary":
+        if not self.deterministic_invocation_guard or not self.local_state_machine_only:
+            raise ValueError("Phase 1 writer invocation must stay locally guarded")
+        if (
+            self.production_runtime_write_performed
+            or self.production_runtime_safety_truth_mutated
+            or self.safety_api_called
+            or self.outbound_alert_sent
+            or self.network_connection_attempted
+            or self.external_send_performed
+            or self.hardware_control_performed
+            or self.private_payload_embedded
+        ):
+            raise ValueError("Phase 1 writer invocation guard cannot perform external effects")
+        return self
+
+
+class Phase1RuntimeWriterInvocationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_kind: str = "scout_phase1_runtime_writer_invocation_request"
+    artifact_version: str = "phase1_runtime_writer_invocation_request.v0"
+    readiness_gate_sha256: str = Field(min_length=1)
+    transition_request_sha256: str = Field(min_length=1)
+    execution_mode: Phase1RuntimeWriterInvocationMode = "dry_run"
+    idempotency_key: str = Field(min_length=1, max_length=128)
+    explicit_confirmation: bool = False
+    operator_identity_ref: str | None = None
+    operator_authenticated: bool = False
+    operator_approval_phrase: str | None = None
+
+    @model_validator(mode="after")
+    def enforce_writer_invocation_request(
+        self,
+    ) -> "Phase1RuntimeWriterInvocationRequest":
+        if self.operator_authenticated and not self.operator_identity_ref:
+            raise ValueError("authenticated writer invocation requires operator identity")
+        forbidden_paths = _forbidden_key_paths(self.model_dump(mode="json"))
+        if forbidden_paths:
+            raise ValueError(
+                "forbidden Phase 1 writer invocation request fields present: "
+                + ", ".join(forbidden_paths)
+            )
+        return self
+
+
+class Phase1RuntimeWriterInvocationReceipt(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_kind: str = "scout_phase1_runtime_writer_invocation_receipt"
+    artifact_version: str = "phase1_runtime_writer_invocation_receipt.v0"
+    source_provider: str = "scout_runtime_phase1_mutation"
+    source_path: str
+    sha256: str = Field(min_length=1)
+    request_sha256: str = Field(min_length=1)
+    readiness_gate_sha256: str = Field(min_length=1)
+    transition_request_sha256: str = Field(min_length=1)
+    execution_mode: Phase1RuntimeWriterInvocationMode
+    status: Phase1RuntimeWriterInvocationStatus
+    readiness_gate_accepted: bool = False
+    operator_approval_recorded: bool = False
+    local_phase1_writer_invoked: bool = False
+    local_phase1_l0_l4_state_mutated: bool = False
+    production_runtime_write_performed: bool = False
+    production_runtime_safety_truth_mutated: bool = False
+    safety_api_called: bool = False
+    outbound_alert_sent: bool = False
+    network_connection_attempted: bool = False
+    external_send_performed: bool = False
+    hardware_control_performed: bool = False
+    mutation_result_sha256: str | None = None
+    mutation_id: str | None = None
+    mutation_status: Phase1MutationStatus | None = None
+    previous_safety_level: SafetyLevel | None = None
+    resulting_safety_level: SafetyLevel | None = None
+    reasons: list[str] = Field(default_factory=list)
+    privacy: Phase1TransitionPrivacy = Field(default_factory=Phase1TransitionPrivacy)
+    boundary: Phase1RuntimeWriterInvocationBoundary = Field(
+        default_factory=Phase1RuntimeWriterInvocationBoundary
+    )
+
+    @model_validator(mode="after")
+    def enforce_writer_invocation_receipt(
+        self,
+    ) -> "Phase1RuntimeWriterInvocationReceipt":
+        invoked = self.status == "local_writer_invoked"
+        if self.local_phase1_writer_invoked != invoked:
+            raise ValueError("local writer invoked flag must match status")
+        if invoked and not self.mutation_result_sha256:
+            raise ValueError("local writer invocation requires mutation result hash")
+        if not invoked and (
+            self.local_phase1_l0_l4_state_mutated
+            or self.mutation_result_sha256
+            or self.mutation_id
+            or self.mutation_status
+            or self.previous_safety_level
+            or self.resulting_safety_level
+        ):
+            raise ValueError("blocked or dry-run invocation cannot include mutation result")
+        if (
+            self.production_runtime_write_performed
+            or self.production_runtime_safety_truth_mutated
+            or self.safety_api_called
+            or self.outbound_alert_sent
+            or self.network_connection_attempted
+            or self.external_send_performed
+            or self.hardware_control_performed
+        ):
+            raise ValueError("writer invocation receipt cannot claim external effects")
+        forbidden_paths = _forbidden_key_paths(self.model_dump(mode="json"))
+        if forbidden_paths:
+            raise ValueError(
+                "forbidden Phase 1 writer invocation receipt fields present: "
+                + ", ".join(forbidden_paths)
+            )
+        return self
+
+
+class Phase1RuntimeWriterDeploymentBoundary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    deterministic_deployment_readiness_only: bool = True
+    production_runtime_write_performed: bool = False
+    production_runtime_safety_truth_mutated: bool = False
+    safety_api_called: bool = False
+    outbound_alert_sent: bool = False
+    network_connection_attempted: bool = False
+    external_send_performed: bool = False
+    hardware_control_performed: bool = False
+    private_payload_embedded: bool = False
+
+    @model_validator(mode="after")
+    def enforce_deployment_boundary(
+        self,
+    ) -> "Phase1RuntimeWriterDeploymentBoundary":
+        if not self.deterministic_deployment_readiness_only:
+            raise ValueError("Phase 1 writer deployment readiness must be deterministic")
+        if (
+            self.production_runtime_write_performed
+            or self.production_runtime_safety_truth_mutated
+            or self.safety_api_called
+            or self.outbound_alert_sent
+            or self.network_connection_attempted
+            or self.external_send_performed
+            or self.hardware_control_performed
+            or self.private_payload_embedded
+        ):
+            raise ValueError("Phase 1 writer deployment readiness cannot perform effects")
+        return self
+
+
+class Phase1RuntimeWriterDeploymentManifest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_kind: str = "scout_phase1_runtime_writer_deployment_manifest"
+    artifact_version: str = "phase1_runtime_writer_deployment_manifest.v0"
+    readiness_gate_sha256: str = Field(min_length=1)
+    writer_invocation_receipt_sha256: str = Field(min_length=1)
+    transition_request_sha256: str = Field(min_length=1)
+    runtime_environment_ref: str | None = None
+    runtime_deployment_ref: str | None = None
+    runtime_authority_ref: str | None = None
+    runtime_authority_sha256: str | None = None
+    writer_effect_boundary_ref: str | None = None
+    writer_effect_boundary_sha256: str | None = None
+    rollback_plan_ref: str | None = None
+    rollback_plan_sha256: str | None = None
+    operator_review_ref: str | None = None
+    operator_review_sha256: str | None = None
+    deployment_idempotency_key: str = Field(min_length=1, max_length=128)
+    production_runtime_write_performed: bool = False
+    production_runtime_safety_truth_mutated: bool = False
+    safety_api_called: bool = False
+    outbound_alert_sent: bool = False
+    network_connection_attempted: bool = False
+    external_send_performed: bool = False
+    hardware_control_performed: bool = False
+    private_payload_embedded: bool = False
+
+    @model_validator(mode="after")
+    def enforce_deployment_manifest(
+        self,
+    ) -> "Phase1RuntimeWriterDeploymentManifest":
+        if (
+            self.production_runtime_write_performed
+            or self.production_runtime_safety_truth_mutated
+            or self.safety_api_called
+            or self.outbound_alert_sent
+            or self.network_connection_attempted
+            or self.external_send_performed
+            or self.hardware_control_performed
+            or self.private_payload_embedded
+        ):
+            raise ValueError("Phase 1 writer deployment manifest cannot perform effects")
+        forbidden_paths = _forbidden_key_paths(self.model_dump(mode="json"))
+        if forbidden_paths:
+            raise ValueError(
+                "forbidden Phase 1 writer deployment fields present: "
+                + ", ".join(forbidden_paths)
+            )
+        return self
+
+
+class Phase1RuntimeWriterDeploymentReadinessAudit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_kind: str = "scout_phase1_runtime_writer_deployment_readiness"
+    artifact_version: str = "phase1_runtime_writer_deployment_readiness.v0"
+    source_provider: str = "scout_runtime_phase1_mutation"
+    source_path: str
+    sha256: str = Field(min_length=1)
+    status: Phase1RuntimeWriterDeploymentReadinessStatus
+    readiness_gate_sha256: str = Field(min_length=1)
+    writer_invocation_receipt_sha256: str = Field(min_length=1)
+    transition_request_sha256: str = Field(min_length=1)
+    deployment_manifest_sha256: str = Field(min_length=1)
+    writer_invocation_ready: bool = False
+    deployment_lineage_match: bool = False
+    runtime_boundary_present: bool = False
+    rollback_plan_present: bool = False
+    operator_review_present: bool = False
+    ready_for_reviewed_production_deployment: bool = False
+    runtime_environment_ref: str | None = None
+    runtime_deployment_ref: str | None = None
+    runtime_authority_ref: str | None = None
+    runtime_authority_sha256: str | None = None
+    writer_effect_boundary_ref: str | None = None
+    writer_effect_boundary_sha256: str | None = None
+    rollback_plan_ref: str | None = None
+    rollback_plan_sha256: str | None = None
+    operator_review_ref: str | None = None
+    operator_review_sha256: str | None = None
+    production_runtime_write_performed: bool = False
+    production_runtime_safety_truth_mutated: bool = False
+    safety_api_called: bool = False
+    outbound_alert_sent: bool = False
+    network_connection_attempted: bool = False
+    external_send_performed: bool = False
+    hardware_control_performed: bool = False
+    reasons: list[str] = Field(default_factory=list)
+    privacy: Phase1TransitionPrivacy = Field(default_factory=Phase1TransitionPrivacy)
+    boundary: Phase1RuntimeWriterDeploymentBoundary = Field(
+        default_factory=Phase1RuntimeWriterDeploymentBoundary
+    )
+
+    @model_validator(mode="after")
+    def enforce_deployment_readiness(
+        self,
+    ) -> "Phase1RuntimeWriterDeploymentReadinessAudit":
+        ready = self.status == "ready_for_reviewed_production_deployment"
+        if self.ready_for_reviewed_production_deployment != ready:
+            raise ValueError("deployment readiness flag must match status")
+        if ready and not (
+            self.writer_invocation_ready
+            and self.deployment_lineage_match
+            and self.runtime_boundary_present
+            and self.rollback_plan_present
+            and self.operator_review_present
+        ):
+            raise ValueError("ready deployment audit requires every prerequisite")
+        if (
+            self.production_runtime_write_performed
+            or self.production_runtime_safety_truth_mutated
+            or self.safety_api_called
+            or self.outbound_alert_sent
+            or self.network_connection_attempted
+            or self.external_send_performed
+            or self.hardware_control_performed
+        ):
+            raise ValueError("Phase 1 writer deployment audit cannot perform effects")
+        forbidden_paths = _forbidden_key_paths(self.model_dump(mode="json"))
+        if forbidden_paths:
+            raise ValueError(
+                "forbidden Phase 1 writer deployment audit fields present: "
+                + ", ".join(forbidden_paths)
+            )
+        return self
+
+
 class Phase1SafetyMutationService:
     def __init__(self, initial_state: SafetyState | None = None) -> None:
         self.state_machine = SafetyStateMachine(initial_state)
@@ -580,6 +1018,389 @@ def build_phase1_transition_request(
     )
 
 
+def evaluate_phase1_runtime_promotion_readiness(
+    transition_request: Phase1TransitionRequest | dict[str, Any],
+    reducer_decision: RuntimeSafetyReducerDecision | dict[str, Any],
+    adapter_result: RuntimeSafetyPhase1AdapterResult | dict[str, Any],
+    gate_residency_audit: ProductionGateResidencyAudit | dict[str, Any],
+    live_evidence_contract_audit: ProductionLiveEvidenceContractAudit | dict[str, Any],
+    *,
+    runtime_authority_ref: str | None = None,
+    runtime_authority_sha256: str | None = None,
+    operator_review_ref: str | None = None,
+    operator_review_sha256: str | None = None,
+    source_path: str = "inline:phase1-runtime-promotion-readiness-gate",
+) -> Phase1RuntimePromotionReadinessGate:
+    request = (
+        transition_request
+        if isinstance(transition_request, Phase1TransitionRequest)
+        else Phase1TransitionRequest.model_validate(transition_request)
+    )
+    reducer = (
+        reducer_decision
+        if isinstance(reducer_decision, RuntimeSafetyReducerDecision)
+        else RuntimeSafetyReducerDecision.model_validate(reducer_decision)
+    )
+    adapter = (
+        adapter_result
+        if isinstance(adapter_result, RuntimeSafetyPhase1AdapterResult)
+        else RuntimeSafetyPhase1AdapterResult.model_validate(adapter_result)
+    )
+    residency = (
+        gate_residency_audit
+        if isinstance(gate_residency_audit, ProductionGateResidencyAudit)
+        else ProductionGateResidencyAudit.model_validate(gate_residency_audit)
+    )
+    live_audit = (
+        live_evidence_contract_audit
+        if isinstance(live_evidence_contract_audit, ProductionLiveEvidenceContractAudit)
+        else ProductionLiveEvidenceContractAudit.model_validate(
+            live_evidence_contract_audit
+        )
+    )
+
+    lineage_match = _phase1_promotion_lineage_matches(
+        request=request,
+        reducer=reducer,
+        adapter=adapter,
+        residency=residency,
+        live_audit=live_audit,
+    )
+    adapter_prepared = (
+        adapter.status == "transition_request_prepared"
+        and adapter.transition_request_prepared
+        and adapter.phase1_adapter_enabled
+        and adapter.human_review_approved
+    )
+    production_gate_residency_ready = (
+        residency.status == "all_resident"
+        and residency.reducer_candidate_allowed
+        and all(row.status == "resident_ready" for row in residency.rows)
+    )
+    live_evidence_contract_ready = (
+        live_audit.status == "all_live_contracts_ready"
+        and live_audit.production_weather_environment_ready
+        and all(row.status == "live_contract_ready" for row in live_audit.rows)
+    )
+    runtime_authority_present = bool(runtime_authority_ref and runtime_authority_sha256)
+    operator_review_present = bool(operator_review_ref and operator_review_sha256)
+    reasons: list[str] = []
+    if not lineage_match:
+        status: Phase1RuntimePromotionReadinessStatus = "blocked_lineage_mismatch"
+        reasons.append("transition request, reducer, adapter, or audit lineage mismatch")
+    elif not adapter_prepared:
+        status = "blocked_adapter_not_prepared"
+        reasons.append("Phase 1 adapter is not enabled and human-reviewed")
+    elif not production_gate_residency_ready:
+        status = "blocked_production_gate_residency"
+        reasons.append("all six primary gates are not production-resident")
+    elif not live_evidence_contract_ready:
+        status = "blocked_live_evidence_contract"
+        reasons.append("weather/environment live evidence contract is not ready")
+    elif not runtime_authority_present:
+        status = "blocked_runtime_authority_missing"
+        reasons.append("reviewed runtime authority ref and hash are required")
+    elif not operator_review_present:
+        status = "blocked_operator_review_missing"
+        reasons.append("operator review ref and hash are required")
+    else:
+        status = "ready_for_deterministic_writer"
+        reasons.append(
+            "all local promotion preconditions are present; writer invocation remains separate"
+        )
+    ready = status == "ready_for_deterministic_writer"
+    digest = aggregate_sha256(
+        [
+            {
+                "source_path": source_path,
+                "status": status,
+                "transition_request_sha256": request.sha256,
+                "reducer_sha256": reducer.sha256,
+                "adapter_sha256": adapter.sha256,
+                "gate_residency_audit_sha256": residency.sha256,
+                "live_evidence_contract_audit_sha256": live_audit.sha256,
+                "runtime_authority_sha256": runtime_authority_sha256,
+                "operator_review_sha256": operator_review_sha256,
+            }
+        ]
+    )
+    return Phase1RuntimePromotionReadinessGate(
+        source_path=source_path,
+        sha256=digest,
+        status=status,
+        reducer_sha256=reducer.sha256,
+        adapter_sha256=adapter.sha256,
+        transition_request_sha256=request.sha256,
+        production_gate_residency_audit_sha256=residency.sha256,
+        live_evidence_contract_audit_sha256=live_audit.sha256,
+        runtime_authority_ref=runtime_authority_ref,
+        runtime_authority_sha256=runtime_authority_sha256,
+        operator_review_ref=operator_review_ref,
+        operator_review_sha256=operator_review_sha256,
+        lineage_match=lineage_match,
+        adapter_prepared=adapter_prepared,
+        production_gate_residency_ready=production_gate_residency_ready,
+        live_evidence_contract_ready=live_evidence_contract_ready,
+        runtime_authority_present=runtime_authority_present,
+        operator_review_present=operator_review_present,
+        deterministic_writer_preconditions_met=ready,
+        reasons=reasons,
+    )
+
+
+def invoke_phase1_runtime_promotion_writer(
+    transition_request: Phase1TransitionRequest | dict[str, Any],
+    readiness_gate: Phase1RuntimePromotionReadinessGate | dict[str, Any],
+    invocation_request: Phase1RuntimeWriterInvocationRequest | dict[str, Any],
+    *,
+    mutation_service: Phase1SafetyMutationService | None = None,
+    source_path: str = "inline:phase1-runtime-writer-invocation-receipt",
+) -> Phase1RuntimeWriterInvocationReceipt:
+    request = (
+        transition_request
+        if isinstance(transition_request, Phase1TransitionRequest)
+        else Phase1TransitionRequest.model_validate(transition_request)
+    )
+    readiness = (
+        readiness_gate
+        if isinstance(readiness_gate, Phase1RuntimePromotionReadinessGate)
+        else Phase1RuntimePromotionReadinessGate.model_validate(readiness_gate)
+    )
+    invocation = (
+        invocation_request
+        if isinstance(invocation_request, Phase1RuntimeWriterInvocationRequest)
+        else Phase1RuntimeWriterInvocationRequest.model_validate(invocation_request)
+    )
+    request_sha = aggregate_sha256([invocation.model_dump(mode="json")])
+    request_mismatch = (
+        invocation.readiness_gate_sha256 != readiness.sha256
+        or invocation.transition_request_sha256 != request.sha256
+        or readiness.transition_request_sha256 != request.sha256
+    )
+    readiness_accepted = (
+        readiness.status == "ready_for_deterministic_writer"
+        and readiness.deterministic_writer_preconditions_met
+    )
+    operator_approval_recorded = (
+        invocation.operator_authenticated
+        and bool(invocation.operator_identity_ref)
+        and invocation.explicit_confirmation
+        and invocation.operator_approval_phrase
+        == _PHASE1_RUNTIME_WRITER_CONFIRMATION_PHRASE
+    )
+    mutation_result: Phase1MutationResult | None = None
+    reasons: list[str] = []
+    if request_mismatch:
+        status: Phase1RuntimeWriterInvocationStatus = "blocked_request_mismatch"
+        reasons.append("writer invocation request does not match readiness lineage")
+    elif not readiness_accepted:
+        status = "blocked_readiness_not_ready"
+        reasons.append("Phase 1 runtime promotion readiness gate is not ready")
+    elif not (
+        invocation.operator_authenticated and invocation.operator_identity_ref
+    ):
+        status = "blocked_requires_authenticated_operator"
+        reasons.append("authenticated operator identity is required")
+    elif not (
+        invocation.explicit_confirmation
+        and invocation.operator_approval_phrase
+        == _PHASE1_RUNTIME_WRITER_CONFIRMATION_PHRASE
+    ):
+        status = "blocked_requires_explicit_confirmation"
+        reasons.append("exact local writer confirmation phrase is required")
+    elif invocation.execution_mode == "dry_run":
+        status = "dry_run_ready"
+        reasons.append("local deterministic writer invocation is ready but not executed")
+    else:
+        service = mutation_service or Phase1SafetyMutationService()
+        mutation_result = service.apply_transition_request(
+            request,
+            source_path=f"{source_path}#local_phase1_mutation_result",
+        )
+        status = "local_writer_invoked"
+        reasons.append("local deterministic writer invoked behind readiness gate")
+
+    digest = aggregate_sha256(
+        [
+            {
+                "source_path": source_path,
+                "request_sha256": request_sha,
+                "readiness_gate_sha256": readiness.sha256,
+                "transition_request_sha256": request.sha256,
+                "execution_mode": invocation.execution_mode,
+                "status": status,
+                "mutation_result_sha256": (
+                    mutation_result.sha256 if mutation_result is not None else None
+                ),
+            }
+        ]
+    )
+    return Phase1RuntimeWriterInvocationReceipt(
+        source_path=source_path,
+        sha256=digest,
+        request_sha256=request_sha,
+        readiness_gate_sha256=invocation.readiness_gate_sha256,
+        transition_request_sha256=invocation.transition_request_sha256,
+        execution_mode=invocation.execution_mode,
+        status=status,
+        readiness_gate_accepted=readiness_accepted,
+        operator_approval_recorded=operator_approval_recorded,
+        local_phase1_writer_invoked=mutation_result is not None,
+        local_phase1_l0_l4_state_mutated=(
+            mutation_result.transition_performed if mutation_result is not None else False
+        ),
+        mutation_result_sha256=(
+            mutation_result.sha256 if mutation_result is not None else None
+        ),
+        mutation_id=mutation_result.mutation_id if mutation_result is not None else None,
+        mutation_status=mutation_result.status if mutation_result is not None else None,
+        previous_safety_level=(
+            mutation_result.previous_safety_level
+            if mutation_result is not None
+            else None
+        ),
+        resulting_safety_level=(
+            mutation_result.resulting_safety_level
+            if mutation_result is not None
+            else None
+        ),
+        reasons=reasons,
+    )
+
+
+def evaluate_phase1_writer_production_deployment_readiness(
+    transition_request: Phase1TransitionRequest | dict[str, Any],
+    readiness_gate: Phase1RuntimePromotionReadinessGate | dict[str, Any],
+    writer_invocation_receipt: Phase1RuntimeWriterInvocationReceipt | dict[str, Any],
+    deployment_manifest: Phase1RuntimeWriterDeploymentManifest | dict[str, Any],
+    *,
+    source_path: str = "inline:phase1-runtime-writer-deployment-readiness",
+) -> Phase1RuntimeWriterDeploymentReadinessAudit:
+    request = (
+        transition_request
+        if isinstance(transition_request, Phase1TransitionRequest)
+        else Phase1TransitionRequest.model_validate(transition_request)
+    )
+    readiness = (
+        readiness_gate
+        if isinstance(readiness_gate, Phase1RuntimePromotionReadinessGate)
+        else Phase1RuntimePromotionReadinessGate.model_validate(readiness_gate)
+    )
+    writer_receipt = (
+        writer_invocation_receipt
+        if isinstance(
+            writer_invocation_receipt,
+            Phase1RuntimeWriterInvocationReceipt,
+        )
+        else Phase1RuntimeWriterInvocationReceipt.model_validate(
+            writer_invocation_receipt
+        )
+    )
+    manifest = (
+        deployment_manifest
+        if isinstance(deployment_manifest, Phase1RuntimeWriterDeploymentManifest)
+        else Phase1RuntimeWriterDeploymentManifest.model_validate(deployment_manifest)
+    )
+    manifest_sha = _phase1_writer_deployment_manifest_sha256(manifest)
+    writer_invocation_ready = (
+        readiness.status == "ready_for_deterministic_writer"
+        and readiness.deterministic_writer_preconditions_met
+        and writer_receipt.status == "local_writer_invoked"
+        and writer_receipt.readiness_gate_accepted
+        and writer_receipt.operator_approval_recorded
+        and writer_receipt.local_phase1_writer_invoked
+        and writer_receipt.local_phase1_l0_l4_state_mutated
+        and not writer_receipt.production_runtime_write_performed
+        and not writer_receipt.production_runtime_safety_truth_mutated
+    )
+    deployment_lineage_match = _phase1_writer_deployment_lineage_matches(
+        request=request,
+        readiness=readiness,
+        writer_receipt=writer_receipt,
+        manifest=manifest,
+    )
+    runtime_boundary_present = bool(
+        manifest.runtime_environment_ref
+        and manifest.runtime_deployment_ref
+        and manifest.runtime_authority_ref
+        and manifest.runtime_authority_sha256
+        and manifest.writer_effect_boundary_ref
+        and manifest.writer_effect_boundary_sha256
+    )
+    rollback_plan_present = bool(
+        manifest.rollback_plan_ref and manifest.rollback_plan_sha256
+    )
+    operator_review_present = bool(
+        manifest.operator_review_ref and manifest.operator_review_sha256
+    )
+    reasons: list[str] = []
+    if not writer_invocation_ready:
+        status: Phase1RuntimeWriterDeploymentReadinessStatus = (
+            "blocked_writer_invocation_not_ready"
+        )
+        reasons.append("local guarded writer invocation proof is required")
+    elif not deployment_lineage_match:
+        status = "blocked_deployment_lineage_mismatch"
+        reasons.append(
+            "deployment manifest does not match transition, readiness, or writer receipt lineage"
+        )
+    elif not runtime_boundary_present:
+        status = "blocked_runtime_boundary_missing"
+        reasons.append(
+            "runtime environment, deployment, authority, and writer effect boundary refs are required"
+        )
+    elif not rollback_plan_present:
+        status = "blocked_rollback_plan_missing"
+        reasons.append("rollback plan ref and hash are required")
+    elif not operator_review_present:
+        status = "blocked_operator_review_missing"
+        reasons.append("operator deployment review ref and hash are required")
+    else:
+        status = "ready_for_reviewed_production_deployment"
+        reasons.append(
+            "production writer deployment readiness recorded; deployment remains a separate effect boundary"
+        )
+    ready = status == "ready_for_reviewed_production_deployment"
+    digest = aggregate_sha256(
+        [
+            {
+                "source_path": source_path,
+                "status": status,
+                "transition_request_sha256": request.sha256,
+                "readiness_gate_sha256": readiness.sha256,
+                "writer_invocation_receipt_sha256": writer_receipt.sha256,
+                "deployment_manifest_sha256": manifest_sha,
+            }
+        ]
+    )
+    return Phase1RuntimeWriterDeploymentReadinessAudit(
+        source_path=source_path,
+        sha256=digest,
+        status=status,
+        readiness_gate_sha256=readiness.sha256,
+        writer_invocation_receipt_sha256=writer_receipt.sha256,
+        transition_request_sha256=request.sha256,
+        deployment_manifest_sha256=manifest_sha,
+        writer_invocation_ready=writer_invocation_ready,
+        deployment_lineage_match=deployment_lineage_match,
+        runtime_boundary_present=runtime_boundary_present,
+        rollback_plan_present=rollback_plan_present,
+        operator_review_present=operator_review_present,
+        ready_for_reviewed_production_deployment=ready,
+        runtime_environment_ref=manifest.runtime_environment_ref,
+        runtime_deployment_ref=manifest.runtime_deployment_ref,
+        runtime_authority_ref=manifest.runtime_authority_ref,
+        runtime_authority_sha256=manifest.runtime_authority_sha256,
+        writer_effect_boundary_ref=manifest.writer_effect_boundary_ref,
+        writer_effect_boundary_sha256=manifest.writer_effect_boundary_sha256,
+        rollback_plan_ref=manifest.rollback_plan_ref,
+        rollback_plan_sha256=manifest.rollback_plan_sha256,
+        operator_review_ref=manifest.operator_review_ref,
+        operator_review_sha256=manifest.operator_review_sha256,
+        reasons=reasons,
+    )
+
+
 def safety_event_from_phase1_transition_request(
     request: Phase1TransitionRequest | dict[str, Any],
 ) -> SafetyEvent:
@@ -638,6 +1459,63 @@ def load_phase1_transition_request(path: Path | str) -> Phase1TransitionRequest:
     payload["source_path"] = payload.get("source_path") or str(expanded)
     payload["sha256"] = payload.get("sha256") or sha256_file(expanded)
     return Phase1TransitionRequest.model_validate(payload)
+
+
+def write_phase1_runtime_promotion_readiness_gate(
+    gate: Phase1RuntimePromotionReadinessGate,
+    output_path: Path | str,
+) -> Phase1RuntimePromotionReadinessGate:
+    path = Path(output_path).expanduser()
+    _atomic_write_json(path, gate.model_dump(mode="json"))
+    return load_phase1_runtime_promotion_readiness_gate(path)
+
+
+def load_phase1_runtime_promotion_readiness_gate(
+    path: Path | str,
+) -> Phase1RuntimePromotionReadinessGate:
+    expanded = Path(path).expanduser()
+    payload = json.loads(expanded.read_text(encoding="utf-8"))
+    payload["source_path"] = payload.get("source_path") or str(expanded)
+    payload["sha256"] = payload.get("sha256") or sha256_file(expanded)
+    return Phase1RuntimePromotionReadinessGate.model_validate(payload)
+
+
+def write_phase1_runtime_writer_invocation_receipt(
+    receipt: Phase1RuntimeWriterInvocationReceipt,
+    output_path: Path | str,
+) -> Phase1RuntimeWriterInvocationReceipt:
+    path = Path(output_path).expanduser()
+    _atomic_write_json(path, receipt.model_dump(mode="json"))
+    return load_phase1_runtime_writer_invocation_receipt(path)
+
+
+def load_phase1_runtime_writer_invocation_receipt(
+    path: Path | str,
+) -> Phase1RuntimeWriterInvocationReceipt:
+    expanded = Path(path).expanduser()
+    payload = json.loads(expanded.read_text(encoding="utf-8"))
+    payload["source_path"] = payload.get("source_path") or str(expanded)
+    payload["sha256"] = payload.get("sha256") or sha256_file(expanded)
+    return Phase1RuntimeWriterInvocationReceipt.model_validate(payload)
+
+
+def write_phase1_runtime_writer_deployment_readiness_audit(
+    audit: Phase1RuntimeWriterDeploymentReadinessAudit,
+    output_path: Path | str,
+) -> Phase1RuntimeWriterDeploymentReadinessAudit:
+    path = Path(output_path).expanduser()
+    _atomic_write_json(path, audit.model_dump(mode="json"))
+    return load_phase1_runtime_writer_deployment_readiness_audit(path)
+
+
+def load_phase1_runtime_writer_deployment_readiness_audit(
+    path: Path | str,
+) -> Phase1RuntimeWriterDeploymentReadinessAudit:
+    expanded = Path(path).expanduser()
+    payload = json.loads(expanded.read_text(encoding="utf-8"))
+    payload["source_path"] = payload.get("source_path") or str(expanded)
+    payload["sha256"] = payload.get("sha256") or sha256_file(expanded)
+    return Phase1RuntimeWriterDeploymentReadinessAudit.model_validate(payload)
 
 
 def write_phase1_mutation_result(
@@ -931,6 +1809,96 @@ def _load_projection_source(
             index,
         )
     return None
+
+
+def _phase1_promotion_lineage_matches(
+    *,
+    request: Phase1TransitionRequest,
+    reducer: RuntimeSafetyReducerDecision,
+    adapter: RuntimeSafetyPhase1AdapterResult,
+    residency: ProductionGateResidencyAudit,
+    live_audit: ProductionLiveEvidenceContractAudit,
+) -> bool:
+    if request.reducer_sha256 != reducer.sha256:
+        return False
+    if request.adapter_sha256 != adapter.sha256:
+        return False
+    if adapter.selected_reducer_sha256 != reducer.sha256:
+        return False
+    if request.selected_gate_id != reducer.selected_gate_id:
+        return False
+    if request.selected_event_sha256 != reducer.selected_event_sha256:
+        return False
+    if request.requested_ln_level_candidate != reducer.ln_level_candidate:
+        return False
+    if request.requested_ln_transition_candidate != reducer.ln_transition_candidate:
+        return False
+
+    residency_by_gate = {row.gate_id: row for row in residency.rows}
+    for gate_id in reducer.contributing_gate_ids:
+        row = residency_by_gate.get(gate_id)
+        if row is None or row.status != "resident_ready":
+            return False
+    if reducer.selected_gate_id:
+        selected_row = residency_by_gate.get(reducer.selected_gate_id)
+        if selected_row is None:
+            return False
+        if selected_row.event_sha256 != reducer.selected_event_sha256:
+            return False
+
+    for live_row in live_audit.rows:
+        residency_row = residency_by_gate.get(live_row.gate_id)
+        if residency_row is None:
+            return False
+        if live_row.event_sha256 != residency_row.event_sha256:
+            return False
+    return True
+
+
+def _phase1_writer_deployment_manifest_sha256(
+    manifest: Phase1RuntimeWriterDeploymentManifest,
+) -> str:
+    return aggregate_sha256(
+        [
+            {
+                "artifact": manifest.artifact_kind,
+                "payload": manifest.model_dump(mode="json"),
+                "production_runtime_write_performed": False,
+            }
+        ]
+    )
+
+
+def _phase1_writer_deployment_lineage_matches(
+    *,
+    request: Phase1TransitionRequest,
+    readiness: Phase1RuntimePromotionReadinessGate,
+    writer_receipt: Phase1RuntimeWriterInvocationReceipt,
+    manifest: Phase1RuntimeWriterDeploymentManifest,
+) -> bool:
+    core_matches = (
+        readiness.transition_request_sha256 == request.sha256
+        and writer_receipt.readiness_gate_sha256 == readiness.sha256
+        and writer_receipt.transition_request_sha256 == request.sha256
+        and manifest.readiness_gate_sha256 == readiness.sha256
+        and manifest.writer_invocation_receipt_sha256 == writer_receipt.sha256
+        and manifest.transition_request_sha256 == request.sha256
+    )
+    if not core_matches:
+        return False
+    if manifest.runtime_authority_ref and manifest.runtime_authority_sha256:
+        if (
+            manifest.runtime_authority_ref != readiness.runtime_authority_ref
+            or manifest.runtime_authority_sha256 != readiness.runtime_authority_sha256
+        ):
+            return False
+    if manifest.operator_review_ref and manifest.operator_review_sha256:
+        if (
+            manifest.operator_review_ref != readiness.operator_review_ref
+            or manifest.operator_review_sha256 != readiness.operator_review_sha256
+        ):
+            return False
+    return True
 
 
 def _raise_if_private_payload_shared(value: Any) -> None:

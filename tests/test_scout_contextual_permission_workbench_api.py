@@ -887,6 +887,20 @@ def test_explicit_rebuild_binds_reviewed_proposal_without_runtime_authority(
     assert payload["baseline"][
         "contextual_permission_rules_reviewed_by_human"
     ] is False
+    assert any(
+        node["kind"] == "night_alternative"
+        for node in payload["remaining_plan"]
+    )
+    review = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/safety-emergency/mission-days/"
+        f"{payload['daily_review']['mission_day_instance_id']}/night-review"
+    )
+    assert review.status_code == 200
+    review_payload = review.json()
+    assert len(review_payload["alternatives"]) == 1
+    assert review_payload["alternatives"][0]["eligibility"] == "ineligible"
+    assert review_payload["alternatives"][0]["candidate_only"] is True
+    assert review_payload["alternatives"][0]["runtime_safety_truth"] is False
     assert payload["current_decision"]["decision"] == "ESCALATE"
     assert payload["authority"]["runtime_authorization_performed"] is False
 

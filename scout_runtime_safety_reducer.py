@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from scout_energy_models import aggregate_sha256, sha256_file
 from scout_runtime_safety_gate_models import (
+    PRIMARY_SAFETY_GATE_IDS,
+    SafetyGateId,
     SafetyGateConfidence,
     SafetyGateSeverity,
     SafetyLnLevelCandidate,
@@ -39,6 +41,26 @@ Phase1AdapterStatus = Literal[
     "blocked_review_required",
     "transition_request_prepared",
 ]
+ProductionGateResidencyStatus = Literal[
+    "resident_ready",
+    "shadow_only",
+    "not_resident",
+]
+ProductionGateResidencyAuditStatus = Literal[
+    "all_resident",
+    "partial_residency",
+    "not_resident",
+]
+ProductionLiveEvidenceContractStatus = Literal[
+    "live_contract_ready",
+    "contract_gap",
+    "not_present",
+]
+ProductionLiveEvidenceContractAuditStatus = Literal[
+    "all_live_contracts_ready",
+    "partial_live_contracts",
+    "no_live_contracts",
+]
 
 _TRANSITION_BY_SEVERITY: dict[str, SafetyLnTransitionCandidate] = {
     "none": "none",
@@ -69,6 +91,34 @@ _RECOMMENDATION_BY_TRANSITION: dict[str, ReducerRecommendation] = {
     "candidate_alert_review": "alert_review",
 }
 _HARD_SINGLE_GATE_ESCALATORS = {"weather_gate", "environment_threat_gate", "darkness_gate"}
+_PRODUCTION_SOURCE_PREFIXES = ("runtime://", "resident://", "prod://")
+_LIVE_EVIDENCE_GATE_IDS: tuple[SafetyGateId, ...] = (
+    "weather_gate",
+    "environment_threat_gate",
+)
+_LIVE_SOURCE_PREFIXES = (
+    "runtime://",
+    "resident://",
+    "prod://",
+    "provider://",
+    "cwa://",
+    "weather://",
+)
+_LIVE_ATTESTATION_PREFIXES = (
+    "attestation://",
+    "provider://",
+    "cwa://",
+    "field://",
+    "device://",
+    "operator://",
+)
+_FIELD_VALIDATION_PREFIXES = (
+    "field://",
+    "operator://",
+    "device://",
+    "attestation://",
+    "reviewed://field",
+)
 
 
 class RuntimeSafetyReducerBoundary(BaseModel):
@@ -287,6 +337,221 @@ class RuntimeSafetyPhase1AdapterResult(BaseModel):
         return self
 
 
+class ProductionGateResidencyRow(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    gate_id: SafetyGateId
+    status: ProductionGateResidencyStatus
+    event_present: bool
+    event_id: str | None = None
+    event_sha256: str | None = None
+    source_provider: str | None = None
+    source_path: str | None = None
+    source_gate_sha256: str | None = None
+    resident_evidence_present: bool
+    freshness_evidence_present: bool
+    route_context_joined: bool
+    field_validation_present: bool
+    boundary_clean: bool
+    blockers: list[str] = Field(default_factory=list)
+    evidence_refs: list[str] = Field(default_factory=list)
+    candidate_only: bool = True
+    runtime_safety_truth: bool = False
+    phase1_l0_l4_state_mutated: bool = False
+    safety_api_called: bool = False
+    outbound_alert_sent: bool = False
+    hardware_control_performed: bool = False
+
+    @model_validator(mode="after")
+    def enforce_residency_row_boundary(self) -> "ProductionGateResidencyRow":
+        ready = (
+            self.event_present
+            and self.resident_evidence_present
+            and self.freshness_evidence_present
+            and self.route_context_joined
+            and self.field_validation_present
+            and self.boundary_clean
+            and not self.blockers
+        )
+        if ready and self.status != "resident_ready":
+            raise ValueError("ready residency row must use resident_ready")
+        if self.status == "resident_ready" and not ready:
+            raise ValueError("resident_ready row requires every residency check")
+        if (
+            self.runtime_safety_truth
+            or self.phase1_l0_l4_state_mutated
+            or self.safety_api_called
+            or self.outbound_alert_sent
+            or self.hardware_control_performed
+        ):
+            raise ValueError("production gate residency audit cannot perform runtime effects")
+        return self
+
+
+class ProductionGateResidencyAudit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_kind: str = "scout_production_gate_residency_audit"
+    artifact_version: str = "production_gate_residency_audit.v0"
+    source_provider: str = "scout_runtime_safety_reducer"
+    source_path: str
+    sha256: str
+    status: ProductionGateResidencyAuditStatus
+    gate_count: int = Field(ge=0)
+    resident_ready_count: int = Field(ge=0)
+    shadow_only_count: int = Field(ge=0)
+    not_resident_count: int = Field(ge=0)
+    required_gate_ids: list[SafetyGateId]
+    missing_gate_ids: list[SafetyGateId]
+    rows: list[ProductionGateResidencyRow]
+    reducer_candidate_allowed: bool
+    production_runtime_enabled: bool = False
+    candidate_only: bool = True
+    runtime_safety_truth: bool = False
+    phase1_l0_l4_state_mutated: bool = False
+    safety_api_called: bool = False
+    outbound_alert_sent: bool = False
+    hardware_control_performed: bool = False
+    limitations: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def enforce_audit_boundary(self) -> "ProductionGateResidencyAudit":
+        if self.gate_count != len(self.rows):
+            raise ValueError("gate_count must match residency rows")
+        if self.required_gate_ids != list(PRIMARY_SAFETY_GATE_IDS):
+            raise ValueError("residency audit must cover the primary safety gate set")
+        if self.resident_ready_count != sum(
+            row.status == "resident_ready" for row in self.rows
+        ):
+            raise ValueError("resident_ready_count does not match rows")
+        if self.shadow_only_count != sum(row.status == "shadow_only" for row in self.rows):
+            raise ValueError("shadow_only_count does not match rows")
+        if self.not_resident_count != sum(row.status == "not_resident" for row in self.rows):
+            raise ValueError("not_resident_count does not match rows")
+        if self.reducer_candidate_allowed != (self.status == "all_resident"):
+            raise ValueError("reducer_candidate_allowed must reflect all_resident status")
+        if self.status == "all_resident" and self.missing_gate_ids:
+            raise ValueError("all_resident audit cannot report missing gate ids")
+        if (
+            self.production_runtime_enabled
+            or self.runtime_safety_truth
+            or self.phase1_l0_l4_state_mutated
+            or self.safety_api_called
+            or self.outbound_alert_sent
+            or self.hardware_control_performed
+        ):
+            raise ValueError("production gate residency audit cannot perform runtime effects")
+        return self
+
+
+class ProductionLiveEvidenceContractRow(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    gate_id: SafetyGateId
+    status: ProductionLiveEvidenceContractStatus
+    event_present: bool
+    event_id: str | None = None
+    event_sha256: str | None = None
+    source_provider: str | None = None
+    source_path: str | None = None
+    source_gate_sha256: str | None = None
+    live_source_present: bool
+    freshness_contract_present: bool
+    current_observation_present: bool
+    route_scope_present: bool
+    provider_or_field_attestation_present: bool
+    boundary_clean: bool
+    blockers: list[str] = Field(default_factory=list)
+    evidence_refs: list[str] = Field(default_factory=list)
+    candidate_only: bool = True
+    runtime_safety_truth: bool = False
+    phase1_l0_l4_state_mutated: bool = False
+    safety_api_called: bool = False
+    outbound_alert_sent: bool = False
+    hardware_control_performed: bool = False
+
+    @model_validator(mode="after")
+    def enforce_live_evidence_row(self) -> "ProductionLiveEvidenceContractRow":
+        if self.gate_id not in _LIVE_EVIDENCE_GATE_IDS:
+            raise ValueError("live evidence contract audit only covers weather/threat gates")
+        ready = (
+            self.event_present
+            and bool(self.source_gate_sha256)
+            and self.live_source_present
+            and self.freshness_contract_present
+            and self.current_observation_present
+            and self.route_scope_present
+            and self.provider_or_field_attestation_present
+            and self.boundary_clean
+            and not self.blockers
+        )
+        if ready and self.status != "live_contract_ready":
+            raise ValueError("ready live evidence row must use live_contract_ready")
+        if self.status == "live_contract_ready" and not ready:
+            raise ValueError("live_contract_ready requires every live evidence check")
+        if (
+            self.runtime_safety_truth
+            or self.phase1_l0_l4_state_mutated
+            or self.safety_api_called
+            or self.outbound_alert_sent
+            or self.hardware_control_performed
+        ):
+            raise ValueError("live evidence contract audit cannot perform runtime effects")
+        return self
+
+
+class ProductionLiveEvidenceContractAudit(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    artifact_kind: str = "scout_production_live_evidence_contract_audit"
+    artifact_version: str = "production_live_evidence_contract_audit.v0"
+    source_provider: str = "scout_runtime_safety_reducer"
+    source_path: str
+    sha256: str
+    status: ProductionLiveEvidenceContractAuditStatus
+    required_gate_ids: list[SafetyGateId]
+    live_contract_ready_count: int = Field(ge=0)
+    contract_gap_count: int = Field(ge=0)
+    not_present_count: int = Field(ge=0)
+    rows: list[ProductionLiveEvidenceContractRow]
+    production_weather_environment_ready: bool
+    candidate_only: bool = True
+    runtime_safety_truth: bool = False
+    phase1_l0_l4_state_mutated: bool = False
+    safety_api_called: bool = False
+    outbound_alert_sent: bool = False
+    hardware_control_performed: bool = False
+    limitations: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def enforce_live_evidence_audit(self) -> "ProductionLiveEvidenceContractAudit":
+        if self.required_gate_ids != list(_LIVE_EVIDENCE_GATE_IDS):
+            raise ValueError("live evidence audit must cover weather and threat gates")
+        if len(self.rows) != len(_LIVE_EVIDENCE_GATE_IDS):
+            raise ValueError("live evidence audit must include one row per required gate")
+        if self.live_contract_ready_count != sum(
+            row.status == "live_contract_ready" for row in self.rows
+        ):
+            raise ValueError("live_contract_ready_count does not match rows")
+        if self.contract_gap_count != sum(row.status == "contract_gap" for row in self.rows):
+            raise ValueError("contract_gap_count does not match rows")
+        if self.not_present_count != sum(row.status == "not_present" for row in self.rows):
+            raise ValueError("not_present_count does not match rows")
+        if self.production_weather_environment_ready != (
+            self.status == "all_live_contracts_ready"
+        ):
+            raise ValueError("production readiness flag must reflect audit status")
+        if (
+            self.runtime_safety_truth
+            or self.phase1_l0_l4_state_mutated
+            or self.safety_api_called
+            or self.outbound_alert_sent
+            or self.hardware_control_performed
+        ):
+            raise ValueError("live evidence contract audit cannot perform runtime effects")
+        return self
+
+
 def reduce_runtime_safety_gate_events(
     gate_events: (
         ScoutRuntimeSafetyGateEventBatch
@@ -462,6 +727,171 @@ def build_phase1_adapter_result(
     )
 
 
+def build_production_gate_residency_audit(
+    gate_events: (
+        ScoutRuntimeSafetyGateEventBatch
+        | list[ScoutRuntimeSafetyGateEvent | dict[str, Any]]
+        | dict[str, Any]
+    ),
+    *,
+    source_path: str = "inline:production-gate-residency-audit",
+) -> ProductionGateResidencyAudit:
+    batch = _event_batch(gate_events)
+    latest_by_gate: dict[str, ScoutRuntimeSafetyGateEvent] = {}
+    for event in batch.events:
+        current = latest_by_gate.get(event.gate_id)
+        if current is None or event.observed_at_offset_s >= current.observed_at_offset_s:
+            latest_by_gate[event.gate_id] = event
+    rows = [
+        _production_gate_residency_row(
+            cast(SafetyGateId, gate_id),
+            latest_by_gate.get(gate_id),
+        )
+        for gate_id in PRIMARY_SAFETY_GATE_IDS
+    ]
+    ready_count = sum(row.status == "resident_ready" for row in rows)
+    shadow_count = sum(row.status == "shadow_only" for row in rows)
+    not_resident_count = sum(row.status == "not_resident" for row in rows)
+    if ready_count == len(PRIMARY_SAFETY_GATE_IDS):
+        status: ProductionGateResidencyAuditStatus = "all_resident"
+    elif shadow_count or ready_count:
+        status = "partial_residency"
+    else:
+        status = "not_resident"
+    missing_gate_ids = [
+        row.gate_id for row in rows if row.status != "resident_ready"
+    ]
+    payload = {
+        "source_path": source_path,
+        "batch_sha256": batch.sha256,
+        "status": status,
+        "rows": [row.model_dump(mode="json") for row in rows],
+    }
+    digest = aggregate_sha256([payload])
+    return ProductionGateResidencyAudit(
+        source_path=source_path,
+        sha256=digest,
+        status=status,
+        gate_count=len(rows),
+        resident_ready_count=ready_count,
+        shadow_only_count=shadow_count,
+        not_resident_count=not_resident_count,
+        required_gate_ids=[
+            cast(SafetyGateId, gate_id) for gate_id in PRIMARY_SAFETY_GATE_IDS
+        ],
+        missing_gate_ids=missing_gate_ids,
+        rows=rows,
+        reducer_candidate_allowed=status == "all_resident",
+        limitations=[
+            "local residency audit only",
+            "does not enable production runtime, Phase 1 mutation, safety API calls, outbound alerts, or hardware control",
+        ],
+    )
+
+
+def build_production_live_evidence_contract_audit(
+    gate_events: (
+        ScoutRuntimeSafetyGateEventBatch
+        | list[ScoutRuntimeSafetyGateEvent | dict[str, Any]]
+        | dict[str, Any]
+    ),
+    *,
+    source_path: str = "inline:production-live-evidence-contract-audit",
+) -> ProductionLiveEvidenceContractAudit:
+    batch = _event_batch(gate_events)
+    latest_by_gate: dict[str, ScoutRuntimeSafetyGateEvent] = {}
+    for event in batch.events:
+        if event.gate_id not in _LIVE_EVIDENCE_GATE_IDS:
+            continue
+        current = latest_by_gate.get(event.gate_id)
+        if current is None or event.observed_at_offset_s >= current.observed_at_offset_s:
+            latest_by_gate[event.gate_id] = event
+    rows = [
+        _production_live_evidence_contract_row(
+            gate_id,
+            latest_by_gate.get(gate_id),
+        )
+        for gate_id in _LIVE_EVIDENCE_GATE_IDS
+    ]
+    ready_count = sum(row.status == "live_contract_ready" for row in rows)
+    gap_count = sum(row.status == "contract_gap" for row in rows)
+    not_present_count = sum(row.status == "not_present" for row in rows)
+    if ready_count == len(_LIVE_EVIDENCE_GATE_IDS):
+        status: ProductionLiveEvidenceContractAuditStatus = (
+            "all_live_contracts_ready"
+        )
+    elif ready_count or gap_count:
+        status = "partial_live_contracts"
+    else:
+        status = "no_live_contracts"
+    payload = {
+        "source_path": source_path,
+        "batch_sha256": batch.sha256,
+        "status": status,
+        "rows": [row.model_dump(mode="json") for row in rows],
+    }
+    digest = aggregate_sha256([payload])
+    return ProductionLiveEvidenceContractAudit(
+        source_path=source_path,
+        sha256=digest,
+        status=status,
+        required_gate_ids=list(_LIVE_EVIDENCE_GATE_IDS),
+        live_contract_ready_count=ready_count,
+        contract_gap_count=gap_count,
+        not_present_count=not_present_count,
+        rows=rows,
+        production_weather_environment_ready=status == "all_live_contracts_ready",
+        limitations=[
+            "local live-evidence contract audit only",
+            "does not call weather providers, safety APIs, outbound transports, or hardware",
+        ],
+    )
+
+
+def write_production_gate_residency_audit(
+    audit: ProductionGateResidencyAudit,
+    output_path: Path | str,
+) -> ProductionGateResidencyAudit:
+    path = Path(output_path).expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(audit.model_dump(mode="json"), ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return ProductionGateResidencyAudit.model_validate_json(path.read_text(encoding="utf-8"))
+
+
+def load_production_gate_residency_audit(path: Path | str) -> ProductionGateResidencyAudit:
+    payload = json.loads(Path(path).expanduser().read_text(encoding="utf-8"))
+    payload["source_path"] = payload.get("source_path") or str(path)
+    payload["sha256"] = payload.get("sha256") or sha256_file(Path(path).expanduser())
+    return ProductionGateResidencyAudit.model_validate(payload)
+
+
+def write_production_live_evidence_contract_audit(
+    audit: ProductionLiveEvidenceContractAudit,
+    output_path: Path | str,
+) -> ProductionLiveEvidenceContractAudit:
+    path = Path(output_path).expanduser()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(audit.model_dump(mode="json"), ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return ProductionLiveEvidenceContractAudit.model_validate_json(
+        path.read_text(encoding="utf-8")
+    )
+
+
+def load_production_live_evidence_contract_audit(
+    path: Path | str,
+) -> ProductionLiveEvidenceContractAudit:
+    payload = json.loads(Path(path).expanduser().read_text(encoding="utf-8"))
+    payload["source_path"] = payload.get("source_path") or str(path)
+    payload["sha256"] = payload.get("sha256") or sha256_file(Path(path).expanduser())
+    return ProductionLiveEvidenceContractAudit.model_validate(payload)
+
+
 def write_runtime_safety_reducer_decision(
     decision: RuntimeSafetyReducerDecision,
     output_path: Path | str,
@@ -500,6 +930,239 @@ def load_phase1_adapter_result(path: Path | str) -> RuntimeSafetyPhase1AdapterRe
     payload["source_path"] = payload.get("source_path") or str(path)
     payload["sha256"] = payload.get("sha256") or sha256_file(Path(path).expanduser())
     return RuntimeSafetyPhase1AdapterResult.model_validate(payload)
+
+
+def _production_gate_residency_row(
+    gate_id: SafetyGateId,
+    event: ScoutRuntimeSafetyGateEvent | None,
+) -> ProductionGateResidencyRow:
+    if event is None:
+        return ProductionGateResidencyRow(
+            gate_id=gate_id,
+            status="not_resident",
+            event_present=False,
+            resident_evidence_present=False,
+            freshness_evidence_present=False,
+            route_context_joined=False,
+            field_validation_present=False,
+            boundary_clean=True,
+            blockers=[
+                "gate_event_missing",
+                "production_resident_evidence_missing",
+                "freshness_evidence_missing",
+                "route_context_join_missing",
+                "field_validation_missing",
+            ],
+        )
+
+    refs = _unique_string_list([event.source_path, *event.evidence_refs])
+    lower_provider = event.source_provider.casefold()
+    inline_or_fixture = (
+        event.source_path.startswith("inline:")
+        or "fixture" in lower_provider
+        or "test" in lower_provider
+    )
+    production_ref_present = any(
+        ref.startswith(_PRODUCTION_SOURCE_PREFIXES) for ref in refs
+    )
+    resident_evidence_present = (
+        bool(event.source_gate_sha256)
+        and bool(event.evidence_refs)
+        and production_ref_present
+        and not inline_or_fixture
+    )
+    freshness_evidence_present = (
+        event.confidence in {"medium", "high"}
+        and not event.data_quality.missing_signal_names
+        and not event.data_quality.stale_signal_names
+    )
+    route_context = event.route_context
+    route_context_joined = bool(route_context.route_id) and bool(
+        route_context.segment_id
+        or route_context.checkpoint_id
+        or route_context.map_target_ids
+    )
+    field_validation_present = any(
+        ref.startswith(_FIELD_VALIDATION_PREFIXES) for ref in event.evidence_refs
+    )
+    boundary = event.boundary
+    boundary_clean = (
+        boundary.candidate_only
+        and boundary.reducer_required
+        and not boundary.runtime_safety_truth
+        and not boundary.phase1_runtime_safety_truth
+        and not boundary.phase1_runtime_mutation_allowed
+        and not boundary.phase1_l0_l4_state_mutated
+        and not boundary.direct_phase1_mutation_performed
+        and not boundary.direct_safety_api_call_allowed
+        and not boundary.direct_safety_api_call_performed
+        and not boundary.safety_api_called
+        and not boundary.outbound_alert_sent
+        and not boundary.medical_diagnosis
+    )
+    blockers: list[str] = []
+    if inline_or_fixture:
+        blockers.append("fixture_or_inline_source")
+    if not resident_evidence_present:
+        blockers.append("production_resident_evidence_missing")
+    if not freshness_evidence_present:
+        blockers.append("freshness_evidence_missing")
+    if not route_context_joined:
+        blockers.append("route_context_join_missing")
+    if not field_validation_present:
+        blockers.append("field_validation_missing")
+    if not boundary_clean:
+        blockers.append("boundary_not_clean")
+    status: ProductionGateResidencyStatus = (
+        "resident_ready" if not blockers else "shadow_only"
+    )
+    return ProductionGateResidencyRow(
+        gate_id=gate_id,
+        status=status,
+        event_present=True,
+        event_id=event.event_id,
+        event_sha256=event.sha256,
+        source_provider=event.source_provider,
+        source_path=event.source_path,
+        source_gate_sha256=event.source_gate_sha256,
+        resident_evidence_present=resident_evidence_present,
+        freshness_evidence_present=freshness_evidence_present,
+        route_context_joined=route_context_joined,
+        field_validation_present=field_validation_present,
+        boundary_clean=boundary_clean,
+        blockers=blockers,
+        evidence_refs=event.evidence_refs,
+    )
+
+
+def _production_live_evidence_contract_row(
+    gate_id: SafetyGateId,
+    event: ScoutRuntimeSafetyGateEvent | None,
+) -> ProductionLiveEvidenceContractRow:
+    if event is None:
+        return ProductionLiveEvidenceContractRow(
+            gate_id=gate_id,
+            status="not_present",
+            event_present=False,
+            live_source_present=False,
+            freshness_contract_present=False,
+            current_observation_present=False,
+            route_scope_present=False,
+            provider_or_field_attestation_present=False,
+            boundary_clean=True,
+            blockers=[
+                "gate_event_missing",
+                "production_live_source_missing",
+                "freshness_contract_missing",
+                "current_observation_missing",
+                "route_scope_missing",
+                "provider_or_field_attestation_missing",
+            ],
+        )
+
+    refs = _unique_string_list([event.source_path, *event.evidence_refs])
+    lower_provider = event.source_provider.casefold()
+    inline_or_fixture = (
+        event.source_path.startswith("inline:")
+        or "fixture" in lower_provider
+        or "test" in lower_provider
+    )
+    live_source_present = any(ref.startswith(_LIVE_SOURCE_PREFIXES) for ref in refs)
+    freshness_contract_present = _live_freshness_contract_present(event)
+    current_observation_present = _live_current_observation_present(event)
+    route_context = event.route_context
+    route_scope_present = bool(route_context.route_id) and bool(
+        route_context.segment_id
+        or route_context.checkpoint_id
+        or route_context.map_target_ids
+    )
+    provider_or_field_attestation_present = any(
+        ref.startswith(_LIVE_ATTESTATION_PREFIXES) for ref in refs
+    )
+    boundary_clean = _event_boundary_clean(event)
+    blockers: list[str] = []
+    if inline_or_fixture:
+        blockers.append("fixture_or_inline_source")
+    if not event.source_gate_sha256:
+        blockers.append("source_gate_hash_missing")
+    if not live_source_present:
+        blockers.append("production_live_source_missing")
+    if not freshness_contract_present:
+        blockers.append("freshness_contract_missing")
+    if not current_observation_present:
+        blockers.append("current_observation_missing")
+    if not route_scope_present:
+        blockers.append("route_scope_missing")
+    if not provider_or_field_attestation_present:
+        blockers.append("provider_or_field_attestation_missing")
+    if not boundary_clean:
+        blockers.append("boundary_not_clean")
+    status: ProductionLiveEvidenceContractStatus = (
+        "live_contract_ready" if not blockers else "contract_gap"
+    )
+    return ProductionLiveEvidenceContractRow(
+        gate_id=gate_id,
+        status=status,
+        event_present=True,
+        event_id=event.event_id,
+        event_sha256=event.sha256,
+        source_provider=event.source_provider,
+        source_path=event.source_path,
+        source_gate_sha256=event.source_gate_sha256,
+        live_source_present=live_source_present,
+        freshness_contract_present=freshness_contract_present,
+        current_observation_present=current_observation_present,
+        route_scope_present=route_scope_present,
+        provider_or_field_attestation_present=provider_or_field_attestation_present,
+        boundary_clean=boundary_clean,
+        blockers=blockers,
+        evidence_refs=event.evidence_refs,
+    )
+
+
+def _live_freshness_contract_present(event: ScoutRuntimeSafetyGateEvent) -> bool:
+    if event.data_quality.missing_signal_names or event.data_quality.stale_signal_names:
+        return False
+    if event.gate_id == "weather_gate":
+        age = event.gate_payload.get("source_age_minutes")
+        return isinstance(age, (int, float)) and age <= 180
+    return any(
+        ref.startswith(("attestation://freshness", "field://", "device://"))
+        for ref in event.evidence_refs
+    )
+
+
+def _live_current_observation_present(event: ScoutRuntimeSafetyGateEvent) -> bool:
+    payload = event.gate_payload
+    if event.gate_id == "weather_gate":
+        return bool(
+            payload.get("warning_level") is not None
+            and payload.get("source_age_minutes") is not None
+            and event.data_quality.signal_count >= 2
+        )
+    return bool(
+        payload.get("threat_type")
+        and payload.get("passability")
+        and payload.get("immediacy")
+    )
+
+
+def _event_boundary_clean(event: ScoutRuntimeSafetyGateEvent) -> bool:
+    boundary = event.boundary
+    return (
+        boundary.candidate_only
+        and boundary.reducer_required
+        and not boundary.runtime_safety_truth
+        and not boundary.phase1_runtime_safety_truth
+        and not boundary.phase1_runtime_mutation_allowed
+        and not boundary.phase1_l0_l4_state_mutated
+        and not boundary.direct_phase1_mutation_performed
+        and not boundary.direct_safety_api_call_allowed
+        and not boundary.direct_safety_api_call_performed
+        and not boundary.safety_api_called
+        and not boundary.outbound_alert_sent
+        and not boundary.medical_diagnosis
+    )
 
 
 def _event_batch(

@@ -6,6 +6,7 @@ from pathlib import Path
 from tools.pi_gnss_nmea_smoke import (
     _termios_baud_constant,
     apply_gnss_oled_telemetry_state,
+    build_redacted_gnss_qualification_summary,
     build_gnss_stream_status_payload,
     gnss_led_bit,
     gnss_oled_message,
@@ -167,6 +168,59 @@ def test_gnss_fix_summary_rolls_up_fix_quality_and_latest_position() -> None:
     assert summary["status_counts"]["A"] == 1
     assert summary["latest_valid_fix"]["sentence_type"] == "GPRMC"
     assert summary["latest_valid_fix"]["position"]["lat"] == 53.36133667
+
+
+def test_redacted_qualification_summary_omits_location_and_raw_nmea() -> None:
+    payloads = parse_raw_nmea(
+        f"{RMC}\n{GGA}\n{GSV}",
+        device_port="/dev/ttyAMA0",
+        baud=9600,
+    )
+
+    summary = build_redacted_gnss_qualification_summary(
+        payloads,
+        device_ref="device://scout/gnss",
+        capture_mode="serial_device",
+    )
+
+    encoded = json.dumps(summary, sort_keys=True)
+    assert summary["status"] == "live_gnss_fix_observed"
+    assert summary["device_ref"] == "device://scout/gnss"
+    assert summary["sentence_count"] == 3
+    assert summary["valid_fix_count"] == 2
+    assert summary["checksum_invalid_count"] == 0
+    assert summary["max_satellite_count"] == 8
+    assert summary["read_only_hardware_access"] is True
+    assert summary["precise_location_values_persisted"] is False
+    assert summary["raw_nmea_persisted"] is False
+    assert "position" not in encoded
+    assert "raw_sentence" not in encoded
+    assert "53.36133667" not in encoded
+    assert "-6.50562" not in encoded
+
+
+def test_gnss_smoke_cli_redacted_summary_cannot_write_raw_jsonl(tmp_path: Path) -> None:
+    output = tmp_path / "gnss.jsonl"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT),
+            "--raw-nmea",
+            f"{RMC}\n{GGA}",
+            "--redacted-qualification-summary",
+            "--output-jsonl",
+            str(output),
+        ],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "cannot be combined with --output-jsonl" in result.stderr
+    assert not output.exists()
 
 
 def test_gnss_payload_with_invalid_checksum_is_diagnostic_only() -> None:

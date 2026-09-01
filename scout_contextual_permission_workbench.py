@@ -42,6 +42,18 @@ REQUIRED_NIGHT_GATE_IDS = (
     "gate.communication",
     "gate.runtime_lineage",
 )
+NightRuntimeAuthorityStatus = Literal[
+    "blocked_receipt_missing",
+    "blocked_receipt_hash_mismatch",
+    "blocked_decision_not_approval",
+    "blocked_packet_replaced",
+    "blocked_sequence_changed",
+    "blocked_freshness",
+    "blocked_gate_matrix",
+    "blocked_runtime_lineage",
+    "blocked_runtime_truth_boundary",
+    "eligible_for_runtime_consideration",
+]
 
 
 class ContextualPermissionConflict(ValueError):
@@ -557,6 +569,139 @@ class EmergencyReviewReceipt(WorkbenchModel):
     outbound_action_performed: bool = False
     outbound_transport_invoked: bool = False
     external_send_performed: bool = False
+
+
+class NightRuntimeAuthorityRequest(WorkbenchModel):
+    receipt_id: str
+    receipt_sha256: str
+    receipt_packet_sha256: str
+    packet_id: str
+    current_packet_sha256: str
+    mission_day_instance_id: str
+    review_generation: int = Field(ge=1)
+    current_sequence: int = Field(ge=0)
+    expected_aggregate_sha256: str
+    expected_gate_matrix_sha256: str
+    expected_reviewed_envelope_sha256: str
+    idempotency_key: str
+
+    @field_validator(
+        "receipt_sha256",
+        "receipt_packet_sha256",
+        "current_packet_sha256",
+        "expected_aggregate_sha256",
+        "expected_gate_matrix_sha256",
+        "expected_reviewed_envelope_sha256",
+    )
+    @classmethod
+    def validate_authority_sha256(cls, value: str) -> str:
+        if not _SHA256_PATTERN.fullmatch(value):
+            raise ValueError("runtime authority request hashes must be SHA-256 digests")
+        return value
+
+    @field_validator("receipt_id", "packet_id", "mission_day_instance_id", "idempotency_key")
+    @classmethod
+    def validate_authority_id(cls, value: str) -> str:
+        if not _SAFE_ID_PATTERN.fullmatch(value):
+            raise ValueError("invalid runtime authority request identifier")
+        return value
+
+
+class NightRuntimeAuthorityDecision(WorkbenchModel):
+    artifact_kind: Literal["scout_night_runtime_authority_decision"] = (
+        "scout_night_runtime_authority_decision"
+    )
+    schema_version: Literal["nightRuntimeAuthorityDecision.v0"] = (
+        "nightRuntimeAuthorityDecision.v0"
+    )
+    decision_id: str
+    decision_sha256: str
+    request_sha256: str
+    status: NightRuntimeAuthorityStatus
+    eligible_for_runtime_consideration: bool
+    reasons: list[str]
+    receipt_id: str
+    receipt_sha256: str
+    receipt_decision: EmergencyReviewDecision | None
+    packet_id: str
+    receipt_packet_sha256: str
+    current_packet_sha256: str
+    review_generation: int = Field(ge=0)
+    receipt_reviewed_sequence: int = Field(ge=0)
+    current_sequence: int = Field(ge=0)
+    current_aggregate_sha256: str
+    current_gate_matrix_sha256: str
+    reviewed_envelope_sha256: str
+    receipt_revalidation_passed: bool
+    sequence_revalidation_passed: bool
+    freshness_revalidation_passed: bool
+    gate_revalidation_passed: bool
+    hash_revalidation_passed: bool
+    current_freshness_state: Literal[
+        "fresh",
+        "expiring",
+        "refresh_due",
+        "expired",
+        "freshness_unknown",
+        "invalidated",
+        "unavailable",
+    ]
+    gate_states: list[EligibilityGate]
+    source_refs: list[str]
+    candidate_only: Literal[True] = True
+    runtime_safety_truth: Literal[False] = False
+    runtime_authorization_performed: Literal[False] = False
+    phase1_l0_l4_state_mutated: Literal[False] = False
+    safety_api_called: Literal[False] = False
+    outbound_action_performed: Literal[False] = False
+    outbound_transport_invoked: Literal[False] = False
+    external_send_performed: Literal[False] = False
+    hardware_control_performed: Literal[False] = False
+    authority: AuthorityBoundary = Field(default_factory=AuthorityBoundary)
+
+    @field_validator(
+        "decision_sha256",
+        "request_sha256",
+        "receipt_sha256",
+        "receipt_packet_sha256",
+        "current_packet_sha256",
+        "current_aggregate_sha256",
+        "current_gate_matrix_sha256",
+        "reviewed_envelope_sha256",
+    )
+    @classmethod
+    def validate_decision_sha256(cls, value: str) -> str:
+        if not _SHA256_PATTERN.fullmatch(value):
+            raise ValueError("runtime authority decision hashes must be SHA-256 digests")
+        return value
+
+    @model_validator(mode="after")
+    def validate_no_runtime_effect(self) -> "NightRuntimeAuthorityDecision":
+        if self.eligible_for_runtime_consideration and self.status != (
+            "eligible_for_runtime_consideration"
+        ):
+            raise ValueError("eligible authority decision must use the eligible status")
+        if self.status == "eligible_for_runtime_consideration" and not (
+            self.receipt_revalidation_passed
+            and self.sequence_revalidation_passed
+            and self.freshness_revalidation_passed
+            and self.gate_revalidation_passed
+            and self.hash_revalidation_passed
+        ):
+            raise ValueError("eligible authority decision requires every revalidation")
+        if (
+            self.runtime_authorization_performed
+            or self.phase1_l0_l4_state_mutated
+            or self.safety_api_called
+            or self.outbound_action_performed
+            or self.outbound_transport_invoked
+            or self.external_send_performed
+            or self.hardware_control_performed
+        ):
+            raise ValueError("night runtime authority v0 cannot perform runtime effects")
+        if self.authority.runtime_authorization_performed:
+            raise ValueError("night runtime authority v0 cannot authorize runtime")
+        return self
 
 
 class DailyEmergencyReviewSession(WorkbenchModel):
@@ -2227,6 +2372,399 @@ def _packet_hash(packet: dict[str, object]) -> str:
             for key, value in packet.items()
             if key not in {"sha256", "server_now"}
         }
+    )
+
+
+_FALLBACK_NIGHT_PACKET_BUILT_AT = datetime(1970, 1, 1, tzinfo=timezone.utc)
+
+_NIGHT_GATE_LABELS = {
+    "gate.reviewed_alternative": "Reviewed alternative",
+    "gate.segment_policy": "Segment policy",
+    "gate.terrain_route": "Terrain / route",
+    "gate.lighting_power": "Lighting / power",
+    "gate.navigation_resources": "Navigation resources",
+    "gate.team": "Team",
+    "gate.weather_threat": "Weather / threat",
+    "gate.communication": "Communication",
+    "gate.runtime_lineage": "Runtime lineage",
+}
+
+
+def _coerce_sha256(value: str | None, *, label: str) -> str:
+    if value is not None and _SHA256_PATTERN.fullmatch(value):
+        return value
+    return _fixed_hash(label)
+
+
+def _dedupe_refs(values: list[str]) -> list[str]:
+    refs: list[str] = []
+    for value in values:
+        if value and value not in refs:
+            refs.append(value)
+    return refs
+
+
+def _gate_state_source_refs(gates: list[EligibilityGate]) -> list[str]:
+    return _dedupe_refs([gate.source_ref for gate in gates])
+
+
+def _night_gate(
+    gate_id: str,
+    *,
+    state: Literal["pass", "blocked", "missing", "unknown"],
+    reason: str,
+    source_ref: str,
+    source_sha256: str,
+) -> EligibilityGate:
+    return EligibilityGate(
+        gate_id=gate_id,
+        label=_NIGHT_GATE_LABELS.get(gate_id, gate_id),
+        state=state,
+        hard_gate=True,
+        reason=reason,
+        source_ref=source_ref,
+        source_sha256=source_sha256,
+    )
+
+
+def _night_gate_matrix_sha256(packet: NightAlternativePacket) -> str:
+    return _digest(
+        {
+            "packet_id": packet.packet_id,
+            "mission_day_instance_id": packet.mission_day_instance_id,
+            "review_generation": packet.review_generation,
+            "reviewed_sequence": packet.reviewed_sequence,
+            "freshness_state": packet.freshness_state,
+            "expires_at": packet.expires_at,
+            "gates": [
+                {
+                    "gate_id": gate.gate_id,
+                    "state": gate.state,
+                    "hard_gate": gate.hard_gate,
+                    "source_ref": gate.source_ref,
+                    "source_sha256": gate.source_sha256,
+                }
+                for gate in packet.gates
+            ],
+        }
+    )
+
+
+def reviewed_target_from_anchor(
+    anchor: BaselineRouteAnchor | None,
+    *,
+    fallback_ref: str,
+    fallback_sha256: str,
+    fallback_label: str,
+) -> ReviewedTargetRef:
+    if anchor is None:
+        return ReviewedTargetRef(
+            target_ref=fallback_ref,
+            target_sha256=fallback_sha256,
+            target_label=fallback_label,
+        )
+    return ReviewedTargetRef(
+        target_ref=anchor.artifact.ref,
+        target_sha256=anchor.artifact.sha256,
+        target_label=anchor.display_label,
+    )
+
+
+def reviewed_target_from_proposal(
+    proposal: BaselineTargetProposal | None,
+    *,
+    fallback_ref: str,
+    fallback_sha256: str,
+    fallback_label: str,
+) -> ReviewedTargetRef:
+    return reviewed_target_from_anchor(
+        proposal.target if proposal is not None else None,
+        fallback_ref=fallback_ref,
+        fallback_sha256=fallback_sha256,
+        fallback_label=fallback_label,
+    )
+
+
+def build_fail_closed_night_alternative_packet(
+    *,
+    project_id: str,
+    session_id: str,
+    mission_day_id: str,
+    mission_day_instance_id: str,
+    movement_group_id: str,
+    membership_revision: int,
+    membership_sha256: str | None,
+    review_generation: int,
+    reviewed_sequence: int,
+    from_target: ReviewedTargetRef,
+    to_target: ReviewedTargetRef,
+    retreat_candidates: list[ReviewedTargetRef],
+    emergency_bivy_candidates: list[ReviewedTargetRef],
+    route_scope_ref: str,
+    route_scope_sha256: str | None,
+    mission_day_plan_ref: str,
+    mission_day_plan_sha256: str,
+    reviewed_alternative_complete: bool,
+    aggregate: CanonicalGroupAggregate | None = None,
+    built_at: datetime | None = None,
+    maximum_night_duration_minutes: int | None = None,
+    requires_daylight: bool | None = None,
+    source_refs: list[str] | None = None,
+) -> NightAlternativePacket:
+    stable_key = _fixed_hash(
+        ":".join(
+            [
+                project_id,
+                session_id,
+                mission_day_instance_id,
+                movement_group_id,
+                mission_day_plan_sha256,
+                to_target.target_sha256,
+                "night-alternative",
+            ]
+        )
+    )[:16]
+    bounded_built_at = built_at or _FALLBACK_NIGHT_PACKET_BUILT_AT
+    route_scope_available = (
+        bool(route_scope_ref)
+        and route_scope_sha256 is not None
+        and route_scope_sha256 != "0" * 64
+        and _SHA256_PATTERN.fullmatch(route_scope_sha256) is not None
+    )
+    route_sha256 = (
+        route_scope_sha256
+        if route_scope_available and route_scope_sha256 is not None
+        else _fixed_hash(f"{project_id}:{mission_day_id}:route-scope-missing")
+    )
+    plan_sha256 = _coerce_sha256(
+        mission_day_plan_sha256,
+        label=f"{project_id}:{mission_day_id}:mission-day-plan",
+    )
+    runtime_ref = (
+        f"aggregate://{aggregate.group_id}/{aggregate.through_sequence}"
+        if aggregate is not None
+        else "aggregate://runtime-lineage/unmaterialized"
+    )
+    runtime_sha256 = (
+        aggregate.aggregate_sha256
+        if aggregate is not None
+        else _fixed_hash(f"{project_id}:{mission_day_instance_id}:runtime-lineage-missing")
+    )
+    freshness_inputs = [
+        FreshnessInput(
+            gate_id="gate.weather_threat",
+            evidence_ref=f"evidence://safety-emergency/{mission_day_instance_id}/weather-live-unavailable",
+            evidence_sha256=_fixed_hash(
+                f"{project_id}:{mission_day_instance_id}:weather-live-unavailable"
+            ),
+            valid_until=None,
+            required=True,
+        ),
+        FreshnessInput(
+            gate_id="gate.route_progress",
+            evidence_ref=f"evidence://safety-emergency/{mission_day_instance_id}/route-progress-unavailable",
+            evidence_sha256=_fixed_hash(
+                f"{project_id}:{mission_day_instance_id}:route-progress-unavailable"
+            ),
+            valid_until=None,
+            required=True,
+        ),
+        FreshnessInput(
+            gate_id="gate.team",
+            evidence_ref=f"evidence://safety-emergency/{mission_day_instance_id}/team-readiness-unavailable",
+            evidence_sha256=_fixed_hash(
+                f"{project_id}:{mission_day_instance_id}:team-readiness-unavailable"
+            ),
+            valid_until=None,
+            required=True,
+        ),
+        FreshnessInput(
+            gate_id="gate.communication",
+            evidence_ref=f"evidence://safety-emergency/{mission_day_instance_id}/communication-window-unavailable",
+            evidence_sha256=_fixed_hash(
+                f"{project_id}:{mission_day_instance_id}:communication-window-unavailable"
+            ),
+            valid_until=None,
+            required=True,
+        ),
+    ]
+    gates = [
+        _night_gate(
+            "gate.reviewed_alternative",
+            state="pass" if reviewed_alternative_complete else "missing",
+            reason=(
+                "Reviewed day-end, retreat, and emergency-bivy bindings are present."
+                if reviewed_alternative_complete
+                else "Reviewed day-end, retreat, and emergency-bivy bindings are incomplete."
+            ),
+            source_ref=mission_day_plan_ref,
+            source_sha256=plan_sha256,
+        ),
+        _night_gate(
+            "gate.segment_policy",
+            state="pass" if requires_daylight is False else "blocked",
+            reason=(
+                "Reviewed segment policy explicitly permits this night alternative."
+                if requires_daylight is False
+                else "Explicit reviewed requires_daylight=false is required."
+            ),
+            source_ref=mission_day_plan_ref,
+            source_sha256=plan_sha256,
+        ),
+        _night_gate(
+            "gate.terrain_route",
+            state="pass" if route_scope_available else "missing",
+            reason=(
+                "Reviewed route scope is bound to this packet."
+                if route_scope_available
+                else "Reviewed terrain and route scope are unavailable for this packet."
+            ),
+            source_ref=route_scope_ref or "missing://route-scope",
+            source_sha256=route_sha256,
+        ),
+        _night_gate(
+            "gate.lighting_power",
+            state="missing",
+            reason="Lighting and power reserves have not been freshly reviewed.",
+            source_ref=f"evidence://safety-emergency/{mission_day_instance_id}/lighting-power-unavailable",
+            source_sha256=_fixed_hash(
+                f"{project_id}:{mission_day_instance_id}:lighting-power-unavailable"
+            ),
+        ),
+        _night_gate(
+            "gate.navigation_resources",
+            state="missing",
+            reason="Navigation resource redundancy has not been freshly reviewed.",
+            source_ref=f"evidence://safety-emergency/{mission_day_instance_id}/navigation-resources-unavailable",
+            source_sha256=_fixed_hash(
+                f"{project_id}:{mission_day_instance_id}:navigation-resources-unavailable"
+            ),
+        ),
+        _night_gate(
+            "gate.team",
+            state="missing",
+            reason="Team readiness and individual constraints have not been freshly reviewed.",
+            source_ref=f"evidence://safety-emergency/{mission_day_instance_id}/team-readiness-unavailable",
+            source_sha256=_fixed_hash(
+                f"{project_id}:{mission_day_instance_id}:team-readiness-unavailable"
+            ),
+        ),
+        _night_gate(
+            "gate.weather_threat",
+            state="missing",
+            reason="Live weather and threat evidence has not been freshly reviewed.",
+            source_ref=f"evidence://safety-emergency/{mission_day_instance_id}/weather-live-unavailable",
+            source_sha256=_fixed_hash(
+                f"{project_id}:{mission_day_instance_id}:weather-live-unavailable"
+            ),
+        ),
+        _night_gate(
+            "gate.communication",
+            state="missing",
+            reason="Communication window and reachable contact path have not been freshly reviewed.",
+            source_ref=f"evidence://safety-emergency/{mission_day_instance_id}/communication-window-unavailable",
+            source_sha256=_fixed_hash(
+                f"{project_id}:{mission_day_instance_id}:communication-window-unavailable"
+            ),
+        ),
+        _night_gate(
+            "gate.runtime_lineage",
+            state="pass" if aggregate is not None else "missing",
+            reason=(
+                "Server rebuilt the current movement-group aggregate for this packet."
+                if aggregate is not None
+                else "Server runtime lineage has not been materialized yet."
+            ),
+            source_ref=runtime_ref,
+            source_sha256=runtime_sha256,
+        ),
+    ]
+    bounded_source_refs = _dedupe_refs(
+        [
+            mission_day_plan_ref,
+            route_scope_ref,
+            from_target.target_ref,
+            to_target.target_ref,
+            *[item.target_ref for item in retreat_candidates],
+            *[item.target_ref for item in emergency_bivy_candidates],
+            *(source_refs or []),
+        ]
+    )
+    reviewed_envelope_sha256 = _digest(
+        {
+            "project_id": project_id,
+            "session_id": session_id,
+            "mission_day_instance_id": mission_day_instance_id,
+            "mission_day_plan_sha256": plan_sha256,
+            "from_target": from_target.model_dump(mode="json"),
+            "to_target": to_target.model_dump(mode="json"),
+            "retreat_candidates": [
+                item.model_dump(mode="json") for item in retreat_candidates
+            ],
+            "emergency_bivy_candidates": [
+                item.model_dump(mode="json") for item in emergency_bivy_candidates
+            ],
+            "requires_daylight": requires_daylight,
+            "reviewed_alternative_complete": reviewed_alternative_complete,
+            "gates": [gate.model_dump(mode="json") for gate in gates],
+        }
+    )
+    payload = {
+        "packet_id": f"night.packet.{mission_day_id}.{stable_key}",
+        "sha256": "0" * 64,
+        "project_id": project_id,
+        "session_id": session_id,
+        "mission_day_id": mission_day_id,
+        "mission_day_instance_id": mission_day_instance_id,
+        "movement_group_id": movement_group_id,
+        "membership_revision": membership_revision,
+        "membership_sha256": membership_sha256,
+        "review_generation": review_generation,
+        "reviewed_sequence": reviewed_sequence,
+        "alternative_id": f"night.alternative.{mission_day_id}.{stable_key}",
+        "alternative_label": f"{mission_day_id} fail-closed night alternative review",
+        "from_target_ref": from_target.target_ref,
+        "from_target_sha256": from_target.target_sha256,
+        "from_target_label": from_target.target_label,
+        "to_target_ref": to_target.target_ref,
+        "to_target_sha256": to_target.target_sha256,
+        "to_target_label": to_target.target_label,
+        "direction": f"{from_target.target_label} -> {to_target.target_label}",
+        "maximum_night_duration_minutes": max(1, maximum_night_duration_minutes or 60),
+        "stop_objective": "Stop, hold, or choose a reviewed emergency bivy; no automatic night-travel authorization.",
+        "retreat_candidate_refs": [item.target_ref for item in retreat_candidates],
+        "emergency_bivy_candidate_refs": [
+            item.target_ref for item in emergency_bivy_candidates
+        ],
+        "retreat_candidates": [
+            item.model_dump(mode="json") for item in retreat_candidates
+        ],
+        "emergency_bivy_candidates": [
+            item.model_dump(mode="json") for item in emergency_bivy_candidates
+        ],
+        "requires_daylight": requires_daylight,
+        "reviewed_envelope_sha256": reviewed_envelope_sha256,
+        "eligibility": "not_assessed",
+        "approval_granted": False,
+        "safety_state": "review_required",
+        "server_now": bounded_built_at,
+        "built_at": bounded_built_at,
+        "expires_at": None,
+        "freshness_state": "freshness_unknown",
+        "expiry_driver": None,
+        "freshness_inputs": [
+            item.model_dump(mode="json") for item in freshness_inputs
+        ],
+        "invalidated_by": [],
+        "gates": [gate.model_dump(mode="json") for gate in gates],
+        "source_refs": bounded_source_refs,
+        "aggregate": aggregate.model_dump(mode="json") if aggregate else None,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+    packet = NightAlternativePacket.model_validate(payload)
+    return packet.model_copy(
+        update={"sha256": _packet_hash(packet.model_dump(mode="json"))}
     )
 
 
@@ -4824,6 +5362,87 @@ class ContextualPermissionWorkbench:
                 trigger_hashes[f"event://{event.event_id}"] = event.event_sha256
         return trigger_hashes
 
+    def _materialize_fail_closed_night_alternatives(
+        self,
+        *,
+        seed: DailyEmergencyReviewSession,
+        group: MovementGroupProjection,
+        aggregate: CanonicalGroupAggregate,
+    ) -> list[NightAlternativePacket]:
+        current_ref = (
+            f"candidate://safety-emergency/{seed.mission_day_id}/"
+            "current-position-unresolved"
+        )
+        current_target = ReviewedTargetRef(
+            target_ref=current_ref,
+            target_sha256=_fixed_hash(
+                f"{self.project_id}:{seed.mission_day_instance_id}:current-position-unresolved"
+            ),
+            target_label=f"{group.group_label} current position unresolved",
+        )
+        effective_target = ReviewedTargetRef(
+            target_ref=group.day_end.effective_target_ref
+            or seed.effective_day_end_target_ref,
+            target_sha256=_coerce_sha256(
+                group.day_end.effective_target_sha256
+                or seed.effective_day_end_target_sha256,
+                label=f"{self.project_id}:{seed.mission_day_id}:effective-day-end",
+            ),
+            target_label=group.day_end.effective_target_label
+            or seed.planned_day_end_target_label,
+        )
+        retreat_target = ReviewedTargetRef(
+            target_ref=(
+                f"candidate://safety-emergency/{seed.mission_day_id}/"
+                "retreat-unresolved"
+            ),
+            target_sha256=_fixed_hash(
+                f"{self.project_id}:{seed.mission_day_instance_id}:retreat-unresolved"
+            ),
+            target_label="Retreat target unresolved",
+        )
+        bivy_target = ReviewedTargetRef(
+            target_ref=(
+                f"candidate://safety-emergency/{seed.mission_day_id}/"
+                "emergency-bivy-unresolved"
+            ),
+            target_sha256=_fixed_hash(
+                f"{self.project_id}:{seed.mission_day_instance_id}:bivy-unresolved"
+            ),
+            target_label="Emergency bivy target unresolved",
+        )
+        return [
+            build_fail_closed_night_alternative_packet(
+                project_id=self.project_id,
+                session_id=aggregate.session_id,
+                mission_day_id=aggregate.mission_day_id,
+                mission_day_instance_id=aggregate.mission_day_instance_id,
+                movement_group_id=aggregate.group_id,
+                membership_revision=aggregate.membership_revision,
+                membership_sha256=aggregate.membership_sha256,
+                review_generation=aggregate.review_generation,
+                reviewed_sequence=aggregate.through_sequence,
+                from_target=current_target,
+                to_target=effective_target,
+                retreat_candidates=[retreat_target],
+                emergency_bivy_candidates=[bivy_target],
+                route_scope_ref=group.communication.route_scope_ref,
+                route_scope_sha256=group.communication.route_scope_sha256,
+                mission_day_plan_ref=seed.mission_day_plan_ref,
+                mission_day_plan_sha256=aggregate.mission_day_plan_sha256,
+                reviewed_alternative_complete=False,
+                aggregate=aggregate,
+                built_at=_FALLBACK_NIGHT_PACKET_BUILT_AT,
+                maximum_night_duration_minutes=60,
+                requires_daylight=None,
+                source_refs=[
+                    seed.planned_day_end_target_ref,
+                    seed.effective_day_end_target_ref,
+                    group.formation_receipt_ref,
+                ],
+            )
+        ]
+
     def daily_emergency_review(
         self,
         mission_day_instance_id: str,
@@ -4847,10 +5466,17 @@ class ContextualPermissionWorkbench:
                 "Only a current movement-group mission-day instance can be reviewed.",
             )
         aggregate = self.canonical_aggregate(group.group_id)
+        seed_alternatives = list(seed.alternatives)
+        if not seed_alternatives:
+            seed_alternatives = self._materialize_fail_closed_night_alternatives(
+                seed=seed,
+                group=group,
+                aggregate=aggregate,
+            )
         packets: list[NightAlternativePacket] = []
         for packet in (
             item
-            for item in seed.alternatives
+            for item in seed_alternatives
             if item.movement_group_id == group.group_id
             and item.mission_day_id == group.mission_day_id
         ):
@@ -4966,6 +5592,11 @@ class ContextualPermissionWorkbench:
         if isinstance(aggregate, dict):
             gate_by_id["gate.runtime_lineage"].update(
                 {
+                    "state": "pass",
+                    "reason": (
+                        "Server rebuilt the current movement-group aggregate "
+                        "for this packet."
+                    ),
                     "source_ref": (
                         f"aggregate://{aggregate.get('group_id')}/"
                         f"{aggregate.get('through_sequence')}"
@@ -5163,6 +5794,349 @@ class ContextualPermissionWorkbench:
                 },
             )
             return self._receipt_from_event(event)
+
+    def build_night_runtime_authority_request(
+        self,
+        receipt: EmergencyReviewReceipt | dict[str, object],
+        *,
+        idempotency_key: str,
+    ) -> NightRuntimeAuthorityRequest:
+        receipt_model = (
+            receipt
+            if isinstance(receipt, EmergencyReviewReceipt)
+            else EmergencyReviewReceipt.model_validate(receipt)
+        )
+        packet = self._current_packet(
+            receipt_model.packet_id,
+            receipt_model.mission_day_instance_id,
+        )
+        aggregate_sha256 = (
+            packet.aggregate.aggregate_sha256 if packet.aggregate is not None else "0" * 64
+        )
+        return NightRuntimeAuthorityRequest(
+            receipt_id=receipt_model.receipt_id,
+            receipt_sha256=receipt_model.receipt_sha256,
+            receipt_packet_sha256=receipt_model.packet_sha256,
+            packet_id=packet.packet_id,
+            current_packet_sha256=packet.sha256,
+            mission_day_instance_id=packet.mission_day_instance_id,
+            review_generation=packet.review_generation,
+            current_sequence=packet.reviewed_sequence,
+            expected_aggregate_sha256=aggregate_sha256,
+            expected_gate_matrix_sha256=_night_gate_matrix_sha256(packet),
+            expected_reviewed_envelope_sha256=packet.reviewed_envelope_sha256,
+            idempotency_key=idempotency_key,
+        )
+
+    def evaluate_night_runtime_authority(
+        self,
+        request: NightRuntimeAuthorityRequest | dict[str, object],
+    ) -> NightRuntimeAuthorityDecision:
+        request_model = (
+            request
+            if isinstance(request, NightRuntimeAuthorityRequest)
+            else NightRuntimeAuthorityRequest.model_validate(request)
+        )
+        request_sha = _digest(request_model)
+        receipt = next(
+            (
+                item
+                for item in self._load_receipts()
+                if item.receipt_id == request_model.receipt_id
+            ),
+            None,
+        )
+        reasons: list[str] = []
+        receipt_decision: EmergencyReviewDecision | None = None
+        receipt_reviewed_sequence = 0
+        gate_states: list[EligibilityGate] = []
+        current_packet_sha256 = "0" * 64
+        current_aggregate_sha256 = "0" * 64
+        current_gate_matrix_sha256 = "0" * 64
+        reviewed_envelope_sha256 = request_model.expected_reviewed_envelope_sha256
+        review_generation = 0
+        current_sequence = 0
+        current_freshness_state: Literal[
+            "fresh",
+            "expiring",
+            "refresh_due",
+            "expired",
+            "freshness_unknown",
+            "invalidated",
+            "unavailable",
+        ] = "unavailable"
+        receipt_revalidation_passed = False
+        sequence_revalidation_passed = False
+        freshness_revalidation_passed = False
+        gate_revalidation_passed = False
+        hash_revalidation_passed = False
+        packet_hash_changed = False
+        aggregate_or_envelope_changed = False
+        gate_matrix_changed = False
+        packet_missing = False
+
+        if receipt is None:
+            reasons.append("approved Safety / Emergency review receipt is not current")
+            return self._night_runtime_authority_decision(
+                request_model=request_model,
+                request_sha=request_sha,
+                status="blocked_receipt_missing",
+                reasons=reasons,
+                receipt_decision=receipt_decision,
+                receipt_reviewed_sequence=receipt_reviewed_sequence,
+                review_generation=review_generation,
+                current_sequence=current_sequence,
+                current_packet_sha256=current_packet_sha256,
+                current_aggregate_sha256=current_aggregate_sha256,
+                current_gate_matrix_sha256=current_gate_matrix_sha256,
+                reviewed_envelope_sha256=reviewed_envelope_sha256,
+                current_freshness_state=current_freshness_state,
+                gate_states=gate_states,
+                receipt_revalidation_passed=receipt_revalidation_passed,
+                sequence_revalidation_passed=sequence_revalidation_passed,
+                freshness_revalidation_passed=freshness_revalidation_passed,
+                gate_revalidation_passed=gate_revalidation_passed,
+                hash_revalidation_passed=hash_revalidation_passed,
+                source_refs=[request_model.receipt_id, request_model.packet_id],
+            )
+
+        receipt_decision = receipt.decision
+        receipt_reviewed_sequence = receipt.reviewed_sequence
+        receipt_boundary_fields = [
+            receipt.production_approval_granted,
+            receipt.real_world_effect_performed,
+            receipt.runtime_authorization_performed,
+            receipt.phase1_l0_l4_state_mutated,
+            receipt.safety_api_called,
+            receipt.outbound_action_performed,
+            receipt.outbound_transport_invoked,
+            receipt.external_send_performed,
+        ]
+        receipt_matches = (
+            receipt.receipt_sha256 == request_model.receipt_sha256
+            and receipt.packet_id == request_model.packet_id
+            and receipt.packet_sha256 == request_model.receipt_packet_sha256
+            and receipt.mission_day_instance_id == request_model.mission_day_instance_id
+            and receipt.review_generation == request_model.review_generation
+            and receipt.reviewed_envelope_sha256
+            == request_model.expected_reviewed_envelope_sha256
+        )
+        if not receipt_matches:
+            reasons.append("review receipt identity, packet binding, or envelope hash changed")
+        if receipt.decision != EmergencyReviewDecision.APPROVE_FOR_RUNTIME_CONSIDERATION:
+            reasons.append("review receipt is not approve_for_runtime_consideration")
+        if any(receipt_boundary_fields):
+            reasons.append("review receipt already claims a forbidden runtime or outbound effect")
+        receipt_revalidation_passed = (
+            receipt_matches
+            and receipt.decision
+            == EmergencyReviewDecision.APPROVE_FOR_RUNTIME_CONSIDERATION
+            and not any(receipt_boundary_fields)
+        )
+
+        try:
+            packet = self._current_packet(
+                request_model.packet_id,
+                request_model.mission_day_instance_id,
+            )
+        except ContextualPermissionConflict as exc:
+            packet_missing = True
+            packet = None
+            reasons.append(exc.message)
+
+        if packet is not None:
+            gate_states = packet.gates
+            current_packet_sha256 = packet.sha256
+            current_aggregate_sha256 = (
+                packet.aggregate.aggregate_sha256 if packet.aggregate is not None else "0" * 64
+            )
+            current_gate_matrix_sha256 = _night_gate_matrix_sha256(packet)
+            reviewed_envelope_sha256 = packet.reviewed_envelope_sha256
+            review_generation = packet.review_generation
+            current_sequence = packet.reviewed_sequence
+            current_freshness_state = packet.freshness_state
+            group_events = self._load_group_events(packet.movement_group_id)
+            invalidated_after_receipt = any(
+                event.event_kind == "daily_review_invalidated"
+                and event.sequence > receipt.event_sequence
+                for event in group_events
+            )
+            sequence_revalidation_passed = (
+                packet.review_generation == request_model.review_generation
+                and packet.reviewed_sequence == request_model.current_sequence
+                and receipt.event_sequence <= packet.reviewed_sequence
+                and not invalidated_after_receipt
+            )
+            freshness_revalidation_passed = (
+                packet.freshness_state in {"fresh", "refresh_due"}
+                and packet.expires_at is not None
+                and self._now() < packet.expires_at
+                and not packet.invalidated_by
+            )
+            required_gate_ids = set(REQUIRED_NIGHT_GATE_IDS)
+            present_gate_ids = {gate.gate_id for gate in packet.gates}
+            gate_revalidation_passed = (
+                required_gate_ids.issubset(present_gate_ids)
+                and packet.eligibility == "eligible_for_human_review"
+                and all(gate.state == "pass" for gate in packet.gates if gate.hard_gate)
+            )
+            packet_hash_changed = packet.sha256 != request_model.current_packet_sha256
+            aggregate_or_envelope_changed = (
+                current_aggregate_sha256 != request_model.expected_aggregate_sha256
+                or packet.reviewed_envelope_sha256
+                != request_model.expected_reviewed_envelope_sha256
+            )
+            gate_matrix_changed = (
+                current_gate_matrix_sha256 != request_model.expected_gate_matrix_sha256
+            )
+            hash_revalidation_passed = (
+                not packet_hash_changed
+                and not aggregate_or_envelope_changed
+                and not gate_matrix_changed
+                and packet.packet_id == receipt.packet_id
+                and receipt.packet_sha256 == request_model.receipt_packet_sha256
+            )
+            if packet.review_generation != request_model.review_generation:
+                reasons.append("review generation changed before runtime authority use")
+            if packet.reviewed_sequence != request_model.current_sequence:
+                reasons.append("event sequence changed before runtime authority use")
+            if invalidated_after_receipt:
+                reasons.append("daily review was invalidated after the approval receipt")
+            if not freshness_revalidation_passed:
+                reasons.append("packet freshness is not valid at runtime authority use")
+            if not gate_revalidation_passed:
+                reasons.append("one or more required night gates are not pass")
+            if not hash_revalidation_passed:
+                reasons.append("current packet, aggregate, gate, or envelope hash changed")
+
+        status: NightRuntimeAuthorityStatus
+        if not receipt_matches:
+            status = "blocked_receipt_hash_mismatch"
+        elif receipt.decision != EmergencyReviewDecision.APPROVE_FOR_RUNTIME_CONSIDERATION:
+            status = "blocked_decision_not_approval"
+        elif any(receipt_boundary_fields):
+            status = "blocked_runtime_truth_boundary"
+        elif packet_missing or packet_hash_changed:
+            status = "blocked_packet_replaced"
+        elif aggregate_or_envelope_changed:
+            status = "blocked_runtime_lineage"
+        elif not sequence_revalidation_passed:
+            status = "blocked_sequence_changed"
+        elif not freshness_revalidation_passed:
+            status = "blocked_freshness"
+        elif gate_matrix_changed or not gate_revalidation_passed:
+            status = "blocked_gate_matrix"
+        elif not hash_revalidation_passed:
+            status = "blocked_runtime_lineage"
+        else:
+            status = "eligible_for_runtime_consideration"
+            reasons.append(
+                "approved receipt, current sequence, freshness, gates, and hashes revalidated"
+            )
+
+        return self._night_runtime_authority_decision(
+            request_model=request_model,
+            request_sha=request_sha,
+            status=status,
+            reasons=reasons,
+            receipt_decision=receipt_decision,
+            receipt_reviewed_sequence=receipt_reviewed_sequence,
+            review_generation=review_generation,
+            current_sequence=current_sequence,
+            current_packet_sha256=current_packet_sha256,
+            current_aggregate_sha256=current_aggregate_sha256,
+            current_gate_matrix_sha256=current_gate_matrix_sha256,
+            reviewed_envelope_sha256=reviewed_envelope_sha256,
+            current_freshness_state=current_freshness_state,
+            gate_states=gate_states,
+            receipt_revalidation_passed=receipt_revalidation_passed,
+            sequence_revalidation_passed=sequence_revalidation_passed,
+            freshness_revalidation_passed=freshness_revalidation_passed,
+            gate_revalidation_passed=gate_revalidation_passed,
+            hash_revalidation_passed=hash_revalidation_passed,
+            source_refs=[
+                receipt.receipt_id,
+                receipt.packet_id,
+                *_gate_state_source_refs(gate_states),
+            ],
+        )
+
+    def _night_runtime_authority_decision(
+        self,
+        *,
+        request_model: NightRuntimeAuthorityRequest,
+        request_sha: str,
+        status: NightRuntimeAuthorityStatus,
+        reasons: list[str],
+        receipt_decision: EmergencyReviewDecision | None,
+        receipt_reviewed_sequence: int,
+        review_generation: int,
+        current_sequence: int,
+        current_packet_sha256: str,
+        current_aggregate_sha256: str,
+        current_gate_matrix_sha256: str,
+        reviewed_envelope_sha256: str,
+        current_freshness_state: Literal[
+            "fresh",
+            "expiring",
+            "refresh_due",
+            "expired",
+            "freshness_unknown",
+            "invalidated",
+            "unavailable",
+        ],
+        gate_states: list[EligibilityGate],
+        receipt_revalidation_passed: bool,
+        sequence_revalidation_passed: bool,
+        freshness_revalidation_passed: bool,
+        gate_revalidation_passed: bool,
+        hash_revalidation_passed: bool,
+        source_refs: list[str],
+    ) -> NightRuntimeAuthorityDecision:
+        eligible = status == "eligible_for_runtime_consideration"
+        decision_id = f"night_runtime_authority.{request_model.idempotency_key}"
+        payload: dict[str, object] = {
+            "decision_id": decision_id,
+            "decision_sha256": "0" * 64,
+            "request_sha256": request_sha,
+            "status": status,
+            "eligible_for_runtime_consideration": eligible,
+            "reasons": reasons,
+            "receipt_id": request_model.receipt_id,
+            "receipt_sha256": request_model.receipt_sha256,
+            "receipt_decision": receipt_decision,
+            "packet_id": request_model.packet_id,
+            "receipt_packet_sha256": request_model.receipt_packet_sha256,
+            "current_packet_sha256": current_packet_sha256,
+            "review_generation": review_generation,
+            "receipt_reviewed_sequence": receipt_reviewed_sequence,
+            "current_sequence": current_sequence,
+            "current_aggregate_sha256": current_aggregate_sha256,
+            "current_gate_matrix_sha256": current_gate_matrix_sha256,
+            "reviewed_envelope_sha256": reviewed_envelope_sha256,
+            "receipt_revalidation_passed": receipt_revalidation_passed,
+            "sequence_revalidation_passed": sequence_revalidation_passed,
+            "freshness_revalidation_passed": freshness_revalidation_passed,
+            "gate_revalidation_passed": gate_revalidation_passed,
+            "hash_revalidation_passed": hash_revalidation_passed,
+            "current_freshness_state": current_freshness_state,
+            "gate_states": [gate.model_dump(mode="json") for gate in gate_states],
+            "source_refs": _dedupe_refs(source_refs),
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "runtime_authorization_performed": False,
+            "phase1_l0_l4_state_mutated": False,
+            "safety_api_called": False,
+            "outbound_action_performed": False,
+            "outbound_transport_invoked": False,
+            "external_send_performed": False,
+            "hardware_control_performed": False,
+            "authority": AuthorityBoundary().model_dump(mode="json"),
+        }
+        payload["decision_sha256"] = _digest(
+            {key: value for key, value in payload.items() if key != "decision_sha256"}
+        )
+        return NightRuntimeAuthorityDecision.model_validate(payload)
 
     def invalidate_daily_review(
         self, request: DailyReviewInvalidationRequest
@@ -10051,6 +11025,14 @@ class ContextualPermissionWorkbench:
                     True,
                     "Reserve size and retreat authority remain pending separate Permission and Safety / Emergency review.",
                 ),
+                (
+                    f"node.night-alternative.{day.mission_day_id}",
+                    "night_alternative",
+                    f"{day.mission_day_id} night alternative review",
+                    0,
+                    False,
+                    "Night travel can only become a reviewed human disposition after the Safety / Emergency gates are satisfied.",
+                ),
             )
             for node_id, kind, label, duration, protected, quality in definitions:
                 policy_ref = f"{rules_ref}#{node_id}"
@@ -10388,6 +11370,116 @@ class ContextualPermissionWorkbench:
             for source in self._seed.evidence
             if source.source_kind == "normalized_weather_fact"
         )
+        daily_session_id = (
+            f"daily-review.{first_day.mission_day_id}.{reviewed_sha256[:12]}"
+        )
+        from_target = reviewed_target_from_anchor(
+            first_day.start_anchor,
+            fallback_ref=(
+                f"candidate://safety-emergency/{first_day.mission_day_id}/"
+                "current-position-unresolved"
+            ),
+            fallback_sha256=_fixed_hash(
+                f"{reviewed_sha256}:{first_day.mission_day_id}:current-position-unresolved"
+            ),
+            fallback_label=f"{first_day.mission_day_id} current position unresolved",
+        )
+        retreat_candidates = [
+            reviewed_target_from_proposal(
+                proposal,
+                fallback_ref=(
+                    f"candidate://safety-emergency/{first_day.mission_day_id}/"
+                    "retreat-unresolved"
+                ),
+                fallback_sha256=_fixed_hash(
+                    f"{reviewed_sha256}:{first_day.mission_day_id}:retreat-unresolved"
+                ),
+                fallback_label="Retreat target unresolved",
+            )
+            for proposal in first_day.retreat_candidates
+        ] or [
+            ReviewedTargetRef(
+                target_ref=(
+                    f"candidate://safety-emergency/{first_day.mission_day_id}/"
+                    "retreat-unresolved"
+                ),
+                target_sha256=_fixed_hash(
+                    f"{reviewed_sha256}:{first_day.mission_day_id}:retreat-unresolved"
+                ),
+                target_label="Retreat target unresolved",
+            )
+        ]
+        emergency_bivy_candidates = [
+            reviewed_target_from_proposal(
+                proposal,
+                fallback_ref=(
+                    f"candidate://safety-emergency/{first_day.mission_day_id}/"
+                    "emergency-bivy-unresolved"
+                ),
+                fallback_sha256=_fixed_hash(
+                    f"{reviewed_sha256}:{first_day.mission_day_id}:bivy-unresolved"
+                ),
+                fallback_label="Emergency bivy target unresolved",
+            )
+            for proposal in first_day.emergency_bivy_candidates
+        ] or [
+            ReviewedTargetRef(
+                target_ref=(
+                    f"candidate://safety-emergency/{first_day.mission_day_id}/"
+                    "emergency-bivy-unresolved"
+                ),
+                target_sha256=_fixed_hash(
+                    f"{reviewed_sha256}:{first_day.mission_day_id}:bivy-unresolved"
+                ),
+                target_label="Emergency bivy target unresolved",
+            )
+        ]
+        eta = first_day.eta_proposal
+        maximum_night_duration_minutes = (
+            int(math.ceil(eta.segment_p75_sum_minutes))
+            if eta is not None
+            and eta.state == "complete_derived"
+            and eta.segment_p75_sum_minutes is not None
+            else 60
+        )
+        night_alternatives = [
+            build_fail_closed_night_alternative_packet(
+                project_id=self.project_id,
+                session_id=daily_session_id,
+                mission_day_id=first_day.mission_day_id,
+                mission_day_instance_id=day_instance_id,
+                movement_group_id=group.group_id,
+                membership_revision=group.membership_revision,
+                membership_sha256=group.membership_sha256,
+                review_generation=1,
+                reviewed_sequence=0,
+                from_target=from_target,
+                to_target=reviewed_target_from_proposal(
+                    first_proposal,
+                    fallback_ref=target.artifact.ref,
+                    fallback_sha256=target.artifact.sha256,
+                    fallback_label=target.display_label,
+                ),
+                retreat_candidates=retreat_candidates,
+                emergency_bivy_candidates=emergency_bivy_candidates,
+                route_scope_ref=graph_ref,
+                route_scope_sha256=graph_sha256,
+                mission_day_plan_ref=reviewed_ref,
+                mission_day_plan_sha256=reviewed_sha256,
+                reviewed_alternative_complete=bool(
+                    first_day.retreat_candidates
+                    and first_day.emergency_bivy_candidates
+                ),
+                built_at=self._now(),
+                maximum_night_duration_minutes=maximum_night_duration_minutes,
+                requires_daylight=None,
+                source_refs=[
+                    review_receipt_ref,
+                    planned_eta_ref,
+                    graph_ref,
+                ],
+            )
+        ]
         return ContextualPermissionWorkbenchSeed(
             artifact_kind="contextual_permission_workbench_seed",
             schema_version="contextualPermissionWorkbenchSeed.v1",
@@ -10422,7 +11514,7 @@ class ContextualPermissionWorkbench:
             action_events=[],
             remaining_plan=plan_nodes,
             daily_review=DailyEmergencyReviewSession(
-                session_id=f"daily-review.{first_day.mission_day_id}.{reviewed_sha256[:12]}",
+                session_id=daily_session_id,
                 project_id=self.project_id,
                 mission_day_id=first_day.mission_day_id,
                 mission_day_instance_id=day_instance_id,
@@ -10438,7 +11530,7 @@ class ContextualPermissionWorkbench:
                 effective_day_end_target_ref=target.artifact.ref,
                 effective_day_end_target_sha256=target.artifact.sha256,
                 day_end_state="day_end_at_risk",
-                alternatives=[],
+                alternatives=night_alternatives,
             ),
             movement_groups=[group],
             evidence=evidence,

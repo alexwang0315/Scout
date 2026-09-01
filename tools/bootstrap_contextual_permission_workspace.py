@@ -38,8 +38,10 @@ from scout_contextual_permission_workbench import (  # noqa: E402
     DepartureChecklistRow,
     MovementGroupProjection,
     RemainingPlanNode,
+    ReviewedTargetRef,
     ReviewedPlanNodePolicy,
     ShelterHoldProjection,
+    build_fail_closed_night_alternative_packet,
 )
 
 
@@ -361,6 +363,7 @@ def _plan_nodes(
             "route_axis",
             "東清路線主體（待每日切段）",
             100,
+            False,
             f"{timing_gap_count} 個參考分段缺少可用 p75 ETA；完成補值前不得自動壓縮。",
         ),
         (
@@ -368,6 +371,7 @@ def _plan_nodes(
             "day_end_target",
             "D1 當日預計最後位置（待領隊確認）",
             100,
+            True,
             "D1 planned day-end target still requires leader review.",
         ),
         (
@@ -375,11 +379,20 @@ def _plan_nodes(
             "weather_daylight_retreat_reserve",
             "天候／日照／後撤預留（待審核）",
             95,
+            True,
             "Weather and daylight evidence is not current enough to size a reviewed reserve.",
+        ),
+        (
+            "node.night-alternative.D1",
+            "night_alternative",
+            "D1 夜間替代方案審核",
+            90,
+            False,
+            "Safety / Emergency gates must be reviewed before any night alternative can be considered.",
         ),
     ]
     nodes: list[RemainingPlanNode] = []
-    for node_id, kind, label, priority, gap in definitions:
+    for node_id, kind, label, priority, protected, gap in definitions:
         policy_ref = f"{RULES_REF}#{node_id}"
         policy_sha = _fixed_hash(f"{project_id}:{node_id}:review-only-bootstrap")
         nodes.append(
@@ -405,7 +418,7 @@ def _plan_nodes(
                 applied_reduction_minutes=0,
                 effective_duration_minutes=0,
                 absorbed_debt_minutes=0,
-                protected=kind != "route_axis",
+                protected=protected,
                 adjustment_state="review_required",
                 source_rule_ref=policy_ref,
                 source_rule_sha256=policy_sha,
@@ -531,6 +544,7 @@ def _seed(
         weather_ref=weather_ref,
         weather_sha=weather_sha,
     )
+    daily_session_id = "daily-review.D1.bootstrap.001"
     group = MovementGroupProjection(
         group_id="group.main",
         group_label="東清主要行動群組（待確認）",
@@ -627,6 +641,55 @@ def _seed(
         ),
         unexpected_separation=False,
     )
+    night_alternatives = [
+        build_fail_closed_night_alternative_packet(
+            project_id=project_id,
+            session_id=daily_session_id,
+            mission_day_id="D1",
+            mission_day_instance_id="D1.instance.bootstrap.001",
+            movement_group_id="group.main",
+            membership_revision=1,
+            membership_sha256=membership_sha,
+            review_generation=1,
+            reviewed_sequence=0,
+            from_target=ReviewedTargetRef(
+                target_ref="reviewed://mission-graph/checkpoint/cp.start",
+                target_sha256=_fixed_hash(f"{project_id}:cp.start"),
+                target_label="Start",
+            ),
+            to_target=ReviewedTargetRef(
+                target_ref=target_ref,
+                target_sha256=target_sha,
+                target_label="待確認：D1 當日預計最後位置",
+            ),
+            retreat_candidates=[
+                ReviewedTargetRef(
+                    target_ref="candidate://safety-emergency/D1/retreat-unresolved",
+                    target_sha256=_fixed_hash(f"{project_id}:D1:retreat-unresolved"),
+                    target_label="後撤點待審核",
+                )
+            ],
+            emergency_bivy_candidates=[
+                ReviewedTargetRef(
+                    target_ref=(
+                        "candidate://safety-emergency/D1/"
+                        "emergency-bivy-unresolved"
+                    ),
+                    target_sha256=_fixed_hash(f"{project_id}:D1:bivy-unresolved"),
+                    target_label="緊急扎營點待審核",
+                )
+            ],
+            route_scope_ref=graph_ref,
+            route_scope_sha256=graph_sha,
+            mission_day_plan_ref=baseline_ref,
+            mission_day_plan_sha256=baseline_sha,
+            reviewed_alternative_complete=False,
+            built_at=datetime(1970, 1, 1, tzinfo=timezone.utc),
+            maximum_night_duration_minutes=60,
+            requires_daylight=None,
+            source_refs=[receipt_ref, timing_ref, weather_ref],
+        )
+    ]
     return ContextualPermissionWorkbenchSeed(
         artifact_kind="contextual_permission_workbench_seed",
         schema_version="contextualPermissionWorkbenchSeed.v1",
@@ -658,7 +721,7 @@ def _seed(
         action_events=[],
         remaining_plan=plan_nodes,
         daily_review=DailyEmergencyReviewSession(
-            session_id="daily-review.D1.bootstrap.001",
+            session_id=daily_session_id,
             project_id=project_id,
             mission_day_id="D1",
             mission_day_instance_id="D1.instance.bootstrap.001",
@@ -674,7 +737,7 @@ def _seed(
             effective_day_end_target_ref=target_ref,
             effective_day_end_target_sha256=target_sha,
             day_end_state="day_end_at_risk",
-            alternatives=[],
+            alternatives=night_alternatives,
         ),
         movement_groups=[group],
         evidence=[

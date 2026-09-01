@@ -21,6 +21,7 @@ from scout_contextual_permission_workbench import (
     ContextualPermissionWorkbench,
     DailyReviewInvalidationRequest,
     EmergencyReviewDecisionRequest,
+    NightRuntimeAuthorityRequest,
     OfflineEmergencyReviewIntent,
     build_reference_workbench_seed,
 )
@@ -689,6 +690,116 @@ def test_night_decision_revalidates_packet_and_is_idempotent(tmp_path: Path) -> 
     assert refreshed.daily_review.reviewed_count == 1
     assert refreshed.daily_review.state == "reviewed"
     assert refreshed.daily_review.selected_alternative_state == "hold_or_bivy_selected"
+
+
+def test_night_runtime_authority_revalidates_approved_receipt_without_effects(
+    tmp_path: Path,
+) -> None:
+    workbench = _workbench(tmp_path)
+    packet = workbench.daily_emergency_review("D1.instance.001").alternatives[0]
+    receipt = workbench.record_night_decision(
+        EmergencyReviewDecisionRequest(
+            packet_id=packet.packet_id,
+            packet_sha256=packet.sha256,
+            mission_day_instance_id=packet.mission_day_instance_id,
+            review_generation=packet.review_generation,
+            reviewed_sequence=packet.reviewed_sequence,
+            decision="approve_for_runtime_consideration",
+            reviewer_alias="leader-01",
+            idempotency_key="review-runtime-consideration-001",
+            explicit_confirmation=True,
+        )
+    )
+
+    authority_request = workbench.build_night_runtime_authority_request(
+        receipt,
+        idempotency_key="night-runtime-authority-001",
+    )
+    decision = workbench.evaluate_night_runtime_authority(authority_request)
+
+    assert decision.status == "eligible_for_runtime_consideration"
+    assert decision.eligible_for_runtime_consideration is True
+    assert decision.receipt_revalidation_passed is True
+    assert decision.sequence_revalidation_passed is True
+    assert decision.freshness_revalidation_passed is True
+    assert decision.gate_revalidation_passed is True
+    assert decision.hash_revalidation_passed is True
+    assert decision.current_sequence >= receipt.event_sequence
+    assert decision.candidate_only is True
+    assert decision.runtime_safety_truth is False
+    assert decision.runtime_authorization_performed is False
+    assert decision.phase1_l0_l4_state_mutated is False
+    assert decision.safety_api_called is False
+    assert decision.outbound_action_performed is False
+    assert decision.external_send_performed is False
+
+
+def test_night_runtime_authority_rejects_non_approval_receipt(
+    tmp_path: Path,
+) -> None:
+    workbench = _workbench(tmp_path)
+    packet = workbench.daily_emergency_review("D1.instance.001").alternatives[0]
+    receipt = workbench.record_night_decision(
+        EmergencyReviewDecisionRequest(
+            packet_id=packet.packet_id,
+            packet_sha256=packet.sha256,
+            mission_day_instance_id=packet.mission_day_instance_id,
+            review_generation=packet.review_generation,
+            reviewed_sequence=packet.reviewed_sequence,
+            decision="reject_night_travel",
+            reviewer_alias="leader-01",
+            idempotency_key="review-runtime-reject-001",
+            explicit_confirmation=True,
+        )
+    )
+
+    authority_request = workbench.build_night_runtime_authority_request(
+        receipt,
+        idempotency_key="night-runtime-authority-reject-001",
+    )
+    decision = workbench.evaluate_night_runtime_authority(authority_request)
+
+    assert decision.status == "blocked_decision_not_approval"
+    assert decision.eligible_for_runtime_consideration is False
+    assert decision.receipt_revalidation_passed is False
+    assert decision.runtime_authorization_performed is False
+
+
+def test_night_runtime_authority_rejects_stale_current_packet_hash(
+    tmp_path: Path,
+) -> None:
+    workbench = _workbench(tmp_path)
+    packet = workbench.daily_emergency_review("D1.instance.001").alternatives[0]
+    receipt = workbench.record_night_decision(
+        EmergencyReviewDecisionRequest(
+            packet_id=packet.packet_id,
+            packet_sha256=packet.sha256,
+            mission_day_instance_id=packet.mission_day_instance_id,
+            review_generation=packet.review_generation,
+            reviewed_sequence=packet.reviewed_sequence,
+            decision="approve_for_runtime_consideration",
+            reviewer_alias="leader-01",
+            idempotency_key="review-runtime-stale-001",
+            explicit_confirmation=True,
+        )
+    )
+    current_request = workbench.build_night_runtime_authority_request(
+        receipt,
+        idempotency_key="night-runtime-authority-stale-001",
+    )
+    stale_request = NightRuntimeAuthorityRequest.model_validate(
+        {
+            **current_request.model_dump(mode="json"),
+            "current_packet_sha256": "f" * 64,
+        }
+    )
+
+    decision = workbench.evaluate_night_runtime_authority(stale_request)
+
+    assert decision.status == "blocked_packet_replaced"
+    assert decision.eligible_for_runtime_consideration is False
+    assert decision.hash_revalidation_passed is False
+    assert "current packet, aggregate, gate, or envelope hash changed" in decision.reasons
 
 
 def test_night_decision_rejects_stale_hash_and_same_key_different_request(
@@ -1427,6 +1538,38 @@ def test_missing_freshness_is_ineligible_and_exact_expiry_is_server_authoritativ
     ).daily_emergency_review("D1.instance.001").alternatives[0]
     assert expired.freshness_state == "expired"
     assert expired.eligibility == "ineligible"
+
+
+def test_empty_daily_review_seed_materializes_fail_closed_packet(
+    tmp_path: Path,
+) -> None:
+    project_root, store_root = _workspace(tmp_path)
+    seed_path = project_root / "outputs" / "contextual_permission" / "workbench_seed.json"
+    seed = json.loads(seed_path.read_text(encoding="utf-8"))
+    seed["daily_review"]["alternatives"] = []
+    seed_path.write_text(json.dumps(seed), encoding="utf-8")
+    workbench = ContextualPermissionWorkbench(
+        project_root=project_root,
+        store_root=store_root,
+        now_factory=lambda: NOW,
+    )
+
+    session = workbench.daily_emergency_review("D1.instance.001")
+    repeated = workbench.daily_emergency_review("D1.instance.001")
+    packet = session.alternatives[0]
+    gates = {gate.gate_id: gate for gate in packet.gates}
+
+    assert len(session.alternatives) == 1
+    assert packet.packet_id.startswith("night.packet.D1.")
+    assert packet.sha256 == repeated.alternatives[0].sha256
+    assert packet.eligibility == "ineligible"
+    assert packet.freshness_state == "freshness_unknown"
+    assert gates["gate.runtime_lineage"].state == "pass"
+    assert gates["gate.reviewed_alternative"].state == "missing"
+    assert gates["gate.segment_policy"].state == "blocked"
+    assert packet.candidate_only is True
+    assert packet.runtime_safety_truth is False
+    assert packet.approval_granted is False
 
 
 def test_same_day_out_of_envelope_change_renews_generation_and_preserves_receipt(

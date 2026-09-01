@@ -136,6 +136,11 @@ class GnssHardwareObserver:
         self._write_json(self.snapshot_path, snapshot)
         oled_status_updates = self._oled_status_updates(snapshot)
         led_status_updates = self._led_status_updates(snapshot)
+        visual_control_state = visual_hardware_control_state(
+            oled_status_updates,
+            led_status_updates,
+            configured=self.config.oled_status or self.config.led_status,
+        )
 
         status = {
             "artifact_kind": ARTIFACT_KIND,
@@ -166,7 +171,7 @@ class GnssHardwareObserver:
             "listening_sources": source_statuses,
             "oled_status_updates": oled_status_updates,
             "led_status_updates": led_status_updates,
-            "boundary": boundary_fields(),
+            "boundary": boundary_fields(**visual_control_state),
         }
         self._write_json(self.status_path, status)
         self.last_status = status
@@ -458,7 +463,12 @@ def load_jsonl_tail(path: Path, *, max_records: int) -> tuple[list[dict[str, Any
     return records, invalid_line_count
 
 
-def boundary_fields() -> dict[str, bool]:
+def boundary_fields(
+    *,
+    hardware_control_allowed: bool = False,
+    hardware_control_attempted: bool = False,
+    hardware_control_performed: bool = False,
+) -> dict[str, bool]:
     return {
         "evidence_only": True,
         "live_hardware_read_performed": False,
@@ -468,8 +478,29 @@ def boundary_fields() -> dict[str, bool]:
         "outbound_send_performed": False,
         "rf_tx_allowed": False,
         "lorawan_uplink_allowed": False,
-        "hardware_control_allowed": False,
+        "hardware_control_allowed": hardware_control_allowed,
+        "hardware_control_attempted": hardware_control_attempted,
+        "hardware_control_performed": hardware_control_performed,
         "credential_value_exposed": False,
+    }
+
+
+def visual_hardware_control_state(
+    oled_updates: list[dict[str, Any]],
+    led_updates: list[dict[str, Any]],
+    *,
+    configured: bool,
+) -> dict[str, bool]:
+    updates = [*oled_updates, *led_updates]
+    attempted = any(not bool(update.get("dry_run")) for update in updates)
+    performed = any(
+        not bool(update.get("dry_run")) and update.get("write_status") == "ok"
+        for update in updates
+    )
+    return {
+        "hardware_control_allowed": configured,
+        "hardware_control_attempted": attempted,
+        "hardware_control_performed": performed,
     }
 
 
@@ -573,6 +604,8 @@ def build_observer_oled_payload(
         "rf_tx_allowed": False,
         "lorawan_uplink_allowed": False,
         "outbound_send_performed": False,
+        "hardware_control_attempted": not dry_run,
+        "hardware_control_performed": not dry_run and write_status == "ok",
     }
     if error is not None:
         payload["error"] = error
@@ -689,6 +722,8 @@ def build_observer_led_payload(
         "rf_tx_allowed": False,
         "lorawan_uplink_allowed": False,
         "outbound_send_performed": False,
+        "hardware_control_attempted": not dry_run,
+        "hardware_control_performed": not dry_run and write_status == "ok",
     }
     if error is not None:
         payload["error"] = error
