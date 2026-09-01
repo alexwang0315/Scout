@@ -1929,6 +1929,8 @@ class QgisSpatialBackend:
             ]
             for artifact_type in (
                 *single_types,
+                "terrain_route_flow_accumulation_raster",
+                "terrain_route_drainage_pressure_raster",
                 "terrain_route_corridor_band_raster",
                 "terrain_route_corridor_overlay",
             )
@@ -1945,6 +1947,8 @@ class QgisSpatialBackend:
             )
         artifacts_to_fetch = [
             *[workers_by_type[artifact_type][0] for artifact_type in single_types],
+            *workers_by_type["terrain_route_flow_accumulation_raster"],
+            *workers_by_type["terrain_route_drainage_pressure_raster"],
             *workers_by_type["terrain_route_corridor_band_raster"],
             *workers_by_type["terrain_route_corridor_overlay"],
         ]
@@ -1997,16 +2001,29 @@ class QgisSpatialBackend:
             ) from exc
         if (
             worker_hypothesis.status is not TerrainRouteRunStatus.COMPLETED
-            or len(worker_hypothesis.hypotheses) != 1
+            or not 1 <= len(worker_hypothesis.hypotheses) <= 6
         ):
             raise QgisSpatialBackendError(
-                "QGIS terrain route hypothesis is not one completed candidate"
+                "QGIS terrain route hypotheses are not a bounded completed candidate set"
             )
-        hypothesis = worker_hypothesis.hypotheses[0]
-        if hypothesis.corridor is None:
+        if len(worker_hypothesis.hypotheses) > 1 and any(
+            len(workers_by_type[artifact_type]) != 1
+            for artifact_type in (
+                "terrain_route_flow_accumulation_raster",
+                "terrain_route_drainage_pressure_raster",
+            )
+        ):
             raise QgisSpatialBackendError(
-                "QGIS terrain route candidate corridor is unavailable"
+                "QGIS multi-route result omitted drainage model artifacts"
             )
+        corridor_hypotheses = [
+            item for item in worker_hypothesis.hypotheses if item.corridor is not None
+        ]
+        if len(corridor_hypotheses) != 1:
+            raise QgisSpatialBackendError(
+                "QGIS terrain route candidate set must bind exactly one corridor profile"
+            )
+        hypothesis = corridor_hypotheses[0]
         band_count = len(hypothesis.corridor.bands)
         if (
             band_count < 1
@@ -2021,7 +2038,7 @@ class QgisSpatialBackend:
             artifact_bytes[
                 workers_by_type["terrain_route_best_path_vector"][0].artifact_id
             ],
-            hypothesis=hypothesis,
+            hypotheses=worker_hypothesis.hypotheses,
         )
         manifest_worker = workers_by_type["terrain_route_processing_manifest"][0]
         processing_manifest = _validated_terrain_route_processing_manifest_bytes(
@@ -2030,6 +2047,13 @@ class QgisSpatialBackend:
         )
 
         cache_key = hypothesis.provenance.cache_key
+        if any(
+            item.provenance.cache_key != cache_key
+            for item in worker_hypothesis.hypotheses
+        ):
+            raise QgisSpatialBackendError(
+                "QGIS terrain route alternatives do not share one run cache identity"
+            )
         root_ref = f"{QGIS_WORKFLOW_ROOT_REF}/terrain-route-cache/{cache_key}"
         refs_by_worker_ref = {
             relative_ref: f"{root_ref}/{relative_ref}"
@@ -3732,7 +3756,7 @@ def _bounded_worker_relative_ref(value: str) -> str:
 def _validate_terrain_route_best_path_bytes(
     raw: bytes,
     *,
-    hypothesis: TerrainRouteHypothesis,
+    hypotheses: list[TerrainRouteHypothesis],
 ) -> None:
     if len(raw) > 16 * 1024 * 1024:
         raise QgisSpatialBackendError(
@@ -3756,41 +3780,51 @@ def _validate_terrain_route_best_path_bytes(
         or metadata.get("operational") is not False
         or metadata.get("safe_or_walkable") != "not_determined"
         or not isinstance(features, list)
-        or len(features) != 1
+        or len(features) != len(hypotheses)
+        or not 1 <= len(features) <= 6
     ):
         raise QgisSpatialBackendError(
             "QGIS terrain route best-path vector violated authority invariants"
         )
-    feature = features[0]
-    geometry = feature.get("geometry") if isinstance(feature, dict) else None
-    properties = feature.get("properties") if isinstance(feature, dict) else None
-    if (
-        not isinstance(geometry, dict)
-        or geometry.get("type") != "LineString"
-        or not isinstance(properties, dict)
-        or properties.get("kind") != "terrain_route_hypothesis_best_path"
-        or properties.get("authority") != "candidate_only"
-        or properties.get("source_type") != "terrain_hypothesis"
-        or properties.get("candidate_only") is not True
-        or properties.get("runtime_safety_truth") is not False
-        or properties.get("operational") is not False
-        or properties.get("observed") is not False
-        or properties.get("official") is not False
-        or properties.get("human_verified") is not False
-        or properties.get("path_model") != TERRAIN_ROUTE_PATH_MODEL
-        or properties.get("path_semantics") != TERRAIN_ROUTE_PATH_SEMANTICS
-        or properties.get("path_band_relationship")
-        != TERRAIN_ROUTE_PATH_BAND_RELATIONSHIP
-    ):
-        raise QgisSpatialBackendError(
-            "QGIS terrain route best-path feature attempted promotion"
-        )
-    coordinates = geometry.get("coordinates")
-    expected = [list(item) for item in hypothesis.best_path.coordinates]
-    if coordinates != expected:
-        raise QgisSpatialBackendError(
-            "QGIS terrain route best-path geometry disagrees with the typed hypothesis"
-        )
+    features_by_candidate = {
+        str(feature.get("properties", {}).get("candidate_id") or ""): feature
+        for feature in features
+        if isinstance(feature, dict)
+    }
+    for hypothesis in hypotheses:
+        candidate_id = f"R{hypothesis.alternative_index}"
+        feature = features_by_candidate.get(candidate_id)
+        if feature is None and len(hypotheses) == 1:
+            feature = features[0]
+        geometry = feature.get("geometry") if isinstance(feature, dict) else None
+        properties = feature.get("properties") if isinstance(feature, dict) else None
+        if (
+            not isinstance(geometry, dict)
+            or geometry.get("type") != "LineString"
+            or not isinstance(properties, dict)
+            or properties.get("kind") != "terrain_route_hypothesis_best_path"
+            or properties.get("authority") != "candidate_only"
+            or properties.get("source_type") != "terrain_hypothesis"
+            or properties.get("candidate_only") is not True
+            or properties.get("runtime_safety_truth") is not False
+            or properties.get("operational") is not False
+            or properties.get("observed") is not False
+            or properties.get("official") is not False
+            or properties.get("human_verified") is not False
+            or properties.get("path_model") != TERRAIN_ROUTE_PATH_MODEL
+            or properties.get("path_semantics") != TERRAIN_ROUTE_PATH_SEMANTICS
+            or properties.get("path_band_relationship")
+            != TERRAIN_ROUTE_PATH_BAND_RELATIONSHIP
+        ):
+            raise QgisSpatialBackendError(
+                "QGIS terrain route best-path feature attempted promotion"
+            )
+        coordinates = geometry.get("coordinates")
+        expected = [list(item) for item in hypothesis.best_path.coordinates]
+        if coordinates != expected:
+            raise QgisSpatialBackendError(
+                "QGIS terrain route best-path geometry disagrees with the typed hypothesis"
+            )
 
 
 def _validated_terrain_route_processing_manifest_bytes(
@@ -3865,15 +3899,20 @@ def _rewrite_terrain_route_workspace_refs(
 ) -> dict[str, Any]:
     normalized = json.loads(json.dumps(payload, ensure_ascii=False))
     hypotheses = normalized.get("hypotheses")
-    if not isinstance(hypotheses, list) or len(hypotheses) != 1:
+    if not isinstance(hypotheses, list) or not 1 <= len(hypotheses) <= 6:
         raise QgisSpatialBackendError(
             "QGIS terrain route hypothesis count is invalid"
         )
-    corridor = hypotheses[0].get("corridor")
-    if not isinstance(corridor, dict):
+    corridors = [
+        item.get("corridor")
+        for item in hypotheses
+        if isinstance(item, dict) and isinstance(item.get("corridor"), dict)
+    ]
+    if len(corridors) != 1:
         raise QgisSpatialBackendError(
-            "QGIS terrain route candidate corridor is unavailable"
+            "QGIS terrain route candidate set must bind one corridor"
         )
+    corridor = corridors[0]
     references = [corridor.get("raster_ref")]
     bands = corridor.get("bands")
     if not isinstance(bands, list) or not bands:
@@ -3919,11 +3958,14 @@ def _terrain_route_visualization_manifest(
     feature_collection: dict[str, Any],
     artifacts_by_relative_ref: dict[str, Any],
 ) -> dict[str, Any]:
-    route = hypothesis.hypotheses[0]
-    if route.corridor is None:
+    corridor_routes = [
+        item for item in hypothesis.hypotheses if item.corridor is not None
+    ]
+    if len(corridor_routes) != 1:
         raise QgisSpatialBackendError(
-            "Terrain route visualization requires a candidate corridor"
+            "Terrain route visualization requires one candidate corridor profile"
         )
+    route = corridor_routes[0]
     overlays: list[dict[str, Any]] = []
     opacity_by_percentile = {5.0: 0.58, 10.0: 0.44, 20.0: 0.30}
     for band in route.corridor.bands:
@@ -3989,6 +4031,22 @@ def _terrain_route_visualization_manifest(
             "display_name": "symmetric macro-terrain detour-score percentile cells",
         },
         "path_band_relationship": route.corridor.path_relationship,
+        "alternative_profiles": [
+            {
+                "candidate": item.id,
+                "label": item.label,
+                "alternative_index": item.alternative_index,
+                "strategy": item.strategy.value,
+                "drainage_penalty_multiplier": (
+                    item.drainage_penalty_multiplier
+                ),
+                "corridor_profile": item.corridor is not None,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "operational": False,
+            }
+            for item in hypothesis.hypotheses
+        ],
         "features": feature_collection.get("features", []),
         "raster_overlays": overlays,
         "boundary": {
@@ -4009,17 +4067,27 @@ def _validate_workspace_terrain_route_hypothesis(
 ) -> None:
     if (
         hypothesis.status is not TerrainRouteRunStatus.COMPLETED
-        or len(hypothesis.hypotheses) != 1
-        or hypothesis.hypotheses[0].provenance.cache_key != expected_cache_key
+        or not 1 <= len(hypothesis.hypotheses) <= 6
+        or any(
+            item.provenance.cache_key != expected_cache_key
+            for item in hypothesis.hypotheses
+        )
     ):
         raise QgisSpatialBackendError(
             "Workspace terrain route hypothesis cache identity is invalid"
         )
-    route = hypothesis.hypotheses[0]
-    if route.corridor is None or route.corridor.raster_ref is None:
+    corridor_routes = [
+        item for item in hypothesis.hypotheses if item.corridor is not None
+    ]
+    if (
+        len(corridor_routes) != 1
+        or corridor_routes[0].corridor is None
+        or corridor_routes[0].corridor.raster_ref is None
+    ):
         raise QgisSpatialBackendError(
             "Workspace terrain route corridor is unavailable"
         )
+    route = corridor_routes[0]
     references = [route.corridor.raster_ref]
     for band in route.corridor.bands:
         if band.raster_ref is None or band.overlay_ref is None:
@@ -4039,6 +4107,8 @@ def _terrain_route_processing_algorithm(artifact_type: str) -> str:
     return {
         "terrain_route_best_path_vector": "grass:r.walk.coords+grass:r.path",
         "terrain_route_slope_raster": "grass:r.slope.aspect",
+        "terrain_route_flow_accumulation_raster": "grass:r.watershed",
+        "terrain_route_drainage_pressure_raster": "grass:r.mapcalc.simple",
         "terrain_route_friction_raster": "grass:r.mapcalc.simple",
         "terrain_route_walk_cost_raster": "grass:r.walk.coords",
         "terrain_route_walk_direction_raster": "grass:r.walk.coords",

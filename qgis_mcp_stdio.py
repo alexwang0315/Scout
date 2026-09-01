@@ -14,7 +14,9 @@ from typing import Any
 
 from terrain_route_hypothesis_artifacts import (
     TERRAIN_ROUTE_CORRIDOR_EXPRESSION_KIND,
+    TERRAIN_ROUTE_DRAINAGE_PRESSURE_EXPRESSION_KIND,
     TERRAIN_ROUTE_PATH_OUTSIDE_BAND_EXPRESSION_KIND,
+    TERRAIN_ROUTE_PROFILE_FRICTION_EXPRESSION_KIND,
     TERRAIN_ROUTE_SLOPE_FRICTION_EXPRESSION_KIND,
     TERRAIN_ROUTE_THRESHOLD_EXPRESSION_KIND,
     validate_terrain_route_mapcalc_expression,
@@ -1266,6 +1268,20 @@ class QgisMcpStdioClient:
                 ):
                     raise QgisMcpToolRejected(
                         "GRASS trace-containment audit requires bounded trace A and band B rasters"
+                    )
+            elif expression_kind == TERRAIN_ROUTE_DRAINAGE_PRESSURE_EXPRESSION_KIND:
+                if set(parameters).intersection({"b", "c"}):
+                    raise QgisMcpToolRejected(
+                        "GRASS drainage pressure may only use accumulation raster A"
+                    )
+            elif expression_kind == TERRAIN_ROUTE_PROFILE_FRICTION_EXPRESSION_KIND:
+                if (
+                    not isinstance(parameters.get("b"), str)
+                    or not self._path_allowed(str(parameters["b"]))
+                    or "c" in parameters
+                ):
+                    raise QgisMcpToolRejected(
+                        "GRASS route-profile friction requires bounded slope friction A and drainage pressure B"
                     )
             elif expression_kind == TERRAIN_ROUTE_SLOPE_FRICTION_EXPRESSION_KIND and set(parameters).intersection({"b", "c"}):
                 raise QgisMcpToolRejected(

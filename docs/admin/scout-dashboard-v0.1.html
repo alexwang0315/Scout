@@ -7568,6 +7568,21 @@
       border-top-style: dashed;
     }
 
+    .navigation-terrain-route-key-items i[data-navigation-route-key-strategy="drainage_averse"] {
+      border-top-color: #58d4c8;
+      border-top-style: dashed;
+    }
+
+    .navigation-terrain-route-key-items i[data-navigation-route-key-strategy="balanced"] {
+      border-top-color: #f4c95d;
+      border-top-style: dashed;
+    }
+
+    .navigation-terrain-route-key-items i[data-navigation-route-key-strategy="terrain_only_baseline"] {
+      border-top-color: #f05a9d;
+      border-top-style: dashed;
+    }
+
     .navigation-terrain-route-key-items i[data-navigation-route-key-swatch="corridor"] {
       height: 9px;
       border: 1px solid rgba(88, 212, 200, .78);
@@ -22541,6 +22556,7 @@
       const terrainRouteHypothesis = navigationTerrainRouteHypothesis(snapshot);
       const terrainRouteBand = navigationTerrainRouteHypothesisBand(snapshot);
       const terrainRouteLabel = navigationTerrainRouteHypothesisDisplayLabel(terrainRouteHypothesis);
+      const terrainRouteAlternatives = asArray(terrainRouteHypothesis?.alternatives);
       const localHypothesisFocus = terrainRouteHypothesis?.focus_mode === "hypothesis";
       const outwardCounts = qgisSpatialOutwardCandidateCounts();
       const outwardLegend = [
@@ -22554,7 +22570,7 @@
         : isTerrain ? "prepared-dem-local-detail" : "known-gpx-plus-terrain-hypothesis";
       const fitLabel = localHypothesisFocus
         ? `Fit ${terrainRouteLabel}`
-        : isTerrain ? "Reset prepared DEM local detail" : "Fit complete GPX + R1 result";
+        : isTerrain ? "Reset prepared DEM local detail" : "Fit complete GPX + TRH alternatives";
       const scaleText = localHypothesisFocus
         ? `LOCAL TRH · ${terrainRouteLabel}`
         : isTerrain
@@ -22647,7 +22663,13 @@
               <strong>GPX ↔ ${escapeHtml(terrainRouteLabel)} TERRAIN COMPARISON</strong>
               <div class="navigation-terrain-route-key-items">
                 <span><i data-navigation-route-key-swatch="gpx"></i><b>Golden Route GPX</b><em>known_gpx · reference only</em></span>
-                <span><i data-navigation-route-key-swatch="hypothesis"></i><b>${escapeHtml(terrainRouteLabel)} terrain hypothesis</b><em>candidate_only · not verified</em></span>
+                ${terrainRouteAlternatives.map(alternative => `
+                  <span>
+                    <i data-navigation-route-key-strategy="${escapeHtml(alternative.strategy || "terrain_only_baseline")}"></i>
+                    <b>${escapeHtml(alternative.display_id || "TRH")} · ${escapeHtml(alternative.label || "terrain hypothesis")}</b>
+                    <em>${escapeHtml(alternative.strategy || "UNKNOWN")} · drainage penalty ${escapeHtml(alternative.drainage_penalty_multiplier)}× · candidate_only</em>
+                  </span>
+                `).join("") || `<span><i data-navigation-route-key-swatch="hypothesis"></i><b>${escapeHtml(terrainRouteLabel)} terrain hypothesis</b><em>candidate_only · not verified</em></span>`}
                 <span><i data-navigation-route-key-swatch="corridor"></i><b>${escapeHtml(navigationTerrainRouteHypothesisBandLabel(terrainRouteBand))} corridor</b><em>macro-terrain cells · separate models, not a confidence band</em></span>
               </div>
               <small>CANDIDATE · TERRAIN HYPOTHESIS · NOT A VERIFIED TRAIL</small>
@@ -23946,7 +23968,12 @@
           && properties.official === false
           && properties.human_verified === false;
       });
-      if (features.length !== 1) {
+      const expectedAlternativeCount = asArray(hypothesis?.alternatives).length || 1;
+      if (
+        features.length < 1
+        || features.length > 6
+        || features.length !== expectedAlternativeCount
+      ) {
         return {type: "FeatureCollection", features: []};
       }
       const coordinates = features[0].geometry.coordinates;
@@ -24066,6 +24093,7 @@
           "scout-terrain-route-corridor-top-20",
           "scout-terrain-route-hypothesis-halo",
           "scout-terrain-route-hypothesis",
+          "scout-terrain-route-hypothesis-route-labels",
           "scout-terrain-route-hypothesis-endpoints",
           "scout-terrain-route-hypothesis-labels",
         ],
@@ -24629,12 +24657,43 @@
           source: "scout-terrain-route-hypothesis",
           filter: ["==", ["get", "kind"], "terrain_route_hypothesis_best_path"],
           paint: {
-            "line-color": "#58d4c8",
+            "line-color": [
+              "match",
+              ["get", "strategy"],
+              "drainage_averse", "#58d4c8",
+              "balanced", "#f4c95d",
+              "terrain_only_baseline", "#f05a9d",
+              "#58d4c8",
+            ],
             "line-width": lineWidth(4, 7),
             "line-opacity": 1,
             "line-dasharray": [2.2, 1.1],
           },
           layout: {"line-cap": "round", "line-join": "round"},
+        },
+        {
+          id: "scout-terrain-route-hypothesis-route-labels",
+          type: "symbol",
+          source: "scout-terrain-route-hypothesis",
+          filter: ["==", ["get", "kind"], "terrain_route_hypothesis_best_path"],
+          layout: {
+            "symbol-placement": "line-center",
+            "text-field": ["get", "candidate_id"],
+            "text-size": 11,
+            "text-allow-overlap": false,
+          },
+          paint: {
+            "text-color": "#08110d",
+            "text-halo-color": [
+              "match",
+              ["get", "strategy"],
+              "drainage_averse", "#bff7f0",
+              "balanced", "#fff0ae",
+              "terrain_only_baseline", "#ffc4dd",
+              "#dff7f2",
+            ],
+            "text-halo-width": 2,
+          },
         },
         {
           id: "scout-terrain-route-hypothesis-endpoints",
@@ -25881,6 +25940,7 @@
       if (!hypothesis) return "";
       const metrics = hypothesis.metrics || {};
       const provenance = hypothesis.provenance || {};
+      const alternatives = asArray(hypothesis.alternatives);
       const formatMetric = (value, digits = 1, suffix = "") => {
         if (value === null || value === undefined || value === "") return "UNKNOWN";
         const number = Number(value);
@@ -25921,6 +25981,16 @@
             <strong>${escapeHtml(navigationTerrainRouteHypothesisDisplayLabel(hypothesis))} · TERRAIN-MODEL RELATIVE PREFERENCE</strong>
             <small>CANDIDATE_ONLY · ${escapeHtml(hypothesis.cost_model_version || "UNKNOWN")}</small>
           </div>
+          ${alternatives.length ? `
+            <div class="navigation-terrain-hypothesis-evidence" data-navigation-terrain-route-alternatives="${alternatives.length}">
+              ${alternatives.map(alternative => `
+                <div>
+                  <strong>${escapeHtml(alternative.display_id || "TRH")} · ${escapeHtml(alternative.strategy || "UNKNOWN")}</strong>
+                  <span>${escapeHtml(alternative.label || "terrain hypothesis")} · drainage penalty ${escapeHtml(alternative.drainage_penalty_multiplier)}× · cost ${formatMetric(alternative.relative_cost, 3)} (${escapeHtml(alternative.relative_cost_comparison_scope || "within_profile_only")})${alternative.corridor_profile ? " · corridor profile" : ""}</span>
+                </div>
+              `).join("")}
+            </div>
+          ` : ""}
           <div class="navigation-terrain-support-meter">
             <div><small>Relative cost</small><strong>${formatMetric(metrics.relative_cost, 3)}</strong></div>
             <div><small>Relative score</small><strong>${formatMetric(metrics.relative_score, 3)}</strong></div>
@@ -25929,6 +25999,7 @@
             <div><small>Median slope</small><strong>${formatMetric(metrics.median_slope_degrees, 1, "°")}</strong></div>
             <div><small>Max slope</small><strong>${formatMetric(metrics.max_slope_degrees, 1, "°")}</strong></div>
             <div><small>High-cost fraction</small><strong>${formatMetric(highCostPercent, 1, "%")}</strong></div>
+            <div><small>Drainage pressure overlap</small><strong>${formatMetric(Number(metrics.drainage_pressure_fraction) * 100, 1, "%")}</strong></div>
             <div><small>DEM resolution</small><strong>${formatMetric(hypothesis.dem_resolution_m, 1, " m")} · ${escapeHtml(hypothesis.resolution_class || "UNKNOWN")}</strong></div>
           </div>
           <p>${escapeHtml(hypothesis.uncertainty_statement || "Terrain evidence remains a candidate hypothesis and does not establish a trail, access, passability, or safety.")}</p>
@@ -26751,7 +26822,7 @@
           : workflowMessage
             ? workflowMessage
           : endpointsReady
-            ? "A/B 已備妥 · 可提交候選地形假說"
+            ? "A/B 已備妥 · 可提交三種候選地形假說"
             : "先設定 A 與 B；未提交前不會產生任何路線幾何";
       return `
         <section
@@ -26794,7 +26865,7 @@
               <span>m</span>
             </label>
             <button type="button" data-qgis-terrain-route-reset="true" ${hasDraft && !controlsLocked ? "" : "disabled"}>清除 A/B</button>
-            <button type="button" data-qgis-terrain-route-generate="true" ${canGenerate ? "" : "disabled"}>${workflowActive ? `分析中 ${workflowProgress.completed}/${workflowProgress.total}` : "產生候選 TRH"}</button>
+            <button type="button" data-qgis-terrain-route-generate="true" ${canGenerate ? "" : "disabled"}>${workflowActive ? `分析中 ${workflowProgress.completed}/${workflowProgress.total}` : "產生 3 組候選 TRH"}</button>
           </div>
           <div class="qgis-boundary-strip">
             <strong>CANDIDATE · TERRAIN HYPOTHESIS · NOT A VERIFIED TRAIL</strong>

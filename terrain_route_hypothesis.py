@@ -753,6 +753,10 @@ def _weights_hash(config: TerrainRoutingCostConfig) -> str:
             "slope_cost_bands": [
                 band.model_dump(mode="json") for band in config.slope_cost_bands
             ],
+            "alternative_profiles": [
+                profile.model_dump(mode="json")
+                for profile in config.alternative_profiles
+            ],
             "candidate_exclusion_slope_degrees": (
                 config.candidate_exclusion_slope_degrees
             ),

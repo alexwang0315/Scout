@@ -135,6 +135,8 @@ class QgisWorkerArtifact(BaseModel):
         "terrain_route_hypothesis",
         "terrain_route_best_path_vector",
         "terrain_route_slope_raster",
+        "terrain_route_flow_accumulation_raster",
+        "terrain_route_drainage_pressure_raster",
         "terrain_route_friction_raster",
         "terrain_route_walk_cost_raster",
         "terrain_route_walk_direction_raster",

@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 TERRAIN_ROUTE_HYPOTHESIS_SCHEMA_VERSION = "scout_terrain_route_hypothesis.v0_2"
-TERRAIN_ROUTE_HYPOTHESIS_ALGORITHM_VERSION = "terrain_route_hypothesis.v0_2"
+TERRAIN_ROUTE_HYPOTHESIS_ALGORITHM_VERSION = "terrain_route_hypothesis.v0_3"
 TERRAIN_ROUTE_PATH_MODEL = "anisotropic_walk"
 TERRAIN_ROUTE_PATH_SEMANTICS = "minimum_anisotropic_model_cost_trace"
 TERRAIN_ROUTE_BAND_MODEL = "symmetric_macro_terrain_cost"
@@ -76,6 +76,12 @@ class TerrainResolutionClass(str, Enum):
     TERRAIN_CORRIDOR_CANDIDATE = "terrain_corridor_candidate"
     FINE_TERRAIN_CANDIDATE = "fine_terrain_candidate"
     MICROTERRAIN_CANDIDATE = "microterrain_candidate"
+
+
+class TerrainRouteStrategy(str, Enum):
+    DRAINAGE_AVERSE = "drainage_averse"
+    BALANCED = "balanced"
+    TERRAIN_ONLY_BASELINE = "terrain_only_baseline"
 
 
 class TerrainAuthorityBoundary(BaseModel):
@@ -250,10 +256,66 @@ def default_slope_cost_bands() -> tuple[SlopeCostBand, ...]:
     )
 
 
+class TerrainRouteAlternativeProfile(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    candidate_id: str = Field(pattern=r"^R[1-9][0-9]?$", min_length=2)
+    label: str = Field(min_length=1, max_length=120)
+    strategy: TerrainRouteStrategy
+    drainage_penalty_multiplier: float = Field(ge=0, le=100)
+    corridor_profile: bool = False
+
+    @field_validator("label")
+    @classmethod
+    def reject_promotional_profile_label(cls, value: str) -> str:
+        reject_promotional_text(value)
+        return value.strip()
+
+    @model_validator(mode="after")
+    def validate_strategy_weight(self) -> "TerrainRouteAlternativeProfile":
+        if (
+            self.strategy is TerrainRouteStrategy.TERRAIN_ONLY_BASELINE
+            and self.drainage_penalty_multiplier != 0
+        ):
+            raise ValueError(
+                "terrain_only_baseline must not apply a drainage penalty"
+            )
+        if (
+            self.strategy is TerrainRouteStrategy.DRAINAGE_AVERSE
+            and self.drainage_penalty_multiplier <= 0
+        ):
+            raise ValueError("drainage_averse requires a positive drainage penalty")
+        return self
+
+
+def default_route_alternative_profiles() -> tuple[TerrainRouteAlternativeProfile, ...]:
+    return (
+        TerrainRouteAlternativeProfile(
+            candidate_id="R1",
+            label="R1 drainage-averse terrain hypothesis",
+            strategy=TerrainRouteStrategy.DRAINAGE_AVERSE,
+            drainage_penalty_multiplier=4.0,
+            corridor_profile=True,
+        ),
+        TerrainRouteAlternativeProfile(
+            candidate_id="R2",
+            label="R2 balanced terrain hypothesis",
+            strategy=TerrainRouteStrategy.BALANCED,
+            drainage_penalty_multiplier=1.5,
+        ),
+        TerrainRouteAlternativeProfile(
+            candidate_id="R3",
+            label="R3 terrain-only baseline hypothesis",
+            strategy=TerrainRouteStrategy.TERRAIN_ONLY_BASELINE,
+            drainage_penalty_multiplier=0.0,
+        ),
+    )
+
+
 class TerrainRoutingCostConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    model_version: str = "terrain_routing_cost.v0_1"
+    model_version: str = "terrain_routing_cost.v0_2"
     algorithm_version: str = TERRAIN_ROUTE_HYPOTHESIS_ALGORITHM_VERSION
     base_cost: float = Field(default=1.0, gt=0)
     slope_weight: float = Field(default=1.0, ge=0)
@@ -269,6 +331,9 @@ class TerrainRoutingCostConfig(BaseModel):
     max_corridor_sample_cells: int = Field(default=500, ge=1, le=10_000)
     slope_cost_bands: tuple[SlopeCostBand, ...] = Field(
         default_factory=default_slope_cost_bands
+    )
+    alternative_profiles: tuple[TerrainRouteAlternativeProfile, ...] = Field(
+        default_factory=default_route_alternative_profiles
     )
 
     @field_validator(
@@ -313,6 +378,29 @@ class TerrainRoutingCostConfig(BaseModel):
             raise ValueError("slope_cost_bands must be sorted by max_degrees")
         if self.slope_cost_bands[-1].max_degrees is not None:
             raise ValueError("final slope_cost_band must cover extreme slopes")
+        if not 3 <= len(self.alternative_profiles) <= 6:
+            raise ValueError("terrain route analysis requires three to six profiles")
+        candidate_ids = [item.candidate_id for item in self.alternative_profiles]
+        if len(candidate_ids) != len(set(candidate_ids)):
+            raise ValueError("terrain route profile candidate IDs must be unique")
+        if candidate_ids != [
+            f"R{index}" for index in range(1, len(candidate_ids) + 1)
+        ]:
+            raise ValueError(
+                "terrain route profile candidate IDs must follow stable R1..Rn order"
+            )
+        if sum(item.corridor_profile for item in self.alternative_profiles) != 1:
+            raise ValueError("exactly one terrain route profile must own the corridor")
+        if not any(
+            item.strategy is TerrainRouteStrategy.TERRAIN_ONLY_BASELINE
+            for item in self.alternative_profiles
+        ):
+            raise ValueError("terrain route profiles require a terrain-only baseline")
+        if not any(
+            item.strategy is TerrainRouteStrategy.DRAINAGE_AVERSE
+            for item in self.alternative_profiles
+        ):
+            raise ValueError("terrain route profiles require a drainage-averse candidate")
         return self
 
 
@@ -446,6 +534,8 @@ class TerrainHypothesisMetrics(BaseModel):
     high_cost_fraction: float
     ridge_fraction: float | None = None
     valley_fraction: float | None = None
+    drainage_pressure_fraction: float | None = None
+    high_drainage_pressure_fraction: float | None = None
     teii_stats: dict[str, float] = Field(default_factory=dict)
 
 
@@ -482,6 +572,12 @@ class TerrainRouteHypothesis(BaseModel):
 
     id: str = Field(min_length=1)
     label: str = Field(default="R1 terrain route hypothesis", min_length=1)
+    alternative_index: int = Field(default=1, ge=1, le=6)
+    strategy: TerrainRouteStrategy = TerrainRouteStrategy.TERRAIN_ONLY_BASELINE
+    drainage_penalty_multiplier: float = Field(default=0.0, ge=0, le=100)
+    relative_cost_comparison_scope: Literal["within_profile_only"] = (
+        "within_profile_only"
+    )
     authority: TerrainHypothesisAuthority = TerrainHypothesisAuthority.CANDIDATE_ONLY
     source_type: TerrainEvidenceSourceType = TerrainEvidenceSourceType.TERRAIN_HYPOTHESIS
     candidate_only: Literal[True] = True
@@ -514,6 +610,13 @@ class TerrainRouteHypothesis(BaseModel):
             raise ValueError("terrain route hypothesis source_type cannot be promoted")
         reject_promotional_text(self.id)
         reject_promotional_text(self.label)
+        if (
+            self.strategy is TerrainRouteStrategy.TERRAIN_ONLY_BASELINE
+            and self.drainage_penalty_multiplier != 0
+        ):
+            raise ValueError(
+                "terrain-only hypothesis cannot claim a drainage penalty"
+            )
         return self
 
 
@@ -534,6 +637,23 @@ class TerrainRouteHypothesisRun(BaseModel):
     runtime_safety_truth: Literal[False] = False
     safe_or_walkable: Literal["not_determined"] = "not_determined"
     boundary: TerrainAuthorityBoundary = Field(default_factory=TerrainAuthorityBoundary)
+
+    @model_validator(mode="after")
+    def validate_completed_alternatives(self) -> "TerrainRouteHypothesisRun":
+        if self.status is not TerrainRouteRunStatus.COMPLETED:
+            return self
+        ids = [item.id for item in self.hypotheses]
+        if len(ids) != len(set(ids)):
+            raise ValueError("terrain route hypothesis IDs must be unique")
+        if len(self.hypotheses) > 1:
+            indexes = [item.alternative_index for item in self.hypotheses]
+            if indexes != list(range(1, len(self.hypotheses) + 1)):
+                raise ValueError("terrain route alternatives must have stable ordering")
+            if sum(item.corridor is not None for item in self.hypotheses) != 1:
+                raise ValueError(
+                    "multi-route runs must bind exactly one profile corridor"
+                )
+        return self
 
 
 class TerrainRouteHypothesisRequest(BaseModel):

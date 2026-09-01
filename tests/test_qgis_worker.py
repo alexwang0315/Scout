@@ -459,6 +459,15 @@ class FakeQgisMcpClient:
         if tool == "qgis_vector_export":
             path = Path(arguments["path"])
             if arguments["format"] == "geojson":
+                terrain_route_midpoint = (
+                    [121.214, 24.046]
+                    if "best_path_r1" in path.name
+                    else [121.216, 24.045]
+                    if "best_path_r2" in path.name
+                    else [121.218, 24.043]
+                    if "best_path_r3" in path.name
+                    else None
+                )
                 vector_kind = (
                     "ridge"
                     if "ridge" in path.name
@@ -477,10 +486,18 @@ class FakeQgisMcpClient:
                                     "type": "Feature",
                                     "geometry": {
                                         "type": "LineString",
-                                        "coordinates": [
-                                            [121.21, 24.05],
-                                            [121.22, 24.04],
-                                        ],
+                                        "coordinates": (
+                                            [
+                                                [121.21, 24.05],
+                                                terrain_route_midpoint,
+                                                [121.22, 24.04],
+                                            ]
+                                            if terrain_route_midpoint is not None
+                                            else [
+                                                [121.21, 24.05],
+                                                [121.22, 24.04],
+                                            ]
+                                        ),
                                     },
                                     "properties": {"fixture_kind": vector_kind},
                                 }
@@ -950,6 +967,7 @@ def test_qgis_worker_persists_candidate_only_terrain_route_hypothesis(
     result = payload["result"]
     assert set(result["processing_algorithms"]) >= {
         "grass:r.slope.aspect",
+        "grass:r.watershed",
         "grass:r.mapcalc.simple",
         "grass:r.walk.coords",
         "grass:r.path",
@@ -961,6 +979,8 @@ def test_qgis_worker_persists_candidate_only_terrain_route_hypothesis(
     artifact_types = [item["artifact_type"] for item in result["artifacts"]]
     assert artifact_types.count("terrain_route_hypothesis") == 1
     assert artifact_types.count("terrain_route_best_path_vector") == 1
+    assert artifact_types.count("terrain_route_flow_accumulation_raster") == 1
+    assert artifact_types.count("terrain_route_drainage_pressure_raster") == 1
     assert artifact_types.count("terrain_route_corridor_raster") == 1
     assert artifact_types.count("terrain_route_corridor_band_raster") == 3
     assert artifact_types.count("terrain_route_corridor_overlay") == 3
@@ -974,7 +994,12 @@ def test_qgis_worker_persists_candidate_only_terrain_route_hypothesis(
         tool == "qgis_processing_start"
         and arguments["algorithm"] == "grass:r.walk.coords"
         for tool, arguments in mcp.calls
-    ) == 1
+    ) == 3
+    assert sum(
+        tool == "qgis_processing_start"
+        and arguments["algorithm"] == "grass:r.path"
+        for tool, arguments in mcp.calls
+    ) == 3
     cost_calls = [
         arguments
         for tool, arguments in mcp.calls
@@ -1028,6 +1053,19 @@ def test_qgis_worker_persists_candidate_only_terrain_route_hypothesis(
     assert artifact_response.status_code == 200
     hypothesis_run = artifact_response.json()
     assert hypothesis_run["status"] == "completed"
+    assert len(hypothesis_run["hypotheses"]) == 3
+    assert [item["strategy"] for item in hypothesis_run["hypotheses"]] == [
+        "drainage_averse",
+        "balanced",
+        "terrain_only_baseline",
+    ]
+    assert [
+        item["drainage_penalty_multiplier"]
+        for item in hypothesis_run["hypotheses"]
+    ] == [4.0, 1.5, 0.0]
+    assert sum(
+        item["corridor"] is not None for item in hypothesis_run["hypotheses"]
+    ) == 1
     hypothesis = hypothesis_run["hypotheses"][0]
     assert hypothesis["authority"] == "candidate_only"
     assert hypothesis["source_type"] == "terrain_hypothesis"
@@ -1050,8 +1088,8 @@ def test_qgis_worker_persists_candidate_only_terrain_route_hypothesis(
     ]
     assert metric_sampling == {
         "method": "deterministic_evenly_spaced_path_vertices",
-        "route_vertex_count": 2,
-        "sample_count": 2,
+        "route_vertex_count": 3,
+        "sample_count": 3,
         "maximum_sample_count": 80,
         "statistics_scope": "sampled_path_cells",
         "max_slope_semantics": "maximum_of_sampled_cells_not_full_path_maximum",

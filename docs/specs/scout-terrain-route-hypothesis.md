@@ -63,10 +63,14 @@ The current thin slice supports:
 - arbitrary WGS84 A/B selection on the Dashboard Navigation map;
 - persisted A/B drafts and a configurable 100-5,000 m analysis margin;
 - exact, hash-bound prepared DEM and parent terrain-manifest validation;
-- GRASS slope, nonlinear slope friction, anisotropic trace, and symmetric
-  macro-terrain corridor processing;
-- one `R1` hypothesis per run, plus a bounded catalog of completed runs for
-  selection and comparison in the Dashboard;
+- GRASS slope, nonlinear slope friction, flow accumulation, resolution-aware
+  drainage pressure, anisotropic traces, and symmetric macro-terrain corridor
+  processing;
+- three same-request alternatives by default: `R1 drainage_averse`, `R2
+  balanced`, and `R3 terrain_only_baseline`;
+- one drainage-averse corridor profile plus three independently computed
+  minimum anisotropic model-cost traces, while a bounded catalog still retains
+  completed A/B runs for Dashboard selection;
 - independent 5%, 10%, and 20% finite-cell corridor percentile layers;
 - typed authority, evidence, unknowns, metrics, failures, provenance, and cache
   keys;
@@ -76,10 +80,11 @@ The current thin slice supports:
   macOS or Scout/Linux when that host has the required QGIS/GRASS runtime and
   hash-bound workspace inputs.
 
-This is not a multi-alternative solver yet. A catalog can retain multiple
-completed A/B runs, but one execution still emits one minimum anisotropic
-model-cost trace. True `R1`/`R2`/`R3` alternatives for the same request remain a
-later phase.
+The three alternatives are different model assumptions, not a safety ranking.
+Their costs are comparable only within each profile because the friction scales
+differ. On terrain with one dominant optimum, two or more profiles may still
+produce the same geometry; the run records that collision instead of inventing
+spatial separation.
 
 ## 4. Architecture and boundaries
 
@@ -131,12 +136,15 @@ The workflow must not guess through missing DEM, mismatched CRS, stale parent
 manifest, unexpected NoData, incomplete cost surface, worker failure, or an
 unconnected endpoint pair.
 
-## 6. Terrain cost model v0.1
+## 6. Terrain cost model v0.2
 
-The current live model intentionally enables slope only:
+The current live model combines nonlinear slope friction with a bounded
+drainage-pressure term:
 
 ```text
-friction = base_cost + slope_weight * piecewise_slope_cost
+slope_friction = base_cost + slope_weight * piecewise_slope_cost
+drainage_pressure = piecewise(abs(flow_accumulation), DEM_cell_area)
+profile_friction = slope_friction + profile_multiplier * drainage_pressure
 ```
 
 Default slope bands are:
@@ -153,10 +161,17 @@ These labels are terrain-model costs, not passability classes. The default
 `candidate_exclusion_slope_degrees` is unset, so no fixed slope is automatically
 declared impassable.
 
-Typed configuration already carries roughness, curvature, drainage, ridge, and
-TEII weights. In v0.1 they are zero and inactive. A zero weight means "not
-included in this model", not that roughness, drainage exposure, ridge effect,
-or TEII is zero on the ground.
+Default profile multipliers are `4.0` for `R1 drainage_averse`, `1.5` for `R2
+balanced`, and `0.0` for `R3 terrain_only_baseline`. The pressure thresholds
+represent approximately 1, 5, and 25 hectares of upstream contributing area,
+converted to cell counts from the actual DEM resolution. This is a model
+penalty, not confirmation of a river, water, hazard, or impassability. R3 may
+therefore follow a valley or channel and remains useful as a visible baseline.
+
+Typed configuration still carries roughness, curvature, generic drainage,
+ridge, and TEII weights. Except for the explicit per-profile drainage penalty,
+those terms remain inactive. A zero weight means "not included in this model",
+not that the property is zero on the ground.
 
 ## 7. GRASS processing chain
 
@@ -166,8 +181,11 @@ The fixed live chain is:
 validated DEM rectangle
   -> grass:r.slope.aspect
   -> grass:r.mapcalc.simple nonlinear slope friction
-  -> grass:r.walk.coords accumulated anisotropic A-to-B cost + direction
-  -> grass:r.path minimum anisotropic model-cost trace
+  -> grass:r.watershed flow accumulation
+  -> grass:r.mapcalc.simple resolution-aware drainage pressure
+  -> three profile friction rasters
+  -> three grass:r.walk.coords accumulated anisotropic A-to-B costs + directions
+  -> three grass:r.path minimum anisotropic model-cost traces
   -> full-extent grass:r.cost from A
   -> full-extent grass:r.cost from B
   -> C_corridor(x,y) = C_A(x,y) + C_B(x,y) - C_AB
@@ -176,10 +194,11 @@ validated DEM rectangle
   -> hypothesis + visualization + processing manifests
 ```
 
-`r.walk` is used for the displayed best-path hypothesis because it accounts for
-directional uphill/downhill movement cost. The two `r.cost` surfaces are used
-for the symmetric corridor. `stop_coordinates` is deliberately omitted so both
-cost rasters cover the complete analysis extent; `C_AB` is sampled at B.
+`r.walk` is used for all three displayed path hypotheses because it accounts
+for directional uphill/downhill movement cost. The two `r.cost` surfaces use
+the declared corridor profile, currently R1, for the symmetric corridor.
+`stop_coordinates` is deliberately omitted so both cost rasters cover the
+complete analysis extent; `C_AB` is sampled at B.
 
 The trace and corridor are separate model products:
 
@@ -199,8 +218,9 @@ references, terrain-model-relative metrics, positive/negative evidence,
 unknowns, DEM resolution class, confidence limits, model version, and full
 provenance.
 
-Current metrics include relative model cost, distance, elevation gain/loss,
-sampled maximum and median slope, and high-cost fraction. Route metrics are
+Current metrics include within-profile relative model cost, distance, elevation
+gain/loss, sampled maximum and median slope, high-cost fraction, drainage
+pressure overlap, and high-drainage-pressure overlap. Route metrics are
 sampled deterministically from at most 80 evenly spaced path vertices while
 retaining both endpoints. Provenance records the original vertex count, sampled
 count, method, and that sampled maximum slope is not a full-path-cell maximum.
@@ -312,6 +332,7 @@ The current implementation must preserve all of the following:
 | Legal access | `legal_access_unknown`; permits, closure, ownership, and access rights are not terrain properties. |
 | Engineered trail | Bridge, rope, ladder, stairs, tunnel, retaining wall, and engineered tread presence remain unknown. |
 | Water state | Current depth, discharge, flood state, and crossing condition remain unknown. |
+| Drainage inference | Flow accumulation is DEM-derived at source resolution; it does not confirm a wet channel, seasonal flow, canyon, bridge, or usable crossing. |
 | Trail surface | Mud, erosion, loose rock, scrambling, and tread condition remain unknown. |
 | Scout-host execution | Portable runner exists, but a real Scout-host QGIS/GRASS receipt has not yet been collected. |
 
@@ -321,11 +342,11 @@ passage, legal access, or operational safety.
 
 ## 13. Next recommended phase
 
-The next highest-value phase is to produce multiple alternatives for one A/B
-request and explain why they differ, while keeping each result candidate-only.
-After that, add versioned roughness, curvature, ridge/valley, drainage,
-geomorphon, and TEII evidence one source at a time with synthetic-terrain and
-real-workspace regression tests.
+The next highest-value phase is to add spatial-diversity constraints when two
+profiles collapse onto the same optimum, and to compute a separately bound
+corridor for each profile. After that, add versioned roughness, curvature,
+ridge/valley, geomorphon, and TEII evidence one source at a time with
+synthetic-terrain and real-workspace regression tests.
 
 Known GPX terrain-consistency analysis and Scout AI tools remain separate later
 work. Their outputs must be `CONSISTENT`, `PARTIALLY_CONSISTENT`,

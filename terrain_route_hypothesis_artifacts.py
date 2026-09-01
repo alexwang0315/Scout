@@ -22,17 +22,25 @@ from terrain_route_hypothesis_models import (
 TERRAIN_ROUTE_CACHE_SCHEMA_VERSION = "scout_terrain_route_cache.v0_1"
 TERRAIN_ROUTE_CORRIDOR_SEMANTICS = TERRAIN_ROUTE_BAND_SEMANTICS
 TERRAIN_ROUTE_SLOPE_FRICTION_EXPRESSION_KIND = "slope_piecewise_friction"
+TERRAIN_ROUTE_DRAINAGE_PRESSURE_EXPRESSION_KIND = "drainage_pressure"
+TERRAIN_ROUTE_PROFILE_FRICTION_EXPRESSION_KIND = "profile_friction"
 TERRAIN_ROUTE_CORRIDOR_EXPRESSION_KIND = "symmetric_relative_corridor"
 TERRAIN_ROUTE_THRESHOLD_EXPRESSION_KIND = "finite_cell_percentile_mask"
 TERRAIN_ROUTE_PATH_OUTSIDE_BAND_EXPRESSION_KIND = "path_outside_percentile_band"
-TERRAIN_ROUTE_VISUALIZATION_REVISION = "candidate_corridor_overlay.v0_2"
-TERRAIN_ROUTE_PROVENANCE_REVISION = "runtime_versions_and_host.v0_2"
+TERRAIN_ROUTE_VISUALIZATION_REVISION = "candidate_corridor_overlay.v0_3"
+TERRAIN_ROUTE_PROVENANCE_REVISION = "runtime_versions_and_host.v0_3"
 
 _DECIMAL = r"(?:0|[1-9][0-9]*)(?:\.[0-9]+)?"
 _CORRIDOR_EXPRESSION = re.compile(rf"^max\(0,A\+B-({_DECIMAL})\)$")
 _THRESHOLD_EXPRESSION = re.compile(rf"^if\(A<=({_DECIMAL}),1,null\(\)\)$")
 _PATH_OUTSIDE_BAND_EXPRESSION = "if(!isnull(A)&&isnull(B),1,null())"
 _FRICTION_EXPRESSION = re.compile(rf"^({_DECIMAL})\+({_DECIMAL})\*\((.+)\)$")
+_DRAINAGE_PRESSURE_EXPRESSION = re.compile(
+    rf"^if\(abs\(A\)>=({_DECIMAL}),8,"
+    rf"if\(abs\(A\)>=({_DECIMAL}),3,"
+    rf"if\(abs\(A\)>=({_DECIMAL}),1,0\)\)\)$"
+)
+_PROFILE_FRICTION_EXPRESSION = re.compile(rf"^A\+({_DECIMAL})\*B$")
 
 
 class TerrainRouteCacheKeys(BaseModel):
@@ -157,6 +165,36 @@ def build_slope_friction_expression(config: TerrainRoutingCostConfig) -> str:
     return compiled
 
 
+def build_drainage_pressure_expression(dem_resolution_m: float) -> str:
+    """Compile flow accumulation to bounded, resolution-aware drainage pressure."""
+
+    resolution = float(dem_resolution_m)
+    if not math.isfinite(resolution) or not 0 < resolution <= 1_000:
+        raise ValueError("DEM resolution is outside drainage-model bounds")
+    cell_area_m2 = resolution * resolution
+    low_cells = max(1, math.ceil(10_000 / cell_area_m2))
+    moderate_cells = max(low_cells + 1, math.ceil(50_000 / cell_area_m2))
+    high_cells = max(moderate_cells + 1, math.ceil(250_000 / cell_area_m2))
+    expression = (
+        f"if(abs(A)>={high_cells},8,"
+        f"if(abs(A)>={moderate_cells},3,"
+        f"if(abs(A)>={low_cells},1,0)))"
+    )
+    validate_terrain_route_mapcalc_expression(expression)
+    return expression
+
+
+def build_profile_friction_expression(drainage_penalty_multiplier: float) -> str:
+    """Combine slope friction A and drainage pressure B for one route profile."""
+
+    multiplier = float(drainage_penalty_multiplier)
+    if not math.isfinite(multiplier) or not 0 <= multiplier <= 100:
+        raise ValueError("drainage penalty multiplier is outside bounds")
+    expression = f"A+{_format_decimal(multiplier)}*B"
+    validate_terrain_route_mapcalc_expression(expression)
+    return expression
+
+
 def build_relative_corridor_expression(minimum_ab_cost: float) -> str:
     value = _bounded_nonnegative_cost(minimum_ab_cost)
     expression = f"max(0,A+B-{_format_decimal(value)})"
@@ -191,6 +229,18 @@ def validate_terrain_route_mapcalc_expression(expression: str) -> str:
         return TERRAIN_ROUTE_THRESHOLD_EXPRESSION_KIND
     if expression == _PATH_OUTSIDE_BAND_EXPRESSION:
         return TERRAIN_ROUTE_PATH_OUTSIDE_BAND_EXPRESSION_KIND
+    drainage = _DRAINAGE_PRESSURE_EXPRESSION.fullmatch(expression)
+    if drainage:
+        high, moderate, low = (float(value) for value in drainage.groups())
+        if not 1 <= low < moderate < high <= 100_000_000:
+            raise ValueError("terrain route drainage thresholds are invalid")
+        return TERRAIN_ROUTE_DRAINAGE_PRESSURE_EXPRESSION_KIND
+    profile = _PROFILE_FRICTION_EXPRESSION.fullmatch(expression)
+    if profile:
+        multiplier = float(profile.group(1))
+        if not 0 <= multiplier <= 100:
+            raise ValueError("terrain route profile friction multiplier is invalid")
+        return TERRAIN_ROUTE_PROFILE_FRICTION_EXPRESSION_KIND
     friction = _FRICTION_EXPRESSION.fullmatch(expression)
     if friction:
         base = float(friction.group(1))
@@ -280,13 +330,17 @@ def _stable_hash(payload: Any) -> str:
 __all__ = [
     "TERRAIN_ROUTE_CACHE_SCHEMA_VERSION",
     "TERRAIN_ROUTE_CORRIDOR_SEMANTICS",
+    "TERRAIN_ROUTE_DRAINAGE_PRESSURE_EXPRESSION_KIND",
+    "TERRAIN_ROUTE_PROFILE_FRICTION_EXPRESSION_KIND",
     "TERRAIN_ROUTE_PROVENANCE_REVISION",
     "TERRAIN_ROUTE_VISUALIZATION_REVISION",
     "TerrainRouteCacheKeys",
     "build_corridor_threshold_expression",
+    "build_drainage_pressure_expression",
     "build_path_outside_band_expression",
     "build_live_terrain_route_cache_keys",
     "build_relative_corridor_expression",
+    "build_profile_friction_expression",
     "build_slope_friction_expression",
     "validate_terrain_route_mapcalc_expression",
 ]

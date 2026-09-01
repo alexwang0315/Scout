@@ -5158,3 +5158,40 @@ Portable macOS/Scout execution is exposed through
 its receipt. A real execution receipt from the currently unreachable Scout host
 remains `UNKNOWN`. The normative subsystem description is maintained in
 [Scout Terrain Route Hypothesis Engine](scout-terrain-route-hypothesis.md).
+
+### 2026-09-01 TRH drainage bias and same-request alternatives
+
+Symptom: a slope-only TRH could prefer a valley or flow channel because lower
+slope reduced friction, while one A/B execution exposed only one R1 trace. A
+catalog of earlier runs did not solve this because those entries represented
+different executions rather than alternate assumptions for the same request.
+
+Root cause: live cost-model v0.1 explicitly rejected non-zero drainage weight,
+and the worker executed `r.walk` / `r.path` once. Flow accumulation existed in
+the broader terrain stack but was not bound into the route friction surface.
+
+Current bounded fix:
+
+```text
+hash-bound DEM
+  -> grass:r.slope.aspect -> nonlinear slope friction
+  -> grass:r.watershed -> flow accumulation
+  -> resolution-aware drainage pressure (1 / 5 / 25 ha contributing area)
+  -> R1 drainage_averse: pressure multiplier 4.0
+  -> R2 balanced: pressure multiplier 1.5
+  -> R3 terrain_only_baseline: pressure multiplier 0.0
+  -> three independent r.walk + r.path traces
+  -> one R1-bound symmetric 5/10/20 corridor in this thin slice
+```
+
+All three candidates are persisted in one typed run and displayed together in
+Navigation with separate colors and labels. Cross-profile costs are not ranked
+because each friction scale differs. If two profiles resolve to the same cells,
+the manifest records `distinct_geometry_count` and emits a warning; it never
+manufactures a detour. The zero-penalty R3 remains visible specifically so a
+valley/channel-following terrain-only solution is not hidden.
+
+Drainage pressure is not observed water, a hazard class, or an exclusion mask.
+Current water level, canyon form, vegetation, recent landslide, bridge, rope,
+engineered tread, passage, safety, and legal access remain UNKNOWN. A stronger
+drainage penalty must never be described as safer.

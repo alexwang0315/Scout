@@ -6748,9 +6748,13 @@ def _validated_qgis_terrain_route_activation(
     )
     if (
         hypothesis.status is not TerrainRouteRunStatus.COMPLETED
-        or len(hypothesis.hypotheses) != 1
-        or hypothesis.hypotheses[0].provenance.cache_key
-        != output_refs["terrain_route_hypothesis_cache_key"]
+        or not 1 <= len(hypothesis.hypotheses) <= 6
+        or any(
+            item.provenance.cache_key
+            != output_refs["terrain_route_hypothesis_cache_key"]
+            for item in hypothesis.hypotheses
+        )
+        or sum(item.corridor is not None for item in hypothesis.hypotheses) != 1
     ):
         raise ValueError("Terrain route activation typed hypothesis is invalid")
     visualization = _load_json(visualization_path)

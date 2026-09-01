@@ -1110,6 +1110,8 @@ Navigation/Terrain Intelligence 必須把地圖本身當作主要操作面，不
 | `MAP-WAYFIND-006` | GRASS 不可用時改用 Python bitmap 並顯示為相同分析。 | fail closed，揭露 unavailable，不產生 synthetic terrain truth。 |
 | `MAP-WAYFIND-007` | 把山脊／谷線／水系候選叫做替代路線、獸徑或安全路線。 | 只稱 terrain morphology candidate，等待獨立 evidence。 |
 | `MAP-WAYFIND-008` | 切換圖層、移動 3D 或選取 evidence 導致 2D 自動回到 fit。 | 只有明示 Fit/Reset 或新的 zoom-to 操作可以改變該 view camera。 |
+| `MAP-WAYFIND-009` | 因溪谷坡度較低，單一 slope-only TRH 把 drainage 當成唯一答案。 | 同一 A/B 至少保留 drainage-averse、balanced、terrain-only baseline 三種模型假說，並揭露各自 drainage penalty。 |
+| `MAP-WAYFIND-010` | 把避開 drainage 的候選宣稱為較安全，或把 terrain-only baseline 的河谷重疊宣稱為河道可走。 | drainage 僅是 DEM-derived relative cost；所有替代線維持 candidate-only，水位、溪床、峽谷、橋梁與通行性保持 UNKNOWN。 |
 
 目前 bounded implementation 對應 `terrain_feature_stack.v1`、Scout-owned QGIS
 worker、GRASS/GDAL artifacts 與 MapLibre projection。實際執行證據、硬體資源與版本
@@ -1119,8 +1121,9 @@ worker、GRASS/GDAL artifacts 與 MapLibre projection。實際執行證據、硬
 ### 11.11 Terrain Route Hypothesis：任意 A/B 地形候選
 
 地圖力可以使用 `terrain_route_hypothesis.v1`，針對使用者指定的 A/B 端點，從
-DEM 與版本化 terrain-cost model 產生一條 minimum anisotropic model-cost trace，
-以及由 A、B 雙向累積成本形成的 symmetric macro-terrain corridor。這項能力稱為
+DEM 與版本化 terrain-cost model 預設產生三條 minimum anisotropic model-cost
+trace，以及由 A、B 雙向累積成本形成的 symmetric macro-terrain corridor。三種
+profile 為 `R1 drainage_averse`、`R2 balanced`、`R3 terrain_only_baseline`；這項能力稱為
 **Terrain Route Hypothesis（TRH）**，不得稱為 Trail Generator。
 
 TRH 的規範問題是：
@@ -1140,9 +1143,17 @@ promotion_allowed=false
 safe_or_walkable=not_determined
 ```
 
-單一 best-path trace 與 5/10/20 percentile corridor 是兩種不同模型產品。不得把
+每條 best-path trace 與 5/10/20 percentile corridor 是不同模型產品。不得把
 trace 稱為已存在步道，也不得把 corridor 稱為安全帶、通行範圍或信心區間；不得
 為了讓 trace 落入 corridor 而把 trace cell 強制 union 進 percentile mask。
+各 profile 使用不同 friction scale，`relative_cost` 只允許在該 profile 內解讀，
+不得跨 profile 排成 safety、passability 或 success ranking。若多個 profile 收斂到
+同一幾何，必須記錄重疊，不能為了湊足三條線而偽造空間差異。
+
+Drainage-aware cost 必須由 hash-bound DEM 經 allowlisted GRASS hydrology 計算，並
+依 DEM resolution 換算 contributing-area threshold。Drainage penalty 只能表示模型
+偏離集水線的程度；`R3 terrain_only_baseline` 明確保留零 drainage penalty，供人工
+比較可能沿谷／沿河的純地形解。任何一條線都不因此取得步道、通行、安全或合法性。
 
 Navigation Dashboard 必須遵守原子發布：新 TRH 在 queued/running 時鎖定 A/B 與
 重複送出控制，只更新進度而不週期性重建 MapLibre；舊的 completed candidate 若

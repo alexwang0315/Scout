@@ -615,6 +615,8 @@ def _terrain_route_worker_evidence(
         "terrain_route_hypothesis": "terrain_route_hypothesis.json",
         "terrain_route_best_path_vector": "terrain_route_best_path.geojson",
         "terrain_route_slope_raster": "terrain_route_slope.tif",
+        "terrain_route_flow_accumulation_raster": "terrain_route_flow_accumulation.tif",
+        "terrain_route_drainage_pressure_raster": "terrain_route_drainage_pressure.tif",
         "terrain_route_friction_raster": "terrain_route_friction.tif",
         "terrain_route_walk_cost_raster": "terrain_route_walk_cost.tif",
         "terrain_route_walk_direction_raster": "terrain_route_walk_direction.tif",
@@ -630,6 +632,8 @@ def _terrain_route_worker_evidence(
         key: f"real-{key}".encode("ascii")
         for key in (
             "terrain_route_slope_raster",
+            "terrain_route_flow_accumulation_raster",
+            "terrain_route_drainage_pressure_raster",
             "terrain_route_friction_raster",
             "terrain_route_walk_cost_raster",
             "terrain_route_walk_direction_raster",
@@ -881,6 +885,69 @@ def _terrain_route_worker_evidence(
             }
         ],
     }
+    midpoint_lon = (float(coordinates[0][0]) + float(coordinates[-1][0])) / 2
+    midpoint_lat = (float(coordinates[0][1]) + float(coordinates[-1][1])) / 2
+    route_profiles = (
+        ("drainage_averse", 4.0, [midpoint_lon - 0.001, midpoint_lat + 0.001]),
+        ("balanced", 1.5, [midpoint_lon, midpoint_lat]),
+        ("terrain_only_baseline", 0.0, [midpoint_lon + 0.001, midpoint_lat - 0.001]),
+    )
+    typed_hypotheses = []
+    path_features = []
+    for alternative_index, (strategy, multiplier, midpoint) in enumerate(
+        route_profiles,
+        start=1,
+    ):
+        candidate_id = f"R{alternative_index}"
+        profile_coordinates = [coordinates[0], midpoint, coordinates[-1]]
+        route = json.loads(json.dumps(hypothesis["hypotheses"][0]))
+        route.update(
+            {
+                "id": f"qgis-worker-demo-run.terrain_route_hypothesis.{candidate_id}",
+                "label": f"{candidate_id} {strategy} terrain hypothesis",
+                "alternative_index": alternative_index,
+                "strategy": strategy,
+                "drainage_penalty_multiplier": multiplier,
+            }
+        )
+        route["best_path"]["coordinates"] = profile_coordinates
+        if alternative_index > 1:
+            route["corridor"] = None
+        route["provenance"]["weights"]["drainage_penalty_multiplier"] = multiplier
+        route["provenance"]["processing_manifest"]["active_profile"] = {
+            "candidate_id": candidate_id,
+            "strategy": strategy,
+            "drainage_penalty_multiplier": multiplier,
+            "corridor_profile": alternative_index == 1,
+        }
+        typed_hypotheses.append(route)
+
+        feature = json.loads(json.dumps(best_path["features"][0]))
+        feature["geometry"]["coordinates"] = profile_coordinates
+        feature["properties"].update(
+            {
+                "id": route["id"],
+                "candidate_id": candidate_id,
+                "alternative_index": alternative_index,
+                "label": route["label"],
+                "strategy": strategy,
+                "drainage_penalty_multiplier": multiplier,
+                "relative_cost_comparison_scope": "within_profile_only",
+            }
+        )
+        path_features.append(feature)
+    hypothesis["hypotheses"] = typed_hypotheses
+    best_path["features"] = path_features
+    best_path["metadata"].update(
+        {
+            "candidate_ids": ["R1", "R2", "R3"],
+            "candidate_count": 3,
+            "distinct_geometry_count": 3,
+        }
+    )
+    bytes_by_key["terrain_route_best_path_vector"] = json.dumps(
+        best_path, separators=(",", ":")
+    ).encode("utf-8")
     bytes_by_key["terrain_route_hypothesis"] = json.dumps(
         hypothesis, separators=(",", ":")
     ).encode("utf-8")
@@ -1354,7 +1421,7 @@ def test_qgis_backend_materializes_and_reuses_candidate_terrain_route_cache(
     assert completed.candidate_only is True
     assert completed.runtime_safety_truth is False
     assert completed.operational is False
-    assert len(route_transport.byte_calls) == 19
+    assert len(route_transport.byte_calls) == 21
     persisted = json.loads(
         (project_root / "project.json").read_text(encoding="utf-8")
     )
@@ -1378,6 +1445,12 @@ def test_qgis_backend_materializes_and_reuses_candidate_terrain_route_cache(
             encoding="utf-8"
         )
     )
+    assert len(normalized["hypotheses"]) == 3
+    assert [item["strategy"] for item in normalized["hypotheses"]] == [
+        "drainage_averse",
+        "balanced",
+        "terrain_only_baseline",
+    ]
     hypothesis = normalized["hypotheses"][0]
     assert hypothesis["authority"] == "candidate_only"
     assert hypothesis["source_type"] == "terrain_hypothesis"
@@ -1394,6 +1467,9 @@ def test_qgis_backend_materializes_and_reuses_candidate_terrain_route_cache(
     assert navigation.payload["terrain_route_hypothesis"]["status"] == (
         "candidate_ready"
     )
+    assert len(
+        navigation.payload["terrain_route_hypothesis"]["alternatives"]
+    ) == 3
     route_boundary = navigation.payload["terrain_route_hypothesis"]["boundary"]
     assert route_boundary["candidate_only"] is True
     assert route_boundary["runtime_safety_truth"] is False
@@ -1413,6 +1489,7 @@ def test_qgis_backend_materializes_and_reuses_candidate_terrain_route_cache(
         "TERRAIN HYPOTHESIS",
         "NOT A VERIFIED TRAIL",
     ]
+    assert len(visualization["alternative_profiles"]) == 3
     assert [item["mode"] for item in visualization["raster_overlays"]] == [
         "top_5_percent_corridor",
         "top_10_percent_corridor",

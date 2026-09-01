@@ -23,8 +23,15 @@ from terrain_route_hypothesis import (
     slope_cost_for_degrees,
 )
 from terrain_route_hypothesis_models import (
+    TerrainRouteAlternativeProfile,
     TerrainRouteHypothesisCatalog,
     TerrainRouteHypothesisCatalogEntry,
+    TerrainRouteStrategy,
+)
+from terrain_route_hypothesis_artifacts import (
+    build_drainage_pressure_expression,
+    build_profile_friction_expression,
+    validate_terrain_route_mapcalc_expression,
 )
 
 
@@ -195,6 +202,46 @@ def test_piecewise_slope_cost_is_nonlinear_and_never_labels_passability() -> Non
     assert high > moderate * 4
     assert extreme > high * 2
     assert not (PROHIBITED_PROMOTION_LABELS & {band.label for band in config.slope_cost_bands})
+
+
+def test_default_live_profiles_preserve_three_distinct_drainage_assumptions() -> None:
+    config = TerrainRoutingCostConfig()
+
+    assert [item.candidate_id for item in config.alternative_profiles] == [
+        "R1",
+        "R2",
+        "R3",
+    ]
+    assert [item.strategy for item in config.alternative_profiles] == [
+        TerrainRouteStrategy.DRAINAGE_AVERSE,
+        TerrainRouteStrategy.BALANCED,
+        TerrainRouteStrategy.TERRAIN_ONLY_BASELINE,
+    ]
+    assert [item.drainage_penalty_multiplier for item in config.alternative_profiles] == [
+        4.0,
+        1.5,
+        0.0,
+    ]
+    assert sum(item.corridor_profile for item in config.alternative_profiles) == 1
+
+    drainage_expression = build_drainage_pressure_expression(20.0)
+    assert drainage_expression == (
+        "if(abs(A)>=625,8,if(abs(A)>=125,3,if(abs(A)>=25,1,0)))"
+    )
+    assert validate_terrain_route_mapcalc_expression(drainage_expression) == (
+        "drainage_pressure"
+    )
+    assert build_profile_friction_expression(4.0) == "A+4*B"
+
+
+def test_terrain_only_profile_rejects_hidden_drainage_penalty() -> None:
+    with pytest.raises(ValidationError, match="must not apply a drainage penalty"):
+        TerrainRouteAlternativeProfile(
+            candidate_id="R3",
+            label="R3 terrain-only baseline hypothesis",
+            strategy=TerrainRouteStrategy.TERRAIN_ONLY_BASELINE,
+            drainage_penalty_multiplier=1.0,
+        )
 
 
 def test_route_prefers_saddle_gap_and_corridor_contains_best_path() -> None:

@@ -631,6 +631,93 @@ def test_projection_exposes_hash_bound_candidate_only_terrain_route_hypothesis(
     ]
 
 
+def test_projection_exposes_three_drainage_strategy_alternatives(
+    tmp_path: Path,
+) -> None:
+    project_root, project = _workspace(tmp_path, sample_count=4)
+    hypothesis_ref, visualization_ref = _attach_terrain_route_hypothesis(
+        project_root,
+        project,
+    )
+    hypothesis_path = project_root / hypothesis_ref
+    visualization_path = project_root / visualization_ref
+    hypothesis_run = json.loads(hypothesis_path.read_text(encoding="utf-8"))
+    visualization = json.loads(visualization_path.read_text(encoding="utf-8"))
+    base = hypothesis_run["hypotheses"][0]
+    base.update(
+        {
+            "alternative_index": 1,
+            "strategy": "drainage_averse",
+            "drainage_penalty_multiplier": 4.0,
+        }
+    )
+    profiles = []
+    features = []
+    for index, (strategy, multiplier, midpoint) in enumerate(
+        (
+            ("drainage_averse", 4.0, [121.145, 24.058]),
+            ("balanced", 1.5, [121.15, 24.05]),
+            ("terrain_only_baseline", 0.0, [121.158, 24.043]),
+        ),
+        start=1,
+    ):
+        route = json.loads(json.dumps(base))
+        route.update(
+            {
+                "id": f"route-demo.terrain-route.R{index}",
+                "label": f"R{index} {strategy} terrain hypothesis",
+                "alternative_index": index,
+                "strategy": strategy,
+                "drainage_penalty_multiplier": multiplier,
+            }
+        )
+        coordinates = [[121.11, 24.01], midpoint, [121.19, 24.09]]
+        route["best_path"]["coordinates"] = coordinates
+        if index > 1:
+            route["corridor"] = None
+        profiles.append(route)
+        feature = json.loads(json.dumps(visualization["features"][0]))
+        feature["geometry"]["coordinates"] = coordinates
+        feature["properties"].update(
+            {
+                "id": route["id"],
+                "candidate_id": f"R{index}",
+                "alternative_index": index,
+                "strategy": strategy,
+                "drainage_penalty_multiplier": multiplier,
+            }
+        )
+        features.append(feature)
+    hypothesis_run["hypotheses"] = profiles
+    visualization["features"] = features
+    _write_json(hypothesis_path, hypothesis_run)
+    _write_json(visualization_path, visualization)
+    project["terrain_route_hypothesis_sha256"] = _sha256(hypothesis_path)
+    project["terrain_route_hypothesis_visualization_sha256"] = _sha256(
+        visualization_path
+    )
+
+    result = build_navigation_terrain_projection(
+        project_root,
+        project,
+        project_id="route-demo",
+    )
+
+    candidate = result["terrain_route_hypothesis"]
+    assert candidate["status"] == "candidate_ready"
+    assert [item["strategy"] for item in candidate["alternatives"]] == [
+        "drainage_averse",
+        "balanced",
+        "terrain_only_baseline",
+    ]
+    assert [
+        item["drainage_penalty_multiplier"]
+        for item in candidate["alternatives"]
+    ] == [4.0, 1.5, 0.0]
+    assert len(candidate["best_path"]["features"]) == 3
+    assert sum(item["corridor_profile"] for item in candidate["alternatives"]) == 1
+
+
 def test_projection_exposes_hash_bound_candidate_only_hypothesis_catalog(
     tmp_path: Path,
 ) -> None:

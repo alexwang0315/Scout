@@ -532,14 +532,27 @@ def _terrain_route_hypothesis_candidate_projection(
         visualization = _read_json_ref(project_root, visualization_ref)
         if (
             hypothesis_run.status is not TerrainRouteRunStatus.COMPLETED
-            or len(hypothesis_run.hypotheses) != 1
+            or not 1 <= len(hypothesis_run.hypotheses) <= 6
         ):
             raise NavigationTerrainProjectionError(
-                "terrain route hypothesis is not one completed candidate"
+                "terrain route hypothesis is not a bounded completed candidate set"
             )
-        hypothesis = hypothesis_run.hypotheses[0]
+        corridor_hypotheses = [
+            item
+            for item in hypothesis_run.hypotheses
+            if item.corridor is not None
+        ]
+        if len(corridor_hypotheses) != 1:
+            raise NavigationTerrainProjectionError(
+                "terrain route candidate set does not bind one corridor profile"
+            )
+        hypothesis = corridor_hypotheses[0]
         if (
             expected_cache_key != hypothesis.provenance.cache_key
+            or any(
+                item.provenance.cache_key != hypothesis.provenance.cache_key
+                for item in hypothesis_run.hypotheses
+            )
             or (
                 require_project_activation
                 and (
@@ -581,10 +594,55 @@ def _terrain_route_hypothesis_candidate_projection(
             for item in hypothesis.reasons
             if item.polarity.value == "negative"
         ]
+        alternatives = [
+            {
+                "candidate": item.id,
+                "display_id": f"R{item.alternative_index}",
+                "label": item.label,
+                "alternative_index": item.alternative_index,
+                "strategy": item.strategy.value,
+                "drainage_penalty_multiplier": (
+                    item.drainage_penalty_multiplier
+                ),
+                "relative_cost_comparison_scope": (
+                    item.relative_cost_comparison_scope
+                ),
+                "corridor_profile": item.corridor is not None,
+                "relative_score": item.metrics.relative_score,
+                "relative_cost": item.metrics.relative_cost,
+                "metrics": item.metrics.model_dump(mode="json"),
+                "positive_evidence": [
+                    evidence.code
+                    for evidence in item.reasons
+                    if evidence.polarity.value == "positive"
+                ],
+                "negative_evidence": [
+                    evidence.code
+                    for evidence in item.reasons
+                    if evidence.polarity.value == "negative"
+                ],
+                "unknowns": [
+                    unknown.model_dump(mode="json") for unknown in item.unknowns
+                ],
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "operational": False,
+                "safe_or_walkable": "not_determined",
+            }
+            for item in hypothesis_run.hypotheses
+        ]
         return {
             "status": "candidate_ready",
             "candidate": hypothesis.id,
             "label": hypothesis.label,
+            "strategy": hypothesis.strategy.value,
+            "drainage_penalty_multiplier": (
+                hypothesis.drainage_penalty_multiplier
+            ),
+            "relative_cost_comparison_scope": (
+                hypothesis.relative_cost_comparison_scope
+            ),
+            "alternatives": alternatives,
             "display_labels": list(visualization["display_labels"]),
             "path_model": {
                 "id": hypothesis.path_model,

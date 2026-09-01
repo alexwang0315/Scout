@@ -15,7 +15,9 @@ from qgis_mcp_stdio import (
 )
 from terrain_route_hypothesis_artifacts import (
     build_corridor_threshold_expression,
+    build_drainage_pressure_expression,
     build_path_outside_band_expression,
+    build_profile_friction_expression,
     build_relative_corridor_expression,
     build_slope_friction_expression,
 )
@@ -936,6 +938,9 @@ def test_qgis_mcp_allows_only_compiled_terrain_route_processing(tmp_path: Path) 
     dem = source_root / "dem.tif"
     dem.write_bytes(b"dem")
     slope = run_root / "slope.tif"
+    flow_accumulation = run_root / "flow-accumulation.tif"
+    drainage_pressure = run_root / "drainage-pressure.tif"
+    slope_friction = run_root / "slope-friction.tif"
     friction = run_root / "friction.tif"
     cost_a = run_root / "cost-a.tif"
     cost_b = run_root / "cost-b.tif"
@@ -951,7 +956,16 @@ def test_qgis_mcp_allows_only_compiled_terrain_route_processing(tmp_path: Path) 
     path_vector = run_root / "path.gpkg"
     quantiles = run_root / "quantiles.html"
     univar = run_root / "univar.html"
-    for path in (slope, cost_a, cost_b, direction_a, direction_b, walk_direction, destination):
+    for path in (
+        slope,
+        flow_accumulation,
+        cost_a,
+        cost_b,
+        direction_a,
+        direction_b,
+        walk_direction,
+        destination,
+    ):
         path.write_bytes(b"fixture")
     client = QgisMcpStdioClient(
         QgisMcpClientConfig(
@@ -976,6 +990,31 @@ def test_qgis_mcp_allows_only_compiled_terrain_route_processing(tmp_path: Path) 
             "parameters": {
                 "a": str(slope),
                 "expression": build_slope_friction_expression(TerrainRoutingCostConfig()),
+                "output": str(slope_friction),
+            },
+        },
+    )
+    client.validate_tool_call(
+        "qgis_processing_start",
+        {
+            "algorithm": "grass:r.mapcalc.simple",
+            "allow_main_thread": True,
+            "parameters": {
+                "a": str(flow_accumulation),
+                "expression": build_drainage_pressure_expression(20.0),
+                "output": str(drainage_pressure),
+            },
+        },
+    )
+    client.validate_tool_call(
+        "qgis_processing_start",
+        {
+            "algorithm": "grass:r.mapcalc.simple",
+            "allow_main_thread": True,
+            "parameters": {
+                "a": str(slope_friction),
+                "b": str(drainage_pressure),
+                "expression": build_profile_friction_expression(4.0),
                 "output": str(friction),
             },
         },
