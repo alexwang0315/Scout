@@ -1,7 +1,7 @@
 # Scout AI NextGen Operating Architecture v0
 
 Status: experimental working architecture, not production promotion
-Date: 2026-08-22
+Date: 2026-08-23
 Authority: candidate-only; production Scout behavior is unchanged
 
 ## Executive Decision
@@ -37,7 +37,8 @@ authority or a full Workspace contract owner.
 | PraisonAI specialist runtime | WORKING PROTOTYPE | Real PraisonAI 1.7.0 isolated qualification |
 | Deterministic specialist router | WORKING PROTOTYPE | Pure terrain uses one Terrain model call plus deterministic QGIS ingestion |
 | Model Gateway and bounded scheduler | WORKING PROTOTYPE | Local concurrency, queue, timeout, cancellation, budget, and audit tests |
-| OpenAI-compatible runtime | WORKING PROTOTYPE | Live Ollama CPU qualification and provider identity checks |
+| OpenAI-compatible runtime | ACCEPTED EXPERIMENTAL BACKGROUND | Native Raspberry Pi 5 CPU/Ollama full qualification passed; profile is Pi-host-bound and loopback-only |
+| Persistent Praison background queue | WORKING PROTOTYPE | SQLite jobs/events, restart interruption, cancellation, stale revalidation, and submit/start resource backpressure pass focused tests |
 | Model capability attestation | WORKING PROTOTYPE | Server-owned, expiring tool-calling attestation |
 | ScoutWorkspaceSnapshot v0 | WORKING PROTOTYPE | Five dependency modes and bounded compiler |
 | Training corpus and leakage policy | WORKING PROTOTYPE | Typed candidate corpus, Frozen Gold isolation, human promotion gate |
@@ -46,8 +47,8 @@ authority or a full Workspace contract owner.
 | Full Workspace contract literacy in qwen3:1.7b | FAILED / SWM-001 | Native mode 0/5; tool mode failed |
 | Deterministic-envelope Workspace path | WORKING PROTOTYPE | 5/5 contract pass; narrative remains reviewable |
 | Live MAX server | NOT PROVEN | Adapter/config exists; no running MAX endpoint was qualified |
-| NextGen Hailo runtime | NOT PROVEN | Hailo remains a sibling target; no AI HAT+2 run in this slice |
-| Live QGIS workstation through Intelligence Service | PARTIAL | Deterministic normalized QGIS evidence works; live heavy QGIS remains separate |
+| NextGen Hailo runtime | ACCEPTED EXPERIMENTAL | Pi AI HAT+2 passed chat and small typed output; tool calling and Praison specialist synthesis were rejected |
+| Live QGIS workstation through Intelligence Service | PARTIAL | A real QGIS/GRASS candidate artifact passed normalized MCP/Praison ingestion; new raw/heavy QGIS execution remains separate and review-gated |
 | Dashboard NextGen telemetry | NOT IMPLEMENTED | Contracts and artifacts exist; no UI promotion was requested |
 | Mojo kernels | NOT STARTED | Benchmark-first candidate only |
 
@@ -80,7 +81,7 @@ flowchart TB
     QA --> QGIS[QGIS MCP / QGIS]
     RA --> MG
     MG --> SCH[Bounded inference scheduler]
-    SCH --> CPU[CPU / Ollama]
+    SCH --> CPU[Raspberry Pi CPU / Ollama background]
     SCH -. target .-> H[AI HAT+2 / Hailo]
     SCH -. target .-> MAX[MAX server]
     SCH -. optional .-> C[Cloud models]
@@ -97,6 +98,14 @@ Workspace/runtime stores, reducers, permission services, runtime safety gates,
 and audit ledger. Experimental NextGen modules are isolated under
 `src/scout/nextgen/`; deleting that namespace does not require a production
 state migration.
+
+Activation is fail-closed: production controllers do not import or construct the
+Intelligence Gateway, MCP service, Praison service, or background queue. They
+exist only when an explicit experimental CLI/test process constructs them. The
+only NextGen module referenced by the existing Assistant path is
+`runtime_shadow.py`, which retains its separate
+`SCOUT_AI_NEXTGEN_RUNTIME_SHADOW` gate and cannot execute intelligence work or
+promote runtime state.
 
 ## B. Target Architecture
 
@@ -137,7 +146,7 @@ flowchart LR
         QUEUE[Bounded queues]
         HAILO[Hailo runtime]
         MAXR[MAX runtime]
-        OLLAMA[llama.cpp / Ollama]
+        OLLAMA[Raspberry Pi CPU / Ollama]
         CLOUD[Cloud]
     end
 
@@ -310,7 +319,7 @@ sequenceDiagram
     participant P as Scout Core
     participant MG as Model Gateway
     participant Q as Local Queue
-    participant H as Hailo/Ollama local backend
+    participant H as Hailo/Pi CPU Ollama edge backend
     P->>MG: requires_offline=true, allow_cloud=false
     MG->>MG: Select registered qualified local profile
     MG->>Q: Priority + timeout + request budget
@@ -423,7 +432,7 @@ inference. Multiple logical specialists normally share one resident local model.
 | Context budget | Snapshot/compiler bound | Fail closed rather than silently truncate required evidence |
 | Output budget | Runtime/case bound | Schema must still fit; timeout/invalid output is explicit |
 | Memory | One resident local model | No specialist model duplication by default |
-| Thermal/energy | Telemetry first | Future router input; not yet a qualified hard gate |
+| Thermal/resource admission | Pi memory/swap/temperature/throttle snapshot | Optional background jobs fail closed at submit and immediately before start; production threshold promotion is still pending |
 | Fallback | Explicit new selection/request | No hidden provider switch; every attempt has an execution record |
 
 Backpressure order is: reject background queue admission, preserve current
@@ -526,11 +535,31 @@ Pydantic Scout Core
 ```
 
 The router retains a real QGIS specialist for raw spatial work and adds Research
-only for typed, evidence-bound conflict/research needs. The pure terrain live run
-used one model request, preserved the exact three findings/evidence items from
-the earlier three-model baseline, and reduced the Praison segment from 209252 ms
-to 92460 ms (55.8 percent). It did not modify route, mission, permission, safety,
-notification, emergency, or device state.
+only for typed, evidence-bound conflict/research needs. The first ablation used
+one model request, preserved the exact three findings/evidence items from the
+earlier three-model baseline, and reduced the Praison segment from 209252 ms to
+92460 ms (55.8 percent).
+
+The 2026-08-23 native Pi run then exercised a real Chilai Nanhua Day 1 route,
+20 m corridor DEM, and completed QGIS/GRASS terrain-feature artifact. The
+Praison MCP segment passed in 126177 ms with one `qwen3:1.7b` model request,
+three read-only tool calls, and this agent path:
+
+```text
+praisonai.orchestrator
+  -> praisonai.router.deterministic.v1
+  -> terrain
+  -> qgis.deterministic
+```
+
+Research was skipped because no bound conflict evidence existed. Four typed
+findings remained candidate-only, and the absent saddle derivative became an
+explicit `UNKNOWN` uncertainty rather than an inferred saddle. Pydantic
+Contract Gateway accepted output hash
+`416fe2b25496c7a2267aa048cc52fb05fba5d88e4d3b78f76f8044a9976b60fd`.
+Changing the current Workspace binding produced `STALE_BINDING` rejection. No
+route, mission, permission, safety, notification, emergency, or device state
+was modified.
 
 Rollback:
 
@@ -562,7 +591,9 @@ No database, Workspace, route, or production contract migration is required.
 - Exit: additive experimental path is observable and removable; no production
   authority changes.
 - Rollback: remove experimental namespace/config.
-- Current status: WORKING PROTOTYPE.
+- Current status: WORKING PROTOTYPE. Native Pi CPU/Ollama qualification and
+  persistent background lifecycle gates pass; production activation remains
+  absent.
 
 ### Phase 2 - Workspace Intelligence / Praison Thin Slice
 
@@ -574,7 +605,9 @@ No database, Workspace, route, or production contract migration is required.
 - Exit: one real end-to-end terrain trajectory with exact candidate boundary and
   measurable specialist value.
 - Rollback: switch to StubIntelligenceGateway or existing Agent path.
-- Current status: WORKING PROTOTYPE.
+- Current status: WORKING PROTOTYPE. One native Pi real-route trajectory now
+  satisfies the candidate, provenance, least-privilege, and stale-binding exit
+  evidence; production activation remains absent.
 
 ### Phase 3 - Workspace-Native Model
 
@@ -598,9 +631,11 @@ No database, Workspace, route, or production contract migration is required.
   live QGIS artifact provenance and rejection.
 - Exit: at least one Pi/Hailo and one MAX or larger-local runtime passes the same
   frozen contracts; heavy GIS remains optional.
-- Rollback: unregister backend/profile; retain CPU and prepared edge GIS.
-- Current status: PARTIAL. CPU/OpenAI-compatible and failure routing are proven;
-  MAX, Hailo, and live heavy QGIS are not.
+- Rollback: unregister backend/profile; retain deterministic runtime, Hailo, and prepared edge GIS.
+- Current status: PARTIAL. Raspberry Pi CPU/Ollama is accepted for slow
+  experimental background reasoning, and Hailo is accepted for chat plus small
+  typed output. MAX is intentionally handled in a separate Phase 4 branch;
+  heavy QGIS review/promotion and cross-runtime comparison remain incomplete.
 
 ### Phase 5 - Expanded Specialists / Specialized Compute
 

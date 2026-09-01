@@ -84,6 +84,7 @@ class IntelligenceGatewayExecution(SchemaModel):
 class IntelligenceMcpClientConfig:
     command: tuple[str, ...]
     timeout_seconds: float = 30.0
+    startup_timeout_seconds: float = 30.0
     pythonpath: str | None = None
     credential_env_names: tuple[str, ...] = ()
 
@@ -108,6 +109,10 @@ class IntelligenceMcpClientConfig:
             )
         if not 0.25 <= float(self.timeout_seconds) <= 300:
             raise ValueError("Intelligence MCP timeout must be between 0.25 and 300 seconds")
+        if not 0.25 <= float(self.startup_timeout_seconds) <= 300:
+            raise ValueError(
+                "Intelligence MCP startup timeout must be between 0.25 and 300 seconds"
+            )
         if len(self.credential_env_names) != len(set(self.credential_env_names)):
             raise IntelligenceMcpCommandRejected(
                 "Intelligence MCP credential environment names must be unique"
@@ -150,6 +155,7 @@ class IntelligenceMcpStdioClient:
                         "version": "0.1",
                     },
                 },
+                timeout_seconds=self.config.startup_timeout_seconds,
             )
             if not isinstance(result, dict) or not result.get("serverInfo"):
                 raise IntelligenceMcpProtocolError(
@@ -266,7 +272,13 @@ class IntelligenceMcpStdioClient:
                 env[name] = value
         return env
 
-    def _rpc(self, method: str, params: dict[str, Any]) -> Any:
+    def _rpc(
+        self,
+        method: str,
+        params: dict[str, Any],
+        *,
+        timeout_seconds: float | None = None,
+    ) -> Any:
         process = self._process
         if process is None or process.stdin is None:
             raise IntelligenceMcpUnavailable("Intelligence MCP process is not running")
@@ -288,7 +300,13 @@ class IntelligenceMcpStdioClient:
                 "Intelligence MCP process closed its input"
             ) from exc
         try:
-            response = self._responses.get(timeout=float(self.config.timeout_seconds))
+            response = self._responses.get(
+                timeout=float(
+                    self.config.timeout_seconds
+                    if timeout_seconds is None
+                    else timeout_seconds
+                )
+            )
         except queue.Empty as exc:
             try:
                 process.wait(timeout=_PROCESS_EXIT_CLASSIFICATION_GRACE_SECONDS)

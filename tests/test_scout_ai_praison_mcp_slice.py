@@ -165,6 +165,35 @@ def test_deterministic_router_skips_research_for_pure_terrain_evidence() -> None
     )
 
 
+def test_normalized_qgis_uncertainty_is_ingested_without_model_promotion() -> None:
+    item = _catalog().items[2].model_copy(
+        update={
+            "attributes": {
+                **_catalog().items[2].attributes,
+                "uncertainties": [
+                    {
+                        "description": "Saddle extraction was not run.",
+                        "missing_evidence": ["qgis.saddle_derivative"],
+                        "impact": "No saddle candidate can be concluded.",
+                        "recommended_next_evidence": [
+                            "run_reviewed_saddle_extraction"
+                        ],
+                    }
+                ],
+            }
+        }
+    )
+
+    report = SpecialistReport.from_catalog_item(role="qgis", item=item)
+
+    assert report.uncertainties[0].description == "Saddle extraction was not run."
+    assert report.uncertainties[0].missing_evidence == (
+        "qgis.saddle_derivative",
+    )
+    assert report.candidate_only is True
+    assert report.runtime_safety_truth is False
+
+
 def test_deterministic_router_includes_research_for_bound_conflict_evidence() -> None:
     request = _request()
     catalog = _catalog()
@@ -441,7 +470,10 @@ def test_mcp_stdio_round_trip_keeps_core_and_service_lifecycles_separate() -> No
 def test_mcp_process_crash_degrades_without_affecting_authoritative_state() -> None:
     request = _request()
     config = IntelligenceMcpClientConfig(
-        command=(sys.executable, "-m", "scout.nextgen.module_that_does_not_exist"),
+        command=(
+            sys.executable,
+            str(Path("src/scout/nextgen/module_that_does_not_exist.py").resolve()),
+        ),
         pythonpath=str(Path("src").resolve()),
         timeout_seconds=1,
     )
@@ -472,6 +504,7 @@ def test_mcp_timeout_cancels_service_and_degrades(tmp_path: Path) -> None:
     config = IntelligenceMcpClientConfig(
         command=(sys.executable, str(sleepy_service)),
         timeout_seconds=0.25,
+        startup_timeout_seconds=0.25,
     )
 
     with McpIntelligenceGateway(config) as gateway:

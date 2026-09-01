@@ -58,6 +58,8 @@ from scout.nextgen.openai_compatible_backend import (
     build_praison_openai_compatible_runtime,
 )
 from scout.nextgen.praison_service import (
+    _CompactSpecialistAdvisory,
+    _CompactSpecialistFinding,
     EvidenceCatalog,
     EvidenceCatalogItem,
     PraisonIntelligenceService,
@@ -65,6 +67,7 @@ from scout.nextgen.praison_service import (
     SpecialistModelInput,
     SpecialistReport,
     SpecialistRole,
+    _ground_compact_specialist_advisory,
     _ground_specialist_report,
     replay_specialist_report,
 )
@@ -351,6 +354,18 @@ def test_max_local_server_is_non_cloud_without_claiming_offline_capability() -> 
         }
         assert runtime.allow_cloud is False
         assert runtime.requires_offline is False
+    finally:
+        runtime.close()
+
+
+def test_openai_runtime_can_select_compact_specialist_advisory() -> None:
+    config = _config(
+        "http://127.0.0.1:8000/v1",
+        specialist_output_mode="compact_advisory",
+    )
+    runtime = build_praison_openai_compatible_runtime(config=config, environ={})
+    try:
+        assert runtime.specialist_output_mode == "compact_advisory"
     finally:
         runtime.close()
 
@@ -820,6 +835,54 @@ def test_specialist_grounding_preserves_typed_features_and_scope() -> None:
     )
 
 
+def test_compact_advisory_leaves_ids_and_authority_to_server_grounding() -> None:
+    request = _intelligence_request()
+    model_input = SpecialistModelInput(
+        request_id=request.request_id,
+        mission_id=request.mission_id,
+        role=SpecialistRole.TERRAIN,
+        question=request.question,
+        workspace_binding=request.workspace_binding,
+        geographic_scope=request.geographic_scope,
+        evidence=tuple(
+            item
+            for item in _catalog().items
+            if item.evidence_id in {"ev-http-route", "ev-http-dem"}
+        ),
+        capabilities_used=("route.read", "dem.read"),
+    )
+    advisory = _CompactSpecialistAdvisory(
+        findings=(
+            _CompactSpecialistFinding(
+                claim="HTTP model suggests a ridge candidate near CP2.",
+                confidence=0.7,
+                evidence_id="ev-http-route",
+            ),
+            _CompactSpecialistFinding(
+                claim="HTTP model suggests a saddle candidate near CP3.",
+                confidence=0.6,
+                evidence_id="ev-http-dem",
+            ),
+        )
+    )
+
+    grounded = _ground_compact_specialist_advisory(
+        model_input=model_input,
+        advisory=advisory,
+    )
+
+    assert [finding.claim for finding in grounded.findings] == [
+        "HTTP model suggests a ridge candidate near CP2.",
+        "HTTP model suggests a saddle candidate near CP3.",
+    ]
+    assert all(finding.candidate_only is True for finding in grounded.findings)
+    assert grounded.runtime_safety_truth is False
+    assert any(
+        uncertainty.uncertainty_id.endswith("not_normalized_candidate")
+        for uncertainty in grounded.uncertainties
+    )
+
+
 def _specialist_responder(payload: dict[str, Any]) -> dict[str, Any]:
     for message in reversed(payload["messages"]):
         content = message.get("content")
@@ -830,6 +893,20 @@ def _specialist_responder(payload: dict[str, Any]) -> dict[str, Any]:
         )
         return replay_specialist_report(model_input).model_dump(mode="json")
     raise AssertionError("Scout specialist input marker was absent from HTTP request")
+
+
+def _compact_specialist_responder(payload: dict[str, Any]) -> dict[str, Any]:
+    report = _specialist_responder(payload)
+    return {
+        "findings": [
+            {
+                "claim": finding["claim"],
+                "confidence": finding["confidence"],
+                "evidence_id": finding["evidence_ids"][0],
+            }
+            for finding in report["findings"]
+        ]
+    }
 
 
 def _unused_loopback_base_url() -> str:
@@ -989,6 +1066,47 @@ def test_praison_openai_compatible_runtime_uses_one_http_model() -> None:
         "qgis.deterministic",
     )
     assert response.provenance.model_runtimes == (config.runtime_id,)
+    assert response.runtime_safety_truth is False
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec("praisonaiagents") is None,
+    reason="optional praisonaiagents dependency is not installed",
+)
+def test_compact_praison_advisory_uses_server_owned_candidate_envelope() -> None:
+    request = _intelligence_request()
+    with _openai_replay_server(responder=_compact_specialist_responder) as (
+        base_url,
+        state,
+    ):
+        config = _config(
+            base_url,
+            structured_output_mode="native",
+            specialist_output_mode="compact_advisory",
+        )
+        runtime = build_praison_openai_compatible_runtime(config=config, environ={})
+        try:
+            response = PraisonIntelligenceService(
+                runtime=runtime,
+                evidence_catalog=_catalog(),
+                max_concurrency=1,
+            ).execute(request)
+        finally:
+            runtime.close()
+
+    assert len(response.findings) == 3, response.model_dump_json(indent=2)
+    assert len(state.requests) == 1
+    schema = state.requests[0]["response_format"]["json_schema"]["schema"]
+    assert set(schema["properties"]) == {"findings"}
+    item_schema = schema["properties"]["findings"]["items"]
+    if "$ref" in item_schema:
+        item_schema = schema["$defs"][item_schema["$ref"].rsplit("/", 1)[-1]]
+    assert set(item_schema["properties"]) == {
+        "claim",
+        "confidence",
+        "evidence_id",
+    }
+    assert all(finding.candidate_only is True for finding in response.findings)
     assert response.runtime_safety_truth is False
 
 
