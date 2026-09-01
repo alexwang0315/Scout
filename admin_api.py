@@ -190,6 +190,9 @@ from scout_runtime_physiologic_pipeline import build_health_auto_export_physio_a
 from scout_env import load_scout_env_files
 from runtime_audit_api import create_runtime_audit_ledger, install_runtime_audit
 from runtime_audit_ledger import FileRuntimeAuditLedger
+from scout.nextgen.dashboard_telemetry_api import (
+    create_intelligence_telemetry_router,
+)
 from scout_emergency_mobile_closed_loop_api import (
     create_emergency_mobile_closed_loop_router,
     create_emergency_mobile_ui_router,
@@ -2362,6 +2365,7 @@ def create_admin_app(
             runtime_audit=resolved_runtime_audit,
         )
     )
+    app.include_router(create_intelligence_telemetry_router())
     app.include_router(create_emergency_mobile_ui_router())
     if resolved_alpha_sandbox_enabled:
         app.include_router(create_alpha_simulation_ui_router())

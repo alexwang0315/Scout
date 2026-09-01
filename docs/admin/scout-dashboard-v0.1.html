@@ -1119,6 +1119,13 @@
       justify-content: flex-end;
     }
 
+    .surface-frame-actions .chip {
+      justify-content: center;
+      max-width: min(100%, 360px);
+      text-align: center;
+      white-space: normal;
+    }
+
     .surface-frame {
       width: 100%;
       height: 100%;
@@ -11177,6 +11184,7 @@
           <div class="nav-subtree">
             <button class="nav-item" type="button" data-route="living" data-route-truth="sandbox"><span class="mark"></span><span>Living</span></button>
             <button class="nav-item" type="button" data-route="runtime-audit" data-route-truth="live"><span class="mark"></span><span>Logs</span></button>
+            <button class="nav-item" type="button" data-route="surface-intelligence" data-route-truth="partial"><span class="mark"></span><span>Intelligence</span></button>
             <button class="nav-item" type="button" data-route="surface-debug" data-route-truth="live"><span class="mark"></span><span>Debug Surface</span></button>
             <button class="nav-item" type="button" data-route="debug" data-route-truth="partial"><span class="mark"></span><span>Debug Message</span></button>
             <button class="nav-item" type="button" data-route="observer" data-route-truth="preview"><span class="mark"></span><span>MQTT / Observer</span></button>
@@ -11344,6 +11352,7 @@
       "outdoor-weather": Object.freeze({maturity: "partial", surface: "Operational", data: "Cache-only loading", action: "Read-only", verification: "State handling verified", provenance: "CWA prepared cache", mode: "Operational"}),
       "agent": Object.freeze({maturity: "partial", surface: "Degraded", data: "Local evidence context", action: "Operator-triggered model request", verification: "Connection not checked", provenance: "Provider configured · readiness unknown", mode: "Operational"}),
       "runtime-audit": Object.freeze({maturity: "live", surface: "Operational", data: "Loading unified runtime records", action: "Read-only filters and refresh", verification: "Hash-chain check pending", provenance: "Local append-only telemetry ledger", mode: "Telemetry only"}),
+      "surface-intelligence": Object.freeze({maturity: "partial", surface: "Degraded", data: "Loading candidate intelligence jobs", action: "Read-only telemetry", verification: "Typed store projection pending", provenance: "Praison background queue · candidate-only", mode: "Telemetry only"}),
       "surface-debug": Object.freeze({maturity: "live", surface: "Operational", data: "Runtime + replay evidence", action: "Diagnostics · projected clear is explicit", verification: "Full page verified", provenance: "Per-event provenance", mode: "Operational"}),
       "debug": Object.freeze({maturity: "partial", surface: "Operational", data: "Runtime + replay evidence", action: "Read-only · retry", verification: "Endpoints + tabs verified", provenance: "Per-event provenance", mode: "Technical Prototype"}),
       "settings": Object.freeze({maturity: "live", surface: "Operational", data: "Browser-local settings", action: "Local browser mutation only", verification: "Validation + save path", provenance: "Browser settings", mode: "Operational"}),
@@ -12194,6 +12203,7 @@
       settings: ["Settings / Configure", "local alpha route and API settings"],
       diagnostic: ["Diagnostic", "38 read-only Dashboard checks"],
       "runtime-audit": ["Logs", "以日／月索引檢視統一運行紀錄、API 成敗與 workspace I/O"],
+      "surface-intelligence": ["Intelligence", "candidate-only background job telemetry"],
     };
 
     document.addEventListener("DOMContentLoaded", () => {
@@ -14125,6 +14135,7 @@
       if (route === "outdoor-architecture") return true;
       if (route === "outdoor-navigation") return true;
       if (route === "outdoor-permission") return true;
+      if (route === "surface-intelligence") return true;
       return route === "agent" || route === "debug" || route === "diagnostic" || route === "runtime-audit" || route === "emergency" || route === "outdoor-route-context" || route === "outdoor-pace-fit" || route === "outdoor-pace-fit-body-index";
     }
 
@@ -14632,6 +14643,14 @@
           title: "Runtime Debug",
           src: surfaceSrc("/admin/debug"),
           summary: "Runtime state, timeline, messages, boundary.",
+        });
+      }
+      if (route === "surface-intelligence") {
+        return renderSurfaceFrame({
+          route,
+          title: "Intelligence Telemetry",
+          src: surfaceSrc("/admin/intelligence"),
+          summary: "Candidate-only background jobs, provenance, model execution, and validation.",
         });
       }
       if (route === "agent") return renderAgentPage();
@@ -18163,7 +18182,7 @@
         "map", "timeline", "features-lbs", "outdoor-route-context",
         "outdoor-pace-fit", "outdoor-pace-fit-body-index", "outdoor-permission",
         "outdoor-architecture", "outdoor-weather", "outdoor-navigation", "emergency",
-        "agent", "living", "runtime-audit", "surface-debug", "debug", "observer",
+        "agent", "living", "runtime-audit", "surface-intelligence", "surface-debug", "debug", "observer",
         "settings", "diagnostic",
       ];
       const routeButtons = Array.from(document.querySelectorAll("#dashboardSidebar [data-route]"));

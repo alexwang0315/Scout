@@ -45,6 +45,24 @@ surfaces:
         required_tests: [dashboard_open_no_write, diag_all_no_write, zero_post_requests]
         required_evidence: [ui, network, server_state, trace]
         authority_boundary: {source: server, runtime_authority: false}
+  - id: intelligence-telemetry
+    route: /admin/dashboard#surface-intelligence
+    capabilities:
+      - id: dashboard.intelligence.read_only_job_projection
+        criticality: P1
+        status: candidate
+        qualification_state: outside_boundary
+        owner: scout-ai-nextgen
+        expected_behavior:
+          - Persisted background intelligence jobs are projected through a typed SQLite read-only connection with request, mission, workspace, route, capability, agent, tool, model, evidence, validation, and output-hash bindings.
+          - Missing, unreadable, malformed, authority-escalating, or stale-bound telemetry renders an explicit unavailable or degraded state with no partial candidate projection.
+          - The Dashboard exposes no question text, submit, cancel, retry, promotion, permission, safety, notification, emergency, route-write, or hardware control.
+        forbidden_behavior:
+          - Opening or refreshing telemetry must not insert, update, or delete SQLite schema, job, or event records, or mutate Workspace, mission, route, permission, safety, notification, emergency, or hardware state.
+          - Candidate intelligence, model confidence, or a successful validation label must not be presented as runtime safety truth or promoted authority.
+        required_tests: [typed_read_only_projection, malformed_store_fail_closed, get_only_api, desktop_mobile_telemetry_smoke]
+        required_evidence: [ui, network, server_state, trace]
+        authority_boundary: {source: server, runtime_authority: false}
   - id: all-dashboard-live-browser
     route: /admin/dashboard#*
     capabilities:
