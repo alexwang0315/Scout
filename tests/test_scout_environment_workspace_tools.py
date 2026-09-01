@@ -562,11 +562,13 @@ def test_environment_tools_are_registered_and_executable() -> None:
             "project_root": str(PROJECT_ROOT),
             "query": "官方 CWA QPF 有什麼?",
             "limit": 3,
+            "arguments": {"reference_time": "2026-06-24T06:00:00Z"},
         }
     )
     assert cwa_result.status == "completed"
     assert cwa_result.output_artifact_kind == CWA_ENVIRONMENT_OUTPUT_KIND
     assert cwa_result.payload["cwa_summary"]["qpf_summary_available"] is True
+    assert cwa_result.missing_fields == []
 
     gee_result = execute_scout_ai_tool(
         {
@@ -582,12 +584,19 @@ def test_environment_tools_are_registered_and_executable() -> None:
 
 
 def test_planner_selects_separate_cwa_and_gee_environment_tools() -> None:
+    reference_time = "2026-06-24T06:00:00Z"
     cwa_plan = plan_scout_ai_tools(
         _query("中央氣象署 CWA QPF 對這條路線有什麼警示？"),
         project_root=PROJECT_ROOT,
+        reference_time=reference_time,
     )
     cwa_ids = [item.tool_id for item in cwa_plan.selected_tools]
     assert CWA_ENVIRONMENT_TOOL_ID in cwa_ids
+    cwa_item = next(
+        item for item in cwa_plan.selected_tools if item.tool_id == CWA_ENVIRONMENT_TOOL_ID
+    )
+    assert cwa_item.request is not None
+    assert cwa_item.request["arguments"]["reference_time"] == reference_time
 
     gee_plan = plan_scout_ai_tools(
         _query("GEE SMAP 土壤含水和 GPM 累積雨量顯示什麼？"),
@@ -603,6 +612,7 @@ def test_answer_synthesis_uses_environment_tool_field_answers() -> None:
         project_root=PROJECT_ROOT,
         surface=AssistantSurface.PRETRIP,
         limit=4,
+        reference_time="2026-06-24T06:00:00Z",
     )
     assert cwa_answer.completed_source_count >= 1
     assert CWA_ENVIRONMENT_TOOL_ID in {source.tool_id for source in cwa_answer.sources}

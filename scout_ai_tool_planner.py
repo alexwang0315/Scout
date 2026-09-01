@@ -97,6 +97,7 @@ def plan_scout_ai_tools(
     *,
     project_root: str | Path | None = None,
     limit: int = 6,
+    reference_time: str | None = None,
 ) -> ScoutAiToolPlan:
     contracts = default_tool_contracts()
     normalized_question = _normalize(query.question)
@@ -503,6 +504,7 @@ def plan_scout_ai_tools(
             query=query,
             project_root=project_root,
             limit=limit,
+            reference_time=reference_time,
         )
         for tool_id, reason in _dedupe_selected(selected)
         if tool_id in contracts
@@ -1627,6 +1629,7 @@ def _plan_item(
     query: ScoutAssistantQuery,
     project_root: str | Path | None,
     limit: int,
+    reference_time: str | None,
 ) -> ScoutAiToolPlanItem:
     missing_fields = _missing_fields(contract, project_root=project_root)
     if _is_executable_contract(contract):
@@ -1695,6 +1698,14 @@ def _plan_item(
         overrides = _review_gap_request_overrides(query.question)
         if overrides:
             request["arguments"] = overrides
+    if (
+        request is not None
+        and reference_time
+        and "reference_time" in contract.optional_fields
+    ):
+        arguments = request.setdefault("arguments", {})
+        if isinstance(arguments, dict):
+            arguments.setdefault("reference_time", reference_time)
     return ScoutAiToolPlanItem(
         tool_id=contract.tool_id,
         label=contract.label,

@@ -312,6 +312,7 @@ def collect_and_synthesize_scout_ai_answer(
     include_missing_context_sources: bool = True,
     include_not_implemented_tools: bool = True,
     max_result_items_per_tool: int = 6,
+    reference_time: str | None = None,
 ) -> ScoutAiAnswerSynthesisOutput:
     evidence_collection = collect_scout_ai_evidence(
         question,
@@ -322,6 +323,7 @@ def collect_and_synthesize_scout_ai_answer(
         include_missing_context_sources=include_missing_context_sources,
         include_not_implemented_tools=include_not_implemented_tools,
         max_result_items_per_tool=max_result_items_per_tool,
+        reference_time=reference_time,
     )
     return synthesize_scout_ai_answer_from_evidence(evidence_collection)
 

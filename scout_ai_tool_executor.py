@@ -316,6 +316,7 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
             include_features=_bool_or_none(arguments.get("include_features")),
             include_timeline=_bool_or_none(arguments.get("include_timeline")),
             stale_after_hours=_float_or_none(arguments.get("stale_after_hours")),
+            reference_time=_str_or_none(arguments.get("reference_time")),
             limit=limit,
         )
 
@@ -944,6 +945,7 @@ def _source_report_refs(payload: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _completed_missing_fields(tool_id: str, payload: dict[str, Any]) -> list[str]:
     if tool_id not in {
+        "pydantic_ai.tool.search_scout_evidence_fulltext.v0",
         LIVE_NAVIGATION_STATE_TOOL_ID,
         WEATHER_WINDOW_TOOL_ID,
         CWA_ENVIRONMENT_TOOL_ID,

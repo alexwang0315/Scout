@@ -76,6 +76,7 @@ def collect_scout_ai_evidence(
     include_missing_context_sources: bool = True,
     include_not_implemented_tools: bool = True,
     max_result_items_per_tool: int = 6,
+    reference_time: str | None = None,
 ) -> ScoutAiEvidenceCollectionOutput:
     discovery = build_scout_ai_workflow_discovery_plan(
         question,
@@ -85,6 +86,7 @@ def collect_scout_ai_evidence(
         limit=limit,
         include_missing_context_sources=include_missing_context_sources,
         include_not_implemented_tools=include_not_implemented_tools,
+        reference_time=reference_time,
     )
     contracts = default_tool_contracts()
     records = [
