@@ -1645,6 +1645,40 @@ def test_verifier_rejects_known_claim_for_missing_weather_dimensions() -> None:
     assert "blocking_dimension_claimed_known:humidity" in verified["errors"]
 
 
+def test_verifier_accepts_dimension_explanation_in_typed_evidence_gaps() -> None:
+    run = next(
+        item
+        for item in expand_case_runs(_artifact())
+        if item["force_code"] == "WTH"
+        and item["variant_id"] == "benign_fresh_route_intersecting"
+    )
+    output = {
+        "scenario_id": run["scenario_id"],
+        "decision": "DELAY",
+        "answer": "只就天氣面可行；仍需核對地形、隊伍與裝備。",
+        "decisive_evidence": ["light_wind"],
+        "opposing_evidence": [],
+        "evidence_gaps": ["temperature 資料缺失，無法確認氣溫最高時間點"],
+        "decision_change_conditions": ["取得更新溫度資料"],
+        "source_refs": ["weather.tool"],
+        "claims": ["candidate_only"],
+    }
+
+    verified = verify_model_output(
+        run=run,
+        output=output,
+        parse_error=None,
+        available_source_refs={"weather.tool"},
+        compact_evidence={
+            "blocking_missing_evidence": ["missing:temperature"],
+            "tools": [{"tool_id": "weather.tool", "decision": "DELAY"}],
+        },
+    )
+
+    assert "blocking_dimension_gap_not_explained:temperature" not in verified["errors"]
+    assert "blocking_dimension_claimed_known:temperature" not in verified["errors"]
+
+
 def test_verifier_rejects_named_route_candidate_when_location_is_stale() -> None:
     run = next(
         item
@@ -2915,6 +2949,33 @@ def test_recovery_prompt_replaces_unsupported_answer_with_primary_field_answer()
     assert field_answer in prompt
     assert "路線僅有登頂" not in prompt
     assert "answer_quality:did_not_preserve_expected_tool_tokens" in prompt
+
+
+def test_recovery_prompt_preserves_typed_gap_for_evidence_void_abstention() -> None:
+    run = next(item for item in expand_case_runs(_artifact()) if item["force_code"] == "EXP")
+    prompt = build_recovery_prompt(
+        run=run,
+        compact_evidence={
+            "scenario_id": run["scenario_id"],
+            "mser": {"task": {"answer_mode": "factual_lookup"}},
+            "tools": [
+                {
+                    "tool_id": "pydantic_ai.tool.search_scout_evidence_fulltext.v0",
+                    "field_answer": None,
+                    "result_count": 3,
+                }
+            ],
+        },
+        previous_output={
+            "answer": "工作區證據不足，無法確認",
+            "evidence_gaps": [],
+        },
+        verifier_errors=["answer_quality:did_not_preserve_expected_tool_tokens"],
+        model_profile="cloud",
+    )
+
+    assert "工作區未提供足夠的題目專屬證據，無法確認" in prompt
+    assert "question_specific_route_context_evidence_missing" in prompt
 
 
 def test_recovery_prompt_replaces_answer_when_sheltered_next_step_is_missing() -> None:

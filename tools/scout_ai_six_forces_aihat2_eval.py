@@ -2455,16 +2455,24 @@ def build_recovery_prompt(
         or error in scenario_answer_repair_errors
         for error in verifier_errors
     )
+    evidence_void_safe_abstention = (
+        _effective_answer_mode(run, compact_evidence) == "factual_context"
+        and not primary_tool.get("field_answer")
+        and any(
+            error.startswith("answer_quality:did_not_preserve_expected_tool_tokens")
+            for error in verifier_errors
+        )
+    )
     preferred_answer = (
         "工作區未提供足夠的題目專屬證據，無法確認。"
-        if question_specific_gap
+        if question_specific_gap or evidence_void_safe_abstention
         else primary_tool.get("field_answer")
         if replace_unsupported_answer
         else previous_output.get("answer")
     )
     preferred_gap = (
         "question_specific_route_context_evidence_missing"
-        if question_specific_gap
+        if question_specific_gap or evidence_void_safe_abstention
         else first_text("evidence_gaps")
     )
     repair_payload: dict[str, Any] = {
@@ -3159,7 +3167,7 @@ def verify_model_output(
                 rf"|(?:{term_pattern}).{{0,16}}(?:缺少|缺乏|未知|無法確認|無有效)",
                 flags=re.IGNORECASE,
             )
-            if uncertainty_pattern.search(answer) is None:
+            if uncertainty_pattern.search(f"{answer} {gaps}") is None:
                 errors.append(f"blocking_dimension_gap_not_explained:{dimension}")
     if (
         run.get("variant_id") == "gnss_stale_location_unknown"
