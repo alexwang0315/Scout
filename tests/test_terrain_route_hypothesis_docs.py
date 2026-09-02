@@ -30,7 +30,9 @@ def test_trh_spec_preserves_candidate_authority_and_resolution_unknowns() -> Non
 
     assert "C_corridor(x,y) = C_A(x,y) + C_B(x,y) - C_AB" in spec
     assert "best-path cells are never unioned into a corridor mask" in spec
-    assert "Actual execution on the Scout host remains `UNKNOWN`" in spec
+    assert "Isolated aarch64 execution is proven" in spec
+    assert "Permanent service deployment" in spec
+    assert "exact GRASS 8.5/8.4 parity remain UNKNOWN" in spec
 
 
 def test_navigation_force_standard_defines_trh_as_non_operational_evidence() -> None:

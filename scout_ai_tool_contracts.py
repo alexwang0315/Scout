@@ -118,6 +118,22 @@ from scout_workspace_query_tool import (
     WORKSPACE_QUERY_TOOL_ID,
     workspace_query_request_json_schema,
 )
+from scout_terrain_narrative_guidance_tool import (
+    TERRAIN_NARRATIVE_GUIDANCE_OPTIONAL_FIELDS,
+    TERRAIN_NARRATIVE_GUIDANCE_OUTPUT_KIND,
+    TERRAIN_NARRATIVE_GUIDANCE_REQUIRED_FIELDS,
+    TERRAIN_NARRATIVE_GUIDANCE_TOOL_ID,
+)
+from scout_terrain_route_hypothesis_tool import (
+    TERRAIN_ROUTE_COMPARE_OUTPUT_KIND,
+    TERRAIN_ROUTE_COMPARE_TOOL_ID,
+    TERRAIN_ROUTE_CONSISTENCY_OUTPUT_KIND,
+    TERRAIN_ROUTE_CONSISTENCY_TOOL_ID,
+    TERRAIN_ROUTE_EXPLAIN_OUTPUT_KIND,
+    TERRAIN_ROUTE_EXPLAIN_TOOL_ID,
+    TERRAIN_ROUTE_GENERATE_OUTPUT_KIND,
+    TERRAIN_ROUTE_GENERATE_TOOL_ID,
+)
 
 ARTIFACT_KIND_REGISTRY = "scout_ai_tool_registry"
 ARTIFACT_VERSION_REGISTRY = "scout_ai_tool_registry.v0"
@@ -157,7 +173,9 @@ class ScoutAiToolImplementationStatus(StrEnum):
 
 
 class ScoutAiToolBoundary(ScoutAiToolBaseModel):
-    read_only: Literal[True] = True
+    read_only: bool = True
+    local_candidate_workspace_write_allowed: bool = False
+    route_truth_mutation_allowed: Literal[False] = False
     runtime_safety_truth: Literal[False] = False
     live_safety_api_calls_allowed: Literal[False] = False
     phase1_safety_mutation_allowed: Literal[False] = False
@@ -165,6 +183,16 @@ class ScoutAiToolBoundary(ScoutAiToolBaseModel):
     hardware_control_allowed: Literal[False] = False
     raw_payloads_embedded: Literal[False] = False
     model_output_is_runtime_truth: Literal[False] = False
+
+    @model_validator(mode="after")
+    def validate_effect_scope(self) -> "ScoutAiToolBoundary":
+        if self.read_only and self.local_candidate_workspace_write_allowed:
+            raise ValueError("read-only tools cannot declare workspace writes")
+        if not self.read_only and not self.local_candidate_workspace_write_allowed:
+            raise ValueError(
+                "effectful tools must explicitly declare bounded candidate writes"
+            )
+        return self
 
 
 class ScoutAiToolContract(ScoutAiToolBaseModel):
@@ -356,6 +384,26 @@ EXECUTABLE_TOOL_ALIASES: dict[str, list[str]] = {
         "scout.ai.router_status.search",
         "scout.ai.sensorlogger_status.search",
     ],
+    TERRAIN_NARRATIVE_GUIDANCE_TOOL_ID: [
+        "scout.ai.terrain_narrative_guidance.interpret",
+        "scout.ai.trh_narrative.interpret",
+    ],
+    TERRAIN_ROUTE_EXPLAIN_TOOL_ID: [
+        "explain_route_hypothesis",
+        "scout.ai.trh.explain",
+    ],
+    TERRAIN_ROUTE_COMPARE_TOOL_ID: [
+        "compare_route_hypotheses",
+        "scout.ai.trh.compare",
+    ],
+    TERRAIN_ROUTE_CONSISTENCY_TOOL_ID: [
+        "inspect_route_terrain_consistency",
+        "scout.ai.gpx_terrain_consistency.inspect",
+    ],
+    TERRAIN_ROUTE_GENERATE_TOOL_ID: [
+        "generate_terrain_route_hypotheses",
+        "scout.ai.trh.generate",
+    ],
 }
 
 
@@ -389,13 +437,183 @@ EXECUTABLE_OUTPUT_KINDS: dict[str, str] = {
     MEDIA_LITERACY_TOOL_ID: MEDIA_LITERACY_OUTPUT_KIND,
     SURVIVAL_INCIDENT_PLAYBOOK_TOOL_ID: SURVIVAL_INCIDENT_PLAYBOOK_OUTPUT_KIND,
     RUNTIME_INGRESS_STATUS_TOOL_ID: RUNTIME_INGRESS_STATUS_OUTPUT_KIND,
+    TERRAIN_NARRATIVE_GUIDANCE_TOOL_ID: TERRAIN_NARRATIVE_GUIDANCE_OUTPUT_KIND,
+    TERRAIN_ROUTE_EXPLAIN_TOOL_ID: TERRAIN_ROUTE_EXPLAIN_OUTPUT_KIND,
+    TERRAIN_ROUTE_COMPARE_TOOL_ID: TERRAIN_ROUTE_COMPARE_OUTPUT_KIND,
+    TERRAIN_ROUTE_CONSISTENCY_TOOL_ID: TERRAIN_ROUTE_CONSISTENCY_OUTPUT_KIND,
+    TERRAIN_ROUTE_GENERATE_TOOL_ID: TERRAIN_ROUTE_GENERATE_OUTPUT_KIND,
 }
 
 
 def default_tool_contracts() -> dict[str, ScoutAiToolContract]:
     contracts = _load_matrix_contracts()
     _add_question_eval_tools(contracts)
+    _add_terrain_narrative_guidance_tool(contracts)
+    _add_terrain_route_hypothesis_tools(contracts)
     return dict(sorted(contracts.items()))
+
+
+def _add_terrain_narrative_guidance_tool(
+    contracts: dict[str, ScoutAiToolContract],
+) -> None:
+    contracts[TERRAIN_NARRATIVE_GUIDANCE_TOOL_ID] = ScoutAiToolContract(
+        tool_id=TERRAIN_NARRATIVE_GUIDANCE_TOOL_ID,
+        label="Interpret terrain route narrative guidance",
+        implementation_status=ScoutAiToolImplementationStatus.READY_CURRENT_TOOL,
+        description=(
+            "Interpret historical route prose into typed candidate-only TRH "
+            "constraints for deterministic map resolution and human review."
+        ),
+        data_bundles=["historical route narrative and source provenance"],
+        required_fields=list(TERRAIN_NARRATIVE_GUIDANCE_REQUIRED_FIELDS),
+        optional_fields=list(TERRAIN_NARRATIVE_GUIDANCE_OPTIONAL_FIELDS),
+        workflow_steps=[
+            "validate narrative and source provenance",
+            "interpret explicit terrain guidance into typed source spans",
+            "retain ambiguity as unknown and require map-anchor review",
+        ],
+        existing_support=[
+            "Pydantic TerrainNarrativeGuidanceAgent with deterministic local fallback",
+            "candidate-only authority and exact source-span validation",
+        ],
+        argument_schema=_argument_schema_for(TERRAIN_NARRATIVE_GUIDANCE_TOOL_ID),
+        output_artifact_kind=TERRAIN_NARRATIVE_GUIDANCE_OUTPUT_KIND,
+        aliases=_aliases_for(TERRAIN_NARRATIVE_GUIDANCE_TOOL_ID),
+    )
+
+
+def _add_terrain_route_hypothesis_tools(
+    contracts: dict[str, ScoutAiToolContract],
+) -> None:
+    definitions = (
+        (
+            TERRAIN_ROUTE_EXPLAIN_TOOL_ID,
+            "Explain a terrain route hypothesis",
+            (
+                "Return explanation-ready candidate evidence, metrics, provenance, "
+                "and unknowns for one completed TRH."
+            ),
+            ["project_root"],
+            ["candidate_id", "hypothesis_path"],
+            TERRAIN_ROUTE_EXPLAIN_OUTPUT_KIND,
+            [
+                "validate the hash-bound candidate-only hypothesis artifact",
+                "select one R1-Rn candidate without promotion",
+                "return positive evidence, negative evidence, metrics, and unknowns",
+            ],
+        ),
+        (
+            TERRAIN_ROUTE_COMPARE_TOOL_ID,
+            "Compare terrain route hypotheses",
+            (
+                "Compare completed TRH alternatives descriptively without safety "
+                "ranking or cross-profile cost promotion."
+            ),
+            ["project_root"],
+            ["candidate_ids", "hypothesis_path"],
+            TERRAIN_ROUTE_COMPARE_OUTPUT_KIND,
+            [
+                "validate the hash-bound candidate-only hypothesis artifact",
+                "compare model assumptions, metrics, evidence, and unknowns",
+                "decline safety ranking and cross-profile cost ranking",
+            ],
+        ),
+        (
+            TERRAIN_ROUTE_CONSISTENCY_TOOL_ID,
+            "Inspect GPX terrain consistency",
+            (
+                "Compare a known GPX with candidate corridor, slope, drainage, and "
+                "optional TEII evidence; return terrain consistency, not GPX validity."
+            ),
+            ["project_root", "gpx_path"],
+            [
+                "candidate_id",
+                "hypothesis_path",
+                "corridor_band_name",
+                "max_samples",
+                "endpoint_tolerance_m",
+                "teii_raster_path",
+            ],
+            TERRAIN_ROUTE_CONSISTENCY_OUTPUT_KIND,
+            [
+                "validate immutable GPX and hypothesis hashes",
+                "sample bounded DEM/TRH evidence with GDAL",
+                "return CONSISTENT, PARTIALLY_CONSISTENT, TERRAIN_ANOMALY, or UNKNOWN",
+            ],
+        ),
+    )
+    for (
+        tool_id,
+        label,
+        description,
+        required_fields,
+        optional_fields,
+        output_kind,
+        workflow_steps,
+    ) in definitions:
+        contracts[tool_id] = ScoutAiToolContract(
+            tool_id=tool_id,
+            label=label,
+            implementation_status=ScoutAiToolImplementationStatus.READY_CURRENT_TOOL,
+            description=description,
+            data_bundles=[
+                "hash-bound TerrainRouteHypothesisRun",
+                "candidate-only DEM/GRASS provenance",
+            ],
+            required_fields=required_fields,
+            optional_fields=optional_fields,
+            workflow_steps=workflow_steps,
+            existing_support=[
+                "scout_terrain_route_hypothesis_tool.py deterministic read-only adapter",
+                "terrain_route_consistency.py typed fail-closed assessment",
+            ],
+            argument_schema=_argument_schema_for(tool_id),
+            output_artifact_kind=output_kind,
+            aliases=_aliases_for(tool_id),
+        )
+    contracts[TERRAIN_ROUTE_GENERATE_TOOL_ID] = ScoutAiToolContract(
+        tool_id=TERRAIN_ROUTE_GENERATE_TOOL_ID,
+        label="Generate candidate terrain route hypotheses",
+        implementation_status=ScoutAiToolImplementationStatus.READY_CURRENT_TOOL,
+        description=(
+            "Submit an allowlisted deterministic QGIS/GRASS candidate workflow "
+            "for explicit WGS84 A/B endpoints."
+        ),
+        data_bundles=[
+            "hash-bound prepared DEM and parent manifest",
+            "explicit WGS84 A/B endpoints",
+            "optional hash-bound human-reviewed R4 guidance",
+        ],
+        required_fields=[
+            "project_root",
+            "start_lon",
+            "start_lat",
+            "destination_lon",
+            "destination_lat",
+        ],
+        optional_fields=[
+            "analysis_margin_m",
+            "requested_by",
+            "guidance_id",
+            "review_sha256",
+        ],
+        workflow_steps=[
+            "validate project and explicit candidate-only endpoints",
+            "submit the allowlisted terrain_route_hypothesis.v1 workflow",
+            "return a typed workflow receipt for polling and human review",
+        ],
+        existing_support=[
+            "QgisSpatialBackend deterministic persistence and worker boundary",
+            "QgisWorkerService allowlisted QGIS/GRASS terrain workflow",
+        ],
+        argument_schema=_argument_schema_for(TERRAIN_ROUTE_GENERATE_TOOL_ID),
+        output_artifact_kind=TERRAIN_ROUTE_GENERATE_OUTPUT_KIND,
+        aliases=_aliases_for(TERRAIN_ROUTE_GENERATE_TOOL_ID),
+        boundary=ScoutAiToolBoundary(
+            read_only=False,
+            local_candidate_workspace_write_allowed=True,
+        ),
+    )
 
 
 def resolve_scout_ai_tool_id(tool_id_or_alias: str) -> str:
@@ -663,6 +881,101 @@ def _aliases_for(tool_id: str) -> list[str]:
 
 
 def _argument_schema_for(tool_id: str) -> dict[str, Any]:
+    if tool_id == TERRAIN_NARRATIVE_GUIDANCE_TOOL_ID:
+        return {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["project_root", "narrative", "source_id"],
+            "properties": {
+                "project_root": {"type": "string"},
+                "narrative": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 32000,
+                },
+                "source_id": {"type": "string", "minLength": 1},
+                "source_date": {"type": ["string", "null"]},
+            },
+        }
+    if tool_id in {
+        TERRAIN_ROUTE_EXPLAIN_TOOL_ID,
+        TERRAIN_ROUTE_COMPARE_TOOL_ID,
+        TERRAIN_ROUTE_CONSISTENCY_TOOL_ID,
+    }:
+        properties: dict[str, Any] = {
+            "project_root": {"type": "string", "minLength": 1},
+            "candidate_id": {"type": ["string", "null"]},
+            "hypothesis_path": {"type": ["string", "null"]},
+        }
+        required = ["project_root"]
+        if tool_id == TERRAIN_ROUTE_COMPARE_TOOL_ID:
+            properties["candidate_ids"] = {
+                "type": ["array", "null"],
+                "items": {"type": "string"},
+                "maxItems": 6,
+            }
+        if tool_id == TERRAIN_ROUTE_CONSISTENCY_TOOL_ID:
+            required.append("gpx_path")
+            properties.update(
+                {
+                    "gpx_path": {"type": "string", "minLength": 1},
+                    "corridor_band_name": {"type": ["string", "null"]},
+                    "max_samples": {
+                        "type": ["integer", "null"],
+                        "minimum": 2,
+                        "maximum": 2000,
+                    },
+                    "endpoint_tolerance_m": {
+                        "type": ["number", "null"],
+                        "exclusiveMinimum": 0,
+                    },
+                    "teii_raster_path": {"type": ["string", "null"]},
+                }
+            )
+        return {
+            "type": "object",
+            "additionalProperties": False,
+            "required": required,
+            "properties": properties,
+        }
+    if tool_id == TERRAIN_ROUTE_GENERATE_TOOL_ID:
+        return {
+            "type": "object",
+            "additionalProperties": False,
+            "required": [
+                "project_root",
+                "start_lon",
+                "start_lat",
+                "destination_lon",
+                "destination_lat",
+            ],
+            "properties": {
+                "project_root": {"type": "string", "minLength": 1},
+                "start_lon": {"type": "number", "minimum": -180, "maximum": 180},
+                "start_lat": {"type": "number", "minimum": -90, "maximum": 90},
+                "destination_lon": {
+                    "type": "number",
+                    "minimum": -180,
+                    "maximum": 180,
+                },
+                "destination_lat": {
+                    "type": "number",
+                    "minimum": -90,
+                    "maximum": 90,
+                },
+                "analysis_margin_m": {
+                    "type": ["number", "null"],
+                    "minimum": 0,
+                    "maximum": 5000,
+                },
+                "requested_by": {"type": ["string", "null"]},
+                "guidance_id": {"type": ["string", "null"]},
+                "review_sha256": {
+                    "type": ["string", "null"],
+                    "pattern": "^[a-f0-9]{64}$",
+                },
+            },
+        }
     properties: dict[str, Any] = {
         "project_root": {"type": "string"},
         "query": {"type": "string"},
@@ -744,6 +1057,28 @@ def _future_argument_schema(required_fields: list[str]) -> dict[str, Any]:
 
 
 def _optional_fields_for(tool_id: str) -> list[str]:
+    if tool_id == TERRAIN_NARRATIVE_GUIDANCE_TOOL_ID:
+        return list(TERRAIN_NARRATIVE_GUIDANCE_OPTIONAL_FIELDS)
+    if tool_id == TERRAIN_ROUTE_EXPLAIN_TOOL_ID:
+        return ["candidate_id", "hypothesis_path"]
+    if tool_id == TERRAIN_ROUTE_COMPARE_TOOL_ID:
+        return ["candidate_ids", "hypothesis_path"]
+    if tool_id == TERRAIN_ROUTE_CONSISTENCY_TOOL_ID:
+        return [
+            "candidate_id",
+            "hypothesis_path",
+            "corridor_band_name",
+            "max_samples",
+            "endpoint_tolerance_m",
+            "teii_raster_path",
+        ]
+    if tool_id == TERRAIN_ROUTE_GENERATE_TOOL_ID:
+        return [
+            "analysis_margin_m",
+            "requested_by",
+            "guidance_id",
+            "review_sha256",
+        ]
     if tool_id == WORKSPACE_QUERY_TOOL_ID:
         return []
     if tool_id == "pydantic_ai.tool.search_scout_workspace_catalog.v0":

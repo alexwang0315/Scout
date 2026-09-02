@@ -70,14 +70,18 @@ from terrain_route_hypothesis_artifacts import (
     TERRAIN_ROUTE_VISUALIZATION_REVISION,
     build_corridor_threshold_expression,
     build_drainage_pressure_expression,
+    build_guidance_friction_expression,
     build_live_terrain_route_cache_keys,
     build_path_outside_band_expression,
     build_profile_friction_expression,
     build_relative_corridor_expression,
     build_slope_friction_expression,
+    build_terrain_route_resolution_identity,
+    build_terrain_route_source_identity,
 )
 from terrain_route_hypothesis_models import (
     TERRAIN_ROUTE_BAND_MODEL,
+    TERRAIN_ROUTE_GUIDED_PATH_SEMANTICS,
     TERRAIN_ROUTE_PATH_BAND_RELATIONSHIP,
     TERRAIN_ROUTE_PATH_MODEL,
     TERRAIN_ROUTE_PATH_SEMANTICS,
@@ -90,6 +94,7 @@ from terrain_route_hypothesis_models import (
     TerrainHypothesisProvenance,
     TerrainRasterReference,
     TerrainRouteCandidateCorridor,
+    TerrainRouteAlternativeProfile,
     TerrainRouteHypothesis,
     TerrainRouteHypothesisRun,
     TerrainRouteRunStatus,
@@ -1297,7 +1302,20 @@ class QgisWorkerService:
         manifest_path = run_root / "terrain_route_processing_manifest.json"
         added_layers: list[str] = []
         processing_invocations: list[dict[str, Any]] = []
-        route_profiles = request.terrain_routing_cost_config.alternative_profiles
+        guidance_execution = request.terrain_route_guidance_execution_plan
+        route_profiles = list(
+            request.terrain_routing_cost_config.alternative_profiles
+        )
+        if guidance_execution is not None:
+            route_profiles.append(
+                TerrainRouteAlternativeProfile(
+                    candidate_id="R4",
+                    label="R4 reviewed historical-guidance terrain hypothesis",
+                    strategy=TerrainRouteStrategy.HISTORICAL_NARRATIVE_GUIDED,
+                    drainage_penalty_multiplier=1.5,
+                )
+            )
+        route_profiles = tuple(route_profiles)
         corridor_profile = next(
             profile for profile in route_profiles if profile.corridor_profile
         )
@@ -1362,16 +1380,31 @@ class QgisWorkerService:
             endpoints_geojson, start_wgs84, destination_wgs84 = (
                 _terrain_route_endpoint_geojson(request.route_geojson)
             )
-            cache_keys = build_live_terrain_route_cache_keys(
-                source_hashes=request.source_hashes,
-                source_resolution=request.source_resolution,
-                route_coordinates=(start_wgs84, destination_wgs84),
-                analysis_margin_m=request.corridor_m,
-                cost_config=request.terrain_routing_cost_config,
+            source_dem_hashes = _verified_terrain_route_dem_hashes(
+                request,
+                dem_refs,
             )
             parent_manifest_ref = _parent_terrain_manifest_ref(
                 request.source_refs,
                 request.source_hashes,
+            )
+            cache_source_identity = build_terrain_route_source_identity(
+                dem_sha256s=source_dem_hashes,
+                parent_manifest_sha256=request.source_hashes[parent_manifest_ref],
+            )
+            cache_keys = build_live_terrain_route_cache_keys(
+                source_hashes=cache_source_identity,
+                source_resolution=build_terrain_route_resolution_identity(
+                    request.source_resolution
+                ),
+                route_coordinates=(start_wgs84, destination_wgs84),
+                analysis_margin_m=request.corridor_m,
+                cost_config=request.terrain_routing_cost_config,
+                guidance_review_sha256=(
+                    guidance_execution.guidance_review_sha256
+                    if guidance_execution is not None
+                    else None
+                ),
             )
             if (
                 request.terrain_route_cache_keys is not None
@@ -1395,9 +1428,11 @@ class QgisWorkerService:
                 "qgis_context",
                 {
                     "task": (
-                        "Generate three candidate-only terrain route hypothesis alternatives from explicit "
+                        f"Generate {len(route_profiles)} candidate-only terrain route hypothesis alternatives from explicit "
                         "A/B endpoints, including drainage-averse, balanced, and terrain-only "
-                        "profiles. Use the fixed allowlisted GRASS recipe; do not infer "
+                        "profiles. When a reviewed R4 execution plan is present, run its "
+                        "ordered point anchors as piecewise GRASS segments. Use the fixed "
+                        "allowlisted GRASS recipe; do not infer "
                         "a trail, safety, passage, legal access, or operational route truth."
                     ),
                     "budget_bytes": 8192,
@@ -1575,6 +1610,80 @@ class QgisWorkerService:
             destination_coordinate = (
                 f"{_compact_number(destination_x)},{_compact_number(destination_y)}"
             )
+            guidance_projected_point_paths: dict[str, Path] = {}
+            guidance_projected_coordinates: dict[str, tuple[float, float]] = {}
+            if guidance_execution is not None:
+                for anchor_index, anchor in enumerate(
+                    guidance_execution.anchors,
+                    start=1,
+                ):
+                    anchor_slug = f"{anchor_index:02d}_{anchor.constraint_id.lower()}"
+                    anchor_source_path = (
+                        run_root / f"terrain_route_guidance_anchor_{anchor_slug}.geojson"
+                    )
+                    anchor_projected_path = (
+                        run_root
+                        / f"terrain_route_guidance_anchor_{anchor_slug}_epsg3826.gpkg"
+                    )
+                    _write_private_json(
+                        anchor_source_path,
+                        _terrain_route_destination_geojson(
+                            (anchor.point.x, anchor.point.y)
+                        ),
+                    )
+                    anchor_source = self._call(
+                        "qgis_project_action",
+                        {
+                            "action": "add_vector",
+                            "source": str(anchor_source_path),
+                            "name": (
+                                "Scout candidate route source guidance "
+                                f"{anchor.constraint_id} {run.worker_run_id[-10:]}"
+                            ),
+                        },
+                    )
+                    anchor_source_id = str(
+                        anchor_source.get("id")
+                        or anchor_source.get("layer_id")
+                        or ""
+                    )
+                    if not anchor_source_id:
+                        raise _WorkerProcessingFailed(
+                            "QGIS did not return a reviewed guidance anchor layer ID"
+                        )
+                    added_layers.append(anchor_source_id)
+                    anchor_export = self._call(
+                        "qgis_vector_export",
+                        {
+                            "layer": anchor_source_id,
+                            "path": str(anchor_projected_path),
+                            "format": "gpkg",
+                            "encoding": "UTF-8",
+                            "selected_only": False,
+                            "destination_crs": "EPSG:3826",
+                            "overwrite": False,
+                            "create_parent": False,
+                            "include_z": False,
+                            "save_metadata": True,
+                        },
+                    )
+                    if (
+                        not anchor_projected_path.is_file()
+                        or int(anchor_export.get("feature_count", -1)) != 1
+                    ):
+                        raise _WorkerProcessingFailed(
+                            "QGIS did not export one reviewed guidance anchor point"
+                        )
+                    anchor_x, anchor_y = wgs84_to_twd97(
+                        anchor.point.y,
+                        anchor.point.x,
+                    )
+                    guidance_projected_point_paths[
+                        anchor.constraint_id
+                    ] = anchor_projected_path
+                    guidance_projected_coordinates[
+                        anchor.constraint_id
+                    ] = (anchor_x, anchor_y)
             run = self._complete_step(run, current_step)
             self._persist(run)
             self._check_cancel(cancel_event)
@@ -1640,6 +1749,17 @@ class QgisWorkerService:
                 (destination_x, destination_y),
                 dem_summary.get("extent"),
             )
+            for anchor in (
+                guidance_execution.anchors if guidance_execution is not None else ()
+            ):
+                projected_anchor = guidance_projected_coordinates[
+                    anchor.constraint_id
+                ]
+                _require_route_endpoints_inside_extent(
+                    projected_anchor,
+                    projected_anchor,
+                    dem_summary.get("extent"),
+                )
             process(
                 "grass:r.univar",
                 {
@@ -1745,6 +1865,7 @@ class QgisWorkerService:
                 drainage_pressure_path,
             )
             profile_friction_expressions: dict[str, str] = {}
+            guidance_friction_expression: str | None = None
             for profile in route_profiles:
                 profile_friction_expression = build_profile_friction_expression(
                     profile.drainage_penalty_multiplier
@@ -1753,31 +1874,84 @@ class QgisWorkerService:
                     profile_friction_expression
                 )
                 output = profile_outputs[profile.candidate_id]["friction"]
+                base_output = (
+                    run_root / "terrain_route_friction_r4_base.tif"
+                    if profile.strategy
+                    is TerrainRouteStrategy.HISTORICAL_NARRATIVE_GUIDED
+                    else output
+                )
                 process(
                     "grass:r.mapcalc.simple",
                     {
                         "a": str(slope_friction_path),
                         "b": str(drainage_pressure_path),
                         "expression": profile_friction_expression,
-                        "output": str(output),
+                        "output": str(base_output),
                     },
-                    output,
+                    base_output,
                 )
+                if (
+                    profile.strategy
+                    is TerrainRouteStrategy.HISTORICAL_NARRATIVE_GUIDED
+                ):
+                    if guidance_execution is None:
+                        raise _WorkerTerrainRouteUnavailable(
+                            SpatialAnalysisErrorCode.INVALID_INPUT,
+                            "R4 cannot compile local cost preferences without a reviewed guidance plan.",
+                        )
+                    guidance_friction_expression = (
+                        build_guidance_friction_expression(
+                            [
+                                (
+                                    guidance_projected_coordinates[
+                                        modifier.constraint_id
+                                    ][0],
+                                    guidance_projected_coordinates[
+                                        modifier.constraint_id
+                                    ][1],
+                                    modifier.influence_radius_m,
+                                    modifier.minimum_friction_multiplier,
+                                )
+                                for modifier in guidance_execution.cost_modifiers
+                            ]
+                        )
+                    )
+                    process(
+                        "grass:r.mapcalc.simple",
+                        {
+                            "a": str(base_output),
+                            "expression": guidance_friction_expression,
+                            "output": str(output),
+                        },
+                        output,
+                    )
             run = self._complete_step(run, current_step)
             self._persist(run)
             self._check_cancel(cancel_event)
 
             current_step = "walk_path_generated"
             profile_results: list[dict[str, Any]] = []
-            for alternative_index, profile in enumerate(route_profiles, start=1):
-                outputs = profile_outputs[profile.candidate_id]
+
+            def run_walk_path_segment(
+                *,
+                profile: TerrainRouteAlternativeProfile,
+                alternative_index: int,
+                segment_id: str,
+                segment_start_wgs84: tuple[float, float],
+                segment_destination_wgs84: tuple[float, float],
+                segment_start_coordinate: str,
+                segment_destination_coordinate: str,
+                segment_destination_path: Path,
+                outputs: dict[str, Path],
+                path_semantics: str,
+            ) -> dict[str, Any]:
                 process(
                     "grass:r.walk.coords",
                     {
                         "elevation": str(dem_input),
                         "friction": str(outputs["friction"]),
-                        "start_coordinates": start_coordinate,
-                        "stop_coordinates": destination_coordinate,
+                        "start_coordinates": segment_start_coordinate,
+                        "stop_coordinates": segment_destination_coordinate,
                         "walk_coeff": "0.72,6.0,1.9998,-1.9998",
                         "lambda": 1.0,
                         "slope_factor": -0.2125,
@@ -1801,7 +1975,7 @@ class QgisWorkerService:
                         "values": None,
                         "raster_path": str(outputs["path_raster"]),
                         "vector_path": str(outputs["path_projected"]),
-                        "start_points": str(projected_destination_path),
+                        "start_points": str(segment_destination_path),
                         "-c": False,
                         "-a": False,
                         "-n": False,
@@ -1817,9 +1991,7 @@ class QgisWorkerService:
                 raw_path_payload, _path_layer_id = (
                     self._export_candidate_terrain_vector(
                         run=run,
-                        vector_name=(
-                            f"terrain_route_best_path_{profile.candidate_id.lower()}"
-                        ),
+                        vector_name=f"terrain_route_best_path_{segment_id}",
                         projected_path=outputs["path_projected"],
                         output_path=outputs["path_geojson"],
                         kind="terrain_route_hypothesis_best_path",
@@ -1830,23 +2002,29 @@ class QgisWorkerService:
                         workflow_id=TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_ID,
                     )
                 )
-                normalized_payload, coordinates = _normalize_terrain_route_best_path(
-                    raw_path_payload,
-                    start_wgs84=start_wgs84,
-                    destination_wgs84=destination_wgs84,
-                    worker_run_id=run.worker_run_id,
-                    candidate_id=profile.candidate_id,
-                    alternative_index=alternative_index,
-                    label=profile.label,
-                    strategy=profile.strategy,
-                    drainage_penalty_multiplier=(
-                        profile.drainage_penalty_multiplier
-                    ),
-                    endpoint_tolerance_m=max(dem_resolution_m * 2.0, 10.0),
+                normalized_payload, coordinates = (
+                    _normalize_terrain_route_best_path(
+                        raw_path_payload,
+                        start_wgs84=segment_start_wgs84,
+                        destination_wgs84=segment_destination_wgs84,
+                        worker_run_id=run.worker_run_id,
+                        candidate_id=profile.candidate_id,
+                        alternative_index=alternative_index,
+                        label=profile.label,
+                        strategy=profile.strategy,
+                        drainage_penalty_multiplier=(
+                            profile.drainage_penalty_multiplier
+                        ),
+                        endpoint_tolerance_m=max(
+                            dem_resolution_m * 2.0,
+                            10.0,
+                        ),
+                        path_semantics=path_semantics,
+                    )
                 )
                 scalar = self._terrain_route_scalar_costs(
                     run=run,
-                    destination_wgs84=destination_wgs84,
+                    destination_wgs84=segment_destination_wgs84,
                     rasters={"anisotropic_walk_cost": outputs["walk_cost"]},
                     added_layers=added_layers,
                 ).get("anisotropic_walk_cost")
@@ -1854,10 +2032,155 @@ class QgisWorkerService:
                     raise _WorkerTerrainRouteUnavailable(
                         SpatialAnalysisErrorCode.NO_CONNECTED_SOLUTION,
                         (
-                            "GRASS r.walk did not produce a connected A/B path cost "
-                            f"for {profile.candidate_id}."
+                            "GRASS r.walk did not produce a connected model-cost "
+                            f"segment for {segment_id}."
                         ),
                     )
+                return {
+                    "payload": normalized_payload,
+                    "coordinates": coordinates,
+                    "walk_cost": float(scalar),
+                }
+
+            for alternative_index, profile in enumerate(route_profiles, start=1):
+                outputs = profile_outputs[profile.candidate_id]
+                guided_segments: list[dict[str, Any]] = []
+                if (
+                    profile.strategy
+                    is TerrainRouteStrategy.HISTORICAL_NARRATIVE_GUIDED
+                ):
+                    if guidance_execution is None:
+                        raise _WorkerTerrainRouteUnavailable(
+                            SpatialAnalysisErrorCode.INVALID_INPUT,
+                            "R4 cannot run without a reviewed guidance execution plan.",
+                        )
+                    waypoint_rows: list[
+                        tuple[tuple[float, float], str, Path | None, str]
+                    ] = [
+                        (start_wgs84, start_coordinate, None, "A"),
+                        *[
+                            (
+                                (anchor.point.x, anchor.point.y),
+                                (
+                                    f"{_compact_number(guidance_projected_coordinates[anchor.constraint_id][0])},"
+                                    f"{_compact_number(guidance_projected_coordinates[anchor.constraint_id][1])}"
+                                ),
+                                guidance_projected_point_paths[
+                                    anchor.constraint_id
+                                ],
+                                anchor.constraint_id,
+                            )
+                            for anchor in guidance_execution.anchors
+                        ],
+                        (
+                            destination_wgs84,
+                            destination_coordinate,
+                            projected_destination_path,
+                            "B",
+                        ),
+                    ]
+                    combined_coordinates: list[list[float]] = []
+                    total_walk_cost = 0.0
+                    for segment_index, (segment_start, segment_destination) in enumerate(
+                        zip(waypoint_rows, waypoint_rows[1:]),
+                        start=1,
+                    ):
+                        segment_suffix = f"r4_segment_{segment_index:02d}"
+                        segment_outputs = {
+                            "friction": outputs["friction"],
+                            "walk_cost": run_root
+                            / f"terrain_route_walk_cost_{segment_suffix}.tif",
+                            "walk_direction": run_root
+                            / f"terrain_route_walk_direction_{segment_suffix}.tif",
+                            "path_raster": run_root
+                            / f"terrain_route_best_path_{segment_suffix}.tif",
+                            "path_projected": run_root
+                            / f"terrain_route_best_path_{segment_suffix}_epsg3826.gpkg",
+                            "path_geojson": run_root
+                            / f"terrain_route_best_path_{segment_suffix}.geojson",
+                        }
+                        segment_result = run_walk_path_segment(
+                            profile=profile,
+                            alternative_index=alternative_index,
+                            segment_id=segment_suffix,
+                            segment_start_wgs84=segment_start[0],
+                            segment_destination_wgs84=segment_destination[0],
+                            segment_start_coordinate=segment_start[1],
+                            segment_destination_coordinate=segment_destination[1],
+                            segment_destination_path=segment_destination[2]
+                            or projected_destination_path,
+                            outputs=segment_outputs,
+                            path_semantics=TERRAIN_ROUTE_GUIDED_PATH_SEMANTICS,
+                        )
+                        combined_coordinates = _append_guided_segment_coordinates(
+                            combined_coordinates,
+                            segment_result["coordinates"],
+                            endpoint_tolerance_m=max(
+                                dem_resolution_m * 2.0,
+                                10.0,
+                            ),
+                        )
+                        total_walk_cost += segment_result["walk_cost"]
+                        guided_segments.append(
+                            {
+                                "segment_index": segment_index,
+                                "start": segment_start[3],
+                                "destination": segment_destination[3],
+                                "walk_cost": segment_result["walk_cost"],
+                                "vertex_count": len(
+                                    segment_result["coordinates"]
+                                ),
+                            }
+                        )
+                    normalized_payload, coordinates = (
+                        _normalize_terrain_route_best_path(
+                            {
+                                "type": "FeatureCollection",
+                                "features": [
+                                    {
+                                        "type": "Feature",
+                                        "geometry": {
+                                            "type": "LineString",
+                                            "coordinates": combined_coordinates,
+                                        },
+                                        "properties": {},
+                                    }
+                                ],
+                            },
+                            start_wgs84=start_wgs84,
+                            destination_wgs84=destination_wgs84,
+                            worker_run_id=run.worker_run_id,
+                            candidate_id=profile.candidate_id,
+                            alternative_index=alternative_index,
+                            label=profile.label,
+                            strategy=profile.strategy,
+                            drainage_penalty_multiplier=(
+                                profile.drainage_penalty_multiplier
+                            ),
+                            endpoint_tolerance_m=max(
+                                dem_resolution_m * 2.0,
+                                10.0,
+                            ),
+                            path_semantics=TERRAIN_ROUTE_GUIDED_PATH_SEMANTICS,
+                        )
+                    )
+                    scalar = total_walk_cost
+                else:
+                    segment_result = run_walk_path_segment(
+                        profile=profile,
+                        alternative_index=alternative_index,
+                        segment_id=profile.candidate_id.lower(),
+                        segment_start_wgs84=start_wgs84,
+                        segment_destination_wgs84=destination_wgs84,
+                        segment_start_coordinate=start_coordinate,
+                        segment_destination_coordinate=destination_coordinate,
+                        segment_destination_path=projected_destination_path,
+                        outputs=outputs,
+                        path_semantics=TERRAIN_ROUTE_PATH_SEMANTICS,
+                    )
+                    normalized_payload = segment_result["payload"]
+                    coordinates = segment_result["coordinates"]
+                    scalar = segment_result["walk_cost"]
                 profile_results.append(
                     {
                         "profile": profile,
@@ -1866,6 +2189,7 @@ class QgisWorkerService:
                         "coordinates": coordinates,
                         "walk_ab": float(scalar),
                         "outputs": outputs,
+                        "guided_segments": guided_segments,
                     }
                 )
             best_path_payload = _combine_terrain_route_best_paths(
@@ -2147,6 +2471,17 @@ class QgisWorkerService:
             distinct_geometry_count = int(
                 best_path_payload["metadata"]["distinct_geometry_count"]
             )
+            analysis_dem_hash = _file_sha256(dem_input)
+            source_dem_hash = (
+                source_dem_hashes[0]
+                if len(source_dem_hashes) == 1
+                else hashlib.sha256(
+                    json.dumps(
+                        sorted(source_dem_hashes),
+                        separators=(",", ":"),
+                    ).encode("ascii")
+                ).hexdigest()
+            )
             processing_manifest = {
                 "schema_version": "scout_terrain_route_processing_manifest.v0_2",
                 "workflow_id": TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_ID,
@@ -2155,6 +2490,14 @@ class QgisWorkerService:
                 "parent_source_hashes": request.source_hashes,
                 "cache_keys": cache_keys.model_dump(mode="json"),
                 "analysis_extent": dem_analysis_extent,
+                "source_dem_sha256s": list(source_dem_hashes),
+                "source_dem_hash_semantics": (
+                    "authoritative_input_content_hash"
+                ),
+                "analysis_dem_sha256": analysis_dem_hash,
+                "analysis_dem_hash_semantics": (
+                    "bounded_worker_raster_bytes_may_vary_by_gdal_grass_version"
+                ),
                 "dem_statistics": dem_stats,
                 "corridor_statistics": corridor_stats,
                 "corridor_semantics": TERRAIN_ROUTE_CORRIDOR_SEMANTICS,
@@ -2222,6 +2565,7 @@ class QgisWorkerService:
                         "anisotropic_walk_ab_cost": item["walk_ab"],
                         "route_vertex_count": len(item["coordinates"]),
                         "metric_sample_count": item["metric_sample_count"],
+                        "guided_segments": item["guided_segments"],
                     }
                     for item in profile_results
                 ],
@@ -2238,6 +2582,75 @@ class QgisWorkerService:
                     "semantics": "resolution-aware model penalty, not hazard or passability truth",
                     "river_or_channel_presence_confirmed": False,
                 },
+                "guidance_execution": (
+                    {
+                        "guidance_id": guidance_execution.guidance_id,
+                        "guided_hypothesis_id": (
+                            guidance_execution.guided_hypothesis_id
+                        ),
+                        "guidance_review_sha256": (
+                            guidance_execution.guidance_review_sha256
+                        ),
+                        "plan_sha256": guidance_execution.plan_sha256,
+                        "resolution_sha256": (
+                            guidance_execution.resolution_sha256
+                        ),
+                        "feature_index_sha256": (
+                            guidance_execution.feature_index_sha256
+                        ),
+                        "algorithm_version": (
+                            guidance_execution.algorithm_version
+                        ),
+                        "cost_model_version": (
+                            guidance_execution.cost_model_version
+                        ),
+                        "anchor_count": len(guidance_execution.anchors),
+                        "review_decision_count": len(
+                            guidance_execution.review_decisions
+                        ),
+                        "review_decisions": [
+                            item.model_dump(mode="json")
+                            for item in guidance_execution.review_decisions
+                        ],
+                        "anchors": [
+                            {
+                                "constraint_id": item.constraint_id,
+                                "sequence_index": item.sequence_index,
+                                "kind": item.kind.value,
+                                "landform": item.landform.value,
+                                "routing_effect": item.routing_effect.value,
+                                "feature_id": item.feature_id,
+                                "point": item.point.model_dump(mode="json"),
+                                "selection_source": item.selection_source,
+                                "source_layer_sha256": (
+                                    item.source_layer_sha256
+                                ),
+                            }
+                            for item in guidance_execution.anchors
+                        ],
+                        "cost_modifier_count": len(
+                            guidance_execution.cost_modifiers
+                        ),
+                        "cost_modifiers": [
+                            item.model_dump(mode="json")
+                            for item in guidance_execution.cost_modifiers
+                        ],
+                        "guidance_friction_expression": (
+                            guidance_friction_expression
+                        ),
+                        "disabled_constraint_ids": (
+                            guidance_execution.disabled_constraint_ids
+                        ),
+                        "source_type": "historical_route",
+                        "candidate_only": True,
+                        "runtime_safety_truth": False,
+                        "operational": False,
+                        "safe_or_walkable": "not_determined",
+                        "raw_narrative_forwarded_to_worker": False,
+                    }
+                    if guidance_execution is not None
+                    else None
+                ),
                 "cost_model": request.terrain_routing_cost_config.model_dump(
                     mode="json"
                 ),
@@ -2254,7 +2667,7 @@ class QgisWorkerService:
                 "operational": False,
                 "safe_or_walkable": "not_determined",
             }
-            dem_hash = _file_sha256(dem_input)
+            dem_hash = source_dem_hash
             hypotheses: list[TerrainRouteHypothesis] = []
             for profile_result in profile_results:
                 profile = profile_result["profile"]
@@ -2305,6 +2718,32 @@ class QgisWorkerService:
                             ),
                         )
                     )
+                elif (
+                    profile.strategy
+                    is TerrainRouteStrategy.HISTORICAL_NARRATIVE_GUIDED
+                ):
+                    evidence.extend(
+                        [
+                            RouteEvidence(
+                                code="reviewed_historical_guidance_applied",
+                                polarity=RouteEvidencePolarity.POSITIVE,
+                                description=(
+                                    "This candidate follows human-confirmed map points "
+                                    "interpreted from a historical narrative, with each "
+                                    "segment solved by the terrain model."
+                                ),
+                            ),
+                            RouteEvidence(
+                                code="historical_guidance_not_observation",
+                                polarity=RouteEvidencePolarity.NEGATIVE,
+                                description=(
+                                    "Historical wording and reviewed map points do not "
+                                    "establish a currently observed trail, passage, safety, "
+                                    "or legal access."
+                                ),
+                            ),
+                        ]
+                    )
                 else:
                     evidence.append(
                         RouteEvidence(
@@ -2348,12 +2787,17 @@ class QgisWorkerService:
                         "statistics_scope": "sampled_path_cells",
                         "max_slope_semantics": "maximum_of_sampled_cells_not_full_path_maximum",
                     },
+                    "guided_segments": profile_result["guided_segments"],
                 }
+                guided_profile = (
+                    profile.strategy
+                    is TerrainRouteStrategy.HISTORICAL_NARRATIVE_GUIDED
+                )
                 provenance = TerrainHypothesisProvenance(
                     dem_dataset_id=(
-                        request.source_refs[0]
-                        if request.source_refs
-                        else dem_input.name
+                        Path(request.dem_refs[0]).name
+                        if len(request.dem_refs) == 1
+                        else "multi_dem_mosaic"
                     ),
                     dem_sha256=dem_hash,
                     dem_resolution_m=dem_resolution_m,
@@ -2368,8 +2812,20 @@ class QgisWorkerService:
                         "start": {"x": start_wgs84[0], "y": start_wgs84[1], "crs": "EPSG:4326"},
                         "destination": {"x": destination_wgs84[0], "y": destination_wgs84[1], "crs": "EPSG:4326"},
                     },
-                    optional_evidence_refs=[],
-                    optional_evidence_hashes={},
+                    optional_evidence_refs=(
+                        [f"terrain-guidance-review:{guidance_execution.guidance_id}"]
+                        if guided_profile and guidance_execution is not None
+                        else []
+                    ),
+                    optional_evidence_hashes=(
+                        {
+                            "terrain_guidance_review": (
+                                guidance_execution.guidance_review_sha256
+                            )
+                        }
+                        if guided_profile and guidance_execution is not None
+                        else {}
+                    ),
                     cost_model_version=request.terrain_routing_cost_config.model_version,
                     weights=weights,
                     weights_hash=hashlib.sha256(
@@ -2405,6 +2861,11 @@ class QgisWorkerService:
                             ),
                             crs="EPSG:4326",
                         ),
+                        path_semantics=(
+                            TERRAIN_ROUTE_GUIDED_PATH_SEMANTICS
+                            if guided_profile
+                            else TERRAIN_ROUTE_PATH_SEMANTICS
+                        ),
                         corridor=(
                             TerrainRouteCandidateCorridor(bands=corridor_bands, raster_ref=raster_ref)
                             if profile.corridor_profile
@@ -2430,6 +2891,13 @@ class QgisWorkerService:
                     "Cross-profile relative costs are not directly comparable because each profile uses a different friction model.",
                     "The terrain-only baseline does not penalize drainage and may overlap a valley or channel without establishing passage.",
                     "Corridor bands are finite-cell relative-cost percentiles and do not receive a best-path-cell union.",
+                    *(
+                        [
+                            "R4 applies reviewed historical guidance as ordered terrain-model gates; it does not verify the narrative, trail existence, current passage, safety, or legal access."
+                        ]
+                        if guidance_execution is not None
+                        else []
+                    ),
                     *(
                         [
                             "Some route profiles produced identical geometry; their model assumptions remain distinct, but no spatial separation was invented."
@@ -6071,7 +6539,7 @@ def _terrain_route_endpoint_geojson(
                 "type": "Feature",
                 "geometry": {
                     "type": "LineString",
-                    "coordinates": [list(start), list(destination)],
+                    "coordinates": coordinates,
                 },
                 "properties": {
                     "kind": "terrain_route_endpoint_baseline",
@@ -6257,7 +6725,13 @@ def _normalize_terrain_route_best_path(
     strategy: TerrainRouteStrategy,
     drainage_penalty_multiplier: float,
     endpoint_tolerance_m: float,
+    path_semantics: str = TERRAIN_ROUTE_PATH_SEMANTICS,
 ) -> tuple[dict[str, Any], list[list[float]]]:
+    if path_semantics not in {
+        TERRAIN_ROUTE_PATH_SEMANTICS,
+        TERRAIN_ROUTE_GUIDED_PATH_SEMANTICS,
+    }:
+        raise _WorkerProcessingFailed("Terrain route path semantics are unsupported")
     features = payload.get("features") if isinstance(payload, dict) else None
     if not isinstance(features, list) or len(features) != 1:
         raise _WorkerTerrainRouteUnavailable(
@@ -6327,7 +6801,7 @@ def _normalize_terrain_route_best_path(
             "drainage_penalty_multiplier": drainage_penalty_multiplier,
             "relative_cost_comparison_scope": "within_profile_only",
             "path_model": TERRAIN_ROUTE_PATH_MODEL,
-            "path_semantics": TERRAIN_ROUTE_PATH_SEMANTICS,
+            "path_semantics": path_semantics,
             "path_band_relationship": TERRAIN_ROUTE_PATH_BAND_RELATIONSHIP,
             "authority": "candidate_only",
             "source_type": "terrain_hypothesis",
@@ -6357,7 +6831,7 @@ def _normalize_terrain_route_best_path(
                 "operational": False,
                 "safe_or_walkable": "not_determined",
                 "path_model": TERRAIN_ROUTE_PATH_MODEL,
-                "path_semantics": TERRAIN_ROUTE_PATH_SEMANTICS,
+                "path_semantics": path_semantics,
                 "path_band_relationship": TERRAIN_ROUTE_PATH_BAND_RELATIONSHIP,
                 "candidate_id": candidate_id,
                 "alternative_index": alternative_index,
@@ -6368,6 +6842,40 @@ def _normalize_terrain_route_best_path(
         },
         oriented,
     )
+
+
+def _append_guided_segment_coordinates(
+    current: list[list[float]],
+    segment: list[list[float]],
+    *,
+    endpoint_tolerance_m: float,
+) -> list[list[float]]:
+    if len(segment) < 2:
+        raise _WorkerTerrainRouteUnavailable(
+            SpatialAnalysisErrorCode.NO_CONNECTED_SOLUTION,
+            "A guided terrain route segment has fewer than two vertices.",
+        )
+    if not current:
+        combined = [list(item) for item in segment]
+    else:
+        join_distance = _haversine_m(
+            current[-1][1],
+            current[-1][0],
+            segment[0][1],
+            segment[0][0],
+        )
+        if join_distance > endpoint_tolerance_m:
+            raise _WorkerTerrainRouteUnavailable(
+                SpatialAnalysisErrorCode.NO_CONNECTED_SOLUTION,
+                "Reviewed guidance segments did not join within DEM-cell tolerance.",
+            )
+        combined = [*current, *[list(item) for item in segment[1:]]]
+    if len(combined) > _MAX_TERRAIN_ROUTE_PATH_COORDINATES:
+        raise _WorkerTerrainRouteUnavailable(
+            SpatialAnalysisErrorCode.NO_CONNECTED_SOLUTION,
+            "The combined guided terrain route exceeds the coordinate limit.",
+        )
+    return combined
 
 
 def _combine_terrain_route_best_paths(
@@ -6381,6 +6889,7 @@ def _combine_terrain_route_best_paths(
         )
     features: list[dict[str, Any]] = []
     candidate_ids: list[str] = []
+    candidate_path_semantics: dict[str, str] = {}
     geometry_hashes: set[str] = set()
     for item in profile_results:
         payload = item.get("payload")
@@ -6394,6 +6903,9 @@ def _combine_terrain_route_best_paths(
         candidate_id = str(profile.candidate_id)
         candidate_ids.append(candidate_id)
         features.append(feature)
+        candidate_path_semantics[candidate_id] = str(
+            feature.get("properties", {}).get("path_semantics") or "unknown"
+        )
         geometry_hashes.add(
             hashlib.sha256(
                 json.dumps(
@@ -6425,6 +6937,7 @@ def _combine_terrain_route_best_paths(
             "candidate_ids": candidate_ids,
             "candidate_count": len(candidate_ids),
             "distinct_geometry_count": len(geometry_hashes),
+            "candidate_path_semantics": candidate_path_semantics,
         },
         "features": features,
     }
@@ -6489,6 +7002,28 @@ def _parent_terrain_manifest_ref(
             "Terrain-feature parent manifest hash is missing.",
         )
     return matches[0]
+
+
+def _verified_terrain_route_dem_hashes(
+    request: QgisWorkerWorkflowRequest,
+    dem_refs: tuple[Path, ...],
+) -> tuple[str, ...]:
+    if len(request.dem_refs) != len(dem_refs) or not dem_refs:
+        raise _WorkerTerrainRouteUnavailable(
+            SpatialAnalysisErrorCode.INVALID_INPUT,
+            "Terrain route DEM source binding is incomplete.",
+        )
+    declared_hashes = tuple(request.source_hashes.values())
+    verified: list[str] = []
+    for dem_path in dem_refs:
+        actual = _file_sha256(dem_path)
+        if not any(hmac.compare_digest(actual, value) for value in declared_hashes):
+            raise _WorkerTerrainRouteUnavailable(
+                SpatialAnalysisErrorCode.INVALID_INPUT,
+                "Terrain route DEM content does not match a declared source hash.",
+            )
+        verified.append(actual)
+    return tuple(verified)
 
 
 def _terrain_route_maplibre_geojson(

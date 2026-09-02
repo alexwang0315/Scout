@@ -221,6 +221,18 @@ class TerrainRouteEndpointSelection(BaseModel):
         return self
 
 
+class TerrainRouteGuidanceSelection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    guidance_id: str = Field(min_length=1, max_length=160)
+    guided_hypothesis_id: Literal["R4"] = "R4"
+    review_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    candidate_only: Literal[True] = True
+    runtime_safety_truth: Literal[False] = False
+    operational: Literal[False] = False
+    safe_or_walkable: Literal["not_determined"] = "not_determined"
+
+
 class SpatialAnalysisRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -232,6 +244,7 @@ class SpatialAnalysisRequest(BaseModel):
     requested_by: str = "dashboard_operator"
     request_id: str | None = None
     terrain_route_endpoints: TerrainRouteEndpointSelection | None = None
+    terrain_route_guidance: TerrainRouteGuidanceSelection | None = None
     terrain_routing_cost_config: TerrainRoutingCostConfig = Field(
         default_factory=TerrainRoutingCostConfig
     )
@@ -264,6 +277,20 @@ class SpatialAnalysisRequest(BaseModel):
         ):
             raise ValueError(
                 "terrain_route_endpoints are only valid for terrain_route_hypothesis.v1"
+            )
+        if (
+            self.terrain_route_guidance is not None
+            and self.workflow_id != TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_ID
+        ):
+            raise ValueError(
+                "terrain_route_guidance is only valid for terrain_route_hypothesis.v1"
+            )
+        if (
+            self.terrain_route_guidance is not None
+            and self.terrain_route_endpoints is None
+        ):
+            raise ValueError(
+                "terrain_route_guidance requires explicit candidate-only A/B endpoints"
             )
         return self
 

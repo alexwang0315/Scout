@@ -55,6 +55,8 @@ from route_matching import load_gpx_route
 from terrain_route_hypothesis_artifacts import (
     TerrainRouteCacheKeys,
     build_live_terrain_route_cache_keys,
+    build_terrain_route_resolution_identity,
+    build_terrain_route_source_identity,
 )
 from terrain_route_hypothesis_models import (
     TERRAIN_ROUTE_BAND_MODEL,
@@ -65,6 +67,9 @@ from terrain_route_hypothesis_models import (
     TerrainRouteHypothesis,
     TerrainRouteHypothesisRun,
     TerrainRouteRunStatus,
+)
+from terrain_route_guidance_workspace import (
+    load_reviewed_guidance_execution_plan,
 )
 
 
@@ -1300,6 +1305,46 @@ class QgisSpatialBackend:
             self._persist_run(project_root, run)
             return run
         request_id = request.request_id or f"qgis-request-{uuid4().hex[:12]}"
+        guidance_execution_plan = None
+        guidance_source_ref = None
+        guidance_source_hash = None
+        if terrain_route and request.terrain_route_guidance is not None:
+            selection = request.terrain_route_guidance
+            try:
+                guidance_execution_plan = load_reviewed_guidance_execution_plan(
+                    project_root,
+                    project_id=project_id,
+                    guidance_id=selection.guidance_id,
+                    review_sha256=selection.review_sha256,
+                )
+                worker_route_points = [
+                    route_points[0],
+                    *[
+                        {"lon": item.point.x, "lat": item.point.y}
+                        for item in guidance_execution_plan.anchors
+                    ],
+                    route_points[-1],
+                ]
+                raw_guidance_ref = project.get(
+                    "terrain_route_guidance_review_ref"
+                )
+                if not isinstance(raw_guidance_ref, str):
+                    raise ValueError("terrain guidance review ref is unavailable")
+                guidance_source_ref = raw_guidance_ref
+                guidance_source_hash = _sha256_file(
+                    _safe_project_path(project_root, raw_guidance_ref)
+                )
+            except (OSError, TypeError, ValueError, ValidationError) as exc:
+                run = self._failed_run(
+                    project_id=project_id,
+                    request=request.model_copy(update={"request_id": request_id}),
+                    code=SpatialAnalysisErrorCode.INVALID_INPUT,
+                    message="Reviewed terrain route guidance is unavailable.",
+                    status=status,
+                    detail=str(exc),
+                )
+                self._persist_run(project_root, run)
+                return run
         dem_ref = request.dem_ref
         if terrain_route and not dem_ref:
             raw_dem_ref = project.get("terrain_dem_route_bbox_raster_ref")
@@ -1366,24 +1411,52 @@ class QgisSpatialBackend:
             }
             combined_source_refs = list(
                 dict.fromkeys(
-                    [*stable_route_refs, *dem_source_refs, parent_ref]
+                    [
+                        *stable_route_refs,
+                        *dem_source_refs,
+                        parent_ref,
+                        *([guidance_source_ref] if guidance_source_ref else []),
+                    ]
                 )
             )
             combined_source_hashes = {
                 **stable_route_hashes,
                 **dem_hashes,
                 parent_ref: parent_hash,
+                **(
+                    {guidance_source_ref: guidance_source_hash}
+                    if guidance_source_ref and guidance_source_hash
+                    else {}
+                ),
             }
             try:
+                if len(dem_source_refs) < len(dem_refs):
+                    raise ValueError("DEM source hashes are incomplete")
+                dem_content_refs = dem_source_refs[-len(dem_refs) :]
+                if any(ref not in dem_hashes for ref in dem_content_refs):
+                    raise ValueError("DEM source hash binding is incomplete")
+                cache_source_identity = build_terrain_route_source_identity(
+                    dem_sha256s=tuple(
+                        dem_hashes[ref] for ref in dem_content_refs
+                    ),
+                    parent_manifest_sha256=parent_hash,
+                )
                 route_cache_keys = build_live_terrain_route_cache_keys(
-                    source_hashes=combined_source_hashes,
-                    source_resolution=source_resolution,
+                    source_hashes=cache_source_identity,
+                    source_resolution=build_terrain_route_resolution_identity(
+                        source_resolution
+                    ),
                     route_coordinates=[
                         [point["lon"], point["lat"]]
                         for point in worker_route_points
                     ],
                     analysis_margin_m=request.corridor_m,
                     cost_config=request.terrain_routing_cost_config,
+                    guidance_review_sha256=(
+                        guidance_execution_plan.guidance_review_sha256
+                        if guidance_execution_plan is not None
+                        else None
+                    ),
                 )
             except (TypeError, ValueError, ValidationError) as exc:
                 run = self._failed_run(
@@ -1434,6 +1507,15 @@ class QgisSpatialBackend:
                     ),
                     "terrain_route_cache_keys": route_cache_keys.model_dump(
                         mode="json"
+                    ),
+                    **(
+                        {
+                            "terrain_route_guidance_execution_plan": (
+                                guidance_execution_plan.model_dump(mode="json")
+                            )
+                        }
+                        if guidance_execution_plan is not None
+                        else {}
                     ),
                 }
             )
@@ -3812,7 +3894,7 @@ def _validate_terrain_route_best_path_bytes(
             or properties.get("official") is not False
             or properties.get("human_verified") is not False
             or properties.get("path_model") != TERRAIN_ROUTE_PATH_MODEL
-            or properties.get("path_semantics") != TERRAIN_ROUTE_PATH_SEMANTICS
+            or properties.get("path_semantics") != hypothesis.path_semantics
             or properties.get("path_band_relationship")
             != TERRAIN_ROUTE_PATH_BAND_RELATIONSHIP
         ):
@@ -4792,6 +4874,20 @@ def _public_worker_error(
 ) -> SpatialAnalysisError | None:
     if error is None:
         return None
+    if (
+        error.code is SpatialAnalysisErrorCode.INVALID_INPUT
+        and error.message
+        == "Terrain route cache keys do not match the submitted inputs."
+    ):
+        return error.model_copy(
+            update={
+                "message": (
+                    "Terrain route cache contract does not match the active QGIS "
+                    "worker. Restart the QGIS worker and resubmit the same A/B inputs."
+                ),
+                "detail": None,
+            }
+        )
     return error.model_copy(update={"detail": None})
 
 

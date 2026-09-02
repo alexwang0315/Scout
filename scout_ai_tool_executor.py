@@ -38,6 +38,15 @@ from scout_survival_incident_playbook_tool import SURVIVAL_INCIDENT_PLAYBOOK_TOO
 from scout_terrain_score_tool import TERRAIN_SCORE_TOOL_ID
 from scout_runtime_ingress_status_tool import RUNTIME_INGRESS_STATUS_TOOL_ID
 from scout_workspace_query_tool import WORKSPACE_QUERY_TOOL_ID
+from scout_terrain_narrative_guidance_tool import (
+    TERRAIN_NARRATIVE_GUIDANCE_TOOL_ID,
+)
+from scout_terrain_route_hypothesis_tool import (
+    TERRAIN_ROUTE_COMPARE_TOOL_ID,
+    TERRAIN_ROUTE_CONSISTENCY_TOOL_ID,
+    TERRAIN_ROUTE_EXPLAIN_TOOL_ID,
+    TERRAIN_ROUTE_GENERATE_TOOL_ID,
+)
 
 
 EXECUTABLE_TOOL_IDS = set(EXECUTABLE_TOOL_ALIASES)
@@ -84,6 +93,7 @@ def execute_scout_ai_tool(request: ScoutAiToolRequest | dict[str, Any]) -> Scout
             missing_fields=list(contract.required_fields),
             warnings=[warning],
             sources=[_contract_source(canonical_tool_id)],
+            boundary=contract.boundary,
         )
 
     arguments = _merged_arguments(parsed)
@@ -99,6 +109,7 @@ def execute_scout_ai_tool(request: ScoutAiToolRequest | dict[str, Any]) -> Scout
             missing_fields=missing,
             warnings=[f"Missing required tool input: {', '.join(missing)}"],
             sources=[_contract_source(canonical_tool_id)],
+            boundary=contract.boundary,
         )
 
     try:
@@ -113,6 +124,7 @@ def execute_scout_ai_tool(request: ScoutAiToolRequest | dict[str, Any]) -> Scout
             output_artifact_kind=contract.output_artifact_kind,
             errors=[str(exc)],
             sources=[_contract_source(canonical_tool_id)],
+            boundary=contract.boundary,
         )
 
     return ScoutAiToolResult(
@@ -126,6 +138,7 @@ def execute_scout_ai_tool(request: ScoutAiToolRequest | dict[str, Any]) -> Scout
         missing_fields=_completed_missing_fields(canonical_tool_id, payload),
         warnings=_completed_warnings(canonical_tool_id, payload),
         sources=[_contract_source(canonical_tool_id), *_source_report_refs(payload)],
+        boundary=contract.boundary,
     )
 
 
@@ -133,6 +146,84 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
     project_root = str(arguments["project_root"])
     query = str(arguments.get("query") or "")
     limit = _int_arg(arguments, "limit", default=6)
+
+    if tool_id == TERRAIN_NARRATIVE_GUIDANCE_TOOL_ID:
+        from scout_terrain_narrative_guidance_tool import (
+            interpret_scout_terrain_narrative_guidance,
+        )
+
+        return interpret_scout_terrain_narrative_guidance(
+            project_root,
+            narrative=str(arguments["narrative"]),
+            source_id=str(arguments["source_id"]),
+            source_date=_str_or_none(arguments.get("source_date")),
+        )
+
+    if tool_id == TERRAIN_ROUTE_EXPLAIN_TOOL_ID:
+        from scout_terrain_route_hypothesis_tool import (
+            explain_scout_terrain_route_hypothesis,
+        )
+
+        return explain_scout_terrain_route_hypothesis(
+            project_root,
+            candidate_id=_str_or_none(arguments.get("candidate_id")),
+            hypothesis_path=_str_or_none(arguments.get("hypothesis_path")),
+        )
+
+    if tool_id == TERRAIN_ROUTE_COMPARE_TOOL_ID:
+        from scout_terrain_route_hypothesis_tool import (
+            compare_scout_terrain_route_hypotheses,
+        )
+
+        return compare_scout_terrain_route_hypotheses(
+            project_root,
+            candidate_ids=_list_arg(arguments, "candidate_ids"),
+            hypothesis_path=_str_or_none(arguments.get("hypothesis_path")),
+        )
+
+    if tool_id == TERRAIN_ROUTE_CONSISTENCY_TOOL_ID:
+        from scout_terrain_route_hypothesis_tool import (
+            inspect_scout_route_terrain_consistency,
+        )
+
+        endpoint_tolerance_m = _float_or_none(
+            arguments.get("endpoint_tolerance_m")
+        )
+        return inspect_scout_route_terrain_consistency(
+            project_root,
+            gpx_path=str(arguments["gpx_path"]),
+            candidate_id=_str_or_none(arguments.get("candidate_id")),
+            hypothesis_path=_str_or_none(arguments.get("hypothesis_path")),
+            corridor_band_name=str(
+                arguments.get("corridor_band_name")
+                or "top_10_percent_corridor"
+            ),
+            max_samples=_int_arg(arguments, "max_samples", default=400),
+            endpoint_tolerance_m=(
+                1000.0 if endpoint_tolerance_m is None else endpoint_tolerance_m
+            ),
+            teii_raster_path=_str_or_none(arguments.get("teii_raster_path")),
+        )
+
+    if tool_id == TERRAIN_ROUTE_GENERATE_TOOL_ID:
+        from scout_terrain_route_hypothesis_tool import (
+            generate_scout_terrain_route_hypotheses,
+        )
+
+        margin = _float_or_none(arguments.get("analysis_margin_m"))
+        return generate_scout_terrain_route_hypotheses(
+            project_root,
+            start_lon=float(arguments["start_lon"]),
+            start_lat=float(arguments["start_lat"]),
+            destination_lon=float(arguments["destination_lon"]),
+            destination_lat=float(arguments["destination_lat"]),
+            analysis_margin_m=1000.0 if margin is None else margin,
+            requested_by=str(
+                arguments.get("requested_by") or "scout_ai_operator_request"
+            ),
+            guidance_id=_str_or_none(arguments.get("guidance_id")),
+            review_sha256=_str_or_none(arguments.get("review_sha256")),
+        )
 
     if tool_id == WORKSPACE_QUERY_TOOL_ID:
         from scout_workspace_query_tool import query_project_workspace
@@ -913,6 +1004,24 @@ def _missing_executable_fields(tool_id: str, arguments: dict[str, Any]) -> list[
         arguments.get("request"), dict
     ):
         missing.append("request")
+    if tool_id == TERRAIN_NARRATIVE_GUIDANCE_TOOL_ID:
+        for field in ("narrative", "source_id"):
+            if not _str_or_none(arguments.get(field)):
+                missing.append(field)
+    if tool_id == TERRAIN_ROUTE_CONSISTENCY_TOOL_ID and not _str_or_none(
+        arguments.get("gpx_path")
+    ):
+        missing.append("gpx_path")
+    if tool_id == TERRAIN_ROUTE_GENERATE_TOOL_ID:
+        for field in (
+            "start_lon",
+            "start_lat",
+            "destination_lon",
+            "destination_lat",
+        ):
+            value = arguments.get(field)
+            if value is None or isinstance(value, bool):
+                missing.append(field)
     return missing
 
 

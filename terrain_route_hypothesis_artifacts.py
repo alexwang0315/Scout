@@ -10,6 +10,7 @@ from typing import Any, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from terrain_route_guidance import TERRAIN_GUIDANCE_COST_MODEL_VERSION
 from terrain_route_hypothesis_models import (
     TERRAIN_ROUTE_BAND_MODEL,
     TERRAIN_ROUTE_BAND_SEMANTICS,
@@ -24,6 +25,7 @@ TERRAIN_ROUTE_CORRIDOR_SEMANTICS = TERRAIN_ROUTE_BAND_SEMANTICS
 TERRAIN_ROUTE_SLOPE_FRICTION_EXPRESSION_KIND = "slope_piecewise_friction"
 TERRAIN_ROUTE_DRAINAGE_PRESSURE_EXPRESSION_KIND = "drainage_pressure"
 TERRAIN_ROUTE_PROFILE_FRICTION_EXPRESSION_KIND = "profile_friction"
+TERRAIN_ROUTE_GUIDANCE_FRICTION_EXPRESSION_KIND = "reviewed_guidance_friction"
 TERRAIN_ROUTE_CORRIDOR_EXPRESSION_KIND = "symmetric_relative_corridor"
 TERRAIN_ROUTE_THRESHOLD_EXPRESSION_KIND = "finite_cell_percentile_mask"
 TERRAIN_ROUTE_PATH_OUTSIDE_BAND_EXPRESSION_KIND = "path_outside_percentile_band"
@@ -41,6 +43,12 @@ _DRAINAGE_PRESSURE_EXPRESSION = re.compile(
     rf"if\(abs\(A\)>=({_DECIMAL}),1,0\)\)\)$"
 )
 _PROFILE_FRICTION_EXPRESSION = re.compile(rf"^A\+({_DECIMAL})\*B$")
+_SIGNED_DECIMAL = rf"-?{_DECIMAL}"
+_GUIDANCE_LOCAL_FACTOR = re.compile(
+    rf"^if\(sqrt\(pow\(x\(\)-({_SIGNED_DECIMAL}),2\)\+"
+    rf"pow\(y\(\)-({_SIGNED_DECIMAL}),2\)\)<=({_DECIMAL}),({_DECIMAL}),1\)$"
+)
+_MAX_GUIDANCE_COST_MODIFIERS = 16
 
 
 class TerrainRouteCacheKeys(BaseModel):
@@ -53,6 +61,50 @@ class TerrainRouteCacheKeys(BaseModel):
     route_hypothesis: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 
+def build_terrain_route_source_identity(
+    *,
+    dem_sha256s: Sequence[str],
+    parent_manifest_sha256: str,
+) -> dict[str, str]:
+    """Build a host-path-independent identity for the authoritative DEM inputs."""
+
+    if not 1 <= len(dem_sha256s) <= 32:
+        raise ValueError("terrain route requires one to thirty-two DEM hashes")
+    normalized = _validated_hashes(
+        {f"dem:{index}": value for index, value in enumerate(sorted(dem_sha256s))}
+    )
+    parent = _validated_hashes(
+        {"terrain_feature_parent_manifest": parent_manifest_sha256}
+    )
+    return {**normalized, **parent}
+
+
+def build_terrain_route_resolution_identity(
+    source_resolution: dict[str, Any],
+) -> dict[str, Any]:
+    """Keep resolution semantics while excluding host-specific evidence paths."""
+
+    keys = (
+        "status",
+        "source_kind",
+        "raster_source_count",
+        "tile_count",
+        "x_m",
+        "y_m",
+        "resolution_m",
+        "crs",
+        "adds_source_resolution",
+    )
+    identity = {
+        key: source_resolution[key]
+        for key in keys
+        if key in source_resolution
+    }
+    if not identity:
+        raise ValueError("terrain route source resolution identity is unavailable")
+    return identity
+
+
 def build_live_terrain_route_cache_keys(
     *,
     source_hashes: dict[str, str],
@@ -61,6 +113,7 @@ def build_live_terrain_route_cache_keys(
     analysis_margin_m: float,
     cost_config: TerrainRoutingCostConfig,
     optional_evidence_hashes: dict[str, str] | None = None,
+    guidance_review_sha256: str | None = None,
 ) -> TerrainRouteCacheKeys:
     """Build layered keys so stale DEM or evidence cannot be reused silently."""
 
@@ -73,6 +126,10 @@ def build_live_terrain_route_cache_keys(
         raise ValueError("terrain route analysis margin is outside the bounded range")
     normalized_hashes = _validated_hashes(source_hashes)
     evidence_hashes = _validated_hashes(optional_evidence_hashes or {})
+    if guidance_review_sha256 is not None and not re.fullmatch(
+        r"[a-f0-9]{64}", guidance_review_sha256
+    ):
+        raise ValueError("terrain guidance review hash is invalid")
     derived = _stable_hash(
         {
             "kind": "derived_terrain",
@@ -103,6 +160,16 @@ def build_live_terrain_route_cache_keys(
                 "band_recipe": "symmetric_grass:r.cost",
                 "path_band_relationship": TERRAIN_ROUTE_PATH_BAND_RELATIONSHIP,
             },
+            **(
+                {
+                    "guidance_review_sha256": guidance_review_sha256,
+                    "guidance_cost_model_version": (
+                        TERRAIN_GUIDANCE_COST_MODEL_VERSION
+                    ),
+                }
+                if guidance_review_sha256 is not None
+                else {}
+            ),
         }
     )
     route_hypothesis = _stable_hash(
@@ -118,6 +185,16 @@ def build_live_terrain_route_cache_keys(
             "visualization_revision": TERRAIN_ROUTE_VISUALIZATION_REVISION,
             "provenance_revision": TERRAIN_ROUTE_PROVENANCE_REVISION,
             "optional_evidence_hashes": evidence_hashes,
+            **(
+                {
+                    "guidance_review_sha256": guidance_review_sha256,
+                    "guidance_cost_model_version": (
+                        TERRAIN_GUIDANCE_COST_MODEL_VERSION
+                    ),
+                }
+                if guidance_review_sha256 is not None
+                else {}
+            ),
         }
     )
     return TerrainRouteCacheKeys(
@@ -195,6 +272,38 @@ def build_profile_friction_expression(drainage_penalty_multiplier: float) -> str
     return expression
 
 
+def build_guidance_friction_expression(
+    modifiers: Sequence[Sequence[float]],
+) -> str:
+    """Apply reviewed-point local preferences without creating zero-cost cells."""
+
+    if not 1 <= len(modifiers) <= _MAX_GUIDANCE_COST_MODIFIERS:
+        raise ValueError("reviewed guidance requires one to sixteen cost modifiers")
+    factors: list[str] = []
+    for modifier in modifiers:
+        if len(modifier) != 4:
+            raise ValueError("reviewed guidance cost modifier is incomplete")
+        x, y, radius_m, multiplier = (float(value) for value in modifier)
+        if not all(math.isfinite(value) for value in (x, y)) or any(
+            abs(value) > 1_000_000_000 for value in (x, y)
+        ):
+            raise ValueError("reviewed guidance coordinate is outside bounds")
+        if not math.isfinite(radius_m) or not 20 <= radius_m <= 500:
+            raise ValueError("reviewed guidance influence radius is outside bounds")
+        if not math.isfinite(multiplier) or not 0.5 <= multiplier <= 1:
+            raise ValueError("reviewed guidance friction multiplier is outside bounds")
+        factors.append(
+            "if(sqrt("
+            f"pow(x()-{_format_signed_decimal(x)},2)+"
+            f"pow(y()-{_format_signed_decimal(y)},2))"
+            f"<={_format_decimal(radius_m)},"
+            f"{_format_decimal(multiplier)},1)"
+        )
+    expression = f"A*min(1,{','.join(factors)})"
+    validate_terrain_route_mapcalc_expression(expression)
+    return expression
+
+
 def build_relative_corridor_expression(minimum_ab_cost: float) -> str:
     value = _bounded_nonnegative_cost(minimum_ab_cost)
     expression = f"max(0,A+B-{_format_decimal(value)})"
@@ -217,8 +326,31 @@ def build_path_outside_band_expression() -> str:
 def validate_terrain_route_mapcalc_expression(expression: str) -> str:
     """Accept only expressions emitted by the typed terrain-route compiler."""
 
-    if not isinstance(expression, str) or not 1 <= len(expression) <= 1024:
+    if not isinstance(expression, str) or not 1 <= len(expression) <= 4096:
         raise ValueError("terrain route mapcalc expression length is invalid")
+    if expression.startswith("A*min(1,") and expression.endswith(")"):
+        body = expression[len("A*min(1,") : -1]
+        raw_factors = body.split(",if(")
+        factors = [
+            raw_factors[0],
+            *(f"if({value}" for value in raw_factors[1:]),
+        ]
+        if not 1 <= len(factors) <= _MAX_GUIDANCE_COST_MODIFIERS:
+            raise ValueError("reviewed guidance modifier count is outside bounds")
+        for factor in factors:
+            match = _GUIDANCE_LOCAL_FACTOR.fullmatch(factor)
+            if match is None:
+                raise ValueError("reviewed guidance friction expression is malformed")
+            x, y, radius_m, multiplier = (float(value) for value in match.groups())
+            if not all(math.isfinite(value) for value in (x, y)) or any(
+                abs(value) > 1_000_000_000 for value in (x, y)
+            ):
+                raise ValueError("reviewed guidance coordinate is outside bounds")
+            if not 20 <= radius_m <= 500:
+                raise ValueError("reviewed guidance influence radius is outside bounds")
+            if not 0.5 <= multiplier <= 1:
+                raise ValueError("reviewed guidance friction multiplier is outside bounds")
+        return TERRAIN_ROUTE_GUIDANCE_FRICTION_EXPRESSION_KIND
     corridor = _CORRIDOR_EXPRESSION.fullmatch(expression)
     if corridor:
         _bounded_nonnegative_cost(float(corridor.group(1)))
@@ -298,6 +430,14 @@ def _format_decimal(value: float) -> str:
     return rendered or "0"
 
 
+def _format_signed_decimal(value: float) -> str:
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError("terrain route coordinate must be finite")
+    rendered = f"{number:.12f}".rstrip("0").rstrip(".")
+    return rendered or "0"
+
+
 def _coordinate(value: Sequence[float]) -> list[float]:
     if len(value) < 2:
         raise ValueError("terrain route endpoint coordinate is incomplete")
@@ -331,12 +471,14 @@ __all__ = [
     "TERRAIN_ROUTE_CACHE_SCHEMA_VERSION",
     "TERRAIN_ROUTE_CORRIDOR_SEMANTICS",
     "TERRAIN_ROUTE_DRAINAGE_PRESSURE_EXPRESSION_KIND",
+    "TERRAIN_ROUTE_GUIDANCE_FRICTION_EXPRESSION_KIND",
     "TERRAIN_ROUTE_PROFILE_FRICTION_EXPRESSION_KIND",
     "TERRAIN_ROUTE_PROVENANCE_REVISION",
     "TERRAIN_ROUTE_VISUALIZATION_REVISION",
     "TerrainRouteCacheKeys",
     "build_corridor_threshold_expression",
     "build_drainage_pressure_expression",
+    "build_guidance_friction_expression",
     "build_path_outside_band_expression",
     "build_live_terrain_route_cache_keys",
     "build_relative_corridor_expression",

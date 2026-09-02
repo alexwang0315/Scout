@@ -45,6 +45,15 @@ from scout_workspace_search_tools import (
     WORKSPACE_CATALOG_TOOL_ID,
 )
 from scout_workspace_query_tool import WORKSPACE_QUERY_TOOL_ID
+from scout_terrain_narrative_guidance_tool import (
+    TERRAIN_NARRATIVE_GUIDANCE_TOOL_ID,
+)
+from scout_terrain_route_hypothesis_tool import (
+    TERRAIN_ROUTE_COMPARE_TOOL_ID,
+    TERRAIN_ROUTE_CONSISTENCY_TOOL_ID,
+    TERRAIN_ROUTE_EXPLAIN_TOOL_ID,
+    TERRAIN_ROUTE_GENERATE_TOOL_ID,
+)
 
 
 ARTIFACT_KIND = "scout_ai_tool_plan"
@@ -265,6 +274,41 @@ def plan_scout_ai_tools(
                 "Question asks about map annotations, OCR labels, contour text, or tile/layer perception material.",
             )
         )
+    if _looks_like_terrain_narrative_guidance_question(normalized_question):
+        selected.append(
+            (
+                TERRAIN_NARRATIVE_GUIDANCE_TOOL_ID,
+                "Question asks Scout AI to interpret historical route prose into typed candidate-only TRH constraints for map-anchor review.",
+            )
+        )
+    if _looks_like_terrain_route_generation_question(normalized_question):
+        selected.append(
+            (
+                TERRAIN_ROUTE_GENERATE_TOOL_ID,
+                "Question asks to submit an allowlisted candidate-only QGIS/GRASS TRH workflow for explicit A/B endpoints.",
+            )
+        )
+    if _looks_like_terrain_route_consistency_question(normalized_question):
+        selected.append(
+            (
+                TERRAIN_ROUTE_CONSISTENCY_TOOL_ID,
+                "Question asks to compare a known GPX with candidate-only TRH corridor and terrain evidence without judging GPX validity.",
+            )
+        )
+    if _looks_like_terrain_route_comparison_question(normalized_question):
+        selected.append(
+            (
+                TERRAIN_ROUTE_COMPARE_TOOL_ID,
+                "Question asks to compare multiple terrain route hypotheses without safety ranking.",
+            )
+        )
+    if _looks_like_terrain_route_explanation_question(normalized_question):
+        selected.append(
+            (
+                TERRAIN_ROUTE_EXPLAIN_TOOL_ID,
+                "Question asks for evidence, metrics, provenance, and unknowns for one candidate-only terrain route hypothesis.",
+            )
+        )
     if (
         _looks_like_navigation_terrain_question(normalized_question)
         and not workspace_inventory_question
@@ -473,8 +517,17 @@ def plan_scout_ai_tools(
         adjacent_verification_tools = [
             (tool_id, reason)
             for tool_id, reason in selected
-            if tool_id == ROUTE_ARCHITECTURE_TOOL_ID
-            and _looks_like_route_architecture_question(normalized_question)
+            if (
+                tool_id == ROUTE_ARCHITECTURE_TOOL_ID
+                and _looks_like_route_architecture_question(normalized_question)
+            )
+            or tool_id
+            in {
+                TERRAIN_ROUTE_EXPLAIN_TOOL_ID,
+                TERRAIN_ROUTE_COMPARE_TOOL_ID,
+                TERRAIN_ROUTE_CONSISTENCY_TOOL_ID,
+                TERRAIN_ROUTE_GENERATE_TOOL_ID,
+            }
         ]
         selected = [
             (
@@ -2827,7 +2880,125 @@ def _missing_fields(
     required = set(contract.argument_schema.get("required", []))
     if "project_root" in required and project_root is None:
         missing.append("project_root")
+    if contract.tool_id == TERRAIN_NARRATIVE_GUIDANCE_TOOL_ID:
+        missing.extend(["narrative", "source_id"])
+    if contract.tool_id == TERRAIN_ROUTE_CONSISTENCY_TOOL_ID:
+        missing.append("gpx_path")
+    if contract.tool_id == TERRAIN_ROUTE_GENERATE_TOOL_ID:
+        missing.extend(
+            ["start_lon", "start_lat", "destination_lon", "destination_lat"]
+        )
     return missing
+
+
+def _looks_like_terrain_narrative_guidance_question(text: str) -> bool:
+    hypothesis_terms = (
+        "trh",
+        "terrainroutehypothesis",
+        "terrain route hypothesis",
+        "地形通行假說",
+        "地形通行假设",
+        "候選路徑",
+        "候选路径",
+        "引導條件",
+        "引导条件",
+    )
+    narrative_terms = (
+        "歷史紀錄",
+        "历史纪录",
+        "行程紀錄",
+        "行程记录",
+        "人為描述",
+        "人为描述",
+        "沿稜",
+        "沿棱",
+        "腰繞",
+        "腰绕",
+        "過溪",
+        "过溪",
+        "轉稜",
+        "转棱",
+        "文字解析",
+        "地圖錨點",
+        "地图锚点",
+        "unresolved",
+        "narrativeguidance",
+    )
+    return _has_any(text, hypothesis_terms) and _has_any(text, narrative_terms)
+
+
+def _looks_like_terrain_route_consistency_question(text: str) -> bool:
+    return _has_any(text, ("gpx", "軌跡", "轨迹")) and _has_any(
+        text,
+        (
+            "trh",
+            "terrainroutehypothesis",
+            "terrainconsistency",
+            "terrain consistency",
+            "地形一致性",
+            "候選corridor",
+            "候选corridor",
+            "candidatecorridor",
+        ),
+    )
+
+
+def _looks_like_terrain_route_generation_question(text: str) -> bool:
+    return _has_any(
+        text,
+        ("產生", "生成", "generate", "計算", "计算", "runtrh"),
+    ) and _has_any(
+        text,
+        (
+            "trh",
+            "terrainroutehypothesis",
+            "terrain route hypothesis",
+            "地形通行假說",
+            "地形通行假设",
+            "候選路徑",
+            "候选路径",
+        ),
+    ) and _has_any(
+        text,
+        ("ab", "a到b", "a至b", "端點", "端点", "座標", "坐标", "endpoint"),
+    )
+
+
+def _looks_like_terrain_route_comparison_question(text: str) -> bool:
+    return _has_any(
+        text,
+        ("比較", "对比", "compare", "comparison"),
+    ) and _has_any(
+        text,
+        (
+            "trh",
+            "terrainroutehypothesis",
+            "terrain route hypothesis",
+            "r1r2",
+            "r2r3",
+            "r1r2r3",
+            "多條候選",
+            "多条候选",
+        ),
+    )
+
+
+def _looks_like_terrain_route_explanation_question(text: str) -> bool:
+    if _looks_like_terrain_route_comparison_question(text):
+        return False
+    return _has_any(
+        text,
+        ("解釋", "解释", "explain", "evidence", "證據", "证据", "未知"),
+    ) and _has_any(
+        text,
+        (
+            "trh",
+            "terrainroutehypothesis",
+            "terrain route hypothesis",
+            "地形通行假說",
+            "地形通行假设",
+        ),
+    )
 
 
 def _is_executable_contract(contract: ScoutAiToolContract) -> bool:

@@ -216,10 +216,10 @@ def test_standard_completion_audit_covers_all_sections_and_primary_surfaces() ->
     assert missing_sections == []
 
     registry = tool_registry_output(include_not_implemented=True)
-    assert registry.tool_count == 26
-    assert registry.ready_current_tool_count == 26
+    assert registry.tool_count == 34
+    assert registry.ready_current_tool_count == 34
     assert registry.contract_only_tool_count == 0
-    assert registry.implementation_status_counts == {"ready_current_tool": 26}
+    assert registry.implementation_status_counts == {"ready_current_tool": 34}
 
     result = run_scout_ai_full_workflow(
         "請以 SCOUT_OUTDOOR_AI_AGENT_STANDARD 為基準，檢視目前 Scout 體系還缺哪些東西，六力是否都有實作？",
@@ -679,7 +679,7 @@ def test_tool_registry_marks_all_six_force_tools_ready_current() -> None:
     registry = tool_registry_output(include_not_implemented=True)
     by_id = {tool.tool_id: tool for tool in registry.tools}
 
-    assert registry.implementation_status_counts == {"ready_current_tool": 26}
+    assert registry.implementation_status_counts == {"ready_current_tool": 34}
     for scenario in SIX_FORCE_SCENARIOS:
         _, system_language, tool_id, alias, _, _, _ = scenario.values
         contract = by_id[tool_id]

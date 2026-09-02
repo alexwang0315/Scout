@@ -2264,6 +2264,10 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
         "function destroyNavigationTerrainMapLibre(",
         "function renderNavigationTerrainReviewWorkbench(",
         "function renderNavigationTerrainEvidenceInspector(",
+        "function inspectNavigationTerrainRouteConsistency(",
+        "hypothesis.source_refs",
+        'ref.endsWith("/terrain_route_hypothesis.json")',
+        "function navigationTerrainRouteConsistencyFeatureCollection(",
         "function renderNavigationTerrainTopDownLayer(",
         "function renderNavigationFeatureExtraction(",
         "function renderNavigationSourceLedger(",
@@ -2297,7 +2301,9 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
         'data-navigation-terrain-band="true"',
         'data-navigation-terrain-event-id="',
             'data-navigation-terrain-event-timeline="true"',
-            'data-navigation-terrain-validation="',
+        'data-navigation-terrain-validation="',
+        'data-navigation-terrain-consistency-run="true"',
+        'data-navigation-terrain-consistency-result="',
         'data-navigation-source-ledger="true"',
         'data-navigation-ordered-clues="true"',
         'data-navigation-route-topology="true"',
@@ -2327,6 +2333,10 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
         "Shadow 關係說明",
         "不需要逐筆審核",
         "/navigation-terrain-intelligence",
+        "/terrain-route-consistency",
+        '"scout-gpx-terrain-consistency"',
+        'id: "scout-gpx-terrain-consistency-samples"',
+        "terrain consistency, not GPX validity",
         "Workspace terrain projection is preparing.",
         "scheduleNavigationTerrainPolling",
         "stopNavigationTerrainPolling",
@@ -3079,7 +3089,7 @@ def test_navigation_maplibre_fit_uses_complete_gpx_and_hypothesis_without_dem_zo
     assert "fitNavigationTerrainMapLibre(map, snapshot, mode);" in initializer
     assert "minZoom: navigationTerrainCameraMinimumZoom(dem, mode)" in initializer
     assert 'isTerrain ? "prepared-dem-local-detail" : "known-gpx-plus-terrain-hypothesis"' in html
-    assert 'isTerrain ? "Reset prepared DEM local detail" : "Fit complete GPX + R1 result"' in html
+    assert 'isTerrain ? "Reset prepared DEM local detail" : "Fit complete GPX + TRH alternatives"' in html
     assert "3D LOCAL DETAIL" in html
     assert "2D / 3D 視角各自獨立" in html
     assert "PARTIAL DEM COVERAGE" in html
@@ -6284,6 +6294,106 @@ def test_dashboard_can_submit_arbitrary_ab_terrain_route_hypothesis() -> None:
     assert "Completed evidence remains optional when no persisted workflow exists." in html
     assert "if (!workflowRunId)" in html
     assert "NOT A VERIFIED TRAIL" in html
+
+
+def test_dashboard_reviews_narrative_guidance_and_submits_visible_r4() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+
+    assert "function renderTerrainRouteGuidanceWorkbench" in html
+    assert 'data-terrain-guidance-narrative="true"' in html
+    assert 'data-terrain-guidance-map-anchor="${escapeHtml(constraint.constraint_id)}"' in html
+    assert 'data-terrain-guidance-review="true"' in html
+    assert 'data-terrain-guidance-reviewer="true"' in html
+    assert 'data-terrain-guidance-generate-r4="true"' in html
+    assert 'data-qgis-terrain-route-use-selected-hypothesis="true"' in html
+    assert "function useSelectedTerrainRouteHypothesisEndpoints()" in html
+    assert "navigationTerrainRouteHypothesis(navigationTerrainSnapshot())" in html
+    assert "function terrainRouteGuidanceReferenceHypothesisId()" in html
+    assert "reference_hypothesis_id: terrainRouteGuidanceReferenceHypothesisId()" in html
+    assert 'reference_corridor_band_name: "top_5_percent_corridor"' in html
+    assert "state.terrainRouteGuidanceManualAnchors = {};" in html
+    assert "state.terrainRouteGuidanceSelectedFeatures = {};" in html
+    assert "state.terrainRouteGuidanceDisabledConstraints = {};" in html
+    assert "async function startQgisGuidedTerrainRouteHypothesis()" in html
+    assert "guidance.guided_execution_ready !== true" in html
+    assert "/^[a-f0-9]{64}$/.test(reviewSha256)" in html
+    assert "terrain_route_guidance:" in html
+    assert 'guided_hypothesis_id: "R4"' in html
+    assert "route_start: normalizeQgisTerrainRoutePoint" in html
+    assert "route_destination: normalizeQgisTerrainRoutePoint" in html
+    assert "search_margin_m: state.qgisTerrainRouteCorridorM" in html
+    assert "qgisTerrainRouteEndpointsReady()" in html
+    assert "const manualCandidateIds = candidateIds.filter" in html
+    assert "const rankedDemCandidates = candidateIds.filter" in html
+    assert "DEM ranked candidate" in html
+    assert "candidate_constraint_labels" in html
+    assert "best_candidate_rank" in html
+    assert 'kind: "terrain_route_guidance_rank_marker"' in html
+    assert "bestRank > 5" in html
+    assert "elevation_sampling_status" in html
+    assert "reference_corridor_overlap" in html
+    assert "Candidate corridor review rank" in html
+    assert "僅供 review ranking" in html
+    assert "R4 必須使用明確的人工 Point 錨點" in html
+    assert "state.terrainRouteGuidanceNarrative = payload.narrative" in html
+    assert "state.terrainRouteGuidanceSourceId = String(plan.source_id" in html
+    assert 'terrainRouteGuidanceReviewerAlias: "dashboard_operator"' in html
+    assert "reviewed_by: reviewerAlias" in html
+    assert '"historical_narrative_guided", "#7fe36d"' in html
+    assert "candidate_only: true" in html
+    assert "runtime_safety_truth: false" in html
+    assert "safe_or_walkable: \"not_determined\"" in html
+
+
+def test_dashboard_places_r4_guidance_in_independent_right_frame() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    route_builder = html.split("function renderQgisTerrainRouteBuilder", 1)[1].split(
+        "function renderTerrainRouteGuidanceWorkbench", 1
+    )[0]
+    navigation_page = html.split("function renderNavigationPage", 1)[1].split(
+        "function architectureSnapshot", 1
+    )[0]
+    map_host = html.split("function renderNavigationTerrainMapLibreHost", 1)[1].split(
+        "function renderNavigationTerrainReviewWorkbench", 1
+    )[0]
+    guidance_workbench = html.split(
+        "function renderTerrainRouteGuidanceWorkbench", 1
+    )[1].split("function renderQgisAnalysisPanel", 1)[0]
+
+    assert "terrainRouteGuidanceExpanded: true" in html
+    assert "terrainRouteGuidanceFrameScrollTop: 0" in html
+    assert "function renderTerrainRouteGuidanceFrame()" in html
+    assert 'data-terrain-guidance-frame="true"' in html
+    assert (
+        'data-navigation-guidance-expanded="${String(state.terrainRouteGuidanceExpanded === true)}"'
+        in html
+    )
+    assert 'data-navigation-terrain-guidance-frame-toggle="true"' in html
+    assert "${renderTerrainRouteGuidanceFrame()}" not in route_builder
+    assert navigation_page.index('id="navigationTerrainContextInspector"') < navigation_page.index(
+        "${renderTerrainRouteGuidanceFrame()}"
+    )
+    assert navigation_page.index("${renderTerrainRouteGuidanceFrame()}") < navigation_page.index(
+        'data-navigation-supporting-evidence="true"'
+    )
+    assert "state.terrainRouteGuidanceExpanded = !state.terrainRouteGuidanceExpanded;" in html
+    assert "state.terrainRouteGuidanceFrameScrollTop = guidanceFrame.scrollTop;" in html
+    assert "guidanceFrame.scrollTop = state.terrainRouteGuidanceFrameScrollTop;" in html
+    assert "--terrain-guidance-body-size: 13px;" in html
+    assert "--terrain-guidance-small-size: 11px;" in html
+    assert (
+        '.navigation-terrain-workspace[data-navigation-inspector-expanded="false"]'
+        '[data-navigation-guidance-expanded="true"],\n'
+        '      .navigation-terrain-workspace[data-navigation-inspector-expanded="true"]'
+        '[data-navigation-guidance-expanded="true"] {\n'
+        '        grid-template-columns: minmax(0, 1fr);'
+        in html
+    )
+    assert '<details\n              class="navigation-terrain-outward-key"' in map_host
+    assert '<details\n              class="navigation-terrain-hypothesis-map-key"' in map_host
+    assert "<span>TRH 圖例</span>" in map_host
+    assert "<span>GRASS 形態圖例</span>" in map_host
+    assert "歷史文字引導 · R4 review" not in guidance_workbench
 
 
 def test_dashboard_keeps_trh_map_stable_and_locks_ab_controls_while_running() -> None:

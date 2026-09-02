@@ -1112,6 +1112,10 @@ Navigation/Terrain Intelligence 必須把地圖本身當作主要操作面，不
 | `MAP-WAYFIND-008` | 切換圖層、移動 3D 或選取 evidence 導致 2D 自動回到 fit。 | 只有明示 Fit/Reset 或新的 zoom-to 操作可以改變該 view camera。 |
 | `MAP-WAYFIND-009` | 因溪谷坡度較低，單一 slope-only TRH 把 drainage 當成唯一答案。 | 同一 A/B 至少保留 drainage-averse、balanced、terrain-only baseline 三種模型假說，並揭露各自 drainage penalty。 |
 | `MAP-WAYFIND-010` | 把避開 drainage 的候選宣稱為較安全，或把 terrain-only baseline 的河谷重疊宣稱為河道可走。 | drainage 僅是 DEM-derived relative cost；所有替代線維持 candidate-only，水位、溪床、峽谷、橋梁與通行性保持 UNKNOWN。 |
+| `MAP-WAYFIND-011` | 直接把歷史行程文字交給 LLM 畫線，或把文字中的「獵徑／布條」promotion 成 observed/official trail。 | Scout AI 只輸出有 source span 的 typed constraints、conflicts 與 unknowns；GIS resolver 與人工 map-point review 分離，source_type 仍是 `historical_route`。 |
+| `MAP-WAYFIND-012` | 已 review 的文字指引繞過 DEM/GRASS，或任一 anchor segment 失敗時用直線補接。 | R4 必須逐段執行 allowlisted `r.walk` + `r.path`；任一段無成本、無路徑、超出 DEM、NoData 或 hash mismatch 時整個 guided hypothesis fail closed。 |
+| `MAP-WAYFIND-013` | 用既有 TRH corridor 自動選定敘事 anchor、排除零重疊候選，或把高 overlap 宣稱為路線確認。 | 只可對 hash-bound source GeoTIFF 做 bounded sampling；所有候選保留，overlap 僅按 `candidate_corridor_overlap_is_review_rank_evidence_not_route_confirmation` 協助人工 review 排序。 |
+| `MAP-WAYFIND-014` | 把人工文字直接拼成 `r.mapcalc`、用零成本／硬 barrier 強迫 R4 通過，或讓 R4 修改 R1-R3。 | 每個 reviewed Point 只能編譯成 typed、有限正值、20-500 m 的局部 friction preference；expression 必須 allowlist 驗證，R1-R3 保持原 profile，任一 anchor/modifier/hash 不一致即 fail closed。 |
 
 目前 bounded implementation 對應 `terrain_feature_stack.v1`、Scout-owned QGIS
 worker、GRASS/GDAL artifacts 與 MapLibre projection。實際執行證據、硬體資源與版本
@@ -1169,6 +1173,138 @@ Navigation Dashboard 必須遵守原子發布：新 TRH 在 queued/running 時�
 
 完整 schema、cost model、GRASS chain、cache、provenance、Dashboard lifecycle、
 驗證證據與限制見 [Scout Terrain Route Hypothesis Engine](scout-terrain-route-hypothesis.md)。
+
+### 11.12 Scout AI 歷史敘事引導與 R4
+
+導航力可以把人工提供的歷史紀錄交給 Scout Pydantic AI，產生
+`TerrainNarrativeGuidancePlan`。Agent 只負責語意結構化：沿稜、轉稜、腰繞、相對
+溪溝位置、過溪、鞍部與順序等必須成為 typed constraint，原文片段、來源 hash、
+衝突與無法判定的 measurement semantics 必須保留。布條、獵徑、植被、泥濘與動物
+跡象只能當 historical context，不能由模型 promotion 成 current observation。
+
+執行鏈必須是：
+
+```text
+Dashboard narrative
+  -> Scout AI typed constraint preview
+  -> deterministic DEM/QGIS feature candidates
+  -> unresolved / multiple / conflict 顯示
+  -> human map-point annotation + review artifact
+  -> typed human-vs-AI map-selection decisions
+  -> hash-bound R4 execution plan + bounded local cost preferences
+  -> ordered r.walk + r.path segments
+  -> R4 historical_narrative_guided terrain hypothesis
+```
+
+人工 review 只確認「這段文字目前被綁到哪些地圖點」，不是 `human_verified trail`。
+R4 仍必須是 `source_type=terrain_hypothesis`、`authority=candidate_only`、
+`runtime_safety_truth=false`、`operational=false`。Raw narrative 不得送進 GIS worker
+臨場重解；worker 只接收經 review、含 plan/resolution/feature-index/review/DEM hash 的
+typed execution plan。任何 hash 漂移、未確認 required anchor、非 point selection、
+CRS/NoData/GRASS/連通失敗都必須拒絕執行。
+
+DEM feature resolution 必須另外綁定當前 A/B 與明示的分析 margin，只向 Dashboard
+投影局部裁切的 ridge/valley/drainage candidate zones。專案全域巨型 geometry 不得當成
+單一可選 anchor；DEM 線只能是地圖比對 context。R4 可執行 anchor 必須是人工在局部
+範圍內確認的 WGS84 `Point`，重新整理後仍須能回看 hash-bound 原始敘事與來源。
+Review artifact 必須保存畫面上可見的實際 reviewer alias；Dashboard 不得硬編碼或推定
+操作者是 `trip_leader`。Review decision 必須明示 Scout AI 沒有執行地圖選點，並逐項保存
+resolver 原候選、人工選定 Point、人工停用 constraint 與 selection source；不得事後把人工
+選擇包裝成 AI 自動確認。
+
+既有 TRH catalog option 必須投影 hash 驗證後的 `start` / `destination`，Dashboard 才能
+明示地套用該假說 A/B 作為 guidance search window。任何 A/B、margin、DEM 或 feature
+index 變更都必須清除舊 review binding 並令 `guided_execution_ready=false`。不得沿用舊
+review 執行不同的局部分析。
+
+DEM elevation adapter 可以為局部 candidate line 取樣高程，並把 ridge 上的局部低點建立
+為 `saddle` proxy，但必須標示為 DEM-derived candidate。Candidate ordering 僅可使用
+deterministic typed semantics，例如 landform、目標高程差、hash-bound candidate corridor
+overlap 與敘事 sequence 在 A/B 間的空間接近度；排序不得視為自動選點。若引用既有 TRH，
+resolver 必須驗證 catalog、hypothesis、cache key、A/B、parent manifest/DEM hash chain、
+corridor source TIFF hash 與 CRS。Mask 僅接受 `1=inside`、`255=NoData/outside`，不得取樣
+PNG 視覺圖。每條 DEM feature 採 bounded deterministic samples，且
+`candidate_corridor_overlap_is_review_rank_evidence_not_route_confirmation`；候選不得因 overlap 為 0 而被移除，
+也不得因 overlap 高而自動選成 anchor。Dashboard 可顯示前五名 rank marker 協助人工定位，
+但 R4 仍只接受操作者親自確認的 WGS84 Point。Sampling failure、NoData 或不完整回傳不得
+產生半套 saddle/elevation/corridor resolution；任一 catalog、hash、endpoint、sampler 或
+raster binding 錯誤都必須 fail closed。
+
+人工確認的每個 Point 必須同時編譯成 ordered gate 與 bounded local friction preference。
+目前 modifier 的 radius 只能在 20-500 m，最低 multiplier 只能在 `0.5-1.0`，且所有 raster
+值必須維持有限正數。Worker 只能接收 typed numeric modifier，由 deterministic builder
+產生並結構驗證 `r.mapcalc` expression；raw narrative 或任意 expression 不得進入 GRASS。
+R4 使用獨立的 balanced base raster，R1-R3 expression 不得因 guidance 改變。
+
+Scout AI 可以向使用者解釋 R4 是「依歷史描述與目前 DEM 地形模型形成的候選假說」，
+但必須同時保留：這不表示現地存在步道、仍可通行、安全或合法進入。Scout 不得依
+R4 自動修改 GPX、改寫 official trail truth，或取得前進／撤退 authority。Explanation
+可以用 `max(10 m, 2 DEM cells)` 比較 R4 candidate geometry 與 reviewed anchor，輸出
+`aligned`、`conflict` 或 `unavailable`；這只是 interpretation-to-map binding audit，不是
+現地驗證。
+
+### 11.13 導航力的 Mac / Scout 雙主機運算與重現性
+
+TRH 不得把「只能在 Scout 執行」或「只能在開發 Mac 執行」硬編碼進 domain model。
+兩台主機必須共用同一 typed request、cost config、QGIS worker 與 GRASS allowlist；
+主機差異只存在 adapter、runtime discovery 與 execution receipt。可攜式 CLI 必須保存
+實際 hostname、architecture、QGIS/GRASS version、來源 DEM hash、parent manifest
+hash、input-contract hash、module list、耗時與 artifact 數量。
+
+R4 的可攜式輸入只能是已人工審核的 `TerrainGuidanceExecutionPlan`。CLI 必須拒絕 raw
+narrative、DEM/hash/resolution/CRS mismatch、與 A/B 重複的 anchor，以及非 WGS84 Point。
+將 plan 搬到另一台主機不等於新增人工審核，也不得改變 candidate-only authority。
+
+跨主機驗證必須分開記錄：
+
+1. authoritative source DEM content hash；
+2. bounded analysis-raster byte hash；
+3. path geometry 與 terrain-model metrics；
+4. corridor cell/threshold variance；
+5. QGIS/GRASS engine version variance。
+
+來源 DEM hash 相同是輸入證據。分析 raster byte hash 可因 GDAL/GRASS metadata 或版本
+而不同，不能反過來冒充來源資料不同。若 input contract 或 candidate-only 欄位不同，
+比較必須 `unavailable`；若 path 或 corridor 超出明示容許值，必須 `diverged`，不可挑選
+較好看的結果。
+
+2026-09-01 的實機 receipt 已證明同一 20 m DEM/A/B/config 可在 Mac x86_64 與 Scout
+aarch64 隔離容器執行。R1/R2/R3 path 在 0.1 m tolerance 內一致；GRASS 8.5.0 與 8.4.1
+造成最高約 2.07% corridor-threshold variance，結果標示
+`passed_with_engine_variance`。這是模型重現性證據，不是 trail、passability、safety 或
+legal-access qualification。永久 Scout service 安裝與 exact engine-version parity 仍為
+`UNKNOWN`，證據見 `docs/evals/scout-terrain-route-host-parity-20260901.md`。
+
+### 11.14 Scout AI TRH 工具與 GPX Terrain Consistency
+
+導航力的 Scout AI tool registry 必須提供四個窄義工具，不得用單一 catch-all GIS tool
+取代：
+
+| Tool alias | Typed responsibility | Effect boundary |
+|---|---|---|
+| `generate_terrain_route_hypotheses` | 以明示 A/B、margin 與可選 reviewed R4 hash 提交 TRH workflow。 | 只可寫 local candidate workspace artifact；不得寫 route truth、official trail 或 safety truth。 |
+| `explain_route_hypothesis` | 回傳選定 hypothesis 的 relative terrain cost、positive/negative evidence、unknowns、provenance；R4 另含 reviewed anchor alignment/conflict。 | Read-only；alignment 不得解讀為現地存在、可通行、安全、合法或推薦。 |
+| `compare_route_hypotheses` | 並列 R1/R2/R3/R4 的模型假設與 metrics。 | Read-only；不得跨 profile 做 safety/passability/success ranking。 |
+| `inspect_route_terrain_consistency` | 比較 known GPX 與 hash-bound corridor、slope、drainage、TEII、model trace。 | Read-only；不得修改 GPX 或判定 GPX validity。 |
+
+GPX 檢查輸出只能是 `CONSISTENT`、`PARTIALLY_CONSISTENT`、
+`TERRAIN_ANOMALY` 或 `UNKNOWN`，assessment semantics 固定為
+`terrain_consistency_not_gpx_validity`。`source_type=known_gpx` 與
+`authority=candidate_only` 必須並存；known GPX 不因比對而變成 terrain hypothesis，
+terrain hypothesis 也不因重疊而變成 observed/official/human-verified trail。
+
+Dashboard 必須將下拉選取的 exact hypothesis `source_ref` 與 corridor band 一併送出，
+不能只送 `R1` 顯示名稱後改讀目前 project manifest 的另一個 artifact。主要 GPX 的
+source index、workspace ref 與 SHA-256 必須先驗證；預設最多取 400 個 deterministic
+樣本。GPX 內落在 hypothesis analysis bbox 外的有效 WGS84 點，記錄為離開 corridor
+與 extent anomaly，不可讓 GDAL 以無效投影使整批樣本失敗。缺少 drainage 或 TEII
+時，該維度保持 `UNKNOWN`，不能補零。
+
+可能 mismatch 原因至少保留 GPS drift、DEM error、engineered/official trail、rope、
+bridge、tunnel、old/historical route、landslide 與 data mismatch。Dashboard 可顯示
+bounded anomaly points，但圖例與 inspector 必須同時明示：這是 terrain consistency，
+不是 GPX validity，不代表步道存在、可通行、安全或合法進入，也不授權 Scout 做
+前進、撤退或自動改線決策。
 
 ---
 

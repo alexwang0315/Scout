@@ -7023,16 +7023,25 @@
 
     .navigation-terrain-workspace {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) clamp(320px, 24vw, 380px);
+      grid-template-columns: minmax(420px, 1fr) clamp(300px, 20vw, 350px) clamp(390px, 28vw, 480px);
       gap: 10px;
       align-items: start;
     }
 
-    .navigation-terrain-workspace[data-navigation-inspector-expanded="false"] {
+    .navigation-terrain-workspace[data-navigation-inspector-expanded="false"][data-navigation-guidance-expanded="false"] {
       grid-template-columns: minmax(0, 1fr);
     }
 
+    .navigation-terrain-workspace[data-navigation-inspector-expanded="true"][data-navigation-guidance-expanded="false"] {
+      grid-template-columns: minmax(0, 1fr) clamp(320px, 24vw, 380px);
+    }
+
+    .navigation-terrain-workspace[data-navigation-inspector-expanded="false"][data-navigation-guidance-expanded="true"] {
+      grid-template-columns: minmax(420px, 1fr) clamp(390px, 30vw, 500px);
+    }
+
     .navigation-terrain-side[hidden] { display: none; }
+    .navigation-terrain-guidance-frame[hidden] { display: none; }
 
     .navigation-terrain-primary {
       display: grid;
@@ -7044,7 +7053,8 @@
     .navigation-terrain-workspace > *,
     .navigation-terrain-primary,
     .navigation-terrain-map-panel,
-    .navigation-terrain-side {
+    .navigation-terrain-side,
+    .navigation-terrain-guidance-frame {
       min-width: 0;
     }
 
@@ -7256,12 +7266,12 @@
     .navigation-terrain-hypothesis-band-switch button,
     .navigation-terrain-layer-switch button,
     .navigation-inspector-toggle {
-      min-height: 30px;
-      padding: 5px 8px;
+      min-height: 34px;
+      padding: 7px 9px;
       border: 1px solid rgba(233, 234, 220, .17);
       background: #0c1712;
       color: #a2b2a9;
-      font: 800 9px var(--mono);
+      font: 800 11px var(--mono);
       letter-spacing: 0;
     }
 
@@ -7469,43 +7479,49 @@
       z-index: 8;
       left: 12px;
       bottom: 104px;
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 6px 10px;
       max-width: min(620px, calc(100% - 100px));
-      padding: 7px 9px;
       border: 1px solid rgba(233, 234, 220, .35);
       background: rgba(5, 11, 8, .86);
       color: #f4f4e9;
-      pointer-events: none;
+      pointer-events: auto;
       backdrop-filter: blur(6px);
     }
 
-    .navigation-terrain-outward-key strong {
-      font: 900 9px var(--mono);
+    .navigation-terrain-outward-key-body {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 7px 10px;
+      max-height: min(210px, 40vh);
+      overflow-y: auto;
+      padding: 9px 10px;
+      border-top: 1px solid rgba(233, 234, 220, .24);
     }
 
-    .navigation-terrain-outward-key span {
+    .navigation-terrain-outward-key-body strong {
+      font: 900 11px var(--mono);
+    }
+
+    .navigation-terrain-outward-key-body span {
       display: inline-flex;
       align-items: center;
       gap: 4px;
       color: #e7eadc;
-      font: 800 8px var(--mono);
+      font: 800 10px var(--mono);
       white-space: nowrap;
     }
 
-    .navigation-terrain-outward-key i {
+    .navigation-terrain-outward-key-body i {
       width: 18px;
       height: 5px;
       background: var(--terrain-outward-color);
       box-shadow: 0 0 0 1px rgba(7, 17, 14, .78);
     }
 
-    .navigation-terrain-outward-key em {
+    .navigation-terrain-outward-key-body em {
       flex-basis: 100%;
       color: #bdc6bb;
-      font: 700 8px var(--mono);
+      font: 700 9px/1.45 var(--mono);
       font-style: normal;
     }
 
@@ -7519,32 +7535,76 @@
       top: 12px;
       right: 58px;
       bottom: auto;
-      max-width: min(370px, calc(100% - 24px));
-      padding: 8px 10px;
+      max-width: min(420px, calc(100% - 24px));
       border: 1px solid rgba(88, 212, 200, .58);
       border-left: 3px solid #58d4c8;
       background: rgba(5, 17, 14, .9);
       color: #dff7f2;
-      pointer-events: none;
+      pointer-events: auto;
       backdrop-filter: blur(6px);
     }
 
-    .navigation-terrain-hypothesis-map-key > strong,
-    .navigation-terrain-hypothesis-map-key > small {
+    .navigation-terrain-outward-key > summary,
+    .navigation-terrain-hypothesis-map-key > summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      min-height: 34px;
+      padding: 7px 9px;
+      cursor: pointer;
+      list-style: none;
+      color: #f1f5ea;
+      font: 900 11px var(--mono);
+    }
+
+    .navigation-terrain-outward-key > summary::-webkit-details-marker,
+    .navigation-terrain-hypothesis-map-key > summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .navigation-terrain-outward-key > summary::after,
+    .navigation-terrain-hypothesis-map-key > summary::after {
+      content: "+";
+      color: #7fe36d;
+      font-size: 15px;
+    }
+
+    .navigation-terrain-outward-key[open] > summary::after,
+    .navigation-terrain-hypothesis-map-key[open] > summary::after {
+      content: "−";
+    }
+
+    .navigation-terrain-outward-key > summary small,
+    .navigation-terrain-hypothesis-map-key > summary small {
+      color: #9caf9f;
+      font-size: 9px;
+      white-space: nowrap;
+    }
+
+    .navigation-terrain-hypothesis-map-key-body {
+      max-height: min(330px, 56vh);
+      overflow-y: auto;
+      padding: 9px 10px;
+      border-top: 1px solid rgba(88, 212, 200, .3);
+    }
+
+    .navigation-terrain-hypothesis-map-key-body > strong,
+    .navigation-terrain-hypothesis-map-key-body > small {
       display: block;
       font-family: var(--mono);
       letter-spacing: 0;
     }
 
-    .navigation-terrain-hypothesis-map-key > strong {
-      font-size: 9px;
+    .navigation-terrain-hypothesis-map-key-body > strong {
+      font-size: 11px;
     }
 
-    .navigation-terrain-hypothesis-map-key > small {
-      margin-top: 3px;
+    .navigation-terrain-hypothesis-map-key-body > small {
+      margin-top: 5px;
       color: #97b8af;
-      font-size: 8px;
-      line-height: 1.4;
+      font-size: 9px;
+      line-height: 1.45;
     }
 
     .navigation-terrain-route-key-items {
@@ -7590,6 +7650,11 @@
       border-top-style: dashed;
     }
 
+    .navigation-terrain-route-key-items i[data-navigation-route-key-strategy="historical_narrative_guided"] {
+      border-top-color: #7fe36d;
+      border-top-style: dashed;
+    }
+
     .navigation-terrain-route-key-items i[data-navigation-route-key-swatch="corridor"] {
       height: 9px;
       border: 1px solid rgba(88, 212, 200, .78);
@@ -7598,12 +7663,12 @@
 
     .navigation-terrain-route-key-items b {
       overflow-wrap: anywhere;
-      font-size: 8px;
+      font-size: 10px;
     }
 
     .navigation-terrain-route-key-items em {
       color: #97b8af;
-      font-size: 7px;
+      font-size: 9px;
       font-style: normal;
       line-height: 1.35;
     }
@@ -7943,6 +8008,47 @@
       overflow-wrap: anywhere;
     }
 
+    .navigation-terrain-consistency-actions {
+      display: grid;
+      grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+      gap: 8px;
+      align-items: center;
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px solid rgba(233, 234, 220, .12);
+    }
+
+    .navigation-terrain-consistency-actions button {
+      min-height: 32px;
+      padding: 7px 10px;
+      border: 1px solid rgba(88, 212, 200, .6);
+      border-radius: 4px;
+      background: rgba(88, 212, 200, .1);
+      color: #dff7f2;
+      font: 900 9px var(--mono);
+      letter-spacing: 0;
+      cursor: pointer;
+    }
+
+    .navigation-terrain-consistency-actions button:disabled {
+      cursor: progress;
+      opacity: .55;
+    }
+
+    .navigation-terrain-consistency-actions small {
+      min-width: 0;
+      color: #8ea198;
+      font: 700 8px/1.45 var(--mono);
+      letter-spacing: 0;
+      overflow-wrap: anywhere;
+    }
+
+    @media (max-width: 520px) {
+      .navigation-terrain-consistency-actions {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
     .navigation-candidate-selection-status {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
@@ -8118,13 +8224,13 @@
 
     .qgis-terrain-route-builder-copy strong {
       color: #f4f6ec;
-      font-size: 11px;
+      font-size: 14px;
     }
 
     .qgis-terrain-route-builder-copy small {
       margin-top: 3px;
       color: #8fa198;
-      font-size: 9px;
+      font-size: 11px;
       line-height: 1.45;
     }
 
@@ -8150,14 +8256,14 @@
 
     .qgis-terrain-route-endpoint small {
       color: #8fa198;
-      font: 800 8px var(--mono);
+      font: 800 11px var(--mono);
       letter-spacing: 0;
     }
 
     .qgis-terrain-route-endpoint strong {
       margin-top: 4px;
       color: #f1f3e8;
-      font: 800 10px var(--mono);
+      font: 800 13px var(--mono);
       letter-spacing: 0;
     }
 
@@ -8175,7 +8281,7 @@
       border: 1px solid rgba(233, 234, 220, .18);
       background: #14211b;
       color: #dfe8e2;
-      font-size: 10px;
+      font-size: 12px;
     }
 
     .qgis-terrain-route-controls button {
@@ -8212,6 +8318,167 @@
       width: 76px;
       padding: 6px;
       font-family: var(--mono);
+    }
+
+    .terrain-guidance-workbench {
+      display: grid;
+      grid-column: 1 / -1;
+      gap: 9px;
+      padding-top: 10px;
+      border-top: 1px solid var(--terrain-rule);
+      font-size: var(--terrain-guidance-body-size, 13px);
+    }
+
+    .terrain-guidance-source-row,
+    .terrain-guidance-actions,
+    .terrain-guidance-constraint-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      align-items: center;
+    }
+
+    .terrain-guidance-source-row label {
+      display: grid;
+      min-width: 150px;
+      flex: 1 1 180px;
+      gap: 3px;
+      color: #8fa198;
+      font: 800 var(--terrain-guidance-small-size, 11px) var(--mono);
+    }
+
+    .terrain-guidance-source-row input,
+    .terrain-guidance-workbench textarea {
+      width: 100%;
+      border: 1px solid rgba(233, 234, 220, .18);
+      background: #101d17;
+      color: #eef1e5;
+      font: 500 var(--terrain-guidance-body-size, 13px)/1.55 var(--sans);
+      letter-spacing: 0;
+    }
+
+    .terrain-guidance-source-row input {
+      min-height: 40px;
+      padding: 8px 10px;
+    }
+
+    .terrain-guidance-workbench textarea {
+      min-height: 150px;
+      resize: vertical;
+      padding: 8px 9px;
+    }
+
+    .terrain-guidance-workbench textarea:focus-visible,
+    .terrain-guidance-source-row input:focus-visible,
+    .terrain-guidance-actions button:focus-visible,
+    .terrain-guidance-constraint-actions button:focus-visible {
+      border-color: #58d4c8;
+      outline: none;
+    }
+
+    .terrain-guidance-actions button,
+    .terrain-guidance-constraint-actions button {
+      min-height: 32px;
+      border: 1px solid rgba(233, 234, 220, .18);
+      background: #14211b;
+      color: #dfe8e2;
+      padding: 8px 10px;
+      font-size: 12px;
+    }
+
+    .terrain-guidance-actions button:disabled,
+    .terrain-guidance-constraint-actions button:disabled {
+      opacity: .38;
+    }
+
+    .terrain-guidance-status {
+      color: #9caf9f;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+
+    .terrain-guidance-constraints {
+      display: grid;
+      gap: 1px;
+      background: var(--terrain-rule);
+    }
+
+    .terrain-guidance-constraint {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 7px 10px;
+      padding: 8px 9px;
+      background: #101d17;
+    }
+
+    .terrain-guidance-constraint[data-resolution-status="unresolved"],
+    .terrain-guidance-constraint[data-resolution-status="multiple_candidates"] {
+      box-shadow: inset 3px 0 0 #f6c75f;
+    }
+
+    .terrain-guidance-constraint[data-resolution-status="resolved"] {
+      box-shadow: inset 3px 0 0 #58d4c8;
+    }
+
+    .terrain-guidance-constraint-copy strong,
+    .terrain-guidance-constraint-copy small {
+      display: block;
+      overflow-wrap: anywhere;
+    }
+
+    .terrain-guidance-constraint-copy strong {
+      color: #eef1e5;
+      font-size: 12px;
+    }
+
+    .terrain-guidance-constraint-copy small {
+      margin-top: 3px;
+      color: #8fa198;
+      font-size: var(--terrain-guidance-small-size, 11px);
+      line-height: 1.5;
+    }
+
+    .terrain-guidance-candidates {
+      grid-column: 1 / -1;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+
+    .terrain-guidance-candidates label,
+    .terrain-guidance-constraint-actions label {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      min-height: 30px;
+      padding: 5px 7px;
+      border: 1px solid rgba(233, 234, 220, .14);
+      background: #14211b;
+      color: #a9b7ad;
+      font-size: var(--terrain-guidance-small-size, 11px);
+    }
+
+    .terrain-guidance-candidate-summary,
+    .terrain-guidance-candidates span {
+      color: #9caf9f;
+      font-size: var(--terrain-guidance-small-size, 11px);
+      line-height: 1.5;
+    }
+
+    .terrain-guidance-candidates label:has(input:checked) {
+      border-color: #58d4c8;
+      color: #b9fff5;
+    }
+
+    .terrain-guidance-candidates input,
+    .terrain-guidance-constraint-actions input {
+      accent-color: #58d4c8;
+    }
+
+    @media (max-width: 720px) {
+      .terrain-guidance-constraint {
+        grid-template-columns: minmax(0, 1fr);
+      }
     }
 
     @media (max-width: 720px) {
@@ -8731,6 +8998,74 @@
 
     .navigation-supporting-evidence .navigation-evidence-workbench {
       border-width: 1px 0 0;
+    }
+
+    .navigation-terrain-guidance-frame {
+      --terrain-guidance-body-size: 13px;
+      --terrain-guidance-small-size: 11px;
+      position: sticky;
+      top: 10px;
+      max-height: calc(100dvh - 24px);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
+      border: 1px solid var(--terrain-rule);
+      background: #0b1510;
+    }
+
+    .navigation-terrain-guidance-frame-head {
+      position: sticky;
+      z-index: 3;
+      top: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 4px 10px;
+      align-items: center;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--terrain-rule);
+      border-left: 3px solid #7fe36d;
+      background: #101d17;
+    }
+
+    .navigation-terrain-guidance-frame-head strong,
+    .navigation-terrain-guidance-frame-head small {
+      display: block;
+      overflow-wrap: anywhere;
+    }
+
+    .navigation-terrain-guidance-frame-head strong {
+      color: #f1f5e8;
+      font-size: 15px;
+    }
+
+    .navigation-terrain-guidance-frame-head small {
+      margin-top: 3px;
+      color: #9caf9f;
+      font: 800 var(--terrain-guidance-small-size) var(--mono);
+      line-height: 1.45;
+    }
+
+    .navigation-terrain-guidance-frame-close {
+      width: 36px;
+      height: 36px;
+      border: 1px solid rgba(233, 234, 220, .2);
+      background: #14211b;
+      color: #dfe8e2;
+      font-size: 22px;
+      line-height: 1;
+    }
+
+    .navigation-terrain-guidance-frame-close:hover,
+    .navigation-terrain-guidance-frame-close:focus-visible {
+      border-color: #7fe36d;
+      color: #f4ffe9;
+      outline: none;
+    }
+
+    .navigation-terrain-guidance-frame > .terrain-guidance-workbench {
+      grid-column: auto;
+      padding: 14px;
+      border-top: 0;
     }
 
     .navigation-utility-drawer > .qgis-analysis-panel,
@@ -9479,6 +9814,22 @@
         border-bottom: 1px solid var(--terrain-rule);
       }
       .navigation-terrain-workspace { grid-template-columns: 1fr; }
+      .navigation-terrain-workspace[data-navigation-inspector-expanded="false"][data-navigation-guidance-expanded="true"],
+      .navigation-terrain-workspace[data-navigation-inspector-expanded="true"][data-navigation-guidance-expanded="true"] {
+        grid-template-columns: minmax(0, 1fr) minmax(380px, 44vw);
+      }
+      .navigation-terrain-workspace[data-navigation-guidance-expanded="true"] > .navigation-terrain-primary {
+        grid-column: 1;
+        grid-row: 1;
+      }
+      .navigation-terrain-workspace[data-navigation-guidance-expanded="true"] > .navigation-terrain-guidance-frame {
+        grid-column: 2;
+        grid-row: 1;
+      }
+      .navigation-terrain-workspace[data-navigation-guidance-expanded="true"] > .navigation-terrain-side {
+        grid-column: 1 / -1;
+        grid-row: 2;
+      }
       .navigation-terrain-side {
         grid-template-columns: repeat(2, minmax(0, 1fr));
         position: static;
@@ -9501,6 +9852,20 @@
     }
 
     @media (max-width: 720px) {
+      .navigation-terrain-workspace[data-navigation-inspector-expanded="false"][data-navigation-guidance-expanded="true"],
+      .navigation-terrain-workspace[data-navigation-inspector-expanded="true"][data-navigation-guidance-expanded="true"] {
+        grid-template-columns: minmax(0, 1fr);
+      }
+      .navigation-terrain-workspace[data-navigation-guidance-expanded="true"] > .navigation-terrain-primary,
+      .navigation-terrain-workspace[data-navigation-guidance-expanded="true"] > .navigation-terrain-side,
+      .navigation-terrain-workspace[data-navigation-guidance-expanded="true"] > .navigation-terrain-guidance-frame {
+        grid-column: 1;
+        grid-row: auto;
+      }
+      .navigation-terrain-guidance-frame {
+        position: static;
+        max-height: min(72dvh, 760px);
+      }
       .field-instrument-theme .route-tabs.is-navigation-active {
         display: flex;
         flex-wrap: nowrap;
@@ -11298,6 +11663,7 @@
     const ROUTE_CONTEXT_REGENERATION_TIMEOUT_MS = 600000;
     const NAVIGATION_TERRAIN_FETCH_TIMEOUT_MS = 60000;
     const QGIS_SPATIAL_FETCH_TIMEOUT_MS = 45000;
+    const TERRAIN_GUIDANCE_FETCH_TIMEOUT_MS = 240000;
     const QGIS_NAVIGATION_PRIMARY_WORKFLOW_ID = "terrain_feature_stack.v1";
     const QGIS_TERRAIN_ROUTE_WORKFLOW_ID = "terrain_route_hypothesis.v1";
     const QGIS_TERRAIN_ROUTE_DEFAULT_MARGIN_M = 1000;
@@ -12053,6 +12419,22 @@
       qgisTerrainRouteEndpoints: {start: null, destination: null},
       qgisTerrainRouteSelectionTarget: "",
       qgisTerrainRouteCorridorM: QGIS_TERRAIN_ROUTE_DEFAULT_MARGIN_M,
+      terrainRouteGuidance: null,
+      terrainRouteGuidanceBusy: false,
+      terrainRouteGuidanceMessage: "",
+      terrainRouteGuidanceNarrative: "",
+      terrainRouteGuidanceSourceId: "",
+      terrainRouteGuidanceSourceDate: "",
+      terrainRouteGuidanceReviewerAlias: "dashboard_operator",
+      terrainRouteGuidanceExpanded: true,
+      terrainRouteGuidanceFrameScrollTop: 0,
+      terrainRouteGuidanceAnchorTarget: "",
+      terrainRouteGuidanceManualAnchors: {},
+      terrainRouteGuidanceSelectedFeatures: {},
+      terrainRouteGuidanceDisabledConstraints: {},
+      terrainRouteConsistency: null,
+      terrainRouteConsistencyBusy: false,
+      terrainRouteConsistencyMessage: "",
       qgisSpatialLayerVisibility: {
         route: true,
         slope: true,
@@ -13213,6 +13595,393 @@
       return `/admin/pretrip/projects/${encodeURIComponent(candidateProjectId)}/spatial/qgis`;
     }
 
+    function terrainRouteGuidanceBasePath(candidateProjectId = projectId()) {
+      return `/admin/pretrip/projects/${encodeURIComponent(candidateProjectId)}/terrain-route-guidance`;
+    }
+
+    function terrainRouteConsistencyPath(candidateProjectId = projectId()) {
+      return `/admin/pretrip/projects/${encodeURIComponent(candidateProjectId)}/terrain-route-consistency`;
+    }
+
+    async function inspectNavigationTerrainRouteConsistency(snapshot) {
+      if (state.terrainRouteConsistencyBusy) return null;
+      const hypothesis = navigationTerrainRouteHypothesis(snapshot);
+      if (!hypothesis) return null;
+      const candidateId = navigationTerrainRouteCandidateDisplayLabel(hypothesis);
+      const hypothesisPath = asArray(hypothesis.source_refs).find(ref => (
+        typeof ref === "string"
+        && ref.startsWith("outputs/spatial/qgis/terrain-route-cache/")
+        && ref.endsWith("/terrain_route_hypothesis.json")
+      ));
+      state.terrainRouteConsistencyBusy = true;
+      state.terrainRouteConsistencyMessage = "正在比對主要 GPX 與候選地形證據";
+      const activeButton = document.querySelector(
+        'button[data-navigation-terrain-consistency-run="true"]',
+      );
+      const activeStatus = document.querySelector(
+        '[data-navigation-terrain-consistency-message="true"]',
+      );
+      if (activeButton) activeButton.disabled = true;
+      if (activeStatus) activeStatus.textContent = state.terrainRouteConsistencyMessage;
+      try {
+        const payload = await postJson(
+          terrainRouteConsistencyPath(),
+          {
+            candidate_id: candidateId,
+            hypothesis_path: hypothesisPath || null,
+            corridor_band_name: navigationTerrainRouteHypothesisBand(snapshot)
+              || "top_10_percent_corridor",
+            max_samples: 400,
+          },
+          {timeoutMs: 60_000},
+        );
+        if (
+          payload?.candidate_only !== true
+          || payload?.runtime_safety_truth !== false
+          || payload?.source_type !== "known_gpx"
+          || payload?.assessment_semantics !== "terrain_consistency_not_gpx_validity"
+        ) throw new Error("GPX terrain consistency authority contract is invalid");
+        state.terrainRouteConsistency = payload;
+        state.terrainRouteConsistencyMessage = payload.status === "completed"
+          ? `Terrain consistency · ${String(payload.terrain_consistency || "unknown").toUpperCase()}`
+          : `Terrain consistency · UNKNOWN · ${payload.failure_code || "unavailable"}`;
+        return payload;
+      } catch (error) {
+        state.terrainRouteConsistency = {
+          status: "unavailable",
+          terrain_consistency: "unknown",
+          assessment_semantics: "terrain_consistency_not_gpx_validity",
+          summary: "GPX terrain consistency is UNKNOWN; no inference was made.",
+          failure_code: "dashboard_request_failed",
+          candidate_only: true,
+          runtime_safety_truth: false,
+          operational: false,
+          source_type: "known_gpx",
+          known_gpx_mutated: false,
+          unknowns: [{code: "terrain_evidence_unavailable"}],
+          observations: [],
+          possible_explanations: [],
+          sample_evidence: {type: "FeatureCollection", features: []},
+        };
+        state.terrainRouteConsistencyMessage = `Terrain consistency · UNKNOWN · ${String(error?.message || error)}`;
+        return state.terrainRouteConsistency;
+      } finally {
+        state.terrainRouteConsistencyBusy = false;
+        render();
+      }
+    }
+
+    function terrainRouteGuidancePlan() {
+      return state.terrainRouteGuidance?.guidance_plan || null;
+    }
+
+    function terrainRouteGuidanceResolution() {
+      return state.terrainRouteGuidance?.resolution || null;
+    }
+
+    function terrainRouteGuidanceConstraint(constraintId) {
+      return asArray(terrainRouteGuidancePlan()?.constraints).find(
+        item => item?.constraint_id === constraintId,
+      ) || null;
+    }
+
+    function syncTerrainRouteGuidanceState(payload) {
+      state.terrainRouteGuidance = payload || null;
+      const plan = payload?.guidance_plan;
+      if (typeof payload?.narrative === "string") {
+        state.terrainRouteGuidanceNarrative = payload.narrative;
+      }
+      if (plan?.source_id) {
+        state.terrainRouteGuidanceSourceId = String(plan.source_id || "");
+        state.terrainRouteGuidanceSourceDate = String(plan.source_date || "");
+      }
+      const review = payload?.review;
+      if (review) {
+        state.terrainRouteGuidanceSelectedFeatures = Object.fromEntries(
+          asArray(review.selected_anchors).map(item => [
+            String(item.constraint_id || ""),
+            String(item.feature_id || ""),
+          ]).filter(([constraintId, featureId]) => constraintId && featureId),
+        );
+        state.terrainRouteGuidanceDisabledConstraints = Object.fromEntries(
+          asArray(review.disabled_constraint_ids).map(constraintId => [
+            String(constraintId),
+            true,
+          ]),
+        );
+      } else if (payload && Object.prototype.hasOwnProperty.call(payload, "review")) {
+        state.terrainRouteGuidanceSelectedFeatures = {};
+        state.terrainRouteGuidanceDisabledConstraints = {};
+      }
+      const manualAnchors = {};
+      asArray(payload?.feature_index?.features).forEach(feature => {
+        if (feature?.selection_source !== "human_map_annotation") return;
+        const constraintId = asArray(feature.supported_constraint_ids)[0];
+        const point = normalizeQgisTerrainRoutePoint(
+          feature?.centroid,
+          feature?.centroid?.label || constraintId,
+        );
+        if (constraintId && point) manualAnchors[constraintId] = point;
+      });
+      state.terrainRouteGuidanceManualAnchors = manualAnchors;
+    }
+
+    async function loadTerrainRouteGuidance() {
+      try {
+        const payload = await fetchJson(terrainRouteGuidanceBasePath(), {
+          timeoutMs: TERRAIN_GUIDANCE_FETCH_TIMEOUT_MS,
+        });
+        syncTerrainRouteGuidanceState(payload);
+        return payload;
+      } catch (error) {
+        state.terrainRouteGuidance = {
+          status: "unavailable",
+          guidance_plan: null,
+          feature_index: null,
+          resolution: null,
+          review: null,
+          guided_execution_ready: false,
+          candidate_only: true,
+          runtime_safety_truth: false,
+        };
+        state.terrainRouteGuidanceMessage = `Guidance unavailable · ${String(error?.message || error)}`;
+        return state.terrainRouteGuidance;
+      }
+    }
+
+    async function interpretTerrainRouteGuidance() {
+      if (state.terrainRouteGuidanceBusy) return null;
+      const narrative = String(state.terrainRouteGuidanceNarrative || "").trim();
+      const sourceId = String(state.terrainRouteGuidanceSourceId || "").trim();
+      if (!narrative || !sourceId) {
+        state.terrainRouteGuidanceMessage = "請填入歷史紀錄文字與來源 ID";
+        refreshCurrentDataView();
+        return null;
+      }
+      state.terrainRouteGuidanceBusy = true;
+      state.terrainRouteGuidanceMessage = "Scout AI 正在建立 typed constraint preview";
+      refreshCurrentDataView();
+      try {
+        const payload = await postJson(
+          `${terrainRouteGuidanceBasePath()}/interpret`,
+          {
+            narrative,
+            source_id: sourceId,
+            source_date: String(state.terrainRouteGuidanceSourceDate || "").trim() || null,
+            requested_by: "dashboard_operator",
+          },
+          {timeoutMs: TERRAIN_GUIDANCE_FETCH_TIMEOUT_MS},
+        );
+        state.terrainRouteGuidanceSelectedFeatures = {};
+        state.terrainRouteGuidanceDisabledConstraints = {};
+        state.terrainRouteGuidanceManualAnchors = {};
+        syncTerrainRouteGuidanceState(payload);
+        if (!qgisTerrainRouteEndpointsReady()) {
+          state.terrainRouteGuidanceMessage = "Typed constraints 已保存 · 請先設定 A/B，再解析局部 DEM 候選地形";
+          return payload;
+        }
+        state.terrainRouteGuidanceMessage = "Typed constraints 已保存 · 正在比對 DEM 候選地形";
+        return await resolveTerrainRouteGuidance({fromInterpretation: true});
+      } catch (error) {
+        state.terrainRouteGuidanceMessage = `Constraint interpretation failed · ${String(error?.message || error)}`;
+        return null;
+      } finally {
+        state.terrainRouteGuidanceBusy = false;
+        refreshCurrentDataView();
+      }
+    }
+
+    async function resolveTerrainRouteGuidance({fromInterpretation = false} = {}) {
+      const plan = terrainRouteGuidancePlan();
+      if (!plan?.guidance_id) return null;
+      if (!qgisTerrainRouteEndpointsReady()) {
+        state.terrainRouteGuidanceMessage = "請先設定不同的 A/B，才能建立局部 DEM candidate zones";
+        refreshCurrentDataView();
+        return null;
+      }
+      const ownsBusyState = !state.terrainRouteGuidanceBusy;
+      if (ownsBusyState) state.terrainRouteGuidanceBusy = true;
+      state.terrainRouteGuidanceMessage = fromInterpretation
+        ? "正在建立 DEM feature index"
+        : "正在重新解析 candidate zones";
+      refreshCurrentDataView();
+      try {
+        const payload = await postJson(
+          `${terrainRouteGuidanceBasePath()}/resolve`,
+          {
+            guidance_id: plan.guidance_id,
+            route_start: normalizeQgisTerrainRoutePoint(
+              state.qgisTerrainRouteEndpoints.start,
+              "A",
+            ),
+            route_destination: normalizeQgisTerrainRoutePoint(
+              state.qgisTerrainRouteEndpoints.destination,
+              "B",
+            ),
+            search_margin_m: state.qgisTerrainRouteCorridorM,
+            reference_hypothesis_id: terrainRouteGuidanceReferenceHypothesisId(),
+            reference_corridor_band_name: "top_5_percent_corridor",
+            manual_anchors: Object.entries(
+              state.terrainRouteGuidanceManualAnchors || {},
+            ).map(([constraintId, point]) => ({
+              constraint_id: constraintId,
+              point: normalizeQgisTerrainRoutePoint(point, point?.label || constraintId),
+            })).filter(item => item.point),
+          },
+          {timeoutMs: TERRAIN_GUIDANCE_FETCH_TIMEOUT_MS},
+        );
+        syncTerrainRouteGuidanceState(payload);
+        const selected = {...(state.terrainRouteGuidanceSelectedFeatures || {})};
+        asArray(payload?.feature_index?.features).forEach(feature => {
+          if (feature?.selection_source !== "human_map_annotation") return;
+          const constraintId = asArray(feature.supported_constraint_ids)[0];
+          if (constraintId && feature.feature_id) selected[constraintId] = feature.feature_id;
+        });
+        state.terrainRouteGuidanceSelectedFeatures = selected;
+        const unresolved = asArray(payload?.resolution?.unresolved_constraint_ids).length;
+        const disabled = state.terrainRouteGuidanceDisabledConstraints || {};
+        const requiredPending = asArray(payload?.guidance_plan?.constraints)
+          .filter(item => item?.required_anchor)
+          .filter(item => !selected[item.constraint_id] && !disabled[item.constraint_id])
+          .length;
+        state.terrainRouteGuidanceMessage = requiredPending
+          ? `${requiredPending} 個 required anchor 仍需人工地圖 Point；${unresolved} 個 typed constraint 仍有零個或多個 DEM 候選`
+          : unresolved
+            ? `Required anchors 已處理；${unresolved} 個非執行 constraint 保留 unresolved / multiple`
+            : "DEM candidate zones 已建立 · 等待人工 review";
+        return payload;
+      } catch (error) {
+        state.terrainRouteGuidanceMessage = `Constraint resolution failed · ${String(error?.message || error)}`;
+        return null;
+      } finally {
+        if (ownsBusyState) state.terrainRouteGuidanceBusy = false;
+        refreshCurrentDataView();
+      }
+    }
+
+    function selectTerrainRouteGuidanceFeature(constraintId, featureId) {
+      if (!constraintId || !featureId || state.terrainRouteGuidanceBusy) return;
+      state.terrainRouteGuidanceSelectedFeatures = {
+        ...(state.terrainRouteGuidanceSelectedFeatures || {}),
+        [constraintId]: featureId,
+      };
+      const {[constraintId]: _disabled, ...remainingDisabled} = (
+        state.terrainRouteGuidanceDisabledConstraints || {}
+      );
+      state.terrainRouteGuidanceDisabledConstraints = remainingDisabled;
+      state.terrainRouteGuidanceMessage = `${constraintId} candidate 已選取 · 尚未 review`;
+      render();
+    }
+
+    function toggleTerrainRouteGuidanceConstraintDisabled(constraintId) {
+      if (!constraintId || state.terrainRouteGuidanceBusy) return;
+      const disabled = {...(state.terrainRouteGuidanceDisabledConstraints || {})};
+      if (disabled[constraintId]) delete disabled[constraintId];
+      else disabled[constraintId] = true;
+      state.terrainRouteGuidanceDisabledConstraints = disabled;
+      if (disabled[constraintId]) {
+        const selected = {...(state.terrainRouteGuidanceSelectedFeatures || {})};
+        delete selected[constraintId];
+        state.terrainRouteGuidanceSelectedFeatures = selected;
+      }
+      state.terrainRouteGuidanceMessage = disabled[constraintId]
+        ? `${constraintId} 已明確停用 · 不會影響 R4 friction`
+        : `${constraintId} 已恢復 review`;
+      render();
+    }
+
+    function selectTerrainRouteGuidanceMapAnchor(constraintId) {
+      if (!terrainRouteGuidanceConstraint(constraintId)) return;
+      state.qgisTerrainRouteSelectionTarget = "";
+      state.terrainRouteGuidanceAnchorTarget = (
+        state.terrainRouteGuidanceAnchorTarget === constraintId ? "" : constraintId
+      );
+      state.terrainRouteGuidanceMessage = state.terrainRouteGuidanceAnchorTarget
+        ? `地圖錨點模式 · 請在 2D 或 3D 地圖確認 ${constraintId}`
+        : "地圖錨點模式已取消";
+      render();
+    }
+
+    function setTerrainRouteGuidanceAnchorFromMap(lngLat) {
+      const constraintId = String(state.terrainRouteGuidanceAnchorTarget || "");
+      if (!constraintId) return false;
+      const point = normalizeQgisTerrainRoutePoint(
+        {x: lngLat?.lng, y: lngLat?.lat},
+        `Map anchor ${constraintId}`,
+      );
+      if (!point) {
+        state.terrainRouteGuidanceMessage = `${constraintId} 地圖座標不是有效 WGS84`;
+        return false;
+      }
+      state.terrainRouteGuidanceManualAnchors = {
+        ...(state.terrainRouteGuidanceManualAnchors || {}),
+        [constraintId]: point,
+      };
+      state.terrainRouteGuidanceAnchorTarget = "";
+      state.terrainRouteGuidanceMessage = `${constraintId} 人工 map annotation 已記錄 · 正在重新解析`;
+      void resolveTerrainRouteGuidance();
+      return true;
+    }
+
+    function terrainRouteGuidanceReviewReady() {
+      const plan = terrainRouteGuidancePlan();
+      if (!plan) return false;
+      const selected = state.terrainRouteGuidanceSelectedFeatures || {};
+      const disabled = state.terrainRouteGuidanceDisabledConstraints || {};
+      return asArray(plan.constraints)
+        .filter(item => item?.required_anchor)
+        .every(item => selected[item.constraint_id] || disabled[item.constraint_id]);
+    }
+
+    async function reviewTerrainRouteGuidance() {
+      const plan = terrainRouteGuidancePlan();
+      if (!plan?.guidance_id || !terrainRouteGuidanceResolution()) return null;
+      const reviewerAlias = String(
+        state.terrainRouteGuidanceReviewerAlias || "",
+      ).trim();
+      if (!reviewerAlias) {
+        state.terrainRouteGuidanceMessage = "請填入實際 reviewer alias；review 不會假設操作者是領隊";
+        refreshCurrentDataView();
+        return null;
+      }
+      if (!terrainRouteGuidanceReviewReady()) {
+        state.terrainRouteGuidanceMessage = "所有 required anchor 都必須選取候選或明確停用";
+        refreshCurrentDataView();
+        return null;
+      }
+      state.terrainRouteGuidanceBusy = true;
+      state.terrainRouteGuidanceMessage = "正在保存 human review artifact";
+      refreshCurrentDataView();
+      try {
+        const payload = await postJson(
+          `${terrainRouteGuidanceBasePath()}/review`,
+          {
+            guidance_id: plan.guidance_id,
+            selected_feature_ids: state.terrainRouteGuidanceSelectedFeatures || {},
+            disabled_constraint_ids: Object.keys(
+              state.terrainRouteGuidanceDisabledConstraints || {},
+            ).filter(constraintId => state.terrainRouteGuidanceDisabledConstraints[constraintId]),
+            reviewed_by: reviewerAlias,
+          },
+          {timeoutMs: TERRAIN_GUIDANCE_FETCH_TIMEOUT_MS},
+        );
+        syncTerrainRouteGuidanceState({
+          ...(state.terrainRouteGuidance || {}),
+          ...payload,
+        });
+        state.terrainRouteGuidanceMessage = payload.guided_execution_ready
+          ? "Human review 已保存 · R4 guided hypothesis 可提交"
+          : "Review 已保存，但仍有 unresolved constraint；R4 不可提交";
+        return payload;
+      } catch (error) {
+        state.terrainRouteGuidanceMessage = `Guidance review failed · ${String(error?.message || error)}`;
+        return null;
+      } finally {
+        state.terrainRouteGuidanceBusy = false;
+        refreshCurrentDataView();
+      }
+    }
+
     function qgisSpatialWorkflowStorageKey(candidateProjectId = projectId()) {
       return `scout.qgisSpatialWorkflowRunId.${candidateProjectId}`;
     }
@@ -13308,6 +14077,82 @@
         : "尚未選取";
     }
 
+    function selectedTerrainRouteHypothesisEndpoints() {
+      const hypothesis = navigationTerrainRouteHypothesis(navigationTerrainSnapshot());
+      const start = normalizeQgisTerrainRoutePoint(hypothesis?.start, "A");
+      const destination = normalizeQgisTerrainRoutePoint(hypothesis?.destination, "B");
+      if (
+        !start
+        || !destination
+        || (start.x === destination.x && start.y === destination.y)
+      ) return null;
+      return {
+        start,
+        destination,
+        label: navigationTerrainRouteHypothesisDisplayLabel(hypothesis),
+      };
+    }
+
+    function terrainRouteGuidanceReferenceHypothesisId() {
+      const snapshot = navigationTerrainSnapshot();
+      const hypothesis = navigationTerrainRouteHypothesis(snapshot);
+      const selectionId = String(hypothesis?.selection_id || "");
+      const selected = selectedTerrainRouteHypothesisEndpoints();
+      const currentStart = normalizeQgisTerrainRoutePoint(
+        state.qgisTerrainRouteEndpoints?.start,
+        "A",
+      );
+      const currentDestination = normalizeQgisTerrainRoutePoint(
+        state.qgisTerrainRouteEndpoints?.destination,
+        "B",
+      );
+      const samePoint = (left, right) => Boolean(
+        left
+        && right
+        && Math.abs(left.x - right.x) <= 0.000001
+        && Math.abs(left.y - right.y) <= 0.000001
+      );
+      if (
+        !/^[a-z0-9][a-z0-9._-]{0,79}$/.test(selectionId)
+        || !selected
+        || !samePoint(currentStart, selected.start)
+        || !samePoint(currentDestination, selected.destination)
+      ) return null;
+      return selectionId;
+    }
+
+    function useSelectedTerrainRouteHypothesisEndpoints() {
+      if (qgisTerrainRouteWorkflowActive()) return false;
+      const selected = selectedTerrainRouteHypothesisEndpoints();
+      if (!selected) {
+        state.qgisSpatialMessage = "目前顯示的 TRH 沒有可重用的 WGS84 A/B";
+        render();
+        return false;
+      }
+      state.qgisTerrainRouteEndpoints = {
+        start: selected.start,
+        destination: selected.destination,
+      };
+      state.qgisTerrainRouteSelectionTarget = "";
+      state.terrainRouteGuidanceAnchorTarget = "";
+      state.terrainRouteGuidanceManualAnchors = {};
+      state.terrainRouteGuidanceSelectedFeatures = {};
+      state.terrainRouteGuidanceDisabledConstraints = {};
+      if (state.terrainRouteGuidance) {
+        state.terrainRouteGuidance = {
+          ...state.terrainRouteGuidance,
+          review: null,
+          review_sha256: null,
+          guided_execution_ready: false,
+        };
+      }
+      state.qgisSpatialMessage = `已套用 ${selected.label} 的 A/B · guidance 必須重新解析與 review`;
+      state.terrainRouteGuidanceMessage = "A/B 已更換 · 舊 review 已失效，請重新解析 DEM 候選區";
+      rememberQgisTerrainRouteDraft();
+      render();
+      return true;
+    }
+
     function selectQgisTerrainRouteEndpoint(target) {
       if (!["start", "destination"].includes(target)) return;
       if (qgisTerrainRouteWorkflowActive()) {
@@ -13315,6 +14160,7 @@
         updateQgisTerrainRouteBuilderWorkflowState();
         return;
       }
+      state.terrainRouteGuidanceAnchorTarget = "";
       state.qgisTerrainRouteSelectionTarget = qgisTerrainRouteSelectionTarget() === target
         ? ""
         : target;
@@ -13465,7 +14311,7 @@
         status.textContent = `${message}。結果只代表 DEM / GRASS 地形模型的相對候選，不代表步道存在、可通行、安全或合法進入。`;
       }
       builder.querySelectorAll(
-        "[data-qgis-terrain-route-select], [data-qgis-terrain-route-reset], [data-qgis-terrain-route-margin]",
+        "[data-qgis-terrain-route-select], [data-qgis-terrain-route-reset], [data-qgis-terrain-route-margin], [data-qgis-terrain-route-use-selected-hypothesis]",
       ).forEach(control => { control.disabled = controlsLocked; });
       document.querySelectorAll(
         "[data-qgis-terrain-preview], [data-qgis-terrain-features]",
@@ -13625,6 +14471,7 @@
         }
       }
       scheduleQgisSpatialPolling();
+      await loadTerrainRouteGuidance();
       return state.qgisSpatialStatus;
     }
 
@@ -13740,6 +14587,59 @@
           start,
           destination,
           selection_source: "dashboard_map_selection",
+          candidate_only: true,
+          runtime_safety_truth: false,
+          operational: false,
+          safe_or_walkable: "not_determined",
+        },
+      });
+    }
+
+    async function startQgisGuidedTerrainRouteHypothesis() {
+      restoreQgisTerrainRouteDraft();
+      const guidance = state.terrainRouteGuidance || {};
+      const plan = guidance.guidance_plan || null;
+      const reviewSha256 = String(guidance.review_sha256 || "");
+      if (
+        guidance.guided_execution_ready !== true
+        || !plan?.guidance_id
+        || !/^[a-f0-9]{64}$/.test(reviewSha256)
+      ) {
+        state.terrainRouteGuidanceMessage = "R4 需要完整的人工 map-point review 與 hash binding";
+        refreshCurrentDataView();
+        return null;
+      }
+      if (!qgisTerrainRouteEndpointsReady()) {
+        state.terrainRouteGuidanceMessage = "請先在地圖選取不同的起點 A 與終點 B";
+        refreshCurrentDataView();
+        return null;
+      }
+      const start = normalizeQgisTerrainRoutePoint(
+        state.qgisTerrainRouteEndpoints.start,
+        "A",
+      );
+      const destination = normalizeQgisTerrainRoutePoint(
+        state.qgisTerrainRouteEndpoints.destination,
+        "B",
+      );
+      state.qgisTerrainRouteSelectionTarget = "";
+      state.terrainRouteGuidanceAnchorTarget = "";
+      state.terrainRouteGuidanceMessage = "正在提交 reviewed R4 · 每一段都必須由 DEM / GRASS 連通";
+      return startQgisSpatialWorkflow(QGIS_TERRAIN_ROUTE_WORKFLOW_ID, {
+        corridor_m: state.qgisTerrainRouteCorridorM,
+        terrain_route_endpoints: {
+          start,
+          destination,
+          selection_source: "dashboard_map_selection",
+          candidate_only: true,
+          runtime_safety_truth: false,
+          operational: false,
+          safe_or_walkable: "not_determined",
+        },
+        terrain_route_guidance: {
+          guidance_id: plan.guidance_id,
+          guided_hypothesis_id: "R4",
+          review_sha256: reviewSha256,
           candidate_only: true,
           runtime_safety_truth: false,
           operational: false,
@@ -22657,42 +23557,48 @@
             aria-live="polite"
           ><strong>${isTerrain ? "MAPLIBRE 3D TERRAIN" : "MAPLIBRE 2D EVIDENCE"}</strong>${escapeHtml(stateText)}</div>
           ${lens === "structure" && outwardCounts.total ? `
-            <div
+            <details
               class="navigation-terrain-outward-key"
               data-navigation-terrain-outward-key="true"
               aria-label="GRASS 地形形態候選圖例"
               ${navigationTerrainLayerVisible("candidates") ? "" : "hidden"}
             >
-              <strong>${outwardScopeAll ? "GRASS 矩形全域形態線" : "接觸 GPX 的 GRASS 形態線"} · ${formatInteger(outwardCounts.total)}</strong>
-              ${outwardLegend.map(([kind, label, color]) => `
-                <span><i style="--terrain-outward-color:${color}"></i>${escapeHtml(label)} ${formatInteger(outwardCounts[kind])}</span>
-              `).join("")}
-              <em>${outwardScopeAll
-                ? "完整矩形 DEM 範圍；並非獸徑、舊路或可通行性證明"
-                : `與 Golden Route GPX 距離 ≤ ${formatInteger(QGIS_GOLDEN_ROUTE_CONTACT_DISTANCE_M)}m 只決定是否顯示；通過篩選後保留完整形態線。這不是 R1 路線與 GPX 的距離，也不是獸徑、舊路或可通行性證明。`}</em>
-            </div>
+              <summary><span>GRASS 形態圖例</span><small>${formatInteger(outwardCounts.total)}</small></summary>
+              <div class="navigation-terrain-outward-key-body">
+                <strong>${outwardScopeAll ? "GRASS 矩形全域形態線" : "接觸 GPX 的 GRASS 形態線"} · ${formatInteger(outwardCounts.total)}</strong>
+                ${outwardLegend.map(([kind, label, color]) => `
+                  <span><i style="--terrain-outward-color:${color}"></i>${escapeHtml(label)} ${formatInteger(outwardCounts[kind])}</span>
+                `).join("")}
+                <em>${outwardScopeAll
+                  ? "完整矩形 DEM 範圍；並非獸徑、舊路或可通行性證明"
+                  : `與 Golden Route GPX 距離 ≤ ${formatInteger(QGIS_GOLDEN_ROUTE_CONTACT_DISTANCE_M)}m 只決定是否顯示；通過篩選後保留完整形態線。這不是 R1 路線與 GPX 的距離，也不是獸徑、舊路或可通行性證明。`}</em>
+              </div>
+            </details>
           ` : ""}
           ${terrainRouteHypothesis ? `
-            <div
+            <details
               class="navigation-terrain-hypothesis-map-key"
               data-navigation-terrain-hypothesis-map-key="true"
               data-navigation-terrain-route-map-key="true"
               ${navigationTerrainLayerVisible("hypothesis") ? "" : "hidden"}
             >
-              <strong>GPX ↔ ${escapeHtml(terrainRouteLabel)} TERRAIN COMPARISON</strong>
-              <div class="navigation-terrain-route-key-items">
-                <span><i data-navigation-route-key-swatch="gpx"></i><b>Golden Route GPX</b><em>known_gpx · reference only</em></span>
-                ${terrainRouteAlternatives.map(alternative => `
-                  <span>
-                    <i data-navigation-route-key-strategy="${escapeHtml(alternative.strategy || "terrain_only_baseline")}"></i>
-                    <b>${escapeHtml(alternative.display_id || "TRH")} · ${escapeHtml(alternative.label || "terrain hypothesis")}</b>
-                    <em>${escapeHtml(alternative.strategy || "UNKNOWN")} · drainage penalty ${escapeHtml(alternative.drainage_penalty_multiplier)}× · candidate_only</em>
-                  </span>
-                `).join("") || `<span><i data-navigation-route-key-swatch="hypothesis"></i><b>${escapeHtml(terrainRouteLabel)} terrain hypothesis</b><em>candidate_only · not verified</em></span>`}
-                <span><i data-navigation-route-key-swatch="corridor"></i><b>${escapeHtml(navigationTerrainRouteHypothesisBandLabel(terrainRouteBand))} corridor</b><em>macro-terrain cells · separate models, not a confidence band</em></span>
+              <summary><span>TRH 圖例</span><small>${formatInteger(terrainRouteAlternatives.length || 1)} candidates</small></summary>
+              <div class="navigation-terrain-hypothesis-map-key-body">
+                <strong>GPX ↔ ${escapeHtml(terrainRouteLabel)} TERRAIN COMPARISON</strong>
+                <div class="navigation-terrain-route-key-items">
+                  <span><i data-navigation-route-key-swatch="gpx"></i><b>Golden Route GPX</b><em>known_gpx · reference only</em></span>
+                  ${terrainRouteAlternatives.map(alternative => `
+                    <span>
+                      <i data-navigation-route-key-strategy="${escapeHtml(alternative.strategy || "terrain_only_baseline")}"></i>
+                      <b>${escapeHtml(alternative.display_id || "TRH")} · ${escapeHtml(alternative.label || "terrain hypothesis")}</b>
+                      <em>${escapeHtml(alternative.strategy || "UNKNOWN")} · drainage penalty ${escapeHtml(alternative.drainage_penalty_multiplier)}× · candidate_only</em>
+                    </span>
+                  `).join("") || `<span><i data-navigation-route-key-swatch="hypothesis"></i><b>${escapeHtml(terrainRouteLabel)} terrain hypothesis</b><em>candidate_only · not verified</em></span>`}
+                  <span><i data-navigation-route-key-swatch="corridor"></i><b>${escapeHtml(navigationTerrainRouteHypothesisBandLabel(terrainRouteBand))} corridor</b><em>macro-terrain cells · separate models, not a confidence band</em></span>
+                </div>
+                <small>CANDIDATE · TERRAIN HYPOTHESIS · NOT A VERIFIED TRAIL</small>
               </div>
-              <small>CANDIDATE · TERRAIN HYPOTHESIS · NOT A VERIFIED TRAIL</small>
-            </div>
+            </details>
           ` : ""}
           ${navigationTerrainRasterOverlay(snapshot, "elevation_tint") ? `
             <div
@@ -22899,6 +23805,13 @@
                 </div>
               </div>
             `}
+            <button
+              type="button"
+              class="navigation-inspector-toggle"
+              data-navigation-terrain-guidance-frame-toggle="true"
+              aria-controls="navigationTerrainGuidanceFrame"
+              aria-expanded="${String(state.terrainRouteGuidanceExpanded === true)}"
+            >R4 review</button>
             <button
               type="button"
               class="navigation-inspector-toggle"
@@ -23963,6 +24876,32 @@
       };
     }
 
+    function navigationTerrainRouteConsistencyFeatureCollection() {
+      const payload = state.terrainRouteConsistency;
+      if (
+        payload?.candidate_only !== true
+        || payload?.runtime_safety_truth !== false
+        || payload?.source_type !== "known_gpx"
+        || payload?.assessment_semantics !== "terrain_consistency_not_gpx_validity"
+      ) return {type: "FeatureCollection", features: []};
+      const features = asArray(payload?.sample_evidence?.features).filter(feature => {
+        const properties = feature?.properties || {};
+        const coordinates = asArray(feature?.geometry?.coordinates).map(Number);
+        return feature?.type === "Feature"
+          && feature?.geometry?.type === "Point"
+          && coordinates.length >= 2
+          && coordinates.every(Number.isFinite)
+          && properties.feature_class === "gpx_terrain_consistency_sample"
+          && properties.authority === "candidate_only"
+          && properties.source_type === "known_gpx"
+          && properties.candidate_only === true
+          && properties.runtime_safety_truth === false
+          && properties.operational === false
+          && properties.gpx_validity_determined === false;
+      });
+      return {type: "FeatureCollection", features};
+    }
+
     function navigationTerrainRouteHypothesisFeatureCollection(snapshot) {
       const hypothesis = navigationTerrainRouteHypothesis(snapshot);
       const raw = hypothesis?.best_path;
@@ -24115,6 +25054,7 @@
           "scout-terrain-route-hypothesis-route-labels",
           "scout-terrain-route-hypothesis-endpoints",
           "scout-terrain-route-hypothesis-labels",
+          "scout-gpx-terrain-consistency-samples",
         ],
         candidates: [
           "scout-drainage-trunk",
@@ -24452,6 +25392,93 @@
       return {type: "FeatureCollection", features};
     }
 
+    function terrainRouteGuidanceFeatureCollection() {
+      const selected = new Set(
+        Object.values(state.terrainRouteGuidanceSelectedFeatures || {}).map(String),
+      );
+      const rankedByFeatureId = new Map();
+      asArray(state.terrainRouteGuidance?.resolution?.constraints).forEach(constraint => {
+        asArray(constraint?.candidate_feature_ids).forEach((featureId, index) => {
+          const normalizedId = String(featureId || "");
+          if (!normalizedId) return;
+          const current = rankedByFeatureId.get(normalizedId) || [];
+          rankedByFeatureId.set(normalizedId, [
+            ...current,
+            {
+              constraintId: String(constraint.constraint_id || ""),
+              rank: index + 1,
+            },
+          ]);
+        });
+      });
+      const features = asArray(state.terrainRouteGuidance?.feature_index?.features)
+        .filter(feature => feature?.geometry?.type && feature?.feature_id)
+        .flatMap(feature => {
+          const ranks = rankedByFeatureId.get(String(feature.feature_id)) || [];
+          const explicitIds = asArray(feature.supported_constraint_ids).map(String);
+          const rankedIds = ranks.map(item => item.constraintId).filter(Boolean);
+          const candidateLabels = ranks.map(item => `${item.constraintId} #${item.rank}`);
+          const corridorOverlap = feature.reference_corridor_overlap || null;
+          const corridorOverlapFraction = Number(corridorOverlap?.overlap_fraction);
+          const bestRank = ranks.length
+            ? Math.min(...ranks.map(item => item.rank))
+            : 0;
+          const projectedFeature = {
+            type: "Feature",
+            geometry: feature.geometry,
+            properties: {
+              id: feature.feature_id,
+              feature_id: feature.feature_id,
+              kind: "terrain_route_guidance_candidate",
+              feature_class: "terrain_route_guidance_candidate",
+              label: feature.label || feature.feature_id,
+              landform: feature.landform || "unknown",
+              elevation_m: Number.isFinite(Number(feature.elevation_m))
+                ? Number(feature.elevation_m)
+                : null,
+              reference_corridor_band_name: String(corridorOverlap?.band_name || ""),
+              reference_corridor_overlap_fraction: Number.isFinite(corridorOverlapFraction)
+                ? corridorOverlapFraction
+                : null,
+              selection_source: feature.selection_source || "dem_derived",
+              supported_constraint_ids: [...new Set([...explicitIds, ...rankedIds])].join(","),
+              candidate_constraint_labels: candidateLabels.join(" · "),
+              best_candidate_rank: bestRank,
+              rank_marker: false,
+              selected: selected.has(String(feature.feature_id)),
+              candidate_only: true,
+              runtime_safety_truth: false,
+              operational: false,
+              safe_or_walkable: "not_determined",
+            },
+          };
+          const centroid = normalizeQgisTerrainRoutePoint(
+            feature.centroid,
+            candidateLabels.join(" · "),
+          );
+          if (
+            feature.geometry?.type !== "LineString"
+            || bestRank < 1
+            || bestRank > 5
+            || !centroid
+          ) return [projectedFeature];
+          return [
+            projectedFeature,
+            {
+              ...projectedFeature,
+              geometry: {type: "Point", coordinates: [centroid.x, centroid.y]},
+              properties: {
+                ...projectedFeature.properties,
+                id: `${feature.feature_id}-rank-marker`,
+                kind: "terrain_route_guidance_rank_marker",
+                rank_marker: true,
+              },
+            },
+          ];
+        });
+      return {type: "FeatureCollection", features};
+    }
+
     function navigationTerrainMapLibreStyle(snapshot, mode) {
       const dem = snapshot.terrain_raster_dem;
       const evidenceDomain = navigationTerrainEvidenceDomain();
@@ -24505,6 +25532,16 @@
           type: "geojson",
           data: qgisTerrainRouteDraftFeatureCollection(),
           attribution: "Unsubmitted candidate-only terrain route endpoint draft",
+        },
+        "scout-terrain-guidance-candidates": {
+          type: "geojson",
+          data: terrainRouteGuidanceFeatureCollection(),
+          attribution: "Candidate-only narrative guidance zones and human map annotations",
+        },
+        "scout-gpx-terrain-consistency": {
+          type: "geojson",
+          data: navigationTerrainRouteConsistencyFeatureCollection(),
+          attribution: "GPX terrain consistency samples; not GPX validity or safety",
         },
       };
       if (revealObservedContext) {
@@ -24682,6 +25719,7 @@
               "drainage_averse", "#58d4c8",
               "balanced", "#f4c95d",
               "terrain_only_baseline", "#f05a9d",
+              "historical_narrative_guided", "#7fe36d",
               "#58d4c8",
             ],
             "line-width": lineWidth(4, 7),
@@ -24709,6 +25747,7 @@
               "drainage_averse", "#bff7f0",
               "balanced", "#fff0ae",
               "terrain_only_baseline", "#ffc4dd",
+              "historical_narrative_guided", "#d8ffd0",
               "#dff7f2",
             ],
             "text-halo-width": 2,
@@ -24744,6 +25783,31 @@
           },
         },
       ] : [];
+      const terrainRouteConsistencyLayers = [{
+        id: "scout-gpx-terrain-consistency-samples",
+        type: "circle",
+        source: "scout-gpx-terrain-consistency",
+        filter: ["==", ["get", "feature_class"], "gpx_terrain_consistency_sample"],
+        layout: {
+          visibility: navigationTerrainLayerVisible("hypothesis") ? "visible" : "none",
+        },
+        paint: {
+          "circle-radius": [
+            "interpolate", ["linear"], ["zoom"],
+            Number(dem.minzoom), 2.5,
+            Number(dem.minzoom) + 3, 5,
+          ],
+          "circle-color": [
+            "case",
+            [">=", ["get", "observation_count"], 3], "#e43120",
+            [">=", ["get", "observation_count"], 2], "#ef7900",
+            "#f4c95d",
+          ],
+          "circle-stroke-color": "#07110e",
+          "circle-stroke-width": 1.2,
+          "circle-opacity": .9,
+        },
+      }];
       const layers = [
         {
           id: "scout-terrain-background",
@@ -24880,6 +25944,7 @@
           layout: {"line-cap": "round", "line-join": "round"},
         },
         ...terrainRouteHypothesisLayers,
+        ...terrainRouteConsistencyLayers,
         {
           id: "scout-terrain-structure-samples",
           type: "circle",
@@ -25117,6 +26182,87 @@
           paint: {
             "text-color": "#fff8ec",
             "text-halo-color": "#55150f",
+            "text-halo-width": 1,
+          },
+        },
+        {
+          id: "scout-terrain-guidance-lines",
+          type: "line",
+          source: "scout-terrain-guidance-candidates",
+          filter: [
+            "all",
+            ["==", ["get", "feature_class"], "terrain_route_guidance_candidate"],
+            ["==", ["geometry-type"], "LineString"],
+          ],
+          layout: {"line-cap": "round", "line-join": "round"},
+          paint: {
+            "line-color": ["case", ["==", ["get", "selected"], true], "#58d4c8", "#f6c75f"],
+            "line-width": [
+              "case",
+              ["==", ["get", "selected"], true], 5,
+              [">", ["get", "best_candidate_rank"], 0], 3,
+              1.5,
+            ],
+            "line-dasharray": [2, 1.5],
+            "line-opacity": [
+              "case",
+              ["==", ["get", "selected"], true], .95,
+              [">", ["get", "best_candidate_rank"], 0], .85,
+              .22,
+            ],
+          },
+        },
+        {
+          id: "scout-terrain-guidance-points-halo",
+          type: "circle",
+          source: "scout-terrain-guidance-candidates",
+          filter: [
+            "all",
+            ["==", ["get", "feature_class"], "terrain_route_guidance_candidate"],
+            ["==", ["geometry-type"], "Point"],
+          ],
+          paint: {
+            "circle-radius": ["case", ["==", ["get", "selected"], true], 13, 10],
+            "circle-color": "rgba(0,0,0,0)",
+            "circle-stroke-color": "#f6e27a",
+            "circle-stroke-width": 3,
+          },
+        },
+        {
+          id: "scout-terrain-guidance-points",
+          type: "circle",
+          source: "scout-terrain-guidance-candidates",
+          filter: [
+            "all",
+            ["==", ["get", "feature_class"], "terrain_route_guidance_candidate"],
+            ["==", ["geometry-type"], "Point"],
+          ],
+          paint: {
+            "circle-radius": 6,
+            "circle-color": [
+              "match",
+              ["get", "selection_source"],
+              "human_map_annotation", "#ff9d00",
+              "#58d4c8",
+            ],
+            "circle-stroke-color": "#07110e",
+            "circle-stroke-width": 2,
+          },
+        },
+        {
+          id: "scout-terrain-guidance-labels",
+          type: "symbol",
+          source: "scout-terrain-guidance-candidates",
+          filter: ["==", ["geometry-type"], "Point"],
+          layout: {
+            "text-field": ["get", "candidate_constraint_labels"],
+            "text-size": 9,
+            "text-offset": [0, 1.3],
+            "text-allow-overlap": false,
+          },
+          paint: {
+            "text-color": "#fff8ca",
+            "text-halo-color": "#07110e",
             "text-halo-width": 1,
           },
         },
@@ -25755,7 +26901,7 @@
           };
           map.scrollZoom.disable();
           map.doubleClickZoom.disable();
-          if (qgisTerrainRouteSelectionTarget()) {
+          if (qgisTerrainRouteSelectionTarget() || state.terrainRouteGuidanceAnchorTarget) {
             map.getCanvas().style.cursor = "crosshair";
           }
           map.addControl(new maplibregl.NavigationControl({
@@ -25812,7 +26958,7 @@
             "scout-terrain-risk-candidates",
           ];
           map.on("mousemove", event => {
-            if (qgisTerrainRouteSelectionTarget()) {
+            if (qgisTerrainRouteSelectionTarget() || state.terrainRouteGuidanceAnchorTarget) {
               map.getCanvas().style.cursor = "crosshair";
               return;
             }
@@ -25826,6 +26972,10 @@
             map.getCanvas().style.cursor = "";
           });
           map.on("click", event => {
+            if (state.terrainRouteGuidanceAnchorTarget) {
+              setTerrainRouteGuidanceAnchorFromMap(event.lngLat);
+              return;
+            }
             if (qgisTerrainRouteSelectionTarget()) {
               setQgisTerrainRouteEndpointFromMap(event.lngLat);
               return;
@@ -25994,6 +27144,22 @@
         : grassModules.length
           ? `version UNKNOWN · ${formatInteger(grassModules.length)} GRASS module steps recorded`
           : "UNKNOWN";
+      const consistency = state.terrainRouteConsistency;
+      const consistencyMetrics = consistency?.metrics || {};
+      const consistencyPercent = value => value === null || value === undefined
+        ? "UNKNOWN"
+        : formatMetric(Number(value) * 100, 1, "%");
+      const consistencyObservations = asArray(consistency?.observations)
+        .map(item => typeof item === "string" ? item : item?.code)
+        .filter(Boolean)
+        .join(" · ") || "none reported";
+      const consistencyUnknowns = asArray(consistency?.unknowns)
+        .map(item => typeof item === "string" ? item : item?.code)
+        .filter(Boolean)
+        .join(" · ") || "UNKNOWN";
+      const consistencyExplanations = asArray(consistency?.possible_explanations)
+        .filter(Boolean)
+        .join(" · ") || "none reported";
       return `
         <section class="navigation-terrain-hypothesis-inspector" data-navigation-terrain-route-hypothesis-inspector="true">
           <div class="navigation-terrain-inspector-head">
@@ -26032,6 +27198,24 @@
             <div><strong>ACTIVE COST TERMS</strong><span>${escapeHtml(activeWeights)}</span></div>
             <div><strong>NOT INCLUDED IN V0.1</strong><span>${escapeHtml(inactiveWeights)} · zero weight means disabled, not a terrain measurement of zero</span></div>
           </div>
+          <div class="navigation-terrain-consistency-actions">
+            <button
+              type="button"
+              data-navigation-terrain-consistency-run="true"
+              ${state.terrainRouteConsistencyBusy ? "disabled" : ""}
+            >${state.terrainRouteConsistencyBusy ? "比對中" : "檢查主要 GPX"}</button>
+            <small data-navigation-terrain-consistency-message="true">${escapeHtml(state.terrainRouteConsistencyMessage || "GPX terrain consistency · 尚未檢查")}</small>
+          </div>
+          ${consistency ? `
+            <div class="navigation-terrain-hypothesis-evidence" data-navigation-terrain-consistency-result="${escapeHtml(consistency.terrain_consistency || "unknown")}">
+              <div><strong>GPX TERRAIN CONSISTENCY</strong><span>${escapeHtml(String(consistency.terrain_consistency || "unknown").toUpperCase())} · terrain consistency, not GPX validity</span></div>
+              <div><strong>SAMPLED TERRAIN EVIDENCE</strong><span>${formatInteger(consistencyMetrics.sample_count || 0)} samples · outside corridor ${consistencyPercent(consistencyMetrics.outside_corridor_fraction)} · extreme DEM slope ${consistencyPercent(consistencyMetrics.extreme_slope_fraction)} · drainage pressure ${consistencyPercent(consistencyMetrics.drainage_pressure_fraction)} · high TEII ${consistencyPercent(consistencyMetrics.high_teii_fraction)}</span></div>
+              <div><strong>OBSERVATIONS</strong><span>${escapeHtml(consistencyObservations)}</span></div>
+              <div><strong>UNKNOWN</strong><span>${escapeHtml(consistencyUnknowns)}</span></div>
+              <div><strong>POSSIBLE MISMATCH EXPLANATIONS</strong><span>${escapeHtml(consistencyExplanations)}</span></div>
+              <div><strong>ASSESSMENT BOUNDARY</strong><span>${escapeHtml(consistency.summary || "UNKNOWN")} · known GPX unchanged · no trail, access, passability, or safety determination</span></div>
+            </div>
+          ` : ""}
           <div class="navigation-terrain-audit-badges">
             <span>CANDIDATE</span>
             <span>TERRAIN HYPOTHESIS</span>
@@ -26828,6 +28012,7 @@
       const backendReady = ["available", "degraded"].includes(availability)
         && workflowAllowlist.includes(QGIS_TERRAIN_ROUTE_WORKFLOW_ID);
       const endpointsReady = qgisTerrainRouteEndpointsReady();
+      const selectedHypothesisEndpoints = selectedTerrainRouteHypothesisEndpoints();
       const controlsLocked = state.qgisSpatialBusy || workflowActive;
       const canGenerate = backendReady && endpointsReady && !controlsLocked;
       const hasDraft = Boolean(endpoints.start || endpoints.destination);
@@ -26869,6 +28054,7 @@
           <div class="qgis-terrain-route-controls">
             <button type="button" data-qgis-terrain-route-select="start" aria-pressed="${selectionTarget === "start" ? "true" : "false"}" ${controlsLocked ? "disabled" : ""}>設定 A</button>
             <button type="button" data-qgis-terrain-route-select="destination" aria-pressed="${selectionTarget === "destination" ? "true" : "false"}" ${controlsLocked ? "disabled" : ""}>設定 B</button>
+            <button type="button" data-qgis-terrain-route-use-selected-hypothesis="true" ${selectedHypothesisEndpoints && !controlsLocked ? "" : "disabled"}>套用目前假說 A/B</button>
             <label class="qgis-terrain-route-margin">
               <span>DEM 邊界</span>
               <input
@@ -26890,6 +28076,203 @@
             <strong>CANDIDATE · TERRAIN HYPOTHESIS · NOT A VERIFIED TRAIL</strong>
             <span>candidate_only=true · runtime_safety_truth=false · operational=false · safe_or_walkable=not_determined</span>
           </div>
+        </section>
+      `;
+    }
+
+    function renderTerrainRouteGuidanceFrame() {
+      const guidance = state.terrainRouteGuidance || {};
+      const plan = guidance.guidance_plan || null;
+      const status = String(guidance.status || "not_started");
+      const workflow = state.qgisSpatialWorkflow?.workflow_id === QGIS_TERRAIN_ROUTE_WORKFLOW_ID
+        ? state.qgisSpatialWorkflow
+        : null;
+      const workflowActive = qgisTerrainRouteWorkflowActive(workflow);
+      const availability = state.qgisSpatialStatus?.availability || "loading";
+      const workflowAllowlist = asArray(
+        state.qgisSpatialCapabilities?.workflow_allowlist,
+      );
+      const backendReady = ["available", "degraded"].includes(availability)
+        && workflowAllowlist.includes(QGIS_TERRAIN_ROUTE_WORKFLOW_ID);
+      const controlsLocked = state.qgisSpatialBusy || workflowActive;
+      const statusLabel = guidance.guided_execution_ready
+        ? "R4 REVIEWED"
+        : status.replaceAll("_", " ").toUpperCase();
+      const detailLabel = plan
+        ? `${asArray(plan.constraints).length} constraints · ${asArray(plan.unknowns).length} unknowns`
+        : "尚無 guidance plan";
+      return `
+        <aside
+          id="navigationTerrainGuidanceFrame"
+          class="navigation-terrain-guidance-frame"
+          data-terrain-guidance-frame="true"
+          ${state.terrainRouteGuidanceExpanded === true ? "" : "hidden"}
+        >
+          <header class="navigation-terrain-guidance-frame-head">
+            <div>
+              <strong>歷史文字引導 · R4 review</strong>
+              <small>${escapeHtml(statusLabel)} · ${escapeHtml(detailLabel)}</small>
+            </div>
+            <button
+              type="button"
+              class="navigation-terrain-guidance-frame-close"
+              data-navigation-terrain-guidance-frame-close="true"
+              aria-label="收合 R4 review"
+              title="收合 R4 review"
+            >×</button>
+          </header>
+          ${renderTerrainRouteGuidanceWorkbench({controlsLocked, backendReady})}
+        </aside>
+      `;
+    }
+
+    function renderTerrainRouteGuidanceWorkbench({controlsLocked, backendReady}) {
+      const guidance = state.terrainRouteGuidance || {};
+      const plan = guidance.guidance_plan || null;
+      const resolution = guidance.resolution || null;
+      const review = guidance.review || null;
+      const resolutionById = Object.fromEntries(
+        asArray(resolution?.constraints).map(item => [item.constraint_id, item]),
+      );
+      const featureById = Object.fromEntries(
+        asArray(guidance.feature_index?.features).map(item => [item.feature_id, item]),
+      );
+      const selected = state.terrainRouteGuidanceSelectedFeatures || {};
+      const disabled = state.terrainRouteGuidanceDisabledConstraints || {};
+      const busy = state.terrainRouteGuidanceBusy;
+      const status = String(guidance.status || "not_started");
+      const constraints = asArray(plan?.constraints);
+      const elevationSamplingStatus = String(
+        guidance.feature_index?.elevation_sampling_status || "unavailable",
+      );
+      const elevationSamplingBackend = String(
+        guidance.feature_index?.elevation_sampling_backend || "none",
+      );
+      const corridorReference = guidance.feature_index?.reference_corridor || null;
+      const canReview = Boolean(resolution) && terrainRouteGuidanceReviewReady() && !busy;
+      return `
+        <section
+          class="terrain-guidance-workbench"
+          data-terrain-guidance-workbench="true"
+          data-terrain-guidance-status="${escapeHtml(status)}"
+          data-terrain-guidance-ready="${guidance.guided_execution_ready === true ? "true" : "false"}"
+        >
+          <div class="terrain-guidance-source-row">
+            <label>
+              來源 ID
+              <input type="text" value="${escapeHtml(state.terrainRouteGuidanceSourceId)}" data-terrain-guidance-source-id="true" maxlength="240" ${busy ? "disabled" : ""}>
+            </label>
+            <label>
+              來源日期
+              <input type="text" value="${escapeHtml(state.terrainRouteGuidanceSourceDate)}" data-terrain-guidance-source-date="true" maxlength="80" placeholder="YYYY-MM-DD" ${busy ? "disabled" : ""}>
+            </label>
+            <label>
+              Reviewer alias
+              <input type="text" value="${escapeHtml(state.terrainRouteGuidanceReviewerAlias)}" data-terrain-guidance-reviewer="true" maxlength="120" ${busy ? "disabled" : ""}>
+            </label>
+          </div>
+          <textarea data-terrain-guidance-narrative="true" maxlength="32000" aria-label="Historical route narrative" placeholder="貼上含沿稜、腰繞、過溪、轉稜等描述的歷史紀錄" ${busy ? "disabled" : ""}>${escapeHtml(state.terrainRouteGuidanceNarrative)}</textarea>
+          <div class="terrain-guidance-actions">
+            <button type="button" data-terrain-guidance-interpret="true" ${busy ? "disabled" : ""}>Scout AI 解析</button>
+            <button type="button" data-terrain-guidance-resolve="true" ${!plan || !qgisTerrainRouteEndpointsReady() || busy ? "disabled" : ""}>解析 DEM 候選區</button>
+            <button type="button" data-terrain-guidance-review="true" ${canReview ? "" : "disabled"}>保存人工 review</button>
+            <button type="button" data-terrain-guidance-generate-r4="true" ${guidance.guided_execution_ready && backendReady && qgisTerrainRouteEndpointsReady() && !controlsLocked ? "" : "disabled"}>產生 R4 guided TRH</button>
+          </div>
+          <div class="terrain-guidance-status" role="status" aria-live="polite">
+            ${escapeHtml(state.terrainRouteGuidanceMessage || (
+              plan
+                ? `${constraints.length} constraints · ${asArray(plan.unknowns).length} unknowns · map review required`
+                : "尚未建立 narrative guidance plan"
+            ))}
+          </div>
+          ${guidance.feature_index ? `
+            <div class="terrain-guidance-status">
+              DEM elevation sampling · ${escapeHtml(elevationSamplingStatus.toUpperCase())} · ${escapeHtml(elevationSamplingBackend)} · samples ${formatInteger(guidance.feature_index?.elevation_sample_count || 0)} · NoData ${formatInteger(guidance.feature_index?.elevation_nodata_count || 0)} · saddle proxies ${formatInteger(guidance.feature_index?.derived_saddle_count || 0)}
+            </div>
+          ` : ""}
+          ${corridorReference ? `
+            <div class="terrain-guidance-status">
+              Candidate corridor review rank · ${escapeHtml(corridorReference.hypothesis_id || "UNKNOWN")} · ${escapeHtml(corridorReference.band_name || "UNKNOWN")} · overlap features ${formatInteger(corridorReference.features_with_overlap || 0)}/${formatInteger(corridorReference.feature_count || 0)} · inside samples ${formatInteger(corridorReference.inside_sample_count || 0)}/${formatInteger(corridorReference.sample_count || 0)} · 僅供 review ranking，不是路線確認
+            </div>
+          ` : ""}
+          ${constraints.length ? `
+            <div class="terrain-guidance-constraints" data-terrain-guidance-constraint-count="${constraints.length}">
+              ${constraints.map(constraint => {
+                const resolved = resolutionById[constraint.constraint_id] || {};
+                const resolutionStatus = String(resolved.status || "pending");
+                const candidateIds = asArray(resolved.candidate_feature_ids);
+                const manualCandidateIds = candidateIds.filter(featureId => (
+                  featureById[featureId]?.selection_source === "human_map_annotation"
+                ));
+                const rankedDemCandidates = candidateIds.filter(featureId => (
+                  featureById[featureId]?.selection_source === "dem_derived"
+                )).slice(0, 5);
+                const demCandidateCount = candidateIds.length - manualCandidateIds.length;
+                const isDisabled = Boolean(disabled[constraint.constraint_id]);
+                const anchorActive = state.terrainRouteGuidanceAnchorTarget === constraint.constraint_id;
+                return `
+                  <article class="terrain-guidance-constraint" data-terrain-guidance-constraint="${escapeHtml(constraint.constraint_id)}" data-resolution-status="${escapeHtml(resolutionStatus)}">
+                    <div class="terrain-guidance-constraint-copy">
+                      <strong>${escapeHtml(constraint.constraint_id)} · ${escapeHtml(constraint.kind)} · ${escapeHtml(resolutionStatus)}</strong>
+                      <small>${escapeHtml(constraint.summary)}</small>
+                      <small>source: ${escapeHtml(constraint.source_span?.text || "UNKNOWN")}${constraint.required_anchor ? " · REQUIRED ANCHOR" : ""}</small>
+                    </div>
+                    <div class="terrain-guidance-constraint-actions">
+                      <button type="button" data-terrain-guidance-map-anchor="${escapeHtml(constraint.constraint_id)}" aria-pressed="${anchorActive ? "true" : "false"}" ${busy ? "disabled" : ""}>${anchorActive ? "取消地圖錨點" : "地圖錨點"}</button>
+                      <label>
+                        <input type="checkbox" data-terrain-guidance-disable="${escapeHtml(constraint.constraint_id)}" ${isDisabled ? "checked" : ""} ${busy ? "disabled" : ""}>
+                        停用
+                      </label>
+                    </div>
+                    ${demCandidateCount ? `
+                      <small class="terrain-guidance-candidate-summary">
+                        DEM ranked candidate zones ${formatInteger(demCandidateCount)} · typed landform / elevation / candidate corridor overlap 排序 · 僅供地圖比對；R4 必須使用明確的人工 Point 錨點
+                      </small>
+                      <div class="terrain-guidance-candidates" aria-label="${escapeHtml(constraint.constraint_id)} DEM ranked candidate preview">
+                        ${rankedDemCandidates.map((featureId, index) => {
+                          const feature = featureById[featureId] || {};
+                          const elevation = Number(feature.elevation_m);
+                          const label = String(feature.label || featureId);
+                          const elevationText = Number.isFinite(elevation)
+                            && !label.includes(`${elevation.toFixed(0)}m`)
+                            ? ` · ${elevation.toFixed(0)}m`
+                            : "";
+                          const overlap = Number(
+                            feature.reference_corridor_overlap?.overlap_fraction,
+                          );
+                          const overlapText = Number.isFinite(overlap)
+                            ? ` · 5% corridor overlap ${(overlap * 100).toFixed(0)}%`
+                            : "";
+                          return `<span>${escapeHtml(`${constraint.constraint_id} #${index + 1} · ${label}${elevationText}${overlapText}`)}</span>`;
+                        }).join("")}
+                      </div>
+                    ` : ""}
+                    ${manualCandidateIds.length ? `
+                      <div class="terrain-guidance-candidates" role="radiogroup" aria-label="${escapeHtml(constraint.constraint_id)} candidates">
+                        ${manualCandidateIds.map(featureId => {
+                          const feature = featureById[featureId] || {};
+                          return `
+                            <label>
+                              <input
+                                type="radio"
+                                name="terrain-guidance-${escapeHtml(constraint.constraint_id)}"
+                                data-terrain-guidance-select-feature="${escapeHtml(featureId)}"
+                                data-terrain-guidance-select-constraint="${escapeHtml(constraint.constraint_id)}"
+                                ${selected[constraint.constraint_id] === featureId ? "checked" : ""}
+                                ${isDisabled || busy ? "disabled" : ""}
+                              >
+                              ${escapeHtml(feature.label || featureId)} · ${escapeHtml(feature.selection_source || "dem_derived")}
+                            </label>
+                          `;
+                        }).join("")}
+                      </div>
+                    ` : ""}
+                  </article>
+                `;
+              }).join("")}
+            </div>
+          ` : ""}
+          ${review ? `<div class="terrain-guidance-status">review=${escapeHtml(review.review_id)} · selected=${asArray(review.selected_anchors).length} · disabled=${asArray(review.disabled_constraint_ids).length}</div>` : ""}
         </section>
       `;
     }
@@ -27180,6 +28563,7 @@
             class="navigation-terrain-workspace"
             data-navigation-primary-stage="true"
             data-navigation-inspector-expanded="${String(inspectorExpanded)}"
+            data-navigation-guidance-expanded="${String(state.terrainRouteGuidanceExpanded === true)}"
           >
             <div class="navigation-terrain-primary">
               <section class="navigation-terrain-map-panel">
@@ -27286,6 +28670,7 @@
               </details>
               <p class="navigation-boundary-note"><strong>使用邊界：</strong> 等高線與 DEM 衍生圖層只提供 Golden Route 周邊地形脈絡，不能單獨證明步道存在、目前可通行或適合獨攀；本頁不建立人工判圖或修正等高線的工作。</p>
             </aside>
+            ${renderTerrainRouteGuidanceFrame()}
           </div>
           ${sourceMode === "workspace" && liveReady ? `
             <details class="navigation-supporting-evidence" data-navigation-supporting-evidence="true">
@@ -31808,6 +33193,8 @@
         const select = terrainHypothesisSelect;
         state.navigationTerrainHypothesisId = select.value;
         state.navigationTerrainHypothesisBand = "";
+        state.terrainRouteConsistency = null;
+        state.terrainRouteConsistencyMessage = "";
         rerenderNavigation(
           'select[data-navigation-terrain-hypothesis-select="true"]',
         );
@@ -31817,10 +33204,18 @@
           const band = button.dataset.navigationTerrainHypothesisBand || "";
           if (!NAVIGATION_TERRAIN_ROUTE_CORRIDOR_MODES.includes(band)) return;
           state.navigationTerrainHypothesisBand = band;
+          state.terrainRouteConsistency = null;
+          state.terrainRouteConsistencyMessage = "";
           rerenderNavigation(
             `button[data-navigation-terrain-hypothesis-band="${cssEscape(band)}"]`,
           );
         });
+      });
+      const terrainConsistencyRun = shell.querySelector(
+        'button[data-navigation-terrain-consistency-run="true"]',
+      );
+      terrainConsistencyRun?.addEventListener("click", () => {
+        void inspectNavigationTerrainRouteConsistency(navigationTerrainSnapshot());
       });
       shell.querySelectorAll("button[data-navigation-terrain-layer-toggle]").forEach(button => {
         button.addEventListener("click", () => {
@@ -33414,13 +34809,97 @@
       });
     }
 
+    function toggleTerrainRouteGuidanceFrame() {
+      state.terrainRouteGuidanceExpanded = !state.terrainRouteGuidanceExpanded;
+      const expanded = state.terrainRouteGuidanceExpanded === true;
+      const workspace = document.querySelector("[data-navigation-primary-stage]");
+      const guidanceFrame = document.querySelector("[data-terrain-guidance-frame]");
+      if (workspace) workspace.dataset.navigationGuidanceExpanded = String(expanded);
+      if (guidanceFrame) {
+        guidanceFrame.hidden = !expanded;
+        if (expanded) {
+          window.requestAnimationFrame(() => {
+            guidanceFrame.scrollTop = state.terrainRouteGuidanceFrameScrollTop;
+          });
+        }
+      }
+      document.querySelectorAll("[data-navigation-terrain-guidance-frame-toggle]").forEach(button => {
+        button.setAttribute("aria-expanded", String(expanded));
+      });
+      window.requestAnimationFrame(() => {
+        navigationTerrainMapLibreRuntime.maps.forEach(entry => entry.map?.resize?.());
+      });
+    }
+
     function bindQgisSpatialControls() {
+      const guidanceFrame = document.querySelector("[data-terrain-guidance-frame]");
+      if (guidanceFrame) {
+        guidanceFrame.scrollTop = state.terrainRouteGuidanceFrameScrollTop;
+        guidanceFrame.addEventListener("scroll", () => {
+          state.terrainRouteGuidanceFrameScrollTop = guidanceFrame.scrollTop;
+        }, {passive: true});
+      }
+      document.querySelectorAll(
+        "[data-navigation-terrain-guidance-frame-toggle], [data-navigation-terrain-guidance-frame-close]",
+      ).forEach(button => {
+        button.addEventListener("click", toggleTerrainRouteGuidanceFrame);
+      });
+      document.querySelector("[data-terrain-guidance-narrative]")?.addEventListener("input", event => {
+        state.terrainRouteGuidanceNarrative = String(event.currentTarget?.value || "");
+      });
+      document.querySelector("[data-terrain-guidance-source-id]")?.addEventListener("input", event => {
+        state.terrainRouteGuidanceSourceId = String(event.currentTarget?.value || "");
+      });
+      document.querySelector("[data-terrain-guidance-source-date]")?.addEventListener("input", event => {
+        state.terrainRouteGuidanceSourceDate = String(event.currentTarget?.value || "");
+      });
+      document.querySelector("[data-terrain-guidance-reviewer]")?.addEventListener("input", event => {
+        state.terrainRouteGuidanceReviewerAlias = String(event.currentTarget?.value || "");
+      });
+      document.querySelector("[data-terrain-guidance-interpret]")?.addEventListener("click", () => {
+        void interpretTerrainRouteGuidance();
+      });
+      document.querySelector("[data-terrain-guidance-resolve]")?.addEventListener("click", () => {
+        void resolveTerrainRouteGuidance();
+      });
+      document.querySelector("[data-terrain-guidance-review]")?.addEventListener("click", () => {
+        void reviewTerrainRouteGuidance();
+      });
+      document.querySelector("[data-terrain-guidance-generate-r4]")?.addEventListener("click", () => {
+        void startQgisGuidedTerrainRouteHypothesis();
+      });
+      document.querySelectorAll("[data-terrain-guidance-map-anchor]").forEach(button => {
+        button.addEventListener("click", () => {
+          selectTerrainRouteGuidanceMapAnchor(
+            button.dataset.terrainGuidanceMapAnchor || "",
+          );
+        });
+      });
+      document.querySelectorAll("[data-terrain-guidance-select-feature]").forEach(input => {
+        input.addEventListener("change", () => {
+          if (!input.checked) return;
+          selectTerrainRouteGuidanceFeature(
+            input.dataset.terrainGuidanceSelectConstraint || "",
+            input.dataset.terrainGuidanceSelectFeature || "",
+          );
+        });
+      });
+      document.querySelectorAll("[data-terrain-guidance-disable]").forEach(input => {
+        input.addEventListener("change", () => {
+          toggleTerrainRouteGuidanceConstraintDisabled(
+            input.dataset.terrainGuidanceDisable || "",
+          );
+        });
+      });
       document.querySelectorAll("[data-qgis-terrain-route-select]").forEach(button => {
         button.addEventListener("click", () => {
           selectQgisTerrainRouteEndpoint(
             button.dataset.qgisTerrainRouteSelect || "",
           );
         });
+      });
+      document.querySelector("[data-qgis-terrain-route-use-selected-hypothesis]")?.addEventListener("click", () => {
+        useSelectedTerrainRouteHypothesisEndpoints();
       });
       document.querySelector("[data-qgis-terrain-route-reset]")?.addEventListener("click", () => {
         resetQgisTerrainRouteDraft();

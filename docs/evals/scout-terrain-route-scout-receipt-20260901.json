@@ -1,0 +1,34 @@
+{
+  "artifact_count": 21,
+  "authority": "candidate_only",
+  "candidate_only": true,
+  "duration_s": 29.747,
+  "execution_architecture": "aarch64",
+  "execution_host": "bb4dee140d39",
+  "input_contract_sha256": "8c4991fb38674ebd73191c3a7f0c52eb8581b5a092435c1ae70c402b194a42ca",
+  "operational": false,
+  "processing_algorithms": [
+    "grass:r.univar",
+    "grass:r.slope.aspect",
+    "grass:r.mapcalc.simple",
+    "grass:r.watershed",
+    "grass:r.walk.coords",
+    "grass:r.path",
+    "grass:r.cost",
+    "grass:r.quantile",
+    "gdal:colorrelief"
+  ],
+  "qgis_version": "3.44.13-Solothurn",
+  "runtime_safety_truth": false,
+  "safe_or_walkable": "not_determined",
+  "schema_version": "scout_terrain_route_execution_receipt.v0_1",
+  "source_dem_sha256s": [
+    "e6a4c3c6aa279d9cc82246f39bd94c04082cac0f1d7eeea34f732875917ffe62"
+  ],
+  "source_type": "terrain_hypothesis",
+  "status": "completed",
+  "terrain_parent_manifest_sha256": "11034c4d12a986b0073cdf4672d9a65cb01e2b6db34b8096fa2b4a1e3b34eff8",
+  "worker_run_id": "qgis-worker-20260901T102422744659Z-c8e7fac4f1",
+  "worker_run_ref": "/output/worker-v2/runs/qgis-worker-20260901T102422744659Z-c8e7fac4f1/run.json",
+  "workflow_id": "terrain_route_hypothesis.v1"
+}

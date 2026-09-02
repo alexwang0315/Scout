@@ -1,0 +1,136 @@
+{
+  "authority": "candidate_only",
+  "candidate_only": true,
+  "comparison_scope": "terrain_model_reproducibility_only",
+  "corridor_comparison": {
+    "bands": [
+      {
+        "cell_count_relative_delta": 0.011046511627906977,
+        "name": "top_5_percent_corridor",
+        "percentile": 5.0,
+        "threshold_relative_delta": 0.02072641442399609,
+        "within_tolerance": true
+      },
+      {
+        "cell_count_relative_delta": 0.01075894155277697,
+        "name": "top_10_percent_corridor",
+        "percentile": 10.0,
+        "threshold_relative_delta": 0.01247241966012729,
+        "within_tolerance": true
+      },
+      {
+        "cell_count_relative_delta": 0.01075894155277697,
+        "name": "top_20_percent_corridor",
+        "percentile": 20.0,
+        "threshold_relative_delta": 0.011298296391898293,
+        "within_tolerance": true
+      }
+    ],
+    "within_tolerance": true
+  },
+  "cross_host_execution_proven": true,
+  "engine_versions_exact": false,
+  "input_contract_sha256": "8c4991fb38674ebd73191c3a7f0c52eb8581b5a092435c1ae70c402b194a42ca",
+  "left_host": {
+    "architecture": "x86_64",
+    "engine": {
+      "algorithm_version": "terrain_route_hypothesis.v0_3",
+      "cost_model_version": "terrain_routing_cost.v0_2",
+      "grass_version": "8.5.0",
+      "qgis_version": "3.44.13-Solothurn"
+    },
+    "name": "Lamb780722de-MacBook-Pro.local"
+  },
+  "operational": false,
+  "right_host": {
+    "architecture": "aarch64",
+    "engine": {
+      "algorithm_version": "terrain_route_hypothesis.v0_3",
+      "cost_model_version": "terrain_routing_cost.v0_2",
+      "grass_version": "8.4.1",
+      "qgis_version": "3.44.13-Solothurn"
+    },
+    "name": "bb4dee140d39"
+  },
+  "route_comparisons": [
+    {
+      "hausdorff_m": 3.9271697005460737e-10,
+      "left_vertex_count": 95,
+      "metric_absolute_deltas": {
+        "distance_m": 4.388311936054379e-10,
+        "drainage_pressure_fraction": 0.0,
+        "elevation_gain_m": 0.0,
+        "elevation_loss_m": 0.0,
+        "high_cost_fraction": 0.0,
+        "max_slope_degrees": 0.0,
+        "median_slope_degrees": 0.0,
+        "relative_cost": 1.8189894035458565e-12
+      },
+      "metrics_within_tolerance": true,
+      "path_within_tolerance": true,
+      "right_vertex_count": 95,
+      "strategy": "drainage_averse",
+      "within_tolerance": true
+    },
+    {
+      "hausdorff_m": 3.9271697005460737e-10,
+      "left_vertex_count": 93,
+      "metric_absolute_deltas": {
+        "distance_m": 5.338733899407089e-10,
+        "drainage_pressure_fraction": 0.0,
+        "elevation_gain_m": 0.0,
+        "elevation_loss_m": 0.0,
+        "high_cost_fraction": 0.0,
+        "max_slope_degrees": 0.0,
+        "median_slope_degrees": 0.0,
+        "relative_cost": 0.0
+      },
+      "metrics_within_tolerance": true,
+      "path_within_tolerance": true,
+      "right_vertex_count": 93,
+      "strategy": "balanced",
+      "within_tolerance": true
+    },
+    {
+      "hausdorff_m": 3.9271697005460737e-10,
+      "left_vertex_count": 89,
+      "metric_absolute_deltas": {
+        "distance_m": 5.32054400537163e-10,
+        "drainage_pressure_fraction": 0.0,
+        "elevation_gain_m": 0.0,
+        "elevation_loss_m": 0.0,
+        "high_cost_fraction": 0.0,
+        "max_slope_degrees": 0.0,
+        "median_slope_degrees": 0.0,
+        "relative_cost": 1.8189894035458565e-12
+      },
+      "metrics_within_tolerance": true,
+      "path_within_tolerance": true,
+      "right_vertex_count": 89,
+      "strategy": "terrain_only_baseline",
+      "within_tolerance": true
+    }
+  ],
+  "runtime_safety_truth": false,
+  "safe_or_walkable": "not_determined",
+  "schema_version": "scout_terrain_route_host_parity.v0_1",
+  "source_dem_sha256s": [
+    "e6a4c3c6aa279d9cc82246f39bd94c04082cac0f1d7eeea34f732875917ffe62"
+  ],
+  "status": "passed_with_engine_variance",
+  "terrain_parent_manifest_sha256": "11034c4d12a986b0073cdf4672d9a65cb01e2b6db34b8096fa2b4a1e3b34eff8",
+  "tolerances": {
+    "corridor_relative": 0.03,
+    "metric_absolute": 1e-06,
+    "path_hausdorff_m": 0.1
+  },
+  "unknowns": [
+    "exact_engine_version_parity_unknown",
+    "field_conditions_unknown",
+    "vegetation_unknown",
+    "microterrain_unknown",
+    "recent_landslide_unknown",
+    "legal_access_unknown",
+    "engineered_route_features_unknown"
+  ]
+}

@@ -16,6 +16,7 @@ from qgis_spatial_contracts import (
 )
 from terrain_route_hypothesis_artifacts import TerrainRouteCacheKeys
 from terrain_route_hypothesis_models import TerrainRoutingCostConfig
+from terrain_route_guidance import TerrainGuidanceExecutionPlan
 
 
 QGIS_WORKER_SCHEMA_VERSION = "scout_qgis_worker.v0_1"
@@ -74,6 +75,7 @@ class QgisWorkerWorkflowRequest(BaseModel):
         default_factory=TerrainRoutingCostConfig
     )
     terrain_route_cache_keys: TerrainRouteCacheKeys | None = None
+    terrain_route_guidance_execution_plan: TerrainGuidanceExecutionPlan | None = None
     candidate_only: Literal[True] = True
     runtime_safety_truth: Literal[False] = False
     operational: Literal[False] = False
@@ -101,6 +103,25 @@ class QgisWorkerWorkflowRequest(BaseModel):
             if not -180 <= float(lon) <= 180 or not -90 <= float(lat) <= 90:
                 raise ValueError("route_geojson coordinate is outside WGS84 bounds")
         return value
+
+    @model_validator(mode="after")
+    def validate_guided_route_payload(self) -> "QgisWorkerWorkflowRequest":
+        plan = self.terrain_route_guidance_execution_plan
+        if plan is None:
+            return self
+        if self.workflow_id != TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_ID:
+            raise ValueError(
+                "terrain_route_guidance_execution_plan is only valid for terrain route analysis"
+            )
+        coordinates = self.route_geojson["features"][0]["geometry"]["coordinates"]
+        expected = [[item.point.x, item.point.y] for item in plan.anchors]
+        if coordinates[1:-1] != expected:
+            raise ValueError(
+                "terrain route geometry does not contain the reviewed ordered guidance anchors"
+            )
+        if plan.dem_sha256 not in self.source_hashes.values():
+            raise ValueError("guided terrain route DEM hash is not bound to worker sources")
+        return self
 
 
 class QgisWorkerArtifact(BaseModel):

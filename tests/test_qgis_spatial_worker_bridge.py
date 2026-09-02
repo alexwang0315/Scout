@@ -17,6 +17,7 @@ from qgis_spatial_backend import (
     QgisSpatialBackendConfig,
     _compact_json_bytes,
     _json_bytes,
+    _public_worker_error,
     _validated_terrain_surface_manifest_bytes,
     _validated_candidate_geojson,
 )
@@ -24,12 +25,21 @@ from qgis_spatial_contracts import (
     TERRAIN_FEATURE_STACK_WORKFLOW_ID,
     TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_ID,
     QgisBackendAvailability,
+    SpatialAnalysisError,
     SpatialAnalysisErrorCode,
     SpatialAnalysisRequest,
     SpatialWorkflowState,
     TerrainRouteEndpointSelection,
 )
 from pretrip_layer_preparation import LayerPreparationRequest
+from terrain_route_guidance_workspace import (
+    TerrainGuidanceInterpretRequest,
+    TerrainGuidanceManualAnchorRequest,
+    TerrainGuidanceResolveRequest,
+    TerrainGuidanceReviewRequest,
+    TerrainRouteGuidanceWorkspaceService,
+)
+from terrain_route_hypothesis_models import GeoPoint
 
 
 def _test_access_value() -> str:
@@ -887,11 +897,23 @@ def _terrain_route_worker_evidence(
     }
     midpoint_lon = (float(coordinates[0][0]) + float(coordinates[-1][0])) / 2
     midpoint_lat = (float(coordinates[0][1]) + float(coordinates[-1][1])) / 2
-    route_profiles = (
+    route_profiles = [
         ("drainage_averse", 4.0, [midpoint_lon - 0.001, midpoint_lat + 0.001]),
         ("balanced", 1.5, [midpoint_lon, midpoint_lat]),
         ("terrain_only_baseline", 0.0, [midpoint_lon + 0.001, midpoint_lat - 0.001]),
+    ]
+    guidance_execution = request_payload.get(
+        "terrain_route_guidance_execution_plan"
     )
+    if isinstance(guidance_execution, dict):
+        anchor = guidance_execution["anchors"][0]["point"]
+        route_profiles.append(
+            (
+                "historical_narrative_guided",
+                1.5,
+                [anchor["x"], anchor["y"]],
+            )
+        )
     typed_hypotheses = []
     path_features = []
     for alternative_index, (strategy, multiplier, midpoint) in enumerate(
@@ -911,6 +933,18 @@ def _terrain_route_worker_evidence(
             }
         )
         route["best_path"]["coordinates"] = profile_coordinates
+        if strategy == "historical_narrative_guided":
+            route["path_semantics"] = (
+                "ordered_anchor_piecewise_anisotropic_model_cost_trace"
+            )
+            route["provenance"]["optional_evidence_refs"] = [
+                f"terrain-guidance-review:{guidance_execution['guidance_id']}"
+            ]
+            route["provenance"]["optional_evidence_hashes"] = {
+                "terrain_guidance_review": guidance_execution[
+                    "guidance_review_sha256"
+                ]
+            }
         if alternative_index > 1:
             route["corridor"] = None
         route["provenance"]["weights"]["drainage_penalty_multiplier"] = multiplier
@@ -933,6 +967,10 @@ def _terrain_route_worker_evidence(
                 "strategy": strategy,
                 "drainage_penalty_multiplier": multiplier,
                 "relative_cost_comparison_scope": "within_profile_only",
+                "path_semantics": route.get(
+                    "path_semantics",
+                    "minimum_anisotropic_model_cost_trace",
+                ),
             }
         )
         path_features.append(feature)
@@ -940,9 +978,11 @@ def _terrain_route_worker_evidence(
     best_path["features"] = path_features
     best_path["metadata"].update(
         {
-            "candidate_ids": ["R1", "R2", "R3"],
-            "candidate_count": 3,
-            "distinct_geometry_count": 3,
+            "candidate_ids": [
+                f"R{index}" for index in range(1, len(route_profiles) + 1)
+            ],
+            "candidate_count": len(route_profiles),
+            "distinct_geometry_count": len(route_profiles),
         }
     )
     bytes_by_key["terrain_route_best_path_vector"] = json.dumps(
@@ -1186,6 +1226,25 @@ def test_qgis_backend_preserves_typed_artifact_normalization_detail(tmp_path: Pa
     assert failed.error.detail == "QGIS slope artifact hash mismatch"
 
 
+def test_public_worker_error_explains_route_cache_contract_recovery() -> None:
+    error = SpatialAnalysisError(
+        code=SpatialAnalysisErrorCode.INVALID_INPUT,
+        message="Terrain route cache keys do not match the submitted inputs.",
+        detail="internal hashes must not be exposed",
+    )
+
+    public = _public_worker_error(error)
+
+    assert public is not None
+    assert public.code is SpatialAnalysisErrorCode.INVALID_INPUT
+    assert public.detail is None
+    assert public.retryable is False
+    assert public.message == (
+        "Terrain route cache contract does not match the active QGIS worker. "
+        "Restart the QGIS worker and resubmit the same A/B inputs."
+    )
+
+
 def test_qgis_backend_grass_feature_stack_is_hashed_and_normalized(
     tmp_path: Path,
 ) -> None:
@@ -1327,6 +1386,176 @@ def test_qgis_backend_grass_feature_stack_is_hashed_and_normalized(
         "visualization_only": True,
         "adds_source_resolution": False,
     }
+
+
+def test_qgis_backend_submits_only_reviewed_guidance_points_to_worker(
+    tmp_path: Path,
+) -> None:
+    project_root, project, _ = _workspace(tmp_path)
+    feature_backend = QgisSpatialBackend(
+        config=QgisSpatialBackendConfig(
+            enabled=True,
+            worker_url="http://127.0.0.1:9876",
+            worker_token=_test_access_value(),
+        ),
+        transport=TerrainFeatureWorkerTransport(),
+        now_factory=_fixed_now,
+    )
+    feature_queued = feature_backend.start_workflow(
+        project_id="qgis_worker_demo",
+        project_root=project_root,
+        project=project,
+        request=SpatialAnalysisRequest(
+            project_id="qgis_worker_demo",
+            workflow_id=TERRAIN_FEATURE_STACK_WORKFLOW_ID,
+            request_id="request-worker-demo",
+        ),
+    )
+    feature_completed = feature_backend.get_run(
+        project_root=project_root,
+        workflow_run_id=feature_queued.workflow_run_id,
+    )
+    assert feature_completed.state is SpatialWorkflowState.COMPLETED
+
+    guidance_service = TerrainRouteGuidanceWorkspaceService(now_factory=_fixed_now)
+    narrative = (
+        "於1148鞍沿著稜線走至其開始轉為上坡後，往西邊的坡切，"
+        "沿遇到的第一個溝東側的稜線續行，在寬闊的稜線上抓方向往北走。"
+        "H820m轉稜，下至溪底，過溪。沿著小溪溝上大概15m之後，"
+        "往西腰繞，沿著獵徑之字繞上稜，抵達異祿閣稜線。"
+    )
+    interpreted = guidance_service.interpret(
+        project_root,
+        project_id="qgis_worker_demo",
+        request=TerrainGuidanceInterpretRequest(
+            narrative=narrative,
+            source_id="iroko-d3",
+        ),
+    )
+    plan = interpreted["guidance_plan"]
+    required = [item for item in plan["constraints"] if item["required_anchor"]]
+    resolved = guidance_service.resolve(
+        project_root,
+        project_id="qgis_worker_demo",
+        request=TerrainGuidanceResolveRequest(
+            guidance_id=plan["guidance_id"],
+            route_start=GeoPoint(x=121.21, y=24.05, crs="EPSG:4326"),
+            route_destination=GeoPoint(x=121.22, y=24.04, crs="EPSG:4326"),
+            search_margin_m=1000,
+            manual_anchors=[
+                TerrainGuidanceManualAnchorRequest(
+                    constraint_id=item["constraint_id"],
+                    point=GeoPoint(
+                        x=121.212 + index * 0.001,
+                        y=24.048 - index * 0.001,
+                        crs="EPSG:4326",
+                    ),
+                )
+                for index, item in enumerate(required)
+            ],
+        ),
+    )
+    selected = {
+        item["supported_constraint_ids"][0]: item["feature_id"]
+        for item in resolved["feature_index"]["features"]
+        if item["selection_source"] == "human_map_annotation"
+    }
+    disabled = [
+        item["constraint_id"]
+        for item in resolved["resolution"]["constraints"]
+        if item["constraint_id"] not in selected
+        and item["status"] in {"unresolved", "multiple_candidates"}
+    ]
+    reviewed = guidance_service.review(
+        project_root,
+        project_id="qgis_worker_demo",
+        request=TerrainGuidanceReviewRequest(
+            guidance_id=plan["guidance_id"],
+            selected_feature_ids=selected,
+            disabled_constraint_ids=disabled,
+            reviewed_by="trip_leader",
+        ),
+    )
+    assert reviewed["guided_execution_ready"] is True
+
+    route_transport = TerrainRouteWorkerTransport()
+    route_backend = QgisSpatialBackend(
+        config=QgisSpatialBackendConfig(
+            enabled=True,
+            worker_url="http://127.0.0.1:9876",
+            worker_token=_test_access_value(),
+        ),
+        transport=route_transport,
+        now_factory=_fixed_now,
+    )
+    active_project = json.loads((project_root / "project.json").read_text())
+    queued = route_backend.start_workflow(
+        project_id="qgis_worker_demo",
+        project_root=project_root,
+        project=active_project,
+        request=SpatialAnalysisRequest(
+            project_id="qgis_worker_demo",
+            workflow_id=TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_ID,
+            request_id="request-guided-terrain-route",
+            terrain_route_endpoints=TerrainRouteEndpointSelection(
+                start=GeoPoint(x=121.21, y=24.05, crs="EPSG:4326"),
+                destination=GeoPoint(x=121.22, y=24.04, crs="EPSG:4326"),
+            ),
+            terrain_route_guidance={
+                "guidance_id": plan["guidance_id"],
+                "guided_hypothesis_id": "R4",
+                "review_sha256": reviewed["review_sha256"],
+            },
+        ),
+    )
+
+    assert queued.state is SpatialWorkflowState.QUEUED, queued.error
+    submitted = route_transport.post_calls[0][1]
+    execution = submitted["terrain_route_guidance_execution_plan"]
+    assert execution["guided_hypothesis_id"] == "R4"
+    assert execution["guidance_review_sha256"] == reviewed["review_sha256"]
+    coordinates = submitted["route_geojson"]["features"][0]["geometry"][
+        "coordinates"
+    ]
+    assert coordinates[0] == [121.21, 24.05]
+    assert coordinates[-1] == [121.22, 24.04]
+    assert coordinates[1:-1] == [
+        [item["point"]["x"], item["point"]["y"]]
+        for item in execution["anchors"]
+    ]
+    assert submitted["candidate_only"] is True
+    assert submitted["runtime_safety_truth"] is False
+    assert submitted["operational"] is False
+
+    completed = route_backend.get_run(
+        project_root=project_root,
+        workflow_run_id=queued.workflow_run_id,
+    )
+    assert completed.state is SpatialWorkflowState.COMPLETED, completed.error
+    persisted = json.loads((project_root / "project.json").read_text())
+    hypothesis_run = json.loads(
+        (project_root / persisted["terrain_route_hypothesis_ref"]).read_text()
+    )
+    assert [item["strategy"] for item in hypothesis_run["hypotheses"]] == [
+        "drainage_averse",
+        "balanced",
+        "terrain_only_baseline",
+        "historical_narrative_guided",
+    ]
+    assert hypothesis_run["hypotheses"][3]["path_semantics"] == (
+        "ordered_anchor_piecewise_anisotropic_model_cost_trace"
+    )
+    navigation = inspect_navigation_terrain_projection(
+        project_root,
+        persisted,
+        project_id="qgis_worker_demo",
+    )
+    assert "alternatives" in navigation.payload["terrain_route_hypothesis"], (
+        navigation.payload
+    )
+    alternatives = navigation.payload["terrain_route_hypothesis"]["alternatives"]
+    assert len(alternatives) == 4
+    assert alternatives[3]["strategy"] == "historical_narrative_guided"
 
 
 def test_qgis_backend_materializes_and_reuses_candidate_terrain_route_cache(

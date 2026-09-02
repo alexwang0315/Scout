@@ -26,7 +26,7 @@ NAVIGATION_TERRAIN_PROJECTION_STATUS_ARTIFACT_KIND = (
     "navigation_terrain_intelligence_projection_status"
 )
 NAVIGATION_TERRAIN_PROJECTION_COMPILER = (
-    "navigation_terrain_projection_store.v1_1"
+    "navigation_terrain_projection_store.v1_2"
 )
 NAVIGATION_TERRAIN_PROJECTION_INPUT_REF_KEYS = (
     "terrain_visualization_ref",

@@ -45,6 +45,7 @@ from navigation_terrain_passage_patterns import (
 from terrain_route_hypothesis_models import (
     TERRAIN_ROUTE_BAND_MODEL,
     TERRAIN_ROUTE_BAND_SEMANTICS,
+    TERRAIN_ROUTE_GUIDED_PATH_SEMANTICS,
     TERRAIN_ROUTE_PATH_BAND_RELATIONSHIP,
     TERRAIN_ROUTE_PATH_MODEL,
     TERRAIN_ROUTE_PATH_SEMANTICS,
@@ -608,6 +609,7 @@ def _terrain_route_hypothesis_candidate_projection(
                     item.relative_cost_comparison_scope
                 ),
                 "corridor_profile": item.corridor is not None,
+                "path_semantics": item.path_semantics,
                 "relative_score": item.metrics.relative_score,
                 "relative_cost": item.metrics.relative_cost,
                 "metrics": item.metrics.model_dump(mode="json"),
@@ -649,6 +651,8 @@ def _terrain_route_hypothesis_candidate_projection(
                 "semantics": hypothesis.path_semantics,
                 "display_name": "minimum anisotropic model-cost trace",
             },
+            "start": hypothesis.start.model_dump(mode="json"),
+            "destination": hypothesis.destination.model_dump(mode="json"),
             "best_path": {
                 "type": "FeatureCollection",
                 "features": features,
@@ -853,7 +857,10 @@ def _normalized_terrain_route_features(
                 and (
                     properties.get("path_model") != TERRAIN_ROUTE_PATH_MODEL
                     or properties.get("path_semantics")
-                    != TERRAIN_ROUTE_PATH_SEMANTICS
+                    not in {
+                        TERRAIN_ROUTE_PATH_SEMANTICS,
+                        TERRAIN_ROUTE_GUIDED_PATH_SEMANTICS,
+                    }
                     or properties.get("path_band_relationship")
                     != TERRAIN_ROUTE_PATH_BAND_RELATIONSHIP
                 )

@@ -29,7 +29,9 @@ from terrain_route_hypothesis_models import (
     TerrainRouteStrategy,
 )
 from terrain_route_hypothesis_artifacts import (
+    TERRAIN_ROUTE_GUIDANCE_FRICTION_EXPRESSION_KIND,
     build_drainage_pressure_expression,
+    build_guidance_friction_expression,
     build_profile_friction_expression,
     validate_terrain_route_mapcalc_expression,
 )
@@ -55,6 +57,38 @@ def _dem(cells: list[list[float | None]], resolution_m: float = 20.0) -> Terrain
         resolution_m=resolution_m,
         crs=CRS,
     )
+
+
+def test_reviewed_guidance_compiles_bounded_local_friction_expression() -> None:
+    expression = build_guidance_friction_expression(
+        [
+            (273559.25, 2583344.5, 100.0, 0.78),
+            (273120.0, 2583000.0, 80.0, 0.65),
+        ]
+    )
+
+    assert expression.startswith("A*min(1,")
+    assert "x()" in expression
+    assert "y()" in expression
+    assert validate_terrain_route_mapcalc_expression(expression) == (
+        TERRAIN_ROUTE_GUIDANCE_FRICTION_EXPRESSION_KIND
+    )
+    assert expression == build_guidance_friction_expression(
+        [
+            (273559.25, 2583344.5, 100.0, 0.78),
+            (273120.0, 2583000.0, 80.0, 0.65),
+        ]
+    )
+
+    with pytest.raises(ValueError, match="multiplier"):
+        build_guidance_friction_expression([(273559.0, 2583344.0, 100.0, 0.0)])
+    with pytest.raises(ValueError, match="radius"):
+        build_guidance_friction_expression([(273559.0, 2583344.0, 0.0, 0.8)])
+    with pytest.raises(ValueError, match="malformed"):
+        validate_terrain_route_mapcalc_expression(
+            "A*min(1,if(sqrt(pow(x()-273559,2)+pow(y()-2583344,2))"
+            "<=100,0.78,1),system(unsafe))"
+        )
 
 
 def _point(dem: TerrainDemRaster, row: int, col: int) -> GeoPoint:

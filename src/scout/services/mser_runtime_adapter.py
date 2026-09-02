@@ -233,6 +233,12 @@ TOOL_CAPABILITY_DIMENSIONS: Mapping[str, tuple[CompactDimension, ...]] = (
                 CompactDimension.COVERAGE_CONFIDENCE,
                 CompactDimension.GPS_CONFIDENCE,
             ),
+            "scout.ai.route_terrain_consistency.inspect.v0": _dimensions(
+                CompactDimension.ROUTE_ALIGNMENT,
+                CompactDimension.ROUTE_FEASIBILITY,
+                CompactDimension.TERRAIN_COMPLEXITY,
+                CompactDimension.TERRAIN_CONFIDENCE,
+            ),
             "scout.ai.safety_boundary.explain.v0": _dimensions(
                 CompactDimension.CURRENT_HAZARD,
                 CompactDimension.SAFETY_MARGIN,
@@ -249,6 +255,19 @@ TOOL_CAPABILITY_DIMENSIONS: Mapping[str, tuple[CompactDimension, ...]] = (
                 CompactDimension.COVERAGE_CONFIDENCE,
                 CompactDimension.EMERGENCY_REACHABILITY,
                 CompactDimension.FATIGUE_INDEX,
+            ),
+            "scout.ai.terrain_narrative_guidance.interpret.v0": _dimensions(
+                CompactDimension.HISTORICAL_CONTEXT_RELEVANCE,
+            ),
+            "scout.ai.terrain_route_hypotheses.compare.v0": _dimensions(
+                CompactDimension.ROUTE_FEASIBILITY,
+                CompactDimension.TERRAIN_COMPLEXITY,
+                CompactDimension.TERRAIN_CONFIDENCE,
+            ),
+            "scout.ai.terrain_route_hypothesis.explain.v0": _dimensions(
+                CompactDimension.ROUTE_FEASIBILITY,
+                CompactDimension.TERRAIN_COMPLEXITY,
+                CompactDimension.TERRAIN_CONFIDENCE,
             ),
             "scout.ai.weather_window.assess.v0": _dimensions(
                 CompactDimension.WEATHER_STABILITY,
@@ -289,21 +308,25 @@ def build_tool_capabilities(
     card_by_id = {
         resolve_scout_ai_tool_id(card.tool_id): card for card in selected_tool_cards
     }
-    requested_ids = selected_ids or tuple(contracts)
+    requested_ids = selected_ids or tuple(
+        tool_id
+        for tool_id, contract in contracts.items()
+        if contract.boundary.read_only
+    )
 
     capabilities: list[ToolCapability] = []
     for tool_id in requested_ids:
-        dimensions = TOOL_CAPABILITY_DIMENSIONS.get(tool_id)
-        if dimensions is None:
-            raise UnknownMSERToolCapabilityError(
-                f"no reviewed MSER capability metadata for tool: {tool_id}"
-            )
         contract = contracts.get(tool_id)
         if contract is None:
             raise UnknownMSERToolCapabilityError(
                 f"tool is not present in the executable Scout registry: {tool_id}"
             )
         _validate_read_only_contract(contract)
+        dimensions = TOOL_CAPABILITY_DIMENSIONS.get(tool_id)
+        if dimensions is None:
+            raise UnknownMSERToolCapabilityError(
+                f"no reviewed MSER capability metadata for tool: {tool_id}"
+            )
         card = card_by_id.get(tool_id)
         available = card is None or (
             card.availability == "available"

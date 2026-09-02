@@ -13,6 +13,9 @@ TERRAIN_ROUTE_HYPOTHESIS_SCHEMA_VERSION = "scout_terrain_route_hypothesis.v0_2"
 TERRAIN_ROUTE_HYPOTHESIS_ALGORITHM_VERSION = "terrain_route_hypothesis.v0_3"
 TERRAIN_ROUTE_PATH_MODEL = "anisotropic_walk"
 TERRAIN_ROUTE_PATH_SEMANTICS = "minimum_anisotropic_model_cost_trace"
+TERRAIN_ROUTE_GUIDED_PATH_SEMANTICS = (
+    "ordered_anchor_piecewise_anisotropic_model_cost_trace"
+)
 TERRAIN_ROUTE_BAND_MODEL = "symmetric_macro_terrain_cost"
 TERRAIN_ROUTE_BAND_SEMANTICS = (
     "finite_symmetric_macro_terrain_relative_cost_cell_percentile"
@@ -82,6 +85,7 @@ class TerrainRouteStrategy(str, Enum):
     DRAINAGE_AVERSE = "drainage_averse"
     BALANCED = "balanced"
     TERRAIN_ONLY_BASELINE = "terrain_only_baseline"
+    HISTORICAL_NARRATIVE_GUIDED = "historical_narrative_guided"
 
 
 class TerrainAuthorityBoundary(BaseModel):
@@ -587,7 +591,10 @@ class TerrainRouteHypothesis(BaseModel):
     destination: GeoPoint
     best_path: GeoJsonLineString
     path_model: Literal["anisotropic_walk"] = "anisotropic_walk"
-    path_semantics: Literal["minimum_anisotropic_model_cost_trace"] = (
+    path_semantics: Literal[
+        "minimum_anisotropic_model_cost_trace",
+        "ordered_anchor_piecewise_anisotropic_model_cost_trace",
+    ] = (
         "minimum_anisotropic_model_cost_trace"
     )
     corridor: TerrainRouteCandidateCorridor | None = None

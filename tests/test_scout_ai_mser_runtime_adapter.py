@@ -18,6 +18,7 @@ from scout.schemas.mser import (
 from scout.services.mser_runtime_adapter import (
     MSERRuntimeAdapter,
     UnknownMSERToolCapabilityError,
+    UnsafeMSERToolCapabilityError,
     build_tool_capabilities,
 )
 from scout_ai_tool_contracts import tool_registry_output
@@ -27,6 +28,12 @@ RISK_TOOL_ID = "pydantic_ai.tool.search_scout_risk_scores.v0"
 CWA_TOOL_ID = "scout.ai.cwa_environment.assess.v0"
 PACE_TOOL_ID = "scout.ai.pace_guardian.assess.v0"
 ROUTE_TOOL_ID = "pydantic_ai.tool.search_scout_route_structure.v0"
+ROUTE_TERRAIN_CONSISTENCY_TOOL_ID = (
+    "scout.ai.route_terrain_consistency.inspect.v0"
+)
+TERRAIN_ROUTE_GENERATE_TOOL_ID = (
+    "scout.ai.terrain_route_hypotheses.generate.v0"
+)
 
 
 def _tool_card(tool_id: str) -> ToolCard:
@@ -74,13 +81,20 @@ def test_registry_builds_known_read_only_capabilities_with_dimension_coverage() 
     capabilities = build_tool_capabilities(registry=registry)
     by_id = {capability.tool_id: capability for capability in capabilities}
 
-    assert set(by_id) == {contract.tool_id for contract in registry.tools}
+    assert set(by_id) == {
+        contract.tool_id for contract in registry.tools if contract.boundary.read_only
+    }
     assert CompactDimension.CURRENT_HAZARD in by_id[RISK_TOOL_ID].produces_dimensions
     assert CompactDimension.SLIP_RISK in by_id[RISK_TOOL_ID].produces_dimensions
     assert CompactDimension.WEATHER_TREND in by_id[CWA_TOOL_ID].produces_dimensions
     assert CompactDimension.DANGER_WINDOW in by_id[CWA_TOOL_ID].produces_dimensions
     assert CompactDimension.PACE_VARIANCE in by_id[PACE_TOOL_ID].produces_dimensions
     assert CompactDimension.NEXT_CHECKPOINT in by_id[ROUTE_TOOL_ID].produces_dimensions
+    assert (
+        CompactDimension.TERRAIN_CONFIDENCE
+        in by_id[ROUTE_TERRAIN_CONSISTENCY_TOOL_ID].produces_dimensions
+    )
+    assert TERRAIN_ROUTE_GENERATE_TOOL_ID not in by_id
     assert all(capability.read_only is True for capability in capabilities)
 
 
@@ -98,6 +112,14 @@ def test_selected_tool_cards_build_only_selected_capabilities_and_reject_unknown
 
     with pytest.raises(UnknownMSERToolCapabilityError, match="unknown.tool.v0"):
         build_tool_capabilities(selected_tool_cards=(_tool_card("unknown.tool.v0"),))
+
+    with pytest.raises(
+        UnsafeMSERToolCapabilityError,
+        match="tool crosses MSER read-only boundary",
+    ):
+        build_tool_capabilities(
+            selected_tool_cards=(_tool_card(TERRAIN_ROUTE_GENERATE_TOOL_ID),)
+        )
 
 
 def test_minimal_plan_becomes_bounded_plan_with_ten_call_capacity_and_expectations() -> (

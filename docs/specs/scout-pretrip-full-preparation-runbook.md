@@ -5195,3 +5195,24 @@ Drainage pressure is not observed water, a hazard class, or an exclusion mask.
 Current water level, canyon form, vegetation, recent landslide, bridge, rope,
 engineered tread, passage, safety, and legal access remain UNKNOWN. A stronger
 drainage penalty must never be described as safer.
+
+### 2026-09-02 TRH route-cache contract mismatch recovery
+
+Symptom: an arbitrary A/B submission failed immediately at `input_validation`
+with `INVALID_INPUT` and `Terrain route cache keys do not match the submitted
+inputs.` The Dashboard API process had loaded the current route-cache contract,
+while the still-running QGIS worker had loaded an older contract revision.
+This was an internal process-version mismatch, not evidence that the selected
+A/B points or DEM were invalid.
+
+Keep the fail-closed key comparison. Restart the local QGIS worker through
+`tools/run_qgis_worker.sh`, confirm `WORKER READY`, and resubmit the unchanged
+A/B request. The public backend error now explains this recovery action without
+exposing internal hashes or automatically retrying a rejected request.
+
+After both processes loaded the same code, real run
+`qgis-worker-20260902T012929318608Z-047dd5793e` completed all 11 steps and
+published three same-request candidate traces: R1 drainage-averse, R2 balanced,
+and R3 terrain-only baseline. The run remained `candidate_only`,
+`runtime_safety_truth=false`, `operational=false`, and
+`safe_or_walkable=not_determined`.

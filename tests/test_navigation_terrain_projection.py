@@ -750,6 +750,18 @@ def test_projection_exposes_hash_bound_candidate_only_hypothesis_catalog(
         "start": "1148 saddle",
         "destination": "Iroko station",
     }
+    assert local["start"] == {
+        "x": 121.256226,
+        "y": 23.34452,
+        "crs": "EPSG:4326",
+        "label": None,
+    }
+    assert local["destination"] == {
+        "x": 121.230419,
+        "y": 23.352571,
+        "crs": "EPSG:4326",
+        "label": None,
+    }
     assert local["boundary"]["authority"] == "candidate_only"
     assert local["boundary"]["promotion_allowed"] is False
     assert all(
@@ -801,6 +813,10 @@ def test_projection_selects_new_active_hypothesis_not_yet_in_catalog(
     assert active["selection_scope"] == "active_request"
     assert active["focus_mode"] == "hypothesis"
     assert active["endpoint_labels"] == {"start": "A", "destination": "B"}
+    assert active["start"]["x"] == 121.22
+    assert active["start"]["y"] == 23.31
+    assert active["destination"]["x"] == 121.24
+    assert active["destination"]["y"] == 23.33
     assert active["boundary"]["candidate_only"] is True
     assert active["boundary"]["runtime_safety_truth"] is False
     assert active_ref in result["source_refs"]

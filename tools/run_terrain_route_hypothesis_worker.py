@@ -26,7 +26,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from qgis_spatial_contracts import SpatialWorkflowState
 from qgis_worker import QgisWorkerConfig, QgisWorkerService
 from qgis_worker_contracts import QgisWorkerRun, QgisWorkerWorkflowRequest
-from terrain_route_hypothesis_artifacts import build_live_terrain_route_cache_keys
+from terrain_route_hypothesis_artifacts import (
+    build_live_terrain_route_cache_keys,
+    build_terrain_route_resolution_identity,
+    build_terrain_route_source_identity,
+)
+from terrain_route_guidance import TerrainGuidanceExecutionPlan
 from terrain_route_hypothesis_models import TerrainRoutingCostConfig
 
 
@@ -63,6 +68,19 @@ def parse_wgs84_point(value: str) -> tuple[float, float]:
     return lon, lat
 
 
+def load_guidance_execution_plan(path: Path) -> TerrainGuidanceExecutionPlan:
+    """Load the reviewed worker-safe payload; raw narrative is schema-rejected."""
+
+    resolved = path.expanduser().resolve(strict=True)
+    if not resolved.is_file():
+        raise TerrainRouteWorkerError(
+            "terrain guidance execution plan is not a regular file"
+        )
+    return TerrainGuidanceExecutionPlan.model_validate_json(
+        resolved.read_text(encoding="utf-8")
+    )
+
+
 def build_worker_request(
     *,
     project_id: str,
@@ -75,6 +93,7 @@ def build_worker_request(
     destination: Sequence[float],
     corridor_m: float,
     cost_config: TerrainRoutingCostConfig | None = None,
+    guidance_execution_plan_path: Path | None = None,
 ) -> QgisWorkerWorkflowRequest:
     resolved_dem = dem_path.expanduser().resolve(strict=True)
     if not resolved_dem.is_file():
@@ -108,7 +127,51 @@ def build_worker_request(
         source_ref: source_hash,
         parent_manifest_ref: parent_manifest_hash,
     }
+    terrain_source_hashes = build_terrain_route_source_identity(
+        dem_sha256s=(source_hash,),
+        parent_manifest_sha256=parent_manifest_hash,
+    )
+    source_refs = [source_ref, parent_manifest_ref]
+    guidance_execution_plan = None
+    guidance_execution_plan_hash = None
     route_coordinates = [list(start_pair), list(destination_pair)]
+    if guidance_execution_plan_path is not None:
+        guidance_path = guidance_execution_plan_path.expanduser().resolve(strict=True)
+        guidance_execution_plan = load_guidance_execution_plan(guidance_path)
+        if guidance_execution_plan.dem_sha256 != source_hash:
+            raise TerrainRouteWorkerError(
+                "reviewed terrain guidance is bound to a different DEM"
+            )
+        if not math.isclose(
+            guidance_execution_plan.dem_resolution_m,
+            resolution,
+            rel_tol=1e-9,
+            abs_tol=1e-9,
+        ):
+            raise TerrainRouteWorkerError(
+                "reviewed terrain guidance DEM resolution does not match the request"
+            )
+        if guidance_execution_plan.dem_crs != "EPSG:3826":
+            raise TerrainRouteWorkerError(
+                "reviewed terrain guidance must be bound to EPSG:3826"
+            )
+        anchor_pairs = [
+            _coordinate_pair(
+                (anchor.point.x, anchor.point.y),
+                label=f"guidance anchor {anchor.constraint_id}",
+            )
+            for anchor in guidance_execution_plan.anchors
+        ]
+        ordered_points = [start_pair, *anchor_pairs, destination_pair]
+        if len(set(ordered_points)) != len(ordered_points):
+            raise TerrainRouteWorkerError(
+                "reviewed terrain guidance anchors must be distinct from A, B, and each other"
+            )
+        route_coordinates = [list(point) for point in ordered_points]
+        guidance_ref = guidance_path.as_posix()
+        guidance_execution_plan_hash = sha256_file(guidance_path)
+        source_refs.append(guidance_ref)
+        source_hashes[guidance_ref] = guidance_execution_plan_hash
     return QgisWorkerWorkflowRequest(
         workflow_id="terrain_route_hypothesis.v1",
         project_id=project_id,
@@ -135,17 +198,36 @@ def build_worker_request(
             ],
         },
         dem_refs=[source_ref],
-        source_refs=[source_ref, parent_manifest_ref],
+        source_refs=source_refs,
         source_hashes=source_hashes,
         source_resolution=source_resolution,
         terrain_routing_cost_config=resolved_cost_config,
         terrain_route_cache_keys=build_live_terrain_route_cache_keys(
-            source_hashes=source_hashes,
-            source_resolution=source_resolution,
+            source_hashes=terrain_source_hashes,
+            source_resolution=build_terrain_route_resolution_identity(
+                source_resolution
+            ),
             route_coordinates=route_coordinates,
             analysis_margin_m=corridor_m,
             cost_config=resolved_cost_config,
+            optional_evidence_hashes=(
+                {
+                    "terrain_guidance_execution_plan": guidance_execution_plan_hash,
+                    "terrain_guidance_review": (
+                        guidance_execution_plan.guidance_review_sha256
+                    ),
+                }
+                if guidance_execution_plan is not None
+                and guidance_execution_plan_hash is not None
+                else None
+            ),
+            guidance_review_sha256=(
+                guidance_execution_plan.guidance_review_sha256
+                if guidance_execution_plan is not None
+                else None
+            ),
         ),
+        terrain_route_guidance_execution_plan=guidance_execution_plan,
         candidate_only=True,
         runtime_safety_truth=False,
         operational=False,
@@ -208,6 +290,7 @@ def execute_request(
             run=current,
             duration_s=time.monotonic() - started,
             worker_root=worker_root,
+            request=request,
         )
         return current, receipt
     finally:
@@ -219,11 +302,18 @@ def build_execution_receipt(
     run: QgisWorkerRun,
     duration_s: float,
     worker_root: Path,
+    request: QgisWorkerWorkflowRequest | None = None,
 ) -> dict[str, Any]:
     _assert_candidate_only(run)
+    if request is not None and (
+        request.request_id != run.request_id or request.workflow_id != run.workflow_id
+    ):
+        raise TerrainRouteWorkerError(
+            "execution receipt request does not match the completed worker run"
+        )
     result = run.result
     assert result is not None
-    return {
+    receipt = {
         "schema_version": "scout_terrain_route_execution_receipt.v0_1",
         "status": "completed",
         "execution_host": platform.node() or "unknown",
@@ -246,6 +336,86 @@ def build_execution_receipt(
         "runtime_safety_truth": False,
         "operational": False,
         "safe_or_walkable": "not_determined",
+    }
+    guidance = (
+        request.terrain_route_guidance_execution_plan
+        if request is not None
+        else None
+    )
+    if guidance is not None:
+        receipt.update(
+            {
+                "guided_hypothesis_id": guidance.guided_hypothesis_id,
+                "guidance_id": guidance.guidance_id,
+                "guidance_review_sha256": guidance.guidance_review_sha256,
+                "guidance_plan_sha256": guidance.plan_sha256,
+                "guidance_resolution_sha256": guidance.resolution_sha256,
+                "guidance_feature_index_sha256": guidance.feature_index_sha256,
+                "reviewed_by": guidance.reviewed_by,
+                "reviewed_at": guidance.reviewed_at.isoformat(),
+                "human_reviewed_interpretation_binding": True,
+                "review_scope": "interpretation_to_map_binding_only",
+            }
+        )
+    if request is not None:
+        receipt.update(_input_contract_receipt_fields(request))
+    return receipt
+
+
+def _input_contract_receipt_fields(
+    request: QgisWorkerWorkflowRequest,
+) -> dict[str, Any]:
+    dem_hashes: list[str] = []
+    for dem_ref in request.dem_refs:
+        value = request.source_hashes.get(dem_ref)
+        if value is None:
+            raise TerrainRouteWorkerError(
+                "execution receipt cannot bind the source DEM hash"
+            )
+        dem_hashes.append(value)
+    parent_refs = [
+        ref
+        for ref in request.source_refs
+        if Path(ref).name == "terrain_feature_manifest.json"
+    ]
+    if len(parent_refs) != 1:
+        raise TerrainRouteWorkerError(
+            "execution receipt requires one terrain-feature parent manifest"
+        )
+    parent_hash = request.source_hashes.get(parent_refs[0])
+    if parent_hash is None:
+        raise TerrainRouteWorkerError(
+            "execution receipt cannot bind the terrain-feature parent hash"
+        )
+    coordinates = request.route_geojson["features"][0]["geometry"]["coordinates"]
+    contract = {
+        "source_dem_sha256s": sorted(dem_hashes),
+        "terrain_parent_manifest_sha256": parent_hash,
+        "source_resolution": build_terrain_route_resolution_identity(
+            request.source_resolution
+        ),
+        "start": coordinates[0],
+        "destination": coordinates[-1],
+        "corridor_m": request.corridor_m,
+        "cost_config": request.terrain_routing_cost_config.model_dump(mode="json"),
+        "guidance_review_sha256": (
+            request.terrain_route_guidance_execution_plan.guidance_review_sha256
+            if request.terrain_route_guidance_execution_plan is not None
+            else None
+        ),
+    }
+    contract_sha = hashlib.sha256(
+        json.dumps(
+            contract,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    return {
+        "source_dem_sha256s": contract["source_dem_sha256s"],
+        "terrain_parent_manifest_sha256": parent_hash,
+        "input_contract_sha256": contract_sha,
     }
 
 
@@ -392,6 +562,13 @@ def main() -> int:
     parser.add_argument("--timeout-s", type=float, default=600.0)
     parser.add_argument("--qgis-mcp-server-root", type=Path)
     parser.add_argument("--cost-config-json", type=Path)
+    parser.add_argument(
+        "--guidance-execution-plan",
+        type=Path,
+        help=(
+            "Optional reviewed, hash-bound R4 execution plan. Raw narrative is not accepted."
+        ),
+    )
     parser.add_argument("--receipt", required=True, type=Path)
     args = parser.parse_args()
     try:
@@ -406,6 +583,7 @@ def main() -> int:
             destination=args.destination,
             corridor_m=args.corridor_m,
             cost_config=_load_cost_config(args.cost_config_json),
+            guidance_execution_plan_path=args.guidance_execution_plan,
         )
         _, receipt = execute_request(
             request=request,
