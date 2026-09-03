@@ -404,6 +404,63 @@ def _attach_candidate_corridor_reference(
     )
 
 
+def _attach_r1_r3_path_references(project_root: Path) -> None:
+    _attach_candidate_corridor_reference(project_root)
+    project_path = project_root / "project.json"
+    project = json.loads(project_path.read_text())
+    ridge_path = project_root / project["qgis_ridge_lines_vector_ref"]
+    ridge_payload = json.loads(ridge_path.read_text())
+    ridge_payload["features"][-1]["geometry"]["coordinates"] = [
+        [121.2095, 23.4640],
+        [121.2100, 23.4645],
+        [121.2105, 23.4650],
+    ]
+    ridge_path.write_text(json.dumps(ridge_payload), encoding="utf-8")
+    catalog_path = project_root / project["terrain_route_hypothesis_catalog_ref"]
+    catalog = json.loads(catalog_path.read_text())
+    entry = catalog["entries"][0]
+    hypothesis_path = project_root / entry["hypothesis_ref"]
+    payload = json.loads(hypothesis_path.read_text())
+    first_hypothesis = payload["hypotheses"][0]
+    for alternative_index, (strategy, multiplier, midpoint) in enumerate(
+        (
+            ("balanced", 1.5, [121.2068, 23.4672]),
+            ("terrain_only_baseline", 0, [121.2072, 23.4668]),
+        ),
+        start=2,
+    ):
+        hypothesis = json.loads(json.dumps(first_hypothesis))
+        hypothesis.update(
+            {
+                "id": f"synthetic-local-r{alternative_index}",
+                "label": f"Synthetic local R{alternative_index} terrain hypothesis",
+                "alternative_index": alternative_index,
+                "strategy": strategy,
+                "drainage_penalty_multiplier": multiplier,
+                "corridor": None,
+            }
+        )
+        hypothesis["best_path"]["coordinates"] = [
+            [ROUTE_START.x, ROUTE_START.y],
+            midpoint,
+            [ROUTE_DESTINATION.x, ROUTE_DESTINATION.y],
+        ]
+        payload["hypotheses"].append(hypothesis)
+
+    hypothesis_path.write_text(json.dumps(payload), encoding="utf-8")
+    entry["hypothesis_sha256"] = _sha(hypothesis_path)
+    catalog_path.write_text(json.dumps(catalog), encoding="utf-8")
+    project["terrain_route_hypothesis_catalog_sha256"] = _sha(catalog_path)
+    project.update(
+        {
+            "terrain_route_hypothesis_ref": entry["hypothesis_ref"],
+            "terrain_route_hypothesis_sha256": entry["hypothesis_sha256"],
+            "terrain_route_hypothesis_cache_key": entry["cache_key"],
+        }
+    )
+    project_path.write_text(json.dumps(project, sort_keys=True), encoding="utf-8")
+
+
 def _service() -> TerrainRouteGuidanceWorkspaceService:
     return TerrainRouteGuidanceWorkspaceService(
         now_factory=lambda: datetime(2026, 9, 1, tzinfo=timezone.utc)
@@ -530,6 +587,139 @@ def test_hash_bound_candidate_corridor_overlap_ranks_without_filtering_or_select
     assert resolved["guided_execution_ready"] is False
     assert resolved["candidate_only"] is True
     assert resolved["runtime_safety_truth"] is False
+
+
+def test_r1_r3_paths_build_review_shortlist_without_removing_candidates(
+    tmp_path: Path,
+) -> None:
+    project_root = _workspace(tmp_path)
+    _attach_r1_r3_path_references(project_root)
+    service = TerrainRouteGuidanceWorkspaceService(
+        now_factory=lambda: datetime(2026, 9, 1, tzinfo=timezone.utc),
+        elevation_sampler=_FakeElevationSampler(),
+    )
+    interpreted = service.interpret(
+        project_root,
+        project_id="guidance_demo",
+        request=TerrainGuidanceInterpretRequest(
+            narrative=NARRATIVE,
+            source_id="iroko-d3",
+        ),
+    )
+
+    resolved = service.resolve(
+        project_root,
+        project_id="guidance_demo",
+        request=TerrainGuidanceResolveRequest(
+            guidance_id=interpreted["guidance_plan"]["guidance_id"],
+            route_start=ROUTE_START,
+            route_destination=ROUTE_DESTINATION,
+            search_margin_m=200,
+            reference_hypothesis_ids=["active-cccccccccccc"],
+            reference_corridor_band_name="top_5_percent_corridor",
+            reference_path_scope_m=40,
+        ),
+    )
+
+    feature_index = resolved["feature_index"]
+    assert [
+        item["hypothesis_id"] for item in feature_index["reference_corridors"]
+    ] == ["active-cccccccccccc"]
+    assert [item["display_id"] for item in feature_index["reference_paths"]] == [
+        "R1",
+        "R2",
+        "R3",
+    ]
+    dem_features = [
+        item
+        for item in feature_index["features"]
+        if item["selection_source"] == "dem_derived"
+    ]
+    assert all(len(item["reference_path_proximities"]) == 3 for item in dem_features)
+    assert all(item["reference_path_support"]["reference_count"] == 3 for item in dem_features)
+
+    by_constraint = {
+        item["constraint_id"]: item for item in resolved["resolution"]["constraints"]
+    }
+    terminal_ridge = by_constraint["G11"]
+    assert len(terminal_ridge["candidate_feature_ids"]) == 2
+    assert len(terminal_ridge["review_shortlist_feature_ids"]) == 1
+    assert terminal_ridge["out_of_scope_candidate_count"] == 1
+    assert terminal_ridge["review_scope_semantics"] == (
+        "candidate_path_or_corridor_union_for_review_scope_only"
+    )
+    assert terminal_ridge["selected_feature_id"] is None
+    assert resolved["candidate_only"] is True
+    assert resolved["runtime_safety_truth"] is False
+
+
+def test_inspect_preserves_hash_binding_for_legacy_json_without_additive_fields(
+    tmp_path: Path,
+) -> None:
+    project_root = _workspace(tmp_path)
+    service = _service()
+    interpreted = service.interpret(
+        project_root,
+        project_id="guidance_demo",
+        request=TerrainGuidanceInterpretRequest(
+            narrative=NARRATIVE,
+            source_id="iroko-d3",
+        ),
+    )
+    service.resolve(
+        project_root,
+        project_id="guidance_demo",
+        request=TerrainGuidanceResolveRequest(
+            guidance_id=interpreted["guidance_plan"]["guidance_id"],
+            route_start=ROUTE_START,
+            route_destination=ROUTE_DESTINATION,
+            search_margin_m=200,
+        ),
+    )
+    project_path = project_root / "project.json"
+    project = json.loads(project_path.read_text())
+    feature_path = project_root / project["terrain_route_guidance_feature_index_ref"]
+    feature_payload = json.loads(feature_path.read_text())
+    feature_payload.pop("reference_corridors", None)
+    feature_payload.pop("reference_paths", None)
+    for feature in feature_payload["features"]:
+        feature.pop("reference_corridor_overlaps", None)
+        feature.pop("reference_corridor_support", None)
+        feature.pop("reference_path_proximities", None)
+        feature.pop("reference_path_support", None)
+    feature_path.write_text(json.dumps(feature_payload), encoding="utf-8")
+
+    resolution_path = project_root / project["terrain_route_guidance_resolution_ref"]
+    resolution_payload = json.loads(resolution_path.read_text())
+    for constraint in resolution_payload["constraints"]:
+        constraint.pop("review_shortlist_feature_ids", None)
+        constraint.pop("review_scope_semantics", None)
+        constraint.pop("out_of_scope_candidate_count", None)
+    resolution_path.write_text(json.dumps(resolution_payload), encoding="utf-8")
+
+    def canonical_sha(payload: dict[str, object]) -> str:
+        encoded = json.dumps(
+            payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+        return hashlib.sha256(encoded).hexdigest()
+
+    project["terrain_route_guidance_feature_index_sha256"] = canonical_sha(
+        feature_payload
+    )
+    project["terrain_route_guidance_resolution_sha256"] = canonical_sha(
+        resolution_payload
+    )
+    project_path.write_text(json.dumps(project, sort_keys=True), encoding="utf-8")
+
+    inspected = service.inspect(project_root, project_id="guidance_demo")
+
+    assert inspected["feature_index"]["reference_paths"] == []
+    assert inspected["resolution"]["constraints"][0][
+        "review_scope_semantics"
+    ] == "legacy_unscoped_candidates"
 
 
 def test_candidate_corridor_hash_mismatch_fails_before_writing_resolution(

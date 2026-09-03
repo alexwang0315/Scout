@@ -6,6 +6,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import tempfile
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -20,6 +21,7 @@ from terrain_route_guidance import (
     TerrainGuidanceConstraintKind,
     TerrainGuidanceCorridorOverlap,
     TerrainGuidanceCorridorReference,
+    TerrainGuidanceCorridorSupport,
     TerrainGuidanceCostModifier,
     TerrainGuidanceCostModifierKind,
     TerrainGuidanceFeatureCandidate,
@@ -28,6 +30,9 @@ from terrain_route_guidance import (
     TerrainGuidanceExecutionPlan,
     TerrainGuidanceInterpretationStatus,
     TerrainGuidanceLandform,
+    TerrainGuidancePathProximity,
+    TerrainGuidancePathReference,
+    TerrainGuidancePathSupport,
     TerrainGuidanceResolution,
     TerrainGuidanceReviewStatus,
     TerrainGuidanceSearchWindow,
@@ -57,6 +62,8 @@ MAX_GUIDANCE_LOCAL_COORDINATES = 100_000
 TERRAIN_GUIDANCE_DEM_DERIVATION_VERSION = "dem_ridge_elevation_saddle_proxy.v0_1"
 MAX_GUIDANCE_CORRIDOR_SAMPLES_PER_FEATURE = 24
 MAX_GUIDANCE_CORRIDOR_SAMPLE_POINTS = 50_000
+MAX_GUIDANCE_REFERENCE_PATHS = 18
+MAX_GUIDANCE_REFERENCE_PATH_POINTS = 800
 
 
 @dataclass(frozen=True)
@@ -72,6 +79,28 @@ class _CandidateCorridorReference:
     bbox_wgs84: dict[str, float]
     inside_value: float = 1.0
     nodata_value: float = 255.0
+
+
+@dataclass(frozen=True)
+class _CandidatePathReference:
+    selection_id: str
+    hypothesis_id: str
+    display_id: str
+    label: str
+    alternative_index: int
+    hypothesis_run_sha256: str
+    cache_key: str
+    path_sha256: str
+    source_path_point_count: int
+    coordinates: tuple[tuple[float, float], ...]
+
+
+@dataclass(frozen=True)
+class _CandidateRunBinding:
+    selection_id: str
+    hypothesis_ref: str
+    hypothesis_sha256: str
+    cache_key: str
 
 
 class TerrainGuidanceElevationSampler(Protocol):
@@ -119,11 +148,16 @@ class TerrainGuidanceResolveRequest(TerrainGuidanceWorkspaceModel):
         default=None,
         pattern=r"^[a-z0-9][a-z0-9._-]{0,79}$",
     )
+    reference_hypothesis_ids: list[str] = Field(
+        default_factory=list,
+        max_length=3,
+    )
     reference_corridor_band_name: Literal[
         "top_5_percent_corridor",
         "top_10_percent_corridor",
         "top_20_percent_corridor",
     ] = "top_5_percent_corridor"
+    reference_path_scope_m: float = Field(default=200, ge=40, le=1000)
     manual_anchors: list[TerrainGuidanceManualAnchorRequest] = Field(
         default_factory=list,
         max_length=100,
@@ -140,6 +174,16 @@ class TerrainGuidanceResolveRequest(TerrainGuidanceWorkspaceModel):
             raise ValueError("manual anchor constraint IDs must be unique")
         return value
 
+    @field_validator("reference_hypothesis_ids")
+    @classmethod
+    def validate_reference_hypothesis_ids(cls, value: list[str]) -> list[str]:
+        pattern = re.compile(r"^[a-z0-9][a-z0-9._-]{0,79}$")
+        if any(not pattern.fullmatch(item) for item in value):
+            raise ValueError("candidate corridor reference hypothesis ID is invalid")
+        if len(value) != len(set(value)):
+            raise ValueError("candidate corridor reference hypothesis IDs must be unique")
+        return value
+
     @model_validator(mode="after")
     def require_route_window(self) -> "TerrainGuidanceResolveRequest":
         if self.route_start is None or self.route_destination is None:
@@ -154,7 +198,16 @@ class TerrainGuidanceResolveRequest(TerrainGuidanceWorkspaceModel):
             and self.route_start.y == self.route_destination.y
         ):
             raise ValueError("terrain guidance route endpoints must differ")
+        if len(self.corridor_reference_hypothesis_ids()) > 3:
+            raise ValueError("at most three candidate corridor references are supported")
         return self
+
+    def corridor_reference_hypothesis_ids(self) -> tuple[str, ...]:
+        values = [
+            *([self.reference_hypothesis_id] if self.reference_hypothesis_id else []),
+            *self.reference_hypothesis_ids,
+        ]
+        return tuple(dict.fromkeys(values))
 
 
 class TerrainGuidanceReviewRequest(TerrainGuidanceWorkspaceModel):
@@ -298,16 +351,34 @@ class TerrainRouteGuidanceWorkspaceService:
             request.route_destination,
             margin_m=request.search_margin_m,
         )
-        corridor_reference = _load_candidate_corridor_reference(
-            root,
-            project,
-            project_id=project_id,
-            parent=parent,
-            search_window=search_window,
-            hypothesis_id=request.reference_hypothesis_id,
-            band_name=request.reference_corridor_band_name,
+        reference_hypothesis_ids = request.corridor_reference_hypothesis_ids()
+        corridor_references = tuple(
+            _load_candidate_corridor_reference(
+                root,
+                project,
+                project_id=project_id,
+                parent=parent,
+                search_window=search_window,
+                hypothesis_id=hypothesis_id,
+                band_name=request.reference_corridor_band_name,
+            )
+            for hypothesis_id in reference_hypothesis_ids
         )
-        if corridor_reference is not None and self._elevation_sampler is None:
+        path_references = tuple(
+            path_reference
+            for hypothesis_id in reference_hypothesis_ids
+            for path_reference in _load_candidate_path_references(
+                root,
+                project,
+                project_id=project_id,
+                parent=parent,
+                search_window=search_window,
+                hypothesis_id=hypothesis_id,
+            )
+        )
+        if len(path_references) > MAX_GUIDANCE_REFERENCE_PATHS:
+            raise ValueError("candidate path reference budget exceeded")
+        if corridor_references and self._elevation_sampler is None:
             raise ValueError("candidate corridor sampling is unavailable on this host")
         feature_index = _build_feature_index(
             root,
@@ -317,7 +388,9 @@ class TerrainRouteGuidanceWorkspaceService:
             search_window=search_window,
             manual_anchors=request.manual_anchors,
             elevation_sampler=self._elevation_sampler,
-            corridor_reference=corridor_reference,
+            corridor_references=corridor_references,
+            path_references=path_references,
+            reference_path_scope_m=request.reference_path_scope_m,
         )
         resolution = resolve_terrain_route_guidance(plan, feature_index)
         guidance_root_ref = str(project["terrain_route_guidance_root_ref"])
@@ -929,6 +1002,54 @@ def _rounded_coordinate(point: tuple[float, float]) -> list[float]:
     return [round(point[0], 9), round(point[1], 9)]
 
 
+def _load_candidate_run_binding(
+    project_root: Path,
+    project: dict[str, Any],
+    *,
+    project_id: str,
+    selection_id: str,
+) -> _CandidateRunBinding:
+    catalog_ref = project.get("terrain_route_hypothesis_catalog_ref")
+    catalog_sha = project.get("terrain_route_hypothesis_catalog_sha256")
+    if isinstance(catalog_ref, str) and isinstance(catalog_sha, str):
+        catalog_path = _safe_project_path(project_root, catalog_ref)
+        if _sha256_file(catalog_path) != catalog_sha:
+            raise ValueError("terrain route hypothesis catalog hash mismatch")
+        catalog = TerrainRouteHypothesisCatalog.model_validate(_read_json(catalog_path))
+        if catalog.project_id != project_id:
+            raise ValueError("terrain route hypothesis catalog project mismatch")
+        entry = next((item for item in catalog.entries if item.id == selection_id), None)
+        if entry is not None:
+            return _CandidateRunBinding(
+                selection_id=entry.id,
+                hypothesis_ref=entry.hypothesis_ref,
+                hypothesis_sha256=entry.hypothesis_sha256,
+                cache_key=entry.cache_key,
+            )
+
+    active_ref = project.get("terrain_route_hypothesis_ref")
+    active_sha = project.get("terrain_route_hypothesis_sha256")
+    active_cache_key = project.get("terrain_route_hypothesis_cache_key")
+    expected_active_id = (
+        f"active-{active_cache_key[:12]}"
+        if isinstance(active_cache_key, str) and len(active_cache_key) == 64
+        else None
+    )
+    if (
+        selection_id == expected_active_id
+        and isinstance(active_ref, str)
+        and isinstance(active_sha, str)
+        and isinstance(active_cache_key, str)
+    ):
+        return _CandidateRunBinding(
+            selection_id=selection_id,
+            hypothesis_ref=active_ref,
+            hypothesis_sha256=active_sha,
+            cache_key=active_cache_key,
+        )
+    raise ValueError("candidate terrain reference hypothesis was not found")
+
+
 def _load_candidate_corridor_reference(
     project_root: Path,
     project: dict[str, Any],
@@ -941,25 +1062,14 @@ def _load_candidate_corridor_reference(
 ) -> _CandidateCorridorReference | None:
     if hypothesis_id is None:
         return None
-    catalog_ref = project.get("terrain_route_hypothesis_catalog_ref")
-    catalog_sha = project.get("terrain_route_hypothesis_catalog_sha256")
-    if not isinstance(catalog_ref, str) or not isinstance(catalog_sha, str):
-        raise ValueError("candidate corridor reference requires a bound TRH catalog")
-    catalog_path = _safe_project_path(project_root, catalog_ref)
-    if _sha256_file(catalog_path) != catalog_sha:
-        raise ValueError("terrain route hypothesis catalog hash mismatch")
-    catalog = TerrainRouteHypothesisCatalog.model_validate(_read_json(catalog_path))
-    if catalog.project_id != project_id:
-        raise ValueError("terrain route hypothesis catalog project mismatch")
-    entry = next(
-        (item for item in catalog.entries if item.id == hypothesis_id),
-        None,
+    binding = _load_candidate_run_binding(
+        project_root,
+        project,
+        project_id=project_id,
+        selection_id=hypothesis_id,
     )
-    if entry is None:
-        raise ValueError("candidate corridor reference hypothesis was not found")
-
-    hypothesis_path = _safe_project_path(project_root, entry.hypothesis_ref)
-    if _sha256_file(hypothesis_path) != entry.hypothesis_sha256:
+    hypothesis_path = _safe_project_path(project_root, binding.hypothesis_ref)
+    if _sha256_file(hypothesis_path) != binding.hypothesis_sha256:
         raise ValueError("candidate corridor hypothesis hash mismatch")
     run = TerrainRouteHypothesisRun.model_validate(_read_json(hypothesis_path))
     if run.status is not TerrainRouteRunStatus.COMPLETED:
@@ -970,7 +1080,7 @@ def _load_candidate_corridor_reference(
     if len(corridor_hypotheses) != 1:
         raise ValueError("candidate corridor hypothesis must bind exactly one corridor")
     hypothesis = corridor_hypotheses[0]
-    if hypothesis.provenance.cache_key != entry.cache_key:
+    if hypothesis.provenance.cache_key != binding.cache_key:
         raise ValueError("candidate corridor cache binding mismatch")
     parent_source_hashes = hypothesis.provenance.processing_manifest.get(
         "parent_source_hashes"
@@ -1021,9 +1131,9 @@ def _load_candidate_corridor_reference(
     if _sha256_file(raster_path) != raster.sha256:
         raise ValueError("candidate corridor raster hash mismatch")
     return _CandidateCorridorReference(
-        hypothesis_id=entry.id,
-        hypothesis_sha256=entry.hypothesis_sha256,
-        cache_key=entry.cache_key,
+        hypothesis_id=binding.selection_id,
+        hypothesis_sha256=binding.hypothesis_sha256,
+        cache_key=binding.cache_key,
         band_name=band.name,
         raster_ref=raster.artifact_ref,
         raster_sha256=raster.sha256,
@@ -1031,6 +1141,111 @@ def _load_candidate_corridor_reference(
         raster_path=raster_path,
         bbox_wgs84=bbox,
     )
+
+
+def _load_candidate_path_references(
+    project_root: Path,
+    project: dict[str, Any],
+    *,
+    project_id: str,
+    parent: dict[str, Any],
+    search_window: TerrainGuidanceSearchWindow,
+    hypothesis_id: str,
+) -> tuple[_CandidatePathReference, ...]:
+    binding = _load_candidate_run_binding(
+        project_root,
+        project,
+        project_id=project_id,
+        selection_id=hypothesis_id,
+    )
+    hypothesis_path = _safe_project_path(project_root, binding.hypothesis_ref)
+    if _sha256_file(hypothesis_path) != binding.hypothesis_sha256:
+        raise ValueError("candidate path hypothesis hash mismatch")
+    run = TerrainRouteHypothesisRun.model_validate(_read_json(hypothesis_path))
+    if run.status is not TerrainRouteRunStatus.COMPLETED:
+        raise ValueError("candidate path hypothesis is not completed")
+    endpoint_tolerance_m = max(30.0, float(parent["dem_resolution_m"]) * 2.0)
+    references: list[_CandidatePathReference] = []
+    for hypothesis in run.hypotheses:
+        if hypothesis.alternative_index > 3:
+            continue
+        if hypothesis.path_semantics != "minimum_anisotropic_model_cost_trace":
+            raise ValueError("candidate path reference requires an unguided R1-R3 trace")
+        if hypothesis.provenance.cache_key != binding.cache_key:
+            raise ValueError("candidate path cache binding mismatch")
+        parent_source_hashes = hypothesis.provenance.processing_manifest.get(
+            "parent_source_hashes"
+        )
+        parent_hash_chain_matches = (
+            isinstance(parent_source_hashes, dict)
+            and parent_source_hashes.get(parent["dem_ref"]) == parent["dem_sha256"]
+            and parent_source_hashes.get(parent["parent_manifest_ref"])
+            == parent["parent_manifest_sha256"]
+        )
+        if (
+            hypothesis.provenance.dem_sha256 != parent["dem_sha256"]
+            and not parent_hash_chain_matches
+        ):
+            raise ValueError(
+                "candidate path DEM parent hash chain differs from active terrain evidence"
+            )
+        if (
+            _wgs84_distance_m(
+                (hypothesis.start.x, hypothesis.start.y),
+                (search_window.route_start.x, search_window.route_start.y),
+            )
+            > endpoint_tolerance_m
+            or _wgs84_distance_m(
+                (hypothesis.destination.x, hypothesis.destination.y),
+                (
+                    search_window.route_destination.x,
+                    search_window.route_destination.y,
+                ),
+            )
+            > endpoint_tolerance_m
+        ):
+            raise ValueError("candidate path endpoints do not match the guidance A/B")
+        if hypothesis.best_path.crs.strip().upper() != "EPSG:4326":
+            raise ValueError("candidate path review scope requires EPSG:4326 geometry")
+        source_coordinates = tuple(hypothesis.best_path.coordinates)
+        path_payload = {
+            "type": "LineString",
+            "coordinates": source_coordinates,
+            "crs": "EPSG:4326",
+        }
+        coordinates = _bounded_reference_path_points(source_coordinates)
+        references.append(
+            _CandidatePathReference(
+                selection_id=binding.selection_id,
+                hypothesis_id=hypothesis.id,
+                display_id=f"R{hypothesis.alternative_index}",
+                label=hypothesis.label,
+                alternative_index=hypothesis.alternative_index,
+                hypothesis_run_sha256=binding.hypothesis_sha256,
+                cache_key=binding.cache_key,
+                path_sha256=_sha256_json(path_payload),
+                source_path_point_count=len(source_coordinates),
+                coordinates=coordinates,
+            )
+        )
+    if not references:
+        raise ValueError("candidate path reference contains no R1-R3 traces")
+    return tuple(references)
+
+
+def _bounded_reference_path_points(
+    points: Sequence[tuple[float, float]],
+) -> tuple[tuple[float, float], ...]:
+    if len(points) < 2:
+        raise ValueError("candidate path reference requires at least two points")
+    if len(points) <= MAX_GUIDANCE_REFERENCE_PATH_POINTS:
+        return tuple(points)
+    maximum = MAX_GUIDANCE_REFERENCE_PATH_POINTS
+    indexes = [
+        round(index * (len(points) - 1) / (maximum - 1))
+        for index in range(maximum)
+    ]
+    return tuple(points[index] for index in dict.fromkeys(indexes))
 
 
 def _validated_wgs84_bbox(value: dict[str, float] | None) -> dict[str, float]:
@@ -1065,7 +1280,9 @@ def _build_feature_index(
     search_window: TerrainGuidanceSearchWindow,
     manual_anchors: Sequence[TerrainGuidanceManualAnchorRequest],
     elevation_sampler: TerrainGuidanceElevationSampler | None,
-    corridor_reference: _CandidateCorridorReference | None,
+    corridor_references: Sequence[_CandidateCorridorReference],
+    path_references: Sequence[_CandidatePathReference],
+    reference_path_scope_m: float,
 ) -> TerrainGuidanceFeatureIndex:
     features: list[TerrainGuidanceFeatureCandidate] = []
     coordinate_count = 0
@@ -1170,14 +1387,27 @@ def _build_feature_index(
                 if elevation_nodata_count == elevation_sample_count
                 else "partial" if elevation_nodata_count else "completed"
             )
-    reference_corridor: TerrainGuidanceCorridorReference | None = None
-    if corridor_reference is not None:
+    reference_corridors: list[TerrainGuidanceCorridorReference] = []
+    if corridor_references:
         if elevation_sampler is None:
             raise ValueError("candidate corridor sampling is unavailable on this host")
-        features, reference_corridor = _add_candidate_corridor_overlap(
+        for corridor_reference in corridor_references:
+            features, bound_reference = _add_candidate_corridor_overlap(
+                features,
+                reference=corridor_reference,
+                sampler=elevation_sampler,
+            )
+            reference_corridors.append(bound_reference)
+        features = _add_candidate_corridor_support(
             features,
-            reference=corridor_reference,
-            sampler=elevation_sampler,
+            reference_count=len(reference_corridors),
+        )
+    reference_paths: tuple[TerrainGuidancePathReference, ...] = ()
+    if path_references:
+        features, reference_paths = _add_candidate_path_proximity(
+            features,
+            references=path_references,
+            scope_distance_m=reference_path_scope_m,
         )
     constraint_by_id = {item.constraint_id: item for item in plan.constraints}
     for anchor in manual_anchors:
@@ -1220,8 +1450,12 @@ def _build_feature_index(
         dem_resolution_m=parent["dem_resolution_m"],
         crs="EPSG:4326",
         algorithm_version=(
-            "qgis_feature_vectors_route_window_plus_dem_elevation_saddles_plus_candidate_corridor_overlap_plus_human_map_annotations.v0_4"
-            if corridor_reference is not None
+            "qgis_feature_vectors_route_window_plus_dem_elevation_saddles_plus_r1_r3_path_review_scope_plus_human_map_annotations.v0_6"
+            if reference_paths
+            else "qgis_feature_vectors_route_window_plus_dem_elevation_saddles_plus_multi_candidate_corridor_review_scope_plus_human_map_annotations.v0_5"
+            if len(reference_corridors) > 1
+            else "qgis_feature_vectors_route_window_plus_dem_elevation_saddles_plus_candidate_corridor_overlap_plus_human_map_annotations.v0_4"
+            if reference_corridors
             else
             "qgis_feature_vectors_route_window_plus_dem_elevation_saddles_plus_human_map_annotations.v0_3"
             if elevation_sampler is not None
@@ -1232,7 +1466,9 @@ def _build_feature_index(
         elevation_sample_count=elevation_sample_count,
         elevation_nodata_count=elevation_nodata_count,
         derived_saddle_count=derived_saddle_count,
-        reference_corridor=reference_corridor,
+        reference_corridor=(reference_corridors[0] if reference_corridors else None),
+        reference_corridors=tuple(reference_corridors),
+        reference_paths=reference_paths,
         search_window=search_window,
         features=features,
     )
@@ -1312,14 +1548,26 @@ def _add_candidate_corridor_overlap(
         total_outside += outside_count
         if inside_count:
             features_with_overlap += 1
-    enriched = [
-        item.model_copy(
-            update={"reference_corridor_overlap": overlap_by_id[item.feature_id]}
+    enriched: list[TerrainGuidanceFeatureCandidate] = []
+    for item in features:
+        overlap = overlap_by_id.get(item.feature_id)
+        if overlap is None:
+            enriched.append(item)
+            continue
+        existing = item.reference_corridor_overlaps or (
+            (item.reference_corridor_overlap,)
+            if item.reference_corridor_overlap is not None
+            else ()
         )
-        if item.feature_id in overlap_by_id
-        else item
-        for item in features
-    ]
+        overlaps = (*existing, overlap)
+        enriched.append(
+            item.model_copy(
+                update={
+                    "reference_corridor_overlap": overlaps[0],
+                    "reference_corridor_overlaps": overlaps,
+                }
+            )
+        )
     bound_reference = TerrainGuidanceCorridorReference(
         hypothesis_id=reference.hypothesis_id,
         hypothesis_sha256=reference.hypothesis_sha256,
@@ -1340,6 +1588,103 @@ def _add_candidate_corridor_overlap(
     return enriched, bound_reference
 
 
+def _add_candidate_corridor_support(
+    features: Sequence[TerrainGuidanceFeatureCandidate],
+    *,
+    reference_count: int,
+) -> list[TerrainGuidanceFeatureCandidate]:
+    enriched: list[TerrainGuidanceFeatureCandidate] = []
+    for feature in features:
+        if feature.selection_source != "dem_derived":
+            enriched.append(feature)
+            continue
+        overlaps = feature.reference_corridor_overlaps or (
+            (feature.reference_corridor_overlap,)
+            if feature.reference_corridor_overlap is not None
+            else ()
+        )
+        if len(overlaps) != reference_count:
+            raise ValueError("candidate corridor support reference count mismatch")
+        overlapping_count = sum(item.inside_sample_count > 0 for item in overlaps)
+        fractions = [item.overlap_fraction for item in overlaps]
+        support = TerrainGuidanceCorridorSupport(
+            reference_count=reference_count,
+            overlapping_reference_count=overlapping_count,
+            mean_overlap_fraction=sum(fractions) / reference_count,
+            max_overlap_fraction=max(fractions),
+            review_shortlist=overlapping_count > 0,
+        )
+        enriched.append(
+            feature.model_copy(update={"reference_corridor_support": support})
+        )
+    return enriched
+
+
+def _add_candidate_path_proximity(
+    features: Sequence[TerrainGuidanceFeatureCandidate],
+    *,
+    references: Sequence[_CandidatePathReference],
+    scope_distance_m: float,
+) -> tuple[
+    list[TerrainGuidanceFeatureCandidate],
+    tuple[TerrainGuidancePathReference, ...],
+]:
+    bound_references = tuple(
+        TerrainGuidancePathReference(
+            selection_id=reference.selection_id,
+            hypothesis_id=reference.hypothesis_id,
+            display_id=reference.display_id,
+            label=reference.label,
+            alternative_index=reference.alternative_index,
+            hypothesis_run_sha256=reference.hypothesis_run_sha256,
+            cache_key=reference.cache_key,
+            path_sha256=reference.path_sha256,
+            path_point_count=reference.source_path_point_count,
+            sampled_path_point_count=len(reference.coordinates),
+            scope_distance_m=scope_distance_m,
+        )
+        for reference in references
+    )
+    enriched: list[TerrainGuidanceFeatureCandidate] = []
+    for feature in features:
+        if feature.selection_source != "dem_derived":
+            enriched.append(feature)
+            continue
+        sample_points = _candidate_corridor_sample_points(feature)
+        proximities: list[TerrainGuidancePathProximity] = []
+        for reference in references:
+            minimum_distance_m = min(
+                _wgs84_point_to_path_distance_m(point, reference.coordinates)
+                for point in sample_points
+            )
+            proximities.append(
+                TerrainGuidancePathProximity(
+                    selection_id=reference.selection_id,
+                    hypothesis_id=reference.hypothesis_id,
+                    display_id=reference.display_id,
+                    minimum_distance_m=minimum_distance_m,
+                    scope_distance_m=scope_distance_m,
+                    within_review_scope=minimum_distance_m <= scope_distance_m,
+                )
+            )
+        within_count = sum(item.within_review_scope for item in proximities)
+        support = TerrainGuidancePathSupport(
+            reference_count=len(proximities),
+            within_scope_reference_count=within_count,
+            minimum_distance_m=min(item.minimum_distance_m for item in proximities),
+            review_shortlist=within_count > 0,
+        )
+        enriched.append(
+            feature.model_copy(
+                update={
+                    "reference_path_proximities": tuple(proximities),
+                    "reference_path_support": support,
+                }
+            )
+        )
+    return enriched, bound_references
+
+
 def _candidate_corridor_sample_points(
     feature: TerrainGuidanceFeatureCandidate,
 ) -> tuple[tuple[float, float], ...]:
@@ -1356,6 +1701,53 @@ def _candidate_corridor_sample_points(
         for index in range(maximum)
     ]
     return tuple(points[index] for index in dict.fromkeys(indexes))
+
+
+def _wgs84_point_to_path_distance_m(
+    point: tuple[float, float],
+    path: Sequence[tuple[float, float]],
+) -> float:
+    if len(path) < 2:
+        raise ValueError("candidate path reference requires at least two points")
+    return min(
+        _wgs84_point_to_segment_distance_m(point, start, destination)
+        for start, destination in zip(path, path[1:], strict=False)
+    )
+
+
+def _wgs84_point_to_segment_distance_m(
+    point: tuple[float, float],
+    start: tuple[float, float],
+    destination: tuple[float, float],
+) -> float:
+    longitude, latitude = point
+    reference_latitude = math.radians(
+        (latitude + start[1] + destination[1]) / 3.0
+    )
+    meters_per_degree_latitude = 111_320.0
+    meters_per_degree_longitude = max(
+        1.0,
+        meters_per_degree_latitude * math.cos(reference_latitude),
+    )
+
+    def local_xy(value: tuple[float, float]) -> tuple[float, float]:
+        return (
+            (value[0] - longitude) * meters_per_degree_longitude,
+            (value[1] - latitude) * meters_per_degree_latitude,
+        )
+
+    start_x, start_y = local_xy(start)
+    destination_x, destination_y = local_xy(destination)
+    delta_x = destination_x - start_x
+    delta_y = destination_y - start_y
+    length_squared = delta_x * delta_x + delta_y * delta_y
+    if length_squared <= 1e-12:
+        return math.hypot(start_x, start_y)
+    projection = -(start_x * delta_x + start_y * delta_y) / length_squared
+    projection = min(1.0, max(0.0, projection))
+    nearest_x = start_x + projection * delta_x
+    nearest_y = start_y + projection * delta_y
+    return math.hypot(nearest_x, nearest_y)
 
 
 def _add_dem_elevation_and_saddle_candidates(
@@ -1629,11 +2021,17 @@ def _load_bound_model(
         raise ValueError(f"workspace artifact binding is unavailable: {ref_key}")
     path = _safe_project_path(project_root, ref)
     payload = _read_json(path)
-    model = model_type.model_validate(payload)
-    actual_hash = _model_sha256(model)
+    actual_hash = _sha256_text(
+        json.dumps(
+            payload,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+    )
     if actual_hash != expected_hash:
         raise ValueError(f"workspace artifact hash mismatch: {ref_key}")
-    return model
+    return model_type.model_validate(payload)
 
 
 def _optional_bound_model(

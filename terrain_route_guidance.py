@@ -206,6 +206,102 @@ class TerrainGuidanceCorridorOverlap(TerrainGuidanceModel):
         return self
 
 
+class TerrainGuidanceCorridorSupport(TerrainGuidanceModel):
+    reference_count: int = Field(ge=1, le=3)
+    overlapping_reference_count: int = Field(ge=0, le=3)
+    mean_overlap_fraction: float = Field(ge=0, le=1)
+    max_overlap_fraction: float = Field(ge=0, le=1)
+    review_shortlist: bool
+    semantics: Literal[
+        "candidate_corridor_union_for_review_scope_only"
+    ] = "candidate_corridor_union_for_review_scope_only"
+    candidate_only: Literal[True] = True
+    runtime_safety_truth: Literal[False] = False
+    operational: Literal[False] = False
+
+    @model_validator(mode="after")
+    def validate_support(self) -> "TerrainGuidanceCorridorSupport":
+        if self.overlapping_reference_count > self.reference_count:
+            raise ValueError("candidate corridor support count is invalid")
+        if self.mean_overlap_fraction > self.max_overlap_fraction + 1e-9:
+            raise ValueError("candidate corridor mean overlap exceeds maximum overlap")
+        if self.review_shortlist is not (self.overlapping_reference_count > 0):
+            raise ValueError("candidate corridor review shortlist flag is inconsistent")
+        return self
+
+
+class TerrainGuidancePathProximity(TerrainGuidanceModel):
+    selection_id: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]{0,79}$")
+    hypothesis_id: str = Field(min_length=1, max_length=160)
+    display_id: str = Field(pattern=r"^R[1-6]$")
+    minimum_distance_m: float = Field(ge=0)
+    scope_distance_m: float = Field(ge=40, le=1000)
+    within_review_scope: bool
+    semantics: Literal[
+        "candidate_path_proximity_for_review_scope_only"
+    ] = "candidate_path_proximity_for_review_scope_only"
+    candidate_only: Literal[True] = True
+    runtime_safety_truth: Literal[False] = False
+    operational: Literal[False] = False
+
+    @model_validator(mode="after")
+    def validate_scope(self) -> "TerrainGuidancePathProximity":
+        expected = self.minimum_distance_m <= self.scope_distance_m + 1e-9
+        if self.within_review_scope is not expected:
+            raise ValueError("candidate path review scope flag is inconsistent")
+        return self
+
+
+class TerrainGuidancePathSupport(TerrainGuidanceModel):
+    reference_count: int = Field(ge=1, le=18)
+    within_scope_reference_count: int = Field(ge=0, le=18)
+    minimum_distance_m: float = Field(ge=0)
+    review_shortlist: bool
+    semantics: Literal[
+        "candidate_path_union_for_review_scope_only"
+    ] = "candidate_path_union_for_review_scope_only"
+    candidate_only: Literal[True] = True
+    runtime_safety_truth: Literal[False] = False
+    operational: Literal[False] = False
+
+    @model_validator(mode="after")
+    def validate_support(self) -> "TerrainGuidancePathSupport":
+        if self.within_scope_reference_count > self.reference_count:
+            raise ValueError("candidate path support count is invalid")
+        if self.review_shortlist is not (self.within_scope_reference_count > 0):
+            raise ValueError("candidate path review shortlist flag is inconsistent")
+        return self
+
+
+class TerrainGuidancePathReference(TerrainGuidanceModel):
+    selection_id: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]{0,79}$")
+    hypothesis_id: str = Field(min_length=1, max_length=160)
+    display_id: str = Field(pattern=r"^R[1-6]$")
+    label: str = Field(min_length=1, max_length=240)
+    alternative_index: int = Field(ge=1, le=6)
+    hypothesis_run_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    cache_key: str = Field(pattern=r"^[a-f0-9]{64}$")
+    path_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    path_point_count: int = Field(ge=2)
+    sampled_path_point_count: int = Field(ge=2)
+    scope_distance_m: float = Field(ge=40, le=1000)
+    sampling_semantics: Literal[
+        "deterministic_bounded_path_vertices_preserving_endpoints"
+    ] = "deterministic_bounded_path_vertices_preserving_endpoints"
+    semantics: Literal[
+        "minimum_anisotropic_model_cost_trace_as_review_scope_evidence"
+    ] = "minimum_anisotropic_model_cost_trace_as_review_scope_evidence"
+    candidate_only: Literal[True] = True
+    runtime_safety_truth: Literal[False] = False
+    operational: Literal[False] = False
+
+    @model_validator(mode="after")
+    def validate_path_sampling(self) -> "TerrainGuidancePathReference":
+        if self.sampled_path_point_count > self.path_point_count:
+            raise ValueError("sampled candidate path point count is invalid")
+        return self
+
+
 class TerrainGuidanceCorridorReference(TerrainGuidanceModel):
     hypothesis_id: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]{0,79}$")
     hypothesis_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
@@ -353,6 +449,10 @@ class TerrainGuidanceFeatureCandidate(TerrainGuidanceModel):
     relations: tuple[str, ...] = ()
     supported_constraint_ids: tuple[str, ...] = ()
     reference_corridor_overlap: TerrainGuidanceCorridorOverlap | None = None
+    reference_corridor_overlaps: tuple[TerrainGuidanceCorridorOverlap, ...] = ()
+    reference_corridor_support: TerrainGuidanceCorridorSupport | None = None
+    reference_path_proximities: tuple[TerrainGuidancePathProximity, ...] = ()
+    reference_path_support: TerrainGuidancePathSupport | None = None
     geometry: dict[str, Any] | None = None
     selection_source: Literal["dem_derived", "human_map_annotation"] = (
         "dem_derived"
@@ -400,6 +500,35 @@ class TerrainGuidanceFeatureCandidate(TerrainGuidanceModel):
             raise ValueError(
                 "human map annotation must identify supported constraint IDs"
             )
+        overlaps = self.reference_corridor_overlaps
+        if self.reference_corridor_overlap is not None and overlaps:
+            if self.reference_corridor_overlap != overlaps[0]:
+                raise ValueError("primary candidate corridor overlap must be first")
+        effective_overlaps = overlaps or (
+            (self.reference_corridor_overlap,)
+            if self.reference_corridor_overlap is not None
+            else ()
+        )
+        hypothesis_ids = [item.hypothesis_id for item in effective_overlaps]
+        if len(hypothesis_ids) != len(set(hypothesis_ids)):
+            raise ValueError("candidate corridor overlaps must use unique hypotheses")
+        support = self.reference_corridor_support
+        if support is not None:
+            if support.reference_count != len(effective_overlaps):
+                raise ValueError("candidate corridor support reference count mismatch")
+            overlapping_count = sum(
+                item.inside_sample_count > 0 for item in effective_overlaps
+            )
+            if support.overlapping_reference_count != overlapping_count:
+                raise ValueError("candidate corridor overlap support count mismatch")
+        path_support = self.reference_path_support
+        if path_support is not None:
+            proximities = self.reference_path_proximities
+            if path_support.reference_count != len(proximities):
+                raise ValueError("candidate path support reference count mismatch")
+            within_count = sum(item.within_review_scope for item in proximities)
+            if path_support.within_scope_reference_count != within_count:
+                raise ValueError("candidate path proximity support count mismatch")
         return self
 
 
@@ -451,6 +580,8 @@ class TerrainGuidanceFeatureIndex(TerrainGuidanceModel):
     elevation_nodata_count: int = Field(default=0, ge=0)
     derived_saddle_count: int = Field(default=0, ge=0)
     reference_corridor: TerrainGuidanceCorridorReference | None = None
+    reference_corridors: tuple[TerrainGuidanceCorridorReference, ...] = ()
+    reference_paths: tuple[TerrainGuidancePathReference, ...] = ()
     search_window: TerrainGuidanceSearchWindow | None = None
     features: list[TerrainGuidanceFeatureCandidate]
     candidate_only: Literal[True] = True
@@ -475,26 +606,70 @@ class TerrainGuidanceFeatureIndex(TerrainGuidanceModel):
         dem_features = [
             item for item in self.features if item.selection_source == "dem_derived"
         ]
-        overlaps = [
-            item.reference_corridor_overlap
+        references = self.reference_corridors or (
+            (self.reference_corridor,) if self.reference_corridor is not None else ()
+        )
+        if self.reference_corridor is not None and self.reference_corridors:
+            if self.reference_corridor != self.reference_corridors[0]:
+                raise ValueError("primary candidate corridor reference must be first")
+        reference_ids = [item.hypothesis_id for item in references]
+        if len(reference_ids) != len(set(reference_ids)):
+            raise ValueError("candidate corridor references must use unique hypotheses")
+        features_with_overlap = [
+            item
             for item in dem_features
             if item.reference_corridor_overlap is not None
+            or item.reference_corridor_overlaps
         ]
-        if self.reference_corridor is None and overlaps:
+        if not references and features_with_overlap:
             raise ValueError("candidate corridor overlap is missing its bound reference")
-        if self.reference_corridor is not None:
-            if len(overlaps) != len(dem_features):
+        if references:
+            if len(features_with_overlap) != len(dem_features):
                 raise ValueError(
                     "candidate corridor reference must cover every DEM-derived feature"
                 )
-            if any(
-                item.hypothesis_id != self.reference_corridor.hypothesis_id
-                or item.band_name != self.reference_corridor.band_name
-                for item in overlaps
-            ):
-                raise ValueError("candidate corridor overlap reference mismatch")
-            if self.reference_corridor.feature_count != len(dem_features):
+            for feature in dem_features:
+                overlaps = feature.reference_corridor_overlaps or (
+                    (feature.reference_corridor_overlap,)
+                    if feature.reference_corridor_overlap is not None
+                    else ()
+                )
+                if len(overlaps) != len(references):
+                    raise ValueError("candidate corridor overlap reference count mismatch")
+                if any(
+                    overlap.hypothesis_id != reference.hypothesis_id
+                    or overlap.band_name != reference.band_name
+                    for overlap, reference in zip(overlaps, references, strict=True)
+                ):
+                    raise ValueError("candidate corridor overlap reference mismatch")
+                if len(references) > 1 and feature.reference_corridor_support is None:
+                    raise ValueError("multi-corridor feature requires review scope support")
+            if any(reference.feature_count != len(dem_features) for reference in references):
                 raise ValueError("candidate corridor feature count mismatch")
+        if self.reference_paths:
+            path_keys = [
+                (item.selection_id, item.hypothesis_id)
+                for item in self.reference_paths
+            ]
+            if len(path_keys) != len(set(path_keys)):
+                raise ValueError("candidate path references must be unique")
+            for feature in dem_features:
+                proximities = feature.reference_path_proximities
+                if len(proximities) != len(self.reference_paths):
+                    raise ValueError("candidate path proximity reference count mismatch")
+                if any(
+                    proximity.selection_id != reference.selection_id
+                    or proximity.hypothesis_id != reference.hypothesis_id
+                    or proximity.display_id != reference.display_id
+                    for proximity, reference in zip(
+                        proximities,
+                        self.reference_paths,
+                        strict=True,
+                    )
+                ):
+                    raise ValueError("candidate path proximity reference mismatch")
+                if feature.reference_path_support is None:
+                    raise ValueError("candidate path feature requires review scope support")
         if self.elevation_sampling_status == "unavailable":
             if (
                 self.elevation_sampling_backend is not None
@@ -537,6 +712,14 @@ class ResolvedTerrainGuidanceConstraint(TerrainGuidanceModel):
     required_anchor: bool
     status: TerrainGuidanceResolutionStatus
     candidate_feature_ids: list[str] = Field(default_factory=list)
+    review_shortlist_feature_ids: list[str] = Field(default_factory=list)
+    review_scope_semantics: Literal[
+        "legacy_unscoped_candidates",
+        "all_typed_candidates",
+        "candidate_corridor_union_for_review_scope_only",
+        "candidate_path_or_corridor_union_for_review_scope_only",
+    ] = "legacy_unscoped_candidates"
+    out_of_scope_candidate_count: int = Field(default=0, ge=0)
     selected_feature_id: None = None
     explanation: str = Field(min_length=1)
     candidate_only: Literal[True] = True
@@ -554,6 +737,17 @@ class ResolvedTerrainGuidanceConstraint(TerrainGuidanceModel):
             TerrainGuidanceResolutionStatus.NOT_ROUTING_APPLICABLE,
         } and count:
             raise ValueError("unresolved/context-only constraint cannot contain candidates")
+        shortlist = self.review_shortlist_feature_ids
+        if len(shortlist) != len(set(shortlist)):
+            raise ValueError("review shortlist candidates must be unique")
+        if any(feature_id not in self.candidate_feature_ids for feature_id in shortlist):
+            raise ValueError("review shortlist must remain inside the full candidate set")
+        if self.review_scope_semantics == "all_typed_candidates":
+            if shortlist != self.candidate_feature_ids:
+                raise ValueError("unscoped review shortlist must contain every candidate")
+        if self.review_scope_semantics != "legacy_unscoped_candidates":
+            if self.out_of_scope_candidate_count != count - len(shortlist):
+                raise ValueError("review shortlist candidate counts are inconsistent")
         return self
 
 
@@ -573,6 +767,8 @@ class TerrainGuidanceResolution(TerrainGuidanceModel):
     candidate_rank_semantics: Literal[
         "typed_landform_elevation_then_narrative_sequence_proximity",
         "typed_landform_elevation_then_candidate_corridor_overlap_then_narrative_sequence_proximity",
+        "typed_landform_elevation_then_multi_candidate_corridor_support_then_narrative_sequence_proximity",
+        "typed_landform_elevation_then_candidate_path_and_corridor_support_then_narrative_sequence_proximity",
     ] = "typed_landform_elevation_then_candidate_corridor_overlap_then_narrative_sequence_proximity"
     constraints: list[ResolvedTerrainGuidanceConstraint]
     unresolved_constraint_ids: list[str] = Field(default_factory=list)
@@ -913,6 +1109,13 @@ def resolve_terrain_route_guidance(
     resolved: list[ResolvedTerrainGuidanceConstraint] = []
     unresolved_ids: list[str] = []
     constraint_count = len(plan.constraints)
+    corridor_references = feature_index.reference_corridors or (
+        (feature_index.reference_corridor,)
+        if feature_index.reference_corridor is not None
+        else ()
+    )
+    path_references = feature_index.reference_paths
+    narrowed_review_scope = bool(corridor_references or path_references)
     for constraint in plan.constraints:
         if not constraint.routing_applicable:
             result = ResolvedTerrainGuidanceConstraint(
@@ -937,6 +1140,21 @@ def resolve_terrain_route_guidance(
                 ),
             )
             matches = [feature.feature_id for feature in matched_features]
+            if narrowed_review_scope:
+                shortlist = [
+                    feature.feature_id
+                    for feature in matched_features
+                    if feature.selection_source == "human_map_annotation"
+                    or _feature_is_in_reference_review_scope(feature)
+                ]
+                review_scope_semantics = (
+                    "candidate_path_or_corridor_union_for_review_scope_only"
+                    if path_references
+                    else "candidate_corridor_union_for_review_scope_only"
+                )
+            else:
+                shortlist = list(matches)
+                review_scope_semantics = "all_typed_candidates"
             if not matches:
                 status = TerrainGuidanceResolutionStatus.UNRESOLVED
                 explanation = "No DEM-derived feature satisfies the typed constraint."
@@ -948,12 +1166,21 @@ def resolve_terrain_route_guidance(
                 status = TerrainGuidanceResolutionStatus.MULTIPLE_CANDIDATES
                 explanation = "Multiple DEM-derived candidate zones were found; no automatic selection was made."
                 unresolved_ids.append(constraint.constraint_id)
+            if narrowed_review_scope and matches:
+                explanation = (
+                    f"{explanation} Candidate path/corridor union narrows map review "
+                    f"to {len(shortlist)} of {len(matches)} candidates without "
+                    "removing evidence or selecting an anchor."
+                )
             result = ResolvedTerrainGuidanceConstraint(
                 constraint_id=constraint.constraint_id,
                 sequence_index=constraint.sequence_index,
                 required_anchor=constraint.required_anchor,
                 status=status,
                 candidate_feature_ids=matches,
+                review_shortlist_feature_ids=shortlist,
+                review_scope_semantics=review_scope_semantics,
+                out_of_scope_candidate_count=len(matches) - len(shortlist),
                 explanation=explanation,
             )
         resolved.append(result)
@@ -977,9 +1204,33 @@ def resolve_terrain_route_guidance(
         feature_index_sha256=feature_sha,
         dem_sha256=feature_index.dem_sha256,
         dem_resolution_m=feature_index.dem_resolution_m,
+        candidate_rank_semantics=(
+            "typed_landform_elevation_then_candidate_path_and_corridor_support_then_narrative_sequence_proximity"
+            if path_references
+            else "typed_landform_elevation_then_multi_candidate_corridor_support_then_narrative_sequence_proximity"
+            if len(corridor_references) > 1
+            else "typed_landform_elevation_then_candidate_corridor_overlap_then_narrative_sequence_proximity"
+        ),
         constraints=resolved,
         unresolved_constraint_ids=unresolved_ids,
     )
+
+
+def _feature_is_in_reference_review_scope(
+    feature: TerrainGuidanceFeatureCandidate,
+) -> bool:
+    path_support = feature.reference_path_support
+    if path_support is not None and path_support.review_shortlist:
+        return True
+    support = feature.reference_corridor_support
+    if support is not None:
+        return support.review_shortlist
+    overlaps = feature.reference_corridor_overlaps or (
+        (feature.reference_corridor_overlap,)
+        if feature.reference_corridor_overlap is not None
+        else ()
+    )
+    return any(item.inside_sample_count > 0 for item in overlaps)
 
 
 def build_narrative_guidance_review(
@@ -1399,15 +1650,39 @@ def _feature_match_rank(
             if feature.elevation_m is not None
             else math.inf
         )
-    reference = feature_index.reference_corridor
-    overlap = feature.reference_corridor_overlap
+    references = feature_index.reference_corridors or (
+        (feature_index.reference_corridor,)
+        if feature_index.reference_corridor is not None
+        else ()
+    )
+    overlaps = feature.reference_corridor_overlaps or (
+        (feature.reference_corridor_overlap,)
+        if feature.reference_corridor_overlap is not None
+        else ()
+    )
     corridor_penalty = 0.0
-    if reference is not None:
-        corridor_penalty = (
-            1.0 - overlap.overlap_fraction
-            if overlap is not None
-            else math.inf
-        )
+    if references:
+        if len(overlaps) != len(references):
+            corridor_penalty = math.inf
+        else:
+            overlapping_count = sum(item.inside_sample_count > 0 for item in overlaps)
+            mean_overlap = sum(item.overlap_fraction for item in overlaps) / len(overlaps)
+            corridor_penalty = (
+                len(references) - overlapping_count + (1.0 - mean_overlap)
+            )
+    path_references = feature_index.reference_paths
+    if path_references:
+        proximities = feature.reference_path_proximities
+        if len(proximities) != len(path_references):
+            corridor_penalty = math.inf
+        else:
+            within_count = sum(item.within_review_scope for item in proximities)
+            nearest_ratio = min(
+                item.minimum_distance_m / item.scope_distance_m
+                for item in proximities
+            )
+            path_penalty = len(path_references) - within_count + nearest_ratio
+            corridor_penalty += path_penalty
     sequence_distance_m = 0.0
     search_window = feature_index.search_window
     if search_window is not None and constraint_count > 1:
@@ -1519,6 +1794,9 @@ __all__ = [
     "TerrainGuidanceCostModifierKind",
     "TerrainGuidanceConstraintKind",
     "TerrainGuidanceContextObservation",
+    "TerrainGuidanceCorridorOverlap",
+    "TerrainGuidanceCorridorReference",
+    "TerrainGuidanceCorridorSupport",
     "TerrainGuidanceDirection",
     "TerrainGuidanceFeatureCandidate",
     "TerrainGuidanceFeatureIndex",
@@ -1527,6 +1805,9 @@ __all__ = [
     "TerrainGuidanceInterpretationStatus",
     "TerrainGuidanceLandform",
     "TerrainGuidanceMeasurementSemantics",
+    "TerrainGuidancePathProximity",
+    "TerrainGuidancePathReference",
+    "TerrainGuidancePathSupport",
     "TerrainGuidanceRelation",
     "TerrainGuidanceResolution",
     "TerrainGuidanceResolutionStatus",

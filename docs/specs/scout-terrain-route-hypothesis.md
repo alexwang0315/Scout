@@ -189,6 +189,27 @@ the overlap does not filter candidates or select an anchor, including when the
 overlap is zero. Human map annotations remain separate and are never assigned
 DEM corridor evidence.
 
+The Dashboard may bind a same-A/B hash-bound TRH run, preferring an active run
+that contains R1-R3 alternatives, to reduce visual review load. Saved catalog
+entries remain supported, and the request boundary accepts at most three run
+selections for legacy layouts. An active selection ID must match the first 12
+characters of the project's bound cache key; every run independently passes
+the hypothesis file hash, cache, DEM-parent, endpoint, and CRS checks. Corridor
+rasters additionally pass the source-raster checks above. R1-R3 path vertices
+are deterministically bounded while preserving endpoints, and each DEM feature
+records its minimum distance to every path. The default Dashboard path scope is
+200 m and is review UI scope, not route width or position accuracy.
+
+The resolver preserves the complete typed set in
+`candidate_feature_ids` and separately emits
+`review_shortlist_feature_ids` as the union of candidates touching at least one
+bound corridor or lying within scope of at least one R1-R3 path. The Dashboard
+defaults the map and top-five preview to this shortlist and displays
+shortlisted/total counts. A candidate without path/corridor support is therefore
+outside the default review scope, not deleted from evidence. The shortlist
+cannot select an anchor, change resolver authority, satisfy a required anchor,
+or make R4 executable without an explicit human WGS84 Point.
+
 Missing or inconsistent evidence produces a typed unavailable/failure result.
 The workflow must not guess through missing DEM, mismatched CRS, stale parent
 manifest, unexpected NoData, incomplete cost surface, worker failure, or an
@@ -353,19 +374,29 @@ Optional reviewed R4 flow:
    conflicts, and unknowns.
 3. Select an existing hypothesis and use **Apply current hypothesis A/B**, or
    set a new A/B manually. Changing A/B invalidates every prior guidance review.
+   When the same-A/B run contains R1-R3, the resolver uses all three path
+   geometries plus the run's single corridor profile as a hash-bound review-scope
+   union; this is not multi-model route confirmation.
 4. Resolve DEM-derived candidate zones. The adapter samples line centroids from
    the bound DEM, derives candidate-only ridge-local-minimum saddle proxies, and
    ranks matches by typed landform, elevation difference, optional hash-bound
    parent-TRH corridor overlap, then narrative-sequence proximity between A and
-   B. Zero or multiple matches remain visible and no
-   automatic anchor selection is made. A zero-overlap candidate remains visible;
-   the selected corridor is review evidence relative to one terrain model, not
-   confirmation of a historical route.
+   B. Zero or multiple matches remain in the complete resolution and no
+   automatic anchor selection is made. The map may default to the R1-R3 union
+   shortlist while reporting the complete count; an out-of-scope candidate is
+   retained in evidence and can never be treated as disproven. Corridor support
+   is review evidence relative to terrain models, not confirmation of a
+   historical route.
    Sampling provenance records `completed`, `partial`, `no_data`, or
    `unavailable` plus total/NoData counts. NoData cannot create elevation or
    saddle evidence.
-5. Use the top-five map rank markers only to orient review. Candidate lines,
-   points, and markers are context; none is an executable anchor choice.
+5. Focus one `Gn` at a time in the R4 review frame. The Dashboard defaults to
+   the first required review constraint, provides previous/next and explicit
+   show-all controls, draws every in-scope candidate for the focused constraint
+   with a numbered highlight marker, dims other constraint lines, and fits the
+   existing MapLibre view to the focused candidate bounds. Focus changes only
+   presentation state: candidate lines, points, ranks, and markers remain
+   context and none is an executable anchor choice.
 6. Place explicit map-point anchors or explicitly disable constraints, then save
    the human review artifact under the visible reviewer alias. The Dashboard
    defaults to `dashboard_operator`; it does not claim the operator is a trip

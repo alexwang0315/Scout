@@ -8387,6 +8387,7 @@
     }
 
     .terrain-guidance-actions button:disabled,
+    .terrain-guidance-focus-toolbar button:disabled,
     .terrain-guidance-constraint-actions button:disabled {
       opacity: .38;
     }
@@ -8401,6 +8402,49 @@
       display: grid;
       gap: 1px;
       background: var(--terrain-rule);
+    }
+
+    .terrain-guidance-focus-toolbar {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto auto;
+      gap: 7px;
+      align-items: center;
+      padding: 9px;
+      border: 1px solid rgba(246, 199, 95, .35);
+      background: #152019;
+    }
+
+    .terrain-guidance-focus-toolbar button {
+      min-height: 36px;
+      padding: 6px 9px;
+      border: 1px solid rgba(233, 234, 220, .18);
+      background: #101d17;
+      color: #eef1e5;
+      font: 800 12px var(--mono);
+    }
+
+    .terrain-guidance-focus-toolbar button[aria-pressed="true"] {
+      border-color: #f6c75f;
+      color: #fff2bc;
+      background: #2b2817;
+    }
+
+    .terrain-guidance-focus-summary strong,
+    .terrain-guidance-focus-summary small {
+      display: block;
+      overflow-wrap: anywhere;
+    }
+
+    .terrain-guidance-focus-summary strong {
+      color: #fff2bc;
+      font-size: 13px;
+    }
+
+    .terrain-guidance-focus-summary small {
+      margin-top: 3px;
+      color: #aebbb2;
+      font-size: var(--terrain-guidance-small-size, 11px);
+      line-height: 1.45;
     }
 
     .terrain-guidance-constraint {
@@ -8418,6 +8462,23 @@
 
     .terrain-guidance-constraint[data-resolution-status="resolved"] {
       box-shadow: inset 3px 0 0 #58d4c8;
+    }
+
+    .terrain-guidance-constraint[data-focused="true"] {
+      position: relative;
+      z-index: 1;
+      background: #19251d;
+      outline: 2px solid #f6c75f;
+      outline-offset: -2px;
+    }
+
+    .terrain-guidance-constraints[data-focus-active="true"]
+      .terrain-guidance-constraint[data-focused="false"]
+      .terrain-guidance-candidate-summary,
+    .terrain-guidance-constraints[data-focus-active="true"]
+      .terrain-guidance-constraint[data-focused="false"]
+      .terrain-guidance-candidates {
+      display: none;
     }
 
     .terrain-guidance-constraint-copy strong,
@@ -8476,6 +8537,15 @@
     }
 
     @media (max-width: 720px) {
+      .terrain-guidance-focus-toolbar {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .terrain-guidance-focus-summary {
+        grid-column: 1 / -1;
+        grid-row: 1;
+      }
+
       .terrain-guidance-constraint {
         grid-template-columns: minmax(0, 1fr);
       }
@@ -12432,6 +12502,8 @@
       terrainRouteGuidanceManualAnchors: {},
       terrainRouteGuidanceSelectedFeatures: {},
       terrainRouteGuidanceDisabledConstraints: {},
+      terrainRouteGuidanceFocusConstraintId: "",
+      terrainRouteGuidanceFocusGuidanceId: "",
       terrainRouteConsistency: null,
       terrainRouteConsistencyBusy: false,
       terrainRouteConsistencyMessage: "",
@@ -13685,6 +13757,195 @@
       ) || null;
     }
 
+    function terrainRouteGuidanceConstraintIds() {
+      return asArray(terrainRouteGuidancePlan()?.constraints)
+        .map(item => String(item?.constraint_id || ""))
+        .filter(Boolean);
+    }
+
+    function terrainRouteGuidanceFocusedConstraintId() {
+      const focused = String(state.terrainRouteGuidanceFocusConstraintId || "");
+      return terrainRouteGuidanceConstraintIds().includes(focused) ? focused : "";
+    }
+
+    function terrainRouteGuidanceReferenceNarrowingActive() {
+      const featureIndex = state.terrainRouteGuidance?.feature_index || {};
+      return asArray(featureIndex.reference_paths).length > 0
+        || asArray(featureIndex.reference_corridors).length > 0
+        || Boolean(featureIndex.reference_corridor);
+    }
+
+    function terrainRouteGuidanceConstraintCandidateSummary(constraintId) {
+      const resolved = asArray(terrainRouteGuidanceResolution()?.constraints).find(
+        item => String(item?.constraint_id || "") === String(constraintId || ""),
+      ) || {};
+      const total = asArray(resolved.candidate_feature_ids).length;
+      const shortlist = asArray(resolved.review_shortlist_feature_ids).length;
+      const narrowed = terrainRouteGuidanceReferenceNarrowingActive();
+      return {
+        total,
+        shortlist,
+        visible: narrowed ? shortlist : total,
+        narrowed,
+      };
+    }
+
+    function updateTerrainRouteGuidanceFocusPresentation() {
+      const focused = terrainRouteGuidanceFocusedConstraintId();
+      const constraintIds = terrainRouteGuidanceConstraintIds();
+      const summary = terrainRouteGuidanceConstraintCandidateSummary(focused);
+      const constraintsRoot = document.querySelector("[data-terrain-guidance-constraints]");
+      if (constraintsRoot) constraintsRoot.dataset.focusActive = String(Boolean(focused));
+      document.querySelectorAll("[data-terrain-guidance-constraint]").forEach(article => {
+        article.dataset.focused = String(
+          String(article.dataset.terrainGuidanceConstraint || "") === focused,
+        );
+      });
+      document.querySelectorAll("[data-terrain-guidance-focus-constraint]").forEach(button => {
+        const isFocused = String(button.dataset.terrainGuidanceFocusConstraint || "") === focused;
+        button.setAttribute("aria-pressed", String(isFocused));
+        button.textContent = isFocused ? "正在聚焦" : "聚焦候選";
+      });
+      const clearButton = document.querySelector("[data-terrain-guidance-focus-clear]");
+      if (clearButton) clearButton.setAttribute("aria-pressed", String(!focused));
+      document.querySelectorAll("[data-terrain-guidance-focus-step]").forEach(button => {
+        button.disabled = constraintIds.length < 2;
+      });
+      const focusedIndex = constraintIds.indexOf(focused);
+      const titleNode = document.querySelector("[data-terrain-guidance-focus-title]");
+      if (titleNode) {
+        titleNode.textContent = `地圖候選焦點 · ${focused || "全部 Gn"}${focusedIndex >= 0 ? ` · ${focusedIndex + 1}/${constraintIds.length}` : ""}`;
+      }
+      const summaryNode = document.querySelector("[data-terrain-guidance-focus-summary]");
+      if (summaryNode) {
+        summaryNode.textContent = focused
+          ? `${focused} · 只突出 ${formatInteger(summary.visible)} 個候選點；其他 Gn 已淡化${summary.narrowed ? ` · R1–R3 scope ${formatInteger(summary.shortlist)}/${formatInteger(summary.total)}` : ""}`
+          : "顯示全部 Gn 候選 · 選擇一個 Gn 可清理地圖標記";
+      }
+    }
+
+    function setTerrainRouteGuidanceConstraintFocus(constraintId, {fitMap = true} = {}) {
+      const normalized = String(constraintId || "");
+      const constraintIds = terrainRouteGuidanceConstraintIds();
+      if (normalized && !constraintIds.includes(normalized)) return false;
+      state.terrainRouteGuidanceFocusConstraintId = normalized;
+      state.terrainRouteGuidanceFocusGuidanceId = String(
+        terrainRouteGuidancePlan()?.guidance_id || "",
+      );
+      updateTerrainRouteGuidanceFocusPresentation();
+      refreshTerrainRouteGuidanceMapFocus(fitMap);
+      if (normalized) {
+        document.querySelector(
+          `[data-terrain-guidance-constraint="${cssEscape(normalized)}"]`,
+        )?.scrollIntoView({block: "nearest"});
+      }
+      return true;
+    }
+
+    function stepTerrainRouteGuidanceConstraintFocus(direction) {
+      const constraintIds = terrainRouteGuidanceConstraintIds();
+      if (!constraintIds.length) return false;
+      const focused = terrainRouteGuidanceFocusedConstraintId();
+      const currentIndex = constraintIds.indexOf(focused);
+      const delta = direction === "previous" ? -1 : 1;
+      const nextIndex = currentIndex < 0
+        ? delta < 0 ? constraintIds.length - 1 : 0
+        : (currentIndex + delta + constraintIds.length) % constraintIds.length;
+      return setTerrainRouteGuidanceConstraintFocus(constraintIds[nextIndex]);
+    }
+
+    function terrainRouteGuidanceGeometryCoordinatePairs(geometry) {
+      const pairs = [];
+      const collect = value => {
+        if (!Array.isArray(value)) return;
+        if (
+          value.length >= 2
+          && Number.isFinite(Number(value[0]))
+          && Number.isFinite(Number(value[1]))
+        ) {
+          pairs.push([Number(value[0]), Number(value[1])]);
+          return;
+        }
+        value.forEach(collect);
+      };
+      collect(geometry?.coordinates);
+      return pairs;
+    }
+
+    function terrainRouteGuidanceFocusedCandidateBounds() {
+      if (!terrainRouteGuidanceFocusedConstraintId()) return null;
+      const coordinates = asArray(terrainRouteGuidanceFeatureCollection()?.features)
+        .filter(feature => feature?.properties?.focused_constraint_candidate === true)
+        .flatMap(feature => terrainRouteGuidanceGeometryCoordinatePairs(feature.geometry));
+      if (!coordinates.length) return null;
+      const longitude = coordinates.map(item => item[0]);
+      const latitude = coordinates.map(item => item[1]);
+      const west = Math.min(...longitude);
+      const east = Math.max(...longitude);
+      const south = Math.min(...latitude);
+      const north = Math.max(...latitude);
+      const longitudePadding = Math.max((east - west) * .08, .00012);
+      const latitudePadding = Math.max((north - south) * .08, .00012);
+      return [
+        [west - longitudePadding, south - latitudePadding],
+        [east + longitudePadding, north + latitudePadding],
+      ];
+    }
+
+    function refreshTerrainRouteGuidanceMapFocus(
+      fitMap = true,
+      attempt = 0,
+      requestedGeneration = navigationTerrainMapLibreRuntime.generation,
+    ) {
+      if (requestedGeneration !== navigationTerrainMapLibreRuntime.generation) return false;
+      const focused = terrainRouteGuidanceFocusedConstraintId();
+      const focusedBounds = terrainRouteGuidanceFocusedCandidateBounds();
+      const featureCollection = terrainRouteGuidanceFeatureCollection();
+      const entries = navigationTerrainMapLibreRuntime.maps;
+      let updatedMapCount = 0;
+      if (fitMap && focusedBounds) navigationTerrainMapLibreRuntime.synchronizing = true;
+      entries.forEach(entry => {
+        const source = entry.map?.getSource?.("scout-terrain-guidance-candidates");
+        if (!source?.setData) return;
+        source.setData(featureCollection);
+        updatedMapCount += 1;
+        entry.host.dataset.terrainGuidanceFocusedConstraint = focused || "all";
+        entry.host.dataset.terrainGuidanceFocusedCandidateCount = String(
+          terrainRouteGuidanceConstraintCandidateSummary(focused).visible,
+        );
+        if (!fitMap || !focusedBounds) return;
+        entry.map.fitBounds(focusedBounds, {
+          padding: entry.mode === "3d" ? 72 : 56,
+          maxZoom: entry.mode === "3d" ? 16 : 17,
+          pitch: entry.map.getPitch(),
+          bearing: entry.map.getBearing(),
+          duration: 420,
+          essential: true,
+        });
+      });
+      if (fitMap && focusedBounds) {
+        window.setTimeout(() => {
+          if (requestedGeneration === navigationTerrainMapLibreRuntime.generation) {
+            navigationTerrainMapLibreRuntime.synchronizing = false;
+          }
+        }, 700);
+      }
+      if (
+        (!entries.length || updatedMapCount < entries.length)
+        && attempt < NAVIGATION_TERRAIN_EVENT_FOCUS_MAX_ATTEMPTS
+      ) {
+        window.setTimeout(
+          () => refreshTerrainRouteGuidanceMapFocus(
+            fitMap,
+            attempt + 1,
+            requestedGeneration,
+          ),
+          100,
+        );
+      }
+      return updatedMapCount > 0;
+    }
+
     function syncTerrainRouteGuidanceState(payload) {
       state.terrainRouteGuidance = payload || null;
       const plan = payload?.guidance_plan;
@@ -13724,6 +13985,33 @@
         if (constraintId && point) manualAnchors[constraintId] = point;
       });
       state.terrainRouteGuidanceManualAnchors = manualAnchors;
+      const guidanceId = String(plan?.guidance_id || "");
+      const constraintIds = terrainRouteGuidanceConstraintIds();
+      if (!guidanceId) {
+        state.terrainRouteGuidanceFocusConstraintId = "";
+        state.terrainRouteGuidanceFocusGuidanceId = "";
+      } else if (state.terrainRouteGuidanceFocusGuidanceId !== guidanceId) {
+        const resolutionById = Object.fromEntries(
+          asArray(payload?.resolution?.constraints).map(item => [
+            String(item?.constraint_id || ""),
+            item,
+          ]),
+        );
+        const defaultConstraint = asArray(plan?.constraints).find(item => (
+          item?.required_anchor
+          && resolutionById[item.constraint_id]?.status !== "resolved"
+        )) || asArray(plan?.constraints).find(item => item?.required_anchor)
+          || asArray(plan?.constraints)[0];
+        state.terrainRouteGuidanceFocusConstraintId = String(
+          defaultConstraint?.constraint_id || "",
+        );
+        state.terrainRouteGuidanceFocusGuidanceId = guidanceId;
+      } else if (
+        state.terrainRouteGuidanceFocusConstraintId
+        && !constraintIds.includes(state.terrainRouteGuidanceFocusConstraintId)
+      ) {
+        state.terrainRouteGuidanceFocusConstraintId = constraintIds[0] || "";
+      }
     }
 
     async function loadTerrainRouteGuidance() {
@@ -13819,8 +14107,9 @@
               "B",
             ),
             search_margin_m: state.qgisTerrainRouteCorridorM,
-            reference_hypothesis_id: terrainRouteGuidanceReferenceHypothesisId(),
+            reference_hypothesis_ids: terrainRouteGuidanceReferenceHypothesisIds(),
             reference_corridor_band_name: "top_5_percent_corridor",
+            reference_path_scope_m: 200,
             manual_anchors: Object.entries(
               state.terrainRouteGuidanceManualAnchors || {},
             ).map(([constraintId, point]) => ({
@@ -13856,6 +14145,7 @@
       } finally {
         if (ownsBusyState) state.terrainRouteGuidanceBusy = false;
         refreshCurrentDataView();
+        window.requestAnimationFrame(() => refreshTerrainRouteGuidanceMapFocus(true));
       }
     }
 
@@ -13892,6 +14182,10 @@
 
     function selectTerrainRouteGuidanceMapAnchor(constraintId) {
       if (!terrainRouteGuidanceConstraint(constraintId)) return;
+      state.terrainRouteGuidanceFocusConstraintId = constraintId;
+      state.terrainRouteGuidanceFocusGuidanceId = String(
+        terrainRouteGuidancePlan()?.guidance_id || "",
+      );
       state.qgisTerrainRouteSelectionTarget = "";
       state.terrainRouteGuidanceAnchorTarget = (
         state.terrainRouteGuidanceAnchorTarget === constraintId ? "" : constraintId
@@ -13900,6 +14194,7 @@
         ? `地圖錨點模式 · 請在 2D 或 3D 地圖確認 ${constraintId}`
         : "地圖錨點模式已取消";
       render();
+      window.requestAnimationFrame(() => refreshTerrainRouteGuidanceMapFocus(true));
     }
 
     function setTerrainRouteGuidanceAnchorFromMap(lngLat) {
@@ -14093,11 +14388,8 @@
       };
     }
 
-    function terrainRouteGuidanceReferenceHypothesisId() {
+    function terrainRouteGuidanceReferenceHypothesisIds() {
       const snapshot = navigationTerrainSnapshot();
-      const hypothesis = navigationTerrainRouteHypothesis(snapshot);
-      const selectionId = String(hypothesis?.selection_id || "");
-      const selected = selectedTerrainRouteHypothesisEndpoints();
       const currentStart = normalizeQgisTerrainRoutePoint(
         state.qgisTerrainRouteEndpoints?.start,
         "A",
@@ -14112,13 +14404,40 @@
         && Math.abs(left.x - right.x) <= 0.000001
         && Math.abs(left.y - right.y) <= 0.000001
       );
-      if (
-        !/^[a-z0-9][a-z0-9._-]{0,79}$/.test(selectionId)
-        || !selected
-        || !samePoint(currentStart, selected.start)
-        || !samePoint(currentDestination, selected.destination)
-      ) return null;
-      return selectionId;
+      const options = [
+        ...navigationTerrainRouteHypothesisOptions(snapshot),
+        navigationTerrainRouteHypothesis(snapshot),
+      ].filter(Boolean);
+      const seen = new Set();
+      const matches = options.filter(option => {
+        const selectionId = String(option?.selection_id || "");
+        const label = navigationTerrainRouteCandidateDisplayLabel(option);
+        const start = normalizeQgisTerrainRoutePoint(option?.start, "A");
+        const destination = normalizeQgisTerrainRoutePoint(option?.destination, "B");
+        if (
+          seen.has(selectionId)
+          || !/^R[1-3]$/.test(label)
+          || !/^[a-z0-9][a-z0-9._-]{0,79}$/.test(selectionId)
+          || !samePoint(currentStart, start)
+          || !samePoint(currentDestination, destination)
+        ) return false;
+        seen.add(selectionId);
+        return true;
+      }).sort((left, right) => (
+        asArray(right?.alternatives).length - asArray(left?.alternatives).length
+      ));
+      const multiProfile = matches.find(option => {
+        const ids = new Set(
+          asArray(option?.alternatives).map(item => String(item?.display_id || "")),
+        );
+        return ["R1", "R2", "R3"].every(id => ids.has(id));
+      });
+      if (multiProfile) return [String(multiProfile.selection_id)];
+      return matches.slice(0, 3).map(option => String(option.selection_id));
+    }
+
+    function terrainRouteGuidanceReferenceHypothesisId() {
+      return terrainRouteGuidanceReferenceHypothesisIds()[0] || null;
     }
 
     function useSelectedTerrainRouteHypothesisEndpoints() {
@@ -25396,9 +25715,19 @@
       const selected = new Set(
         Object.values(state.terrainRouteGuidanceSelectedFeatures || {}).map(String),
       );
+      const featureIndex = state.terrainRouteGuidance?.feature_index || {};
+      const activeConstraintId = terrainRouteGuidanceFocusedConstraintId();
+      const constraintFocusActive = Boolean(activeConstraintId);
+      const referenceNarrowingActive = terrainRouteGuidanceReferenceNarrowingActive();
+      const reviewShortlist = new Set();
       const rankedByFeatureId = new Map();
       asArray(state.terrainRouteGuidance?.resolution?.constraints).forEach(constraint => {
-        asArray(constraint?.candidate_feature_ids).forEach((featureId, index) => {
+        const shortlistIds = asArray(constraint?.review_shortlist_feature_ids);
+        const rankIds = referenceNarrowingActive
+          ? shortlistIds
+          : asArray(constraint?.candidate_feature_ids);
+        shortlistIds.forEach(featureId => reviewShortlist.add(String(featureId)));
+        rankIds.forEach((featureId, index) => {
           const normalizedId = String(featureId || "");
           if (!normalizedId) return;
           const current = rankedByFeatureId.get(normalizedId) || [];
@@ -25411,14 +25740,29 @@
           ]);
         });
       });
-      const features = asArray(state.terrainRouteGuidance?.feature_index?.features)
+      const features = asArray(featureIndex.features)
         .filter(feature => feature?.geometry?.type && feature?.feature_id)
+        .filter(feature => (
+          !referenceNarrowingActive
+          || feature.selection_source !== "dem_derived"
+          || selected.has(String(feature.feature_id))
+          || reviewShortlist.has(String(feature.feature_id))
+        ))
         .flatMap(feature => {
           const ranks = rankedByFeatureId.get(String(feature.feature_id)) || [];
           const explicitIds = asArray(feature.supported_constraint_ids).map(String);
           const rankedIds = ranks.map(item => item.constraintId).filter(Boolean);
           const candidateLabels = ranks.map(item => `${item.constraintId} #${item.rank}`);
+          const focusedRank = ranks.find(item => item.constraintId === activeConstraintId) || null;
+          const focusedCandidateRank = Number(focusedRank?.rank || 0);
+          const focusedCandidateLabel = focusedCandidateRank > 0
+            ? `${activeConstraintId} #${focusedCandidateRank}`
+            : "";
           const corridorOverlap = feature.reference_corridor_overlap || null;
+          const corridorOverlaps = asArray(feature.reference_corridor_overlaps);
+          const corridorSupport = feature.reference_corridor_support || null;
+          const pathProximities = asArray(feature.reference_path_proximities);
+          const pathSupport = feature.reference_path_support || null;
           const corridorOverlapFraction = Number(corridorOverlap?.overlap_fraction);
           const bestRank = ranks.length
             ? Math.min(...ranks.map(item => item.rank))
@@ -25440,10 +25784,37 @@
               reference_corridor_overlap_fraction: Number.isFinite(corridorOverlapFraction)
                 ? corridorOverlapFraction
                 : null,
+              reference_corridor_ids: corridorOverlaps
+                .map(item => String(item?.hypothesis_id || ""))
+                .filter(Boolean)
+                .join(","),
+              reference_corridor_support_count: Number(
+                corridorSupport?.overlapping_reference_count || 0,
+              ),
+              reference_corridor_count: Number(corridorSupport?.reference_count || 0),
+              reference_path_ids: pathProximities
+                .map(item => String(item?.display_id || ""))
+                .filter(Boolean)
+                .join(","),
+              reference_path_support_count: Number(
+                pathSupport?.within_scope_reference_count || 0,
+              ),
+              reference_path_count: Number(pathSupport?.reference_count || 0),
+              reference_path_minimum_distance_m: Number.isFinite(
+                Number(pathSupport?.minimum_distance_m),
+              ) ? Number(pathSupport.minimum_distance_m) : null,
+              r1_r3_review_shortlist: pathSupport?.review_shortlist === true
+                || corridorSupport?.review_shortlist === true,
               selection_source: feature.selection_source || "dem_derived",
               supported_constraint_ids: [...new Set([...explicitIds, ...rankedIds])].join(","),
               candidate_constraint_labels: candidateLabels.join(" · "),
               best_candidate_rank: bestRank,
+              constraint_focus_active: constraintFocusActive,
+              focused_constraint_id: activeConstraintId,
+              focused_constraint_candidate: focusedCandidateRank > 0,
+              focused_candidate_rank: focusedCandidateRank,
+              focused_candidate_label: focusedCandidateLabel,
+              map_candidate_label: focusedCandidateLabel || candidateLabels.join(" · "),
               rank_marker: false,
               selected: selected.has(String(feature.feature_id)),
               candidate_only: true,
@@ -25456,10 +25827,11 @@
             feature.centroid,
             candidateLabels.join(" · "),
           );
+          const markerRank = constraintFocusActive ? focusedCandidateRank : bestRank;
           if (
             feature.geometry?.type !== "LineString"
-            || bestRank < 1
-            || bestRank > 5
+            || markerRank < 1
+            || (!constraintFocusActive && markerRank > 5)
             || !centroid
           ) return [projectedFeature];
           return [
@@ -26196,10 +26568,18 @@
           ],
           layout: {"line-cap": "round", "line-join": "round"},
           paint: {
-            "line-color": ["case", ["==", ["get", "selected"], true], "#58d4c8", "#f6c75f"],
+            "line-color": [
+              "case",
+              ["==", ["get", "selected"], true], "#58d4c8",
+              ["==", ["get", "focused_constraint_candidate"], true], "#ffe36e",
+              ["==", ["get", "constraint_focus_active"], true], "#607068",
+              "#f6c75f",
+            ],
             "line-width": [
               "case",
-              ["==", ["get", "selected"], true], 5,
+              ["==", ["get", "selected"], true], 6,
+              ["==", ["get", "focused_constraint_candidate"], true], 5,
+              ["==", ["get", "constraint_focus_active"], true], 1,
               [">", ["get", "best_candidate_rank"], 0], 3,
               1.5,
             ],
@@ -26207,6 +26587,8 @@
             "line-opacity": [
               "case",
               ["==", ["get", "selected"], true], .95,
+              ["==", ["get", "focused_constraint_candidate"], true], .98,
+              ["==", ["get", "constraint_focus_active"], true], .07,
               [">", ["get", "best_candidate_rank"], 0], .85,
               .22,
             ],
@@ -26220,12 +26602,32 @@
             "all",
             ["==", ["get", "feature_class"], "terrain_route_guidance_candidate"],
             ["==", ["geometry-type"], "Point"],
+            [
+              "any",
+              ["==", ["get", "constraint_focus_active"], false],
+              ["==", ["get", "focused_constraint_candidate"], true],
+              ["==", ["get", "selected"], true],
+            ],
           ],
           paint: {
-            "circle-radius": ["case", ["==", ["get", "selected"], true], 13, 10],
+            "circle-radius": [
+              "case",
+              ["==", ["get", "selected"], true], 15,
+              ["==", ["get", "focused_constraint_candidate"], true], 14,
+              10,
+            ],
             "circle-color": "rgba(0,0,0,0)",
-            "circle-stroke-color": "#f6e27a",
-            "circle-stroke-width": 3,
+            "circle-stroke-color": [
+              "case",
+              ["==", ["get", "selected"], true], "#58d4c8",
+              ["==", ["get", "focused_constraint_candidate"], true], "#ffe36e",
+              "#f6e27a",
+            ],
+            "circle-stroke-width": [
+              "case",
+              ["==", ["get", "focused_constraint_candidate"], true], 4,
+              3,
+            ],
           },
         },
         {
@@ -26236,13 +26638,24 @@
             "all",
             ["==", ["get", "feature_class"], "terrain_route_guidance_candidate"],
             ["==", ["geometry-type"], "Point"],
+            [
+              "any",
+              ["==", ["get", "constraint_focus_active"], false],
+              ["==", ["get", "focused_constraint_candidate"], true],
+              ["==", ["get", "selected"], true],
+            ],
           ],
           paint: {
-            "circle-radius": 6,
+            "circle-radius": [
+              "case",
+              ["==", ["get", "selected"], true], 9,
+              ["==", ["get", "focused_constraint_candidate"], true], 10,
+              6,
+            ],
             "circle-color": [
-              "match",
-              ["get", "selection_source"],
-              "human_map_annotation", "#ff9d00",
+              "case",
+              ["==", ["get", "selection_source"], "human_map_annotation"], "#ff9d00",
+              ["==", ["get", "focused_constraint_candidate"], true], "#ffe36e",
               "#58d4c8",
             ],
             "circle-stroke-color": "#07110e",
@@ -26253,12 +26666,25 @@
           id: "scout-terrain-guidance-labels",
           type: "symbol",
           source: "scout-terrain-guidance-candidates",
-          filter: ["==", ["geometry-type"], "Point"],
+          filter: [
+            "all",
+            ["==", ["geometry-type"], "Point"],
+            [
+              "any",
+              ["==", ["get", "constraint_focus_active"], false],
+              ["==", ["get", "focused_constraint_candidate"], true],
+              ["==", ["get", "selected"], true],
+            ],
+          ],
           layout: {
-            "text-field": ["get", "candidate_constraint_labels"],
-            "text-size": 9,
-            "text-offset": [0, 1.3],
-            "text-allow-overlap": false,
+            "text-field": ["get", "map_candidate_label"],
+            "text-size": [
+              "case",
+              ["==", ["get", "focused_constraint_candidate"], true], 12,
+              9,
+            ],
+            "text-offset": [0, 1.45],
+            "text-allow-overlap": true,
           },
           paint: {
             "text-color": "#fff8ca",
@@ -28148,7 +28574,42 @@
       const elevationSamplingBackend = String(
         guidance.feature_index?.elevation_sampling_backend || "none",
       );
-      const corridorReference = guidance.feature_index?.reference_corridor || null;
+      const corridorReferences = asArray(
+        guidance.feature_index?.reference_corridors,
+      );
+      const corridorReference = corridorReferences[0]
+        || guidance.feature_index?.reference_corridor
+        || null;
+      const boundCorridorReferences = corridorReferences.length
+        ? corridorReferences
+        : corridorReference ? [corridorReference] : [];
+      const referencePaths = asArray(guidance.feature_index?.reference_paths);
+      const referenceEvidenceActive = referencePaths.length > 0
+        || boundCorridorReferences.length > 0;
+      const focusedConstraintId = terrainRouteGuidanceFocusedConstraintId();
+      const focusedConstraintIndex = constraints.findIndex(item => (
+        item?.constraint_id === focusedConstraintId
+      ));
+      const focusedCandidateSummary = terrainRouteGuidanceConstraintCandidateSummary(
+        focusedConstraintId,
+      );
+      const referenceLabels = referencePaths.length
+        ? referencePaths.map(item => item.display_id || item.hypothesis_id || "UNKNOWN")
+        : boundCorridorReferences.map(item => item.hypothesis_id || "UNKNOWN");
+      const fullDemCandidateIds = new Set();
+      const shortlistedDemCandidateIds = new Set();
+      asArray(resolution?.constraints).forEach(item => {
+        asArray(item?.candidate_feature_ids).forEach(featureId => {
+          if (featureById[featureId]?.selection_source === "dem_derived") {
+            fullDemCandidateIds.add(String(featureId));
+          }
+        });
+        asArray(item?.review_shortlist_feature_ids).forEach(featureId => {
+          if (featureById[featureId]?.selection_source === "dem_derived") {
+            shortlistedDemCandidateIds.add(String(featureId));
+          }
+        });
+      });
       const canReview = Boolean(resolution) && terrainRouteGuidanceReviewReady() && !busy;
       return `
         <section
@@ -28190,34 +28651,57 @@
               DEM elevation sampling · ${escapeHtml(elevationSamplingStatus.toUpperCase())} · ${escapeHtml(elevationSamplingBackend)} · samples ${formatInteger(guidance.feature_index?.elevation_sample_count || 0)} · NoData ${formatInteger(guidance.feature_index?.elevation_nodata_count || 0)} · saddle proxies ${formatInteger(guidance.feature_index?.derived_saddle_count || 0)}
             </div>
           ` : ""}
-          ${corridorReference ? `
+          ${referenceEvidenceActive ? `
             <div class="terrain-guidance-status">
-              Candidate corridor review rank · ${escapeHtml(corridorReference.hypothesis_id || "UNKNOWN")} · ${escapeHtml(corridorReference.band_name || "UNKNOWN")} · overlap features ${formatInteger(corridorReference.features_with_overlap || 0)}/${formatInteger(corridorReference.feature_count || 0)} · inside samples ${formatInteger(corridorReference.inside_sample_count || 0)}/${formatInteger(corridorReference.sample_count || 0)} · 僅供 review ranking，不是路線確認
+              Candidate corridor review rank · ${escapeHtml(referenceLabels.join(" + "))} · ${escapeHtml(corridorReference?.band_name || "path proximity")} · R1–R3 narrowed review scope ${formatInteger(shortlistedDemCandidateIds.size)}/${formatInteger(fullDemCandidateIds.size)} · ${referencePaths.length ? `${formatInteger(referencePaths[0]?.scope_distance_m || 0)}m path scope` : "corridor scope"} · 僅供 review ranking，不是路線確認
             </div>
           ` : ""}
           ${constraints.length ? `
-            <div class="terrain-guidance-constraints" data-terrain-guidance-constraint-count="${constraints.length}">
+            <div class="terrain-guidance-focus-toolbar" role="group" aria-label="R4 Gn candidate map focus">
+              <button type="button" data-terrain-guidance-focus-step="previous" ${constraints.length < 2 ? "disabled" : ""}>上一個</button>
+              <div class="terrain-guidance-focus-summary">
+                <strong data-terrain-guidance-focus-title="true">地圖候選焦點 · ${escapeHtml(focusedConstraintId || "全部 Gn")}${focusedConstraintIndex >= 0 ? ` · ${focusedConstraintIndex + 1}/${constraints.length}` : ""}</strong>
+                <small data-terrain-guidance-focus-summary="true">${focusedConstraintId
+                  ? `${escapeHtml(focusedConstraintId)} · 只突出 ${formatInteger(focusedCandidateSummary.visible)} 個候選點；其他 Gn 已淡化${focusedCandidateSummary.narrowed ? ` · R1–R3 scope ${formatInteger(focusedCandidateSummary.shortlist)}/${formatInteger(focusedCandidateSummary.total)}` : ""}`
+                  : "顯示全部 Gn 候選 · 選擇一個 Gn 可清理地圖標記"}</small>
+              </div>
+              <button type="button" data-terrain-guidance-focus-step="next" ${constraints.length < 2 ? "disabled" : ""}>下一個</button>
+              <button type="button" data-terrain-guidance-focus-clear="true" aria-pressed="${String(!focusedConstraintId)}">顯示全部</button>
+            </div>
+          ` : ""}
+          ${constraints.length ? `
+            <div class="terrain-guidance-constraints" data-terrain-guidance-constraints="true" data-focus-active="${String(Boolean(focusedConstraintId))}" data-terrain-guidance-constraint-count="${constraints.length}">
               ${constraints.map(constraint => {
                 const resolved = resolutionById[constraint.constraint_id] || {};
                 const resolutionStatus = String(resolved.status || "pending");
                 const candidateIds = asArray(resolved.candidate_feature_ids);
+                const reviewShortlistIds = asArray(
+                  resolved.review_shortlist_feature_ids,
+                );
                 const manualCandidateIds = candidateIds.filter(featureId => (
                   featureById[featureId]?.selection_source === "human_map_annotation"
                 ));
-                const rankedDemCandidates = candidateIds.filter(featureId => (
+                const isFocused = focusedConstraintId === constraint.constraint_id;
+                const rankedDemCandidates = (
+                  referenceEvidenceActive ? reviewShortlistIds : candidateIds
+                ).filter(featureId => (
                   featureById[featureId]?.selection_source === "dem_derived"
-                )).slice(0, 5);
+                )).slice(0, isFocused ? 12 : 5);
                 const demCandidateCount = candidateIds.length - manualCandidateIds.length;
+                const shortlistDemCandidateCount = reviewShortlistIds.filter(featureId => (
+                  featureById[featureId]?.selection_source === "dem_derived"
+                )).length;
                 const isDisabled = Boolean(disabled[constraint.constraint_id]);
                 const anchorActive = state.terrainRouteGuidanceAnchorTarget === constraint.constraint_id;
                 return `
-                  <article class="terrain-guidance-constraint" data-terrain-guidance-constraint="${escapeHtml(constraint.constraint_id)}" data-resolution-status="${escapeHtml(resolutionStatus)}">
+                  <article class="terrain-guidance-constraint" data-terrain-guidance-constraint="${escapeHtml(constraint.constraint_id)}" data-focused="${String(isFocused)}" data-resolution-status="${escapeHtml(resolutionStatus)}">
                     <div class="terrain-guidance-constraint-copy">
                       <strong>${escapeHtml(constraint.constraint_id)} · ${escapeHtml(constraint.kind)} · ${escapeHtml(resolutionStatus)}</strong>
                       <small>${escapeHtml(constraint.summary)}</small>
                       <small>source: ${escapeHtml(constraint.source_span?.text || "UNKNOWN")}${constraint.required_anchor ? " · REQUIRED ANCHOR" : ""}</small>
                     </div>
                     <div class="terrain-guidance-constraint-actions">
+                      <button type="button" data-terrain-guidance-focus-constraint="${escapeHtml(constraint.constraint_id)}" aria-pressed="${String(isFocused)}" ${busy ? "disabled" : ""}>${isFocused ? "正在聚焦" : "聚焦候選"}</button>
                       <button type="button" data-terrain-guidance-map-anchor="${escapeHtml(constraint.constraint_id)}" aria-pressed="${anchorActive ? "true" : "false"}" ${busy ? "disabled" : ""}>${anchorActive ? "取消地圖錨點" : "地圖錨點"}</button>
                       <label>
                         <input type="checkbox" data-terrain-guidance-disable="${escapeHtml(constraint.constraint_id)}" ${isDisabled ? "checked" : ""} ${busy ? "disabled" : ""}>
@@ -28226,7 +28710,7 @@
                     </div>
                     ${demCandidateCount ? `
                       <small class="terrain-guidance-candidate-summary">
-                        DEM ranked candidate zones ${formatInteger(demCandidateCount)} · typed landform / elevation / candidate corridor overlap 排序 · 僅供地圖比對；R4 必須使用明確的人工 Point 錨點
+                        DEM ranked candidate zones ${formatInteger(demCandidateCount)} · ${referenceEvidenceActive ? `R1–R3 narrowed review scope ${formatInteger(shortlistDemCandidateCount)}/${formatInteger(demCandidateCount)}` : "尚無 R1–R3 scope"} · typed landform / elevation / candidate path proximity / corridor overlap 排序 · 僅供地圖比對；R4 必須使用明確的人工 Point 錨點
                       </small>
                       <div class="terrain-guidance-candidates" aria-label="${escapeHtml(constraint.constraint_id)} DEM ranked candidate preview">
                         ${rankedDemCandidates.map((featureId, index) => {
@@ -28237,12 +28721,37 @@
                             && !label.includes(`${elevation.toFixed(0)}m`)
                             ? ` · ${elevation.toFixed(0)}m`
                             : "";
+                          const overlaps = asArray(feature.reference_corridor_overlaps);
+                          const supportCount = Number(
+                            feature.reference_corridor_support?.overlapping_reference_count,
+                          );
+                          const referenceCount = Number(
+                            feature.reference_corridor_support?.reference_count,
+                          );
                           const overlap = Number(
                             feature.reference_corridor_overlap?.overlap_fraction,
                           );
-                          const overlapText = Number.isFinite(overlap)
-                            ? ` · 5% corridor overlap ${(overlap * 100).toFixed(0)}%`
-                            : "";
+                          const pathSupportCount = Number(
+                            feature.reference_path_support?.within_scope_reference_count,
+                          );
+                          const pathReferenceCount = Number(
+                            feature.reference_path_support?.reference_count,
+                          );
+                          const pathDistance = Number(
+                            feature.reference_path_support?.minimum_distance_m,
+                          );
+                          const overlapText = Number.isFinite(pathSupportCount)
+                            && Number.isFinite(pathReferenceCount)
+                            && Number.isFinite(pathDistance)
+                            && pathReferenceCount > 0
+                            ? ` · R1–R3 path support ${pathSupportCount}/${pathReferenceCount} · nearest ${pathDistance.toFixed(0)}m`
+                            : Number.isFinite(supportCount)
+                            && Number.isFinite(referenceCount)
+                            && referenceCount > 0
+                            ? ` · R1–R3 support ${supportCount}/${referenceCount}`
+                            : Number.isFinite(overlap)
+                              ? ` · 5% corridor overlap ${(overlap * 100).toFixed(0)}%`
+                              : overlaps.length ? ` · corridor refs ${overlaps.length}` : "";
                           return `<span>${escapeHtml(`${constraint.constraint_id} #${index + 1} · ${label}${elevationText}${overlapText}`)}</span>`;
                         }).join("")}
                       </div>
@@ -34867,6 +35376,23 @@
       });
       document.querySelector("[data-terrain-guidance-generate-r4]")?.addEventListener("click", () => {
         void startQgisGuidedTerrainRouteHypothesis();
+      });
+      document.querySelectorAll("[data-terrain-guidance-focus-constraint]").forEach(button => {
+        button.addEventListener("click", () => {
+          setTerrainRouteGuidanceConstraintFocus(
+            button.dataset.terrainGuidanceFocusConstraint || "",
+          );
+        });
+      });
+      document.querySelectorAll("[data-terrain-guidance-focus-step]").forEach(button => {
+        button.addEventListener("click", () => {
+          stepTerrainRouteGuidanceConstraintFocus(
+            button.dataset.terrainGuidanceFocusStep || "next",
+          );
+        });
+      });
+      document.querySelector("[data-terrain-guidance-focus-clear]")?.addEventListener("click", () => {
+        setTerrainRouteGuidanceConstraintFocus("");
       });
       document.querySelectorAll("[data-terrain-guidance-map-anchor]").forEach(button => {
         button.addEventListener("click", () => {

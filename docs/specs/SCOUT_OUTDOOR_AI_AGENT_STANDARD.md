@@ -1114,7 +1114,7 @@ Navigation/Terrain Intelligence 必須把地圖本身當作主要操作面，不
 | `MAP-WAYFIND-010` | 把避開 drainage 的候選宣稱為較安全，或把 terrain-only baseline 的河谷重疊宣稱為河道可走。 | drainage 僅是 DEM-derived relative cost；所有替代線維持 candidate-only，水位、溪床、峽谷、橋梁與通行性保持 UNKNOWN。 |
 | `MAP-WAYFIND-011` | 直接把歷史行程文字交給 LLM 畫線，或把文字中的「獵徑／布條」promotion 成 observed/official trail。 | Scout AI 只輸出有 source span 的 typed constraints、conflicts 與 unknowns；GIS resolver 與人工 map-point review 分離，source_type 仍是 `historical_route`。 |
 | `MAP-WAYFIND-012` | 已 review 的文字指引繞過 DEM/GRASS，或任一 anchor segment 失敗時用直線補接。 | R4 必須逐段執行 allowlisted `r.walk` + `r.path`；任一段無成本、無路徑、超出 DEM、NoData 或 hash mismatch 時整個 guided hypothesis fail closed。 |
-| `MAP-WAYFIND-013` | 用既有 TRH corridor 自動選定敘事 anchor、排除零重疊候選，或把高 overlap 宣稱為路線確認。 | 只可對 hash-bound source GeoTIFF 做 bounded sampling；所有候選保留，overlap 僅按 `candidate_corridor_overlap_is_review_rank_evidence_not_route_confirmation` 協助人工 review 排序。 |
+| `MAP-WAYFIND-013` | 用既有 TRH path/corridor 自動選定敘事 anchor、從完整證據刪除無鄰近／零重疊候選，或把高 support 宣稱為路線確認。 | 只可使用 hash-bound R1-R3 path 與 source GeoTIFF bounded evidence；完整候選集必須保留。可另以 same-A/B R1-R3 path/corridor 聯集建立預設 review shortlist，但必須揭露 shortlist/total，且 proximity/overlap 只協助人工 review。 |
 | `MAP-WAYFIND-014` | 把人工文字直接拼成 `r.mapcalc`、用零成本／硬 barrier 強迫 R4 通過，或讓 R4 修改 R1-R3。 | 每個 reviewed Point 只能編譯成 typed、有限正值、20-500 m 的局部 friction preference；expression 必須 allowlist 驗證，R1-R3 保持原 profile，任一 anchor/modifier/hash 不一致即 fail closed。 |
 
 目前 bounded implementation 對應 `terrain_feature_stack.v1`、Scout-owned QGIS
@@ -1229,6 +1229,18 @@ PNG 視覺圖。每條 DEM feature 採 bounded deterministic samples，且
 但 R4 仍只接受操作者親自確認的 WGS84 Point。Sampling failure、NoData 或不完整回傳不得
 產生半套 saddle/elevation/corridor resolution；任一 catalog、hash、endpoint、sampler 或
 raster binding 錯誤都必須 fail closed。
+
+若同 A/B 的 hash-bound run 含 R1-R3，Dashboard 應優先傳入該 run selection。Backend 從
+同一 artifact 取出三條 path，驗證 run hash、cache、DEM parent、A/B 與 CRS，並對長 path
+做保留端點的 deterministic bounded sampling；active selection ID 還必須與 project 綁定
+cache key 前 12 字元一致。預設以 200 m path proximity 加上單一 corridor-profile overlap
+建立 `review_shortlist_feature_ids`。完整 `candidate_feature_ids` 不得被覆寫；地圖只是在
+預設視野隱藏 shortlist 外的 DEM candidates，並必須顯示 shortlist/total。這個聯集只縮小
+人工檢視範圍，不是 AI 地圖選點、模型共識確認或 route truth，也不得解鎖 R4 execution。
+R4 review 應一次聚焦一個 `Gn`：該 constraint 的 scope 內候選須以清楚的編號 marker
+highlight，其他 `Gn` 的 marker 隱藏、line 淡化，並提供上一個、下一個與顯示全部控制。
+切換 focus 或自動 fit MapLibre 僅能改變呈現狀態，不得寫入 selection、人工 anchor、review
+artifact 或 execution plan；仍須由操作者進入地圖錨點模式並親自點選 WGS84 Point。
 
 人工確認的每個 Point 必須同時編譯成 ordered gate 與 bounded local friction preference。
 目前 modifier 的 radius 只能在 20-500 m，最低 multiplier 只能在 `0.5-1.0`，且所有 raster

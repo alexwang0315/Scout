@@ -6309,8 +6309,11 @@ def test_dashboard_reviews_narrative_guidance_and_submits_visible_r4() -> None:
     assert "function useSelectedTerrainRouteHypothesisEndpoints()" in html
     assert "navigationTerrainRouteHypothesis(navigationTerrainSnapshot())" in html
     assert "function terrainRouteGuidanceReferenceHypothesisId()" in html
-    assert "reference_hypothesis_id: terrainRouteGuidanceReferenceHypothesisId()" in html
+    assert "function terrainRouteGuidanceReferenceHypothesisIds()" in html
+    assert '["R1", "R2", "R3"].every(id => ids.has(id))' in html
+    assert "reference_hypothesis_ids: terrainRouteGuidanceReferenceHypothesisIds()" in html
     assert 'reference_corridor_band_name: "top_5_percent_corridor"' in html
+    assert "reference_path_scope_m: 200" in html
     assert "state.terrainRouteGuidanceManualAnchors = {};" in html
     assert "state.terrainRouteGuidanceSelectedFeatures = {};" in html
     assert "state.terrainRouteGuidanceDisabledConstraints = {};" in html
@@ -6324,14 +6327,19 @@ def test_dashboard_reviews_narrative_guidance_and_submits_visible_r4() -> None:
     assert "search_margin_m: state.qgisTerrainRouteCorridorM" in html
     assert "qgisTerrainRouteEndpointsReady()" in html
     assert "const manualCandidateIds = candidateIds.filter" in html
-    assert "const rankedDemCandidates = candidateIds.filter" in html
+    assert "const rankedDemCandidates = (" in html
     assert "DEM ranked candidate" in html
     assert "candidate_constraint_labels" in html
     assert "best_candidate_rank" in html
     assert 'kind: "terrain_route_guidance_rank_marker"' in html
-    assert "bestRank > 5" in html
+    assert "(!constraintFocusActive && markerRank > 5)" in html
     assert "elevation_sampling_status" in html
     assert "reference_corridor_overlap" in html
+    assert "reference_corridor_overlaps" in html
+    assert "reference_path_proximities" in html
+    assert "reference_paths" in html
+    assert "review_shortlist_feature_ids" in html
+    assert "R1–R3 narrowed review scope" in html
     assert "Candidate corridor review rank" in html
     assert "僅供 review ranking" in html
     assert "R4 必須使用明確的人工 Point 錨點" in html
@@ -6343,6 +6351,110 @@ def test_dashboard_reviews_narrative_guidance_and_submits_visible_r4() -> None:
     assert "candidate_only: true" in html
     assert "runtime_safety_truth: false" in html
     assert "safe_or_walkable: \"not_determined\"" in html
+
+
+def test_dashboard_focuses_one_r4_constraint_candidate_set_at_a_time() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    focus_setter = html.split(
+        "function setTerrainRouteGuidanceConstraintFocus", 1
+    )[1].split("function stepTerrainRouteGuidanceConstraintFocus", 1)[0]
+
+    assert "terrainRouteGuidanceFocusConstraintId" in html
+    assert "terrainRouteGuidanceFocusGuidanceId" in html
+    assert "function terrainRouteGuidanceFocusedConstraintId()" in html
+    assert "function setTerrainRouteGuidanceConstraintFocus(" in html
+    assert "function stepTerrainRouteGuidanceConstraintFocus(" in html
+    assert "function terrainRouteGuidanceFocusedCandidateBounds()" in html
+    assert "function refreshTerrainRouteGuidanceMapFocus(" in html
+    assert 'data-terrain-guidance-focus-constraint="${escapeHtml(constraint.constraint_id)}"' in html
+    assert 'data-terrain-guidance-focus-step="previous"' in html
+    assert 'data-terrain-guidance-focus-step="next"' in html
+    assert 'data-terrain-guidance-focus-clear="true"' in html
+    assert "constraint_focus_active" in html
+    assert "focused_constraint_candidate" in html
+    assert "focused_candidate_rank" in html
+    assert "focused_candidate_label" in html
+    assert "map.fitBounds(focusedBounds" in html
+    assert "只突出" in html
+    assert "候選點；其他 Gn 已淡化" in html
+    assert "refreshTerrainRouteGuidanceMapFocus(fitMap)" in focus_setter
+    assert "render()" not in focus_setter
+    assert "source.setData(featureCollection)" in html
+    assert "terrainRouteGuidanceSelectedFeatures" not in focus_setter
+    assert "terrainRouteGuidanceManualAnchors" not in focus_setter
+    assert "setTerrainRouteGuidanceAnchorFromMap" not in focus_setter
+    assert "if (state.terrainRouteGuidanceAnchorTarget)" in html
+
+
+def test_dashboard_r4_map_projection_marks_only_the_focused_gn_candidates() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    guidance_helpers = (
+        "function terrainRouteGuidancePlan"
+        + html.split("function terrainRouteGuidancePlan", 1)[1].split(
+            "function terrainRouteGuidanceConstraintCandidateSummary", 1
+        )[0]
+    )
+    feature_collection = (
+        "function terrainRouteGuidanceFeatureCollection"
+        + html.split("function terrainRouteGuidanceFeatureCollection", 1)[1].split(
+            "function navigationTerrainMapLibreStyle", 1
+        )[0]
+    )
+    node_program = "\n".join(
+        (
+            "const asArray = value => Array.isArray(value) ? value : [];",
+            "const normalizeQgisTerrainRoutePoint = (point, label) => ({x: Number(point.x), y: Number(point.y), label});",
+            "const state = {terrainRouteGuidanceFocusConstraintId: 'G1', terrainRouteGuidanceSelectedFeatures: {}, terrainRouteGuidance: {",
+            "  guidance_plan: {constraints: [{constraint_id: 'G1'}, {constraint_id: 'G2'}]},",
+            "  resolution: {constraints: [",
+            "    {constraint_id: 'G1', candidate_feature_ids: ['F1', 'F2'], review_shortlist_feature_ids: ['F1', 'F2']},",
+            "    {constraint_id: 'G2', candidate_feature_ids: ['F2', 'F3'], review_shortlist_feature_ids: ['F2', 'F3']},",
+            "  ]},",
+            "  feature_index: {reference_paths: [{display_id: 'R1'}], features: [",
+            "    {feature_id: 'F1', label: 'one', selection_source: 'dem_derived', supported_constraint_ids: ['G1'], geometry: {type: 'LineString', coordinates: [[121, 24], [121.001, 24.001]]}, centroid: {x: 121.0005, y: 24.0005}},",
+            "    {feature_id: 'F2', label: 'two', selection_source: 'dem_derived', supported_constraint_ids: ['G1', 'G2'], geometry: {type: 'LineString', coordinates: [[121.002, 24.002], [121.003, 24.003]]}, centroid: {x: 121.0025, y: 24.0025}},",
+            "    {feature_id: 'F3', label: 'three', selection_source: 'dem_derived', supported_constraint_ids: ['G2'], geometry: {type: 'LineString', coordinates: [[121.004, 24.004], [121.005, 24.005]]}, centroid: {x: 121.0045, y: 24.0045}},",
+            "  ]},",
+            "}};",
+            guidance_helpers,
+            feature_collection,
+            "const summarize = () => terrainRouteGuidanceFeatureCollection().features.map(feature => ({id: feature.properties.id, marker: feature.properties.rank_marker, focused: feature.properties.focused_constraint_candidate, rank: feature.properties.focused_candidate_rank, label: feature.properties.focused_candidate_label}));",
+            "const g1 = summarize();",
+            "state.terrainRouteGuidanceFocusConstraintId = 'G2';",
+            "const g2 = summarize();",
+            "process.stdout.write(JSON.stringify({g1, g2}));",
+        )
+    )
+    result = subprocess.run(
+        ["node"],
+        input=node_program,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert [item["id"] for item in payload["g1"] if item["marker"]] == [
+        "F1-rank-marker",
+        "F2-rank-marker",
+    ]
+    assert [item["label"] for item in payload["g1"] if item["marker"]] == [
+        "G1 #1",
+        "G1 #2",
+    ]
+    assert [item["id"] for item in payload["g2"] if item["marker"]] == [
+        "F2-rank-marker",
+        "F3-rank-marker",
+    ]
+    assert [item["label"] for item in payload["g2"] if item["marker"]] == [
+        "G2 #1",
+        "G2 #2",
+    ]
+    assert all(
+        item["focused"] is False
+        for item in payload["g1"]
+        if item["id"] == "F3"
+    )
 
 
 def test_dashboard_places_r4_guidance_in_independent_right_frame() -> None:
