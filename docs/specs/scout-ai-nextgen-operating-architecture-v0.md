@@ -4,6 +4,24 @@ Status: experimental working architecture, not production promotion
 Date: 2026-08-23
 Authority: candidate-only; production Scout behavior is unchanged
 
+## Dependency Compatibility Update 2026-09-03
+
+The local control plane now targets Pydantic AI 2.37.0, and the optional
+intelligence SDK targets `praisonaiagents==1.7.3` in the package extra.
+The in-progress Pi intelligence sidecar remains a separate deployment change.
+Earlier 1.7.0 qualification evidence below remains a
+historical baseline, not proof that Pi has been upgraded. The separate
+`praisonai` CLI is not required and is not installed by this update.
+
+Compatibility verification covers real AgentTeam/Task orchestration, the
+Scout-owned Model Gateway with a replay backend, isolated MCP lifecycle,
+public live search/fetch, and temporary fixture-only file-memory isolation.
+No persistent Scout memory is enabled implicitly. Pydantic AI and deterministic
+Scout services remain authoritative; SDK memory or model output cannot alter
+runtime safety state. See the
+[local upgrade report](../evals/scout-ai-pydantic-237-praison-173-smoke-20260903.md)
+for transport, grounding, and test outcomes separately.
+
 ## Executive Decision
 
 Scout NextGen uses four distinct planes:

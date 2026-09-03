@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import tomllib
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
+from packaging.requirements import Requirement
+from pydantic_ai.models.test import TestModel
 
+from scout.cli import pydantic_compat_smoke as smoke
 from scout.cli.pydantic_compat_smoke import (
     REPO_ROOT,
     REQUIRED_VERSION,
@@ -21,13 +26,14 @@ def test_offline_pydantic_ai_compatibility_smoke_passes() -> None:
 
     assert report["status"] == "passed"
     assert report["required_version"] == REQUIRED_VERSION
-    assert report["check_count"] == 17
-    assert report["passed_count"] == 17
+    assert report["check_count"] == 18
+    assert report["passed_count"] == 18
     assert report["failed_count"] == 0
     assert report["live_openrouter_requested"] is False
     assert {item["name"] for item in report["checks"]} == {
         "runtime_versions",
         "v236_capability_contract",
+        "v237_zai_finish_reasons",
         "openrouter_web_search_annotations",
         "instrumentation_v6_tool_role",
         "function_tool_call",
@@ -51,6 +57,77 @@ def test_offline_pydantic_ai_compatibility_smoke_passes() -> None:
     mcp_details = by_name["mcp_instructions_and_tool"]["details"]
     assert "FunctionToolCallEvent" in mcp_details["event_types"]
     assert "FunctionToolResultEvent" in mcp_details["event_types"]
+    termination_details = by_name["v237_zai_finish_reasons"]["details"]
+    assert termination_details["network_performed"] is False
+    assert termination_details["case_count"] == 6
+    expected_reasons = {
+        "sensitive": "content_filter",
+        "model_context_window_exceeded": "length",
+        "network_error": "error",
+    }
+    for case in termination_details["cases"]:
+        assert case["partial_answer_preserved"] is True
+        assert case["finish_reason"] == expected_reasons[case["provider_finish_reason"]]
+
+
+def test_runtime_and_deployment_dependency_pins_stay_aligned() -> None:
+    project = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text())["project"]
+    dependency_sets = {
+        "project": project["dependencies"],
+        **project["optional-dependencies"],
+        **{
+            path.name: path.read_text().splitlines()
+            for path in REPO_ROOT.glob("requirements.pi.*.txt")
+        },
+    }
+    assert {
+        "requirements.pi.admin.txt",
+        "requirements.pi.live.txt",
+    } <= dependency_sets.keys()
+    expected_versions = {
+        "pydantic-ai-slim": "2.37.0",
+        "pydantic-evals": "2.37.0",
+        "praisonaiagents": "1.7.3",
+    }
+    seen = set()
+    for surface, dependencies in dependency_sets.items():
+        for dependency in dependencies:
+            if not dependency.strip() or dependency.lstrip().startswith("#"):
+                continue
+            requirement = Requirement(dependency)
+            if requirement.name in expected_versions:
+                expected = expected_versions[requirement.name]
+                assert str(requirement.specifier) == f"=={expected}", surface
+                seen.add(requirement.name)
+    assert seen == expected_versions.keys()
+    assert REQUIRED_VERSION == expected_versions["pydantic-ai-slim"]
+
+
+def test_native_web_smoke_keeps_ten_use_capacity_and_transport_scope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tools = []
+    native_tool = smoke.NativeTool
+
+    def record_tool(tool):
+        tools.append(tool)
+        return native_tool(tool)
+
+    async def run_fixture(agent, prompt):
+        return SimpleNamespace(
+            output="Pydantic AI: https://pydantic.dev/docs/ai/project/changelog/",
+            all_messages=lambda: [],
+        )
+
+    monkeypatch.setattr(smoke, "NativeTool", record_tool)
+    monkeypatch.setattr(smoke, "_live_run", run_fixture)
+
+    result = asyncio.run(smoke._live_native_web_search(TestModel()))
+
+    assert len(tools) == 1
+    assert tools[0].max_uses == result["native_search_max_uses"] == 10
+    assert result["qualification_scope"] == "provider_transport_only"
+    assert result["provider_exposed_native_parts"] is False
 
 
 def test_live_smoke_fails_closed_without_openrouter_key(

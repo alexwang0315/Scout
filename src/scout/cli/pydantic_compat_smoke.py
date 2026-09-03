@@ -12,6 +12,7 @@ from collections.abc import AsyncIterator, Callable
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any, Literal
+from uuid import uuid4
 
 from pydantic import BaseModel
 from pydantic_ai import Agent, ModelRetry, Tool, ToolFailed, UsageLimits
@@ -44,7 +45,7 @@ from scout.agents.pydantic_ai_compat import (
     pydantic_native_research_capabilities,
 )
 
-REQUIRED_VERSION = "2.36.0"
+REQUIRED_VERSION = "2.37.0"
 DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4-flash-0731"
 DEFAULT_TIMEOUT_SECONDS = 120.0
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -146,6 +147,7 @@ def _offline_checks() -> list[tuple[str, Callable[[], Any]]]:
     return [
         ("runtime_versions", _offline_runtime_versions),
         ("v236_capability_contract", _offline_v236_capability_contract),
+        ("v237_zai_finish_reasons", _offline_v237_zai_finish_reasons),
         ("openrouter_web_search_annotations", _offline_openrouter_annotations),
         ("instrumentation_v6_tool_role", _offline_instrumentation_v6_tool_role),
         ("function_tool_call", _offline_function_tool_call),
@@ -290,6 +292,88 @@ async def _offline_v236_capability_contract() -> dict[str, Any]:
         "mcp_prefer_tasks_default": mcp_parameters["prefer_tasks"].default,
         "tool_search_max_retries": True,
         "agent_web_allowed_hosts": True,
+    }
+
+
+async def _offline_v237_zai_finish_reasons() -> dict[str, Any]:
+    cases = []
+    for raw_reason, expected in (
+        ("sensitive", "content_filter"),
+        ("model_context_window_exceeded", "length"),
+        ("network_error", "error"),
+    ):
+        for streaming in (False, True):
+            case = await _zai_finish_reason_case(raw_reason, streaming=streaming)
+            _require(case["finish_reason"] == expected, f"lost {raw_reason}")
+            _require(case["partial_answer_preserved"], "partial response was lost")
+            cases.append(case)
+    return {"network_performed": False, "case_count": len(cases), "cases": cases}
+
+
+async def _zai_finish_reason_case(
+    raw_reason: str, *, streaming: bool
+) -> dict[str, Any]:
+    import httpx2
+    from openai import AsyncOpenAI
+    from pydantic_ai.models.zai import ZaiModel
+    from pydantic_ai.providers.zai import ZaiProvider
+
+    partial = "Partial Scout evidence."
+
+    def respond(request: httpx2.Request) -> httpx2.Response:
+        payload = json.loads(request.content)
+        _require(bool(payload.get("stream")) == streaming, "unexpected request mode")
+        completion = {
+            "id": "scout-zai-termination-fixture",
+            "created": 0,
+            "model": "glm-5.2",
+            "object": "chat.completion.chunk" if streaming else "chat.completion",
+            "choices": [
+                {
+                    "index": 0,
+                    "finish_reason": raw_reason,
+                    "delta" if streaming else "message": {
+                        "role": "assistant",
+                        "content": partial,
+                    },
+                }
+            ],
+        }
+        if streaming:
+            return httpx2.Response(
+                200,
+                headers={"content-type": "text/event-stream"},
+                content=f"data: {json.dumps(completion)}\n\ndata: [DONE]\n\n",
+            )
+        return httpx2.Response(200, json=completion)
+
+    async with httpx2.AsyncClient(transport=httpx2.MockTransport(respond)) as http:
+        async with AsyncOpenAI(
+            base_url="https://fixture.invalid/v1",
+            api_key=uuid4().hex,
+            http_client=http,
+        ) as client:
+            model = ZaiModel("glm-5.2", provider=ZaiProvider(openai_client=client))
+            agent = Agent(model, **pydantic_agent_runtime_kwargs())
+            limits = UsageLimits(request_limit=10, tool_calls_limit=10)
+            if streaming:
+                async with agent.run_stream(
+                    "Read Scout evidence.", usage_limits=limits
+                ) as run:
+                    chunks = [
+                        chunk async for chunk in run.stream_text(debounce_by=None)
+                    ]
+                    output, response = chunks[-1], run.response
+            else:
+                run = await agent.run("Read Scout evidence.", usage_limits=limits)
+                output, response = run.output, run.response
+    provider_reason = (response.provider_details or {}).get("finish_reason")
+    _require(provider_reason == raw_reason, "raw provider finish reason was lost")
+    return {
+        "streaming": streaming,
+        "provider_finish_reason": provider_reason,
+        "finish_reason": response.finish_reason,
+        "partial_answer_preserved": output == partial,
     }
 
 
@@ -912,13 +996,14 @@ async def _live_web_search(model: Any) -> dict[str, Any]:
 
 
 async def _live_native_web_search(model: Any) -> dict[str, Any]:
+    search_tool = WebSearchTool(max_uses=10)
     agent = Agent(
         model,
         instructions=(
             "Use the provider-native web search tool to find the official Pydantic AI "
             "changelog. Return one result title and its pydantic.dev URL."
         ),
-        capabilities=[NativeTool(WebSearchTool(max_uses=1))],
+        capabilities=[NativeTool(search_tool)],
         **pydantic_agent_runtime_kwargs(),
     )
     result = await _live_run(
@@ -935,6 +1020,8 @@ async def _live_native_web_search(model: Any) -> dict[str, Any]:
     return {
         **trace,
         "output": output,
+        "qualification_scope": "provider_transport_only",
+        "native_search_max_uses": search_tool.max_uses,
         "provider_exposed_native_parts": bool(trace["native_tool_call_count"]),
     }
 
