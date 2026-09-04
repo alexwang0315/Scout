@@ -28,6 +28,36 @@ that would otherwise require all of the following on every change:
 
 The hard safety boundaries in this file never relax.
 
+## Navigation Freeze: Explicit User Approval Required
+
+**Effective 2026-09-04, Dashboard Navigation is frozen at the current worktree
+baseline, including its existing uncommitted changes.** This rule overrides
+Construction Mode autonomy for Navigation-related work. It is not permission to
+revert that work, refactor Navigation, or promote it to production.
+
+- Do not change Navigation behavior, layout, 2D/3D/Rudy+TW maps, A/B TRH R1-R3,
+  corridors, R4/Gn review, highlights, Diagnostic Navigation checks, DEM
+  preparation, workspace/provenance contracts or QGIS/GRASS worker behavior
+  without the user's explicit approval for that particular change.
+- Shared Dashboard HTML/CSS/JavaScript, MapLibre, API entrypoints, dependencies,
+  map layer contracts and worker launchers are part of this boundary. Another
+  page's task does not authorize modifying these shared files. Keep that work
+  isolated; if Navigation impact cannot be ruled out, stop and ask first.
+- Read-only investigation and non-mutating tests are allowed. Test failures do
+  not authorize automatic repairs, workspace regeneration or worker restarts.
+- A specific user request to change Navigation approves only that scope.
+  Generic "continue", "commit", or unrelated-page work is not approval. State
+  the affected files and behavior before editing; approval is not a blanket unlock.
+- Run `rtk proxy ./venv/bin/python tools/verify_navigation_freeze.py` before and
+  after Dashboard/shared-GIS work. A failed check requires review, not a revert
+  or automatic baseline update. The guard never grants approval.
+- The baseline, guard, protected-path inventory and this policy also require
+  approval to change. Never bypass them or relax candidate-only safety contracts
+  to make a check pass.
+
+Details and approved-change procedure:
+`qualification/policies/navigation-freeze.md`.
+
 ## V1 Capability-First Cost Doctrine
 
 The first working version of a complex AI system is expected to be the most
