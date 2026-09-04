@@ -26,6 +26,7 @@ PROJECT_ROOT = (
 POST_ANALYSIS_ROOT = (
     ROOT / "tests" / "fixtures" / "post_analysis" / "chilai_nanhua_day1_post_analysis"
 )
+EXPECTED_READY_TOOL_COUNT = 34
 
 STANDARD_DECISIONS = {
     "GO",
@@ -216,16 +217,19 @@ def test_standard_completion_audit_covers_all_sections_and_primary_surfaces() ->
     assert missing_sections == []
 
     registry = tool_registry_output(include_not_implemented=True)
-    assert registry.tool_count == 34
-    assert registry.ready_current_tool_count == 34
+    assert registry.tool_count == EXPECTED_READY_TOOL_COUNT
+    assert registry.ready_current_tool_count == EXPECTED_READY_TOOL_COUNT
     assert registry.contract_only_tool_count == 0
-    assert registry.implementation_status_counts == {"ready_current_tool": 34}
+    assert registry.implementation_status_counts == {
+        "ready_current_tool": EXPECTED_READY_TOOL_COUNT
+    }
 
     result = run_scout_ai_full_workflow(
         "請以 SCOUT_OUTDOOR_AI_AGENT_STANDARD 為基準，檢視目前 Scout 體系還缺哪些東西，六力是否都有實作？",
         project_root=PROJECT_ROOT,
         project_id="chilai_nanhua_day1",
         limit=8,
+        reference_time="2026-06-24T06:00:00Z",
     )
     decision_output = result.decision_output
 
@@ -679,7 +683,9 @@ def test_tool_registry_marks_all_six_force_tools_ready_current() -> None:
     registry = tool_registry_output(include_not_implemented=True)
     by_id = {tool.tool_id: tool for tool in registry.tools}
 
-    assert registry.implementation_status_counts == {"ready_current_tool": 34}
+    assert registry.implementation_status_counts == {
+        "ready_current_tool": EXPECTED_READY_TOOL_COUNT
+    }
     for scenario in SIX_FORCE_SCENARIOS:
         _, system_language, tool_id, alias, _, _, _ = scenario.values
         contract = by_id[tool_id]

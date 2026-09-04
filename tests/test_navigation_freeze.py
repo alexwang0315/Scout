@@ -44,17 +44,20 @@ def frozen_repo(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def test_current_navigation_matches_frozen_worktree() -> None:
+def test_current_navigation_freeze_is_temporarily_report_only() -> None:
     report = verify_freeze(ROOT)
     assert report["ok"], report
-    assert report["status"] == "FROZEN_UNCHANGED"
+    assert report["status"] == "NAVIGATION_FREEZE_SUSPENDED"
+    assert report["enforcement"] == "report_only"
     assert report["approval_granted"] is False
     assert report["runtime_safety_truth"] is False
 
 
 def test_freeze_does_not_need_git_or_a_clean_worktree(frozen_repo: Path) -> None:
     assert not (frozen_repo / ".git").exists()
-    assert verify_freeze(frozen_repo)["ok"]
+    report = verify_freeze(frozen_repo, enforce=True)
+    assert report["ok"]
+    assert report["status"] == "FROZEN_UNCHANGED"
 
 
 def test_other_page_in_an_independent_file_is_allowed(frozen_repo: Path) -> None:
@@ -76,7 +79,7 @@ def test_changed_navigation_and_shared_entrypoints_require_approval(
     path: str,
 ) -> None:
     _write(frozen_repo, path, "changed for another page\n")
-    report = verify_freeze(frozen_repo)
+    report = verify_freeze(frozen_repo, enforce=True)
     assert not report["ok"]
     assert report["status"] == "NAVIGATION_APPROVAL_REQUIRED"
     assert report["changes"] == [{"path": path, "change": "modified"}]
@@ -172,6 +175,7 @@ def test_symlink_to_an_identical_file_is_not_accepted(frozen_repo: Path) -> None
 
 
 def test_inventory_and_cli_are_deterministic_and_read_only(frozen_repo: Path) -> None:
+    _write(frozen_repo, "terrain_route_hypothesis.py", "changed\n")
     before = protected_inventory(frozen_repo)
     baseline_before = (frozen_repo / BASELINE_PATH).read_bytes()
     reports = []
@@ -190,11 +194,16 @@ def test_inventory_and_cli_are_deterministic_and_read_only(frozen_repo: Path) ->
         assert result.returncode == 0, result.stdout + result.stderr
         reports.append(json.loads(result.stdout))
     assert reports[0] == reports[1]
+    assert reports[0]["status"] == "NAVIGATION_FREEZE_SUSPENDED"
+    assert reports[0]["changes"] == verify_freeze(frozen_repo, enforce=True)["changes"]
+    assert reports[0]["changes"] == [
+        {"path": "terrain_route_hypothesis.py", "change": "modified"},
+    ]
     assert before == protected_inventory(frozen_repo)
     assert baseline_before == (frozen_repo / BASELINE_PATH).read_bytes()
 
 
-def test_cli_returns_nonzero_for_unapproved_change(frozen_repo: Path) -> None:
+def test_strict_cli_returns_nonzero_for_source_drift(frozen_repo: Path) -> None:
     _write(frozen_repo, "terrain_route_hypothesis.py", "changed\n")
     result = subprocess.run(
         [
@@ -202,6 +211,7 @@ def test_cli_returns_nonzero_for_unapproved_change(frozen_repo: Path) -> None:
             str(ROOT / "tools/verify_navigation_freeze.py"),
             "--repo-root",
             str(frozen_repo),
+            "--enforce",
         ],
         text=True,
         capture_output=True,
@@ -216,6 +226,6 @@ def test_baseline_cannot_auto_approve_a_change(frozen_repo: Path) -> None:
     baseline["approval_granted"] = True
     _write(frozen_repo, BASELINE_PATH, json.dumps(baseline))
     _write(frozen_repo, "terrain_route_hypothesis.py", "changed\n")
-    report = verify_freeze(frozen_repo)
+    report = verify_freeze(frozen_repo, enforce=True)
     assert not report["ok"]
     assert report["approval_granted"] is False

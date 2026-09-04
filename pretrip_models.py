@@ -133,12 +133,26 @@ class DtmTileCandidate(BaseModel):
     coverage_note: str = ""
 
 
+class DtmRasterSource(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(min_length=1)
+    role: str = Field(min_length=1)
+    sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    crs: str = Field(min_length=1)
+    crs_evidence: str | None = None
+    source_resolution_m: float = Field(gt=0.0)
+    candidate_only: Literal[True] = True
+    runtime_safety_truth: Literal[False] = False
+
+
 class DtmCoverageSummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     summary_id: str
     route_artifact_id: str
     source_dirs: list[str] = Field(default_factory=list)
+    raster_sources: list[DtmRasterSource] = Field(default_factory=list)
     route_bbox_wgs84: RouteBBox
     route_bbox_twd97: ProjectedBBox
     candidate_tiles: list[DtmTileCandidate] = Field(default_factory=list)

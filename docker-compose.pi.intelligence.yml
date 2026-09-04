@@ -1,0 +1,63 @@
+services:
+  scout-intelligence-edge:
+    platform: linux/arm64
+    build:
+      context: .
+      dockerfile: Dockerfile.pi.intelligence
+    image: scout-fusion/pi-intelligence-edge:experimental
+    container_name: scout-pi-intelligence-edge
+    restart: unless-stopped
+    environment:
+      PRAISONAI_TELEMETRY_DISABLED: "true"
+      SCOUT_SAFETY_ENABLED: "false"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - type: bind
+        source: ${SCOUT_INTELLIGENCE_EVIDENCE_CATALOG:-/data/scout/config/intelligence-evidence-catalog.json}
+        target: /data/scout/config/intelligence-evidence-catalog.json
+        read_only: true
+      - type: bind
+        source: /data/scout/config/intelligence-hailo-model.json
+        target: /data/scout/config/intelligence-hailo-model.json
+        read_only: true
+      - type: bind
+        source: /data/scout/experimental/intelligence
+        target: /data/scout/experimental/intelligence
+      - type: bind
+        source: /data/scout/run
+        target: /data/scout/run
+      - type: bind
+        source: /proc/device-tree/model
+        target: /run/scout-host/model
+        read_only: true
+    command:
+      - --mode
+      - praison-openai-compatible
+      - --evidence-catalog
+      - /data/scout/config/intelligence-evidence-catalog.json
+      - --model-runtime-config
+      - /data/scout/config/intelligence-hailo-model.json
+      - --background-job-store
+      - /data/scout/experimental/intelligence/jobs.sqlite3
+      - --max-background-jobs
+      - "8"
+      - --unix-socket
+      - /data/scout/run/intelligence-mcp.sock
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import socket; s=socket.socket(socket.AF_UNIX); s.settimeout(3); s.connect('/data/scout/run/intelligence-mcp.sock'); s.close()",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+networks:
+  default:
+    external: true
+    name: ${SCOUT_INTELLIGENCE_DOCKER_NETWORK:-scout-ai-os-hardware-current_default}

@@ -1,3 +1,5 @@
+from importlib.metadata import version
+
 from pydantic_ai_runtime_compat import (
     build_chat_model,
     normalize_chat_model_name,
@@ -30,7 +32,7 @@ from scout.schemas.agent_runtime import AgentRunBudget
 
 
 def test_pydantic_ai_runtime_version_supports_slim_install() -> None:
-    assert pydantic_ai_runtime_version() == "2.37.0"
+    assert pydantic_ai_runtime_version() == version("pydantic-ai-slim")
     assert packaged_runtime_version() == pydantic_ai_runtime_version()
 
 

@@ -9,7 +9,8 @@ import json
 import os
 import re
 import threading
-from collections.abc import Mapping
+from collections.abc import Awaitable, Iterator, Mapping
+from contextlib import contextmanager
 from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
@@ -78,6 +79,7 @@ class OpenAICompatibleBackendConfig(SchemaModel):
     supports_reasoning_control: bool = False
     uses_max_completion_tokens: bool = True
     structured_output_mode: Literal["tool", "native", "prompted"] = "tool"
+    native_retry_context_mode: Literal["full_history", "fresh_attempt"] = "full_history"
     specialist_output_mode: Literal[
         "full_report",
         "compact_advisory",
@@ -96,6 +98,9 @@ class OpenAICompatibleBackendConfig(SchemaModel):
 
     @model_validator(mode="after")
     def validate_transport_and_runtime(self) -> "OpenAICompatibleBackendConfig":
+        if (self.native_retry_context_mode == "fresh_attempt"
+                and self.structured_output_mode != "native"):
+            raise ValueError("fresh_attempt retry context is only valid for native JSON output")
         parsed = urlsplit(self.base_url)
         if parsed.scheme not in {"http", "https"} or not parsed.hostname:
             raise ValueError("base_url must be an absolute HTTP(S) URL")
@@ -222,6 +227,7 @@ class OpenAICompatiblePydanticBackend:
         *,
         config: OpenAICompatibleBackendConfig,
         environ: Mapping[str, str] | None = None,
+        http_client: httpx.AsyncClient | None = None,
     ) -> None:
         from openai import AsyncOpenAI
         from pydantic_ai.models.openai import OpenAIChatModel
@@ -237,8 +243,9 @@ class OpenAICompatiblePydanticBackend:
             or config.request_message_control_mode
             == "replace_controls_with_spaces"
         )
-        http_client = None
         if needs_compatibility_transport:
+            if http_client is not None:
+                raise OpenAICompatibleConfigurationError("custom transport cannot bypass Hailo compatibility")
             http_client = httpx.AsyncClient(
                 transport=_HailoCompatibilityTransport(
                     normalize_created_timestamp=(
@@ -277,7 +284,9 @@ class OpenAICompatiblePydanticBackend:
                 ),
             ),
         )
-        counted_model = _RequestCountingModel(provider_model)
+        counted_model = _RequestCountingModel(
+            provider_model, native_retry_context_mode=config.native_retry_context_mode,
+        )
         self._delegate = PydanticAIStructuredBackend(
             runtime_id=config.runtime_id,
             model_id=config.model_id,
@@ -295,12 +304,13 @@ class OpenAICompatiblePydanticBackend:
         model_request_limit: int,
         cancellation_event: threading.Event,
     ) -> BackendInferenceResult:
-        return self._delegate.infer(
-            request=request,
-            output_type=output_type,
-            model_request_limit=model_request_limit,
-            cancellation_event=cancellation_event,
-        )
+        with self.resident_model.cancellation_scope(cancellation_event):
+            return self._delegate.infer(
+                request=request,
+                output_type=output_type,
+                model_request_limit=model_request_limit,
+                cancellation_event=cancellation_event,
+            )
 
     def close(self) -> None:
         if self._closed:
@@ -314,12 +324,14 @@ def build_praison_openai_compatible_runtime(
     *,
     config: OpenAICompatibleBackendConfig,
     environ: Mapping[str, str] | None = None,
+    http_client: httpx.AsyncClient | None = None,
 ) -> "PraisonModelGatewayRuntime":
     from scout.nextgen.praison_service import PraisonModelGatewayRuntime
 
     backend = OpenAICompatiblePydanticBackend(
         config=config,
         environ=environ,
+        http_client=http_client,
     )
     profile = config.to_runtime_profile()
     small_typed_output = (
@@ -532,7 +544,60 @@ def _normalize_created_timestamp(value: object) -> int | None:
     return normalized
 
 
-def _RequestCountingModel(inner_model: Any) -> Any:  # noqa: N802 - model factory
+class _ModelRequestCancelled(RuntimeError):
+    pass
+
+
+async def _await_cancellable_request(
+    operation: Awaitable[Any],
+    cancellation_event: threading.Event | None,
+) -> Any:
+    if cancellation_event is None:
+        return await operation
+    task = asyncio.ensure_future(operation)
+    try:
+        while not task.done():
+            if cancellation_event.is_set():
+                raise _ModelRequestCancelled("model HTTP request was cancelled")
+            await asyncio.wait({task}, timeout=0.05)
+        if cancellation_event.is_set():
+            raise _ModelRequestCancelled("model HTTP response was cancelled")
+        return task.result()
+    finally:
+        # Await transport cleanup before the scheduler can release its slot.
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+def _fresh_native_retry_messages(messages: list[Any], attempt: int) -> list[Any]:
+    from dataclasses import replace
+    from pydantic_ai.messages import ModelRequest, RetryPromptPart, UserPromptPart
+
+    if not messages or not isinstance(messages[-1], ModelRequest):
+        return messages
+    retries = [part for part in messages[-1].parts if isinstance(part, RetryPromptPart)]
+    if not retries or any(part.tool_name is not None for part in retries):
+        return messages
+    original = next((message for message in messages if isinstance(message, ModelRequest)), None)
+    if original is None:
+        return messages
+    errors = [
+        {"path": error.get("loc", ()), "error": error.get("type", "invalid_output")}
+        for part in retries if isinstance(part.content, list)
+        for error in part.content
+    ]
+    feedback = (
+        f"Previous output failed schema validation. Repair attempt {attempt}. "
+        "Return only the requested JSON object; preserve the original evidence. "
+        + json.dumps(errors, separators=(",", ":"))
+    )
+    return [replace(original, parts=[*original.parts, UserPromptPart(feedback)])]
+
+
+def _RequestCountingModel(  # noqa: N802 - model factory
+    inner_model: Any, *, native_retry_context_mode: str = "full_history",
+) -> Any:
     from pydantic_ai.models import Model
 
     class RequestCountingModel(Model):
@@ -546,6 +611,9 @@ def _RequestCountingModel(inner_model: Any) -> Any:  # noqa: N802 - model factor
                     f"scout_model_request_scope_{id(self)}",
                     default=None,
                 )
+            )
+            self._cancellation: contextvars.ContextVar[threading.Event | None] = (
+                contextvars.ContextVar(f"scout_model_cancellation_{id(self)}", default=None)
             )
 
         @property
@@ -577,21 +645,35 @@ def _RequestCountingModel(inner_model: Any) -> Any:  # noqa: N802 - model factor
             self._request_scope.reset(token)
             return counter[0]
 
+        @contextmanager
+        def cancellation_scope(self, event: threading.Event) -> Iterator[None]:
+            token = self._cancellation.set(event)
+            try:
+                yield
+            finally:
+                self._cancellation.reset(token)
+
         async def request(
             self,
             messages: list[Any],
             model_settings: Any,
             model_request_parameters: Any,
         ) -> Any:
+            cancellation = self._cancellation.get()
+            if cancellation is not None and cancellation.is_set():
+                raise _ModelRequestCancelled("model request was cancelled before dispatch")
             with self._request_count_lock:
                 self.request_count += 1
             scoped_counter = self._request_scope.get()
             if scoped_counter is not None:
                 scoped_counter[0] += 1
-            return await self.inner.request(
-                messages,
-                model_settings,
-                model_request_parameters,
+            if native_retry_context_mode == "fresh_attempt":
+                messages = _fresh_native_retry_messages(
+                    messages, scoped_counter[0] if scoped_counter is not None else self.request_count,
+                )
+            return await _await_cancellable_request(
+                self.inner.request(messages, model_settings, model_request_parameters),
+                cancellation,
             )
 
         async def count_tokens(

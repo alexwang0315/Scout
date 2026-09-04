@@ -80,8 +80,8 @@ from tools.scout_ai_workspace_query_eval import (  # noqa: E402
 
 DEFAULT_CASES_FILE = (
     ROOT
-    / "outputs"
-    / "evals"
+    / "tests"
+    / "fixtures"
     / "scout_ai_workspace_grounded_100_questions_20260713_glm52_cases.json"
 )
 DEFAULT_GOLD_FILE = ROOT / "tests" / "fixtures" / "scout_ai_workspace_query_gold_100.json"

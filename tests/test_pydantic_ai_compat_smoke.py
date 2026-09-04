@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import tomllib
+from importlib.metadata import version
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -22,10 +23,12 @@ from scout.cli.pydantic_compat_smoke import (
 
 
 def test_offline_pydantic_ai_compatibility_smoke_passes() -> None:
-    report = asyncio.run(run_compatibility_smoke())
+    installed_version = version("pydantic-ai-slim")
+    report = asyncio.run(run_compatibility_smoke(expected_version=installed_version))
 
     assert report["status"] == "passed"
-    assert report["required_version"] == REQUIRED_VERSION
+    assert report["required_version"] == installed_version
+    assert report["configured_version"] == REQUIRED_VERSION
     assert report["check_count"] == 18
     assert report["passed_count"] == 18
     assert report["failed_count"] == 0
@@ -85,8 +88,8 @@ def test_runtime_and_deployment_dependency_pins_stay_aligned() -> None:
         "requirements.pi.live.txt",
     } <= dependency_sets.keys()
     expected_versions = {
-        "pydantic-ai-slim": "2.37.0",
-        "pydantic-evals": "2.37.0",
+        "pydantic-ai-slim": "2.38.0",
+        "pydantic-evals": "2.38.0",
         "praisonaiagents": "1.7.3",
     }
     seen = set()
@@ -101,6 +104,55 @@ def test_runtime_and_deployment_dependency_pins_stay_aligned() -> None:
                 seen.add(requirement.name)
     assert seen == expected_versions.keys()
     assert REQUIRED_VERSION == expected_versions["pydantic-ai-slim"]
+
+
+def test_candidate_version_is_verified_without_changing_runtime_pin(monkeypatch):
+    monkeypatch.setattr(smoke, "REQUIRED_VERSION", "2.37.0")
+    packages = smoke._package_versions()
+    candidate = {
+        **packages,
+        **{
+            name: "2.38.0"
+            for name in ("pydantic-ai-slim", "pydantic-evals", "pydantic-graph")
+        },
+    }
+    monkeypatch.setattr(smoke, "_package_versions", lambda: candidate)
+
+    report = asyncio.run(run_compatibility_smoke(expected_version="2.38.0"))
+
+    assert report["status"] == "passed"
+    assert report["required_version"] == "2.38.0"
+    assert report["configured_version"] == "2.37.0"
+    assert smoke.REQUIRED_VERSION == "2.37.0"
+
+
+def test_candidate_version_does_not_hide_misaligned_graph(monkeypatch):
+    monkeypatch.setattr(
+        smoke,
+        "_package_versions",
+        lambda: {
+            "pydantic-ai-slim": "2.38.0",
+            "pydantic-evals": "2.38.0",
+            "pydantic-graph": "2.37.0",
+        },
+    )
+
+    with pytest.raises(AssertionError, match="pydantic-graph=2.37.0"):
+        smoke._offline_runtime_versions(expected_version="2.38.0")
+
+
+def test_default_version_gate_still_rejects_unapproved_candidate(monkeypatch):
+    monkeypatch.setattr(
+        smoke,
+        "_package_versions",
+        lambda: {
+            name: "0.0.0"
+            for name in ("pydantic-ai-slim", "pydantic-evals", "pydantic-graph")
+        },
+    )
+
+    with pytest.raises(AssertionError, match=f"expected {REQUIRED_VERSION}"):
+        smoke._offline_runtime_versions()
 
 
 def test_native_web_smoke_keeps_ten_use_capacity_and_transport_scope(
@@ -141,6 +193,7 @@ def test_live_smoke_fails_closed_without_openrouter_key(
             live_openrouter=True,
             model_name="deepseek/deepseek-v4-flash-0731",
             env_file=tmp_path / "missing.env",
+            expected_version=version("pydantic-ai-slim"),
         )
     )
 

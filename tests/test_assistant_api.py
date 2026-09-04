@@ -220,6 +220,26 @@ def _write_map_perception_workspace(project_root: Path) -> Path:
 
 
 class AssistantApiTests(unittest.TestCase):
+    def test_rejected_local_model_answer_is_observed_as_safe_failure(self):
+        class RejectedLocalModelProvider:
+            def answer(self, query: ScoutAssistantQuery, *, sources=None):
+                return ScoutAssistantResponse(
+                    surface=query.surface,
+                    answer="AI HAT+2 local model answer was rejected.",
+                    sources=list(sources or []),
+                    boundary=AssistantBoundary(surface=query.surface),
+                    limitations=["ai_hat_model_answer_rejected=true"],
+                )
+
+        response = answer_assistant_query_safely(
+            RejectedLocalModelProvider(),
+            ScoutAssistantQuery(surface="admin", question="內部 Hailo 測試"),
+            sources=[],
+        )
+
+        self.assertIsNotNone(response.observability)
+        self.assertTrue(response.observability.safe_failure)
+
     def test_assistant_query_is_read_only_post_body_endpoint(self):
         client = TestClient(create_assistant_app())
 

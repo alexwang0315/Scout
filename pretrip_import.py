@@ -50,6 +50,7 @@ from pretrip_mcp_synthesis import (
 from pretrip_models import (
     CandidateReviewState,
     DtmCoverageSummary,
+    DtmRasterSource,
     PreTripArtifactKind,
     PreTripCheckpointCandidate,
     PreTripPackage,
@@ -1942,13 +1943,20 @@ def _build_dtm_coverage_from_material(
     primary_artifact_id: str,
 ) -> DtmCoverageSummary | None:
     dtm_dirs = _dtm_source_dirs(request)
-    if not dtm_dirs:
+    raster_sources = _dtm_raster_sources(request)
+    if not dtm_dirs and not raster_sources:
         return None
-    return scan_dtm_coverage(
+    coverage = scan_dtm_coverage(
         route_summary=route_summary,
         source_dirs=dtm_dirs,
         summary_id=f"dtm_coverage.{request.project_id}.material_root",
-    ).model_copy(update={"route_artifact_id": primary_artifact_id})
+    )
+    return coverage.model_copy(
+        update={
+            "route_artifact_id": primary_artifact_id,
+            "raster_sources": raster_sources,
+        }
+    )
 
 
 def _material_root_for_request(request: PretripImportRequest) -> Path | None:
@@ -1992,6 +2000,35 @@ def _dtm_source_dirs(request: PretripImportRequest) -> list[Path]:
         seen.add(key)
         deduped.append(path)
     return deduped
+
+
+def _dtm_raster_sources(request: PretripImportRequest) -> list[DtmRasterSource]:
+    manifest = _material_manifest(request)
+    raw_sources = manifest.get("sources", {}).get("dtm_rasters", [])
+    if not isinstance(raw_sources, list):
+        raise ValueError("material manifest sources.dtm_rasters must be a list")
+    sources: list[DtmRasterSource] = []
+    seen: set[str] = set()
+    for raw_source in raw_sources:
+        if not isinstance(raw_source, dict):
+            raise ValueError("material manifest DTM raster source must be an object")
+        raw_path = raw_source.get("path")
+        if not isinstance(raw_path, str) or not raw_path.strip():
+            raise ValueError("material manifest DTM raster source has no path")
+        path = Path(raw_path).expanduser().resolve()
+        if path.suffix.lower() not in {".tif", ".tiff"}:
+            raise ValueError("material manifest DTM raster source must be GeoTIFF")
+        if not path.is_file():
+            raise FileNotFoundError(f"DTM raster not found: {path}")
+        key = path.as_posix()
+        if key in seen:
+            continue
+        seen.add(key)
+        source = DtmRasterSource.model_validate({**raw_source, "path": key})
+        if sha256_file(path) != source.sha256:
+            raise ValueError(f"DTM raster sha256 mismatch: {path}")
+        sources.append(source)
+    return sources
 
 
 def _resolve_mcp_named_point_evidence(request: PretripImportRequest) -> Path | None:
@@ -2717,6 +2754,9 @@ def _build_route_evidence_bundle(
             "filtered_geometry_ref": _project_ref(
                 project_root,
                 Path(gpx_speed_filter["primary"]["output_path"]),
+            ),
+            "filtered_geometry_sha256": sha256_file(
+                Path(gpx_speed_filter["primary"]["output_path"])
             ),
             "route_summary_ref": output_refs["route_summary_ref"],
             "route_bbox_wgs84": route_bbox,

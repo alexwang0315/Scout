@@ -11,6 +11,32 @@ from pretrip_admin_view import build_pretrip_admin_view
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def test_historical_return_projection_scales_distance_not_directional_time():
+    from pretrip_route_architecture_intelligence import _historical_return_cost_projection
+
+    result = _historical_return_cost_projection({
+        "bins": [{"start_distance_m": 0, "end_distance_m": 1000,
+                  "forward": {"average_minutes": 60, "status": "observed"},
+                  "reverse": {"average_minutes": 30, "status": "estimated"}}],
+        "checkpoints": [
+            {"node_id": "start", "label": "Start", "route_distance_m": 0},
+            {"node_id": "end", "label": "End", "route_distance_m": 1000},
+        ],
+        "camp_evidence": {"camps": [{"node_id": "camp", "label": "Camp", "route_distance_m": 500}]},
+        "daily_budget": {"minutes": 20, "sample_day_count": 3},
+    }, route_distance_m=2000, distance_scale=2, source_ref="outputs/timing.json")
+    finish = result["checkpoints"][-1]
+    assert finish["route_distance_m"] == 2000
+    assert finish["return_to_entry_minutes"] == 30
+    assert finish["return_cost_minutes"] == 15
+    assert finish["return_target_distance_m"] == 1000
+    assert finish["return_cost_status"] == "estimated"
+    assert result["daily_budget"]["minutes"] == 20
+    assert result["duration_scaled"] is False
+    assert result["candidate_only"] is True
+    assert result["runtime_safety_truth"] is False
+
+
 def _reference_pace_payload() -> dict:
     return {
         "artifact_kind": "pretrip_reference_pace_energy_analysis",

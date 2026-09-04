@@ -17,6 +17,7 @@ from scout.nextgen.intelligence_gateway import (
     GatewayValidationDisposition,
     IntelligenceRequest,
     IntelligenceResponse,
+    ModelExecutionRecord,
     PydanticContractGateway,
     WorkspaceBinding,
 )
@@ -69,11 +70,17 @@ class BackgroundIntelligenceJobProgress(SchemaModel):
     error_type: str | None = None
     validation_disposition: GatewayValidationDisposition | None = None
     validation_reasons: tuple[NonEmptyStr, ...] = ()
+    model_execution_records: tuple[ModelExecutionRecord, ...] = ()
     candidate_only: Literal[True] = True
     runtime_safety_truth: Literal[False] = False
 
     @model_validator(mode="after")
     def validate_lifecycle(self) -> "BackgroundIntelligenceJobProgress":
+        if any(
+            item.parent_request_id != self.request_id
+            for item in self.model_execution_records
+        ):
+            raise ValueError("background model record request binding does not match")
         terminal = self.state in _TERMINAL_STATES
         if terminal != (self.completed_at is not None):
             raise ValueError("terminal background jobs require completed_at")
@@ -415,6 +422,11 @@ class PraisonBackgroundIntelligenceQueue:
                             error_type="ContractGatewayRejected",
                             validation_disposition=validation.disposition,
                             validation_reasons=validation.reasons,
+                            model_execution_records=tuple(
+                                item for item in response.provenance.model_execution_records
+                                if item.parent_request_id == record.request.request_id
+                                and item.inference_id is not None
+                            ),
                         )
             finally:
                 self._pending.task_done()
@@ -474,6 +486,9 @@ class PraisonBackgroundIntelligenceQueue:
                         "progress_percent": 100,
                         "completed_at": now,
                         "cancellation_requested": True,
+                        "model_execution_records": (
+                            response.provenance.model_execution_records
+                        ),
                     }
                 )
                 finished = replace(record, progress=progress, response=None)
@@ -487,6 +502,9 @@ class PraisonBackgroundIntelligenceQueue:
                         "response_available": True,
                         "validation_disposition": validation_disposition,
                         "validation_reasons": validation_reasons,
+                        "model_execution_records": (
+                            response.provenance.model_execution_records
+                        ),
                     }
                 )
                 finished = replace(record, progress=progress, response=response)
@@ -508,6 +526,7 @@ class PraisonBackgroundIntelligenceQueue:
         error_type: str,
         validation_disposition: GatewayValidationDisposition | None = None,
         validation_reasons: tuple[str, ...] = (),
+        model_execution_records: tuple[ModelExecutionRecord, ...] = (),
     ) -> None:
         with self._lock:
             record = self._record(job_id)
@@ -526,6 +545,7 @@ class PraisonBackgroundIntelligenceQueue:
                     "error_type": None if cancelled else error_type,
                     "validation_disposition": validation_disposition,
                     "validation_reasons": validation_reasons,
+                    "model_execution_records": model_execution_records,
                 }
             )
             self._jobs[job_id] = replace(record, progress=progress, response=None)

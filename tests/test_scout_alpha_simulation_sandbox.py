@@ -755,17 +755,22 @@ def test_admin_app_requires_explicit_alpha_sandbox_feature_flag(tmp_path: Path) 
         living_sandbox_store_root=tmp_path / "disabled",
         alpha_sandbox_enabled=False,
     )
-    disabled_paths = {route.path for route in disabled.routes}
-    assert "/emergency/sandbox-alpha-v0" not in disabled_paths
-    assert "/admin/dashboard/living/alpha/scenarios" not in disabled_paths
+    disabled_client = TestClient(disabled)
+    assert disabled_client.get("/emergency/sandbox-alpha-v0").status_code == 404
+    assert (
+        disabled_client.get("/admin/dashboard/living/alpha/scenarios").status_code
+        == 404
+    )
 
     enabled = create_admin_app(
         living_sandbox_store_root=tmp_path / "enabled",
         alpha_sandbox_enabled=True,
     )
-    enabled_paths = {route.path for route in enabled.routes}
-    assert "/emergency/sandbox-alpha-v0" in enabled_paths
-    assert "/admin/dashboard/living/alpha/scenarios" in enabled_paths
+    enabled_client = TestClient(enabled)
+    assert enabled_client.get("/emergency/sandbox-alpha-v0").status_code == 200
+    catalog = enabled_client.get("/admin/dashboard/living/alpha/scenarios")
+    assert catalog.status_code == 200
+    assert catalog.json()["scenario_count"] == 10
 
 
 def test_alpha_sandbox_rejects_workspace_escape_and_actual_user_tracks(

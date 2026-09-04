@@ -5,7 +5,14 @@ import json
 import sys
 from pathlib import Path
 
-from scout.nextgen.model_qualification import (
+
+ROOT = Path(__file__).resolve().parents[1]
+SRC = ROOT / "src"
+for import_root in (ROOT, SRC):
+    if str(import_root) not in sys.path:
+        sys.path.insert(0, str(import_root))
+
+from scout.nextgen.model_qualification import (  # noqa: E402
     ModelQualificationDisposition,
     build_model_capability_attestation,
     run_openai_compatible_qualification,
@@ -67,18 +74,14 @@ def main() -> int:
                 parents=True,
                 exist_ok=True,
             )
-            attestation_temporary_path = (
-                args.capability_attestation_output.with_suffix(
-                    args.capability_attestation_output.suffix + ".tmp"
-                )
+            attestation_temporary_path = args.capability_attestation_output.with_suffix(
+                args.capability_attestation_output.suffix + ".tmp"
             )
             attestation_temporary_path.write_text(
                 attestation.model_dump_json(indent=2) + "\n",
                 encoding="utf-8",
             )
-            attestation_temporary_path.replace(
-                args.capability_attestation_output
-            )
+            attestation_temporary_path.replace(args.capability_attestation_output)
             attestation_output = str(args.capability_attestation_output)
     print(
         json.dumps(

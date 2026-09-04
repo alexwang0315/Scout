@@ -1,0 +1,27 @@
+FROM scout-fusion/pi-phase4-admin:preview
+
+USER root
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app \
+    PRAISONAI_TELEMETRY_DISABLED=true \
+    SCOUT_SAFETY_ENABLED=false
+
+WORKDIR /app
+
+COPY requirements.pi.intelligence.txt .
+RUN pip install --no-cache-dir -r requirements.pi.intelligence.txt
+
+COPY src/scout/ ./scout/
+COPY tools/scout_ai_praison_background_mcp_smoke.py ./tools/
+
+RUN mkdir -p /data/scout/experimental/intelligence /data/scout/run \
+    && chown -R scout:scout /data/scout /app
+
+USER scout
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD python -c "import socket; s=socket.socket(socket.AF_UNIX); s.settimeout(3); s.connect('/data/scout/run/intelligence-mcp.sock'); s.close()"
+
+ENTRYPOINT ["python", "-m", "scout.nextgen.intelligence_mcp_http_server"]

@@ -52,6 +52,13 @@ from qgis_spatial_contracts import (
 )
 from qgis_worker_contracts import QgisWorkerRun
 from route_matching import load_gpx_route
+from pretrip_source_ingest import wgs84_to_twd97
+from workspace_terrain_dem import (
+    WorkspaceDemError,
+    load_workspace_dem,
+    prepare_workspace_dem,
+    require_analysis_coverage,
+)
 from terrain_route_hypothesis_artifacts import (
     TerrainRouteCacheKeys,
     build_live_terrain_route_cache_keys,
@@ -1403,6 +1410,35 @@ class QgisSpatialBackend:
                 )
                 self._persist_run(project_root, run)
                 return run
+            if request.dem_ref is None:
+                try:
+                    full_source = self._terrain_route_workspace_dem_source(
+                        project_root=project_root, project=project, parent_ref=parent_ref,
+                        parent_hash=parent_hash, parent_resolution=source_resolution,
+                        parent_dem_ref=dem_source_refs[0], parent_dem_sha256=dem_hashes[dem_source_refs[0]],
+                        route_points=worker_route_points, margin_m=request.corridor_m,
+                    )
+                    if full_source is None and request.terrain_route_endpoints is not None:
+                        full_source = self._terrain_route_full_dem_source(
+                            project_root=project_root,
+                            parent_ref=parent_ref,
+                            parent_resolution=source_resolution,
+                            parent_dem_ref=dem_source_refs[0],
+                            parent_dem_sha256=dem_hashes[dem_source_refs[0]],
+                        )
+                except (OSError, KeyError, TypeError, ValueError, QgisSpatialBackendError) as exc:
+                    run = self._failed_run(
+                        project_id=project_id,
+                        request=request.model_copy(update={"request_id": request_id}),
+                        code=SpatialAnalysisErrorCode.SOURCE_UNAVAILABLE,
+                        message="The prepared DEM is unavailable, changed, or does not cover A/B plus the analysis margin.",
+                        status=status,
+                        detail=str(exc),
+                    )
+                    self._persist_run(project_root, run)
+                    return run
+                if full_source is not None:
+                    dem_refs, dem_source_refs, dem_hashes, source_resolution = full_source
             stable_route_refs = [ref for ref in source_refs if ref != "project.json"]
             stable_route_hashes = {
                 ref: value
@@ -1476,7 +1512,7 @@ class QgisSpatialBackend:
             )
             if cached is not None:
                 return cached
-            _deactivate_terrain_route_hypothesis(project_root=project_root)
+            # Only successful materialization replaces the published candidate.
         else:
             combined_source_refs = list(
                 dict.fromkeys([*source_refs, *dem_source_refs])
@@ -2912,6 +2948,133 @@ class QgisSpatialBackend:
                 ],
             }
         )
+
+    def prepare_workspace_terrain_dem(
+        self, *, project_root: Path, adapter: Any | None = None,
+    ) -> dict[str, Any]:
+        """Add a buffered DEM without regenerating terrain features, routes or review."""
+        try:
+            project = _read_json(project_root / "project.json")
+            parent_ref, parent_hash = _terrain_route_parent_manifest_binding(
+                project_root=project_root, project=project,
+            )
+            dem_ref = project.get("terrain_dem_route_bbox_raster_ref")
+            if not parent_ref or not parent_hash or not isinstance(dem_ref, str):
+                raise WorkspaceDemError("Prepare the terrain-feature parent before workspace DEM preparation")
+            resolution = _terrain_route_parent_source_resolution(
+                project_root=project_root, parent_ref=parent_ref, dem_ref=dem_ref,
+            )
+            if resolution is None:
+                raise WorkspaceDemError("Prepared DEM resolution is unavailable")
+            full = self._terrain_route_full_dem_source(
+                project_root=project_root, parent_ref=parent_ref, parent_resolution=resolution,
+                parent_dem_ref=dem_ref, parent_dem_sha256=_sha256_file(_safe_project_path(project_root, dem_ref)),
+            )
+            if full is None:
+                raise WorkspaceDemError("No parent-bound regional DEM raster is registered")
+            paths, refs, hashes, full_resolution = full
+            coverage_ref = "normalized/terrain/dtm_coverage_summary.json"
+            coverage = _read_json(_safe_project_path(project_root, coverage_ref))
+            prepared = prepare_workspace_dem(
+                project_root=project_root, project_id=project["project_id"], source_path=paths[0],
+                source_ref=refs[-1], source_hashes={**hashes, parent_ref: parent_hash},
+                parent_ref=parent_ref, parent_dem_ref=dem_ref, coverage_ref=coverage_ref,
+                route_bounds=coverage["route_bbox_twd97"], resolution_m=resolution["x_m"], adapter=adapter,
+                crs_evidence_path=(Path(full_resolution["crs_evidence"])
+                                   if full_resolution.get("crs_evidence") not in (None, "unavailable") else None),
+            )
+            current = _read_json(project_root / "project.json")
+            if (current.get("terrain_feature_manifest_ref") != parent_ref
+                    or _sha256_file(_safe_project_path(project_root, parent_ref)) != parent_hash):
+                raise WorkspaceDemError("Terrain parent changed during DEM preparation")
+            output_refs = {
+                "terrain_workspace_dem_manifest_ref": prepared.manifest_ref,
+                "terrain_workspace_dem_manifest_sha256": _sha256_file(_safe_project_path(project_root, prepared.manifest_ref)),
+                "terrain_workspace_dem_raster_ref": prepared.dem_ref,
+                "terrain_workspace_dem_status": "ready",
+            }
+            _write_bytes(project_root / "project.json", _json_bytes({**current, **output_refs}))
+            return {"status": "completed", "output_refs": output_refs,
+                    "bounds": prepared.bounds, "route_bounds": prepared.route_bounds,
+                    "resolution_m": prepared.resolution_m, "max_analysis_margin_m": prepared.max_analysis_margin_m,
+                    "finite_cell_count": prepared.finite_cell_count, "nodata_cell_count": 0,
+                    "candidate_only": True, "runtime_safety_truth": False}
+        except (OSError, KeyError, TypeError, ValueError, QgisSpatialBackendError) as exc:
+            return {"status": "unavailable", "error": {"code": "SOURCE_UNAVAILABLE", "message": str(exc)},
+                    "output_refs": {}, "candidate_only": True, "runtime_safety_truth": False}
+
+    def _terrain_route_workspace_dem_source(
+        self, *, project_root: Path, project: dict[str, Any], parent_ref: str, parent_hash: str,
+        parent_resolution: dict[str, Any], parent_dem_ref: str, parent_dem_sha256: str,
+        route_points: list[dict[str, float]], margin_m: float,
+    ) -> tuple[list[Path], list[str], dict[str, str], dict[str, Any]] | None:
+        manifest_ref = project.get("terrain_workspace_dem_manifest_ref")
+        if not manifest_ref:
+            return None
+        manifest_path = _safe_project_path(project_root, manifest_ref)
+        manifest_hash = _sha256_file(manifest_path)
+        if manifest_hash != project.get("terrain_workspace_dem_manifest_sha256"):
+            raise WorkspaceDemError("Workspace DEM manifest hash mismatch")
+        raw = _read_json(manifest_path)
+        parent = _read_json(_safe_project_path(project_root, parent_ref))
+        coverage_ref = "normalized/terrain/dtm_coverage_summary.json"
+        source_ref = raw["source_ref"]
+        expected = {parent_ref: parent_hash, parent_dem_ref: parent_dem_sha256,
+                    coverage_ref: parent["source_hashes"][coverage_ref],
+                    source_ref: parent["source_hashes"][source_ref]}
+        prepared = load_workspace_dem(project_root, manifest_ref=manifest_ref,
+                                      expected_hashes=expected, project_id=project["project_id"])
+        if (prepared.parent_ref != parent_ref or prepared.parent_dem_ref != parent_dem_ref
+                or prepared.coverage_ref != coverage_ref or prepared.resolution_m != parent_resolution["x_m"]):
+            raise WorkspaceDemError("Workspace DEM parent or resolution binding changed")
+        require_analysis_coverage(prepared,
+                                  projected_points=[wgs84_to_twd97(p["lat"], p["lon"]) for p in route_points],
+                                  margin_m=margin_m)
+        hashes = {**expected, manifest_ref: manifest_hash, prepared.dem_ref: prepared.dem_sha256}
+        return ([_safe_project_path(project_root, prepared.dem_ref)], list(hashes), hashes,
+                {**parent_resolution, "source_kind": "workspace_prepared_dem",
+                 "parent_dem_sha256": parent_dem_sha256, "workspace_dem_manifest_ref": manifest_ref})
+
+    def _terrain_route_full_dem_source(
+        self,
+        *,
+        project_root: Path,
+        parent_ref: str,
+        parent_resolution: dict[str, Any],
+        parent_dem_ref: str,
+        parent_dem_sha256: str,
+    ) -> tuple[list[Path], list[str], dict[str, str], dict[str, Any]] | None:
+        parent = _read_json(_safe_project_path(project_root, parent_ref))
+        parent_hashes = parent.get("source_hashes")
+        prefix = "normalized/terrain/dtm_coverage_summary.json#raster_sources/"
+        if not isinstance(parent_hashes, dict) or not any(
+            str(ref).startswith(prefix) for ref in parent_hashes
+        ):
+            return None
+        # Arbitrary A/B must be cropped from the original DEM, not a prior GPX crop.
+        paths, refs, hashes, resolution = self._dem_sources(
+            project_root=project_root, dem_ref=None,
+        )
+        if (
+            not paths
+            or resolution.get("source_kind") != "declared_full_extent_raster"
+            or resolution.get("status") != "reported"
+            or resolution.get("adds_source_resolution") is not False
+            or any(parent_hashes.get(ref) != hashes.get(ref) for ref in refs)
+            or any(
+                resolution.get(key) != parent_resolution.get(key)
+                for key in ("crs", "x_m", "y_m")
+            )
+        ):
+            raise QgisSpatialBackendError(
+                "Full DEM hash, CRS and resolution must match the terrain-feature parent."
+            )
+        return paths, [parent_dem_ref, *refs], {parent_dem_ref: parent_dem_sha256, **hashes}, {
+            **resolution,
+            "source_kind": "parent_bound_full_extent_raster",
+            "parent_terrain_feature_manifest_ref": parent_ref,
+            "parent_dem_sha256": parent_dem_sha256,
+        }
 
     def _dem_sources(
         self,
@@ -4631,47 +4794,6 @@ def _terrain_route_parent_source_resolution(
         "adds_source_resolution": False,
         "parent_terrain_feature_manifest_ref": parent_ref,
     }
-
-
-_TERRAIN_ROUTE_ACTIVE_PROJECT_KEYS = frozenset(
-    {
-        "terrain_route_hypothesis_ref",
-        "terrain_route_hypothesis_sha256",
-        "terrain_route_hypothesis_cache_key",
-        "terrain_route_hypothesis_visualization_ref",
-        "terrain_route_hypothesis_visualization_sha256",
-        "terrain_route_hypothesis_best_path_ref",
-        "terrain_route_hypothesis_processing_manifest_ref",
-        "terrain_route_hypothesis_workflow_run_id",
-        "terrain_route_hypothesis_authority",
-    }
-)
-
-
-def _deactivate_terrain_route_hypothesis(*, project_root: Path) -> None:
-    project_path = project_root / "project.json"
-    try:
-        project = _read_json(project_path)
-    except (OSError, json.JSONDecodeError) as exc:
-        raise QgisSpatialBackendError("Scout project metadata is unavailable") from exc
-    if not isinstance(project, dict):
-        raise QgisSpatialBackendError("Scout project metadata must be an object")
-    previous_ref = project.get("terrain_route_hypothesis_ref")
-    updated = {
-        key: value
-        for key, value in project.items()
-        if key not in _TERRAIN_ROUTE_ACTIVE_PROJECT_KEYS
-    }
-    if isinstance(previous_ref, str) and previous_ref:
-        updated["terrain_route_hypothesis_previous_ref"] = previous_ref
-    updated.update(
-        {
-            "terrain_route_hypothesis_status": "pending",
-            "terrain_route_hypothesis_candidate_only": True,
-            "terrain_route_hypothesis_runtime_safety_truth": False,
-        }
-    )
-    _write_bytes(project_path, _json_bytes(updated))
 
 
 def _refresh_navigation_projection_after_terrain_route(

@@ -16,6 +16,11 @@ from scout.nextgen.intelligence_gateway import (
     StubIntelligenceGateway,
 )
 from scout.nextgen.intelligence_mcp import (
+    BACKGROUND_CANCEL_TOOL_NAME,
+    BACKGROUND_INTELLIGENCE_TOOL_NAMES,
+    BACKGROUND_RESULT_TOOL_NAME,
+    BACKGROUND_STATUS_TOOL_NAME,
+    BACKGROUND_SUBMIT_TOOL_NAME,
     DEEP_RESEARCH_TOOL_NAME,
     INTELLIGENCE_TOOL_NAME,
     INTELLIGENCE_TOOL_NAMES,
@@ -32,13 +37,43 @@ from scout.nextgen.praison_service import (
     PraisonIntelligenceService,
     build_praison_model_replay_runtime,
 )
+from scout.nextgen.praison_background_mcp import (
+    BackgroundIntelligenceJobAccess,
+    BackgroundIntelligenceJobAccessRejected,
+    BackgroundIntelligenceJobSubmission,
+    PraisonBackgroundMcpService,
+)
+from scout.nextgen.praison_background_queue import (
+    BackgroundIntelligenceJobCancelled,
+    BackgroundIntelligenceJobFailed,
+    BackgroundIntelligenceJobNotFound,
+    BackgroundIntelligenceJobNotReady,
+    BackgroundIntelligenceJobProgress,
+    BackgroundIntelligenceQueueError,
+    BackgroundIntelligenceResultStale,
+)
+from scout.nextgen.intelligence_gateway import WorkspaceBinding
+from scout.schemas.base import SchemaModel
 from scout.nextgen.web_research import BoundedLiveWebResearchTools
 
 SUPPORTED_PROTOCOL_VERSIONS = frozenset({"2025-11-25", MCP_PROTOCOL_VERSION})
+_PROTOCOL_STDOUT = sys.stdout
 
 
 class IntelligenceService(Protocol):
     def execute(self, request: IntelligenceRequest) -> IntelligenceResponse: ...
+
+
+class _BackgroundSubmitInput(SchemaModel):
+    request: IntelligenceRequest
+
+
+class _BackgroundAccessInput(SchemaModel):
+    access: BackgroundIntelligenceJobAccess
+
+
+class _BackgroundResultInput(_BackgroundAccessInput):
+    current_binding: WorkspaceBinding
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -56,6 +91,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--evidence-catalog", type=Path)
     parser.add_argument("--model-runtime-config", type=Path)
+    parser.add_argument(
+        "--background",
+        action="store_true",
+        help="Expose submit/status/cancel/result tools through a bounded queue.",
+    )
+    parser.add_argument("--background-job-store", type=Path)
+    parser.add_argument("--max-background-jobs", type=int, default=16)
     return parser
 
 
@@ -145,12 +187,16 @@ def _dispatch(
     if method == "ping":
         return {}
     if method == "tools/list":
-        return {
-            "tools": [
-                _tool_description(service, INTELLIGENCE_TOOL_NAME),
-                _tool_description(service, DEEP_RESEARCH_TOOL_NAME),
-            ]
-        }
+        tools = [
+            _tool_description(service, INTELLIGENCE_TOOL_NAME),
+            _tool_description(service, DEEP_RESEARCH_TOOL_NAME),
+        ]
+        if isinstance(service, PraisonBackgroundMcpService):
+            tools.extend(
+                _background_tool_description(tool_name)
+                for tool_name in sorted(BACKGROUND_INTELLIGENCE_TOOL_NAMES)
+            )
+        return {"tools": tools}
     if method == "tools/call":
         return _call_tool(service, params)
     raise ValueError(f"unsupported MCP method: {method}")
@@ -160,9 +206,15 @@ def _call_tool(
     service: IntelligenceService,
     params: Any,
 ) -> dict[str, Any]:
-    if not isinstance(params, dict) or params.get("name") not in INTELLIGENCE_TOOL_NAMES:
+    if not isinstance(params, dict):
         return _tool_error("Scout Intelligence tool is not allowlisted")
-    tool_name = str(params["name"])
+    tool_name = str(params.get("name") or "")
+    if tool_name in BACKGROUND_INTELLIGENCE_TOOL_NAMES:
+        if not isinstance(service, PraisonBackgroundMcpService):
+            return _tool_error("Scout background intelligence is not enabled")
+        return _call_background_tool(service, tool_name, params.get("arguments"))
+    if tool_name not in INTELLIGENCE_TOOL_NAMES:
+        return _tool_error("Scout Intelligence tool is not allowlisted")
     arguments = params.get("arguments")
     if not isinstance(arguments, dict) or "request" not in arguments:
         return _tool_error("Scout Intelligence tool requires a typed request")
@@ -190,6 +242,59 @@ def _call_tool(
             }
         ],
         "structuredContent": payload,
+        "isError": False,
+    }
+
+
+def _call_background_tool(
+    service: PraisonBackgroundMcpService,
+    tool_name: str,
+    arguments: Any,
+) -> dict[str, Any]:
+    if not isinstance(arguments, dict):
+        return _tool_error("Scout background intelligence requires typed arguments")
+    try:
+        if tool_name == BACKGROUND_SUBMIT_TOOL_NAME:
+            payload = _BackgroundSubmitInput.model_validate(arguments)
+            output: SchemaModel = service.submit(payload.request)
+        elif tool_name == BACKGROUND_STATUS_TOOL_NAME:
+            payload = _BackgroundAccessInput.model_validate(arguments)
+            output = service.progress(payload.access)
+        elif tool_name == BACKGROUND_CANCEL_TOOL_NAME:
+            payload = _BackgroundAccessInput.model_validate(arguments)
+            output = service.cancel(payload.access)
+        elif tool_name == BACKGROUND_RESULT_TOOL_NAME:
+            payload = _BackgroundResultInput.model_validate(arguments)
+            output = service.result(
+                payload.access,
+                current_binding=payload.current_binding,
+            )
+        else:
+            return _tool_error("Scout background intelligence tool is not allowlisted")
+    except BackgroundIntelligenceResultStale:
+        return _tool_error("Scout background intelligence result is stale")
+    except BackgroundIntelligenceJobAccessRejected:
+        return _tool_error("Scout background intelligence job binding was rejected")
+    except BackgroundIntelligenceJobNotFound:
+        return _tool_error("Scout background intelligence job was not found")
+    except BackgroundIntelligenceJobNotReady:
+        return _tool_error("Scout background intelligence result is not ready")
+    except BackgroundIntelligenceJobCancelled:
+        return _tool_error("Scout background intelligence job was cancelled")
+    except BackgroundIntelligenceJobFailed:
+        return _tool_error("Scout background intelligence job failed")
+    except BackgroundIntelligenceQueueError:
+        return _tool_error("Scout background intelligence queue rejected the operation")
+    except Exception:
+        return _tool_error("Scout background intelligence arguments failed validation")
+    return {
+        "content": [
+            {
+                "type": "text",
+                "text": "Candidate job data is available in structuredContent.",
+            }
+        ],
+        "structuredContent": output.model_dump(mode="json"),
         "isError": False,
     }
 
@@ -236,6 +341,52 @@ def _tool_description(
     }
 
 
+def _background_tool_description(tool_name: str) -> dict[str, Any]:
+    if tool_name == BACKGROUND_SUBMIT_TOOL_NAME:
+        title = "Submit bounded Scout candidate intelligence"
+        description = "Queue a typed candidate-only intelligence request."
+        input_schema = _BackgroundSubmitInput.model_json_schema()
+        output_schema = BackgroundIntelligenceJobSubmission.model_json_schema()
+        idempotent = False
+    elif tool_name == BACKGROUND_STATUS_TOOL_NAME:
+        title = "Get Scout candidate intelligence progress"
+        description = "Read progress for one request-bound candidate job."
+        input_schema = _BackgroundAccessInput.model_json_schema()
+        output_schema = BackgroundIntelligenceJobProgress.model_json_schema()
+        idempotent = True
+    elif tool_name == BACKGROUND_CANCEL_TOOL_NAME:
+        title = "Cancel Scout candidate intelligence"
+        description = "Cancel and discard one request-bound candidate job."
+        input_schema = _BackgroundAccessInput.model_json_schema()
+        output_schema = BackgroundIntelligenceJobProgress.model_json_schema()
+        idempotent = True
+    elif tool_name == BACKGROUND_RESULT_TOOL_NAME:
+        title = "Get Scout candidate intelligence result"
+        description = (
+            "Return a completed candidate only after current Workspace binding "
+            "validation."
+        )
+        input_schema = _BackgroundResultInput.model_json_schema()
+        output_schema = IntelligenceResponse.model_json_schema()
+        idempotent = True
+    else:
+        raise ValueError("unsupported background intelligence tool")
+    return {
+        "name": tool_name,
+        "title": title,
+        "description": description
+        + " It never has runtime, safety, permission, route, or action authority.",
+        "inputSchema": input_schema,
+        "outputSchema": output_schema,
+        "annotations": {
+            "readOnlyHint": tool_name != BACKGROUND_CANCEL_TOOL_NAME,
+            "destructiveHint": False,
+            "idempotentHint": idempotent,
+            "openWorldHint": False,
+        },
+    }
+
+
 def _tool_error(message: str) -> dict[str, Any]:
     return {
         "content": [{"type": "text", "text": message}],
@@ -254,10 +405,10 @@ def _write_error(request_id: Any, code: int, message: str) -> None:
 
 
 def _write(payload: dict[str, Any]) -> None:
-    sys.stdout.write(
+    _PROTOCOL_STDOUT.write(
         json.dumps(payload, ensure_ascii=True, separators=(",", ":")) + "\n"
     )
-    sys.stdout.flush()
+    _PROTOCOL_STDOUT.flush()
 
 
 def main() -> int:
@@ -268,6 +419,13 @@ def main() -> int:
             evidence_catalog_path=args.evidence_catalog,
             model_runtime_config_path=args.model_runtime_config,
         )
+        if args.background:
+            service = PraisonBackgroundMcpService(
+                service=service,
+                job_store_path=args.background_job_store,
+                max_queue_size=args.max_background_jobs,
+                redirect_worker_stdout=True,
+            )
     except Exception as exc:
         print(f"Scout Intelligence Service failed to initialize: {exc}", file=sys.stderr)
         return 2

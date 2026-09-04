@@ -12,6 +12,8 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 BASELINE_PATH = "qualification/navigation-freeze-baseline.json"
 SCHEMA_VERSION = "scout.navigation_freeze.v1"
+# User-directed temporary suspension, 2026-09-04; keep reporting source drift.
+ENFORCE_FREEZE = False
 
 # Shared entrypoints are whole-file protected until an approved isolation change.
 PROTECTED_GROUPS = {
@@ -144,11 +146,12 @@ def _load_baseline(root: Path) -> dict[str, str]:
     return files
 
 
-def verify_freeze(root: Path = ROOT) -> dict[str, Any]:
+def verify_freeze(root: Path = ROOT, *, enforce: bool = ENFORCE_FREEZE) -> dict[str, Any]:
     root = root.resolve()
     report: dict[str, Any] = {
         "ok": False,
         "status": "INVALID_BASELINE",
+        "enforcement": "strict" if enforce else "report_only",
         "approval_granted": False,
         "runtime_safety_truth": False,
         "checked_file_count": 0,
@@ -175,15 +178,24 @@ def verify_freeze(root: Path = ROOT) -> dict[str, Any]:
     ]
     return {
         **report,
-        "ok": not changes,
-        "status": "NAVIGATION_APPROVAL_REQUIRED" if changes else "FROZEN_UNCHANGED",
+        "ok": not changes or not enforce,
+        "status": (
+            "NAVIGATION_FREEZE_SUSPENDED"
+            if not enforce
+            else ("NAVIGATION_APPROVAL_REQUIRED" if changes else "FROZEN_UNCHANGED")
+        ),
         "checked_file_count": len(actual),
         "changes": changes,
         "next_step": (
-            "Stop Navigation edits and ask the user for explicit scoped approval. "
-            "Do not restore files or update the baseline to silence this check."
-            if changes
-            else "No inventoried source drift; this is not edit approval or runtime QA."
+            "Freeze temporarily suspended by the user. Review reported drift; "
+            "preserve the original baseline and unrelated work."
+            if not enforce
+            else (
+                "Stop Navigation edits and ask the user for explicit scoped approval. "
+                "Do not restore files or update the baseline to silence this check."
+                if changes
+                else "No inventoried source drift; this is not edit approval or runtime QA."
+            )
         ),
     }
 
@@ -191,8 +203,14 @@ def verify_freeze(root: Path = ROOT) -> dict[str, Any]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", type=Path, default=ROOT)
+    parser.add_argument(
+        "--enforce",
+        action="store_true",
+        default=ENFORCE_FREEZE,
+        help="Run the strict drift check without reinstating the suspended policy.",
+    )
     args = parser.parse_args()
-    report = verify_freeze(args.repo_root)
+    report = verify_freeze(args.repo_root, enforce=args.enforce)
     print(json.dumps(report, ensure_ascii=True, indent=2))
     return 0 if report["ok"] else 1
 

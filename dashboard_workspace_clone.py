@@ -1,15 +1,17 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
+import ipaddress
 import json
 import os
 import re
-import shutil
 import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Literal
+from urllib.parse import urlparse
 
 from pretrip_import import PretripImportRequest, run_pretrip_import
 from pretrip_layer_preparation import (
@@ -23,6 +25,10 @@ from pretrip_source_ingest import sha256_file
 
 PROJECT_ID_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+$")
 WORKSPACE_CLONE_RECEIPT_REF = Path("outputs/workspace_clone_receipt.json")
+ROUTE_CONTEXT_SOURCE_HANDOFF_REF = Path("inputs/route_context_source_records.json")
+ROUTE_CONTEXT_SOURCE_HANDOFF_KIND = (
+    "dashboard_workspace_route_context_source_handoff"
+)
 
 ImportRunner = Callable[[PretripImportRequest], dict[str, Any]]
 PreparationRunner = Callable[[LayerPreparationRequest], dict[str, Any]]
@@ -74,6 +80,12 @@ def clone_pretrip_workspace_from_inputs(
         source_root,
         source_manifest,
     )
+    route_context_source_handoff = _route_context_source_handoff_payload(
+        source_root=source_root,
+        source_project=source_project,
+        source_project_id=request.source_project_id,
+        target_project_id=request.target_project_id,
+    )
     material_root, material_manifest = _source_material_manifest(
         source_root=source_root,
         source_project=source_project,
@@ -82,6 +94,30 @@ def clone_pretrip_workspace_from_inputs(
     material_sources = material_manifest.get("sources", {})
     if not isinstance(material_sources, dict):
         material_sources = {}
+    local_osm_pbf = material_sources.get("local_osm_pbf", {})
+    if not isinstance(local_osm_pbf, dict):
+        local_osm_pbf = {}
+    configured_osm_pbf_path = _existing_file(local_osm_pbf.get("path"))
+    osm_pbf_path, osm_input_policy = _select_osm_preparation_input(
+        configured_path=configured_osm_pbf_path,
+        configured_sha256=_optional_text(local_osm_pbf.get("sha256")),
+        osmium_bin=request.osmium_bin,
+        allow_network_fetch=request.allow_network_fetch,
+        network_mode=request.network_mode,
+    )
+    if configured_osm_pbf_path is not None and osm_pbf_path is None:
+        raise WorkspaceClonePreparationError(
+            "Local OSM PBF is configured but Python osmium is unavailable in "
+            "the active Dashboard runtime. Run "
+            "tools/setup_dashboard_workspace_runtime.sh once and start the "
+            "Dashboard with tools/run_dashboard_workspace.sh; the target "
+            "workspace was not created."
+        )
+    osm_pbf_source_url = _optional_text(local_osm_pbf.get("source_url"))
+    osm_pbf_cache_ttl_days = _positive_int(
+        local_osm_pbf.get("cache_ttl_days"),
+        default=30,
+    )
     reference_gpx, source_records, reference_discovery = (
         _discover_declared_material_reference_gpx(
             material_sources=material_sources,
@@ -132,21 +168,9 @@ def clone_pretrip_workspace_from_inputs(
         if mcp_named_point_evidence is not None:
             mcp_named_point_evidence.unlink(missing_ok=True)
 
-    local_osm_pbf = material_sources.get("local_osm_pbf", {})
-    if not isinstance(local_osm_pbf, dict):
-        local_osm_pbf = {}
-    configured_osm_pbf_path = _existing_file(local_osm_pbf.get("path"))
-    osm_pbf_path, osm_input_policy = _select_osm_preparation_input(
-        configured_path=configured_osm_pbf_path,
-        configured_sha256=_optional_text(local_osm_pbf.get("sha256")),
-        osmium_bin=request.osmium_bin,
-        allow_network_fetch=request.allow_network_fetch,
-        network_mode=request.network_mode,
-    )
-    osm_pbf_source_url = _optional_text(local_osm_pbf.get("source_url"))
-    osm_pbf_cache_ttl_days = _positive_int(
-        local_osm_pbf.get("cache_ttl_days"),
-        default=30,
+    route_context_source_handoff_summary = _write_route_context_source_handoff(
+        target_root=target_root,
+        payload=route_context_source_handoff,
     )
 
     try:
@@ -182,6 +206,10 @@ def clone_pretrip_workspace_from_inputs(
                 osm_pbf_source_url=osm_pbf_source_url,
                 osm_pbf_cache_ttl_days=osm_pbf_cache_ttl_days,
                 osmium_bin=request.osmium_bin,
+                run_qgis_terrain_workflow=True,
+                qgis_terrain_analysis_margin_m=250.0,
+                qgis_route_contact_distance_m=10.0,
+                qgis_requested_by=request.requested_by,
             )
         )
     except Exception as exc:
@@ -202,14 +230,22 @@ def clone_pretrip_workspace_from_inputs(
                     reference_discovery=reference_discovery,
                     mcp_rebinding=mcp_rebinding,
                     osm_input_policy=osm_input_policy,
+                    route_context_source_handoff=(
+                        route_context_source_handoff_summary
+                    ),
                     error=safe_error,
                 ),
             )
         raise WorkspaceClonePreparationError(safe_error) from exc
 
+    qgis_terrain_stage = _qgis_terrain_stage(preparation_manifest)
+    completion_status = _clone_completion_status(
+        preparation_manifest,
+        qgis_terrain_stage=qgis_terrain_stage,
+    )
     receipt = _clone_receipt(
         request=request,
-        status="completed",
+        status=completion_status,
         source_records=source_records,
         import_manifest=import_manifest,
         preparation_manifest=preparation_manifest,
@@ -217,13 +253,14 @@ def clone_pretrip_workspace_from_inputs(
         reference_discovery=reference_discovery,
         mcp_rebinding=mcp_rebinding,
         osm_input_policy=osm_input_policy,
+        route_context_source_handoff=route_context_source_handoff_summary,
     )
     _write_clone_receipt(target_root, receipt)
     return {
         "source_project_id": request.source_project_id,
         "target_project_id": request.target_project_id,
         "project_root": str(target_root),
-        "status": "completed",
+        "status": completion_status,
         "receipt": receipt,
         "import": {
             "status": "completed",
@@ -241,6 +278,8 @@ def clone_pretrip_workspace_from_inputs(
             "manifest_ref": preparation_manifest.get("outputs", {}).get(
                 "layer_preparation_manifest_ref"
             ),
+            "qgis_terrain_feature_stack": qgis_terrain_stage,
+            "terrain_status": qgis_terrain_stage.get("status"),
         },
         "boundary": receipt["boundary"],
     }
@@ -486,6 +525,7 @@ def _clone_receipt(
     reference_discovery: dict[str, Any],
     mcp_rebinding: dict[str, Any] | None,
     osm_input_policy: dict[str, Any],
+    route_context_source_handoff: dict[str, Any] | None,
     error: str | None = None,
 ) -> dict[str, Any]:
     normalized_layers = (
@@ -507,6 +547,7 @@ def _clone_receipt(
         "reference_discovery": reference_discovery,
         "mcp_evidence_rebinding": mcp_rebinding,
         "osm_input_policy": osm_input_policy,
+        "route_context_source_handoff": route_context_source_handoff,
         "stages": {
             "gpx_import": {
                 "status": "completed",
@@ -523,6 +564,9 @@ def _clone_receipt(
                 "normalized_layers": normalized_layers,
                 "layer_count": len(normalized_layers),
             },
+            "qgis_terrain_feature_stack": _qgis_terrain_stage(
+                preparation_manifest
+            ),
         },
         "dynamic_evidence_policy": {
             "weather_cwa_gee_overpass_refreshable": True,
@@ -539,6 +583,37 @@ def _clone_receipt(
             "phase1_runtime_mutation_allowed": False,
         },
     }
+
+
+def _qgis_terrain_stage(
+    preparation_manifest: dict[str, Any] | None,
+) -> dict[str, Any]:
+    stage = (
+        preparation_manifest.get("qgis_terrain_feature_stack")
+        if preparation_manifest is not None
+        else None
+    )
+    if isinstance(stage, dict):
+        return stage
+    return {
+        "status": "not_run",
+        "actual_processor": "not_run",
+        "fallback_used": False,
+        "python_dtm_processing_used": False,
+    }
+
+
+def _clone_completion_status(
+    preparation_manifest: dict[str, Any],
+    *,
+    qgis_terrain_stage: dict[str, Any],
+) -> str:
+    normalized_layers = set(preparation_manifest.get("normalized_layers") or [])
+    if "terrain" not in normalized_layers:
+        return "completed"
+    if qgis_terrain_stage.get("status") == "completed":
+        return "completed"
+    return "completed_with_degraded_terrain"
 
 
 def _write_clone_receipt(project_root: Path, receipt: dict[str, Any]) -> None:
@@ -600,15 +675,17 @@ def _select_osm_preparation_input(
         **policy,
         "status": "local_pbf_skipped_parser_unavailable",
         "fallback": fallback,
-        "reason": "neither osmium CLI nor Python osmium package is available",
+        "reason": (
+            "Python osmium package is unavailable in the active Dashboard "
+            "runtime; the osmium CLI alone is insufficient for the current "
+            "Scout conversion path"
+        ),
     }
 
 
 def _osm_pbf_parser_available(osmium_bin: str) -> bool:
-    return (
-        shutil.which(osmium_bin) is not None
-        or importlib.util.find_spec("osmium") is not None
-    )
+    del osmium_bin
+    return importlib.util.find_spec("osmium") is not None
 
 
 def _rebound_mcp_evidence_input(
@@ -645,6 +722,148 @@ def _rebound_mcp_evidence_input(
         "source_path_preserved_in_evidence": True,
         "candidate_only": True,
         "runtime_safety_truth": False,
+    }
+
+
+def _route_context_source_handoff_payload(
+    *,
+    source_root: Path,
+    source_project: dict[str, Any],
+    source_project_id: str,
+    target_project_id: str,
+) -> dict[str, Any] | None:
+    source_ref = _optional_text(source_project.get("web_case_evidence_ref"))
+    if source_ref is None:
+        source_ref = "outputs/layers/normalized/web_case_evidence.json"
+    source_path = _safe_source_relative_path(source_root, source_ref)
+    if source_path is None or not source_path.is_file():
+        return None
+    source_payload = _load_json_object(source_path)
+    boundary = source_payload.get("boundary")
+    if not isinstance(boundary, dict) or boundary.get("runtime_safety_truth") is not False:
+        return None
+    records: list[dict[str, str]] = []
+    seen_urls: set[str] = set()
+    source_statuses = source_payload.get("source_statuses")
+    if not isinstance(source_statuses, list):
+        source_statuses = []
+    for item in source_statuses:
+        record = _bounded_public_route_context_source_record(item)
+        if record is None or record["url"] in seen_urls:
+            continue
+        seen_urls.add(record["url"])
+        records.append(record)
+        if len(records) >= 32:
+            break
+    if not records:
+        return None
+    return {
+        "artifact_kind": ROUTE_CONTEXT_SOURCE_HANDOFF_KIND,
+        "schema_version": "scout.dashboard.route_context_source_handoff.v1",
+        "project_id": target_project_id,
+        "source_project_id": source_project_id,
+        "target_project_id": target_project_id,
+        "source_artifact_ref": source_ref,
+        "source_artifact_sha256": sha256_file(source_path),
+        "record_count": len(records),
+        "records": records,
+        "boundary": {
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "raw_source_payload_embedded": False,
+            "source_workspace_mutation_allowed": False,
+            "network_fetch_requires_explicit_preparation": True,
+        },
+    }
+
+
+def _write_route_context_source_handoff(
+    *,
+    target_root: Path,
+    payload: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    if payload is None:
+        return None
+    target_path = target_root / ROUTE_CONTEXT_SOURCE_HANDOFF_REF
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = target_path.with_suffix(target_path.suffix + ".tmp")
+    temporary_path.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    temporary_path.replace(target_path)
+    project_path = target_root / "project.json"
+    project = _load_json_object(project_path)
+    project.update(
+        {
+            "route_context_source_records_ref": (
+                ROUTE_CONTEXT_SOURCE_HANDOFF_REF.as_posix()
+            ),
+            "route_context_source_record_count": payload["record_count"],
+            "route_context_source_handoff_sha256": sha256_file(target_path),
+        }
+    )
+    project_path.write_text(
+        json.dumps(project, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return {
+        "status": "ready_for_explicit_fetch",
+        "ref": ROUTE_CONTEXT_SOURCE_HANDOFF_REF.as_posix(),
+        "record_count": payload["record_count"],
+        "source_artifact_ref": payload["source_artifact_ref"],
+        "source_artifact_sha256": payload["source_artifact_sha256"],
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+
+
+def _safe_source_relative_path(source_root: Path, ref: str) -> Path | None:
+    relative = Path(ref)
+    if relative.is_absolute() or ".." in relative.parts:
+        return None
+    root = source_root.resolve()
+    resolved = (root / relative).resolve()
+    return resolved if resolved.is_relative_to(root) else None
+
+
+def _bounded_public_route_context_source_record(
+    item: Any,
+) -> dict[str, str] | None:
+    if not isinstance(item, dict):
+        return None
+    source_tier = _optional_text(item.get("source_tier"))
+    url = _optional_text(item.get("url"))
+    if source_tier not in {"P0", "P1"} or url is None:
+        return None
+    parsed = urlparse(url)
+    hostname = parsed.hostname
+    if parsed.scheme not in {"http", "https"} or not hostname:
+        return None
+    if hostname.lower() == "localhost" or hostname.lower().endswith(".localhost"):
+        return None
+    try:
+        address = ipaddress.ip_address(hostname)
+    except ValueError:
+        address = None
+    if address is not None and (
+        address.is_private
+        or address.is_loopback
+        or address.is_link_local
+        or address.is_reserved
+    ):
+        return None
+    source_id = _optional_text(item.get("source_id")) or hashlib.sha256(
+        url.encode("utf-8")
+    ).hexdigest()[:16]
+    return {
+        "source_id": source_id,
+        "source_tier": source_tier,
+        "source_family": (
+            _optional_text(item.get("source_family")) or "route_context_source"
+        ),
+        "label": _optional_text(item.get("label")) or hostname,
+        "url": url,
     }
 
 

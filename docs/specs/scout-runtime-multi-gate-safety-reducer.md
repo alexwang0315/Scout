@@ -2429,7 +2429,24 @@ Implemented functions:
 Implemented CLI options:
 
 - `--dossier`;
-- `--dossier-output`.
+- `--dossier-output`;
+- `--evaluation-time` (also applies to dossier rerun).
+
+The dossier and dossier-rerun CLI evaluate all area bundles and threat/mode
+coverage at one current UTC time by default. An explicit timezone-aware ISO
+`--evaluation-time` selects reproducible historical evaluation. The runner
+revalidates in-memory copies at that time; it never rewrites source bundles,
+observation timestamps, reviewer timestamps, or source packages. Future-dated
+observations fail validation, and expired observations fail admission. The
+report records `evaluation_time` and binds it into its digest, so downstream
+hash-bound references must be regenerated after an evaluation-time change.
+
+For library replay compatibility, omitting `evaluation_time` retains the old
+per-bundle reference times and records `evaluation_time=null`. Such a result is
+a historical replay, not evidence of present-time cutover eligibility. Any
+future effectful executor must re-evaluate current source evidence immediately
+before its effect; loading an old ready report or overriding the time for a
+historical replay cannot authorize deployment.
 
 The dossier report summarizes every required area as `qualified`,
 `missing_entry`, `missing_paths`, `load_failed`, `source_integrity_failed`, or
@@ -3509,7 +3526,158 @@ verification, executor invocation, production deployment, or hardware control.
 ## Production Readiness Gaps
 
 The completed slices should be treated as the first safety template, not as the
-complete Scout safety system. The current production gaps are intentional:
+complete Scout safety system. Qualification snapshots do not close the missing
+production integrations described below.
+
+### Simulator-first development evidence - 2026-09-04
+
+Development verification must first reuse the
+[Alpha Simulation Sandbox](scout-alpha-mobile-wearable-simulation-sandbox.md).
+Its existing CLI accepts a selected workspace's canonical historical GPX,
+scenario profile, virtual clock, and scheduled faults, then executes the real
+observer boundary and six-gate shadow reducer with sandbox-only receipts.
+Missing physical GNSS, wearable input, or live weather is not a prerequisite
+blocker for development work covered by those simulations.
+
+Keep the two evidence scopes separate:
+
+- Development: verify expected gate/level, degraded-input behavior, source and
+  scenario hashes, no-effect boundaries, and simulated approval/receipt lineage
+  using deterministic workspace-based test cases. Preserve the virtual clock;
+  rerun when source/code/scenario inputs change instead of requiring a fresh
+  field observation for every development iteration.
+- Production release: verify the actual approved deployment, hardware/provider
+  integration and delivery effects within their required freshness windows.
+  A simulator receipt cannot qualify those effects or authorize cutover.
+
+On 2026-09-04, the unchanged Alpha CLI passed all ten existing profiles on each
+of two Dashboard-catalog workspaces: `chilai_nanhua_day1_scoutAI` and
+`dongqing_batongguan_historic_trail_newImport`. Each profile replayed 48 frames
+through a local MQTT broker. All twenty expected gate/level results matched;
+GNSS/network/device fault evidence and source hashes verified, with twelve
+simulated approval/receipt chains and no production mutation or delivery.
+The 49 focused simulator, API/UI-contract, MQTT harness, shadow replay, and
+legacy runtime simulator tests passed after replacing one FastAPI-internal
+route-list assertion with HTTP feature-flag checks. Simulator runtime code
+was unchanged.
+The current Dashboard entrypoint does not expose Alpha routes and passes a
+workspace collection root, so selected-project UI integration remains separate
+work subject to the Navigation freeze. The CLI is usable without that change.
+
+Evidence is under
+`artifacts/qualification/scout-safety-simulator-revalidation-20260904/`.
+The node 9 production attempt below records a release boundary, not a reason
+to halt simulator-based construction or require field hardware for coding.
+
+### Node 9 cutover attempt - 2026-09-03
+
+The operator requested execution of node 9 (production cutover). The request is
+recorded; a second copy of the same authorization is not the blocker. Preflight
+stopped before any deployment, restart, runtime mutation, or outbound send:
+
+- The Pi admin container was running and healthy with zero restarts, but its
+  image differs from the earlier qualification snapshot. A fresh read-only
+  writer probe returned `phase1_writer_runtime_verified`, with matching local
+  and deployed module hashes. This proves the guarded surface is present, not
+  that a resident production caller executes it.
+- Evaluation at `2026-09-03T05:33:28.904805Z` returned
+  `blocked_dossier_failed`: all nine source packages verified, but all 72 area
+  claims exceeded their 3,600-second TTL. Eight threat cases and 15 qualification
+  modes were also stale. The generated gap plan has 32 evidence gaps and its
+  request pack has 41 artifact requests; these are not 41 independent code bugs.
+- The former `9/9` result was a historical replay using each bundle's saved
+  reference time. It did not demonstrate one fresh, coherent qualification
+  window. The CLI now checks current time by default; old evidence is preserved.
+- Slices 89-92 remain no-effect review/handoff/receipt/closure contracts.
+  `deployment://scout/safety-release-executor` names a target, not an implemented
+  release executor. The production writer caller, production-scoped MQTT
+  integration, canary execution, and verified rollback remain unproven.
+
+Local evidence is under
+`artifacts/qualification/scout-safety-cutover-20260903/`: the fresh writer probe,
+`dossier-report.current.json`, `gap-plan.current.json`,
+`evidence-request-pack.current.json`, and `node9-attempt.json`. The historical
+`scout-safety-production-20260831` artifacts were not refreshed or overwritten.
+
+The remaining execution sequence is:
+
+1. Implement the deterministic release executor for a pinned target/image,
+   with idempotency, exclusive activation, a captured rollback target, and
+   authenticated execution receipts. Review its concrete effect boundary.
+2. Connect the resident observation/reducer path to the guarded Phase 1 writer
+   and production transport client. Bind the reviewed MQTT topic/recipient and
+   consumer acknowledgement; the qualification-only topic is not a production
+   destination and a broker acknowledgement alone is not delivery evidence.
+3. Prove isolated canary and rollback behavior, including stale/missing input,
+   denied permission, replay, delivery failure, and interrupted activation.
+   Preserve fail-closed behavior without genuine rescue messages.
+4. Recollect and review the required evidence for that exact release within one
+   current qualification window. Re-run the dossier and source-integrity gates;
+   do not renew evidence by editing timestamps or treating a new wrapper report
+   as a new underlying observation.
+5. Bind the operator request to the reviewed change/rollback/target evidence,
+   perform the bounded activation, verify runtime and delivery receipts, and
+   close the release only after those checks pass.
+
+Node 9 is therefore `BLOCKED`, not completed or merely awaiting authorization.
+No real SOS, production state mutation, service restart, or hardware action
+occurred during this attempt.
+
+Validation of the current-time repair passed: 328 tests across the 20 selected
+Safety/Phase 1/permissions/UI/GNSS test modules (346.95 seconds), Ruff on the
+changed Python files, and scoped diff whitespace checks. The real dossier CLI
+reproduced the stale-evidence block. These local checks do not replace the
+missing production activation, canary, delivery, or rollback evidence.
+
+### Fresh evidence revalidation - 2026-09-03
+
+At `2026-09-03T06:18:42.218949Z` (14:18 Taipei), the current-time dossier
+evaluated newly collected CWA, authenticated MQTT, Pi, Phase 1 writer, bounded
+freshness, and regression/threat evidence. The old artifacts were preserved.
+
+- All 72 required claims have current observation/review timestamps within the
+  qualification window: zero stale claims. This is a freshness result, not 72
+  accepted claims; 71 are accepted and one is rejected.
+- Eight of nine areas qualify, and all nine source packages verify. The sole
+  rejected claim is `credential_scope_and_rotation_verified` in
+  `credential_access_path`. The current credential successfully reads CWA, but
+  the valid historical rotation receipt binds the September 1 live report,
+  not this fresh report. It needs fresh, report-bound scope/rotation review;
+  this does not establish that another provider key rotation is required.
+- Eight threat cases and 15 qualification modes pass. The generated gap plan
+  contains one qualification gap and two evidence requests. These counts do
+  not replace the separate production integration gaps listed above.
+- The selected regression and threat tests pass: 347 tests in 151.68 seconds.
+  Ruff and scoped diff whitespace checks pass. Evidence bridges now preserve
+  the oldest prerequisite observation, so a new test or companion receipt
+  cannot renew old live evidence. Pi qualification also rejects missing,
+  stale, or future attestor heartbeat timestamps and accepts an explicit
+  fresh receipt path.
+
+The real MQTT action used the previously authorized qualification-only topic,
+with authentication and a matching consumer receipt. It was not a genuine SOS
+or a test of the production destination. Pi GNSS still reports
+`blocked_no_nmea_stream`: the device claims prove bounded read-only observation
+and fail-closed rejection, not a valid fix or field accuracy. The freshness
+attestor completed 20 heartbeats with two current sources and one rejected
+stale source; no permanent resident service was installed.
+
+The current Pi image lacks the CWA collector, and its deployed gate adapter
+lacks the required execution-request interface. CWA qualification therefore
+used reviewed code in an isolated qualification directory with a process-local
+`PYTHONPATH` overlay. The provider/API/environment path works, but this does not
+prove the deployed resident adapter or production entrypoint. No `/app` code
+was replaced and no service was restarted. The Phase 1 writer probe remains
+read-only module/hash/symbol evidence, not proof of a resident writer caller.
+
+The dossier remains `blocked_dossier_failed` and node 9 remains `BLOCKED`.
+No credential rotation, production cutover, runtime safety mutation, production
+database write, or hardware control occurred. Artifacts and the explicit effect
+summary are under
+`artifacts/qualification/scout-safety-revalidation-20260903/`, including
+`revalidation-summary.json`, `dossier-report.current.json`, and
+`safety-revalidation.junit.xml`. Freshness is assessed at the stated evaluation
+time; any later release must recheck the evidence against its own current time.
 
 ### Qualification snapshot — 2026-09-01
 
@@ -3525,13 +3693,15 @@ complete Scout safety system. The current production gaps are intentional:
   and the Pi runtime. The Pi-origin report is hash-bound to a sanitized
   credential-rotation receipt; neither artifact embeds credential material or
   a raw provider response.
-- The deterministic dossier is now `9/9`: every required area is `qualified`,
-  threat coverage is ready, the failed and missing area lists are empty, and
-  the generated gap plan has zero open gaps.
+- The saved-time dossier replay returned `9/9`: every required area was
+  `qualified` at its stored reference time, threat coverage was ready, and the
+  generated gap plan had zero open gaps. This is historical evidence, not a
+  current coherent live qualification window.
 - `ready_for_production_cutover=true` is a deterministic qualification result,
-  not an execution authorization. No qualification action performed a Safety
+  not an execution authorization. The local dossier validator performed no Safety
   API call, outbound transport, hardware control, production database write, or
-  runtime-safety-truth mutation. Cutover remains a separate operator/reviewer
+  runtime-safety-truth mutation. The bounded MQTT qualification publish described
+  above was a separate action. Cutover remains a separate operator/reviewer
   boundary and `execution_allowed=false`.
 
 - `physiologic_gate` has the most complete end-to-end path. All six gates now

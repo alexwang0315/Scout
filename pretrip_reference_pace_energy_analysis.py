@@ -13,8 +13,15 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable
+from zoneinfo import ZoneInfo
 
 from geo_utils import haversine_m
+from pretrip_historical_route_timing import (
+    build_directional_route_timing,
+    build_historical_day_budget,
+    historical_timezone,
+    moving_interval_days,
+)
 
 
 ARTIFACT_KIND = "pretrip_reference_pace_energy_analysis"
@@ -273,6 +280,10 @@ def build_reference_pace_energy_analysis(
     source_index = _load_json(source_index_path)
     risk_payload = _load_optional_json_value(root, risk_ref) or {}
     pressure_payload = _load_optional_json_value(root, pressure_ref) or {}
+    daylight_ref = str(project.get("weather_daylight_evidence_ref") or "outputs/weather_daylight_evidence.json")
+    local_timezone, timezone_source = historical_timezone(
+        project, _load_optional_json_value(root, daylight_ref) or {},
+    )
     route_bin_m = max(100.0, float(route_bin_m))
     match_radius_m = max(25.0, float(match_radius_m))
     min_tracks_for_guidance = max(1, int(min_tracks_for_guidance))
@@ -350,6 +361,7 @@ def build_reference_pace_energy_analysis(
             normal_walking_min_kmh=normal_walking_min_kmh,
             normal_walking_max_kmh=normal_walking_max_kmh,
             min_traversal_distance_m=min_traversal_distance_m,
+            local_timezone=local_timezone,
         )
         track_reports.append(track_report)
         traversals.extend(track_traversals)
@@ -387,6 +399,31 @@ def build_reference_pace_energy_analysis(
         route_distance_m=source_route_distance_m,
         source_sha256=source_sha256,
     )
+    bin_grades = []
+    for index in range(math.ceil(source_route_distance_m / route_bin_m)):
+        midpoint = min(source_route_distance_m, (index + 0.5) * route_bin_m)
+        sample = pressure_index.at(midpoint)
+        terrain = sample.get("terrain") or {}
+        terrain_distance = _float_or_none(terrain.get("distance_m"))
+        start = _float_or_none(sample.get("start_distance_m"))
+        end = _float_or_none(sample.get("end_distance_m"))
+        grade_available = (
+            terrain_distance is not None and terrain_distance > 0
+            and start is not None and end is not None and start <= midpoint <= end
+        )
+        bin_grades.append(_signed_grade(sample, direction=1)[0] if grade_available else None)
+    historical_route_timing = build_directional_route_timing(
+        traversals, route_distance_m=source_route_distance_m,
+        route_bin_m=route_bin_m, bin_grades=bin_grades, grade_band=_grade_band,
+    )
+    historical_route_timing["daily_budget"] = build_historical_day_budget(
+        track_reports, timezone_name=local_timezone.key, timezone_source=timezone_source,
+    )
+    historical_route_timing["checkpoints"] = [
+        {key: node.get(key) for key in ("node_id", "label", "route_distance_m", "node_kind")}
+        for node in checkpoint_passage_timing.get("nodes", [])
+        if node.get("node_kind") == "cp"
+    ]
     crowd_axis = _crowd_supported_axis(
         bin_summaries,
         source_route_distance_m=source_route_distance_m,
@@ -622,6 +659,7 @@ def build_reference_pace_energy_analysis(
         "route_bins": bin_summaries,
         "golden_route_elevation_profile": golden_route_elevation_profile,
         "checkpoint_passage_timing": checkpoint_passage_timing,
+        "historical_route_timing": historical_route_timing,
         "suggested_observation_dimensions": [
             "signed walking grade and direction",
             "terrain hill slope independent of walking grade",
@@ -743,6 +781,7 @@ def _analyze_track(
     normal_walking_min_kmh: float,
     normal_walking_max_kmh: float,
     min_traversal_distance_m: float,
+    local_timezone: ZoneInfo | None = None,
 ) -> tuple[
     dict[str, Any],
     list[dict[str, Any]],
@@ -819,6 +858,8 @@ def _analyze_track(
     pause_reset_count = 0
     speed_window_eligible_count = 0
     valid_segment_speeds: list[float] = []
+    daily_moving_seconds: Counter[str] = Counter()
+    local_timezone = local_timezone or ZoneInfo("UTC")
     for track_segment_index, segment in enumerate(track_segments):
         bout_age_seconds = 0.0
         bout_id = 0
@@ -913,6 +954,9 @@ def _analyze_track(
                 )
                 continue
             speed_window_eligible_count += 1
+            daily_moving_seconds.update(moving_interval_days(
+                previous.observed_at, current.observed_at, local_timezone,
+            ))
             previous_match = matches[point_index]
             current_match = matches[point_index + 1]
             if previous_match is None or current_match is None:
@@ -1043,6 +1087,11 @@ def _analyze_track(
         normal_walking_min_kmh=normal_walking_min_kmh,
         normal_walking_max_kmh=normal_walking_max_kmh,
     )
+    report = {
+        **report,
+        "daily_moving_minutes": [round(value / 60.0, 6) for _, value in sorted(daily_moving_seconds.items())],
+        "daily_movement_timezone": local_timezone.key,
+    }
     return report, source_traversals, intervals, normal_walking_intervals
 
 

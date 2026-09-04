@@ -1,3 +1,4 @@
+import hashlib
 import json
 import subprocess
 import sys
@@ -14,7 +15,7 @@ from pretrip_import import (
     restore_durable_admin_evidence_refs,
     run_pretrip_import,
 )
-from pretrip_source_ingest import wgs84_to_twd97
+from pretrip_source_ingest import sha256_file, wgs84_to_twd97
 from runtime_debug_log import FileRuntimeDebugEventLog
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -217,6 +218,12 @@ def test_pretrip_import_core_writes_pretrip_admin_and_debug_projections(tmp_path
     assert route_bundle["golden_route"]["role"] == "golden_route_reference"
     assert route_bundle["golden_route"]["filtered_geometry_ref"].startswith(
         "normalized/routes/filtered/"
+    )
+    filtered_golden_route = (
+        project_root / route_bundle["golden_route"]["filtered_geometry_ref"]
+    )
+    assert route_bundle["golden_route"]["filtered_geometry_sha256"] == sha256_file(
+        filtered_golden_route
     )
     assert route_bundle["route_scope_for_map_preparation"]["corridor_policy"] == (
         "bbox_fetch_then_along_track_filter"
@@ -564,6 +571,9 @@ def test_pretrip_import_uses_material_root_for_terrain_weather_and_retreat(
     material_root = tmp_path / "materials" / "pretrip" / "material_import"
     dtm_dir = material_root / "sources" / "dtm" / "分幅_南投縣20MDEM(2025)"
     dtm_dir.mkdir(parents=True)
+    dtm_raster = material_root / "sources" / "dtm" / "taiwan-20m.tif"
+    dtm_raster.write_bytes(b"fixture-geotiff")
+    dtm_raster_sha256 = hashlib.sha256(dtm_raster.read_bytes()).hexdigest()
     x, y = wgs84_to_twd97(24.001, 121.001)
     _write_dtm_header(
         dtm_dir / "material_dem.hdr",
@@ -582,6 +592,17 @@ def test_pretrip_import_uses_material_root_for_terrain_weather_and_retreat(
                     "primary_gpx": str(golden_route),
                     "gpx_corpus": str(inbox),
                     "dtm_dirs": [str(dtm_dir)],
+                    "dtm_rasters": [
+                        {
+                            "path": str(dtm_raster),
+                            "role": "operator_supplied_full_taiwan_dem_raster",
+                            "sha256": dtm_raster_sha256,
+                            "crs": "EPSG:3826",
+                            "source_resolution_m": 20.0,
+                            "candidate_only": True,
+                            "runtime_safety_truth": False,
+                        }
+                    ],
                 },
                 "boundary": {
                     "pretrip_candidate_evidence_only": True,
@@ -620,6 +641,18 @@ def test_pretrip_import_uses_material_root_for_terrain_weather_and_retreat(
     assert project["retreat_routes_ref"] == "candidates/retreat_routes.json"
     assert project["retreat_route_candidate_count"] == 1
     assert dtm_summary["source_dirs"] == [str(dtm_dir.resolve())]
+    assert dtm_summary["raster_sources"] == [
+        {
+            "path": str(dtm_raster.resolve()),
+            "role": "operator_supplied_full_taiwan_dem_raster",
+            "sha256": dtm_raster_sha256,
+            "crs": "EPSG:3826",
+            "crs_evidence": None,
+            "source_resolution_m": 20.0,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+    ]
     assert dtm_summary["scanned_header_count"] == 1
     assert dtm_summary["candidate_tiles"][0]["tile_id"] == "material"
     assert segment_dtm["segment_count"] == project["segment_candidate_count"]

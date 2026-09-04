@@ -39,7 +39,10 @@ from tools.scout_ai_live_tool_selection_eval import (  # noqa: E402
 )
 
 DEFAULT_CASES_FILE = (
-    ROOT / "outputs" / "evals" / "scout_ai_workspace_grounded_100_questions_20260713_glm52_cases.json"
+    ROOT
+    / "tests"
+    / "fixtures"
+    / "scout_ai_workspace_grounded_100_questions_20260713_glm52_cases.json"
 )
 DEFAULT_BEFORE_REPORT = (
     ROOT

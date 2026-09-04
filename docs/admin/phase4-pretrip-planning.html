@@ -2295,6 +2295,7 @@
       ? PROJECT_ID_PARAM
       : DEFAULT_PROJECT_ID;
     const DASHBOARD_MAP_ONLY = new URLSearchParams(window.location.search).get("mapOnly") === "1";
+    const DIAGNOSTIC_MAP_PROBE = new URLSearchParams(window.location.search).get("diagnosticMapProbe") === "1";
     document.body.classList.toggle("dashboard-map-only", DASHBOARD_MAP_ONLY);
     function requestedMapRendererPreference() {
       const requested = new URLSearchParams(window.location.search).get("mapRenderer")
@@ -2544,7 +2545,12 @@
         state.mapLibreRenderer.setLayerVisibility(input.dataset.layer, input.checked);
       });
       const host = document.getElementById("mapLibreEvidenceMap");
-      if (host) host.dataset.maplibreFeatureCount = String(featureCollection.features.length);
+      if (host) {
+        host.dataset.maplibreFeatureCount = String(featureCollection.features.length);
+        host.dataset.maplibreOsmPbfFeatureCount = String(
+          featureCollection.features.filter(feature => feature.properties?.layer_id === "osm").length
+        );
+      }
       return featureCollection;
     }
     async function activatePretripMapLibreRenderer(maplibregl, view) {
@@ -2590,6 +2596,9 @@
           state.mapLibreRenderer.setLayerVisibility(input.dataset.layer, input.checked);
         });
         host.dataset.maplibreFeatureCount = String(featureCollection.features.length);
+        host.dataset.maplibreOsmPbfFeatureCount = String(
+          featureCollection.features.filter(feature => feature.properties?.layer_id === "osm").length
+        );
         shell.dataset.mapRendererActive = "maplibre";
         shell.dataset.mapRendererState = "ready";
         setPretripMapRendererState({
@@ -2646,6 +2655,22 @@
       return activatePretripMapLibreRenderer(loaded.maplibregl, state.view);
     }
     window.scoutPretripMapRendererBridge = Object.freeze({
+      inspectLayerOrder() {
+        const adapter = window.ScoutMapLibreEvidence;
+        const foreground = new Set(MAP_ROUTE_FOREGROUND_LAYER_IDS);
+        const expectedLayerOrder = [
+          ...Object.keys(MAP_LAYER_RANKS).filter(id => !foreground.has(id))
+            .sort((left, right) => MAP_LAYER_RANKS[left] - MAP_LAYER_RANKS[right]),
+          ...MAP_ROUTE_FOREGROUND_LAYER_IDS,
+        ];
+        const report = state.mapRenderer.active === "maplibre"
+          ? adapter.inspectMapLibreLayerOrder(state.mapLibreRenderer?.map)
+          : adapter.inspectSvgLayerOrder(svg, {
+              requiredLayerIds: Object.keys(MAP_LAYER_RANKS), expectedLayerOrder,
+            });
+        return {...report, projectId: PROJECT_ID, activeRenderer: state.mapRenderer.active,
+          rendererState: state.mapRenderer.state};
+      },
       getSnapshot() {
         return state.mapLibreRenderer?.snapshot() || state.mapRenderer;
       },
@@ -2691,7 +2716,7 @@
       "risk-delta": 56,
       "soil-moisture": 57,
       "antecedent-rain": 58,
-      "weather-api": 58.5,
+      "weather-api": 80,
       "cwa-qpf": 59,
       "risk-score": 60,
       checkpoints: 62,
@@ -2703,8 +2728,20 @@
       "boss-points": 70,
       events: 72
     };
+    const MAP_ROUTE_FOREGROUND_LAYER_IDS = Object.freeze([
+      "reference-tracks",
+      "retreat",
+      "route",
+      "segments",
+      "checkpoints",
+      "route-notes",
+      "mcp",
+      "boss-points",
+      "events",
+    ]);
 
     function apiBase() {
+      if (DIAGNOSTIC_MAP_PROBE) return "";
       const params = new URLSearchParams(location.search);
       const override = params.get("apiBase") || localStorage.getItem("scout.adminApiBase");
       if (override) return override.replace(/\/$/, "");
@@ -4903,10 +4940,17 @@
     function mapLayerRank(node) {
       return MAP_LAYER_RANKS[node.dataset.layerGroup] ?? 50;
     }
+    function promoteRouteVisibilityLayerGroups() {
+      MAP_ROUTE_FOREGROUND_LAYER_IDS
+        .map(layerId => svg.querySelector(`:scope > [data-layer-group="${layerId}"]`))
+        .filter(Boolean)
+        .forEach(node => svg.appendChild(node));
+    }
     function orderMapLayerGroups() {
       [...svg.querySelectorAll(":scope > [data-layer-group]")]
         .sort((left, right) => mapLayerRank(left) - mapLayerRank(right))
         .forEach(node => svg.appendChild(node));
+      promoteRouteVisibilityLayerGroups();
     }
     function mapKeyboardPanDelta(event) {
       const step = event.shiftKey ? 140 : 70;
@@ -6653,6 +6697,7 @@
       }
     }
     async function postJson(path, payload) {
+      if (DIAGNOSTIC_MAP_PROBE) throw new Error("Map order diagnostics are read-only.");
       return window.ScoutAssistantUI.postJson(path, payload, {apiBase});
     }
     async function fetchJson(path) {
@@ -7324,11 +7369,78 @@
       }));
       return feature;
     }
+    function mapLibreGeometryBounds(geometry) {
+      let west = Infinity;
+      let south = Infinity;
+      let east = -Infinity;
+      let north = -Infinity;
+      const visit = value => {
+        if (!Array.isArray(value)) return;
+        if (
+          value.length >= 2
+          && Number.isFinite(Number(value[0]))
+          && Number.isFinite(Number(value[1]))
+        ) {
+          const lon = Number(value[0]);
+          const lat = Number(value[1]);
+          west = Math.min(west, lon);
+          south = Math.min(south, lat);
+          east = Math.max(east, lon);
+          north = Math.max(north, lat);
+          return;
+        }
+        value.forEach(visit);
+      };
+      visit(geometry?.coordinates);
+      if (![west, south, east, north].every(Number.isFinite)) return null;
+      return {west, south, east, north};
+    }
+    function mapLibreOsmFeatureLabel(feature, category) {
+      const label = String(osmPbfFeatureLabel(feature) || "").trim();
+      if (label && label !== "OSM feature" && !/^\d+$/.test(label)) return label;
+      return `Local OSM ${category || "feature"}`;
+    }
+    function appendPretripMapLibreOsmFeatures(append, view) {
+      const routeBounds = boundsFor(view);
+      let appended = 0;
+      (state.osmPbfVector?.features || []).forEach(feature => {
+        const geometry = feature?.geometry;
+        if (!geometry || ![
+          "Point",
+          "MultiPoint",
+          "LineString",
+          "MultiLineString",
+          "Polygon",
+          "MultiPolygon",
+        ].includes(geometry.type)) return;
+        const geometryBounds = mapLibreGeometryBounds(geometry);
+        if (!geometryBounds || !boundsIntersect(routeBounds, geometryBounds)) return;
+        const category = osmPbfStyleCategory(feature);
+        const item = osmPbfFeatureItem(feature, category);
+        const semanticLabel = mapLibreOsmFeatureLabel(feature, category);
+        if (
+          geometry.type === "Point"
+          && category === "default"
+          && semanticLabel === "Local OSM default"
+        ) return;
+        append(item, "osm", geometry, {
+          display_label: semanticLabel,
+          osm_style_category: category,
+          osm_source_kind: "local_osm_pbf_vector",
+          source_path: item.source_path,
+          render_position: "base",
+          visualization_only: true,
+        });
+        appended += 1;
+      });
+      return appended;
+    }
     function pretripMapLibreFeatureCollection(view) {
       const features = [];
       const append = (item, layerId, geometry, properties = {}) => (
         appendPretripMapLibreFeature(features, item, layerId, geometry, properties)
       );
+      appendPretripMapLibreOsmFeatures(append, view);
       const item = view.route;
       append(item, "route", mapLibreLineGeometryFromSegments(
         coordinateSegments(view.route.display_geometry, view.route.polyline || [])

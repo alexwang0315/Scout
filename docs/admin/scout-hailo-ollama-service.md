@@ -74,9 +74,62 @@ curl --fail --silent http://127.0.0.1:18000/api/tags
 
 Mac dashboard 的 `configs/assistant-models.dashboard-aihat2.json` 使用上述
 `127.0.0.1:18000` tunnel。Hailo 服務只綁 host loopback 時，一般 Docker bridge
-上的 `host.docker.internal` **無法**連到 `127.0.0.1:8000`。容器驗證應使用一次性
+上的 `http://host.docker.internal:8000` **無法**連到 `127.0.0.1:8000`。容器驗證應使用一次性
 `--network host` smoke，或在產品化時加入經審核的 local proxy/socket；不可為了
 容器連線而把 Hailo listener 改成 field LAN 可達。
+
+## Scout container-only bridge
+
+內部測試部署可用 systemd socket activation，把目前 Scout Docker network 的 host
+gateway `172.25.0.1:18000` 轉送到 Hailo loopback
+`127.0.0.1:8000`。代理不得綁定 `0.0.0.0`，Hailo 本體也繼續只監聽
+`127.0.0.1:8000`。因此 field LAN 無法直接連入未驗證、未授權的模型介面。
+
+這個薄切面綁定目前的內部 network `scout-ai-os-hardware-current_default`。部署前先
+取得實際 gateway：
+
+```bash
+docker network inspect scout-ai-os-hardware-current_default \
+  --format '{{(index .IPAM.Config 0).Gateway}}'
+```
+
+只有輸出為 `172.25.0.1` 時才能使用 repo 內的 unit 與
+`configs/assistant-models.dashboard-aihat2.internal-test.json`。若 network 不存在或
+gateway 不同，必須保持 fail closed，不啟動代理；由 operator 審核後同步修改 unit
+及內部設定，不可自動猜測位址。
+
+安裝 user units：
+
+```bash
+install -m 0644 deploy/systemd/scout-hailo-container-bridge.socket \
+  ~/.config/systemd/user/scout-hailo-container-bridge.socket
+install -m 0644 deploy/systemd/scout-hailo-container-bridge.service \
+  ~/.config/systemd/user/scout-hailo-container-bridge.service
+systemctl --user daemon-reload
+systemctl --user enable --now scout-hailo-container-bridge.socket
+```
+
+實際 proxy process 由第一個連線啟動，其固定命令為
+`systemd-socket-proxyd 127.0.0.1:8000`。驗證 listener 只能出現在 Docker gateway，
+並從 Scout container 讀取模型清單：
+
+```bash
+systemctl --user is-active scout-hailo-container-bridge.socket
+ss -ltn 'sport = :18000'
+docker exec scout-phase4-admin \
+  curl --fail --silent http://172.25.0.1:18000/api/tags
+```
+
+若 listener 顯示 `0.0.0.0:18000`、physical LAN IP 或 container 無法取得
+`/api/tags`，不得切換 Scout model config。
+
+內部 bridge rollback 不動 Hailo 模型或原始 loopback service：
+
+```bash
+systemctl --user disable --now scout-hailo-container-bridge.socket
+systemctl --user stop scout-hailo-container-bridge.service
+systemctl --user daemon-reload
+```
 
 Hailo Ollama 5.3 的 OpenAI-compatible response 會把 `created` 回成奈秒 Unix
 timestamp。Pydantic AI 2.22 預期秒，因此 Scout 的 `hailo:` model adapter 只在

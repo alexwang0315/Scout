@@ -2704,19 +2704,29 @@ def _check_imagery_tile(
         with urllib.request.urlopen(request, timeout=10) as response:
             body = response.read()
             source = response.headers.get("x-scout-tile-source", "")
-            content_type = response.headers.get("content-type", "")
+            content_type = (
+                response.headers.get("content-type", "")
+                .split(";", 1)[0]
+                .strip()
+                .lower()
+            )
     except Exception as exc:
         errors.append(f"imagery tile check failed: {url}: {exc}")
         return {"checked": True, "ok": False}
     if source != "local_cache":
         errors.append(f"imagery tile is not local_cache: {source}")
-    if content_type != "image/png":
-        errors.append(f"imagery tile content-type is not image/png: {content_type}")
+    supported_content_types = {"image/png", "image/jpeg"}
+    if content_type not in supported_content_types:
+        errors.append(f"imagery tile content-type is unsupported: {content_type}")
     if len(body) <= 1024:
         errors.append(f"imagery tile payload too small: {len(body)} bytes")
     return {
         "checked": True,
-        "ok": source == "local_cache" and content_type == "image/png" and len(body) > 1024,
+        "ok": (
+            source == "local_cache"
+            and content_type in supported_content_types
+            and len(body) > 1024
+        ),
         "source": source,
         "content_type": content_type,
         "bytes": len(body),

@@ -1,0 +1,888 @@
+{
+  "cases": [
+    {
+      "case_id": "workspace-20260713-001",
+      "question": "目前 workspace 的 project_id、route_name 與 primary GPX 檔名分別是什麼？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0",
+        "scout.ai.energy_vitals.assess.v0",
+        "scout.ai.live_navigation_state.assess.v0"
+      ],
+      "notes": "workspace_catalog"
+    },
+    {
+      "case_id": "workspace-20260713-002",
+      "question": "請從 workspace catalog 查出 import manifest 記錄的來源類型與檔案數量。",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0",
+        "scout.ai.energy_vitals.assess.v0"
+      ],
+      "notes": "workspace_catalog"
+    },
+    {
+      "case_id": "workspace-20260713-003",
+      "question": "workspace 目前共有多少條 reference GPX，請列出前五個檔名。",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0"
+      ],
+      "notes": "workspace_catalog"
+    },
+    {
+      "case_id": "workspace-20260713-004",
+      "question": "目前 workspace 有哪些 reviewed package 與 candidate package？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0",
+        "scout.ai.energy_vitals.assess.v0"
+      ],
+      "notes": "workspace_catalog"
+    },
+    {
+      "case_id": "workspace-20260713-005",
+      "question": "請從 workspace catalog 查 layer preparation summary 的最新狀態、完成時間與 profile。",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0",
+        "scout.ai.energy_vitals.assess.v0"
+      ],
+      "notes": "workspace_catalog"
+    },
+    {
+      "case_id": "workspace-20260713-006",
+      "question": "layer validation report 目前有哪些失敗或需要人工複核的項目？",
+      "required_tool_ids": [],
+      "notes": "workspace_catalog"
+    },
+    {
+      "case_id": "workspace-20260713-007",
+      "question": "route evidence bundle 引用了哪些主要來源 artifact？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0"
+      ],
+      "notes": "workspace_catalog"
+    },
+    {
+      "case_id": "workspace-20260713-008",
+      "question": "source inbox manifest 中哪些原始資料已匯入，哪些尚未處理？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0"
+      ],
+      "notes": "workspace_catalog"
+    },
+    {
+      "case_id": "workspace-20260713-009",
+      "question": "readiness report 目前列出的 blocker 與 warning 各有哪些？",
+      "required_tool_ids": [],
+      "notes": "workspace_catalog"
+    },
+    {
+      "case_id": "workspace-20260713-010",
+      "question": "workspace catalog 中哪些 environment artifact 已存在，哪些 ref 指向的檔案缺失？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0"
+      ],
+      "notes": "workspace_catalog"
+    },
+    {
+      "case_id": "workspace-20260713-011",
+      "question": "primary route 的 GPX 總里程、點數、最低與最高海拔是多少？",
+      "required_tool_ids": [
+        "scout.ai.navigation_terrain.assess.v0",
+        "scout.ai.energy_vitals.assess.v0",
+        "scout.ai.route_context.assess.v0"
+      ],
+      "notes": "route_structure"
+    },
+    {
+      "case_id": "workspace-20260713-012",
+      "question": "路線結構資料中的 route summary 起點、終點與 bbox 座標是多少？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_route_structure.v0",
+        "scout.ai.route_architecture.assess.v0"
+      ],
+      "notes": "route_structure"
+    },
+    {
+      "case_id": "workspace-20260713-013",
+      "question": "目前路線被切成多少個 segments，各段名稱是什麼？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_route_structure.v0",
+        "scout.ai.live_navigation_state.assess.v0"
+      ],
+      "notes": "route_structure"
+    },
+    {
+      "case_id": "workspace-20260713-014",
+      "question": "哪一個 route segment 的距離最長，長度是多少公里？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_route_structure.v0"
+      ],
+      "notes": "route_structure"
+    },
+    {
+      "case_id": "workspace-20260713-015",
+      "question": "segment display geometry 每一段各有多少個座標點？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_route_structure.v0"
+      ],
+      "notes": "route_structure"
+    },
+    {
+      "case_id": "workspace-20260713-016",
+      "question": "resume segment report 找到哪些可續接的路段？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_route_structure.v0"
+      ],
+      "notes": "route_structure"
+    },
+    {
+      "case_id": "workspace-20260713-017",
+      "question": "primary route 的總爬升、總下降與平均坡度資料是否存在？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0",
+        "pydantic_ai.tool.search_scout_terrain_scores.v0"
+      ],
+      "notes": "route_structure"
+    },
+    {
+      "case_id": "workspace-20260713-018",
+      "question": "路線結構資料中的 reference tracks 總共有幾條，哪些與 primary route 名稱最接近？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0",
+        "pydantic_ai.tool.search_scout_route_structure.v0",
+        "scout.ai.route_architecture.assess.v0"
+      ],
+      "notes": "route_structure"
+    },
+    {
+      "case_id": "workspace-20260713-019",
+      "question": "reference segment timing 提供了哪些路段時間統計？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0",
+        "pydantic_ai.tool.search_scout_route_structure.v0"
+      ],
+      "notes": "route_structure"
+    },
+    {
+      "case_id": "workspace-20260713-020",
+      "question": "路線結構資料顯示 primary route 與 reference tracks 的幾何是否都已準備完成？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0",
+        "scout.ai.route_architecture.assess.v0"
+      ],
+      "notes": "route_structure"
+    },
+    {
+      "case_id": "workspace-20260713-021",
+      "question": "checkpoint candidates 共有多少個，第一個與最後一個 CP 是什麼？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_route_structure.v0"
+      ],
+      "notes": "major_points"
+    },
+    {
+      "case_id": "workspace-20260713-022",
+      "question": "目前 boss points 共有多少個，請列出名稱與里程。",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_major_points.v0",
+        "scout.ai.route_context.assess.v0"
+      ],
+      "notes": "major_points"
+    },
+    {
+      "case_id": "workspace-20260713-023",
+      "question": "MCP candidates 共有多少個，哪些 MCP 已有名稱證據？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_major_points.v0"
+      ],
+      "notes": "major_points"
+    },
+    {
+      "case_id": "workspace-20260713-024",
+      "question": "CP 與 MCP reconciliation 報告中有哪些重疊、缺漏或衝突？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_major_points.v0",
+        "scout.ai.route_architecture.assess.v0"
+      ],
+      "notes": "major_points"
+    },
+    {
+      "case_id": "workspace-20260713-025",
+      "question": "哪些 checkpoint 靠近 route note 或地圖標註？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_route_structure.v0",
+        "pydantic_ai.tool.search_scout_map_perception.v0"
+      ],
+      "notes": "major_points"
+    },
+    {
+      "case_id": "workspace-20260713-026",
+      "question": "哪幾個 CP 之間的距離最長？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_route_structure.v0"
+      ],
+      "notes": "major_points"
+    },
+    {
+      "case_id": "workspace-20260713-027",
+      "question": "哪些 CP 目前沒有對應的 MCP support？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_major_points.v0"
+      ],
+      "notes": "major_points"
+    },
+    {
+      "case_id": "workspace-20260713-028",
+      "question": "rest area candidates 共有幾個，分別靠近哪些 CP 或 segment？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_route_structure.v0",
+        "scout.ai.energy_vitals.assess.v0"
+      ],
+      "notes": "major_points"
+    },
+    {
+      "case_id": "workspace-20260713-029",
+      "question": "checkpoint events 中有哪些預計通過時間或實際事件資料？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0",
+        "pydantic_ai.tool.search_scout_route_structure.v0"
+      ],
+      "notes": "major_points"
+    },
+    {
+      "case_id": "workspace-20260713-030",
+      "question": "哪些 checkpoint proposal 仍在 review queue 等待人工審核？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_route_structure.v0",
+        "scout.ai.review_gap.assess.v0"
+      ],
+      "notes": "major_points"
+    },
+    {
+      "case_id": "workspace-20260713-031",
+      "question": "route mileage K anchors 目前辨識出哪些 K 標記？",
+      "required_tool_ids": [
+        "scout.ai.ins_dr_trace.analyze.v0"
+      ],
+      "notes": "ocr_mileage"
+    },
+    {
+      "case_id": "workspace-20260713-032",
+      "question": "本次路徑的 15K 在哪裡，座標與最近 CP 是什麼？",
+      "required_tool_ids": [
+        "scout.ai.route_context.assess.v0"
+      ],
+      "notes": "ocr_mileage"
+    },
+    {
+      "case_id": "workspace-20260713-033",
+      "question": "本次路徑的 20K 對應哪個 route segment？",
+      "required_tool_ids": [
+        "scout.ai.route_context.assess.v0"
+      ],
+      "notes": "ocr_mileage"
+    },
+    {
+      "case_id": "workspace-20260713-034",
+      "question": "mileage tag alignment 中最大的 K 標記是多少？",
+      "required_tool_ids": [
+        "scout.ai.media_literacy.assess.v0"
+      ],
+      "notes": "ocr_mileage"
+    },
+    {
+      "case_id": "workspace-20260713-035",
+      "question": "有哪些 OCR mileage label 尚未成功對齊 GPX？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_map_perception.v0",
+        "scout.ai.navigation_terrain.assess.v0"
+      ],
+      "notes": "ocr_mileage"
+    },
+    {
+      "case_id": "workspace-20260713-036",
+      "question": "mileage alignment 與 GPX 累積里程最大的差值是多少？",
+      "required_tool_ids": [
+        "scout.ai.navigation_terrain.assess.v0",
+        "scout.ai.media_literacy.assess.v0"
+      ],
+      "notes": "ocr_mileage"
+    },
+    {
+      "case_id": "workspace-20260713-037",
+      "question": "哪些 K anchors 之間出現明顯缺號或排序異常？",
+      "required_tool_ids": [
+        "scout.ai.ins_dr_trace.analyze.v0"
+      ],
+      "notes": "ocr_mileage"
+    },
+    {
+      "case_id": "workspace-20260713-038",
+      "question": "raster label OCR output 總共有多少筆 label，低信心項目有哪些？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0",
+        "pydantic_ai.tool.search_scout_map_perception.v0"
+      ],
+      "notes": "ocr_mileage"
+    },
+    {
+      "case_id": "workspace-20260713-039",
+      "question": "MCP OCR labels 中哪些文字已連結到 named point evidence？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_route_structure.v0",
+        "pydantic_ai.tool.search_scout_map_perception.v0"
+      ],
+      "notes": "ocr_mileage"
+    },
+    {
+      "case_id": "workspace-20260713-040",
+      "question": "route mileage alignment 的來源影像、OCR 與 route refs 是什麼？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_map_perception.v0",
+        "scout.ai.media_literacy.assess.v0"
+      ],
+      "notes": "ocr_mileage"
+    },
+    {
+      "case_id": "workspace-20260713-041",
+      "question": "calibrated risk score 最高的五個位置在哪裡？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_risk_scores.v0"
+      ],
+      "notes": "risk_score"
+    },
+    {
+      "case_id": "workspace-20260713-042",
+      "question": "risk score 各 bucket 分別有多少個點？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_risk_scores.v0"
+      ],
+      "notes": "risk_score"
+    },
+    {
+      "case_id": "workspace-20260713-043",
+      "question": "baseline 與 calibrated risk 的最大分數各是多少？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_risk_scores.v0"
+      ],
+      "notes": "risk_score"
+    },
+    {
+      "case_id": "workspace-20260713-044",
+      "question": "risk delta 最大的路線位置與差值是多少？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_route_structure.v0",
+        "pydantic_ai.tool.search_scout_risk_scores.v0"
+      ],
+      "notes": "risk_score"
+    },
+    {
+      "case_id": "workspace-20260713-045",
+      "question": "最高 calibrated risk 點最近的 CP、K 標記與座標是什麼？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_risk_scores.v0",
+        "scout.ai.route_context.assess.v0"
+      ],
+      "notes": "risk_score"
+    },
+    {
+      "case_id": "workspace-20260713-046",
+      "question": "15K 附近的 risk score 與 bucket 是什麼？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_major_points.v0",
+        "pydantic_ai.tool.search_scout_risk_scores.v0"
+      ],
+      "notes": "risk_score"
+    },
+    {
+      "case_id": "workspace-20260713-047",
+      "question": "risk attribution diagnostic 將最高風險歸因到哪些來源？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_risk_scores.v0"
+      ],
+      "notes": "risk_score"
+    },
+    {
+      "case_id": "workspace-20260713-048",
+      "question": "excluded extreme warning CP proposals 為何被排除？",
+      "required_tool_ids": [],
+      "notes": "risk_score"
+    },
+    {
+      "case_id": "workspace-20260713-049",
+      "question": "risk ribbon 與 calibrated heatmap 的資料點數是否一致？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_risk_scores.v0"
+      ],
+      "notes": "risk_score"
+    },
+    {
+      "case_id": "workspace-20260713-050",
+      "question": "哪些 route segments 含有 extreme 或 very_high risk 點？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_route_structure.v0",
+        "scout.ai.energy_vitals.assess.v0",
+        "scout.ai.media_literacy.assess.v0"
+      ],
+      "notes": "risk_score"
+    },
+    {
+      "case_id": "workspace-20260713-051",
+      "question": "terrain route samples 中坡度最高的位置與數值是多少？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_terrain_scores.v0",
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.gee_environment.assess.v0"
+      ],
+      "notes": "terrain"
+    },
+    {
+      "case_id": "workspace-20260713-052",
+      "question": "哪個 terrain segment 的 TEII_20m 最高？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_terrain_scores.v0",
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.gee_environment.assess.v0"
+      ],
+      "notes": "terrain"
+    },
+    {
+      "case_id": "workspace-20260713-053",
+      "question": "terrain risk candidates 中有哪些崩壁、落石或暴露地形候選？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_risk_scores.v0",
+        "pydantic_ai.tool.search_scout_terrain_scores.v0",
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.gee_environment.assess.v0",
+        "scout.ai.safety_boundary.explain.v0",
+        "scout.ai.contextual_permission.assess.v0",
+        "scout.ai.live_navigation_state.assess.v0",
+        "scout.ai.route_architecture.assess.v0",
+        "scout.ai.pace_guardian.assess.v0"
+      ],
+      "notes": "terrain"
+    },
+    {
+      "case_id": "workspace-20260713-054",
+      "question": "new landslide candidates 在路線哪些位置出現？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_route_structure.v0"
+      ],
+      "notes": "terrain"
+    },
+    {
+      "case_id": "workspace-20260713-055",
+      "question": "trail obscurity risk 最高的 route segment 是哪一段？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_risk_scores.v0"
+      ],
+      "notes": "terrain"
+    },
+    {
+      "case_id": "workspace-20260713-056",
+      "question": "wetness flash flood susceptibility 標示了哪些高候選區？",
+      "required_tool_ids": [
+        "scout.ai.safety_boundary.explain.v0"
+      ],
+      "notes": "terrain"
+    },
+    {
+      "case_id": "workspace-20260713-057",
+      "question": "terrain score 資料中的 DTM coverage summary 有效覆蓋率與缺口是多少？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0",
+        "pydantic_ai.tool.search_scout_terrain_scores.v0",
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.gee_environment.assess.v0"
+      ],
+      "notes": "terrain"
+    },
+    {
+      "case_id": "workspace-20260713-058",
+      "question": "哪些 route segments 的 DTM coverage 不完整？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_route_structure.v0"
+      ],
+      "notes": "terrain"
+    },
+    {
+      "case_id": "workspace-20260713-059",
+      "question": "terrain visualization 目前包含哪些 elevation、slope 與 hillshade layer？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_terrain_scores.v0",
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.gee_environment.assess.v0"
+      ],
+      "notes": "terrain"
+    },
+    {
+      "case_id": "workspace-20260713-060",
+      "question": "哪些 retreat route 最靠近高 terrain risk segment？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_route_structure.v0",
+        "pydantic_ai.tool.search_scout_risk_scores.v0",
+        "pydantic_ai.tool.search_scout_terrain_scores.v0",
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.gee_environment.assess.v0"
+      ],
+      "notes": "terrain"
+    },
+    {
+      "case_id": "workspace-20260713-061",
+      "question": "CWA warning layer 目前有多少個警特報 feature，影響哪些區域？",
+      "required_tool_ids": [
+        "scout.ai.cwa_environment.assess.v0"
+      ],
+      "notes": "cwa_weather"
+    },
+    {
+      "case_id": "workspace-20260713-062",
+      "question": "CWA observations 的最新觀測時間與最近測站是什麼？",
+      "required_tool_ids": [
+        "scout.ai.cwa_environment.assess.v0"
+      ],
+      "notes": "cwa_weather"
+    },
+    {
+      "case_id": "workspace-20260713-063",
+      "question": "CWA forecast timeline 涵蓋哪些鄉鎮與時間窗？",
+      "required_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0"
+      ],
+      "notes": "cwa_weather"
+    },
+    {
+      "case_id": "workspace-20260713-064",
+      "question": "QPF corridor summary 的 max、mean、p95 與 peak window 是多少？",
+      "required_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0"
+      ],
+      "notes": "cwa_weather"
+    },
+    {
+      "case_id": "workspace-20260713-065",
+      "question": "QPF 是否來自劇烈天氣 3 小時加密作業？",
+      "required_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0"
+      ],
+      "notes": "cwa_weather"
+    },
+    {
+      "case_id": "workspace-20260713-066",
+      "question": "CWA QPF evidence 的 issued time、valid time 與 stale risk 是什麼？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_risk_scores.v0",
+        "scout.ai.cwa_environment.assess.v0"
+      ],
+      "notes": "cwa_weather"
+    },
+    {
+      "case_id": "workspace-20260713-067",
+      "question": "astronomy timeline 的日落、民用暮光與 practical darkness 時間是什麼？",
+      "required_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0"
+      ],
+      "notes": "cwa_weather"
+    },
+    {
+      "case_id": "workspace-20260713-068",
+      "question": "tide marine timeline 對這條山區路線是否標示為適用？",
+      "required_tool_ids": [
+        "scout.ai.cwa_environment.assess.v0"
+      ],
+      "notes": "cwa_weather"
+    },
+    {
+      "case_id": "workspace-20260713-069",
+      "question": "CWA weather evidence 使用了哪些 dataset id？",
+      "required_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0"
+      ],
+      "notes": "cwa_weather"
+    },
+    {
+      "case_id": "workspace-20260713-070",
+      "question": "CWA radar 與 satellite imagery manifest 各有多少個 prepared frames？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0",
+        "scout.ai.cwa_environment.assess.v0"
+      ],
+      "notes": "cwa_weather"
+    },
+    {
+      "case_id": "workspace-20260713-071",
+      "question": "SMAP L4 corridor summary 的 surface、rootzone 與 profile soil moisture 是多少？",
+      "required_tool_ids": [
+        "scout.ai.gee_environment.assess.v0",
+        "scout.ai.safety_boundary.explain.v0"
+      ],
+      "notes": "gee_environment"
+    },
+    {
+      "case_id": "workspace-20260713-072",
+      "question": "SMAP surface wetness 的 latest、mean、max、p95 與 trend 是什麼？",
+      "required_tool_ids": [
+        "scout.ai.gee_environment.assess.v0"
+      ],
+      "notes": "gee_environment"
+    },
+    {
+      "case_id": "workspace-20260713-073",
+      "question": "antecedent rain grid 顯示最近累積降雨最高的位置在哪裡？",
+      "required_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.gee_environment.assess.v0"
+      ],
+      "notes": "gee_environment"
+    },
+    {
+      "case_id": "workspace-20260713-074",
+      "question": "GPM IMERG corridor summary 的最新雨量與趨勢是什麼？",
+      "required_tool_ids": [
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.gee_environment.assess.v0"
+      ],
+      "notes": "gee_environment"
+    },
+    {
+      "case_id": "workspace-20260713-075",
+      "question": "environment factor matrix 中哪些因素已有資料，哪些仍缺失？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0"
+      ],
+      "notes": "gee_environment"
+    },
+    {
+      "case_id": "workspace-20260713-076",
+      "question": "environment risk derivatives 產生了哪些 compound candidate 類型？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_risk_scores.v0"
+      ],
+      "notes": "gee_environment"
+    },
+    {
+      "case_id": "workspace-20260713-077",
+      "question": "QPF、SMAP、recent rain 與 terrain evidence 在哪幾段形成複合候選？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_terrain_scores.v0",
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.gee_environment.assess.v0",
+        "scout.ai.safety_boundary.explain.v0"
+      ],
+      "notes": "gee_environment"
+    },
+    {
+      "case_id": "workspace-20260713-078",
+      "question": "route revalidation report 將哪些環境證據標成 stale 或 missing？",
+      "required_tool_ids": [],
+      "notes": "gee_environment"
+    },
+    {
+      "case_id": "workspace-20260713-079",
+      "question": "go/no-go review draft 引用了哪些 weather 與 terrain evidence？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_terrain_scores.v0",
+        "scout.ai.route_readiness.assess.v0",
+        "scout.ai.route_architecture.assess.v0",
+        "scout.ai.navigation_terrain.assess.v0",
+        "scout.ai.weather_window.assess.v0",
+        "scout.ai.cwa_environment.assess.v0",
+        "scout.ai.gee_environment.assess.v0",
+        "scout.ai.pace_guardian.assess.v0",
+        "scout.ai.equipment_resource.assess.v0"
+      ],
+      "notes": "gee_environment"
+    },
+    {
+      "case_id": "workspace-20260713-080",
+      "question": "environment evidence package 的 provenance refs 是否完整？",
+      "required_tool_ids": [
+        "scout.ai.review_gap.assess.v0"
+      ],
+      "notes": "gee_environment"
+    },
+    {
+      "case_id": "workspace-20260713-081",
+      "question": "route context briefing artifact 是否存在，最後產生時間是什麼？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0",
+        "scout.ai.route_context.assess.v0"
+      ],
+      "notes": "route_context"
+    },
+    {
+      "case_id": "workspace-20260713-082",
+      "question": "route context pack 中有哪些歷史脈絡點？",
+      "required_tool_ids": [
+        "scout.ai.route_context.assess.v0"
+      ],
+      "notes": "route_context"
+    },
+    {
+      "case_id": "workspace-20260713-083",
+      "question": "route context pack 中有哪些文化或地名來源？",
+      "required_tool_ids": [
+        "scout.ai.route_context.assess.v0"
+      ],
+      "notes": "route_context"
+    },
+    {
+      "case_id": "workspace-20260713-084",
+      "question": "route context points 中有哪些自然或地形觀察點？",
+      "required_tool_ids": [
+        "scout.ai.route_context.assess.v0"
+      ],
+      "notes": "route_context"
+    },
+    {
+      "case_id": "workspace-20260713-085",
+      "question": "哪些 route context points 被標成值得停留三分鐘？",
+      "required_tool_ids": [
+        "scout.ai.route_context.assess.v0"
+      ],
+      "notes": "route_context"
+    },
+    {
+      "case_id": "workspace-20260713-086",
+      "question": "route context source manifest 收錄了哪些來源網域與抓取時間？",
+      "required_tool_ids": [
+        "scout.ai.route_context.assess.v0"
+      ],
+      "notes": "route_context"
+    },
+    {
+      "case_id": "workspace-20260713-087",
+      "question": "route context media manifest 有多少張可用影像，授權資訊是否完整？",
+      "required_tool_ids": [
+        "scout.ai.route_context.assess.v0"
+      ],
+      "notes": "route_context"
+    },
+    {
+      "case_id": "workspace-20260713-088",
+      "question": "請用 workspace fulltext 查 route note candidates 共有多少筆及主要分類。",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0",
+        "scout.ai.energy_vitals.assess.v0"
+      ],
+      "notes": "route_notes"
+    },
+    {
+      "case_id": "workspace-20260713-089",
+      "question": "哪些 route notes 靠近 calibrated high risk 點？",
+      "required_tool_ids": [
+        "scout.ai.energy_vitals.assess.v0",
+        "scout.ai.media_literacy.assess.v0"
+      ],
+      "notes": "route_notes"
+    },
+    {
+      "case_id": "workspace-20260713-090",
+      "question": "historical GPX source index 中哪些來源與目前路線重疊？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_route_structure.v0",
+        "scout.ai.live_navigation_state.assess.v0"
+      ],
+      "notes": "route_notes"
+    },
+    {
+      "case_id": "workspace-20260713-091",
+      "question": "review queue manifest 目前有多少個待審項目，類型是什麼？",
+      "required_tool_ids": [
+        "scout.ai.review_gap.assess.v0"
+      ],
+      "notes": "review"
+    },
+    {
+      "case_id": "workspace-20260713-092",
+      "question": "human reviews 已核准、拒絕與待處理的項目各有多少？",
+      "required_tool_ids": [
+        "scout.ai.review_gap.assess.v0"
+      ],
+      "notes": "review"
+    },
+    {
+      "case_id": "workspace-20260713-093",
+      "question": "reviewed pretrip package 與 candidate package 的主要差異是什麼？",
+      "required_tool_ids": [],
+      "notes": "review"
+    },
+    {
+      "case_id": "workspace-20260713-094",
+      "question": "compiled mission graph 的 candidate 與 reviewed 版本是否一致？",
+      "required_tool_ids": [],
+      "notes": "review"
+    },
+    {
+      "case_id": "workspace-20260713-095",
+      "question": "workspace 內有哪些 equipment resource 或裝置清單證據？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0",
+        "scout.ai.energy_vitals.assess.v0",
+        "scout.ai.equipment_resource.assess.v0"
+      ],
+      "notes": "equipment"
+    },
+    {
+      "case_id": "workspace-20260713-096",
+      "question": "workspace 目前保存了哪些 GNSS、IMU、PDR 或其他 sensor snapshot？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0",
+        "scout.ai.ins_dr_trace.analyze.v0",
+        "scout.ai.energy_vitals.assess.v0"
+      ],
+      "notes": "sensor_status"
+    },
+    {
+      "case_id": "workspace-20260713-097",
+      "question": "workspace 中最新的 live navigation state 是何時，資料是否過期？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0",
+        "scout.ai.energy_vitals.assess.v0",
+        "scout.ai.media_literacy.assess.v0"
+      ],
+      "notes": "navigation"
+    },
+    {
+      "case_id": "workspace-20260713-098",
+      "question": "workspace 是否有 team status、隊員位置或生命徵兆 evidence？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0",
+        "scout.ai.energy_vitals.assess.v0",
+        "scout.ai.team_status.assess.v0",
+        "scout.ai.survival_incident_playbook.explain.v0"
+      ],
+      "notes": "team"
+    },
+    {
+      "case_id": "workspace-20260713-099",
+      "question": "post-trip review 可以從目前 GPX、CP events 與 risk artifacts 找出哪些延誤或偏離？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0",
+        "pydantic_ai.tool.search_scout_route_structure.v0",
+        "pydantic_ai.tool.search_scout_risk_scores.v0"
+      ],
+      "notes": "post_trip"
+    },
+    {
+      "case_id": "workspace-20260713-100",
+      "question": "依照目前 workspace evidence，還有哪些資料問題無法可靠回答？",
+      "required_tool_ids": [
+        "pydantic_ai.tool.search_scout_workspace_catalog.v0"
+      ],
+      "notes": "review_gap"
+    }
+  ]
+}

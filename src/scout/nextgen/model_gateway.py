@@ -33,6 +33,7 @@ from scout.nextgen.model_scheduler import (
     InferenceSchedulerSnapshot,
     InferenceSchedulerTimeout,
 )
+from scout.pydantic_ai_result import pydantic_result_output
 from scout.schemas.base import NonEmptyStr, SchemaModel
 
 OutputT = TypeVar("OutputT", bound=BaseModel)
@@ -95,6 +96,10 @@ class BackendInferenceFailure(RuntimeError):
         self.output_tokens = output_tokens
 
 
+class BackendInferenceCancelled(BackendInferenceFailure):
+    pass
+
+
 class ModelRuntimeUnavailable(ModelGatewayError):
     pass
 
@@ -134,6 +139,26 @@ class ModelInferenceCancelled(ModelGatewayExecutionError):
 
 class ModelOutputValidationError(ModelGatewayExecutionError):
     pass
+
+
+class _InferenceCancellation(threading.Event):
+    """A scheduler timeout may abort inference, but cannot cancel its parent job."""
+
+    def __init__(self, parent: threading.Event) -> None:
+        super().__init__()
+        self._parent = parent
+
+    def is_set(self) -> bool:
+        return super().is_set() or self._parent.is_set()
+
+    def wait(self, timeout: float | None = None) -> bool:
+        deadline = time.monotonic() + timeout if timeout is not None else None
+        while not self.is_set():
+            remaining = None if deadline is None else deadline - time.monotonic()
+            if remaining is not None and remaining <= 0:
+                return self.is_set()
+            super().wait(0.05 if remaining is None else min(0.05, remaining))
+        return True
 
 
 class ModelInferenceRequest(SchemaModel):
@@ -234,9 +259,10 @@ class PydanticAIStructuredBackend:
         cancellation_event: threading.Event,
     ) -> BackendInferenceResult:
         if cancellation_event.is_set():
-            raise RuntimeError("model inference was cancelled before execution")
-        from scout.agents.pydantic_ai_compat import pydantic_result_output
-
+            raise BackendInferenceCancelled(
+                "model inference was cancelled before execution",
+                model_request_count=0,
+            )
         agent = self._agent_for(output_type)
         requests_before = _resident_model_request_count(self.resident_model)
         request_scope = _begin_model_request_scope(self.resident_model)
@@ -270,7 +296,12 @@ class PydanticAIStructuredBackend:
             )
             raise
         except Exception as exc:
-            raise BackendInferenceFailure(
+            failure_type = (
+                BackendInferenceCancelled
+                if cancellation_event.is_set()
+                else BackendInferenceFailure
+            )
+            raise failure_type(
                 "Pydantic AI model execution failed",
                 model_request_count=_finish_model_request_scope(
                     self.resident_model,
@@ -458,13 +489,14 @@ class ScoutModelGateway:
         started_at = datetime.now(UTC)
         started_monotonic = time.monotonic()
         backend_result: BackendInferenceResult | None = None
+        inference_cancellation = _InferenceCancellation(cancellation_event)
 
         def operation() -> BackendInferenceResult:
             return backend.infer(
                 request=request,
                 output_type=output_type,
                 model_request_limit=model_request_limit,
-                cancellation_event=cancellation_event,
+                cancellation_event=inference_cancellation,
             )
 
         try:
@@ -472,7 +504,7 @@ class ScoutModelGateway:
                 operation,
                 priority=_PRIORITY_RANK[request.priority],
                 timeout_seconds=request.timeout_seconds,
-                cancellation_event=cancellation_event,
+                cancellation_event=inference_cancellation,
             )
             if backend_result.model_request_count > model_request_limit:
                 record = _execution_record(
@@ -529,6 +561,23 @@ class ScoutModelGateway:
                 error_type=type(exc).__name__,
             )
             raise ModelInferenceCancelled(str(exc), record=record) from exc
+        except BackendInferenceCancelled as exc:
+            record = _execution_record(
+                request=request,
+                profile=profile,
+                selection=selection,
+                started_at=started_at,
+                started_monotonic=started_monotonic,
+                status="cancelled",
+                model_request_count=exc.model_request_count,
+                input_tokens=exc.input_tokens,
+                output_tokens=exc.output_tokens,
+                error_type=type(exc.__cause__ or exc).__name__,
+            )
+            raise ModelInferenceCancelled(
+                "model backend request was cancelled",
+                record=record,
+            ) from exc
         except BackendInferenceFailure as exc:
             record = _execution_record(
                 request=request,

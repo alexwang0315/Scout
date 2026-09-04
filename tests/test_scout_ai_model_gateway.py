@@ -407,6 +407,28 @@ def test_model_gateway_timeout_cancels_queued_request() -> None:
     assert second.records[-1].status == "timed_out"
 
 
+def test_model_timeout_does_not_mark_parent_job_as_user_cancelled() -> None:
+    backend = _RecordingBackend(delay_seconds=0.2)
+    parent_cancellation = threading.Event()
+    with ScoutModelGateway(profiles=(_profile(),), backends=(backend,)) as gateway:
+        session = gateway.open_session(
+            parent_request_id=uuid4(), max_model_requests=10,
+            cancellation_event=parent_cancellation,
+        )
+        with pytest.raises(ModelInferenceTimeout):
+            session.infer(
+                _request(parent_request_id=session.parent_request_id, timeout_seconds=0.05),
+                output_type=_ProbeOutput,
+            )
+        assert not parent_cancellation.is_set()
+        recovered = session.infer(
+            _request(parent_request_id=session.parent_request_id, timeout_seconds=2),
+            output_type=_ProbeOutput,
+        )
+        assert recovered.execution_record.status == "completed"
+        assert gateway.scheduler_snapshots()[0].max_observed_concurrency == 1
+
+
 def test_pydantic_ai_backend_uses_one_resident_model_for_typed_output() -> None:
     calls: list[str] = []
 

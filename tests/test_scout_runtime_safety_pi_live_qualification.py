@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
+import pytest
+
 from scout_hardware_readiness_live_probe import build_probe_result
 from scout_runtime_safety_pi_live_qualification import (
     PiGnssObservation,
@@ -151,6 +153,7 @@ def test_pi_live_qualification_accepts_hashed_bounded_resident_attestor_evidence
             freshness_attestor_current_source_count=1,
             freshness_attestor_stale_source_rejected=True,
             freshness_attestor_status_sha256="b" * 64,
+            freshness_attestor_observed_at="2026-08-31T04:00:00Z",
         ),
         gnss=_no_stream(),
         now=datetime(2026, 8, 31, 4, 1, tzinfo=timezone.utc),
@@ -166,6 +169,31 @@ def test_pi_live_qualification_rejects_process_name_without_attestor_receipt() -
         source_path="prod://qualification/run-001/pi-live",
         probe=_probe(),
         runtime=_runtime(freshness_attestor_process_running=True),
+        gnss=_no_stream(),
+        now=datetime(2026, 8, 31, 4, 1, tzinfo=timezone.utc),
+    )
+
+    assert report.resident_freshness_attestor_observed is False
+    assert report.freshness_evidence_ready is False
+
+
+@pytest.mark.parametrize(
+    "heartbeat_time", [None, "2026-08-30T04:00:00Z", "2026-09-01T04:00:00Z"]
+)
+def test_pi_revalidation_rejects_missing_stale_or_future_heartbeat(heartbeat_time) -> None:
+    report = run_pi_live_qualification(
+        host_ref="pi://scout/runtime",
+        source_path="prod://qualification/revalidation/pi-live",
+        probe=_probe(),
+        runtime=_runtime(
+            freshness_attestor_reported_resident_process_observed=True,
+            freshness_attestor_status="freshness_attestation_complete",
+            freshness_attestor_heartbeat_count=10,
+            freshness_attestor_current_source_count=1,
+            freshness_attestor_stale_source_rejected=True,
+            freshness_attestor_status_sha256="b" * 64,
+            freshness_attestor_observed_at=heartbeat_time,
+        ),
         gnss=_no_stream(),
         now=datetime(2026, 8, 31, 4, 1, tzinfo=timezone.utc),
     )

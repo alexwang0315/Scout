@@ -20,6 +20,7 @@ from uuid import UUID, uuid4
 from pydantic import Field, model_validator
 
 from scout.schemas.base import NonEmptyStr, SchemaModel
+from scout.nextgen.claim_support import ClaimSupportContract, claim_support_reasons, render_claim_degradation
 
 
 FORBIDDEN_INTELLIGENCE_CAPABILITIES = frozenset(
@@ -156,6 +157,8 @@ class IntelligenceRequest(SchemaModel):
     max_model_requests: int | None = Field(default=None, ge=10)
     requires_freshness_seconds: int | None = Field(default=None, ge=1)
     allow_cloud_escalation: bool = False
+    privacy_sensitive: bool = True
+    claim_support: ClaimSupportContract | None = None
     candidate_only: Literal[True] = True
     runtime_safety_truth: Literal[False] = False
 
@@ -163,6 +166,13 @@ class IntelligenceRequest(SchemaModel):
     def validate_binding_and_grant(self) -> "IntelligenceRequest":
         if self.workspace_binding.mission_id != self.mission_id:
             raise ValueError("workspace binding mission_id must match request")
+        if self.claim_support is not None:
+            if self.task_type is not IntelligenceTaskType.TERRAIN_ANALYSIS:
+                raise ValueError("claim support is limited to the terrain experiment")
+            if self.claim_support.input_hash != self.workspace_binding.input_hash:
+                raise ValueError("claim support input binding does not match request")
+            if any(item.source_ref not in self.evidence_refs for item in self.claim_support.evidence):
+                raise ValueError("claim support evidence is outside request scope")
         grant = self.capability_grant
         if grant.request_id != self.request_id:
             raise ValueError("capability grant request_id must match request")
@@ -409,11 +419,9 @@ class PydanticContractGateway:
                 "capability grant expired",
             )
         try:
-            parsed = (
-                response
-                if isinstance(response, IntelligenceResponse)
-                else IntelligenceResponse.model_validate(response)
-            )
+            # model_copy/model_construct can bypass validation even on typed objects.
+            payload = response.model_dump(mode="python") if isinstance(response, IntelligenceResponse) else response
+            parsed = IntelligenceResponse.model_validate(payload)
         except Exception as exc:
             return _rejected(
                 request.request_id,
@@ -451,6 +459,21 @@ class PydanticContractGateway:
                 "intelligence response output hash mismatch",
                 output_hash=parsed.provenance.output_hash,
             )
+        if request.claim_support is not None:
+            support_reasons = claim_support_reasons(
+                request.claim_support,
+                findings=tuple(item.model_dump(mode="json") for item in parsed.findings),
+                evidence=tuple(item.model_dump(mode="json") for item in parsed.evidence),
+                uncertainties=tuple(item.model_dump(mode="json") for item in parsed.uncertainties),
+                conflicts=tuple(item.model_dump(mode="json") for item in parsed.conflicts),
+            )
+            if not parsed.findings and not parsed.uncertainties:
+                support_reasons += ("claim_support:empty_result_requires_uncertainty",)
+            if support_reasons:
+                return _rejected(
+                    request.request_id, GatewayValidationDisposition.REJECTED,
+                    *support_reasons, output_hash=parsed.provenance.output_hash,
+                )
         return GatewayValidationResult(
             disposition=GatewayValidationDisposition.ACCEPTED_CANDIDATE,
             request_id=request.request_id,
@@ -584,6 +607,8 @@ def degraded_intelligence_response(
         impact=impact,
         recommended_next_evidence=tuple(recommended_next_evidence),
     )
+    if request.claim_support is not None and request.claim_support.schema_version == "scout.claim_support.v1":
+        uncertainty = Uncertainty.model_validate(render_claim_degradation(uncertainty_id))
     response = IntelligenceResponse(
         request_id=request.request_id,
         uncertainties=(uncertainty,),

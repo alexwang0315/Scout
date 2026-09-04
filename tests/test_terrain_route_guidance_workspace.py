@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -10,6 +11,7 @@ from fastapi.testclient import TestClient
 
 import terrain_route_guidance_workspace as guidance_workspace
 from admin_api import create_admin_app
+from terrain_route_guidance_map_review import TerrainGuidanceMapReviewScope
 from terrain_route_guidance_workspace import (
     TerrainGuidanceInterpretRequest,
     TerrainGuidanceManualAnchorRequest,
@@ -717,6 +719,8 @@ def test_inspect_preserves_hash_binding_for_legacy_json_without_additive_fields(
     inspected = service.inspect(project_root, project_id="guidance_demo")
 
     assert inspected["feature_index"]["reference_paths"] == []
+    assert inspected["feature_index_sha256"] == project["terrain_route_guidance_feature_index_sha256"]
+    assert inspected["resolution_sha256"] == project["terrain_route_guidance_resolution_sha256"]
     assert inspected["resolution"]["constraints"][0][
         "review_scope_semantics"
     ] == "legacy_unscoped_candidates"
@@ -1418,3 +1422,578 @@ def test_resolver_fails_closed_when_local_candidate_budget_is_exceeded(
                 search_margin_m=200,
             ),
         )
+
+
+def _canonical_sha(payload: dict) -> str:
+    return hashlib.sha256(json.dumps(
+        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+    ).encode()).hexdigest()
+
+
+def _replace_guidance_artifact(root: Path, name: str, payload: dict) -> None:
+    project_path = root / "project.json"
+    project = json.loads(project_path.read_text())
+    (root / project[f"terrain_route_guidance_{name}_ref"]).write_text(
+        json.dumps(payload), encoding="utf-8",
+    )
+    project[f"terrain_route_guidance_{name}_sha256"] = _canonical_sha(payload)
+    project_path.write_text(json.dumps(project), encoding="utf-8")
+
+
+def _replace_map_review_index(root: Path, index: dict) -> None:
+    _replace_guidance_artifact(root, "feature_index", index)
+    project = json.loads((root / "project.json").read_text())
+    resolution = json.loads((root / project["terrain_route_guidance_resolution_ref"]).read_text())
+    resolution["feature_index_sha256"] = _canonical_sha(index)
+    _replace_guidance_artifact(root, "resolution", resolution)
+
+
+def _different_map_review_context(root: Path) -> dict:
+    index = _service().inspect(root, project_id="guidance_demo")["feature_index"]
+    index["search_window"]["route_start"]["x"] += 0.0045
+    _replace_map_review_index(root, index)
+    return index["search_window"]
+
+
+def _map_review_workspace(tmp_path: Path, *, manual: bool = False) -> Path:
+    root = _workspace(tmp_path)
+    _attach_r1_r3_path_references(root)
+    service = TerrainRouteGuidanceWorkspaceService(elevation_sampler=_FakeElevationSampler())
+    interpreted = service.interpret(
+        root, project_id="guidance_demo",
+        request=TerrainGuidanceInterpretRequest(narrative=NARRATIVE, source_id="iroko-d3"),
+    )
+    saved = service.resolve(
+        root, project_id="guidance_demo",
+        request=TerrainGuidanceResolveRequest(
+            guidance_id=interpreted["guidance_plan"]["guidance_id"],
+            route_start=ROUTE_START, route_destination=ROUTE_DESTINATION,
+            search_margin_m=200,
+        ),
+    )
+    project = json.loads((root / "project.json").read_text())
+    assert saved["feature_index_sha256"] == project["terrain_route_guidance_feature_index_sha256"]
+    assert saved["resolution_sha256"] == project["terrain_route_guidance_resolution_sha256"]
+    index = saved["feature_index"]
+    ridge = next(item for item in index["features"] if item["landform"] == "ridge")
+    points = [
+        (121.2085, 23.4685), (121.206, 23.466), (121.209, 23.466),
+        (121.210, 23.465), (121.208, 23.469),
+    ]
+    index["features"] = [
+        {
+            **ridge, "feature_id": f"ridge-{rank}", "elevation_m": 820,
+            "centroid": {"x": x, "y": y, "crs": "EPSG:4326"},
+            "geometry": {
+                "type": "LineString",
+                "coordinates": [[x - 0.0001, y], [x + 0.0001, y]],
+            },
+        }
+        for rank, (x, y) in enumerate(points, start=1)
+    ]
+    # The first line intersects the mask, but its unchanged marker does not.
+    index["features"][0]["geometry"]["coordinates"] = [
+        [121.207, 23.467], [121.210, 23.470],
+    ]
+    for feature_id, x, y in (
+        ("saddle-on", 121.207, 23.467), ("saddle-off", 121.2105, 23.4645),
+    ):
+        index["features"].append({
+            **ridge, "feature_id": feature_id, "landform": "saddle", "elevation_m": 1148,
+            "centroid": {"x": x, "y": y, "crs": "EPSG:4326"},
+            "geometry": {"type": "Point", "coordinates": [x, y]},
+        })
+    if manual:
+        index["features"].append({
+            **ridge, "feature_id": "manual-anchor", "selection_source": "human_map_annotation",
+            "supported_constraint_ids": ["G6"],
+            "centroid": {"x": 121.2072, "y": 23.4672, "crs": "EPSG:4326"},
+            "geometry": {"type": "Point", "coordinates": [121.2072, 23.4672]},
+        })
+    for key in ("reference_corridor", "reference_corridors", "reference_paths"):
+        index.pop(key, None)
+    for feature in index["features"]:
+        for key in tuple(feature):
+            if key.startswith("reference_"):
+                feature.pop(key)
+    plan = guidance_workspace.TerrainNarrativeGuidancePlan.model_validate(saved["guidance_plan"])
+    resolution = guidance_workspace.resolve_terrain_route_guidance(
+        plan, guidance_workspace.TerrainGuidanceFeatureIndex.model_validate(index),
+    ).model_dump(mode="json")
+    g6 = next(item for item in resolution["constraints"] if item["constraint_id"] == "G6")
+    g6["candidate_feature_ids"] = [f"ridge-{rank}" for rank in range(1, 6)]
+    if manual:
+        g6["candidate_feature_ids"].append("manual-anchor")
+    for constraint in resolution["constraints"]:
+        for key in ("review_shortlist_feature_ids", "review_scope_semantics", "out_of_scope_candidate_count"):
+            constraint.pop(key, None)
+    resolution["feature_index_sha256"] = _canonical_sha(index)
+    _replace_guidance_artifact(root, "feature_index", index)
+    _replace_guidance_artifact(root, "resolution", resolution)
+    if manual:
+        service.review(
+            root, project_id="guidance_demo",
+            request=TerrainGuidanceReviewRequest(
+                guidance_id=plan.guidance_id, selected_feature_ids={"G6": "manual-anchor"},
+                disabled_constraint_ids=[
+                    item.constraint_id for item in plan.constraints
+                    if item.required_anchor and item.constraint_id != "G6"
+                ],
+            ),
+        )
+    return root
+
+
+class _MapReviewSampler:
+    backend_id = "fixture_marker_mask.v0_1"
+
+    def __init__(self, samples: dict | None = None, default: float | None = 255.0):
+        self.samples = samples if samples is not None else {
+            (121.206, 23.466): 1.0, (121.208, 23.469): 1.0,
+            (121.207, 23.467): 1.0, (121.2105, 23.4645): 1.0,
+        }
+        self.default = default
+        self.calls: list[tuple[Path, tuple[tuple[float, float], ...]]] = []
+
+    def sample(self, raster_path: Path, points_wgs84: tuple) -> tuple:
+        self.calls.append((raster_path, points_wgs84))
+        if raster_path.name == "terrain_route_top_10_percent_corridor.tif":
+            return tuple(1.0 for _point in points_wgs84)
+        return tuple(self.samples.get(point, self.default) for point in points_wgs84)
+
+
+def _file_snapshot(root: Path) -> dict[str, bytes]:
+    return {
+        str(path.relative_to(root)): path.read_bytes()
+        for path in root.rglob("*") if path.is_file()
+    }
+
+
+def _map_scope(root: Path, sampler, **kwargs) -> dict:
+    return TerrainRouteGuidanceWorkspaceService(elevation_sampler=sampler).map_review_scope(
+        root, project_id="guidance_demo", reference_hypothesis_id="active-cccccccccccc",
+        corridor_band_name=kwargs.pop("corridor_band_name", "top_5_percent_corridor"),
+        **kwargs,
+    )
+
+
+def _scope_constraint(scope: dict, constraint_id: str) -> dict:
+    return next(item for item in scope["constraints"] if item["constraint_id"] == constraint_id)
+
+
+def _candidate_run(root: Path) -> dict:
+    project = json.loads((root / "project.json").read_text())
+    return json.loads((root / project["terrain_route_hypothesis_ref"]).read_text())
+
+
+def _replace_candidate_run(root: Path, run: dict) -> None:
+    project_path = root / "project.json"
+    project = json.loads(project_path.read_text())
+    run_path = root / project["terrain_route_hypothesis_ref"]
+    run_path.write_text(json.dumps(run), encoding="utf-8")
+    catalog_path = root / project["terrain_route_hypothesis_catalog_ref"]
+    catalog = json.loads(catalog_path.read_text())
+    catalog["entries"][0]["hypothesis_sha256"] = _sha(run_path)
+    catalog_path.write_text(json.dumps(catalog), encoding="utf-8")
+    project["terrain_route_hypothesis_catalog_sha256"] = _sha(catalog_path)
+    project["terrain_route_hypothesis_sha256"] = _sha(run_path)
+    project_path.write_text(json.dumps(project), encoding="utf-8")
+
+
+def test_map_review_scope_uses_legacy_marker_centroids_and_original_ranks(tmp_path: Path) -> None:
+    root = _map_review_workspace(tmp_path)
+    before = _file_snapshot(root)
+    sampler = _MapReviewSampler()
+    inspected = _service().inspect(root, project_id="guidance_demo")
+    assert inspected["feature_index"]["reference_paths"] == []
+    assert inspected["feature_index"]["reference_corridors"] == []
+    scope = _map_scope(
+        root, sampler, expected_feature_index_sha256=inspected["feature_index_sha256"],
+        expected_resolution_sha256=inspected["resolution_sha256"],
+    )
+    assert TerrainGuidanceMapReviewScope.model_validate(scope).model_dump(mode="json") == scope
+    assert scope["status"] == "ready"
+    assert scope["endpoint_alignment"] == "same_ab"
+    assert scope["start_difference_m"] == scope["destination_difference_m"] == 0
+    assert scope["execution_eligible"] is False
+    assert scope["routing_effect"] == "none"
+    assert scope["source_feature_index_sha256"] == inspected["feature_index_sha256"]
+    assert scope["source_resolution_sha256"] == inspected["resolution_sha256"]
+    g6 = _scope_constraint(scope, "G6")
+    assert [(item["feature_id"], item["rank"]) for item in g6["candidates"]] == [
+        ("ridge-2", 2), ("ridge-5", 5),
+    ]
+    assert (g6["total_candidate_count"], g6["visible_candidate_count"], g6["excluded_candidate_count"]) == (5, 2, 3)
+    assert g6["status"] == "candidates"
+    assert g6["candidates"][1]["minimum_path_distance_m"] > scope["saddle_path_tolerance_m"]
+    assert len(sampler.calls) == 1
+    assert sampler.calls[0][0] == root / scope["corridor_reference"]["raster_ref"]
+    assert sampler.calls[0][1] == tuple(
+        (item["centroid"]["x"], item["centroid"]["y"])
+        for item in inspected["feature_index"]["features"]
+    )
+    assert (121.210, 23.470) not in sampler.calls[0][1]
+    assert scope["candidate_only"] is True
+    assert scope["runtime_safety_truth"] is False
+    assert scope["operational"] is False
+    assert _map_scope(root, sampler) == scope
+    assert _file_snapshot(root) == before
+
+
+def test_map_review_saddle_requires_one_dem_diagonal_to_a_path(tmp_path: Path) -> None:
+    root = _map_review_workspace(tmp_path)
+    scope = _map_scope(root, _MapReviewSampler())
+    saddle = _scope_constraint(scope, "G1")
+    assert scope["saddle_path_tolerance_m"] == 20 * math.sqrt(2)
+    assert [item["feature_id"] for item in saddle["candidates"]] == ["saddle-on"]
+    assert saddle["candidates"][0]["minimum_path_distance_m"] == pytest.approx(0)
+    assert saddle["excluded_candidate_count"] == 1
+    assert [item["display_id"] for item in scope["reference_paths"]] == ["R1", "R2", "R3"]
+
+
+@pytest.mark.parametrize("value", [None, 0.0, 255.0, float("nan"), float("inf")])
+def test_map_review_nodata_or_outside_never_passes(tmp_path: Path, value: float | None) -> None:
+    root = _map_review_workspace(tmp_path)
+    before = _file_snapshot(root)
+    scope = _map_scope(root, _MapReviewSampler({}, default=value))
+    assert all(item["status"] == "unknown" and not item["candidates"] for item in scope["constraints"])
+    assert all(item["excluded_candidate_count"] == item["total_candidate_count"] for item in scope["constraints"])
+    assert _file_snapshot(root) == before
+
+
+@pytest.mark.parametrize("value", [2.0, 1.0000001, -1.0, True, "1"])
+def test_map_review_unexpected_mask_values_fail_closed(tmp_path: Path, value) -> None:
+    root = _map_review_workspace(tmp_path)
+    before = _file_snapshot(root)
+    with pytest.raises(ValueError, match="unexpected value|invalid data"):
+        _map_scope(root, _MapReviewSampler({}, default=value))
+    assert _file_snapshot(root) == before
+
+
+@pytest.mark.parametrize("key", ["feature_index", "resolution"])
+def test_map_review_rejects_stale_expected_hash_before_sampling(tmp_path: Path, key: str) -> None:
+    root = _map_review_workspace(tmp_path)
+    before = _file_snapshot(root)
+    sampler = _MapReviewSampler()
+    with pytest.raises(ValueError, match="expected .* hash is stale"):
+        _map_scope(root, sampler, **{f"expected_{key}_sha256": "0" * 64})
+    assert sampler.calls == []
+    assert _file_snapshot(root) == before
+
+
+def test_map_review_unavailable_and_incomplete_sampler_fail_closed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = _map_review_workspace(tmp_path)
+    before = _file_snapshot(root)
+    with pytest.raises(ValueError, match="sampling is unavailable"):
+        _map_scope(root, None)
+    sampler = _MapReviewSampler()
+    monkeypatch.setattr(sampler, "sample", lambda _raster, _points: (1.0,))
+    with pytest.raises(ValueError, match="incomplete result"):
+        _map_scope(root, sampler)
+    assert _file_snapshot(root) == before
+
+
+def test_map_review_omits_manual_annotations_and_preserves_review(tmp_path: Path) -> None:
+    root = _map_review_workspace(tmp_path, manual=True)
+    before = _file_snapshot(root)
+    sampler = _MapReviewSampler()
+    scope = _map_scope(root, sampler)
+    g6 = _scope_constraint(scope, "G6")
+    assert [(item["feature_id"], item["rank"]) for item in g6["candidates"]] == [("ridge-2", 2), ("ridge-5", 5)]
+    assert g6["total_candidate_count"] == 6
+    assert (121.2072, 23.4672) not in sampler.calls[0][1]
+    assert _file_snapshot(root) == before
+    review = _service().inspect(root, project_id="guidance_demo")["review"]
+    assert review["selected_anchors"][0]["feature_id"] == "manual-anchor"
+
+
+def test_map_review_uses_the_selected_source_band(tmp_path: Path) -> None:
+    root = _map_review_workspace(tmp_path)
+    run = _candidate_run(root)
+    band = run["hypotheses"][0]["corridor"]["bands"][0]
+    raster_ref = band["raster_ref"]["artifact_ref"].replace("top_5_", "top_10_")
+    (root / raster_ref).write_bytes(b"synthetic-ten-percent-corridor")
+    run["hypotheses"][0]["corridor"]["bands"].append({
+        **band, "name": "top_10_percent_corridor", "percentile": 10,
+        "raster_ref": {**band["raster_ref"], "artifact_ref": raster_ref, "sha256": _sha(root / raster_ref)},
+    })
+    _replace_candidate_run(root, run)
+    before = _file_snapshot(root)
+    sampler = _MapReviewSampler()
+    narrow = _map_scope(root, sampler)
+    wide = _map_scope(root, sampler, corridor_band_name="top_10_percent_corridor")
+    assert narrow["scope_id"] != wide["scope_id"]
+    assert _scope_constraint(narrow, "G6")["visible_candidate_count"] == 2
+    assert _scope_constraint(wide, "G6")["visible_candidate_count"] == 5
+    assert wide["corridor_reference"]["raster_ref"] == raster_ref
+    assert sampler.calls[-1][0] == root / raster_ref
+    assert _file_snapshot(root) == before
+
+
+@pytest.mark.parametrize("source", ["plan", "feature_index", "resolution", "dem", "manifest", "run", "raster", "catalog"])
+def test_map_review_rejects_stale_source_artifacts(tmp_path: Path, source: str) -> None:
+    root = _map_review_workspace(tmp_path)
+    project = json.loads((root / "project.json").read_text())
+    refs = {
+        **{key: project[f"terrain_route_guidance_{key}_ref"] for key in ("plan", "feature_index", "resolution")},
+        "dem": project["terrain_dem_route_bbox_raster_ref"],
+        "manifest": project["terrain_feature_manifest_ref"],
+        "run": project["terrain_route_hypothesis_ref"],
+        "catalog": project["terrain_route_hypothesis_catalog_ref"],
+        "raster": _candidate_run(root)["hypotheses"][0]["corridor"]["bands"][0]["raster_ref"]["artifact_ref"],
+    }
+    target = root / refs[source]
+    if target.suffix == ".json":
+        target.write_text(json.dumps({**json.loads(target.read_text()), "changed": True}), encoding="utf-8")
+    else:
+        target.write_bytes(b"changed-evidence")
+    before = _file_snapshot(root)
+    sampler = _MapReviewSampler()
+    with pytest.raises(ValueError, match="hash|binding"):
+        _map_scope(root, sampler)
+    assert sampler.calls == []
+    assert _file_snapshot(root) == before
+
+
+@pytest.mark.parametrize("change", ["ab", "cache", "dem", "parent", "crs", "path_crs", "resolution"])
+def test_map_review_validates_selected_run_binding(tmp_path: Path, change: str) -> None:
+    root = _map_review_workspace(tmp_path)
+    run = _candidate_run(root)
+    hypothesis = run["hypotheses"][0 if change == "ab" else 1]
+    if change == "ab":
+        hypothesis["start"]["x"] += 0.01
+    elif change == "cache":
+        hypothesis["provenance"]["cache_key"] = "0" * 64
+    elif change == "dem":
+        hypothesis["provenance"]["dem_sha256"] = "0" * 64
+    elif change == "parent":
+        hypothesis["provenance"]["processing_manifest"]["parent_source_hashes"] = {"unbound": "0" * 64}
+    elif change == "crs":
+        hypothesis["provenance"]["dem_crs"] = "EPSG:4326"
+    elif change == "path_crs":
+        hypothesis["best_path"]["crs"] = "EPSG:3826"
+    else:
+        hypothesis["provenance"]["dem_resolution_m"] = 30
+    _replace_candidate_run(root, run)
+    before = _file_snapshot(root)
+    sampler = _MapReviewSampler()
+    with pytest.raises(ValueError, match="A/B|cache|DEM|CRS|EPSG:4326"):
+        _map_scope(root, sampler)
+    assert sampler.calls == []
+    assert _file_snapshot(root) == before
+
+
+def test_map_review_preserves_full_path_vertices_for_saddle_distance(tmp_path: Path) -> None:
+    root = _map_review_workspace(tmp_path)
+    run = _candidate_run(root)
+    points = [
+        (
+            ROUTE_START.x + (ROUTE_DESTINATION.x - ROUTE_START.x) * index / 1000,
+            ROUTE_START.y + (ROUTE_DESTINATION.y - ROUTE_START.y) * index / 1000
+            + (0.005 if 0 < index < 1000 else 0),
+        )
+        for index in range(1001)
+    ]
+    sampled_indexes = {round(index * 1000 / 799) for index in range(800)}
+    omitted = next(index for index in range(450, 550) if index not in sampled_indexes)
+    points[omitted] = (121.207, 23.467)
+    assert guidance_workspace._wgs84_point_to_path_distance_m(
+        points[omitted], guidance_workspace._bounded_reference_path_points(points),
+    ) > 20 * math.sqrt(2)
+    run["hypotheses"] = [run["hypotheses"][0]]
+    run["hypotheses"][0]["best_path"]["coordinates"] = points
+    _replace_candidate_run(root, run)
+    before = _file_snapshot(root)
+    scope = _map_scope(root, _MapReviewSampler())
+    assert _scope_constraint(scope, "G1")["candidates"][0]["feature_id"] == "saddle-on"
+    assert _scope_constraint(scope, "G1")["candidates"][0]["minimum_path_distance_m"] == pytest.approx(0)
+    assert scope["reference_paths"][0]["path_point_count"] == 1001
+    assert _file_snapshot(root) == before
+
+
+@pytest.mark.parametrize("offset_m, visible", [(-0.001, True), (0.001, False)])
+def test_map_review_saddle_cell_diagonal_boundary(tmp_path: Path, offset_m: float, visible: bool) -> None:
+    root = _map_review_workspace(tmp_path)
+    run = _candidate_run(root)
+    run["hypotheses"] = [run["hypotheses"][0]]
+    run["hypotheses"][0]["best_path"]["coordinates"] = [
+        [ROUTE_START.x, ROUTE_START.y], [121.206, 23.467], [121.208, 23.467],
+        [ROUTE_DESTINATION.x, ROUTE_DESTINATION.y],
+    ]
+    _replace_candidate_run(root, run)
+    state = _service().inspect(root, project_id="guidance_demo")
+    index = state["feature_index"]
+    saddle = next(item for item in index["features"] if item["feature_id"] == "saddle-on")
+    latitude = 23.467 + (20 * math.sqrt(2) + offset_m) / 111320
+    saddle["centroid"]["y"] = latitude
+    saddle["geometry"]["coordinates"][1] = latitude
+    _replace_map_review_index(root, index)
+    before = _file_snapshot(root)
+    scope = _map_scope(root, _MapReviewSampler({}, default=1.0))
+    ids = [item["feature_id"] for item in _scope_constraint(scope, "G1")["candidates"]]
+    assert ("saddle-on" in ids) is visible
+    assert _file_snapshot(root) == before
+
+
+def test_map_review_outside_raster_extent_is_not_sampled(tmp_path: Path) -> None:
+    root = _map_review_workspace(tmp_path)
+    run = _candidate_run(root)
+    run["hypotheses"][0]["corridor"]["bands"][0]["raster_ref"]["bbox_wgs84"] = {
+        "west": 122, "east": 123, "south": 24, "north": 25,
+    }
+    _replace_candidate_run(root, run)
+    sampler = _MapReviewSampler({}, default=1.0)
+    scope = _map_scope(root, sampler)
+    assert sampler.calls == []
+    assert scope["corridor_reference"]["sampled_marker_count"] == 0
+    assert all(item["status"] == "unknown" for item in scope["constraints"])
+
+
+def test_map_review_retains_not_routing_applicable_status(tmp_path: Path) -> None:
+    root = _map_review_workspace(tmp_path)
+    state = _service().inspect(root, project_id="guidance_demo")
+    plan = state["guidance_plan"]
+    plan["constraints"][2].update(routing_applicable=False, routing_effect="context_only")
+    _replace_guidance_artifact(root, "plan", plan)
+    resolution = state["resolution"]
+    resolution["plan_sha256"] = _canonical_sha(plan)
+    resolution["constraints"][2].update(status="not_routing_applicable", candidate_feature_ids=[])
+    _replace_guidance_artifact(root, "resolution", resolution)
+    before = _file_snapshot(root)
+    scope = _map_scope(root, _MapReviewSampler())
+    assert _scope_constraint(scope, "G3") == {
+        "constraint_id": "G3", "total_candidate_count": 0, "visible_candidate_count": 0,
+        "excluded_candidate_count": 0, "status": "not_routing_applicable", "candidates": [],
+    }
+    assert _file_snapshot(root) == before
+
+
+@pytest.mark.parametrize("change", ["index_chain", "plan_chain", "search_window"])
+def test_map_review_rejects_rebound_but_inconsistent_sources(tmp_path: Path, change: str) -> None:
+    root = _map_review_workspace(tmp_path)
+    state = _service().inspect(root, project_id="guidance_demo")
+    if change == "search_window":
+        index = state["feature_index"]
+        index["search_window"] = None
+        _replace_map_review_index(root, index)
+    else:
+        resolution = state["resolution"]
+        resolution["feature_index_sha256" if change == "index_chain" else "plan_sha256"] = "0" * 64
+        _replace_guidance_artifact(root, "resolution", resolution)
+    before = _file_snapshot(root)
+    sampler = _MapReviewSampler()
+    with pytest.raises(ValueError, match="hash chain|search window"):
+        _map_scope(root, sampler)
+    assert sampler.calls == []
+    assert _file_snapshot(root) == before
+
+
+@pytest.mark.parametrize("change", ["feature_index", "raster"])
+def test_map_review_detects_concurrent_source_change(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, change: str) -> None:
+    root = _map_review_workspace(tmp_path)
+    sampler = _MapReviewSampler()
+    original_sample = sampler.sample
+    changed_files: dict[str, bytes] = {}
+
+    def sample(raster_path, points):
+        values = original_sample(raster_path, points)
+        if change == "feature_index":
+            index = _service().inspect(root, project_id="guidance_demo")["feature_index"]
+            index["algorithm_version"] += ".concurrent"
+            _replace_map_review_index(root, index)
+        else:
+            raster_path.write_bytes(b"concurrent-raster-replacement")
+        changed_files.update(_file_snapshot(root))
+        return values
+
+    monkeypatch.setattr(sampler, "sample", sample)
+    with pytest.raises(ValueError, match="changed while sampling"):
+        _map_scope(root, sampler)
+    assert _file_snapshot(root) == changed_files
+
+
+def test_map_review_different_context_preserves_ranks_without_relaxing_resolve(tmp_path: Path) -> None:
+    root = _map_review_workspace(tmp_path)
+    source_window = _different_map_review_context(root)
+    before = _file_snapshot(root)
+    scope = _map_scope(root, _MapReviewSampler())
+    assert scope["endpoint_alignment"] == "different_review_context"
+    assert scope["source_route_start"] == source_window["route_start"]
+    assert scope["source_route_destination"] == source_window["route_destination"]
+    assert scope["scope_route_start"] == ROUTE_START.model_dump(mode="json")
+    assert scope["scope_route_destination"] == ROUTE_DESTINATION.model_dump(mode="json")
+    assert scope["start_difference_m"] > 400
+    assert scope["destination_difference_m"] == 0
+    assert scope["execution_eligible"] is False
+    assert scope["routing_effect"] == "none"
+    assert [item["rank"] for item in _scope_constraint(scope, "G6")["candidates"]] == [2, 5]
+    with pytest.raises(ValueError, match="endpoints do not match the guidance A/B"):
+        TerrainRouteGuidanceWorkspaceService(elevation_sampler=_FakeElevationSampler()).resolve(
+            root, project_id="guidance_demo",
+            request=TerrainGuidanceResolveRequest(
+                guidance_id=scope["guidance_id"],
+                route_start=GeoPoint.model_validate(source_window["route_start"]),
+                route_destination=GeoPoint.model_validate(source_window["route_destination"]),
+                search_margin_m=source_window["margin_m"],
+                reference_hypothesis_id="active-cccccccccccc",
+            ),
+        )
+    assert _file_snapshot(root) == before
+
+
+@pytest.mark.parametrize("with_hashes, different_context", [(False, False), (True, False), (True, True)])
+def test_admin_api_map_review_scope_success_is_read_only(tmp_path: Path, with_hashes: bool, different_context: bool) -> None:
+    root = _map_review_workspace(tmp_path, manual=True)
+    if different_context:
+        _different_map_review_context(root)
+    client = TestClient(create_admin_app(
+        pretrip_workspace_root=tmp_path,
+        runtime_audit_root=tmp_path.parent / f"{tmp_path.name}-audit",
+        terrain_guidance_elevation_sampler=_MapReviewSampler(),
+    ))
+    base = "/admin/pretrip/projects/guidance_demo/terrain-route-guidance"
+    state = client.get(base).json()
+    params = {
+        "reference_hypothesis_id": "active-cccccccccccc",
+        "corridor_band_name": "top_5_percent_corridor",
+    }
+    if with_hashes:
+        params.update({f"expected_{key}_sha256": state[f"{key}_sha256"] for key in ("feature_index", "resolution")})
+    before = _file_snapshot(root)
+    response = client.get(f"{base}/map-review-scope", params=params)
+    assert response.status_code == 200, response.text
+    scope = response.json()
+    assert scope["status"] == "ready"
+    assert scope["endpoint_alignment"] == ("different_review_context" if different_context else "same_ab")
+    assert scope["execution_eligible"] is False
+    assert scope["routing_effect"] == "none"
+    assert [item["rank"] for item in _scope_constraint(scope, "G6")["candidates"]] == [2, 5]
+    assert scope["source_feature_index_sha256"] == state["feature_index_sha256"]
+    assert scope["source_resolution_sha256"] == state["resolution_sha256"]
+    assert response.headers["x-scout-candidate-only"] == "true"
+    assert _file_snapshot(root) == before
+
+
+@pytest.mark.parametrize("failure", ["sampler", "feature_index", "resolution"])
+def test_admin_api_map_review_scope_failures_are_read_only(tmp_path: Path, failure: str) -> None:
+    root = _map_review_workspace(tmp_path, manual=True)
+    client = TestClient(create_admin_app(
+        pretrip_workspace_root=tmp_path,
+        runtime_audit_root=tmp_path.parent / f"{tmp_path.name}-audit",
+        terrain_guidance_elevation_sampler=None if failure == "sampler" else _MapReviewSampler(),
+    ))
+    params = {
+        "reference_hypothesis_id": "active-cccccccccccc",
+        "corridor_band_name": "top_5_percent_corridor",
+    }
+    if failure != "sampler":
+        params[f"expected_{failure}_sha256"] = "0" * 64
+    before = _file_snapshot(root)
+    response = client.get(
+        "/admin/pretrip/projects/guidance_demo/terrain-route-guidance/map-review-scope", params=params,
+    )
+    assert response.status_code == 409, response.text
+    assert response.json()["status"] == "unavailable"
+    assert response.json()["constraints"] == []
+    assert response.json()["runtime_safety_truth"] is False
+    assert _file_snapshot(root) == before

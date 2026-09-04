@@ -28,7 +28,17 @@ that would otherwise require all of the following on every change:
 
 The hard safety boundaries in this file never relax.
 
-## Navigation Freeze: Explicit User Approval Required
+## Navigation Freeze: Temporarily Suspended
+
+**User-directed suspension, 2026-09-04:** The user temporarily cancelled the
+Navigation freeze approval blocker. Until the user explicitly reinstates it,
+the freeze-specific restrictions below are inactive. Continue scoped local
+Dashboard work under Construction Mode without another Navigation approval
+prompt. Run the guard before and after work in its default report-only mode;
+`NAVIGATION_FREEZE_SUSPENDED` reports drift without blocking it. Preserve the
+original baseline and unrelated work. Hard safety and external-action boundaries
+remain active. `--enforce` provides a read-only strict comparison, not policy
+reinstatement. The original freeze rules are retained below for later restoration.
 
 **Effective 2026-09-04, Dashboard Navigation is frozen at the current worktree
 baseline, including its existing uncommitted changes.** This rule overrides
@@ -54,6 +64,15 @@ revert that work, refactor Navigation, or promote it to production.
 - The baseline, guard, protected-path inventory and this policy also require
   approval to change. Never bypass them or relax candidate-only safety contracts
   to make a check pass.
+
+**Standing local-venv authorization, 2026-09-04:** The user explicitly authorized
+future local virtual-environment upgrades and their compatibility tests without
+another Navigation approval prompt. A local venv upgrade alone is not a
+Navigation page change. Record installed versions, preserve unrelated packages,
+and run focused checks. This authorization does not permit Navigation source or
+GIS contract changes, worker/server restarts, hardware deployment, or changes to
+the freeze baseline/guard. Source-controlled dependency edits remain scoped to
+the requested upgrade; it is not a blanket unlock for shared Navigation files.
 
 Details and approved-change procedure:
 `qualification/policies/navigation-freeze.md`.

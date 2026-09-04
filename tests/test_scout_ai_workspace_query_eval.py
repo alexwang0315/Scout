@@ -19,8 +19,8 @@ from tools.scout_ai_workspace_query_eval import (
 ROOT = Path(__file__).resolve().parents[1]
 CASES_PATH = (
     ROOT
-    / "outputs"
-    / "evals"
+    / "tests"
+    / "fixtures"
     / "scout_ai_workspace_grounded_100_questions_20260713_glm52_cases.json"
 )
 GOLD_PATH = ROOT / "tests" / "fixtures" / "scout_ai_workspace_query_gold_100.json"

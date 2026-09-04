@@ -73,6 +73,76 @@ PROJECT_ROOT = (
 )
 
 
+def test_bounded_retry_timeout_preserves_unlimited_construction_mode():
+    assert (
+        assistant_provider_module._bounded_retry_timeout_seconds(None, cap_seconds=30)
+        is None
+    )
+    assert assistant_provider_module._bounded_retry_timeout_seconds(120, cap_seconds=30) == 30
+    assert assistant_provider_module._bounded_retry_timeout_seconds(12, cap_seconds=30) == 12
+
+
+def test_hailo_local_base_url_allows_only_the_exact_container_bridge() -> None:
+    assert assistant_provider_module._is_local_assistant_base_url(
+        "http://172.25.0.1:18000"
+    )
+
+    for rejected in (
+        "http://172.25.0.1:8000",
+        "http://172.25.0.2:18000",
+        "https://172.25.0.1:18000",
+        "http://user:secret@172.25.0.1:18000",
+        "http://192.168.8.230:18000",
+    ):
+        assert not assistant_provider_module._is_local_assistant_base_url(rejected)
+
+
+def test_hailo_runner_rejects_concurrent_direct_inference(monkeypatch) -> None:
+    entered = threading.Event()
+    release = threading.Event()
+    calls: list[str] = []
+    first_result: list[str] = []
+    first_error: list[BaseException] = []
+    runner = PydanticAIEnvRunner(
+        model_name="hailo:qwen3:1.7b",
+        base_url="http://172.25.0.1:18000",
+        backend="hailo_ollama",
+        hardware_accelerator=AI_HAT_PLUS_2_ACCELERATOR,
+        profile_name="local",
+    )
+
+    def blocking_model(prompt: str, _timeout_seconds: int | None) -> str:
+        calls.append(prompt)
+        if len(calls) > 1:
+            raise AssertionError("a second local generation entered concurrently")
+        entered.set()
+        assert release.wait(timeout=2), "test local inference was not released"
+        return "local answer"
+
+    monkeypatch.setattr(runner, "_run_model", blocking_model)
+
+    def run_first_request() -> None:
+        try:
+            first_result.append(runner.run("first", timeout_seconds=2))
+        except BaseException as exc:  # pragma: no cover - asserted below
+            first_error.append(exc)
+
+    first_thread = threading.Thread(target=run_first_request)
+    first_thread.start()
+    assert entered.wait(timeout=2), "first local generation did not start"
+    try:
+        with pytest.raises(RuntimeError, match="local inference busy"):
+            runner.run("second", timeout_seconds=2)
+    finally:
+        release.set()
+        first_thread.join(timeout=2)
+
+    assert not first_thread.is_alive()
+    assert first_error == []
+    assert first_result == ["local answer"]
+    assert calls == ["first"]
+
+
 def _mser_total_info_source() -> AssistantSourceRef:
     return AssistantSourceRef(
         source_id=assistant_provider_module.TOTAL_INFO_SOURCE_ID,
@@ -115,7 +185,7 @@ def test_pre_provider_limit_checkpoints_and_enters_fresh_recovery_stage(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     runner = PydanticAIEnvRunner(
-        model_name="fixture-model",
+        model_name="openrouter:fixture-model",
         backend="pydantic",
         workspace_tools_enabled=False,
     )
@@ -472,6 +542,9 @@ def test_mser_enforce_fails_closed_on_evidence_gap_or_pipeline_error(
 
     assert context.mser_final_state is not None
     assert context.mser_final_state.reasoning.disposition.value != "ready_to_reason"
+    assert assistant_provider_module._mser_structured_evidence_gaps(
+        context.mser_final_state
+    )
     assert assistant_provider_module._mser_enforcement_failure(context, {}) is True
 
     context.mser_error = "mser_reprojection_error:ValueError"
@@ -636,7 +709,7 @@ def test_bounded_runner_without_workspace_tools_retains_request_limits(monkeypat
 
     assert runner._run_model("bounded prompt", 10) == "bounded answer"
 
-    assert captured["capabilities"] == ["WebSearch", "WebFetch"]
+    assert captured["capabilities"] == []
     usage_limits = captured["usage_limits"]
     assert usage_limits.request_limit == 10
     assert usage_limits.tool_calls_limit == 10
@@ -2337,7 +2410,7 @@ def test_ai_hat_plus_2_generic_rain_answer_is_shown_with_failed_grounding_guard(
         fallback_profile="local",
     )
     runner.local_hardware_accelerator = AI_HAT_PLUS_2_ACCELERATOR
-    provider = PydanticAIAssistantProvider(runner=runner, timeout_seconds=2)
+    provider = PydanticAIAssistantProvider(runner=runner, timeout_seconds=None)
 
     response = provider.answer(
         ScoutAssistantQuery(
@@ -2367,6 +2440,7 @@ def test_ai_hat_plus_2_generic_rain_answer_is_shown_with_failed_grounding_guard(
     )
 
     assert local.calls
+    assert all(call["timeout_seconds"] is None for call in local.calls)
     assert runner.last_profile == "local"
     assert response.local_model_answer is not None
     assert "物品可能污染" in response.local_model_answer
@@ -2387,6 +2461,7 @@ def test_ai_hat_plus_2_generic_rain_answer_is_shown_with_failed_grounding_guard(
     )
     assert any("raw answer failed grounding" in item for item in response.limitations)
     assert "ai_hat_model_answer_rejected=true" in response.limitations
+    assert not any("TypeError" in item for item in response.limitations)
     assert "ai_hat_evidence_lock_applied=true" not in response.limitations
 
 
@@ -10949,7 +11024,7 @@ def test_configured_runner_does_not_create_local_fallback_when_disabled():
             "active_profile": "cloud",
             "cloud_model": {
                 "profile": "cloud",
-                "model_name": "cloud/test",
+                "model_name": "openrouter:cloud/test",
                 "base_url": "https://cloud.example/v1",
                 "token_env_var": "SCOUT_CLOUD_TOKEN",
             },
@@ -10969,7 +11044,7 @@ def test_configured_runner_does_not_create_local_fallback_when_disabled():
 
     assert isinstance(runner, PydanticAIEnvRunner)
     assert runner.profile_name == "cloud"
-    assert runner.model_name == "cloud/test"
+    assert runner.model_name == "openrouter:cloud/test"
 
 
 def test_configured_runner_allows_open_local_fallback_by_default():
@@ -10978,13 +11053,15 @@ def test_configured_runner_allows_open_local_fallback_by_default():
             "active_profile": "cloud",
             "cloud_model": {
                 "profile": "cloud",
-                "model_name": "cloud/test",
+                "model_name": "openrouter:cloud/test",
                 "base_url": "https://cloud.example/v1",
             },
             "local_model": {
                 "profile": "local",
-                "model_name": "qwen2.5:0.5b",
-                "base_url": "http://127.0.0.1:11434/v1",
+                "model_name": "hailo:qwen2.5:0.5b",
+                "base_url": "http://127.0.0.1:18000",
+                "backend": "hailo_ollama",
+                "hardware_accelerator": AI_HAT_PLUS_2_ACCELERATOR,
             },
             "fallback_to_local_on_error": True,
         }
@@ -11985,7 +12062,7 @@ def test_hailo_ollama_runner_uses_short_system_prompt_for_grounded_synthesis(
     )
 
     runner = PydanticAIEnvRunner(
-        model_name="qwen2.5:3b",
+        model_name="hailo:qwen2.5:3b",
         base_url="http://127.0.0.1:8000",
         backend="hailo_ollama",
         hardware_accelerator=AI_HAT_PLUS_2_ACCELERATOR,
@@ -12519,7 +12596,7 @@ def test_hailo_ollama_runner_uses_short_system_prompt_for_grounding_repair(monke
     )
 
     runner = PydanticAIEnvRunner(
-        model_name="qwen2.5:3b",
+        model_name="hailo:qwen2.5:3b",
         base_url="http://127.0.0.1:8000",
         backend="hailo_ollama",
         hardware_accelerator=AI_HAT_PLUS_2_ACCELERATOR,
@@ -12645,7 +12722,7 @@ def test_hailo_ollama_runner_compacts_scout_context_prompt(monkeypatch):
     )
 
     runner = PydanticAIEnvRunner(
-        model_name="qwen2.5-instruct:1.5b",
+        model_name="hailo:qwen2.5-instruct:1.5b",
         base_url="http://host.docker.internal:8000",
         backend="hailo_ollama",
         hardware_accelerator=AI_HAT_PLUS_2_ACCELERATOR,

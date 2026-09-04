@@ -2,7 +2,7 @@
 
 Status: **WORKING PROTOTYPE / local single-operator only**
 Version: `v0.1`
-Last updated: `2026-07-21`
+Last updated: `2026-09-04`
 Canonical document: `docs/specs/scout-alpha-mobile-wearable-simulation-sandbox.md`
 
 ## 1. 文件定位與權責
@@ -57,6 +57,26 @@ v0.1 不提供：
 - 醫療診斷或由單一生理數值直接推導危險結論。
 - LAN／Internet operator authentication、正式授權或多租戶隔離。
 - transactional crash recovery 或 hostile-filesystem integrity guarantee。
+
+### 2.3 開發驗證採用 Simulator First
+
+開發階段優先使用既有 Alpha sandbox，以選定 workspace 的歷史 GPX 位置、
+路線進度、virtual clock、scenario profile 與 fault schedule 組成 test cases。
+缺少現場 GNSS、真實穿戴裝置或即時天氣，不得阻擋可由模擬器覆蓋的程式開發、
+replay、reducer 邏輯與失效處理驗證。
+
+- 位置來源綁定該 workspace 的 canonical GPX ref/hash；情境與故障必須明示為合成。
+- 同一批 profiles 可套用不同 workspace，不必為每條路線重建模擬器。
+- Case 應檢查預期 gate、candidate level、missing context、fault evidence、
+  approval/receipt lineage 及無正式副作用；只檢查執行完成還不夠。
+- Replay 使用固定 virtual clock；stale/dropout 的預期依 replay 時間線驗證。
+  程式、來源或情境改動後重跑，不把 production dossier 的現場時效要求套成開發前置條件。
+- 現有 profiles 不會自動把 workspace 中所有天氣、地形或營地規則轉成情境。
+  這些合成 overlay 證明邏輯路徑，不是現場風險校準。
+
+模擬通過可完成其覆蓋範圍的開發驗證，不等於真實裝置連線、production delivery
+或正式 cutover。那些證據留在相應的部署／產品化驗收；不得將本地回放收據包裝成
+現場證據，也不得因此啟用 Phase 1 mutation 或移除既有權限邊界。
 
 ## 3. 目標部署模型與目前原型
 
@@ -474,22 +494,26 @@ Workspace spec 只記錄「此 workspace 曾執行哪個 replay 與得到何種 
 ### 15.1 CLI Scenario Matrix
 
 ```bash
-rtk proxy python3 tools/run_scout_alpha_simulation_sandbox.py \
+rtk proxy ./venv/bin/python tools/run_scout_alpha_simulation_sandbox.py \
   --workspace /path/to/scout-workspace \
   --scenario-matrix \
   --ingress-mode loopback_mqtt_broker \
-  --max-frames 16 \
+  --max-frames 48 \
   --speed-multiplier 600 \
+  --output-root artifacts/qualification/scout-alpha-development \
   --simulate-approval-receipt \
   --confirm-sandbox-run
 ```
 
 如需指定來源，`--gpx-ref` 必須使用 workspace 內的相對 canonical GPX ref。
+`--workspace` 必須是含 `project.json` 的單一專案，不是 workspace 集合目錄。
+以上 `--output-root` 將結果隔離在 repo 的驗證目錄，不改動來源 workspace；
+CLI 原本的預設輸出位置仍保留，但在 Navigation 凍結期間應使用獨立輸出目錄。
 
 ### 15.2 Admin UI
 
 1. 由 trusted local operator 明確啟用 `SCOUT_ALPHA_SANDBOX_ENABLED=true`。
-2. Server 必須設定合法 pretrip workspace。
+2. Server 必須設定合法的單一 pretrip workspace，並掛載 Alpha API 與 UI router。
 3. 開啟 `/emergency/sandbox-alpha-v0`。
 4. 選擇 scenario，Prepare 後 Step 或 Run to completion。
 5. 視需要注入 fault 或 synthetic interaction。
@@ -525,7 +549,7 @@ Internet 暴露此 surface。
 ### 16.3 Verification Commands
 
 ```bash
-rtk proxy pytest \
+rtk proxy ./venv/bin/python -m pytest \
   tests/test_scout_alpha_simulation_docs.py \
   tests/test_scout_alpha_simulation_sandbox.py \
   tests/test_scout_alpha_simulation_ui.py \
@@ -546,6 +570,8 @@ rtk ruff check \
 
 ## 17. 已驗證的真實 Workspace Evidence
 
+### 17.1 歷史驗證 - 2026-07-20
+
 Workspace：`chilai_nanhua_day1_scoutAI`
 Result：`outputs/sandbox/alpha/last_cli_result.json`
 Run prefix：`alpha-final-audit-20260720T1900Z-{profile}`
@@ -565,6 +591,51 @@ Run prefix：`alpha-final-audit-20260720T1900Z-{profile}`
 完整 run record 保留於
 [Workspace Agent Tool Spec](scout-ai-workspace-agent-tool-spec.md)；它是 evidence
 record，不是本文件的 normative schema 替代品。
+
+### 17.2 重用驗證 - 2026-09-04
+
+從目前 Dashboard workspace catalog 選取兩個已存在的專案，經既有 CLI 實際回放：
+
+| Workspace | GPX points | Profiles | Frames/profile | 預期 gate/level | Simulated receipts |
+|---|---:|---:|---:|---|---:|
+| `chilai_nanhua_day1_scoutAI` | 2,958 | 10/10 | 48 | 全部符合 | 6 |
+| `dongqing_batongguan_historic_trail_newImport` | 5,649 | 10/10 | 48 | 全部符合 | 6 |
+
+這是兩個 catalog workspace 的驗證，不宣稱已讀到使用者當時的前景選取狀態。
+本次使用較新的 filtered GPX，雜湊與點數不覆寫 17.1 的歷史紀錄。
+
+- 20/20 cases 完成且符合預期；六個 pressure profiles 各自選中預期 gate。
+- 20/20 loopback broker connections 成功，共 960 replay frames、1,908 accepted
+  messages；故障情境合計丟棄 12 則訊息。
+- GNSS 失準／過期／缺失保留 missing context；network recovery、device dropout
+  與低電量留下對應 fault evidence。
+- 12 組 candidate/approval/simulated-receipt 完成；production delivery 全為 false。
+- Request、manifest、來源 GPX 與 reducer artifact 雜湊逐一核對。
+- 原 workspace 僅作輸入，未修改 GPX 或 project metadata；未呼叫外部 API、
+  production MQTT、`/safety/*`、真實 GNSS 或硬體控制。
+- 49 項聚焦測試通過（30.60 秒）。初輪有一項測試假設 FastAPI 的所有 route 都有
+  `.path`，遇到 `_IncludedRouter` 失敗；改用 TestClient 驗證停用時 404、啟用時
+  UI/catalog 200 與 10 個 profiles，未修改 API 實作或應用套件依賴。
+
+本次結果在
+`artifacts/qualification/scout-safety-simulator-revalidation-20260904/`：
+`chilai/last_cli_result.json`、`dongqing/last_cli_result.json`、
+`simulator-tests.fixed.junit.xml` 與 `verification-summary.json`。
+初輪失敗記錄 `simulator-tests.junit.xml` 另行保留，未覆寫。
+
+目前 Dashboard integration 的缺口另列，不代表 CLI 模擬器失效：
+
+1. `127.0.0.1:9099` 的 Alpha catalog 回傳 404，OpenAPI 未列 Alpha endpoints。
+   Router 受 `SCOUT_ALPHA_SANDBOX_ENABLED` 控制；本次未變更旗標或重啟服務。
+2. `tools/dashboard_workspace_app.py` 使用 workspace 集合目錄，Alpha API 則需要
+   單一 project root。尚未接上 Dashboard 選定專案到 Alpha run 的解析與 pinning。
+3. 該 entrypoint 只掛載 admin router，未掛載獨立 Alpha UI router。
+   只開旗標不足以完成 operator UI 接線。
+
+修復上述共用 entrypoint 會碰到 Navigation 凍結範圍，必須另列具體檔案與影響取得
+核准；本次未編輯這些檔案或設定。Guard 前後均回報四個既有差異，其中 Dashboard
+HTML 在驗證期間又有並行變更，未回復或重設基線，不能宣稱 Navigation 全域不變。
+開發驗證可先直接使用 CLI，不必等待這項 UI 接線。
 
 ## 18. 產品化缺口
 

@@ -28,6 +28,10 @@ PiLiveQualificationStatus = Literal[
 
 _HOST_PATTERN = re.compile(r"^[A-Za-z0-9_.-]+$")
 _SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
+_DEFAULT_FRESHNESS_STATUS_PATH = (
+    "/data/scout/qualification/scout-safety-production-20260831/"
+    "freshness-attestor-status.pi.json"
+)
 
 
 class PiRuntimeObservation(BaseModel):
@@ -48,6 +52,7 @@ class PiRuntimeObservation(BaseModel):
     freshness_attestor_current_source_count: int = Field(default=0, ge=0)
     freshness_attestor_stale_source_rejected: bool = False
     freshness_attestor_status_sha256: str | None = None
+    freshness_attestor_observed_at: datetime | None = None
     gnss_observer_visual_control_configured: bool = False
     gnss_observer_reported_hardware_control_allowed: bool = False
     gnss_observer_reported_hardware_control_performed: bool = False
@@ -66,6 +71,11 @@ class PiRuntimeObservation(BaseModel):
             raise ValueError("freshness attestor status hash must be SHA-256")
         if self.credential_material_embedded or self.raw_location_payload_embedded:
             raise ValueError("Pi runtime observation cannot embed sensitive material")
+        if (
+            self.freshness_attestor_observed_at is not None
+            and self.freshness_attestor_observed_at.utcoffset() is None
+        ):
+            raise ValueError("freshness attestor observation must be timezone-aware")
         return self
 
 
@@ -266,8 +276,15 @@ def run_pi_live_qualification(
         )
         stale_rejected = source_age_minutes > freshness_window_minutes
     freshness_window_enforced = source_age_minutes is not None
+    attestor_time = runtime_model.freshness_attestor_observed_at
+    attestor_current = bool(
+        attestor_time is not None
+        and 0 <= (observed_at - attestor_time).total_seconds()
+        <= freshness_window_minutes * 60
+    )
     resident_freshness_observed = bool(
-        (
+        attestor_current
+        and (
             runtime_model.freshness_attestor_process_running
             or runtime_model.freshness_attestor_reported_resident_process_observed
         )
@@ -361,6 +378,7 @@ def collect_pi_runtime_observation(
     *,
     admin_container: str,
     mqtt_container: str,
+    freshness_status_path: str = _DEFAULT_FRESHNESS_STATUS_PATH,
     timeout_seconds: int = 15,
 ) -> PiRuntimeObservation:
     for value in (host, admin_container, mqtt_container):
@@ -414,7 +432,7 @@ if status_path.exists():
     except (OSError, json.JSONDecodeError):
         status = {{}}
 boundary = status.get("boundary") if isinstance(status.get("boundary"), dict) else {{}}
-freshness_status_path = pathlib.Path("/data/scout/qualification/scout-safety-production-20260831/freshness-attestor-status.pi.json")
+freshness_status_path = pathlib.Path({freshness_status_path!r})
 freshness_status = {{}}
 freshness_status_sha256 = None
 if freshness_status_path.exists():
@@ -443,6 +461,7 @@ print(json.dumps({{
     "freshness_attestor_current_source_count": int(freshness_status.get("current_source_count") or 0),
     "freshness_attestor_stale_source_rejected": bool(freshness_status.get("stale_source_rejected")),
     "freshness_attestor_status_sha256": freshness_status_sha256,
+    "freshness_attestor_observed_at": freshness_status.get("observed_at"),
     "gnss_observer_visual_control_configured": any(
         "--oled-status" in line or "--led-status" in line for line in gnss_processes
     ),
@@ -535,6 +554,9 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument("--gnss-duration-seconds", type=float, default=8.0)
+    parser.add_argument(
+        "--freshness-attestor-status-path", default=_DEFAULT_FRESHNESS_STATUS_PATH
+    )
     parser.add_argument("--allow-live-gnss-read", action="store_true")
     args = parser.parse_args(argv)
     if not args.allow_live_gnss_read:
@@ -546,6 +568,7 @@ def main(argv: list[str] | None = None) -> int:
         args.host,
         admin_container="scout-pi-phase4-admin",
         mqtt_container="chirpstack-docker-mosquitto-1",
+        freshness_status_path=args.freshness_attestor_status_path,
     )
     gnss = collect_redacted_gnss_observation(
         args.host,

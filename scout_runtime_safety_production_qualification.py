@@ -1427,6 +1427,7 @@ class ProductionSafetyQualificationDossierReport(BaseModel):
     source_path: str
     sha256: str
     status: ProductionSafetyQualificationDossierStatus
+    evaluation_time: datetime | None = None
     required_areas: list[ProductionSafetyQualificationArea]
     rows: list[ProductionSafetyQualificationDossierRow]
     cutover_audit: ProductionSafetyCutoverReadinessAudit
@@ -1456,6 +1457,8 @@ class ProductionSafetyQualificationDossierReport(BaseModel):
     def enforce_dossier_report(
         self,
     ) -> "ProductionSafetyQualificationDossierReport":
+        if self.evaluation_time is not None and self.evaluation_time.utcoffset() is None:
+            raise ValueError("dossier evaluation_time must be timezone-aware")
         ready = self.status == "dossier_ready_for_production_cutover"
         if self.ready_for_production_cutover != ready:
             raise ValueError("ready_for_production_cutover must match dossier status")
@@ -6240,6 +6243,7 @@ def load_production_safety_qualification_cutover_release_closure_report(
 def run_production_safety_qualification_dossier(
     manifest: ProductionSafetyQualificationDossierManifest | dict[str, Any] | Path | str,
     *,
+    evaluation_time: datetime | None = None,
     output_path: Path | str | None = None,
     cutover_audit_output_path: Path | str | None = None,
     threat_coverage_output_path: Path | str | None = None,
@@ -6248,6 +6252,11 @@ def run_production_safety_qualification_dossier(
     receipt_output_dir: Path | str | None = None,
     source_path: str | None = None,
 ) -> ProductionSafetyQualificationDossierReport:
+    # None preserves historical bundle-local replay; the CLI supplies current UTC.
+    if evaluation_time is not None:
+        if evaluation_time.utcoffset() is None:
+            raise ValueError("dossier evaluation_time must be timezone-aware")
+        evaluation_time = evaluation_time.astimezone(timezone.utc)
     manifest_model = _load_or_validate_dossier_manifest(manifest)
     entries_by_area = {entry.area: entry for entry in manifest_model.entries}
     source_root = manifest_model.source_root_path
@@ -6266,6 +6275,7 @@ def run_production_safety_qualification_dossier(
             index,
             area,
             entries_by_area.get(area),
+            evaluation_time=evaluation_time,
             source_root_path=source_root,
             source_integrity_output_dir=source_integrity_dir,
             admission_output_dir=admission_dir,
@@ -6277,6 +6287,7 @@ def run_production_safety_qualification_dossier(
     threat_coverage_audit, threat_coverage_status, threat_blockers = (
         _run_dossier_threat_coverage(
             manifest_model.threat_coverage_path,
+            evaluation_time=evaluation_time,
             source_package_path=manifest_model.threat_coverage_source_package_path,
             source_root_path=source_root,
             source_integrity_output_path=(
@@ -6340,6 +6351,9 @@ def run_production_safety_qualification_dossier(
             {
                 "source_path": report_source_path,
                 "manifest_ref": manifest_model.source_path,
+                "evaluation_time": (
+                    evaluation_time.isoformat() if evaluation_time is not None else None
+                ),
                 "row_statuses": [
                     {
                         "area": row.area,
@@ -6361,6 +6375,7 @@ def run_production_safety_qualification_dossier(
         source_path=report_source_path,
         sha256=digest,
         status=status,
+        evaluation_time=evaluation_time,
         required_areas=list(REQUIRED_PRODUCTION_SAFETY_QUALIFICATION_AREAS),
         rows=rows,
         cutover_audit=cutover_audit,
@@ -7810,6 +7825,7 @@ def evaluate_production_safety_qualification_dossier_rerun_intake(
         ProductionSafetyQualificationDossierManifest | dict[str, Any] | Path | str
     ),
     *,
+    evaluation_time: datetime | None = None,
     cutover_audit_output_path: Path | str | None = None,
     threat_coverage_output_path: Path | str | None = None,
     source_integrity_output_dir: Path | str | None = None,
@@ -7833,6 +7849,7 @@ def evaluate_production_safety_qualification_dossier_rerun_intake(
     else:
         dossier_report = run_production_safety_qualification_dossier(
             manifest,
+            evaluation_time=evaluation_time,
             cutover_audit_output_path=cutover_audit_output_path,
             threat_coverage_output_path=threat_coverage_output_path,
             source_integrity_output_dir=source_integrity_output_dir,
@@ -10132,6 +10149,7 @@ def _mode_gap_row(
 def _run_dossier_threat_coverage(
     threat_coverage_path: str | None,
     *,
+    evaluation_time: datetime | None,
     source_package_path: str | None,
     source_root_path: Path | str | None,
     source_integrity_output_path: Path | str | None,
@@ -10148,6 +10166,10 @@ def _run_dossier_threat_coverage(
         manifest = load_production_safety_qualification_threat_coverage_manifest(
             threat_coverage_path
         )
+        if evaluation_time is not None:
+            manifest = ProductionSafetyQualificationThreatCoverageManifest.model_validate(
+                {**manifest.model_dump(), "reference_time": evaluation_time}
+            )
         source_report = None
         if source_package_path:
             package = (
@@ -10192,6 +10214,7 @@ def _run_dossier_area(
     area: ProductionSafetyQualificationArea,
     entry: ProductionSafetyQualificationDossierEntry | None,
     *,
+    evaluation_time: datetime | None,
     source_root_path: Path | str | None,
     source_integrity_output_dir: Path | None,
     admission_output_dir: Path | None,
@@ -10221,6 +10244,10 @@ def _run_dossier_area(
         bundle = load_production_safety_qualification_evidence_bundle(
             entry.bundle_path
         )
+        if evaluation_time is not None:
+            bundle = ProductionSafetyQualificationEvidenceBundle.model_validate(
+                {**bundle.model_dump(), "reference_time": evaluation_time}
+            )
         package = load_production_safety_qualification_evidence_package(
             entry.source_package_path
         )
@@ -10797,6 +10824,14 @@ def main(argv: list[str] | None = None) -> int:
         help="Optional path for the production safety qualification dossier report.",
     )
     parser.add_argument(
+        "--evaluation-time",
+        help=(
+            "Timezone-aware ISO timestamp for dossier or dossier-rerun evaluation. "
+            "Defaults to current UTC. Use an explicit timestamp for historical replay; "
+            "evidence observation times are never changed."
+        ),
+    )
+    parser.add_argument(
         "--gap-plan",
         help="Path to a production safety qualification dossier report JSON file.",
     )
@@ -11080,9 +11115,24 @@ def main(argv: list[str] | None = None) -> int:
         help="Source path recorded in the generated audit artifact.",
     )
     args = parser.parse_args(argv)
+    evaluation_time = None
+    if args.dossier or args.dossier_rerun_closure_report or args.dossier_rerun_manifest:
+        try:
+            evaluation_time = (
+                datetime.fromisoformat(args.evaluation_time)
+                if args.evaluation_time is not None
+                else datetime.now(timezone.utc)
+            )
+            if evaluation_time.utcoffset() is None:
+                raise ValueError("evaluation time must be timezone-aware")
+        except ValueError:
+            parser.error("--evaluation-time must be a timezone-aware ISO timestamp")
+    elif args.evaluation_time is not None:
+        parser.error("--evaluation-time requires --dossier or dossier-rerun inputs")
     if args.dossier:
         report = run_production_safety_qualification_dossier(
             args.dossier,
+            evaluation_time=evaluation_time,
             output_path=args.dossier_output,
             cutover_audit_output_path=args.output,
             threat_coverage_output_path=args.threat_coverage_output,
@@ -11403,6 +11453,7 @@ def main(argv: list[str] | None = None) -> int:
         rerun_report = evaluate_production_safety_qualification_dossier_rerun_intake(
             args.dossier_rerun_closure_report,
             args.dossier_rerun_manifest,
+            evaluation_time=evaluation_time,
             cutover_audit_output_path=args.output,
             threat_coverage_output_path=args.threat_coverage_output,
             source_integrity_output_dir=args.source_integrity_output_dir,

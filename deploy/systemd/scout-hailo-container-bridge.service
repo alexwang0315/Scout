@@ -1,0 +1,16 @@
+[Unit]
+Description=Scout Hailo Ollama container-only bridge proxy
+Requires=scout-hailo-ollama.service
+After=scout-hailo-ollama.service
+
+[Service]
+ExecStart=/usr/lib/systemd/systemd-socket-proxyd 127.0.0.1:8000
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictRealtime=true
+RestrictAddressFamilies=AF_INET AF_INET6

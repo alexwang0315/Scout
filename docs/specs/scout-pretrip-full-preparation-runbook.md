@@ -727,12 +727,129 @@ and `requestActivityState=in-progress`; the Dashboard renders this as
 `in progress`, not the misleading `false`. A completed run replaces them with
 observed booleans.
 
+#### 2026-09-04 Weather Refresh To Decision Reassessment
+
+`GET .../weather-dashboard` already rebuilds the candidate decision from the
+published rainfall and route-weather artifacts on every request. It never
+fetches CWA upstream. A separate Decision POST is not required. The explicit
+refresh path is:
+
+```text
+operator POST connected-preparation
+  -> server fetch / derive / atomic publication
+  -> browser observes completedAt
+  -> GET weather-dashboard (no-store)
+  -> Decision response evaluatedAt + consumed evidence pair IDs
+```
+
+The original UI could miss the completion when the operator left Weather,
+when another status read consumed the completion timestamp, or when a slower
+old response replaced the newer result. Concurrent status and decision reads
+also allowed a new completion status to be paired with an earlier decision.
+Track the completion consumed by `weatherData.decisionReview`, observe status
+before starting the decision read, and fence responses by project, API base,
+and request sequence. Continue polling through transient status failures;
+do not treat a failed status read as cancellation of the running job. Terminal
+completion reloads Weather data even while another Dashboard view is open.
+
+The coordinator now exposes `weatherDecisionInputs` and `currentArtifactRefs`.
+The four required inputs are rainfall manifest, rainfall trend, imagery
+manifest, and route-weather risk package. Inspect actual file contents, safe
+workspace refs, timestamps within the run window, and matching pair/source-
+frame/route identities. Missing, invalid, or previous-generation inputs keep
+the overall result `partial`, even if an external API call succeeded. Historical
+refs remain available in `artifactRefs`; they are not silently promoted into
+the current-run receipt. `weatherDecisionInputs.status=current_run` proves
+generation provenance, not provider freshness, rainfall coverage, or a safe
+route. Decision API freshness and candidate-only boundaries still apply.
+
+The Weather page separately reports preparation completion, Decision API
+reassessment time, input generation status, and evidence freshness. A completed
+reassessment can still return `DELAY` with `stale_data`. Expired imagery arrival
+estimates must not appear as a current countdown in either the top critical
+window or the decision evidence. A failed Decision read clears the candidate
+and explicitly reports reassessment failure.
+
+Focused replay:
+
+```bash
+./venv/bin/python -m pytest tests/test_dashboard_weather_refresh.py tests/test_dashboard_connected_preparation.py tests/test_admin_cwa_imagery_overlay.py -q
+SCOUT_BROWSER_EXECUTABLE='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
+  SCOUT_WEATHER_REFRESH_OUTPUT_DIR=artifacts/browser/dashboard-weather-refresh-20260904 \
+  node tools/dashboard_weather_refresh_browser_smoke.js
+```
+
+The browser replay operates the real refresh button with intercepted local API
+responses: current-run completion, partial/stale completion, and Decision API
+failure. Its receipt records `actualCwaRefreshPerformed=false`; desktop/mobile
+screenshots are in the same artifact directory. This does not prove a new live
+CWA fetch. The inspected 9099 process had `idle`, `runCount=0`, and no completion
+record; process-local status cannot establish whether an earlier process ran.
+HTML changes take effect on reload. New Python coordinator checks require a
+service restart. Do not stop the shared Dashboard launcher without accounting
+for its managed QGIS worker and active jobs.
+
 Current-position and target sampling is a separate user gesture in Weather.
 The user selects a prepared checkpoint and presses `授權目前位置並更新降雨趨勢`.
 Only then does the browser request geolocation, obtain a server-issued short-
 lived approval, and call `POST .../rainfall-trend`. The response is kept in UI
 state; the server persists only the sanitized approval audit with
 `rawCoordinatesPersisted=false`.
+
+#### 2026-09-04 Target Trend To Decision Reassessment
+
+The original `POST .../rainfall-trend` returned only point/corridor samples.
+Replacing `weatherData.routeTrend` did not re-evaluate the Decision candidate,
+and changing the checkpoint dropdown left the previous target result visible.
+The target gesture now returns both `decisionReview` and an ephemeral
+`weatherDashboard`, using the approved current position and selected target.
+The same deterministic reducer consumes their QPE/QPF values and coverage;
+`missing_cell`, `outside_grid`, or a missing value cannot become zero or `GO`.
+Why/Where identify the sampled target and amounts, and When includes the QPF
+validity window. No new arbitrary rainfall threshold is introduced.
+
+The server binds the sampled, hash-validated grid frames to the active rainfall
+manifest and checks the captured route identity. If publication changes the
+source frames during sampling, or cached Decision context fails, sampling
+still returns with `decisionReview.status=failed` and `weatherDashboard=null`.
+Freshness is recomputed from the consumed rainfall, imagery, and newly sampled
+trend, not the superseded cached trend's aggregate status. A stale old trend
+must not force a fresh target review back to DELAY; a stale consumed source
+still does.
+Only the sanitized approval audit is written. The new trend is not published
+as the stored route trend, and no LoRa alert is regenerated or sent.
+
+Checkpoint selection invalidates the previous target decision without reading
+location or making a request. The explicit location button obtains a new
+short-lived approval and samples the existing CWA cache. Project, API-base,
+request-sequence, and target checks prevent late results from replacing a
+newer selection. An older server without the new Decision fields displays
+`UNVERIFIED`, even if the rain samples succeeded. A later route-cache reload
+discards ephemeral target context and explicitly requires another approved
+sample; it never reuses or persists the coordinates.
+
+The UI distinguishes QPE past-hour measurements from QPF next-hour predictions,
+shows both source timestamps and validity windows, and explains UNKNOWN by
+point status. The LoRa line is labeled as the persisted whole-route unsent
+preview, not an alert produced for the newly selected checkpoint.
+
+Focused proof commands:
+
+```bash
+./venv/bin/python -m pytest tests/test_dashboard_weather_target.py tests/test_dashboard_weather_refresh.py tests/test_admin_cwa_precipitation_grid.py tests/test_admin_cwa_imagery_overlay.py tests/test_route_precipitation_sampler.py -q
+./venv/bin/python tools/dashboard_weather_target_fixture.py --fixture-harness --port 19107
+```
+
+The opt-in browser fixture serves the actual Weather UI with only its bootstrap
+replaced, and uses the real approval, sampling, and Decision API against tiny
+synthetic grids. CP 02 has numeric coverage; CP 103 has a QPF missing cell. It
+uses a synthetic geolocation provider, forbids other POSTs and external browser
+connections, and excludes the unrelated map panel. Select and recalculate both
+targets, verify that selection itself sends no request, and confirm CP 103's
+Decision Why/Where and UNKNOWN explanation change together. This is prototype
+evidence, not official Dashboard qualification or proof of today's live CWA
+weather. The 9099 service and QGIS worker are not restarted by the fixture;
+new Python handlers require a separately coordinated service restart.
 
 The 2026-07-23 operator approval covers the Dashboard service-lifetime recurring
 timer after an explicit refresh described above. It is intentionally not
@@ -5216,3 +5333,199 @@ published three same-request candidate traces: R1 drainage-averse, R2 balanced,
 and R3 terrain-only baseline. The run remained `candidate_only`,
 `runtime_safety_truth=false`, `operational=false`, and
 `safe_or_walkable=not_determined`.
+
+### 2026-09-02 Dashboard-managed local QGIS worker
+
+`tools/run_dashboard_workspace.sh` now manages the local QGIS worker by
+default. One command is sufficient when the persistent runtime, worker token,
+and Scout QGIS profile are already prepared:
+
+```bash
+tools/run_dashboard_workspace.sh --host 127.0.0.1 --port 9099
+```
+
+The launcher first probes the authenticated worker capabilities endpoint. It
+reuses an already-running compatible worker; otherwise it starts
+`tools/run_qgis_worker.sh`, waits for the worker API to respond, and records its
+output in `~/.scout-fusion/qgis-desktop/runtime/qgis-worker.log`. When the
+Dashboard exits, it stops only the worker process that it started. A separately
+started worker is never terminated.
+
+Autostart is local-only and does not launch or control QGIS Desktop. The Scout
+QGIS profile and plugin bridge must still be available for GIS execution. If
+the worker cannot start, the Dashboard remains usable while QGIS/TRH stays
+typed `unavailable`; no terrain result is guessed. Set
+`SCOUT_DASHBOARD_QGIS_WORKER_REQUIRED=true` to make worker startup failure also
+stop Dashboard startup, or `SCOUT_DASHBOARD_AUTO_QGIS_WORKER=false` to retain
+manual worker lifecycle management.
+
+### 2026-09-03 TRH button disabled after selecting A/B
+
+The observed runtime had no listening Worker and an MCP connection file for an
+exited QGIS process. Saved candidate geometries remained viewable, but they did
+not prove live calculation readiness. Restarting the prepared Scout QGIS profile
+and the Dashboard-managed Worker restored the real handshake; A/B drafts were
+not changed. QGIS expects the parent of the `profiles` directory here:
+
+```bash
+open -a /Applications/QGIS-LTR.app --args \
+  --profiles-path "$HOME/.scout-fusion/qgis-desktop" \
+  --profile scout --nologo --noversioncheck
+tools/run_dashboard_workspace.sh --host 127.0.0.1 --port 9099
+```
+
+Use this QGIS command only when that Scout application instance is not already
+running. Do not stop an existing QGIS session with unsaved work or an active GIS
+job. The `--profiles-path` argument must not end with `/profiles`, because QGIS
+appends that directory itself; otherwise it loads a different profile without
+the prepared bridge. Do not change credentials or install another plugin.
+
+Navigation now exposes **重新檢查 Worker** beside A/B. It re-reads live status
+and capabilities/control metadata without resetting the map, endpoints, current candidate, or
+R4 review. Initial rendering and in-place updates share the same gate: a missing
+Worker/bridge remains unavailable, and stale/fixture readiness never unlocks a
+live TRH request. Starting QGIS and Worker does not execute TRH automatically.
+
+### 2026-09-03 Explicit Navigation Worker startup
+
+In Navigation, **啟動 Worker** now starts a missing local Worker and, on macOS,
+can open the already-prepared Scout QGIS profile. **重新檢查 Worker** remains
+read-only. Merely opening Navigation or running Diagnostic does not start any
+service. The button is disabled while checking/starting, during a GIS job, when
+already READY, or when this Dashboard cannot manage the configured runtime.
+
+The local workspace Dashboard owns the fixed launcher/profile configuration.
+The general admin API does not gain process-launch authority. Startup accepts
+only same-origin loopback JSON requests; browser-supplied commands, host URLs,
+credentials and authority fields are rejected. Token/profile/runtime setup must
+already exist. Remote Scout startup and Linux container lifecycle are not
+implemented here; a configured existing Linux bridge can still be reused.
+
+An occupied unrecognized Worker port, missing setup, unresponsive existing QGIS
+session, or timeout stays typed unavailable. Never close somebody's QGIS session
+to make this check green. After fixing that underlying condition, use the
+read-only recheck. A READY startup receipt alone does not enable TRH: the UI
+repeats the real Worker/QGIS/bridge/capability handshake. R4 retains its separate
+human-review gate, and no route job is submitted by either Worker button.
+
+Receipts are appended to `~/.scout-fusion/qgis-desktop/runtime/qgis-runtime-control.jsonl`
+and the action's Worker log is `qgis-worker-navigation.log` in that directory
+(or beside the configured token file). They contain no credentials. The action
+is start-only: a Worker it starts remains running for later Dashboard reuse.
+
+Live local proof used an isolated Dashboard on port 9101 with Worker autostart
+disabled and an initially empty port 9878. Clicking **啟動 Worker** produced
+`existing_qgis_preserved`, `worker_started`, then a real `READY` handshake.
+The A/B generation button unlocked; endpoints, narrative, G6 focus and the map
+were preserved, while unreviewed R4 stayed disabled. No TRH/R4 job was generated.
+The existing QGIS application and normal Worker on port 9876 were not interrupted.
+Cold QGIS GUI launch was covered by adapter tests, not repeated against the
+operator's open QGIS session; remote Scout qualification remains UNKNOWN.
+
+### 2026-09-04 Arbitrary A/B TRH stops at DEM inspection
+
+The Dongqing run `qgis-worker-20260904T005941165938Z-c59eeb94a5` failed with
+`NODATA_PRESENT` before routing. Its 1,000 m A/B margin extended 680 m east
+and 520 m south of the existing prepared DEM; GDAL padded the clip with 13,994
+NoData cells (62,088 total). The original registered Taiwan 20 m DEM was still
+available and bound to the terrain-feature manifest.
+
+Do not reduce the margin, fill unknown elevations, or bypass the finite-grid
+gate to make this green. Explicit A/B now uses that original full raster only
+after verifying the parent-bound source/coverage hashes, CRS and resolution.
+It remains a bounded GRASS calculation at native resolution. An unavailable or
+changed original source stays `SOURCE_UNAVAILABLE`; genuine clipped NoData
+still stays `NODATA_PRESENT`.
+
+The blank-map symptom had two independent lifecycle causes: submitting TRH
+removed the published candidate references before success, and Navigation
+replaced completed terrain vectors/GPX geometry with the new job's empty
+artifacts. New attempts now retain the published candidate until a validated
+replacement exists; errors identify it as the previous result, not the failed
+A/B solution. Completed terrain-stack evidence is loaded separately on page
+entry and survives TRH progress/failure. Import/preparation invalidation and
+all human-review/candidate-only boundaries remain unchanged.
+
+Retain the prepared DEM hash as a separate parent-source binding even when the
+full raster supplies the new A/B pixels. R4 review uses that chain to compare
+corridors against the existing terrain feature index. It is also included in
+cache identity; missing parent bindings must not be waved through or repaired
+by auto-selecting review anchors. Transient map-refresh failures display the
+last loaded evidence with an explicit stale/previous-result notice, while a
+typed source-unavailable projection still fails closed.
+
+Recovery receipt: `qgis-worker-20260904T012958960072Z-8d6d01ab12` completed
+R1/R2/R3 for the original failed endpoints and unchanged margin. The bounded
+20 m grid contained 62,088 finite cells and zero NoData. Its full-raster cache
+`82a9f7b4511226e028261759c6a04f002a59aca177dcf5d30152d5ab89f869c9`
+also passed the existing R4 parent/corridor/path checks in a read-only replay;
+no human anchors or review decisions were written.
+
+Check the operator's actual Dashboard port before declaring a runtime repair
+complete. In this incident, Chrome was connected to an old process on 9100 while
+9099 had already been updated. A later 9100 submission repeated the old
+candidate-deactivation behavior. Wait for an active worker job to complete,
+then update the owning Dashboard process, preserving a shared worker/QGIS
+session. The newer successful operator result (`be8797bfcd83` cache prefix) was
+retained; the earlier recovery was not republished over it. Both local ports
+served the updated page afterward.
+
+The affected combined Python run had 442 passes and one worker-poll timing
+failure; the failing test passed on an unchanged standalone rerun. Frontend
+checks, the real-workspace 32-layer contract, and focused 2D/3D browser checks
+passed. This is local recovery evidence, not remote Scout qualification or
+production/safety promotion.
+
+### 2026-09-04 Store buffered analysis DEM in the workspace
+
+The operator correctly reported that both failed A/B points were inside the
+route scope. Verified EPSG:3826 points were approximately
+`A=(277780.49,2581296.74)` and `B=(273584.44,2583237.12)`, inside the route bbox
+`242479.596,2581030.537,277868.065,2606119.118`. The old prepared DEM only added
+250 m, whereas TRH added 1,000 m around the A/B bbox. Do not describe this as
+the operator selecting endpoints outside the route.
+
+Preparation now materializes a separate workspace-owned regional DEM after the
+terrain-feature parent, before TRH. Default storage margin is 5,000 m plus two
+native grid cells, covering the current maximum analysis margin for endpoints
+within the route bbox. Feature-stack extent, semantic corridor, known GPX,
+candidate route refs and R4 review remain unchanged. The normal layer
+preparation receipt includes `workspace_terrain_dem`; unavailable preparation
+must remain explicit, not be counted as successful coverage.
+
+Use `./venv/bin/python -m workspace_terrain_dem --project-root <project-root>`
+for a bounded backfill without rebuilding the rest of the workspace. The new
+project refs point to `outputs/terrain/dem/<identity>/dem.tif` and its manifest.
+TRH validates the local file and its current parent/source bindings, checks the
+buffered request fits, then submits that workspace-owned source to the worker.
+Only legacy workspaces without these refs retain direct original-raster use.
+
+Attempt 1 stopped with a typed CRS error: the original GeoTIFF had custom
+WGS84/TM121 WKT without an EPSG ID, despite its registered Metadata.xml declaring
+EPSG:3826. The fixed adapter requires both provider reference-system metadata
+and matching complete TM121 projection parameters. It normalizes only the
+derived clip's CRS tag, records original WKT and exact commands, and keeps a
+hash-bound provider XML copy inside the workspace. Any recognized conflicting
+CRS, unsupported axis/unit or different projection remains unavailable.
+
+The successful local receipt is
+`outputs/terrain/dem/e8a985456305ac9d09939754d7937dc547c8b845e1f15ea15019fb2c88a82dd4/manifest.json`:
+20 m native resolution, 2,274 x 1,759 cells, 3,999,966 finite cells, zero NoData,
+and an 11,796,504-byte GeoTIFF. Full-grid counts come from actual GDAL cell
+export, not rounded statistics. Active R1-R3 and R4 review hashes were not
+replaced. Original source data, safety authority and GPX geometry were untouched.
+
+Validation used the same failed A/B and 1,000 m margin against the new local
+raster: 312 x 199 cells, 62,088 finite and zero NoData. The backend selected
+`workspace_prepared_dem`; repeated preparation reused the same manifest/hash.
+Related tests passed 159 cases, with 47 cases passing in the final focused rerun;
+the real-workspace 32-layer contract passed. Both Dashboard ports were updated.
+Startup took longer than the initial readiness poll, so the existing startup
+process was allowed to finish instead of launching a duplicate on that port.
+
+After restarting, the Navigation API reported `persisted_projection_stale_or_invalid`
+even though the active route artifacts were intact. The prior projection's
+fingerprint no longer matched current inputs; the specific earlier input change
+was not established. Recompile only the existing Navigation display projection,
+then verify its fingerprint, candidates and R4 scope. Do not respond to this
+state by deleting route results or rebuilding human review.

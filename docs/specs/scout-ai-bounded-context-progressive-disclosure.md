@@ -88,7 +88,7 @@ insufficient.
 
 The unchanged corpus is:
 
-`outputs/evals/scout_ai_workspace_grounded_100_questions_20260713_glm52_cases.json`
+`tests/fixtures/scout_ai_workspace_grounded_100_questions_20260713_glm52_cases.json`
 
 The recorded pre-change baseline is:
 
@@ -106,7 +106,7 @@ Then run a provider without printing the key:
 
 ```bash
 ./venv/bin/python tools/scout_ai_live_tool_selection_eval.py \
-  --cases-file outputs/evals/scout_ai_workspace_grounded_100_questions_20260713_glm52_cases.json \
+  --cases-file tests/fixtures/scout_ai_workspace_grounded_100_questions_20260713_glm52_cases.json \
   --model openrouter:openrouter/free \
   --api-key-env-var OPENROUTER_API_KEY \
   --project-id chilai_nanhua_day1_scoutAI \

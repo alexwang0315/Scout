@@ -145,6 +145,8 @@ HAILO_MAX_INPUT_TOKENS = 1_200
 HAILO_CONTINUATION_INPUT_TOKENS = 900
 HAILO_SEMANTIC_STOP = "<SCOUT_DONE>"
 HAILO_STREAM_STALL_TIMEOUT_SECONDS = 45.0
+HAILO_CONTAINER_BRIDGE_HOST = "172.25.0.1"
+HAILO_CONTAINER_BRIDGE_PORT = 18_000
 MIN_GROUNDING_REPAIR_OUTPUT_HEADROOM = 1_024
 HARD_BUDGET_FAIL_CLOSED_OUTPUT = (
     "Scout bounded runtime discarded the model answer because the actual provider "
@@ -346,6 +348,18 @@ def _request_timeout(timeout_seconds: int | None) -> float | None:
     if timeout_seconds is None or timeout_seconds <= 0:
         return None
     return float(max(1, timeout_seconds - 1))
+
+
+def _bounded_retry_timeout_seconds(
+    timeout_seconds: int | None,
+    *,
+    cap_seconds: int,
+) -> int | None:
+    """Cap a retry only when the caller configured a finite timeout."""
+
+    if timeout_seconds is None or timeout_seconds <= 0:
+        return None
+    return max(1, min(timeout_seconds, cap_seconds))
 
 
 WORKSPACE_EVIDENCE_TOOL_ID = "pydantic_ai.tool.search_scout_workspace_evidence.v0"
@@ -1551,6 +1565,25 @@ def _mser_trace_payload(
     return payload
 
 
+def _mser_structured_evidence_gaps(
+    state: MSERPipelineState,
+) -> list[str]:
+    context = state.packet.compact_context
+    gaps = [
+        f"{need.dimension.value}:{need.gap_kind.value}:{need.reason}"
+        for need in context.information_needs
+    ]
+    for receipt in state.gap_evidence_receipts:
+        gaps.extend(
+            f"{dimension.value}:{receipt.availability.value}:{field}"
+            for dimension in receipt.dimensions
+            for field in receipt.missing_fields
+        )
+    if not gaps and state.reasoning.disposition.value != "ready_to_reason":
+        gaps.append(f"sufficiency_status:{context.certificate.status.value}")
+    return list(dict.fromkeys(gaps))
+
+
 def _mser_verify_output(
     tool_context: "ScoutWorkspaceToolContext",
     *,
@@ -1577,6 +1610,7 @@ def _mser_verify_output(
         output={
             "answer": output,
             "source_refs": list(dict.fromkeys(source_refs)),
+            "evidence_gaps": _mser_structured_evidence_gaps(final),
         },
     )
     tool_context.mser_answer_verification = verification.model_dump(mode="json")
@@ -1782,6 +1816,46 @@ def _tool_argument_mapping(args: object) -> dict[str, Any]:
     return {}
 
 
+def _execute_typed_read_only_plan_item(
+    tool_context: "ScoutWorkspaceToolContext",
+    item: object,
+) -> tuple[str, dict[str, object]] | None:
+    """Execute one server-planned read-only tool when the model stops early."""
+
+    tool_id = str(getattr(item, "tool_id", "") or "")
+    request = getattr(item, "request", None)
+    if tool_id not in REGISTERED_WORKSPACE_TOOL_NAMES or not isinstance(request, dict):
+        return None
+    raw_arguments = request.get("arguments")
+    if not isinstance(raw_arguments, dict):
+        return None
+    arguments = dict(raw_arguments)
+    arguments.pop("project_root", None)
+    if tool_id == WORKSPACE_QUERY_TOOL_ID:
+        workspace_request = arguments.get("request")
+        if not isinstance(workspace_request, (dict, str)):
+            return None
+        return tool_id, tool_context.query_scout_workspace(request=workspace_request)
+
+    question = tool_context.query.question
+    tool_query = _merge_workspace_tool_query(
+        question,
+        str(arguments.pop("query", question) or question),
+    )
+    raw_limit = arguments.pop("limit", tool_context.default_limit)
+    limit = (
+        raw_limit
+        if isinstance(raw_limit, int) and not isinstance(raw_limit, bool)
+        else tool_context.default_limit
+    )
+    return tool_id, tool_context._run_registered_read_only_tool(
+        tool_id,
+        query=tool_query,
+        limit=limit,
+        **arguments,
+    )
+
+
 def _workspace_query_operation_from_arguments(args: object) -> str:
     request = _tool_argument_mapping(args).get("request")
     if isinstance(request, str):
@@ -1952,7 +2026,7 @@ def _merge_native_research_trace(
     }
 
 
-_HAILO_NATIVE_RESEARCH_TOOL_IDS = frozenset(
+_NATIVE_RESEARCH_TOOL_IDS = frozenset(
     {
         CWA_ENVIRONMENT_TOOL_ID,
         GEE_ENVIRONMENT_TOOL_ID,
@@ -1960,7 +2034,7 @@ _HAILO_NATIVE_RESEARCH_TOOL_IDS = frozenset(
         WEATHER_WINDOW_TOOL_ID,
     }
 )
-_HAILO_NATIVE_RESEARCH_QUESTION_PATTERN = re.compile(
+_NATIVE_RESEARCH_QUESTION_PATTERN = re.compile(
     r"(?:上網|網路|web\s*(?:search|fetch)|live\s*research|"
     r"最新|即時|今天|明天|預報|警報|特報|公告|封閉|管制|開放|"
     r"歷史|文化|自然|季節|簡報|briefing)",
@@ -1968,15 +2042,15 @@ _HAILO_NATIVE_RESEARCH_QUESTION_PATTERN = re.compile(
 )
 
 
-def _hailo_question_can_use_native_research(
+def _question_can_use_native_research(
     question: str,
     selected_tool_ids: list[str],
 ) -> bool:
     """Open the local research planner for public-evidence question classes."""
 
     return bool(
-        _HAILO_NATIVE_RESEARCH_QUESTION_PATTERN.search(question)
-        or _HAILO_NATIVE_RESEARCH_TOOL_IDS.intersection(selected_tool_ids)
+        _NATIVE_RESEARCH_QUESTION_PATTERN.search(question)
+        or _NATIVE_RESEARCH_TOOL_IDS.intersection(selected_tool_ids)
     )
 
 
@@ -7818,6 +7892,12 @@ class PydanticAIEnvRunner:
             hardware_accelerator=hardware_accelerator,
             base_url=base_url,
         )
+        self.max_inference_concurrency = 1 if uses_local_token_budget else None
+        self._local_inference_semaphore = (
+            threading.BoundedSemaphore(self.max_inference_concurrency)
+            if self.max_inference_concurrency is not None
+            else None
+        )
         self.workspace_model_max_tokens = (
             workspace_model_max_tokens
             if workspace_model_max_tokens is not None
@@ -7908,33 +7988,37 @@ class PydanticAIEnvRunner:
         )
 
     def run(self, prompt: str, *, timeout_seconds: int | None) -> str:
-        self.last_model_usage = {}
-        self.last_model_response_metadata = {}
-        self.last_native_research_trace = {}
-        self.last_agent_run_ledger = {}
-        self.last_agent_recovery = {}
-        self.last_evidence_cards = []
-        self.last_grounding_verification = {}
-        self.last_mser_trace = {}
-        self.last_mser_answer_verification = {}
-        self.last_context_handles = []
-        self.last_context_reads = []
-        self.last_raw_model_output = ""
-        self.last_raw_model_outputs = []
-        self._reset_hailo_request_state()
-        executor = ThreadPoolExecutor(max_workers=1)
-        future = executor.submit(self._run_model, prompt, timeout_seconds)
+        local_slot_acquired = self._acquire_local_inference_slot()
         try:
-            return (
-                future.result()
-                if timeout_seconds is None or timeout_seconds <= 0
-                else future.result(timeout=timeout_seconds)
-            )
-        except TimeoutError as exc:
-            future.cancel()
-            raise TimeoutError("pydantic assistant provider timed out") from exc
+            self.last_model_usage = {}
+            self.last_model_response_metadata = {}
+            self.last_native_research_trace = {}
+            self.last_agent_run_ledger = {}
+            self.last_agent_recovery = {}
+            self.last_evidence_cards = []
+            self.last_grounding_verification = {}
+            self.last_mser_trace = {}
+            self.last_mser_answer_verification = {}
+            self.last_context_handles = []
+            self.last_context_reads = []
+            self.last_raw_model_output = ""
+            self.last_raw_model_outputs = []
+            self._reset_hailo_request_state()
+            executor = ThreadPoolExecutor(max_workers=1)
+            future = executor.submit(self._run_model, prompt, timeout_seconds)
+            try:
+                return (
+                    future.result()
+                    if timeout_seconds is None or timeout_seconds <= 0
+                    else future.result(timeout=timeout_seconds)
+                )
+            except TimeoutError as exc:
+                future.cancel()
+                raise TimeoutError("pydantic assistant provider timed out") from exc
+            finally:
+                executor.shutdown(wait=False, cancel_futures=True)
         finally:
-            executor.shutdown(wait=False, cancel_futures=True)
+            self._release_local_inference_slot(local_slot_acquired)
 
     def run_with_workspace_tools(
         self,
@@ -7943,45 +8027,61 @@ class PydanticAIEnvRunner:
         timeout_seconds: int | None,
         tool_context: ScoutWorkspaceToolContext,
     ) -> str:
-        self.last_model_usage = {}
-        self.last_model_response_metadata = {}
-        self.last_native_research_trace = {}
-        self.last_agent_run_ledger = {}
-        self.last_agent_recovery = {}
-        self.last_evidence_cards = []
-        self.last_grounding_verification = {}
-        self.last_mser_trace = {}
-        self.last_mser_answer_verification = {}
-        self.last_context_handles = []
-        self.last_context_reads = []
-        self.last_raw_model_output = ""
-        self.last_raw_model_outputs = []
-        self._reset_hailo_request_state()
         if not self.workspace_tools_enabled and not self.bounded_agent_runtime_enabled:
             return self.run(prompt, timeout_seconds=timeout_seconds)
-        executor = ThreadPoolExecutor(max_workers=1)
-        run_args: tuple[object, ...] = (
-            prompt,
-            tool_context,
-            timeout_seconds,
-        )
-        if not self.workspace_tools_enabled:
-            run_args = (*run_args, False)
-        future = executor.submit(
-            self._run_model_with_workspace_tools,
-            *run_args,
-        )
+        local_slot_acquired = self._acquire_local_inference_slot()
         try:
-            return (
-                future.result()
-                if timeout_seconds is None or timeout_seconds <= 0
-                else future.result(timeout=timeout_seconds)
+            self.last_model_usage = {}
+            self.last_model_response_metadata = {}
+            self.last_native_research_trace = {}
+            self.last_agent_run_ledger = {}
+            self.last_agent_recovery = {}
+            self.last_evidence_cards = []
+            self.last_grounding_verification = {}
+            self.last_mser_trace = {}
+            self.last_mser_answer_verification = {}
+            self.last_context_handles = []
+            self.last_context_reads = []
+            self.last_raw_model_output = ""
+            self.last_raw_model_outputs = []
+            self._reset_hailo_request_state()
+            executor = ThreadPoolExecutor(max_workers=1)
+            run_args: tuple[object, ...] = (
+                prompt,
+                tool_context,
+                timeout_seconds,
             )
-        except TimeoutError as exc:
-            future.cancel()
-            raise TimeoutError("pydantic assistant provider timed out") from exc
+            if not self.workspace_tools_enabled:
+                run_args = (*run_args, False)
+            future = executor.submit(
+                self._run_model_with_workspace_tools,
+                *run_args,
+            )
+            try:
+                return (
+                    future.result()
+                    if timeout_seconds is None or timeout_seconds <= 0
+                    else future.result(timeout=timeout_seconds)
+                )
+            except TimeoutError as exc:
+                future.cancel()
+                raise TimeoutError("pydantic assistant provider timed out") from exc
+            finally:
+                executor.shutdown(wait=False, cancel_futures=True)
         finally:
-            executor.shutdown(wait=False, cancel_futures=True)
+            self._release_local_inference_slot(local_slot_acquired)
+
+    def _acquire_local_inference_slot(self) -> bool:
+        semaphore = self._local_inference_semaphore
+        if semaphore is None:
+            return False
+        if not semaphore.acquire(blocking=False):
+            raise RuntimeError("local inference busy; stale model request discarded")
+        return True
+
+    def _release_local_inference_slot(self, acquired: bool) -> None:
+        if acquired and self._local_inference_semaphore is not None:
+            self._local_inference_semaphore.release()
 
     def _run_model(
         self,
@@ -8120,7 +8220,11 @@ class PydanticAIEnvRunner:
                 api_key=self.api_key,
             ),
             system_prompt=GLOBAL_ASSISTANT_PROMPT,
-            capabilities=self._native_capabilities(),
+            capabilities=(
+                self._native_capabilities()
+                if _question_can_use_native_research(prompt, [])
+                else []
+            ),
             **pydantic_agent_runtime_kwargs(),
         )
         run_kwargs: dict[str, object] = {
@@ -8204,7 +8308,14 @@ class PydanticAIEnvRunner:
         from pydantic_ai.capabilities import Hooks
         from pydantic_ai.messages import ModelRequest, UserPromptPart
 
-        native_capabilities = self._native_capabilities()
+        native_capabilities = (
+            self._native_capabilities()
+            if _question_can_use_native_research(
+                tool_context.query.question,
+                selected_tool_ids,
+            )
+            else []
+        )
         native_research_tool_names = {
             "scout_web_search",
             "scout_web_fetch",
@@ -9193,6 +9304,7 @@ class PydanticAIEnvRunner:
         )
         run_error: str | None = None
         external_limit_reason: str | None = None
+        deterministic_tool_completion_count = 0
         result: object | None = None
         output = ""
         verification: GroundingVerification | None = None
@@ -9246,6 +9358,77 @@ class PydanticAIEnvRunner:
             missing_expected_operations = sorted(
                 expected_operations - executed_operations
             )
+            if missing_selected_tool_ids:
+                missing_id_set = set(missing_selected_tool_ids)
+                for item in selected_plan_items:
+                    planned_tool_id = str(getattr(item, "tool_id", "") or "")
+                    if planned_tool_id not in missing_id_set:
+                        continue
+                    completed = _execute_typed_read_only_plan_item(
+                        tool_context,
+                        item,
+                    )
+                    if completed is None:
+                        continue
+                    completed_tool_id, completed_result = completed
+                    deterministic_tool_completion_count += 1
+                    completed_name = REGISTERED_WORKSPACE_TOOL_NAMES.get(
+                        completed_tool_id
+                    )
+                    if completed_name:
+                        executed_tool_names.add(completed_name)
+                    completed_card = bounded_runtime.evidence_from_tool_result(
+                        completed_tool_id,
+                        completed_result,
+                    )
+                    evidence_cards.append(completed_card.model_dump(mode="json"))
+                    if completed_tool_id == WORKSPACE_QUERY_TOOL_ID:
+                        operation = str(completed_result.get("operation") or "")
+                        if operation and completed_result.get("status") in {
+                            "success",
+                            "completed",
+                        }:
+                            executed_operations.add(operation)
+                if deterministic_tool_completion_count:
+                    if request_records:
+                        request_records[-1]["tool_call_count"] = int(
+                            request_records[-1].get("tool_call_count") or 0
+                        ) + deterministic_tool_completion_count
+                    executed_tool_ids = [
+                        str(item.get("tool_id"))
+                        for item in tool_context.invocations
+                        if isinstance(item.get("tool_id"), str)
+                    ]
+                    missing_selected_tool_ids = [
+                        tool_id
+                        for tool_id in required_tool_ids
+                        if tool_id not in executed_tool_ids
+                    ]
+                    missing_expected_operations = sorted(
+                        expected_operations - executed_operations
+                    )
+                    if not missing_selected_tool_ids and not missing_expected_operations:
+                        result = agent.run_sync(
+                            "Synthesize the answer from the completed deterministic "
+                            "read-only Scout evidence.",
+                            model_settings=_workspace_request_model_settings(
+                                max_tokens=self.workspace_model_max_tokens,
+                                timeout_seconds=request_timeout_seconds,
+                                workspace_tools=False,
+                            ),
+                            usage_limits=pydantic_usage_limits_from_budget(
+                                bounded_runtime.budget
+                            ),
+                        )
+                        self.last_native_research_trace = _merge_native_research_trace(
+                            self.last_native_research_trace,
+                            pydantic_native_research_trace(result),
+                        )
+                        output = str(pydantic_result_output(result))
+                        validated_cards = [
+                            EvidenceCard.model_validate(card)
+                            for card in evidence_cards
+                        ]
             if missing_selected_tool_ids or missing_expected_operations:
                 run_error = "selected_tools_partially_executed"
                 verification = GroundingVerification(
@@ -9348,7 +9531,7 @@ class PydanticAIEnvRunner:
                             "evidence gap requires fresh public research; do not add "
                             "unsupported claims."
                         ),
-                        capabilities=[repair_hooks, *self._native_capabilities()],
+                        capabilities=[repair_hooks, *native_capabilities],
                         **pydantic_agent_runtime_kwargs(),
                     )
                     remaining_input = (
@@ -9577,9 +9760,14 @@ class PydanticAIEnvRunner:
             "cache_read_tokens": ledger.cache_read_tokens,
             "output_tokens": ledger.output_tokens,
         }
-        self.last_model_response_metadata = (
+        response_metadata = (
             _serialize_pydantic_response_metadata(result) if result is not None else {}
         )
+        if deterministic_tool_completion_count:
+            response_metadata["deterministic_tool_completion_count"] = str(
+                deterministic_tool_completion_count
+            )
+        self.last_model_response_metadata = response_metadata
         return output
 
     def _recover_workspace_external_limit(
@@ -9692,7 +9880,11 @@ class PydanticAIEnvRunner:
                     "concrete evidence gap requires fresh public research; do not "
                     "invent facts."
                 ),
-                capabilities=self._native_capabilities(),
+                capabilities=(
+                    self._native_capabilities()
+                    if _question_can_use_native_research(question, [])
+                    else []
+                ),
                 **pydantic_agent_runtime_kwargs(),
             )
             result = agent.run_sync(
@@ -9845,7 +10037,7 @@ class PydanticAIEnvRunner:
     ) -> list[EvidenceCard]:
         """Collect model-selected public evidence through Pydantic AI capabilities."""
 
-        if not _hailo_question_can_use_native_research(
+        if not _question_can_use_native_research(
             question,
             selected_tool_ids,
         ):
@@ -10658,7 +10850,10 @@ class PydanticAIEnvRunner:
         self._reset_hailo_request_state()
         base_url = _normalize_hailo_ollama_base_url(self.base_url)
         if not _is_local_assistant_base_url(base_url):
-            raise ValueError("hailo_ollama base URL must use an approved loopback host")
+            raise ValueError(
+                "hailo_ollama base URL must use an approved loopback or "
+                "container-bridge endpoint"
+            )
         model_name = _normalize_hailo_ollama_model_name(self.model_name)
         control_prompt = prompt
         if prompt.startswith(
@@ -11649,7 +11844,10 @@ def _run_cloud_grounded_synthesis_retry(
         output = _run_cloud_only_with_optional_tools(
             runner,
             prompt,
-            timeout_seconds=max(1, min(timeout_seconds, 60)),
+            timeout_seconds=_bounded_retry_timeout_seconds(
+                timeout_seconds,
+                cap_seconds=60,
+            ),
             tool_context=None,
         )
     except Exception:
@@ -11884,7 +12082,10 @@ def _run_ai_hat_rain_risk_staged_synthesis(
             try:
                 raw_output = fallback_runner.run(
                     attempt_prompt,
-                    timeout_seconds=max(1, min(timeout_seconds, 50)),
+                    timeout_seconds=_bounded_retry_timeout_seconds(
+                        timeout_seconds,
+                        cap_seconds=50,
+                    ),
                 )
             except Exception as exc:
                 errors.append(
@@ -12052,7 +12253,10 @@ def _run_ai_hat_checkpoint_design_staged_synthesis(
             try:
                 raw_output = fallback_runner.run(
                     attempt_prompt,
-                    timeout_seconds=max(1, min(timeout_seconds, 50)),
+                    timeout_seconds=_bounded_retry_timeout_seconds(
+                        timeout_seconds,
+                        cap_seconds=50,
+                    ),
                 )
             except Exception as exc:
                 errors.append(
@@ -12188,7 +12392,10 @@ def _run_ai_hat_multi_terrain_staged_synthesis(
             try:
                 raw_output = fallback_runner.run(
                     attempt_prompt,
-                    timeout_seconds=max(1, min(timeout_seconds, 50)),
+                    timeout_seconds=_bounded_retry_timeout_seconds(
+                        timeout_seconds,
+                        cap_seconds=50,
+                    ),
                 )
             except Exception as exc:
                 errors.append(
@@ -12306,7 +12513,10 @@ def _run_ai_hat_plus_2_raw_single_pass_eval(
     few_shot_questions_by_call: dict[int, str | None] = {1: None}
     raw_output = fallback_runner.run(
         prompt,
-        timeout_seconds=max(1, min(timeout_seconds, 120)),
+        timeout_seconds=_bounded_retry_timeout_seconds(
+            timeout_seconds,
+            cap_seconds=120,
+        ),
     )
     endpoint_traces_by_call = {1: _hailo_endpoint_response_trace(fallback_runner)}
     original_raw_text = str(raw_output or "").strip()
@@ -13007,7 +13217,10 @@ def _run_ai_hat_plus_2_raw_single_pass_eval(
             )
         reviewed_output = fallback_runner.run(
             review_prompt,
-            timeout_seconds=max(1, min(timeout_seconds, 120)),
+            timeout_seconds=_bounded_retry_timeout_seconds(
+                timeout_seconds,
+                cap_seconds=120,
+            ),
         )
         original_reviewed_text = str(reviewed_output or "").strip()
         reviewed_text = _normalize_ai_hat_plus_2_orthography_only(
@@ -14809,7 +15022,10 @@ def _run_ai_hat_plus_2_grounding_retry(
         try:
             output = fallback_runner.run(
                 prompt,
-                timeout_seconds=max(1, min(timeout_seconds, 70)),
+                timeout_seconds=_bounded_retry_timeout_seconds(
+                    timeout_seconds,
+                    cap_seconds=70,
+                ),
             )
             stripped_output = _normalize_ai_hat_plus_2_local_output(
                 str(output or "").strip()
@@ -14989,7 +15205,10 @@ def _run_ai_hat_plus_2_grounding_retry(
             try:
                 output = fallback_runner.run(
                     repair_prompt[:2200],
-                    timeout_seconds=max(1, min(timeout_seconds, 70)),
+                    timeout_seconds=_bounded_retry_timeout_seconds(
+                        timeout_seconds,
+                        cap_seconds=70,
+                    ),
                 )
                 stripped_output = _normalize_ai_hat_plus_2_local_output(
                     str(output or "").strip()
@@ -15234,7 +15453,10 @@ def _run_ai_hat_plus_2_typed_decision(
     try:
         raw_output = fallback_runner.run(
             prompt,
-            timeout_seconds=max(1, min(timeout_seconds, 30)),
+            timeout_seconds=_bounded_retry_timeout_seconds(
+                timeout_seconds,
+                cap_seconds=30,
+            ),
         )
     except Exception as exc:
         setattr(
@@ -15297,7 +15519,10 @@ def _run_ai_hat_missing_context_action_decision(
     try:
         raw_output = fallback_runner.run(
             prompt,
-            timeout_seconds=max(1, min(timeout_seconds, 30)),
+            timeout_seconds=_bounded_retry_timeout_seconds(
+                timeout_seconds,
+                cap_seconds=30,
+            ),
         )
     except Exception as exc:
         setattr(
@@ -15577,7 +15802,10 @@ def _run_ai_hat_missing_context_staged_synthesis(
             try:
                 raw_output = fallback_runner.run(
                     attempt_prompt,
-                    timeout_seconds=max(1, min(timeout_seconds, 50)),
+                    timeout_seconds=_bounded_retry_timeout_seconds(
+                        timeout_seconds,
+                        cap_seconds=50,
+                    ),
                 )
             except Exception as exc:
                 errors.append(
@@ -15910,7 +16138,10 @@ def _run_ai_hat_traditional_chinese_translation(
     try:
         translated = fallback_runner.run(
             prompt,
-            timeout_seconds=max(1, min(timeout_seconds, 60)),
+            timeout_seconds=_bounded_retry_timeout_seconds(
+                timeout_seconds,
+                cap_seconds=60,
+            ),
         )
     except Exception:
         return None
@@ -17486,13 +17717,20 @@ def _is_local_assistant_base_url(base_url: str | None) -> bool:
         return False
     try:
         parsed = urlsplit(base_url.strip())
+        port = parsed.port
     except ValueError:
         return False
-    return parsed.scheme.lower() == "http" and parsed.hostname in {
-        "127.0.0.1",
-        "localhost",
-        "host.docker.internal",
-    }
+    if parsed.scheme.lower() != "http" or parsed.username or parsed.password:
+        return False
+    if parsed.hostname in {"127.0.0.1", "localhost", "host.docker.internal"}:
+        return True
+    return (
+        parsed.hostname == HAILO_CONTAINER_BRIDGE_HOST
+        and port == HAILO_CONTAINER_BRIDGE_PORT
+        and parsed.path in {"", "/"}
+        and not parsed.query
+        and not parsed.fragment
+    )
 
 
 def _normalize_hailo_ollama_base_url(base_url: str | None) -> str:

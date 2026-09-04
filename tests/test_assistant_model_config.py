@@ -1,3 +1,6 @@
+import hashlib
+import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -9,6 +12,11 @@ from assistant_model_config import (
     AssistantModelConfig,
     AssistantModelProfile,
     load_assistant_model_config,
+)
+from scout.nextgen.assistant_promotion import (
+    AssistantModelProductionPromotionManifest,
+    PromotionEvidenceRef,
+    promotion_manifest_hash,
 )
 
 
@@ -195,3 +203,124 @@ def test_legacy_tool_disable_values_do_not_remove_scout_tools() -> None:
     )
 
     assert profile.workspace_tools_enabled() is True
+
+
+def test_loads_hash_bound_production_promotion_manifest(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "model-promotions" / "gpt-5.6-sol.json"
+    manifest_path.parent.mkdir()
+    manifest = _promotion_manifest()
+    manifest_path.write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
+    config_path = tmp_path / "assistant-models.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "cloud_model": {
+                    "profile": "cloud",
+                    "model_name": "openrouter:openai/gpt-5.6-sol",
+                },
+                "local_model": {
+                    "profile": "local",
+                    "model_name": "hailo:qwen3:1.7b",
+                    "backend": "hailo_ollama",
+                },
+                "production_promotion_manifest_path": (
+                    "model-promotions/gpt-5.6-sol.json"
+                ),
+                "production_promotion_manifest_sha256": hashlib.sha256(
+                    manifest_path.read_bytes()
+                ).hexdigest(),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_assistant_model_config(config_path)
+
+    assert config.production_promotion_manifest_path == (
+        "model-promotions/gpt-5.6-sol.json"
+    )
+    assert config.cloud_model.model_name == manifest.promoted_model_name
+
+
+def test_production_promotion_manifest_binding_fails_closed(tmp_path: Path) -> None:
+    manifest_path = tmp_path / "promotion.json"
+    manifest = _promotion_manifest()
+    manifest_path.write_text(manifest.model_dump_json(indent=2), encoding="utf-8")
+    config_path = tmp_path / "assistant-models.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "cloud_model": {
+                    "profile": "cloud",
+                    "model_name": "openrouter:openai/different-model",
+                },
+                "local_model": {
+                    "profile": "local",
+                    "model_name": "hailo:qwen3:1.7b",
+                },
+                "production_promotion_manifest_path": "promotion.json",
+                "production_promotion_manifest_sha256": hashlib.sha256(
+                    manifest_path.read_bytes()
+                ).hexdigest(),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="promotion manifest model binding mismatch"):
+        load_assistant_model_config(config_path)
+
+
+def test_production_promotion_manifest_fields_must_be_paired() -> None:
+    with pytest.raises(ValidationError, match="must be configured together"):
+        AssistantModelConfig.model_validate(
+            {
+                "cloud_model": {"profile": "cloud", "model_name": "cloud"},
+                "local_model": {"profile": "local", "model_name": "local"},
+                "production_promotion_manifest_path": "promotion.json",
+            }
+        )
+
+
+def _promotion_manifest() -> AssistantModelProductionPromotionManifest:
+    evidence = tuple(
+        PromotionEvidenceRef(
+            evidence_type=evidence_type,
+            path=f"artifacts/{evidence_type}.json",
+            file_sha256=str(index) * 64,
+            report_hash=(str(index + 4) * 64 if index < 3 else None),
+        )
+        for index, evidence_type in enumerate(
+            (
+                "model_runtime_qualification",
+                "workspace_five_mode_benchmark",
+                "assistant_workspace_api_smoke",
+                "assistant_route_smoke",
+            ),
+            start=1,
+        )
+    )
+    provisional = AssistantModelProductionPromotionManifest.model_construct(
+        promotion_id="SCOUT-AI-MODEL-PROMOTION-TEST",
+        generated_at=datetime(2026, 9, 2, tzinfo=UTC),
+        scope="read_only_workspace_assistant",
+        promoted_model_name="openrouter:openai/gpt-5.6-sol",
+        observed_model_id="openai/gpt-5.6-sol",
+        rollback_model_name="deepseek/deepseek-v4-flash-0731",
+        local_fallback_model_name="hailo:qwen3:1.7b",
+        evidence=evidence,
+        model_runtime_qualification_passed=True,
+        workspace_five_mode_benchmark_passed=True,
+        assistant_route_smoke_passed=True,
+        assistant_workspace_api_smoke_passed=True,
+        authority_boundary_passed=True,
+        local_fallback_preserved=True,
+        behavior_probe_promoted=False,
+        production_promotion_allowed=True,
+        candidate_only=True,
+        runtime_safety_truth=False,
+        manifest_hash="0" * 64,
+    )
+    payload = provisional.model_dump(mode="json")
+    payload["manifest_hash"] = promotion_manifest_hash(provisional)
+    return AssistantModelProductionPromotionManifest.model_validate(payload)

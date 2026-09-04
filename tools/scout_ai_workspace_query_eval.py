@@ -29,7 +29,7 @@ ARTIFACT_KIND = "scout_ai_workspace_query_eval"
 ARTIFACT_VERSION = "scout_ai_workspace_query_eval.v1"
 DEFAULT_CASES_PATH = (
     ROOT
-    / "outputs/evals/scout_ai_workspace_grounded_100_questions_20260713_glm52_cases.json"
+    / "tests/fixtures/scout_ai_workspace_grounded_100_questions_20260713_glm52_cases.json"
 )
 DEFAULT_GOLD_PATH = (
     ROOT

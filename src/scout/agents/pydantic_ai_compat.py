@@ -7,6 +7,7 @@ from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
 from scout.agents.model_policy import ModelPolicy
+from scout.pydantic_ai_result import pydantic_result_output as pydantic_result_output
 from scout.schemas.agent_runtime import AgentRunBudget
 
 OPENAI_KEY_ENV = "OPENAI_API_KEY"
@@ -145,10 +146,6 @@ def _narrow_limit(
     if value > maximum:
         raise ValueError(f"{name} cannot exceed the Scout AgentRunBudget")
     return value
-
-
-def pydantic_result_output(result: Any) -> Any:
-    return getattr(result, "output", getattr(result, "data", result))
 
 
 def pydantic_native_research_trace(result: Any) -> dict[str, Any]:

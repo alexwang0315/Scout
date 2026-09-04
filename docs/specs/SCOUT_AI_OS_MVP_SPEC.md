@@ -35,7 +35,7 @@ architecture. The implemented core includes:
 - local notification gateway and runtime tick loop;
 - provider-backed agent facades with a local `FunctionModel` default;
 - model policy, timeout/cost SLA gateway, and external-model fallback handling;
-- Pydantic AI v2.37.0 compatibility helpers;
+- Pydantic AI v2.38.0 compatibility helpers;
 - generated capability sandbox verification;
 - FastAPI routes and focused API/runtime tests;
 - Scout AI read-only workspace tool workflow:
@@ -94,7 +94,7 @@ Build a Raspberry Pi-compatible Scout core that supports:
 
 - Natural-language request intake.
 - Pydantic AI-based workflow compilation.
-- Pydantic AI v2.37.0 model execution with explicit model policy, OpenRouter and
+- Pydantic AI v2.38.0 model execution with explicit model policy, OpenRouter and
   OpenAI-chat provider semantics, and local FunctionModel fallback.
 - Capability search and registry.
 - Execution planning.
@@ -304,8 +304,8 @@ MVP package choices:
 ```text
 python >= 3.12
 pydantic >= 2
-pydantic-ai-slim[duckduckgo,mcp,openai,openrouter] == 2.37.0
-pydantic-evals == 2.37.0
+pydantic-ai-slim[duckduckgo,mcp,openai,openrouter] == 2.38.0
+pydantic-evals == 2.38.0
 fastapi
 uvicorn
 aiosqlite or sqlite3 wrapper
@@ -328,7 +328,14 @@ dbos
 mcp clients
 ```
 
-Pydantic AI v2.37.0 operating rules:
+Pydantic AI v2.38.0 operating rules:
+
+- Slim, Evals and Graph must resolve to the same `2.38.0` family. The September 4
+  upgrade covers local dependencies and compatibility only, not a new hardware
+  deployment or improved answer accuracy. Same-ID capability merges, WebSearch
+  override with WebFetch preserved, interrupted first-tool resumption, and the
+  opt-in finish-reason check are covered by focused regressions. See the
+  [upgrade and failed-case report](../evals/scout-ai-pydantic-238-failed-case-smoke-20260904.md).
 
 - Local September 3 compatibility also covers optional
   `praisonaiagents==1.7.3`. The SDK remains behind the candidate-only Scout
@@ -900,9 +907,9 @@ Output:
 
 - `LearningBundle`
 
-### 7.6 Pydantic AI v2.37.0 Provider Policy
+### 7.6 Pydantic AI v2.38.0 Provider Policy
 
-Scout AI OS uses Pydantic AI v2.37.0 as a typed provider facade, not as an
+Scout AI OS uses Pydantic AI v2.38.0 as a typed provider facade, not as an
 unbounded autonomous runtime.
 
 Provider modes:

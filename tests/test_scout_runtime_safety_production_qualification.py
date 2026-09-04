@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
+from pathlib import Path
 
 import pytest
 
+import scout_runtime_safety_production_qualification as qualification
 from scout_energy_models import aggregate_sha256, sha256_file
 from scout_runtime_safety_production_qualification import (
     PRODUCTION_SAFETY_QUALIFICATION_REQUIRED_CLAIMS,
@@ -2036,6 +2039,8 @@ def test_production_safety_qualification_dossier_cli_writes_ready_report(
             str(manifest_path),
             "--dossier-output",
             str(report_path),
+            "--evaluation-time",
+            "2026-08-28T00:00:00+00:00",
             "--output",
             str(cutover_path),
             "--threat-coverage-output",
@@ -2077,6 +2082,166 @@ def test_production_safety_qualification_dossier_cli_writes_ready_report(
     assert len(list(receipt_dir.glob("*-receipt.json"))) == len(
         REQUIRED_PRODUCTION_SAFETY_QUALIFICATION_AREAS
     )
+
+
+def test_dossier_current_time_rejects_expired_historical_evidence(tmp_path) -> None:
+    manifest = _dossier_manifest_payload(tmp_path)
+    paths = [entry["bundle_path"] for entry in manifest["entries"]]
+    paths.append(manifest["threat_coverage_path"])
+
+    originals = {path: Path(path).read_bytes() for path in paths}
+    historical = run_production_safety_qualification_dossier(manifest)
+    now = datetime(2026, 9, 3, 5, 0, tzinfo=timezone.utc)
+    current = run_production_safety_qualification_dossier(
+        manifest,
+        evaluation_time=now,
+    )
+
+    assert historical.ready_for_production_cutover is True
+    assert historical.evaluation_time is None
+    assert current.evaluation_time == now
+    assert current.status == "blocked_dossier_failed"
+    assert current.ready_for_production_cutover is False
+    assert current.failed_areas == list(REQUIRED_PRODUCTION_SAFETY_QUALIFICATION_AREAS)
+    assert all(row.admission_status == "blocked_stale_required_claims" for row in current.rows)
+    assert current.threat_coverage_ready is False
+    assert current.runtime_safety_truth_mutated_by_dossier is False
+    assert current.outbound_transport_invoked_by_dossier is False
+    assert {path: Path(path).read_bytes() for path in paths} == originals
+
+
+def test_dossier_evaluation_time_is_bound_even_when_both_runs_are_ready(tmp_path) -> None:
+    manifest = _dossier_manifest_payload(tmp_path)
+    first = run_production_safety_qualification_dossier(
+        manifest,
+        evaluation_time=datetime(2026, 8, 28, 0, 0, tzinfo=timezone.utc),
+    )
+    second = run_production_safety_qualification_dossier(
+        manifest,
+        evaluation_time=datetime(2026, 8, 28, 0, 5, tzinfo=timezone.utc),
+    )
+
+    assert first.ready_for_production_cutover is True
+    assert second.ready_for_production_cutover is True
+    assert first.sha256 != second.sha256
+
+
+def test_dossier_current_time_rejects_future_evidence(tmp_path) -> None:
+    report = run_production_safety_qualification_dossier(
+        _dossier_manifest_payload(tmp_path),
+        evaluation_time=datetime(2026, 8, 27, 22, 0, tzinfo=timezone.utc),
+    )
+
+    assert report.ready_for_production_cutover is False
+    assert all(row.status == "load_failed" for row in report.rows)
+    assert report.threat_coverage_ready is False
+
+
+def test_dossier_current_time_rejects_naive_time(tmp_path) -> None:
+    with pytest.raises(ValueError, match="timezone-aware"):
+        run_production_safety_qualification_dossier(
+            _dossier_manifest_payload(tmp_path),
+            evaluation_time=datetime(2026, 8, 28),
+        )
+
+
+def test_dossier_current_time_preserves_source_integrity_gate(tmp_path) -> None:
+    report = run_production_safety_qualification_dossier(
+        _dossier_manifest_payload(tmp_path, mutate_package_area="live_provider_api"),
+        evaluation_time=datetime(2026, 8, 28, 0, 0, tzinfo=timezone.utc),
+    )
+
+    assert report.ready_for_production_cutover is False
+    assert report.failed_areas == ["live_provider_api"]
+    assert report.rows[0].status == "source_integrity_failed"
+
+
+@pytest.mark.parametrize("value", ["", "invalid", "2026-09-03", "2026-09-03T05:00:00"])
+def test_dossier_cli_rejects_invalid_evaluation_time(tmp_path, value, capsys) -> None:
+    with pytest.raises(SystemExit) as exc:
+        main(["--dossier", str(tmp_path / "unused.json"), "--evaluation-time", value])
+
+    assert exc.value.code == 2
+    assert "timezone-aware ISO timestamp" in capsys.readouterr().err
+
+
+def test_cli_rejects_evaluation_time_without_dossier(capsys) -> None:
+    with pytest.raises(SystemExit) as exc:
+        main(["--evaluation-time", "2026-09-03T05:00:00+00:00"])
+
+    assert exc.value.code == 2
+    assert "requires --dossier or dossier-rerun" in capsys.readouterr().err
+
+
+def test_dossier_cli_defaults_to_current_time(tmp_path, monkeypatch) -> None:
+    now = datetime(2026, 9, 3, 5, 0, tzinfo=timezone.utc)
+
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return now
+
+    monkeypatch.setattr(qualification, "datetime", FrozenDateTime)
+    manifest_path = tmp_path / "dossier-manifest.json"
+    manifest_path.write_text(json.dumps(_dossier_manifest_payload(tmp_path)))
+    report_path = tmp_path / "dossier-report.json"
+
+    exit_code = main(
+        ["--dossier", str(manifest_path), "--dossier-output", str(report_path)]
+    )
+    report = load_production_safety_qualification_dossier_report(report_path)
+
+    assert exit_code == 0
+    assert report.evaluation_time == now
+    assert report.ready_for_production_cutover is False
+    assert report.status == "blocked_dossier_failed"
+
+
+def test_dossier_rerun_cli_defaults_to_current_time(tmp_path, monkeypatch) -> None:
+    now = datetime(2026, 9, 3, 5, 0, tzinfo=timezone.utc)
+
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return now
+
+    monkeypatch.setattr(qualification, "datetime", FrozenDateTime)
+    closure_path = tmp_path / "closure.json"
+    write_production_safety_qualification_external_result_remediation_closure_report(
+        _ready_external_result_remediation_closure(tmp_path), closure_path
+    )
+    manifest_path = tmp_path / "dossier-manifest.json"
+    manifest_path.write_text(json.dumps(_dossier_manifest_payload(tmp_path)))
+    report_path = tmp_path / "rerun-report.json"
+
+    exit_code = main(
+        [
+            "--dossier-rerun-closure-report", str(closure_path),
+            "--dossier-rerun-manifest", str(manifest_path),
+            "--dossier-rerun-output", str(report_path),
+        ]
+    )
+    report = load_production_safety_qualification_dossier_rerun_report(report_path)
+
+    assert exit_code == 0
+    assert report.dossier_report.evaluation_time == now
+    assert report.status == "blocked_dossier_rerun_failed"
+    assert report.execution_allowed is False
+
+
+def test_dossier_rerun_propagates_current_time_gate(tmp_path) -> None:
+    closure = _ready_external_result_remediation_closure(tmp_path)
+    now = datetime(2026, 9, 3, 5, 0, tzinfo=timezone.utc)
+    rerun = evaluate_production_safety_qualification_dossier_rerun_intake(
+        closure,
+        _dossier_manifest_payload(tmp_path),
+        evaluation_time=now,
+    )
+
+    assert rerun.status == "blocked_dossier_rerun_failed"
+    assert rerun.dossier_report.evaluation_time == now
+    assert rerun.dossier_report_ready_for_cutover is False
+    assert rerun.execution_allowed is False
 
 
 def test_production_safety_qualification_dossier_blocks_missing_and_failed_entries(
@@ -4457,6 +4622,8 @@ def test_production_safety_qualification_dossier_rerun_cli_writes_report(
             str(manifest_path),
             "--dossier-rerun-output",
             str(output_path),
+            "--evaluation-time",
+            "2026-08-28T00:00:00+00:00",
             "--source-integrity-output-dir",
             str(tmp_path / "cli-rerun-source-integrity"),
             "--admission-output-dir",

@@ -8,6 +8,7 @@ from pathlib import Path
 from pretrip_architecture_preparation import prepare_route_architecture_intelligence
 from tools.verify_pretrip_workspace_spec_alignment import (
     _check_architecture_preparation,
+    _check_imagery_tile,
     _check_layer_preparation,
     _check_layer_projection,
     _check_required_project_refs,
@@ -52,6 +53,42 @@ def test_verifier_direct_execution_bootstraps_repo_import_path(
     )
 
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_imagery_tile_check_accepts_cached_jpeg(monkeypatch) -> None:
+    class FakeResponse:
+        headers = {
+            "content-type": "image/jpeg",
+            "x-scout-tile-source": "local_cache",
+        }
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def read(self) -> bytes:
+            return b"jpeg" * 300
+
+    monkeypatch.setattr(
+        "tools.verify_pretrip_workspace_spec_alignment.urllib.request.urlopen",
+        lambda *_args, **_kwargs: FakeResponse(),
+    )
+    errors: list[str] = []
+
+    result = _check_imagery_tile(
+        "http://127.0.0.1:9099",
+        "project.demo",
+        "14/13694/7087",
+        {},
+        errors,
+        [],
+    )
+
+    assert result["ok"] is True
+    assert result["content_type"] == "image/jpeg"
+    assert not errors
 
 
 def test_runtime_session_layout_contract_rejects_credential_exposure(

@@ -20,6 +20,11 @@ from pydantic import Field, model_validator
 
 from scout.schemas.base import NonEmptyStr, SchemaModel
 
+_HOST_MODEL_PATHS = (
+    Path("/proc/device-tree/model"),
+    Path("/run/scout-host/model"),
+)
+
 
 class ModelRuntimeTier(StrEnum):
     """Logical model role. Agent code should depend on this, not providers."""
@@ -47,15 +52,15 @@ class ModelRuntimeHostKind(StrEnum):
 
 
 def detect_model_runtime_host_kind() -> ModelRuntimeHostKind:
-    """Detect a Raspberry Pi without trusting a caller-provided environment flag."""
+    """Detect a Raspberry Pi from a host-kernel model file, including containers."""
 
-    try:
-        model = Path("/proc/device-tree/model").read_text(
-            encoding="utf-8",
-            errors="ignore",
-        )
-    except OSError:
-        return ModelRuntimeHostKind.GENERIC
+    model = ""
+    for path in _HOST_MODEL_PATHS:
+        try:
+            model = path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        break
     return (
         ModelRuntimeHostKind.RASPBERRY_PI
         if "raspberry pi" in model.lower()

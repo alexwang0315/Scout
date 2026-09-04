@@ -24,13 +24,32 @@ from scout.nextgen.intelligence_gateway import (
     WorkspaceBinding,
     degraded_intelligence_response,
 )
+from scout.nextgen.praison_background_mcp import (
+    BackgroundIntelligenceJobAccess,
+    BackgroundIntelligenceJobSubmission,
+)
+from scout.nextgen.praison_background_queue import (
+    BackgroundIntelligenceJobProgress,
+)
 from scout.schemas.base import SchemaModel
 
 MCP_PROTOCOL_VERSION = "2026-07-28"
 INTELLIGENCE_TOOL_NAME = "scout_analyze_route_terrain_candidate"
 DEEP_RESEARCH_TOOL_NAME = "scout_deep_research_candidate"
+BACKGROUND_SUBMIT_TOOL_NAME = "scout_submit_background_intelligence_candidate"
+BACKGROUND_STATUS_TOOL_NAME = "scout_get_background_intelligence_progress"
+BACKGROUND_CANCEL_TOOL_NAME = "scout_cancel_background_intelligence_candidate"
+BACKGROUND_RESULT_TOOL_NAME = "scout_get_background_intelligence_result"
 INTELLIGENCE_TOOL_NAMES = frozenset(
     {INTELLIGENCE_TOOL_NAME, DEEP_RESEARCH_TOOL_NAME}
+)
+BACKGROUND_INTELLIGENCE_TOOL_NAMES = frozenset(
+    {
+        BACKGROUND_SUBMIT_TOOL_NAME,
+        BACKGROUND_STATUS_TOOL_NAME,
+        BACKGROUND_CANCEL_TOOL_NAME,
+        BACKGROUND_RESULT_TOOL_NAME,
+    }
 )
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 _SHELL_EXECUTABLES = frozenset(
@@ -140,6 +159,12 @@ class IntelligenceMcpStdioClient:
         self._request_id = 0
         self._initialized = False
 
+    def __enter__(self) -> "IntelligenceMcpStdioClient":
+        return self
+
+    def __exit__(self, *args: Any) -> None:
+        self.close()
+
     def initialize(self) -> None:
         with self._lock:
             if self._initialized:
@@ -165,14 +190,82 @@ class IntelligenceMcpStdioClient:
             self._initialized = True
 
     def call(self, request: IntelligenceRequest) -> IntelligenceResponse:
+        payload = self._call_tool(
+            _tool_name_for_request(request),
+            {"request": request.model_dump(mode="json")},
+        )
+        return IntelligenceResponse.model_validate(payload)
+
+    def submit_background(
+        self,
+        request: IntelligenceRequest,
+    ) -> BackgroundIntelligenceJobSubmission:
+        payload = self._call_tool(
+            BACKGROUND_SUBMIT_TOOL_NAME,
+            {"request": request.model_dump(mode="json")},
+        )
+        submission = BackgroundIntelligenceJobSubmission.model_validate(payload)
+        _validate_access_request(submission.access, request)
+        return submission
+
+    def background_progress(
+        self,
+        access: BackgroundIntelligenceJobAccess,
+    ) -> BackgroundIntelligenceJobProgress:
+        payload = self._call_tool(
+            BACKGROUND_STATUS_TOOL_NAME,
+            {"access": access.model_dump(mode="json")},
+        )
+        progress = BackgroundIntelligenceJobProgress.model_validate(payload)
+        _validate_access_progress(access, progress)
+        return progress
+
+    def cancel_background(
+        self,
+        access: BackgroundIntelligenceJobAccess,
+    ) -> BackgroundIntelligenceJobProgress:
+        payload = self._call_tool(
+            BACKGROUND_CANCEL_TOOL_NAME,
+            {"access": access.model_dump(mode="json")},
+        )
+        progress = BackgroundIntelligenceJobProgress.model_validate(payload)
+        _validate_access_progress(access, progress)
+        return progress
+
+    def background_result(
+        self,
+        access: BackgroundIntelligenceJobAccess,
+        *,
+        request: IntelligenceRequest,
+        current_binding: WorkspaceBinding,
+    ) -> IntelligenceResponse:
+        _validate_access_request(access, request)
+        payload = self._call_tool(
+            BACKGROUND_RESULT_TOOL_NAME,
+            {
+                "access": access.model_dump(mode="json"),
+                "current_binding": current_binding.model_dump(mode="json"),
+            },
+        )
+        response = IntelligenceResponse.model_validate(payload)
+        validation = PydanticContractGateway().validate_response(
+            request=request,
+            response=response,
+            current_binding=current_binding,
+        )
+        if not validation.accepted:
+            raise IntelligenceMcpProtocolError(
+                "background intelligence result failed local contract validation: "
+                + "; ".join(validation.reasons)
+            )
+        return response
+
+    def _call_tool(self, name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         with self._lock:
             self.initialize()
             result = self._rpc(
                 "tools/call",
-                {
-                    "name": _tool_name_for_request(request),
-                    "arguments": {"request": request.model_dump(mode="json")},
-                },
+                {"name": name, "arguments": arguments},
             )
         if not isinstance(result, dict):
             raise IntelligenceMcpProtocolError(
@@ -184,7 +277,7 @@ class IntelligenceMcpStdioClient:
             )
         structured = result.get("structuredContent")
         if isinstance(structured, dict):
-            return IntelligenceResponse.model_validate(structured)
+            return structured
         content = result.get("content")
         if isinstance(content, list):
             for item in content:
@@ -193,9 +286,10 @@ class IntelligenceMcpStdioClient:
                         payload = json.loads(str(item.get("text", "")))
                     except json.JSONDecodeError:
                         continue
-                    return IntelligenceResponse.model_validate(payload)
+                    if isinstance(payload, dict):
+                        return payload
         raise IntelligenceMcpProtocolError(
-            "Intelligence MCP result omitted structured candidate output"
+            "Intelligence MCP result omitted structured output"
         )
 
     def close(self) -> None:
@@ -515,7 +609,37 @@ def _tool_name_for_request(request: IntelligenceRequest) -> str:
     return INTELLIGENCE_TOOL_NAME
 
 
+def _validate_access_request(
+    access: BackgroundIntelligenceJobAccess,
+    request: IntelligenceRequest,
+) -> None:
+    if (
+        access.request_id != request.request_id
+        or access.mission_id != request.mission_id
+        or access.workspace_binding != request.workspace_binding
+    ):
+        raise IntelligenceMcpProtocolError(
+            "background intelligence job binding does not match the request"
+        )
+
+
+def _validate_access_progress(
+    access: BackgroundIntelligenceJobAccess,
+    progress: BackgroundIntelligenceJobProgress,
+) -> None:
+    expected = BackgroundIntelligenceJobAccess.from_progress(progress)
+    if access != expected:
+        raise IntelligenceMcpProtocolError(
+            "background intelligence progress binding does not match the job access"
+        )
+
+
 __all__ = [
+    "BACKGROUND_CANCEL_TOOL_NAME",
+    "BACKGROUND_INTELLIGENCE_TOOL_NAMES",
+    "BACKGROUND_RESULT_TOOL_NAME",
+    "BACKGROUND_STATUS_TOOL_NAME",
+    "BACKGROUND_SUBMIT_TOOL_NAME",
     "DEEP_RESEARCH_TOOL_NAME",
     "INTELLIGENCE_TOOL_NAME",
     "INTELLIGENCE_TOOL_NAMES",

@@ -52,6 +52,15 @@ from terrain_route_hypothesis_models import (
     TerrainRouteHypothesisRun,
     TerrainRouteRunStatus,
 )
+from terrain_route_guidance_map_review import (
+    TerrainGuidanceMapReviewCandidate,
+    TerrainGuidanceMapReviewCentroid,
+    TerrainGuidanceMapReviewConstraint,
+    TerrainGuidanceMapReviewCorridorReference,
+    TerrainGuidanceMapReviewPathReference,
+    TerrainGuidanceMapReviewRequest,
+    TerrainGuidanceMapReviewScope,
+)
 
 
 GUIDANCE_WORKSPACE_ROOT_REF = "outputs/spatial/qgis/terrain_route_guidance"
@@ -447,7 +456,9 @@ class TerrainRouteGuidanceWorkspaceService:
             "status": status,
             "guidance_plan": plan.model_dump(mode="json"),
             "feature_index": feature_index.model_dump(mode="json"),
+            "feature_index_sha256": project["terrain_route_guidance_feature_index_sha256"],
             "resolution": resolution.model_dump(mode="json"),
+            "resolution_sha256": project["terrain_route_guidance_resolution_sha256"],
             "review": None,
             "review_sha256": None,
             "guided_execution_ready": False,
@@ -572,7 +583,9 @@ class TerrainRouteGuidanceWorkspaceService:
                 "status": "not_started",
                 "guidance_plan": None,
                 "feature_index": None,
+                "feature_index_sha256": None,
                 "resolution": None,
+                "resolution_sha256": None,
                 "review": None,
                 "guided_execution_ready": False,
                 **_candidate_boundary(),
@@ -608,7 +621,15 @@ class TerrainRouteGuidanceWorkspaceService:
             "feature_index": (
                 feature_index.model_dump(mode="json") if feature_index else None
             ),
+            "feature_index_sha256": (
+                project["terrain_route_guidance_feature_index_sha256"]
+                if feature_index is not None else None
+            ),
             "resolution": resolution.model_dump(mode="json") if resolution else None,
+            "resolution_sha256": (
+                project["terrain_route_guidance_resolution_sha256"]
+                if resolution is not None else None
+            ),
             "review": review.model_dump(mode="json") if review else None,
             "review_sha256": (
                 str(project.get("terrain_route_guidance_review_sha256"))
@@ -634,11 +655,314 @@ class TerrainRouteGuidanceWorkspaceService:
             **_candidate_boundary(),
         }
 
+    def map_review_scope(
+        self,
+        project_root: Path | str,
+        *,
+        project_id: str,
+        reference_hypothesis_id: str,
+        corridor_band_name: str,
+        expected_feature_index_sha256: str | None = None,
+        expected_resolution_sha256: str | None = None,
+    ) -> dict[str, Any]:
+        """Project saved DEM markers without resolving, selecting, or persisting."""
+        request = TerrainGuidanceMapReviewRequest(
+            reference_hypothesis_id=reference_hypothesis_id,
+            corridor_band_name=corridor_band_name,
+            expected_feature_index_sha256=expected_feature_index_sha256,
+            expected_resolution_sha256=expected_resolution_sha256,
+        )
+        root, project = _load_project(project_root, project_id=project_id)
+        plan, feature_index, resolution, parent = _load_map_review_sources(root, project)
+        for name in ("feature_index", "resolution"):
+            expected = getattr(request, f"expected_{name}_sha256")
+            if expected is not None and expected != project[f"terrain_route_guidance_{name}_sha256"]:
+                raise ValueError(f"map review expected {name} hash is stale")
+        source_window = feature_index.search_window
+        scope_window, scope_binding = _load_map_review_reference_window(
+            root, project, project_id=project_id,
+            selection_id=request.reference_hypothesis_id, margin_m=source_window.margin_m,
+        )
+        corridor = _load_candidate_corridor_reference(
+            root, project, project_id=project_id, parent=parent,
+            search_window=scope_window,
+            hypothesis_id=request.reference_hypothesis_id,
+            band_name=request.corridor_band_name,
+        )
+        if corridor is None:
+            raise ValueError("map review corridor reference is unavailable")
+        paths = _load_candidate_path_references(
+            root, project, project_id=project_id, parent=parent,
+            search_window=scope_window,
+            hypothesis_id=request.reference_hypothesis_id,
+            preserve_full_vertices=True,
+        )
+        if (
+            scope_binding.hypothesis_sha256 != corridor.hypothesis_sha256
+            or scope_binding.cache_key != corridor.cache_key
+        ) or any(
+            path.hypothesis_run_sha256 != corridor.hypothesis_sha256
+            or path.cache_key != corridor.cache_key for path in paths
+        ):
+            raise ValueError("map review reference run changed while loading")
+        if self._elevation_sampler is None:
+            raise ValueError("map review corridor sampling is unavailable on this host")
+        tolerance_m = parent["dem_resolution_m"] * math.sqrt(2)
+        start_difference_m = _wgs84_distance_m(
+            (source_window.route_start.x, source_window.route_start.y),
+            (scope_window.route_start.x, scope_window.route_start.y),
+        )
+        destination_difference_m = _wgs84_distance_m(
+            (source_window.route_destination.x, source_window.route_destination.y),
+            (scope_window.route_destination.x, scope_window.route_destination.y),
+        )
+        endpoint_tolerance_m = max(30.0, parent["dem_resolution_m"] * 2.0)
+        constraints, sampled_count = _project_map_review_markers(
+            plan, feature_index, resolution, corridor=corridor, paths=paths,
+            sampler=self._elevation_sampler, saddle_path_tolerance_m=tolerance_m,
+        )
+        projection = TerrainGuidanceMapReviewScope(
+            project_id=project_id, guidance_id=plan.guidance_id, scope_id="0" * 64,
+            reference_hypothesis_id=request.reference_hypothesis_id,
+            band_name=request.corridor_band_name,
+            dem_resolution_m=parent["dem_resolution_m"],
+            saddle_path_tolerance_m=tolerance_m,
+            source_feature_index_sha256=project["terrain_route_guidance_feature_index_sha256"],
+            source_resolution_sha256=project["terrain_route_guidance_resolution_sha256"],
+            endpoint_alignment=(
+                "same_ab" if max(start_difference_m, destination_difference_m) <= endpoint_tolerance_m
+                else "different_review_context"
+            ),
+            source_route_start=source_window.route_start,
+            source_route_destination=source_window.route_destination,
+            scope_route_start=scope_window.route_start,
+            scope_route_destination=scope_window.route_destination,
+            start_difference_m=start_difference_m,
+            destination_difference_m=destination_difference_m,
+            corridor_reference=TerrainGuidanceMapReviewCorridorReference(
+                hypothesis_id=corridor.hypothesis_id,
+                hypothesis_sha256=corridor.hypothesis_sha256,
+                cache_key=corridor.cache_key, band_name=corridor.band_name,
+                raster_ref=corridor.raster_ref, raster_sha256=corridor.raster_sha256,
+                raster_crs=corridor.raster_crs, bbox_wgs84=corridor.bbox_wgs84,
+                parent_manifest_ref=parent["parent_manifest_ref"],
+                parent_manifest_sha256=parent["parent_manifest_sha256"],
+                dem_ref=parent["dem_ref"], dem_sha256=parent["dem_sha256"],
+                sampling_backend=self._elevation_sampler.backend_id,
+                sampled_marker_count=sampled_count,
+            ),
+            reference_paths=tuple(
+                TerrainGuidanceMapReviewPathReference(
+                    selection_id=path.selection_id, hypothesis_id=path.hypothesis_id,
+                    display_id=path.display_id, label=path.label,
+                    alternative_index=path.alternative_index,
+                    hypothesis_run_sha256=path.hypothesis_run_sha256,
+                    cache_key=path.cache_key, path_sha256=path.path_sha256,
+                    path_point_count=path.source_path_point_count,
+                )
+                for path in paths
+            ),
+            constraints=constraints,
+        )
+        _verify_map_review_snapshot(root, project, corridor)
+        scope_id = _sha256_json({
+            "projection_version": "terrain_guidance_map_review_scope.v0_1",
+            **projection.model_dump(mode="json", exclude={"scope_id"}),
+        })
+        return projection.model_copy(update={"scope_id": scope_id}).model_dump(mode="json")
+
     def _now(self) -> datetime:
         value = self._now_factory()
         if value.tzinfo is None:
             return value.replace(tzinfo=timezone.utc)
         return value.astimezone(timezone.utc)
+
+
+def _load_map_review_sources(
+    root: Path, project: dict[str, Any],
+) -> tuple[
+    TerrainNarrativeGuidancePlan, TerrainGuidanceFeatureIndex,
+    TerrainGuidanceResolution, dict[str, Any],
+]:
+    guidance_id = project.get("terrain_route_guidance_id")
+    if not isinstance(guidance_id, str) or not guidance_id:
+        raise ValueError("map review requires an active terrain guidance plan")
+    plan, _ = _load_active_plan(root, project, guidance_id)
+    feature_index = _load_bound_model(
+        root, project, ref_key="terrain_route_guidance_feature_index_ref",
+        hash_key="terrain_route_guidance_feature_index_sha256",
+        model_type=TerrainGuidanceFeatureIndex,
+    )
+    resolution = _load_bound_model(
+        root, project, ref_key="terrain_route_guidance_resolution_ref",
+        hash_key="terrain_route_guidance_resolution_sha256",
+        model_type=TerrainGuidanceResolution,
+    )
+    if not isinstance(feature_index, TerrainGuidanceFeatureIndex) or not isinstance(resolution, TerrainGuidanceResolution):
+        raise TypeError("map review source types are invalid")
+    # Compare the bound raw JSON hashes; legacy models gain defaults on loading.
+    if (
+        plan.guidance_id != guidance_id
+        or resolution.plan_sha256 != project["terrain_route_guidance_plan_sha256"]
+        or resolution.feature_index_sha256 != project["terrain_route_guidance_feature_index_sha256"]
+    ):
+        raise ValueError("map review plan/index/resolution hash chain mismatch")
+    parent = _terrain_parent_binding(root, project, required=True)
+    if parent is None or (
+        feature_index.dem_sha256 != parent["dem_sha256"]
+        or resolution.dem_sha256 != parent["dem_sha256"]
+        or project.get("terrain_route_guidance_dem_sha256") != parent["dem_sha256"]
+        or project.get("terrain_route_guidance_parent_manifest_sha256") != parent["parent_manifest_sha256"]
+        or not math.isfinite(parent["dem_resolution_m"])
+        or feature_index.dem_resolution_m != parent["dem_resolution_m"]
+        or resolution.dem_resolution_m != parent["dem_resolution_m"]
+    ):
+        raise ValueError("map review DEM parent binding changed or is invalid")
+    if feature_index.crs != "EPSG:4326" or feature_index.search_window is None:
+        raise ValueError("map review requires a WGS84 feature index and A/B search window")
+    if [item.constraint_id for item in resolution.constraints] != [item.constraint_id for item in plan.constraints]:
+        raise ValueError("map review resolution constraints differ from the bound plan")
+    feature_ids = {item.feature_id for item in feature_index.features}
+    for constraint, resolved in zip(plan.constraints, resolution.constraints, strict=True):
+        ids = resolved.candidate_feature_ids
+        if (
+            len(ids) != len(set(ids)) or not set(ids).issubset(feature_ids)
+            or resolved.sequence_index != constraint.sequence_index
+            or resolved.required_anchor != constraint.required_anchor
+            or (resolved.status.value == "not_routing_applicable") != (not constraint.routing_applicable)
+        ):
+            raise ValueError("map review resolution references invalid constraint evidence")
+    return plan, feature_index, resolution, parent
+
+
+def _load_map_review_reference_window(
+    root: Path, project: dict[str, Any], *, project_id: str,
+    selection_id: str, margin_m: float,
+) -> tuple[TerrainGuidanceSearchWindow, _CandidateRunBinding]:
+    """Bind display context independently of the immutable source feature window."""
+    binding = _load_candidate_run_binding(
+        root, project, project_id=project_id, selection_id=selection_id,
+    )
+    path = _safe_project_path(root, binding.hypothesis_ref)
+    if _sha256_file(path) != binding.hypothesis_sha256:
+        raise ValueError("map review selected hypothesis hash mismatch")
+    run = TerrainRouteHypothesisRun.model_validate(_read_json(path))
+    if run.status is not TerrainRouteRunStatus.COMPLETED:
+        raise ValueError("map review selected hypothesis is not completed")
+    references = [item for item in run.hypotheses if item.alternative_index <= 3]
+    if not references or any(
+        item.alternative_index > 3
+        or item.path_semantics != "minimum_anisotropic_model_cost_trace"
+        for item in run.hypotheses if item.corridor is not None
+    ):
+        raise ValueError("map review requires an unguided R1-R3 corridor run")
+    reference = references[0]
+    return _build_search_window(
+        reference.start, reference.destination, margin_m=margin_m,
+    ), binding
+
+
+def _project_map_review_markers(
+    plan: TerrainNarrativeGuidancePlan,
+    feature_index: TerrainGuidanceFeatureIndex,
+    resolution: TerrainGuidanceResolution,
+    *,
+    corridor: _CandidateCorridorReference,
+    paths: Sequence[_CandidatePathReference],
+    sampler: TerrainGuidanceElevationSampler,
+    saddle_path_tolerance_m: float,
+) -> tuple[tuple[TerrainGuidanceMapReviewConstraint, ...], int]:
+    candidate_ids = {
+        feature_id for item in resolution.constraints for feature_id in item.candidate_feature_ids
+    }
+    markers = {
+        item.feature_id: TerrainGuidanceMapReviewCentroid(
+            x=item.centroid.x, y=item.centroid.y, crs=item.centroid.crs,
+        )
+        for item in feature_index.features
+        if item.selection_source == "dem_derived" and item.feature_id in candidate_ids
+    }
+    bbox = corridor.bbox_wgs84
+    sampled_ids = [
+        feature_id for feature_id, point in markers.items()
+        if bbox["west"] <= point.x <= bbox["east"]
+        and bbox["south"] <= point.y <= bbox["north"]
+    ]
+    points = tuple((markers[key].x, markers[key].y) for key in sampled_ids)
+    raw_values = sampler.sample(corridor.raster_path, points) if points else ()
+    if not isinstance(raw_values, Sequence) or any(
+        value is not None and (isinstance(value, bool) or not isinstance(value, (int, float)))
+        for value in raw_values
+    ):
+        raise ValueError("map review corridor sampler returned invalid data")
+    values = _validated_dem_samples(raw_values, expected_count=len(points))
+    distances: dict[str, float] = {}
+    for feature_id, value in zip(sampled_ids, values, strict=True):
+        if value is None or value in (0.0, corridor.nodata_value):
+            continue
+        if value != corridor.inside_value:
+            raise ValueError("map review corridor mask returned an unexpected value")
+        point = markers[feature_id]
+        distances[feature_id] = min(
+            _wgs84_point_to_path_distance_m((point.x, point.y), path.coordinates)
+            for path in paths
+        )
+    constraints: list[TerrainGuidanceMapReviewConstraint] = []
+    for constraint, resolved in zip(plan.constraints, resolution.constraints, strict=True):
+        candidates = tuple(
+            TerrainGuidanceMapReviewCandidate(
+                feature_id=feature_id, rank=rank, centroid=markers[feature_id],
+                minimum_path_distance_m=distances[feature_id],
+            )
+            for rank, feature_id in enumerate(resolved.candidate_feature_ids, start=1)
+            if feature_id in distances and (
+                constraint.landform is not TerrainGuidanceLandform.SADDLE
+                or distances[feature_id] <= saddle_path_tolerance_m
+            )
+        )
+        constraints.append(TerrainGuidanceMapReviewConstraint(
+            constraint_id=constraint.constraint_id,
+            total_candidate_count=len(resolved.candidate_feature_ids),
+            visible_candidate_count=len(candidates),
+            excluded_candidate_count=len(resolved.candidate_feature_ids) - len(candidates),
+            status=(
+                "not_routing_applicable" if not constraint.routing_applicable
+                else "candidates" if candidates else "unknown"
+            ),
+            candidates=candidates,
+        ))
+    return tuple(constraints), len(points)
+
+
+def _verify_map_review_snapshot(
+    root: Path, project: dict[str, Any],
+    corridor: _CandidateCorridorReference,
+) -> None:
+    """Detect relevant changes during raster sampling without writing a lock."""
+    _, current = _load_project(root, project_id=project["project_id"])
+    keys = [
+        "terrain_route_guidance_id", "terrain_route_guidance_dem_sha256",
+        "terrain_route_guidance_parent_manifest_sha256", "terrain_feature_manifest_ref",
+        "terrain_dem_route_bbox_raster_ref",
+        *(
+            f"terrain_route_guidance_{name}_{suffix}"
+            for name in ("plan", "narrative", "feature_index", "resolution")
+            for suffix in ("ref", "sha256")
+        ),
+    ]
+    if any(current.get(key) != project.get(key) for key in keys):
+        raise ValueError("map review source bindings changed while sampling")
+    _load_map_review_sources(root, current)
+    binding = _load_candidate_run_binding(
+        root, current, project_id=project["project_id"], selection_id=corridor.hypothesis_id,
+    )
+    if (
+        binding.hypothesis_sha256 != corridor.hypothesis_sha256
+        or binding.cache_key != corridor.cache_key
+        or _sha256_file(_safe_project_path(root, binding.hypothesis_ref)) != corridor.hypothesis_sha256
+        or _sha256_file(corridor.raster_path) != corridor.raster_sha256
+    ):
+        raise ValueError("map review reference hash changed while sampling")
 
 
 def build_guided_route_cache_binding(
@@ -1151,6 +1475,7 @@ def _load_candidate_path_references(
     parent: dict[str, Any],
     search_window: TerrainGuidanceSearchWindow,
     hypothesis_id: str,
+    preserve_full_vertices: bool = False,
 ) -> tuple[_CandidatePathReference, ...]:
     binding = _load_candidate_run_binding(
         project_root,
@@ -1171,6 +1496,14 @@ def _load_candidate_path_references(
             continue
         if hypothesis.path_semantics != "minimum_anisotropic_model_cost_trace":
             raise ValueError("candidate path reference requires an unguided R1-R3 trace")
+        if preserve_full_vertices and (
+            hypothesis.start.crs != "EPSG:4326"
+            or hypothesis.destination.crs != "EPSG:4326"
+            or hypothesis.provenance.dem_crs.strip().upper() != str(parent["dem_crs"]).strip().upper()
+            or hypothesis.dem_resolution_m != parent["dem_resolution_m"]
+            or hypothesis.provenance.dem_resolution_m != parent["dem_resolution_m"]
+        ):
+            raise ValueError("candidate path CRS or DEM resolution differs from active terrain evidence")
         if hypothesis.provenance.cache_key != binding.cache_key:
             raise ValueError("candidate path cache binding mismatch")
         parent_source_hashes = hypothesis.provenance.processing_manifest.get(
@@ -1182,6 +1515,8 @@ def _load_candidate_path_references(
             and parent_source_hashes.get(parent["parent_manifest_ref"])
             == parent["parent_manifest_sha256"]
         )
+        if preserve_full_vertices and parent_source_hashes is not None and not parent_hash_chain_matches:
+            raise ValueError("candidate path DEM parent hash chain differs from active terrain evidence")
         if (
             hypothesis.provenance.dem_sha256 != parent["dem_sha256"]
             and not parent_hash_chain_matches
@@ -1208,12 +1543,20 @@ def _load_candidate_path_references(
         if hypothesis.best_path.crs.strip().upper() != "EPSG:4326":
             raise ValueError("candidate path review scope requires EPSG:4326 geometry")
         source_coordinates = tuple(hypothesis.best_path.coordinates)
+        if preserve_full_vertices and any(
+            not (-180 <= longitude <= 180 and -90 <= latitude <= 90)
+            for longitude, latitude in source_coordinates
+        ):
+            raise ValueError("candidate path contains invalid WGS84 coordinates")
         path_payload = {
             "type": "LineString",
             "coordinates": source_coordinates,
             "crs": "EPSG:4326",
         }
-        coordinates = _bounded_reference_path_points(source_coordinates)
+        coordinates = (
+            source_coordinates if preserve_full_vertices
+            else _bounded_reference_path_points(source_coordinates)
+        )
         references.append(
             _CandidatePathReference(
                 selection_id=binding.selection_id,

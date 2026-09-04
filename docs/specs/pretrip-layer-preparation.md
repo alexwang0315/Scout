@@ -1,6 +1,6 @@
 # Pretrip Layer Preparation
 
-Last updated: 2026-08-26
+Last updated: 2026-08-28
 
 ## Objective
 
@@ -39,10 +39,14 @@ canonical handoff is:
 ```text
 validated Historical GPX Importer route bundle
   -> route identity/corridor locked for this target
+  -> clone-owned P0/P1 route-context source handoff
   -> all requested preparation-backed layers
+  -> explicit connected route-context source refresh
   -> route-scoped raster/WMTS cache policy
   -> local OSM PBF route extract and MapLibre GeoJSON
-  -> terrain/Navigation/risk/post-layer enrichments
+  -> Scout-owned QGIS worker and allowlisted QGIS/GRASS/GDAL terrain stack
+  -> Terrain RGB visualization packaging and Navigation projection
+  -> risk/post-layer enrichments
   -> validation, clone receipt, and browser-visible workspace
 ```
 
@@ -55,9 +59,33 @@ switches:
 ```text
 run_post_layer_enrichments = true
 run_map_preparation_spec_artifacts = true
+run_qgis_terrain_workflow = true
+qgis_status_retry_attempts = 3
+qgis_status_retry_interval_s = 1
+qgis_terrain_analysis_margin_m = 250
+qgis_route_contact_distance_m = 10
+qgis_terrain_workflow_timeout_s = 1800
 seed_imagery_cache = true when explicit connected fetch is authorized
 prepare_cwa_imagery = true when requested by the operator/profile
 ```
+
+DEM storage coverage is distinct from the terrain-feature analysis margin.
+After the terrain parent is available, preparation must materialize a
+workspace-owned regional DEM under `outputs/terrain/dem/<identity>/`. Its
+default coverage is the complete route bbox plus 5,000 m on every side and
+two native grid cells for outward alignment. This covers the current maximum
+TRH analysis margin for endpoints inside the route bbox; it does not expand the
+semantic route corridor or change the 250 m feature-stack analysis scope.
+
+The `workspace_terrain_dem` preparation receipt records status and output refs.
+The GeoTIFF, manifest, hashes, native grid inventory and any CRS evidence
+snapshot belong to the workspace. TRH prefers this prepared raster and then
+clips only its requested A/B extent. Missing, stale or insufficient prepared
+coverage fails closed before worker submission; it must not silently shrink the
+analysis margin or reuse the old GPX crop. See
+`scout-terrain-route-hypothesis.md` for the backfill entrypoint and provenance
+checks. Legacy workspaces without the new manifest retain their earlier source
+selection until explicitly prepared.
 
 The target should open with route-derived data already materialized. This
 includes, where source evidence supports it, CP/segments, MCP, Overpass/PBF
@@ -68,6 +96,19 @@ and raster manifests/cache status. A route may legitimately produce fewer
 features than Chilai Nanhua, but a missing mechanism or skipped preparation
 stage must be reported as blocked/degraded rather than silently appearing as an
 empty ready layer.
+
+Before preparation starts, Dashboard Clone must inspect the source workspace's
+declared P0/P1 web evidence and write a target-owned
+`inputs/route_context_source_records.json` handoff. The handoff contains only
+validated public HTTP(S) source records, the source artifact hash, and
+candidate-only boundaries; it does not embed fetched payloads or permit source
+workspace mutation. Connected preparation consumes that handoff before route
+context packaging, records whether live network calls were made, and writes
+`outputs/layers/normalized/web_case_evidence.json`. Raster/OCR context
+collection must then write `outputs/briefings/route_context_briefing.html` in
+the same preparation generation and expose its ref in both the project and
+preparation manifest. A full connected Clone is not accepted when these inputs
+exist but only inherited/cache-only route context is present.
 
 Importer-complete plus later manual repair is not the normal completion model.
 A preparation failure leaves the clone incomplete. Fix the dependency or
@@ -88,17 +129,22 @@ scout-dashboard --host 127.0.0.1 --port 9099 \
 
 Setup is explicit and idempotent. It installs the `pretrip-workstation` extra
 into `./venv`, records the `pyproject.toml` hash, and creates persistent
-`~/.local/bin/scout-dashboard`, `~/.local/bin/osmium`, and
-`./venv/bin/osmium` bindings. When the marker and imports are unchanged, setup
-must skip package installation. The launch command never installs packages; it
-puts `./venv/bin` first on process PATH and fails clearly when the runtime or
-CLI binding is incomplete.
+`~/.local/bin/scout-dashboard`, `~/.local/bin/osmium`,
+`~/.local/bin/grass`, `./venv/bin/osmium`, and `./venv/bin/grass` bindings.
+GRASS lives in the fixed
+`~/.local/share/scout-tools/micromamba/envs/scout-grass` environment; setup
+creates that environment once when absent and otherwise reuses it. When the
+marker and imports are unchanged, setup must skip Python package installation.
+The launch command never installs packages; it puts `./venv/bin` first on
+process PATH and fails clearly when the runtime or CLI binding is incomplete.
 
 Local PBF preparation requires both capabilities to be discoverable by the
 running preparation process:
 
 - Python `osmium` importable from the active Dashboard interpreter;
 - the `osmium` CLI executable reachable through that process PATH.
+- the `grass` CLI executable reachable through that same process PATH whenever
+  QGIS terrain preparation is requested.
 
 An installation in a legacy repository venv or isolated micromamba environment
 does not count unless it is deliberately bound into this runtime. The CLI alone
@@ -181,7 +227,7 @@ The accepted map-source split is:
 | Rudy+TW (`rudy-twmap`) | Yes, for the route bbox and OCR when requested. | Yes, with cache-first display and explicit refresh. | Authoritative hiking rendered-map evidence（登山圖面證據） for mileage K, stable POI, trail labels, rendered icons, and route-context OCR. |
 | Rudy without TW overlay (`rudy`) | Optional route-bbox cache. | Yes. | Optional hiking basemap/reference. It must not be mixed with the Rudy+TW OCR evidence source unless explicitly selected as that evidence source. |
 | NLSC WMTS layers | Optional bounded workspace cache for selected/required layers. | Yes, with cache-first display and explicit refresh. | Basemap/context such as `EMAP5`, `PHOTO_MIX`, `B5000`, `TOPO25K`, `MOI_HILLSHADE`, `GeoSensitive2`. |
-| Historical map themes (`historical-map`) | Yes for the selected preparation theme; other themes are fetched on demand. | Yes, through a theme selector and workspace-cache refresh action. | Candidate-only historical comparison. Theme identity, provider, year, bbox, zooms, hashes, and attribution stay explicit. |
+| Historical map themes (`historical-map`) | Yes. A full preparation seeds every allowlisted theme into its own route-scoped cache namespace; provider no-coverage remains typed per theme. | Yes, through a theme selector and workspace-cache refresh action. | Candidate-only historical comparison. Theme identity, provider, year, bbox, zooms, hashes, and attribution stay explicit. |
 | OSM raster plus local PBF vector | Optional bounded raster cache; required local PBF route extract when configured. | Yes. | Raster provides visual context; PBF/Overpass provides structured features. Neither uses tile OCR as structured evidence. |
 | TWMap/other public WMTS/XYZ | Optional bounded workspace cache when selected and provider policy permits. | Yes, with explicit refresh. | Candidate-only visual reference; never route-safety truth. |
 | DEM/DTM, risk, CWA, GEE | Not map-tile cache. | Yes as Scout evidence overlays. | Workspace evidence artifacts and derived visualizations, not basemap tile providers. |
@@ -194,12 +240,12 @@ records must include project id, control layer id, source id/theme id, z/x/y,
 route bbox, zoom range, fetch timestamp, TTL, response/content type, SHA-256,
 attribution, and failure state. Runtime display reads the workspace cache first.
 
-The dated Dashboard Clone baseline currently has eight cache-manifest entries:
-`imagery`, `rudy`, `rudy-twmap`, `relief`, `geology`, `topo-5k`, `forest`, and
-one selected historical-theme cache id such as `historical-fandi-1916`. A
-different selected historical theme replaces that final id; it does not reuse
-its directory. Any additional raster control enabled by default or requested
-for opening must join the profile cache set when provider policy permits.
+The full Dashboard Clone baseline has 22 cache-manifest entries: `imagery`,
+`rudy`, `rudy-twmap`, `relief`, `geology`, `topo-5k`, `forest`, plus all 15
+allowlisted historical-theme cache ids. Historical themes never replace one
+another and never reuse another theme's directory. Any additional raster
+control enabled by default or requested for opening must join the profile cache
+set when provider policy permits.
 Sources that prohibit caching must be off by default or visibly marked as
 requiring a connected runtime fetch, never shown as cache-ready.
 
@@ -536,15 +582,14 @@ OCR, or older handoff packages.
 ### Historical Map Theme Preparation
 
 `historical-map` is one auxiliary presentation control backed by an allowlisted
-theme catalog, not one canonical safety layer per year. Preparation must choose
-an explicit theme and seed enough valid tiles for the route bbox and configured
-initial zooms into the target workspace before the clone is complete. When the
-operator does not choose a theme, the profile may select a documented
-coverage-tested default. For the Dongqing Batongguan corridor, the current
-tested default is `sinica_jm50k_1916` in the
-`historical-fandi-1916` cache namespace; a nominally older theme such as the
-1904 fortress map must not be selected merely by date when it returns blank
-coverage for the route.
+theme catalog, not one canonical safety layer per year. Full preparation must
+plan and seed every catalog theme for the route bbox and configured initial
+zooms into an independent target-workspace namespace. The selected/default
+theme controls initial display only; it does not limit preparation. For the
+Dongqing Batongguan corridor, `sinica_jm50k_1916` remains the coverage-tested
+initial display default in `historical-fandi-1916`, while the other 14 themes
+are already available for cache-first switching when their providers return
+route coverage.
 
 Every historical theme must have a distinct cache layer/source namespace.
 Changing `source_id`, year, or provider while reusing another theme's cache
@@ -553,6 +598,13 @@ theme manifest must record theme id, display name, provider, map year, source
 URL/template kind, route bbox, zoom range, fetched and valid tile counts,
 transparent/blank tile count, timestamps, TTL, per-tile hashes, attribution,
 candidate boundary, and cache status.
+
+HTTP 404/410, a fully transparent image, or an effectively blank white provider
+tile is `provider_no_coverage`, not a successful cached tile. Preparation must
+not retry permanent 404/410 responses and must persist usable, blank, no-
+coverage, and failed counts independently. A theme with no usable tile reports
+`seed_no_coverage`; this does not fail unrelated themes and must not be reported
+as ready.
 
 The page loads the selected historical theme cache-first and remains network
 quiet until the operator uses the selected-theme refresh action. That action
@@ -745,12 +797,180 @@ full-route DEM/DTM GeoTIFF + Golden Route
   -> /admin/pretrip display
 ```
 
+### Preparation-Owned QGIS/GRASS Stage
+
+`terrain_feature_stack.v1` is a blocking stage of the same preparation job. It
+is not a Navigation-page backfill and must run after the base layer and
+map-preparation artifacts have been persisted, but before Terrain RGB packaging
+and the final Navigation projection:
+
+```text
+base layer manifests and source refs
+  -> outputs/spatial/qgis/map_preparation_status.json
+  -> Scout-owned QGIS worker: terrain_feature_stack.v1
+  -> validate typed artifacts, hashes, authority, processor, extent, and grid
+  -> activate QGIS terrain refs in project.json
+  -> Terrain RGB visualization packaging only
+  -> navigation_terrain_intelligence.json
+```
+
+The stage is enabled by default when `terrain` is requested and both
+`run_post_layer_enrichments` and `run_map_preparation_spec_artifacts` are true.
+Its request controls are:
+
+```text
+run_qgis_terrain_workflow = true
+qgis_terrain_analysis_margin_m = 250
+qgis_route_contact_distance_m = 10
+qgis_terrain_workflow_timeout_s = 1800
+qgis_terrain_poll_interval_s = 0.5
+qgis_requested_by = map_preparation
+```
+
+The CLI exposes the corresponding
+`--disable-qgis-terrain-workflow`,
+`--qgis-status-retry-attempts`,
+`--qgis-status-retry-interval-s`,
+`--qgis-terrain-analysis-margin-m`,
+`--qgis-route-contact-distance-m`,
+`--qgis-terrain-workflow-timeout-s`, and
+`--qgis-terrain-poll-interval-s` controls. Disabling the stage is an explicit
+diagnostic mode, not a successful terrain preparation.
+
+QGIS application/plugin health is a live desktop bridge check and can be
+briefly delayed while the workstation is busy. Preparation retries only a
+typed, retryable `unavailable`, `degraded`, or `error` preflight, at most three
+times by default. Disabled, not configured, non-retryable, and policy failures
+do not retry. The final receipt records `preflight_attempt_count`; exhausting
+the bounded attempts remains fail-closed and never selects a Python terrain
+processor. The Dashboard runtime allows 30 seconds for each worker HTTP status
+response so a transient GUI scheduling delay does not permanently degrade an
+otherwise valid new workspace.
+
+The QGIS worker must receive the importer's exact filtered Golden GPX ref and
+SHA-256. When that authoritative ref is declared, a missing file or hash
+mismatch fails closed; the worker must not silently substitute the original
+source GPX, a source-manifest route, checkpoint points, or another workspace's
+route. Checkpoint geometry is allowed only for legacy workspaces that do not
+declare an authoritative filtered Golden GPX.
+
+Every terrain raster and morphology operation runs on one complete prepared DEM
+rectangle. For resolution `(rx, ry)`, the manifest must satisfy the grid
+alignment relationship `xmax - xmin == width * rx` and
+`ymax - ymin == height * ry` within the declared numeric tolerance. Elevation
+tint, hillshade, slope shading, contours, geomorphon, flow accumulation, and
+their rasterized/vectorized derivatives must retain the same CRS, rectangle,
+and source grid. A Golden Route ribbon is not an analysis extent.
+
+The worker exports typed and hashed full-rectangle artifacts for elevation,
+hillshade, slope, contours, ridge candidates, valley candidates, and
+flow-channel candidates. Dashboard filtering is a projection only:
+
+- `RECTANGLE_ALL` exposes all candidates from the immutable rectangle artifact;
+- `ROUTE_CONNECTED` retains a complete candidate geometry when any of its
+  segments intersects or comes within 10 m of any Golden Route segment;
+- the full outward geometry remains intact after contact and the rectangle
+  artifact is never clipped or rewritten;
+- testing only a candidate line's starting point is forbidden.
+
+The preparation receipt persists the stage state even on failure. Successful
+activation requires all of the following:
+
+```ini
+status=completed
+actual_processor=qgis_processing_grass
+fallback_used=false
+python_dtm_processing_used=false
+candidate_only=true
+runtime_safety_truth=false
+operational=false
+adds_source_resolution=false
+```
+
+Disabled, not-configured, unavailable, missing-algorithm, cancelled, timeout,
+artifact-validation, or processor failures remain typed non-ready states. A
+fixture/synthetic run is persisted as `fixture_non_runtime` and is never
+activated. Any failed activation restores the previous terrain refs. Terrain
+RGB then remains `awaiting_qgis_grass_processor`, and no Python bitmap, route
+sample, risk ribbon, or synthetic raster may make terrain ready. Navigation's
+non-GIS projection and the rest of Dashboard remain available with the blocker
+shown explicitly.
+
+Weather/CWA/GEE and geology provider evidence stay refreshable after this
+one-time terrain preparation. A connected refresh may update their current
+workspace manifests, but it does not rerun or silently replace the QGIS/GRASS
+terrain generation.
+
 The manifest must identify the actual standard processor and algorithms, source
 resolution, rectangle extent, parameters, and whether raw DEM/DTM payloads were
 embedded. `standard_processor_completed=true`, `fallback_used=false`, and
 `python_dtm_processing_used=false` are required before a standard terrain
 visualization becomes the active project ref. No Python DTM analysis fallback is
 authorized by this contract.
+
+This prohibition also covers terrain-dependent route-risk preparation. The
+normal layer-preparation path must not call Scout Risk's Python
+`build_dem_from_dtm_coverage()` or `compute_teii_from_dem()` to manufacture
+missing risk-score, ribbon, heatmap, or delta artifacts before QGIS runs. When
+those artifacts are absent, preparation records
+`awaiting_qgis_grass_processor`, `actual_processor=not_run`,
+`fallback_used=false`, and `python_dtm_processing_used=false`. If the approved
+QGIS/GRASS terrain workflow succeeds, the same preparation transaction must run
+`scout_qgis_grass_risk_profile_adapter.v1`. The adapter consumes only the
+hash-verified `terrain_feature_route_samples` artifact produced by the current
+`terrain_feature_stack.v1` run, including QGIS-sampled elevation, slope,
+geomorphon, and flow-accumulation values. It must not open the DEM, calculate a
+Python slope/TEII surface, or select a Python terrain fallback.
+
+The adapter applies the explicit candidate profile
+`qgis_grass_terrain_candidate_score.v1`, projects/package-repeats those sparse
+QGIS values along the existing Overpass route-base progress, and records
+`adds_source_resolution=false`. Repeated values are display/contract packaging,
+not interpolated terrain analysis. It produces route-risk, risk-score points,
+risk ribbon, calibrated heatmap, and delta artifacts before dependent boss-
+point synthesis begins. Successful metadata must state:
+
+```ini
+actual_processor=qgis_processing_grass
+adapter=scout_qgis_grass_risk_profile_adapter.v1
+fallback_used=false
+python_dtm_processing_used=false
+candidate_only=true
+runtime_safety_truth=false
+operational=false
+adds_source_resolution=false
+```
+
+Missing/malformed artifacts, a hash mismatch, fixture/synthetic evidence,
+missing required slope values, or an adapter exception fails closed as typed
+`qgis_grass_risk_profile_adapter_failed` (or a more specific typed input/
+contract reason). It must not remain falsely "awaiting QGIS", publish partial
+risk outputs, or invoke the legacy Python terrain engine. Candidate generation
+does not waive later human review and does not make the scores operational or
+safety truth.
+
+The post-QGIS ordering is part of the contract, not an implementation detail:
+
+1. activate the completed `terrain_feature_stack.v1` receipt;
+2. run the risk adapter against that exact `workflow_run_id` and artifact hash;
+3. rebuild `terrain_risk_candidates.json` from the verified QGIS/GRASS risk
+   points before any Navigation projection is compiled;
+4. run dependent Boss/route-pressure synthesis; and
+5. compile the persisted Navigation projection from the refreshed artifacts.
+
+A new terrain workflow id invalidates the prior adapter receipt and forces this
+sequence to run again. Reusing a stale risk artifact because its path still
+exists is forbidden. Dashboard Navigation must request the latest successful
+`terrain_feature_stack.v1` explicitly; an unfiltered "latest QGIS workflow"
+query can select a later auxiliary failed workflow and incorrectly project an
+empty ridge/valley/stream view.
+
+Workstation startup must preserve this path across restarts. The Dashboard
+launcher reads the worker URL and an owner-only token file, enables the local
+QGIS endpoint when that token exists, and never prints the token. The QGIS
+worker launcher uses the same token and loopback endpoint. Missing bridge
+connectivity or timeout fails closed; recovery restarts QGIS plus the worker
+and reruns preparation rather than publishing a synthetic terrain substitute.
 
 Mapbox Terrain RGB generation is a separate deterministic display-packaging
 step. It may resample supported DEM values for encoding, but must record
@@ -1050,3 +1270,7 @@ second workspace are incident history, not the current procedure.
   stores, provider send queues, or final `MissionGraph` artifacts.
 - `/admin/pretrip` can render layer readiness from the projection output, and
   `/admin/debug` can show the job timeline as read-only projection events.
+- Repository and selected-workspace invocations of
+  `tools/verify_scout_layer_contract.py` both pass. `weather-api` keeps the
+  contract rank 80 above cached CWA overlays; UI-local rank drift is a failed
+  preparation acceptance gate.

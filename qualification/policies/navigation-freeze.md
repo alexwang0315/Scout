@@ -1,7 +1,31 @@
 # Navigation Change Freeze
 
-Status: **FROZEN / USER APPROVAL REQUIRED**
+Status: **TEMPORARILY SUSPENDED / REPORT ONLY**
 Effective: 2026-09-04
+
+## User-Directed Suspension
+
+On 2026-09-04 the user explicitly requested temporary cancellation of the
+`NAVIGATION_APPROVAL_REQUIRED` blocker. Until the user explicitly reinstates the
+freeze, its per-change approval and shared-file restrictions are inactive.
+Scoped local Dashboard work proceeds under Construction Mode. The original
+freeze scope and approval protocol below are retained for restoration; they do
+not require another approval prompt during this suspension.
+
+The guard defaults to report-only mode and returns
+`NAVIGATION_FREEZE_SUSPENDED` with exit code 0 when inspection succeeds, including
+when protected files have changed. It still lists every inventoried difference,
+keeps `approval_granted=false` and `runtime_safety_truth=false`, and never updates
+the original baseline. Invalid baselines or unreadable files still return errors.
+`--enforce` runs a strict, read-only comparison for verification without restoring
+the policy. When the user requests restoration, set `ENFORCE_FREEZE` back to
+`True` and restore the active status in this policy and `AGENTS.md`; review the
+accumulated changes against the preserved baseline.
+
+Hard safety boundaries and explicit authorization for external or destructive
+actions remain active. Suspension is not production or runtime qualification.
+
+## Original Freeze Policy (Inactive During Suspension)
 
 The user requested that Dashboard Navigation be fixed at its current behavior,
 that work on other pages must not change it, and that Navigation-related changes
@@ -72,6 +96,20 @@ changing runtime configuration, restarting workers, regenerating workspace DEM,
 TRH or R4 results, rewriting GPX, or replacing a live projection. Existing user
 operations within Navigation remain usable; the freeze does not disable the UI.
 
+### Standing Local-Venv Authorization
+
+On 2026-09-04 the user explicitly authorized future local venv upgrades without
+repeated approval requests. Installing or upgrading packages in the local venv,
+and running focused compatibility checks, is not by itself a Navigation page
+change. Record before/after versions and preserve unrelated installed packages.
+
+This standing authorization does not permit changes to Navigation code, shared
+GIS/workspace contracts, worker or server restarts, hardware deployment, or the
+freeze baseline/guard. Tracked dependency declaration edits stay within the
+scope of the requested upgrade. Approved declaration changes may still appear
+in the read-only source-drift report; record their approval rather than updating
+the baseline or weakening the check to hide them.
+
 ## Local And CI Check
 
 ```bash
@@ -83,11 +121,12 @@ The standalone guard needs only Python's standard library. It reads source
 files and the committed baseline, does not import Scout runtime modules, and
 never starts a server, runs GIS, accesses private workspaces, writes a baseline,
 restores files, or grants approval. Missing/invalid baselines, unreadable files,
-symlinks, changed or deleted protected files and new files matching the protected
-patterns fail closed with a nonzero exit code.
+and symlinks fail closed with a nonzero exit code. Changed or deleted protected
+files and new files matching the protected patterns return a nonzero exit code
+only in strict mode (`--enforce`) while the freeze is suspended.
 
-`FROZEN_UNCHANGED` means only that inventoried source bytes are unchanged.
-`NAVIGATION_APPROVAL_REQUIRED` reports drift for human review. It does not infer
+In strict mode, `FROZEN_UNCHANGED` means only that inventoried source bytes are
+unchanged. `NAVIGATION_APPROVAL_REQUIRED` reports drift for human review. It does not infer
 whether the user already approved it, and never silently absorbs it. The baseline
 contains hashes only, not workspace data, GPX coordinates or credentials.
 

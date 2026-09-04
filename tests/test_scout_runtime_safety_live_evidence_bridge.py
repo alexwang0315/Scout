@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -45,6 +46,13 @@ def _reviewed_after(path) -> datetime:
     return observed_at + timedelta(seconds=1)
 
 
+def _write_test_evidence(path, report, text, *, encoding="utf-8") -> None:
+    path.write_text(text, encoding=encoding)
+    # Align fixture evidence with its fixed-time replay, not the host clock.
+    timestamp = report.observed_at.timestamp()
+    os.utime(path, (timestamp, timestamp))
+
+
 def _report(*, execution_host_ref: str):
     config = CwaLiveQualificationConfig(
         source_path="prod://qualification/cwa/live-run-001",
@@ -73,8 +81,8 @@ def _report(*, execution_host_ref: str):
 def test_cwa_live_evidence_bridge_preserves_credential_rotation_gap(tmp_path) -> None:
     report = _report(execution_host_ref="pi://scout/runtime")
     test_evidence = tmp_path / "cwa-live.junit.xml"
-    test_evidence.write_text("<testsuite tests='6' failures='0' />\n", encoding="utf-8")
-    reviewed_at = datetime.now(timezone.utc) + timedelta(minutes=1)
+    _write_test_evidence(test_evidence, report, "<testsuite tests='6' failures='0' />\n")
+    reviewed_at = _reviewed_after(test_evidence)
 
     paths_by_area = write_cwa_live_evidence_bundles(
         report,
@@ -120,7 +128,7 @@ def test_cwa_live_evidence_bridge_preserves_credential_rotation_gap(tmp_path) ->
 def test_cwa_live_evidence_bridge_rejects_non_pi_execution_report(tmp_path) -> None:
     report = _report(execution_host_ref="prod://runtime/macos-qualification-host")
     test_evidence = tmp_path / "cwa-live.junit.xml"
-    test_evidence.write_text("<testsuite tests='6' failures='0' />\n", encoding="utf-8")
+    _write_test_evidence(test_evidence, report, "<testsuite tests='6' failures='0' />\n")
 
     with pytest.raises(ValueError, match="Pi execution evidence"):
         write_cwa_live_evidence_bundles(
@@ -135,10 +143,32 @@ def test_cwa_live_evidence_bridge_rejects_non_pi_execution_report(tmp_path) -> N
         )
 
 
+def test_fresh_test_run_does_not_refresh_old_live_observations(tmp_path) -> None:
+    report = _report(execution_host_ref="pi://scout/runtime")
+    test_evidence = tmp_path / "fresh-tests.junit.xml"
+    test_evidence.write_text("<testsuite tests='6' failures='0' />\n", encoding="utf-8")
+    paths = write_cwa_live_evidence_bundles(
+        report,
+        test_evidence_path=test_evidence,
+        output_root=tmp_path / "areas",
+        qualification_root_ref="prod://qualification/revalidation",
+        reviewer_ref="operator://qualification/codex/evidence-check",
+        reviewed_at=_reviewed_after(test_evidence),
+    )
+
+    bundle = json.loads(paths["live_provider_api"].bundle_path.read_text())
+    assert all(
+        datetime.fromisoformat(claim["evidence_observed_at"]) == report.observed_at
+        for claim in bundle["claims"]
+    )
+    decision = evaluate_production_safety_qualification_bundle(bundle)
+    assert decision.status == "blocked_stale_required_claims"
+
+
 def test_cwa_live_evidence_bridge_accepts_verified_rotation_receipt(tmp_path) -> None:
     report = _report(execution_host_ref="pi://scout/runtime")
     test_evidence = tmp_path / "cwa-live.junit.xml"
-    test_evidence.write_text("<testsuite tests='6' failures='0' />\n", encoding="utf-8")
+    _write_test_evidence(test_evidence, report, "<testsuite tests='6' failures='0' />\n")
     receipt = build_cwa_credential_rotation_receipt(
         source_path=(
             "prod://qualification/scout-safety-production-20260831/"
@@ -273,7 +303,7 @@ def _mqtt_report(*, broker_allows_anonymous: bool):
 def test_mqtt_live_evidence_bridge_qualifies_transport_and_delivery(tmp_path) -> None:
     report = _mqtt_report(broker_allows_anonymous=False)
     test_evidence = tmp_path / "mqtt-live.junit.xml"
-    test_evidence.write_text("<testsuite tests='5' failures='0' />\n", encoding="utf-8")
+    _write_test_evidence(test_evidence, report, "<testsuite tests='5' failures='0' />\n")
 
     paths_by_area = write_mqtt_live_evidence_bundles(
         report,
@@ -307,7 +337,7 @@ def test_mqtt_live_evidence_bridge_qualifies_transport_and_delivery(tmp_path) ->
 def test_mqtt_live_evidence_bridge_keeps_anonymous_transport_gap_open(tmp_path) -> None:
     report = _mqtt_report(broker_allows_anonymous=True)
     test_evidence = tmp_path / "mqtt-live.junit.xml"
-    test_evidence.write_text("<testsuite tests='5' failures='0' />\n", encoding="utf-8")
+    _write_test_evidence(test_evidence, report, "<testsuite tests='5' failures='0' />\n")
 
     paths_by_area = write_mqtt_live_evidence_bundles(
         report,
@@ -381,6 +411,9 @@ __SCOUT_PROBE_SECTION__ uart
         freshness_attestor_current_source_count=1 if freshness_resident else 0,
         freshness_attestor_stale_source_rejected=freshness_resident,
         freshness_attestor_status_sha256=("b" * 64 if freshness_resident else None),
+        freshness_attestor_observed_at=(
+            "2026-08-31T04:00:00Z" if freshness_resident else None
+        ),
         gnss_observer_visual_control_configured=control_mismatch,
         gnss_observer_reported_hardware_control_allowed=False,
         gnss_observer_reported_hardware_control_performed=False,
@@ -410,7 +443,7 @@ __SCOUT_PROBE_SECTION__ uart
 def test_pi_live_evidence_bridge_qualifies_all_three_areas_when_ready(tmp_path) -> None:
     report = _pi_report(control_mismatch=False, freshness_resident=True)
     test_evidence = tmp_path / "pi-live.junit.xml"
-    test_evidence.write_text("<testsuite tests='3' failures='0' />\n", encoding="utf-8")
+    _write_test_evidence(test_evidence, report, "<testsuite tests='3' failures='0' />\n")
 
     paths_by_area = write_pi_live_evidence_bundles(
         report,
@@ -448,7 +481,7 @@ def test_pi_live_evidence_bridge_qualifies_all_three_areas_when_ready(tmp_path) 
 def test_pi_live_evidence_bridge_preserves_real_runtime_blockers(tmp_path) -> None:
     report = _pi_report(control_mismatch=True, freshness_resident=False)
     test_evidence = tmp_path / "pi-live.junit.xml"
-    test_evidence.write_text("<testsuite tests='3' failures='0' />\n", encoding="utf-8")
+    _write_test_evidence(test_evidence, report, "<testsuite tests='3' failures='0' />\n")
 
     paths_by_area = write_pi_live_evidence_bundles(
         report,
@@ -520,7 +553,9 @@ def test_phase1_writer_evidence_bridge_preserves_deployment_state(
         reviewed_module_sha256=reviewed_sha256,
     )
     test_evidence = tmp_path / "phase1-writer.junit.xml"
-    test_evidence.write_text(
+    _write_test_evidence(
+        test_evidence,
+        report,
         "<testsuite tests='15' failures='0' />\n",
         encoding="utf-8",
     )

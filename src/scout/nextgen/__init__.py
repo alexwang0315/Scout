@@ -113,6 +113,12 @@ from scout.nextgen.praison_background_queue import (
     BackgroundIntelligenceResultStale,
     PraisonBackgroundIntelligenceQueue,
 )
+from scout.nextgen.praison_background_mcp import (
+    BackgroundIntelligenceJobAccess,
+    BackgroundIntelligenceJobAccessRejected,
+    BackgroundIntelligenceJobSubmission,
+    PraisonBackgroundMcpService,
+)
 from scout.nextgen.openai_compatible_backend import (
     OpenAICompatibleBackendConfig,
     OpenAICompatibleConfigurationError,
@@ -196,11 +202,14 @@ __all__ = [
     "BackendInferenceResult",
     "BackgroundIntelligenceJobEvent",
     "BackgroundIntelligenceJobCancelled",
+    "BackgroundIntelligenceJobAccess",
+    "BackgroundIntelligenceJobAccessRejected",
     "BackgroundIntelligenceJobFailed",
     "BackgroundIntelligenceJobNotFound",
     "BackgroundIntelligenceJobNotReady",
     "BackgroundIntelligenceJobProgress",
     "BackgroundIntelligenceJobState",
+    "BackgroundIntelligenceJobSubmission",
     "BackgroundIntelligenceQueueClosed",
     "BackgroundIntelligenceQueueError",
     "BackgroundIntelligenceQueueFull",
@@ -281,6 +290,7 @@ __all__ = [
     "PydanticContractGateway",
     "PydanticAIStructuredBackend",
     "PraisonBackgroundIntelligenceQueue",
+    "PraisonBackgroundMcpService",
     "RUNTIME_SHADOW_ENV",
     "RuntimeShadowStatus",
     "ScoutModelRuntimeRouter",

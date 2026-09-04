@@ -203,12 +203,36 @@ records its minimum distance to every path. The default Dashboard path scope is
 The resolver preserves the complete typed set in
 `candidate_feature_ids` and separately emits
 `review_shortlist_feature_ids` as the union of candidates touching at least one
-bound corridor or lying within scope of at least one R1-R3 path. The Dashboard
-defaults the map and top-five preview to this shortlist and displays
-shortlisted/total counts. A candidate without path/corridor support is therefore
-outside the default review scope, not deleted from evidence. The shortlist
+bound corridor or lying within scope of at least one R1-R3 path. This union is
+ranking context, not the Dashboard's visible point set. A candidate without
+path/corridor support is outside that review scope, not deleted from evidence. The shortlist
 cannot select an anchor, change resolver authority, satisfy a required anchor,
 or make R4 executable without an explicit human WGS84 Point.
+
+The Dashboard uses a stricter, read-only `map-review-scope` projection for Gn
+markers and their candidate lists. It samples each marker's own centroid in the
+selected 5/10/20-percent source corridor GeoTIFF. A line touching the corridor
+somewhere else, or lying within a broad R1-R3 path buffer, cannot admit an
+outside marker. Saddle candidates also require centroid proximity to an R1-R3
+path within one DEM-cell diagonal. That tolerance is a terrain-grid review
+constraint, not historical-location accuracy. A missing match remains UNKNOWN;
+the projection must never move a saddle onto a route to manufacture a match.
+
+The projection binds the selected hypothesis, corridor band, raster hash,
+source feature-index/resolution hashes, DEM parent and both A/B contexts. It also
+works on older unscoped resolutions without rewriting them. Geometry from the
+same DEM but a different source A/B may be visually clipped, with explicit
+`endpoint_alignment=different_review_context`, both endpoint pairs and measured
+differences. This projection always has `execution_eligible=false` and
+`routing_effect=none`; it cannot rebind a resolution or review to the new A/B.
+The existing resolver, human review and R4 execution keep their endpoint checks.
+Pending, stale, unavailable
+or NoData scope evidence must hide DEM candidates, never fall back to the full
+set. Switching hypothesis or percentile refreshes the scope without writing a
+review, selecting anchors, or rebuilding the map for the response. Labels keep
+their original ranks, such as `G6 #2` and `G6 #5`, after filtering. Human map
+annotations remain separate. Long hypothesis-name badges are omitted from the
+map center; the external status/legend retains the candidate-only disclosure.
 
 Missing or inconsistent evidence produces a typed unavailable/failure result.
 The workflow must not guess through missing DEM, mismatched CRS, stale parent
@@ -382,8 +406,9 @@ Optional reviewed R4 flow:
    ranks matches by typed landform, elevation difference, optional hash-bound
    parent-TRH corridor overlap, then narrative-sequence proximity between A and
    B. Zero or multiple matches remain in the complete resolution and no
-   automatic anchor selection is made. The map may default to the R1-R3 union
-   shortlist while reporting the complete count; an out-of-scope candidate is
+   automatic anchor selection is made. The map shows only marker points inside
+   the currently selected corridor, with an additional path-proximity condition
+   for saddles, while reporting the complete count; an out-of-scope candidate is
    retained in evidence and can never be treated as disproven. Corridor support
    is review evidence relative to terrain models, not confirmation of a
    historical route.
@@ -391,12 +416,16 @@ Optional reviewed R4 flow:
    `unavailable` plus total/NoData counts. NoData cannot create elevation or
    saddle evidence.
 5. Focus one `Gn` at a time in the R4 review frame. The Dashboard defaults to
-   the first required review constraint, provides previous/next and explicit
-   show-all controls, draws every in-scope candidate for the focused constraint
-   with a numbered highlight marker, dims other constraint lines, and fits the
-   existing MapLibre view to the focused candidate bounds. Focus changes only
+   the first required review constraint. Clicking its narrative, source text,
+   DEM summary, or candidate evidence preview switches highlight; Enter/Space
+   on the focusable evidence area does the same. It provides previous/next and explicit
+   all-Gn controls, draws every in-scope candidate for the focused constraint
+   with its original numbered highlight marker, dims other constraint lines,
+   and fits the existing MapLibre view to the focused marker bounds. Focus changes only
    presentation state: candidate lines, points, ranks, and markers remain
    context and none is an executable anchor choice.
+   Anchor, select, disable, and other interactive controls retain their own
+   actions without also triggering the evidence-area focus handler.
 6. Place explicit map-point anchors or explicitly disable constraints, then save
    the human review artifact under the visible reviewer alias. The Dashboard
    defaults to `dashboard_operator`; it does not claim the operator is a trip
@@ -409,6 +438,75 @@ Optional reviewed R4 flow:
    a tolerance of `max(10 m, 2 DEM cells)`. `aligned` means only that the
    candidate geometry reflects the reviewed map binding; `conflict` or
    `unavailable` does not determine real-world passage or narrative validity.
+
+Worker readiness recovery:
+
+- A/B drafts remain browser-local when the Worker is unavailable. The builder
+  names the blocking condition (disabled/unconfigured Worker, lost connection,
+  timeout, missing QGIS bridge, or missing TRH capability) next to the disabled
+  generation control.
+- **重新檢查 Worker** repeats only status, capability, and runtime-control
+  metadata GET requests. It
+  updates controls in place without rebuilding the map, changing A/B, replacing
+  the current candidate, or clearing narrative review and Gn focus. Completing
+  an A/B selection also retries an unavailable connection once. Concurrent
+  checks are coalesced; responses from a different project or API host are
+  discarded. There is no background retry loop or automatic route submission.
+- Initial rendering, in-place updates, R4 controls, and TRH submission use the
+  same live-Worker gate. A reachable Worker with a missing QGIS application or
+  bridge, a synthetic fixture, or an unconfirmed TRH capability cannot enable
+  generation. Running workflows retain their lock and are not interrupted by
+  a readiness check. R4 still requires its explicit human review.
+- **啟動 Worker** is a separate explicit local action. The workspace Dashboard
+  injects `QgisRuntimeController` with `LocalQgisRuntimeHost`; the general admin
+  API defaults to `NOT_MANAGED`. Only a same-origin JSON POST from a loopback
+  client can call `/spatial/qgis/runtime/ensure-ready`. The body accepts only
+  `action=ensure_ready`, never a command, host, credentials, or authority.
+  Entering Navigation, status GETs, and Diagnostic never launch services.
+- The start-only adapter reuses a live Worker/bridge. On macOS it can open the
+  already-prepared Scout QGIS profile if no QGIS instance is running, then start
+  the fixed local Worker launcher. It never kills a process, installs a plugin,
+  edits credentials, or restarts an active job. An existing unresponsive QGIS
+  session returns `QGIS_SESSION_REQUIRES_ATTENTION`; remote configurations return
+  `REMOTE_MANAGED`. Linux can reuse an existing bridge but this button does not
+  start a container or remote service.
+- Startup is serialized, bounded, and audited in the prepared runtime directory
+  (`qgis-runtime-control.jsonl`); Worker output is in
+  `qgis-worker-navigation.log`. Receipts contain request/project IDs, timestamps,
+  action names and typed outcomes, not secrets. Runtime GET shows control
+  eligibility and the last operation receipt, not proof of current readiness.
+  Only a fresh authenticated Worker/QGIS/bridge/capability check unlocks TRH.
+  Starting preserves A/B, current map, narrative, anchors, and Gn focus. It never
+  submits a terrain job or satisfies R4 human review.
+- The shell Dashboard launcher still starts/reuses only the Worker. Workers
+  started by the explicit Navigation action remain available for reuse across
+  Dashboard restarts; this action has no stop/restart command. A stale MCP file
+  or listening port alone never proves READY. See the preparation runbook.
+
+Navigation diagnostics:
+
+- `System > Diagnostic > Navigation 體檢` runs only DASH-025 and DASH-038-043.
+  Existing single-check retry and Diag all remain available. Results are scoped
+  to the current project, hypothesis selection, and corridor band; switching
+  context invalidates them, and simultaneous batches/retries are prevented.
+- DASH-039 checks the real Worker handshake and TRH workflow capability, not a
+  fixture or a new GRASS execution. A timeout is a failure even if saved routes
+  remain visible.
+- DASH-040 checks saved candidate geometries, processing provenance, and all
+  three corridor PNG responses, SHA-256 hashes, and decoded dimensions.
+- DASH-041 checks the R4 source hashes, corridor scope, retained original ranks,
+  and saddle-to-path bound. NoData/missing evidence fails closed; unresolved Gn
+  and different review A/B remain visible warnings.
+- DASH-042 separates reviewed Point-anchor readiness from existing R4 execution
+  evidence tied to that review. Missing review or execution remains UNKNOWN;
+  readiness alone cannot produce a successful execution receipt.
+- DASH-043 renders the current review in isolated DOM and exercises the same
+  evidence click/keyboard/previous/next bindings and focused feature projection
+  used by Navigation. It does not move the live map or change anchors/review.
+- This read-only batch does not generate TRH/R4, save review, modify GPX, or
+  access runtime safety authority. Passing it is not proof of a fresh computation
+  or real-world trail conditions. See the existing Dashboard functional
+  verification checklist for actual execution and browser acceptance steps.
 
 Optional known-GPX terrain comparison:
 
@@ -586,6 +684,123 @@ The expanded affected-surface suite completed **489 passed**, and a live
 Dashboard smoke switched the real Iroko workspace between one-canvas 2D and 3D
 states without a visible MapLibre/WebGL error. Review and R4 generation stayed
 disabled because no human Point anchors had been supplied.
+
+### 2026-09-04 Arbitrary A/B extent and map-retention repair
+
+The failed Dongqing A/B run `qgis-worker-20260904T005941165938Z-c59eeb94a5`
+stopped at `dem_loaded` with `NODATA_PRESENT`: its 1,000 m analysis margin
+extended beyond the previously prepared GPX-bounded DEM. The resulting clip
+contained 13,994 NoData cells out of 62,088. This was a source-selection problem,
+not permission to relax the finite-grid requirement.
+
+For explicit A/B requests without an operator-specified `dem_ref`, the backend
+now selects the registered full-extent raster when its source and coverage
+summary hashes are bound by the terrain-feature parent. Its CRS and native
+resolution must match that parent. Missing, changed, or mismatched registered
+sources fail closed. The worker still crops the requested extent and rejects
+NoData; it does not shrink the margin, interpolate gaps, or change cost weights.
+The actual full DEM hash participates in all existing cache/provenance keys.
+The prepared parent DEM hash is retained separately in `source_hashes` and
+`source_resolution.parent_dem_sha256`, and participates in cache identity.
+This preserves the existing R4 corridor/path parent-chain validation while
+making clear that only the full raster supplies the new analysis pixels.
+Projects without a parent-bound full raster retain the bounded-source path.
+
+Starting an A/B attempt no longer clears the published candidate's project
+references. Only successful validation and materialization publishes a new
+candidate. Failed/cancelled attempts remain separate typed workflow receipts;
+the Dashboard explicitly identifies a retained candidate as an earlier result,
+not a solution for the failed request. Import/preparation invalidation remains
+unchanged.
+
+Navigation loads completed `terrain_feature_stack.v1` evidence independently
+of the latest TRH job. Ridge, valley and drainage vectors plus their full GPX
+reference geometry no longer come from a queued/failed TRH receipt. Reloading
+the page restores that baseline and the failed job's visible error; TRH input
+lines never replace the reference GPX. A/B drafts and R4 human review are not
+reset or automatically completed.
+Transient projection preparation/timeouts retain the previously loaded map
+with an explicit previous-evidence notice. Authoritative unavailable/failed
+projections still replace stale evidence, and responses for a different
+project/API scope are ignored.
+
+Live recovery used the original failed A/B and unchanged 1,000 m margin in
+`qgis-worker-20260904T012958960072Z-8d6d01ab12`: all 62,088 clipped DEM cells were
+finite, and R1/R2/R3 completed. Cache identity
+`82a9f7b4511226e028261759c6a04f002a59aca177dcf5d30152d5ab89f869c9`
+retains both the full raster and prepared-DEM parent bindings. A read-only R4
+replay accepted its 10% corridor and three candidate paths without modifying
+the workspace or completing human review.
+
+The operator subsequently submitted a newer A/B through a still-running old
+Dashboard on port 9100. That process repeated the premature-deactivation bug;
+updating only port 9099 had not updated the operator's actual backend. After
+the newer job completed, port 9100 was restarted against the updated code while
+preserving the shared QGIS worker and the newer result (active cache prefix
+`be8797bfcd83`). Both local Dashboard entrypoints now serve the repair.
+
+Verification: the combined affected Python suite produced 442 passes and one
+worker-poll timing failure; that test passed unchanged when rerun separately.
+Focused frontend checks and the real-workspace 32-layer contract passed. Browser
+smoke observed Rudy+TW, three candidates, decoded 3D DEM, and restored morphology
+counts (41 ridge, 24 valley, 99 drainage). R4 scope remained candidate-only and
+explicitly marked differing source A/B as range comparison only. Remote Scout
+execution was not retested, and no runtime or route authority was promoted.
+
+### 2026-09-04 Workspace-owned regional DEM preparation
+
+Both endpoints in the original failed A/B request were inside the route bbox.
+The failure was a preparation-contract mismatch: the terrain-feature DEM had
+only a 250 m margin, while arbitrary A/B analysis requested 1,000 m. Endpoint
+containment alone does not prove containment of the buffered analysis extent.
+
+The normal preparation path now stores a separate regional GeoTIFF plus typed
+manifest under `outputs/terrain/dem/<identity>/`. Default preparation covers
+the complete route bbox plus 5,000 m and two native cells of alignment guard.
+The existing 250 m morphology surface and route relevance filters are unchanged.
+Per-request TRH clipping remains bounded by its actual A/B and requested margin.
+
+`terrain_workspace_dem_manifest_ref` and its hash bind the prepared raster to
+the project, current terrain parent, parent DEM, coverage summary, original
+raster hash, CRS and native resolution. The backend prefers this file before
+the legacy full-raster recovery path. A present but invalid or insufficient
+workspace preparation fails closed, without falling back to another DEM.
+Successful cached use does not require the original external material file;
+the immutable source declaration, local parent, output hash and any local CRS
+evidence snapshot must still validate. Changed source declarations require
+preparation again.
+
+Backfill an existing workspace without rebuilding morphology, R1-R3 or R4:
+
+```bash
+./venv/bin/python -m workspace_terrain_dem --project-root <workspace-project-root>
+```
+
+The GDAL adapter uses an outward, source-grid-aligned clip with `-epo`, without
+resampling, filling gaps, or changing source resolution. It counts every cell
+through GDAL XYZ export; rounded valid-percent statistics are not sufficient.
+CRS mismatches normally fail closed. An unidentifiable WGS84/TM121 header is
+resolved only when the registered ISO provider metadata declares EPSG:3826 and
+all projection parameters, axis directions and units match. The derived clip's
+CRS tag is then normalized explicitly, with the original WKT, exact commands,
+provider XML snapshot/hash and decision retained. The original raster is never
+modified; recognized conflicting CRSs or unmatched metadata are rejected.
+
+Local Dongqing receipt `e8a985456305ac9d09939754d7937dc547c8b845e1f15ea15019fb2c88a82dd4`
+contains a 2,274 by 1,759 native 20 m grid: 3,999,966 finite cells, zero NoData,
+11,796,504 GeoTIFF bytes. EPSG:3826 bounds are
+`237430,2575990,282910,2611170` (min x, min y, max x, max y). The active
+`be8797bfcd83` route result and all existing R4 source/review hashes were retained.
+This is local preparation evidence; remote Scout execution is not newly qualified.
+
+Verification retained the exact original failed A/B and 1,000 m analysis margin:
+the backend selected `workspace_prepared_dem`, and GDAL produced 312 x 199 cells,
+all 62,088 finite with zero NoData. Repeating preparation reused the same local
+manifest/hash. The related preparation, R4 and backend suite passed 159 tests;
+the final focused DEM/backend run passed 47 tests, and the real-workspace
+32-layer contract passed. The existing Navigation display projection was
+refreshed after its input fingerprint was found stale; this did not regenerate
+or overwrite the active hypotheses or human review.
 
 ## 12. Known limitations and UNKNOWNs
 

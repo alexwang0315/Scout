@@ -150,6 +150,7 @@ def test_pretrip_maplibre_reuses_bounded_raster_tile_sources():
 
 def test_pretrip_maplibre_places_cached_cwa_imagery_above_rudy() -> None:
     html = PAGE.read_text(encoding="utf-8")
+    script = MAPLIBRE_EVIDENCE_SCRIPT.read_text(encoding="utf-8")
 
     cwa_layers = html.split(
         "function pretripMapLibreCwaImageLayers()", 1
@@ -183,8 +184,24 @@ def test_pretrip_maplibre_places_cached_cwa_imagery_above_rudy() -> None:
         assert match is not None
         return float(match.group(1))
 
-    assert layer_rank("weather-api") < layer_rank("cwa-qpf")
     assert layer_rank("cwa-qpf") < layer_rank("cwa-weather")
+    assert layer_rank("cwa-weather") < layer_rank("weather-api")
+    assert layer_rank("weather-api") == 80
+    assert "const MAP_ROUTE_FOREGROUND_LAYER_IDS = Object.freeze([" in html
+    for layer_id in (
+        "reference-tracks",
+        "retreat",
+        "route",
+        "segments",
+        "checkpoints",
+        "route-notes",
+    ):
+        assert f'"{layer_id}"' in html
+    assert "function promoteRouteVisibilityLayerGroups()" in html
+    assert "promoteRouteVisibilityLayerGroups();" in html
+    assert script.index("...overlayRasterStyleLayers") < script.index(
+        "id: EVIDENCE_LAYER_IDS.line"
+    )
 
 
 def test_pretrip_maplibre_binds_mileage_hints_box_zoom_and_terrain_images():
@@ -423,6 +440,12 @@ def test_pretrip_maplibre_adapter_converts_core_evidence_without_authority_promo
     assert 'append(segment, "segments", mapLibreLineGeometryFromSegments(segmentCoordSegments));' in html
     assert 'append(candidate, "corridors", mapLibreLineGeometry(candidate.corridor.coordinates));' in html
     assert 'append(segment, "risk-ribbon", mapLibreLineGeometry(segment.coordinates));' in html
+    assert "function appendPretripMapLibreOsmFeatures(append, view)" in html
+    assert "appendPretripMapLibreOsmFeatures(append, view);" in html
+    assert 'append(item, "osm", geometry, {' in html
+    assert "osm_style_category: category" in html
+    assert 'osm_source_kind: "local_osm_pbf_vector"' in html
+    assert "maplibreOsmPbfFeatureCount" in html
     assert "candidate_only: identity.candidate_only" in html
     assert "runtime_safety_truth: identity.runtime_safety_truth" in html
 

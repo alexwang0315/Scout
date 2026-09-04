@@ -276,6 +276,10 @@ def test_geojson_adapter_builds_bounded_sources_and_layers() -> None:
     assert result["style"]["sourceFeatureCount"] == 1
     assert result["style"]["layerIds"] == [
         "scout-evidence-background",
+        "scout-evidence-osm-fill",
+        "scout-evidence-osm-line-casing",
+        "scout-evidence-osm-line",
+        "scout-evidence-osm-point",
         "scout-evidence-fill",
         "scout-evidence-line",
         "scout-evidence-point",
@@ -350,7 +354,13 @@ def test_raster_adapter_is_bounded_candidate_only_and_renderer_ordered() -> None
     assert layer_ids.index(raster["map_layer_id"]) < layer_ids.index(
         "scout-evidence-fill"
     )
-    assert layer_ids.index(cwa["map_layer_id"]) > layer_ids.index(
+    assert layer_ids.index("scout-evidence-fill") < layer_ids.index(
+        cwa["map_layer_id"]
+    )
+    assert layer_ids.index(cwa["map_layer_id"]) < layer_ids.index(
+        "scout-evidence-line"
+    )
+    assert layer_ids.index(cwa["map_layer_id"]) < layer_ids.index(
         "scout-evidence-point"
     )
     assert result["rasterStateTransitions"] == {
@@ -368,6 +378,14 @@ def test_raster_adapter_is_bounded_candidate_only_and_renderer_ordered() -> None
 def test_renderer_contract_includes_hover_labels_grouped_layers_and_box_zoom() -> None:
     source = SCRIPT.read_text(encoding="utf-8")
 
+    assert 'osmFill: "scout-evidence-osm-fill"' in source
+    assert 'osmLineCasing: "scout-evidence-osm-line-casing"' in source
+    assert 'osmLine: "scout-evidence-osm-line"' in source
+    assert 'osmPoint: "scout-evidence-osm-point"' in source
+    assert "function osmFillColorExpression()" in source
+    assert "function osmLineCoreColorExpression()" in source
+    assert '["==", ["get", "layer_id"], "osm"]' in source
+    assert '["!=", ["get", "layer_id"], "osm"]' in source
     assert 'className = "scout-maplibre-selection-label"' in source
     assert "onFeatureHover = null" in source
     assert "onFeatureLeave = null" in source

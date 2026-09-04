@@ -3,9 +3,11 @@
 !Dockerfile.pi
 !Dockerfile.pi.admin
 !Dockerfile.pi.live
+!Dockerfile.pi.intelligence
 !requirements.pi.txt
 !requirements.pi.admin.txt
 !requirements.pi.live.txt
+!requirements.pi.intelligence.txt
 !config/
 !config/gee_datasets.yaml
 !scout-risk-engine/
@@ -292,6 +294,7 @@ scout-risk-engine/scout_codex_package/tests/__pycache__/**
 !tools/pi_wio_e5_chirpstack_key_sync.py
 !tools/pi_wio_e5_chirpstack_join_state_reset.py
 !tools/pydantic_ai_cloud_latency_benchmark.py
+!tools/scout_ai_praison_background_mcp_smoke.py
 !tools/scout_agent_tool_manifests/
 !tools/scout_agent_tool_manifests/*.json
 !docs/

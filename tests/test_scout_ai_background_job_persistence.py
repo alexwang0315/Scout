@@ -3,10 +3,12 @@ from __future__ import annotations
 import sqlite3
 import threading
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from functools import partial
 from pathlib import Path
 from stat import S_IMODE
 from typing import Any
+from unittest.mock import Mock
 from uuid import uuid4
 
 import pytest
@@ -14,15 +16,20 @@ import pytest
 from scout.nextgen import (
     CapabilityBroker,
     IntelligenceRequest,
+    IntelligenceResponse,
     IntelligenceTaskType,
+    ModelExecutionRecord,
     StubIntelligenceGateway,
     WorkspaceBinding,
+    degraded_intelligence_response,
 )
 from scout.nextgen.background_job_store import (
     BackgroundJobStoreCorrupt,
     SQLiteBackgroundIntelligenceJobStore,
 )
+from scout.nextgen.intelligence_gateway import GatewayValidationDisposition
 from scout.nextgen.praison_background_queue import (
+    BackgroundIntelligenceJobCancelled,
     BackgroundIntelligenceJobProgress,
     BackgroundIntelligenceJobState,
     PraisonBackgroundIntelligenceQueue,
@@ -201,6 +208,154 @@ def test_queued_cancellation_is_persisted_and_not_replayed(tmp_path: Path) -> No
         "submitted",
         "cancelled",
     )
+
+
+@pytest.mark.parametrize(
+    ("expire_at_completion", "record_kind"),
+    (
+        pytest.param(False, "matching", id="valid-grant"),
+        pytest.param(True, "matching", id="expired-grant"),
+        pytest.param(True, "foreign", id="expired-grant-foreign-parent"),
+        pytest.param(True, "mixed", id="expired-grant-mixed-parents"),
+    ),
+)
+def test_running_cancellation_telemetry_survives_restart_without_replay(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    expire_at_completion: bool,
+    record_kind: str,
+) -> None:
+    request = _request()
+    recorded_at = datetime.now(UTC)
+    record = ModelExecutionRecord(
+        parent_request_id=request.request_id,
+        inference_id=uuid4(),
+        runtime_id="local.cancel.probe",
+        model_id="cancel-probe",
+        locality="edge",
+        started_at=recorded_at,
+        completed_at=recorded_at,
+        latency_ms=0,
+        status="cancelled",
+        model_request_count=1,
+    )
+    foreign_record = record.model_copy(
+        update={
+            "execution_id": uuid4(),
+            "parent_request_id": uuid4(),
+            "inference_id": uuid4(),
+        }
+    )
+    response_records = {
+        "matching": (record,),
+        "foreign": (foreign_record,),
+        "mixed": (record, foreign_record),
+    }[record_kind]
+    expected_records = () if record_kind == "foreign" else (record,)
+    started = threading.Event()
+
+    class _CancellingStubService:
+        def execute(
+            self,
+            request: IntelligenceRequest,
+            *,
+            cancellation_event: threading.Event | None = None,
+            progress_callback: Callable[[str, int], None] | None = None,
+        ) -> IntelligenceResponse:
+            del progress_callback
+            assert cancellation_event is not None
+            started.set()
+            assert cancellation_event.wait(timeout=2)
+            return degraded_intelligence_response(
+                request=request,
+                uncertainty_id="intelligence_cancelled",
+                description="Background candidate intelligence was cancelled.",
+                missing_evidence=("model_response",),
+                impact="Candidate intelligence is unavailable.",
+                service_name="cancellation-telemetry-test",
+                service_version="test",
+                agent_path=("cancellation-telemetry-test",),
+                model_execution_records=response_records,
+            )
+
+    store_path = tmp_path / "running-cancelled-jobs.sqlite3"
+    with SQLiteBackgroundIntelligenceJobStore(store_path) as store:
+        with PraisonBackgroundIntelligenceQueue(
+            service=_CancellingStubService(),
+            job_store=store,
+        ) as queue:
+            submitted = queue.submit(request)
+            assert started.wait(timeout=1)
+            running = queue.get_progress(submitted.job_id)
+            assert running.state is BackgroundIntelligenceJobState.RUNNING
+
+            if expire_at_completion:
+                # Only completion validation observes an expired grant.
+                monkeypatch.setattr(
+                    queue._contract_gateway,
+                    "validate_response",
+                    partial(
+                        queue._contract_gateway.validate_response,
+                        now=request.capability_grant.expires_at + timedelta(seconds=1),
+                    ),
+                )
+
+            cancelling = queue.cancel(submitted.job_id)
+            assert cancelling.state is BackgroundIntelligenceJobState.CANCELLING
+            terminal = queue.wait(submitted.job_id, timeout_seconds=2)
+            assert terminal.state is BackgroundIntelligenceJobState.CANCELLED
+            assert terminal.cancellation_requested is True
+            assert terminal.progress_percent == 100
+            assert terminal.completed_at is not None
+            assert terminal.response_available is False
+            if expire_at_completion:
+                assert (
+                    terminal.validation_disposition
+                    is GatewayValidationDisposition.CAPABILITY_VIOLATION
+                )
+                assert terminal.validation_reasons == ("capability grant expired",)
+            assert all(
+                item.parent_request_id == request.request_id
+                for item in terminal.model_execution_records
+            )
+            with pytest.raises(BackgroundIntelligenceJobCancelled):
+                queue.result(
+                    submitted.job_id,
+                    current_binding=request.workspace_binding,
+                )
+
+        (stored,) = store.load_jobs()
+        assert stored.response is None
+        assert (
+            BackgroundIntelligenceJobProgress.model_validate_json(stored.progress_json)
+            == terminal
+        )
+        events = store.list_events(submitted.job_id)
+        assert tuple(event.event_type for event in events) == (
+            "submitted",
+            "started",
+            "cancelling",
+            "cancelled",
+        )
+
+    restored_service = Mock(wraps=_MustNotRunService())
+    with SQLiteBackgroundIntelligenceJobStore(store_path) as restored_store:
+        with PraisonBackgroundIntelligenceQueue(
+            service=restored_service,
+            job_store=restored_store,
+        ) as restored_queue:
+            restored = restored_queue.wait(submitted.job_id, timeout_seconds=0)
+            assert restored == terminal
+            with pytest.raises(BackgroundIntelligenceJobCancelled):
+                restored_queue.result(
+                    submitted.job_id,
+                    current_binding=request.workspace_binding,
+                )
+
+        assert restored_store.load_jobs() == (stored,)
+        assert restored_store.list_events(submitted.job_id) == events
+    restored_service.execute.assert_not_called()
+    assert terminal.model_execution_records == expected_records
 
 
 def test_corrupt_persisted_progress_fails_closed_before_worker_start(

@@ -2524,6 +2524,7 @@
   <script src="/admin/scout-assistant-ui.js"></script>
   <script src="/admin/scout-maplibre-evidence.js"></script>
   <script>
+    const DIAGNOSTIC_MAP_PROBE = new URLSearchParams(location.search).get("diagnosticMapProbe") === "1";
     const DEFAULT_PRETRIP_PROJECT_ID = "chilai_nanhua_day1";
     const PRETRIP_PROJECT_ID_PARAM = new URLSearchParams(window.location.search).get("projectId") || "";
     const PRETRIP_PROJECT_ID = /^[A-Za-z0-9_.-]+$/.test(PRETRIP_PROJECT_ID_PARAM)
@@ -2759,6 +2760,7 @@
     }
 
     async function postJson(path, payload) {
+      if (DIAGNOSTIC_MAP_PROBE) throw new Error("Map order diagnostics are read-only.");
       return window.ScoutAssistantUI.postJson(path, payload);
     }
 
@@ -2868,6 +2870,7 @@
     }
 
     function apiBase() {
+      if (DIAGNOSTIC_MAP_PROBE) return "";
       const params = new URLSearchParams(location.search);
       const override = params.get("apiBase") || localStorage.getItem("scout.adminApiBase");
       if (override) return override.replace(/\/$/, "");
@@ -3910,6 +3913,17 @@
       return activateDebugMapLibreRenderer(loaded.maplibregl, projection);
     }
     window.scoutDebugMapRendererBridge = Object.freeze({
+      inspectLayerOrder() {
+        const adapter = window.ScoutMapLibreEvidence;
+        const report = debugMapLibreActive()
+          ? adapter.inspectMapLibreLayerOrder(debugPageState.mapLibreRenderer.map)
+          : adapter.inspectSvgLayerOrder(runtimeMap, {
+              requiredLayerIds: Object.keys(MAP_LAYER_RANKS),
+              expectedLayerOrder: Object.keys(MAP_LAYER_RANKS).sort((left, right) => MAP_LAYER_RANKS[left] - MAP_LAYER_RANKS[right]),
+            });
+        return {...report, projectId: PRETRIP_PROJECT_ID, activeRenderer: debugPageState.mapRenderer.active,
+          rendererState: debugPageState.mapRenderer.state};
+      },
       getSnapshot: () => debugPageState.mapLibreRenderer?.snapshot?.() || debugPageState.mapRenderer,
       focusEvent: eventId => {
         const event = debugPageState.events.find(candidate => candidate.event_id === eventId);
@@ -7563,9 +7577,23 @@
     bindCwaWeatherImageryControls();
     bindDebugTabs();
     switchDebugTab(document.querySelector(`[data-tab-target="${debugPageState.selectedTabId}"]`), { syncUrl: false });
-    loadAssistantStatus();
-    loadDebugSurface();
-    startDebugEventStream();
+    if (DIAGNOSTIC_MAP_PROBE) {
+      (async () => {
+        try {
+          debugPageState.projection = await fetchJson(PRETRIP_DEBUG_PROJECTION_PATH);
+          await loadCwaWeatherImagery(PRETRIP_PROJECT_ID);
+          await loadOsmPbfVectorLayer();
+          renderDebugEvidenceMap(debugPageState.projection);
+          await initializeDebugMapRenderer(debugPageState.projection);
+        } catch (error) {
+          activateDebugSvgFallback("diagnostic_projection_unavailable", String(error.message));
+        }
+      })();
+    } else {
+      loadAssistantStatus();
+      loadDebugSurface();
+      startDebugEventStream();
+    }
   </script>
 </body>
 </html>

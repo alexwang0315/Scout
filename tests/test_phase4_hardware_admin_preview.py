@@ -969,6 +969,13 @@ def test_phase4_admin_compose_keeps_runtime_9099_free_for_existing_service() -> 
     assert "SCOUT_CLOUD_MODEL_TOKEN:" not in source
 
 
+def test_phase4_admin_requirements_include_nextgen_http_client() -> None:
+    requirements = read("requirements.pi.admin.txt")
+
+    assert "pydantic-ai-slim[duckduckgo,mcp,openai,openrouter]==2.36.0" in requirements
+    assert "httpx>=0.28,<1" in requirements
+
+
 def test_phase4_admin_docker_context_whitelists_only_metadata_and_admin_assets() -> None:
     dockerignore = read(".dockerignore")
 

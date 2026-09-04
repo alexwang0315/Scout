@@ -4,13 +4,13 @@ This interface gives Scout AI a deterministic way to read available tool
 contracts and run read-only local evidence tools without depending on prompt-only
 knowledge.
 
-## Implementation Update 2026-09-03
+## Implementation Update 2026-09-04
 
-Scout AI's Mac runtime and Pi dependency manifests target Pydantic AI v2.37.0.
-The September 3 upgrade is locally verified, not a new hardware deployment.
+Scout AI's Mac runtime and Pi dependency manifests target Pydantic AI v2.38.0.
+The September 4 upgrade is local only, not a new hardware deployment.
 Tool execution remains deterministic and read-only by default:
 
-- `pydantic-ai-slim[duckduckgo,mcp,openai,openrouter]` is pinned to v2.37.0 for Pi
+- `pydantic-ai-slim[duckduckgo,mcp,openai,openrouter]` is pinned to v2.38.0 for Pi
   admin/live runtimes and the local development venv.
 - Scout keeps `pydantic_ai.Agent(end_strategy="early")` for typed Scout
   provider calls. This intentionally avoids Pydantic AI v2's default graceful
@@ -58,6 +58,13 @@ Tool execution remains deterministic and read-only by default:
   retaining partial output and the original provider reason. This verifies the
   dedicated Z.AI adapter only; it neither changes Scout's configured model nor
   assumes OpenRouter/NVIDIA automatically inherit that provider-specific fix.
+- The v2.38.0 regressions cover same-ID capability merging, run-level WebSearch
+  replacement without losing WebFetch, first-tool cancellation/resumption, and
+  the opt-in streamed finish-reason check. Scout keeps one traced search/fetch
+  pair and does not enable strict finish reasons on every compatible provider.
+  Installed version metadata, not a constant answer, must satisfy the live
+  version tool. See the
+  [upgrade and failed-case report](../evals/scout-ai-pydantic-238-failed-case-smoke-20260904.md).
 - Optional Praison intelligence dependencies target `praisonaiagents==1.7.3`.
   Real SDK orchestration, MCP lifecycle, Scout Model Gateway replay, and isolated
   opt-in file memory are compatibility checks, not new authority or implicit

@@ -166,7 +166,10 @@ def answer_assistant_query_safely(
             provider=provider,
             sources=response.sources,
             started_at=resolved_started_at,
-            safe_failure=isinstance(provider, FailedAssistantProvider),
+            safe_failure=(
+                isinstance(provider, FailedAssistantProvider)
+                or "ai_hat_model_answer_rejected=true" in response.limitations
+            ),
         )
     except Exception as exc:
         fallback_sources = _augment_pretrip_evidence_first_sources(

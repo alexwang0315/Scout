@@ -7,6 +7,10 @@
   const EVIDENCE_SOURCE_ID = "scout-evidence";
   const EVIDENCE_LAYER_IDS = Object.freeze({
     background: "scout-evidence-background",
+    osmFill: "scout-evidence-osm-fill",
+    osmLineCasing: "scout-evidence-osm-line-casing",
+    osmLine: "scout-evidence-osm-line",
+    osmPoint: "scout-evidence-osm-point",
     fill: "scout-evidence-fill",
     line: "scout-evidence-line",
     point: "scout-evidence-point",
@@ -374,6 +378,446 @@
     return null;
   }
 
+  function createLayerOrderResult(renderer, layers, violations = [], gaps = []) {
+    const groupedViolations = new Map();
+    violations.forEach(violation => {
+      const key = JSON.stringify([violation.code, violation.detail]);
+      const previous = groupedViolations.get(key);
+      groupedViolations.set(key, {...violation, occurrences: (previous?.occurrences || 0) + 1});
+    });
+    const uniqueViolations = [...groupedViolations.values()];
+    const failed = uniqueViolations.some(violation => !String(violation?.code || "").startsWith("empty_"));
+    return {
+      status: failed ? "failed" : gaps.length || violations.length ? "warning" : "passed",
+      renderer,
+      layers,
+      violations: uniqueViolations,
+      gaps: [...new Set(gaps)],
+    };
+  }
+
+  function layerOrderVisibleFromDom(node) {
+    if (!node) return false;
+    let current = node;
+    while (current && String(current.tagName || "").toLowerCase() !== "svg") {
+      const currentStyle = current.getAttribute?.("style") || "";
+      if (current.hidden
+        || current.dataset?.layerHidden === "true"
+        || svgClassIncludes(current, "is-hidden")
+        || /(^|;)\s*display\s*:\s*none\b/i.test(currentStyle)
+        || /(^|;)\s*visibility\s*:\s*hidden\b/i.test(currentStyle)
+        || /(^|;)\s*opacity\s*:\s*0(?:\.0+)?\s*(?:!important\s*)?(?:;|$)/i.test(currentStyle)) {
+        return false;
+      }
+      current = current.parentElement;
+    }
+    const style = node.getAttribute?.("style") || "";
+    return !/(^|;)\s*display\s*:\s*none\b/i.test(style)
+      && !/(^|;)\s*visibility\s*:\s*hidden\b/i.test(style)
+      && !/(^|;)\s*opacity\s*:\s*0(?:\.0+)?\s*(?:!important\s*)?(?:;|$)/i.test(style);
+  }
+
+  function svgElementHasPaintContent(node) {
+    if (!node) return false;
+    const tag = String(node.tagName || "").toLowerCase();
+    if (["defs", "clipPath", "mask", "pattern", "metadata", "title", "desc"].includes(tag)) return false;
+    if (tag === "image") {
+      return Boolean(firstIdentifier(
+        node.getAttribute?.("href"),
+        node.getAttribute?.("xlink:href"),
+      ));
+    }
+    if (tag === "path") return Boolean(String(node.getAttribute?.("d") || "").trim());
+    if (["line", "polyline", "polygon", "circle", "ellipse", "rect"].includes(tag)) return true;
+    if (tag === "text") return Boolean(String(node.textContent || "").trim());
+    return false;
+  }
+
+  function svgDescendantHasPaintContent(node) {
+    if (!node || !node.querySelectorAll) return svgElementHasPaintContent(node);
+    if (svgElementHasPaintContent(node)) return true;
+    return [...node.querySelectorAll("*")].some(svgElementHasPaintContent);
+  }
+
+  function svgDescendantHasVisiblePaintContent(node) {
+    if (!node || !node.querySelectorAll) return svgElementHasPaintContent(node) && layerOrderVisibleFromDom(node);
+    if (svgElementHasPaintContent(node) && layerOrderVisibleFromDom(node)) return true;
+    return [...node.querySelectorAll("*")]
+      .some(child => svgElementHasPaintContent(child) && layerOrderVisibleFromDom(child));
+  }
+
+  function svgClassIncludes(node, token) {
+    const classes = String(node?.getAttribute?.("class") || "").split(/\s+/);
+    return classes.includes(token);
+  }
+
+  function svgRoleOverride(node) {
+    const role = String(node?.dataset?.mapOrderRole || "").trim().toLowerCase();
+    return role || null;
+  }
+
+  function semanticDatasetValue(node, key, fallback) {
+    if (!Object.prototype.hasOwnProperty.call(node?.dataset || {}, key)) return null;
+    const value = String(node?.dataset?.[key] || "").trim();
+    return value && value !== "true" ? value : fallback;
+  }
+
+  function svgSemanticLayerId(node) {
+    return firstIdentifier(
+      node?.dataset?.layerGroup,
+      node?.dataset?.layer,
+      node?.dataset?.mapLayer,
+      node?.dataset?.mapTileSource,
+      node?.dataset?.dashboardMapHintSource,
+      semanticDatasetValue(node, "dashboardContextPoints", "dashboard-context-points"),
+      node?.dataset?.paceCheckpointId,
+      node?.dataset?.permissionMapAnchor,
+      node?.dataset?.architectureNodeId,
+      node?.dataset?.navigationNodeId,
+      node?.dataset?.mapRenderKind,
+      node?.getAttribute?.("id"),
+      String(node?.tagName || "").toLowerCase(),
+    );
+  }
+
+  function svgLayerRole(layerId, node) {
+    const roleOverride = svgRoleOverride(node);
+    if (roleOverride) return roleOverride;
+    const id = String(layerId || "").toLowerCase();
+    const tag = String(node?.tagName || "").toLowerCase();
+    const kind = String(node?.dataset?.mapRenderKind || node?.dataset?.layerKind || "").toLowerCase();
+    const hintSource = String(node?.dataset?.dashboardMapHintSource || "").toLowerCase();
+    if (node?.hasAttribute?.("data-navigation-route-path")
+      || node?.hasAttribute?.("data-navigation-route-halo")
+      || node?.hasAttribute?.("data-navigation-terrain-3d-route")
+      || id === "route-structure") return "route";
+    if (hintSource.endsWith("-route-evidence")) return "route";
+    if (node?.dataset?.dashboardContextPoints !== undefined
+      || node?.dataset?.paceCheckpointId
+      || node?.dataset?.permissionMapAnchor) {
+      return "checkpoint";
+    }
+    if (svgClassIncludes(node, "route-structure")
+      || svgClassIncludes(node, "navigation-route")
+      || svgClassIncludes(node, "terrain-route")
+      || svgClassIncludes(node, "terrain-route-reference")
+      || svgClassIncludes(node, "terrain-retreat-arrow")
+      || svgClassIncludes(node, "route-line")
+      || svgClassIncludes(node, "retreat-line")
+      || svgClassIncludes(node, "segment-overlay")) {
+      return "route";
+    }
+    if (["route", "completed-track", "reference-tracks"].includes(id)) return "route";
+    if (id === "segments") return "segment";
+    if (["checkpoints", "mcp", "boss-points"].includes(id)) return "checkpoint";
+    if (["pois", "hazards", "route-notes", "events"].includes(id)) return "evidence";
+    if (tag === "image" || ["tile", "raster", "image"].includes(kind)
+      || ["imagery", "rudy", "rudy-twmap", "relief", "geology", "topo-5k", "forest", "osm"].includes(id)) {
+      return "background";
+    }
+    if (["terrain", "risk-heatmap", "risk-delta", "soil-moisture", "antecedent-rain", "cwa-qpf", "cwa-weather", "weather-api"].includes(id)) {
+      return "thematic-background";
+    }
+    if (["corridors", "overpass", "retreat", "risk-ribbon", "risk-score"].includes(id)) return "evidence";
+    return "unknown";
+  }
+
+  function mergeLayerSummary(left, right) {
+    return {
+      id: left.id,
+      role: left.role,
+      visible: left.visible || right.visible,
+      hasContent: left.hasContent || right.hasContent,
+    };
+  }
+
+  function compactSvgOrderLayers(svg, paintLayers, exceptionIndexes = new Set()) {
+    const topLevelGroups = svg?.querySelectorAll
+      ? [...svg.querySelectorAll(":scope > [data-layer-group]")]
+      : [];
+    if (topLevelGroups.length) {
+      const representedIds = new Set();
+      const compact = topLevelGroups.map(node => {
+        const id = node.dataset.layerGroup;
+        representedIds.add(id);
+        return {
+          id,
+          role: svgLayerRole(id, node),
+          visible: svgDescendantHasVisiblePaintContent(node),
+          hasContent: svgDescendantHasPaintContent(node),
+        };
+      });
+      [...exceptionIndexes].forEach(index => {
+        const layer = paintLayers[index];
+        if (layer && !representedIds.has(layer.id)) compact.push({...layer});
+      });
+      return compact;
+    }
+    return paintLayers.reduce((compact, layer) => {
+      const previous = compact[compact.length - 1];
+      if (previous && previous.id === layer.id && previous.role === layer.role) {
+        compact[compact.length - 1] = mergeLayerSummary(previous, layer);
+      } else {
+        compact.push({...layer});
+      }
+      return compact;
+    }, []);
+  }
+
+  function collectSvgPaintLayers(svg) {
+    const layers = [];
+    const walk = node => {
+      if (!node || ["defs", "clippath", "mask", "pattern"].includes(String(node.tagName || "").toLowerCase())) return;
+      if (node !== svg && svgElementHasPaintContent(node)) {
+        let id = svgSemanticLayerId(node);
+        let role = svgLayerRole(id, node);
+        const marker = node.closest?.("[data-dashboard-context-points], [data-pace-checkpoint-id], [data-permission-map-anchor], [data-navigation-terrain-3d-saddle], [data-terrain-feature]");
+        const group = node.closest?.("[data-layer-group]");
+        if (role === "unknown" && marker) {
+          id = svgSemanticLayerId(marker);
+          role = "checkpoint";
+        } else if (role === "unknown" && group) {
+          id = group.dataset.layerGroup;
+          role = svgLayerRole(id, group);
+        } else if (group && id === String(node.tagName || "").toLowerCase()) {
+          id = `${group.dataset.layerGroup}:${id}`;
+        }
+        layers.push({
+          id,
+          role,
+          visible: layerOrderVisibleFromDom(node),
+          hasContent: true,
+        });
+      }
+      [...(node.children || [])].forEach(walk);
+    };
+    walk(svg);
+    return layers;
+  }
+
+  function normalizeExpectedLayerOrder(expectedLayerOrder) {
+    return expectedLayerOrder
+      .map(entry => Array.isArray(entry) ? entry.map(String) : [String(entry)])
+      .filter(group => group.some(Boolean));
+  }
+
+  function expectedLayerRankMap(expectedLayerOrder) {
+    const rankMap = new Map();
+    normalizeExpectedLayerOrder(expectedLayerOrder).forEach((group, rank) => {
+      group.forEach(layerId => rankMap.set(layerId, rank));
+    });
+    return rankMap;
+  }
+
+  function inspectExpectedSvgGroupOrder(svg, expectedLayerOrder, violations) {
+    if (!expectedLayerOrder.length || !svg?.querySelectorAll) return;
+    const groupOrder = [...svg.querySelectorAll(":scope > [data-layer-group]")]
+      .map(node => node.dataset.layerGroup);
+    const rankMap = expectedLayerRankMap(expectedLayerOrder);
+    groupOrder.forEach((layerId, observedIndex) => {
+      const leftRank = rankMap.get(layerId);
+      if (!Number.isInteger(leftRank)) return;
+      groupOrder.slice(observedIndex + 1).forEach(laterId => {
+        const rightRank = rankMap.get(laterId);
+        if (!Number.isInteger(rightRank) || leftRank <= rightRank) return;
+        violations.push({
+          code: "expected_layer_order_inversion",
+          detail: `${layerId} is painted below ${laterId}, but the layer contract requires it above.`,
+        });
+      });
+    });
+  }
+
+  function inspectSvgLayerOrder(svg, options = {}) {
+    const requiredLayerIds = Array.isArray(options.requiredLayerIds) ? options.requiredLayerIds.map(String) : [];
+    const expectedLayerOrder = Array.isArray(options.expectedLayerOrder) ? options.expectedLayerOrder : [];
+    const requireRoute = options.requireRoute !== false;
+    const violations = [];
+    const gaps = [];
+    if (!svg || String(svg.tagName || "").toLowerCase() !== "svg") {
+      return createLayerOrderResult("svg", [], [], ["no SVG element supplied"]);
+    }
+    const paintLayers = collectSvgPaintLayers(svg);
+    if (!paintLayers.length) gaps.push("SVG contains no painted layer content");
+    if (!requireRoute && ![...svg.querySelectorAll("path,polyline,polygon,line,circle,ellipse")]
+      .some(node => !node.closest("defs,clipPath,mask,pattern") && svgElementHasPaintContent(node))) {
+      gaps.push("SVG contains no route, terrain, or point geometry to verify");
+    }
+    const topLevelGroups = svg.querySelectorAll
+      ? [...svg.querySelectorAll(":scope > [data-layer-group]")]
+      : [];
+    const groupIds = topLevelGroups.map(node => node.dataset.layerGroup);
+    topLevelGroups.filter(node => layerOrderVisibleFromDom(node) && !svgDescendantHasVisiblePaintContent(node))
+      .forEach(node => gaps.push(`${node.dataset.layerGroup} has no rendered content`));
+    requiredLayerIds.forEach(layerId => {
+      if (!groupIds.includes(layerId)) {
+        violations.push({code: "missing_required_layer", detail: `${layerId} is missing.`});
+      }
+    });
+    [...new Set(groupIds)].forEach(layerId => {
+      if (groupIds.filter(id => id === layerId).length > 1) {
+        violations.push({code: "duplicate_layer_group", detail: `${layerId} appears more than once.`});
+      }
+    });
+    inspectExpectedSvgGroupOrder(svg, expectedLayerOrder, violations);
+    paintLayers.filter(layer => layer.visible && !layer.hasContent).forEach(layer => {
+      gaps.push(`${layer.id} has no rendered content`);
+    });
+    const routeIndexes = paintLayers
+      .map((layer, index) => ["route", "segment"].includes(layer.role) ? index : -1)
+      .filter(index => index >= 0);
+    if (requireRoute && !routeIndexes.length) gaps.push("route or segment layer is missing or empty");
+    const checkpointIndexes = paintLayers
+      .map((layer, index) => layer.role === "checkpoint" ? index : -1)
+      .filter(index => index >= 0);
+    const backgroundIndexes = paintLayers
+      .map((layer, index) => ["background", "thematic-background"].includes(layer.role) ? index : -1)
+      .filter(index => index >= 0);
+    const exceptionIndexes = new Set();
+    if (routeIndexes.length) {
+      const firstRoute = Math.min(...routeIndexes);
+      backgroundIndexes
+        .filter(index => index > firstRoute)
+        .forEach(index => {
+          exceptionIndexes.add(index);
+          violations.push({
+            code: "background_over_route",
+            detail: `${paintLayers[index].id} is painted above a route or segment layer.`,
+          });
+        });
+    }
+    if (routeIndexes.length && checkpointIndexes.length) {
+      const lastRoute = Math.max(...routeIndexes);
+      checkpointIndexes
+        .filter(index => index < lastRoute)
+        .forEach(index => {
+          exceptionIndexes.add(index);
+          violations.push({
+            code: "route_over_checkpoint_anchor",
+            detail: `${paintLayers[index].id} is painted below a later route or segment layer.`,
+          });
+        });
+    }
+    const layers = compactSvgOrderLayers(svg, paintLayers, exceptionIndexes);
+    return createLayerOrderResult("svg", layers, violations, gaps);
+  }
+
+  function mapLibreStyleFromMapOrStyle(mapOrStyle) {
+    if (mapOrStyle?.getStyle && typeof mapOrStyle.getStyle === "function") {
+      try {
+        return mapOrStyle.getStyle();
+      } catch (error) {
+        return {__scoutOrderInspectorGap: `getStyle failed: ${String(error?.message || error || "unknown error")}`};
+      }
+    }
+    return mapOrStyle && typeof mapOrStyle === "object" ? mapOrStyle : null;
+  }
+
+  function mapLibreLayerRole(layer) {
+    const id = String(layer?.id || "").toLowerCase();
+    const source = String(layer?.source || "").toLowerCase();
+    const type = String(layer?.type || "").toLowerCase();
+    if (layer?.type === "raster" || layer?.type === "hillshade" || id.includes("raster") || id.includes("hillshade")) {
+      return "background";
+    }
+    if (id === EVIDENCE_LAYER_IDS.osmLine || id === EVIDENCE_LAYER_IDS.osmLineCasing) return "osm-basemap";
+    if (type === "line" && (id === EVIDENCE_LAYER_IDS.line || /(^|[-_])(route|track|segment)([-_]|$)/.test(id))) return "route";
+    if (["circle", "symbol"].includes(type)
+      && (id === EVIDENCE_LAYER_IDS.point || /(^|[-_])(checkpoint|cp|anchor|poi|hazard|boss|mcp|event)([-_]|$)/.test(id))) {
+      return "checkpoint";
+    }
+    if (source === EVIDENCE_SOURCE_ID) return "evidence";
+    return "unknown";
+  }
+
+  function mapLibreLayerVisible(layer) {
+    return layer?.layout?.visibility !== "none";
+  }
+
+  function mapLibreSourceHasGeometry(style, sourceId, role) {
+    const source = style?.sources?.[sourceId];
+    const data = source?.data;
+    const features = Array.isArray(data?.features) ? data.features : [];
+    if (!features.length) return false;
+    if (role === "route") {
+      return features.some(feature => ["LineString", "MultiLineString"].includes(feature?.geometry?.type)
+        && String(feature?.properties?.layer_id || "").toLowerCase() !== "osm");
+    }
+    if (role === "checkpoint") {
+      return features.some(feature => feature?.geometry?.type === "Point"
+        && String(feature?.properties?.layer_id || "").toLowerCase() !== "osm");
+    }
+    return true;
+  }
+
+  function inspectMapLibreLayerOrder(mapOrStyle, options = {}) {
+    const requireRoute = options.requireRoute !== false;
+    const style = mapLibreStyleFromMapOrStyle(mapOrStyle);
+    const violations = [];
+    const gaps = [];
+    if (style?.__scoutOrderInspectorGap) {
+      return createLayerOrderResult("maplibre", [], [], [style.__scoutOrderInspectorGap]);
+    }
+    if (!style || !Array.isArray(style.layers)) {
+      return createLayerOrderResult("maplibre", [], [], ["empty or missing MapLibre style"]);
+    }
+    style.layers
+      .map(layer => String(layer?.id || ""))
+      .filter(Boolean)
+      .filter((id, index, ids) => ids.indexOf(id) !== index)
+      .filter((id, index, ids) => ids.indexOf(id) === index)
+      .forEach(id => violations.push({
+        code: "duplicate_style_layer_id",
+        detail: `${id} appears more than once.`,
+      }));
+    const layers = style.layers.map(layer => {
+      const role = mapLibreLayerRole(layer);
+      return {
+        id: String(layer?.id || ""),
+        role,
+        visible: mapLibreLayerVisible(layer),
+        hasContent: role === "background"
+          ? Boolean(style.sources?.[layer.source])
+          : mapLibreSourceHasGeometry(style, layer.source, role),
+      };
+    });
+    if (!layers.length) gaps.push("MapLibre style contains no layers");
+    const routeIndexes = layers
+      .map((layer, index) => layer.role === "route" ? index : -1)
+      .filter(index => index >= 0);
+    const checkpointIndexes = layers
+      .map((layer, index) => layer.role === "checkpoint" ? index : -1)
+      .filter(index => index >= 0);
+    const backgroundIndexes = layers
+      .map((layer, index) => layer.role === "background" ? index : -1)
+      .filter(index => index >= 0);
+    if (requireRoute && !routeIndexes.length) gaps.push("route layer is missing");
+    if (requireRoute && routeIndexes.length && !routeIndexes.some(index => layers[index].hasContent)) {
+      gaps.push("route layer has no non-OSM source geometry");
+    }
+    layers.filter(layer => layer.visible && !layer.hasContent && layer.role !== "unknown" && layer.role !== "osm-basemap")
+      .forEach(layer => gaps.push(`${layer.id} has no source geometry or raster source`));
+    if (routeIndexes.length) {
+      const firstRoute = Math.min(...routeIndexes);
+      backgroundIndexes
+        .filter(index => index > firstRoute)
+        .forEach(index => violations.push({
+          code: "background_over_route",
+          detail: `${layers[index].id} is above a protected route layer.`,
+        }));
+    }
+    if (routeIndexes.length && checkpointIndexes.length) {
+      const lastRoute = Math.max(...routeIndexes);
+      checkpointIndexes
+        .filter(index => index < lastRoute)
+        .forEach(index => violations.push({
+          code: "route_over_checkpoint_anchor",
+          detail: `${layers[index].id} is below a later protected route layer.`,
+        }));
+    }
+    return createLayerOrderResult("maplibre", layers, violations, gaps);
+  }
+
   function buildEvidenceIndex(features = []) {
     const featureById = new Map();
     const featureIdsByRef = new Map();
@@ -529,6 +973,132 @@
     ];
   }
 
+  function osmFillColorExpression() {
+    return [
+      "match",
+      ["get", "osm_style_category"],
+      "forest", "#add19e",
+      "park", "#c8facc",
+      "grass", "#cdebb0",
+      "farmland", "#eef0d5",
+      "residential", "#e0dfdf",
+      "building", "#d9d0c9",
+      "water", "#aad3df",
+      "glacier", "#ddecec",
+      "terrain", "#e7dfd2",
+      "#eeeece",
+    ];
+  }
+
+  function osmFillOutlineColorExpression() {
+    return [
+      "match",
+      ["get", "osm_style_category"],
+      "building", "#b8ada6",
+      "water", "#4d80b3",
+      "rgba(110,114,102,0.46)",
+    ];
+  }
+
+  function osmLineCasingColorExpression() {
+    return [
+      "match",
+      ["get", "osm_style_category"],
+      "path", "#ffffff",
+      "footway", "#ffffff",
+      "steps", "#ffffff",
+      "track", "#8d6f38",
+      "motorway", "#dc2a67",
+      "waterway", "rgba(255,255,255,0.86)",
+      "terrain", "rgba(255,255,255,0.76)",
+      "infrastructure", "rgba(255,255,255,0.82)",
+      "#b9a16f",
+    ];
+  }
+
+  function osmLineCoreColorExpression() {
+    return [
+      "match",
+      ["get", "osm_style_category"],
+      "path", "#b47d46",
+      "footway", "#cf5f70",
+      "steps", "#9e7048",
+      "track", "#996600",
+      "service", "#ffffff",
+      "motorway", "#e892a2",
+      "trunk", "#f9b29c",
+      "primary", "#fcd6a4",
+      "secondary", "#f7fabf",
+      "tertiary", "#ffffff",
+      "unclassified", "#ffffff",
+      "residential", "#ffffff",
+      "road", "#ffffff",
+      "route", "#7b8f2a",
+      "waterway", "#4d80b3",
+      "terrain", "#9c8d78",
+      "infrastructure", "#8a8f99",
+      "#a36b2c",
+    ];
+  }
+
+  function osmLineCasingWidthExpression() {
+    return [
+      "match",
+      ["get", "osm_style_category"],
+      "motorway", 6.6,
+      "trunk", 6.2,
+      "primary", 5.9,
+      "secondary", 5.5,
+      "tertiary", 5.1,
+      "unclassified", 5.1,
+      "residential", 5.1,
+      "road", 5.3,
+      "track", 4.8,
+      "service", 4.5,
+      "path", 3.8,
+      "footway", 3.8,
+      "steps", 3.8,
+      2.8,
+    ];
+  }
+
+  function osmLineCoreWidthExpression() {
+    return [
+      "match",
+      ["get", "osm_style_category"],
+      "motorway", 4.1,
+      "trunk", 3.8,
+      "primary", 3.5,
+      "secondary", 3.2,
+      "tertiary", 3,
+      "unclassified", 3,
+      "residential", 3,
+      "road", 3.1,
+      "track", 2.5,
+      "service", 2.5,
+      "path", 1.55,
+      "footway", 1.45,
+      "steps", 1.55,
+      "route", 1.55,
+      "waterway", 1.35,
+      1.15,
+    ];
+  }
+
+  function osmPointColorExpression() {
+    return [
+      "match",
+      ["get", "osm_style_category"],
+      "milestone", "#8c6a21",
+      "mobile", "#0077b6",
+      "peak", "#a46020",
+      "shelter", "#6d5e3a",
+      "parking", "#3f78b5",
+      "water", "#2f90c8",
+      "#5a5f63",
+    ];
+  }
+
   function createEvidenceStyle(
     featureCollection = createEvidenceFeatureCollection(),
     {rasterLayers = []} = {},
@@ -548,6 +1118,16 @@
       .filter(layer => layer.render_position === "overlay")
       .map(rasterStyleLayerDefinition);
     const visibleFilter = ["==", ["get", "_scout_visible"], true];
+    const osmVisibleFilter = [
+      "all",
+      visibleFilter,
+      ["==", ["get", "layer_id"], "osm"],
+    ];
+    const evidenceVisibleFilter = [
+      "all",
+      visibleFilter,
+      ["!=", ["get", "layer_id"], "osm"],
+    ];
     return {
       version: 8,
       sources: {
@@ -565,12 +1145,60 @@
         },
         ...baseRasterStyleLayers,
         {
+          id: EVIDENCE_LAYER_IDS.osmFill,
+          type: "fill",
+          source: EVIDENCE_SOURCE_ID,
+          filter: ["all", osmVisibleFilter, ["==", ["geometry-type"], "Polygon"]],
+          paint: {
+            "fill-color": osmFillColorExpression(),
+            "fill-opacity": ["case", ["boolean", ["feature-state", "selected"], false], 0.82, 0.68],
+            "fill-outline-color": osmFillOutlineColorExpression(),
+          },
+        },
+        {
+          id: EVIDENCE_LAYER_IDS.osmLineCasing,
+          type: "line",
+          source: EVIDENCE_SOURCE_ID,
+          filter: ["all", osmVisibleFilter, ["==", ["geometry-type"], "LineString"]],
+          layout: {"line-cap": "round", "line-join": "round"},
+          paint: {
+            "line-color": osmLineCasingColorExpression(),
+            "line-width": osmLineCasingWidthExpression(),
+            "line-opacity": 0.92,
+          },
+        },
+        {
+          id: EVIDENCE_LAYER_IDS.osmLine,
+          type: "line",
+          source: EVIDENCE_SOURCE_ID,
+          filter: ["all", osmVisibleFilter, ["==", ["geometry-type"], "LineString"]],
+          layout: {"line-cap": "round", "line-join": "round"},
+          paint: {
+            "line-color": osmLineCoreColorExpression(),
+            "line-width": osmLineCoreWidthExpression(),
+            "line-opacity": 0.96,
+          },
+        },
+        {
+          id: EVIDENCE_LAYER_IDS.osmPoint,
+          type: "circle",
+          source: EVIDENCE_SOURCE_ID,
+          filter: ["all", osmVisibleFilter, ["==", ["geometry-type"], "Point"]],
+          paint: {
+            "circle-color": osmPointColorExpression(),
+            "circle-radius": ["case", ["boolean", ["feature-state", "selected"], false], 7, 3.2],
+            "circle-stroke-color": "rgba(255,255,255,0.94)",
+            "circle-stroke-width": 1,
+            "circle-opacity": 0.86,
+          },
+        },
+        {
           id: EVIDENCE_LAYER_IDS.fill,
           type: "fill",
           source: EVIDENCE_SOURCE_ID,
           filter: [
             "all",
-            visibleFilter,
+            evidenceVisibleFilter,
             ["==", ["geometry-type"], "Polygon"],
             ["!=", ["get", "render_position"], "overlay"],
           ],
@@ -580,11 +1208,12 @@
             "fill-outline-color": "#263746",
           },
         },
+        ...overlayRasterStyleLayers,
         {
           id: EVIDENCE_LAYER_IDS.line,
           type: "line",
           source: EVIDENCE_SOURCE_ID,
-          filter: ["all", visibleFilter, ["==", ["geometry-type"], "LineString"]],
+          filter: ["all", evidenceVisibleFilter, ["==", ["geometry-type"], "LineString"]],
           layout: {"line-cap": "round", "line-join": "round"},
           paint: {
             "line-color": evidenceLayerColorExpression(),
@@ -596,7 +1225,7 @@
           id: EVIDENCE_LAYER_IDS.point,
           type: "circle",
           source: EVIDENCE_SOURCE_ID,
-          filter: ["all", visibleFilter, ["==", ["geometry-type"], "Point"]],
+          filter: ["all", evidenceVisibleFilter, ["==", ["geometry-type"], "Point"]],
           paint: {
             "circle-color": evidenceLayerColorExpression(),
             "circle-radius": ["case", ["boolean", ["feature-state", "selected"], false], 10, 6],
@@ -611,7 +1240,7 @@
           source: EVIDENCE_SOURCE_ID,
           filter: [
             "all",
-            visibleFilter,
+            evidenceVisibleFilter,
             ["==", ["geometry-type"], "Polygon"],
             ["==", ["get", "render_position"], "overlay"],
           ],
@@ -626,7 +1255,6 @@
             "fill-outline-color": "rgba(255,255,255,0.48)",
           },
         },
-        ...overlayRasterStyleLayers,
       ],
     };
   }
@@ -812,8 +1440,13 @@
             this.map.getLayer(EVIDENCE_LAYER_IDS.fill) ? EVIDENCE_LAYER_IDS.fill : undefined,
           );
         });
+        const overlayBeforeLayerId = this.map.getLayer(EVIDENCE_LAYER_IDS.line)
+          ? EVIDENCE_LAYER_IDS.line
+          : this.map.getLayer(EVIDENCE_LAYER_IDS.point)
+            ? EVIDENCE_LAYER_IDS.point
+            : undefined;
         nextLayers.filter(layer => layer.render_position === "overlay").forEach(layer => {
-          this.map.addLayer(rasterStyleLayerDefinition(layer));
+          this.map.addLayer(rasterStyleLayerDefinition(layer), overlayBeforeLayerId);
         });
       }
 
@@ -880,6 +1513,9 @@
 
     bindFeatureInteractions() {
       [
+        EVIDENCE_LAYER_IDS.osmFill,
+        EVIDENCE_LAYER_IDS.osmLine,
+        EVIDENCE_LAYER_IDS.osmPoint,
         EVIDENCE_LAYER_IDS.fill,
         EVIDENCE_LAYER_IDS.line,
         EVIDENCE_LAYER_IDS.point,
@@ -1451,6 +2087,8 @@
     createEvidenceFeatureCollection,
     createEvidenceStyle,
     featureCollectionBounds,
+    inspectSvgLayerOrder,
+    inspectMapLibreLayerOrder,
     createRenderer,
     sourceId: EVIDENCE_SOURCE_ID,
     layerIds: EVIDENCE_LAYER_IDS,

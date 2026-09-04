@@ -40,6 +40,7 @@ from terrain_route_guidance_workspace import (
     TerrainRouteGuidanceWorkspaceService,
 )
 from terrain_route_hypothesis_models import GeoPoint
+from terrain_route_hypothesis_artifacts import build_terrain_route_resolution_identity
 
 
 def _test_access_value() -> str:
@@ -1115,6 +1116,221 @@ class TerrainRouteWorkerTransport(AsyncWorkerTransport):
         if artifact_id in self.artifact_bytes:
             return self.artifact_bytes[artifact_id]
         raise AssertionError(f"unexpected terrain route artifact: {url}")
+
+
+@pytest.fixture
+def prepared_ab_workspace(tmp_path: Path):
+    root, project, full_dem = _workspace(tmp_path)
+    config = QgisSpatialBackendConfig(
+        enabled=True, worker_url="http://127.0.0.1:9876",
+        worker_token=_test_access_value(),
+    )
+    feature_backend = QgisSpatialBackend(
+        config=config, transport=TerrainFeatureWorkerTransport(), now_factory=_fixed_now,
+    )
+    queued = feature_backend.start_workflow(
+        project_id=project["project_id"], project_root=root, project=project,
+        request=SpatialAnalysisRequest(
+            project_id=project["project_id"], workflow_id=TERRAIN_FEATURE_STACK_WORKFLOW_ID,
+            request_id="request-worker-demo",
+        ),
+    )
+    prepared = feature_backend.get_run(
+        project_root=root, workflow_run_id=queued.workflow_run_id,
+    )
+    assert prepared.state is SpatialWorkflowState.COMPLETED, prepared.error
+    project = json.loads((root / "project.json").read_text())
+    parent_path = root / project["terrain_feature_manifest_ref"]
+    parent = json.loads(parent_path.read_text())
+    summary_ref = "normalized/terrain/dtm_coverage_summary.json"
+    raster_ref = f"{summary_ref}#raster_sources/0/operator_supplied_full_extent_dem_raster"
+    parent["source_hashes"] = {
+        summary_ref: hashlib.sha256((root / summary_ref).read_bytes()).hexdigest(),
+        raster_ref: hashlib.sha256(full_dem.read_bytes()).hexdigest(),
+    }
+    parent["source_refs"] = list(parent["source_hashes"])
+    parent_path.write_text(json.dumps(parent))
+    transport = TerrainRouteWorkerTransport()
+    backend = QgisSpatialBackend(config=config, transport=transport, now_factory=_fixed_now)
+    request = SpatialAnalysisRequest(
+        project_id=project["project_id"], workflow_id=TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_ID,
+        corridor_m=1000,
+        terrain_route_endpoints=TerrainRouteEndpointSelection(
+            start={"x": 121.27166904, "y": 23.33401754, "crs": "EPSG:4326"},
+            destination={"x": 121.23066591, "y": 23.35160555, "crs": "EPSG:4326"},
+            selection_source="dashboard_map_selection",
+        ),
+    )
+    return root, project, full_dem, backend, transport, request
+
+
+def test_arbitrary_ab_uses_parent_bound_full_dem_not_previous_gpx_crop(prepared_ab_workspace):
+    root, project, full_dem, backend, transport, request = prepared_ab_workspace
+    queued = backend.start_workflow(
+        project_id=project["project_id"], project_root=root, project=project, request=request,
+    )
+    assert queued.state is SpatialWorkflowState.QUEUED, queued.error
+    submitted = transport.post_calls[0][1]
+    assert submitted["dem_refs"] == [str(full_dem)]
+    assert submitted["corridor_m"] == 1000
+    assert submitted["source_resolution"]["source_kind"] == "parent_bound_full_extent_raster"
+    assert submitted["source_resolution"]["x_m"] == 20
+    assert submitted["source_resolution"]["parent_terrain_feature_manifest_ref"] == project["terrain_feature_manifest_ref"]
+    parent_dem_ref = project["terrain_dem_route_bbox_raster_ref"]
+    parent_dem_sha = hashlib.sha256((root / parent_dem_ref).read_bytes()).hexdigest()
+    assert submitted["source_hashes"][parent_dem_ref] == parent_dem_sha
+    assert submitted["source_resolution"]["parent_dem_sha256"] == parent_dem_sha
+    identity = build_terrain_route_resolution_identity(submitted["source_resolution"])
+    assert identity["parent_dem_sha256"] == parent_dem_sha
+    assert "parent_terrain_feature_manifest_ref" not in identity
+    assert identity != build_terrain_route_resolution_identity({
+        **submitted["source_resolution"], "parent_dem_sha256": "0" * 64,
+    })
+    assert submitted["candidate_only"] is True
+    assert submitted["runtime_safety_truth"] is False
+    assert hashlib.sha256(full_dem.read_bytes()).hexdigest() in submitted["source_hashes"].values()
+
+
+def _prepare_workspace_buffer(prepared_ab_workspace):
+    from test_workspace_terrain_dem import FakeGdal
+
+    root, project, _, backend, _, _ = prepared_ab_workspace
+    ref = "normalized/terrain/dtm_coverage_summary.json"
+    coverage = json.loads((root / ref).read_text())
+    coverage["route_bbox_twd97"] = {"min_x": 242479.596, "min_y": 2581030.537,
+                                    "max_x": 277868.065, "max_y": 2606119.118}
+    (root / ref).write_text(json.dumps(coverage))
+    parent_path = root / project["terrain_feature_manifest_ref"]
+    parent = json.loads(parent_path.read_text())
+    parent["source_hashes"][ref] = hashlib.sha256((root / ref).read_bytes()).hexdigest()
+    parent_path.write_text(json.dumps(parent))
+    before = json.loads((root / "project.json").read_text())
+    result = backend.prepare_workspace_terrain_dem(project_root=root, adapter=FakeGdal())
+    assert result["status"] == "completed", result
+    after = json.loads((root / "project.json").read_text())
+    assert all(after[key] == value for key, value in before.items())
+    return after
+
+
+def test_arbitrary_ab_prefers_workspace_dem_without_original_material(prepared_ab_workspace):
+    root, _, full_dem, backend, transport, request = prepared_ab_workspace
+    project = _prepare_workspace_buffer(prepared_ab_workspace)
+    full_dem.unlink()
+    queued = backend.start_workflow(
+        project_id=project["project_id"], project_root=root, project=project, request=request,
+    )
+    assert queued.state is SpatialWorkflowState.QUEUED, queued.error
+    payload = transport.post_calls[0][1]
+    assert payload["dem_refs"] == [str(root / project["terrain_workspace_dem_raster_ref"])]
+    assert payload["source_resolution"]["source_kind"] == "workspace_prepared_dem"
+    assert payload["source_resolution"]["parent_dem_sha256"] in payload["source_hashes"].values()
+    assert payload["corridor_m"] == 1000
+    assert payload["candidate_only"] is True
+    assert payload["runtime_safety_truth"] is False
+
+
+@pytest.mark.parametrize("damage", ["raster", "manifest", "coverage", "parent", "outside"])
+def test_workspace_dem_never_falls_back_on_invalid_preparation(prepared_ab_workspace, damage):
+    root, _, _, backend, transport, request = prepared_ab_workspace
+    project = _prepare_workspace_buffer(prepared_ab_workspace)
+    if damage == "outside":
+        request = request.model_copy(update={"terrain_route_endpoints": TerrainRouteEndpointSelection(
+            start={"x": 121.8, "y": 24.0, "crs": "EPSG:4326"},
+            destination={"x": 121.7, "y": 24.01, "crs": "EPSG:4326"},
+            selection_source="dashboard_map_selection",
+        )})
+    else:
+        ref = {"raster": project["terrain_workspace_dem_raster_ref"],
+               "manifest": project["terrain_workspace_dem_manifest_ref"],
+               "coverage": "normalized/terrain/dtm_coverage_summary.json",
+               "parent": project["terrain_feature_manifest_ref"]}[damage]
+        (root / ref).write_bytes((root / ref).read_bytes() + b" ")
+    result = backend.start_workflow(
+        project_id=project["project_id"], project_root=root, project=project, request=request,
+    )
+    assert result.state is SpatialWorkflowState.FAILED
+    assert result.error.code is SpatialAnalysisErrorCode.SOURCE_UNAVAILABLE
+    assert not transport.post_calls
+
+
+def test_layer_preparation_materializes_workspace_dem_after_terrain_parent(tmp_path):
+    calls = []
+
+    class Backend:
+        def prepare_workspace_terrain_dem(self, *, project_root):
+            calls.append(project_root)
+            return {"status": "completed", "output_refs": {"terrain_workspace_dem_manifest_ref": "dem/manifest.json"}}
+
+    result = pretrip_layer_preparation._prepare_workspace_terrain_dem_after_terrain(
+        project_root=tmp_path, terrain_result={"status": "completed"}, backend=Backend(),
+    )
+    assert result["status"] == "completed"
+    assert calls == [tmp_path]
+    skipped = pretrip_layer_preparation._prepare_workspace_terrain_dem_after_terrain(
+        project_root=tmp_path, terrain_result={"status": "failed"}, backend=Backend(),
+    )
+    assert skipped["status"] == "not_run"
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("damage", ["missing", "changed_bytes", "changed_declaration", "parent_hash", "resolution"])
+def test_arbitrary_ab_rejects_unbound_full_dem_without_falling_back(prepared_ab_workspace, damage):
+    root, project, full_dem, backend, transport, request = prepared_ab_workspace
+    if damage == "missing":
+        full_dem.unlink()
+    elif damage == "changed_bytes":
+        full_dem.write_bytes(b"different-dem")
+    elif damage == "changed_declaration":
+        path = root / "normalized/terrain/dtm_coverage_summary.json"
+        payload = json.loads(path.read_text())
+        payload["raster_sources"][0]["source_resolution_m"] = 5
+        path.write_text(json.dumps(payload))
+    else:
+        path = root / project["terrain_feature_manifest_ref"]
+        payload = json.loads(path.read_text())
+        if damage == "parent_hash":
+            ref = next(ref for ref in payload["source_hashes"] if "#raster_sources/" in ref)
+            payload["source_hashes"][ref] = "0" * 64
+        else:
+            payload["source_resolution"]["x_m"] = 5
+            payload["source_resolution"]["y_m"] = 5
+            payload["parameters"]["analysis_extent"]["resolution_m"] = 5
+        path.write_text(json.dumps(payload))
+    run = backend.start_workflow(
+        project_id=project["project_id"], project_root=root, project=project, request=request,
+    )
+    assert run.state is SpatialWorkflowState.FAILED
+    assert run.error.code is SpatialAnalysisErrorCode.SOURCE_UNAVAILABLE
+    assert not transport.post_calls
+
+
+def test_new_ab_attempt_keeps_published_candidate_when_worker_fails(prepared_ab_workspace, monkeypatch):
+    root, project, _, backend, transport, request = prepared_ab_workspace
+    queued = backend.start_workflow(
+        project_id=project["project_id"], project_root=root, project=project, request=request,
+    )
+    completed = backend.get_run(project_root=root, workflow_run_id=queued.workflow_run_id)
+    assert completed.state is SpatialWorkflowState.COMPLETED, completed.error
+    published = json.loads((root / "project.json").read_text())
+    changed = request.model_copy(update={"corridor_m": 1200})
+    queued = backend.start_workflow(
+        project_id=project["project_id"], project_root=root, project=published, request=changed,
+    )
+    assert queued.state is SpatialWorkflowState.QUEUED, queued.error
+    pending = json.loads((root / "project.json").read_text())
+    assert pending["terrain_route_hypothesis_ref"] == published["terrain_route_hypothesis_ref"]
+    worker_failed = transport._run("failed")
+    worker_failed["error"] = {
+        "code": "NODATA_PRESENT", "message": "The DEM contains NoData cells.",
+    }
+    monkeypatch.setattr(transport, "get_json", lambda *args, **kwargs: worker_failed)
+    failed = backend.get_run(project_root=root, workflow_run_id=queued.workflow_run_id)
+    assert failed.state is SpatialWorkflowState.FAILED
+    assert failed.error.code is SpatialAnalysisErrorCode.NODATA_PRESENT
+    after = json.loads((root / "project.json").read_text())
+    for key in published:
+        if key.startswith("terrain_route_hypothesis_"):
+            assert after.get(key) == published[key]
 
 
 def test_qgis_backend_requires_worker_token_before_network_call() -> None:

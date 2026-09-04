@@ -15,7 +15,6 @@ from uuid import UUID, uuid4
 
 from pydantic import Field, model_validator
 
-from scout.agents.pydantic_ai_compat import pydantic_result_output
 from scout.nextgen.intelligence_gateway import (
     CapabilityBroker,
     FORBIDDEN_INTELLIGENCE_CAPABILITIES,
@@ -38,6 +37,7 @@ from scout.nextgen.model_gateway import (
     ScoutModelGateway,
 )
 from scout.nextgen.model_runtime import (
+    Locality,
     ModelCapabilityAttestation,
     ModelRuntimeCapability,
     ModelRuntimeProfile,
@@ -47,6 +47,7 @@ from scout.nextgen.openai_compatible_backend import (
     OpenAICompatiblePydanticBackend,
 )
 from scout.nextgen.praison_service import EvidenceCatalog
+from scout.pydantic_ai_result import pydantic_result_output
 from scout.schemas.base import NonEmptyStr, SchemaModel
 
 MAX_QUALIFICATION_CASE_BYTES = 64 * 1024
@@ -251,7 +252,11 @@ def run_openai_compatible_qualification(
     config = OpenAICompatibleBackendConfig.from_json_file(runtime_config_path)
     case = ModelRuntimeQualificationCase.from_json_file(case_path)
     catalog = EvidenceCatalog.from_json_file(evidence_catalog_path)
-    request = _build_intelligence_request(case, catalog)
+    request = _build_intelligence_request(
+        case,
+        catalog,
+        allow_cloud_escalation=config.locality is Locality.CLOUD,
+    )
     checks = [_configuration_check(config)]
     execution: IntelligenceGatewayExecution | None = None
 
@@ -1013,6 +1018,8 @@ def _authority_check(
 def _build_intelligence_request(
     case: ModelRuntimeQualificationCase,
     catalog: EvidenceCatalog,
+    *,
+    allow_cloud_escalation: bool,
 ) -> IntelligenceRequest:
     available_refs = {item.source_ref for item in catalog.items}
     missing_refs = set(case.evidence_refs).difference(available_refs)
@@ -1058,6 +1065,8 @@ def _build_intelligence_request(
         evidence_refs=case.evidence_refs,
         max_runtime_seconds=case.max_runtime_seconds,
         max_model_requests=case.max_model_requests,
+        allow_cloud_escalation=allow_cloud_escalation,
+        privacy_sensitive=case.privacy_sensitive,
     )
 
 

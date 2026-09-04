@@ -60,6 +60,7 @@ from scout.nextgen.openai_compatible_backend import (
 from scout.nextgen.praison_service import (
     _CompactSpecialistAdvisory,
     _CompactSpecialistFinding,
+    _compact_specialist_model_prompt,
     EvidenceCatalog,
     EvidenceCatalogItem,
     PraisonIntelligenceService,
@@ -422,6 +423,36 @@ def test_openai_compatible_backend_executes_native_json_schema_output() -> None:
     assert result.output == _ProbeOutput(value="http-replay-ok")
     assert payload.get("tools") is None
     assert payload["response_format"]["type"] == "json_schema"
+
+
+def test_native_schema_retries_keep_evidence_without_accumulating_bad_answers() -> None:
+    calls = 0
+
+    def respond(payload):
+        nonlocal calls
+        calls += 1
+        text = json.dumps(payload["messages"])
+        assert "Return the typed replay result" in text
+        assert not any(message["role"] == "assistant" for message in payload["messages"])
+        if calls > 1:
+            assert "schema validation" in text
+            assert "bad-untrusted-answer" not in text
+        return {"wrong_field": "bad-untrusted-answer"} if calls < 3 else {"value": "repaired"}
+
+    with _openai_replay_server(responder=respond) as (base_url, state):
+        config = _config(base_url, structured_output_mode="native", native_retry_context_mode="fresh_attempt")
+        backend = OpenAICompatiblePydanticBackend(config=config, environ={})
+        with ScoutModelGateway(profiles=(config.to_runtime_profile(),), backends=(backend,)) as gateway:
+            session = gateway.open_session(parent_request_id=uuid4(), max_model_requests=10)
+            result = session.infer(_request(session.parent_request_id), output_type=_ProbeOutput)
+    assert result.output.value == "repaired"
+    assert result.execution_record.model_request_count == 3
+    assert len(state.requests[1]["messages"]) == len(state.requests[2]["messages"])
+
+
+def test_fresh_attempt_context_rejects_tool_calling_runtime() -> None:
+    with pytest.raises(ValidationError, match="native"):
+        _config("http://127.0.0.1:8000/v1", native_retry_context_mode="fresh_attempt")
 
 
 def test_hailo_timestamp_mode_normalizes_nanoseconds_before_pydantic_ai() -> None:
@@ -881,6 +912,15 @@ def test_compact_advisory_leaves_ids_and_authority_to_server_grounding() -> None
         uncertainty.uncertainty_id.endswith("not_normalized_candidate")
         for uncertainty in grounded.uncertainties
     )
+
+    prompt = _compact_specialist_model_prompt(
+        task_prompt="Analyze terrain candidates.",
+        model_input=model_input,
+    )
+    assert "exactly 2 objects in the findings array" in prompt
+    assert '{"findings":[{"claim":"...","confidence":0.5' in prompt
+    assert "confidence must be a JSON number from 0 to 1" in prompt
+    assert "never rename it to confidentiality" in prompt
 
 
 def _specialist_responder(payload: dict[str, Any]) -> dict[str, Any]:

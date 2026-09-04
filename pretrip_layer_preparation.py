@@ -605,6 +605,11 @@ def run_layer_preparation(request: LayerPreparationRequest) -> dict[str, Any]:
         else _qgis_terrain_preparation_not_run(request, manifest)
     )
     manifest["qgis_terrain_feature_stack"] = qgis_terrain_feature_stack
+    workspace_terrain_dem = _prepare_workspace_terrain_dem_after_terrain(
+        project_root=project_root, terrain_result=qgis_terrain_feature_stack,
+    )
+    manifest["workspace_terrain_dem"] = workspace_terrain_dem
+    outputs.update(workspace_terrain_dem.get("output_refs", {}))
     manifest["qgis_dependent_risk"] = _finalize_qgis_dependent_risk_state(
         project_root=project_root,
         manifest=manifest,
@@ -6248,6 +6253,18 @@ def _run_qgis_terrain_feature_stack_after_layer_preparation(
                 },
             },
         )
+
+
+def _prepare_workspace_terrain_dem_after_terrain(
+    *, project_root: Path, terrain_result: dict[str, Any], backend: Any | None = None,
+) -> dict[str, Any]:
+    if terrain_result.get("status") != "completed":
+        return {"status": "not_run", "reason": "terrain_parent_unavailable", "output_refs": {}}
+    if backend is None:
+        from qgis_spatial_backend import QgisSpatialBackend
+
+        backend = QgisSpatialBackend.from_env()
+    return backend.prepare_workspace_terrain_dem(project_root=project_root)
 
 
 def _terrain_route_hypothesis_not_run(

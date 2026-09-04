@@ -45,7 +45,7 @@ from scout.agents.pydantic_ai_compat import (
     pydantic_native_research_capabilities,
 )
 
-REQUIRED_VERSION = "2.37.0"
+REQUIRED_VERSION = "2.38.0"
 DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4-flash-0731"
 DEFAULT_TIMEOUT_SECONDS = 120.0
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -86,12 +86,18 @@ def main(argv: list[str] | None = None) -> int:
             ".env followed by ~/.scout/.env without overriding process values."
         ),
     )
+    parser.add_argument(
+        "--expected-version",
+        default=REQUIRED_VERSION,
+        help="Verify an isolated upgrade candidate without changing runtime pins.",
+    )
     args = parser.parse_args(argv)
     report = asyncio.run(
         run_compatibility_smoke(
             live_openrouter=args.live_openrouter,
             model_name=args.model,
             env_file=Path(args.env_file) if args.env_file else None,
+            expected_version=args.expected_version,
         )
     )
     print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
@@ -103,11 +109,12 @@ async def run_compatibility_smoke(
     live_openrouter: bool = False,
     model_name: str | None = None,
     env_file: Path | None = None,
+    expected_version: str = REQUIRED_VERSION,
 ) -> dict[str, Any]:
     loaded_env_files: tuple[str, ...] = ()
     if live_openrouter:
         loaded_env_files = _load_live_env_files(env_file)
-    checks = await _run_checks(_offline_checks())
+    checks = await _run_checks(_offline_checks(expected_version=expected_version))
     resolved_model = _normalize_openrouter_model(
         model_name or os.getenv("SCOUT_AI_OS_MODEL") or DEFAULT_OPENROUTER_MODEL
     )
@@ -124,13 +131,18 @@ async def run_compatibility_smoke(
             )
         else:
             model = build_chat_model(model_name=resolved_model, api_key=api_key)
-            checks.extend(await _run_checks(_live_checks(model)))
+            checks.extend(
+                await _run_checks(
+                    _live_checks(model, expected_version=expected_version)
+                )
+            )
     failed = [item for item in checks if item["status"] != "passed"]
     return {
         "artifact_kind": "scout_pydantic_ai_compatibility_smoke",
         "schema_version": "scout.pydantic_ai.compatibility_smoke.v1",
         "status": "passed" if not failed else "failed",
-        "required_version": REQUIRED_VERSION,
+        "required_version": expected_version,
+        "configured_version": REQUIRED_VERSION,
         "package_versions": _package_versions(),
         "live_openrouter_requested": live_openrouter,
         "openrouter_credential_present": bool(os.getenv("OPENROUTER_API_KEY")),
@@ -143,9 +155,15 @@ async def run_compatibility_smoke(
     }
 
 
-def _offline_checks() -> list[tuple[str, Callable[[], Any]]]:
+def _offline_checks(
+    *,
+    expected_version: str = REQUIRED_VERSION,
+) -> list[tuple[str, Callable[[], Any]]]:
     return [
-        ("runtime_versions", _offline_runtime_versions),
+        (
+            "runtime_versions",
+            lambda: _offline_runtime_versions(expected_version=expected_version),
+        ),
         ("v236_capability_contract", _offline_v236_capability_contract),
         ("v237_zai_finish_reasons", _offline_v237_zai_finish_reasons),
         ("openrouter_web_search_annotations", _offline_openrouter_annotations),
@@ -166,10 +184,17 @@ def _offline_checks() -> list[tuple[str, Callable[[], Any]]]:
     ]
 
 
-def _live_checks(model: Any) -> list[tuple[str, Callable[[], Any]]]:
+def _live_checks(
+    model: Any,
+    *,
+    expected_version: str = REQUIRED_VERSION,
+) -> list[tuple[str, Callable[[], Any]]]:
     return [
         ("live_openrouter_function_tool", lambda: _live_function_tool(model)),
-        ("live_openrouter_structured_output", lambda: _live_structured_output(model)),
+        (
+            "live_openrouter_structured_output",
+            lambda: _live_structured_output(model, expected_version=expected_version),
+        ),
         ("live_openrouter_mcp", lambda: _live_mcp(model)),
         ("live_openrouter_stream_events", lambda: _live_stream_events(model)),
         (
@@ -204,12 +229,15 @@ async def _run_checks(
     return results
 
 
-def _offline_runtime_versions() -> dict[str, str]:
+def _offline_runtime_versions(
+    *,
+    expected_version: str = REQUIRED_VERSION,
+) -> dict[str, str]:
     versions = _package_versions()
     for package_name in ("pydantic-ai-slim", "pydantic-evals", "pydantic-graph"):
-        if versions[package_name] != REQUIRED_VERSION:
+        if versions[package_name] != expected_version:
             raise AssertionError(
-                f"{package_name}={versions[package_name]}, expected {REQUIRED_VERSION}"
+                f"{package_name}={versions[package_name]}, expected {expected_version}"
             )
     return versions
 
@@ -843,7 +871,7 @@ async def _live_function_tool(model: Any) -> dict[str, Any]:
     def scout_runtime_version() -> str:
         """Return the installed Scout Pydantic AI version."""
 
-        return REQUIRED_VERSION
+        return version("pydantic-ai-slim")
 
     agent = Agent(
         model,
@@ -857,16 +885,22 @@ async def _live_function_tool(model: Any) -> dict[str, Any]:
     result = await _live_run(agent, "What Scout Pydantic AI version is installed?")
     trace = _message_trace(result)
     _require("scout_runtime_version" in trace["tool_names"], "live tool was not called")
-    _require(REQUIRED_VERSION in str(result.output), "live tool result was not used")
+    _require(
+        scout_runtime_version() in str(result.output), "live tool result was not used"
+    )
     return {**trace, "output": str(result.output)}
 
 
-async def _live_structured_output(model: Any) -> dict[str, Any]:
+async def _live_structured_output(
+    model: Any,
+    *,
+    expected_version: str = REQUIRED_VERSION,
+) -> dict[str, Any]:
     agent = Agent(
         model,
         output_type=LiveStructuredSmokeOutput,
         instructions=(
-            f"Return status='ok' and runtime_version='{REQUIRED_VERSION}' "
+            f"Return status='ok' and runtime_version='{expected_version}' "
             "using the required structured output."
         ),
         **pydantic_agent_runtime_kwargs(),
@@ -874,7 +908,7 @@ async def _live_structured_output(model: Any) -> dict[str, Any]:
     result = await _live_run(agent, "Produce the compatibility result.")
     _require(result.output.status == "ok", "live structured status mismatch")
     _require(
-        result.output.runtime_version == REQUIRED_VERSION,
+        result.output.runtime_version == expected_version,
         "live structured version mismatch",
     )
     return result.output.model_dump(mode="json")

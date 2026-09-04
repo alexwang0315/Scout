@@ -94,6 +94,7 @@ def build_terrain_route_resolution_identity(
         "resolution_m",
         "crs",
         "adds_source_resolution",
+        "parent_dem_sha256",
     )
     identity = {
         key: source_resolution[key]

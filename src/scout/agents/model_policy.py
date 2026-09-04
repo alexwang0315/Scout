@@ -146,7 +146,7 @@ def resolve_model_policy(
     if provider is None:
         raise ValueError(
             f"unsupported Scout model provider for {requested!r}; "
-            "use openrouter:, nvidia:, or openai-chat:"
+            "use openrouter:, nvidia:, openai-chat:, or hailo:"
         )
     provider_model_id = _provider_model_id(normalized_model)
     required_credential_env = _required_credential_env(normalized_model)
@@ -161,7 +161,7 @@ def resolve_model_policy(
         provider=provider,
         provider_model_id=provider_model_id,
         display_name=normalized_model,
-        requires_network=True,
+        requires_network=provider != "hailo_ollama",
         required_credential_env=required_credential_env,
         missing_credential_env=missing_credential_env,
         aggressive_construction_mode=aggressive_construction_mode,
@@ -173,7 +173,11 @@ def resolve_model_policy(
         estimated_call_cost_usd=(
             estimated_call_cost_usd
             if estimated_call_cost_usd is not None
-            else DEFAULT_EXTERNAL_MODEL_ESTIMATED_CALL_COST_USD
+            else (
+                0.0
+                if provider == "hailo_ollama"
+                else DEFAULT_EXTERNAL_MODEL_ESTIMATED_CALL_COST_USD
+            )
         ),
         fallback_model=fallback_model,
         **native_research,
@@ -231,6 +235,8 @@ def _provider_for_model(model: str) -> str | None:
         return "nvidia"
     if model.startswith("openai-chat:"):
         return "openai-chat"
+    if model.startswith("hailo:"):
+        return "hailo_ollama"
     return None
 
 
@@ -241,6 +247,8 @@ def _provider_model_id(model: str) -> str:
         return model.removeprefix("nvidia:")
     if model.startswith("openai-chat:"):
         return model.removeprefix("openai-chat:")
+    if model.startswith("hailo:"):
+        return model.removeprefix("hailo:")
     return model
 
 

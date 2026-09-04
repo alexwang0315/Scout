@@ -13,6 +13,8 @@ import math
 import re
 from typing import Any, Iterable, Mapping, Sequence
 
+from pretrip_historical_return_cost import build_historical_return_cost
+
 
 SCHEMA_VERSION = "scout_route_architecture_intelligence.v0"
 MAX_SPINE_NODES = 40
@@ -166,6 +168,12 @@ def build_route_architecture_intelligence(
         default_source_ref=reference_source_ref,
         demand_vectors=vectors,
     )
+    historical_return_cost = _historical_return_cost_projection(
+        reference_value.get("historical_route_timing"),
+        route_distance_m=route_distance_m,
+        distance_scale=_route_axis_scale(route_axis_transform),
+        source_ref=reference_source_ref,
+    )
     evidence_quality = _evidence_quality(
         status=status,
         reference=reference_value,
@@ -280,6 +288,7 @@ def build_route_architecture_intelligence(
         },
         "segment_demand_vectors": vectors,
         "checkpoint_passage_timing": checkpoint_passage_timing,
+        "historical_return_cost": historical_return_cost,
         "checkpoint_graph": _checkpoint_graph(
             checkpoint_values,
             segment_values,
@@ -362,6 +371,49 @@ def build_route_architecture_intelligence(
     }
     payload["sha256"] = _payload_sha256(payload)
     return payload
+
+
+def _historical_return_cost_projection(
+    value: Any, *, route_distance_m: float, distance_scale: float, source_ref: str,
+) -> dict[str, Any]:
+    timing = dict(value) if isinstance(value, Mapping) else {}
+
+    def scaled(item: Mapping, keys: tuple[str, ...]) -> dict:
+        return {
+            **item,
+            **{key: number * distance_scale if (number := _number(item.get(key))) is not None else None for key in keys},
+        }
+
+    bins = [
+        scaled(item, ("start_distance_m", "end_distance_m"))
+        for item in timing.get("bins", []) if isinstance(item, Mapping)
+    ]
+    checkpoints = [
+        scaled(item, ("route_distance_m",))
+        for item in timing.get("checkpoints", []) if isinstance(item, Mapping)
+    ]
+    camps = [
+        scaled(item, ("route_distance_m",))
+        for item in timing.get("camp_evidence", {}).get("camps", []) if isinstance(item, Mapping)
+    ]
+    daily_budget = dict(timing.get("daily_budget") or {})
+    result = build_historical_return_cost(
+        bins=bins, checkpoints=checkpoints, camps=camps,
+        daily_budget_minutes=_number(daily_budget.get("minutes")),
+        route_distance_m=route_distance_m,
+    )
+    return {
+        **result,
+        "daily_budget": daily_budget,
+        "directional_counts": dict(timing.get("counts") or {}),
+        "estimation_policy": dict(timing.get("policy") or {}),
+        "camp_evidence": {**dict(timing.get("camp_evidence") or {}), "camps": camps},
+        "source_path": f"{source_ref}#historical_route_timing",
+        "distance_scale": distance_scale,
+        "duration_scaled": False,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
 
 
 def _golden_route_elevation_profile_projection(value: Any) -> dict[str, Any]:

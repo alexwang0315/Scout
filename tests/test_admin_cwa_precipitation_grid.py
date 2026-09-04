@@ -308,6 +308,23 @@ def test_admin_position_target_rainfall_trend_is_compact_and_does_not_persist_co
     payload = response.json()
     assert payload["currentPosition"]["past1hMm"] == 1.0
     assert payload["target"]["next1hMm"] == 24.0
+    assert payload["decisionReview"]["status"] == "reevaluated"
+    assert payload["decisionReview"]["targetId"] == "CP-02"
+    assert payload["decisionReview"]["trigger"] == "target-rainfall-trend"
+    dashboard = payload["weatherDashboard"]
+    assert dashboard["routeTrend"]["target"]["id"] == "CP-02"
+    assert dashboard["routeTrend"]["target"]["next1hMm"] == 24.0
+    assert "CP-02" in " ".join(dashboard["decision"]["why"])
+    assert dashboard["processingBoundary"]["upstreamFetchOnRead"] is False
+    assert dashboard["processingBoundary"]["rawCoordinatesPersisted"] is False
+    assert dashboard["loraAlert"]["sent"] is False
+    assert dashboard["loraAlert"]["targetSpecific"] is False
+    assert dashboard["loraAlert"]["basis"] == "persisted_route_risk"
+    assert "rainfallTrend" not in dashboard["sourceRefs"]
+    assert dashboard["trendContext"]["scope"] == "request_only"
+    assert dashboard["pairVerification"]["targetRainfallTrend"] == "verified_source_frames"
+    cached = client.get("/admin/pretrip/projects/fixture-route/weather-dashboard").json()
+    assert cached["routeTrend"]["target"]["id"] is None
     serialized = json.dumps(payload)
     assert '"lat"' not in serialized
     assert '"lon"' not in serialized
@@ -351,6 +368,81 @@ def test_admin_position_target_rainfall_trend_is_compact_and_does_not_persist_co
         },
     )
     assert missing_approval.status_code == 422
+
+
+def test_target_decision_failure_does_not_discard_successful_sampling(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fixed_now = datetime(2026, 7, 13, 3, 0, tzinfo=timezone.utc)
+    workspace_root = _prepare_workspace(tmp_path)
+    client = TestClient(create_admin_app(
+        pretrip_workspace_root=workspace_root, now_factory=lambda: fixed_now,
+    ))
+    approval = _issue_location_approval(client)
+
+    def failed_decision(**_kwargs):
+        raise ValueError("controlled decision context failure")
+
+    monkeypatch.setattr(admin_api, "_build_weather_dashboard_decision", failed_decision)
+    response = client.post("/admin/pretrip/projects/fixture-route/rainfall-trend", json={
+        "currentPosition": {"lat": 23.0, "lon": 121.0, "observedAt": fixed_now.isoformat()},
+        "targetPosition": {"lat": 23.0125, "lon": 121.025, "id": "CP-103"},
+        "confirmLocationAccess": True,
+        "locationApprovalReference": approval["reference"],
+        "locationApprovedAt": approval["approvedAt"],
+        "locationApprovalScope": approval["scope"],
+    })
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["target"]["id"] == "CP-103"
+    assert payload["target"]["next1hMm"] == 24.0
+    assert payload["decisionReview"]["status"] == "failed"
+    assert payload["weatherDashboard"] is None
+
+
+def test_target_decision_rejects_a_new_cwa_pair_published_during_sampling(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import route_precipitation_sampler
+
+    fixed_now = datetime(2026, 7, 13, 3, 0, tzinfo=timezone.utc)
+    workspace_root = _prepare_workspace(tmp_path)
+    client = TestClient(create_admin_app(
+        pretrip_workspace_root=workspace_root, now_factory=lambda: fixed_now,
+    ))
+    approval = _issue_location_approval(client)
+    sampler = route_precipitation_sampler.build_route_precipitation_trend
+    rainfall_root = workspace_root / "fixture-route/outputs/environment/cwa/rainfall"
+
+    def rotate_frames_after_sampling(**kwargs):
+        package = sampler(**kwargs)
+        qpf = kwargs["qpf_grid"]
+        values = [list(row) for row in qpf.values]
+        values[0][0] = 99.0
+        updated_qpf = qpf.model_copy(update={"values": tuple(tuple(row) for row in values)})
+        WeatherGridStore(rainfall_root).update_manifest([kwargs["qpe_grid"], updated_qpf])
+        return package
+
+    monkeypatch.setattr(
+        route_precipitation_sampler, "build_route_precipitation_trend",
+        rotate_frames_after_sampling,
+    )
+    response = client.post("/admin/pretrip/projects/fixture-route/rainfall-trend", json={
+        "currentPosition": {"lat": 23.0, "lon": 121.0, "observedAt": fixed_now.isoformat()},
+        "targetPosition": {"lat": 23.0125, "lon": 121.025, "id": "CP-103"},
+        "confirmLocationAccess": True,
+        "locationApprovalReference": approval["reference"],
+        "locationApprovedAt": approval["approvedAt"],
+        "locationApprovalScope": approval["scope"],
+    })
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["target"]["next1hMm"] == 24.0
+    assert payload["decisionReview"]["status"] == "failed"
+    assert payload["decisionReview"]["errorCode"] == "weather_decision_context_unavailable"
+    assert payload["weatherDashboard"] is None
 
 
 def test_admin_rainfall_endpoints_reject_unsafe_or_wrong_project_ids(

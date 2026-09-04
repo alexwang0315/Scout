@@ -110,8 +110,9 @@ def write_cwa_live_evidence_bundles(
     observed_times = [report.observed_at, test_observed_at]
     if credential_rotation_receipt is not None:
         observed_times.append(credential_rotation_receipt.observed_at)
-    evidence_observed_at = max(observed_times)
-    if evidence_observed_at > reviewed_at:
+    # A new companion receipt cannot renew older evidence in the same claim.
+    evidence_observed_at = min(observed_times)
+    if max(observed_times) > reviewed_at:
         raise ValueError("reviewed_at cannot predate report or test evidence")
 
     root_ref = qualification_root_ref.rstrip("/")
@@ -220,8 +221,8 @@ def write_mqtt_live_evidence_bundles(
         test_path.stat().st_mtime,
         tz=timezone.utc,
     )
-    evidence_observed_at = max(report.observed_at, test_observed_at)
-    if evidence_observed_at > reviewed_at:
+    evidence_observed_at = min(report.observed_at, test_observed_at)
+    if max(report.observed_at, test_observed_at) > reviewed_at:
         raise ValueError("reviewed_at cannot predate report or test evidence")
 
     root_ref = qualification_root_ref.rstrip("/")
@@ -317,8 +318,8 @@ def write_pi_live_evidence_bundles(
         test_path.stat().st_mtime,
         tz=timezone.utc,
     )
-    evidence_observed_at = max(report.observed_at, test_observed_at)
-    if evidence_observed_at > reviewed_at:
+    evidence_observed_at = min(report.observed_at, test_observed_at)
+    if max(report.observed_at, test_observed_at) > reviewed_at:
         raise ValueError("reviewed_at cannot predate report or test evidence")
 
     root_ref = qualification_root_ref.rstrip("/")
@@ -421,8 +422,8 @@ def write_phase1_writer_live_evidence_bundle(
         test_path.stat().st_mtime,
         tz=timezone.utc,
     )
-    evidence_observed_at = max(report.observed_at, test_observed_at)
-    if evidence_observed_at > reviewed_at:
+    evidence_observed_at = min(report.observed_at, test_observed_at)
+    if max(report.observed_at, test_observed_at) > reviewed_at:
         raise ValueError("reviewed_at cannot predate report or test evidence")
 
     area = "phase1_writer_deployment"

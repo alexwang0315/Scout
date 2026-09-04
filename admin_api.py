@@ -100,6 +100,12 @@ from qgis_spatial_backend import (
     QgisSpatialNotFound,
 )
 from qgis_spatial_contracts import SpatialAnalysisRequest, SpatialEvidenceReviewRequest
+from qgis_runtime_control import (
+    QgisRuntimeControlCode,
+    QgisRuntimeControlRequest,
+    QgisRuntimeControlResult,
+    QgisRuntimeController,
+)
 from scout_gee_integration import build_gee_runtime_status
 from pretrip_admin_view import (
     build_pretrip_admin_view,
@@ -2339,6 +2345,7 @@ def create_admin_app(
     ) = None,
     now_factory: Callable[[], datetime] | None = None,
     connected_preparation_manager: Any | None = None,
+    qgis_runtime_controller: QgisRuntimeController | None = None,
     runtime_audit_root: Path | None = None,
     runtime_audit_ledger: FileRuntimeAuditLedger | None = None,
     terrain_guidance_elevation_sampler: Any = (
@@ -2408,6 +2415,7 @@ def create_admin_app(
             ),
             now_factory=now_factory,
             connected_preparation_manager=resolved_connected_preparation_manager,
+            qgis_runtime_controller=qgis_runtime_controller,
             runtime_audit=resolved_runtime_audit,
             terrain_guidance_elevation_sampler=terrain_guidance_elevation_sampler,
         )
@@ -2738,6 +2746,7 @@ def create_admin_router(
     ) = None,
     now_factory: Callable[[], datetime] | None = None,
     connected_preparation_manager: Any | None = None,
+    qgis_runtime_controller: QgisRuntimeController | None = None,
     runtime_audit: FileRuntimeAuditLedger | None = None,
     terrain_guidance_elevation_sampler: Any = (
         _AUTO_TERRAIN_GUIDANCE_ELEVATION_SAMPLER
@@ -5152,6 +5161,52 @@ def create_admin_router(
             ) from exc
         return _terrain_route_guidance_response(payload)
 
+    @router.get("/pretrip/projects/{project_id}/terrain-route-guidance/map-review-scope")
+    def pretrip_project_terrain_route_guidance_map_review_scope(
+        project_id: str,
+        reference_hypothesis_id: str = Query(
+            pattern=r"^[a-z0-9][a-z0-9._-]{0,79}$",
+        ),
+        corridor_band_name: str = Query(
+            pattern=r"^top_(5|10|20)_percent_corridor$",
+        ),
+        expected_feature_index_sha256: str | None = Query(
+            default=None, pattern=r"^[a-f0-9]{64}$",
+        ),
+        expected_resolution_sha256: str | None = Query(
+            default=None, pattern=r"^[a-f0-9]{64}$",
+        ),
+    ) -> JSONResponse:
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        try:
+            payload = terrain_route_guidance_service.map_review_scope(
+                project_root,
+                project_id=project_id,
+                reference_hypothesis_id=reference_hypothesis_id,
+                corridor_band_name=corridor_band_name,
+                expected_feature_index_sha256=expected_feature_index_sha256,
+                expected_resolution_sha256=expected_resolution_sha256,
+            )
+        except (OSError, ValueError, ValidationError, TerrainRouteToolUnavailable) as exc:
+            return _terrain_route_guidance_response({
+                "artifact_kind": "terrain_guidance_map_review_scope",
+                "status": "unavailable",
+                "project_id": project_id,
+                "reference_hypothesis_id": reference_hypothesis_id,
+                "band_name": corridor_band_name,
+                "reason": str(exc),
+                "constraints": [],
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "operational": False,
+            }, status_code=409)
+        return _terrain_route_guidance_response(payload)
+
     @router.get(
         "/pretrip/projects/{project_id}/terrain-route-hypotheses/explain"
     )
@@ -5314,6 +5369,63 @@ def create_admin_router(
         except (OSError, ValueError, ValidationError) as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         return _terrain_route_guidance_response(payload)
+
+    def qgis_runtime_project(project_id: str) -> None:
+        try:
+            _validate_pretrip_import_project_id(project_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        project_root = _pretrip_workspace_project_root(pretrip_workspace_root, project_id=project_id)
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        if _pretrip_project_root_is_repo_fixture(project_root):
+            raise HTTPException(status_code=409, detail="Worker startup requires a workspace-backed project")
+
+    def qgis_runtime_local_request(request: Request) -> bool:
+        try:
+            return (
+                request.client is not None
+                and ipaddress.ip_address(request.client.host).is_loopback
+                and request.url.hostname in {"127.0.0.1", "localhost", "::1"}
+            )
+        except ValueError:
+            return False
+
+    def qgis_runtime_response(result: QgisRuntimeControlResult) -> JSONResponse:
+        return JSONResponse(content=result.model_dump(mode="json"), headers={
+            "Cache-Control": "no-store", "X-Scout-Candidate-Only": "true",
+            "X-Scout-Runtime-Safety-Truth": "false",
+        })
+
+    @router.get("/pretrip/projects/{project_id}/spatial/qgis/runtime")
+    def pretrip_project_qgis_runtime(project_id: str, request: Request) -> JSONResponse:
+        qgis_runtime_project(project_id)
+        if qgis_runtime_controller is None or not qgis_runtime_local_request(request):
+            result = QgisRuntimeControlResult(
+                project_id=project_id, status="unavailable", code=QgisRuntimeControlCode.NOT_MANAGED,
+            )
+        else:
+            result = qgis_runtime_controller.snapshot(project_id=project_id)
+        return qgis_runtime_response(result)
+
+    @router.post("/pretrip/projects/{project_id}/spatial/qgis/runtime/ensure-ready")
+    def pretrip_project_qgis_runtime_ensure_ready(
+        project_id: str, request: Request, body: QgisRuntimeControlRequest,
+    ) -> JSONResponse:
+        origin = request.headers.get("origin")
+        if (not qgis_runtime_local_request(request)
+                or origin != f"{request.url.scheme}://{request.url.netloc}"
+                or request.headers.get("sec-fetch-site", "same-origin") != "same-origin"
+                or request.headers.get("content-type", "").split(";", 1)[0].strip() != "application/json"):
+            raise HTTPException(status_code=403, detail="Worker startup requires the same-origin local Dashboard")
+        qgis_runtime_project(project_id)
+        if qgis_runtime_controller is None:
+            result = QgisRuntimeControlResult(
+                project_id=project_id, status="unavailable", code=QgisRuntimeControlCode.NOT_MANAGED,
+            )
+        else:
+            result = qgis_runtime_controller.ensure_ready(project_id=project_id)
+        return qgis_runtime_response(result)
 
     @router.get("/pretrip/projects/{project_id}/spatial/qgis/status")
     def pretrip_project_qgis_spatial_status(project_id: str) -> JSONResponse:
@@ -6876,8 +6988,51 @@ def create_admin_router(
                 event_type="access_completed",
                 verification=approval_verification,
             )
+            decision_review = {
+                "status": "failed",
+                "trigger": "target-rainfall-trend",
+                "projectId": project_id,
+                "targetId": package["target"]["id"],
+                "evaluatedAt": package["evaluatedAt"],
+                "evidenceStatus": "unavailable",
+                "rainfallPairId": None,
+                "imageryPairId": None,
+            }
+            dashboard = None
+            try:
+                from weather_grid_store import _compact_frame
+
+                source_frame_ids = {
+                    grid.grid_kind: _compact_frame(grid, str(path))["frameId"]
+                    for grid, path in ((qpe_grid, qpe_path), (qpf_grid, qpf_path))
+                }
+                dashboard = _build_weather_target_dashboard(
+                    cached=pretrip_project_weather_dashboard(project_id),
+                    trend=package,
+                    source_frame_ids=source_frame_ids,
+                    source_project=project,
+                )
+                decision_review = {
+                    **decision_review,
+                    "status": "reevaluated",
+                    "evaluatedAt": dashboard["evaluatedAt"],
+                    "evidenceStatus": dashboard["status"],
+                    "rainfallPairId": dashboard["rainfall"].get("pairId"),
+                    "imageryPairId": dashboard["imagery"].get("pairId"),
+                    "sourceFrameIds": source_frame_ids,
+                }
+            except (HTTPException, OSError, ValueError, KeyError, TypeError):
+                # Successful, approved sampling remains useful if risk context
+                # changes concurrently or cannot be verified for this review.
+                decision_review = {
+                    **decision_review,
+                    "errorCode": "weather_decision_context_unavailable",
+                }
+                dashboard = None
             return {
                 **package,
+                "decisionReview": decision_review,
+                "weatherDashboard": dashboard,
                 "locationApproval": {
                     "reference": request.location_approval_reference,
                     "approvedAt": request.location_approved_at.isoformat(),
@@ -12176,6 +12331,29 @@ def _build_weather_dashboard_decision(
             f"{item['ruleCode']} intersects explicit terrain evidence."
             for item in interactions
         )
+    point_gaps: list[str] = []
+    for key, default_label in (("currentPosition", "Current position"), ("target", "Target")):
+        point = route_trend.get(key) or {}
+        point_status = point.get("status", "not_provided")
+        if point_status == "not_provided" and not point.get("id"):
+            continue
+        label = str(point.get("id") or default_label)
+        past = _weather_dashboard_number(point.get("past1hMm"), minimum=0)
+        future = _weather_dashboard_number(point.get("next1hMm"), minimum=0)
+        past_text = f"{past:g} mm" if past is not None else "UNKNOWN"
+        future_text = f"{future:g} mm" if future is not None else "UNKNOWN"
+        why.append(f"{label}: past-hour QPE {past_text}; next-hour QPF {future_text}.")
+        where.append(label)
+        if point_status != "ready" or past is None or future is None:
+            point_gaps.append(f"{label}: {point_status}; missing or invalid QPE/QPF coverage")
+    if point_gaps:
+        confidence = 0.0
+    elif (route_trend.get("target") or {}).get("id"):
+        trend_confidence = _weather_dashboard_number(
+            route_trend.get("confidence"), minimum=0, maximum=1,
+        )
+        if trend_confidence is not None:
+            confidence = min(confidence, float(trend_confidence))
     arrival = features.get("estimatedRainArrivalMinutes")
     when = (
         f"Estimated rain arrival is {arrival} minutes."
@@ -12186,6 +12364,10 @@ def _build_weather_dashboard_decision(
         decision = "DELAY"
         summary = "Weather evidence is missing or stale; do not infer a safe route window."
         action = "Refresh the server-side CWA preparation before departure review."
+    elif point_gaps:
+        decision = "DELAY"
+        summary = "Current-position or target rainfall coverage is incomplete."
+        action = "Resolve the missing target/current-position QPE or QPF coverage before reviewing the route window; UNKNOWN is not zero rainfall."
     elif positive_signals or interactions:
         decision = "CHANGE_PLAN"
         summary = "Weather is on, near, or moving toward the planned route."
@@ -12215,6 +12397,10 @@ def _build_weather_dashboard_decision(
             + ", ".join(missing_classifications)
             + "."
         )
+    uncertainty.extend(point_gaps)
+    qpf_window = (route_trend.get("validWindows") or {}).get("next1hQpf")
+    if isinstance(qpf_window, list) and len(qpf_window) == 2:
+        when += f" Target QPF window: {qpf_window[0]} to {qpf_window[1]}."
     if route_trend.get("status") in {
         "not_prepared",
         "awaiting_position_and_target",
@@ -12235,6 +12421,80 @@ def _build_weather_dashboard_decision(
         "humanReviewRequired": True,
         "candidateOnly": True,
         "runtimeSafetyTruth": False,
+    }
+
+
+def _build_weather_target_dashboard(
+    *,
+    cached: dict[str, Any],
+    trend: dict[str, Any],
+    source_frame_ids: dict[str, str],
+    source_project: dict[str, Any],
+) -> dict[str, Any]:
+    rainfall = cached["rainfall"]
+    active_frames = {
+        product["gridKind"]: product["frameId"]
+        for product in rainfall.get("products", [])
+    }
+    if any(active_frames.get(kind) != frame_id for kind, frame_id in source_frame_ids.items()):
+        raise ValueError("Sampled CWA frames no longer match the active rainfall pair")
+    if cached["projectId"] != source_project.get("project_id"):
+        raise ValueError("Sampled weather project changed during review")
+    for project_key, artifact_key in (
+        ("cwa_rainfall_route_ref", "routeRef"),
+        ("cwa_rainfall_route_sha256", "routeSha256"),
+        ("cwa_rainfall_route_basis", "routeBasis"),
+    ):
+        expected = source_project.get(project_key)
+        if expected is not None and rainfall.get(artifact_key) != expected:
+            raise ValueError("Sampled weather route changed during review")
+    compact_trend = _compact_weather_dashboard_trend(trend)
+    route_risk = cached["routeRisk"]
+    status = _weather_dashboard_status(
+        rainfall=rainfall,
+        imagery=cached["imagery"],
+        trend=trend,
+        risk=route_risk if route_risk.get("status") != "not_prepared" else None,
+    )
+    source_statuses = (
+        rainfall.get("status", ""),
+        cached["imagery"].get("status", ""), trend.get("status", ""),
+    )
+    if any("stale" in value for value in source_statuses):
+        status = "stale_data"
+    elif status == "ready" and trend.get("status") in {"missing_data", "no_coverage", "partial"}:
+        status = "partial"
+    return {
+        **cached,
+        "status": status,
+        "routeTrend": compact_trend,
+        "decision": _build_weather_dashboard_decision(
+            status=status, route_risk=route_risk, route_trend=compact_trend,
+        ),
+        "trendContext": {
+            "scope": "request_only",
+            "targetId": compact_trend["target"]["id"],
+            "rawCoordinatesPersisted": False,
+        },
+        "pairVerification": {
+            **cached["pairVerification"],
+            "targetRainfallTrend": "verified_source_frames",
+        },
+        "sourceRefs": {
+            key: value for key, value in cached["sourceRefs"].items()
+            if key != "rainfallTrend"
+        },
+        "loraAlert": {
+            **cached["loraAlert"],
+            "basis": "persisted_route_risk",
+            "targetSpecific": False,
+        },
+        "processingBoundary": {
+            **cached["processingBoundary"],
+            "positionEvaluationOnRead": True,
+            "positionAccessRequiresApproval": True,
+            "rawCoordinatesPersisted": False,
+        },
     }
 
 

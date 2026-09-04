@@ -26,6 +26,7 @@ from scout.nextgen.intelligence_mcp import (
 from scout.nextgen.model_qualification import (
     ModelQualificationDisposition,
     ModelQualificationStatus,
+    ModelRuntimeQualificationCase,
     ModelRuntimeQualificationReport,
     TOOL_CALLING_EVIDENCE_REF,
     TOOL_CALLING_OUTPUT_MARKER,
@@ -35,12 +36,14 @@ from scout.nextgen.model_qualification import (
     qualification_report_hash,
     run_openai_compatible_qualification,
 )
+from scout.nextgen.model_qualification import _build_intelligence_request
 from scout.nextgen.model_runtime import (
     ModelCapabilityAttestation,
     ModelRuntimeCapability,
 )
 from scout.nextgen.openai_compatible_backend import OpenAICompatibleBackendConfig
 from scout.nextgen.praison_service import (
+    EvidenceCatalog,
     SPECIALIST_INPUT_MARKER,
     SpecialistModelInput,
     replay_specialist_report,
@@ -51,9 +54,38 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 FIXTURES = Path(__file__).parent / "fixtures" / "nextgen"
 CASE_PATH = FIXTURES / "model_runtime_qualification_case.json"
+CLOUD_CASE_PATH = FIXTURES / "model_runtime_qualification_case.cloud.json"
 EVIDENCE_PATH = FIXTURES / "model_runtime_qualification_evidence.json"
 PRAISON_AVAILABLE = importlib.util.find_spec("praisonaiagents") is not None
 CLI_PROCESS_TIMEOUT_SECONDS = 90
+
+
+def test_cloud_qualification_propagates_explicit_privacy_and_escalation() -> None:
+    case = ModelRuntimeQualificationCase.from_json_file(CLOUD_CASE_PATH)
+    catalog = EvidenceCatalog.from_json_file(EVIDENCE_PATH)
+
+    request = _build_intelligence_request(
+        case,
+        catalog,
+        allow_cloud_escalation=True,
+    )
+
+    assert request.privacy_sensitive is False
+    assert request.allow_cloud_escalation is True
+
+
+def test_intelligence_qualification_defaults_to_private_local_execution() -> None:
+    case = ModelRuntimeQualificationCase.from_json_file(CASE_PATH)
+    catalog = EvidenceCatalog.from_json_file(EVIDENCE_PATH)
+
+    request = _build_intelligence_request(
+        case,
+        catalog,
+        allow_cloud_escalation=False,
+    )
+
+    assert request.privacy_sensitive is True
+    assert request.allow_cloud_escalation is False
 
 
 class _ServerState:

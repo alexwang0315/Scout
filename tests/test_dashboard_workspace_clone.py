@@ -10,6 +10,7 @@ import pytest
 from dashboard_workspace_clone import (
     WORKSPACE_CLONE_RECEIPT_REF,
     WorkspaceCloneRequest,
+    WorkspaceClonePreparationError,
     clone_pretrip_workspace_from_inputs,
 )
 from pretrip_layer_preparation import DEFAULT_LAYERS
@@ -76,6 +77,34 @@ def _source_workspace(tmp_path: Path) -> tuple[Path, Path, Path]:
         encoding="utf-8",
     )
     osm_path.write_bytes(b"osm")
+    web_evidence_ref = "outputs/layers/normalized/web_case_evidence.json"
+    web_evidence_path = source_root / web_evidence_ref
+    web_evidence_path.parent.mkdir(parents=True)
+    web_evidence_path.write_text(
+        json.dumps(
+            {
+                "artifact_kind": "pretrip_web_case_evidence",
+                "collector_schema_version": "pretrip_p0_p1_source_collection.v1",
+                "project_id": SOURCE_ID,
+                "source_statuses": [
+                    {
+                        "source_id": "official.route.status",
+                        "source_tier": "P0",
+                        "source_family": "official_status",
+                        "label": "Official route status",
+                        "url": "https://example.invalid/official-route-status",
+                        "status": "fetched",
+                    }
+                ],
+                "boundary": {
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                    "network_calls_made": True,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
     (material_root / "material_manifest.json").write_text(
         json.dumps(
             {
@@ -98,6 +127,7 @@ def _source_workspace(tmp_path: Path) -> tuple[Path, Path, Path]:
             {
                 "project_id": SOURCE_ID,
                 "mcp_named_point_evidence_source_path": str(mcp_path),
+                "web_case_evidence_ref": web_evidence_ref,
             }
         ),
         encoding="utf-8",
@@ -131,7 +161,7 @@ def test_clean_clone_runs_one_import_then_full_preparation_without_source_mutati
 ) -> None:
     monkeypatch.setattr(
         "dashboard_workspace_clone._osm_pbf_parser_available",
-        lambda _: False,
+        lambda _: True,
     )
     workspace_root, source_root, material_root = _source_workspace(tmp_path)
     source_snapshot = {
@@ -164,11 +194,29 @@ def test_clean_clone_runs_one_import_then_full_preparation_without_source_mutati
 
     def preparation_runner(request: Any) -> dict[str, Any]:
         preparations.append(request)
+        target_root = request.project_root
+        target_project = json.loads(
+            (target_root / "project.json").read_text(encoding="utf-8")
+        )
+        handoff_ref = target_project["route_context_source_records_ref"]
+        handoff = json.loads((target_root / handoff_ref).read_text(encoding="utf-8"))
+        assert handoff["source_project_id"] == SOURCE_ID
+        assert handoff["target_project_id"] == TARGET_ID
+        assert handoff["record_count"] == 1
+        assert handoff["records"][0]["url"] == (
+            "https://example.invalid/official-route-status"
+        )
         return {
             "project_id": request.project_id,
             "normalized_layers": list(request.layers),
             "counts": {"requested_layer_count": len(request.layers)},
             "validation": {"status": "ready"},
+            "qgis_terrain_feature_stack": {
+                "status": "completed",
+                "actual_processor": "qgis_processing_grass",
+                "fallback_used": False,
+                "python_dtm_processing_used": False,
+            },
             "outputs": {
                 "layer_preparation_manifest_ref": (
                     "outputs/layers/layer_preparation_manifest.json"
@@ -213,15 +261,19 @@ def test_clean_clone_runs_one_import_then_full_preparation_without_source_mutati
         workspace_root / TARGET_ID / "cache" / "raster-tiles"
     ).resolve()
     assert preparations[0].imagery_cache_fallback_project_ids == (SOURCE_ID,)
-    assert preparations[0].osm_pbf_path is None
+    assert preparations[0].osm_pbf_path == (
+        material_root / "sources" / "osm" / "taiwan.osm.pbf"
+    ).resolve()
+    assert preparations[0].run_qgis_terrain_workflow is True
+    assert preparations[0].qgis_terrain_analysis_margin_m == 250.0
+    assert preparations[0].qgis_route_contact_distance_m == 10.0
     assert result["receipt"]["osm_input_policy"] == {
         "configured_path": str(material_root / "sources" / "osm" / "taiwan.osm.pbf"),
         "configured_sha256": None,
         "osmium_bin": "osmium",
-        "parser_available": False,
-        "status": "local_pbf_skipped_parser_unavailable",
-        "fallback": "overpass_explicit_fetch",
-        "reason": "neither osmium CLI nor Python osmium package is available",
+        "parser_available": True,
+        "status": "local_pbf_selected",
+        "fallback": "not_needed",
     }
     assert result["receipt"]["dynamic_evidence_policy"] == {
         "weather_cwa_gee_overpass_refreshable": True,
@@ -232,6 +284,7 @@ def test_clean_clone_runs_one_import_then_full_preparation_without_source_mutati
     assert result["receipt"]["mcp_evidence_rebinding"]["changed_fields"] == [
         "project_id"
     ]
+    assert result["receipt"]["route_context_source_handoff"]["record_count"] == 1
     receipt_path = workspace_root / TARGET_ID / WORKSPACE_CLONE_RECEIPT_REF
     assert receipt_path.is_file()
     assert json.loads(receipt_path.read_text(encoding="utf-8"))["status"] == "completed"
@@ -242,13 +295,102 @@ def test_clean_clone_runs_one_import_then_full_preparation_without_source_mutati
     }
 
 
-def test_clean_clone_discovers_additional_declared_reference_gpx(
+def test_clean_clone_marks_qgis_unavailable_terrain_as_explicitly_degraded(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "dashboard_workspace_clone._osm_pbf_parser_available",
+        lambda _: True,
+    )
+    workspace_root, source_root, _ = _source_workspace(tmp_path)
+
+    def import_runner(request: Any) -> dict[str, Any]:
+        target_root = request.workspace_root / request.project_id
+        target_root.mkdir(parents=True)
+        (target_root / "project.json").write_text(
+            json.dumps({"project_id": request.project_id}),
+            encoding="utf-8",
+        )
+        return {
+            "project_id": request.project_id,
+            "counts": {"source_file_count": 2},
+            "outputs": {"import_manifest_ref": "outputs/import_manifest.json"},
+        }
+
+    result = clone_pretrip_workspace_from_inputs(
+        WorkspaceCloneRequest(
+            source_project_id=SOURCE_ID,
+            target_project_id=TARGET_ID,
+            source_project_root=source_root,
+            workspace_root=workspace_root,
+        ),
+        import_runner=import_runner,
+        preparation_runner=lambda request: {
+            "project_id": request.project_id,
+            "normalized_layers": list(request.layers),
+            "counts": {"requested_layer_count": len(request.layers)},
+            "validation": {"status": "ready"},
+            "qgis_terrain_feature_stack": {
+                "status": "unavailable",
+                "actual_processor": "not_run",
+                "fallback_used": False,
+                "python_dtm_processing_used": False,
+                "error": {"code": "REQUIRED_ALGORITHM_MISSING"},
+            },
+            "outputs": {},
+        },
+    )
+
+    assert result["status"] == "completed_with_degraded_terrain"
+    assert result["receipt"]["status"] == "completed_with_degraded_terrain"
+    assert result["receipt"]["stages"]["gpx_import"]["status"] == "completed"
+    assert result["receipt"]["stages"]["qgis_terrain_feature_stack"][
+        "status"
+    ] == "unavailable"
+    assert result["map_preparation"]["status"] == "ready"
+    assert result["map_preparation"]["terrain_status"] == "unavailable"
+
+
+def test_clean_clone_blocks_before_import_when_local_pbf_parser_is_missing(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
         "dashboard_workspace_clone._osm_pbf_parser_available",
         lambda _: False,
+    )
+    workspace_root, source_root, _ = _source_workspace(tmp_path)
+    imports: list[Any] = []
+    preparations: list[Any] = []
+
+    with pytest.raises(
+        WorkspaceClonePreparationError,
+        match="Python osmium is unavailable in the active Dashboard runtime",
+    ):
+        clone_pretrip_workspace_from_inputs(
+            WorkspaceCloneRequest(
+                source_project_id=SOURCE_ID,
+                target_project_id=TARGET_ID,
+                source_project_root=source_root,
+                workspace_root=workspace_root,
+            ),
+            import_runner=lambda request: imports.append(request) or {},
+            preparation_runner=lambda request: preparations.append(request) or {},
+        )
+
+    assert imports == []
+    assert preparations == []
+    assert not (workspace_root / TARGET_ID).exists()
+
+
+def test_clean_clone_discovers_additional_declared_reference_gpx(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "dashboard_workspace_clone._osm_pbf_parser_available",
+        lambda _: True,
     )
     workspace_root, source_root, material_root = _source_workspace(tmp_path)
     corpus_root = material_root / "sources" / "gpx" / "reference"
@@ -328,7 +470,7 @@ def test_clean_clone_deduplicates_existing_reference_matching_primary(
 ) -> None:
     monkeypatch.setattr(
         "dashboard_workspace_clone._osm_pbf_parser_available",
-        lambda _: False,
+        lambda _: True,
     )
     workspace_root, source_root, _ = _source_workspace(tmp_path)
     duplicate = source_root / "inbox" / "gpx" / "reference.duplicate-primary.gpx"

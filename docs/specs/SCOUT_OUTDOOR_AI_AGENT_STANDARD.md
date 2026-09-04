@@ -1114,7 +1114,7 @@ Navigation/Terrain Intelligence 必須把地圖本身當作主要操作面，不
 | `MAP-WAYFIND-010` | 把避開 drainage 的候選宣稱為較安全，或把 terrain-only baseline 的河谷重疊宣稱為河道可走。 | drainage 僅是 DEM-derived relative cost；所有替代線維持 candidate-only，水位、溪床、峽谷、橋梁與通行性保持 UNKNOWN。 |
 | `MAP-WAYFIND-011` | 直接把歷史行程文字交給 LLM 畫線，或把文字中的「獵徑／布條」promotion 成 observed/official trail。 | Scout AI 只輸出有 source span 的 typed constraints、conflicts 與 unknowns；GIS resolver 與人工 map-point review 分離，source_type 仍是 `historical_route`。 |
 | `MAP-WAYFIND-012` | 已 review 的文字指引繞過 DEM/GRASS，或任一 anchor segment 失敗時用直線補接。 | R4 必須逐段執行 allowlisted `r.walk` + `r.path`；任一段無成本、無路徑、超出 DEM、NoData 或 hash mismatch 時整個 guided hypothesis fail closed。 |
-| `MAP-WAYFIND-013` | 用既有 TRH path/corridor 自動選定敘事 anchor、從完整證據刪除無鄰近／零重疊候選，或把高 support 宣稱為路線確認。 | 只可使用 hash-bound R1-R3 path 與 source GeoTIFF bounded evidence；完整候選集必須保留。可另以 same-A/B R1-R3 path/corridor 聯集建立預設 review shortlist，但必須揭露 shortlist/total，且 proximity/overlap 只協助人工 review。 |
+| `MAP-WAYFIND-013` | 用既有 TRH path/corridor 自動選定敘事 anchor、從完整證據刪除無鄰近／零重疊候選，或把高 support 宣稱為路線確認。 | 只可使用 hash-bound R1-R3 path 與 source GeoTIFF evidence；完整候選集必須保留。地圖標記點必須位於目前所選 corridor 內；鞍部還須鄰近 R1-R3。不得因線段其他部分有重疊就顯示範圍外中心點，proximity/overlap 只協助人工 review。 |
 | `MAP-WAYFIND-014` | 把人工文字直接拼成 `r.mapcalc`、用零成本／硬 barrier 強迫 R4 通過，或讓 R4 修改 R1-R3。 | 每個 reviewed Point 只能編譯成 typed、有限正值、20-500 m 的局部 friction preference；expression 必須 allowlist 驗證，R1-R3 保持原 profile，任一 anchor/modifier/hash 不一致即 fail closed。 |
 
 目前 bounded implementation 對應 `terrain_feature_stack.v1`、Scout-owned QGIS
@@ -1234,11 +1234,25 @@ raster binding 錯誤都必須 fail closed。
 同一 artifact 取出三條 path，驗證 run hash、cache、DEM parent、A/B 與 CRS，並對長 path
 做保留端點的 deterministic bounded sampling；active selection ID 還必須與 project 綁定
 cache key 前 12 字元一致。預設以 200 m path proximity 加上單一 corridor-profile overlap
-建立 `review_shortlist_feature_ids`。完整 `candidate_feature_ids` 不得被覆寫；地圖只是在
-預設視野隱藏 shortlist 外的 DEM candidates，並必須顯示 shortlist/total。這個聯集只縮小
-人工檢視範圍，不是 AI 地圖選點、模型共識確認或 route truth，也不得解鎖 R4 execution。
+建立 `review_shortlist_feature_ids` 作為排序脈絡。完整 `candidate_feature_ids` 不得被覆寫。
+地圖另以唯讀 `map-review-scope` 比對每個標記點本身與目前 5%／10%／20% source corridor
+GeoTIFF；範圍外、NoData 或缺少 scope 證據的點不得出現在候選清單或地圖上。鞍部還須在
+R1-R3 路徑的一個 DEM cell 對角線距離內；沒有符合者顯示 UNKNOWN，不得平移或吸附遠處
+鞍部來製造吻合。必須顯示 scope/total，篩選後保留原始 `Gn #m` 編號。
+投影須綁定 hypothesis、band、raster hash、feature-index/resolution hashes、DEM parent 與
+來源／顯示兩組 A/B；舊版 unscoped resolution 也可唯讀比對。同 DEM 的來源 A/B 不同時，
+只能以 `endpoint_alignment=different_review_context`、兩組座標與差距明示作為視覺裁選，
+不得重新綁定原始 resolution／review、重寫人工 review 或刪除原始證據。投影一律
+`execution_eligible=false`、`routing_effect=none`；resolve、review 與 R4 execution 的 A/B
+一致性檢查不得因此放寬。
+這個範圍限制不是 AI 地圖選點、模型共識確認或 route truth，也不得解鎖 R4 execution。
 R4 review 應一次聚焦一個 `Gn`：該 constraint 的 scope 內候選須以清楚的編號 marker
-highlight，其他 `Gn` 的 marker 隱藏、line 淡化，並提供上一個、下一個與顯示全部控制。
+highlight，其他 `Gn` 的 marker 隱藏、line 淡化，並提供上一個、下一個與全部 Gn 控制。
+點選該 Gn 的 narrative、source、DEM summary 或候選 evidence 預覽區域即可切換 highlight；
+可聚焦的 evidence 區域亦支援 Enter／Space。上一筆／下一筆必須保留；錨點、選取、停用
+及其他互動控制不得連帶觸發 evidence 點選，焦點切換不得視為人工錨點確認。
+全部 Gn 仍限於所選 corridor 內；地圖中央不放置遮擋畫面的長假說名稱，candidate-only
+揭露保留在地圖外的 status/legend。
 切換 focus 或自動 fit MapLibre 僅能改變呈現狀態，不得寫入 selection、人工 anchor、review
 artifact 或 execution plan；仍須由操作者進入地圖錨點模式並親自點選 WGS84 Point。
 
@@ -1254,6 +1268,17 @@ R4 自動修改 GPX、改寫 official trail truth，或取得前進／撤退 aut
 可以用 `max(10 m, 2 DEM cells)` 比較 R4 candidate geometry 與 reviewed anchor，輸出
 `aligned`、`conflict` 或 `unavailable`；這只是 interpretation-to-map binding audit，不是
 現地驗證。
+
+`System → Diagnostic → Navigation 體檢` 必須分開檢查目前 Worker／TRH workflow 入口、
+既有 R1-R3 geometry 與 provenance、5%／10%／20% PNG 實際回應／SHA-256／解碼尺寸、
+R4 corridor scope 與原始 rank／saddle 距離、人工 review 就緒條件，以及綁定該 review 的
+既有 R4 execution evidence。Gn 點選、鍵盤與上一筆／下一筆以正式 renderer／binder 的
+隔離 DOM 驗證，不得更動 live map、選取、A/B 或 workspace review。
+這些檢查對應 `DASH-025`、`DASH-038～DASH-043`；僅使用 GET／既有 artifact，不自動
+執行 GRASS、生成 R4 或保存 review。Worker timeout 必須失敗；未確認錨點、來源 A/B 不同、
+尚無 R4 成果必須保留提醒／UNKNOWN，不得以 UI 可開或 review 就緒推論運算成功。
+體檢結果綁定 project／TRH selection／corridor band，變更後須重測，不得沿用舊的通過狀態。
+完整 browser／實際運算驗收仍依既有 Dashboard functional verification checklist 執行。
 
 ### 11.13 導航力的 Mac / Scout 雙主機運算與重現性
 

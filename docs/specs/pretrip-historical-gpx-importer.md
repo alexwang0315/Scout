@@ -1,7 +1,7 @@
 # Spec: Pretrip Historical GPX Importer
 
 Date: 2026-06-02
-Last updated: 2026-08-26
+Last updated: 2026-08-28
 
 ## Objective
 
@@ -43,7 +43,12 @@ historical/open-download GPX corpus
   -> route evidence bundle
   -> optional MCP synthesis from named-point evidence
   -> Route-Corridor Map Preparation
-  -> OSM/GIS/web/raster along-track evidence
+  -> OSM/GIS/web/raster evidence and local OSM PBF projection
+  -> all allowlisted historical themes seeded into independent workspace caches
+  -> Scout-owned QGIS worker and QGIS/GRASS/GDAL terrain_feature_stack.v1
+  -> typed/hash-validated rectangle artifacts
+  -> QGIS/GRASS route-sample risk adapter and dependent boss-point synthesis
+  -> Terrain RGB packaging and Navigation projection
   -> Pydantic AI semantic judgement
   -> candidate CP / Ln / POI / detour review items
 ```
@@ -70,6 +75,7 @@ read-only source workspace and material manifest
   -> validate all source identities, hashes, paths, and required tools
   -> one clean GPX import into a new target (`overwrite=false`)
   -> one full map preparation run using that target route bundle
+  -> one blocking QGIS/GRASS terrain stage inside that preparation run
   -> post-layer enrichments and map-preparation spec artifacts
   -> `outputs/workspace_clone_receipt.json`
   -> expose/open the target workspace only as prepared or explicitly degraded
@@ -113,8 +119,12 @@ before GPX import creates the target directory. Preflight includes:
 - local OSM PBF path, SHA-256/source metadata, and cache policy when configured;
 - Python `osmium` importability in the same interpreter that runs the Dashboard;
 - the persistent `osmium` CLI binding used by preparation;
+- the persistent `grass` CLI binding and required QGIS Processing `grass:*`
+  algorithms when terrain preparation is requested;
 - DTM directories and declared full-route GeoTIFF sources, including hash, CRS,
   CRS evidence, and source resolution;
+- configured QGIS worker reachability, QGIS/GRASS/GDAL versions, and the required
+  `terrain_feature_stack.v1` processing allowlist when terrain is requested;
 - typed MCP named-point evidence identity;
 - writable workspace root and non-existent target path.
 
@@ -123,6 +133,9 @@ once by `tools/setup_dashboard_workspace_runtime.sh` and subsequently launched
 through `scout-dashboard` or `tools/run_dashboard_workspace.sh`. A parser found
 only in a legacy venv or an unrelated shell PATH does not satisfy this
 preflight. The launch command must never install dependencies implicitly.
+The one-time setup owns the fixed `scout-grass` micromamba environment and
+binds it into both `~/.local/bin/grass` and `./venv/bin/grass`; an installation
+visible only in an unrelated interactive shell does not satisfy preflight.
 
 If a configured PBF exists but Python `osmium` is unavailable in the active
 Dashboard interpreter, clone fails before import and no target workspace is
@@ -141,6 +154,10 @@ receipt must identify both stages:
 ```text
 stages.gpx_import.status = completed
 stages.map_preparation.status = ready | ready_with_warnings | completed
+stages.qgis_terrain_feature_stack.status = completed
+stages.qgis_terrain_feature_stack.actual_processor = qgis_processing_grass
+stages.qgis_terrain_feature_stack.fallback_used = false
+stages.qgis_terrain_feature_stack.python_dtm_processing_used = false
 clone_strategy = clean_import_from_source_inbox_then_map_preparation
 dynamic_evidence_policy.weather_cwa_gee_overpass_refreshable = true
 dynamic_evidence_policy.connected_refresh_rewrites_primary_layer_manifest = false
@@ -158,6 +175,12 @@ transaction. Do not normalize a manual post-import repair or a newly named
 `_v2` workspace as the standard path. A one-off repair can recover evidence for
 debugging, but it is not acceptance proof until the original single-pass user
 flow succeeds reproducibly.
+
+If non-GIS preparation completes but a requested QGIS/GRASS terrain stage is
+typed unavailable, the clone remains inspectable with
+`status=completed_with_degraded_terrain`. This is an explicit degraded result,
+not a fully completed terrain workspace; its `stages.gpx_import` remains
+completed and `stages.qgis_terrain_feature_stack` preserves the exact blocker.
 
 A failed clone must not permanently consume the requested target id. The
 preferred implementation imports and prepares in an operation-scoped staging
@@ -445,6 +468,8 @@ The route evidence bundle should be compact and deterministic:
     "source_id": "gpx.source.能高安東軍",
     "source_path": "/data/scout/pretrip/inbox/golden/route.gpx",
     "sha256": "...",
+    "filtered_geometry_ref": "normalized/routes/filtered/primary.route.speed_filtered.gpx",
+    "filtered_geometry_sha256": "...",
     "geometry_ref": "normalized/routes/golden_route.geojson",
     "route_bbox_wgs84": [121.12, 23.91, 121.31, 24.04],
     "route_distance_m": 14600
@@ -483,6 +508,66 @@ The route evidence bundle should be compact and deterministic:
   }
 }
 ```
+
+`filtered_geometry_ref` plus `filtered_geometry_sha256` is the authoritative
+QGIS/GRASS route identity for this import generation. The hash binds the exact
+speed-filtered, ordered, and direction-reviewed Golden GPX that produced the
+route bundle. Map preparation must verify both values before dispatching
+`terrain_feature_stack.v1`. If either value is missing from the declared path,
+unsafe, unavailable, or mismatched, terrain processing fails closed. Once a
+filtered geometry is declared, falling back to `source_path`, a source-manifest
+GPX, checkpoint geometry, or a route from another workspace is forbidden.
+
+The same clone transaction must finish the QGIS/GRASS stage before packaging
+Terrain RGB or compiling the final Navigation projection. A clone receipt with
+only `stages.gpx_import.status=completed` is incomplete. QGIS/GRASS
+unavailability may leave a typed degraded workspace for diagnosis, but it is
+not repaired by opening Navigation, running a hidden page action, or creating a
+second `_v2` target. Weather/CWA/GEE and geology remain runtime-refreshable and
+are not frozen by the terrain generation timestamp.
+
+Dashboard Clone must also transfer route-context source identity without
+copying source payloads. After import succeeds and before preparation starts,
+it writes a target-owned `inputs/route_context_source_records.json` containing
+allowlisted public P0/P1 HTTP(S) records and the hash of the source evidence
+artifact. Connected preparation uses that handoff for a live source refresh,
+then generates the route-context evidence, media/point package, and HTML
+briefing in the same target. The clone receipt records the handoff count and
+hash. Source project files remain read-only, and private/loopback literal IP
+sources are rejected from the handoff.
+
+The receiving preparation also owns all allowlisted historical-map cache
+namespaces and `scout_qgis_grass_risk_profile_adapter.v1`. Import does not copy
+another workspace's historical tiles or fixed risk artifacts. In the same
+preparation pass it seeds each historical theme independently, classifies
+blank/transparent/404 responses as typed provider no-coverage, validates the
+current QGIS route-sample hash, emits the four candidate risk layers, and then
+runs dependent boss-point synthesis. Missing GIS evidence fails closed without
+calling Python DEM/TEII processing; one failed historical provider does not
+invalidate usable caches from the other themes.
+
+The successful user-flow receipt must therefore bind one confirmed import to
+one persisted preparation generation and the primary QGIS workflow run used by
+the risk adapter. Before Navigation is opened, preparation must refresh the
+canonical terrain-risk candidate artifact and compile the target workspace's
+projection. The page must query `terrain_feature_stack.v1` explicitly instead
+of accepting whichever auxiliary QGIS run happened most recently. A later
+failed terrain-hypothesis run cannot erase a completed primary terrain stack.
+
+Historical coverage is evaluated per provider and per supported zoom
+intersection. The common requested range is clamped independently to each
+provider's declared range; one provider must not make all themes empty. A
+theme with some usable tiles plus some 404/blank cells remains partially
+covered with explicit counts. A theme whose entire route bbox is no-coverage
+remains typed `seed_no_coverage`; this is an honest source result, not a reason
+to create a second workspace or run a manual page repair.
+
+Acceptance distinguishes provider coverage from preparation failure. Every
+theme must have its own plan and manifest, and every theme with at least one
+usable route-bbox tile must serve a nonblank `local_cache` response. An
+all-no-coverage provider may remain typed unavailable, but a network error,
+missing manifest, wrong cache namespace, or unattempted allowlisted theme is a
+preparation defect.
 
 The bundle separates:
 
@@ -879,6 +964,13 @@ Never:
 - All discoverable parser/material failures stop before target creation.
 - The successful receipt and live workspace prove that no manual post-import
   repair or `_v2` replacement was required.
+- The source workspace's project, route-bundle, and layer-manifest hashes are
+  unchanged after import and preparation.
+- Every historical theme has its own cache manifest; every theme with route
+  coverage serves a nonblank local tile before the workspace is accepted.
+- The current QGIS terrain receipt, risk-adapter receipt, risk candidates,
+  Boss outputs, and Navigation projection are generated in the target before
+  the Dashboard is opened.
 
 ## Open Questions
 

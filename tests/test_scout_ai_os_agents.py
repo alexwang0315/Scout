@@ -238,6 +238,19 @@ def test_model_policy_supports_nvidia_api_key_models() -> None:
     assert "nvapi-test-secret" not in str(with_key.model_dump(mode="json"))
 
 
+def test_model_policy_supports_local_hailo_ollama_without_credentials() -> None:
+    policy = resolve_model_policy("hailo:qwen3:1.7b", env={})
+
+    assert policy.mode is ModelPolicyMode.EXTERNAL_PYDANTIC_AI
+    assert policy.model_for_agent == "hailo:qwen3:1.7b"
+    assert policy.provider == "hailo_ollama"
+    assert policy.provider_model_id == "qwen3:1.7b"
+    assert policy.requires_network is False
+    assert policy.required_credential_env == []
+    assert policy.missing_credential_env == []
+    assert policy.estimated_call_cost_usd == 0.0
+
+
 def test_model_policy_records_but_does_not_enforce_resource_limits_in_construction() -> None:
     policy = resolve_model_policy(
         "openrouter:openai/gpt-4o-mini",
