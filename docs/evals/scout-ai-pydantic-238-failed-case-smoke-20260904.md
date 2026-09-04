@@ -180,7 +180,7 @@ Navigation 契約修改，也未切模型來掩蓋矛盾。上述業務問題保
 
 - `pyproject.toml`、`requirements.pi.admin.txt`、`requirements.pi.live.txt`：
   相關 Pydantic pins 對齊 `2.38.0`。
-- 既有未追蹤的 `requirements.pi.intelligence.txt` 僅對齊 Slim pin；其餘
+- 升級時既有未追蹤的 `requirements.pi.intelligence.txt` 僅對齊 Slim pin；其餘
   intelligence sidecar 內容及擁有權不變，不把整個檔案當成本輪新功能。
 - `src/scout/cli/pydantic_compat_smoke.py`：新增 `--expected-version`，保留
   configured/expected/installed 三者的區別；預設 `2.38.0`；版本工具讀實際
@@ -199,12 +199,27 @@ Navigation 契約修改，也未切模型來掩蓋矛盾。上述業務問題保
 
 ### 提交範圍
 
-本次提交僅包含版本宣告、相容性 smoke/regression、上述規格與驗證報告，
-以及 local venv 持續授權段落。共用檔案採部分暫存，不納入另一線的 Navigation
-freeze suspension、MCP HTTP entrypoint 或 admin `httpx` 相依變更。
-`requirements.pi.intelligence.txt` 與完整測試產物仍留在本機，不連同 sidecar
-或大型 ignored artifacts 加入版本控制。上節 guard 狀態與 hash 均為升級當時
-的歷史紀錄，不代表提交整理時其他對話串的 Navigation 政策狀態。
+原先整理的獨立範圍為 13 個檔案：版本宣告、相容性 smoke/regression、上述
+規格與報告，以及 local venv 持續授權段落。共用檔案只取本輪區塊，不納入
+另一線的 freeze suspension、MCP HTTP entrypoint 或 admin `httpx` 變更。
+
+整理期間共用暫存區被並行作業更新，隨後該作業建立
+`f5f7a42884d176736b3e4934c531e35fd13e35c6`
+(`chore: checkpoint dashboard, GIS, and AI development changes`)。
+此 commit 共 178 個檔案，**已包含本輪 13 個檔案的變更，但不是單獨的 Pydantic
+升級 commit**；intelligence sidecar 等其他工作也在該 checkpoint 中。
+本對話未 amend、reset 或重新拆寫該提交。本段為其後另行提交的驗證紀錄修正。
+
+為排除未提交程式的影響，另外從 base `b5fc9559` 組出僅含本輪變更的獨立
+Git tree `179b2ef20afd6b0fc0c62eb94d60c29fbdf395fb`，使用本機 2.38.0 venv
+測試其匯出來源：**101 passed、0 skipped，31.55 秒**，同一則上游 event-loop
+warning。Ruff 通過；已確認模組來自獨立快照，並排除其他工作新增的 result
+adapter。這證明本輪相容性變更可獨立運作，不代表整個 178-file checkpoint
+都經過本輪測試。完整產物仍在 ignored artifacts，未強制加入 Git。
+
+上節 guard 狀態與 hash 均為升級當時的歷史紀錄，不代表提交整理時其他
+對話串的 Navigation 政策狀態。沒有為此次 commit 重複真實雲端呼叫；既有
+27/27 live smoke 的 artifact hash 已重新核對。
 
 ## 證據與重跑
 
@@ -222,6 +237,9 @@ Repo artifact 目錄：`artifacts/scout-ai-compatibility/pydantic-238-20260904/`
   確認僅三個 Pydantic 套件升版的快照。
 - `promotion-navigation-before.json`、`promotion-navigation-after.json`：
   既存漂移與本輪核准漂移的區分。
+- `pytest-commit-scoped.xml`：只含本輪 13-file scope 的獨立來源快照測試。
+  `pytest-commit-snapshot.xml` 是較早受並行暫存影響的混合來源快照，不能當作
+  本輪獨立提交驗證；以前者為準。
 
 結果 JSONL SHA-256：
 
