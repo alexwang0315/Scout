@@ -14,6 +14,7 @@ import re
 from typing import Any, Iterable, Mapping, Sequence
 
 from pretrip_historical_return_cost import build_historical_return_cost
+from pretrip_historical_time_window import build_historical_time_windows
 
 
 SCHEMA_VERSION = "scout_route_architecture_intelligence.v0"
@@ -174,6 +175,12 @@ def build_route_architecture_intelligence(
         distance_scale=_route_axis_scale(route_axis_transform),
         source_ref=reference_source_ref,
     )
+    historical_time_windows = _historical_time_window_projection(
+        reference_value.get("historical_route_timing"),
+        return_projection=historical_return_cost,
+        route_distance_m=route_distance_m,
+        source_ref=reference_source_ref,
+    )
     evidence_quality = _evidence_quality(
         status=status,
         reference=reference_value,
@@ -289,6 +296,7 @@ def build_route_architecture_intelligence(
         "segment_demand_vectors": vectors,
         "checkpoint_passage_timing": checkpoint_passage_timing,
         "historical_return_cost": historical_return_cost,
+        "historical_time_windows": historical_time_windows,
         "checkpoint_graph": _checkpoint_graph(
             checkpoint_values,
             segment_values,
@@ -377,6 +385,9 @@ def _historical_return_cost_projection(
     value: Any, *, route_distance_m: float, distance_scale: float, source_ref: str,
 ) -> dict[str, Any]:
     timing = dict(value) if isinstance(value, Mapping) else {}
+    source_distance = _number(timing.get("route_distance_m"))
+    if source_distance is not None and source_distance > 0:
+        distance_scale = route_distance_m / source_distance
 
     def scaled(item: Mapping, keys: tuple[str, ...]) -> dict:
         return {
@@ -396,9 +407,15 @@ def _historical_return_cost_projection(
         scaled(item, ("route_distance_m",))
         for item in timing.get("camp_evidence", {}).get("camps", []) if isinstance(item, Mapping)
     ]
+    overnight_camps = _historical_overnight_candidates(
+        timing.get("daily_departures"),
+        distance_scale=distance_scale,
+    )
     daily_budget = dict(timing.get("daily_budget") or {})
     result = build_historical_return_cost(
-        bins=bins, checkpoints=checkpoints, camps=camps,
+        bins=bins,
+        checkpoints=checkpoints,
+        camps=[*camps, *overnight_camps],
         daily_budget_minutes=_number(daily_budget.get("minutes")),
         route_distance_m=route_distance_m,
     )
@@ -407,7 +424,102 @@ def _historical_return_cost_projection(
         "daily_budget": daily_budget,
         "directional_counts": dict(timing.get("counts") or {}),
         "estimation_policy": dict(timing.get("policy") or {}),
-        "camp_evidence": {**dict(timing.get("camp_evidence") or {}), "camps": camps},
+        "camp_evidence": {
+            **dict(timing.get("camp_evidence") or {}),
+            "camps": [*camps, *overnight_camps],
+            "explicit_camp_count": len(camps),
+            "overnight_candidate_count": len(overnight_camps),
+        },
+        "source_path": f"{source_ref}#historical_route_timing",
+        "distance_scale": distance_scale,
+        "duration_scaled": False,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+
+
+def _historical_overnight_candidates(
+    value: Any, *, distance_scale: float
+) -> list[dict]:
+    departure = dict(value) if isinstance(value, Mapping) else {}
+    if departure.get("status") != "ready":
+        return []
+    days = departure.get("days") or []
+    return [
+        {
+            "node_id": f"historical_overnight.{day['day_id']}",
+            "label": f"D{day['day_index']} 隔夜停留候選",
+            "route_distance_m": distance * distance_scale,
+            "node_kind": "overnight_candidate",
+            "source_refs": list(day.get("source_refs") or []),
+            "candidate_only": True,
+            "overnight_assignment_verified": False,
+            "field_verified": False,
+            "runtime_safety_truth": False,
+        }
+        for day, following in zip(days, days[1:])
+        if (distance := _number(day.get("end_distance_m"))) is not None
+        and (gap := _number(following.get("preceding_gap_hours"))) is not None
+        and 6 <= gap <= 36
+    ]
+
+
+def _historical_time_window_projection(
+    value: Any,
+    *,
+    return_projection: Mapping[str, Any],
+    route_distance_m: float,
+    source_ref: str,
+) -> dict[str, Any]:
+    timing = dict(value) if isinstance(value, Mapping) else {}
+    distance_scale = return_projection["distance_scale"]
+
+    def scaled_range(item: Mapping) -> dict:
+        return {
+            **item,
+            **{
+                key: number * distance_scale
+                if (number := _number(item.get(key))) is not None
+                else None
+                for key in ("start_distance_m", "end_distance_m")
+            },
+        }
+
+    departure = dict(timing.get("daily_departures") or {})
+    days = [
+        scaled_range(day)
+        for day in departure.get("days", [])
+        if isinstance(day, Mapping)
+    ]
+    bins = [
+        scaled_range(item)
+        for item in timing.get("bins", [])
+        if isinstance(item, Mapping)
+    ]
+    checkpoints = list(return_projection.get("checkpoints") or [])
+    camps = list(return_projection.get("camp_evidence", {}).get("camps", []))
+    finish = next(
+        (
+            node
+            for node in reversed(checkpoints)
+            if (distance := _number(node.get("route_distance_m"))) is not None
+            and abs(distance - route_distance_m) < 0.01
+        ),
+        None,
+    )
+    safe_points = [*camps, *([finish] if finish else [])]
+    result = build_historical_time_windows(
+        bins=bins,
+        checkpoints=checkpoints,
+        days=days,
+        safe_points=safe_points,
+        route_distance_m=route_distance_m,
+        cutoff_minute_of_day=18 * 60,
+    )
+    return {
+        **result,
+        "departure_evidence": departure,
+        "safe_point_policy": "historical_camp_or_overnight_candidate_not_verified_current_safety",
         "source_path": f"{source_ref}#historical_route_timing",
         "distance_scale": distance_scale,
         "duration_scaled": False,

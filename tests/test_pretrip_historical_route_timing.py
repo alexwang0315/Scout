@@ -54,6 +54,45 @@ def test_missing_terrain_cannot_supply_flat_cohort():
     assert result["bins"][0]["reverse"]["status"] == "unavailable"
 
 
+def test_partial_directional_observation_marks_extrapolation_estimated():
+    result = timing(
+        [{**sample(0, "reverse", 60), "route_progress_distance_m": 40}], [0.1]
+    )
+    reverse = result["bins"][0]["reverse"]
+    assert reverse["average_minutes"] == 6.25
+    assert reverse["status"] == "estimated"
+    assert reverse["method"] == "partial_directional_bin_mean_pace"
+    assert reverse["minimum_sample_coverage_ratio"] == 0.16
+    assert result["counts"]["reverse_direct_sampled_bin_count"] == 1
+
+
+def test_fragmentation_does_not_change_directional_mean_pace():
+    complete = timing([sample(0, "reverse", 460)], [0.1])
+    fragmented = timing(
+        [
+            {**sample(0, "reverse", 60), "route_progress_distance_m": 50},
+            {**sample(0, "reverse", 400), "route_progress_distance_m": 200},
+        ],
+        [0.1],
+    )
+    assert complete["bins"][0]["reverse"] == fragmented["bins"][0]["reverse"]
+
+
+def test_complete_samples_take_precedence_over_partial_extrapolations():
+    result = timing(
+        [
+            sample(0, "reverse", 120, source="complete"),
+            {
+                **sample(0, "reverse", 600, source="partial"),
+                "route_progress_distance_m": 40,
+            },
+        ],
+        [0.1],
+    )
+    assert result["bins"][0]["reverse"]["average_minutes"] == 2
+    assert result["bins"][0]["reverse"]["status"] == "observed"
+
+
 def test_pace_average_and_duplicate_sources():
     result = timing([
         sample(0, "reverse", 120, source="a", digest="same"),

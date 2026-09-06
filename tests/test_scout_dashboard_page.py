@@ -6173,12 +6173,21 @@ def test_dashboard_route_architecture_intelligence_workbench_contract() -> None:
         'data-architecture-legend="${escapeHtml(state.architectureLens)}"',
         "Very high · 78–100",
         "No observed bin",
-        "Unverified segment reversibility",
+        "NEXT CP · AVG",
+        "TIME WINDOW · A",
+        '["time_window", "Time Window"]',
+        "data-architecture-window-mark",
+        "data-architecture-day-reset",
+        "data-architecture-window-node",
+        "function renderArchitectureReturnLanes",
+        "function renderArchitectureReturnSelection",
+        "data-architecture-return-boundary",
+        "historical_return_cost",
         "green means stronger evidence support; this is confidence, not pressure",
-        "gray means unverified candidate topology; it is not a safe-return claim",
+        "歷史 CP 回程成本 · 包含坡度配對與部分涵蓋推估 · 非即時安全返程判定",
         "candidate-only · runtime safety truth=false",
         "normalized route architecture missing",
-        "compiled mission graph missing",
+        "Reviewed topology unavailable",
         "const flattenedCoordinates = coordinates.length ? coordinates : coordinateSegments.flat();",
         "route.bbox_wgs84 || route.bounds || route.display_bounds || display.bounds",
         "coordinateSegments.length && flattenedCoordinates.length >= 2",
@@ -6228,6 +6237,144 @@ def test_dashboard_route_architecture_intelligence_workbench_contract() -> None:
     assert 'centerMap: focusSurface.startsWith("fingerprint")' in architecture_binding
     assert "routeDistanceM: target.dataset.architectureRouteDistanceM" in architecture_binding
     assert 'data-architecture-route-distance-m="${' in html
+
+
+def test_dashboard_historical_return_lanes_encode_cost_and_estimates() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    functions = "function architectureReturnNodes" + html.split(
+        "function architectureReturnNodes", 1
+    )[1].split("function architectureModeOpacity", 1)[0]
+    program = r'''
+      const state = {architectureSelectedPassageNodeId: "b"};
+      const asArray = value => Array.isArray(value) ? value : [];
+      const escapeHtml = value => String(value).replaceAll("<", "&lt;");
+      const formatInteger = value => String(value || 0);
+      const architecturePressureColor = () => "#62b8c6";
+      const architectureModeOpacity = () => 1;
+    ''' + functions + r'''
+      const nodes = [
+        {node_id:"a",node_kind:"checkpoint",label:"<start>",route_distance_m:0,
+         next_cp_id:"b",next_cp_label:"End",next_cp_distance_m:100,next_cp_average_minutes:20,
+         next_cp_timing_status:"estimated",return_target_label:"Start",return_cost_minutes:0,
+         return_cost_status:"observed",return_to_entry_minutes:0,budget_ratio:0},
+        {node_id:"b",node_kind:"checkpoint",label:"End",route_distance_m:100,
+         next_cp_id:null,next_cp_distance_m:null,next_cp_average_minutes:null,
+         return_target_label:"Camp",return_cost_minutes:10,return_cost_status:"estimated",
+         return_to_entry_minutes:120,budget_ratio:0.2,entry_day_exceeded:true,
+         decision_boundary:true,entry_decision_boundary:true},
+      ];
+      const snapshot = {historical_return_cost:{checkpoints:nodes}};
+      const lanes = renderArchitectureReturnLanes(snapshot, x=>x, {reversibility:0,next_cp:50}, 30);
+      console.log(JSON.stringify({
+        colors: [0,0.5,1,0.2,null].map(budget_ratio=>architectureReturnColor({budget_ratio})),
+        nullTime:architectureHistoricalTime(null), estimate:architectureHistoricalTime(120,"estimated"),
+        estimateHatch:lanes.includes('url(#architectureEstimatedHatch)'),
+        boundary:lanes.includes('data-architecture-return-boundary="entry-limit"'),
+        escaped:lanes.includes('&lt;start>'),
+        selection:lanes.includes('data-architecture-passage-selected="true"'),
+        previous:architectureReturnNodeAtDistance(snapshot, 50).node_id,
+      }));
+    '''
+    result = subprocess.run(["node"], input=program, text=True, capture_output=True, check=True)
+    payload = json.loads(result.stdout)
+    assert payload["colors"][:3] == ["rgb(251,209,200)", "rgb(209,106,103)", "rgb(118,37,62)"]
+    assert payload["colors"][3] != payload["colors"][2]
+    assert payload["colors"][4] == "#596960"
+    assert payload["nullTime"] == "資料不足"
+    assert "推估" in payload["estimate"]
+    assert all(payload[key] for key in ("estimateHatch", "boundary", "escaped", "selection"))
+    assert payload["previous"] == "a"
+
+
+def test_dashboard_time_window_encodes_remaining_balance_and_daily_reset() -> None:
+    from html.parser import HTMLParser
+
+    html = PAGE.read_text(encoding="utf-8")
+    functions = "function architectureReturnNodes" + html.split(
+        "function architectureReturnNodes", 1
+    )[1].split("function architectureModeOpacity", 1)[0]
+    binding = html.split("function bindArchitectureControls", 1)[1].split(
+        "function embeddedPretripLayerInput", 1
+    )[0]
+    keyboard_nodes = binding.split(
+        'if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;', 1
+    )[1].split("const currentIndex", 1)[0]
+    program = r'''
+      const state = {architectureSelectedPassageNodeId: "day2"};
+      const asArray = value => Array.isArray(value) ? value : [];
+      const escapeHtml = value => String(value).replaceAll("<", "&lt;");
+      const formatInteger = value => String(value || 0);
+      const architectureModeOpacity = () => 1;
+    ''' + functions + '''
+      function keyboardNodeIds(snapshot) {
+        const architectureSnapshot = () => snapshot;
+        const target = {hasAttribute:name=>name === "data-architecture-window-mark",
+                        dataset:{architectureSelectionSurface:"fingerprint-window"}};
+    ''' + keyboard_nodes + '''
+        return nodes.map(node => node.node_id);
+      }
+    ''' + r'''
+      const nodes = [
+        {node_id:"start",label:"<start>",route_distance_m:0,remaining_minutes:720,
+         remaining_ratio:1,remaining_status:"estimated",initial_window_minutes:720,
+         consumed_minutes:0,day_index:1,day_id:"day1",day_reset:true,departure_minute_of_day:360},
+        {node_id:"late",label:"Late",route_distance_m:100,remaining_minutes:-90,
+         remaining_ratio:-0.125,initial_window_minutes:720,consumed_minutes:810,day_index:1},
+        {node_id:"day2",label:"Departure",route_distance_m:200,remaining_minutes:660,
+         remaining_ratio:1,remaining_status:"estimated",initial_window_minutes:660,
+         consumed_minutes:0,day_index:2,day_id:"day2",day_reset:true,departure_minute_of_day:420},
+      ];
+      const snapshot = {historical_time_windows:{checkpoints:nodes,days:[{},{}]}};
+      const lane = renderArchitectureTimeWindowLane(snapshot, x=>x, 50, 30);
+      const gapSnapshot = {historical_time_windows:{days:[
+        {day_id:"day1",start_distance_m:0,end_distance_m:100},
+        {day_id:"day2",start_distance_m:105,end_distance_m:200},
+      ],checkpoints:[nodes[0],{...nodes[1],day_id:"day1"},{...nodes[2],route_distance_m:105}]}};
+      console.log(JSON.stringify({
+        colors: [nodes[0],{remaining_minutes:360,remaining_ratio:0.5},nodes[1],nodes[2],null]
+          .map(architectureTimeWindowColor),
+        negative:architectureHistoricalTime(-90,"estimated"),
+        clock:architectureClockMinutes(360.5),missingClock:architectureClockMinutes(null),
+        title:architectureTimeWindowTitle(nodes[0]),
+        reset:lane.includes('data-architecture-day-reset="day2"'),
+        selection:lane.includes('data-architecture-passage-selected="true"'),
+        hatch:lane.includes('url(#architectureEstimatedHatch)'),
+        negativeValue:lane.includes('data-architecture-remaining-minutes="-90"'),
+        validGeometry:!lane.includes('undefined') && !lane.includes('NaN'),
+        previous:architectureWindowNodeAtDistance(snapshot,150).node_id,
+        summary:renderArchitectureWindowSummary(snapshot),
+        gapIsUnknown:architectureWindowNodeAtDistance(gapSnapshot,102) === null,
+        gapLane:renderArchitectureTimeWindowLane(gapSnapshot, x=>x, 50, 30),
+        keyboardIds:keyboardNodeIds({historical_time_windows:{checkpoints:[
+          nodes[0],{node_id:"zz_missing_distance",route_distance_m:null},nodes[2],
+        ]}}),
+      }));
+    '''
+    result = subprocess.run(["node"], input=program, text=True, capture_output=True, check=True)
+    payload = json.loads(result.stdout)
+    assert payload["colors"] == ["rgb(155,216,176)", "rgb(227,186,111)", "#ad4558", "rgb(155,216,176)", "#596960"]
+    assert payload["negative"] == "-1h 30m · 推估"
+    assert payload["clock"] == "06:00"
+    assert payload["missingClock"] == "--:--"
+    assert "T 12h 0m" in payload["title"] and "A 12h 0m" in payload["title"]
+    assert all(payload[key] for key in ("reset", "selection", "hatch", "negativeValue", "validGeometry"))
+    assert payload["previous"] == "late"
+    assert "18:00 固定截止" in payload["summary"] and "非實測日落" in payload["summary"]
+    assert payload["gapIsUnknown"]
+    assert payload["keyboardIds"] == ["start", "day2"]
+    rectangles = []
+
+    class RectangleParser(HTMLParser):
+        def handle_starttag(self, tag, attrs):
+            if tag == "rect":
+                rectangles.append(dict(attrs))
+
+    RectangleParser().feed(payload["gapLane"])
+    cell = next(item for item in rectangles if item.get("data-architecture-window-cell") == "late")
+    hit = next(item for item in rectangles if item.get("data-architecture-passage-node-id") == "late")
+    assert float(cell["width"]) == 0
+    assert float(hit["width"]) >= 2
+    assert hit["fill"] == "transparent"
 
 
 def test_dashboard_architecture_map_focuses_distance_bound_evidence() -> None:

@@ -37,6 +37,144 @@ def test_historical_return_projection_scales_distance_not_directional_time():
     assert result["runtime_safety_truth"] is False
 
 
+def test_historical_time_window_projection_scales_axis_not_clock_or_cost():
+    from pretrip_route_architecture_intelligence import (
+        _historical_return_cost_projection,
+        _historical_time_window_projection,
+    )
+
+    timing = {
+        "route_distance_m": 1000,
+        "bins": [
+            {
+                "start_distance_m": 0,
+                "end_distance_m": 1000,
+                "forward": {"average_minutes": 60, "status": "observed"},
+                "reverse": {"average_minutes": 120, "status": "estimated"},
+            }
+        ],
+        "checkpoints": [
+            {"node_id": "start", "label": "Start", "route_distance_m": 0},
+            {"node_id": "end", "label": "End", "route_distance_m": 1000},
+        ],
+        "camp_evidence": {
+            "camps": [{"node_id": "camp", "label": "Camp", "route_distance_m": 500}]
+        },
+        "daily_budget": {"minutes": 20},
+        "daily_departures": {
+            "timezone": "Asia/Taipei",
+            "days": [
+                {
+                    "day_id": "d1",
+                    "day_index": 1,
+                    "start_distance_m": 0,
+                    "end_distance_m": 1000,
+                    "departure_minute_of_day": 360,
+                    "departure_status": "estimated",
+                }
+            ],
+        },
+    }
+    returns = _historical_return_cost_projection(
+        timing, route_distance_m=2000, distance_scale=0.2, source_ref="timing.json"
+    )
+    result = _historical_time_window_projection(
+        timing,
+        return_projection=returns,
+        route_distance_m=2000,
+        source_ref="timing.json",
+    )
+    start, camp, finish = result["checkpoints"]
+    assert start["initial_window_minutes"] == 720
+    assert start["remaining_minutes"] == 720
+    assert start["forward_to_safe_minutes"] == 30
+    assert start["arrival_margin_minutes"] == 690
+    assert camp["route_distance_m"] == 1000
+    assert camp["remaining_minutes"] == 690
+    assert camp["day_reset"] is False
+    assert finish["consumed_minutes"] == 60
+    assert finish["remaining_minutes"] == 660
+    assert finish["remaining_status"] == "estimated"
+    assert result["days"][0]["end_distance_m"] == 2000
+    assert result["departure_evidence"]["days"][0]["end_distance_m"] == 1000
+    assert result["duration_scaled"] is False
+    assert result["candidate_only"] is True
+    assert result["runtime_safety_truth"] is False
+
+
+def test_historical_overnight_candidates_are_shared_without_filling_schedule_gaps():
+    from pretrip_route_architecture_intelligence import (
+        _historical_return_cost_projection,
+        _historical_time_window_projection,
+    )
+
+    timing = {
+        "bins": [
+            {
+                "start_distance_m": 0,
+                "end_distance_m": 300,
+                "forward": {"average_minutes": 30, "status": "observed"},
+                "reverse": {"average_minutes": 60, "status": "observed"},
+            }
+        ],
+        "checkpoints": [
+            {"node_id": str(d), "label": str(d), "route_distance_m": d}
+            for d in (0, 110, 300)
+        ],
+        "daily_budget": {"minutes": 5},
+        "daily_departures": {
+            "status": "ready",
+            "days": [
+                {
+                    "day_id": "d1",
+                    "day_index": 1,
+                    "start_distance_m": 0,
+                    "end_distance_m": 100,
+                    "departure_minute_of_day": 360,
+                    "departure_status": "estimated",
+                },
+                {
+                    "day_id": "d2",
+                    "day_index": 2,
+                    "start_distance_m": 120,
+                    "end_distance_m": 300,
+                    "departure_minute_of_day": 420,
+                    "departure_status": "estimated",
+                    "preceding_gap_hours": 12,
+                },
+            ],
+        },
+    }
+    returns = _historical_return_cost_projection(
+        timing, route_distance_m=300, distance_scale=1, source_ref="timing.json"
+    )
+    window = _historical_time_window_projection(
+        timing,
+        return_projection=returns,
+        route_distance_m=300,
+        source_ref="timing.json",
+    )
+    assert returns["camp_evidence"]["overnight_candidate_count"] == 1
+    assert returns["checkpoints"][0]["next_cp_id"] == "110"
+    camp = returns["checkpoints"][1]
+    assert camp["return_cost_minutes"] == 0
+    assert camp["return_target_id"] == "historical_overnight.d1"
+    assert window["checkpoints"][0]["next_safe_point_id"] == camp["return_target_id"]
+    assert (
+        next(node for node in window["checkpoints"] if node["node_id"] == "110")[
+            "remaining_minutes"
+        ]
+        is None
+    )
+    reset = next(
+        node
+        for node in window["checkpoints"]
+        if node["day_index"] == 2 and node["day_reset"]
+    )
+    assert reset["remaining_minutes"] == 660
+    assert reset["route_distance_m"] == 120
+
+
 def _reference_pace_payload() -> dict:
     return {
         "artifact_kind": "pretrip_reference_pace_energy_analysis",

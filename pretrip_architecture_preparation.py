@@ -127,6 +127,7 @@ def architecture_input_snapshot(
         ),
         "enrichment_policy": "risk_and_route_pressure_are_optional_enrichments",
         "historical_timing_policy": "directional_signed_grade_return_and_local_moving_day_v1",
+        "time_window_policy": "primary_overnight_departure_to_fixed_1800_forward_countdown_v1",
         "project_timezone": project.get("timezone"),
     }
     fingerprint_payload = {

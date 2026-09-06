@@ -609,8 +609,9 @@ UI 應以一張可左右平移、維持原始尺度的 `Route Fingerprint` 作�
 | Terrain Demand | 坡度與上升／下降機械功率 proxy | 不是人體代謝功率。 |
 | Mobility Demand | 歷史速度 envelope、黏滯與持續移動時間 | 是 ref-GPX 相對通過需求，不是個人成功率。 |
 | Risk Passage | route risk source value 與 passage pattern | provider/candidate value，不是 runtime safety truth。 |
-| Reversibility | 撤退依賴、回頭成本與替代路線 | 缺 reviewed topology 時顯示 unknown。 |
-| Time Window | ETA、日照、交通與固定截止條件 | 與 Weather/Darkness gate 分工，不在此頁自行下 safety state。 |
+| Reversibility | 各 CP 原路反向回程耗時加總，與歷史每日有效行進時數 P50 比較；超過登山口單日容量後改到最近已經過的歷史營地 | 優先反向觀測，缺樣本時只以其他區段相同反向有號坡度級距的配速推估並標示；不能套去程時間。缺方向或坡度基礎仍 unknown，不要求 reviewed graph 才能呈現歷史統計。 |
+| Next CP · Avg | 此 CP 到下一個原始 CP 的順向平均移動時間，與固定 500m Passage 分開 | 各順向區段平均配速按重疊距離加總；推估明示。插入營地 anchor 不得縮短原始 CP-to-CP 區間。 |
+| Time dependencies | 保留 ETA、日照、交通與固定截止條件資料，不當作 Next CP 的時間來源 | 原 Time Window 定義；與 Weather/Darkness gate 分工，不在此頁自行下 safety state。 |
 | Confidence | track count、traversal count、data quality、缺失來源 | 缺資料必須可見，不得以平滑圖形掩蓋。 |
 
 頁面提供四個閱讀模式：`Structure`、`Demand`、`Reversibility`、

@@ -6332,6 +6332,10 @@
       background: linear-gradient(to right, #fbd1c8, #d16a67, #76253e);
     }
 
+    .architecture-window-key {
+      background: linear-gradient(to right, #9bd8b0, #e3ba6f, #ad4558);
+    }
+
     .architecture-return-selection {
       border-block: 1px solid rgba(233, 234, 220, .18);
       padding: 14px 0;
@@ -6476,6 +6480,7 @@
     }
 
     .architecture-map-frame {
+      align-self: start;
       overflow: visible;
     }
 
@@ -6950,7 +6955,7 @@
     }
 
     .architecture-spine-item strong { display: block; font-size: 13px; }
-    .architecture-spine-item small { color: var(--muted); font-family: var(--mono); font-size: 10px; }
+    .architecture-spine-item small { display: block; color: var(--muted); font-family: var(--mono); font-size: 10px; }
     .architecture-spine-score { color: var(--architecture-amber); font-family: var(--mono); font-size: 13px; }
 
     .architecture-empty {
@@ -30939,6 +30944,9 @@
       const historicalNode = architectureReturnNodes(snapshot)
         .find(item => String(item.node_id) === String(nodeId));
       if (historicalNode) return historicalNode;
+      const windowNode = architectureTimeWindowNodes(snapshot)
+        .find(item => String(item.node_id) === String(nodeId));
+      if (windowNode) return windowNode;
       return asArray(snapshot.route_spine?.nodes)
         .find(item => String(item?.node_id || "") === String(nodeId))
         || null;
@@ -31070,9 +31078,80 @@
 
     function architectureHistoricalTime(value, status = "observed") {
       if (value === null || value === undefined || !Number.isFinite(Number(value))) return "資料不足";
-      const minutes = Math.round(Number(value));
+      const minutes = Math.round(Math.abs(Number(value)));
       const duration = minutes >= 60 ? `${Math.floor(minutes / 60)}h ${minutes % 60}m` : `${minutes}m`;
-      return `${duration}${status === "estimated" ? " · 推估" : ""}`;
+      return `${Number(value) < 0 ? "-" : ""}${duration}${status === "estimated" ? " · 推估" : ""}`;
+    }
+
+    function architectureTimeWindowNodes(snapshot = architectureSnapshot()) {
+      return asArray(snapshot.historical_time_windows?.checkpoints)
+        .filter(node => node && node.route_distance_m !== null && Number.isFinite(Number(node.route_distance_m)));
+    }
+
+    function architectureWindowNodeAtDistance(snapshot, distance) {
+      const nodes = architectureTimeWindowNodes(snapshot);
+      const days = asArray(snapshot.historical_time_windows?.days)
+        .filter(day => Number.isFinite(day.start_distance_m) && Number.isFinite(day.end_distance_m));
+      const day = days.findLast(item => distance >= item.start_distance_m && distance <= item.end_distance_m);
+      if (days.length && !day) return null;
+      return nodes.findLast(node => Number(node.route_distance_m) <= Number(distance)
+        && (!day || node.day_id === day.day_id)) || null;
+    }
+
+    function architectureClockMinutes(value) {
+      if (value === null || value === undefined || !Number.isFinite(Number(value))) return "--:--";
+      const minutes = Math.floor(Number(value));
+      return `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+    }
+
+    function architectureTimeWindowColor(node) {
+      if (!node || node.remaining_minutes === null || node.remaining_minutes === undefined) return "#596960";
+      if (Number(node.remaining_minutes) <= 0) return "#ad4558";
+      if (node.remaining_ratio === null || node.remaining_ratio === undefined) return "#596960";
+      const ratio = Math.max(0, Math.min(1, Number(node.remaining_ratio)));
+      if (!Number.isFinite(ratio)) return "#596960";
+      const stops = [[173, 69, 88], [227, 186, 111], [155, 216, 176]];
+      const position = ratio * 2;
+      const index = Math.min(1, Math.floor(position));
+      return `rgb(${stops[index].map((value, channel) => Math.round(value + (stops[index + 1][channel] - value) * (position - index))).join(",")})`;
+    }
+
+    function architectureTimeWindowTitle(node) {
+      const day = node.day_index ? `D${node.day_index}` : "日程未定";
+      return `${node.label} · ${day} ${architectureClockMinutes(node.departure_minute_of_day)} → 18:00 · T ${architectureHistoricalTime(node.initial_window_minutes)} · 已用 ${architectureHistoricalTime(node.consumed_minutes, node.remaining_status)} · A ${architectureHistoricalTime(node.remaining_minutes, node.remaining_status)}`;
+    }
+
+    function renderArchitectureWindowSummary(snapshot) {
+      const result = snapshot.historical_time_windows || {};
+      const departure = result.departure_evidence || {};
+      return `<div class="architecture-return-summary" data-architecture-window-summary>
+        <strong>Time Window · 18:00 固定截止</strong>
+        <span>${formatInteger(result.days?.length)} 個歷史行進日 · ${escapeHtml(departure.timezone || "timezone unknown")}</span>
+        <span><i class="architecture-return-key architecture-window-key" aria-hidden="true"></i> A / T：100% → 0%</span>
+        <span>A = T − 累計前進耗時 · 未扣額外休息 · 非實測日落</span>
+      </div>`;
+    }
+
+    function renderArchitectureTimeWindowLane(snapshot, xForDistance, y, height) {
+      const nodes = architectureTimeWindowNodes(snapshot);
+      return nodes.map((node, index) => {
+        const x = xForDistance(node.route_distance_m);
+        const next = nodes[index + 1];
+        const day = asArray(snapshot.historical_time_windows?.days).find(item => item.day_id
+          && item.day_id === node.day_id && Number.isFinite(item.end_distance_m));
+        const nextX = next ? xForDistance(next.route_distance_m) : x + 2;
+        const endX = day ? Math.min(nextX, xForDistance(day.end_distance_m)) : nextX;
+        const width = Math.max(0, endX - x);
+        const selected = node.node_id === state.architectureSelectedPassageNodeId;
+        const value = node.remaining_minutes === null ? "?" : `${Math.round(node.remaining_minutes)}m`;
+        return `<g opacity="${architectureModeOpacity("time")}">
+          <rect x="${x}" y="${y}" width="${width}" height="${height}" fill="${architectureTimeWindowColor(node)}" data-architecture-window-cell="${escapeHtml(node.node_id)}" pointer-events="none"></rect>
+          <rect x="${x}" y="${y}" width="${Math.max(2, width)}" height="${height}" fill="transparent" data-architecture-return-mark data-architecture-window-mark data-architecture-window-color="${architectureTimeWindowColor(node)}" data-architecture-remaining-minutes="${node.remaining_minutes ?? ""}" data-architecture-passage-node-id="${escapeHtml(node.node_id)}" data-architecture-route-distance-m="${node.route_distance_m}" data-architecture-passage-selected="${selected}" data-architecture-selection-surface="fingerprint-window" role="button" tabindex="${selected || index === 0 ? 0 : -1}" aria-label="${escapeHtml(architectureTimeWindowTitle(node))}"><title>${escapeHtml(architectureTimeWindowTitle(node))}</title></rect>
+          ${node.remaining_status === "estimated" ? `<rect x="${x}" y="${y}" width="${width}" height="${height}" fill="url(#architectureEstimatedHatch)" pointer-events="none"></rect>` : ""}
+          ${width > 65 ? `<text x="${x + width / 2}" y="${y + 22}" text-anchor="middle" fill="${node.remaining_minutes === null || node.remaining_minutes <= 0 ? "#fff" : "#09120f"}" font-size="12" pointer-events="none">${escapeHtml(value)}${node.remaining_status === "estimated" ? "*" : ""}</text>` : ""}
+          ${node.day_reset ? `<path d="M${x} ${y} V${y + height}" stroke="#fff" stroke-width="2" data-architecture-day-reset="${escapeHtml(node.day_id)}"><title>${escapeHtml(`D${node.day_index} · ${architectureClockMinutes(node.departure_minute_of_day)} · T ${architectureHistoricalTime(node.initial_window_minutes)}`)}</title></path>` : ""}
+        </g>`;
+      }).join("");
     }
 
     function architectureReturnTitle(node) {
@@ -31087,7 +31166,7 @@
         <strong>歷史日行進 P50 ${architectureHistoricalTime(budget.minutes)}</strong>
         <span>${formatInteger(budget.sample_day_count)} 日 · ${formatInteger(budget.distinct_source_count)} 份 GPX · ${escapeHtml(budget.timezone || "timezone unknown")}</span>
         <span><i class="architecture-return-key" aria-hidden="true"></i> 0–100% 單日容量</span>
-        <span>回程區段 ${formatInteger(count.reverse_observed_bin_count)} 觀測 / ${formatInteger(count.reverse_estimated_bin_count)} 推估 / ${formatInteger(count.reverse_unavailable_bin_count)} 缺資料</span>
+        <span>回程區段 ${formatInteger(count.reverse_observed_bin_count)} 完整觀測 / ${formatInteger(count.reverse_estimated_bin_count)} 推估 / ${formatInteger(count.reverse_unavailable_bin_count)} 缺資料</span>
         <span>斜線 = 推估 · 歷史比較，非即時返程保證</span>
       </div>`;
     }
@@ -31110,10 +31189,10 @@
           ${node.return_cost_status === "estimated" ? `<rect x="${x}" y="${laneY.reversibility}" width="${width}" height="${laneHeight}" fill="url(#architectureEstimatedHatch)" pointer-events="none"></rect>` : ""}
           ${reset ? `<path d="M${x - 5} ${laneY.reversibility - 8} L${x + 5} ${laneY.reversibility - 8} L${x} ${laneY.reversibility - 1} Z" fill="${node.entry_decision_boundary ? "#ffbe4d" : "#e9eadc"}" data-architecture-return-boundary="${node.entry_decision_boundary ? "entry-limit" : "camp-reset"}"><title>${escapeHtml(node.entry_decision_boundary ? "回登山口已超過歷史單日容量" : `返程目標切換：${node.return_target_label}`)}</title></path>` : ""}
         </g>
-        ${node.node_kind === "checkpoint" ? `<g opacity="${architectureModeOpacity("time")}">
-          <rect x="${x}" y="${laneY.time}" width="${nextWidth}" height="${laneHeight}" fill="${nextMinutes === null ? "url(#architectureMissingHatch)" : architecturePressureColor(Math.min(100, Number(nextMinutes) / 60 * 100))}" ${attributes} data-architecture-selection-surface="fingerprint-next-cp" aria-label="${escapeHtml(nextTitle)}"><title>${escapeHtml(nextTitle)}</title></rect>
-          ${node.next_cp_timing_status === "estimated" ? `<rect x="${x}" y="${laneY.time}" width="${nextWidth}" height="${laneHeight}" fill="url(#architectureEstimatedHatch)" pointer-events="none"></rect>` : ""}
-          ${nextWidth > 42 ? `<text x="${x + nextWidth / 2}" y="${laneY.time + 22}" text-anchor="middle" fill="#07100c" font-size="12" pointer-events="none">${nextMinutes === null ? "?" : `${Math.round(nextMinutes)}m${node.next_cp_timing_status === "estimated" ? "*" : ""}`}</text>` : ""}
+        ${node.node_kind === "checkpoint" ? `<g opacity="${architectureModeOpacity("next_cp")}">
+          <rect x="${x}" y="${laneY.next_cp}" width="${nextWidth}" height="${laneHeight}" fill="${nextMinutes === null ? "url(#architectureMissingHatch)" : architecturePressureColor(Math.min(100, Number(nextMinutes) / 60 * 100))}" ${attributes} data-architecture-selection-surface="fingerprint-next-cp" aria-label="${escapeHtml(nextTitle)}"><title>${escapeHtml(nextTitle)}</title></rect>
+          ${node.next_cp_timing_status === "estimated" ? `<rect x="${x}" y="${laneY.next_cp}" width="${nextWidth}" height="${laneHeight}" fill="url(#architectureEstimatedHatch)" pointer-events="none"></rect>` : ""}
+          ${nextWidth > 42 ? `<text x="${x + nextWidth / 2}" y="${laneY.next_cp + 22}" text-anchor="middle" fill="#07100c" font-size="12" pointer-events="none">${nextMinutes === null ? "?" : `${Math.round(nextMinutes)}m${node.next_cp_timing_status === "estimated" ? "*" : ""}`}</text>` : ""}
         </g>` : ""}`;
       }).join("");
     }
@@ -31123,7 +31202,8 @@
       const focus = {
         structure: ["elevation", "structure"],
         demand: ["composite", "terrain", "mobility", "risk", "endurance", "pace_variability"],
-        reversibility: ["reversibility", "time"],
+        reversibility: ["reversibility", "time", "next_cp"],
+        time_window: ["time", "next_cp"],
         evidence: ["evidence"],
       }[mode] || ["structure"];
       return focus.includes(lane) ? 1 : .38;
@@ -31187,7 +31267,7 @@
         1780,
         224 + Math.ceil(routeDistance / 500) * 116,
       );
-      const height = timingNodes.length ? 958 : 670;
+      const height = timingNodes.length ? 1004 : 716;
       const plotX = 154;
       const plotWidth = width - 224;
       const elevationTop = 42;
@@ -31203,7 +31283,8 @@
         pace_variability: 452,
         reversibility: 498,
         time: 544,
-        evidence: 590,
+        next_cp: 590,
+        evidence: 636,
       };
       const metricBottom = laneY.evidence + laneHeight;
       const xForDistance = value => plotX + Math.max(0, Math.min(1, Number(value || 0) / routeDistance)) * plotWidth;
@@ -31227,7 +31308,8 @@
         ["endurance", "ENDURANCE"],
         ["pace_variability", "PACE VAR"],
         ["reversibility", "REVERSIBILITY"],
-        ["time", "NEXT CP · AVG"],
+        ["time", "TIME WINDOW · A"],
+        ["next_cp", "NEXT CP · AVG"],
         ["evidence", "CONFIDENCE"],
       ];
       const laneLabels = laneDefinitions.map(([lane, label]) => `<text class="architecture-lane-text" x="16" y="${laneY[lane] + laneHeight / 2 + 4}">${label}</text><line class="architecture-lane-rule" x1="${plotX}" y1="${laneY[lane] + laneHeight}" x2="${plotX + plotWidth}" y2="${laneY[lane] + laneHeight}"></line>`).join("");
@@ -31335,6 +31417,7 @@
             <span class="chip ${snapshot.status === "ready" ? "ok" : "warn"}">${escapeHtml(snapshot.status)}</span>
           </div>
           ${renderArchitectureReturnSummary(snapshot)}
+          ${renderArchitectureWindowSummary(snapshot)}
           <div class="architecture-fingerprint-scroll" data-architecture-fingerprint-scroll>
             <div class="architecture-sticky-lane-key" aria-hidden="true">${stickyLaneLabels}</div>
             <svg class="architecture-fingerprint" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" style="width:${width}px;min-width:${width}px;height:${height}px" role="img" aria-label="Golden GPX elevation profile compared with distance-indexed route architecture metrics and CP or MCP passage timing">
@@ -31357,7 +31440,8 @@
                 </g>
               ` : `<rect x="${plotX}" y="${elevationTop}" width="${plotWidth}" height="${elevationHeight}" fill="url(#architectureMissingHatch)"></rect>`}
               ${laneLabels}${binMarks}${checkpointNodes}
-              ${returnLanes || `<text class="architecture-axis-text" x="${plotX + 10}" y="${laneY.reversibility + 25}">歷史方向耗時尚未準備</text><text class="architecture-axis-text" x="${plotX + 10}" y="${laneY.time + 25}">CP 區間耗時尚未準備</text>`}
+              ${returnLanes || `<text class="architecture-axis-text" x="${plotX + 10}" y="${laneY.reversibility + 25}">歷史方向耗時尚未準備</text><text class="architecture-axis-text" x="${plotX + 10}" y="${laneY.next_cp + 25}">CP 區間耗時尚未準備</text>`}
+              ${renderArchitectureTimeWindowLane(snapshot, xForDistance, laneY.time, laneHeight) || `<text class="architecture-axis-text" x="${plotX + 10}" y="${laneY.time + 25}">歷史每日出發紀錄尚未準備</text>`}
               <line x1="${selectedX.toFixed(1)}" y1="29" x2="${selectedX.toFixed(1)}" y2="${metricBottom + 8}" stroke="#f0ae3b" stroke-width="2" stroke-dasharray="4 4"></line>
               ${timingNodes.length ? `
                 <rect x="0" y="${metricBottom + 16}" width="${width}" height="318" fill="#09110e"></rect>
@@ -31382,6 +31466,7 @@
         slow_passage: "Slow Passage",
         risk_passage: "Risk Passage",
         reversibility: "Reversibility",
+        time_window: "Time Window",
         evidence_quality: "Evidence Quality",
       }[lens] || "Structure";
     }
@@ -31422,6 +31507,14 @@
           missing,
         ];
       }
+      if (lens === "time_window") {
+        return [
+          {color: "#9bd8b0", label: "A / T · 100%", description: "當日出發時間資本"},
+          {color: "#e3ba6f", label: "A / T · 50%", description: "前進耗時逐段扣除"},
+          {color: "#ad4558", label: "A ≤ 0", description: "已用完至 18:00 的時間資本"},
+          {color: "#596960", label: "資料不足", description: "出發時刻或前進耗時缺值"},
+        ];
+      }
       return [
         {color: "#fbd1c8", label: "0% 歷史單日容量", description: "反向回程成本"},
         {color: "#d16a67", label: "50% 歷史單日容量", description: "回到目前返程目標"},
@@ -31433,7 +31526,8 @@
     function architectureLensLegendSubtitle(lens = state.architectureLens) {
       if (lens === "structure") return "cyan shows connected geometry; metric magnitude is not encoded";
       if (lens === "evidence_quality") return "green means stronger evidence support; this is confidence, not pressure";
-      if (lens === "reversibility") return "歷史 CP 回程成本 · 包含坡度配對推估 · 非即時安全返程判定";
+      if (lens === "reversibility") return "歷史 CP 回程成本 · 包含坡度配對與部分涵蓋推估 · 非即時安全返程判定";
+      if (lens === "time_window") return "18:00 固定截止假設 · 依歷史每日出發重置 · 非實測日落";
       return "candidate metric · warmer color means greater route pressure";
     }
 
@@ -31457,6 +31551,9 @@
       if (lens === "slow_passage") return architecturePressureColor(architectureVectorValue(bin, "slow_passage_impedance"));
       if (lens === "risk_passage") return architecturePressureColor(architectureVectorValue(bin, "risk_passage_pressure"));
       if (lens === "evidence_quality") return architectureEvidenceColor(bin);
+      if (lens === "time_window") return architectureTimeWindowColor(architectureWindowNodeAtDistance(
+        architectureSnapshot(), (Number(bin?.start_distance_m) + Number(bin?.end_distance_m)) / 2,
+      ));
       if (lens === "reversibility") return architectureReturnColor(architectureReturnNodeAtDistance(
         architectureSnapshot(), (Number(bin?.start_distance_m) + Number(bin?.end_distance_m)) / 2,
       ));
@@ -31619,6 +31716,7 @@
         ["slow_passage", "Slow passage"],
         ["risk_passage", "Risk passage"],
         ["reversibility", "Reversibility"],
+        ["time_window", "Time Window"],
         ["evidence_quality", "Evidence"],
       ];
       const architectureMapSvg = `
@@ -31702,7 +31800,28 @@
           <div><small>歷史日行進 P50</small><strong>${architectureHistoricalTime(budget.minutes)}</strong></div>
         </div>
         <p class="small-note">${assessment}${node.budget_ratio !== null ? ` · ${Math.round(Number(node.budget_ratio) * 100)}%` : ""}${node.entry_day_exceeded ? " · 回登山口已超出單日容量" : ""}${node.return_target_kind === "camp" ? " · 歷史營地標記，現況未驗證" : ""}</p>
-        ${node.return_cost_status === "estimated" || node.next_cp_timing_status === "estimated" ? '<p class="small-note">推估依據：歷史其他區段、相同有號坡度級距的平均配速；回程坡度反向。非當日剩餘時間。</p>' : ""}
+        ${node.return_cost_status === "estimated" || node.next_cp_timing_status === "estimated" ? '<p class="small-note">推估依據：方向樣本涵蓋不足時按配速補足區間；無方向樣本時用其他區段的相同有號坡度級距配速，回程坡度反向。非當日剩餘時間。</p>' : ""}
+      </div>`;
+    }
+
+    function renderArchitectureWindowSelection(snapshot, distance) {
+      const node = architectureTimeWindowNodes(snapshot).find(item => item.node_id === state.architectureSelectedPassageNodeId)
+        || architectureWindowNodeAtDistance(snapshot, distance);
+      if (!node) return "";
+      const status = node.remaining_status;
+      return `<div class="architecture-return-selection" data-architecture-window-node="${escapeHtml(node.node_id)}">
+        <span class="architecture-micro-label">Time Window · ${formatDistanceKm(node.route_distance_m)}</span>
+        <h4>${escapeHtml(node.label)} · ${node.day_index ? `D${node.day_index}` : "日程未定"}</h4>
+        <div class="architecture-metric-grid">
+          <div><small>出發 → 固定截止</small><strong>${architectureClockMinutes(node.departure_minute_of_day)} → 18:00</strong></div>
+          <div><small>T · 當日時間資本</small><strong>${architectureHistoricalTime(node.initial_window_minutes, node.departure_status)}</strong></div>
+          <div><small>Σt · 已用前進成本</small><strong>${architectureHistoricalTime(node.consumed_minutes, node.consumed_status)}</strong></div>
+          <div><small>A · 剩餘時間資本</small><strong>${architectureHistoricalTime(node.remaining_minutes, status)}</strong></div>
+          <div><small>前進 → ${escapeHtml(node.next_safe_point_label || "無後續安全地點候選")}</small><strong>${architectureHistoricalTime(node.forward_to_safe_minutes, node.forward_to_safe_status)}</strong></div>
+          <div><small>抵達後時間餘額</small><strong>${architectureHistoricalTime(node.arrival_margin_minutes, node.arrival_margin_status)}</strong></div>
+        </div>
+        <p class="small-note">${node.day_reset ? "每日出發重置 · " : ""}${node.deadline_exceeded ? "時間資本已透支 · " : ""}A = T − Σt · 18:00 為固定假設，非實測日落；未扣額外休息。</p>
+        <p class="small-note">出發為 GPX 首筆紀錄代理值；歷史營地與隔夜停留點僅為安全地點候選，現況未驗證。</p>
       </div>`;
     }
 
@@ -31722,6 +31841,8 @@
         snapshot,
         midpointDistanceM,
       );
+      const selectedPassage = architecturePassageNodeById(state.architectureSelectedPassageNodeId, snapshot);
+      const timingDistanceM = selectedPassage?.route_distance_m ?? midpointDistanceM;
       return `
         <section class="architecture-segment-inspector" data-architecture-mobile-panel="segment" data-selected-architecture-bin="${escapeHtml(bin.route_bin_id)}">
           <div class="architecture-inspector-heading">
@@ -31729,7 +31850,8 @@
             <span class="chip ${bin.guidance_eligible ? "ok" : "warn"}">${bin.guidance_eligible ? "guidance eligible" : "context only"}</span>
           </div>
           <div class="architecture-inspector-body">
-            ${renderArchitectureReturnSelection(snapshot, midpointDistanceM)}
+            ${renderArchitectureWindowSelection(snapshot, timingDistanceM)}
+            ${renderArchitectureReturnSelection(snapshot, timingDistanceM)}
             <div class="architecture-segment-callout">
               <span class="architecture-micro-label">Selected route bin</span>
               <strong>${escapeHtml(bin.distance_label || bin.route_bin_id)}</strong>
@@ -31772,6 +31894,16 @@
     }
 
     function renderArchitectureMobileSpine(snapshot) {
+      if (state.architectureMode === "time_window") {
+        const nodes = architectureTimeWindowNodes(snapshot);
+        return `<section class="architecture-mobile-spine" data-architecture-mobile-panel="spine">
+          <div class="architecture-lower-heading"><h3>Time Window</h3><span class="chip info">${nodes.length} anchors</span></div>
+          ${renderArchitectureWindowSummary(snapshot)}
+          <div class="architecture-spine-list">${nodes.map(node => `<button type="button" class="architecture-spine-item ${node.node_id === state.architectureSelectedPassageNodeId ? "is-selected" : ""}" data-architecture-window-mark data-architecture-passage-node-id="${escapeHtml(node.node_id)}" data-architecture-route-distance-m="${node.route_distance_m}" data-architecture-selection-surface="mobile-window" style="border-left:6px solid ${architectureTimeWindowColor(node)}">
+            <span><strong>${escapeHtml(node.label)} · ${formatDistanceKm(node.route_distance_m)}</strong><small>${node.day_index ? `D${node.day_index}` : "日程未定"} · A ${architectureHistoricalTime(node.remaining_minutes, node.remaining_status)}</small><small>T ${architectureHistoricalTime(node.initial_window_minutes)} · 已用 ${architectureHistoricalTime(node.consumed_minutes)}</small>${node.day_reset ? `<small>每日出發重置 · ${architectureClockMinutes(node.departure_minute_of_day)} → 18:00</small>` : ""}</span>
+          </button>`).join("") || '<div class="architecture-empty">歷史每日出發紀錄尚未準備</div>'}</div>
+        </section>`;
+      }
       if (state.architectureMode === "reversibility") {
         const nodes = architectureReturnNodes(snapshot);
         return `<section class="architecture-mobile-spine" data-architecture-mobile-panel="spine">
@@ -31872,6 +32004,7 @@
         ["structure", "Structure"],
         ["demand", "Demand"],
         ["reversibility", "Reversibility"],
+        ["time_window", "Time Window"],
         ["evidence", "Evidence"],
       ];
       return `
@@ -35728,7 +35861,7 @@
           : fallbackDistanceM;
         if (!node && !Number.isFinite(distanceM)) return;
         state.architectureSelectedPassageNodeId = nodeId;
-        if (focusSurface === "mobile-return") state.architectureMobileView = "segment";
+        if (["mobile-return", "mobile-window"].includes(focusSurface)) state.architectureMobileView = "segment";
         const nearest = architectureBinForDistance(distanceM);
         if (nearest?.route_bin_id) state.architectureSelectedBinId = nearest.route_bin_id;
         const surfaceSelector = focusSurface
@@ -35766,11 +35899,14 @@
           }
           if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;
           const nodes = asArray(
-            target.hasAttribute("data-architecture-return-mark")
+            target.hasAttribute("data-architecture-window-mark")
+              ? architectureSnapshot().historical_time_windows?.checkpoints
+              : target.hasAttribute("data-architecture-return-mark")
               ? architectureSnapshot().historical_return_cost?.checkpoints
               : architectureSnapshot().checkpoint_passage_timing?.nodes,
           )
-            .filter(item => item && Number.isFinite(Number(item.route_distance_m)))
+            .filter(item => target.dataset.architectureSelectionSurface !== "fingerprint-next-cp" || item.node_kind === "checkpoint")
+            .filter(item => item && item.route_distance_m !== null && Number.isFinite(Number(item.route_distance_m)))
             .slice()
             .sort((left, right) => Number(left.route_distance_m) - Number(right.route_distance_m)
               || String(left.node_id).localeCompare(String(right.node_id)));

@@ -19,6 +19,85 @@ Use this file when a rerun must include all of:
 
 If any required step is skipped, report the run as partial.
 
+### 2026-09-04 Architecture Historical Return Timing Repair
+
+An available candidate mission graph is not historical Reversibility analysis.
+The old fingerprint rendered graph/ETA status strings instead of CP-level costs.
+Keep the workspace-first fetch order and the collapsed supporting evidence panels.
+The historical definition now lives in
+`docs/specs/pretrip-reference-pace-energy-analysis.md`: reverse-direction return
+cost, historical moving-day P50, explicit prior camp anchors, and a separate
+forward `Next CP · Avg` lane. Reviewed topology does not gate these statistics.
+
+New root causes found during the real-workspace run:
+
+- A 20 m individual-step threshold mislabeled dense reverse samples as forward.
+  Direction now follows nonzero matched progress; spatial proximity leads route
+  matching, with continuity resolving coincident branches.
+- Short observations were extrapolated to complete bins but called observed.
+  Partial coverage is explicitly estimated; fragments in the same passage are
+  aggregated before averaging so file segmentation does not change mean pace.
+- Duplicate files and overlapping time intervals inflated daily sample weight.
+  Deduplicate file hashes and union eligible intervals within each GPX before
+  splitting at local midnight. The weather artifact's timezone may be an
+  importer default, not source-GPX timezone metadata.
+- Generic rests and camp water-access notes are not overnight anchors. Use only
+  explicit camp labels, reject off-route/adjacent points and keep provenance.
+- The last regularly spaced risk sample can precede the true filtered GPX finish
+  (about 7 m in Dongqing). Include the primary GPX's full cumulative distance in
+  the time axis; otherwise the final CP lies outside all timing bins.
+
+Bounded repair command (no GPX import, terrain worker or weather refresh):
+
+```bash
+rtk proxy ./venv/bin/python pretrip_architecture_preparation.py --project-root /path/to/workspace --force --json
+```
+
+This refreshes reference pace JSON/GeoJSON, Architecture manifest and their
+project refs. The input fingerprint includes timing-policy version, camp notes
+and timezone evidence. A running Python Dashboard needs the new projection code;
+use an isolated free port for verification when existing servers are in use.
+`tools/dashboard_architecture_return_smoke.js` exercises actual desktop/mobile
+controls, return/next-CP selection, decision/reset marks and the map lens using
+read-only browser requests. On this Mac it uses installed Chrome, because the
+Playwright-managed browser binary is absent.
+
+### 2026-09-04 Architecture Daily Time Window
+
+Time Window is now a separate forward resource account: local departure to the
+user's fixed 18:00 cutoff, less accumulated historical forward movement costs.
+The old next-CP average remains a distinct lane, and historical moving-day P50
+still belongs to return-cost comparison, not this daylight proxy.
+
+The Dongqing filtered primary GPX contains a coherent nine-day sequence. Its
+initial and post-overnight first records provide candidate departure clocks;
+neither `project.route_days=1`, all camp labels, nor local midnight provides this
+schedule. Original GPX timestamp reversals and multi-year contaminated rest
+durations must not create resets. Short spatial gaps between overnight endpoints
+remain unknown schedule spans. No current camp safety or actual sunset is proven.
+
+Use the bounded Architecture command above. The input fingerprint now also
+includes the daily-departure/countdown policy. This reuses existing local GPX and
+timezone evidence without importing GPX, rebuilding terrain, or fetching weather.
+The browser smoke additionally operates the Time Window mode/lens, daily reset
+anchors, desktop keyboard selection and mobile balance inspector, checking
+`A = T - consumed` and `arrival margin = A - forward-to-safe` against live data.
+
+The bounded Dongqing proof produced 9 daily resets, 250 available reverse-cost
+anchors and 257/258 available Time Window anchors. One original CP lies in an
+overnight recording gap and intentionally remains unknown. The 8 inferred
+overnight stops join 23 named camp candidates in both directional target sets,
+without being promoted to verified camps. Daily departures remain independent
+reset events. Distance conversion does not alter any duration or clock.
+
+Keep exact zero-width data cells at day ends separate from transparent minimum
+hit targets, so a 5 m unknown gap is not painted over by a 2 px data minimum.
+Keyboard traversal excludes null-distance anchors just as the visible lanes do.
+Desktop/mobile controls, countdown arithmetic and map colors were exercised on
+an isolated 9187 preview; existing Dashboard processes were not restarted. This
+is working-prototype evidence, not official full Dashboard qualification or a
+promoted safety/runtime baseline.
+
 ### 2026-08-25 Workspace raster-cache preparation repair
 
 The blank-layer report on

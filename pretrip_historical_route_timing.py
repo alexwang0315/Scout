@@ -91,6 +91,7 @@ def build_directional_route_timing(
     by_bin: dict[tuple[int, str], list[dict]] = defaultdict(list)
     cohorts: dict[str, list[dict]] = defaultdict(list)
     source_for_hash: dict[str, str] = {}
+    passages: dict[tuple, list[dict]] = defaultdict(list)
     for item in traversals:
         source = str(item.get("source_id") or "")
         digest = str(item.get("source_sha256") or source)
@@ -102,9 +103,24 @@ def build_directional_route_timing(
         distance = _positive_number(item.get("route_progress_distance_m"))
         if duration is None or distance is None or direction not in {"forward", "reverse"}:
             continue
+        key = (
+            source,
+            item.get("track_segment_index"),
+            item.get("bout_id"),
+            index,
+            direction,
+        )
+        passages[key].append({"seconds": duration, "distance_m": distance})
+    for (source, _, _, index, direction), fragments in passages.items():
+        distance = math.fsum(item["distance_m"] for item in fragments)
+        duration = math.fsum(item["seconds"] for item in fragments)
+        bin_length = min(route_bin_m, route_distance_m - index * route_bin_m)
+        if bin_length <= 0 or index < 0:
+            continue
         sample = {
             "bin_index": index, "source_id": source,
             "seconds_per_m": duration / distance,
+            "coverage_ratio": min(1.0, distance / bin_length),
         }
         by_bin[index, direction].append(sample)
         if 0 <= index < len(bin_grades) and bin_grades[index] is not None:
@@ -120,10 +136,19 @@ def build_directional_route_timing(
             target_grade = canonical_grade * sign if canonical_grade is not None else None
             band = grade_band({"signed_grade_ratio": target_grade}) if target_grade is not None else None
             samples = by_bin[index, direction]
-            observed = bool(samples)
+            direct = bool(samples)
+            complete = [
+                sample for sample in samples if sample["coverage_ratio"] >= 1.0 - 1e-6
+            ]
+            if complete:
+                samples = complete
             if not samples and band is not None:
-                samples = [sample for sample in cohorts[band] if sample["bin_index"] != index]
-            status = "observed" if observed else "estimated" if samples else "unavailable"
+                samples = [
+                    sample for sample in cohorts[band] if sample["bin_index"] != index
+                ]
+            status = (
+                "observed" if complete else "estimated" if samples else "unavailable"
+            )
             timings[direction] = {
                 "status": status,
                 "average_minutes": round(
@@ -133,10 +158,24 @@ def build_directional_route_timing(
                 "sample_count": len(samples),
                 "distinct_source_count": len({sample["source_id"] for sample in samples}),
                 "source_ids": sorted({sample["source_id"] for sample in samples}),
+                "direct_directional_samples": direct,
+                "minimum_sample_coverage_ratio": min(
+                    sample["coverage_ratio"] for sample in samples
+                )
+                if samples
+                else None,
                 "signed_grade_ratio": target_grade,
                 "grade_band": band,
-                "method": "directional_bin_mean_pace" if observed else (
-                    "other_bin_same_signed_grade_mean_pace" if samples else "missing_directional_evidence"
+                "method": "directional_bin_mean_pace"
+                if complete
+                else (
+                    "partial_directional_bin_mean_pace"
+                    if direct
+                    else (
+                        "other_bin_same_signed_grade_mean_pace"
+                        if samples
+                        else "missing_directional_evidence"
+                    )
                 ),
             }
         bins.append({
@@ -150,6 +189,12 @@ def build_directional_route_timing(
             f"{direction}_{status}_bin_count": sum(item[direction]["status"] == status for item in bins)
             for direction in ("forward", "reverse")
             for status in ("observed", "estimated", "unavailable")
+        }
+        | {
+            f"{direction}_direct_sampled_bin_count": sum(
+                item[direction]["direct_directional_samples"] for item in bins
+            )
+            for direction in ("forward", "reverse")
         },
         "policy": {
             "direct_directional_samples_first": True,
@@ -160,6 +205,8 @@ def build_directional_route_timing(
             "duplicate_source_sha256_counted_once": True,
             "duration_estimator": "arithmetic_mean_seconds_per_route_meter_times_bin_length",
             "partial_bin_cost": "proportional_to_interval_overlap",
+            "partial_sample_extrapolation": "estimated_not_observed",
+            "fragment_weighting": "aggregate_by_source_track_segment_bout_bin_direction_before_mean_pace",
         },
         "candidate_only": True,
         "runtime_safety_truth": False,

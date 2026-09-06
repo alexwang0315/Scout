@@ -4,16 +4,44 @@ import hashlib
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
+
+import pytest
 
 from pretrip_architecture_preparation import (
     inspect_architecture_readiness,
     prepare_route_architecture_intelligence,
 )
 from pretrip_reference_pace_energy_analysis import (
+    _PressureProfileIndex,
+    _RouteSpatialIndex,
+    _TrackPoint,
+    _analyze_track,
     _crowd_supported_axis,
+    _sequence_route_matches,
     build_reference_pace_energy_analysis,
     write_reference_pace_energy_analysis,
 )
+
+
+def test_historical_timing_reaches_primary_finish_beyond_last_risk_sample(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = _write_workspace(tmp_path)
+    monkeypatch.setattr(
+        "pretrip_reference_pace_energy_analysis._primary_route_progress",
+        lambda root: [index * 607 / 12 for index in range(13)],
+    )
+    report, _ = build_reference_pace_energy_analysis(root)
+    timing = report["historical_route_timing"]
+    assert timing["route_distance_m"] == 607
+    assert timing["bins"][-1]["end_distance_m"] == 607
+    assert timing["bins"][-1]["forward"]["signed_grade_ratio"] is not None
+    finish = next(
+        node for node in timing["checkpoints"] if node["node_id"] == "cp.finish"
+    )
+    assert finish["route_distance_m"] == 607
 
 
 def test_reference_pace_energy_analysis_rejects_fixed_interval_assumption_and_builds_map(
@@ -43,6 +71,15 @@ def test_reference_pace_energy_analysis_rejects_fixed_interval_assumption_and_bu
     assert report["counts"]["route_traversal_count"] > 0
     assert report["crowd_axis"]["analysis_distance_m"] == 600.0
     assert max(item["end_distance_m"] for item in report["route_bins"]) == 600.0
+
+    directional = report["historical_route_timing"]
+    assert directional["schema_version"] == "historical_directional_timing.v1"
+    assert directional["bins"][-1]["end_distance_m"] == 600
+    assert directional["daily_budget"]["sample_day_count"] == 3
+    assert directional["daily_budget"]["minutes"] > 0
+    assert directional["daily_budget"]["live_remaining_day_budget"] is False
+    assert all(node["node_kind"] == "cp" for node in directional["checkpoints"])
+    assert directional["policy"]["outbound_duration_reused_for_return"] is False
 
     passage_timing = report["checkpoint_passage_timing"]
     assert passage_timing["artifact_kind"] == "pretrip_checkpoint_passage_timing"
@@ -687,6 +724,159 @@ def test_sequence_map_matching_preserves_out_and_back_route_progress(
     assert [item["route_bin_index"] for item in report["route_bins"]] == [0, 1, 2, 3]
     assert report["crowd_axis"]["analysis_distance_m"] == 1_000.0
     assert report["tracks"][0]["excluded_segment_counts"] == {}
+
+
+def test_dense_reverse_route_matches_follow_nearest_points() -> None:
+    canonical = _dense_route_points()
+    spatial_index = _RouteSpatialIndex.from_track_segments(
+        [canonical],
+        cell_size_m=100.0,
+    )
+    reverse = list(reversed(canonical))
+
+    matches = _sequence_route_matches(
+        reverse,
+        spatial_index=spatial_index,
+        match_radius_m=100.0,
+    )
+
+    assert all(match is not None and match[1] == 0 for match in matches)
+    assert [match[0].route_distance_m for match in matches] == [
+        sample.route_distance_m for sample in reversed(spatial_index.samples)
+    ]
+
+
+def test_dense_reverse_matches_keep_direction_through_overlapping_branches() -> None:
+    canonical = [
+        _TrackPoint(0.0, distance / 111_320.0, 0.0, None) for distance in (0, 5, 0, -5)
+    ]
+    spatial_index = _RouteSpatialIndex.from_track_segments(
+        [canonical],
+        cell_size_m=100.0,
+    )
+
+    matches = _sequence_route_matches(
+        list(reversed(canonical)),
+        spatial_index=spatial_index,
+        match_radius_m=100.0,
+    )
+
+    assert [match[0].route_distance_m for match in matches] == [
+        sample.route_distance_m for sample in reversed(spatial_index.samples)
+    ]
+
+
+@pytest.mark.parametrize("exact_matches", [True, False])
+def test_analyze_track_preserves_dense_reverse_direction(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    exact_matches: bool,
+) -> None:
+    canonical = _dense_route_points()
+    spatial_index = _RouteSpatialIndex.from_track_segments(
+        [canonical],
+        cell_size_m=100.0,
+    )
+    points = [(point.lat, point.lon) for point in reversed(canonical)]
+    start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    path = tmp_path / "dense-reverse.gpx"
+    _write_gpx(
+        path,
+        points,
+        [start + timedelta(seconds=index * 5) for index in range(len(points))],
+    )
+    if exact_matches:
+        monkeypatch.setattr(
+            "pretrip_reference_pace_energy_analysis._sequence_route_matches",
+            lambda segment, **kwargs: [
+                (sample, 0.0) for sample in reversed(spatial_index.samples)
+            ],
+        )
+
+    report, traversals, _, _ = _analyze_timing_fixture(path, spatial_index)
+
+    assert report["status"] == "usable_candidate"
+    assert report["excluded_segment_counts"] == {}
+    assert len(traversals) == 1
+    assert traversals[0]["direction"] == "reverse"
+    assert traversals[0]["duration_seconds"] == 100
+    assert traversals[0]["route_progress_distance_m"] == pytest.approx(
+        spatial_index.samples[-1].route_distance_m,
+    )
+
+
+@pytest.mark.parametrize(
+    ("offsets", "expected_minutes"),
+    [
+        ([(0, 60), (0, 60)], [1.0]),
+        ([(0, 60), (180, 240)], [1.0, 1.0]),
+        ([(0, 60), (60, 120), (120, 180)], [2.0, 1.0]),
+        ([(240, 300), (60, 180), (0, 120), (30, 90), (0, 120), (300, 360)], [2.0, 3.0]),
+    ],
+)
+def test_daily_moving_time_unions_eligible_intervals_before_local_day_split(
+    tmp_path: Path,
+    offsets: list[tuple[int, int]],
+    expected_minutes: list[float],
+) -> None:
+    canonical = _dense_route_points()
+    spatial_index = _RouteSpatialIndex.from_track_segments(
+        [canonical],
+        cell_size_m=100.0,
+    )
+    points = [(point.lat, point.lon) for point in (canonical[0], canonical[-1])]
+    start = datetime(2026, 1, 1, 15, 58, tzinfo=timezone.utc)
+    path = tmp_path / "overlapping-segments.gpx"
+    _write_multisegment_gpx(
+        path,
+        [points for _ in offsets],
+        [
+            [start + timedelta(seconds=left), start + timedelta(seconds=right)]
+            for left, right in offsets
+        ],
+    )
+
+    report, _, _, _ = _analyze_timing_fixture(
+        path,
+        spatial_index,
+        local_timezone=ZoneInfo("Asia/Taipei"),
+    )
+
+    assert report["excluded_segment_counts"] == {}
+    assert report["daily_moving_minutes"] == expected_minutes
+    assert report["daily_movement_timezone"] == "Asia/Taipei"
+
+
+def _dense_route_points() -> list[_TrackPoint]:
+    return [
+        _TrackPoint(0.0, distance / 111_320.0, 0.0, None)
+        for distance in range(0, 101, 5)
+    ]
+
+
+def _analyze_timing_fixture(
+    path: Path,
+    spatial_index: _RouteSpatialIndex,
+    *,
+    local_timezone: ZoneInfo | None = None,
+) -> tuple:
+    return _analyze_track(
+        source={"source_id": path.stem, "sha256": _sha256(path)},
+        filtered_path=path,
+        analysis_source_kind="workspace_raw_gpx",
+        analysis_source_ref=path.name,
+        spatial_index=spatial_index,
+        pressure_index=_PressureProfileIndex.from_payload({}),
+        route_bin_m=250.0,
+        match_radius_m=100.0,
+        pause_reset_seconds=300.0,
+        max_interval_seconds=300.0,
+        stationary_speed_mps=0.08,
+        normal_walking_min_kmh=1.0,
+        normal_walking_max_kmh=10.0,
+        min_traversal_distance_m=40.0,
+        local_timezone=local_timezone,
+    )
 
 
 def _write_workspace(tmp_path: Path) -> Path:
