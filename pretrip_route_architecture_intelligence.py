@@ -381,37 +381,90 @@ def build_route_architecture_intelligence(
     return payload
 
 
+def _historical_mapping(value: Any) -> dict:
+    return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _historical_records(value: Any) -> list[dict]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        return []
+    # Keep malformed positions so a broken bin/day cannot disappear into a valid sum.
+    return [_historical_mapping(item) for item in value]
+
+
+def _historical_project_distance(
+    value: Any, *, source_distance_m: float | None,
+    route_distance_m: float, distance_scale: float | None,
+) -> float | None:
+    number = _number(value)
+    target = _number(route_distance_m)
+    scale = _number(distance_scale)
+    if number is None or number < 0 or target is None or target < 0:
+        return None
+    if source_distance_m is not None:
+        if number > source_distance_m or source_distance_m < 0:
+            return None
+        # Exact source equality, not a tolerance: genuinely outside points stay invalid.
+        if source_distance_m > 0 and number == source_distance_m:
+            return target
+    if scale is None or scale <= 0:
+        return None
+    projected = number * scale
+    return projected if math.isfinite(projected) and projected <= target else None
+
+
+def _historical_project_records(
+    value: Any, keys: tuple[str, ...], *, source_distance_m: float | None,
+    route_distance_m: float, distance_scale: float | None,
+) -> list[dict]:
+    return [
+        {
+            **item,
+            **{
+                key: _historical_project_distance(
+                    item.get(key), source_distance_m=source_distance_m,
+                    route_distance_m=route_distance_m, distance_scale=distance_scale,
+                )
+                for key in keys
+            },
+        }
+        for item in _historical_records(value)
+    ]
+
+
+def _historical_departure_ready(value: Mapping, *, allow_legacy: bool = False) -> bool:
+    return (
+        value.get("status", "ready" if allow_legacy else None) == "ready"
+        and not value.get("reason")
+    )
+
+
 def _historical_return_cost_projection(
     value: Any, *, route_distance_m: float, distance_scale: float, source_ref: str,
 ) -> dict[str, Any]:
-    timing = dict(value) if isinstance(value, Mapping) else {}
+    timing = _historical_mapping(value)
     source_distance = _number(timing.get("route_distance_m"))
     if source_distance is not None and source_distance > 0:
         distance_scale = route_distance_m / source_distance
-
-    def scaled(item: Mapping, keys: tuple[str, ...]) -> dict:
-        return {
-            **item,
-            **{key: number * distance_scale if (number := _number(item.get(key))) is not None else None for key in keys},
-        }
-
-    bins = [
-        scaled(item, ("start_distance_m", "end_distance_m"))
-        for item in timing.get("bins", []) if isinstance(item, Mapping)
-    ]
-    checkpoints = [
-        scaled(item, ("route_distance_m",))
-        for item in timing.get("checkpoints", []) if isinstance(item, Mapping)
-    ]
-    camps = [
-        scaled(item, ("route_distance_m",))
-        for item in timing.get("camp_evidence", {}).get("camps", []) if isinstance(item, Mapping)
-    ]
-    overnight_camps = _historical_overnight_candidates(
-        timing.get("daily_departures"),
-        distance_scale=distance_scale,
+    axis = {
+        "source_distance_m": source_distance,
+        "route_distance_m": route_distance_m,
+        "distance_scale": distance_scale,
+    }
+    bins = _historical_project_records(
+        timing.get("bins"), ("start_distance_m", "end_distance_m"), **axis
     )
-    daily_budget = dict(timing.get("daily_budget") or {})
+    checkpoints = _historical_project_records(
+        timing.get("checkpoints"), ("route_distance_m",), **axis
+    )
+    camp_evidence = _historical_mapping(timing.get("camp_evidence"))
+    camps = _historical_project_records(
+        camp_evidence.get("camps"), ("route_distance_m",), **axis
+    )
+    overnight_camps = _historical_overnight_candidates(
+        timing.get("daily_departures"), **axis
+    )
+    daily_budget = _historical_mapping(timing.get("daily_budget"))
     result = build_historical_return_cost(
         bins=bins,
         checkpoints=checkpoints,
@@ -422,10 +475,10 @@ def _historical_return_cost_projection(
     return {
         **result,
         "daily_budget": daily_budget,
-        "directional_counts": dict(timing.get("counts") or {}),
-        "estimation_policy": dict(timing.get("policy") or {}),
+        "directional_counts": _historical_mapping(timing.get("counts")),
+        "estimation_policy": _historical_mapping(timing.get("policy")),
         "camp_evidence": {
-            **dict(timing.get("camp_evidence") or {}),
+            **camp_evidence,
             "camps": [*camps, *overnight_camps],
             "explicit_camp_count": len(camps),
             "overnight_candidate_count": len(overnight_camps),
@@ -439,26 +492,34 @@ def _historical_return_cost_projection(
 
 
 def _historical_overnight_candidates(
-    value: Any, *, distance_scale: float
+    value: Any, *, source_distance_m: float | None,
+    route_distance_m: float, distance_scale: float,
 ) -> list[dict]:
-    departure = dict(value) if isinstance(value, Mapping) else {}
-    if departure.get("status") != "ready":
+    departure = _historical_mapping(value)
+    if not _historical_departure_ready(departure):
         return []
-    days = departure.get("days") or []
+    days = _historical_records(departure.get("days"))
     return [
         {
             "node_id": f"historical_overnight.{day['day_id']}",
             "label": f"D{day['day_index']} 隔夜停留候選",
-            "route_distance_m": distance * distance_scale,
+            "route_distance_m": distance,
             "node_kind": "overnight_candidate",
-            "source_refs": list(day.get("source_refs") or []),
+            "source_refs": [ref for ref in day.get("source_refs", []) if isinstance(ref, str)]
+            if isinstance(day.get("source_refs"), (list, tuple)) else [],
             "candidate_only": True,
             "overnight_assignment_verified": False,
             "field_verified": False,
             "runtime_safety_truth": False,
         }
         for day, following in zip(days, days[1:])
-        if (distance := _number(day.get("end_distance_m"))) is not None
+        if isinstance(day.get("day_id"), str) and day["day_id"].strip()
+        and (index := _number(day.get("day_index"))) is not None
+        and index >= 0 and index.is_integer()
+        and (distance := _historical_project_distance(
+            day.get("end_distance_m"), source_distance_m=source_distance_m,
+            route_distance_m=route_distance_m, distance_scale=distance_scale,
+        )) is not None
         and (gap := _number(following.get("preceding_gap_hours"))) is not None
         and 6 <= gap <= 36
     ]
@@ -471,33 +532,25 @@ def _historical_time_window_projection(
     route_distance_m: float,
     source_ref: str,
 ) -> dict[str, Any]:
-    timing = dict(value) if isinstance(value, Mapping) else {}
-    distance_scale = return_projection["distance_scale"]
-
-    def scaled_range(item: Mapping) -> dict:
-        return {
-            **item,
-            **{
-                key: number * distance_scale
-                if (number := _number(item.get(key))) is not None
-                else None
-                for key in ("start_distance_m", "end_distance_m")
-            },
-        }
-
-    departure = dict(timing.get("daily_departures") or {})
-    days = [
-        scaled_range(day)
-        for day in departure.get("days", [])
-        if isinstance(day, Mapping)
-    ]
-    bins = [
-        scaled_range(item)
-        for item in timing.get("bins", [])
-        if isinstance(item, Mapping)
-    ]
-    checkpoints = list(return_projection.get("checkpoints") or [])
-    camps = list(return_projection.get("camp_evidence", {}).get("camps", []))
+    timing = _historical_mapping(value)
+    distance_scale = _number(return_projection.get("distance_scale"))
+    axis = {
+        "source_distance_m": _number(timing.get("route_distance_m")),
+        "route_distance_m": route_distance_m,
+        "distance_scale": distance_scale,
+    }
+    departure = _historical_mapping(timing.get("daily_departures"))
+    days = _historical_project_records(
+        departure.get("days") if _historical_departure_ready(departure, allow_legacy=True) else [],
+        ("start_distance_m", "end_distance_m"), **axis,
+    )
+    bins = _historical_project_records(
+        timing.get("bins"), ("start_distance_m", "end_distance_m"), **axis
+    )
+    checkpoints = _historical_records(return_projection.get("checkpoints"))
+    camps = _historical_records(
+        _historical_mapping(return_projection.get("camp_evidence")).get("camps")
+    )
     finish = next(
         (
             node
@@ -2177,7 +2230,7 @@ def _number(value: Any) -> float | None:
         return None
     try:
         number = float(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None
     return number if math.isfinite(number) else None
 

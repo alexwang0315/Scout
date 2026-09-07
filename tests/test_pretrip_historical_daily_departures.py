@@ -4,6 +4,7 @@ import hashlib
 import json
 import math
 import xml.etree.ElementTree as ET
+from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -134,6 +135,46 @@ def test_two_day_overnight_keeps_exact_axis_and_candidate_departures(tmp_path):
     assert '"lat"' not in encoded and '"lon"' not in encoded
 
 
+def test_lone_post_overnight_record_does_not_erase_prior_day_window(tmp_path):
+    from pretrip_historical_time_window import build_historical_time_windows
+
+    points = _two_days()[:3]
+    _write(tmp_path, [points])
+    result = _build(tmp_path)
+    axis = _axis(points)
+    assert result["status"] == "ready"
+    assert len(result["days"]) == result["counts"]["day_count"] == 1
+    assert result["days"][0]["end_distance_m"] == axis[1]
+    assert "zero_span_day" in result["quality_flags"]
+    unknown = next(item for item in result["unknown_ranges"] if item["reason"] == "zero_span_day")
+    assert unknown["start_distance_m"] == unknown["end_distance_m"] == axis[2]
+    assert unknown["start_point_index"] == unknown["end_point_index"] == 2
+    window = build_historical_time_windows(
+        bins=[{"start_distance_m": 0, "end_distance_m": axis[1],
+               "forward": {"average_minutes": 60, "status": "observed"}}],
+        checkpoints=[{"node_id": str(i), "route_distance_m": d} for i, d in enumerate(axis)],
+        days=result["days"], safe_points=[], route_distance_m=axis[-1],
+    )
+    rows = {row["node_id"]: row for row in window["checkpoints"]}
+    assert window["stats"]["schedule_valid"] is True
+    assert rows["1"]["remaining_minutes"] == 1080 - 336.5 - 60
+    assert rows["2"]["remaining_minutes"] is None
+    assert rows["2"]["consumed_minutes"] is None
+    assert rows["2"]["day_reset"] is False
+
+
+def test_only_isolated_overnight_records_have_no_usable_day(tmp_path):
+    _write(tmp_path, [[
+        _point("2020-12-25T16:00:00+08:00"),
+        _point("2020-12-26T06:00:00+08:00", 121.0001),
+    ]])
+    result = _build(tmp_path)
+    assert result["status"] == "unavailable"
+    assert result["days"] == []
+    assert result["counts"]["day_count"] == 0
+    assert "zero_span_day" in result["quality_flags"]
+
+
 def test_continuous_midnight_walking_does_not_reset(tmp_path):
     _write(
         tmp_path,
@@ -192,6 +233,7 @@ def test_overnight_gap_thresholds_are_inclusive(
                 _point("2020-12-25T19:00:00+08:00"),
                 _point("2020-12-25T20:00:00+08:00", 121.001),
                 _point(end, 121.0011),
+                _point((datetime.fromisoformat(end) + timedelta(hours=1)).isoformat(), 121.002),
             ]
         ],
     )
@@ -229,7 +271,9 @@ def test_local_date_not_utc_date_controls_overnight(tmp_path):
         [
             [
                 _point("2020-12-25T08:00:00Z"),
-                _point("2020-12-25T22:00:00Z", 121.0001),
+                _point("2020-12-25T09:00:00Z", 121.001),
+                _point("2020-12-25T22:00:00Z", 121.0011),
+                _point("2020-12-25T23:00:00Z", 121.002),
             ]
         ],
     )

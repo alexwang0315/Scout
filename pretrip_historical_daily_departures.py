@@ -329,11 +329,20 @@ def _ready_schedule(
     starts = [timed[0], *(item["end_point_index"] for item in overnights)]
     ends = [*(item["start_point_index"] for item in overnights), timed[-1]]
     gaps = [None, *(item["preceding_gap_hours"] for item in overnights)]
-    days = [
+    records = [
         _day_record(result, points, axis, index, start, end, gap, timezone)
         for index, (start, end, gap) in enumerate(zip(starts, ends, gaps), 1)
     ]
-    unknown = []
+    days = [day for day in records if day["end_distance_m"] > day["start_distance_m"]]
+    empty_spans = [
+        _span(
+            axis, day["start_point_index"], day["end_point_index"], "zero_span_day",
+            day_index=day["day_index"],
+        )
+        for day in records
+        if day["end_distance_m"] <= day["start_distance_m"]
+    ]
+    unknown = list(empty_spans)
     if timed[0] > 0:
         unknown.append(_span(axis, 0, timed[0], "missing_boundary_timestamp"))
     unknown.extend(
@@ -352,13 +361,16 @@ def _ready_schedule(
         )
     return {
         **result,
-        "status": "ready",
+        "status": "ready" if days else "unavailable",
+        "reason": result.get("reason") if days else "no_positive_length_days",
         "days": days,
         "overnight_breaks": overnights,
         "unknown_ranges": unknown,
+        "quality_issues": [*result["quality_issues"], *empty_spans],
         "quality_flags": sorted(
             {
                 *result["quality_flags"],
+                *(span["reason"] for span in empty_spans),
                 *(flag for day in days for flag in day["quality_flags"]),
             }
         ),
