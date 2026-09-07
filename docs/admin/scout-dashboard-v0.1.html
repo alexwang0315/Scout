@@ -11054,6 +11054,25 @@
     .permission-day-details .permission-safety-handoff,
     .permission-day-details .permission-day-evidence { margin: 0 11px 10px; }
 
+    .permission-reference-details { display: grid; gap: 12px; min-width: 0; margin: 0 11px 12px; }
+    .permission-reference-details h5 { margin: 0 0 5px; color: #e7ece4; font-size: 13px; }
+    .permission-reference-details p,
+    .permission-reference-gap-list { margin: 4px 0; color: #aabbb0; font-size: 12px; line-height: 1.5; }
+    .permission-reference-table-wrap { max-width: 100%; overflow-x: auto; border: 1px solid var(--permission-line); }
+    .permission-reference-table { width: 100%; border-collapse: collapse; font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .permission-reference-table caption { padding: 8px; text-align: left; color: #aabbb0; }
+    .permission-reference-table th,
+    .permission-reference-table td { padding: 8px; text-align: left; border-bottom: 1px solid var(--permission-line); vertical-align: top; }
+    .permission-reference-table th { color: #dce5dc; font-weight: 600; }
+    .permission-reference-table td { color: #afc0b4; }
+    .permission-reference-table td:not(:first-child) { white-space: nowrap; }
+    .permission-reference-table small { display: block; color: #96a89b; white-space: normal; }
+    .permission-reference-stop-list { margin: 0; padding-left: 20px; color: #c3cdbf; font-size: 12px; line-height: 1.6; }
+    .permission-reference-stop-list li + li { margin-top: 8px; }
+    .permission-reference-stop-list small { display: block; color: #9daea4; }
+    .permission-reference-gap-list { padding-left: 20px; }
+    .permission-reference-gaps { padding: 10px; border: 1px solid rgba(220, 174, 86, .4); }
+
     .permission-day-route > div { min-width: 0; flex: 1; }
 
     .permission-day-route strong,
@@ -11285,6 +11304,13 @@
       display: grid;
       align-items: end;
       background: rgba(0, 0, 0, .68);
+    }
+
+    /* The page entrance animation retains a transform, which otherwise pins
+       this fixed confirmation to the long itinerary instead of the viewport. */
+    .permission-shell:has([data-permission-baseline-confirm-sheet]) {
+      animation: none;
+      transform: none;
     }
 
     .emergency-confirm-sheet {
@@ -23373,20 +23399,56 @@
         && (!requirements.handoffRequired || checks.safetyHandoff === true);
     }
 
+    function permissionFiniteNumber(value) {
+      if (value == null || typeof value === "boolean" || String(value).trim() === "") return null;
+      const numeric = Number(value);
+      return Number.isFinite(numeric) ? numeric : null;
+    }
+
+    function permissionHasReferenceReplay(draft) {
+      return draft?.proposal_strategy_id === "reference-gpx.historical-reconstruction"
+        && Boolean(draft?.reference_reconstruction);
+    }
+
     function permissionFormatMinutes(value) {
-      if (!Number.isFinite(Number(value))) return "—";
-      const minutes = Math.max(0, Math.round(Number(value)));
+      const numeric = permissionFiniteNumber(value);
+      if (numeric == null) return "unknown";
+      const minutes = Math.max(0, Math.round(numeric));
       const hours = Math.floor(minutes / 60);
       const remainder = minutes % 60;
       return hours ? `${hours} h ${remainder} m` : `${remainder} min`;
+    }
+
+    function permissionFormatReferenceDuration(value) {
+      const numeric = permissionFiniteNumber(value);
+      if (numeric == null || numeric < 0) return "unknown";
+      const seconds = Math.round(numeric * 60);
+      const hours = Math.floor(seconds / 3600);
+      const minutes = Math.floor((seconds % 3600) / 60);
+      const remainder = seconds % 60;
+      return `${hours ? `${hours} h ` : ""}${minutes} m ${remainder} s`;
+    }
+
+    function permissionReferenceClock(value) {
+      return typeof value === "string" && value.trim() ? value.trim() : "unknown";
     }
 
     function renderPermissionEta(day) {
       const eta = day?.eta_proposal || {};
       const segmentCount = asArray(day?.segment_ids).length;
       const unsupported = asArray(eta.unsupported_segment_ids);
+      if (eta.state === "reference_replayed") {
+        const replay = day.reference_replay || {};
+        return `
+          <div class="permission-day-timing" data-permission-reference-elapsed="true">
+            <span class="permission-day-label">Reference recorded elapsed time</span>
+            <strong>${permissionFormatReferenceDuration(eta.observed_elapsed_minutes)}</strong>
+            <p>Historical departure ${escapeHtml(permissionReferenceClock(replay.departure_clock))} → arrival ${escapeHtml(permissionReferenceClock(replay.arrival_clock))}. Elapsed time includes recorded stops; it is neither moving-only time nor a p75 estimate. Missing observations remain unknown.</p>
+          </div>
+        `;
+      }
       if (eta.state === "complete_derived") {
-        const p50 = Number.isFinite(Number(eta.segment_p50_sum_minutes))
+        const p50 = permissionFiniteNumber(eta.segment_p50_sum_minutes) != null
           ? `<span>Segment p50 sum</span><strong>${permissionFormatMinutes(eta.segment_p50_sum_minutes)}</strong>`
           : "";
         return `
@@ -23399,7 +23461,7 @@
         `;
       }
       if (eta.state === "partial_derived") {
-        const p50 = Number.isFinite(Number(eta.supported_segment_p50_sum_minutes))
+        const p50 = permissionFiniteNumber(eta.supported_segment_p50_sum_minutes) != null
           ? `<span>Supported-segment p50 subtotal</span><strong>${permissionFormatMinutes(eta.supported_segment_p50_sum_minutes)}</strong>`
           : "";
         return `
@@ -23421,12 +23483,13 @@
     }
 
     function permissionFormatRouteKm(value) {
-      return Number.isFinite(Number(value)) ? `${(Number(value) / 1000).toFixed(1)} km` : "—";
+      const numeric = permissionFiniteNumber(value);
+      return numeric == null ? "unknown" : `${(numeric / 1000).toFixed(1)} km`;
     }
 
     function permissionFormatCoordinate(value, axis) {
-      const numeric = Number(value);
-      if (!Number.isFinite(numeric)) return "coordinate unavailable";
+      const numeric = permissionFiniteNumber(value);
+      if (numeric == null) return "coordinate unavailable";
       const positive = axis === "lat" ? "N" : "E";
       const negative = axis === "lat" ? "S" : "W";
       return `${numeric < 0 ? negative : positive}${Math.abs(numeric).toFixed(5)}`;
@@ -23699,8 +23762,94 @@
       });
     }
 
+    function renderPermissionReferenceCheckpointTable(windows, caption) {
+      const rows = asArray(windows).map(checkpoint => {
+        const distance = permissionFiniteNumber(checkpoint.from_previous_distance_m);
+        const speed = permissionFiniteNumber(checkpoint.from_previous_speed_kmh);
+        const routeOrder = permissionFiniteNumber(checkpoint.route_order_m);
+        return `
+          <tr data-permission-reference-checkpoint="${escapeHtml(checkpoint.anchor_id || "unknown")}">
+            <th scope="row">${escapeHtml(permissionCompactAnchorLabel(checkpoint.label || checkpoint.anchor_id || "Unknown checkpoint"))}<small>${routeOrder == null ? "unknown route position" : `${(routeOrder / 1000).toFixed(3)} km`}</small></th>
+            <td>${escapeHtml(permissionReferenceClock(checkpoint.arrival_clock))}<small>${escapeHtml(String(checkpoint.status || "unknown").replaceAll("_", " "))}</small></td>
+            <td>${distance == null ? "unknown" : `${(distance / 1000).toFixed(3)} km`}</td>
+            <td>${permissionFormatReferenceDuration(checkpoint.from_previous_minutes)}</td>
+            <td>${speed == null ? "unknown" : `${speed.toFixed(2)} km/h`}</td>
+            <td>${permissionFormatReferenceDuration(checkpoint.remaining_to_day_end_minutes)}</td>
+          </tr>
+        `;
+      }).join("");
+      return `
+        <div class="permission-reference-table-wrap" role="region" aria-label="${escapeHtml(caption)}" tabindex="0">
+          <table class="permission-reference-table">
+            <caption>${escapeHtml(caption)}</caption>
+            <thead><tr><th scope="col">CP / route position</th><th scope="col">Passage clock</th><th scope="col">From previous · distance</th><th scope="col">From previous · elapsed</th><th scope="col">Interval average speed</th><th scope="col">Remaining to day end</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>
+      `;
+    }
+
+    function renderPermissionReferenceGaps(ranges, heading) {
+      const items = asArray(ranges);
+      if (!items.length) return "";
+      return `
+        <section class="permission-reference-gaps" data-permission-reference-gaps="true">
+          <h5>${escapeHtml(heading)}</h5>
+          <ul class="permission-reference-gap-list">${items.map(gap => {
+            const reason = gap.reason || gap.basis || gap.kind || "recording gap";
+            const start = gap.start_clock || gap.start_timestamp || gap.start_time;
+            const end = gap.end_clock || gap.end_timestamp || gap.end_time;
+            const duration = gap.duration_minutes ?? gap.elapsed_minutes;
+            const startM = permissionFiniteNumber(gap.start_route_order_m ?? gap.start_distance_m ?? gap.start?.route_order_m);
+            const endM = permissionFiniteNumber(gap.end_route_order_m ?? gap.end_distance_m ?? gap.end?.route_order_m);
+            const distance = permissionFiniteNumber(gap.recording_gap_distance_m);
+            const pointCount = permissionFiniteNumber(gap.point_count);
+            const fromDay = permissionFiniteNumber(gap.from_day_index);
+            const toDay = permissionFiniteNumber(gap.to_day_index);
+            return `<li>${fromDay != null || toDay != null ? `D${fromDay ?? "unknown"} → D${toDay ?? "unknown"} · ` : ""}${escapeHtml(String(reason).replaceAll("_", " "))}${start || end ? ` · ${escapeHtml(permissionReferenceClock(start))} → ${escapeHtml(permissionReferenceClock(end))}` : ""}${duration != null ? ` · ${permissionFormatReferenceDuration(duration)}` : ""}${startM != null || endM != null ? ` · ${startM == null ? "unknown" : `${(startM / 1000).toFixed(3)} km`} → ${endM == null ? "unknown" : `${(endM / 1000).toFixed(3)} km`}` : ""}${distance != null ? ` · ${distance.toFixed(1)} m in recording gap` : ""}${pointCount != null ? ` · ${pointCount} source points` : ""}${gap.description ? ` · ${escapeHtml(gap.description)}` : ""}</li>`;
+          }).join("")}</ul>
+          <p>Recording gaps are retained. Unrecorded movement and rest remain unknown.</p>
+        </section>
+      `;
+    }
+
+    function renderPermissionReferenceDayDetails(day) {
+      const replay = day?.reference_replay;
+      if (!replay) return "";
+      const stops = asArray(replay.rest_stops);
+      const checkpoints = asArray(replay.checkpoint_windows);
+      return `
+        <div class="permission-reference-details" data-permission-reference-day-details="${escapeHtml(day.mission_day_id || "")}">
+          <section><h5>Inferred stationary stops · ${stops.length}</h5>
+            <p>Stops below are inferred from stationary GPX clusters. They do not confirm the activity or approve a rest or overnight site for this trip.</p>
+            ${stops.length ? `<ol class="permission-reference-stop-list">${stops.map(stop => `<li data-permission-reference-stop="${escapeHtml(stop.stop_id || "unknown")}"><strong>${escapeHtml(stop.label || stop.stop_id || "Stationary stop")}</strong> · ${permissionFormatRouteKm(stop.route_order_m)}<br>${escapeHtml(permissionReferenceClock(stop.start_clock))} → ${escapeHtml(permissionReferenceClock(stop.end_clock))} · ${permissionFormatReferenceDuration(stop.duration_minutes)}<small>${escapeHtml(permissionFormatCoordinate(stop.lat, "lat"))} · ${escapeHtml(permissionFormatCoordinate(stop.lon, "lon"))}<br>Basis: ${escapeHtml(String(stop.basis || "unknown").replaceAll("_", " "))}</small></li>`).join("")}</ol>` : "<p>No stationary stop was reconstructed from this day’s observations.</p>"}
+          </section>
+          <section><h5>Every reference CP · ${checkpoints.length}</h5>
+            <p>Clock values retain the source precision. Interval speed uses distance divided by recorded elapsed time, including stops; it is not moving-only walking speed.</p>
+            ${checkpoints.length ? renderPermissionReferenceCheckpointTable(checkpoints, "Historical CP passage and remaining time") : "<p>No checkpoints are assigned to this recorded day.</p>"}
+          </section>
+          ${renderPermissionReferenceGaps(replay.unknown_ranges, "Day recording gaps / unknown ranges")}
+        </div>
+      `;
+    }
+
+    function renderPermissionReferenceRecordingContext(draft) {
+      if (!permissionHasReferenceReplay(draft)) return "";
+      const reconstruction = draft.reference_reconstruction || {};
+      const unassigned = asArray(reconstruction.unassigned_checkpoint_windows);
+      return `
+        <div class="permission-reference-details" data-permission-reference-recording-context="true">
+          <p>Source ${escapeHtml(reconstruction.source_ref || "unknown")} · ${escapeHtml(reconstruction.timezone || "unknown timezone")} · ${escapeHtml(String(reconstruction.source_sha256 || "unknown hash").slice(0, 16))}. Daily starts, ends and passage clocks are copied from the reference recording. Overnight gaps preserve the boundary between recorded days; they do not confirm overnight activities.</p>
+          ${renderPermissionReferenceGaps(reconstruction.overnight_gaps, "Between-day recording gaps")}
+          ${renderPermissionReferenceGaps(asArray(reconstruction.unknown_ranges).filter(gap => gap.reason !== "overnight_recording_gap"), "Other recording gaps / unknown ranges")}
+          ${unassigned.length ? `<section><h5>CPs without a recorded-day assignment · ${unassigned.length}</h5><p>These CPs remain visible with their missing clocks. No arrival or walking speed was invented.</p>${renderPermissionReferenceCheckpointTable(unassigned, "Reference CPs outside recorded day coverage")}</section>` : ""}
+        </div>
+      `;
+    }
+
     function permissionEtaHeadline(day) {
       const eta = day?.eta_proposal || {};
+      if (eta.state === "reference_replayed") return `Reference elapsed ${permissionFormatReferenceDuration(eta.observed_elapsed_minutes)}`;
       if (eta.state === "complete_derived") return `p75 segment sum ${permissionFormatMinutes(eta.segment_p75_sum_minutes)}`;
       if (eta.state === "partial_derived") return `Known p75 subtotal ${permissionFormatMinutes(eta.supported_segment_p75_sum_minutes)} · ${asArray(eta.unsupported_segment_ids).length} gap`;
       return "Whole-day ETA unknown";
@@ -23712,7 +23861,7 @@
           <div class="permission-proposal-shell">
             <span class="permission-day-label">Scout auto proposal</span>
             <h4>No Ref. GPX proposal yet</h4>
-            <p>Select Generate from Ref. GPX to produce an evidence-bound day proposal. Imported route_days metadata remains source metadata; it is not a reviewed mission-day plan.</p>
+            <p>Select Generate from Ref. GPX to reconstruct the recorded days, daily endpoints, rest stops and CP passage times from the reference trip. Review the copied itinerary before adopting it.</p>
           </div>
         `;
       }
@@ -23727,6 +23876,7 @@
         `;
       }
       const summary = draft.proposal_summary || {};
+      const isReferenceReplay = permissionHasReferenceReplay(draft);
       const requirements = permissionBaselineReviewRequirements(draft);
       const trailDays = asArray(draft.days).filter(day => day?.day_kind === "on_trail");
       const routeDaysMetadata = summary.source_route_days_metadata;
@@ -23737,41 +23887,46 @@
         const artifact = target.artifact || {};
         const handoffCount = asArray(day.retreat_candidates).length + asArray(day.emergency_bivy_candidates).length;
         const eta = day.eta_proposal || {};
-        const startMapAnchor = permissionMapAnchor(start.anchor_id, start.route_order_m) || {};
-        const endMapAnchor = permissionMapAnchor(target.anchor_id, target.route_order_m) || {};
-        const dayDistanceM = Math.max(0, Number(target.route_order_m || 0) - Number(start.route_order_m || 0));
+        const replay = isReferenceReplay ? day.reference_replay || {} : {};
+        const startMapAnchor = replay.start || permissionMapAnchor(start.anchor_id, start.route_order_m) || {};
+        const endMapAnchor = replay.end || permissionMapAnchor(target.anchor_id, target.route_order_m) || {};
+        const startM = permissionFiniteNumber(start.route_order_m);
+        const endM = permissionFiniteNumber(target.route_order_m);
+        const dayDistanceM = startM == null || endM == null ? null : Math.max(0, endM - startM);
         return `
           <article class="permission-day-card" data-permission-proposal-day="${escapeHtml(day.mission_day_id || "")}">
             <div class="permission-day-card-head">
-              <div><span class="permission-day-label">${escapeHtml(day.mission_day_id || "Day")} · ${permissionFormatRouteKm(start.route_order_m)}–${permissionFormatRouteKm(target.route_order_m)}</span><h4>${escapeHtml(permissionCompactAnchorLabel(start.display_label || "Route start"))} → ${escapeHtml(permissionCompactAnchorLabel(target.display_label || "Proposed day end"))}</h4></div>
-              <span class="chip ${eta.state === "complete_derived" ? "good" : eta.state === "partial_derived" ? "warn" : "bad"}">${escapeHtml(String(eta.state || "unknown").replaceAll("_", " "))}</span>
+              <div><span class="permission-day-label">${escapeHtml(day.mission_day_id || "Day")}${isReferenceReplay ? " · Historical reference" : ""} · ${permissionFormatRouteKm(start.route_order_m)}–${permissionFormatRouteKm(target.route_order_m)}</span><h4>${escapeHtml(permissionCompactAnchorLabel(start.display_label || "Route start"))} → ${escapeHtml(permissionCompactAnchorLabel(target.display_label || "Proposed day end"))}</h4></div>
+              <span class="chip ${eta.state === "complete_derived" ? "good" : eta.state === "reference_replayed" ? "info" : eta.state === "partial_derived" ? "warn" : "bad"}">${escapeHtml(String(eta.state || "unknown").replaceAll("_", " "))}</span>
             </div>
             ${renderPermissionDayMap(day)}
             <div class="permission-day-location" aria-label="Day endpoint locations">
-              <div><span class="permission-day-label">Start · ${permissionFormatRouteKm(start.route_order_m)}</span><strong>${escapeHtml(permissionCompactAnchorLabel(start.display_label || "Unknown"))}</strong><small>${escapeHtml(permissionFormatCoordinate(startMapAnchor.lat, "lat"))} · ${escapeHtml(permissionFormatCoordinate(startMapAnchor.lon, "lon"))}</small></div>
-              <div><span class="permission-day-label">End · ${permissionFormatRouteKm(target.route_order_m)}</span><strong>${escapeHtml(permissionCompactAnchorLabel(target.display_label || "Unknown"))}</strong><small>${escapeHtml(permissionFormatCoordinate(endMapAnchor.lat, "lat"))} · ${escapeHtml(permissionFormatCoordinate(endMapAnchor.lon, "lon"))}</small></div>
+              <div><span class="permission-day-label">${isReferenceReplay ? "Historical start" : "Start"} · ${permissionFormatRouteKm(start.route_order_m)}</span><strong>${escapeHtml(permissionCompactAnchorLabel(start.display_label || "Unknown"))}</strong>${isReferenceReplay ? `<strong>${escapeHtml(permissionReferenceClock(replay.departure_clock))}</strong>` : ""}<small>${escapeHtml(permissionFormatCoordinate(startMapAnchor.lat, "lat"))} · ${escapeHtml(permissionFormatCoordinate(startMapAnchor.lon, "lon"))}</small></div>
+              <div><span class="permission-day-label">${isReferenceReplay ? "Historical day end" : "End"} · ${permissionFormatRouteKm(target.route_order_m)}</span><strong>${escapeHtml(permissionCompactAnchorLabel(target.display_label || "Unknown"))}</strong>${isReferenceReplay ? `<strong>${escapeHtml(permissionReferenceClock(replay.arrival_clock))}</strong>` : ""}<small>${escapeHtml(permissionFormatCoordinate(endMapAnchor.lat, "lat"))} · ${escapeHtml(permissionFormatCoordinate(endMapAnchor.lon, "lon"))}</small></div>
             </div>
             <div class="permission-day-context"><strong>${permissionFormatRouteKm(dayDistanceM)} today</strong><span>${escapeHtml(permissionDayAnchorContext(day))}</span></div>
             <div class="permission-day-brief"><span>${escapeHtml(permissionEtaHeadline(day))}</span><span>${handoffCount ? `${handoffCount} Safety handoff` : "No Safety handoff"}</span></div>
             <details class="permission-day-details"><summary>Day route, ETA & evidence</summary>
               ${renderPermissionEta(day)}
+              ${isReferenceReplay ? renderPermissionReferenceDayDetails(day) : ""}
               ${handoffCount ? `<div class="permission-safety-handoff"><strong>Pending Safety / Emergency</strong> · ${handoffCount} candidate${handoffCount === 1 ? "" : "s"}; not approved here.</div>` : ""}
-              <div class="permission-day-evidence">${escapeHtml(asArray(day.segment_ids).join(", ") || "No segment IDs")}<br>${escapeHtml(proposal.proposal_id || "unbound")} · ${escapeHtml(String(artifact.sha256 || "").slice(0, 12) || "no hash")}<br>${escapeHtml(artifact.ref || "No target ref")}<br>${escapeHtml(asArray(eta.unsupported_segment_ids).length ? `Missing p75: ${asArray(eta.unsupported_segment_ids).join(", ")}` : "Complete p75 coverage")}</div>
+              <div class="permission-day-evidence">${escapeHtml(asArray(day.segment_ids).join(", ") || "No segment IDs")}<br>${escapeHtml(proposal.proposal_id || "unbound")} · ${escapeHtml(String(artifact.sha256 || "").slice(0, 12) || "no hash")}<br>${escapeHtml(artifact.ref || "No target ref")}<br>${escapeHtml(isReferenceReplay ? `${replay.source_day_id || "unknown reference day"} · source-bound historical day end · reference elapsed time and retained recording gaps` : asArray(eta.unsupported_segment_ids).length ? `Missing p75: ${asArray(eta.unsupported_segment_ids).join(", ")}` : "Complete p75 coverage")}</div>
             </details>
           </article>
         `;
       }).join("");
       return `
         <div class="permission-proposal-shell" data-permission-scout-auto-proposal="true">
-          <div><span class="permission-day-label">Scout auto proposal</span><h4>Proposal-first daily itinerary</h4></div>
-          <div class="permission-authority-note">Review scope: exact day ends + timing gaps. Safety handoffs stay pending; no departure/runtime authority.</div>
+          <div><span class="permission-day-label">${isReferenceReplay ? "Reference GPX reconstruction" : "Scout auto proposal"}</span><h4>${isReferenceReplay ? "Copied historical itinerary" : "Proposal-first daily itinerary"}</h4></div>
+          <div class="permission-authority-note">${isReferenceReplay ? "Review adoption of the source trip’s daily endpoints, route, stops and recorded clock windows. Recording gaps remain visible." : "Review scope: exact day ends + timing gaps."} Safety handoffs stay pending; no departure/runtime authority.</div>
           <div class="permission-proposal-summary">
-            <div class="permission-proposal-stat"><span>Route</span><strong>${Number(summary.route_length_m || 0) ? `${(Number(summary.route_length_m) / 1000).toFixed(1)} km` : "—"}</strong></div>
-            <div class="permission-proposal-stat"><span>Proposed days</span><strong>${Number(summary.day_count || trailDays.length)}</strong></div>
-            <div class="permission-proposal-stat"><span>Timing</span><strong>${Number(summary.observed_p75_segment_count || 0)} usable / ${Number(summary.missing_p75_segment_count || 0)} missing p75</strong></div>
+            <div class="permission-proposal-stat"><span>Route</span><strong>${permissionFormatRouteKm(summary.route_length_m)}</strong></div>
+            <div class="permission-proposal-stat"><span>${isReferenceReplay ? "Recorded days" : "Proposed days"}</span><strong>${Number(isReferenceReplay ? summary.reconstructed_day_count ?? trailDays.length : summary.day_count ?? trailDays.length)}</strong></div>
+            <div class="permission-proposal-stat"><span>${isReferenceReplay ? "Historical observations" : "Timing"}</span><strong>${isReferenceReplay ? `${Number(summary.historical_timed_checkpoint_count ?? 0)} / ${Number(summary.historical_checkpoint_count ?? 0)} CP clocks<br>${Number(summary.historical_rest_stop_count ?? 0)} inferred stops` : `${Number(summary.observed_p75_segment_count || 0)} usable / ${Number(summary.missing_p75_segment_count || 0)} missing p75`}</strong></div>
             <div class="permission-proposal-stat"><span>Safety handoff</span><strong>${requirements.handoffIds.length} pending</strong></div>
           </div>
           <div class="permission-day-grid">${dayCards}</div>
+          ${renderPermissionReferenceRecordingContext(draft)}
           <details class="permission-typed-payload"><summary>Technical payload · route_days ${routeDaysMetadata == null ? "unreviewed" : `${routeDaysMetadata}, not planning authority`}</summary><pre>${escapeHtml(JSON.stringify(draft, null, 2))}</pre></details>
         </div>
       `;
@@ -23780,6 +23935,7 @@
     function renderPermissionBaselineQuickReview() {
       const draft = state.permissionBaselineDraft;
       if (draft?.proposal_profile !== "ref_gpx_proposal_v1") return "";
+      const isReferenceReplay = permissionHasReferenceReplay(draft);
       const saved = state.permissionBaselineSavedCandidate;
       const requirements = permissionBaselineReviewRequirements(draft);
       const checks = state.permissionBaselineReviewChecks || {};
@@ -23787,9 +23943,9 @@
       const disabled = candidateCurrent ? "" : "disabled";
       return `
         <section class="permission-review-panel" data-permission-quick-review="true">
-          <div><span class="permission-day-label">Quick review</span><h4>Permission review</h4><p>Confirm daily destinations and disclosed gaps. Safety candidates remain pending outside this review.</p></div>
-          <label class="permission-review-control ${candidateCurrent ? "" : "is-disabled"}"><input type="checkbox" data-permission-review-check="dayEnds" ${checks.dayEnds && candidateCurrent ? "checked" : ""} ${disabled}><span>I confirm the exact day-end target shown for every day in this immutable candidate.<small>${requirements.dayIds.length} exact day ID${requirements.dayIds.length === 1 ? "" : "s"} will be enumerated in the receipt.</small></span></label>
-          ${requirements.uncertaintyIds.length ? `<label class="permission-review-control ${candidateCurrent ? "" : "is-disabled"}"><input type="checkbox" data-permission-review-check="timingUncertainty" ${checks.timingUncertainty && candidateCurrent ? "checked" : ""} ${disabled}><span>I acknowledge every listed timing uncertainty. Supported subtotals are not whole-day ETAs, and no missing duration was inferred.<small>${requirements.uncertaintyIds.length} exact uncertainty ID${requirements.uncertaintyIds.length === 1 ? "" : "s"}.</small></span></label>` : ""}
+          <div><span class="permission-day-label">Quick review</span><h4>Permission review</h4><p>${isReferenceReplay ? "Confirm adoption of the copied reference itinerary and its disclosed gaps. The recorded daily endpoints are already bound to the source." : "Confirm daily destinations and disclosed gaps."} Safety candidates remain pending outside this review.</p></div>
+          <label class="permission-review-control ${candidateCurrent ? "" : "is-disabled"}"><input type="checkbox" data-permission-review-check="dayEnds" ${checks.dayEnds && candidateCurrent ? "checked" : ""} ${disabled}><span>${isReferenceReplay ? "I adopt the reference trip’s recorded daily starts, endpoints, route and time windows shown in this immutable candidate." : "I confirm the exact day-end target shown for every day in this immutable candidate."}<small>${requirements.dayIds.length} exact day ID${requirements.dayIds.length === 1 ? "" : "s"} will be enumerated in the receipt.</small></span></label>
+          ${requirements.uncertaintyIds.length ? `<label class="permission-review-control ${candidateCurrent ? "" : "is-disabled"}"><input type="checkbox" data-permission-review-check="timingUncertainty" ${checks.timingUncertainty && candidateCurrent ? "checked" : ""} ${disabled}><span>${isReferenceReplay ? "I acknowledge every disclosed recording gap and uncertainty. Stationary clusters are inferred stops; missing CP clocks and unrecorded movement remain unknown." : "I acknowledge every listed timing uncertainty. Supported subtotals are not whole-day ETAs, and no missing duration was inferred."}<small>${requirements.uncertaintyIds.length} exact uncertainty ID${requirements.uncertaintyIds.length === 1 ? "" : "s"}.</small></span></label>` : ""}
           ${requirements.handoffRequired ? `<label class="permission-review-control ${candidateCurrent ? "" : "is-disabled"}"><input type="checkbox" data-permission-review-check="safetyHandoff" ${checks.safetyHandoff && candidateCurrent ? "checked" : ""} ${disabled}><span>I acknowledge that the listed retreat, emergency-bivy and route-reversal items remain pending separate Safety / Emergency review. This does not approve them.<small>${requirements.handoffIds.length} exact handoff item${requirements.handoffIds.length === 1 ? "" : "s"}.</small></span></label>` : ""}
           <p class="emergency-review-status">${candidateCurrent ? (permissionBaselineReviewComplete() ? "Review complete for this candidate hash · open the final acceptance sheet." : "Complete the required checks for this exact saved candidate.") : "Save the current candidate version first. Review controls are hash-bound and reset after every change."}</p>
         </section>
@@ -23813,8 +23969,9 @@
                 ${state.permissionBaselineMode === "human_text" ? `
                   <textarea data-permission-baseline-text="true" aria-label="Ideal-state itinerary text" placeholder="D0: city - trailhead C0&#10;D1: C0 - junction - reviewed camp C1">${escapeHtml(state.permissionBaselineText || "D0: city - trailhead C0\nD1: C0 - reviewed junction - reviewed camp C1")}</textarea>
                 ` : `
-                  <label class="permission-eyebrow" for="permissionBaselineRoute">Reference route axis</label>
-                  <select id="permissionBaselineRoute" data-permission-baseline-ref="true"><option value="outputs/compiled_mission_graph.reviewed.json">Reviewed mission graph route axis</option></select>
+                  <label class="permission-eyebrow" for="permissionBaselineRoute">Reference trip</label>
+                  <select id="permissionBaselineRoute" data-permission-baseline-ref="true"><option value="outputs/compiled_mission_graph.reviewed.json">Reference GPX with reviewed route axis</option></select>
+                  <p>Reconstruct the original daily starts and ends, route, recorded stops and every CP clock window from the reference GPX.</p>
                 `}
               </div>
               <div class="permission-authoring-actions">
@@ -23866,6 +24023,7 @@
       const isRebuild = pending.kind === "rebuild";
       const isAccept = pending.kind === "accept";
       const draft = state.permissionBaselineDraft || {};
+      const isReferenceReplay = permissionHasReferenceReplay(draft);
       const saved = state.permissionBaselineSavedCandidate || {};
       const patch = state.permissionBaselinePatchPreview || {};
       const rebuild = state.permissionProjection?.rebuild || {};
@@ -23878,7 +24036,9 @@
           ? "Create an immutable child candidate bound to the current base version and this exact patch hash."
           : isRebuild
             ? "Rebuild planned ETA, review-only rules and the bounded workbench seed from the exact selected reviewed baseline."
-            : "Append a human review receipt and create a new immutable reviewed-baseline artifact.";
+            : isReferenceReplay
+              ? "Record your adoption of this copied historical itinerary and create a new immutable reviewed-baseline artifact."
+              : "Append a human review receipt and create a new immutable reviewed-baseline artifact.";
       return `
         <div class="emergency-confirm-backdrop" data-permission-baseline-confirm-backdrop="true">
           <section class="emergency-confirm-sheet" role="dialog" aria-modal="true" aria-labelledby="permissionBaselineConfirmTitle" tabindex="-1" data-permission-baseline-confirm-sheet="true">
@@ -23889,9 +24049,9 @@
               <div class="permission-detail-row"><span>Source / candidate hash</span><strong>${escapeHtml(String(isSave ? draft.source_sha256 : isPatchSave ? patch.patch_sha256 : isRebuild ? rebuild.reviewed_baseline_sha256 : saved.version_sha256).slice(0, 16) || "missing")}</strong></div>
               <div class="permission-detail-row"><span>Result</span><strong>${isSave ? "new candidate version" : isPatchSave ? "new child candidate version" : isRebuild ? "new bounded projection · every rule remains review_only" : "new reviewed artifact + stale dependent projection"}</strong></div>
               <div class="permission-detail-row"><span>Authority</span><strong>candidate only · no departure/runtime approval</strong></div>
-              ${isAccept ? `<div class="permission-detail-row"><span>Permission scope</span><strong>${requirements.dayIds.length} exact day ends · ${requirements.uncertaintyIds.length} timing gaps<br>${requirements.handoffIds.length} Safety / Emergency items remain pending</strong></div>` : ""}
+              ${isAccept ? `<div class="permission-detail-row"><span>Permission scope</span><strong>${requirements.dayIds.length} ${isReferenceReplay ? "copied historical days" : "exact day ends"} · ${requirements.uncertaintyIds.length} ${isReferenceReplay ? "disclosed uncertainties" : "timing gaps"}<br>${requirements.handoffIds.length} Safety / Emergency items remain pending</strong></div>` : ""}
             </div>
-            <p>${isSave || isPatchSave ? "The source candidate is never edited in place." : isRebuild ? "This clears dependency staleness only. It does not approve adjustment policies, departure, Safety / Emergency items, or runtime action." : "This confirms day ends and disclosed timing gaps only. Safety / Emergency items remain unapproved; departure and runtime safety are unchanged."}</p>
+            <p>${isSave || isPatchSave ? "The source candidate is never edited in place." : isRebuild ? "This clears dependency staleness only. It does not approve adjustment policies, departure, Safety / Emergency items, or runtime action." : isReferenceReplay ? "This adopts the source-bound itinerary with its recorded gaps. Historical stops and overnight boundaries are not current site approvals. Safety / Emergency items remain unapproved; departure and runtime safety are unchanged." : "This confirms day ends and disclosed timing gaps only. Safety / Emergency items remain unapproved; departure and runtime safety are unchanged."}</p>
             <div class="emergency-confirm-actions">
               <button type="button" class="emergency-confirm-button" data-permission-baseline-confirm-cancel="true">Cancel</button>
               <button type="button" class="emergency-confirm-button is-warning" data-permission-baseline-confirm-submit="true" ${canSubmit ? "" : "disabled"}>${state.permissionBaselineBusy ? "Writing…" : isSave ? "Confirm · create candidate version" : isPatchSave ? "Confirm · create child version" : isRebuild ? "Confirm · rebuild bounded projection" : "Accept reviewed baseline"}</button>
@@ -24160,7 +24320,7 @@
 
           </details>
 
-          <div class="permission-boundary-banner">candidate_only=true · runtime_safety_truth=false · no live safety API call · no Phase 1 mutation · no outbound · no hardware control · no raw health, GPX, precise location history or private timestamp projection</div>
+          <div class="permission-boundary-banner">candidate_only=true · runtime_safety_truth=false · no live safety API call · no Phase 1 mutation · no outbound · no hardware control · source-bound historical GPX only · no live location or raw health read</div>
           ${renderPermissionBaselineConfirmationSheet()}
         </section>
       `;
@@ -37389,6 +37549,7 @@
         const payload = state.permissionBaselineMode === "reference_gpx"
           ? {
               mode: "reference_gpx",
+              reference_strategy: "historical_reconstruction",
               reference_route_ref: "outputs/compiled_mission_graph.reviewed.json",
             }
           : {
@@ -37400,6 +37561,7 @@
           payload,
         );
         state.permissionBaselineDraft = draft;
+        state.permissionBaselineSavedCandidate = null;
         if (draft.proposal_profile === "ref_gpx_proposal_v1") {
           await loadPermissionBaselineMapContext(candidateProjectId);
         } else {
@@ -37408,9 +37570,11 @@
         }
         state.permissionBaselinePatchPreview = null;
         resetPermissionBaselineReviewChecks();
-        state.permissionBaselineStatus = draft.proposal_profile === "ref_gpx_proposal_v1"
-          ? `Scout proposal ready · ${Number(draft.proposal_summary?.day_count || 0)} proposed days · ${Number(draft.proposal_summary?.missing_p75_segment_count || 0)} missing p75 remain visible · writes_performed=false`
-          : `${draft.validation_state || "unknown"} · ${asArray(draft.days).length} mission days · candidate_only=true · writes_performed=false`;
+        state.permissionBaselineStatus = permissionHasReferenceReplay(draft)
+          ? `Reference itinerary reconstructed · ${Number(draft.proposal_summary?.reconstructed_day_count ?? asArray(draft.days).length)} recorded days · ${Number(draft.proposal_summary?.historical_timed_checkpoint_count ?? 0)} / ${Number(draft.proposal_summary?.historical_checkpoint_count ?? 0)} CP clocks · ${Number(draft.proposal_summary?.historical_rest_stop_count ?? 0)} inferred stops · writes_performed=false`
+          : draft.proposal_profile === "ref_gpx_proposal_v1"
+            ? `Scout proposal ready · ${Number(draft.proposal_summary?.day_count || 0)} proposed days · ${Number(draft.proposal_summary?.missing_p75_segment_count || 0)} missing p75 remain visible · writes_performed=false`
+            : `${draft.validation_state || "unknown"} · ${asArray(draft.days).length} mission days · candidate_only=true · writes_performed=false`;
       } catch (error) {
         state.permissionBaselineDraft = null;
         state.permissionBaselineStatus = `Draft failed closed · ${String(error?.message || error)}`;
@@ -37827,6 +37991,9 @@
           try {
             await loadDataScope("permission", {force: true});
           } catch {
+            // The loader records the fail-closed state for the next render.
+          } finally {
+            button.disabled = false;
             if (["outdoor-permission", "emergency"].includes(state.route)) render();
           }
         });

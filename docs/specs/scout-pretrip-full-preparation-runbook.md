@@ -3769,6 +3769,171 @@ sparse review: return to the still-available authoring workbench, generate and
 accept a new proposal-first Ref. GPX baseline, then rebuild. Never infer missing
 day ends from that legacy artifact.
 
+### 2026-09-07: Dongqing newImport Permission bootstrap and Retry repair
+
+Target: `/Users/alexwang0315/workspace/dongqing_batongguan_historic_trail_newImport`.
+Always bind `?projectId=dongqing_batongguan_historic_trail_newImport` when
+checking this Dashboard; the unqualified URL initially selects the Chilai
+workspace and can produce an unrelated diagnosis.
+
+Both baseline and replay GETs returned HTTP 200 with `status=blocked` and
+`contextual_permission_seed_missing`. The workspace had its reviewed graph,
+reference timing, route summary and weather/daylight inputs, but lacked the
+Permission seed, model, rules and planned ETA. The source timing had 21 segments
+and 22 ordered anchors with matching labels; it did not have Chilai's timing
+alignment defect. GET and Retry deliberately do not initialize workspace files.
+
+The existing bootstrap passed `--dry-run`; one write attempt with no `--force`
+then created the six candidate/receipt artifacts and updated only Permission
+refs plus `planned_eta_ref` in `project.json`. The reviewed graph, reference
+timing, route summary and weather/daylight source hashes were unchanged. The
+bootstrap reported six missing p75 segment estimates and four unresolved gaps.
+No GPX import, map preparation, external API call or runtime activation ran.
+
+The Retry handler separately disabled its button and only rendered in `catch`.
+A successful HTTP response containing a blocked projection therefore left the
+old screen and disabled button in place. The handler now reenables the button
+and renders the settled state in `finally`, for both Permission and the shared
+Safety / Emergency refresh control. It does not render an unrelated page if
+the user navigates away while the request is pending.
+
+Live verification: Retry remained usable while the seed was missing, then
+opened the Baseline Authoring Workbench after initialization without a page
+reload. Baseline and replay now return `status=degraded`, `decision=ESCALATE`,
+`accepted_by_human=false`, `candidate_only=true`, and `runtime_safety_truth=false`.
+All adjustment policies remain `review_only`; missing ETA, daily endpoint and
+weather/daylight inputs remain visible for review.
+
+Browser `Preview source` and `Generate typed draft` both produced the six-day
+Ref. GPX proposal with `writes_performed=false`, 15 usable timing segments and
+six missing p75 estimates. Save became available; Accept remained disabled.
+No candidate was saved or accepted during this verification. The daily route
+geometries rendered, but the Rudy backgrounds used the explicit route-only
+fallback: the PNG endpoint returned `422 invalid_rudy_background` because this
+workspace's selected imagery cache source is not `happyman_rudy_twmap`. This
+separate imagery limitation was not bypassed by relabeling cache provenance.
+
+Checks: the new Retry regression failed before the fix and passed afterwards
+across nine result/route combinations; focused Permission/workbench/API tests
+passed 64 cases (142 deselected). `pnpm lint`, `pnpm typecheck` (1 test),
+`pnpm test` (19 tests), Dashboard inline JavaScript syntax and `git diff --check`
+passed. Navigation freeze checks before/after reported
+`NAVIGATION_FREEZE_SUSPENDED`. No layer/preparation contract changed, so full
+real-workspace GIS gates were not applicable. This repairs the candidate
+authoring workflow; itinerary acceptance and runtime promotion remain separate.
+
+### 2026-09-07: Restore dedicated Rudy cache and exercise the Ref. GPX proposal
+
+Follow-up for `dongqing_batongguan_historic_trail_newImport`: the prior Rudy
+`422 invalid_rudy_background` did not indicate missing tiles. The primary
+`imagery` cache is `nlsc_photo2`, while 402 prepared Rudy tiles already exist
+under `rudy-twmap`. The Permission renderer previously supported only the
+legacy Rudy-as-primary-imagery layout.
+
+Resolve `rudy-twmap` through `workspace_raster_tile_cache_bundle_ref`, its
+`layer_manifest_refs` and `layer_source_ids`, and the layer manifest's tile
+plan. Require consistent project, layer, cache root and
+`happyman_rudy_twmap` provenance. Use that layer for the single daily PNG;
+retain the explicitly declared Rudy `imagery` fallback for legacy workspaces.
+Do not relabel aerial tiles, change primary imagery, refetch tiles, or rerun
+preparation to fix this read path. Malformed or conflicting bindings remain
+unavailable. Update the owning local Dashboard process after checking that its
+preparation worker is idle; no QGIS worker restart is needed.
+
+Real browser verification covered Preview source, Generate typed draft, all
+six daily evidence disclosures, Cancel save, and Confirm save. Six Rudy PNG
+requests returned HTTP 200 with the expected source and
+`X-Scout-Writes-Performed: false`; all 402 cache file hashes were unchanged.
+The generated day intervals continuously cover 89.8271 km. Of 21 timing
+segments, 15 have usable p75 and six do not. D1, D2, D5 and D6 show supported
+subtotals; D3 and D4 show complete segment sums. There are five uncertainty
+acknowledgments (four partial days plus D3 exceeding the strategy target) and
+12 Safety handoffs (11 daily emergency-bivy candidates plus one route reversal).
+Never describe the partial subtotals as whole-day or whole-trip ETAs.
+
+The explicit browser save created
+`candidates/mission_baselines/baseline.e056777b35bf380f/versions/version.71cba88516894f70.json`.
+It remains candidate-only with no acceptance receipt or departure/runtime
+authority. The source cache bundle, seed, reference timing, reviewed graph and
+planned ETA hashes were unchanged. The whole `project.json` hash changed
+earlier during this session, before candidate save; that metadata change was
+not attributed by this run and was preserved.
+
+The existing automatic-proposal acceptance gap is now independently confirmed:
+`review_ready=false` because `explicit_day_end_inputs_bound=false`. The current
+Generate UI does not supply pre-candidate `day_end_inputs`; post-save Quick
+review and the `add_assumption` conversation patch cannot provide that missing
+provenance. Missing p75 is a disclosed uncertainty, not this acceptance gate.
+Do not fabricate human inputs or weaken the gate. A follow-up UI slice must
+collect explicit day-end choices before regenerating a candidate. Until then,
+report the real workflow as verified through candidate save, with acceptance
+and rebuild tested only in isolated fixtures.
+
+Focused results: 15 Rudy/API cases, 28 baseline/Ref-GPX/API workflow cases and
+one pre-candidate endpoint-provenance qualification case passed. The current
+33-layer contract verifier passed. Browser maps and source reads made no
+external fetches; only candidate save wrote workspace data in this follow-up.
+See `docs/admin/scout-permission-ref-gpx-guide.md` for the Chinese operator
+guide and `artifacts/permission-ref-gpx-20260907-newImport/` for local evidence.
+
+### 2026-09-07 correction: Ref. GPX means historical itinerary reconstruction
+
+The user clarified that `Generate from Ref. GPX` must copy the prior itinerary:
+daily endpoints, route, stops and CP passage timing. The preceding six-day
+480-minute proposal and recommendation to add a new day-end input step were
+the wrong interpretation of this mode. Keep their receipts as historical test
+evidence; do not present that candidate as the reconstructed reference journey.
+
+For the exact `dongqing_batongguan_historic_trail_newImport` workspace, existing
+`reference_pace_energy_analysis.historical_route_timing.daily_departures`
+already describes nine historical days. Bind and recompute those boundaries
+against the same speed-filtered primary GPX. Its 5,649 points include 5,506
+timestamps; the raw primary has non-monotonic cross-year observations and must
+not be substituted. The 219 checkpoint events match this filtered route:
+218 have exact observed passage clocks, and `cp.177` has no timestamp. Do not
+replace exact passage clocks with pooled multi-track 500 m checkpoint means.
+
+`scout_reference_gpx_reconstruction.py` is a read-only producer for these
+bindings. It preserves all nine day starts/ends, eight overnight recording
+gaps, missing-time ranges and CP-to-CP interval averages. The map preview
+samples the same route while retaining every exact daily boundary. Existing
+raw rest candidates contain durations spanning 2012 to 2020; copying them
+would invent multi-year rests. Instead, derive bounded stationary intervals
+from the coherent filtered track, split them at missing timestamps and long
+observation gaps, and label their semantics as inferred. This dataset yields
+32 such intervals. Daily elapsed time includes stops and recording gaps; it
+is not pure moving time, p75 or a present-day performance promise.
+
+The Dashboard explicitly requests `historical_reconstruction`. Missing or
+inconsistent declared evidence produces `reference_itinerary_unavailable`,
+never a silent 480-minute fallback. Day ends use `reference_evidence` with
+source/day hashes, without fabricated human input. Save and Accept recompute
+the entire bound reconstruction, including CP clocks, stops and elapsed time;
+`day_end_provenance_bound` accepts this verified historical provenance. Human
+review still names the exact days, disclosed uncertainties and pending Safety
+handoffs. Source changes invalidate the candidate or rebuild snapshot. New
+preview/generation clears the previously saved candidate and its review checks.
+
+Real screenshot inspection also found a confirmation-sheet layout defect:
+the page entrance animation leaves an identity transform on `.permission-shell`.
+That makes its fixed backdrop use the entire long itinerary as the containing
+block, placing Save/Accept below the visible viewport. Disable that animation
+and transform only while the Permission confirmation sheet is present. Verify
+the actual dialog and submit/cancel rectangles are within the viewport, not
+merely present in the accessibility tree. Other Dashboard page animations stay
+unchanged.
+
+The accepted baseline and rebuilt planned ETA retain the historical day data;
+Permission plan nodes carry observed elapsed duration while adjustment remains
+`review_only`. No baseline acceptance grants departure or runtime authority.
+The independent custom-endpoint/legacy fixture path remains available for its
+existing callers; the Dashboard's Ref. GPX mode is the explicit reconstruction
+path. No new GPX import, map preparation, QGIS restart or external fetch is
+required for this recovery. Updated operator guidance is in
+`docs/admin/scout-permission-ref-gpx-guide.md`, and source audits, test results
+and live UI evidence are under
+`artifacts/permission-ref-gpx-reconstruction-20260907/`.
+
 ## Run Log: 2026-07-28 Timeline Evidence Producer Repair
 
 Target workspace:

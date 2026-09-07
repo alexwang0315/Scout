@@ -225,8 +225,9 @@ The Baseline lens supports two starting modes:
 
 1. `human_seeded`: the operator supplies an ideal-state itinerary in natural
    language;
-2. `reference_gpx_seeded`: Scout derives a first itinerary candidate from one
-   selected reference route axis and its supporting GPX corpus.
+2. `reference_gpx_seeded`: Scout reconstructs the selected historical itinerary,
+   retaining its route, daily endpoints, stops and CP timing as a reference
+   template for the new candidate.
 
 These are entry modes, not incompatible artifact types. Both must converge on
 the same typed, versioned `MissionBaselineCandidate`, and either mode may later
@@ -262,7 +263,8 @@ The reference-GPX-seeded path must:
   before deriving days or nodes;
 - produce route, checkpoint, elevation, timing, rest/camp, and branch candidates
   with source refs and hashes;
-- never equate historical timestamps with the intended current itinerary;
+- retain the selected historical local clocks and durations as the reference
+  template; keep current calendar dates and runtime observations separate;
 - generate the most complete evidence-bound daily proposal possible before
   asking the operator anything; only destination ambiguity, human intent, and
   domain-authority decisions may become narrow questions;
@@ -272,17 +274,41 @@ The reference-GPX-seeded path must:
 
 #### Proposal-first clarification for `reference_gpx_seeded`
 
-`Generate from Ref. GPX` is a Scout proposal command, not an empty form
-generator. When the selected workspace contains a bound timing artifact and
-ordered route anchors, Scout must automatically propose:
+**User clarification, 2026-09-07:** `Generate from Ref. GPX` means reproducing
+the earlier reference itinerary as closely as its evidence permits. It must
+not repartition that trip using a 480-minute target or require the operator
+to specify daily endpoints already present in the reference. The Dashboard
+sends `reference_strategy=historical_reconstruction` for Preview and Generate.
+Missing or inconsistent history is a source-data error, never a silent fallback
+to a new day plan.
 
-- destination-defined `D1...Dn` intervals independent of imported
-  `route_days` metadata;
-- one exact primary day-end target per proposed day;
-- complete, partial, or unknown timing evidence per day;
-- candidate-only emergency-bivy targets and route-level retreat/reversal
-  handoff items when the corresponding candidate artifacts exist;
-- one deterministic, compact Permission review-requirements object.
+The reconstruction uses one source-bound filtered primary GPX with coherent
+chronology, the existing historical-day producer, and CP events whose point
+indices, coordinates, progress and timestamps match that same GPX. It retains:
+
+- source-defined `D1...Dn` intervals and exact first/last recorded points,
+  independently of imported `route_days` metadata;
+- every day's departure and arrival clock plus elapsed time;
+- every CP's recorded clock, distance/time/average speed from the previous CP,
+  and remaining time to the historical day end; missing clocks remain unknown;
+- inferred intraday stationary intervals from valid same-day filtered records,
+  with their extraction policy and point indices; raw contaminated rest
+  durations and overnight breaks must not become daytime rest totals;
+- short overnight recording gaps without moving endpoints to hide them;
+- a compact review of adopting these copied endpoints and disclosed gaps.
+
+`selection_origin=reference_evidence` binds each historical day ID and digest.
+It does not impersonate `human_decision` or invent a pre-candidate operator
+input. Save and Accept recompute the entire reconstruction from current bound
+sources. Their `day_end_provenance_bound` gate accepts verified historical
+bindings or an explicit custom-input contract. Quick review and the final
+version-bound Accept confirmation remain required.
+
+The strategy is `reference-gpx.historical-reconstruction`; the candidate retains
+the existing `ref_gpx_proposal_v1` profile and `ref_gpx_proposal.v1` capability.
+The older API compatibility path (without reconstruction intent or declared
+historical sources) and explicit custom-input fixtures retain their old
+quantile-based contracts. A reconstruction request never uses that fallback.
 
 New Ref. GPX proposals use the server-owned profile
 `ref_gpx_proposal_v1`. Sparse legacy fixtures may retain their existing path,
@@ -293,16 +319,17 @@ The v1 timing contract is deliberately non-imputing:
 
 | ETA state | Allowed numeric content | Required presentation |
 | --- | --- | --- |
+| `reference_replayed` | observed departure-to-arrival elapsed minutes from the selected historical day | label as historical elapsed time, including stops and recording gaps; never moving-only time or p75 |
 | `complete_derived` | deterministic sums of the assigned segments' usable p50/p75 values | label as `Segment p50/p75 sum`; never an observed whole-day quantile |
 | `partial_derived` | deterministic subtotal for supported segments only | label as `Supported-segment subtotal`; state that it is not a whole-day ETA and no duration was inferred |
 | `unknown` | none | label as `Whole-day ETA unknown`; list the unsupported segment IDs |
 
-A missing p75 remains missing. It becomes one day-grouped, Permission-
+A missing p75 in the legacy segment-quantile path remains missing. It becomes one day-grouped, Permission-
 acknowledgeable uncertainty; the operator is never asked to invent a replacement
-duration. Primary day ends are selected only on ordered timing-segment
-boundaries under a versioned deterministic partition policy. Rest/camp and MCP
-labels alone do not create reviewed destinations, and retreat/bivy candidates
-never become primary day ends merely because they exist.
+duration. That compatibility path may partition timing-segment boundaries,
+but it must not masquerade as a reconstructed historical itinerary. Historical
+day ends use their exact GPX indices, even when they fall between timing-segment
+boundaries. Rest/camp and MCP labels alone do not create historical endpoints.
 
 The generic reversed-route retreat candidate remains a route-level
 Safety / Emergency handoff item until it has a concrete target binding and
@@ -432,6 +459,14 @@ required_acknowledgment_uncertainty_ids
 pending_safety_handoff_item_ids
 safety_handoff_required
 ```
+
+For historical reconstruction they also rebuild and compare the source-bound
+days, endpoints, stops, CP windows, exact route samples and recording gaps.
+The map context uses the filtered primary GPX and preserves every daily boundary
+in its bounded sample. A changed or forged reconstruction must fail before any
+candidate or acceptance artifact is written. Genuine overnight recording gaps
+are preserved as evidence; strict equality between consecutive recorded daily
+end/start coordinates must not erase those gaps.
 
 The compact review request must match the exact day and uncertainty sets and the
 exact handoff boolean. Omitted, duplicate, extra, unknown, stale, or cross-
@@ -2369,12 +2404,13 @@ message.
 For a proposal-first Ref. GPX candidate, raw JSON must not be the primary review
 surface. The established workbench renders:
 
-1. one compact proposal summary showing route length, proposed day count,
-   usable/missing p75 counts, blockers, Safety / Emergency handoff count, and
-   imported `route_days` as non-authoritative metadata;
+1. one compact summary showing route length, historical day and CP coverage,
+   inferred-stop count, blockers and pending Safety handoffs for reconstructed
+   history; compatibility proposals retain their usable/missing p75 summary;
 2. ordered day cards showing start anchor, exact proposed day-end binding,
-   complete/partial/unknown timing evidence, uncertainty IDs, and day-scoped
-   emergency-bivy handoff candidates;
+   historical departure/arrival and elapsed time, all CP intervals and inferred
+   stops for reconstructed history; compatibility proposals retain their
+   complete/partial/unknown quantile evidence and handoff candidates;
 3. a collapsed, read-only `Typed evidence payload` disclosure;
 4. one `Quick review` panel with no more than three controls:
    - confirm every exact daily endpoint;

@@ -4087,6 +4087,56 @@ def test_contextual_permission_workbench_uses_typed_projection_and_dedicated_sco
     assert 'force: route === "emergency" || route === "outdoor-permission"' in html
 
 
+def test_permission_refresh_renders_settled_data_and_reenables_retry() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    selector = 'document.querySelectorAll("[data-permission-refresh]")'
+    binding = selector + html.split(selector, 1)[1].split(
+        'document.querySelector("[data-permission-projection-rebuild]")', 1
+    )[0]
+    program = """
+const assert = require("node:assert/strict");
+(async () => {
+  for (const route of ["outdoor-permission", "emergency", "outdoor-navigation"]) {
+    for (const result of ["degraded", "blocked", "error"]) {
+      const state = {route, permissionDataStatus: "blocked"};
+      const renders = [];
+      let click, settle;
+      const button = {
+        disabled: false,
+        addEventListener(type, handler) { assert.equal(type, "click"); click = handler; },
+      };
+      const document = {querySelectorAll: () => [button]};
+      const render = () => renders.push(state.permissionDataStatus);
+      const loadDataScope = (scope, options) => {
+        assert.equal(scope, "permission");
+        assert.deepEqual(options, {force: true});
+        return new Promise((resolve, reject) => {
+          settle = () => {
+            state.permissionDataStatus = result;
+            if (result === "error") reject(new Error("projection unavailable"));
+            else resolve();
+          };
+        });
+      };
+""" + binding + """
+      const pending = click();
+      assert.equal(button.disabled, true);
+      assert.equal(state.permissionDataStatus, "loading");
+      assert.deepEqual(renders, []);
+      settle();
+      await pending;
+      assert.equal(button.disabled, false);
+      assert.deepEqual(renders, route === "outdoor-navigation" ? [] : [result]);
+    }
+  }
+})().catch(error => { console.error(error); process.exitCode = 1; });
+"""
+    result = subprocess.run(
+        ["node", "-e", program], capture_output=True, text=True, check=False
+    )
+    assert result.returncode == 0, result.stderr
+
+
 def test_daily_emergency_review_is_shared_fail_closed_and_two_step() -> None:
     html = PAGE.read_text(encoding="utf-8")
     emergency_page = html.split("function renderEmergencyPage()", 1)[1].split(

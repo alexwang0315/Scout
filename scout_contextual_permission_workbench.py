@@ -25,6 +25,7 @@ DEFAULT_CONTEXTUAL_PERMISSION_RULES_REF = Path(
 )
 CONTEXTUAL_PERMISSION_REDUCER_VERSION = "contextual-permission.reducer.v1"
 BASELINE_AUTO_PROPOSAL_VERSION = "reference-gpx-auto-proposal.v1"
+BASELINE_REFERENCE_RECONSTRUCTION_STRATEGY = "reference-gpx.historical-reconstruction"
 PROJECTION_REBUILD_ADMISSION_VERSION = (
     "contextual-permission.projection-rebuild-admission.v1"
 )
@@ -1206,6 +1207,7 @@ class BaselineAuthoringRequest(WorkbenchModel):
     mode: Literal["human_text", "reference_gpx"]
     human_text: str | None = Field(default=None, max_length=20_000)
     reference_route_ref: str | None = Field(default=None, max_length=500)
+    reference_strategy: Literal["historical_reconstruction"] | None = None
     day_end_inputs: list[BaselineDayEndInput] = Field(
         default_factory=list,
         max_length=50,
@@ -1219,6 +1221,10 @@ class BaselineAuthoringRequest(WorkbenchModel):
             raise ValueError("reference_route_ref is required for reference_gpx mode")
         if self.mode != "reference_gpx" and self.day_end_inputs:
             raise ValueError("explicit day-end inputs require reference_gpx mode")
+        if self.reference_strategy is not None and (
+            self.mode != "reference_gpx" or self.day_end_inputs
+        ):
+            raise ValueError("historical reconstruction copies reference day ends without new endpoint inputs")
         input_ids = [item.input_id for item in self.day_end_inputs]
         anchor_ids = [item.target_anchor_id for item in self.day_end_inputs]
         if len(input_ids) != len(set(input_ids)) or len(anchor_ids) != len(
@@ -1269,7 +1275,9 @@ class BaselineMapContextProjection(WorkbenchModel):
     anchors: list[BaselineMapAnchor] = Field(min_length=2, max_length=100)
     source_refs: list[str] = Field(min_length=2, max_length=4)
     source_hashes: dict[str, str]
-    sampling_policy: Literal["distance_order_sample.v1"] = "distance_order_sample.v1"
+    sampling_policy: Literal[
+        "distance_order_sample.v1", "reference_gpx_boundary_preserving_sample.v1"
+    ] = "distance_order_sample.v1"
     presentation_only: Literal[True] = True
     candidate_only: Literal[True] = True
     runtime_safety_truth: Literal[False] = False
@@ -1284,11 +1292,12 @@ class BaselineMapContextProjection(WorkbenchModel):
 
 
 class BaselineEtaProposal(WorkbenchModel):
-    state: Literal["complete_derived", "partial_derived", "unknown"]
+    state: Literal["complete_derived", "partial_derived", "unknown", "reference_replayed"]
     method: Literal[
         "sum_segment_quantiles",
         "sum_supported_segment_quantiles",
         "no_numeric_eta",
+        "reference_track_elapsed",
     ]
     method_version: Literal["1"] = "1"
     confidence: Literal["medium", "low", "unknown"]
@@ -1296,6 +1305,7 @@ class BaselineEtaProposal(WorkbenchModel):
     segment_p75_sum_minutes: float | None = Field(default=None, ge=0)
     supported_segment_p50_sum_minutes: float | None = Field(default=None, ge=0)
     supported_segment_p75_sum_minutes: float | None = Field(default=None, ge=0)
+    observed_elapsed_minutes: float | None = Field(default=None, ge=0)
     supporting_segment_ids: list[str] = Field(default_factory=list)
     unsupported_segment_ids: list[str] = Field(default_factory=list)
     gap_ids: list[str] = Field(default_factory=list)
@@ -1309,6 +1319,25 @@ class BaselineEtaProposal(WorkbenchModel):
     def validate_eta_state(self) -> "BaselineEtaProposal":
         if set(self.supporting_segment_ids).intersection(self.unsupported_segment_ids):
             raise ValueError("supported and unsupported timing segments must be disjoint")
+        if self.state == "reference_replayed":
+            if (
+                self.method != "reference_track_elapsed"
+                or self.confidence != "medium"
+                or self.observed_elapsed_minutes is None
+                or not self.supporting_segment_ids
+                or self.unsupported_segment_ids
+                or self.reason is not None
+                or any(value is not None for value in (
+                    self.segment_p50_sum_minutes,
+                    self.segment_p75_sum_minutes,
+                    self.supported_segment_p50_sum_minutes,
+                    self.supported_segment_p75_sum_minutes,
+                ))
+            ):
+                raise ValueError("reference elapsed time must remain separate from quantile estimates")
+            return self
+        if self.observed_elapsed_minutes is not None:
+            raise ValueError("only a reference replay may carry observed elapsed time")
         if self.state == "complete_derived":
             if (
                 self.method != "sum_segment_quantiles"
@@ -1375,12 +1404,14 @@ class BaselineTargetProposal(WorkbenchModel):
     rationale: str
     evidence: list[BaselineArtifactBinding] = Field(min_length=1)
     required_review_surface: Literal["permission", "safety_emergency"]
-    selection_origin: Literal["scout_proposal", "explicit_input"] = (
+    selection_origin: Literal["scout_proposal", "explicit_input", "reference_evidence"] = (
         "scout_proposal"
     )
     selection_actor: Literal["human_decision", "test_fixture_input"] | None = None
     selection_input_id: str | None = None
     selection_input_sha256: str | None = None
+    reference_day_id: str | None = None
+    reference_day_sha256: str | None = None
     candidate_only: bool = True
     runtime_safety_truth: bool = False
     departure_approval_granted: bool = False
@@ -1392,6 +1423,19 @@ class BaselineTargetProposal(WorkbenchModel):
             raise ValueError("target kind is routed to the wrong review surface")
         if self.kind != "day_end":
             return self
+        if self.selection_origin == "reference_evidence":
+            if (
+                not self.reference_day_id
+                or not self.reference_day_sha256
+                or not _SHA256_PATTERN.fullmatch(self.reference_day_sha256)
+                or any(value is not None for value in (
+                    self.selection_actor, self.selection_input_id, self.selection_input_sha256
+                ))
+            ):
+                raise ValueError("reference day ends must bind historical evidence, not human input")
+            return self
+        if self.reference_day_id is not None or self.reference_day_sha256 is not None:
+            raise ValueError("only reference selections may claim historical day provenance")
         if self.selection_origin == "explicit_input":
             if (
                 self.selection_actor is None
@@ -1478,7 +1522,11 @@ class BaselineProposalSummary(WorkbenchModel):
     permission_uncertainty_count: int = Field(ge=0)
     safety_pending_count: int = Field(ge=0)
     blocking_gap_count: int = Field(ge=0)
-    target_p75_minutes_per_day: int = Field(ge=1)
+    target_p75_minutes_per_day: int | None = Field(default=None, ge=1)
+    reconstructed_day_count: int = Field(default=0, ge=0)
+    historical_checkpoint_count: int = Field(default=0, ge=0)
+    historical_timed_checkpoint_count: int = Field(default=0, ge=0)
+    historical_rest_stop_count: int = Field(default=0, ge=0)
     source_route_days_metadata: int | None = Field(default=None, ge=0)
     source_route_days_planning_authority: bool = False
 
@@ -1505,6 +1553,7 @@ class BaselineDayDraft(WorkbenchModel):
     )
     uncertainty_ids: list[str] = Field(default_factory=list)
     review_summary: str | None = None
+    reference_replay: dict[str, object] | None = None
 
 
 class MissionBaselineDraft(WorkbenchModel):
@@ -1548,6 +1597,7 @@ class MissionBaselineDraft(WorkbenchModel):
     uncertainties: list[BaselineUncertainty] = Field(default_factory=list)
     review_requirements: BaselineReviewRequirements | None = None
     safety_handoff_summary: str | None = None
+    reference_reconstruction: dict[str, object] | None = None
     writes_performed: bool = False
     candidate_only: bool = True
     runtime_safety_truth: bool = False
@@ -8126,6 +8176,217 @@ class ContextualPermissionWorkbench:
             ),
         )
 
+    def _reference_gpx_reconstruction(
+        self, project: dict[str, object]
+    ) -> dict[str, object] | None:
+        if not project.get("reference_pace_energy_analysis_ref"):
+            return None
+        from scout_reference_gpx_reconstruction import build_reference_gpx_reconstruction
+
+        try:
+            return build_reference_gpx_reconstruction(self.project_root, project)
+        except (OSError, ValueError) as exc:
+            raise ContextualPermissionConflict(
+                "reference_itinerary_unavailable",
+                f"The reference itinerary cannot be reconstructed from its bound evidence: {exc}",
+            ) from exc
+
+    def _build_reference_gpx_reconstruction_draft(
+        self,
+        *,
+        project: dict[str, object],
+        route_ref: str,
+        route_sha: str,
+        reconstruction: dict[str, object],
+    ) -> MissionBaselineDraft:
+        expected_route_ref = str(
+            project.get("compiled_mission_graph_reviewed_ref")
+            or "outputs/compiled_mission_graph.reviewed.json"
+        )
+        if route_ref != expected_route_ref:
+            raise ContextualPermissionConflict(
+                "reference_route_selection_mismatch",
+                "Historical reconstruction must use this workspace's bound reviewed route axis.",
+            )
+        source_refs = list(dict.fromkeys([route_ref, *reconstruction["source_refs"]]))
+        source_hashes = {route_ref: route_sha, **reconstruction["source_hashes"]}
+        gpx_binding = BaselineArtifactBinding(
+            ref=str(reconstruction["source_ref"]),
+            sha256=str(reconstruction["source_sha256"]),
+        )
+        retreat_source = self._load_optional_baseline_source(project, "retreat_routes_ref")
+        handoff_ids: list[str] = []
+        if retreat_source is not None:
+            source_refs.append(retreat_source[0])
+            source_hashes[retreat_source[0]] = retreat_source[1]
+            if isinstance(retreat_source[2], list):
+                handoff_ids = list(dict.fromkeys(
+                    f"branch:{item['candidate_id']}"
+                    for item in retreat_source[2]
+                    if isinstance(item, dict) and item.get("candidate_id")
+                ))
+
+        def anchor(item: dict[str, object]) -> BaselineRouteAnchor:
+            return BaselineRouteAnchor(
+                anchor_id=str(item["anchor_id"]),
+                display_label=str(item["label"]),
+                route_order_m=float(item["route_order_m"]),
+                artifact=gpx_binding,
+            )
+
+        days: list[BaselineDayDraft] = []
+        uncertainties: list[BaselineUncertainty] = []
+        for row in reconstruction["days"]:
+            day_id = f"D{row['day_index']}"
+            start, end = anchor(row["start"]), anchor(row["end"])
+            historical_day_id = str(row["source_day_id"])
+            day_sha = _digest(row)
+            unknown_cp = [
+                str(cp["anchor_id"])
+                for cp in row["checkpoint_windows"]
+                if cp.get("arrival_clock") is None
+            ]
+            uncertainty_ids: list[str] = []
+            if unknown_cp or row["unknown_ranges"]:
+                uncertainty_id = f"uncertainty.reference.{day_sha[:20]}"
+                uncertainty_ids.append(uncertainty_id)
+                uncertainties.append(BaselineUncertainty(
+                    uncertainty_id=uncertainty_id,
+                    code="insufficient_evidence",
+                    affected_day_ids=[day_id],
+                    affected_segment_ids=unknown_cp,
+                    summary=(
+                        f"{day_id} preserves {len(unknown_cp)} CP clock gap(s) and "
+                        f"{len(row['unknown_ranges'])} recording gap(s) in the reference track. "
+                        "Historical departure-to-arrival elapsed time includes stops and recording gaps."
+                    ),
+                    disposition="acknowledgeable",
+                    required_review_surface="permission",
+                    evidence=[gpx_binding],
+                ))
+            days.append(BaselineDayDraft(
+                mission_day_id=day_id,
+                source_text=f"{start.display_label} -> {end.display_label}",
+                day_kind="on_trail",
+                ordered_place_mentions=[start.display_label, end.display_label],
+                resolved_targets=[end.display_label],
+                resolved_target_refs={end.display_label: gpx_binding.ref},
+                resolved_target_hashes={end.display_label: gpx_binding.sha256},
+                unresolved_names=[],
+                start_anchor=start,
+                primary_day_end_proposal=BaselineTargetProposal(
+                    proposal_id=f"proposal.reference.{day_sha[:20]}",
+                    kind="day_end",
+                    mission_day_id=day_id,
+                    target=end,
+                    confidence="medium",
+                    rationale="The historical day's final recorded point, retained from the same reference GPX.",
+                    evidence=[gpx_binding],
+                    required_review_surface="permission",
+                    selection_origin="reference_evidence",
+                    reference_day_id=historical_day_id,
+                    reference_day_sha256=day_sha,
+                ),
+                eta_proposal=BaselineEtaProposal(
+                    state="reference_replayed",
+                    method="reference_track_elapsed",
+                    confidence="medium",
+                    observed_elapsed_minutes=float(row["elapsed_minutes"]),
+                    supporting_segment_ids=[historical_day_id],
+                    gap_ids=uncertainty_ids,
+                ),
+                segment_ids=[historical_day_id],
+                uncertainty_ids=uncertainty_ids,
+                review_summary=(
+                    f"{row['departure_clock']}–{row['arrival_clock']} · "
+                    f"{len(row['checkpoint_windows'])} historical CP records"
+                ),
+                reference_replay=dict(row),
+            ))
+        if reconstruction["overnight_gaps"] or reconstruction["unassigned_checkpoint_windows"]:
+            uncertainties.append(BaselineUncertainty(
+                uncertainty_id=f"uncertainty.reference-gaps.{gpx_binding.sha256[:16]}",
+                code="insufficient_evidence",
+                affected_day_ids=[day.mission_day_id for day in days],
+                summary=(
+                    f"{len(reconstruction['overnight_gaps'])} overnight recording gap(s) "
+                    f"and {len(reconstruction['unassigned_checkpoint_windows'])} CP record(s) "
+                    "outside the timed daily intervals remain explicit; endpoints were not moved."
+                ),
+                disposition="acknowledgeable",
+                required_review_surface="permission",
+                evidence=[gpx_binding],
+            ))
+        uncertainty_ids = [item.uncertainty_id for item in uncertainties]
+        requirements = BaselineReviewRequirements(
+            required_reviewed_day_ids=[day.mission_day_id for day in days],
+            required_acknowledgment_uncertainty_ids=uncertainty_ids,
+            pending_safety_handoff_item_ids=handoff_ids,
+            safety_handoff_required=bool(handoff_ids),
+        )
+        all_cps = [cp for row in reconstruction["days"] for cp in row["checkpoint_windows"]]
+        all_cps.extend(reconstruction["unassigned_checkpoint_windows"])
+        source_text = json.dumps({
+            "strategy": BASELINE_REFERENCE_RECONSTRUCTION_STRATEGY,
+            "policy_version": reconstruction["policy_version"],
+            "source_hashes": source_hashes,
+            "reconstruction_sha256": _digest(reconstruction),
+        }, sort_keys=True, separators=(",", ":"))
+        source_sha = _fixed_hash(source_text)
+        pace_ref = str(project["reference_pace_energy_analysis_ref"])
+        return MissionBaselineDraft(
+            artifact_kind="mission_baseline_candidate",
+            schema_version="missionBaselineCandidate.v1",
+            draft_id=f"baseline-draft.{source_sha[:16]}",
+            source_mode="reference_gpx",
+            source_sha256=source_sha,
+            source_text=source_text,
+            source_refs=source_refs,
+            source_hashes=source_hashes,
+            route_axis_validation={
+                "track_order": "pass", "endpoint_continuity": "pass",
+                "resume_gaps": "pass", "route_direction": "pass",
+            },
+            days=days,
+            assumptions=[
+                "Daily destinations and clocks are reconstructed from one historical reference track; no new day-end choice or 480-minute repartition was applied.",
+                "Reference elapsed time includes stops and recording gaps. CP-to-CP speeds are historical interval averages, not pure moving speed or p75 estimates.",
+                "Stationary intervals are derived from the filtered reference track and remain inferred stops; historical overnight locations do not grant current camping or departure approval.",
+            ],
+            validation_state="valid",
+            unresolved_gaps=[],
+            proposal_profile="ref_gpx_proposal_v1",
+            capability_version="ref_gpx_proposal.v1",
+            migration_state="candidate",
+            migration_contract_version="contextual-permission.baseline-migration.v1",
+            proposal_strategy_id=BASELINE_REFERENCE_RECONSTRUCTION_STRATEGY,
+            proposal_strategy_version=str(reconstruction["policy_version"]),
+            timing_evidence=BaselineArtifactBinding(ref=pace_ref, sha256=source_hashes[pace_ref]),
+            proposal_summary=BaselineProposalSummary(
+                day_count=len(days),
+                route_length_m=float(reconstruction["route_length_m"]),
+                timing_segment_count=len(days),
+                observed_p75_segment_count=0,
+                missing_p75_segment_count=0,
+                permission_uncertainty_count=len(uncertainty_ids),
+                safety_pending_count=len(handoff_ids),
+                blocking_gap_count=0,
+                target_p75_minutes_per_day=None,
+                reconstructed_day_count=len(days),
+                historical_checkpoint_count=len(all_cps),
+                historical_timed_checkpoint_count=sum(cp.get("arrival_clock") is not None for cp in all_cps),
+                historical_rest_stop_count=sum(len(row["rest_stops"]) for row in reconstruction["days"]),
+                source_route_days_metadata=project.get("route_days"),
+            ),
+            uncertainties=uncertainties,
+            review_requirements=requirements,
+            safety_handoff_summary=(
+                f"{len(handoff_ids)} item(s) pending Safety / Emergency review."
+                if handoff_ids else "No separate Safety / Emergency alternative was copied."
+            ),
+            reference_reconstruction=reconstruction,
+        )
+
     def preview_baseline(self, request: BaselineAuthoringRequest) -> MissionBaselineDraft:
         if request.mode == "human_text":
             source = (request.human_text or "").strip()
@@ -8220,6 +8481,19 @@ class ContextualPermissionWorkbench:
                 self._resolve_project_ref("project.json").read_text(encoding="utf-8")
             )
             route_sha = _file_sha256(route_path)
+            reconstruction = (
+                self._reference_gpx_reconstruction(project) if not request.day_end_inputs else None
+            )
+            if request.reference_strategy == "historical_reconstruction" and reconstruction is None:
+                raise ContextualPermissionConflict(
+                    "reference_itinerary_unavailable",
+                    "Prepare a coherent historical reference GPX and its checkpoint evidence before reconstructing this itinerary.",
+                )
+            if reconstruction is not None:
+                return self._build_reference_gpx_reconstruction_draft(
+                    project=project, route_ref=ref, route_sha=route_sha,
+                    reconstruction=reconstruction,
+                )
             timing_source = self._load_optional_baseline_source(
                 project, "reference_segment_timing_ref"
             )
@@ -8352,6 +8626,31 @@ class ContextualPermissionWorkbench:
             raise ContextualPermissionConflict(
                 "invalid_project_manifest", f"project.json is invalid: {exc}"
             ) from exc
+        reconstruction = self._reference_gpx_reconstruction(project)
+        if reconstruction is not None:
+            anchors: dict[str, BaselineMapAnchor] = {}
+            for day in reconstruction["days"]:
+                for endpoint in (day["start"], day["end"]):
+                    anchor_id = str(endpoint["anchor_id"])
+                    anchors[anchor_id] = BaselineMapAnchor(
+                        anchor_id=anchor_id,
+                        display_label=str(endpoint["label"]),
+                        source_kind="historical_day_boundary",
+                        named_context=False,
+                        route_order_m=float(endpoint["route_order_m"]),
+                        lat=float(endpoint["lat"]), lon=float(endpoint["lon"]),
+                    )
+            return BaselineMapContextProjection(
+                artifact_kind="mission_baseline_map_context",
+                schema_version="missionBaselineMapContext.v1",
+                project_id=self.project_id,
+                route_length_m=float(reconstruction["route_length_m"]),
+                route_points=[BaselineMapPoint.model_validate(point) for point in reconstruction["route_points"]],
+                anchors=sorted(anchors.values(), key=lambda item: item.route_order_m),
+                source_refs=list(reconstruction["source_refs"]),
+                source_hashes=dict(reconstruction["source_hashes"]),
+                sampling_policy="reference_gpx_boundary_preserving_sample.v1",
+            )
         admin_ref = str(
             project.get("admin_projection_ref") or "outputs/admin_projection.json"
         )
@@ -8897,6 +9196,54 @@ class ContextualPermissionWorkbench:
         project = json.loads(
             self._resolve_project_ref("project.json").read_text(encoding="utf-8")
         )
+        if (
+            draft.proposal_strategy_id == BASELINE_REFERENCE_RECONSTRUCTION_STRATEGY
+            or draft.reference_reconstruction is not None
+            or any(
+                day.reference_replay is not None
+                or (
+                    day.primary_day_end_proposal is not None
+                    and day.primary_day_end_proposal.selection_origin == "reference_evidence"
+                )
+                for day in draft.days
+            )
+        ):
+            reconstruction = self._reference_gpx_reconstruction(project)
+            if reconstruction is None:
+                raise ContextualPermissionConflict(
+                    "reference_itinerary_unavailable",
+                    "A reconstructed itinerary requires this workspace's historical reference sources.",
+                )
+            route_ref = str(project.get("compiled_mission_graph_reviewed_ref") or "outputs/compiled_mission_graph.reviewed.json")
+            expected = self._build_reference_gpx_reconstruction_draft(
+                project=project,
+                route_ref=route_ref,
+                route_sha=_file_sha256(self._resolve_project_ref(route_ref)),
+                reconstruction=reconstruction,
+            )
+            # Rebuild from the actual source on both Save and Accept. A client digest,
+            # changed destination or copied human-actor flag cannot authorize history.
+            fields = (
+                "source_mode", "source_sha256", "source_text", "source_refs", "source_hashes",
+                "route_axis_validation", "days", "validation_state", "unresolved_gaps",
+                "proposal_profile", "capability_version", "migration_contract_version",
+                "day_end_input_contract_sha256", "day_end_inputs", "proposal_strategy_id",
+                "proposal_strategy_version", "timing_evidence", "proposal_summary",
+                "uncertainties", "review_requirements", "safety_handoff_summary",
+                "reference_reconstruction", "candidate_only", "runtime_safety_truth",
+                "departure_approval_granted", "writes_performed",
+            )
+            if any(getattr(draft, field) != getattr(expected, field) for field in fields):
+                raise ContextualPermissionConflict(
+                    "reference_reconstruction_mismatch",
+                    "The copied days, route, stops, CP timing or source bindings differ from the reference evidence. Regenerate the draft.",
+                )
+            if draft.review_requirements != self._recompute_baseline_review_requirements(draft):
+                raise ContextualPermissionConflict(
+                    "baseline_review_requirements_mismatch",
+                    "Historical review requirements must match the exact reconstructed candidate.",
+                )
+            return
         rich_reference_declared = bool(project.get("reference_segment_timing_ref"))
         proposal_fields_present = bool(
             draft.timing_evidence
@@ -9188,6 +9535,7 @@ class ContextualPermissionWorkbench:
                 else None
             ),
             "safety_handoff_summary": draft.safety_handoff_summary,
+            "reference_reconstruction": draft.reference_reconstruction,
             "promotion_gates": {
                 "route_critical_names_resolved": not draft.unresolved_gaps,
                 "route_axis_order_pass": draft.route_axis_validation.get("track_order")
@@ -9210,8 +9558,9 @@ class ContextualPermissionWorkbench:
                     "graph" in ref.casefold() for ref in draft.source_refs
                 ),
                 "deterministic_validation_pass": draft.validation_state == "valid",
-                "explicit_day_end_inputs_bound": (
+                "day_end_provenance_bound": (
                     draft.proposal_profile != "ref_gpx_proposal_v1"
+                    or draft.proposal_strategy_id == BASELINE_REFERENCE_RECONSTRUCTION_STRATEGY
                     or (
                         draft.day_end_input_contract_sha256 is not None
                         and bool(draft.day_end_inputs)
@@ -9399,6 +9748,7 @@ class ContextualPermissionWorkbench:
             "timing_evidence": candidate.get("timing_evidence"),
             "proposal_summary": candidate.get("proposal_summary"),
             "uncertainties": candidate.get("uncertainties") or [],
+            "reference_reconstruction": candidate.get("reference_reconstruction"),
             "reviewed_day_ids": canonical_reviewed_day_ids,
             "review_scope": "permission_day_end_only",
             "reviewed_day_end_bindings": reviewed_day_end_bindings,
@@ -9903,6 +10253,13 @@ class ContextualPermissionWorkbench:
             ),
             "admission_version": PROJECTION_REBUILD_ADMISSION_VERSION,
         }
+        reconstruction = reviewed_payload.get("reference_reconstruction")
+        if isinstance(reconstruction, dict):
+            identities["reference_reconstruction_file_hashes"] = {
+                ref: bound_hash(ref)
+                for ref in reconstruction.get("source_refs", [])
+                if isinstance(ref, str)
+            }
         return _digest(identities)
 
     def _pending_projection_rebuild_transaction_paths(self) -> list[Path]:
@@ -10793,6 +11150,7 @@ class ContextualPermissionWorkbench:
                 "timing_evidence",
                 "proposal_summary",
                 "uncertainties",
+                "reference_reconstruction",
             )
             if candidate_draft.proposal_profile == "ref_gpx_proposal_v1"
             else ("source_mode", "source_sha256", "days", "proposal_profile")
@@ -10988,18 +11346,18 @@ class ContextualPermissionWorkbench:
             if proposal is None:  # pragma: no cover - guarded by caller
                 continue
             eta = day.eta_proposal
-            baseline_minutes = (
-                int(round(eta.segment_p75_sum_minutes))
-                if eta is not None
-                and eta.state == "complete_derived"
-                and eta.segment_p75_sum_minutes is not None
-                else 0
-            )
-            eta_gap = (
-                "Segment p50/p75 sums are complete; the adjustment policy still requires separate review."
-                if eta is not None and eta.state == "complete_derived"
-                else "Whole-day duration remains unknown; supported subtotals are never promoted to a full-day ETA."
-            )
+            if eta is not None and eta.state == "reference_replayed":
+                baseline_minutes = int(round(eta.observed_elapsed_minutes))
+                eta_gap = (
+                    "Historical departure-to-arrival elapsed time includes stops and "
+                    "recording gaps; the adjustment policy still requires separate review."
+                )
+            elif eta is not None and eta.state == "complete_derived":
+                baseline_minutes = int(round(eta.segment_p75_sum_minutes))
+                eta_gap = "Segment p50/p75 sums are complete; the adjustment policy still requires separate review."
+            else:
+                baseline_minutes = 0
+                eta_gap = "Whole-day duration remains unknown; supported subtotals are never promoted to a full-day ETA."
             definitions = (
                 (
                     f"node.route-axis.{day.mission_day_id}",
@@ -11109,6 +11467,8 @@ class ContextualPermissionWorkbench:
                         if day.primary_day_end_proposal is not None
                         else None
                     ),
+                    **({"reference_replay": day.reference_replay}
+                       if day.reference_replay is not None else {}),
                 }
             )
         return {
