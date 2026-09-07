@@ -1704,3 +1704,49 @@ user question
 This keeps Scout AI flexible enough to answer unexpected hiker questions while
 preserving Scout's core safety rule: model output can explain and propose, but
 it cannot directly mutate runtime safety truth.
+
+## Experimental Native Retrieval Qualification (2026-09-07)
+
+`tools/scout_ai_workspace_retrieval_qualification.py` exercises an isolated
+MCP background service with one Praison Research specialist, ScoutModelGateway,
+and native Pydantic AI `search_workspace_artifacts`,
+`inspect_workspace_artifact`, and `query_workspace` calls. The initial model
+input is the question, not a precompiled evidence answer. A server-owned
+read grant pins six actual Workspace files and permitted fields; the independent
+answer oracle stays outside the intelligence service.
+
+This experimental adapter uses
+`WorkspaceQueryService(..., discover_nested_collections=False)`. An explicitly
+null collection path selects the root object/list, never a nested list inferred
+from names such as `warnings`. Existing callers retain their default collection
+discovery. In this adapter, `inspect` with predicates is rejected with actionable
+tool feedback; `exists` evaluates a boolean condition. Counterfactual tests must
+cover root review status disagreeing with nested records. Matching the expected
+boolean alone is insufficient evidence of a correct query.
+
+The corrected five-case cloud run passed source-bound scalar and native-call
+checks. It is a `WORKING_PROTOTYPE`, not a general Workspace answer benchmark,
+production routing change, or Pi/Hailo/MAX qualification. It does not establish
+human acceptance or safety authority. Full experiment details, the superseded
+false-positive run, limitations, and reproduction command are recorded in
+`artifacts/scout-ai-nextgen/workspace-retrieval-20260907/README.md`.
+
+The user subsequently selected `deepseek/deepseek-v4-flash-0731` for this
+qualification. Its CLI now defaults to that exact OpenRouter model and
+`--structured-output-mode tool`; it registers no alternate model. This does
+not change production routing or the shared provider configuration. The native
+query input uses a flat operation schema with required `predicates` and `fields`,
+then validates against the existing operation-specific query union. Pydantic's
+unwrapped single-model arguments and earlier `request`-wrapped traces normalize
+to the same typed receipt for verification. Neither normalization may change
+the requested predicates. Native JSON mode remains an explicit diagnostic
+option, not a qualified default for this DeepSeek path. Follow-up evidence is
+in `artifacts/scout-ai-nextgen/workspace-retrieval-deepseek-20260907/`.
+
+The DeepSeek follow-up produced five eventual source-bound successes, not one
+uninterrupted five-case pass. Its selected trajectories used 28 model requests
+and 32 executed Workspace tools, with one separately recorded argument rejection.
+The full history retains the failed configurations and manually cancelled
+stalls. `qualification-verified.json` binds the exact model, actual predicates,
+receipt/source hashes, and all attempts; `README.md` records the remaining
+response-stall issue. This remains experimental and candidate-only.

@@ -1823,7 +1823,11 @@ class PraisonIntelligenceService:
         if cancellation.is_set():
             _emit_progress(progress_callback, "cancelled", 100)
             return self._cancelled(request)
-        if request.task_type not in SUPPORTED_TASKS:
+        workspace_discovery = (
+            request.task_type is IntelligenceTaskType.WORKSPACE_QA
+            and bool(getattr(self.runtime, "supports_workspace_retrieval", False))
+        )
+        if request.task_type not in SUPPORTED_TASKS and not workspace_discovery:
             return self._degraded(
                 request,
                 "intelligence_task_unsupported",
@@ -1841,7 +1845,7 @@ class PraisonIntelligenceService:
             )
         _emit_progress(progress_callback, "resolving_evidence", 15)
         evidence, missing_refs = self.evidence_catalog.resolve(request.evidence_refs)
-        if not evidence and request.task_type is not IntelligenceTaskType.DEEP_RESEARCH:
+        if not evidence and request.task_type is not IntelligenceTaskType.DEEP_RESEARCH and not workspace_discovery:
             return self._degraded(
                 request,
                 "intelligence_evidence_unavailable",

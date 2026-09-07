@@ -101,11 +101,13 @@ class WorkspaceQueryService:
         project_root: str | Path,
         *,
         limits: WorkspaceQueryLimits | None = None,
+        discover_nested_collections: bool = True,
     ) -> None:
         self.project_root = Path(project_root).expanduser().resolve(strict=True)
         if not self.project_root.is_dir():
             raise ValueError("project_root must be a directory")
         self.limits = limits or WorkspaceQueryLimits()
+        self.discover_nested_collections = discover_nested_collections
 
     def execute(self, raw_request: WorkspaceQueryRequest | Mapping[str, Any]) -> WorkspaceQueryResponse:
         operation = _raw_operation(raw_request)
@@ -815,6 +817,8 @@ class WorkspaceQueryService:
         if isinstance(selected, list):
             return [_Record(item, f"{path}/{index}" or f"/{index}") for index, item in enumerate(selected)], path or "/"
         if isinstance(selected, Mapping):
+            if not self.discover_nested_collections:
+                return [_Record(selected, path or "/")], path or "/"
             for key in _COLLECTION_KEYS:
                 value = selected.get(key)
                 if isinstance(value, list):
