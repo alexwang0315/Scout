@@ -347,11 +347,11 @@ def test_guidance_evidence_markup_is_keyboard_accessible_and_binder_is_used(html
     assert "bindTerrainRouteGuidanceFocusControls(" in _function(html, "bindQgisSpatialControls")
 
 
-def test_navigation_diagnostics_register_44_unique_cases_with_executable_handlers(html: str) -> None:
+def test_navigation_diagnostics_register_48_unique_cases_with_executable_handlers(html: str) -> None:
     cases = _array_constant(html, "DASHBOARD_DIAGNOSTIC_CASES")
     stubs = "\n".join(
         f"const diagnosticCheck{number:03d} = () => 'DASH-{number:03d}';"
-        for number in range(1, 45)
+        for number in range(1, 49)
     )
     payload = _run_node(stubs + "\n" + cases, """
 const cases = DASHBOARD_DIAGNOSTIC_CASES.map(({id, category, title, description, run}) => ({
@@ -361,8 +361,8 @@ const cases = DASHBOARD_DIAGNOSTIC_CASES.map(({id, category, title, description,
 process.stdout.write(JSON.stringify({cases}));
 """)
     cases_by_id = {case["id"]: case for case in payload["cases"]}
-    assert len(payload["cases"]) == len(cases_by_id) == 44
-    assert set(cases_by_id) == {f"DASH-{number:03d}" for number in range(1, 45)}
+    assert len(payload["cases"]) == len(cases_by_id) == 48
+    assert set(cases_by_id) == {f"DASH-{number:03d}" for number in range(1, 49)}
     for case_id in NAVIGATION_CASE_IDS:
         case = cases_by_id[case_id]
         assert case["callable"] and case["result"] == case_id
@@ -544,7 +544,7 @@ function expectDiagnosticFailure(callback) {
 def validator_source(html: str) -> str:
     helpers = re.findall(r"(?m)^    (?:async )?function (diagnosticNavigation\w+)\(", html)
     names = dict.fromkeys((
-        "asArray", "diagnosticRequire", "diagnosticWarning", "diagnosticIsSha256",
+        "asArray", "diagnosticRequire", "diagnosticWarning", "diagnosticUnavailable", "diagnosticIsSha256",
         "navigationTerrainRouteHypothesisCandidate", *PURE_VALIDATORS, *helpers,
     ))
     return "\n".join((
@@ -808,6 +808,9 @@ def batch_source(html: str) -> str:
 global.state = {navigationTerrainHypothesisId: "fixture-run", navigationTerrainHypothesisBand: "top_10_percent_corridor",
   diagnosticResults: {"DASH-001": {status: "passed", detail: "preserved unrelated result"}}};
 global.projectId = () => "navigation-fixture";
+global.resolvedPretripProjectId = () => projectId();
+global.apiBase = () => "http://navigation-fixture.invalid";
+state.diagnosticResults["DASH-001"].scopeKey = diagnosticCaseScopeKey("DASH-001");
 global.diagnosticResourceCache = new Map([["stale-response", Promise.resolve({})]]);
 global.updateDiagnosticDom = () => {};
 """,
@@ -842,7 +845,8 @@ for (const key of ["navigationTerrainHypothesisId", "navigationTerrainHypothesis
 }
 global.projectId = () => "other-project";
 staleSummaries.push(diagnosticSummary(NAVIGATION_DIAGNOSTIC_CASE_IDS));
-assert.equal(diagnosticResult("DASH-001"), preserved);
+assert.equal(state.diagnosticResults["DASH-001"], preserved);
+assert.equal(diagnosticResult("DASH-001").status, "idle");
 process.stdout.write(JSON.stringify({calls, summary, worker, r4, staleSummaries}));
 """)
     assert payload["calls"] == list(NAVIGATION_BATCH_IDS)
@@ -956,7 +960,7 @@ const requests = [];
 global.diagnosticJson = async path => {{
   requests.push(path);
   const newer = {{...f.hypothesis, selection_id: "new-server-default"}};
-  return {{status: "ready", project_id: f.context.project_id, terrain_route_hypothesis: {{selection: {{
+  return {{status: "ready", project_id: f.context.project_id, boundary: {{candidate_only: true, runtime_safety_truth: false, operational: false}}, terrain_route_hypothesis: {{selection: {{
     default_id: newer.selection_id, options: {json.dumps(displayed_selection_available)} ? [newer, f.hypothesis] : [newer],
   }}}}}};
 }};
@@ -1003,7 +1007,7 @@ global.fetch = async (url, options = {{}}) => {{
     expected_resolution_sha256: f.guidance.resolution_sha256,
   }});
   const data = [
-    {{project_id: f.context.project_id, status: "ready", terrain_route_hypothesis: {{selection: {{default_id: f.context.selection_id, options: [f.hypothesis]}}}}}},
+    {{project_id: f.context.project_id, status: "ready", boundary: {{candidate_only: true, runtime_safety_truth: false, operational: false}}, terrain_route_hypothesis: {{selection: {{default_id: f.context.selection_id, options: [f.hypothesis]}}}}}},
     f.guidance,
     {json.dumps(scope_available)} ? f.scope : {{status: "unavailable", reason: "sampler_unavailable", candidate_only: true, runtime_safety_truth: false, operational: false}},
   ][index];
@@ -1133,3 +1137,26 @@ process.stdout.write(JSON.stringify({{metrics, detail: failure.message}}));
     assert payload["metrics"]["decoded"] == decoded
     assert payload["metrics"]["closed"] == closed
     assert payload["metrics"]["timers"] == payload["metrics"]["cleared"] == 1
+
+
+@pytest.mark.parametrize("valid_boundary", (True, False))
+def test_navigation_unprepared_data_warns_only_after_candidate_boundary_validation(
+    html: str, validator_source: str, valid_boundary: bool,
+) -> None:
+    source = validator_source + _function(html, "diagnosticResource")
+    payload = _run_node(source, f"""
+global.state = {{}};
+global.projectId = () => "navigation-fixture";
+global.diagnosticResourceCache = new Map();
+global.diagnosticJson = async () => ({{project_id: "navigation-fixture", status: "not_prepared",
+  boundary: {{runtime_safety_truth: {json.dumps(not valid_boundary)}}}}});
+let failure;
+try {{ await diagnosticNavigationContext(); }} catch (error) {{ failure = error; }}
+assert.ok(failure instanceof Error);
+process.stdout.write(JSON.stringify({{status: failure.diagnosticStatus || "failed",
+  structureStatus: failure.structureStatus, dataStatus: failure.dataStatus}}));
+""")
+    if valid_boundary:
+        assert payload == {"status": "warning", "structureStatus": "passed", "dataStatus": "not_prepared"}
+    else:
+        assert payload["status"] == "failed"

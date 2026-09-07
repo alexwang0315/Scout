@@ -80,3 +80,39 @@ def test_workspace_gate_accepts_top_level_project_refs_and_counts(tmp_path: Path
     )
 
     assert result["ok"], result["errors"]
+
+
+def test_historical_map_contract_is_pretrip_only_and_preserves_cache_policy() -> None:
+    from admin_map_layers import build_pretrip_map_layers
+
+    assert len(SCOUT_LAYER_IDS) == 33
+    assert len(SCOUT_SURFACE_LAYER_IDS["pretrip"]) == 32
+    assert len(SCOUT_SURFACE_LAYER_IDS["debug"]) == 31
+    assert len(SCOUT_SURFACE_LAYER_IDS["after-action"]) == 32
+    assert "historical-map" in SCOUT_SURFACE_LAYER_IDS["pretrip"]
+    assert "historical-map" not in SCOUT_SURFACE_LAYER_IDS["debug"]
+    assert "historical-map" not in SCOUT_SURFACE_LAYER_IDS["after-action"]
+    layers = build_pretrip_map_layers(source_refs={}, weather={})
+    historical = next(layer for layer in layers if layer["layer_id"] == "historical-map")
+    assert historical["z_index"] == 2
+    assert historical["available"] is True  # UI support, not cached tile coverage.
+    assert historical["default_enabled"] is False
+    assert historical["remote_fetch_requires_explicit_enable"] is True
+    assert historical["cache_namespace_per_theme"] is True
+    assert historical["candidate_only"] is True
+    assert historical["runtime_safety_truth"] is False
+
+
+def test_surface_gate_rejects_a_known_layer_on_an_unsupported_surface(tmp_path: Path) -> None:
+    from scout_layer_contract import SCOUT_LAYER_HTML_FILES
+
+    for surface, relative in SCOUT_LAYER_HTML_FILES.items():
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        html = (ROOT / relative).read_text()
+        if surface == "debug":
+            html += '<input data-layer="historical-map">'
+        path.write_text(html)
+    result = run_checks(repo_root=tmp_path)
+    assert not result["ok"]
+    assert "debug: unexpected layer controls ['historical-map']" in result["errors"]

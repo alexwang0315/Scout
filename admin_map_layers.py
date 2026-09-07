@@ -54,6 +54,16 @@ _LAYER_SPECS: dict[str, AdminMapLayerSpec] = {
         render_mode="wmts_raster_tile",
         source_kind="wmts_tile",
     ),
+    "historical-map": AdminMapLayerSpec(
+        layer_id="historical-map",
+        label="Historical map",
+        label_zh="古地圖（歷史主題比對，候選脈絡）",
+        layer_kind="imagery",
+        z_index=SCOUT_LAYER_RANKS["historical-map"],
+        render_mode="wmts_raster_tile",
+        source_kind="historical_map_theme",
+        default_enabled=False,
+    ),
     "rudy": AdminMapLayerSpec(
         layer_id="rudy",
         label="Rudy",
@@ -388,6 +398,10 @@ def build_pretrip_map_layers(
             "pretrip.map_layer.forest",
             source_refs.get("imagery") or source_refs.get("map_context"),
         ),
+        "historical-map": (
+            "pretrip.map_layer.historical_map",
+            source_refs.get("historical_map"),
+        ),
         "osm": ("pretrip.map_layer.osm", source_refs.get("map_context")),
         "terrain": (
             "pretrip.map_layer.terrain",
@@ -665,6 +679,16 @@ def _layer_dict(
 
 
 def _layer_renderer_contract(layer_id: str) -> dict[str, Any]:
+    if layer_id == "historical-map":
+        return {
+            "raster_tile_delivery": "workspace_cache_first",
+            "remote_fetch_requires_explicit_enable": True,
+            "theme_selector_supported": True,
+            "cache_namespace_per_theme": True,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "operational": False,
+        }
     if layer_id == "imagery":
         return {
             "local_raster_manifest_supported": False,

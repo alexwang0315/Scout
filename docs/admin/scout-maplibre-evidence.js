@@ -516,6 +516,14 @@
       return "background";
     }
     if (["terrain", "risk-heatmap", "risk-delta", "soil-moisture", "antecedent-rain", "cwa-qpf", "cwa-weather", "weather-api"].includes(id)) {
+      // Classify painted geometry, never exempt an entire mixed group.
+      if (tag === "path" && ["risk-heatmap", "risk-delta"].includes(id)
+        && svgClassIncludes(node, id)
+        && node?.getAttribute?.("data-risk-layer") === (id === "risk-heatmap" ? "calibrated" : "delta")) {
+        return "evidence";
+      }
+      if (tag === "circle" && ["soil-moisture", "antecedent-rain", "cwa-qpf", "cwa-weather"].includes(id)
+        && svgClassIncludes(node, `${id}-point`)) return "evidence";
       return "thematic-background";
     }
     if (["corridors", "overpass", "retreat", "risk-ribbon", "risk-score"].includes(id)) return "evidence";
@@ -578,7 +586,7 @@
           role = "checkpoint";
         } else if (role === "unknown" && group) {
           id = group.dataset.layerGroup;
-          role = svgLayerRole(id, group);
+          role = svgLayerRole(id, node);
         } else if (group && id === String(node.tagName || "").toLowerCase()) {
           id = `${group.dataset.layerGroup}:${id}`;
         }

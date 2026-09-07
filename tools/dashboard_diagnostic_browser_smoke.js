@@ -21,7 +21,7 @@ const browserExecutablePath = process.env.SCOUT_BROWSER_EXECUTABLE || undefined;
 const dynamicTilesOnly = process.env.SCOUT_DIAGNOSTIC_DYNAMIC_TILES_ONLY === "1";
 const cameraPersistenceOnly = process.env.SCOUT_DIAGNOSTIC_CAMERA_ONLY === "1";
 const mapOrderOnly = process.env.SCOUT_DIAGNOSTIC_MAP_ORDER_ONLY === "1";
-const expectedDiagnosticCount = 44;
+const expectedDiagnosticCount = 48;
 const dataDependentDiagnosticIds = new Set([
   "DASH-009",
   "DASH-018",
@@ -36,6 +36,10 @@ const dataDependentDiagnosticIds = new Set([
   "DASH-042",
   "DASH-043",
   "DASH-044",
+  "DASH-045",
+  "DASH-046",
+  "DASH-047",
+  "DASH-048",
 ]);
 
 function assert(condition, message) {

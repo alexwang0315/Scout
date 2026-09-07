@@ -31,6 +31,7 @@ from scout_layer_contract import (  # noqa: E402
 
 
 RASTER_SOURCE_LAYER_IDS = {
+    "historical-map",
     "imagery",
     "rudy",
     "rudy-twmap",
@@ -210,11 +211,11 @@ def _check_html_surfaces(
         groups = _extract_static_layer_groups(text)
         expected = set(SCOUT_SURFACE_LAYER_IDS[surface])
         missing_controls = sorted(expected - controls)
-        extra_controls = sorted(controls - set(SCOUT_LAYER_IDS))
+        extra_controls = sorted(controls - expected)
         if missing_controls:
             errors.append(f"{surface}: missing layer controls {missing_controls}")
         if extra_controls:
-            errors.append(f"{surface}: unknown layer controls {extra_controls}")
+            errors.append(f"{surface}: unexpected layer controls {extra_controls}")
 
         for layer_id in SCOUT_LAYER_IDS:
             expected_on_surface = layer_id in expected
@@ -413,6 +414,12 @@ def _extract_static_layer_groups(text: str) -> set[str]:
 def _has_dynamic_raster_group(text: str, layer_id: str) -> bool:
     if layer_id not in RASTER_SOURCE_LAYER_IDS:
         return False
+    if layer_id == "historical-map":
+        return (
+            'const HISTORICAL_MAP_LAYER_ID = "historical-map";' in text
+            and "layerId: HISTORICAL_MAP_LAYER_ID" in text
+            and '"data-layer-group": layer.layerId' in text
+        )
     return f'layerId: "{layer_id}"' in text or f"layerId: '{layer_id}'" in text
 
 

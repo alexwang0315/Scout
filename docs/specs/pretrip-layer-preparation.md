@@ -581,8 +581,8 @@ OCR, or older handoff packages.
 
 ### Historical Map Theme Preparation
 
-`historical-map` is one auxiliary presentation control backed by an allowlisted
-theme catalog, not one canonical safety layer per year. Full preparation must
+`historical-map` is one canonical, pretrip-only presentation layer backed by an
+allowlisted theme catalog. Each year is a theme, not a separate layer; none is safety truth. Full preparation must
 plan and seed every catalog theme for the route bbox and configured initial
 zooms into an independent target-workspace namespace. The selected/default
 theme controls initial display only; it does not limit preparation. For the

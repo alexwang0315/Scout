@@ -11896,11 +11896,164 @@
 
   <script src="/admin/scout-maplibre-evidence.js"></script>
   <script>
+// diagnostic-advanced-inline:start
+/* Executable, isolated replays of trusted Dashboard functions. Synthetic storage only; no user records or network. */
+(function (root) {
+  "use strict";
+  const requireValue = (value, message) => { if (!value) throw new Error(message); };
+  function compile(sources, names, environment) {
+    for (const name of names) requireValue(typeof sources[name] === "string" && sources[name].includes(`function ${name}(`), `Missing production source: ${name}`);
+    // Sources are supplied by the Dashboard itself, never accepted from API/model/user content.
+    return Function(...Object.keys(environment), `"use strict";\n${names.map(name => sources[name]).join("\n")}\nreturn {${names.join(",")}};`)(...Object.values(environment));
+  }
+  function memoryDatabase() {
+    const stores = {keys: new Map(), offline_intents: new Map()};
+    const database = {
+      close() {},
+      transaction(name) {
+        const transaction = {error: null};
+        let scheduled = false;
+        const complete = () => {
+          if (scheduled) return;
+          scheduled = true;
+          setTimeout(() => transaction.oncomplete?.(), 0);
+        };
+        transaction.objectStore = () => ({
+          get(key) { const request = {}; queueMicrotask(() => { request.result = stores[name].get(key); request.onsuccess?.(); complete(); }); return request; },
+          put(value, key) { stores[name].set(key, value); complete(); },
+          add(value) { if (stores[name].has(value.intent_id)) throw new Error("Duplicate key"); stores[name].set(value.intent_id, structuredClone(value)); complete(); },
+        });
+        return transaction;
+      },
+    };
+    return {database, stores};
+  }
+  const pageInstance = root.crypto?.randomUUID?.();
+  async function runPersistentStorage(sources) {
+    if (!root.indexedDB) return [{id: "indexedDbReopen", status: "warning", detail: "Browser IndexedDB unavailable; not executed"}];
+    const production = compile(sources, ["openEmergencyOfflineDb", "emergencyOfflineRequest", "emergencyOfflineTransaction", "emergencyOfflineEncryptionKey", "storeEncryptedEmergencyIntent", "decryptEmergencyOfflineRecord"], {
+      window: {crypto: root.crypto, indexedDB: root.indexedDB},
+      EMERGENCY_OFFLINE_DB: "scout-diagnostic-synthetic-offline-v1",
+      EMERGENCY_OFFLINE_KEY_ID: "diagnostic_ephemeral_key",
+      resolvedPretripProjectId: () => "diagnostic_project_A",
+      refreshEmergencyOfflineIntentCount: async () => {},
+      fetch: () => { throw new Error("Persistence probe forbids network"); },
+    });
+    const read = async () => {
+      const database = await production.openEmergencyOfflineDb();
+      try {
+        const transaction = database.transaction("offline_intents", "readonly");
+        const record = await production.emergencyOfflineRequest(transaction.objectStore("offline_intents").get("diagnostic.persistence.v2"));
+        await production.emergencyOfflineTransaction(transaction);
+        if (!record) return null;
+        const key = await production.emergencyOfflineEncryptionKey(database);
+        requireValue(key.extractable === false, "Persisted CryptoKey became extractable");
+        return await production.decryptEmergencyOfflineRecord(database, record);
+      } finally { database.close(); }
+    };
+    const previous = await read();
+    if (!previous) await production.storeEncryptedEmergencyIntent({intent_id: "diagnostic.persistence.v2", mission_day_instance_id: "fixture_day", marker: "synthetic-only-v1", pageInstance});
+    const restored = await read();
+    requireValue(restored?.marker === "synthetic-only-v1", "Real IndexedDB reopen readback differs");
+    const acrossPage = Boolean(previous && previous.pageInstance && previous.pageInstance !== pageInstance);
+    return [
+      {id: "indexedDbReopen", status: "passed", detail: "Real IndexedDB close/reopen, persisted nonextractable CryptoKey and decrypt verified; synthetic database only"},
+      {id: "indexedDbAcrossPage", status: acrossPage ? "passed" : "warning", detail: acrossPage ? "Decrypted fixture from a previous page instance" : "Fixture saved. Reopen the page and run again to verify persistence across page instances"},
+    ];
+  }
+  async function runStorage({sources}) {
+    requireValue(root.crypto?.subtle, "WebCrypto unavailable: replay not executed");
+    const {database, stores} = memoryDatabase();
+    let selectedProject = "diagnostic_project_A";
+    const state = {emergencyOfflineIntentCount: 0, emergencyOfflineFieldOverlay: {}};
+    const names = ["emergencyOfflineEncryptionKey", "storeEncryptedEmergencyIntent", "decryptEmergencyOfflineRecord", "refreshEmergencyOfflineIntentCount"];
+    const environment = {
+      window: {crypto: root.crypto}, state,
+      EMERGENCY_OFFLINE_KEY_ID: "diagnostic_ephemeral_key",
+      openEmergencyOfflineDb: async () => database,
+      emergencyOfflineRequest: request => new Promise((resolve, reject) => { request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); }),
+      emergencyOfflineTransaction: transaction => new Promise((resolve, reject) => { transaction.oncomplete = resolve; transaction.onerror = () => reject(transaction.error); transaction.onabort = () => reject(new Error("Aborted")); }),
+      listEmergencyOfflineRecords: async () => [...stores.offline_intents.values()].map(value => structuredClone(value)),
+      resolvedPretripProjectId: () => selectedProject,
+      projectId: () => selectedProject,
+      asArray: value => Array.isArray(value) ? value : [],
+      fetch: () => { throw new Error("Replay forbids network"); },
+      localStorage: undefined, indexedDB: undefined, document: undefined,
+    };
+    const production = compile(sources, names, environment);
+    const intent = {intent_id: "diagnostic.fixture.intent", mission_day_instance_id: "fixture_day", decision: "hold", pending_sync: true, device_local_encrypted: true};
+    await production.storeEncryptedEmergencyIntent(intent, {intent_type: "field_conflict", group_id: "same_group", row_id: "same_row", category: "field_condition_differs"});
+    const record = stores.offline_intents.get(intent.intent_id);
+    requireValue(record?.encrypted && record.ciphertext instanceof ArrayBuffer, "Production did not persist encrypted ciphertext");
+    requireValue(!new TextDecoder().decode(record.ciphertext).includes(intent.intent_id), "Ciphertext contains plaintext fixture");
+    const key = stores.keys.get("diagnostic_ephemeral_key");
+    requireValue(key && key.extractable === false, "Encryption key is exportable");
+    state.emergencyOfflineFieldOverlay = {};
+    const restored = await production.decryptEmergencyOfflineRecord(database, structuredClone(record));
+    requireValue(JSON.stringify(restored) === JSON.stringify(intent), "Encrypted readback differs from saved intent");
+    let corruptionRejected = false;
+    const corrupt = structuredClone(record);
+    new Uint8Array(corrupt.ciphertext)[0] ^= 1;
+    try { await production.decryptEmergencyOfflineRecord(database, corrupt); } catch { corruptionRejected = true; }
+    requireValue(corruptionRejected, "Corrupt ciphertext was accepted");
+    let bindingRejected = false;
+    try { await production.decryptEmergencyOfflineRecord(database, {...record, intent_id: "different.intent"}); } catch { bindingRejected = true; }
+    requireValue(bindingRejected, "Changed intent binding was accepted");
+    selectedProject = "diagnostic_project_B";
+    await production.refreshEmergencyOfflineIntentCount();
+    const crossProjectOverlay = Boolean(state.emergencyOfflineFieldOverlay.same_group);
+    selectedProject = "diagnostic_project_A";
+    record.created_at = "2000-01-01T00:00:00.000Z";
+    state.emergencyOfflineFieldOverlay = {};
+    await production.refreshEmergencyOfflineIntentCount();
+    const oldPendingOverlay = Boolean(state.emergencyOfflineFieldOverlay.same_group);
+    const persistenceChecks = await runPersistentStorage(sources);
+    return {
+      status: crossProjectOverlay ? "failed" : "warning", evidenceMode: "production_function_replay_memory_idb_real_webcrypto",
+      detail: crossProjectOverlay ? "隔離重播發現跨專案 pending overlay；加密讀回與竄改拒絕通過。" : "加密與專案隔離重播通過；持久化結果另列，後端過期拒用未在此頁執行。",
+      checks: [...persistenceChecks, {id: "serverExpiryRejection", status: "warning", detail: "Not executed here; requires isolated backend sync tests, not browser inference"}, ...Object.entries({encryptedSaveReadback: true, nonExtractableKey: true, corruptionRejected, intentBindingRejected: bindingRejected, projectOverlayIsolation: !crossProjectOverlay}).map(([id, passed]) => ({id, status: passed ? "passed" : "failed", detail: `${id}: ${passed ? "verified in isolated replay" : "production behavior mismatch"}`}))],
+      findings: [ ...(crossProjectOverlay ? ["Cross-project pending field overlay: project A record is shown in project B for the same group identifier."] : []), ...(oldPendingOverlay ? ["Old pending intent still appears as pending overlay. No local expiry contract is established; server expiry/revalidation remains unverified."] : []) ],
+      limitations: ["Crypto/isolation replay uses memory; persistence checks use a dedicated synthetic IndexedDB. OS crash durability is not tested.", "No server sync, expiry rejection, runtime approval or outbound delivery was executed."],
+      userStorageTouched: false, networkRequests: 0,
+    };
+  }
+  async function runSettings({sources}) {
+    const saved = new Map([["scout.dashboardApiBase", "https://previous.invalid"], ["scout.dashboardProjectId", "previous_project"]]);
+    const initial = [...saved];
+    let failNextProjectWrite = false;
+    const fields = {apiBaseInput: {value: "https://diagnostic.invalid/"}, projectInput: {value: "diagnostic_project"}, reloadSettings: {disabled: true}};
+    let status;
+    const production = compile(sources, ["validateDashboardSettings", "saveDashboardSettings"], {
+      document: {getElementById: id => fields[id]}, PROJECT_ID: "fallback_fixture",
+      localStorage: {getItem: key => saved.get(key) ?? null, setItem(key, value) { if (failNextProjectWrite && key === "scout.dashboardProjectId") { failNextProjectWrite = false; throw new Error("Fixture quota failure"); } saved.set(key, String(value)); }},
+      setDashboardSettingsStatus: (detail, tone, reloadPending) => { status = {detail, tone, reloadPending}; },
+      fetch: () => { throw new Error("Replay forbids network"); }, window: undefined,
+    });
+    try {
+      requireValue(production.saveDashboardSettings() === true, "Valid settings save failed");
+      const reloadSnapshot = Object.fromEntries(saved);
+      requireValue(reloadSnapshot["scout.dashboardApiBase"] === "https://diagnostic.invalid" && reloadSnapshot["scout.dashboardProjectId"] === "diagnostic_project", "Saved values cannot be read back");
+      requireValue(fields.reloadSettings.disabled === false && status.reloadPending, "Changed settings did not enable reload");
+      requireValue(production.saveDashboardSettings() && fields.reloadSettings.disabled, "Unchanged save still requests reload");
+      fields.apiBaseInput.value = "https://diagnostic.invalid?unsafe=1";
+      requireValue(production.saveDashboardSettings() === false && status.tone === "bad", "Invalid URL settings were accepted");
+      requireValue(JSON.stringify(Object.fromEntries(saved)) === JSON.stringify(reloadSnapshot), "Invalid save changed stored settings");
+      fields.apiBaseInput.value = "https://changed.invalid";
+      fields.projectInput.value = "changed_project";
+      failNextProjectWrite = true;
+      requireValue(production.saveDashboardSettings() === false, "Partial storage failure was accepted");
+      requireValue(JSON.stringify(Object.fromEntries(saved)) === JSON.stringify(reloadSnapshot), "Partial storage write was not rolled back");
+      return {status: "passed", evidenceMode: "production_function_replay_memory_storage", detail: "Settings 正式函式隔離重播：儲存讀回、reload 按鈕、拒絕無效輸入、部分寫入 rollback 通過。", checks: ["saveReadback", "reloadSignal", "unchangedSave", "invalidRejected", "partialWriteRollback"].map(id => ({id, status: "passed", detail: "Verified in isolated memory-storage replay"})), limitations: ["Readback and reload-button signal verified; actual page reload and browser persistence not executed."], userStorageTouched: false, networkRequests: 0};
+    } finally { saved.clear(); for (const [key, value] of initial) saved.set(key, value); }
+  }
+  root.ScoutDiagnosticAdvanced = Object.freeze({runStorage, runSettings});
+})(typeof window === "undefined" ? globalThis : window);
+// diagnostic-advanced-inline:end
+
     "use strict";
     const DIAGNOSTIC_MAP_PROBE = new URLSearchParams(window.location.search).get("diagnosticMapProbe") === "1";
 
     const PROJECT_ID = "chilai_nanhua_day1_scoutAI";
-    const PRETRIP_DATA_PROJECT_ID = "chilai_nanhua_day1";
     const ASSISTANT_STATUS_PATH = "/assistant/status";
     const ASSISTANT_QUERY_PATH = "/assistant/query";
     const ASSISTANT_QUERY_TIMEOUT_MS = 240000;
@@ -11990,13 +12143,13 @@
     const DASHBOARD_DIAGNOSTIC_CASES = Object.freeze([
       {id: "DASH-001", category: "Global / Overview", title: "Dashboard 啟動、入口與必要 API", description: "確認 Dashboard、workspace 與 project read APIs 可用。", run: diagnosticCheck001},
       {id: "DASH-002", category: "Global / Overview", title: "全站導覽、路由與返回狀態", description: "確認現有 route contract 與 Diagnostic 導覽位置。", run: diagnosticCheck002},
-      {id: "DASH-003", category: "Plan Trip / Workspace", title: "Workspace 清單、切換與資料隔離", description: "確認目前 project 由 server catalog 正確解析。", run: diagnosticCheck003},
-      {id: "DASH-004", category: "Map & Evidence", title: "32 層圖層契約、來源與幾何內容", description: "確認 32 個 canonical layer ID 與 surface 邊界。", run: diagnosticCheck004},
+      {id: "DASH-003", category: "Plan Trip / Workspace", title: "Workspace 清單、切換與資料隔離", description: "核對 server catalog，並隔離重播 A→B 請求競態與舊結果失效；不切換使用者專案。", run: diagnosticCheck003},
+      {id: "DASH-004", category: "Map & Evidence", title: "33 層契約與各頁面圖層控制", description: "確認 33 個 canonical layer ID；行前 32、Debug 31、After-action 32，歷史地圖限行前。", run: diagnosticCheck004},
       {id: "DASH-005", category: "Map & Evidence", title: "地圖基本操作、鍵盤操作與圖徵選取", description: "確認共用 Pan、Box、Zoom、Fit 與鍵盤控制契約。", run: diagnosticCheck005},
       {id: "DASH-006", category: "Map & Evidence", title: "Timeline Evidence 分類、分頁與地圖連動", description: "從目前 project 建立 timeline 與 Map/Risk 分類。", run: diagnosticCheck006},
       {id: "DASH-007", category: "Plan Trip / Workspace", title: "Trip Intake GPX 驗證、預覽與建立流程", description: "只檢查安全 UI/API wiring；不建立 workspace。", run: diagnosticCheck007},
       {id: "DASH-008", category: "Exploring for Six Axis", title: "Weather 五圖層、CWA 控制與候選決策", description: "確認 Weather read API 與五個 canonical 控制。", run: diagnosticCheck008},
-      {id: "DASH-009", category: "Assistant / System / Safety", title: "Assistant 狀態、提問、證據與錯誤復原", description: "只讀取 Assistant readiness；不送出模型問題。", run: diagnosticCheck009},
+      {id: "DASH-009", category: "Assistant / System / Safety", title: "Assistant readiness 與唯讀權限邊界", description: "只讀取 Assistant readiness；不送出模型問題。", run: diagnosticCheck009},
       {id: "DASH-010", category: "Assistant / System / Safety", title: "Debug、Observer、Emergency 與設定安全邊界", description: "確認 debug GET APIs 與 no-outbound UI boundary。", run: diagnosticCheck010},
       {id: "DASH-011", category: "Global / Overview", title: "Overview Current Decision Brief 與狀態摘要", description: "確認 Overview 優先資訊結構與 truth markers。", run: diagnosticCheck011},
       {id: "DASH-012", category: "Plan Trip / Workspace", title: "Workspace Operations 與非執行型收據", description: "讀取 operation requests 與 intent-only capability。", run: diagnosticCheck012},
@@ -12007,7 +12160,7 @@
       {id: "DASH-017", category: "Map & Evidence", title: "Map Segment、風險覆蓋與 layer preset", description: "確認目前 project 的 Segment 與風險 evidence 非空。", run: diagnosticCheck017},
       {id: "DASH-018", category: "Exploring for Six Axis", title: "Route Context canonical briefing", description: "讀取目前 project briefing；不重新生成。", run: diagnosticCheck018},
       {id: "DASH-019", category: "Exploring for Six Axis", title: "Route Context variants 與 reference gate", description: "讀取現有 variants metadata 與安全 artifact refs。", run: diagnosticCheck019},
-      {id: "DASH-020", category: "Exploring for Six Axis", title: "Pace Dashboard 資訊與 read-only 控制", description: "確認 Pace 頁面資料區塊與 read-only boundary。", run: diagnosticCheck020},
+      {id: "DASH-020", category: "Exploring for Six Axis", title: "Pace CP 上下文、地圖與來源邊界", description: "確認 Pace 頁面資料區塊與 read-only boundary。", run: diagnosticCheck020},
       {id: "DASH-021", category: "Exploring for Six Axis", title: "Body Index sanitized overview 與空狀態", description: "讀取 sanitized snapshot 並掃描敏感欄位。", run: diagnosticCheck021},
       {id: "DASH-022", category: "Exploring for Six Axis", title: "Body Index import、merge 與 dedup contract", description: "只檢查 synthetic import wiring；不讀私人資料。", run: diagnosticCheck022},
       {id: "DASH-023", category: "Exploring for Six Axis", title: "Body Index directory watch lifecycle boundary", description: "只讀 watcher status，並要求 live watcher 為 stopped。", run: diagnosticCheck023},
@@ -12024,7 +12177,7 @@
       {id: "DASH-034", category: "Exploring for Six Axis / Contextual Permission", title: "Safety / Emergency 專屬決策與權限邊界", description: "確認 Permission 只提供 handoff，沒有 night-travel 決策或 runtime/outbound authority。", run: diagnosticCheck034},
       {id: "DASH-035", category: "Exploring for Six Axis / Contextual Permission", title: "Contextual Permission Evidence lineage 與隱私邊界", description: "確認 source/cause 為 hash-bound bounded refs，缺口可見且沒有 raw GPX、健康或私人路徑。", run: diagnosticCheck035},
       {id: "DASH-036", category: "Exploring for Six Axis / Contextual Permission", title: "Candidate Simulation 明確觸發與 no-write contract", description: "只檢查 explicit Run wiring；Diagnostic 本身不送出 simulation POST。", run: diagnosticCheck036},
-      {id: "DASH-037", category: "Map & Evidence", title: "Navigation、Architecture、Weather 動態圖磚倍率切換", description: "從 Fit 放大並跨過 prepared Z14 時，確認地圖倍率與 Rudy+TW request Z／TILEMATRIX 同步上升，不得拉伸前一層圖磚冒充原生倍率。", run: (...args) => diagnosticCheck037Runner(...args)},
+      {id: "DASH-037", category: "Map & Evidence", title: "Navigation／Architecture 倍率與 Weather 快取優先契約", description: "檢查倍率契約，並在隔離 Weather SVG 縮放、核對 active 圖磚與快取解碼；不觸發遠端 Refresh。", run: (...args) => diagnosticCheck037Runner(...args)},
       {id: "DASH-038", category: "Navigation", title: "Navigation MapLibre 2D/3D 鏡頭持久化", description: "確認 2D/3D 中心、zoom、pitch 與 bearing 各自保存，Dashboard 重繪不會回到 Fit。", run: diagnosticCheck038},
       {id: "DASH-039", category: "Navigation", title: "TRH Worker 連線與工作流程入口", description: "目前 Worker 握手、QGIS bridge 與 TRH allowlist；不提交運算。", run: diagnosticCheck039},
       {id: "DASH-040", category: "Navigation", title: "TRH 路線、corridor 與 provenance", description: "既有 R1–R3 幾何、DEM/model 記錄及 5/10/20% 圖層內容與 SHA-256。", run: diagnosticCheck040},
@@ -12032,6 +12185,10 @@
       {id: "DASH-042", category: "Navigation", title: "R4 人工 review 與執行成果", description: "分開確認人工 Point 錨點、review 就緒與已保存的 R4 執行證據。", run: diagnosticCheck042},
       {id: "DASH-043", category: "Navigation", title: "R4 Gn evidence 點選與前後筆", description: "以隔離的 DOM 操作實際事件綁定；確認高亮流程不更動錨點或 review。", run: diagnosticCheck043},
       {id: "DASH-044", category: "Map & Evidence", title: "全 Dashboard 地圖圖層順序", description: "逐張檢查底圖、天氣／地形覆蓋、路徑與標記的實際順序，涵蓋內嵌地圖、Navigation 2D/3D、各種視角與每日路線小圖。", run: diagnosticCheck044},
+      {id: "DASH-045", category: "System", title: "Logs 記錄、完整性與唯讀來源", description: "讀取 Runtime Audit Ledger 的 schema、hash-chain 狀態與 telemetry 邊界；不把空紀錄視為完整驗證。", run: diagnosticCheck045},
+      {id: "DASH-046", category: "System", title: "Living sandbox 與模擬收據邊界", description: "只讀 sandbox projection 與既有模擬 receipt；不執行情境、批准或傳送。", run: diagnosticCheck046},
+      {id: "DASH-047", category: "System", title: "Intelligence 內嵌頁面與工作紀錄", description: "確認 iframe、telemetry GET、store 與 candidate-only 工作資料；不執行模型。", run: diagnosticCheck047},
+      {id: "DASH-048", category: "Assistant / System / Safety", title: "Emergency packet、Field 與離線就緒狀態", description: "讀取 mission-day packet 與 field group，檢查離線 API 能力；不寫入離線資料或執行安全決策。", run: diagnosticCheck048},
     ]);
     const NAVIGATION_DIAGNOSTIC_CASE_IDS = Object.freeze([
       "DASH-025", "DASH-038", "DASH-039", "DASH-040", "DASH-041", "DASH-042", "DASH-043",
@@ -12169,6 +12326,7 @@
       "geology",
       "topo-5k",
       "forest",
+      "historical-map",
       "osm",
       "terrain",
       "corridors",
@@ -12740,7 +12898,7 @@
         text: "尚未檢查完成軌跡目錄。",
       },
       completedTripActivationBusy: false,
-      pretripDataProjectId: PRETRIP_DATA_PROJECT_ID,
+      pretripDataProjectId: null,
       briefingFrameVersion: "",
       briefingArtifactStatus: {
         status: "checking",
@@ -12841,6 +12999,7 @@
       importTripResult: null,
       layerEnabled: {
         ...Object.fromEntries(SCOUT_LAYER_IDS.map((layerId) => [layerId, layerId !== "osm"])),
+        "historical-map": false,
         ...WEATHER_LAYER_DEFAULTS,
       },
     };
@@ -12861,7 +13020,7 @@
       debug: ["Debug Message", "read-only runtime and projection messages"],
       observer: ["MQTT / Observer Message", "observer stream review without publish controls"],
       settings: ["Settings / Configure", "local alpha route and API settings"],
-      diagnostic: ["Diagnostic", "44 read-only Dashboard checks"],
+      diagnostic: ["Diagnostic", "48 read-only Dashboard checks"],
       "runtime-audit": ["Logs", "以日／月索引檢視統一運行紀錄、API 成敗與 workspace I/O"],
       "surface-intelligence": ["Intelligence", "candidate-only background job telemetry"],
     };
@@ -12904,11 +13063,11 @@
     }
 
     function completedTripRecordingsPath() {
-      return `${COMPLETED_TRIP_RECORDINGS_PATH}?projectId=${encodeURIComponent(state.pretripDataProjectId || projectId())}`;
+      return `${COMPLETED_TRIP_RECORDINGS_PATH}?projectId=${encodeURIComponent(resolvedPretripProjectId())}`;
     }
 
     function completedTripRecordingSelectPath(recordingId) {
-      return `${COMPLETED_TRIP_RECORDINGS_PATH}/${encodeURIComponent(recordingId)}/select?projectId=${encodeURIComponent(state.pretripDataProjectId || projectId())}`;
+      return `${COMPLETED_TRIP_RECORDINGS_PATH}/${encodeURIComponent(recordingId)}/select?projectId=${encodeURIComponent(resolvedPretripProjectId())}`;
     }
 
     function workspaceContextForProject(candidateProjectId = projectId()) {
@@ -13019,10 +13178,14 @@
       return `${path}${delimiter}projectId=${encodeURIComponent(projectId())}`;
     }
 
+    function resolvedPretripProjectId() {
+      // The selected workspace is the authority. A missing resource must never
+      // silently redirect other reads or writes to a historical demo workspace.
+      return projectId();
+    }
+
     function pretripDataProjectIds() {
-      return Array.from(
-        new Set([projectId(), state.pretripDataProjectId || PRETRIP_DATA_PROJECT_ID])
-      ).filter(Boolean);
+      return [resolvedPretripProjectId()];
     }
 
     async function fetchJson(path, options = {}) {
@@ -13168,8 +13331,20 @@
     }
 
     async function refreshEmergencyOfflineIntentCount() {
+      const selectedProject = resolvedPretripProjectId();
+      const sequence = (state.emergencyOfflineRefreshSequence || 0) + 1;
+      state.emergencyOfflineRefreshSequence = sequence;
+      const isCurrent = () => resolvedPretripProjectId() === selectedProject
+        && state.emergencyOfflineRefreshSequence === sequence;
+      if (state.emergencyOfflineOverlayProjectId !== selectedProject) {
+        state.emergencyOfflineIntentCount = 0;
+        state.emergencyOfflineFieldOverlay = {};
+        state.emergencyOfflineOverlayProjectId = selectedProject;
+      }
       try {
-        const records = await listEmergencyOfflineRecords();
+        const storedRecords = await listEmergencyOfflineRecords();
+        if (!isCurrent()) return;
+        const records = asArray(storedRecords).filter(record => record.project_id === selectedProject);
         state.emergencyOfflineIntentCount = records.length;
         const priorOverlays = state.emergencyOfflineFieldOverlay;
         state.emergencyOfflineFieldOverlay = records
@@ -13213,12 +13388,14 @@
             };
           }, {});
       } catch {
+        if (!isCurrent()) return;
         state.emergencyOfflineIntentCount = 0;
         state.emergencyOfflineFieldOverlay = {};
       }
     }
 
     async function storeEncryptedEmergencyIntent(intent, metadata = {}) {
+      const selectedProject = resolvedPretripProjectId();
       const database = await openEmergencyOfflineDb();
       try {
         const key = await emergencyOfflineEncryptionKey(database);
@@ -13232,7 +13409,6 @@
         const transaction = database.transaction("offline_intents", "readwrite");
         transaction.objectStore("offline_intents").add({
           intent_id: intent.intent_id,
-          project_id: state.pretripDataProjectId || projectId(),
           mission_day_instance_id: intent.mission_day_instance_id,
           iv: Array.from(iv),
           ciphertext,
@@ -13240,6 +13416,7 @@
           pending_sync: true,
           encrypted: true,
           ...metadata,
+          project_id: selectedProject,
         });
         await emergencyOfflineTransaction(transaction);
       } finally {
@@ -13273,6 +13450,7 @@
     }
 
     async function saveEmergencyOfflineFieldCompletion(group, pending) {
+      const selectedProject = resolvedPretripProjectId();
       const usesBivy = group.day_end?.state === "emergency_bivy_selected";
       const intentId = `offline.field.${String(group.group_id).replace(/[^A-Za-z0-9._:-]/g, "-")}.${Date.now()}`;
       const intent = {
@@ -13304,6 +13482,7 @@
         group_id: group.group_id,
         mission_day_instance_id: group.mission_day_instance_id,
       });
+      if (resolvedPretripProjectId() !== selectedProject) return intent;
       const existing = state.emergencyOfflineFieldOverlay[group.group_id] || {
         day_end_completion: null,
         conflict_rows: {},
@@ -13324,6 +13503,7 @@
     }
 
     async function saveEmergencyOfflineFieldConflict(group, pending, conflictCategory) {
+      const selectedProject = resolvedPretripProjectId();
       const row = asArray(group.departure_checklist?.rows)
         .find(item => item.row_id === pending.rowId);
       if (!row?.evidence_ref || !row?.evidence_sha256) {
@@ -13361,6 +13541,7 @@
         row_id: row.row_id,
         category: conflictCategory,
       });
+      if (resolvedPretripProjectId() !== selectedProject) return intent;
       const existing = state.emergencyOfflineFieldOverlay[group.group_id] || {
         day_end_completion: null,
         conflict_rows: {},
@@ -13628,17 +13809,16 @@
     }
 
     async function fetchFirstPretripJson(pathForProjectId, options = {}) {
-      let lastError = null;
-      for (const candidateProjectId of pretripDataProjectIds()) {
-        try {
-          const data = await fetchJson(pathForProjectId(candidateProjectId), options);
-          state.pretripDataProjectId = candidateProjectId;
-          return data;
-        } catch (error) {
-          lastError = error;
-        }
+      const candidateProjectId = resolvedPretripProjectId();
+      const data = await fetchJson(pathForProjectId(candidateProjectId), options);
+      if (resolvedPretripProjectId() !== candidateProjectId) {
+        throw new Error("Workspace changed during the request; reload the selected workspace.");
       }
-      throw lastError || new Error("pretrip project unavailable");
+      if (data?.project_id && data.project_id !== candidateProjectId) {
+        throw new Error("Response project does not match the selected workspace.");
+      }
+      state.pretripDataProjectId = candidateProjectId;
+      return data;
     }
 
     function scheduleBodyIndexWatchRefresh() {
@@ -13811,12 +13991,12 @@
         );
         state.permissionProjection = projection;
         await loadPermissionBaselineMapContext(
-          state.pretripDataProjectId || projectId(),
+          resolvedPretripProjectId(),
         );
         if (projection?.daily_review?.mission_day_instance_id) {
           state.permissionReviewSession = await fetchJson(
             permissionDailyReviewPath(
-              state.pretripDataProjectId || projectId(),
+              resolvedPretripProjectId(),
               projection.daily_review.mission_day_instance_id,
             ),
             {timeoutMs: FETCH_TIMEOUT_MS},
@@ -17351,7 +17531,7 @@
           ])}
           ${renderMetricPanel("Workspace Health", [
             ["Active project", projectId()],
-            ["Resolved data project", state.pretripDataProjectId || projectId()],
+            ["Resolved data project", resolvedPretripProjectId()],
             ["Checkpoints / Segments", `${rows.checkpoints} / ${rows.segments}`],
             ["Terrain material", rows.terrainTiles],
             ["Evidence refs", rows.evidenceRefs],
@@ -17729,7 +17909,7 @@
                 </div>
                 <div class="import-context-path">
                   <span>Pretrip source</span>
-                  <strong>${escapeHtml(state.pretripDataProjectId || projectId())}</strong>
+                  <strong>${escapeHtml(resolvedPretripProjectId())}</strong>
                 </div>
                 <div class="import-context-path">
                   <span>Weather provider</span>
@@ -17961,7 +18141,7 @@
         preparedAt: formatDateTime(project.layer_preparation?.prepared_at || project.map_layers?.prepared_at),
         exportedAt: formatDateTime(project.runtime_handoff?.exported_at || project.departure_bundle?.package?.exported_at),
         loadedAt: formatDateTime(project.runtime_handoff?.loaded_at || project.departure_bundle?.package?.loaded_at),
-        source: state.project ? (state.pretripDataProjectId || projectId()) : "loading",
+        source: state.project ? (resolvedPretripProjectId()) : "loading",
       };
     }
 
@@ -18503,7 +18683,7 @@
       const online = typeof navigator === "undefined" ? true : navigator.onLine !== false;
       const packetCurrent = packetAvailable
         && packet.eligibility === "eligible_for_human_review"
-        && ["fresh", "refresh_due"].includes(packet.freshness_state)
+        && packet.freshness_state === "fresh"
         && !alreadyReviewed;
       const commonBlocker = !packetAvailable
         ? "No exact night-review packet exists for this mission day. Field operations remain available."
@@ -18511,7 +18691,7 @@
         ? "This exact packet already has an append-only decision."
         : packet.eligibility !== "eligible_for_human_review"
           ? "The conjunctive eligibility gate is not satisfied."
-          : !["fresh", "refresh_due"].includes(packet.freshness_state)
+          : packet.freshness_state !== "fresh"
             ? `Packet is ${packet.freshness_state || "not fresh"}.`
             : "";
       const decisionRows = [
@@ -18527,7 +18707,9 @@
         : selectedGroup ? [selectedGroup] : [];
       const selectedChecklist = selectedGroup?.departure_checklist || {};
       const selectedDwell = selectedGroup?.arrival_dwell || {};
-      const selectedOfflineField = state.emergencyOfflineFieldOverlay[selectedGroup?.group_id || ""] || null;
+      const offlineScopeMatches = state.emergencyOfflineOverlayProjectId === resolvedPretripProjectId();
+      const scopedOfflineIntentCount = offlineScopeMatches ? Number(state.emergencyOfflineIntentCount || 0) : 0;
+      const selectedOfflineField = offlineScopeMatches ? state.emergencyOfflineFieldOverlay[selectedGroup?.group_id || ""] || null : null;
       const selectedOfflineDayEnd = selectedOfflineField?.day_end_completion || null;
       const selectedOfflineConflictRows = selectedOfflineField?.conflict_rows || {};
       const hasOfflineFieldConflict = Object.keys(selectedOfflineConflictRows).length > 0;
@@ -18586,7 +18768,7 @@
             `).join("")}
           </div>
 
-          ${!online ? `<div class="emergency-boundary-banner" role="status" data-emergency-offline-banner="true">Offline · cached packet · ${Number(state.emergencyOfflineIntentCount || 0)} encrypted pending intent · approval disabled · no request or server receipt until reconnect revalidation</div>` : state.emergencyOfflineIntentCount ? `<div class="emergency-boundary-banner" role="status" data-emergency-offline-banner="true">${Number(state.emergencyOfflineIntentCount)} encrypted offline intent pending · ${escapeHtml(state.emergencyOfflineSyncStatus || "waiting for current-truth sync")}</div>` : ""}
+          ${!online ? `<div class="emergency-boundary-banner" role="status" data-emergency-offline-banner="true">Offline · cached packet · ${scopedOfflineIntentCount} encrypted pending intent · approval disabled · no request or server receipt until reconnect revalidation</div>` : scopedOfflineIntentCount ? `<div class="emergency-boundary-banner" role="status" data-emergency-offline-banner="true">${scopedOfflineIntentCount} encrypted offline intent pending · ${escapeHtml(state.emergencyOfflineSyncStatus || "waiting for current-truth sync")}</div>` : ""}
 
           <div class="emergency-review-grid">
             <div class="permission-primary-stack">
@@ -18769,7 +18951,7 @@
               <h3>Runtime Details</h3>
               <p class="debug-visual-intro">Switch grouped debug views without leaving the dashboard.</p>
             </div>
-            <span class="chip info">${escapeHtml(state.pretripDataProjectId || projectId())}</span>
+            <span class="chip info">${escapeHtml(resolvedPretripProjectId())}</span>
           </div>
           <div class="debug-tab-strip" role="tablist" aria-label="Debug runtime detail categories">
             ${matrix.map((record) => `
@@ -18926,7 +19108,7 @@
     }
 
     function renderDebugApiCompactTable(matrix) {
-      const project = encodeURIComponent(state.pretripDataProjectId || projectId());
+      const project = encodeURIComponent(resolvedPretripProjectId());
       const rows = [
         ["Runtime events", "/debug/events?limit=200", state.runtimeDebugEventPayload, state.runtimeDebugEvents.length],
         ["Runtime state", "/debug/state", state.debugRuntimeState, state.debugRuntimeState?.event_count || 0],
@@ -19284,7 +19466,7 @@
     }
 
     function renderDebugApiDetail(active) {
-      const project = encodeURIComponent(state.pretripDataProjectId || projectId());
+      const project = encodeURIComponent(resolvedPretripProjectId());
       const endpoints = [
         ["Runtime events", "/debug/events?limit=200", state.runtimeDebugEventPayload, state.runtimeDebugEvents.length],
         ["Runtime state", "/debug/state", state.debugRuntimeState, state.debugRuntimeState?.event_count || 0],
@@ -19651,7 +19833,7 @@
 
     function diagnosticResult(caseId) {
       const result = state.diagnosticResults?.[caseId];
-      const changed = result && (NAVIGATION_DIAGNOSTIC_CASE_IDS.includes(caseId) || caseId === "DASH-044")
+      const changed = result
         && (result.scopeKey || result.status !== "idle")
         && result.scopeKey !== diagnosticCaseScopeKey(caseId);
       return result && !changed ? result : {
@@ -19664,7 +19846,7 @@
 
     function diagnosticCaseScopeKey(caseId) {
       if (caseId === "DASH-044") return `${apiBase()}|${projectId()}|map-layer-order-v1`;
-      return NAVIGATION_DIAGNOSTIC_CASE_IDS.includes(caseId) ? diagnosticNavigationScopeKey() : null;
+      return NAVIGATION_DIAGNOSTIC_CASE_IDS.includes(caseId) ? diagnosticNavigationScopeKey() : `${apiBase()}|${resolvedPretripProjectId()}|diagnostic-v2`;
     }
 
     function diagnosticSummary(caseIds = DASHBOARD_DIAGNOSTIC_CASES.map(item => item.id)) {
@@ -19680,7 +19862,7 @@
     }
 
     function diagnosticExecutionBusy() {
-      return state.diagnosticBatchRunning || state.navigationDiagnosticRunning
+      return state.diagnosticAdvancedBusy || state.diagnosticBatchRunning || state.navigationDiagnosticRunning
         || Object.values(state.diagnosticResults || {}).some(result => result.status === "running");
     }
 
@@ -19713,6 +19895,7 @@
               <span data-diagnostic-status-label>${escapeHtml(diagnosticStatusLabel(result.status))}</span>
             </div>
             <p class="diagnostic-result-detail" data-diagnostic-result-detail>${escapeHtml(result.detail || diagnosticStatusLabel(result.status))}${escapeHtml(duration)}${escapeHtml(checkedAt)}</p>
+            ${renderDiagnosticEvidenceStatus(result)}
             ${item.id === "DASH-044" ? renderDiagnosticMapOrderResults(result.mapLayerOrder) : ""}
           </div>
           <button
@@ -19725,6 +19908,178 @@
       `;
     }
 
+    async function diagnosticAdvancedAssistantReplay() {
+      const production = [submitAgentQuestion, formatAgentEvalAnswer, displayAgentAnswer, agentResponseMeta,
+        agentGroundingGuard, agentAiHatGenerationMode, agentAiHatSkillId, agentAiHatTypedDecision,
+        agentAiHatActionToken, agentAiHatTraceValue, agentLimitations, agentDeterministicFallbackOnly,
+        agentAnswerLooksLikeReferenceCopy, agentToolUsing, agentMissingTools, agentMissingEvidence,
+        agentLooksLikeToolSource, collectMissingEvidence, formatMissingEvidenceItem, dedupe];
+      const replay = Function(`${production.map(fn => fn.toString()).join("\n")}
+        return async function() {
+          const check = (ok, message) => { if (!ok) throw Error(message); };
+          const state = {agentBusy:false, agentMessages:[], agentResponses:[], agentStatus:{ok:true}};
+          const input = {value:'  fixture question  ', focus(){}};
+          const document = {getElementById(){return input;}};
+          const window = {};
+          const projectId = () => 'diagnostic-selected-project';
+          const ASSISTANT_QUERY_PATH = '/fixture/assistant/query';
+          const ASSISTANT_QUERY_TIMEOUT_MS = 1000;
+          const renderAgentStatus = () => {};
+          const renderAgentTranscript = () => {};
+          const refreshAgentStatus = () => {throw Error('unexpected status refresh');};
+          const fixture = {answer:'Fixture answer [workspace://fixture/source.json]',
+            sources:[{source_id:'scout.ai.fixture', selected:true, artifact_ref:'workspace://fixture/source.json'}],
+            limitations:[], observability:{model_profile_used:'fixture', latency_ms:1}};
+          let calls = [], resolve, reject;
+          const postJson = (path, payload) => {calls.push({path,payload}); return new Promise((yes,no)=>{resolve=yes;reject=no;});};
+          // Rebind actual handler and formatter declarations to this isolated lexical environment.
+          const handler = Function('state','document','window','projectId','postJson',
+            'ASSISTANT_QUERY_PATH','ASSISTANT_QUERY_TIMEOUT_MS','renderAgentStatus','renderAgentTranscript','refreshAgentStatus',
+            'formatAgentEvalAnswer','agentResponseMeta', 'return (' + submitAgentQuestion.toString() + ');')(
+            state,document,window,projectId,postJson,ASSISTANT_QUERY_PATH,ASSISTANT_QUERY_TIMEOUT_MS,
+            renderAgentStatus,renderAgentTranscript,refreshAgentStatus,formatAgentEvalAnswer,agentResponseMeta);
+          const pending = handler();
+          check(state.agentBusy && state.agentMessages.some(m=>m.pending),'Assistant pending state missing');
+          input.value='duplicate fixture';
+          const duplicate=handler();
+          check(calls.length===1,'Assistant duplicate busy request escaped');
+          await duplicate;
+          check(calls[0].payload.project_id===projectId() && calls[0].payload.question==='fixture question' && calls[0].payload.runtime_preference==='cloud','Assistant selected project/question payload changed');
+          resolve(fixture); await pending;
+          check(!state.agentBusy && !state.agentMessages.some(m=>m.pending),'Assistant success cleanup failed');
+          check(state.agentResponses[0]?.response===fixture && window.scoutDashboardAgentResponses===state.agentResponses,'Assistant raw evidence response not preserved');
+          const answer=state.agentMessages.find(m=>m.role==='assistant')?.text || '';
+          check(answer.includes('workspace://fixture/source.json') && answer.includes('scout.ai.fixture'),'Assistant tool/reference text was lost');
+          input.value='failure fixture'; const failed=handler(); reject(Error('fixture unavailable')); await failed;
+          check(!state.agentBusy && !state.agentMessages.some(m=>m.pending) && state.agentComposerStatus.tone==='bad' && state.agentStatus.ok===false,'Assistant error cleanup failed');
+          check(state.agentMessages.some(m=>m.text.includes('fixture unavailable')),'Assistant failure not visible');
+          return true;
+        };`)();
+      await replay();
+      return {status:"warning", detail:"Assistant 真實送出 handler／格式器的隔離重播通過：專案與問題 payload、busy 防重、來源引用保存、成功／失敗清理。未呼叫模型或網路。",
+        checks:[{id:"assistant-handler",status:"passed",detail:"Synthetic response and failure replay; no actual tool retrieval or model call."}],
+        limitations:["現行介面沒有取消按鈕；取消流程未實作，未判定通過。", "來源字串保存不等於驗證模型引用正確性或來源實際存在。"]};
+    }
+
+    async function diagnosticAdvancedLivingReplay() {
+      const run = Function('source', `return async function() {
+        const check=(ok,message)=>{if(!ok)throw Error(message);};
+        const state={livingActionBusy:false,livingProjection:null};
+        const loadedDataScopes=new Set();
+        const projectId=()=> 'diagnostic-selected-project';
+        const DASHBOARD_LIVING_PATH='/fixture/living';
+        const render=()=>{}; const scheduleLivingRefresh=()=>{};
+        const fetchJson=()=>{throw Error('unexpected GET');};
+        const calls=[];
+        let mode='success';
+        const base={status:'simulated', revision:1, scenario:{scenario_id:'sandbox-ridge-distress-v0',run_id:'fixture-run'},
+          alert_packet:{packet_id:'fixture-packet',sha256:'a'.repeat(64)},
+          boundary:{runtime_safety_truth:false,real_outbound_send_performed:false}};
+        const postJson=async(path,payload)=>{
+          calls.push({path,payload});
+          if(mode==='failure')throw Error('fixture failure');
+          if(path.endsWith('/scenarios/run'))return structuredClone(base);
+          if(path.endsWith('/approvals'))return {...structuredClone(base),revision:2,transport_attempt:{attempt_id:'fixture-attempt',sha256:'b'.repeat(64)}};
+          if(path.endsWith('/transport/simulations'))return {...state.livingProjection,revision:3,receipt:{receipt_id:'fixture-receipt',source_attempt_id:'fixture-attempt',simulated_receipt_correlated:true,sent:false}};
+          throw Error('unexpected POST path');
+        };
+        const handler=Function('state','loadedDataScopes','projectId','DASHBOARD_LIVING_PATH','render','scheduleLivingRefresh','fetchJson','postJson','return ('+source+');')(
+          state,loadedDataScopes,projectId,DASHBOARD_LIVING_PATH,render,scheduleLivingRefresh,fetchJson,postJson);
+        await handler('run');
+        check(calls[0]?.payload.project_id===projectId() && calls[0]?.payload.source_mode==='synthetic_replay' && calls[0]?.payload.confirm_sandbox_run===true,'Living run sandbox/project payload changed');
+        await handler('approve');
+        check(calls[1]?.payload.packet_id===base.alert_packet.packet_id && calls[1]?.payload.packet_sha256===base.alert_packet.sha256 && calls[1]?.payload.confirm_sandbox_action===true,'Living approval packet/hash binding changed');
+        await handler('simulation');
+        check(calls[2]?.payload.packet_sha256===base.alert_packet.sha256 && calls[2]?.payload.attempt_sha256==='b'.repeat(64) && calls[2]?.payload.attempt_id==='fixture-attempt' && calls[2]?.payload.confirm_simulated_transport===true,'Living simulation attempt/packet binding changed');
+        check(state.livingProjection.receipt?.source_attempt_id==='fixture-attempt' && state.livingProjection.receipt?.sent===false && loadedDataScopes.has('living'),'Living simulated receipt projection lost');
+        state.livingActionBusy=true; await handler('run'); check(calls.length===3,'Living busy guard failed'); state.livingActionBusy=false;
+        state.livingProjection={}; await handler('approve'); await handler('simulation');
+        check(calls.length===3 && state.livingActionStatus.includes('No authorized sandbox attempt'),'Living missing packet/attempt posted anyway');
+        mode='failure'; await handler('run');
+        check(!state.livingActionBusy && state.livingActionStatus.includes('fixture failure'),'Living error cleanup failed');
+        return true;
+      };`)(performLivingAction.toString());
+      await run();
+      return {status:"passed",detail:"Living 真實 handler 完成隔離 run→approve→simulation 重播，驗證專案、packet／attempt hash、模擬 receipt、busy 與錯誤清理；所有 POST 都由記憶體 fixture 接收。",
+        checks:[{id:"living-synthetic-handler",status:"passed",detail:"Synthetic payload and receipt projection replay."}],
+        limitations:["僅驗證前端流程及 payload；未驗證後端儲存、授權 reducer、真實傳輸或外部送達。"]};
+    }
+
+    async function diagnosticAdvancedIntelligenceReplay() {
+      return {status:"warning",detail:"Intelligence 現行 Dashboard 是唯讀 telemetry iframe；沒有工作提交／取消控制可供端到端操作重播。DASH-047 保留頁面、GET schema 與 candidate 邊界檢查。",
+        checks:[{id:"intelligence-job-execution",status:"warning",detail:"Unsupported by the current Dashboard control surface."}],
+        limitations:["未執行模型、未排程工作、未將 telemetry 存在視為工作執行通過。"]};
+    }
+
+    const DIAGNOSTIC_ADVANCED_CASES = [
+      {id: "offline", title: "離線加密儲存與專案隔離"},
+      {id: "settings", title: "Settings 保存與重新讀取"},
+      {id: "assistant", title: "Assistant 問答與錯誤流程"},
+      {id: "living", title: "Living 模擬收據流程"},
+      {id: "intelligence", title: "Intelligence 執行覆蓋"},
+    ];
+
+    function renderDiagnosticAdvanced() {
+      return `<section class="diagnostic-category" data-diagnostic-advanced>
+        <h3>進階隔離重播</h3>
+        <p>以下五項需單獨點選，不包含在 Diag all 或 48 題統計。使用目前正式函式與隔離測試資料；不呼叫模型、不傳送訊息、不變更目前專案或使用者資料。離線測試會寫入專用測試資料庫，重開頁面再執行可驗證持久化；後端拒用與送達需另外驗證。</p>
+        <div class="diagnostic-case-list">${DIAGNOSTIC_ADVANCED_CASES.map(item => {
+          const stored = state.diagnosticAdvancedResults?.[item.id];
+          const result = stored?.scopeKey === diagnosticCaseScopeKey("DASH-003") ? stored : null;
+          return `<article class="diagnostic-case" data-diagnostic-advanced-case="${item.id}">
+            <h4>${escapeHtml(item.title)}</h4>
+            <p role="status">${escapeHtml(result ? diagnosticStatusLabel(result.status) : "尚未執行")}</p>
+            <p>${escapeHtml(result?.detail || "等待手動執行隔離重播。")}</p>
+            ${(result?.checks || []).map(check => `<p>${escapeHtml(check.id || check.name || "check")} · ${escapeHtml(check.status || "unknown")} · ${escapeHtml(check.detail || "")}</p>`).join("")}
+            ${(result?.limitations || []).map(detail => `<p>${escapeHtml(detail)}</p>`).join("")}
+            ${(result?.findings || []).map(detail => `<p>${escapeHtml(detail)}</p>`).join("")}
+            <button type="button" data-diagnostic-advanced-run="${item.id}" ${diagnosticExecutionBusy() ? "disabled" : ""}>執行隔離重播</button>
+          </article>`;
+        }).join("")}</div>
+      </section>`;
+    }
+
+    async function runDiagnosticAdvanced(id) {
+      if (diagnosticExecutionBusy() || !DIAGNOSTIC_ADVANCED_CASES.some(item => item.id === id)) return;
+      const scopeKey = diagnosticCaseScopeKey("DASH-003");
+      state.diagnosticAdvancedBusy = true;
+      state.diagnosticAdvancedResults ||= {};
+      state.diagnosticAdvancedResults[id] = {status: "running", detail: "正在執行隔離重播…", scopeKey};
+      const update = () => {
+        const root = document.querySelector('[data-diagnostic-advanced]');
+        if (root) root.outerHTML = renderDiagnosticAdvanced();
+        updateDiagnosticDom();
+        bindDiagnosticControls();
+      };
+      update();
+      try {
+        let result;
+        if (id === "offline") result = await window.ScoutDiagnosticAdvanced.runStorage({sources: {
+          openEmergencyOfflineDb: openEmergencyOfflineDb.toString(),
+          emergencyOfflineRequest: emergencyOfflineRequest.toString(),
+          emergencyOfflineTransaction: emergencyOfflineTransaction.toString(),
+          emergencyOfflineEncryptionKey: emergencyOfflineEncryptionKey.toString(),
+          storeEncryptedEmergencyIntent: storeEncryptedEmergencyIntent.toString(),
+          decryptEmergencyOfflineRecord: decryptEmergencyOfflineRecord.toString(),
+          refreshEmergencyOfflineIntentCount: refreshEmergencyOfflineIntentCount.toString(),
+        }});
+        else if (id === "settings") result = await window.ScoutDiagnosticAdvanced.runSettings({sources: {
+          validateDashboardSettings: validateDashboardSettings.toString(),
+          saveDashboardSettings: saveDashboardSettings.toString(),
+        }});
+        else if (id === "assistant") result = await diagnosticAdvancedAssistantReplay();
+        else if (id === "living") result = await diagnosticAdvancedLivingReplay();
+        else result = await diagnosticAdvancedIntelligenceReplay();
+        diagnosticRequire(["passed", "warning", "failed"].includes(result?.status), "Advanced replay returned an invalid status.");
+        state.diagnosticAdvancedResults[id] = {...result, scopeKey};
+      } catch (error) {
+        state.diagnosticAdvancedResults[id] = {status: "failed", detail: diagnosticSafeDetail(error.message), scopeKey};
+      } finally {
+        state.diagnosticAdvancedBusy = false;
+        update();
+      }
+    }
+
     function renderDiagnosticPage() {
       const summary = diagnosticSummary();
       const categories = ["Navigation", ...new Set(DASHBOARD_DIAGNOSTIC_CASES.map(item => item.category).filter(category => category !== "Navigation"))];
@@ -19733,7 +20088,7 @@
           <section class="diagnostic-command">
             <div>
               <h3>Dashboard Diagnostic</h3>
-              <p><strong>Read-only diagnostics.</strong> These ${DASHBOARD_DIAGNOSTIC_CASES.length} checks use the current UI contract, same-origin GET APIs and existing artifacts. They do not run imports, connected preparation, HealthExport watch, model generation, MQTT publish, Emergency send or hardware actions, and this page does not replace the full acceptance checklist.</p>
+              <p><strong>Read-only diagnostics.</strong> These ${DASHBOARD_DIAGNOSTIC_CASES.length} checks use the current UI contract, same-origin GET APIs and existing artifacts. They do not run imports, connected preparation, HealthExport watch, model generation, MQTT publish, Emergency send or hardware actions, and this page does not replace the full acceptance checklist.</p><p>綠燈只代表本題明列的驗證範圍；介面／契約與資料／依賴分開顯示。「未檢測」不代表資料已就緒，也不代表完整操作流程通過。</p>
             </div>
             <button type="button" data-diagnostic-action="all" ${diagnosticExecutionBusy() ? "disabled" : ""}>${state.diagnosticBatchRunning ? "Diag all running…" : "Diag all"}</button>
           </section>
@@ -19752,6 +20107,7 @@
               </div>
             `).join("")}
           </section>
+          ${renderDiagnosticAdvanced()}
           ${categories.map(category => {
             const items = DASHBOARD_DIAGNOSTIC_CASES.filter(item => item.category === category);
             return `
@@ -19789,8 +20145,22 @@
       if (!condition) throw new Error(message);
     }
 
-    function diagnosticWarning(detail) {
-      return {status: "warning", detail};
+    function diagnosticWarning(detail, dataStatus = "not_ready", structureStatus = "passed") {
+      return {status: "warning", detail, structureStatus, dataStatus};
+    }
+
+    function diagnosticAvailability(dataStatus, detail, structureStatus = "passed") {
+      return {status: ["ready", "available"].includes(dataStatus) ? "passed" : "warning", detail, structureStatus, dataStatus};
+    }
+
+    function diagnosticUnavailable(dataStatus, detail, structureStatus = "not_checked") {
+      throw Object.assign(new Error(detail), {diagnosticStatus: "warning", dataStatus, structureStatus});
+    }
+
+    function renderDiagnosticEvidenceStatus(result) {
+      const structure = {passed: "通過", failed: "失敗", not_checked: "未完整驗證"};
+      const data = {ready: "可用", available: "可用", not_checked: "未檢測", not_ready: "未就緒", stale_data: "已過期", not_prepared: "未準備", unavailable: "不可用", blocked: "缺少前置條件", incomplete: "資料不完整", degraded: "部分可用", empty: "無資料"};
+      return `<p class="boundary-note" data-diagnostic-evidence-status>介面／契約：${escapeHtml(structure[result.structureStatus] || "未完整驗證")} · 資料／依賴：${escapeHtml(data[result.dataStatus] || result.dataStatus || "未檢測")}</p>`;
     }
 
     function diagnosticMarkupRoot(markup) {
@@ -19902,7 +20272,7 @@
     }
 
     function diagnosticPermissionProjection(lens = "baseline") {
-      const candidateProjectId = state.pretripDataProjectId || projectId();
+      const candidateProjectId = resolvedPretripProjectId();
       return diagnosticJson(permissionProjectionPath(candidateProjectId, lens), 120000);
     }
 
@@ -20156,6 +20526,78 @@
       return `${expectedRoutes.length} routes rendered · truth contracts complete · Diagnostic follows Settings`;
     }
 
+    async function diagnosticProjectIsolationReplay() {
+      // Rebind the current production functions to an isolated environment. Only
+      // trusted local function source is compiled; no server/model text is code.
+      // The replay cannot select a live workspace, write storage, or issue I/O.
+      const build = new Function("environment", `
+        const {window, localStorage, state, fetchJson} = environment;
+        const PROJECT_ID = "diagnostic_fallback";
+        const DIAGNOSTIC_MAP_PROBE = false;
+        const NAVIGATION_DIAGNOSTIC_CASE_IDS = [];
+        ${projectId.toString()}
+        ${apiBase.toString()}
+        ${resolvedPretripProjectId.toString()}
+        ${pretripDataProjectIds.toString()}
+        ${fetchFirstPretripJson.toString()}
+        ${diagnosticCaseScopeKey.toString()}
+        ${diagnosticResult.toString()}
+        return {projectId, pretripDataProjectIds, fetchFirstPretripJson,
+          diagnosticCaseScopeKey, diagnosticResult};
+      `);
+      const pending = [];
+      const storage = new Map([
+        ["scout.dashboardProjectId", "diagnostic_old_demo"],
+        ["scout.dashboardApiBase", "https://diagnostic.invalid"],
+      ]);
+      const environment = {
+        window: {location: {search: "?projectId=diagnostic_A"}},
+        localStorage: {getItem: key => storage.get(key) || null},
+        state: {pretripDataProjectId: "diagnostic_old_demo", diagnosticResults: {}},
+        fetchJson: path => new Promise((resolve, reject) => pending.push({path, resolve, reject})),
+      };
+      const replay = build(environment);
+      const request = () => replay.fetchFirstPretripJson(id => `/projects/${id}`)
+        .then(value => ({value}), error => ({error}));
+      diagnosticRequire(replay.projectId() === "diagnostic_A", "Isolation replay: URL project lost authority.");
+      diagnosticRequire(JSON.stringify(replay.pretripDataProjectIds()) === '["diagnostic_A"]', "Isolation replay: alias fallback was enabled.");
+      const a = request();
+      diagnosticRequire(pending.length === 1 && pending[0].path === "/projects/diagnostic_A", "Isolation replay: A request used the wrong project.");
+      environment.state.diagnosticResults["DASH-031"] = {
+        status: "passed", scopeKey: replay.diagnosticCaseScopeKey("DASH-031"),
+      };
+      diagnosticRequire(replay.diagnosticResult("DASH-031").status === "passed", "Isolation replay: unchanged scope lost its result.");
+      environment.window.location.search = "?projectId=diagnostic_B";
+      diagnosticRequire(replay.diagnosticResult("DASH-031").status === "idle", "Isolation replay: A result remained valid after switching to B.");
+      const b = request();
+      diagnosticRequire(pending.length === 2 && pending[1].path === "/projects/diagnostic_B", "Isolation replay: B request used the wrong project.");
+      pending[1].resolve({project_id: "diagnostic_B", marker: "B"});
+      const bResult = await b;
+      diagnosticRequire(!bResult.error && bResult.value?.marker === "B", "Isolation replay: current B response was rejected.");
+      diagnosticRequire(environment.state.pretripDataProjectId === "diagnostic_B", "Isolation replay: B data binding was not adopted.");
+      pending[0].resolve({project_id: "diagnostic_A", marker: "late-A"});
+      diagnosticRequire(Boolean((await a).error), "Isolation replay: late A response was accepted after B completed.");
+      diagnosticRequire(environment.state.pretripDataProjectId === "diagnostic_B", "Isolation replay: late A overwrote B data binding.");
+      const wrong = request();
+      pending[2].resolve({project_id: "diagnostic_old_demo"});
+      diagnosticRequire(Boolean((await wrong).error), "Isolation replay: foreign-project response was accepted.");
+      diagnosticRequire(environment.state.pretripDataProjectId === "diagnostic_B", "Isolation replay: foreign response overwrote B data binding.");
+      const missing = request();
+      pending[3].reject(new Error("diagnostic fixture HTTP 404"));
+      // Settle any erroneous fallback too, so a regression fails instead of hanging.
+      await Promise.resolve();
+      await Promise.resolve();
+      pending.slice(4).forEach(item => item.reject(new Error("unexpected fallback")));
+      diagnosticRequire(pending.length === 4, "Isolation replay: missing B resource retried an alias workspace.");
+      diagnosticRequire(Boolean((await missing).error), "Isolation replay: missing resource was silently accepted.");
+      environment.state.diagnosticResults["DASH-031"] = {
+        status: "passed", scopeKey: replay.diagnosticCaseScopeKey("DASH-031"),
+      };
+      storage.set("scout.dashboardApiBase", "https://other-diagnostic.invalid");
+      diagnosticRequire(replay.diagnosticResult("DASH-031").status === "idle", "Isolation replay: result survived an API origin change.");
+      return "隔離重播：A→B 請求競態、錯誤 project 拒絕、404 無別名退回、專案／API 切換結果失效；非實際 UI 切換";
+    }
+
     async function diagnosticCheck003() {
       const [catalog, context] = await Promise.all([
         diagnosticWorkspaceCatalog(),
@@ -20183,12 +20625,13 @@
         diagnosticRequire(alternateContext.project_id === alternate.project_id, "Alternate workspace context resolved the wrong Project ID.");
         diagnosticRequire(alternateContext.resolved_project_root !== context.resolved_project_root, "Two workspace IDs resolved to the same project root.");
       }
-      return `Workspace isolated · invalid ID rejected (${invalid.status}) · ${alternate ? "alternate context verified" : "single catalog entry"}`;
+      const replay = await diagnosticProjectIsolationReplay();
+      return `Workspace isolated · invalid ID rejected (${invalid.status}) · ${alternate ? "alternate context verified" : "single catalog entry"} · ${replay}`;
     }
 
     async function diagnosticCheck004() {
-      diagnosticRequire(SCOUT_LAYER_IDS.length === 32, `Expected 32 canonical layers; found ${SCOUT_LAYER_IDS.length}.`);
-      diagnosticRequire(new Set(SCOUT_LAYER_IDS).size === 32, "Canonical layer IDs contain duplicates.");
+      diagnosticRequire(SCOUT_LAYER_IDS.length === 33, `Expected 33 canonical layers; found ${SCOUT_LAYER_IDS.length}.`);
+      diagnosticRequire(new Set(SCOUT_LAYER_IDS).size === 33, "Canonical layer IDs contain duplicates.");
       diagnosticRequire(SCOUT_LAYER_IDS.includes("completed-track"), "completed-track is missing from the canonical contract.");
       diagnosticRequire(!WEATHER_EMBEDDED_MAP_LAYER_IDS.includes("completed-track"), "completed-track leaked into the Weather map.");
       diagnosticRequire(WEATHER_LAYER_IDS.length === 5, "Weather must own exactly five weather/hydrology controls.");
@@ -20199,7 +20642,7 @@
       const layerControls = diagnosticLayerControlIds(pretrip.data);
       const uniqueLayerControls = [...new Set(layerControls)];
       const expectedPretripLayers = SCOUT_LAYER_IDS.filter(layerId => layerId !== "completed-track");
-      diagnosticRequire(layerControls.length === 31, `Expected 31 pre-trip layer controls; found ${layerControls.length}.`);
+      diagnosticRequire(layerControls.length === expectedPretripLayers.length, `Expected ${expectedPretripLayers.length} pre-trip layer controls; found ${layerControls.length}.`);
       diagnosticRequire(uniqueLayerControls.length === layerControls.length, "Pre-trip layer controls contain duplicate IDs.");
       diagnosticRequire(
         expectedPretripLayers.every(layerId => uniqueLayerControls.includes(layerId)),
@@ -20210,7 +20653,7 @@
       const zOrder = ["imagery", "terrain", "route", "risk-ribbon", "checkpoints"]
         .map(layerId => SCOUT_LAYER_IDS.indexOf(layerId));
       diagnosticRequire(zOrder.every((value, index) => index === 0 || value > zOrder[index - 1]), "Canonical layer z-order is invalid.");
-      return `32 canonical IDs · 31 pre-trip controls · completed-track boundary retained`;
+      return `33 canonical IDs · 32 pre-trip controls · historical-map pre-trip only · completed-track boundary retained`;
     }
 
     async function diagnosticCheck005() {
@@ -20303,7 +20746,7 @@
       }
       const boundary = weather.boundary || weather.privacy || {};
       diagnosticRequire(boundary.runtime_safety_truth !== true, "Weather response claims runtime safety truth.");
-      return `Weather API=${weather.status || "response ready"} · five layers and eight CWA controls rendered`;
+      return diagnosticAvailability(weather.status || "unavailable", `Weather API=${weather.status || "unavailable"} · five layers and eight CWA controls rendered; live freshness is separate`);
     }
 
     async function diagnosticCheck009() {
@@ -20361,7 +20804,7 @@
       diagnosticRequire(validateDashboardSettings("ftp://invalid.example", projectId()).ok === false, "Settings accepted an invalid API protocol.");
       diagnosticRequire(validateDashboardSettings("https://user:secret@example.test", projectId()).ok === false, "Settings accepted credentials in the API base.");
       diagnosticRequire(validateDashboardSettings("https://example.test?token=secret", projectId()).ok === false, "Settings accepted query values in the API base.");
-      return `${debugEvents.events.length} debug events · Observer/Emergency/Settings boundaries verified`;
+      return diagnosticWarning(`${debugEvents.events.length} debug events · Observer/Emergency/Settings boundaries verified · Observer 目前只有靜態說明，沒有即時 feed／斷線／過期狀態控制，尚不能驗證更新流程。`, "not_checked");
     }
 
     async function diagnosticCheck011() {
@@ -20504,7 +20947,7 @@
       } catch (error) {
         if (String(error?.message || error).includes("HTTP 404")) {
           return diagnosticWarning(
-            "Route Context is recorded as deferred / not implemented; its canonical briefing is outside this QA round.",
+            "Route Context briefing artifact is unavailable (HTTP 404); this does not mean the feature is not implemented.",
           );
         }
         throw error;
@@ -20516,7 +20959,7 @@
       const records = asArray(variants.variants);
       if (records.length === 0 && Number(variants.variant_count || 0) === 0) {
         return diagnosticWarning(
-          "Route Context variants are recorded as deferred / not implemented; zero variants are expected in this QA round.",
+          "Route Context has no existing variants in this workspace; no generation was run.",
         );
       }
       diagnosticRequire(records.length === 5 || Number(variants.variant_count) === 5, `Expected five variants; found ${records.length || variants.variant_count || 0}.`);
@@ -20526,29 +20969,105 @@
       return `Five existing variants · reference gate=${gate}`;
     }
 
+    function diagnosticPaceInteractions(project, force) {
+      return diagnosticRenderWithState({project, adminProjection: project, paceSelectedCheckpointId: ""}, () => {
+        const root = document.createElement("div");
+        const repaint = () => {
+          root.innerHTML = renderPaceFitPage(force);
+          bindPaceFitControls(root, {render: repaint, schedule: callback => callback()});
+        };
+        repaint();
+        const points = paceFitCheckpointContext().checkpoints;
+        if (!points.length) return {complete: false, detail: "No workspace CP available for selection replay"};
+        let selections = 0;
+        for (const point of [points[points.length - 1], points[0]]) {
+          // Clear only the detached replay selection so a one-CP workspace still exercises the handler.
+          state.paceSelectedCheckpointId = "";
+          repaint();
+          const timeline = root.querySelector(`.pace-cp-node[data-pace-checkpoint-select="${cssEscape(point.id)}"]`);
+          const marker = root.querySelector(`[data-pace-checkpoint-id="${cssEscape(point.id)}"]`);
+          if (!timeline || !marker) return {complete: false, detail: `${selections} selections verified; CP geometry/timeline unavailable`};
+          (selections ? marker : timeline).dispatchEvent(new MouseEvent("click", {bubbles: true}));
+          const context = paceFitCheckpointContext();
+          diagnosticRequire(state.paceSelectedCheckpointId === point.id, "Pace selection handler did not update the selected CP.");
+          diagnosticRequire(root.querySelector(`.pace-cp-node[data-pace-checkpoint-select="${cssEscape(point.id)}"]`)?.getAttribute("aria-pressed") === "true", "Pace timeline selection is stale.");
+          diagnosticRequire(root.querySelector(`[data-pace-checkpoint-id="${cssEscape(point.id)}"]`)?.dataset.paceCheckpointSelected === "true", "Pace map selection is stale.");
+          diagnosticRequire(root.querySelector('.pace-cp-inspector-head strong')?.textContent === context.label, "Pace inspector label does not match selected CP.");
+          selections += 1;
+        }
+        return {complete: true, detail: `${selections} timeline/map click replays synchronized CP, inspector and timeline`};
+      });
+    }
+
+    function diagnosticArchitectureInteractions(project) {
+      const isolated = {project, adminProjection: project};
+      for (const key of Object.keys(state).filter(key => key.startsWith("architecture"))) {
+        isolated[key] = state[key] && typeof state[key] === "object" ? structuredClone(state[key]) : state[key];
+      }
+      return diagnosticRenderWithState(isolated, () => {
+        const root = document.createElement("div");
+        const repaint = () => {
+          root.innerHTML = renderOutdoorPage("outdoor-architecture");
+          bindArchitectureControls(root, {render: repaint, schedule: callback => callback()});
+        };
+        repaint();
+        let modes = 0, lenses = 0;
+        for (const id of ["structure", "demand", "reversibility", "time_window", "evidence"]) {
+          root.querySelector(`button[data-architecture-mode="${id}"]`)?.click();
+          diagnosticRequire(state.architectureMode === id && root.querySelector(`button[data-architecture-mode="${id}"]`)?.getAttribute("aria-selected") === "true", `Architecture mode ${id} did not update.`);
+          modes += 1;
+        }
+        for (const id of ["structure", "terrain_demand", "slow_passage", "risk_passage", "reversibility", "time_window", "evidence_quality"]) {
+          const control = root.querySelector(`button[data-architecture-lens="${id}"]`);
+          if (!control || control.disabled) continue;
+          control.click();
+          diagnosticRequire(state.architectureLens === id && root.querySelector(`button[data-architecture-lens="${id}"]`)?.getAttribute("aria-selected") === "true", `Architecture lens ${id} did not update.`);
+          const layer = root.querySelector('g[data-layer-group="segments"][data-architecture-lens]');
+          if (!layer) return {complete: false, detail: `${modes} modes exercised; Architecture map geometry unavailable`};
+          diagnosticRequire(layer.dataset.architectureLens === id, `Architecture map layer retained stale lens ${id}.`);
+          lenses += 1;
+        }
+        const bins = [...root.querySelectorAll('[data-architecture-selection-surface="fingerprint-bin"]')];
+        if (!bins.length || lenses !== 7) return {complete: false, detail: `${modes} modes / ${lenses} lenses exercised; route bins unavailable`};
+        const binId = bins[bins.length - 1].dataset.architectureBinId;
+        bins[bins.length - 1].dispatchEvent(new MouseEvent("click", {bubbles: true}));
+        diagnosticRequire(state.architectureSelectedBinId === binId, "Architecture selected bin did not update.");
+        diagnosticRequire(root.querySelector('[data-selected-architecture-bin]')?.dataset.selectedArchitectureBin === binId, "Segment Microscope retained a stale bin.");
+        const selectedMap = root.querySelector(`[data-architecture-selection-surface="map-bin"][data-architecture-bin-id="${cssEscape(binId)}"]`);
+        if (!selectedMap) return {complete: false, detail: `${modes} modes / ${lenses} lenses and Microscope exercised; selected bin geometry unavailable`};
+        diagnosticRequire(selectedMap.dataset.architectureSelected === "true", "Architecture map did not highlight selected bin.");
+        root.querySelector('button[data-architecture-mode="time_window"]')?.click();
+        const windowNode = root.querySelector('[data-architecture-selection-surface="fingerprint-window"]');
+        if (!windowNode) return {complete: false, detail: `${modes} modes / ${lenses} lenses, map and Microscope synchronized; historical Time Window evidence unavailable`};
+        const nodeId = windowNode.dataset.architecturePassageNodeId;
+        windowNode.dispatchEvent(new MouseEvent("click", {bubbles: true}));
+        diagnosticRequire(state.architectureSelectedPassageNodeId === nodeId, "Time Window selection did not update.");
+        diagnosticRequire(root.querySelector(`[data-architecture-window-node="${cssEscape(nodeId)}"]`), "Time Window selected evidence is absent from Microscope.");
+        return {complete: true, detail: `${modes} modes / ${lenses} lenses, bin/map/Microscope and Time Window selection synchronized`};
+      });
+    }
+
     async function diagnosticCheck020() {
       const force = SIX_FORCES.find(item => item.route === "outdoor-pace-fit");
       diagnosticRequire(Boolean(force), "Pace Fit route contract is unavailable.");
       const project = await diagnosticProjectProjection();
-      const root = diagnosticMarkupRoot(diagnosticRenderWithState(
-        {project, adminProjection: project},
-        () => renderPaceFitPage(force),
-      ));
-      const markup = root.textContent || "";
-      for (const marker of ["Pace Parameters", "Current CP Status", "Next Segment Risk", "CP Timeline", "Pace Output", "Read-only preview"]) {
-        diagnosticRequire(markup.includes(marker), `Pace Dashboard marker ${marker} is missing.`);
+      const overrides = {project, adminProjection: project};
+      const root = diagnosticMarkupRoot(diagnosticRenderWithState(overrides, () => renderPaceFitPage(force)));
+      const context = diagnosticRenderWithState(overrides, () => paceFitCheckpointContext());
+      for (const selector of ['[data-pace-fit-dashboard="true"]', '[data-dashboard-map-viewport="pace-fit-map"]', '[aria-label="Selected checkpoint inspector"]', '[aria-label="Pace checkpoint timeline"]', '[data-pace-supporting-details]']) {
+        diagnosticRequire(Boolean(root.querySelector(selector)), `Pace CP context is missing ${selector}.`);
       }
-      diagnosticRequire(Boolean(root.querySelector('[data-pace-fit-dashboard="true"]')), "Pace Dashboard shell is missing.");
-      diagnosticRequire(Boolean(root.querySelector('[data-dashboard-map-viewport="pace-fit-map"]')), "Pace synchronized map is missing.");
-      diagnosticRequire(!Array.from(root.querySelectorAll("h3")).some(node => ["Decision", "Confidence", "Next action"].includes(node.textContent.trim())), "Removed low-information Pace blocks returned.");
-      diagnosticRequire(markup.includes("advisory / dry-run") && markup.includes("no safety mutation"), "Pace advisory boundary is missing.");
-      diagnosticRequire(markup.includes("Static planning examples only"), "Pace preview does not disclose that its parameters are static examples.");
-      diagnosticRequire(
-        ROUTE_TRUTH["outdoor-pace-fit"]?.data === "Static pace parameters"
-          && ROUTE_TRUTH["outdoor-pace-fit"]?.provenance === "Synthetic projection",
-        "Pace truth contract does not identify the synthetic preview.",
-      );
-      return "Pace parameters, CP, risk, timeline, output and synchronized map · synthetic preview disclosed";
+      const markup = root.textContent || "";
+      for (const marker of ["CP Timeline", "not live location or safety truth", "terrain risk not evaluated", "fixture / non-runtime"]) {
+        diagnosticRequire(markup.includes(marker), `Pace context boundary ${marker} is missing.`);
+      }
+      const ids = new Set(context.checkpoints.map(point => point.id));
+      const rendered = [...root.querySelectorAll('[data-pace-checkpoint-select]')].map(node => node.dataset.paceCheckpointSelect);
+      if (ids.size) {
+        diagnosticRequire(rendered.some(id => ids.has(id)), "Workspace CP candidates have no matching selection controls.");
+      }
+      const interaction = diagnosticPaceInteractions(project, force);
+      return diagnosticAvailability(interaction.complete ? "available" : "incomplete", `${ids.size} workspace checkpoint candidates · ${interaction.detail} · detached production controls; live map camera/runtime pace not evaluated`);
     }
 
     async function diagnosticCheck021() {
@@ -20613,14 +21132,19 @@
       diagnosticRequire(Boolean(root.querySelector('[data-route-architecture-intelligence="true"]')), "Architecture workbench shell is missing.");
       diagnosticRequire(Boolean(root.querySelector("[data-route-fingerprint]")), "Route Fingerprint is missing.");
       diagnosticRequire(Boolean(root.querySelector('[data-dashboard-map-viewport="architecture-map"]')), "Architecture map is missing.");
-      diagnosticRequire(root.querySelectorAll("[data-architecture-mode]").length === 4, "Architecture must render four reading modes.");
-      diagnosticRequire(root.querySelectorAll("button[data-architecture-lens]").length === 6, "Architecture must render Structure plus five map lenses.");
+      const expectedModes = ["structure", "demand", "reversibility", "time_window", "evidence"];
+      const modeIds = [...root.querySelectorAll("[data-architecture-mode]")].map(node => node.dataset.architectureMode);
+      diagnosticRequire(modeIds.length === expectedModes.length && expectedModes.every(id => modeIds.includes(id)), "Architecture reading modes do not match the five named modes.");
+      const expectedLenses = ["structure", "terrain_demand", "slow_passage", "risk_passage", "reversibility", "time_window", "evidence_quality"];
+      const lensIds = [...root.querySelectorAll("button[data-architecture-lens]")].map(node => node.dataset.architectureLens);
+      diagnosticRequire(lensIds.length === expectedLenses.length && expectedLenses.every(id => lensIds.includes(id)), "Architecture map lenses do not match the seven named lenses.");
       diagnosticRequire(root.querySelectorAll("[data-architecture-mobile-view]").length === 3, "Architecture mobile Spine/Map/Segment controls are incomplete.");
       if (architecture.segment_demand_vectors.length) {
         diagnosticRequire(Boolean(root.querySelector("[data-architecture-bin-id]")), "Architecture demand vectors did not render selectable bins.");
         diagnosticRequire(Boolean(root.querySelector("[data-architecture-mobile-panel='segment']")), "Segment Microscope is missing.");
       }
-      return `Architecture status=${architecture.status || "ready"} · ${architecture.segment_demand_vectors.length} demand vectors · modes/lenses rendered`;
+      const interaction = diagnosticArchitectureInteractions(project);
+      return diagnosticAvailability(interaction.complete ? (architecture.status || "available") : "incomplete", `Architecture status=${architecture.status || "unknown"} · ${interaction.detail} · detached production controls; live map camera not evaluated`);
     }
 
     async function diagnosticCheck025() {
@@ -20660,11 +21184,12 @@
       }
       diagnosticRequire(root.querySelectorAll("button[data-navigation-terrain-lens]").length >= 4, "Navigation terrain lens controls are incomplete.");
       diagnosticRequire(Boolean(root.querySelector("[data-navigation-evidence-workbench], [data-navigation-terrain-intelligence]")), "Navigation evidence workbench is missing.");
-      return mapLibre2d
+      const detail = mapLibre2d
         ? `Navigation status=${navigation.status || "ready"} · ${routeCount} route points · MapLibre 2D primary terrain map rendered`
         : mapLibre3d
           ? `Navigation status=${navigation.status || "ready"} · ${routeCount} route points · MapLibre 3D terrain map rendered`
         : `Navigation status=${navigation.status || "ready"} · ${routeCount} route points · Rudy+TW-only map rendered`;
+      return diagnosticAvailability(routeCount ? (navigation.status || "unavailable") : (navigation.status === "not_prepared" ? "not_prepared" : "empty"), detail);
     }
 
     function diagnosticSourceText(value) {
@@ -20927,7 +21452,7 @@
 
     async function diagnosticCheck031() {
       const projection = await diagnosticPermissionProjection("baseline");
-      const expectedProjectId = state.pretripDataProjectId || projectId();
+      const expectedProjectId = resolvedPretripProjectId();
       diagnosticRequire(
         projection?.artifact_kind === "contextual_permission_dashboard_projection",
         "Contextual Permission returned the wrong artifact kind.",
@@ -20945,7 +21470,7 @@
         `Contextual Permission returned an invalid status: ${projection?.status || "missing"}.`,
       );
       diagnosticRequireNoAuthority(projection);
-      return `GET project=${projection.project_id} · schema=${projection.schema_version} · status=${projection.status} · no authority effects`;
+      return diagnosticAvailability(projection.status, `GET project=${projection.project_id} · schema=${projection.schema_version} · status=${projection.status} · no authority effects`);
     }
 
     async function diagnosticCheck032() {
@@ -21283,7 +21808,11 @@
       diagnosticRequire(!zoomSelector.includes("preparedMaxZoom"), "Weather tile selection is capped at preparedMaxZoom.");
       diagnosticRequire(source.includes("function mapInteractionMaxZoom()"), "Weather map interaction has no native matrix ceiling.");
       diagnosticRequire(source.includes("nativeMaxZoom - initialZoom"), "Weather interaction ceiling is not derived from the native matrix range.");
-      diagnosticRequire(source.includes("source_id=${encodeURIComponent(definition.sourceId)}&native=1"), "Weather Rudy+TW request does not opt into native dynamic tiles.");
+      const templateSource = source.split("function rasterTileTemplate", 2)[1]?.split("function normalizeRasterBounds", 1)[0] || "";
+      const compact = templateSource.replace(/\s+/g, " ");
+      for (const marker of ['new URLSearchParams(query)', 'params.set("source_id", definition.sourceId)', 'if (state.rasterRemoteRefreshEnabled)', 'params.set("native", "1")', 'params.set("refresh", "1")', 'params.set("cache_only", "1")', 'params.delete("native")', 'params.delete("refresh")']) {
+        diagnosticRequire(compact.includes(marker), `Weather cache-first / explicit Refresh wiring is missing ${marker}.`);
+      }
       const firstMatrix = Math.min(
         maxMatrix,
         initialMatrix + Math.ceil(Math.log2(1.25)),
@@ -21292,6 +21821,195 @@
       const highMatrix = Math.min(maxMatrix, preparedMatrix + 1);
       diagnosticRequire(highMatrix > preparedMatrix, `Weather cannot request a matrix above prepared Z${preparedMatrix}.`);
       return {label: "Weather", initialMatrix, firstMatrix, highMatrix};
+    }
+
+    function diagnosticWeatherTileSnapshot(doc) {
+      const group = doc.querySelector('[data-layer-group="rudy-twmap"]');
+      const tiles = [...(group?.querySelectorAll('image[data-raster-tile]') || [])]
+        .filter(node => !node.closest('[data-tile-generation="pending"]'))
+        .map(node => ({key: node.getAttribute("data-raster-tile"), href: node.getAttribute("href")}));
+      return {tiles, generation: group?.dataset.activeTileGenerationKey || "",
+        status: group?.dataset.tileGenerationState || "", failure: group?.dataset.nativeTileFailure || "",
+        matrix: tiles.length ? Number(tiles[0].key.split("/")[0]) : null};
+    }
+
+    function diagnosticWeatherValidateTileUrls(snapshot, baseUrl, selectedProject) {
+      return snapshot.tiles.map(tile => {
+        const url = new URL(tile.href, baseUrl);
+        diagnosticRequire(url.origin === new URL(baseUrl).origin, "Weather tile escaped the selected API origin.");
+        diagnosticRequire(url.pathname.startsWith(`/admin/tiles/imagery/${encodeURIComponent(selectedProject)}/`), "Weather tile belongs to another workspace.");
+        diagnosticRequire(url.searchParams.get("cache_only") === "1" && !url.searchParams.has("native") && !url.searchParams.has("refresh"), "Weather diagnostic tile is not cache-only.");
+        const key = tile.key.split("/");
+        diagnosticRequire(key.length === 3 && key.every(value => /^\d+$/.test(value)) && Number(key[0]) === snapshot.matrix,
+          "Weather active tile generation contains mixed or invalid matrices.");
+        diagnosticRequire(url.pathname.endsWith(`/${key.join("/")}.png`), "Weather DOM tile matrix disagrees with its request URL.");
+        return url.href;
+      });
+    }
+
+    function diagnosticWeatherCachedFrames(manifest, baseUrl, selectedProject) {
+      const base = new URL(baseUrl);
+      const prefix = `/admin/pretrip/projects/${encodeURIComponent(selectedProject)}/weather-imagery/`;
+      const frames = [];
+      for (const family of ["radar", "satellite"]) {
+        const overlay = manifest?.childOverlays?.[family] || {};
+        for (const frame of overlay.frames || []) {
+          if (!frame.assetUrl || !frame.bboxWgs84 || frame.mapOverlaySupported === false) continue;
+          const url = new URL(frame.assetUrl, base);
+          diagnosticRequire(url.origin === base.origin && url.pathname.startsWith(prefix)
+            && !url.search && !url.hash, "CWA cached asset escaped the selected workspace or requested refresh.");
+          if (Object.prototype.hasOwnProperty.call(overlay.windows || {}, "12h") && !overlay.windows["12h"].includes(frame.frameId)) continue;
+          frames.push({...frame, family, assetHref: url.href});
+        }
+      }
+      return frames;
+    }
+
+    async function diagnosticWeatherLiveFrames(existingFrame = null, onRender = null) {
+      const selectedProject = projectId();
+      const src = new URL(surfaceSrc("/admin/pretrip"), location.href);
+      if (src.origin !== location.origin) return diagnosticWarning("CWA cached controls: isolated same-origin DOM unavailable.", "not_checked");
+      const envelope = await diagnosticCoverageRead(`/admin/pretrip/projects/${encodeURIComponent(selectedProject)}/weather-imagery`);
+      if (!envelope.available) return diagnosticWarning("CWA cached manifest unavailable; product/frame switching not verified.", "unavailable");
+      const frames = diagnosticWeatherCachedFrames(envelope.data, src.href, selectedProject);
+      if (!frames.length) return diagnosticWarning("CWA has no renderable cached frames; product/frame switching not verified.", "unavailable");
+      const frame = existingFrame || document.createElement("iframe");
+      if (!existingFrame) {
+        for (const [key, value] of Object.entries({mapOnly: "1", wheelZoom: "0", diagnosticMapProbe: "1", mapRenderer: "svg", initialLayers: "route,segments,cwa-weather"})) src.searchParams.set(key, value);
+        frame.title = "CWA cached product and frame diagnostic";
+        frame.style.cssText = "position:fixed;left:-12000px;width:1120px;height:720px;border:0";
+        frame.src = src.href;
+        document.body.appendChild(frame);
+      }
+      let controls, original = existingFrame?.contentWindow?.scoutCwaImageryController?.getState();
+      const layerControl = existingFrame?.contentDocument?.querySelector('input[data-layer="cwa-weather"]');
+      if (layerControl && !layerControl.checked) layerControl.click();
+      const change = (control, value, event = "change") => {
+        control.value = String(value);
+        control.dispatchEvent(new frame.contentWindow.Event(event, {bubbles: true}));
+      };
+      try {
+        try {
+          controls = await diagnosticWaitForMapOrder(() => {
+            const doc = frame.contentDocument;
+            const product = doc?.querySelector('[data-cwa-imagery-product]');
+            const timeline = doc?.querySelector('[data-cwa-imagery-timeline]');
+            const windowControl = doc?.querySelector('[data-cwa-imagery-window]');
+            const controller = frame.contentWindow?.scoutCwaImageryController;
+            return product && timeline && windowControl && controller?.getState()?.products?.length ? {doc, product, timeline, windowControl, controller} : null;
+          }, 15000);
+        } catch (_) { return diagnosticWarning("CWA cached controls did not become ready; frame interaction not verified.", "unavailable"); }
+        const {doc, product, timeline, windowControl, controller} = controls;
+        original = original || controller.getState();
+        diagnosticRequire(original.boundary?.cacheOnly === true && original.boundary?.candidateOnly === true, "CWA imagery boundary is not cache-only candidate evidence.");
+        change(windowControl, "12h");
+        const productIds = [...new Set(frames.map(item => item.productId).filter(Boolean))];
+        let productsVerified = 0, frameSwitches = 0, renders = 0, decoded = 0;
+        const gaps = [];
+        for (const productId of productIds.slice(0, 2)) {
+          diagnosticRequire([...product.options].some(option => option.value === productId), "Cached CWA product is missing from the real selector.");
+          change(product, productId);
+          const candidates = frames.filter(item => item.productId === productId);
+          const family = candidates[0].family;
+          const opacity = doc.querySelector(`[data-cwa-imagery-opacity="${family}"]`);
+          diagnosticRequire(opacity, "CWA opacity control missing.");
+          change(opacity, 37, "input");
+          const imagesSeen = [];
+          for (const index of [0, ...(Number(timeline.max) > 0 ? [1] : [])]) {
+            change(timeline, index, "input");
+            const snapshot = controller.getState();
+            diagnosticRequire(snapshot.productId === productId && snapshot.frameIndex === index, "CWA controls and controller state diverged.");
+            const expected = candidates[index];
+            diagnosticRequire(expected && snapshot.current?.frameId === expected.frameId, "CWA timeline selected a different cached frame.");
+            const image = doc.querySelector(`image[data-cwa-imagery-family="${family}"]`);
+            diagnosticRequire(image && image.getAttribute("data-cwa-imagery-frame") === expected.frameId, "CWA DOM frame does not match the selected cached frame.");
+            diagnosticRequire(new URL(image.getAttribute("href"), src.href).href === expected.assetHref, "CWA image href does not match its manifest frame.");
+            diagnosticRequire(Math.abs(Number(image.getAttribute("opacity")) - 0.37) < 0.001, "CWA opacity control did not update the rendered image.");
+            if (onRender) onRender(`${productId} / ${expected.frameId}`);
+            imagesSeen.push(expected.assetHref); renders += 1;
+            try {
+              const response = await fetch(expected.assetHref, {method: "GET", signal: AbortSignal.timeout(15000)});
+              if (response.ok) {
+                const bitmap = await createImageBitmap(await response.blob());
+                try { if (bitmap.width > 0 && bitmap.height > 0) decoded += 1; } finally { bitmap.close(); }
+              }
+            } catch (_) { /* Cache absence/invalid bytes remain data gaps. */ }
+          }
+          if (imagesSeen.length > 1 && imagesSeen[0] !== imagesSeen[1]) frameSwitches += 1;
+          productsVerified += 1;
+        }
+        diagnosticRequire(projectId() === selectedProject, "Workspace changed during CWA cached-frame probe.");
+        if (productsVerified < 2) gaps.push("fewer than two cached products");
+        if (!frameSwitches) gaps.push("no distinct cached timeline transition");
+        if (decoded !== renders || !renders) gaps.push(`${decoded}/${renders} cached frames decoded`);
+        const detail = `CWA real controls: ${productsVerified} products, ${frameSwitches} timeline transitions, ${renders} frame ID/href/opacity checks, ${decoded} decoded; cache-only candidate evidence${gaps.length ? `; ${gaps.join("; ")}` : ""}.`;
+        return gaps.length ? diagnosticWarning(detail, "incomplete") : diagnosticAvailability("ready", detail);
+      } finally {
+        if (existingFrame && controls && original) {
+          change(controls.windowControl, original.windowId);
+          change(controls.product, original.productId);
+          change(controls.timeline, original.frameIndex, "input");
+          for (const family of ["radar", "satellite"]) {
+            const opacity = controls.doc.querySelector(`[data-cwa-imagery-opacity="${family}"]`);
+            if (opacity) change(opacity, original[`${family}OpacityPercent`], "input");
+          }
+        }
+        if (existingFrame && original && layerControl && layerControl.checked !== original.layerEnabled) layerControl.click();
+        if (!existingFrame) frame.remove();
+      }
+    }
+
+    async function diagnosticWeatherLiveTiles() {
+      const selectedProject = projectId();
+      const src = new URL(surfaceSrc("/admin/pretrip"), location.href);
+      if (src.origin !== location.origin) return diagnosticWarning("Weather live tile probe: API origin differs; isolated DOM unavailable.", "not_checked");
+      for (const [key, value] of Object.entries({mapOnly: "1", wheelZoom: "0", diagnosticMapProbe: "1", mapRenderer: "svg", initialLayers: WEATHER_EMBEDDED_MAP_LAYER_IDS.join(",")})) src.searchParams.set(key, value);
+      const frame = document.createElement("iframe");
+      frame.title = "Weather cache-only tile diagnostic";
+      frame.style.cssText = "position:fixed;left:-12000px;width:1120px;height:720px;border:0";
+      frame.src = src.href;
+      document.body.appendChild(frame);
+      try {
+        let doc;
+        try {
+          doc = await diagnosticWaitForMapOrder(() => {
+            const d = frame.contentDocument;
+            return d?.querySelector('[data-layer-group="rudy-twmap"] image[data-raster-tile]') && d.querySelector('#zoomIn') ? d : null;
+          }, 45000);
+        } catch (_) { return diagnosticWarning("Weather live tile probe: no prepared Rudy+TW tiles; zoom/decode not verified.", "unavailable"); }
+        const before = diagnosticWeatherTileSnapshot(doc);
+        diagnosticWeatherValidateTileUrls(before, src.href, selectedProject);
+        let after = before;
+        for (let attempt = 0; attempt < 4 && after.matrix === before.matrix; attempt += 1) {
+          doc.querySelector('#zoomIn').click();
+          try {
+            await diagnosticWaitForMapOrder(() => {
+              const now = diagnosticWeatherTileSnapshot(doc);
+              return now.status === "retained-previous" || now.failure || (now.status === "ready" && now.generation !== before.generation);
+            }, 15000);
+          } catch (_) { break; }
+          after = diagnosticWeatherTileSnapshot(doc);
+        }
+        diagnosticRequire(projectId() === selectedProject, "Workspace changed during Weather tile probe.");
+        const urls = diagnosticWeatherValidateTileUrls(after, src.href, selectedProject);
+        if (!urls.length || after.matrix <= before.matrix || after.status !== "ready" || after.failure) {
+          return diagnosticWarning(`Weather cache-only zoom: Z${before.matrix}→Z${after.matrix}; higher complete generation unavailable (${after.status || "unknown"}).`, "incomplete");
+        }
+        let decoded = 0;
+        await Promise.all(urls.map(async url => {
+          const controller = new AbortController();
+          const timer = window.setTimeout(() => controller.abort(), 15000);
+          try {
+            const response = await fetch(url, {method: "GET", signal: controller.signal});
+            if (!response.ok) return;
+            const bitmap = await createImageBitmap(await response.blob());
+            try { if (bitmap.width > 0 && bitmap.height > 0) decoded += 1; } finally { bitmap.close(); }
+          } catch (_) { /* Missing cached bytes are availability gaps, not a successful render. */ }
+          finally { window.clearTimeout(timer); }
+        }));
+        const detail = `Weather cache-only live zoom Z${before.matrix}→Z${after.matrix}; active DOM / request matrix agree; ${decoded}/${urls.length} tiles decoded. CWA controls reported separately.`;
+        return decoded === urls.length ? diagnosticAvailability("ready", detail) : diagnosticWarning(detail, "incomplete");
+      } finally { frame.remove(); }
     }
 
     async function diagnosticCheck037() {
@@ -21328,9 +22046,10 @@
       );
       const weatherContract = diagnosticWeatherRudyTileContract(pretrip.data);
       const contracts = [...nativeContracts, weatherContract];
-      return contracts
-        .map(contract => `${contract.label} Z${contract.initialMatrix}→Z${contract.firstMatrix}→Z${contract.highMatrix}`)
-        .join(" · ") + " · request URL/TILEMATRIX contract crosses prepared Z14";
+      const tiles = await diagnosticWeatherLiveTiles();
+      const cwa = await diagnosticWeatherLiveFrames();
+      const live = tiles.status === "passed" && cwa.status === "passed" ? diagnosticAvailability("ready", `${tiles.detail} ${cwa.detail}`) : diagnosticWarning(`${tiles.detail} ${cwa.detail}`, "incomplete");
+      return {...live, detail: "倍率計算契約（非實際換磚）：" + contracts.map(contract => `${contract.label} Z${contract.initialMatrix}→Z${contract.firstMatrix}→Z${contract.highMatrix}`).join(" · ") + " · " + live.detail};
     }
     diagnosticCheck037Runner = diagnosticCheck037;
 
@@ -21702,7 +22421,12 @@
       const requestedBand = String(state.navigationTerrainHypothesisBand || "");
       return diagnosticResource(`navigation-context:${scopeKey}`, async () => {
         const navigation = await diagnosticJson(`/admin/pretrip/projects/${encodeURIComponent(candidateProjectId)}/navigation-terrain-intelligence`, 240000);
-        diagnosticRequire(navigation.project_id === candidateProjectId && navigation.status === "ready", "Navigation 證據尚未就緒或不屬於目前專案。");
+        diagnosticRequire(navigation.project_id === candidateProjectId, "Navigation 證據不屬於目前專案。");
+        diagnosticRequire(navigation.boundary?.runtime_safety_truth === false, "Navigation candidate boundary 缺失。");
+        if (["not_prepared", "unavailable", "blocked", "empty", "degraded"].includes(navigation.status)) {
+          diagnosticUnavailable(navigation.status, `Navigation 資料=${navigation.status}；TRH/R4 前置證據未就緒，本題未完整驗證。`, "passed");
+        }
+        diagnosticRequire(navigation.status === "ready", "Navigation 狀態無效。");
         const selection = navigation.terrain_route_hypothesis?.selection;
         const selectionId = requestedId || String(selection?.default_id || "");
         const hypothesis = asArray(selection?.options).find(item => item.selection_id === selectionId);
@@ -21781,7 +22505,13 @@
       const [status, capabilities] = await Promise.all([
         diagnosticJson(`${base}/status`, 120000), diagnosticJson(`${base}/capabilities`, 120000),
       ]);
-      return diagnosticNavigationValidateWorker(status, capabilities);
+      diagnosticNavigationRequireCandidate(status?.boundary, "Worker");
+      diagnosticNavigationRequireCandidate(capabilities?.boundary, "Capabilities");
+      if (["unavailable", "disabled", "not_configured"].includes(status.availability)
+          || status.enabled === false || status.configured === false || status.reachable === false) {
+        return diagnosticWarning(`TRH Worker UNAVAILABLE · ${asArray(status.errors).map(item => item.code).filter(Boolean).join(", ") || status.availability}；只讀狀態契約已檢查，未驗證運算能力。`, "unavailable");
+      }
+      return diagnosticAvailability("available", diagnosticNavigationValidateWorker(status, capabilities));
     }
 
     async function diagnosticCheck040() {
@@ -21908,6 +22638,94 @@
       }));
     }
 
+    async function diagnosticProbeDebugSplitControls(frame, surface, collect) {
+      const reports = [], doc = frame.contentDocument;
+      const svg = doc.querySelector("#runtimeMap");
+      if (!svg) return [diagnosticMapOrderGap(surface, "SVG · split linkage", "Debug SVG 未載入，無法驗證拆層聯動。")];
+      for (const id of ["soil-moisture", "antecedent-rain", "cwa-qpf", "cwa-weather"]) {
+        const control = doc.querySelector(`input[data-layer="${id}"]`);
+        if (!control || control.disabled) {
+          reports.push(diagnosticMapOrderGap(surface, `SVG · ${id} linkage`, "缺少可操作的原圖層開關。"));
+          continue;
+        }
+        const original = control.checked;
+        const groupFor = () => svg.querySelector(`[data-layer-group="${id}"]`);
+        const backgroundFor = () => svg.querySelector(`[data-layer-background="${id}"]`);
+        const initial = groupFor();
+        const initialPoints = initial?.querySelectorAll("circle, path").length || 0;
+        const initialLabels = initial?.querySelectorAll("text").length || 0;
+        const initialBackground = backgroundFor()?.querySelectorAll("image, .environment-extent").length || 0;
+        try {
+          for (const enabled of [false, true]) {
+            if (control.checked !== enabled) control.click();
+            const report = collect(`${id} · ${enabled ? "on" : "off"} · split linkage`);
+            const fail = (code, detail) => report.violations.push({code, detail: `${id}: ${detail}`});
+            const gap = detail => report.gaps.push(`${id}: ${detail}`);
+            const group = groupFor(), background = backgroundFor();
+            if (control.checked !== enabled) fail("split_toggle_rejected", "原圖層開關未切換。");
+            const visible = node => node.dataset.layerHidden !== "true" && !node.hidden
+              && frame.contentWindow.getComputedStyle(node).display !== "none"
+              && frame.contentWindow.getComputedStyle(node).visibility !== "hidden";
+            if (!group) gap("尚無點位群組，未驗證聯動。");
+            if (!background) {
+              if (initialBackground) fail("split_background_lost", "操作後遺失既有背景。");
+              else gap("尚無 raster / extent 背景，未驗證背景聯動。");
+            }
+            for (const node of [group, background].filter(Boolean)) {
+              if (visible(node) !== enabled) fail("split_visibility_mismatch", "背景／點位未與原開關同步。");
+            }
+            if (group) {
+              if (group.querySelector("image, .environment-extent")) fail("split_mixed_background", "真正背景仍留在點位群組。");
+              if (group.querySelectorAll("circle, path").length < initialPoints || group.querySelectorAll("text").length < initialLabels) fail("split_evidence_lost", "操作後遺失點位或標籤。");
+              if (!initialPoints) gap("無既有點位可驗證保留。");
+              if (!initialLabels) gap("無既有標籤可驗證保留。");
+            }
+            const routes = [...svg.querySelectorAll(':scope > [data-layer-group="route"], :scope > [data-layer-group="segments"]')];
+            if (!routes.length) gap("無路線可驗證相對順序。");
+            for (const route of routes) {
+              if (background && !(background.compareDocumentPosition(route) & 4)) fail("split_background_over_route", "背景必須位於路線下方。");
+              if (group && !(route.compareDocumentPosition(group) & 4)) fail("split_evidence_under_route", "點位／標籤必須保留於路線上方。");
+            }
+            if (background && background.querySelectorAll("image, .environment-extent").length < initialBackground) fail("split_background_lost", "操作後遺失既有背景幾何。");
+            if (id === "cwa-weather") {
+              if (!background?.querySelector("image")) gap("目前無 CWA raster，影像聯動尚未驗證。");
+              if (!frame.contentWindow?.scoutCwaImageryController?.getState) gap("此唯讀探測僅操作圖層開關；CWA 影格更新後的重新拆層尚未驗證。");
+            }
+            report.status = report.violations.length ? "failed" : report.gaps.length ? "warning" : report.status;
+            reports.push(report);
+          }
+        } finally {
+          if (control.checked !== original) control.click();
+        }
+      }
+      if (frame.contentWindow?.scoutCwaImageryController?.getState) {
+        const result = await diagnosticWeatherLiveFrames(frame, variant => {
+          const report = collect(`CWA cached rerender · ${variant}`);
+          const currentSvg = doc.querySelector("#runtimeMap");
+          for (const id of ["soil-moisture", "antecedent-rain", "cwa-qpf", "cwa-weather"]) {
+            const group = currentSvg?.querySelector(`[data-layer-group="${id}"]`);
+            const background = currentSvg?.querySelector(`[data-layer-background="${id}"]`);
+            if (!group || !background) { report.gaps.push(`${id}: rerender has no split pair to verify.`); continue; }
+            if (group.querySelector("image, .environment-extent")) report.violations.push({code: "split_rerender_mixed_background", detail: `${id}: cached-frame rerender moved background into evidence group.`});
+            const enabled = Boolean(doc.querySelector(`input[data-layer="${id}"]`)?.checked);
+            for (const node of [group, background]) {
+              const style = frame.contentWindow.getComputedStyle(node);
+              const visible = node.dataset.layerHidden !== "true" && !node.hidden && style.display !== "none" && style.visibility !== "hidden";
+              if (visible !== enabled) report.violations.push({code: "split_rerender_visibility", detail: `${id}: rerender lost original switch linkage.`});
+            }
+            if (!currentSvg.querySelector('[data-layer-group="route"], [data-layer-group="segments"]')) report.gaps.push(`${id}: no route for rerender order proof.`);
+            for (const route of currentSvg.querySelectorAll(':scope > [data-layer-group="route"], :scope > [data-layer-group="segments"]')) {
+              if (!(background.compareDocumentPosition(route) & 4) || !(route.compareDocumentPosition(group) & 4)) report.violations.push({code: "split_rerender_order", detail: `${id}: cached-frame rerender violated background/route/evidence order.`});
+            }
+          }
+          report.status = report.violations.length ? "failed" : report.gaps.length ? "warning" : report.status;
+          reports.push(report);
+        });
+        if (result.status !== "passed") reports.push(diagnosticMapOrderGap(surface, "SVG · cached CWA frame update", result.detail));
+      }
+      return reports;
+    }
+
     async function diagnosticProbeEmbeddedMapOrder(root, surface, renderer) {
       const content = surface.id === "weather-map"
         ? diagnosticMarkupRoot(renderWeatherIntersectionMap(weatherCandidateSnapshot()))
@@ -21961,6 +22779,9 @@
           if (allLayers.status === "passed") allLayers.status = "warning";
         }
         reports.push(allLayers);
+        if (surface.id === "debug-map" && renderer === "svg" && allLayers.activeRenderer === "svg") {
+          reports.push(...await diagnosticProbeDebugSplitControls(frame, surface, collect));
+        }
         const weatherRouteLayers = ["rudy-twmap", "cwa-weather", "route", "segments", "checkpoints"];
         if (surface.id === "weather-map") {
           const missing = weatherRouteLayers.filter(id => !WEATHER_EMBEDDED_MAP_LAYER_IDS.includes(id));
@@ -22120,6 +22941,101 @@
       };
     }
 
+    // Read-only coverage: never execute Living actions, Emergency decisions or offline writes.
+    function diagnosticCoverageResult(dataStatus, detail) {
+      return {structureStatus: "passed", dataStatus, status: dataStatus === "ready" ? "passed" : "warning", detail};
+    }
+
+    async function diagnosticCoverageRead(path, options) {
+      try {
+        return {available: true, data: (await diagnosticEnvelope(path, options)).data};
+      } catch (_) {
+        // Do not echo transport errors: URLs or server messages may contain private context.
+        return {available: false, data: null};
+      }
+    }
+
+    async function diagnosticCheck045() {
+      const markup = diagnosticMarkupRoot(renderRuntimeAuditPage());
+      diagnosticRequire(Boolean(markup.querySelector('[data-runtime-audit-page="true"]')), "Logs page shell is missing.");
+      diagnosticRequire(Boolean(markup.querySelector('[data-runtime-audit-refresh]')), "Logs read-only refresh control is missing.");
+      diagnosticRequire(diagnosticCompactSource(loadRuntimeAuditData).includes("fetchJson("), "Logs GET loader is missing.");
+      const path = `${RUNTIME_AUDIT_PATH}?limit=20`;
+      const response = await diagnosticCoverageRead(path);
+      if (!response.available) return diagnosticCoverageResult("unavailable", "Logs 介面正常；GET /admin/runtime-audit 暫不可用，未驗證資料。");
+      const payload = response.data;
+      diagnosticRequire(payload?.schema_version === "scout_runtime_audit_list.v1" && Array.isArray(payload.events), "Logs response schema/events contract is invalid.");
+      diagnosticRequire(payload.boundary?.telemetry_only === true && payload.boundary?.runtime_safety_truth === false && payload.boundary?.raw_payloads_embedded === false, "Logs telemetry/privacy boundary is invalid.");
+      diagnosticRequire(payload.integrity?.verified !== false, "Logs ledger reports an integrity failure.");
+      const ready = payload.events.length > 0 && payload.integrity?.verified === true && payload.writer_health?.status === "healthy";
+      return diagnosticCoverageResult(ready ? "ready" : "incomplete", `Logs 介面與 telemetry 邊界正常；讀取 ${payload.events.length} 筆，完整性=${payload.integrity?.verified === true ? "已驗證" : "尚未驗證"}；GET /admin/runtime-audit。Hash chain 不代表來源簽章。`);
+    }
+
+    async function diagnosticCheck046() {
+      const markup = diagnosticMarkupRoot(renderLivingPage());
+      diagnosticRequire(Boolean(markup.querySelector('[data-living-surface="true"]')) && Boolean(markup.querySelector('[data-living-action="refresh"]')), "Living sandbox shell/refresh control is missing.");
+      const path = DASHBOARD_LIVING_PATH;
+      const response = await diagnosticCoverageRead(path);
+      if (!response.available) return diagnosticCoverageResult("unavailable", "Living 介面正常；GET /admin/dashboard/living 暫不可用，未啟動 sandbox。");
+      const payload = response.data;
+      diagnosticRequire(payload?.schema_version === "scout.emergency_mobile_closed_loop.living.v0" && Array.isArray(payload.timeline), "Living projection schema/timeline is invalid.");
+      const boundary = payload.boundary;
+      for (const key of ["local_only", "synthetic_scenario", "candidate_only"]) diagnosticRequire(boundary?.[key] === true, `Living ${key} boundary is invalid.`);
+      for (const key of ["runtime_safety_truth", "phase1_runtime_safety_truth", "phase1_l0_l4_state_mutated", "safety_api_called", "real_outbound_send_performed", "production_transport_invoked", "hardware_control_invoked", "network_mqtt_publish_performed", "precise_real_user_location_embedded", "raw_health_payload_embedded"]) diagnosticRequire(boundary?.[key] === false, `Living ${key} boundary is invalid.`);
+      const receipt = payload.transport_receipt;
+      if (receipt) {
+        diagnosticRequire(receipt.simulated_transport === true && receipt.simulated_receipt_correlated === true, "Living receipt lacks simulated provenance.");
+        for (const key of ["production_delivery_verified", "production_send_performed", "sent"]) diagnosticRequire(receipt[key] === false, `Living receipt ${key} is invalid.`);
+      }
+      const ready = payload.status !== "unavailable" && Boolean(receipt);
+      return diagnosticCoverageResult(ready ? "ready" : "incomplete", `Living 介面與 sandbox 邊界正常；${receipt ? "已有模擬 receipt" : "尚無模擬 receipt"}；GET /admin/dashboard/living。不代表真實傳送／收件，未執行情境或批准。`);
+    }
+
+    async function diagnosticCheck047() {
+      const root = diagnosticMarkupRoot(diagnosticRouteMarkup("surface-intelligence"));
+      const iframe = root.querySelector("iframe");
+      diagnosticRequire(Boolean(iframe) && new URL(iframe.getAttribute("src"), location.href).pathname === "/admin/intelligence", "Intelligence iframe points to an unexpected page.");
+      const page = await diagnosticCoverageRead("/admin/intelligence", {text: true});
+      if (!page.available) return diagnosticCoverageResult("unavailable", "Intelligence iframe wiring 正常；GET /admin/intelligence 暫不可用。");
+      diagnosticRequire(page.data.includes("data-intelligence-telemetry-page") && page.data.includes('"/admin/intelligence/telemetry"'), "Intelligence embedded telemetry page/GET wiring is missing.");
+      const response = await diagnosticCoverageRead("/admin/intelligence/telemetry");
+      if (!response.available) return diagnosticCoverageResult("unavailable", "Intelligence 頁面正常；GET /admin/intelligence/telemetry 暫不可用。");
+      const payload = response.data;
+      diagnosticRequire(payload?.schema_version === "scout.intelligence_telemetry.v0" && Array.isArray(payload.jobs), "Intelligence telemetry schema/jobs is invalid.");
+      diagnosticRequire(payload.read_only === true && payload.candidate_only === true && payload.runtime_safety_truth === false && payload.promotion_result === "not_promoted", "Intelligence telemetry authority boundary is invalid.");
+      for (const job of payload.jobs) diagnosticRequire(job.candidate_only === true && job.runtime_safety_truth === false, "Intelligence job claims runtime authority.");
+      const ready = payload.status === "ready" && payload.store_available === true && payload.jobs.length > 0;
+      return diagnosticCoverageResult(ready ? "ready" : "incomplete", `Intelligence iframe／GET schema 與 candidate 邊界正常；${payload.jobs.length} 筆工作，store=${payload.store_available === true ? "可用" : "不可用"}；GET /admin/intelligence/telemetry。未執行模型或排程。`);
+    }
+
+    async function diagnosticCheck048() {
+      const renderer = diagnosticCompactSource(renderEmergencyPage);
+      for (const marker of ["data-daily-emergency-review", "data-emergency-review-pane", "data-emergency-field-operations", "data-emergency-offline-banner"]) diagnosticRequire(renderer.includes(marker), `Emergency ${marker} is missing.`);
+      const unavailableMarkup = diagnosticRenderWithState({permissionReviewSession: null, permissionProjection: null, permissionDataStatus: "error"}, renderEmergencyPage);
+      diagnosticRequire(Boolean(diagnosticMarkupRoot(unavailableMarkup).querySelector('[data-daily-emergency-review="unavailable"]')), "Emergency missing packet is not visibly fail-closed.");
+      const offlineAvailable = Boolean(window.indexedDB && window.crypto?.subtle);
+      const path = permissionProjectionPath(projectId(), "replay");
+      const response = await diagnosticCoverageRead(path);
+      if (!response.available) return diagnosticCoverageResult("unavailable", "Emergency 介面正常；replay projection 不可用，未執行 field／offline 寫入。");
+      const projection = response.data;
+      diagnosticRequire(projection?.project_id === projectId(), "Emergency projection belongs to another project.");
+      diagnosticRequire(projection.candidate_only === true && projection.runtime_safety_truth === false, "Emergency projection claims runtime authority.");
+      diagnosticRequire(Array.isArray(projection.movement_groups), "Emergency movement-group projection is invalid.");
+      const missionDay = projection.daily_review?.mission_day_instance_id;
+      if (!missionDay) return diagnosticCoverageResult("incomplete", "Emergency projection 邊界正常；尚無 mission-day review；offline 僅檢查瀏覽器能力，未寫入。");
+      const sessionResponse = await diagnosticCoverageRead(permissionDailyReviewPath(projectId(), missionDay));
+      if (!sessionResponse.available) return diagnosticCoverageResult("unavailable", "Emergency projection 正常；GET night-review 暫不可用。");
+      const session = sessionResponse.data;
+      diagnosticRequire(session?.project_id === projectId() && session.mission_day_instance_id === missionDay, "Emergency review project/mission-day binding is invalid.");
+      diagnosticRequire(Array.isArray(session.alternatives) && Array.isArray(session.receipts), "Emergency review alternatives/receipts schema is invalid.");
+      for (const packet of session.alternatives) {
+        diagnosticRequire(packet.project_id === projectId() && packet.mission_day_instance_id === missionDay && diagnosticIsSha256(packet.sha256), "Emergency packet binding/hash is invalid.");
+      }
+      const freshPackets = session.alternatives.filter(packet => packet.freshness_state === "fresh");
+      const ready = freshPackets.length > 0 && projection.movement_groups.length > 0 && offlineAvailable;
+      return diagnosticCoverageResult(ready ? "ready" : "incomplete", `Emergency 介面與 packet binding 正常；${freshPackets.length}/${session.alternatives.length} 筆新鮮候選，${projection.movement_groups.length} 個 field group；offline API=${offlineAvailable ? "具備" : "缺少"}。來源 GET contextual-permission-dashboard／night-review；未驗證 offline 儲存或實際送達。`);
+    }
+
     function updateDiagnosticDom(caseId = null) {
       const items = caseId ? DASHBOARD_DIAGNOSTIC_CASES.filter(candidate => candidate.id === caseId) : DASHBOARD_DIAGNOSTIC_CASES;
       for (const item of items) {
@@ -22164,6 +23080,8 @@
         checkedAt: null,
         scopeKey,
         mapLayerOrder: null,
+        structureStatus: "not_checked",
+        dataStatus: "not_checked",
       });
       updateDiagnosticDom(caseId);
       try {
@@ -22175,6 +23093,8 @@
         const warning = outcome?.status === "warning";
         diagnosticSetResult(caseId, {
           status: warning ? "warning" : "passed",
+          structureStatus: outcome?.structureStatus || (warning ? "not_checked" : "passed"),
+          dataStatus: outcome?.dataStatus || "not_checked",
           detail: diagnosticSafeDetail(outcome?.detail || outcome),
           mapLayerOrder: outcome?.mapLayerOrder || null,
           durationMs: performance.now() - startedAt,
@@ -22183,7 +23103,9 @@
         });
       } catch (error) {
         diagnosticSetResult(caseId, {
-          status: "failed",
+          status: error?.diagnosticStatus === "warning" ? "warning" : "failed",
+          structureStatus: error?.structureStatus || "not_checked",
+          dataStatus: error?.dataStatus || "not_checked",
           detail: diagnosticSafeDetail(error?.message || error || "Diagnostic failed."),
           mapLayerOrder: error?.mapLayerOrder || null,
           durationMs: performance.now() - startedAt,
@@ -22244,6 +23166,12 @@
     }
 
     function bindDiagnosticControls() {
+      document.querySelectorAll('[data-diagnostic-advanced-run]').forEach(button => {
+        button.disabled = diagnosticExecutionBusy();
+        if (button.dataset.diagnosticBound === "true") return;
+        button.dataset.diagnosticBound = "true";
+        button.addEventListener("click", () => { void runDiagnosticAdvanced(button.dataset.diagnosticAdvancedRun); });
+      });
       const allButton = document.querySelector('[data-diagnostic-action="all"]');
       if (allButton && allButton.dataset.diagnosticBound !== "true") {
         allButton.dataset.diagnosticBound = "true";
@@ -32138,7 +33066,7 @@
       const route = state.project?.route || {};
       const mapData = buildMapData();
       const timelineNodes = paceFitCheckpointMapPoints(mapData, context, 9);
-      const routeLabel = String(route.route_name || state.pretripDataProjectId || projectId());
+      const routeLabel = String(route.route_name || resolvedPretripProjectId());
       const coordinateLabel = context.available
         ? `${context.lat.toFixed(6)}, ${context.lon.toFixed(6)}`
         : "unavailable";
@@ -32295,7 +33223,7 @@
                 <h3>Artifact Metadata</h3>
                 <div class="metric-line">
                   ${[
-                    ["Workspace", state.pretripDataProjectId || projectId()],
+                    ["Workspace", resolvedPretripProjectId()],
                     ["Model profile", "not attached"],
                     ["Boundary mode", "candidate / read-only"],
                   ].map(([label, value]) => `<div class="metric-row"><span>${escapeHtml(label)}</span><span>${escapeHtml(value)}</span></div>`).join("")}
@@ -34219,7 +35147,7 @@
         <section class="panel">
           <div class="panel-header"><h3>Layer Contract</h3><span class="chip ok">${SCOUT_LAYER_IDS.length} layers</span></div>
           <div class="panel-body">
-            <p class="small-note"><strong>32 canonical layers.</strong> Pre-trip and Debug expose 31; completed-track is after-action only.</p>
+            <p class="small-note"><strong>33 canonical layers.</strong> Pre-trip exposes 32, Debug 31, After-action 32; historical-map is pre-trip only and completed-track is after-action only.</p>
             <div style="height:10px"></div>
             <table class="table">
               <thead><tr><th>Layer</th><th>Dashboard use</th><th>Boundary</th></tr></thead>
@@ -34374,7 +35302,7 @@
       const tabCounts = evidenceTabCounts(groups);
       const activeGroups = groups.filter((group) => group.tabId === activeTab);
       const totalItems = groups.reduce((sum, group) => sum + group.count, 0);
-      const sourceProject = state.pretripDataProjectId || projectId();
+      const sourceProject = resolvedPretripProjectId();
       return `
         <section class="panel" data-pretrip-evidence-source="${escapeHtml(sourceProject)}">
           <div class="panel-header">
@@ -35141,7 +36069,7 @@
     function debugEndpointText(endpoint) {
       if (!endpoint) return "--";
       if (endpoint.startsWith("/")) return `<a href="${escapeHtml(endpoint)}" target="_blank" rel="noreferrer">${escapeHtml(endpoint)}</a>`;
-      const project = encodeURIComponent(state.pretripDataProjectId || projectId());
+      const project = encodeURIComponent(resolvedPretripProjectId());
       const path = `/admin/pretrip/projects/${project}/${endpoint}`;
       return `<a href="${escapeHtml(path)}" target="_blank" rel="noreferrer">${escapeHtml(path)}</a>`;
     }
@@ -35408,8 +36336,8 @@
           <h3>Refs</h3>
           <div class="drawer-list">
             <div class="item"><strong>Standard</strong><span>docs/specs/SCOUT_OUTDOOR_AI_AGENT_STANDARD.md</span></div>
-            <div class="item"><strong>Pretrip API</strong><span>/admin/pretrip/projects/${escapeHtml(state.pretripDataProjectId || projectId())}?compact=1</span></div>
-            <div class="item"><strong>Projection</strong><span>/admin/pretrip/projects/${escapeHtml(state.pretripDataProjectId || projectId())}/admin-projection</span></div>
+            <div class="item"><strong>Pretrip API</strong><span>/admin/pretrip/projects/${escapeHtml(resolvedPretripProjectId())}?compact=1</span></div>
+            <div class="item"><strong>Projection</strong><span>/admin/pretrip/projects/${escapeHtml(resolvedPretripProjectId())}/admin-projection</span></div>
           </div>
         </section>
         <section class="drawer-section">
@@ -35717,8 +36645,10 @@
       });
     }
 
-    function bindArchitectureControls() {
-      const shell = document.querySelector('[data-route-architecture-intelligence="true"]');
+    function bindArchitectureControls(root = document, actions = {}) {
+      const renderView = actions.render || render;
+      const schedule = actions.schedule || (callback => window.requestAnimationFrame(callback));
+      const shell = root.querySelector('[data-route-architecture-intelligence="true"]');
       if (!shell) return;
       shell.querySelectorAll("details[data-architecture-supporting]").forEach(details => {
         details.addEventListener("toggle", () => {
@@ -35764,7 +36694,7 @@
         state.architectureFingerprintScrollLeft = nextScroll.scrollLeft;
       };
       const centerArchitectureMapSelection = ({nodeId = "", binId = ""} = {}) => {
-        const viewport = document.querySelector(
+        const viewport = root.querySelector(
           '[data-dashboard-map-viewport="architecture-map"]',
         );
         const controller = viewport?.dashboardMapController;
@@ -35792,9 +36722,9 @@
       ) => {
         const currentScroll = shell.querySelector("[data-architecture-fingerprint-scroll]");
         if (currentScroll) state.architectureFingerprintScrollLeft = currentScroll.scrollLeft;
-        render();
-        window.requestAnimationFrame(() => {
-          const nextScroll = document.querySelector("[data-architecture-fingerprint-scroll]");
+        renderView();
+        schedule(() => {
+          const nextScroll = root.querySelector("[data-architecture-fingerprint-scroll]");
           if (nextScroll) nextScroll.scrollLeft = Number(state.architectureFingerprintScrollLeft || 0);
           if (centerFingerprint) centerFingerprintSelection(nextScroll);
           if (centerMap) {
@@ -35803,8 +36733,8 @@
               binId: state.architectureSelectedBinId,
             });
           }
-          if (focusSelector) document.querySelector(focusSelector)?.focus({preventScroll: true});
-          document.querySelector(
+          if (focusSelector) root.querySelector(focusSelector)?.focus({preventScroll: true});
+          root.querySelector(
             '[data-dashboard-map-viewport="architecture-map"]',
           )?.dashboardMapController?.refresh?.();
         });
@@ -36397,7 +37327,7 @@
       state.permissionSimulationMessage = "Running a no-write deterministic candidate. Stored Current Decision remains unchanged.";
       render();
       try {
-        const candidateProjectId = state.pretripDataProjectId || projectId();
+        const candidateProjectId = resolvedPretripProjectId();
         const result = await postJson(
           `/admin/pretrip/projects/${encodeURIComponent(candidateProjectId)}/contextual-permission-dashboard/simulations`,
           {
@@ -36431,7 +37361,7 @@
         : "Building a typed, no-write source preview…";
       render();
       try {
-        const candidateProjectId = state.pretripDataProjectId || projectId();
+        const candidateProjectId = resolvedPretripProjectId();
         const payload = state.permissionBaselineMode === "reference_gpx"
           ? {
               mode: "reference_gpx",
@@ -36473,7 +37403,7 @@
       state.permissionBaselineStatus = "Compiling a no-write, hash-bound Scout patch preview…";
       render();
       try {
-        const candidateProjectId = state.pretripDataProjectId || projectId();
+        const candidateProjectId = resolvedPretripProjectId();
         const conversationHash = await sha256Hex(patchText);
         const conversationRef = `conversation://dashboard/baseline-patch/${conversationHash.slice(0, 16)}`;
         const patch = await postJson(
@@ -36512,7 +37442,7 @@
             : "Revalidating and appending the reviewed-baseline receipt…";
       render();
       try {
-        const candidateProjectId = state.pretripDataProjectId || projectId();
+        const candidateProjectId = resolvedPretripProjectId();
         if (pending.kind === "save") {
           if (!draft) throw new Error("Typed draft is no longer available");
           const result = await postJson(
@@ -36599,12 +37529,12 @@
     }
 
     function emergencyReviewDecisionPath(packet) {
-      const candidateProjectId = state.pretripDataProjectId || projectId();
+      const candidateProjectId = resolvedPretripProjectId();
       return `${permissionDailyReviewPath(candidateProjectId, packet.mission_day_instance_id)}/${encodeURIComponent(packet.packet_id)}/decisions`;
     }
 
     function emergencyGroupCommandPath(groupId, suffix) {
-      const candidateProjectId = state.pretripDataProjectId || projectId();
+      const candidateProjectId = resolvedPretripProjectId();
       return `/admin/pretrip/projects/${encodeURIComponent(candidateProjectId)}/safety-emergency/movement-groups/${encodeURIComponent(groupId)}/${suffix}`;
     }
 
@@ -37309,20 +38239,22 @@
       });
     }
 
-    function bindPaceFitControls() {
-      document.querySelectorAll("[data-pace-checkpoint-select]").forEach(control => {
+    function bindPaceFitControls(root = document, actions = {}) {
+      const renderView = actions.render || render;
+      const schedule = actions.schedule || (callback => window.requestAnimationFrame(callback));
+      root.querySelectorAll("[data-pace-checkpoint-select]").forEach(control => {
         const selectCheckpoint = () => {
           const checkpointId = control.dataset.paceCheckpointSelect || "";
           if (!checkpointId || checkpointId === state.paceSelectedCheckpointId) return;
           const selectionStartedOnMap = control.hasAttribute("data-pace-checkpoint-id");
           state.paceSelectedCheckpointId = checkpointId;
-          render();
-          window.requestAnimationFrame(() => {
-            const viewport = document.querySelector(
+          renderView();
+          schedule(() => {
+            const viewport = root.querySelector(
               '[data-dashboard-map-viewport="pace-fit-map"]',
             );
             const selectedMarker = Array.from(
-              document.querySelectorAll("[data-pace-checkpoint-id]"),
+              root.querySelectorAll("[data-pace-checkpoint-id]"),
             ).find(marker => marker.dataset.paceCheckpointId === checkpointId);
             if (viewport && selectedMarker) {
               viewport.dashboardMapController?.focusElements(
@@ -37333,7 +38265,7 @@
             }
             const focusTarget = selectionStartedOnMap
               ? selectedMarker
-              : Array.from(document.querySelectorAll(".pace-cp-node")).find(
+              : Array.from(root.querySelectorAll(".pace-cp-node")).find(
                   node => node.dataset.paceCheckpointSelect === checkpointId,
                 );
             focusTarget?.focus?.({preventScroll: true});

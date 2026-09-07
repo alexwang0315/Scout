@@ -4124,10 +4124,33 @@
       updateScaleBar();
     }
     function mapLayerRank(node) {
+      if (node.dataset.layerBackground) return 30;
       return MAP_LAYER_RANKS[node.dataset.layerGroup] ?? 50;
     }
+    function splitEnvironmentBackgrounds() {
+      ["soil-moisture", "antecedent-rain", "cwa-qpf", "cwa-weather"].forEach(layerId => {
+        const group = runtimeMap.querySelector(`[data-layer-group="${layerId}"]`);
+        if (!group) return;
+        group.querySelectorAll("text").forEach(label => {
+          label.dataset.mapOrderRole = "evidence";
+        });
+        const paints = [...group.querySelectorAll("image, .environment-extent")];
+        if (!paints.length) return;
+        let background = runtimeMap.querySelector(`[data-layer-background="${layerId}"]`);
+        if (!background) {
+          background = svgEl("g", {"data-layer-background": layerId});
+          runtimeMap.appendChild(background);
+        }
+        background.dataset.layerHidden = layerInputChecked(layerId) ? "false" : "true";
+        paints.forEach(node => {
+          node.dataset.mapOrderRole = "thematic-background";
+          background.appendChild(node);
+        });
+      });
+    }
     function orderMapLayerGroups() {
-      [...runtimeMap.querySelectorAll(":scope > [data-layer-group]")]
+      splitEnvironmentBackgrounds();
+      [...runtimeMap.querySelectorAll(":scope > [data-layer-group], :scope > [data-layer-background]")]
         .sort((left, right) => mapLayerRank(left) - mapLayerRank(right))
         .forEach(node => runtimeMap.appendChild(node));
     }
@@ -4454,6 +4477,8 @@
         const group = runtimeMap.querySelector(`[data-layer-group="${input.dataset.layer}"]`);
         if (group && !input.checked && RASTER_BASEMAP_LAYER_IDS.has(input.dataset.layer)) group.replaceChildren();
         if (group) group.dataset.layerHidden = input.checked ? "false" : "true";
+        const background = runtimeMap.querySelector(`[data-layer-background="${input.dataset.layer}"]`);
+        if (background) background.dataset.layerHidden = input.checked ? "false" : "true";
       });
       const summary = document.getElementById("layerEnabledCount");
       if (summary) {

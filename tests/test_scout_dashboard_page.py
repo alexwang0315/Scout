@@ -1102,7 +1102,7 @@ def test_scout_dashboard_workspace_tab_summarizes_project_stats() -> None:
     assert "workspaceEvidenceRefCount(project)" in html
     assert "project.import_manifest?.imported_at" in html
     assert "project.layer_preparation?.prepared_at" in html
-    assert "state.pretripDataProjectId || projectId()" in html
+    assert "resolvedPretripProjectId()" in html
 
 
 def test_scout_dashboard_workspace_tab_exposes_structure_cache_and_operations() -> None:
@@ -1524,7 +1524,7 @@ def test_scout_dashboard_country_material_pool_contract() -> None:
 def test_scout_dashboard_timeline_evidence_uses_pretrip_tree_categories() -> None:
     html = PAGE.read_text(encoding="utf-8")
 
-    assert 'const PRETRIP_DATA_PROJECT_ID = "chilai_nanhua_day1";' in html
+    assert 'const PRETRIP_DATA_PROJECT_ID' not in html
     assert "function pretripDataProjectIds()" in html
     assert "fetchFirstPretripJson" in html
     assert "renderPretripEvidencePanel" in html
@@ -1541,7 +1541,7 @@ def test_scout_dashboard_timeline_evidence_uses_pretrip_tree_categories() -> Non
     assert 'zeroState: view.capability_timeline_import ? "no completed edges" : "not imported"' in html
     assert 'const COMPLETED_TRIP_RECORDINGS_PATH = "/admin/post-analysis/completed-trip-recordings";' in html
     assert "function completedTripRecordingsPath()" in html
-    assert "projectId=${encodeURIComponent(state.pretripDataProjectId || projectId())}" in html
+    assert "projectId=${encodeURIComponent(resolvedPretripProjectId())}" in html
     assert "completedTripRecordingSelectPath(safeRecordingId)" in html
     assert "function renderCompletedGpxLifecycle()" in html
     assert "async function loadCompletedTripRecordings()" in html
@@ -3761,7 +3761,7 @@ def test_scout_dashboard_pace_fit_is_map_first_and_discloses_supporting_info() -
     )
     assert "function paceFitCheckpointContext()" in html
     assert "function paceFitCheckpointMapPoints(" in html
-    assert "function bindPaceFitControls()" in html
+    assert "function bindPaceFitControls(root = document, actions = {})" in html
     assert 'preserveAspectRatio="xMidYMid slice"' in html
     assert 'data-pace-checkpoint-select="${escapeHtml(point.id)}"' in html
     assert "{minimumZoom: 2}" in html
@@ -4033,7 +4033,7 @@ def test_contextual_permission_workbench_uses_typed_projection_and_dedicated_sco
     assert "state.permissionProjection = projection;" in permission_loader
     assert (
         "await loadPermissionBaselineMapContext(\n"
-        "          state.pretripDataProjectId || projectId(),\n"
+        "          resolvedPretripProjectId(),\n"
         "        );"
     ) in permission_loader
     assert "state.permissionReviewSession = await fetchJson" in permission_loader
@@ -4359,7 +4359,7 @@ def test_dashboard_route_context_binds_selected_project_before_first_render() ->
         "function routeContextBriefingProjectId()", 1
     )[1].split("function routeContextBriefingSrc()", 1)[0]
 
-    assert "pretripDataProjectId: PRETRIP_DATA_PROJECT_ID," in html
+    assert "pretripDataProjectId: null," in html
     assert "pretripDataProjectId: projectId()," not in html
     assert "pretripDataProjectId: PROJECT_ID," not in html
     assert "return projectId();" in project_binding
@@ -4988,7 +4988,7 @@ def test_dashboard_project_loading_prefers_selected_workspace_over_cached_fallba
     helpers = "\n".join(
         start + html.split(start, 1)[1].split(end, 1)[0]
         for start, end in (
-            ("function pretripDataProjectIds()", "async function fetchJson"),
+            ("function resolvedPretripProjectId()", "async function fetchJson"),
             ("async function fetchFirstPretripJson", "function scheduleBodyIndexWatchRefresh"),
             ("async function loadProjectData()", "async function loadBriefingData()"),
         )
@@ -5013,12 +5013,14 @@ const results = [];
 (async () => {
   async function capture() {
     requests = [];
-    await loadProjectData();
+    let error = null;
+    try { await loadProjectData(); } catch (e) { error = e.message; }
     results.push({
+      error,
       selectedProject,
-      project: state.project.project_id,
-      admin: state.adminProjection.project_id,
-      debug: state.debugEvents[0].project_id,
+      project: state.project?.project_id || null,
+      admin: state.adminProjection?.project_id || null,
+      debug: state.debugEvents[0]?.project_id || null,
       resolvedProject: state.pretripDataProjectId,
       requests: [...requests],
     });
@@ -5043,9 +5045,10 @@ const results = [];
         assert observed["project"] == observed["admin"] == observed["debug"] == expected
         assert observed["resolvedProject"] == expected
         assert observed["requests"] == [expected] * 3
-    assert fallback["project"] == fallback["admin"] == fallback["debug"] == "chilai_nanhua_day1"
+    assert fallback["project"] is fallback["admin"] is fallback["debug"] is None
+    assert fallback["error"] == "project unavailable"
     assert fallback["requests"][:3] == [fallback["selectedProject"]] * 3
-    assert fallback["requests"][3:] == ["chilai_nanhua_day1"] * 3
+    assert fallback["requests"][3:] == []
 
 
 def test_dashboard_uses_strict_project_route_scoped_loading_and_truthful_debug_state() -> None:
@@ -5055,9 +5058,9 @@ def test_dashboard_uses_strict_project_route_scoped_loading_and_truthful_debug_s
         "async function fetchJson", 1
     )[0]
     assert "replace(/_scoutAI$/" not in project_id_candidates
-    assert "state.pretripDataProjectId || PRETRIP_DATA_PROJECT_ID" in project_id_candidates
-    assert "projectId()" in project_id_candidates
-    assert "new Set" in project_id_candidates
+    assert "state.pretripDataProjectId" not in project_id_candidates
+    assert "resolvedPretripProjectId()" in project_id_candidates
+    assert "new Set" not in project_id_candidates
 
     for marker in (
         "ROUTE_DATA_SCOPES",
@@ -5377,7 +5380,7 @@ def test_dashboard_joint_review_information_architecture_and_qa_contract() -> No
         "Preview Import",
         "Create Workspace",
         "Clone creates a new target with one clean GPX import",
-        "32 canonical layers",
+        "33 canonical layers",
         "completed-track is after-action only",
         "Remaining Mission Projection",
         "Current decision",
@@ -5575,15 +5578,15 @@ def test_dashboard_diagnostic_page_runs_38_read_only_checks() -> None:
     assert diagnostic_nav in html
     assert html.index(diagnostic_nav) > html.index(settings_nav)
     assert '"diagnostic": Object.freeze' in html
-    assert 'diagnostic: ["Diagnostic", "44 read-only Dashboard checks"]' in html
+    assert 'diagnostic: ["Diagnostic", "48 read-only Dashboard checks"]' in html
     assert 'if (route === "diagnostic") return renderDiagnosticPage();' in html
 
     case_source = html.split(
         "const DASHBOARD_DIAGNOSTIC_CASES = Object.freeze([", 1
     )[1].split("]);", 1)[0]
-    for index in range(1, 45):
+    for index in range(1, 49):
         assert f'id: "DASH-{index:03d}"' in case_source
-    assert case_source.count('id: "DASH-') == 44
+    assert case_source.count('id: "DASH-') == 48
     assert "postJson(" not in case_source
 
     for marker in (
@@ -5611,7 +5614,7 @@ def test_dashboard_diagnostic_page_runs_38_read_only_checks() -> None:
         "Safety / Emergency 專屬決策與權限邊界",
         "Contextual Permission Evidence lineage 與隱私邊界",
         "Candidate Simulation 明確觸發與 no-write contract",
-        "Navigation、Architecture、Weather 動態圖磚倍率切換",
+        "Navigation／Architecture 倍率與 Weather 快取優先契約",
         "Navigation MapLibre 2D/3D 鏡頭持久化",
         "DASHBOARD_MAP_APPROVED_SINGLE_IMAGE_THEMES",
         "const DASHBOARD_MAP_SURFACES = Object.freeze([",
@@ -5680,7 +5683,7 @@ def test_dashboard_diagnostic_page_runs_38_read_only_checks() -> None:
     assert "postJson(" not in runner
     assert 'status: "running"' in runner
     assert 'status: warning ? "warning" : "passed"' in runner
-    assert 'status: "failed"' in runner
+    assert 'error?.diagnosticStatus === "warning" ? "warning" : "failed"' in runner
     assert "performance.now()" in runner
 
     check_030 = html.split(
@@ -5701,7 +5704,7 @@ def test_dashboard_diagnostic_classifies_expected_runtime_gaps_without_false_red
     check_018 = html.split(
         "async function diagnosticCheck018()", 1
     )[1].split("async function diagnosticCheck019()", 1)[0]
-    assert "Route Context is recorded as deferred / not implemented" in check_018
+    assert "Route Context briefing artifact is unavailable (HTTP 404)" in check_018
     assert "return diagnosticWarning(" in check_018
 
     check_019 = html.split(
@@ -5790,7 +5793,7 @@ def test_dashboard_diagnostic_checks_probe_runtime_data_and_rendered_behavior() 
 
     assert "diagnosticFetchStatus(" in diagnostic_source
     assert "__diagnostic_missing_workspace__" in diagnostic_source
-    assert "Expected 31 pre-trip layer controls" in diagnostic_source
+    assert "Expected ${expectedPretripLayers.length} pre-trip layer controls" in diagnostic_source
     assert "diagnosticExerciseSharedMapController()" in diagnostic_source
     assert "paginateEvidenceGroup(pagedGroup, 2" in diagnostic_source
     assert "renderPaceFitPage(force)" in diagnostic_source
@@ -5817,7 +5820,7 @@ def test_dashboard_diagnostic_checks_probe_runtime_data_and_rendered_behavior() 
         "NAVIGATION_RUDY_TILE_SOURCE.maxZoom",
         "firstMatrix > initialMatrix",
         "NAVIGATION_RUDY_TILE_SOURCE.preparedMaxZoom + 1",
-        "request URL/TILEMATRIX contract crosses prepared Z14",
+        "diagnosticWeatherLiveTiles",
         "definition.initialMaxZoom + Math.ceil(Math.log2(Math.max(1, state.zoom)))",
         "navigationTerrainMapLibreStoredCamera",
         "rememberNavigationTerrainMapLibreCamera",
@@ -5850,7 +5853,7 @@ def test_dashboard_diagnostic_checks_probe_runtime_data_and_rendered_behavior() 
         "DASH-035",
     ):
         assert f'"{case_id}"' in browser_smoke
-    assert "const expectedDiagnosticCount = 44" in browser_smoke
+    assert "const expectedDiagnosticCount = 48" in browser_smoke
     assert '"DASH-037"' in browser_smoke
     assert '"DASH-038"' in browser_smoke
     assert "async function inspectNavigationMapLibreCameraPersistence(" in browser_smoke
@@ -5900,11 +5903,11 @@ def test_navigation_maplibre_camera_fail_case_and_diagnostic_gate_are_documented
         assert marker in failure_log
 
     for marker in (
-        "目前版本：44 / 100",
-        "DASH-001～DASH-044",
+        "目前版本：48 / 100",
+        "DASH-001～DASH-048",
         "### DASH-038 Navigation MapLibre 2D/3D 鏡頭持久化",
         "DASH-MAP-REG-003",
-        "下一個可用編號為 `DASH-045`",
+        "下一個可用編號為 `DASH-049`",
     ):
         assert marker in checklist
 
