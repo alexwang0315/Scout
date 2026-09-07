@@ -4,13 +4,13 @@ This interface gives Scout AI a deterministic way to read available tool
 contracts and run read-only local evidence tools without depending on prompt-only
 knowledge.
 
-## Implementation Update 2026-09-04
+## Implementation Update 2026-09-07
 
-Scout AI's Mac runtime and Pi dependency manifests target Pydantic AI v2.38.0.
-The September 4 upgrade is local only, not a new hardware deployment.
+Scout AI's Mac runtime and Pi dependency manifests target Pydantic AI v2.40.0.
+The September 7 upgrade is local only, not a new hardware deployment.
 Tool execution remains deterministic and read-only by default:
 
-- `pydantic-ai-slim[duckduckgo,mcp,openai,openrouter]` is pinned to v2.38.0 for Pi
+- `pydantic-ai-slim[duckduckgo,mcp,openai,openrouter]` is pinned to v2.40.0 for Pi
   admin/live runtimes and the local development venv.
 - Scout keeps `pydantic_ai.Agent(end_strategy="early")` for typed Scout
   provider calls. This intentionally avoids Pydantic AI v2's default graceful
@@ -65,11 +65,16 @@ Tool execution remains deterministic and read-only by default:
   Installed version metadata, not a constant answer, must satisfy the live
   version tool. See the
   [upgrade and failed-case report](../evals/scout-ai-pydantic-238-failed-case-smoke-20260904.md).
-- Optional Praison intelligence dependencies target `praisonaiagents==1.7.3`.
+- The v2.40.0 regressions verify filtered `Agent.on_event` listeners and ensure
+  parallel sibling tool results remain together before synthetic deferred-tool
+  reveal exchanges. The live OpenRouter smoke continues to verify structured
+  output, MCP stream events, traced search/fetch, visible tool failure, and
+  retry. See the
+  [2.40/Praison 1.7.4 report](../evals/scout-ai-pydantic-240-praison-174-smoke-20260907.md).
+- Optional Praison intelligence dependencies target `praisonaiagents==1.7.4`.
   Real SDK orchestration, MCP lifecycle, Scout Model Gateway replay, and isolated
   opt-in file memory are compatibility checks, not new authority or implicit
-  memory activation. See the
-  [local upgrade report](../evals/scout-ai-pydantic-237-praison-173-smoke-20260903.md).
+  memory activation. Version 1.7.3 remains the pre-upgrade baseline.
 - MCP compatibility is now exercised through `run_stream_events()`. A valid
   trace must include both `FunctionToolCallEvent` and
   `FunctionToolResultEvent` before `AgentRunResultEvent`; merely listing an MCP

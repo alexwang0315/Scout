@@ -17,7 +17,7 @@ def praison_sdk(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> ModuleType:
 
 
 def test_praison_core_version(praison_sdk: ModuleType) -> None:
-    assert version("praisonaiagents") == "1.7.3"
+    assert version("praisonaiagents") == "1.7.4"
     for name in ("Agent", "Task", "AgentTeam", "AgentFlow"):
         assert getattr(praison_sdk, name) is not None
 

@@ -29,8 +29,8 @@ def test_offline_pydantic_ai_compatibility_smoke_passes() -> None:
     assert report["status"] == "passed"
     assert report["required_version"] == installed_version
     assert report["configured_version"] == REQUIRED_VERSION
-    assert report["check_count"] == 18
-    assert report["passed_count"] == 18
+    assert report["check_count"] == 19
+    assert report["passed_count"] == 19
     assert report["failed_count"] == 0
     assert report["live_openrouter_requested"] is False
     assert {item["name"] for item in report["checks"]} == {
@@ -45,6 +45,7 @@ def test_offline_pydantic_ai_compatibility_smoke_passes() -> None:
         "structured_output",
         "mcp_instructions_and_tool",
         "web_capability_contract",
+        "agent_event_hook",
         "stream_events_and_compaction",
         "agent_web_content_type_guard",
         "agent_web_host_guard",
@@ -88,9 +89,9 @@ def test_runtime_and_deployment_dependency_pins_stay_aligned() -> None:
         "requirements.pi.live.txt",
     } <= dependency_sets.keys()
     expected_versions = {
-        "pydantic-ai-slim": "2.38.0",
-        "pydantic-evals": "2.38.0",
-        "praisonaiagents": "1.7.3",
+        "pydantic-ai-slim": "2.40.0",
+        "pydantic-evals": "2.40.0",
+        "praisonaiagents": "1.7.4",
     }
     seen = set()
     for surface, dependencies in dependency_sets.items():

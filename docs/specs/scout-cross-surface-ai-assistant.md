@@ -23,8 +23,8 @@ assets, `docker-compose.pi.ai.yml` and `tools/pi_ollama_stress.py`, while
 keeping them under the `ai-experimental` manual hardware prototype profile and
 not part of the assistant readiness gate.
 
-2026-09-04 update: Scout AI is the full-capability user entrypoint. Pydantic AI
-provider compatibility targets v2.38.0. This update qualifies the Mac runtime
+2026-09-07 update: Scout AI is the full-capability user entrypoint. Pydantic AI
+provider compatibility targets v2.40.0. This update qualifies the Mac runtime
 and deployment manifests; it does not claim a new Pi deployment. The assistant
 and Mac-local fallback paths use `end_strategy="early"`, normalize
 `openai:<model>` to `openai-chat:<model>`, and using the dedicated OpenRouter
@@ -302,7 +302,7 @@ Provider support should be staged:
 
 Current Pydantic AI provider policy:
 
-- supported runtime family: Pydantic AI v2.38.0;
+- supported runtime family: Pydantic AI v2.40.0;
 - default model path: local `FunctionModel`;
 - external NVIDIA GLM path: `SCOUT_AI_OS_MODEL=z-ai/glm-5.2` with
   `NVIDIA_API_KEY`; Scout sends `z-ai/glm-5.2` as the provider model id;

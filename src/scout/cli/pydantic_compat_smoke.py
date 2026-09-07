@@ -15,7 +15,7 @@ from typing import Any, Literal
 from uuid import uuid4
 
 from pydantic import BaseModel
-from pydantic_ai import Agent, ModelRetry, Tool, ToolFailed, UsageLimits
+from pydantic_ai import Agent, ModelRetry, RunContext, Tool, ToolFailed, UsageLimits
 from pydantic_ai.capabilities.native_tool import NativeTool
 from pydantic_ai.capabilities.web_fetch import WebFetch
 from pydantic_ai.capabilities.web_search import WebSearch
@@ -27,6 +27,7 @@ from pydantic_ai.messages import (
     ModelResponse,
     NativeToolCallPart,
     NativeToolReturnPart,
+    PartStartEvent,
     RetryPromptPart,
     TextPart,
     ToolCallPart,
@@ -45,7 +46,7 @@ from scout.agents.pydantic_ai_compat import (
     pydantic_native_research_capabilities,
 )
 
-REQUIRED_VERSION = "2.38.0"
+REQUIRED_VERSION = "2.40.0"
 DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4-flash-0731"
 DEFAULT_TIMEOUT_SECONDS = 120.0
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -174,6 +175,7 @@ def _offline_checks(
         ("structured_output", _offline_structured_output),
         ("mcp_instructions_and_tool", _offline_mcp_instructions),
         ("web_capability_contract", _offline_web_capabilities),
+        ("agent_event_hook", _offline_agent_event_hook),
         ("stream_events_and_compaction", _offline_stream_events_and_compaction),
         ("agent_web_content_type_guard", _offline_agent_web_content_type_guard),
         ("agent_web_host_guard", _offline_agent_web_host_guard),
@@ -514,6 +516,29 @@ async def _offline_stream_events_and_compaction() -> dict[str, Any]:
     return {
         "event_types": event_types,
         "compaction_round_trip": True,
+    }
+
+
+async def _offline_agent_event_hook() -> dict[str, Any]:
+    observed: list[str] = []
+    agent = Agent(
+        TestModel(custom_output_text="Scout event hook observed."),
+        **pydantic_agent_runtime_kwargs(),
+    )
+
+    @agent.on_event(PartStartEvent)
+    async def capture_part_start(
+        ctx: RunContext[None], event: PartStartEvent
+    ) -> None:
+        del ctx
+        observed.append(type(event).__name__)
+
+    result = await agent.run("Emit one model response part.")
+    _require(result.output == "Scout event hook observed.", "event hook changed output")
+    _require(observed == ["PartStartEvent"], "filtered agent event hook was not called")
+    return {
+        "filtered_event": "PartStartEvent",
+        "observed_count": len(observed),
     }
 
 

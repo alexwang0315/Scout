@@ -1,5 +1,5 @@
 pydantic==2.13.3
-pydantic-ai-slim[mcp,openai]==2.38.0
+pydantic-ai-slim[mcp,openai]==2.40.0
 httpx>=0.28,<1
-praisonaiagents==1.7.3
+praisonaiagents==1.7.4
 uvicorn==0.46.0
