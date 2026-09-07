@@ -4353,6 +4353,184 @@ def test_scout_dashboard_route_context_embeds_skill_trip_briefing() -> None:
     assert '<div class="debug-main-stack">\n            ${renderMetricPanel("Briefing Source"' not in html
 
 
+def test_route_context_regeneration_waits_without_disabling_other_post_timeouts() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    post_json = "async function postJson" + html.split("async function postJson", 1)[1].split(
+        "async function sha256Hex", 1
+    )[0]
+    constants = "\n".join(re.findall(
+        r"const (?:FETCH_TIMEOUT_MS|ROUTE_CONTEXT_REGENERATION_TIMEOUT_MS) = [^;]+;", html
+    ))
+    program = constants + "\n" + post_json + r"""
+const assert = require("node:assert/strict");
+const DIAGNOSTIC_MAP_PROBE = false;
+const apiBase = () => "http://example.test";
+const timers = [];
+const cleared = [];
+const requests = [];
+const window = {
+  setTimeout(callback, delay) {
+    const timer = {id: timers.length + 1, callback, delay};
+    timers.push(timer);
+    return timer.id;
+  },
+  clearTimeout(id) { cleared.push(id); },
+};
+const fetch = (url, options) => new Promise((resolve, reject) => {
+  requests.push({url, options, resolve});
+  options.signal.addEventListener("abort", () => {
+    reject(Object.assign(new Error("aborted"), {name: "AbortError"}));
+  }, {once: true});
+});
+(async () => {
+  const payload = {confirm_regenerate: true};
+  const result = {status: "completed", canonical_promoted: true};
+  const quality = postJson("/quality", payload, {
+    timeoutMs: ROUTE_CONTEXT_REGENERATION_TIMEOUT_MS,
+  });
+  assert.equal(timers.length, 0);
+  const qualityRequest = requests.shift();
+  assert.equal(qualityRequest.url, "http://example.test/quality");
+  assert.equal(qualityRequest.options.method, "POST");
+  assert.deepEqual(JSON.parse(qualityRequest.options.body), payload);
+  let completed = false;
+  quality.then(() => { completed = true; });
+  await Promise.resolve();
+  assert.equal(completed, false);
+  qualityRequest.resolve({ok: true, json: async () => result});
+  assert.deepEqual(await quality, result);
+  assert.equal(cleared.length, 0);
+
+  const timed = postJson("/normal", payload);
+  requests.shift();
+  assert.equal(timers.length, 1);
+  assert.equal(timers[0].delay, FETCH_TIMEOUT_MS);
+  timers[0].callback();
+  await assert.rejects(timed, /request timed out after 20s: \/normal/);
+  assert.deepEqual(cleared, [timers[0].id]);
+
+  const custom = postJson("/custom", payload, {timeoutMs: 120000});
+  assert.equal(timers[1].delay, 120000);
+  requests.shift().resolve({ok: true, json: async () => result});
+  assert.deepEqual(await custom, result);
+  assert.deepEqual(cleared, [timers[0].id, timers[1].id]);
+})().catch(error => { console.error(error); process.exitCode = 1; });
+"""
+    subprocess.run(
+        ["node", "-e", program], capture_output=True, text=True, check=True, timeout=30
+    )
+
+
+def test_route_context_frame_height_converges_after_content_growth() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    helpers = "function routeContextBriefingDocumentHeight" + html.split(
+        "function routeContextBriefingDocumentHeight", 1
+    )[1].split("function bindRouteContextBriefingFrame", 1)[0]
+    program = helpers + """
+let height = 760;
+let content = 16000;
+let writes = 0;
+const root = {
+  get scrollHeight() { return Math.max(height, content); },
+  get offsetHeight() { return height; },
+  get clientHeight() { return height; },
+};
+const frame = {
+  isConnected: true, dataset: {},
+  contentDocument: {documentElement: root, body: {
+    get scrollHeight() { return content; },
+    get offsetHeight() { return content; },
+  }},
+  style: {set height(value) { height = parseFloat(value); writes++; }},
+  getBoundingClientRect() { return {height}; },
+  setAttribute() {},
+};
+for (let i = 0; i < 100; i++) syncRouteContextBriefingFrameHeight(frame);
+const initial = {height, writes};
+content = 18000;
+for (let i = 0; i < 100; i++) syncRouteContextBriefingFrameHeight(frame);
+const expanded = {height, writes};
+content = 9000;
+for (let i = 0; i < 100; i++) syncRouteContextBriefingFrameHeight(frame);
+console.log(JSON.stringify({initial, expanded, height, writes}));
+"""
+    result = subprocess.run(
+        ["node", "-e", program], capture_output=True, text=True, check=True
+    )
+    assert json.loads(result.stdout) == {
+        "initial": {"height": 16000, "writes": 1},
+        "expanded": {"height": 18000, "writes": 2},
+        "height": 9000,
+        "writes": 3,
+    }
+
+
+def test_route_context_renders_before_optional_variants_finish() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    loader = "async function loadBriefingData()" + html.split(
+        "async function loadBriefingData()", 1
+    )[1].split("async function loadRouteContextBriefingArtifactStatus()", 1)[0]
+    program = """
+const state = {route: 'outdoor-route-context'};
+let rendered = false;
+let finished = false;
+let releaseVariants;
+const refreshCurrentDataView = () => { rendered = true; };
+const loadRouteContextBriefingArtifactStatus = async () => ({status: 'available'});
+const fetchFirstPretripJson = () => new Promise(resolve => { releaseVariants = resolve; });
+""" + loader + """
+(async () => {
+  const pending = loadBriefingData().then(() => { finished = true; });
+  await new Promise(resolve => setImmediate(resolve));
+  const beforeVariants = {rendered, finished};
+  releaseVariants({status: 'missing'});
+  await pending;
+  console.log(JSON.stringify({beforeVariants, finished}));
+})();
+"""
+    result = subprocess.run(
+        ["node", "-e", program], capture_output=True, text=True, check=True
+    )
+    assert json.loads(result.stdout) == {
+        "beforeVariants": {"rendered": True, "finished": False},
+        "finished": True,
+    }
+
+
+def test_route_context_background_refresh_preserves_loaded_document() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    refresh = "function refreshCurrentDataView()" + html.split(
+        "function refreshCurrentDataView()", 1
+    )[1].split("function routeUsesEmbeddedFrame", 1)[0]
+    program = """
+const state = {route: 'outdoor-route-context', briefingArtifactStatus: {status: 'available'}};
+let renderCount = 0;
+const render = () => { renderCount++; };
+const renderTruthStrip = () => {};
+const routeUsesEmbeddedFrame = () => false;
+const routeContextBriefingSrc = () => '/briefing?v=1';
+let src = '/briefing?v=1';
+const frame = {getAttribute: () => src};
+const document = {
+  getElementById: id => id === 'workspace' ? {} : null,
+  querySelector: selector => selector.startsWith('iframe') ? frame : null,
+};
+""" + refresh + """
+refreshCurrentDataView();
+const sameDocumentRenders = renderCount;
+src = '/briefing?v=0';
+refreshCurrentDataView();
+console.log(JSON.stringify({sameDocumentRenders, versionChangedRenders: renderCount}));
+"""
+    result = subprocess.run(
+        ["node", "-e", program], capture_output=True, text=True, check=True
+    )
+    assert json.loads(result.stdout) == {
+        "sameDocumentRenders": 0,
+        "versionChangedRenders": 1,
+    }
+
+
 def test_dashboard_route_context_binds_selected_project_before_first_render() -> None:
     html = PAGE.read_text(encoding="utf-8")
     project_binding = html.split(

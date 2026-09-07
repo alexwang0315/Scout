@@ -1,17 +1,55 @@
 from __future__ import annotations
 
 import hashlib
+import importlib
 import json
+import re
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from pretrip_route_context_scout_ai_regenerate import (
     EDITORIAL_PLAN_SCHEMA_VERSION,
     EVIDENCE_SCHEMA_VERSION,
+    MAX_EDITORIAL_PLAN_ATTEMPTS,
     RouteContextRegenerationError,
     regenerate_route_context_briefing,
 )
+
+
+@pytest.mark.parametrize("module_name", [
+    "pretrip_route_context_scout_ai_regenerate",
+    "pretrip_route_context_scout_ai_review",
+])
+def test_legacy_dashboard_model_can_enable_research_with_configured_provider(
+    monkeypatch: pytest.MonkeyPatch, module_name: str,
+) -> None:
+    import pydantic_ai
+    from pydantic_ai_runtime_compat import pydantic_native_research_capabilities_for_model
+
+    module = importlib.import_module(module_name)
+    captured = {}
+
+    class LocalAgent:
+        def __init__(self, model, **kwargs):
+            captured.update(kwargs)
+
+        def run_sync(self, *args, **kwargs):
+            return SimpleNamespace(output=SimpleNamespace(model_dump=lambda **_: {}))
+
+    monkeypatch.setattr(pydantic_ai, "Agent", LocalAgent)
+    monkeypatch.setattr(module, "build_chat_model", lambda **_: object())
+    monkeypatch.setattr(module, "pydantic_native_research_capabilities_for_model",
+                        lambda name: pydantic_native_research_capabilities_for_model(name, env={}))
+    monkeypatch.setattr(module, "pydantic_native_research_trace", lambda _: {
+        "web_search_call_count": 1, "web_fetch_call_count": 1,
+    })
+    module._call_live_model(
+        prompt="test", model_name="deepseek/deepseek-v4-flash-0731",
+        base_url="https://openrouter.ai/api/v1", api_key="test-only", timeout_seconds=240,
+    )
+    assert [type(item).__name__ for item in captured["capabilities"]] == ["WebSearch", "WebFetch"]
 
 
 def test_regeneration_archives_baseline_and_deterministically_renders_evidence(
@@ -71,14 +109,22 @@ def test_regeneration_archives_baseline_and_deterministically_renders_evidence(
     assert "未開放路線的脈絡導覽" in html
     assert "第 0 道閘門" in html
     assert "不得直接套用為今日規劃模板" in html
-    assert "等待官方恢復「其他路線」" in html
+    assert "等待官方確認本路線開放" in html
+    assert "等待官方恢復「其他路線」" not in html
+    assert "先等官方恢復清代東段所屬" not in html
     assert "D1" in html
     assert "東埔第二登山口至觀高" in html
     assert "其他路線" in html
     assert "入園日前 10 天至 2 個月" in html
     assert "歷史參考，不是今日建議行程" in html
-    assert "帶著這些問題讀" in html
-    assert "帶著三個問題讀" not in html
+    assert "帶著這些問題讀" not in html
+    first_section = html.split('<section id="decision_snapshot">', 1)[1].split('</section>', 1)[0]
+    assert "路線身分" in first_section
+    assert "申請結論" in first_section
+    assert "參考隊伍以包車前往東埔" in first_section
+    assert "最新現地路況與所有渡溪點狀態" not in first_section
+    assert all(question not in html for question in _editorial_plan()["reader_questions"])
+    assert '<details class="follow-up">' in html
     assert "P0" in html
     assert "P1" in html
     assert "P2" in html
@@ -131,6 +177,52 @@ def test_regeneration_can_create_a_missing_canonical_briefing(tmp_path: Path) ->
     assert result["archive_ref"] is None
     assert briefing_path.is_file()
     assert "<h1>東清八通關古道</h1>" in briefing_path.read_text(encoding="utf-8")
+
+
+def test_regeneration_numbers_sections_in_the_editorial_reading_order(tmp_path: Path) -> None:
+    project_root = _write_project(tmp_path)
+    plan = _editorial_plan()
+    plan["section_headings"]["visual_essay"] = "歷史參考圖像"
+    media_path = project_root / "normalized/context/route_context/media_manifest.json"
+    media = json.loads(media_path.read_text(encoding="utf-8"))
+    first_image = media["images"][0]
+    first_image.update({
+        "source_tier": "P1",
+        "source_family": "historical_map_reference",
+        "alt": "清代八通關道路全線示意",
+        "caption": "清代八通關道路全線示意",
+    })
+    media["images"].append({
+        **first_image,
+        "url": "https://example.test/east-route.jpg",
+        "alt": "拉庫拉庫溪北岸的清八東段",
+        "caption": "拉庫拉庫溪北岸的清八東段",
+    })
+    _write_json(media_path, media)
+    order = plan["section_order"]
+    order[5], order[6] = order[6], order[5]
+
+    result = regenerate_route_context_briefing(
+        project_root=project_root,
+        evidence_path=_write_evidence(project_root),
+        model_config_path=_write_model_config(tmp_path),
+        skill_path=_write_skill(tmp_path),
+        model_caller=lambda **_: {"plan": plan},
+    )
+
+    document = (project_root / result["briefing_ref"]).read_text(encoding="utf-8")
+    numbered_sections = re.findall(
+        r'<section id="([^"]+)"><div class="section-heading"><span>(\d+)</span>',
+        document,
+    )
+    assert numbered_sections == [(section_id, f"{index:02d}")
+                                 for index, section_id in enumerate(order, 1)]
+    gallery = document.split('<section id="visual_essay">', 1)[1].split('</section>', 1)[0]
+    assert gallery.count('<figure class="map-figure">') == 2
+    assert 'class="original-image" href="https://example.test/route-map.jpg"' in gallery
+    gallery_image_style = re.search(r'\.visual-grid img\s*\{([^}]+)\}', document)
+    assert gallery_image_style is not None
+    assert 'object-fit: contain' in gallery_image_style.group(1)
 
 
 def test_regeneration_rejects_claim_with_unknown_source_before_model_call(
@@ -247,6 +339,37 @@ def test_regeneration_rejects_model_route_rename(
         )
 
 
+def test_regeneration_repairs_official_image_label_without_p0_images(tmp_path: Path) -> None:
+    project_root = _write_project(tmp_path)
+    media_path = project_root / "normalized/context/route_context/media_manifest.json"
+    media = json.loads(media_path.read_text(encoding="utf-8"))
+    media["images"][0]["source_tier"] = "P1"
+    _write_json(media_path, media)
+    invalid_plan = _editorial_plan()
+    invalid_plan["section_headings"]["visual_essay"] = "歷史與官方參考圖像：對照路段與地景"
+    corrected_plan = _editorial_plan()
+    corrected_plan["section_headings"]["visual_essay"] = "歷史參考圖像：對照路段與地景"
+    prompts: list[str] = []
+
+    def fake_model_caller(**kwargs: object) -> dict[str, object]:
+        prompts.append(str(kwargs["prompt"]))
+        return {"plan": invalid_plan if len(prompts) == 1 else corrected_plan}
+
+    result = regenerate_route_context_briefing(
+        project_root=project_root,
+        evidence_path=_write_evidence(project_root),
+        model_config_path=_write_model_config(tmp_path),
+        skill_path=_write_skill(tmp_path),
+        model_caller=fake_model_caller,
+    )
+
+    assert len(prompts) == result["model_request_count"] == 2
+    assert "mislabels non-P0 imagery" in prompts[1]
+    document = (project_root / result["briefing_ref"]).read_text(encoding="utf-8")
+    assert "歷史與官方參考圖像" not in document
+    assert "歷史參考圖像：對照路段與地景" in document
+
+
 def test_regeneration_repairs_closed_claim_for_unknown_route_status(
     tmp_path: Path,
 ) -> None:
@@ -296,6 +419,8 @@ def test_regeneration_repairs_closed_claim_for_unknown_route_status(
     ).read_text(encoding="utf-8")
     assert "目前狀態待查：先確認官方公告" in html
     assert "目前未開放：不可直接成行" not in html
+    assert "在官方恢復與全部缺口重查前" not in html
+    assert "等待官方確認本路線開放" not in html
 
 
 def test_regeneration_repairs_a_weak_closed_route_editorial_plan(
@@ -388,11 +513,109 @@ def test_regeneration_keeps_baseline_when_all_editorial_repairs_are_weak(
             model_caller=fake_model_caller,
         )
 
-    assert calls == 3
+    assert calls == MAX_EDITORIAL_PLAN_ATTEMPTS == 10
     briefing_path = (
         project_root / "outputs" / "briefings" / "route_context_briefing.html"
     )
     assert "OLD BRIEFING" in briefing_path.read_text(encoding="utf-8")
+
+
+def test_regeneration_gallery_has_unique_attributed_route_images(tmp_path: Path) -> None:
+    project_root = _write_project(tmp_path)
+    media_path = project_root / "normalized/context/route_context/media_manifest.json"
+    images = [{
+        "url": f"https://example.test/route-{index}.jpg",
+        "caption": f"參考紀錄中的古道路段 {index}",
+        "source_tier": "P1",
+        "source_url": "https://example.test/trip",
+        "source_title": "古道行程紀錄",
+    } for index in range(20)]
+    images.insert(1, {**images[0], "url": images[0]["url"] + "#same-photo"})
+    images.insert(0, {**images[-1], "url": "https://example.test/logo.jpg"})
+    images.insert(0, {**images[-1], "url": "https://example.test/unattributed.jpg",
+                      "source_url": "javascript:alert(1)"})
+    images.insert(0, {**images[-1], "url": "https://example.test/blank.jpg", "caption": ""})
+    _write_json(media_path, {"images": images})
+    plan = _editorial_plan()
+    plan["section_headings"]["visual_essay"] = "歷史參考圖像"
+
+    result = regenerate_route_context_briefing(
+        project_root=project_root,
+        evidence_path=_write_evidence(project_root),
+        model_config_path=_write_model_config(tmp_path),
+        skill_path=_write_skill(tmp_path),
+        model_caller=lambda **_: {"plan": plan},
+    )
+
+    document = (project_root / result["briefing_ref"]).read_text(encoding="utf-8")
+    gallery = document.split('<section id="visual_essay">', 1)[1].split('</section>', 1)[0]
+    assert gallery.count('<figure>') == 18
+    assert gallery.count('href="https://example.test/trip"') == 18
+    assert gallery.count('class="original-image"') == 18
+    assert "古道行程紀錄" in gallery
+    assert "route-17.jpg" in gallery
+    assert "route-18.jpg" not in gallery
+    assert "#same-photo" not in document
+    assert "logo.jpg" not in document
+    assert "unattributed.jpg" not in document
+    assert "blank.jpg" not in document
+
+
+def test_regeneration_draws_bound_route_and_hashes_the_geometry(tmp_path: Path) -> None:
+    project_root = _write_project(tmp_path)
+    geometry_ref = "normalized/map/map_context.geojson"
+    geometry_path = project_root / geometry_ref
+    _write_json(geometry_path, {
+        "type": "FeatureCollection",
+        "features": [{"type": "Feature", "geometry": {
+            "type": "LineString",
+            "coordinates": [[121.0, 23.5, 600], [121.02, 23.51, 1800],
+                            [121.04, 23.50, 900]],
+        }}],
+    })
+    _write_json(project_root / "normalized/routes/route_evidence_bundle.json", {
+        "project_id": "dongqing_fixture",
+        "golden_route": {"source_id": "bound-test-route", "geometry_ref": geometry_ref},
+    })
+
+    result = regenerate_route_context_briefing(
+        project_root=project_root,
+        evidence_path=_write_evidence(project_root),
+        model_config_path=_write_model_config(tmp_path),
+        skill_path=_write_skill(tmp_path),
+        model_caller=lambda **_: {"plan": _editorial_plan()},
+    )
+
+    document = (project_root / result["briefing_ref"]).read_text(encoding="utf-8")
+    assert 'aria-label="綁定軌跡全段走向圖"' in document
+    assert 'aria-label="綁定軌跡海拔剖面圖"' in document
+    assert "1,800 m" in document
+    assert "121.040°E" in document
+    packet = json.loads((project_root / result["evidence_packet_ref"]).read_text())
+    drawing = packet["workspace_snapshot"]["route_drawing"]
+    assert drawing["geometry_ref"] == geometry_ref
+    assert drawing["geometry_sha256"] == hashlib.sha256(geometry_path.read_bytes()).hexdigest()
+    assert drawing["profile_segments"][0][1] == [121.02, 23.51, 1800]
+
+
+def test_regeneration_rejects_another_projects_route_drawing_before_model(tmp_path: Path) -> None:
+    project_root = _write_project(tmp_path)
+    _write_json(project_root / "normalized/routes/route_evidence_bundle.json", {
+        "project_id": "a_different_journey",
+        "golden_route": {"geometry_ref": "normalized/map/map_context.geojson"},
+    })
+
+    def should_not_call(**_: object) -> dict[str, object]:
+        raise AssertionError("model should not be called for a mismatched route")
+
+    with pytest.raises(RouteContextRegenerationError, match="another project"):
+        regenerate_route_context_briefing(
+            project_root=project_root,
+            evidence_path=_write_evidence(project_root),
+            model_config_path=_write_model_config(tmp_path),
+            skill_path=_write_skill(tmp_path),
+            model_caller=should_not_call,
+        )
 
 
 def _write_project(tmp_path: Path) -> Path:

@@ -19,6 +19,142 @@ Use this file when a rerun must include all of:
 
 If any required step is skipped, report the run as partial.
 
+### 2026-09-07 Route Context recovery for the exact legacy newImport workspace
+
+The reported workspace was `dongqing_batongguan_historic_trail_newImport`.
+Checking `chilai_nanhua_day1_scoutAI` or the older Dongqing `scoutAI` workspace
+does not verify this target. Always bind the Dashboard URL, status endpoint,
+project metadata and rendered HTML to the exact requested project id.
+
+Its 2026-08-25 collection retained 39 context points, but the pack, source
+manifest and evidence had `route_context_briefing_ref: null`; the briefing
+directory did not exist. This is the legacy omitted-HTML preparation defect
+described in the 2026-08-29 lessons below. It was not a rejected semantic
+review. The current preparation path already requests `write_briefing=True`;
+that change does not backfill older workspaces.
+
+Bounded recovery rendered the existing project-bound points, source manifest,
+media manifest, crawl seeds and route summary through the existing deterministic
+briefing renderer. Only the missing HTML and its refs in `project.json`, the
+pack, source manifest and evidence were written. Original metadata copies and
+input/output hashes are recorded in
+`artifacts/route-context-recovery-20260907-newImport/restoration-receipt.json`.
+The associated `restore.py` records this exact recovery and refuses to overwrite
+an existing briefing; it is not a general preparation or regeneration command.
+No GPX import, layer preparation, QGIS restart, cloud request or live source
+fetch was performed. Context points, media and crawl seeds retained their hashes.
+
+The recovered HTML renders seven eligible named points from the 39 stored
+candidates. At that first recovery the target had zero fetched web evidence
+items and zero photos; current status and itinerary evidence were missing. The
+renderer now shows missing official evidence when P0 count is zero instead of
+claiming historical support from absent sources. Recovery is artifact
+availability, not semantic-review approval or current route verification.
+
+The exact target's status endpoint returned `available`, its HTML returned 200
+and matched the local bytes, and `content_reviewed=false` remained truthful.
+The earlier Dashboard repair also starts briefing reads independently of
+workspace/variants loading and removes the extra 2 px in iframe sizing that
+otherwise creates a ResizeObserver growth loop. Do not add viewport padding
+to a measurement that already includes the iframe viewport height.
+
+Additional browser verification covered the canonical renderer's embedded
+chapter controls: use the Dashboard workspace scroller for viewport, current
+chapter and section jumps; the expanded iframe viewport otherwise appears to
+be permanently at its last chapter. Measure body content for height changes
+when switching data/briefing modes. Background project and variants completion
+must update the outer status without replacing a matching loaded iframe.
+The final mouse smoke advanced from the first chapter to the days-evidence
+section on the exact newImport workspace. Full data mode remains available,
+with missing official sources, photos and current status explicitly shown.
+
+#### 2026-09-07 Researched first edition after the reader rejected the empty briefing
+
+Restoring an HTML file does not complete a request for a useful briefing. The
+reader rejected the gap-only report. The established Codex skill and Scout
+`route-context-intelligence` manifest already require actual search, selected
+source fetches, attributed images, historical itinerary, logistics and six
+context layers. This legacy workspace lacked the typed regeneration input
+expected by the Dashboard's quality cycle.
+
+Use the existing skill's evidence-bound regeneration branch for this case.
+The exact-workspace handoff is recorded under
+`artifacts/route-context-first-edition-20260907/`: source research, live status
+query receipt, curated image references, assembly/collection scripts and
+`preparation-receipt.json`. It materialized 20 public pages (14 P0, 6 P1),
+16 image references and a nine-day historical itinerary. Original route
+summary, context points, mileage anchors and crawl seeds retained their hashes.
+The canonical briefing remains the responsibility of the existing Dashboard
+generation plus independent hash-bound semantic-review cycle.
+
+Specific failures and corrections:
+
+- A successful HTTP status can contain only an access challenge. Reject the
+  body as missing evidence; the first edition omitted the blocked public-bus
+  page and its detailed reservation claims from the collector-bound packet.
+- Archive image endpoints use `?name=...jpg&folder=...`. Check the explicit
+  filename against the existing image/chrome gate and retain name/folder in
+  deduplication. Dropping every query string incorrectly merged four different
+  historical images into one.
+- The Dashboard still passes the legacy bare DeepSeek model ID. Chat-model
+  construction accepted its configured OpenRouter endpoint, but native research
+  policy rejected the missing provider prefix before any search. Both the
+  editorial and review callers now resolve the OpenRouter research identity
+  from that endpoint without changing the selected model or credentials.
+- An answer-first document needs evidence-backed conclusions before unresolved
+  tasks. The evidence renderer now leads with route identity, historical
+  schedule, transport and application answers, includes attributed imagery and
+  draws the bound route/profile. It avoids asserting old MCP mileage labels as
+  the journey order and removes fixed route/year/category assumptions.
+- Browser inspection caught two additional rendering defects: fixed section
+  numbers disagreed with the model's reading order, and `object-fit: cover`
+  cropped map edges and portrait photos. Number sections from the accepted
+  editorial order, display gallery images in full, give maps a full-width row,
+  and link each original image. Keep the independent review bound to the final
+  HTML after these corrections.
+- Use the existing media `source_family=historical_map_reference` when choosing
+  the wide map layout; these two source captions do not contain the word
+  "map". Reject an editorial heading claiming official imagery when the
+  workspace has no P0 images, just as P2 imagery labels require P2 images.
+- Keep the virtual-environment executable path when reloading the local
+  Dashboard. Resolving its Python symlink to the base interpreter loses the
+  installed Scout package. Wait for the listener/status endpoint before browser
+  actions; importing the full local Dashboard stack can take around a minute.
+
+The route identity remains 清代八通關古道, with the northern-bank eastern
+alignment; the southern-bank Japanese-era itinerary is not a substitute.
+Current entry restrictions are based on the 2026-08-27 closure, 2026-08-28
+partial reopening, direct route-note reads and the 2026-09-07 status query.
+Historical photos and day counts are not a claim of current access.
+
+The first live Dashboard cycle returned an independent content `PASS` (4/5)
+after two editorial attempts. Its retained receipt records 2 web-search calls
+and 2 web-fetch calls; the independent reviewer performed an additional fetch.
+Browser operation confirmed the embedded historical-itinerary jump, 16 distinct
+loaded image URLs (17 image elements including the repeated hero), and the two
+bound-GPX figures. The pre-visual-correction copy and receipts are retained in
+`reviewed-before-visual-fix/`; the final promoted hash and current API review
+state belong in `final-qualification.json`, generated by
+`verify_first_edition.py` only after the last review passes.
+
+Final first edition: the Dashboard promoted SHA-256
+`c23ed6ed70700a16d8a7e7c04b4f2642290bd09530a9a8355625ff509c4250d8`
+after an independent `PASS` (4/5). `final-qualification.json` verifies the
+canonical, input, skill, review-packet and project review bindings;
+`browser-qualification.json` records the reloaded exact-workspace page, actual
+chapter click, 17 loaded image elements / 16 unique images, two full-width
+source maps, and the route/profile figures. Focused Python checks passed 28
+generation/review/media cases and 3 Dashboard cases; `pnpm lint`, `pnpm
+typecheck` and `pnpm test` also passed. The reviewer left only minor source-
+excerpt/checklist-link suggestions for a later edition.
+
+The live generation/review cycle can take several minutes per editorial
+attempt. Route Context now explicitly opts out of the browser's fixed request
+timer; other POST calls retain their timeouts. This avoids presenting a still-
+running quality cycle as failed solely because ten minutes elapsed. Model and
+provider failures continue to surface normally. No GPX import, map preparation,
+worker restart, hardware action or external publication was performed.
+
 ### 2026-09-04 Architecture Historical Return Timing Repair
 
 An available candidate mission graph is not historical Reversibility analysis.

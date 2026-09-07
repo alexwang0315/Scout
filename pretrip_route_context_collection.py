@@ -9,7 +9,7 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from urllib.parse import unquote, urlsplit, urlunsplit
+from urllib.parse import parse_qs, unquote, urlencode, urlsplit, urlunsplit
 
 
 ROUTE_CONTEXT_COLLECTION_ARTIFACT_KIND = "pretrip_route_context_collection"
@@ -6708,6 +6708,15 @@ def _build_briefing_html(
       const activeCounts = Array.from(document.querySelectorAll('[data-active-section-count]'));
       let presenterLockUntil = 0;
       const mobilePresenterDock = document.querySelector('.mobile-presenter-dock');
+      const hostFrame = window.frameElement;
+      const hostScroller = hostFrame?.matches('[data-route-context-briefing]')
+        ? hostFrame.closest('#workspace') : null;
+      const visibleViewport = () => hostScroller
+        ? {{
+            top: hostScroller.getBoundingClientRect().top - hostFrame.getBoundingClientRect().top,
+            height: hostScroller.clientHeight,
+          }}
+        : {{top: 0, height: window.innerHeight}};
       const sectionFor = (link) => {{
         const id = (link.getAttribute('href') || '').slice(1);
         return id ? document.getElementById(id) : null;
@@ -6726,6 +6735,17 @@ def _build_briefing_html(
           ? mobilePresenterDock.getBoundingClientRect().height
           : 0;
         return navHeight + dockHeight + 40;
+      }};
+      const scrollToSection = (section, behavior = 'auto') => {{
+        const offset = section.getBoundingClientRect().top - activeNavThreshold() + 12;
+        if (hostScroller) {{
+          hostScroller.scrollTo({{
+            top: Math.max(0, hostScroller.scrollTop + offset - visibleViewport().top),
+            behavior,
+          }});
+        }} else {{
+          window.scrollTo({{top: Math.max(0, window.scrollY + offset), behavior}});
+        }}
       }};
       const setActiveLink = (link, visibleLinks) => {{
         navLinks.forEach((item) => item.removeAttribute('aria-current'));
@@ -6761,7 +6781,7 @@ def _build_briefing_html(
           return;
         }}
         presenterLockUntil = Date.now() + 900;
-        section.scrollIntoView({{ block: 'start', behavior: 'smooth' }});
+        scrollToSection(section, 'smooth');
         setActiveLink(target, visible);
         window.setTimeout(() => {{
           presenterLockUntil = 0;
@@ -6776,13 +6796,14 @@ def _build_briefing_html(
         if (!visible.length) {{
           return;
         }}
-        const nearBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4;
+        const viewport = visibleViewport();
+        const nearBottom = viewport.height + viewport.top + window.scrollY >= document.documentElement.scrollHeight - 4;
         if (nearBottom) {{
           setActiveLink(visible[visible.length - 1], visible);
           return;
         }}
         let active = visible[0];
-        const threshold = activeNavThreshold();
+        const threshold = viewport.top + activeNavThreshold();
         for (const link of visible) {{
           const section = sectionFor(link);
           if (!section) {{
@@ -6837,13 +6858,9 @@ def _build_briefing_html(
           const root = document.documentElement;
           const previousScrollBehavior = root.style.scrollBehavior;
           root.style.scrollBehavior = 'auto';
-          const targetTop = Math.max(
-            0,
-            window.scrollY + section.getBoundingClientRect().top - activeNavThreshold() + 12
-          );
-          window.scrollTo(0, targetTop);
+          scrollToSection(section);
           root.style.scrollBehavior = previousScrollBehavior;
-          if (window.location.hash !== link.hash) {{
+          if (!hostScroller && window.location.hash !== link.hash) {{
             window.history.pushState(null, '', link.hash);
           }}
           setActiveLink(link, visible);
@@ -6854,6 +6871,7 @@ def _build_briefing_html(
         }});
       }});
       window.addEventListener('scroll', scheduleActiveNav, {{ passive: true }});
+      hostScroller?.addEventListener('scroll', scheduleActiveNav, {{ passive: true }});
       window.addEventListener('resize', scheduleActiveNav);
       applyMode('briefing');
       updateActiveNav();
@@ -7026,10 +7044,18 @@ def _is_briefing_content_image(
     except ValueError:
         return False
     path = unquote(parsed.path or "").lower()
+    # Public archives also serve photographs through named file endpoints.
+    # Inspect their explicit filename, while applying the same chrome checks.
+    query = parse_qs(parsed.query)
+    filename = next(
+        (query[key][0].lower() for key in ("name", "filename") if query.get(key)),
+        "",
+    )
+    image_path = path if path.endswith((".jpg", ".jpeg", ".png", ".webp")) else filename
     netloc = parsed.netloc.lower()
     text = " ".join(
         str(value or "").strip().lower()
-        for value in (caption, alt, title, page_url, path)
+        for value in (caption, alt, title, page_url, path, filename)
         if str(value or "").strip()
     )
     if netloc in {"www.facebook.com", "facebook.com", "sb.scorecardresearch.com"}:
@@ -7041,9 +7067,9 @@ def _is_briefing_content_image(
         return False
     if path.endswith((".svg", ".gif", ".ico")):
         return False
-    if not path.endswith((".jpg", ".jpeg", ".png", ".webp")):
+    if not image_path.endswith((".jpg", ".jpeg", ".png", ".webp")):
         return False
-    if re.search(r"(^|/)(icon|icons|logo|logos|sprite|avatar|badge)(/|_|-|\.)", path):
+    if re.search(r"(^|/)(icon|icons|logo|logos|sprite|avatar|badge)(/|_|-|\.)", image_path):
         return False
     if any(
         marker in path
@@ -7180,12 +7206,22 @@ def _media_dedupe_key(url: str) -> str:
         parsed = urlsplit(url)
     except ValueError:
         return url.strip()
+    query = parse_qs(parsed.query)
+    # File endpoints identify different photos by name/folder, not URL path.
+    identity_query = (
+        urlencode(
+            [(key, value) for key in ("container", "folder", "name", "filename")
+             for value in query.get(key, [])]
+        )
+        if query.get("name") or query.get("filename")
+        else ""
+    )
     return urlunsplit(
         (
             parsed.scheme.lower(),
             parsed.netloc.lower(),
             parsed.path,
-            "",
+            identity_query,
             "",
         )
     )
@@ -8737,7 +8773,7 @@ def _briefing_route_map_atlas(
           <div class="map-atlas-layers" aria-label="地圖證據三層">
             <article class="map-layer-card">
               <b>官方來源</b>
-              <p>目前官方頁面支撐歷史與路徑脈絡；是否包含現行狀態，必須逐頁確認，不能從來源層級推定。</p>
+              <p>{'官方來源的內容與日期必須逐頁確認，不能從來源層級推定現況。' if p0_count else '目前沒有已載入的官方來源，官方路線脈絡仍待查證。'}</p>
               <small>已整理 {_h(p0_count)} 筆 P0 官方頁面證據</small>
             </article>
             <article class="map-layer-card">
@@ -10474,10 +10510,14 @@ def _briefing_route_context_intelligence_panel(
             "action": "用節點順序建立路線骨架；節點用途仍需來源確認。",
         },
         {
-            "style": "good",
+            "style": "good" if p0_count else "warn",
             "label": "官方脈絡",
             "metric": str(p0_count),
-            "cue": "目前 P0 內容支撐清代與日治道路的路徑、年代與東西段比較。",
+            "cue": (
+                "官方資料僅支撐來源實際記載的路線脈絡；請逐項核對來源內容與日期。"
+                if p0_count
+                else "目前沒有已載入的官方來源，官方路線脈絡仍待查證。"
+            ),
             "action_label": "不能延伸成",
             "action": "現行開放、路況、天氣、住宿或入園結論。",
         },

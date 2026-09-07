@@ -4,9 +4,11 @@ import argparse
 import hashlib
 import html
 import json
+import math
 import os
 import re
 import uuid
+import xml.etree.ElementTree as ET
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
@@ -33,7 +35,7 @@ DEFAULT_SKILL_PATH = (
     ROOT / ".agents" / "skills" / "scout-route-context-briefing" / "SKILL.md"
 )
 DEFAULT_TIMEOUT_SECONDS = 240
-MAX_EDITORIAL_PLAN_ATTEMPTS = 3
+MAX_EDITORIAL_PLAN_ATTEMPTS = 10
 OUTPUT_DIR = Path("outputs/route_context_regeneration")
 EVIDENCE_PACKET_REF = OUTPUT_DIR / "evidence_packet.json"
 EDITORIAL_PLAN_REF = OUTPUT_DIR / "scout_ai_editorial_plan.json"
@@ -575,7 +577,7 @@ def render_route_context_briefing(
         '<figure class="hero-media">'
         f'<img src="{_h(hero_image.get("url"))}" '
         f'alt="{_h(hero_image.get("alt") or hero_image.get("caption") or "")}">'
-        f'<figcaption>{_h(hero_image.get("caption") or hero_image.get("alt") or "")}</figcaption>'
+        f'<figcaption>{_image_caption(hero_image)}</figcaption>'
         "</figure>"
         if hero_image
         else ""
@@ -592,14 +594,20 @@ def render_route_context_briefing(
         else "可追溯的行前路線導覽"
     )
     status_banner = (
-        """
+        f"""
         <aside class="hero-status" role="note">
           <strong>目前未開放｜不是可直接套用的出發方案</strong>
-          <p>本頁只用來讀懂路線、歷史實走與未來查核順序。官方恢復「其他路線」以前，不建立可執行的宿點、接駁或申請方案。</p>
+          <p>{_h(evidence.current_status.summary)}</p>
+          {_source_chips(evidence.current_status.source_ids, sources)}
         </aside>
         """
         if closed_route
         else ""
+    )
+    footer_boundary = (
+        "在官方確認本路線開放與路況、宿點、接駁重查前，不作為可執行行程。"
+        if closed_route
+        else "出發安排仍須核對本路線的最新官方狀態、路況、宿點與接駁。"
     )
     return f"""<!doctype html>
 <html lang="zh-Hant">
@@ -630,7 +638,7 @@ def render_route_context_briefing(
   <main>{sections}</main>
   <footer>
     <strong>{_h(plan.closing_note)}</strong>
-    <p>本頁整理路線研究、歷史實走與申請查核；在官方恢復與全部缺口重查前，不是可執行行程、通行證明、現場判斷或出發核准。產製日期：{_h(generated_date)}</p>
+    <p>{_h(footer_boundary)}本頁不構成通行證明、現場判斷或出發核准。產製日期：{_h(generated_date)}</p>
   </footer>
 </body>
 </html>
@@ -644,14 +652,12 @@ def _decision_snapshot(
     workspace: dict[str, Any],
 ) -> str:
     route = workspace["route_summary"]
-    questions = "".join(f"<li>{_h(question)}</li>" for question in plan.reader_questions)
-    unresolved = "".join(f"<li>{_h(item)}</li>" for item in evidence.unresolved_items)
     hard_gate = (
         """
         <aside class="hard-gate">
           <span>第 0 道閘門</span>
-          <strong>先等官方恢復清代東段所屬的「其他路線」</strong>
-          <p>這道閘門未通過以前，不把舊宿點、舊接駁或九日節奏編成出發方案。恢復後仍須重新查證路況、合法宿營、接駁、天氣與完整登山計畫。</p>
+          <strong>等待官方確認本路線開放</strong>
+          <p>歷史紀錄提供沿線地景與當年實走節奏。官方確認本路線開放後，仍須重新查證路況、合法宿營、接駁與天氣，才能編訂新的登山計畫。</p>
         </aside>
         """
         if evidence.current_status.operability == "closed"
@@ -659,7 +665,7 @@ def _decision_snapshot(
     )
     return _section(
         "decision_snapshot",
-        plan.section_headings["decision_snapshot"],
+        plan,
         f"""
         <div class="decision-grid">
           <article class="status-card blocked">
@@ -685,14 +691,32 @@ def _decision_snapshot(
           </article>
         </div>
         {hard_gate}
-        <div class="reader-grid">
+        <div class="reader-grid answer-grid">
           <article>
-            <p class="section-kicker">帶著這些問題讀</p>
-            <ol>{questions}</ol>
+            <p class="section-kicker">路線身分</p>
+            <h3>{_h(evidence.route_identity.direction)}</h3>
+            <p>{_h(evidence.route_identity.explanation)}</p>
+            {_source_chips(evidence.route_identity.source_ids, sources)}
           </article>
           <article>
-            <p class="section-kicker">仍未解決</p>
-            <ul>{unresolved}</ul>
+            <p class="section-kicker">有紀錄的行程節奏</p>
+            <h3>{_h(evidence.reference_itinerary.label)}</h3>
+            <p>起段：{_h(evidence.reference_itinerary.days[0].route)}<br>
+               末段：{_h(evidence.reference_itinerary.days[-1].route)}</p>
+            <p>{_h(evidence.reference_itinerary.caveat)}</p>
+            {_source_chips(evidence.reference_itinerary.source_ids, sources)}
+          </article>
+          <article>
+            <p class="section-kicker">進出與交通</p>
+            <p><b>進場：</b>{_h(evidence.logistics.access)}</p>
+            <p><b>退場：</b>{_h(evidence.logistics.exit)}</p>
+            {_source_chips(evidence.logistics.source_ids, sources)}
+          </article>
+          <article>
+            <p class="section-kicker">申請結論</p>
+            <h3>{_h(evidence.application.classification)}</h3>
+            <p>{_h(evidence.application.summary)}</p>
+            {_source_chips(evidence.application.source_ids, sources)}
           </article>
         </div>
         """,
@@ -715,7 +739,7 @@ def _route_identity(
     )
     return _section(
         "route_identity",
-        plan.section_headings["route_identity"],
+        plan,
         f"""
         <div class="identity-board">
           <div>
@@ -729,8 +753,9 @@ def _route_identity(
             {_source_chips(evidence.route_identity.source_ids, sources)}
           </div>
           <aside>
-            <strong>不要混成同一條維護步道</strong>
-            <p>本頁會分開呈現清代古道、日治越道路、現行申請分類與 2020 實走紀錄；名稱接近，不代表路線、路況或宿點可以互換。</p>
+            <strong>沿線順序以這份軌跡為準</strong>
+            <p>{_h(evidence.route_identity.bound_track_name)}</p>
+            <p>{_h(evidence.reference_itinerary.caveat)}</p>
           </aside>
         </div>
         <div class="story-grid">{claim_cards}</div>
@@ -750,7 +775,7 @@ def _reference_itinerary(
     )
     return _section(
         "reference_itinerary",
-        plan.section_headings["reference_itinerary"],
+        plan,
         f"""
         <div class="section-intro">
           <div>
@@ -779,7 +804,7 @@ def _logistics_and_application(
     flow = (
         """
         <div class="flow" aria-label="官方重開後的查核順序">
-          <span><b>0</b>等待官方恢復「其他路線」</span>
+          <span><b>0</b>等待官方確認本路線開放</span>
           <span><b>1</b>重查路況、渡溪與合法宿營</span>
           <span><b>2</b>確認接駁、隊伍、留守與撤退</span>
           <span><b>3</b>查天氣後依規則送完整計畫</span>
@@ -791,22 +816,22 @@ def _logistics_and_application(
           <span><b>1</b>確認最新官方狀態</span>
           <span><b>2</b>重建逐日宿營與撤退計畫</span>
           <span><b>3</b>確認接駁、隊伍與留守</span>
-          <span><b>4</b>依其他路線規則送件</span>
+          <span><b>4</b>依本路線最新申請規則送件</span>
         </div>
         """
     )
     return _section(
         "logistics_and_application",
-        plan.section_headings["logistics_and_application"],
+        plan,
         f"""
         <div class="logistics-grid">
           <article>
-            <span class="card-kicker">2020 參考隊伍的進出方式</span>
-            <h3>接駁只能當歷史線索</h3>
+            <span class="card-kicker">有來源的進出方式</span>
+            <h3>登山口與離山交通</h3>
             <p><b>進場：</b>{_h(evidence.logistics.access)}</p>
             <p><b>退場：</b>{_h(evidence.logistics.exit)}</p>
-            <ul>{unresolved}</ul>
             {_source_chips(evidence.logistics.source_ids, sources)}
+            <details class="follow-up"><summary>交通與宿點仍需確認的項目</summary><ul>{unresolved}</ul></details>
           </article>
           <article class="application-card">
             <span class="card-kicker">目前申請分類</span>
@@ -827,13 +852,10 @@ def _route_atlas(
     workspace: dict[str, Any],
 ) -> str:
     route = workspace["route_summary"]
-    points = sorted(
-        [point for point in workspace["points"] if point.get("source_tier") == "P1"],
-        key=lambda point: float(point.get("distance_m") or 0),
-    )
+    points = [point for point in workspace["points"] if point.get("source_tier") == "P1"]
     point_cards = "".join(
         '<article class="point-card">'
-        f'<span>{_format_km(point.get("distance_m"))}</span>'
+        '<span>參考紀錄地名</span>'
         f"<h3>{_h(_point_label(point))}</h3>"
         f"<p>{_h(_context_label(point.get('context_kind')))}</p>"
         "</article>"
@@ -841,7 +863,7 @@ def _route_atlas(
     )
     return _section(
         "route_atlas",
-        plan.section_headings["route_atlas"],
+        plan,
         f"""
         <div class="atlas-summary">
           <article><span>綁定距離</span><b>{_format_km(route.get("distance_m"))}</b></article>
@@ -849,14 +871,15 @@ def _route_atlas(
           <article><span>最高高度</span><b>{_format_m(route.get("elevation_max_m"))}</b></article>
           <article><span>軌跡點</span><b>{_h(route.get("point_count") or "—")}</b></article>
         </div>
-        <p class="lead">這些節點來自已綁定的路線證據，里程只代表在目前軌跡上的投影位置；不能自動解讀成合法宿點、補水點或今日可通行位置。</p>
+        {_route_figures(workspace)}
+        <p class="lead">以下地名保留自參考紀錄，供對照逐日敘述。排列不代表里程順序，也不代表現行宿營或補水安排。</p>
         <div class="point-rail">{point_cards}</div>
         """,
     )
 
 
 def _visual_essay(plan: EditorialPlan, workspace: dict[str, Any]) -> str:
-    images = workspace["images"][:6]
+    images = _curated_images(workspace)
     if not images:
         gallery = (
             '<div class="empty-state">目前沒有已核對來源的路線圖像；'
@@ -864,20 +887,22 @@ def _visual_essay(plan: EditorialPlan, workspace: dict[str, Any]) -> str:
         )
     else:
         gallery = '<div class="visual-grid">' + "".join(
-            '<figure>'
+            ('<figure class="map-figure">' if _is_route_map_image(image) else '<figure>')
+            +
             f'<img loading="lazy" src="{_h(image.get("url"))}" '
             f'alt="{_h(image.get("alt") or image.get("caption") or "")}">'
-            f'<figcaption><span>{_h(image.get("source_tier") or "來源")}</span>'
-            f'{_h(image.get("caption") or image.get("alt") or "路線圖像")}</figcaption>'
+            f'<figcaption>{_image_caption(image)}'
+            f'<a class="original-image" href="{_h(image.get("url"))}" '
+            'target="_blank" rel="noopener noreferrer">開啟原圖</a></figcaption>'
             "</figure>"
             for image in images
             if image.get("url")
         ) + "</div>"
     return _section(
         "visual_essay",
-        plan.section_headings["visual_essay"],
+        plan,
         f"""
-        <p class="lead">圖像用來理解道路歷史、文化地景與路線方向；沒有點位錨定的圖片，不對應到特定里程或今天的現地狀態。</p>
+        <p class="lead">沿著來源照片與路線圖閱讀古道地景；圖說標明對應位置與來源。歷史影像保留拍攝當時的面貌，不代表今日路況。</p>
         {gallery}
         """,
     )
@@ -920,7 +945,7 @@ def _six_context_layers(
         )
     return _section(
         "six_context_layers",
-        plan.section_headings["six_context_layers"],
+        plan,
         """
         <p class="lead">六層不是六份資料表，而是六個閱讀角度：先看有來源的結論，再看哪些節點仍需人工查證。</p>
         <div class="layer-grid">""" + "".join(cards) + "</div>",
@@ -939,7 +964,7 @@ def _p2_route_memory(plan: EditorialPlan, workspace: dict[str, Any]) -> str:
     chips = "".join(f"<span>{_h(label)}</span>" for label in labels)
     return _section(
         "p2_route_memory",
-        plan.section_headings["p2_route_memory"],
+        plan,
         f"""
         <div class="p2-board">
           <div>
@@ -982,9 +1007,10 @@ def _source_ledger(
         if p2_count
         else ""
     )
+    unresolved = "".join(f"<li>{_h(item)}</li>" for item in evidence.unresolved_items)
     return _section(
         "source_ledger",
-        plan.section_headings["source_ledger"],
+        plan,
         f"""
         <div class="source-summary">
           <span><b>{counts["P0"]}</b>P0 官方</span>
@@ -992,6 +1018,10 @@ def _source_ledger(
           <span><b>{p2_count}</b>P2 路線線索</span>
         </div>
         {p2_note}
+        <details class="follow-up">
+          <summary>本次查核後仍待確認的事項</summary>
+          <ul>{unresolved}</ul>
+        </details>
         <div class="table-wrap">
           <table>
             <thead><tr><th>層級</th><th>來源</th><th>發布</th><th>本次查核</th></tr></thead>
@@ -1006,12 +1036,12 @@ def _source_ledger(
     )
 
 
-def _section(section_id: str, heading: str, body: str) -> str:
+def _section(section_id: str, plan: EditorialPlan, body: str) -> str:
     return (
         f'<section id="{_h(section_id)}">'
         '<div class="section-heading">'
-        f'<span>{SECTION_IDS.index(section_id) + 1:02d}</span>'
-        f"<h2>{_h(heading)}</h2>"
+        f'<span>{plan.section_order.index(section_id) + 1:02d}</span>'
+        f"<h2>{_h(plan.section_headings[section_id])}</h2>"
         "</div>"
         f"{body}</section>"
     )
@@ -1063,12 +1093,14 @@ def _load_workspace_snapshot(
         or media_payload.get("media")
         or []
     )
+    images = _curated_images({"images": images})
     return {
         "project_id": str(
             project.get("project_id") or project.get("id") or project_root.name
         ),
         "project_route_name": project.get("route_name") or project.get("name"),
         "route_summary": route_summary,
+        "route_drawing": _load_route_drawing(project_root, project, route_summary),
         "points": [point for point in points if isinstance(point, dict)],
         "images": [image for image in images if isinstance(image, dict)],
         "counts": {
@@ -1101,6 +1133,177 @@ def _load_workspace_snapshot(
             ),
         },
     }
+
+
+def _load_route_drawing(
+    project_root: Path,
+    project: dict[str, Any],
+    route_summary: dict[str, Any],
+) -> dict[str, Any]:
+    bundle_ref = Path(str(project.get("route_evidence_bundle_ref") or
+                          "normalized/routes/route_evidence_bundle.json"))
+    bundle_path = _safe_project_path(project_root, bundle_ref)
+    if not bundle_path.is_file():
+        return {}
+    bundle = _load_json(bundle_path)
+    project_id = str(project.get("project_id") or project.get("id") or project_root.name)
+    if bundle.get("project_id") != project_id:
+        raise RouteContextRegenerationError("route drawing bundle belongs to another project")
+    golden = bundle.get("golden_route") or {}
+    if (route_summary.get("artifact_id") and
+            golden.get("source_id") != route_summary["artifact_id"]):
+        raise RouteContextRegenerationError("route drawing does not match the bound route")
+    drawing: dict[str, Any] = {
+        "bundle_ref": bundle_ref.as_posix(),
+        "bundle_sha256": _sha256_file(bundle_path),
+        "source_id": golden.get("source_id"),
+        "route_name": route_summary.get("route_name"),
+        "overview_segments": [],
+        "profile_segments": [],
+    }
+    geometry_ref = golden.get("geometry_ref")
+    if geometry_ref:
+        geometry_path = _safe_project_path(project_root, Path(str(geometry_ref)))
+        if geometry_path.is_file():
+            payload = _load_json(geometry_path)
+            features = payload.get("features") or [payload]
+            lines = [feature for feature in features
+                     if (feature.get("geometry") or feature).get("type")
+                     in {"LineString", "MultiLineString"}]
+            for feature in lines:
+                props = feature.get("properties") or {}
+                if len(lines) > 1 and props.get("feature_type") not in {
+                    "approved_corridor", "golden_route", "route",
+                }:
+                    continue
+                geometry = feature.get("geometry") or feature
+                segments = (geometry.get("coordinates") or [])
+                if geometry.get("type") == "LineString":
+                    segments = [segments]
+                for segment in segments:
+                    if len(segment) >= 2 and all(_valid_coordinate(p) for p in segment):
+                        drawing["overview_segments"].append(segment)
+                        if all(len(p) >= 3 and _finite_number(p[2]) for p in segment):
+                            drawing["profile_segments"].append(segment)
+            drawing.update(geometry_ref=str(geometry_ref),
+                           geometry_sha256=_sha256_file(geometry_path))
+    profile_ref = golden.get("filtered_geometry_ref")
+    if profile_ref and Path(str(profile_ref)).suffix.lower() == ".gpx":
+        profile_path = _safe_project_path(project_root, Path(str(profile_ref)))
+        if profile_path.is_file():
+            document = ET.parse(profile_path).getroot()
+            segments = []
+            for segment in document.findall(".//{*}trkseg"):
+                coordinates = []
+                for point in segment.findall("{*}trkpt"):
+                    raw = [point.get("lon"), point.get("lat"), point.findtext("{*}ele")]
+                    if all(_finite_number(v) for v in raw):
+                        coordinate = [float(v) for v in raw]
+                        if _valid_coordinate(coordinate):
+                            coordinates.append(coordinate)
+                if len(coordinates) >= 2:
+                    segments.append(coordinates)
+            if segments:
+                drawing["profile_segments"] = segments
+                drawing["profile_ref"] = str(profile_ref)
+                drawing["profile_sha256"] = _sha256_file(profile_path)
+                if not drawing["overview_segments"]:
+                    drawing["overview_segments"] = segments
+    return drawing
+
+
+def _finite_number(value: Any) -> bool:
+    try:
+        return math.isfinite(float(value))
+    except (ValueError, TypeError):
+        return False
+
+
+def _valid_coordinate(point: Any) -> bool:
+    return (isinstance(point, (list, tuple)) and len(point) >= 2
+            and all(_finite_number(v) for v in point[:2])
+            and -180 <= float(point[0]) <= 180 and -90 <= float(point[1]) <= 90)
+
+
+def _route_figures(workspace: dict[str, Any]) -> str:
+    drawing = workspace.get("route_drawing") or {}
+    segments = drawing.get("overview_segments") or []
+    if not segments:
+        return ""
+    points = [point for segment in segments for point in segment]
+    west, east = min(p[0] for p in points), max(p[0] for p in points)
+    south, north = min(p[1] for p in points), max(p[1] for p in points)
+    longitude_scale = max(math.cos(math.radians((south + north) / 2)), 0.01)
+    scale = min(620 / max((east - west) * longitude_scale, 1e-6),
+                300 / max(north - south, 1e-6))
+
+    def position(point: list[float]) -> tuple[float, float]:
+        return (360 + (point[0] - (east + west) / 2) * longitude_scale * scale,
+                190 - (point[1] - (north + south) / 2) * scale)
+
+    paths = "".join(
+        '<polyline points="' + " ".join(f"{x:.1f},{y:.1f}" for x, y in
+                                        (position(p) for p in segment))
+        + '" class="route-line"/>' for segment in segments
+    )
+    markers = "".join(
+        f'<circle cx="{x:.1f}" cy="{y:.1f}" r="6" class="route-end"/>'
+        f'<text x="{x:.1f}" y="{y - 12:.1f}" text-anchor="middle">{label}</text>'
+        for label, (x, y) in (("起點", position(points[0])), ("終點", position(points[-1])))
+    )
+    overview = f"""<figure class="route-figure">
+      <h3>全段走向｜北向上</h3>
+      <svg viewBox="0 0 720 390" role="img" aria-label="綁定軌跡全段走向圖">
+        <title>綁定軌跡全段走向圖</title>
+        <rect x="30" y="25" width="660" height="330" rx="12" class="chart-ground"/>
+        <path d="M660 80 V45 M652 55 L660 43 L668 55" class="north-arrow"/>
+        <text x="660" y="35" text-anchor="middle">N</text>
+        {paths}{markers}
+        <text x="36" y="378">{west:.3f}°E</text>
+        <text x="684" y="378" text-anchor="end">{east:.3f}°E</text>
+      </svg>
+      <figcaption>依本頁綁定軌跡繪製的走向圖，未疊加底圖；用於理解路線方向與尺度。</figcaption>
+    </figure>"""
+    profile_segments = drawing.get("profile_segments") or []
+    profile = ""
+    if profile_segments:
+        samples: list[list[tuple[float, float]]] = []
+        distance = 0.0
+        for segment in profile_segments:
+            section = []
+            for index, point in enumerate(segment):
+                if index:
+                    previous = segment[index - 1]
+                    lat1, lat2 = math.radians(previous[1]), math.radians(point[1])
+                    delta_lat = lat2 - lat1
+                    delta_lon = math.radians(point[0] - previous[0])
+                    haversine = (math.sin(delta_lat / 2) ** 2 + math.cos(lat1) *
+                                 math.cos(lat2) * math.sin(delta_lon / 2) ** 2)
+                    distance += 6371000 * 2 * math.asin(min(1, math.sqrt(haversine)))
+                section.append((distance, point[2]))
+            samples.append(section)
+        elevations = [p[1] for segment in samples for p in segment]
+        low, high = min(elevations), max(elevations)
+        profile_paths = "".join(
+            '<polyline points="' + " ".join(
+                f'{60 + x / max(distance, 1) * 600:.1f},'
+                f'{325 - (y - low) / max(high - low, 1) * 260:.1f}' for x, y in segment
+            ) + '" class="elevation-line"/>' for segment in samples
+        )
+        profile = f"""<figure class="route-figure">
+          <h3>海拔剖面｜沿軌跡順序</h3>
+          <svg viewBox="0 0 720 390" role="img" aria-label="綁定軌跡海拔剖面圖">
+            <title>綁定軌跡海拔剖面圖</title>
+            <rect x="60" y="50" width="600" height="275" rx="8" class="chart-ground"/>
+            <path d="M60 50 V325 H660" class="chart-axis"/>{profile_paths}
+            <text x="60" y="38">{high:,.0f} m</text>
+            <text x="48" y="325" text-anchor="end">{low:,.0f}</text>
+            <text x="60" y="355">0 km</text>
+            <text x="660" y="355" text-anchor="end">{distance / 1000:.1f} km</text>
+          </svg>
+          <figcaption>海拔與橫軸距離來自綁定軌跡的座標；不跨接分離軌跡段，量測及濾波可能與摘要里程不同。</figcaption>
+        </figure>"""
+    return f'<div class="route-figures">{overview}{profile}</div>'
 
 
 def _build_prompt(
@@ -1189,6 +1392,8 @@ def _build_prompt(
         "看得懂的隊伍回顧／軌跡線索用語，不得直接以 P2路線記憶 作章名。"
         "若 workspace_summary 顯示沒有 P2 圖片，visual_essay 的章節名稱必須"
         "明確稱為歷史、官方或參考圖像，不得稱為行程照片、實走照片或現地照片。"
+        "若沒有 P0 圖片，visual_essay 的章節名稱也不得宣稱包含官方圖像；"
+        "文字引用官方來源，不代表照片來自官方。"
         "不要做出出發核准、通行判斷、安全結論或資料外推。\n\n"
         + json.dumps(payload, ensure_ascii=False, sort_keys=True)
     )
@@ -1230,6 +1435,13 @@ def _call_live_model(
         base_url=base_url,
         api_key=api_key,
     )
+    # Legacy Dashboard model IDs rely on the configured OpenRouter endpoint.
+    # The research policy resolves providers from explicit model prefixes.
+    research_model = (
+        f"openrouter:{model_name}"
+        if ":" not in model_name and urlparse(base_url or "").hostname == "openrouter.ai"
+        else model_name
+    )
     agent = Agent(
         model,
         output_type=EditorialPlan,
@@ -1242,7 +1454,7 @@ def _call_live_model(
             "single unavailable page must not end the research stage. Do not write "
             "HTML and do not invent route facts."
         ),
-        capabilities=pydantic_native_research_capabilities_for_model(model_name),
+        capabilities=pydantic_native_research_capabilities_for_model(research_model),
         **pydantic_agent_runtime_kwargs(),
     )
     try:
@@ -1301,8 +1513,12 @@ def _validate_editorial_plan_for_workspace(
         )
     counts = workspace.get("counts")
     counts = counts if isinstance(counts, dict) else {}
+    visual_heading = plan.section_headings["visual_essay"]
+    if int(counts.get("p0_image_count") or 0) <= 0 and "官方" in visual_heading:
+        raise RouteContextRegenerationError(
+            "visual_essay heading mislabels non-P0 imagery: 官方"
+        )
     if int(counts.get("p2_image_count") or 0) <= 0:
-        visual_heading = plan.section_headings["visual_essay"]
         misleading_terms = ("行程照片", "實走照片", "現地照片")
         found = [term for term in misleading_terms if term in visual_heading]
         if found:
@@ -1519,7 +1735,7 @@ def _validate_rendered_html(
             "未開放路線的脈絡導覽",
             "第 0 道閘門",
             "不得直接套用為今日規劃模板",
-            "等待官方恢復「其他路線」",
+            "等待官方確認本路線開放",
         )
         missing_closed_route = [
             text for text in closed_route_required if text not in html_text
@@ -1595,7 +1811,7 @@ def _write_bytes(path: Path, value: bytes) -> None:
 
 
 def _hero_image(workspace: dict[str, Any]) -> dict[str, Any]:
-    images = workspace.get("images") or []
+    images = _curated_images(workspace)
     for image in images:
         text = " ".join(
             str(image.get(key) or "") for key in ("alt", "caption", "context_layer")
@@ -1603,6 +1819,61 @@ def _hero_image(workspace: dict[str, Any]) -> dict[str, Any]:
         if image.get("url") and any(term in text for term in ("地圖", "路線", "古道")):
             return image
     return next((image for image in images if image.get("url")), {})
+
+
+def _curated_images(workspace: dict[str, Any]) -> list[dict[str, Any]]:
+    selected: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for image in workspace.get("images") or []:
+        if not isinstance(image, dict):
+            continue
+        url = str(image.get("url") or "").strip()
+        parsed = urlparse(url)
+        if parsed.scheme not in {"https", "http"} or not parsed.netloc:
+            continue
+        identity = parsed._replace(fragment="").geturl()
+        caption = str(image.get("caption") or image.get("alt") or "").strip()
+        source_url = str(image.get("source_url") or image.get("page_url") or "")
+        source = urlparse(source_url)
+        if (not caption or identity in seen or
+                (image.get("source_tier") != "P2" and
+                 (source.scheme not in {"https", "http"} or not source.netloc))):
+            continue
+        quality_text = " ".join(str(image.get(key) or "") for key in (
+            "url", "alt", "caption", "title", "source_role",
+        )).lower()
+        if re.search(r"(?:^|[^a-z])(icon|logo|logotype|button|menu|search|close|"
+                     r"language|facebook|tracking|pixel|avatar|badge)(?:[^a-z]|$)",
+                     quality_text):
+            continue
+        if Path(parsed.path).suffix.lower() in {".svg", ".gif", ".ico"}:
+            continue
+        selected.append({**image, "url": url, "caption": caption})
+        seen.add(identity)
+        if len(selected) == 18:
+            break
+    return selected
+
+
+def _image_caption(image: dict[str, Any]) -> str:
+    caption = _h(image.get("caption") or image.get("alt") or "")
+    tier = _h(image.get("source_tier") or "來源")
+    source_url = str(image.get("source_url") or image.get("page_url") or "")
+    parsed = urlparse(source_url)
+    attribution = ""
+    if parsed.scheme in {"http", "https"} and parsed.netloc:
+        label = _h(image.get("source_title") or image.get("credit") or "照片來源")
+        attribution = f'<a href="{_h(source_url)}" rel="noreferrer">{label}</a>'
+    return f'<span>{tier}</span>{caption}<small>{attribution}</small>'
+
+
+def _is_route_map_image(image: dict[str, Any]) -> bool:
+    text = " ".join(str(image.get(key) or "") for key in (
+        "caption", "alt", "title", "source_role", "media_role", "source_family",
+    ))
+    return any(term in text for term in ("地圖", "路線圖", "走向圖", "路徑圖")) or bool(
+        re.search(r"(?:^|[^a-z])map(?:[^a-z]|$)", text.lower())
+    )
 
 
 def _point_label(point: dict[str, Any]) -> str:
@@ -1931,6 +2202,8 @@ def _css() -> str:
       color: #dce8e2;
       font-size: 12px;
     }
+    .hero-media figcaption a, .hero-status a { color: #f4df9f; }
+    figcaption small { display: block; margin-top: 5px; }
     nav {
       position: sticky;
       top: 0;
@@ -2055,6 +2328,15 @@ def _css() -> str:
     }
     .reader-grid article, .logistics-grid article, .story-card { padding: 24px; }
     .reader-grid li, .logistics-grid li { margin: 8px 0; }
+    .answer-grid h3 { margin: 4px 0 14px; color: var(--forest); }
+    .follow-up {
+      margin-block: 20px;
+      padding: 16px 20px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      color: var(--muted);
+    }
+    .follow-up summary { cursor: pointer; color: var(--forest); font-weight: 750; }
     .identity-board {
       display: grid;
       grid-template-columns: minmax(0, 1.3fr) minmax(280px, .7fr);
@@ -2138,6 +2420,16 @@ def _css() -> str:
       color: white;
     }
     .atlas-summary b { display: block; margin-top: 5px; font-size: 28px; }
+    .route-figures { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .route-figure { margin: 24px 0 8px; min-width: 0; }
+    .route-figure svg { display: block; width: 100%; height: auto; }
+    .route-figure figcaption { color: var(--muted); font-size: 13px; }
+    .route-figure text { fill: var(--forest-dark); font-size: 16px; }
+    .chart-ground { fill: #eef3eb; }
+    .route-line { fill: none; stroke: var(--clay); stroke-width: 3; }
+    .elevation-line { fill: none; stroke: var(--forest); stroke-width: 2; }
+    .route-end { fill: var(--forest); stroke: white; stroke-width: 2; }
+    .north-arrow, .chart-axis { fill: none; stroke: var(--forest); stroke-width: 2; }
     .point-rail {
       display: flex;
       gap: 12px;
@@ -2168,8 +2460,11 @@ def _css() -> str:
       background: #e5e9e4;
     }
     .visual-grid figure:first-child { grid-column: span 8; grid-row: span 2; }
-    .visual-grid img { width: 100%; height: 260px; object-fit: cover; display: block; }
-    .visual-grid figure:first-child img { height: 100%; min-height: 532px; }
+    .visual-grid img { width: 100%; height: 260px; object-fit: contain; display: block; background: #e5e9e4; }
+    .visual-grid figure:first-child img { height: 532px; }
+    .visual-grid figure.map-figure { grid-column: span 12; grid-row: auto; }
+    .visual-grid figure.map-figure img { height: auto; }
+    .original-image { display: inline-block; margin-top: 8px; font-weight: 750; }
     .visual-grid figcaption { padding: 10px 12px; font-size: 13px; }
     .visual-grid figcaption span {
       margin-right: 8px;
@@ -2259,7 +2554,7 @@ def _css() -> str:
       main { padding-inline: 12px; }
       section { padding: 28px 20px; }
       .decision-grid, .reader-grid, .logistics-grid, .story-grid,
-      .identity-board, .layer-grid, .atlas-summary, .flow {
+      .identity-board, .layer-grid, .atlas-summary, .flow, .route-figures {
         grid-template-columns: 1fr;
       }
       .section-intro { align-items: start; flex-direction: column; }

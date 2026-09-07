@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Literal, Self
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -501,11 +502,16 @@ def _call_live_model(
         base_url=base_url,
         api_key=api_key,
     )
+    research_model = (
+        f"openrouter:{model_name}"
+        if ":" not in model_name and urlparse(base_url or "").hostname == "openrouter.ai"
+        else model_name
+    )
     agent = Agent(
         model,
         output_type=ScoutAIReviewDecision,
         instructions=SYSTEM_INSTRUCTIONS,
-        capabilities=pydantic_native_research_capabilities_for_model(model_name),
+        capabilities=pydantic_native_research_capabilities_for_model(research_model),
         **pydantic_agent_runtime_kwargs(),
     )
     try:

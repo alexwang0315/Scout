@@ -12058,7 +12058,7 @@
     const ASSISTANT_QUERY_PATH = "/assistant/query";
     const ASSISTANT_QUERY_TIMEOUT_MS = 240000;
     const FETCH_TIMEOUT_MS = 20000;
-    const ROUTE_CONTEXT_REGENERATION_TIMEOUT_MS = 600000;
+    const ROUTE_CONTEXT_REGENERATION_TIMEOUT_MS = null;
     const NAVIGATION_TERRAIN_FETCH_TIMEOUT_MS = 60000;
     const QGIS_SPATIAL_FETCH_TIMEOUT_MS = 45000;
     const TERRAIN_GUIDANCE_FETCH_TIMEOUT_MS = 240000;
@@ -13034,9 +13034,11 @@
       bindMobileNavigation();
       bindAgentChatControls();
       setRoute(routeFromHash());
+      if (state.route === "outdoor-route-context") void loadDataScope("briefing");
       void loadConnectedPreparationStatus();
       loadWorkspaceCatalog().finally(() => loadData()).finally(() => {
-        if (!routeUsesEmbeddedFrame(state.route)) setRoute(state.route, {loadRouteData: false});
+        if (state.route === "outdoor-route-context") refreshCurrentDataView();
+        else if (!routeUsesEmbeddedFrame(state.route)) setRoute(state.route, {loadRouteData: false});
       });
       void rebuildPermissionTruthAndSyncOfflineIntents();
       window.addEventListener("hashchange", () => setRoute(routeFromHash(), {loadRouteData: true}));
@@ -13214,9 +13216,9 @@
 
     async function postJson(path, payload, options = {}) {
       if (DIAGNOSTIC_MAP_PROBE) throw new Error("Map order diagnostics are read-only.");
-      const timeoutMs = Number(options.timeoutMs) || FETCH_TIMEOUT_MS;
+      const timeoutMs = options.timeoutMs === null ? null : Number(options.timeoutMs) || FETCH_TIMEOUT_MS;
       const controller = new AbortController();
-      const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+      const timer = timeoutMs === null ? null : window.setTimeout(() => controller.abort(), timeoutMs);
       try {
         const response = await fetch(`${apiBase()}${path}`, {
           method: "POST",
@@ -13239,12 +13241,12 @@
         }
         return data;
       } catch (error) {
-        if (error?.name === "AbortError") {
+        if (error?.name === "AbortError" && timeoutMs !== null) {
           throw new Error(`request timed out after ${Math.round(timeoutMs / 1000)}s: ${path}`);
         }
         throw error;
       } finally {
-        window.clearTimeout(timer);
+        if (timer !== null) window.clearTimeout(timer);
       }
     }
 
@@ -15952,7 +15954,9 @@
 
     async function loadBriefingData() {
       const [artifactResult, variantsResult] = await Promise.allSettled([
-        loadRouteContextBriefingArtifactStatus(),
+        loadRouteContextBriefingArtifactStatus().finally(() => {
+          if (state.route === "outdoor-route-context") refreshCurrentDataView();
+        }),
         fetchFirstPretripJson(candidateId => `/admin/pretrip/projects/${encodeURIComponent(candidateId)}/briefings/route-context/variants`),
       ]);
       if (artifactResult.status === "rejected") {
@@ -16219,6 +16223,26 @@
       const readinessChip = document.getElementById("readinessChip");
       if (readinessChip) readinessChip.textContent = readiness;
       renderTruthStrip(state.route);
+      if (state.route === "outdoor-route-context"
+          && state.briefingArtifactStatus?.status === "available") {
+        const frame = document.querySelector("iframe[data-route-context-briefing]");
+        if (frame?.getAttribute("src") === routeContextBriefingSrc()) {
+          // Background project/variant reads must not reset the document being read.
+          const status = document.getElementById("routeBriefingVariantsStatus");
+          if (status) status.textContent = state.briefingVariantsStatus?.text || "";
+          const drawer = document.querySelector("[data-route-briefing-variants]");
+          if (drawer && state.briefingVariants
+              && frame.routeContextVariants !== state.briefingVariants) {
+            const template = document.createElement("template");
+            template.innerHTML = renderRouteBriefingVariantsDrawer(state.briefingVariants);
+            const replacement = template.content.firstElementChild;
+            replacement.open = drawer.open;
+            drawer.replaceWith(replacement);
+            frame.routeContextVariants = state.briefingVariants;
+          }
+          return;
+        }
+      }
       if (state.route === "map") {
         renderMapEvidenceRail();
         bindMapEvidenceControls();
@@ -38643,15 +38667,15 @@
     function routeContextBriefingDocumentHeight(frame) {
       const documentRef = frame.contentDocument || frame.contentWindow?.document;
       if (!documentRef) return 0;
-      const root = documentRef.documentElement;
       const body = documentRef.body;
-      return Math.ceil(Math.max(
-        documentRef.documentElement?.scrollHeight || 0,
-        root?.offsetHeight || 0,
-        root?.clientHeight || 0,
-        body?.scrollHeight || 0,
-        body?.offsetHeight || 0,
-      ));
+      const bodyHeight = Math.max(body?.scrollHeight || 0, body?.offsetHeight || 0);
+      if (bodyHeight > 0) {
+        const style = frame.contentWindow?.getComputedStyle?.(body);
+        return Math.ceil(bodyHeight
+          + (parseFloat(style?.marginTop) || 0)
+          + (parseFloat(style?.marginBottom) || 0));
+      }
+      return Math.ceil(documentRef.documentElement?.scrollHeight || 0);
     }
 
     function syncRouteContextBriefingFrameHeight(frame) {
@@ -38659,7 +38683,9 @@
       try {
         const contentHeight = routeContextBriefingDocumentHeight(frame);
         if (contentHeight <= 0) return false;
-        const nextHeight = contentHeight + 2;
+        // The root height includes the iframe viewport. Adding padding here
+        // makes every ResizeObserver callback grow the viewport again.
+        const nextHeight = contentHeight;
         if (Math.abs(frame.getBoundingClientRect().height - nextHeight) > 1) {
           frame.style.height = `${nextHeight}px`;
         }
