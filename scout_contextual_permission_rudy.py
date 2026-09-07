@@ -13,6 +13,7 @@ from scout_contextual_permission_workbench import BaselineMapContextProjection
 
 RUDY_SOURCE_ID = "happyman_rudy_twmap"
 RUDY_LAYER_ID = "imagery"
+RUDY_PREPARED_LAYER_ID = "rudy-twmap"
 RUDY_BACKGROUND_WIDTH = 760
 RUDY_BACKGROUND_HEIGHT = 248
 RUDY_MAX_SOURCE_TILES = 24
@@ -46,16 +47,86 @@ class RudyCacheSettings:
     cache_root: Path
     min_zoom: int
     max_zoom: int
+    layer_id: str = RUDY_LAYER_ID
 
 
 def rudy_cache_settings(project_root: Path) -> RudyCacheSettings:
+    project_root = project_root.expanduser().resolve()
     try:
         project = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError(f"project.json is invalid: {exc}") from exc
+    if not isinstance(project, dict):
+        raise ValueError("project.json must be an object.")
+    bundle_ref = project.get("workspace_raster_tile_cache_bundle_ref")
+    if bundle_ref:
+        bundle = _read_project_cache_manifest(project_root, bundle_ref)
+        if bundle.get("project_id") != project.get("project_id"):
+            raise ValueError("Rudy cache bundle belongs to a different project.")
+        manifest_refs = bundle.get("layer_manifest_refs")
+        source_ids = bundle.get("layer_source_ids")
+        if not isinstance(manifest_refs, dict) or not isinstance(source_ids, dict):
+            raise ValueError("Rudy cache bundle has invalid layer bindings.")
+        manifest_ref = manifest_refs.get(RUDY_PREPARED_LAYER_ID)
+        if manifest_ref:
+            manifest = _read_project_cache_manifest(project_root, manifest_ref)
+            plan = manifest.get("plan")
+            if not isinstance(plan, dict):
+                raise ValueError("Prepared Rudy cache manifest has no tile plan.")
+            if (
+                source_ids.get(RUDY_PREPARED_LAYER_ID) != RUDY_SOURCE_ID
+                or manifest.get("imagery_source_id") != RUDY_SOURCE_ID
+                or plan.get("source_id") != RUDY_SOURCE_ID
+                or manifest.get("project_id") != project.get("project_id")
+                or plan.get("project_id") != project.get("project_id")
+                or manifest.get("layer_id") != RUDY_PREPARED_LAYER_ID
+                or plan.get("layer_id") != RUDY_PREPARED_LAYER_ID
+                or plan.get("cache_root") != bundle.get("cache_root")
+            ):
+                raise ValueError("Prepared Rudy cache source, project or layer binding is inconsistent.")
+            return _cache_settings(
+                project_root,
+                cache_root=plan.get("cache_root"),
+                min_zoom=plan.get("min_zoom"),
+                max_zoom=plan.get("max_zoom"),
+                layer_id=RUDY_PREPARED_LAYER_ID,
+            )
     if project.get("imagery_tile_cache_source_id") != RUDY_SOURCE_ID:
         raise ValueError("Rudy+TW is not the reviewed imagery cache source for this project.")
-    raw_cache_root = project.get("imagery_tile_cache_root")
+    return _cache_settings(
+        project_root,
+        cache_root=project.get("imagery_tile_cache_root"),
+        min_zoom=project.get("imagery_tile_cache_min_zoom"),
+        max_zoom=project.get("imagery_tile_cache_max_zoom"),
+        layer_id=RUDY_LAYER_ID,
+    )
+
+
+def _read_project_cache_manifest(project_root: Path, ref: object) -> dict[str, object]:
+    if not isinstance(ref, str) or not ref.strip():
+        raise ValueError("Rudy cache manifest ref must be a workspace-relative path.")
+    relative = Path(ref)
+    path = (project_root / relative).resolve()
+    if relative.is_absolute() or ".." in relative.parts or project_root not in path.parents:
+        raise ValueError("Rudy cache manifest ref escapes the workspace.")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError("Rudy cache manifest is invalid JSON.") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("Rudy cache manifest must be an object.")
+    return payload
+
+
+def _cache_settings(
+    project_root: Path,
+    *,
+    cache_root: object,
+    min_zoom: object,
+    max_zoom: object,
+    layer_id: str,
+) -> RudyCacheSettings:
+    raw_cache_root = cache_root
     if not isinstance(raw_cache_root, str) or not raw_cache_root.strip():
         raise FileNotFoundError("The project has no prepared Rudy+TW tile cache root.")
     cache_root = Path(raw_cache_root).expanduser()
@@ -64,14 +135,15 @@ def rudy_cache_settings(project_root: Path) -> RudyCacheSettings:
     cache_root = cache_root.resolve()
     if not cache_root.is_dir():
         raise FileNotFoundError(f"Prepared Rudy+TW tile cache is unavailable: {cache_root}")
-    min_zoom = _bounded_zoom(project.get("imagery_tile_cache_min_zoom"), default=5)
-    max_zoom = _bounded_zoom(project.get("imagery_tile_cache_max_zoom"), default=14)
+    min_zoom = _bounded_zoom(min_zoom, default=5)
+    max_zoom = _bounded_zoom(max_zoom, default=14)
     if min_zoom > max_zoom:
         raise ValueError("Rudy+TW cache zoom range is invalid.")
     return RudyCacheSettings(
         cache_root=cache_root,
         min_zoom=min_zoom,
         max_zoom=max_zoom,
+        layer_id=layer_id,
     )
 
 
@@ -118,7 +190,7 @@ def render_daily_rudy_background(
         for x in range(x_min, x_max + 1):
             payload = load_or_build_raster_tile_payload(
                 project_id,
-                RUDY_LAYER_ID,
+                cache_settings.layer_id,
                 zoom,
                 x,
                 y,

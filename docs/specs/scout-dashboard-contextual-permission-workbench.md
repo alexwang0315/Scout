@@ -327,6 +327,15 @@ route-containing bbox, performs no remote fetch and no cache write, and returns
 must say `Rudy unavailable · route only`; it must not substitute an unapproved
 basemap or imply that geographic context was loaded.
 
+The daily renderer first resolves the prepared `rudy-twmap` layer through the
+project's workspace raster-cache bundle and its layer manifest. Bundle,
+manifest and tile plan must agree on the project, layer, cache root and
+`happyman_rudy_twmap` source. This supports workspaces whose primary `imagery`
+source is aerial photography without changing that selection. Legacy projects
+may still read their `imagery` cache when its declared source is Rudy+TW.
+Malformed or conflicting dedicated-layer provenance fails closed; the renderer
+never relabels another basemap or fills missing tiles during a GET.
+
 The sketch must use actual prepared route geometry clipped to the day's exact
 `start_anchor.route_order_m` and proposed day-end `route_order_m`. It shows:
 
