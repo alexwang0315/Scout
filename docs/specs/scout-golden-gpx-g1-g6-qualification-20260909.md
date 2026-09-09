@@ -9,7 +9,44 @@ Dashboard 重驗。驗收依據維持 [delivery plan §3.2](scout-golden-planned
 > 六頁共同分析版次修復。新的完整 UI 驗收仍在執行；不可把下列試算或隔離 PASS
 > 當成 G1–G6 全數通過。
 
-## r9 整合與重驗進度
+## 整合與重驗進度
+
+### r12 顯示層修復完成，等待 runtime 重載與瀏覽器重驗
+
+2026-09-09 15:55（Asia/Taipei）：`pretrip_admin_view.py` 已改讀採用後的
+`mission_day_estimates`，保留日界、歷史 clocks 及 elapsed time；新啟程日期與
+target ETA 維持未指定，不復活退休欄位。相同來源版本的 18 項聚焦測試通過，
+包括完整 Save／Accept／Rebuild 後 full 與 compact project GET、舊格式相容、
+analysis subject 及嚴格 CWA 驗證。33-layer 與 Navigation report-only guard 通過。
+
+真實 G1 唯讀 before／after 重現已恢復 35 CP、1 日及 imagery ready；七份原始
+產物的 hashes 不變，沒有網路或 `.env` 讀取。這仍不是瀏覽器通過；正在執行的
+G2 與 Clone0 完成後才重載 Dashboard。首次完整成功及其後三次重跑仍為 **0**。
+[修復與同版測試回執](../../artifacts/golden-gpx-repair-20260909/receipts/r11-adopted-eta-view-repair/completion.json)。
+
+### r11 真實 Resume／採用完成，G6 因舊 ETA reader 仍未通過
+
+2026-09-09 15:42（Asia/Taipei）：`739a1229`、Dashboard PID `22378`，
+worker `11290`／QGIS `5214` 未重啟。G1 原 job attempt 2 已 `completed`，
+唯一 import.1、來源 hash 均未改；重載前後 18 份作業／Permission 檔案完全相同。
+MCP、fresh OSM、實際數值雨量及影像均 ready，layer validation 零警告。
+
+新候選 `version.862eeb521c6e06c1`、review `review.89fb012a420ef538` 完成
+Save／Accept／Rebuild 各次 reload；adopted 1 日、35 CP、08:40:19→16:47:41、
+487.4 分，共同 revision `9eff5be5c741c774`。獨立原始 GPX／candidate／review／
+Rebuild／ETA／CWA route-pair 稽核全部通過。然而 compact project 回傳 404，
+Pace 為 0 CP、Architecture mobility 未載入，因此 **G6 仍 FAIL**。
+
+精確唯讀重現指出 `pretrip_admin_view.py` 讀取已退休的 `eta["assumption"]`，
+`KeyError` 被錯譯成專案不存在。專案及採用鏈未遺失；下一修復改讀
+`mission_day_estimates`，不恢復舊 timing、不刪除 workspace 或捏造衍生資料。
+
+[Resume 保留 import 證據](../../artifacts/golden-gpx-repair-20260909/receipts/r11-g1-resume-import-preserved.json)、
+[完成準備回執](../../artifacts/golden-gpx-repair-20260909/receipts/r11-g1-completed-preparation.json)、
+[採用後 artifact audit](../../artifacts/golden-gpx-repair-20260909/receipts/adopted-golden-golden_g1_chilai_20260909_r10-20260909T073849498740Z.json)、
+[404 原始回應](../../artifacts/golden-gpx-repair-20260909/browser/r11/019-g1-compact-404-response.json)。
+另有獨立 TRH／DEM metadata 缺口照實保留，沒有冒充主地形工作成功或可安全通行。
+G2 正在完整準備，Clone0 已從真實 Workspace 入口提出；首次完整成功與三次重跑仍為 **0**。
 
 ### r10 真實入口驗證：MCP／路線修復成功，影像能力宣告仍缺
 

@@ -104,8 +104,11 @@ r9 已恢復 worker／Dashboard 瀏覽器，完成 MCP 真實來源整理及六�
 修復。新 G1 已實際產生 7 MCP，並完成 Save／Accept／Rebuild 各次 reload 及
 A→B→A 恢復。G2 完成準備與初始化，實際重建保留 9 天、218／219 CP 時刻、
 32 段停留候選。r10 修正最終 MCP layer 與 CWA 對齊順序，新 G1 的專案 API 已
-由 422 恢復 200，正確載入 35 CP／34 segments。完整準備仍缺 CWA 影像的可信任
-伺服器能力宣告，需補齊後以同一作業 Resume 重驗，不把此缺口當成上游無資料。
+由 422 恢復 200，正確載入 35 CP／34 segments。r11 補齊 CWA 影像的可信任
+伺服器能力宣告；同一 G1 作業 Resume 已完成、layer validation 零警告，import
+未重做。採用後的獨立原始 GPX／日程／review／Rebuild／CWA 稽核通過，但
+Dashboard 仍因讀取已退休的 ETA 欄位而 404。r12 已修復顯示層並通過 18 項
+聚焦測試；仍須載入修復版完成真實瀏覽器重驗，不能把唯讀重現當作 G6 通過。
 仍為 **NOT QUALIFIED**，須完成新 Import／Clone、G2 全鏈、六頁觀測及首次完整
 成功後的同版本三次核心重跑。隔離測試或共同 banner 相符不能替代完整鏈。
 

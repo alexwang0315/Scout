@@ -939,16 +939,7 @@ def build_pretrip_admin_view(
             include_keys=("status", "findings"),
         ),
         "eta": {
-            "source_id": eta["plan_id"],
-            "source_path": source_refs["eta"],
-            "evidence_type": "pretrip_eta_plan",
-            "planned_start_time": eta["assumption"].get("planned_start_time"),
-            "target_eta": eta["assumption"].get("target_eta"),
-            "turn_back_checkpoint_eta": eta["assumption"].get(
-                "turn_back_checkpoint_eta"
-            ),
-            "estimate_count": len(eta.get("estimates", [])),
-            "estimates": eta.get("estimates", []),
+            **_planned_eta_summary(eta, source_refs["eta"]),
             "energy_reserve_projection": _energy_projection_summary(
                 energy_projection,
                 source_refs.get("energy_projection", ""),
@@ -1522,6 +1513,40 @@ def build_pretrip_admin_view(
         "energy_reserve_monitor"
     ]
     return view
+
+
+def _planned_eta_summary(eta: dict[str, Any], source_path: str) -> dict[str, Any]:
+    """Project the active ETA collection without reviving retired assumptions."""
+    day_bound = (
+        eta.get("authoritative_collection") == "mission_day_estimates"
+        or "mission_day_estimates" in eta
+    )
+    days = eta.get("mission_day_estimates", []) if day_bound else []
+    if not isinstance(days, list) or any(not isinstance(day, dict) for day in days):
+        raise ValueError("planned ETA mission_day_estimates must be a list of day objects")
+    # A Rebuild's per-day replay records historical clocks and elapsed time.
+    # They do not set new departure/arrival dates or restore the former plan.
+    assumption = {} if day_bound else (eta.get("assumption") or {})
+    estimates = [] if day_bound else (eta.get("estimates") or [])
+    return {
+        "source_id": eta["plan_id"],
+        "source_path": source_path,
+        "evidence_type": "pretrip_eta_plan",
+        "status": eta.get("status"),
+        "authoritative_collection": "mission_day_estimates" if day_bound else "estimates",
+        "planned_start_time": assumption.get("planned_start_time"),
+        "target_eta": assumption.get("target_eta"),
+        "turn_back_checkpoint_eta": assumption.get("turn_back_checkpoint_eta"),
+        "estimate_count": len(days) if day_bound else len(estimates),
+        "estimates": estimates,
+        "mission_day_estimates": days,
+        "reviewed_baseline_ref": eta.get("reviewed_baseline_ref"),
+        "reviewed_baseline_sha256": eta.get("reviewed_baseline_sha256"),
+        "legacy_timing_status": "superseded" if day_bound else "active",
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "departure_approval_granted": False,
+    }
 
 
 def resolve_pretrip_project_artifacts(

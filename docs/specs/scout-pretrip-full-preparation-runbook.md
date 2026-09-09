@@ -19,6 +19,39 @@ Use this file when a rerun must include all of:
 
 If any required step is skipped, report the run as partial.
 
+### 2026-09-09 Golden r11: successful Rebuild exposed a legacy ETA reader
+
+G1 Resume completed with current MCP, fresh OSM and real numeric/imagery weather
+outputs. Save, Accept and explicit Rebuild preserved the recorded one-day trip;
+the source/candidate/review/rebuild/ETA/CWA artifact auditor passed. The browser
+still received a misleading 404 from the compact project endpoint because
+`pretrip_admin_view.py` read `eta["assumption"]` after Rebuild intentionally moved
+legacy timing into `retired_legacy_timing`. The API's broad KeyError handler
+translated that contract mismatch into `Pre-trip project not found`.
+
+Read the adopted `mission_day_estimates` and its recorded-day evidence in the
+admin projection. Do not resurrect retired timing, fabricate eight-hour days,
+reinitialize Permission, or recreate the existing project to hide this error.
+Verify both full and compact views after a real source-bound Rebuild. Keep
+artifact-audit success separate from the failing browser result until both pass.
+
+The r12 view repair publishes the adopted day collection, its review binding and
+historical clocks. New departure/arrival fields stay unset; legacy estimates
+remain retired. Eighteen focused tests pass, including full and compact HTTP
+responses after the real fixture Save/Accept/Rebuild chain and strict CWA
+validation. A read-only replay of the actual G1 restores 35 checkpoints and
+ready imagery without changing the seven source/ETA/review/weather artifacts.
+Load this source only after current preparation jobs finish, then verify the
+actual browser maps and six-page convergence; the isolated result alone is not
+G6 acceptance.
+
+The same attempt's primary QGIS/GRASS terrain workflow completed with 27 outputs.
+A separate Terrain Route Hypothesis workflow failed its strict DEM metadata
+guard; workspace DEM resolution metadata was unavailable and navigation tile
+coverage remained explicit. Do not pick the newest auxiliary workflow filename
+and misreport it as failure of the primary terrain workflow. Do not present the
+failed TRH candidate or unsupported terrain coverage as a safe, verified route.
+
 ### 2026-09-09 Golden r9 live findings: final layer state and CWA route binding
 
 The new G1 completed real QGIS/GRASS and produced seven MCP candidates, but
