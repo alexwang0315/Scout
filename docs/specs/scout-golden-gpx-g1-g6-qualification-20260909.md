@@ -1,16 +1,83 @@
 # 依循 Golden：修復與 G1–G6 重驗（2026-09-09）
 
-狀態：**NOT QUALIFIED；不得宣稱「依循 Golden 可用」**。
+狀態：**SCOPED PASS / WORKING PROTOTYPE；G1–G6 在本文件指定版本與案例內通過**。
+第一項「依循 Golden」的 Dashboard 分析與恢復流程可用；不外推到任意路線、
+新路規劃、正式產品可靠性或登山安全判定。
 本文件記錄使用者指定的準備流程、作業恢復與 Permission 初始化修復，及其真實
 Dashboard 重驗。驗收依據維持 [delivery plan §3.2](scout-golden-planned-gpx-delivery-plan.md#32-驗收矩陣)。
 [2026-09-08 首輪失敗紀錄](scout-golden-gpx-g1-g6-qualification-20260908.md)保留不改判。
 
-> 最新進度以最上方 r14e 紀錄為準；下方保留各次觀測當時的結論與失敗。
-> 不可把隔離測試、已恢復的產物或單輪成功當成 G1–G6 全數通過。
+> 最新結論以最上方 r14e 最終驗收為準；下方保留各次觀測當時的結論與失敗。
+> 本次判定包含首次完整操作與其後同版本連續三輪核心重驗；隔離故障測試分列。
 
 ## 整合與重驗進度
 
-### r14e 觀測流程修正；第五輪 FLAKY 後重新累計
+### r14e 最終驗收：G1–G6 PASS，後續核心重驗 3/3
+
+r14b 已取得 New Import 與 Clone／Resume 的首次完整核心觀測。第二、五輪
+不穩定操作各自重置連續計數後，第六、七、八輪在相同 r14 程式
+`a069a000bfe34b5d6dfa903a32bd2f69317c8f72` 上重新取得連續三次核心成功。
+驗收依據沒有更改；結論由[最終證據審核](../../artifacts/golden-gpx-repair-20260909/reports/r14e-final-g1-g6-review.json)
+及各輪封存報告支持。
+
+三個全新 Clone 均在 attempt 1 完成準備，23/23 層 ready、0 warnings；各案
+33-layer contract 及採用產物的獨立 GPX oracle 通過。以下案名皆以
+`golden_g1_chilai_repeat` 開頭、`_20260909_r14` 結尾。
+
+| 輪次 | 準備作業 | 採用版本 | 共同分析版次前綴 | 獨立核心審核 |
+|---|---|---|---|---|
+| 6 | `prep.b0298f6c0a59d0649e2bce1070a4d8a7` | `version.0ee974d2ee458107` | `102c62f2825c43ac` | PASS；1/3 |
+| 7 | `prep.3a54be0d7ec677e0ba2e71524068210d` | `version.a49f529b4507480f` | `562fd2a587febd88f` | PASS；2/3 |
+| 8 | `prep.6ebcc12b3ce5008c93dde6af8adbbaad` | `version.a8223d6fdbaafd30` | `0c98ed1644dec192` | PASS；3/3 |
+
+每案實際執行準備中完整 reload、同名重送、未接受初始化、Preview、雙擊 Save、
+reload／Restore、雙擊 Accept、reload、單次 Rebuild、reload、六頁與
+A→九日 G2→A，再恢復原候選。單日皆為 08:40:19→16:47:41、35/35 CP 時刻。
+三輪各有四次真實 Document reload、同名提交回到同一 job、Save／Accept
+雙擊各一次效果、單次 Rebuild，以及原候選往返恢復的 browser 與保存產物證據。
+
+[第六輪審核](../../artifacts/golden-gpx-repair-20260909/reports/r14e-repeat6-review.json)、
+[第七輪審核](../../artifacts/golden-gpx-repair-20260909/reports/r14e-repeat7-review.json)、
+[第八輪審核](../../artifacts/golden-gpx-repair-20260909/reports/r14e-repeat8-review.json)、
+[第八輪返回原候選](../../artifacts/golden-gpx-repair-20260909/browser/r14e/092-repeat8-return-restored.dom.json)。
+
+| Gate | 結果 | 實際證據與適用範圍 |
+|---|---|---|
+| G1 | PASS | r14b 真實 New Import 與 Clone／Resume 均走完準備、未接受初始化、採用、Rebuild 與六頁；25 份 raw GPX、35 CP／34 segments 與來源／階段回執一致，沒有人工補入 derived outputs。第六至八輪另從全新 Clone 狀態重驗。 |
+| G2 | PASS | 真實九日案保留 219 CP、218 個有時刻 CP、32 停留、8 過夜間隔、10 未知與 143 缺失時間戳。新案於 r11 匯入、r13 完整採用；r14 核對未變分析邏輯及原產物，三輪切換回歸仍一致。並未宣稱九日案在 r14 再全新匯入一次。 |
+| G3 | PASS | 六個隔離缺時刻、不單調、方向與來源衝突案例保留可用幾何並明示原因；真實 G2 的 `cp.177` 仍為未知。隔離測試沒有冒充真實完整行程。 |
+| G4 | PASS | Save、Accept、Rebuild 各次完整 reload 與 A→G2→A 均找回正確 project／version／hash；未接受者不自動接受，Restore 不新增持久化寫入。 |
+| G5 | PASS | 真實同 job Resume 保留 import.1；三輪準備中 reload、同名 202 與雙擊 Save／Accept 都只有預期的一次效果。隔離故障測試另驗證中斷／transport loss、來源改變、stale／偽造 hash 衝突拒絕與原檔保留。原 Resume 的 HTTP response 未捕捉，僅以 durable completion 證明效果。 |
+| G6 | PASS | 六頁各使用該案共同分析版次、Golden／CP／segment 與採用日程；Pace 起訖原時刻及實際 Navigation／Weather 地圖已觀察。Architecture 固定 18:00 是明示假設，歷史天候未知與目前 CWA／no_coverage 分列。 |
+
+[首次完整核心審核](../../artifacts/golden-gpx-repair-20260909/reports/r14b-first-complete-independent-review.json)、
+[G1–G6 既有證據基礎與限制](../../artifacts/golden-gpx-repair-20260909/reports/r14c-final-gate-review.json)、
+[r14 同碼 G3/G5 九項測試](../../artifacts/golden-gpx-repair-20260909/tests/run-20260909T101915644040Z/results.json)。
+
+最後 22:19（Asia/Taipei）的[版本核對](../../artifacts/golden-gpx-repair-20260909/receipts/runtime-version-round-14e-final.json)
+確認 16 個受測來源檔、launcher 與第八輪實際 main Document HTML 和第六輪
+相同；三輪間未重啟 Dashboard／Worker／QGIS。Navigation guard 為
+`NAVIGATION_FREEZE_SUSPENDED` report-only，既有差異仍列出，未更新 baseline。
+
+第七輪首次設定追蹤器的分頁綁定錯誤、第八輪在空白分頁啟用 CDP 被拒絕，均
+發生在全新 Clone 之前，原始錯誤保留，不能稱整段自動化設定皆無錯。第八輪
+064 的 Submitting 暫態也不當成建立成功；064b 實際收到新 job 的 202 後才
+執行 reload。這些觀測限制與第二、五輪真正的流程操作失敗／重試分列。
+
+測試版本的檔名修復 12 項、既有 import 回歸 3 項、同碼 G3/G5 故障 9 項
+皆通過。r13 已通過的前端 46 項、`pnpm lint`／`typecheck` 與 27 項 `pnpm test`
+保留為未變 HTML 的先前證據；本次三輪沒有重跑或合併成新的全庫測試數字。
+故障測試的選定檔案 hash 與前後來源快照已核對，不宣稱在 pytest 程序內逐一
+attest 所有 production modules。其中 G5 冪等案例只序列化最後重試的 hashes，
+前後相等由通過的 pytest assertion 證明；其餘八份故障紀錄另有可直接比較的
+前後 hash maps。沒有補造缺少的序列化快照，未進入 Productization Mode。
+
+aux TRH 仍因 parent DEM resolution／CRS metadata 缺口為 `SOURCE_UNAVAILABLE`，
+三份 terminal audit 仍保留該項 FAIL；既有 Golden 的地形／風險準備成功不代表
+新路假說成功。第二項 Planned GPX、R1–R4 補段，以及 departure／runtime safety
+授權都沒有由此完成或開放。Permission adjustment rules 仍為 review-only。
+
+### r14e 觀測流程修正；第五輪 FLAKY 後重新累計（較早 checkpoint）
 
 r14d 第三、第四個全新 Clone 的核心／恢復操作經獨立稽核成立，曾累計為
 1/3、2/3。兩案各有 60 份採用產物、25 份原始 GPX、六份作業檔案與受測
@@ -614,7 +681,10 @@ browser list 亦為空。該次 Preview 沒有完整 Network／畫面回執，�
 這些頁面能讀取部分同一 Golden 的觀測資料，仍不等於六力共用同一已接受分析版本。
 歷史資料、18:00 假設與目前天候原本就有不同時間角色，不要求把目前预報改成歷史天氣。
 
-## 已確認的剩餘缺口
+## 較早輪次確認的缺口（歷史紀錄）
+
+以下保存當時的診斷，不代表最上方最新受測版本仍有相同缺口；MCP producer
+與六力共同版次的後續修復及實測結果，見「整合與重驗進度」。
 
 **MCP 仍缺 producer。** 真實 G1 r2 的 33-layer verifier 只剩 MCP ref/positive-count
 失敗，但這不能讀作全部 preparation 通過。GPX notes 和 OSM objects 尚未經來源去重、
@@ -673,4 +743,5 @@ OSM 物件當成合格 MCP。現有 synthesis/alignment 可重用，新的真實
   依既有 suspended/report-only 政策執行；沒有更新 baseline 或放寬契約。
 
 沒有進入 Productization Mode，未跑與修改無關的全 repo suite；上述任何測試數字均不
-替代 G1–G6 的真實操作門檻。完整成功後同版本三次核心流程驗證尚未成立。
+替代 G1–G6 的真實操作門檻。最新完整流程及連續重驗計數見本文最上方，
+不同輪次的失敗與成功不互相改判。

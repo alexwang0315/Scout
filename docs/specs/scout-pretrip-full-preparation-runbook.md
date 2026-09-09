@@ -5936,6 +5936,26 @@ artifact hashes corroborate visible state but do not recreate a missing trace.
 These are observer repairs, not a source/runtime version change. Recollect the
 required consecutive successful cycles after a failed action.
 
+When reusing browser helpers across Node REPL cells, keep one shared mutable
+state object. Update its tab, CDP handle, cursor, request map, pending events and
+cycle with `Object.assign`; do not rebind the state variable to a new object.
+Existing helper closures may still hold the earlier binding. Repeat7's setup
+read the new tab while its helper opened Workspace on the preceding tab. Both
+readiness guards blocked the dependent fill/Clone, so no new preparation had
+started. Preserve the wrong-tab capture and failed guards, then prove the exact
+source and enabled form before the first Clone. This is not evidence of an
+error-free automation setup or a reason to erase an actual workflow retry.
+
+A new browser tab must first navigate to the observed HTTP(S) source page before
+enabling raw CDP. Repeat8's attempt on `about:blank` was rejected by the browser
+security check; normal navigation followed by supported CDP attachment resolved
+the prerequisite without bypassing it. Exclude pre-instrumentation events from
+reload proof. During Clone submission, match the exact target's new job card and
+its HTTP 202 response: the text field containing the target plus an older
+`prep.` card does not prove creation. Repeat8's initial Submitting capture is
+retained separately from its later verified new-job response. Do not repeat a
+submission just to repair an incomplete observation.
+
 ### 2026-09-09 Scout storage for Golden qualification evidence
 
 When the Mac ran out of space, the user asked to use Scout storage. A strict,

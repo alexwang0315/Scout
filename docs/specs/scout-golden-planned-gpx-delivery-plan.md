@@ -1,7 +1,7 @@
 # Golden 復刻驗證與 Planned GPX 交付計畫
 
 日期：2026-09-08
-狀態：Golden 首輪 Dashboard 驗證已執行，結果 NOT QUALIFIED；阻擋與未完成步驟見 §3.2。Planned 功能開發尚未執行。
+狀態：2026-09-09 Golden G1–G6 在指定版本與案例內 PASS，後續核心重驗連續 3/3；證據及限制見 §3.2。Planned 功能開發尚未執行。
 依據：[Outdoor AI Standard §5.2、§18.4–§18.7](SCOUT_OUTDOOR_AI_AGENT_STANDARD.md)。
 
 本計畫交付兩件事：先證明「依循 Golden」能從 Dashboard 完成並可靠恢復，再建立
@@ -9,13 +9,13 @@
 六力共同分析選定軌跡／計畫；零 Ref. 的 AOI 起始 workspace 留在後續情境三，不是
 這兩項交付的先決條件。情境二仍包含新增路段所需的 R1–R4。
 
-## 1. 現況判定與直接證據
+## 1. 計畫建立時的現況判定與直接證據
 
-第一項是 **已有構件，尚未證明完整 Dashboard 流程穩定**；第二項是 **端到端生成
+計畫建立時，第一項是 **已有構件，尚未證明完整 Dashboard 流程穩定**；第二項是 **端到端生成
 功能尚未完成，需要新增能力**。既有單元／API 測試與文件不能替代本次瀏覽器驗證。
 下表保留計畫建立時的程式與測試閱讀結論；後續 runtime 實測結果另見 §3.2 的驗收紀錄。
 
-| 範圍 | 目前程式行為 | 對計畫的影響 |
+| 範圍 | 計畫建立時的程式行為 | 對計畫的影響 |
 |---|---|---|
 | New Import | [Dashboard](../admin/scout-dashboard-v0.1.html) 的 `bindImportTripControls` 中，Create Workspace 只呼叫 `import-gpx`，成功文字明示未啟動 layer preparation。 | 需補可持續操作的完整準備鏈；不能以匯入成功宣告可用。 |
 | Clone | [clone_pretrip_workspace_from_inputs](../../dashboard_workspace_clone.py) 串接 `run_pretrip_import` 與 `run_layer_preparation`，含 enrichments 與 spec artifacts；準備失敗保存 `imported_preparation_failed` receipt。 | 可重用的整合基礎；長 POST 逾時、重開頁面及恢復仍須驗證／補足。 |
@@ -109,13 +109,21 @@ G2 的 r11 真實 New Import、r13 採用全鏈及 r14 當前回歸保留九日�
 新起始操作分別記錄。aux TRH 的 DEM metadata 缺口仍保留為 unavailable，
 目前預報與 Golden 歷史天候未知分列。先前失敗不改判。
 
-**仍為 NOT QUALIFIED。** Scout 已驗證封存 928.11 MiB 測試證據，Mac 空間
-恢復後續跑，沒有刪除既有檔案。r14c 第二輪的返回控制逾時列 FLAKY；r14d
-第三、第四輪核心操作經獨立審查曾累計為 2/3。第五輪完成採用與原版本恢復，
-但表單尚未載入時的填寫操作拋錯後重試，另有後段地圖網路 trace 缺口，依原
-規則列 FLAKY，計數再次重置為 0/3。r14e 已改用每輪新分頁、明確等待來源
-表單與增量追蹤，開始第六個新 Clone。仍須同版本連續三輪成功；修正觀測方式
-不會改判舊失敗。詳見上方 qualification checkpoint 的最新紀錄。
+**最終為 SCOPED PASS / WORKING PROTOTYPE。** 首次完整操作後，第六、七、八輪
+全新 Clone 在 r14 `a069a000` 上連續通過核心／恢復驗證，達成 3/3；三案皆
+attempt 1 完成、23/23 層 ready、0 warnings，33-layer contract 與原始 GPX
+採用稽核通過。四次真實文件 reload、同名回到同 job、雙擊 Save／Accept
+各一次效果、六頁同源與 A→九日 G2→A 原候選恢復均有封存證據。
+
+第二輪控制逾時及第五輪 disabled-field 操作拋錯後重試仍列 FLAKY，兩次皆
+重置連續計數；第三、四輪只保留為較早成功。第七、八輪在開始 Clone 之前的
+追蹤器設定失敗與第八輪初次狀態 predicate 過早成立也保留，不宣稱整段
+自動化皆無錯。原 §3.2 判準不變，結論限於指定版本、路線與案例。
+
+Scout 已驗證封存 928.11 MiB 既有證據，沒有刪除本機原檔；儲存回執與後續
+追加封存另列。完整結果見[最終 G1–G6 報告](scout-golden-gpx-g1-g6-qualification-20260909.md)。
+第二項仍從 B1 開始：Permission 人工差異 → Ref. GPX 路段組合 → Planned GPX
+與新節奏，後續才接 B2–B4。第一項通過不代表 Planned 或新路 TRH 已實作。
 
 ## 4. 第二項：人工行程如何生成 Planned GPX
 
