@@ -43,11 +43,47 @@ r14 已提交 `a069a000` 並載入 Dashboard PID `30791`；重載前後 74 份�
 來源、候選／review 與失敗目標檔案完全相同。原 G1 已接受版本仍可在瀏覽器
 找回。原失敗 Clone 的 25 個來源檔名經新規則處理均在 255 UTF-8 bytes 內，
 最長 filtered 檔名已由作業系統實際建立；這是檔名修復證据，不能替代完整 Clone。
-目前磁碟僅餘約 285 MiB，已提出一個 519 MiB、沒有開啟中檔案的已完成
+當時磁碟僅餘約 285 MiB，曾提出一個 519 MiB、沒有開啟中檔案的已完成
 `pytest-base` 暫存目錄清理申請；尚未取得同意，沒有刪除。
-待空間允許後，以 r14 重新蒐集完整流程及三次連續核心重跑證據。
+18:19 續跑時空間已恢復約 1.5 GiB，未刪除任何檔案即可重新開始實測。
 [r14 載入回執](../../artifacts/golden-gpx-repair-20260909/receipts/runtime-version-round-14-final.json)、
 [實際來源檔名核對](../../artifacts/golden-gpx-repair-20260909/reports/r14-real-filenames-verified.json)。
+
+### r14b 啟動設定修復與同作業 Resume
+
+新 Clone `golden_g1_chilai_seed0_20260909_r14` 已實際匯入同一批 25 份 GPX，
+原始 bytes／hash 全部一致，50 個 raw／filtered 檔名均不超過 255 UTF-8 bytes。
+但首次準備於 18:27 終止為 `completed_with_gaps`：23 層只有 18 層 ready。
+主 QGIS 與輔助 TRH 明確回報 `BACKEND_NOT_CONFIGURED`，四個 risk 層 blocked，
+MCP 的 7 candidates／32 documents 已存在，但缺 Overpass 對齊而未發布 ready。
+Permission 初始化已完成、0 個人工 saved／review、未自動接受。此失敗照實保留。
+
+原因是 r14 直接執行 `tools/dashboard_workspace_app.py`，略過正式
+`tools/run_dashboard_workspace.sh` 提供的 QGIS 設定與 authenticated worker probe。
+PID 存在不足以證明 Dashboard 已啟用 backend。18:32 改回正式入口，設
+`SCOUT_DASHBOARD_AUTO_QGIS_WORKER=false`、`SCOUT_DASHBOARD_QGIS_WORKER_REQUIRED=true`，
+沿用 worker 11290 與 QGIS 5214；只重啟本次 Dashboard 至 PID 32770。
+333 份來源、作業、Permission 與失敗目標檔案前後 hashes 全部一致；16 個程式
+來源 hashes 與 r14 相同。真實 Navigation 顯示 `WORKER READY`，地圖已載入。
+
+18:33 已透過 Dashboard 對同 job `prep.b9f0ab50f85307a4197ac9f8fa4b60bd`
+執行 Resume；重整頁面後仍找回 `running / prepare / attempt 2`，不建立新 import。
+正在核對完整準備結果，之後才進行候選保存、接受、重建與六頁驗證。首次完整
+成功及其後同版本三次核心重跑尚未完成，仍為 **NOT QUALIFIED**。
+
+[首次準備缺口封存](../../artifacts/golden-gpx-repair-20260909/receipts/terminal-r14-golden_g1_chilai_seed0_20260909_r14-20260909T103126752583Z.json)、
+[重啟後 333 檔核對](../../artifacts/golden-gpx-repair-20260909/receipts/r14b-after-runtime-reload-persistence.json)、
+[正式入口 runtime](../../artifacts/golden-gpx-repair-20260909/receipts/runtime-version-round-14b-final.json)、
+[原 runtime 回執沿用欄位更正](../../artifacts/golden-gpx-repair-20260909/receipts/r14-runtime-attestation-correction.json)、
+[真實 Resume 後重整](../../artifacts/golden-gpx-repair-20260909/browser/r14/019-seed0-r14b-running-after-reload.dom.json)。
+
+同版 G3／G5 的九項隔離故障案例再次通過，env／socket guard 事件均為 0。
+G1／G2 既有採用產物唯讀稽核各 134／92 項通過，99 個保存產物 hashes 不變；
+G2 瀏覽器再次確認九日、219 CP、`cp.177` 未知、原候選 no-write Restore、
+起終點地圖、Architecture、Route Context、Weather 與 Navigation。這些既有
+案例回歸可保留，不能當作新的 New Import／Clone 或新的獨立重跑次數。
+[隔離故障測試](../../artifacts/golden-gpx-repair-20260909/tests/run-20260909T101915644040Z/results.json)、
+[既有證據與必要新操作對照](../../artifacts/golden-gpx-repair-20260909/reports/r14-adopted-evidence-reconciliation.json)。
 
 ### r12 顯示層修復完成，等待 runtime 重載與瀏覽器重驗
 

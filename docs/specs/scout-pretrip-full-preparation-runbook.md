@@ -5859,6 +5859,37 @@ and R3 terrain-only baseline. The run remained `candidate_only`,
 `runtime_safety_truth=false`, `operational=false`, and
 `safe_or_walkable=not_determined`.
 
+### 2026-09-09 Qualification restart must retain the Dashboard launcher
+
+The r14 qualification restart invoked `tools/dashboard_workspace_app.py`
+directly. Dashboard served saved pages, while the newly submitted Clone completed
+only 18 of 23 preparation layers. Both primary QGIS and auxiliary TRH reported
+`BACKEND_NOT_CONFIGURED`; a listening Worker and a live QGIS process did not
+enable the Dashboard adapter. Four risk layers and the aligned MCP publication
+remained blocked. GPX import and unaccepted Permission initialization succeeded
+independently; retain these separate outcomes.
+
+Use `tools/run_dashboard_workspace.sh` when restarting the real preparation
+runtime. It provides the existing token-file integration, `SCOUT_QGIS_ENABLED`,
+worker URL, GIS paths, locale and authenticated capabilities probe. With an
+already running task-owned Worker, use `SCOUT_DASHBOARD_AUTO_QGIS_WORKER=false`
+and `SCOUT_DASHBOARD_QGIS_WORKER_REQUIRED=true` to require successful reuse
+without creating a second Worker. Do not print credentials or restart QGIS.
+
+Before replacing the task-owned Dashboard, verify that preparation jobs are
+idle and hash the persisted job/source/Permission evidence. After restart,
+verify those hashes, the actual browser Worker readiness and a real preparation
+operation. Resume the same saved job to retain its completed import; a backend
+readiness label alone is not a completed preparation. Record the launcher and
+non-secret overrides alongside source hashes. An attestation copied from a
+previous HTML-only reload must not retain contradictory Python restart flags.
+
+The r14b recovery preserved 333 files and the same 16 code hashes, reused Worker
+11290/QGIS 5214 and launched Dashboard 32770. Its first same-job Resume was
+observed after browser reload; final preparation and G1–G6 qualification remain
+separate required observations. See the
+[qualification checkpoint](scout-golden-gpx-g1-g6-qualification-20260909.md#r14b-啟動設定修復與同作業-resume).
+
 ### 2026-09-02 Dashboard-managed local QGIS worker
 
 `tools/run_dashboard_workspace.sh` now manages the local QGIS worker by
