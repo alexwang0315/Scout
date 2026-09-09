@@ -17,6 +17,42 @@ TW_MAP_GPX_PRIMARY_FILENAME = "能高安東軍縱走.gpx.gpx"
 TW_MAP_GPX_GOLDEN_ROUTE_FILENAME = TW_MAP_GPX_PRIMARY_FILENAME
 
 
+def gpx_provenance_role(path: Path | str) -> str:
+    """Read Scout planning provenance without classifying arbitrary files as GPX.
+
+    GPX geometry filtering preserves metadata/extensions. Detection uses the XML
+    root and namespace rather than the filename, so a renamed plan stays a plan.
+    """
+    root_seen = False
+    provenance_tag = "{https://scout.local/schemas/planned-route/v1}provenance"
+    try:
+        with Path(path).open("rb") as stream:
+            for event, element in ET.iterparse(stream, events=("start", "end")):
+                if event == "end":
+                    element.clear()
+                    continue
+                local_name = element.tag.split("}")[-1]
+                if not root_seen:
+                    if local_name != "gpx":
+                        return "not_gpx"
+                    root_seen = True
+                if element.tag == provenance_tag and element.get("role") == "planned":
+                    return "planned"
+    except ET.ParseError:
+        if root_seen:
+            raise ValueError("invalid_gpx_planning_provenance: GPX metadata is malformed") from None
+        return "not_gpx"
+    return "reference_observation" if root_seen else "not_gpx"
+
+
+def _route_provenance(path: Path | str, default_role: str) -> dict[str, Any]:
+    provenance = gpx_provenance_role(path)
+    return {"role": "planned_gpx_reference" if provenance == "planned" else default_role,
+            "gpx_provenance_role": provenance,
+            "time_role": "planned_estimate" if provenance == "planned" else "source_observation",
+            "actual_user_recorded_activity": False}
+
+
 @dataclass(frozen=True)
 class _IndexedDisplayPoint:
     source_index: int
@@ -45,6 +81,7 @@ def build_reference_track_summary(
 ) -> dict[str, Any]:
     primary_path = Path(primary_gpx_path).expanduser()
     primary_summary = summarize_gpx(primary_path, primary_artifact_id)
+    primary_provenance = _route_provenance(primary_path, "golden_route_reference")
     references: list[dict[str, Any]] = []
 
     for index, reference_path in enumerate(sorted(Path(path).expanduser() for path in reference_gpx_paths), start=1):
@@ -53,7 +90,7 @@ def build_reference_track_summary(
         references.append(
             {
                 "reference_id": artifact_id,
-                "role": "reference_track",
+                **_route_provenance(reference_path, "reference_track"),
                 "source_use_treatment": {
                     "reference_track_only": True,
                     "authoritative_for_mission": False,
@@ -62,7 +99,8 @@ def build_reference_track_summary(
                     "raw_source_versioned": False,
                     "derived_summary_only": True,
                 },
-                "route": _route_entry(reference_path, reference_summary),
+                "route": {**_route_entry(reference_path, reference_summary),
+                          **_route_provenance(reference_path, "reference_track")},
                 "bbox_comparison": _bbox_comparison(primary_summary.bbox_wgs84, reference_summary.bbox_wgs84),
                 "distance_delta_m": round(reference_summary.distance_m - primary_summary.distance_m, 2),
                 "point_count_delta": reference_summary.point_count - primary_summary.point_count,
@@ -73,14 +111,14 @@ def build_reference_track_summary(
         "artifact_kind": "pretrip_reference_track_summary",
         "schema_version": "0.1.0",
         "project_id": project_id,
-        "route_role": "golden_route",
+        "route_role": "planned_gpx_reference" if primary_provenance["gpx_provenance_role"] == "planned" else "golden_route",
         "golden_route": {
             **_route_entry(primary_path, primary_summary),
-            "role": "golden_route_reference",
+            **primary_provenance,
             "pretrip_actual_user_track": False,
             "runtime_safety_truth": False,
         },
-        "primary_route": _route_entry(primary_path, primary_summary),
+        "primary_route": {**_route_entry(primary_path, primary_summary), **primary_provenance},
         "reference_track_count": len(references),
         "reference_tracks": references,
         "boundary": {
@@ -113,6 +151,7 @@ def build_checkpoint_event_candidates(
 ) -> dict[str, Any]:
     route_path = Path(route_gpx_path).expanduser()
     route = load_gpx_route(route_path)
+    provenance = gpx_provenance_role(route_path)
     events: list[dict[str, Any]] = []
 
     for sequence, checkpoint in enumerate(checkpoint_candidates, start=1):
@@ -124,14 +163,16 @@ def build_checkpoint_event_candidates(
         events.append(
             {
                 "event_id": f"event.{project_id}.{checkpoint.candidate_id}",
-                "event_type": "checkpoint_candidate_reached",
+                "event_type": "planned_checkpoint_arrival_candidate" if provenance == "planned" else "checkpoint_candidate_reached",
                 "sequence": sequence,
                 "checkpoint_candidate_id": checkpoint.candidate_id,
                 "checkpoint_type": checkpoint.checkpoint_type,
                 "label": checkpoint.label,
                 "route_point_index": checkpoint.route_point_index,
                 "progress_m": round(point.progress_m, 2),
-                "observed_at": point.timestamp,
+                "observed_at": None if provenance == "planned" else point.timestamp,
+                "planned_at": point.timestamp if provenance == "planned" else None,
+                "time_role": "planned_estimate" if provenance == "planned" else "source_observation",
                 "lat": point.lat,
                 "lon": point.lon,
                 "elevation_m": point.elevation_m,
@@ -151,6 +192,8 @@ def build_checkpoint_event_candidates(
         "project_id": project_id,
         "route_artifact_id": route_artifact_id,
         "source_gpx": {
+            "gpx_provenance_role": provenance,
+            "time_role": "planned_estimate" if provenance == "planned" else "source_observation",
             "uri": route_path.resolve().as_posix(),
             "sha256": sha256_file(route_path),
             "point_count": len(route.points),
@@ -225,6 +268,7 @@ def build_segment_display_geometry(
         "project_id": project_id,
         "route_artifact_id": route_artifact_id,
         "source_gpx": {
+            "gpx_provenance_role": gpx_provenance_role(route_path),
             "uri": route_path.resolve().as_posix(),
             "sha256": sha256_file(route_path),
             "point_count": len(route.points),
@@ -279,7 +323,7 @@ def build_reference_track_display_geometry(
         references.append(
             {
                 "reference_id": reference_id,
-                "role": "reference_track",
+                **_route_provenance(reference_path, "reference_track"),
                 "route_name": summarize_gpx(reference_path, reference_id).route_name,
                 "source_uri": reference_path.resolve().as_posix(),
                 "source_sha256": sha256_file(reference_path),
@@ -297,6 +341,8 @@ def build_reference_track_display_geometry(
         "artifact_kind": "pretrip_reference_track_display_geometry",
         "schema_version": "0.1.0",
         "project_id": project_id,
+        "primary_gpx_provenance_role": gpx_provenance_role(primary_path),
+        "primary_route_role": _route_provenance(primary_path, "golden_route_reference")["role"],
         "golden_route_ref": primary_artifact_id,
         "golden_route_source_uri": Path(primary_gpx_path).expanduser().resolve().as_posix(),
         "primary_route_ref": primary_artifact_id,

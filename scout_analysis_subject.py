@@ -42,6 +42,17 @@ class AnalysisSubject(BaseModel):
     unknown_ranges: list[dict[str, Any]] = Field(default_factory=list)
     dependencies: dict[str, dict[str, Any]] = Field(default_factory=dict)
     issues: list[str] = Field(default_factory=list)
+    selected_plan_version_id: str | None = None
+    planned_bundle_ref: str | None = None
+    planned_bundle_sha256: str | None = None
+    planning_review_ref: str | None = None
+    route_axis: dict[str, Any] | list[Any] | None = None
+    planned_route_geojson: dict[str, Any] | None = None
+    checkpoints: list[dict[str, Any]] = Field(default_factory=list)
+    segments: list[dict[str, Any]] = Field(default_factory=list)
+    itinerary: dict[str, Any] | None = None
+    comparison: dict[str, Any] | None = None
+    coverage: dict[str, Any] | None = None
     candidate_only: Literal[True] = True
     runtime_safety_truth: Literal[False] = False
     departure_approval_granted: Literal[False] = False
@@ -215,7 +226,7 @@ def _schedule(ws: _Workspace, project: dict) -> tuple[str, dict, dict, list[str]
     return "adopted", reviewed, eta, []
 
 
-def build_analysis_subject(project_root: Path) -> AnalysisSubject:
+def _build_golden_analysis_subject(project_root: Path) -> AnalysisSubject:
     ws = _Workspace(Path(project_root))
     project = ws.read("project.json")
     binding = _geometry_binding(ws, project)
@@ -325,3 +336,97 @@ def build_analysis_subject(project_root: Path) -> AnalysisSubject:
         unknown_ranges=reconstruction.get("unknown_ranges", []) if status == "adopted" else [],
         dependencies=dependencies, issues=issues,
     )
+
+
+def _build_planned_analysis_subject(project_root: Path, bundle: dict) -> AnalysisSubject:
+    """Expose the selected plan's own graph and timetable, with honest gaps."""
+    from scout_planned_route_artifacts import STORE_REF, planned_day_bindings
+
+    ws = _Workspace(Path(project_root))
+    manifest, preview = bundle["manifest"], bundle["preview"]
+    version_id = manifest["version_id"]
+    prefix = f"{STORE_REF}/versions/{version_id}"
+    current = bundle["source_status"]["status"] == "current"
+    axis = preview.get("route_axis")
+    checkpoints, segments = preview.get("checkpoints", []), preview.get("segments", [])
+    graph_present = bool(axis and checkpoints and segments)
+    itinerary = preview.get("itinerary") or {}
+    coverage = preview.get("coverage") or {"status": "unverified", "reason": "Planned map/DEM coverage has not been verified."}
+    coverage_needed = coverage.get("status") not in {"within_existing_coverage", "existing_golden_scope"}
+    reason = ("Saved planning sources changed; create and review a new Planned version." if not current
+              else "The Planned route axis or checkpoint/segment graph is missing." if not graph_present else None)
+    dependencies = {}
+    for role in ("permission", "pace_fit"):
+        dependencies[role] = {
+            "status": "current_planned_candidate" if current and graph_present else "needs_reanalysis",
+            "subject_version_id": version_id, "geometry_sha256": manifest["geometry_sha256"],
+            "itinerary_sha256": manifest["itinerary_sha256"], "schedule_dependency": "reviewed_planned_itinerary",
+            "time_role": "人工規劃的移動／休息／紮營時間；未知保留，不是歷史記錄或出發許可",
+            "reason": reason,
+            "legacy_projection_status": "golden_only_not_applicable_to_planned",
+        }
+    for role in ("architecture", "navigation", "route_context", "weather"):
+        dependencies[role] = {
+            "status": "coverage_needed" if coverage_needed and role in {"navigation", "weather", "route_context"} else "needs_reanalysis",
+            "subject_version_id": version_id, "geometry_sha256": manifest["geometry_sha256"],
+            "itinerary_sha256": manifest["itinerary_sha256"], "schedule_dependency": "planned_route_and_itinerary",
+            "time_role": "Planned 新路線／日程；既有 Golden 分析不是此版本的重分析",
+            "reason": reason or (coverage.get("reason") if coverage_needed and role in {"navigation", "weather", "route_context"}
+                                  else f"No {role} projection is bound to Planned version {version_id}."),
+            "projection_refs": [], "legacy_projection_status": "golden_only_not_applicable_to_planned",
+        }
+    dependencies["weather"].update(historical_weather_status="unknown", current_forecast_status="requires_planned_route_binding")
+    sources = {
+        "planned_geometry": ws.source(f"{prefix}/planned.gpx", manifest["files"]["planned.gpx"]["sha256"]),
+        "planned_itinerary": ws.source(f"{prefix}/itinerary.json", manifest["files"]["itinerary.json"]["sha256"]),
+        "planned_route_axis": ws.source(f"{prefix}/route_axis.json", manifest["files"]["route_axis.json"]["sha256"]),
+        "checkpoints": ws.source(f"{prefix}/checkpoints.json", manifest["files"]["checkpoints.json"]["sha256"]),
+        "segments": ws.source(f"{prefix}/segments.json", manifest["files"]["segments.json"]["sha256"]),
+    }
+    for index, (ref, expected) in enumerate(manifest["source_hashes"].items()):
+        sources[f"source_{index}"] = ws.source(ref, expected)
+    return AnalysisSubject(
+        project_id=manifest["project_id"], subject_kind="planned_gpx", subject_id=version_id,
+        analysis_revision=_digest({"selection": bundle["selection"]["selection_sha256"],
+                                   "manifest": manifest["manifest_sha256"], "source_status": bundle["source_status"],
+                                   "dependencies": dependencies}),
+        geometry_fingerprint=manifest["geometry_sha256"], timing_fingerprint=manifest["itinerary_sha256"],
+        sources=sources, selected_plan_version_id=version_id,
+        planned_bundle_ref=f"{prefix}/manifest.json", planned_bundle_sha256=manifest["manifest_sha256"],
+        planning_review_ref=bundle["review"]["review_ref"],
+        selected_baseline_ref=f"{prefix}/mission_baseline_candidate.json",
+        selected_baseline_sha256=manifest["files"]["mission_baseline_candidate.json"]["sha256"],
+        original_golden_provenance={"role": "Preserved source and accepted baseline; Planned is a separate candidate version.",
+                                    "golden_baseline_mutated": False},
+        schedule_status="planned_reviewed" if current and graph_present else "stale" if not current else "needs_reanalysis",
+        schedule_time_role="planned_estimate", timezone=itinerary.get("timezone"),
+        mission_day_estimates=itinerary.get("days", []) if current and graph_present else [],
+        day_segment_mapping=planned_day_bindings(preview),
+        unknown_ranges=[item if isinstance(item, dict) else {"reason": str(item)} for item in itinerary.get("unknowns", [])],
+        overnight_gaps=[item for item in itinerary.get("timeline", []) if item.get("kind") in {"camp", "overnight"}],
+        dependencies=dependencies, issues=[reason] if reason else [],
+        route_axis=axis, planned_route_geojson=preview.get("route_geojson"), checkpoints=checkpoints, segments=segments,
+        itinerary=itinerary, comparison=preview.get("comparison"), coverage=coverage,
+    )
+
+
+def build_analysis_subject(project_root: Path) -> AnalysisSubject:
+    from scout_planned_route_artifacts import selected_planned_bundle
+    from scout_planned_route_models import PlannedRouteConflict
+
+    try:
+        planned = selected_planned_bundle(project_root)
+    except (PlannedRouteConflict, ValueError, TypeError, KeyError) as exc:
+        # An invalid selected plan cannot silently reveal old Golden outputs as
+        # if they satisfied the user's new analysis selection.
+        reason = getattr(exc, "code", "invalid_planned_selection")
+        return AnalysisSubject(
+            project_id=Path(project_root).name, subject_kind="unresolved_selection", subject_id="selection.invalid",
+            analysis_revision=_digest({"project": str(project_root), "issue": reason}),
+            geometry_fingerprint=_digest(None), timing_fingerprint=_digest(None), sources={},
+            schedule_status="blocked", schedule_time_role="unknown", issues=[reason],
+            dependencies={role: {"status": "needs_reanalysis", "reason": reason}
+                          for role in ("permission", "pace_fit", "architecture", "navigation", "route_context", "weather")},
+        )
+    return (_build_planned_analysis_subject(project_root, planned) if planned is not None
+            else _build_golden_analysis_subject(project_root))

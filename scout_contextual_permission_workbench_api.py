@@ -46,6 +46,7 @@ from scout_contextual_permission_rudy import (
     rudy_cache_settings,
 )
 from scout_analysis_subject import build_analysis_subject
+from scout_planned_route_api import create_planned_route_router
 
 
 ROOT = Path(__file__).resolve().parent
@@ -857,6 +858,7 @@ def create_contextual_permission_workbench_router(
         except ContextualPermissionConflict as exc:
             raise _http_conflict(exc) from exc
 
+    router.include_router(create_planned_route_router(project_root_for=project_root_for))
     return router
 
 

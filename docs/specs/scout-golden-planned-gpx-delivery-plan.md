@@ -1,7 +1,7 @@
 # Golden 復刻驗證與 Planned GPX 交付計畫
 
-日期：2026-09-08
-狀態：2026-09-09 Golden G1–G6 在指定版本與案例內 PASS，後續核心重驗連續 3/3；證據及限制見 §3.2。Planned 功能開發尚未執行。
+建立日期：2026-09-08；更新日期：2026-09-10
+狀態：Golden G1–G6 的 2026-09-09 指定版本與案例維持 PASS，後續核心重驗連續 3/3；證據及限制見 §3.2。Planned 第二項已完成指定範圍的 P1–P9 驗收，為 SCOPED PASS / WORKING PROTOTYPE；操作見 §4，真實／fixture 證據及限制見[驗收報告](scout-planned-gpx-p1-p9-qualification-20260910.md)。
 依據：[Outdoor AI Standard §5.2、§18.4–§18.7](SCOUT_OUTDOOR_AI_AGENT_STANDARD.md)。
 
 本計畫交付兩件事：先證明「依循 Golden」能從 Dashboard 完成並可靠恢復，再建立
@@ -14,6 +14,8 @@
 計畫建立時，第一項是 **已有構件，尚未證明完整 Dashboard 流程穩定**；第二項是 **端到端生成
 功能尚未完成，需要新增能力**。既有單元／API 測試與文件不能替代本次瀏覽器驗證。
 下表保留計畫建立時的程式與測試閱讀結論；後續 runtime 實測結果另見 §3.2 的驗收紀錄。
+2026-09-10 的實作已新增獨立 Planned 編譯、保存、審查與分析主體接點，現況對照見
+§4.2；此歷史表格中的缺口描述不再代表所有功能均未開發。
 
 | 範圍 | 計畫建立時的程式行為 | 對計畫的影響 |
 |---|---|---|
@@ -122,19 +124,23 @@ attempt 1 完成、23/23 層 ready、0 warnings，33-layer contract 與原始 GP
 
 Scout 已驗證封存 928.11 MiB 既有證據，沒有刪除本機原檔；儲存回執與後續
 追加封存另列。完整結果見[最終 G1–G6 報告](scout-golden-gpx-g1-g6-qualification-20260909.md)。
-第二項仍從 B1 開始：Permission 人工差異 → Ref. GPX 路段組合 → Planned GPX
-與新節奏，後續才接 B2–B4。第一項通過不代表 Planned 或新路 TRH 已實作。
+上述 2026-09-09 紀錄當時將第二項列為 B1 起點：Permission 人工差異 → Ref. GPX
+路段組合 → Planned GPX 與新節奏。2026-09-10 已完成下節所列實作及 B4 的 P1–P9
+指定案例驗證；Golden 的歷史 PASS 與本次 Planned 驗收分開記錄。
 
 ## 4. 第二項：人工行程如何生成 Planned GPX
 
 ### 4.1 一個明確入口，串通意圖、幾何與節奏
 
-Permission 的 Human Design 應承接這類輸入：
+Permission 的 Human Design 要處理這類行程差異：
 
 > 沿 Golden 第三天路線，從營地 A 單攻山頭 B 後回 A；觀景點 C 多停 40 分鐘，
 > 第四天改到營地 D，早上 6 點出發。
 
-目標流程：
+目前入口同時提供受限文字句型與明確行程表單。上例中的日次、營地離營日期及
+來源路段須拆成可核對欄位，不能假設整段自然語言已能一次自動完成；見 §4.4、§4.6。
+
+已接入的流程：
 
 ```text
 Permission 原始文字＋選定 Golden／Ref.
@@ -144,43 +150,48 @@ Permission 原始文字＋選定 Golden／Ref.
   → 組合 Planned 路線幾何並驗證連通
   → 建立新 CP／segment 對應與移動／休息／紮營時間計畫
   → 地圖與逐日差異預覽
-  → Save Planned Version → 審查採用／匯出 → 六力重分析
+  → Save Planned Version → 審查／分析主體選擇／匯出 → 六力版本與待重算狀態
 ```
 
-AI 負責解析意圖、查詢證據、選擇工具、提出可核對的路段組合；確定性程式負責
-剪接、幾何／時間檢查、版本、保存與結果回執。使用者不必手動決定每個 GPX 點。
-唯一且有來源的匹配可自動提出；歧義與未定位點需可見，R4 仍依既有契約人工選錨點。
+目前文字解析與路線編譯由確定性程式執行；LLM／agent 的自由文字工具規劃仍是後續
+擴充方向。唯一且有來源的匹配可提出候選；歧義與未定位點列為待解，亦可在表單中
+明確選來源錨點、路段及第幾次經過。R4 仍依既有契約人工選錨點。
 
-文字解析先產生 ordered itinerary intent，再組合路線與 candidate graph，最後綁回
-既有 `MissionBaselineCandidate` 的驗證／審查鏈。不能要求新支線的 CP 先存在於
-舊 Golden graph，也不能把未定位的新地名直接視為已驗證圖節點。
-程式中的既有候選型別是 `MissionBaselineDraft`（schema `missionBaselineCandidate.v1`）；
-沿用其版本生命週期，但新幾何須有實際的拓樸／來源驗證回執，不能只沿用人工設定
-`confirm_route_axis` 或 source ref 字串的 graph 判定來證明剪接正確。
+文字與表單先產生有順序的 typed operations，再建立新 route axis、CP、segments 及
+日程。Bundle 內沿用 `MissionBaselineDraft`（schema `missionBaselineCandidate.v1`）
+保存候選日程表示，審查則綁定獨立 Planned manifest。這個接點不會採用或改寫
+Golden 的 accepted baseline，也不會用舊 graph 接受新支線；候選中的
+`golden_graph_activation` 明示 `blocked`。不能把型別相同、`confirm_route_axis`
+或 source ref 字串當成新幾何已通過舊 mission graph 驗證。
 
-### 4.2 最小模組與責任
+### 4.2 2026-09-10 實作對照
 
-以下是建議責任切分；新增模組／schema 名稱是實作提案，不代表目前已有 API。
+下表列出已落地的程式入口。P1–P9 依原矩陣完成觀察，真實 Dashboard 操作、
+來源讀取與 focused fixtures 的證據範圍分列於[驗收報告](scout-planned-gpx-p1-p9-qualification-20260910.md)。
 
-| 模組 | 沿用基礎與新增責任 | 產物 |
+| 模組 | 已實作責任 | 產物／接點 |
 |---|---|---|
-| 行程意圖編譯 | 沿用 Human Design、preview／candidate／patch 生命週期；新增支線、返回、刪段、改端點、停留、啟程及營地的 typed operations。 | `ItineraryIntent`，含原文、欄位來源、待確認項。 |
-| 路段目錄與解析 | 讀取完整的 filtered Ref. 幾何與來源索引，按端點／途經順序／方向找段；不可使用 Dashboard 簡化過的顯示線做剪接。 | `RouteSegmentSelection`，含 source hash、track／trkseg、點範圍、方向與來源類型。 |
-| 路線組合器 | 剪取、反向、接續、支線往返，驗證距離容差、拓樸、斷點與 NoData。 | `PlannedRouteRevision`、GPX、地圖預覽、來源鏈與缺口。 |
-| 地圖／TRH adapter | 查詢可用 Overpass 山徑，對 Rudy+TWMap 圖上線索定位／描繪；讀 hash-bound R1–R3／R4 產物轉成候選路段。 | 與 Ref. 同格式、但保留各自證據性質的候選段。 |
-| 節奏估計 | 沿用 [reference segment timing](../../pretrip_reference_segment_timing.py) 的可用來源；依新路段與人工限制估計移動、固定停留、啟程／離營與分日。 | `PlannedItinerary`，區分歷史觀測、計畫估計、假設與未知。 |
-| 版本與分析接點 | 沿用 workbench 的 project-scoped immutable save／review；新增 Planned 與 baseline、分析輸出間的綁定。 | 版本化 plan bundle、Golden 比較、各六力的來源／新舊狀態。 |
+| Typed 輸入 | [scout_planned_route_models.py](../../scout_planned_route_models.py) 定義 `PlannedRouteRequest`、`ItineraryOperation`、`RouteSegmentSelection`、`TrailPathSelection`，拒絕未知欄位及無時區的日期。 | 原文、來源 snapshot、父版本、七種行程操作、依序選段及地名對位。 |
+| 目錄與路線編譯 | [scout_planned_route.py](../../scout_planned_route.py) 的 `load_planned_catalog`、`compile_planned_route` 讀完整來源點與分段，執行剪裁、取代、反向、接續及支線往返；保留缺口與來源 hash。 | `plannedRoutePreview.v1`、Golden／Planned GeoJSON、GPX、新 route axis／CP／segments、差異與問題。 |
+| 節奏編譯 | 同一編譯器分離來源可辨識的靜止時間、移動估計及新增固定停留；支援指定腳程、啟程、營地離營、最晚到達與跨日，無依據時保留未知。 | `itinerary.days`、`timeline`、`unknowns`、`conflicts`；時間角色均為計畫估計。 |
+| 地圖／TRH 候選 | [scout_planned_route_sources.py](../../scout_planned_route_sources.py) 接入 Overpass 查詢與已保存向量圖的起終點／途經點連通搜尋；讀入已審查的 Rudy 描繪、具來源鏈的 R1–R3 及沿用人工錨點審查的 R4。 | 來源檔案與 hash 綁定、候選路段及不可用原因；不將 raster 圖像或 TRH 成本直接變成可通行性／耗時。 |
+| 保存、審查與匯出 | [scout_planned_route_artifacts.py](../../scout_planned_route_artifacts.py) 重新編譯核對 preview，檢查父版本、來源及冪等鍵，原子發布 immutable bundle；獨立記錄四面向審查與分析選擇。 | `reviews/planned_routes` 下的版本、審查、選擇回執；GPX、manifest、ZIP bundle。 |
+| HTTP 入口 | [scout_planned_route_api.py](../../scout_planned_route_api.py) 透過既有 [workbench router](../../scout_contextual_permission_workbench_api.py) 的 `project_root_for` 接入相同 workspace。 | §4.5 的 `/admin/pretrip/projects/{project_id}/planned-route` API；來源衝突回報具體 code。 |
+| 分析主體 | [scout_analysis_subject.py](../../scout_analysis_subject.py) 增加 reviewed Planned bundle 選擇，提供完整新軸與分日；來源／版本無效時保留具體失效原因。 | Permission／Pace 的 Planned 日程，以及其他各力 `needs_reanalysis`／`coverage_needed`；不把舊報告標成新結果。 |
+| Dashboard | [scout-planned-route.js](../admin/scout-planned-route.js) 接入 [Permission Human Design](../admin/scout-dashboard-v0.1.html)，提供差異表單、來源選段、疊圖、時間軸、版本審查及匯出。 | 下節可見操作鏈；原始逐點時間軸保留，畫面採分頁與相鄰移動摘要。 |
+| 重匯入來源隔離 | [pretrip_import.py](../../pretrip_import.py)、[pretrip_gpx_corpus.py](../../pretrip_gpx_corpus.py) 保留 Planned XML provenance；[reference timing](../../pretrip_reference_segment_timing.py) 與 [daily departures](../../pretrip_historical_daily_departures.py) 排除計畫時間。 | Planned 可作規劃來源；不能藉重匯入成為本人 Recorded 或歷史觀測。 |
 
 先在 B1 內證明同路線的啟程／停留修改真的改變 timetable；再切出主線一段、接上
 一條 Ref. 支線、回到主線，加入 40 分鐘停留。B1 出口須同時展示新幾何、新時間與
 保存後重開，不能只證明解析出幾個地名。
 
-B2 再分三個可驗證增量：Overpass／Rudy+TWMap 補段、R1–R3 補段、R4 敘事引導補段。
+B2 分三個驗證增量：Overpass／Rudy+TWMap 補段、R1–R3 補段、R4 敘事引導補段。
 既有 [Overpass alignment](../../pretrip_overpass_route_alignment.py) 對齊／切分已排序路線，
-尚不能視為任意 A/B 的山徑搜尋。先接入已有向量段，接著補分析區域內的 trail graph
-連通搜尋，並驗證分岔選擇與找不到接續的結果，才能完成「直接尋找既有山徑」。
-Rudy+TWMap 是圖上證據，須另取得可回查的向量／描繪結果；沒有已對位幾何時保留
-待查。R4 來源文字、人工錨點及 DEM hash 變更必須使舊選段失效，不能繞過原審查。
+本身不是任意 A/B 山徑搜尋。新的 sources adapter 已另加向量 trail graph 連通搜尋；
+目前只在目錄內可追溯的既有山徑向量上運作，分岔、途經點與找不到接續仍須依
+P4 驗收。Rudy+TWMap 要先有已審查的人工描繪向量及地圖來源綁定，這次沒有新增
+從 raster 自動描繪路線的能力。R4 讀取既有敘事／人工錨點審查產物；來源文字、
+人工錨點或 DEM hash 改變使舊選段失效，不能用 Planned 審查繞過原審查。
 
 ### 4.3 路線、時間與保存規則
 
@@ -209,16 +220,116 @@ Rudy+TWMap 是圖上證據，須另取得可回查的向量／描繪結果；沒
   只新增 `planned.gpx` 就認為六力已切換。新支線超出現有 map／DEM coverage 時，
   先標示需追加準備並更新受影響範圍，不能沿用舊 workspace 的 ready。
 
-### 4.4 Dashboard 的最小操作面
+### 4.4 Dashboard 操作方式
 
-在現有 Permission authoring 區增加行程差異與結果預覽，沿用既有頁面與審查操作。
-使用者應能看到 Golden／Planned 疊圖、分日啟程／到達／休息／營地差異、各新增段
-來源、待確認項，以及 Save Planned Version、重新開啟、版本比較與 GPX 匯出。
+1. 選擇已準備的 Golden／Ref. workspace，進入 Permission → Human Design 的
+   **Human Design → Planned GPX**。確認 project ID、來源數及 snapshot 已載入；
+   有新來源或要恢復版本時按「重新讀取來源與版本」。
+2. 填「人工行程」、計畫啟程日期時間及時區。腳程可選「可用來源節奏優先」或
+   「全程使用固定腳程」；沒有可用來源又未填腳程的部分維持未知。支援句型見 §4.6。
+3. 在「明確行程差異與來源選段」加入固定停留、紮營／離營、啟程、最晚到達、
+   支線往返、取代主線路段或剪裁路線端點。使用錨點搜尋／來源範圍選位置，重訪
+   同點時指定第幾次經過。路段操作另選 Ref.／地圖／TRH 來源、不跨缺口的來源段、
+   起終點與是否返回；也可依序「以此段建立自訂主路線」。需要山徑補段時，先用
+   「查詢並加入 Overpass 山徑候選」保存指定範圍來源，再選既有向量山徑連通搜尋
+   的起點、終點與途經點。新增來源會使舊預覽過期。
+4. 按「預覽 Planned 幾何與節奏」，檢查 Golden／Planned 疊圖、方向與返回、
+   來源點範圍、分日及固定停留、未知時間與衝突。大型時間軸可切摘要／原始明細並
+   分頁核對，完整記錄仍在 bundle。`blocked` 須先解決；`needs_review` 的限制會
+   帶入版本審查，不能靠勾選解除幾何或時間的阻擋錯誤。
+5. 按 **Save Planned Version**，保存這次 preview 的獨立版本。保存不會自動採用
+   為分析主體。若回應逾時，先重新讀取版本確認保存結果；重送同一請求只回傳
+   原版本。輸入、來源或父版本變更後須重新預覽。
+6. 在「審查此 Planned 版本」逐一檢視**來源與選段範圍、幾何順序／往返／缺口、
+   分日／腳程／固定停留、不確定性與候選來源限制**，確認完整的版本限制，再按
+   「記錄此版本審查」。審查只綁定該 manifest，保留 candidate-only 性質。
+7. 按「以此 Planned 分析六力」。檢查目前選擇的 `planned_gpx` 與版本 ID，以及
+   各力使用的新 route axis／CP／segments 和日程狀態。Permission／Pace 顯示新計畫；
+   尚未依新版本產生的分析保留待重算／追加準備原因，見 §4.6。
+8. 由「匯出 Planned GPX」「匯出 行程 Manifest」「匯出 完整 Bundle」匯出同版資料。
+   GPX 預設提供規劃幾何與角色 metadata；完整日程、來源、hash 與不確定性請取 ZIP bundle。
+   按鈕先核對伺服器回應，顯示檔名、大小及 hash，再觸發下載；HTTP 衝突會顯示失敗。
+   「產物已準備」只表示檔案已取回，是否落盤須看瀏覽器下載紀錄。
+   reload 或切回 workspace 後，用 **Restore Planned Version** 重開，亦可比較
+   另一保存版本，或按「切回 Golden 分析」恢復 Golden 分析主體。
 
-Navigation 負責候選生成／比較，選段結果可帶回同一份 Planned 草案；避免另存一份
-沒有回綁 Permission 的計畫。日程與候選改變時，preview／review 的過期原因必須清楚。
+### 4.5 API 與保存位置
+
+以下路徑共用前綴 `/admin/pretrip/projects/{project_id}/planned-route`，使用既有
+project workspace resolver，沒有另建另一套 project store。
+
+| 方法與路徑 | 輸入／結果重點 |
+|---|---|
+| `GET /catalog` | 來源、錨點、問題及 `source_snapshot_sha256`；只讀。 |
+| `POST /sources/overpass` | `bbox`（south／west／north／east）、冪等鍵與明確確認；查詢固定 Overpass 入口、保存來源檔，再回傳更新的 catalog。 |
+| `POST /preview` | `PlannedRouteRequest`：原文、時區日期、腳程模式、`operations`、`route_selections`、來源 snapshot／父版本及地名對位；回傳 preview hash、幾何、日程與 `review_requirements.required_issue_ids`，不寫入。 |
+| `GET /versions`、`GET /versions/{version_id}` | 列出或恢復 manifest、preview、review、來源新鮮度與目前分析選擇；只讀。 |
+| `POST /versions` | `request`、`expected_preview_sha256`、`idempotency_key`、`explicit_confirmation: true`；重新編譯與核對來源，成功才發布版本。 |
+| `POST /review` | 版本 ID、`expected_manifest_sha256`、審查者、四個 `accepted_dimensions`、完整 `acknowledged_issue_ids`、冪等鍵及明確確認；阻擋錯誤不能審查放行。 |
+| `GET /analysis-selection`、`POST /analysis-selection` | 讀取／切換 `golden_gpx` 或已審查的 `planned_gpx`；寫入綁版本、manifest、`expected_selection_sha256`、冪等鍵及明確確認。 |
+| `GET /export/{version_id}/{format}` | `format` 為 `gpx`、`manifest` 或 `bundle`；核對同版產物與 hash 後下載。 |
+
+`GET /admin/pretrip/projects/{project_id}/analysis-subject` 回傳實際選用的共同分析主體，
+包含 `subject_kind`、`selected_plan_version_id`、來源／manifest 綁定、新路線軸、
+CP／segments、itinerary 及各力 dependency 狀態。重送相同冪等鍵與相同 payload
+回到相同結果；同鍵不同 payload、過期來源、過期父版本或分析選擇衝突會被拒絕。
+
+每個 project 的版本位置為
+`reviews/planned_routes/versions/plan.<24 位十六進位識別碼>/`，包括：
+
+- `planned.gpx`、`route.geojson`、`route_axis.json`、`checkpoints.json`、`segments.json`。
+- `itinerary.json`、`request.json`、`preview.json`、`mission_baseline_candidate.json`。
+- `manifest.json`：檔案 hash、來源 snapshot、父版本、幾何／日程 hash 與必要限制 ID。
+
+審查位於 `reviews/planned_routes/reviews/{version_id}/`；分析選擇位於
+`reviews/planned_routes/analysis_selection.json`，並保留 `selections/` 歷史回執。
+Overpass 原始／向量來源存於 `normalized/map/planned-overpass/{來源內容識別碼}/`，
+只追加 `project.planned_overpass_source_refs`；Golden refs 與原 accepted baseline 保留。
+
+### 4.6 目前能力邊界與未完成重算
+
+文字解析以換行、分號或句號分句，目前直接支援以下句型；A／B／C 必須替換成
+目錄可辨識的地名或錨點。解析成功後仍須核對定位與來源路段。
+
+| 文字例子 | 目前處理方式 |
+|---|---|
+| `沿 Golden`、`依循 Golden` | 保留 Golden 主線，再套用其餘差異。 |
+| `在 C 停留 40 分鐘`、`C 多停 40 分鐘` | 新增固定停留；以分鐘表示，與來源可辨識停留分列。 |
+| `從 A 單攻 B 後回 A` | 提出同點返回的支線；無唯一可用來源時須明確選段。 |
+| `早上6點出發` | 修改已填計畫日期的出發時刻；完整日期與時區仍由欄位提供。 |
+| `在 A 紮營`、`改到 A 過夜` | 新增營地事件；停留或離營日期由明確操作補足，未有依據時列未知。 |
+
+「第三天」「第四天改營地」「隔天六點」與任意敘事沒有通用日期／意圖推論能力。
+以表單選實際位置、完整啟程／離營日期時間，必要時在「此操作對應的原文句子」
+填入完整待解句，保留原文並明確表達該句。多日、歧義地名及相同地點重訪不能
+靠未解析文字靜默略過。
+
+Rudy 僅接受 `project.planned_rudy_trace_refs` 中已有的人工描繪向量，且需
+`human_reviewed`、審查者／時間、Rudy 圖層及地圖證據 hash；沒有此來源就保持待查。
+R4 仍在既有 Navigation 敘事引導流程選人工錨點、審查並產生候選，Planned 只讀取
+與該來源、A/B、DEM、審查版本一致的產物。這次沒有把一般登山日誌直接變成
+免錨點審查的 R4。
+
+切換 Planned 已更新共同分析主體。當來源與新軸有效時，Permission／Pace 的日程
+dependency 為 `current_planned_candidate`；Architecture 的完整 producer 尚未依
+新版本重新產生，保留 `needs_reanalysis`。Navigation、Weather、
+Route Context 亦依來源與幾何範圍顯示待重算或 `coverage_needed`，目前預報不冒充
+Golden 歷史天候。新幾何即使位於 Golden 外框內，DEM coverage 仍屬未驗證；這次
+沒有把 Planned 選擇直接接成額外 map／DEM 自動準備作業。
+
+來源 elapsed time 只作計畫估計，停留辨識方法與腳程假設可回查；未知移動時間
+不補成完整 ETA。GPX 預設不輸出 `<time>`，日程留在同版 bundle；即使外部加入
+預估時間且保留 Planned provenance，重匯入也不能進入歷史觀測樣本。所有候選、
+審查、匯出與六力顯示維持 `candidate_only: true`、`runtime_safety_truth: false`。
 
 ## 5. 第二項驗收矩陣
+
+2026-09-10 狀態：P1–P9 指定範圍 **SCOPED PASS / WORKING PROTOTYPE**。
+P1／P2／P7／P8 與 P9 核心由真實 Dashboard 操作；P3–P6 與故障案例使用 focused
+fixtures，另有真實 Overpass 取源與既有 R1–R3 讀取。下表維持原始完成標準；
+逐例結果、版本及證據見[驗收報告](scout-planned-gpx-p1-p9-qualification-20260910.md)。
+P9 的再次 Accept 經 409 後成功找回既有 review，不宣稱新 Accept 或新的 Rebuild。
+P8 通過的是共同新版本與具體待重算狀態；後四力完整 producer 重算仍見 §4.6。
 
 | ID | 輸入／操作 | 完成證據 |
 |---|---|---|
@@ -236,14 +347,14 @@ P1／P2 是首個 demo；整項完成仍須 P3–P9。模組與故障測試可�
 Permission → Planned → 地圖／節奏 → 保存／重開／匯出 → 六力 必須由真實 Dashboard
 可見控制完成，不能靠後端直接寫入成果冒充 UI 可操作。
 
-## 6. 預計修改範圍與驗證資產
+## 6. 實作範圍與驗證資產
 
 | 工作 | 主要既有範圍 | 新增範圍／證據 |
 |---|---|---|
 | A：入口、準備與恢復 | [Dashboard](../admin/scout-dashboard-v0.1.html)、[admin API](../../admin_api.py)、[clone service](../../dashboard_workspace_clone.py)、[pretrip import](../../pretrip_import.py)、既有 layer preparation／Permission bootstrap。 | 共用準備工作接點與專用 Golden browser flow；只在證據確認缺口後修改相關構件。 |
-| B：文字、幾何與保存 | [Permission workbench](../../scout_contextual_permission_workbench.py)、[workbench API](../../scout_contextual_permission_workbench_api.py)、reference timing、terrain hypothesis／guidance modules。 | 建議新增 `scout_planned_route_models.py`、`scout_planned_route.py`、`scout_planned_route_artifacts.py`；adapter 沿用既有 API 入口，名稱可依現有結構調整。 |
-| B：分析整合 | 現有 CP／segment producers、六力 collectors、map／Dashboard projections。 | 以 plan revision 綁定分析主體的接點；不另建六套計畫來源。 |
-| 文件 | 本計畫、Outdoor Standard、workspace layout、Permission workbench spec、preparation runbook。 | 開發時同步記錄契約與實際根因／恢復步驟；本規劃回合不先修改 runtime 或其他工作中的 runbook。 |
+| B：文字、幾何與保存 | [Permission workbench](../../scout_contextual_permission_workbench.py)、[workbench API](../../scout_contextual_permission_workbench_api.py)、reference timing、terrain hypothesis／guidance modules。 | 已新增 §4.2 的 Planned models／compiler／sources／artifacts／API 及 Dashboard 操作面。 |
+| B：分析整合與重匯入 | 現有 CP／segment producers、六力 collectors、map／Dashboard projections、GPX import／歷史來源 producers。 | `scout_analysis_subject.py` 綁定新 plan revision；import／corpus 保留 Planned 角色，歷史 timing／daily departures 排除預估時間。各力未重算處仍可見。 |
+| 文件 | 本計畫、Outdoor Standard、workspace layout、Permission workbench spec、preparation runbook。 | 持續記錄契約與實際根因／恢復步驟；本計畫的實作對照與操作更新不代替另行保存的 qualification 結果。 |
 
 可重用的 focused tests：
 
@@ -253,6 +364,14 @@ Permission → Planned → 地圖／節奏 → 保存／重開／匯出 → 六�
 - `tests/test_scout_contextual_permission_workbench_api.py`：版本、狀態、project scope 與重建。
 - `tests/test_pretrip_reference_segment_timing.py`：分段時間來源與品質。
 - `tests/test_terrain_route_hypothesis.py`、`tests/test_terrain_route_guidance.py`：TRH 接點與來源限制。
+
+已新增／擴充的 Planned focused tests：
+
+- `tests/test_scout_planned_route.py`：文字與 typed 差異、剪接、往返、缺口、時間及來源變更。
+- `tests/test_scout_planned_route_sources.py`、`tests/test_scout_planned_route_map_compilation.py`：Overpass／Rudy／R1–R4 來源、向量連通及編譯接點。
+- `tests/test_scout_planned_route_artifacts.py`：實際 API 保存／重開／審查／選擇／匯出、hash／authority／來源競態與冪等。
+- `tests/test_scout_analysis_subject.py`、`tests/test_dashboard_analysis_subject.py`、`tests/test_dashboard_planned_route.py`：共同分析主體、Dashboard 呈現與待重算狀態。
+- `tests/test_pretrip_import_planned_provenance.py`：真實 local importer 的 GPX 重匯入、預估時間、來源角色與 Recorded 隔離；connected preparation 另行驗證。
 
 新增測試只保護本計畫的路段組合、時間計畫、版本保存及 browser 操作鏈。變更到
 GPX／準備／共用地圖時執行 layer contract verifier 與對應 smoke；前後執行 Navigation

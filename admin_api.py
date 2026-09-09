@@ -270,6 +270,7 @@ DEFAULT_ASSISTANT_UI_SCRIPT = ROOT / "docs" / "admin" / "scout-assistant-ui.js"
 DEFAULT_MAPLIBRE_EVIDENCE_SCRIPT = (
     ROOT / "docs" / "admin" / "scout-maplibre-evidence.js"
 )
+DEFAULT_PLANNED_ROUTE_SCRIPT = ROOT / "docs" / "admin" / "scout-planned-route.js"
 DEFAULT_MAPLIBRE_DISTRIBUTION_ROOT = (
     ROOT / "docs" / "admin" / "vendor" / "maplibre-gl" / "6.2.0"
 )
@@ -3289,6 +3290,16 @@ def create_admin_router(
         return Response(
             DEFAULT_ASSISTANT_UI_SCRIPT.read_text(encoding="utf-8"),
             media_type="application/javascript",
+        )
+
+    @router.get("/scout-planned-route.js")
+    def planned_route_script() -> Response:
+        if not DEFAULT_PLANNED_ROUTE_SCRIPT.exists():
+            raise HTTPException(status_code=404, detail="Planned route UI not found")
+        return Response(
+            DEFAULT_PLANNED_ROUTE_SCRIPT.read_text(encoding="utf-8"),
+            media_type="application/javascript",
+            headers={"Cache-Control": "no-store"},
         )
 
     @router.get("/scout-maplibre-evidence.js")

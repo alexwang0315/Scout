@@ -5,6 +5,14 @@ not runtime authority or a production Safety system
 
 Last updated: 2026-08-02
 
+Planned authoring addition: 2026-09-10. The `Human Design → Planned GPX` panel now
+compiles itinerary differences into a separate candidate route and schedule.
+It has source selection, geometry/timing preview, immutable Save, Restore,
+version comparison, explicit planning review and bundle export. The original
+Golden baseline and runtime forward-constraint authority remain separate.
+Current acceptance evidence and limitations are recorded in the
+[P1–P9 report](scout-planned-gpx-p1-p9-qualification-20260910.md).
+
 ## 1. Objective
 
 Define the Dashboard `Exploring for Six Axis -> Permission` page as a

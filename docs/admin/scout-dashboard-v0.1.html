@@ -11924,6 +11924,7 @@
   </div>
 
   <script src="/admin/scout-maplibre-evidence.js"></script>
+  <script src="/admin/scout-planned-route.js"></script>
   <script>
 // diagnostic-advanced-inline:start
 /* Executable, isolated replays of trusted Dashboard functions. Synthetic storage only; no user records or network. */
@@ -13237,9 +13238,9 @@
     }
 
     async function fetchJson(path, options = {}) {
-      const timeoutMs = Number(options.timeoutMs) || FETCH_TIMEOUT_MS;
+      const timeoutMs = options.timeoutMs === null ? null : Number(options.timeoutMs) || FETCH_TIMEOUT_MS;
       const controller = new AbortController();
-      const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+      const timer = timeoutMs === null ? null : window.setTimeout(() => controller.abort(), timeoutMs);
       try {
         const response = await fetch(`${apiBase()}${path}`, {
           headers: { "Accept": "application/json" },
@@ -13251,12 +13252,12 @@
         }
         return response.json();
       } catch (error) {
-        if (error?.name === "AbortError") {
+        if (error?.name === "AbortError" && timeoutMs !== null) {
           throw new Error(`request timed out after ${Math.round(timeoutMs / 1000)}s: ${path}`);
         }
         throw error;
       } finally {
-        window.clearTimeout(timer);
+        if (timer !== null) window.clearTimeout(timer);
       }
     }
 
@@ -16728,6 +16729,12 @@
       const subject = selectedAnalysisSubject();
       const role = route.replace("outdoor-", "").replaceAll("-", "_");
       const dependency = subject?.dependencies?.[role];
+      if (["planned_gpx", "unresolved_selection"].includes(subject?.subject_kind)) {
+        return {...truth, surface: "Planned candidate analysis", mode: dependency?.status || "needs_reanalysis",
+          data: `${subject.checkpoints?.length || 0} Planned CP · ${subject.segments?.length || 0} segments`,
+          verification: dependency?.reason || "Inspect this version's route axis and pending analyses",
+          provenance: `${subject.selected_plan_version_id || subject.subject_id} · runtime truth=false`};
+      }
       if (["stale_or_unverified", "stale", "rebuild_required"].includes(dependency?.status)) {
         return {...truth, surface: "Sources need review", mode: "Retained evidence",
           verification: dependency.reason || subject.issues?.join(" · ") || "Rebuild the adopted schedule before using this projection"};
@@ -23429,12 +23436,17 @@
     function renderOutdoorPage(route) {
       const force = SIX_FORCES.find((item) => item.route === route) || SIX_FORCES[0];
       if (route === "outdoor-pace-fit-body-index") return renderPaceFitBodyIndexPage();
-      if (route === "outdoor-permission") return renderPermissionPage(force);
-      if (route === "outdoor-weather") return renderWeatherPage(force);
-      if (route === "outdoor-navigation") return renderNavigationPage(force);
-      if (route === "outdoor-architecture") return renderArchitecturePage(force);
-      if (route === "outdoor-pace-fit") return renderPaceFitPage(force);
-      return renderRouteContextPage(force);
+      const renderers = {
+        "outdoor-permission": renderPermissionPage, "outdoor-weather": renderWeatherPage,
+        "outdoor-navigation": renderNavigationPage, "outdoor-architecture": renderArchitecturePage,
+        "outdoor-pace-fit": renderPaceFitPage,
+      };
+      const content = (renderers[route] || renderRouteContextPage)(force);
+      const subject = selectedAnalysisSubject();
+      if (["planned_gpx", "unresolved_selection"].includes(subject?.subject_kind) && typeof window !== "undefined" && window.ScoutPlannedRoute) {
+        return window.ScoutPlannedRoute.wrapHistorical(content, outdoorTabs(route), route, subject);
+      }
+      return content;
     }
 
     function outdoorTabs(activeRoute) {
@@ -23454,6 +23466,9 @@
     function renderAnalysisSubject(route) {
       const subject = selectedAnalysisSubject();
       if (!subject) return `<section class="panel" data-analysis-subject="loading"><p class="status">共同分析來源：${escapeHtml(state.analysisSubjectStatus || "loading")}。來源核對完成前，保留內容不代表本版已完成分析。</p></section>`;
+      if (["planned_gpx", "unresolved_selection"].includes(subject.subject_kind) && typeof window !== "undefined" && window.ScoutPlannedRoute) {
+        return window.ScoutPlannedRoute.renderSubject(subject, route);
+      }
       const role = route.replace("outdoor-", "").replaceAll("-", "_");
       const dependency = subject.dependencies?.[role] || {};
       const golden = subject.sources?.golden_geometry || {};
@@ -24119,6 +24134,8 @@
               <button type="button" role="tab" aria-selected="${state.permissionBaselineMode === "human_text"}" class="${state.permissionBaselineMode === "human_text" ? "is-active" : ""}" data-permission-baseline-mode="human_text">Human Design</button>
               <button type="button" role="tab" aria-selected="${state.permissionBaselineMode === "reference_gpx"}" class="${state.permissionBaselineMode === "reference_gpx" ? "is-active" : ""}" data-permission-baseline-mode="reference_gpx">Generate from Ref. GPX</button>
             </div>
+            ${state.permissionBaselineMode === "human_text" && typeof window !== "undefined" && window.ScoutPlannedRoute ? window.ScoutPlannedRoute.render({projectId: resolvedPretripProjectId(), subject: selectedAnalysisSubject()}) : ""}
+            ${state.permissionBaselineMode === "human_text" ? '<details data-permission-legacy-text-authoring="true"><summary>既有文字候選與 assumption patch（不變更 GPX 幾何）</summary>' : ""}
             <div class="permission-authoring-toolbar" style="margin-top:12px">
               <div class="permission-authoring-source">
                 ${state.permissionBaselineMode === "human_text" ? `
@@ -24165,6 +24182,7 @@
               </section>
             ` : ""}
             <p class="emergency-review-status">${escapeHtml(state.permissionBaselineStatus || "Preview and draft generation are no-write. Save/Accept require a separate explicit versioned command.")}</p>
+            ${state.permissionBaselineMode === "human_text" ? "</details>" : ""}
           </div>
         </section>
       `;
@@ -24303,8 +24321,8 @@
 
           ${renderPermissionBaselineAuthoring()}
 
-          <details class="permission-projection-details" data-permission-projection-details="true" ${projection.lens === "baseline" ? "" : "open"}>
-            <summary><span>Projection details</span><strong>${escapeHtml(decision.decision || "UNKNOWN")} · ${nodes.length} plan nodes · ${asArray(projection.evidence).length} evidence sources</strong></summary>
+          <details class="permission-projection-details" data-permission-projection-details="true" ${selectedAnalysisSubject()?.subject_kind === "planned_gpx" ? 'data-planned-legacy-golden="permission"' : projection.lens === "baseline" ? "" : "open"}>
+            <summary><span>${selectedAnalysisSubject()?.subject_kind === "planned_gpx" ? "Golden 歷史 Permission projection · 未重算為 Planned" : "Projection details"}</span><strong>${escapeHtml(decision.decision || "UNKNOWN")} · ${nodes.length} plan nodes · ${asArray(projection.evidence).length} evidence sources</strong></summary>
 
           <div class="permission-mobile-switcher" role="tablist" aria-label="Permission mobile views">
             ${[["now", "Now"], ["remaining", "Remaining"], ["safety", "Safety"], ["evidence", "Evidence"]].map(([view, label]) => `
@@ -38228,6 +38246,10 @@
     }
 
     function bindPermissionControls() {
+      window.ScoutPlannedRoute?.bind({projectId: resolvedPretripProjectId, render,
+        fetchJson: path => fetchJson(path, {timeoutMs: null, cache: "no-store"}),
+        postJson: (path, payload) => postJson(path, payload, {timeoutMs: null}),
+        refreshAnalysis: refreshSixAxisAfterBaselineChange, apiBase});
       bindPermissionRudyBackgrounds();
       document.querySelectorAll("[data-permission-lens-select]").forEach(button => {
         button.addEventListener("click", async () => {

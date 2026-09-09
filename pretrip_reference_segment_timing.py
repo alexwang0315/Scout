@@ -11,6 +11,8 @@ from pathlib import Path
 from typing import Any
 from xml.etree import ElementTree as ET
 
+from pretrip_gpx_corpus import gpx_provenance_role
+
 
 DEFAULT_SOURCE_INDEX_REF = "sources/historical_gpx_source_index.json"
 DEFAULT_ROUTE_GUIDE_TIMING_REF = "candidates/route_guide_timing.json"
@@ -154,9 +156,19 @@ def build_reference_segment_timing(
     guide_candidates = _load_json(guide_path) if guide_path.exists() else []
     guide_graph = _guide_graph(guide_candidates if isinstance(guide_candidates, list) else [])
 
-    existing_sources = [
+    available_sources = [
         source for source in source_records if Path(str(source.get("original_path") or "")).exists()
     ]
+    existing_sources, planned_sources = [], []
+    for source in available_sources:
+        declared_planned = source.get("gpx_provenance_role") == "planned" or any(
+            source.get(field) in {"planned", "planned_route", "planned_gpx_reference"}
+            for field in ("role", "route_role")
+        )
+        if declared_planned or gpx_provenance_role(Path(source["original_path"])) == "planned":
+            planned_sources.append(source)
+        else:
+            existing_sources.append(source)
     workspace_nodes = (
         _workspace_route_timing_nodes(project_root, project)
         if target_segments is None
@@ -196,7 +208,12 @@ def build_reference_segment_timing(
     }
     timed_source_count = 0
     time_quality_rejected_source_count = 0
-    source_time_quality: list[dict[str, Any]] = []
+    source_time_quality: list[dict[str, Any]] = [
+        {"source_id": str(source.get("source_id") or ""), "source_filename": source.get("original_filename"),
+         "status": "excluded_planned_source", "reason": "planned_time_is_not_historical_observation",
+         "accepted_timing_point_count": 0, "gpx_provenance_role": "planned"}
+        for source in planned_sources
+    ]
 
     if all(key in canonical_checkpoints for key in required_checkpoint_keys):
         for source in existing_sources:
@@ -276,7 +293,9 @@ def build_reference_segment_timing(
         "evidence_type": "pretrip_reference_segment_timing",
         "counts": {
             "source_file_count": len(source_records),
-            "existing_source_file_count": len(existing_sources),
+            "existing_source_file_count": len(available_sources),
+            "eligible_historical_source_file_count": len(existing_sources),
+            "planned_source_file_count": len(planned_sources),
             "timed_source_file_count": timed_source_count,
             "time_quality_rejected_source_file_count": (
                 time_quality_rejected_source_count
@@ -318,7 +337,9 @@ def build_reference_segment_timing(
         "segments": segment_summaries,
         "data_quality": {
             "source_file_count": len(source_records),
-            "existing_source_file_count": len(existing_sources),
+            "existing_source_file_count": len(available_sources),
+            "eligible_historical_source_file_count": len(existing_sources),
+            "planned_source_file_count": len(planned_sources),
             "timed_source_file_count": timed_source_count,
             "time_quality_rejected_source_file_count": (
                 time_quality_rejected_source_count

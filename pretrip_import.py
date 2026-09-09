@@ -25,6 +25,7 @@ from pretrip_gpx_corpus import (
     build_reference_track_display_geometry,
     build_reference_track_summary,
     build_segment_display_geometry,
+    gpx_provenance_role,
     write_json,
 )
 from pretrip_gpx_filter import (
@@ -468,6 +469,7 @@ def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
             method="pretrip_import.run_pretrip_import",
             metadata={
                 "role": _golden_route_role(request),
+                "gpx_provenance_role": _gpx_planning_role(primary_gpx),
                 "imported_at": import_timestamp,
                 "import_stage": request.import_stage,
                 "actual_user_track_available": request.import_stage == "post_analysis",
@@ -489,7 +491,9 @@ def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
                 media_type="application/gpx+xml",
                 method="pretrip_import.run_pretrip_import",
                 metadata={
-                    "role": "reference_track",
+                    "role": "planned_gpx_reference" if _gpx_planning_role(reference_path) == "planned" else "reference_track",
+                    "gpx_provenance_role": _gpx_planning_role(reference_path),
+                    "actual_user_track_available": False,
                     "imported_at": import_timestamp,
                     "gpx_speed_filter": _gpx_filter_source_summary(
                         gpx_filter_report["references"][index - 1],
@@ -1069,6 +1073,8 @@ def _validate_request(request: PretripImportRequest) -> None:
     primary = request.primary_gpx.expanduser()
     if not primary.exists():
         raise FileNotFoundError(f"golden route GPX not found: {primary}")
+    if request.import_stage == "post_analysis" and _gpx_planning_role(primary) == "planned":
+        raise ValueError("planned_gpx_is_not_recorded: import this GPX as a planning candidate, not a completed activity")
     if request.reference_dir is not None and not request.reference_dir.expanduser().exists():
         raise FileNotFoundError(f"reference directory not found: {request.reference_dir}")
     if request.template_project_root is not None and not request.template_project_root.expanduser().exists():
@@ -1140,9 +1146,11 @@ def _stage_source_inbox(
         if path.resolve() != destination.resolve():
             shutil.copy2(path, destination)
         stat = destination.stat()
+        source_provenance = _gpx_planning_role(path)
         sources.append(
             {
-                "role": role,
+                "role": "planned_gpx_reference" if source_provenance == "planned" else role,
+                "gpx_provenance_role": source_provenance,
                 "original_path": path.resolve().as_posix(),
                 "workspace_ref": destination.relative_to(project_root).as_posix(),
                 "sha256": sha256_file(destination),
@@ -1194,6 +1202,7 @@ def _build_historical_gpx_source_index(
                 "source_id": source_id,
                 "route_role": route_role,
                 "role": role,
+                "gpx_provenance_role": source.get("gpx_provenance_role", "reference_observation"),
                 "original_path": original_path,
                 "original_filename": Path(original_path).name,
                 "workspace_ref": source["workspace_ref"],
@@ -1275,6 +1284,11 @@ def _prepare_speed_filtered_gpx(
 def _gpx_filter_manifest_payload(gpx_filter: dict[str, Any]) -> dict[str, Any]:
     primary = gpx_filter["primary"]["report"].to_dict()
     references = [item["report"].to_dict() for item in gpx_filter["references"]]
+    for source, report in zip([gpx_filter["primary"], *gpx_filter["references"]], [primary, *references]):
+        report["gpx_provenance_role"] = _gpx_planning_role(source["original_path"])
+        report["filtered_gpx_provenance_role"] = _gpx_planning_role(source["filtered_path"])
+        if report["gpx_provenance_role"] != report["filtered_gpx_provenance_role"]:
+            raise ValueError("gpx_filter_provenance_changed: filtering must preserve Planned source metadata")
     source_reports = [primary, *references]
     return {
         "artifact_kind": "pretrip_gpx_speed_filter_report",
@@ -2846,6 +2860,7 @@ def _build_route_evidence_bundle(
             "source_path": primary_gpx.resolve().as_posix(),
             "sha256": sha256_file(primary_gpx),
             "role": _golden_route_role(request),
+            "gpx_provenance_role": _gpx_planning_role(primary_gpx),
             "geometry_ref": output_refs["map_context_ref"],
             "filtered_geometry_ref": _project_ref(
                 project_root,
@@ -2861,7 +2876,8 @@ def _build_route_evidence_bundle(
         "reference_tracks": [
             {
                 "source_id": f"{primary_artifact_id}.reference.{index:03d}",
-                "role": "reference_track",
+                "role": "planned_gpx_reference" if _gpx_planning_role(path) == "planned" else "reference_track",
+                "gpx_provenance_role": _gpx_planning_role(path),
                 "source_path": path.resolve().as_posix(),
                 "sha256": sha256_file(path),
                 "geometry_ref": output_refs["reference_track_display_geometry_ref"],
@@ -2870,7 +2886,8 @@ def _build_route_evidence_bundle(
                     Path(gpx_speed_filter["references"][index - 1]["output_path"]),
                 ),
                 "freshness": {
-                    "track_time_available": True,
+                    "track_time_available": _gpx_planning_role(path) != "planned",
+                    "time_role": "planned_estimate" if _gpx_planning_role(path) == "planned" else "source_observation",
                     "old_route_note_flag": False,
                 },
             }
@@ -3737,8 +3754,10 @@ def _projection_boundary() -> dict[str, bool]:
 
 def _source_record(path: Path, *, role: str) -> dict[str, Any]:
     stat = path.stat()
+    source_provenance = _gpx_planning_role(path)
     return {
-        "role": role,
+        "role": "planned_gpx_reference" if source_provenance == "planned" else role,
+        "gpx_provenance_role": source_provenance,
         "uri": path.resolve().as_posix(),
         "sha256": sha256_file(path),
         "size_bytes": stat.st_size,
@@ -3746,19 +3765,29 @@ def _source_record(path: Path, *, role: str) -> dict[str, Any]:
 
 
 def _golden_route_role(request: PretripImportRequest) -> str:
+    if _gpx_planning_role(request.primary_gpx.expanduser()) == "planned":
+        return "planned_gpx_reference"
     if request.import_stage == "post_analysis":
         return "actual_track_replacing_pretrip_golden_route"
     return "golden_route_reference"
 
 
+def _gpx_planning_role(path: Path) -> str:
+    """Preserve exported plan provenance; a planning file cannot become Recorded."""
+    return gpx_provenance_role(path)
+
+
 def _planning_semantics(request: PretripImportRequest) -> dict[str, Any]:
+    provenance = _gpx_planning_role(request.primary_gpx)
     return {
         "golden_route": {
             "meaning": (
-                "selected similar reference route before departure"
+                "unwalked Planned route geometry and estimated timetable"
+                if provenance == "planned" else "selected similar reference route before departure"
                 if request.import_stage == "pretrip"
                 else "actual walked route replacing the pretrip golden route"
             ),
+            "gpx_provenance_role": provenance,
             "actual_user_track": request.import_stage == "post_analysis",
             "runtime_safety_truth": False,
         },
@@ -3869,13 +3898,16 @@ def _project_payload(
     imagery_source_id = str(
         payload.get("imagery_source_id") or imagery_scope["imagery_source_id"]
     )
+    primary_source = next(iter(source_inbox_manifest.get("sources", [])), {})
+    primary_provenance = primary_source.get("gpx_provenance_role", "reference_observation")
     payload.update(
         {
             "project_id": project_id,
             "route_name": route_summary["route_name"],
             "import_profile": "standalone_pretrip_importer",
             "import_stage": import_stage,
-            "route_role": "golden_route",
+            "route_role": "planned_gpx_reference" if primary_provenance == "planned" else "golden_route",
+            "gpx_provenance_role": primary_provenance,
             "route_days": _route_days_for_import(project_id),
             "route_kind": _route_kind_for_import(project_id),
             "actual_user_track_available": import_stage == "post_analysis",

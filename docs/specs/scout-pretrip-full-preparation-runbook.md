@@ -6817,3 +6817,67 @@ initialization through the actual Dashboard. Repeated-core acceptance starts
 again under the fixed source version.
 
 [Failure evidence](../../artifacts/golden-gpx-repair-20260909/reports/r13-repeat1-filename-failure.json).
+
+## 2026-09-10 — Planned GPX preparation and recovery
+
+Planned authoring uses a prepared Golden/Ref workspace. Open Permission → Human
+Design, load the source catalog, then preview the itinerary differences. A
+preview is read-only. Save publishes a new bundle under `reviews/planned_routes`
+and does not replace Golden inputs, its reviewed baseline or existing reports.
+The independent analysis selection sidecar chooses the reviewed Planned version.
+
+Use the existing formal Dashboard launcher and verified QGIS Worker. A separate
+test Dashboard may use port 9100 without replacing the existing 9099 process.
+Record the project ID, server/source identity and source hashes before testing.
+Loading a full Ref catalog or preview may take longer than a short browser wait;
+inspect its request and response before deciding whether another action is needed.
+
+The first real 9,290-point Planned preview returned HTTP 200 but subsequent DOM
+capture timed out. Preserve the failed action and Network evidence. Do not repeat
+a Save after an uncertain response until the versions endpoint and immutable
+bundle establish whether it completed. Raw timeline data remain part of the
+bundle even when the UI aggregates or pages its display.
+
+Imported Planned GPX must retain its planning provenance through normalization
+and output manifests. `post_analysis` rejects such a file as a completed personal
+recording. Re-import is not a way to promote planned times into observations.
+New geometry outside the original preparation scope remains `coverage_needed`;
+do not copy the old layer-ready label onto new route segments.
+
+[Planned verification and recovery evidence](scout-planned-gpx-p1-p9-qualification-20260910.md).
+
+The P7 local re-import replay runs the actual compiler export through
+`run_pretrip_import`, including inbox staging, speed filtering, reference
+summaries and output projections. Planned provenance must survive each stage;
+detect it from the GPX XML extension even when the file is renamed or the
+extension appears after the track. Non-GPX material evidence keeps its original
+source role. A `post_analysis` rejection must happen before any workspace write.
+
+Optional Planned timestamps are estimates: checkpoint events expose them as
+`planned_at`, with no `observed_at`. Historical segment timing excludes Planned
+sources with `planned_time_is_not_historical_observation`; historical daily
+departures returns `unavailable` / `planned_gpx_is_not_historical_recording`.
+The source XML must still enforce this boundary when an index incorrectly labels
+the same file as Golden. Keep ordinary Golden/reference observations unchanged.
+
+The isolated replay checked 35 imported JSON outputs and exercised both timed
+and untimed Planned files, with zero network attempts and zero real `.env`
+reads. The 53 focused tests and 33-layer contract check passed. These receipts
+prove local re-import provenance and time isolation; they do not substitute for
+connected map/DEM/weather preparation or browser re-import acceptance.
+[P7 local qualification](../../artifacts/planned-gpx-reimport-20260910/qualification-result.json),
+[estimated-time producer replay](../../artifacts/planned-gpx-reimport-20260910/planned-estimates-evidence.json).
+
+The completed real Dashboard replay saved two immutable Planned versions,
+restored one after a server restart and the branch version after A→B→A workspace
+switching, then exported GPX, manifest and bundle through visible buttons. All
+observed response bytes match the stored version and the bundle's ten files.
+Do not infer a native Downloads write from a successful attachment link: the
+Planned buttons now fetch and validate the response before triggering a download,
+and show file identity, byte count and hash separately from disk confirmation.
+
+For already accepted Golden versions, this replay's repeated Accept returned
+`baseline_activation_write_in_doubt` and the UI recovered and verified the
+existing review. Preserve that 409 and distinguish recovery from a new Accept or
+Rebuild. P1–P9 scope, failures and final receipts are in the linked qualification
+report; no new import or connected preparation run is implied by this regression.

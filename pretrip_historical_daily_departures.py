@@ -157,6 +157,9 @@ def _parse_points(payload: bytes) -> tuple[list[_Point], int]:
     root = ET.fromstring(payload, parser=ET.XMLParser(target=_NoDeclarations()))
     if _local_name(root.tag) != "gpx":
         raise ValueError("invalid_gpx_root")
+    if any(element.tag == "{https://scout.local/schemas/planned-route/v1}provenance"
+           and element.get("role") == "planned" for element in root.iter()):
+        raise ValueError("planned_gpx_is_not_historical_recording")
     segments = [
         [child for child in segment if _local_name(child.tag) == "trkpt"]
         for segment in root.iter()

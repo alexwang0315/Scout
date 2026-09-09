@@ -1865,12 +1865,16 @@ Golden-bound projection 的後續整合方向，不能僅切換 UI 名稱而沿�
 
 ### 18.7 與現有實作的銜接及完成條件
 
-截至本次文件整理，可沿用的基礎與待完成項目如下；本節不是執行驗證通過聲明。
+下表保留初次文件整理時的基礎與整合方向；實際交付狀態以指定版本的驗收證據為準。
 
-**交付狀態補充：** 情境一仍待完整 Dashboard 操作與穩定性驗證；New Import、Clone
-與 Refresh 的準備範圍不同。情境二的「人工行程 → 路段剪接／尋徑 → Planned GPX
-與新節奏」按新增端到端能力開發，不能因既有 Permission／TRH 構件而視為已完成。
-具體階段、修改範圍與驗收案例見
+**2026-09-10 交付狀態補充：** 情境一已取得指定版本／路線的 G1–G6 SCOPED PASS，
+包含完整 Dashboard 操作與連續 3/3 核心恢復驗證。情境二已新增「人工行程與明確
+表單 → Ref. 剪接／向量山徑及 TRH 候選 → Planned GPX 與新節奏」並完成 P1–P9
+指定範圍驗收，為 WORKING PROTOTYPE。真實 Dashboard 與 fixture 證據分列於
+[Planned 驗收報告](scout-planned-gpx-p1-p9-qualification-20260910.md)；不是通用
+自然語言推論、所有六力 producer 重算或現場安全資格。未重算與 coverage 缺口
+仍明示；Rudy 需人工向量描繪，R4 需原有人工錨點審查。情境三與 Recorded 共同
+閉環仍是後續工作。具體階段、修改範圍、操作方式及驗收案例見
 [Golden 復刻驗證與 Planned GPX 交付計畫](scout-golden-planned-gpx-delivery-plan.md)。
 
 | 範圍 | 現有基礎 | 後續改善與驗證重點 |
