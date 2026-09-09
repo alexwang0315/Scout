@@ -11,6 +11,34 @@ Dashboard 重驗。驗收依據維持 [delivery plan §3.2](scout-golden-planned
 
 ## 整合與重驗進度
 
+### r13 完整核心觀測後，獨立 Clone 重測發現檔名缺陷
+
+G1、G2 與 Clone0 已實際完成 Save／reload／Restore、Accept／reload、
+Rebuild／reload 及六頁來源檢查。G2 的九日、219 個 CP、32 段停留、八段過夜
+缺口、十段未知與 143 個缺失時間戳均通過原始 GPX 的獨立核對。G1 返回後的
+原候選 `version.862eeb521c6e06c1` 仍為 accepted；057／058 補足 027 尚在載入
+時未顯示的候選與日程證據。G2 Weather 在同一次載入中最終顯示地圖，早期空白
+快照保留；沒有證據確認 JavaScript 失敗，也不將快照間隔冒充完整初始化耗時。
+
+[r13 核心觀測清單](../../artifacts/golden-gpx-repair-20260909/reports/r13-first-complete-g1-g6.json)、
+[G1 返回後原候選](../../artifacts/golden-gpx-repair-20260909/browser/r13/058-g1-return-restored-original-candidate.dom.json)、
+[Weather 收斂觀測](../../artifacts/golden-gpx-repair-20260909/reports/r13-weather-load-observation.json)。
+
+但第一個獨立新 Clone `golden_g1_chilai_repeat1_20260909_r13` 在 import 失敗，
+job `prep.a91e2d3fc2ab9ff6a061873d0497a676` 保留 partial target 並禁止覆寫。
+`_safe_file_name` 把 `Path.stem` 與全部 `Path.suffixes` 串接，使已帶來源前綴的
+檔名在再次 Clone 時重複膨脹；原函式的隔離檔案探針得到 `ENAMETOOLONG`，
+最長名稱 371 字、451 UTF-8 bytes。這不是已證實的磁碟寫滿錯誤。
+[失敗及原函式重現](../../artifacts/golden-gpx-repair-20260909/reports/r13-repeat1-filename-failure.json)。
+
+r14 已修正 raw inbox 與 filtered GPX 共用的檔名規則，保留完整原始路徑與內容
+hash。12 項檔名／實際 stage-to-stage 測試及三項既有 import core／segment／
+template 回歸全數通過，env／socket guard 事件皆為 0；33-layer contract 通過。
+接著載入修正版並使用新的目標 ID 重跑；不得覆寫已失敗的工作、複製準備產物補洞，或把
+這次失敗算成穩定通過。**連續三輪通過仍為 0，整體仍 NOT QUALIFIED。**
+[檔名修復測試](../../artifacts/golden-gpx-repair-20260909/tests/run-20260909T085015813826Z/results.json)、
+[既有匯入回歸](../../artifacts/golden-gpx-repair-20260909/tests/run-20260909T085144677097Z/results.json)。
+
 ### r12 顯示層修復完成，等待 runtime 重載與瀏覽器重驗
 
 2026-09-09 15:55（Asia/Taipei）：`pretrip_admin_view.py` 已改讀採用後的

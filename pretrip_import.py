@@ -1317,12 +1317,22 @@ def _safe_file_stem(path: Path) -> str:
             allowed.append(character)
         else:
             allowed.append("_")
-    return "".join(allowed).strip("_") or "route"
+    stem = "".join(allowed).strip("_") or "route"
+    # Both inbox and normalized names use this stem. Reserve the longest
+    # generated wrapper so the complete filename fits a 255-byte filesystem.
+    max_bytes = 255 - len("reference_000.") - len(".speed_filtered.gpx")
+    encoded = stem.encode("utf-8")
+    if len(encoded) <= max_bytes:
+        return stem
+    digest = hashlib.sha256(path.stem.encode("utf-8")).hexdigest()[:16]
+    suffix = f"_{digest}"
+    shortened = encoded[: max_bytes - len(suffix)].decode("utf-8", errors="ignore")
+    return f"{shortened.rstrip('_')}{suffix}"
 
 
 def _safe_file_name(name: str) -> str:
     path = Path(name)
-    suffix = "".join(path.suffixes) or ".gpx"
+    suffix = path.suffix or ".gpx"
     stem = _safe_file_stem(path)
     return f"{stem}{suffix}"
 

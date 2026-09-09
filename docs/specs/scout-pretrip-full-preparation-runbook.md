@@ -6647,3 +6647,27 @@ this is service persistence evidence, not browser reload evidence.
 [G2 terminal receipt](../../artifacts/golden-gpx-repair-20260909/reports/r7-g2-terminal.json),
 [new G2 reconstruction](../../artifacts/golden-gpx-repair-20260909/reports/r7-g2-real-reconstruction-after-preparation.json),
 [reload persistence](../../artifacts/golden-gpx-repair-20260909/receipts/r8-after-ready-persistence.json).
+
+### Repeated Clone GPX filenames must remain bounded
+
+The first r13 independent Clone of the already cloned Golden workspace failed
+during raw inbox staging. The target and failed import receipt were preserved;
+Resume correctly refused to overwrite an import without a verified completion
+checkpoint. An isolated OS filename probe of the unchanged naming function
+returned `ENAMETOOLONG` for a 371-character / 451-byte name. Disk space was low,
+but this probe establishes a distinct filename defect, not an `ENOSPC` finding.
+
+`Path.stem` already includes earlier dot-separated components. Appending every
+`Path.suffixes` component repeats those components and amplifies each Clone.
+Keep only the final GPX suffix, bound the common stem in UTF-8 bytes with room
+for the reference prefix and `.speed_filtered.gpx`, and retain a deterministic
+hash when truncating. Preserve the original path/name and raw content checksum
+in the source manifest. Cover repeated stage-to-stage copies and filtered names
+with small real-file tests; do not copy a large workspace merely to test names.
+
+After fixing the producer, preserve the failed target and submit a fresh name.
+Recheck raw hashes, Golden choice, CP/time reconstruction and fresh Permission
+initialization through the actual Dashboard. Repeated-core acceptance starts
+again under the fixed source version.
+
+[Failure evidence](../../artifacts/golden-gpx-repair-20260909/reports/r13-repeat1-filename-failure.json).
