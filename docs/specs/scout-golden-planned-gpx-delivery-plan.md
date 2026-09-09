@@ -96,21 +96,23 @@ API／fixture tests 與真實 browser 成果分開報告；HTTP 200、圖層數�
 2026-09-08 首輪實測紀錄見
 [G1–G6 qualification report](scout-golden-gpx-g1-g6-qualification-20260908.md)。
 2026-09-09 的[修復與重驗 checkpoint](scout-golden-gpx-g1-g6-qualification-20260909.md)
-已證明新案 Permission 初始化、保存候選恢復、持久化 preparation 與明確 Resume，
-並修復 job catalog 逾時；G2 主機重啟後沿用 import.1 完成第 3 次續跑，終止為
-`completed_with_gaps`，Permission 初始化完成且未接受，唯讀重建保留完整九日語意。
-r8 已修復 OCR 過短的預設逾時並載入新 runtime，尚待完整 preparation 重驗。
-r9 已恢復 worker／Dashboard 瀏覽器，完成 MCP 真實來源整理及六頁共同分析版次
-修復。新 G1 已實際產生 7 MCP，並完成 Save／Accept／Rebuild 各次 reload 及
-A→B→A 恢復。G2 完成準備與初始化，實際重建保留 9 天、218／219 CP 時刻、
-32 段停留候選。r10 修正最終 MCP layer 與 CWA 對齊順序，新 G1 的專案 API 已
-由 422 恢復 200，正確載入 35 CP／34 segments。r11 補齊 CWA 影像的可信任
-伺服器能力宣告；同一 G1 作業 Resume 已完成、layer validation 零警告，import
-未重做。採用後的獨立原始 GPX／日程／review／Rebuild／CWA 稽核通過，但
-Dashboard 仍因讀取已退休的 ETA 欄位而 404。r12 已修復顯示層並通過 18 項
-聚焦測試；仍須載入修復版完成真實瀏覽器重驗，不能把唯讀重現當作 G6 通過。
-仍為 **NOT QUALIFIED**，須完成新 Import／Clone、G2 全鏈、六頁觀測及首次完整
-成功後的同版本三次核心重跑。隔離測試或共同 banner 相符不能替代完整鏈。
+已記錄準備恢復、Permission 初始化、MCP／CWA 來源對齊、採用後 ETA 讀取、
+重複 Clone 檔名及正式 GIS launcher 的修復。r14 程式碼 `a069a000` 搭配正式
+launcher 的 r14b 已完成兩個獨立新案的完整真實操作：New Import 第一次準備
+即 completed；Clone 沿同 job Resume 完成且 import.1 保留。兩者 23/23 層
+ready、0 warnings，初始未接受，Save／Accept／Rebuild 各次 reload、雙擊
+冪等、六頁內容／地圖與 A→B→A 原版本恢復都有證據。原始 GPX 與採用產物
+稽核、兩個 workspace 的 33-layer contract 及同碼 G3/G5 故障測試通過。
+
+G2 的 r13 真實 New Import／採用全鏈及 r14 當前回歸保留九日、218/219 CP
+時刻、32 停留、8 過夜間隔、10 未知與 143 缺失時間戳；未變邏輯的回歸與
+新起始操作分別記錄。aux TRH 的 DEM metadata 缺口仍保留為 unavailable，
+目前預報與 Golden 歷史天候未知分列。先前失敗不改判。
+
+**仍為 NOT QUALIFIED：完整核心流程已觀測，之後規定的同版本連續三次
+獨立核心重跑尚為 0/3。** 18:51 磁碟約剩 107 MiB，已提出明確的 860 MiB
+完成測試暫存清理提案，等待逐項同意；沒有刪除既有檔案。取得足夠空間後，
+從全新 Clone 起始狀態完成三輪，不能以再看已完成頁面代替。
 
 ## 4. 第二項：人工行程如何生成 Planned GPX
 

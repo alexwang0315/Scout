@@ -11,6 +11,56 @@ Dashboard 重驗。驗收依據維持 [delivery plan §3.2](scout-golden-planned
 
 ## 整合與重驗進度
 
+### r14b 新 Import／Clone 完整核心流程已觀測；三次重跑待空間
+
+2026-09-09 18:53（Asia/Taipei），r14 程式碼 `a069a000`、正式 Dashboard
+launcher、PID 32770。兩個獨立新案均已完成完整準備、未接受初始化、
+Save／reload／Restore、Accept／reload、明確 Rebuild／reload、六頁實際內容
+與地圖、A→九日專案 B→A。每案的 Save／Accept 雙擊均只產生一次 POST、
+一份人工 candidate、一份 review；Rebuild 也只有一次成功 POST。
+
+| 案例 | 完整準備結果 | 採用版本／共同分析版次 | 保存證據 |
+|---|---|---|---|
+| `golden_g1_chilai_seed0_20260909_r14`（Clone） | 同 job Resume attempt 2 completed；23/23 ready、0 warnings；唯一 import.1 未改 | `version.f5afed3194ea5e87`／`6a394153e57fc210` | browser/r14 025–049；terminal audit、adopted audit |
+| `golden_g1_chilai_newimport_20260909_r14`（New Import） | 真實 Validate→Preview→Create；attempt 1 completed；23/23 ready、0 warnings | `version.6c2fdf16b662fd17`／`f993afce019dd582` | browser/r14 020–024、050–073；terminal audit、adopted audit |
+
+兩案均由實際 raw GPX 重建 1 日、35/35 CP 時刻、08:40:19→16:47:41；沒有
+手動補入 derived outputs。New Import 明確選用 G1 已有的影像快取作為 app
+允許的 fallback；其餘資料仍由宣告來源準備。每案的原始 GPX oracle、review、
+Rebuild、ETA 與 CWA route/pair 稽核均 PASS。兩個真實 workspace 的 33-layer
+contract 及 Navigation report-only guard 亦通過。
+
+G2 九日案例保留 r13 真實 New Import／採用全鏈的歷史證據，r14 又驗證其
+原版本恢復、九日、219 CP、32 停留、8 過夜間隔、10 未知、143 個缺失時間戳
+及六頁。既有 G1/G2 的 99 份採用產物 hashes 相同；這是未變分析邏輯的當前
+回歸，不宣稱 G2 在 r14 又新建了一次。G3/G5 的同碼九項隔離故障測試皆 PASS。
+
+Resume 的 POST 已記錄，但重整前未取得其 HTTP response status；不捏造成功
+狀態碼。原 job、階段回執、import hash 與重整後的執行／完成結果，才是這次
+恢復的效果證據。先前錯誤 launcher 的失敗及 r13 檔名失敗均保留。
+
+主地形處理成功與 aux TRH 缺口分列。兩案 aux TRH 仍為
+`SOURCE_UNAVAILABLE`（parent DEM resolution/CRS metadata），不當成 PASS；
+它是第二項新路假說範疇，不是第一項既有 Golden 的安全或可行性結論。
+Weather 圖面明示目前 CWA 與 `no_coverage`／unknown，Golden 歷史天候仍未知。
+
+**整體仍 NOT QUALIFIED。首次完整核心操作已有證據，規定的其後同版本
+連續三次新起始狀態重跑尚為 0/3，不能宣稱「依循 Golden 可用」。**
+獨立審查已確認 `FIRST_COMPLETE_SCOPED_CORE_OBSERVATION_SUPPORTED`：120 份
+目標產物與 50 份原始 GPX hashes 相符，204 份 browser／PNG／network refs
+綁定至最後的 073 返回觀測；首次限定核心觀測計為 1 次，後續重跑仍為 0 次。
+18:51 磁碟只剩約 107 MiB；已提出兩個完成且通過測試的 `pytest-base` 目錄
+清理申請，共約 860 MiB，均無開啟中檔案，尚未取得同意且沒有刪除。現有
+workspace、程式、log、測試結果、來源、截圖與失敗證據均保留。
+
+[Clone 採用稽核](../../artifacts/golden-gpx-repair-20260909/receipts/adopted-golden-golden_g1_chilai_seed0_20260909_r14-20260909T104105843445Z.json)、
+[New Import 採用稽核](../../artifacts/golden-gpx-repair-20260909/receipts/adopted-golden-golden_g1_chilai_newimport_20260909_r14-20260909T104902537513Z.json)、
+[New Import 完整準備](../../artifacts/golden-gpx-repair-20260909/receipts/terminal-r14-golden_g1_chilai_newimport_20260909_r14-20260909T104600356865Z.json)、
+[New Import 返回原候選](../../artifacts/golden-gpx-repair-20260909/browser/r14/073-newimport-r14b-return-original-itinerary.dom.json)、
+[獨立完整核心審查](../../artifacts/golden-gpx-repair-20260909/reports/r14b-first-complete-independent-review.json)、
+[首次觀測 checkpoint](../../artifacts/golden-gpx-repair-20260909/reports/r14b-first-complete-checkpoint.json)、
+[清理提案](../../artifacts/golden-gpx-repair-20260909/reports/r14b-cleanup-proposal.json)。
+
 ### r13 完整核心觀測後，獨立 Clone 重測發現檔名缺陷
 
 G1、G2 與 Clone0 已實際完成 Save／reload／Restore、Accept／reload、

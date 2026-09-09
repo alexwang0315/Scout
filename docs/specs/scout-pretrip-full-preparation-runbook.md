@@ -5885,9 +5885,14 @@ non-secret overrides alongside source hashes. An attestation copied from a
 previous HTML-only reload must not retain contradictory Python restart flags.
 
 The r14b recovery preserved 333 files and the same 16 code hashes, reused Worker
-11290/QGIS 5214 and launched Dashboard 32770. Its first same-job Resume was
-observed after browser reload; final preparation and G1–G6 qualification remain
-separate required observations. See the
+11290/QGIS 5214 and launched Dashboard 32770. Same-job Resume then completed
+23/23 preparation layers with no warnings while retaining the only import.1
+receipt and all raw GPX bytes. A fresh New Import also completed on its first
+attempt with the same launcher. Both completed actual Save/Accept/Rebuild,
+reload, six-page and cross-workspace return observations. Auxiliary TRH still
+reported missing parent DEM metadata, separately from primary QGIS success.
+Final G1–G6 qualification still requires the three independent repeat cycles.
+See the
 [qualification checkpoint](scout-golden-gpx-g1-g6-qualification-20260909.md#r14b-啟動設定修復與同作業-resume).
 
 ### 2026-09-02 Dashboard-managed local QGIS worker
