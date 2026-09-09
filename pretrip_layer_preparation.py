@@ -1959,8 +1959,32 @@ def _maybe_prepare_cwa_imagery_server_job(
     except Exception as exc:  # pragma: no cover - live provider/server worker path.
         return {
             "cwa_weather_imagery_status": "fetch_or_processing_failed",
-            "cwa_weather_imagery_error": _safe_exception_summary(exc),
+            "cwa_weather_imagery_error": _safe_cwa_imagery_exception_summary(exc),
         }
+
+
+def _safe_cwa_imagery_exception_summary(exc: Exception) -> dict[str, Any]:
+    # Match only fixed producer guard messages. Never persist arbitrary exception
+    # text, provider URLs, query credentials, or the contents of RuntimeError.args.
+    guard_codes = {
+        "trusted server imagery capability attestation is required": "CWA_IMAGERY_SERVER_CAPABILITY_REQUIRED",
+        "CWA imagery processing is server-side only; Pi/mobile consume prepared artifacts": "CWA_IMAGERY_SERVER_PROFILE_REQUIRED",
+        "CWA imagery processing is disabled on ARM and Raspberry Pi hosts": "CWA_IMAGERY_HOST_UNSUPPORTED",
+        "CWA imagery processing is disabled on actual Raspberry Pi hosts": "CWA_IMAGERY_HOST_UNSUPPORTED",
+        "explicit network approval is required for the CWA imagery server job": "CWA_IMAGERY_EXPLICIT_NETWORK_REQUIRED",
+        "a CWA imagery server job is already running": "CWA_IMAGERY_JOB_BUSY",
+        "CWA imagery server job rate limit is active": "CWA_IMAGERY_JOB_RATE_LIMITED",
+    }
+    message = exc.args[0] if len(exc.args) == 1 and isinstance(exc.args[0], str) else None
+    code = guard_codes.get(message, "CWA_IMAGERY_PREPARATION_FAILED")
+    http_status = getattr(exc, "code", None)
+    return {
+        "error_type": type(exc).__name__,
+        "http_status": http_status if type(http_status) is int and 100 <= http_status <= 599 else None,
+        "error_code": code,
+        "reason": code,
+        "secret_value_embedded": False,
+    }
 
 
 def _route_points_for_weather_imagery(

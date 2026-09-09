@@ -47,6 +47,26 @@ tests passed on one frozen source, including late alignment, stale/mixed output
 rejection, fetch failures, MCP integration and connected-refresh compatibility.
 Real Dashboard qualification is a separate gate.
 
+The r10 real G1 confirms both fixes: MCP layer is current, the compact project
+endpoint returns 200 with the final aligned rainfall route, and the fresh PBF
+clears the genuine TTL warning. One new explicit gap remains: full Dashboard
+preparation does not supply the server-imagery capability attestation that the
+connected-refresh entrypoint supplies. Both r9 targets and r10 G1 fail before
+the imagery job lock/provider call, recording a RuntimeError with an empty
+safe-summary reason. Fix the trusted full-preparation entrypoint and expose a
+fixed guard error code; preserve the host, profile and network guards. Do not
+classify an empty RuntimeError as an upstream outage. Preserve the failed
+attempt and resume the same durable job after loading the repair.
+
+The trusted `prepare_imported_workspace` wrapper now supplies this declaration
+only after validating a mac-workstation request that explicitly requests imagery
+and permits explicit network fetch. Public preparation options cannot set the
+declaration. The lower-level CLI primitive, host/profile checks and cross-process
+job lock keep their existing behavior. Known imagery guard failures publish a
+fixed allowlisted error code, while arbitrary exception text remains excluded.
+The 31 focused capability, denial, diagnostic and final-route tests pass; actual
+Resume and final imagery outputs must still be checked in the target workspace.
+
 The older PBF is genuinely outside its 30-day TTL. Qualification acquired a
 new dated public snapshot with a verified upstream MD5 and local SHA256. Use
 a new material declaration and a new import identity; do not replace sources

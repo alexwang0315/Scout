@@ -102,8 +102,10 @@ API／fixture tests 與真實 browser 成果分開報告；HTTP 200、圖層數�
 r8 已修復 OCR 過短的預設逾時並載入新 runtime，尚待完整 preparation 重驗。
 r9 已恢復 worker／Dashboard 瀏覽器，完成 MCP 真實來源整理及六頁共同分析版次
 修復。新 G1 已實際產生 7 MCP，並完成 Save／Accept／Rebuild 各次 reload 及
-A→B→A 恢復。G2 匯入後正進行完整準備。然而 G1 最終 MCP layer 狀態過時，且
-CWA 先於最終路線對齊產製，造成專案 API 422、六頁載入不完整；r10 正修復。
+A→B→A 恢復。G2 完成準備與初始化，實際重建保留 9 天、218／219 CP 時刻、
+32 段停留候選。r10 修正最終 MCP layer 與 CWA 對齊順序，新 G1 的專案 API 已
+由 422 恢復 200，正確載入 35 CP／34 segments。完整準備仍缺 CWA 影像的可信任
+伺服器能力宣告，需補齊後以同一作業 Resume 重驗，不把此缺口當成上游無資料。
 仍為 **NOT QUALIFIED**，須完成新 Import／Clone、G2 全鏈、六頁觀測及首次完整
 成功後的同版本三次核心重跑。隔離測試或共同 banner 相符不能替代完整鏈。
 

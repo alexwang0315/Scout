@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -143,6 +144,16 @@ def prepare_imported_workspace(
         requested_by=requested_by,
         preparation_options=preparation_options,
     )
+    if (
+        request.profile == "mac-workstation"
+        and request.prepare_cwa_imagery
+        and request.network_mode == "explicit-fetch"
+        and request.allow_network_fetch
+    ):
+        # This trusted Dashboard entrypoint attests the server just as connected
+        # refresh does. Host/profile/network enforcement remains in the worker;
+        # the request option whitelist never accepts an attestation override.
+        os.environ["SCOUT_CWA_SERVER_IMAGERY_CAPABLE"] = "1"
     return run_layer_preparation(request)
 
 

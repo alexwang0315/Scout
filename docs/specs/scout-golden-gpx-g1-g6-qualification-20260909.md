@@ -11,6 +11,40 @@ Dashboard 重驗。驗收依據維持 [delivery plan §3.2](scout-golden-planned
 
 ## r9 整合與重驗進度
 
+### r10 真實入口驗證：MCP／路線修復成功，影像能力宣告仍缺
+
+2026-09-09 15:20（Asia/Taipei），runtime PID `21231` 載入已提交版本
+`e96efb60`，新 G1 `golden_g1_chilai_20260909_r10` 的 job
+`prep.1fa512d40e42de5c6dd56f9dd3378e6b` 完成 attempt 1。
+
+- 同名、同內容再次 Create Workspace 與 reload 均找回同一 job，只有一次 import。
+- QGIS/GRASS 完成；35 CP／34 segments；MCP layer 正確發布 7 candidates，沒有過時警告。
+- 新 OSM 快照為 fresh。數值雨量實際綁定最終 Overpass geometry，原本 422 的
+  `?compact=1` 現為 200，Workspace 畫面收斂至正確 CP／segment 數。
+- Permission 初始化完成、0 saved versions、未自動接受。
+- job 仍為 `completed_with_gaps`，只剩 CWA imagery 的 `fetch_or_processing_failed`。
+  錯誤記錄為 `RuntimeError`／空白 reason。完整 Dashboard 準備入口未提供 connected
+  refresh 已有的伺服器影像能力宣告；影像尚未進入 fetch／job lock。這不是已證實的
+  上游資料不足，也不能略過。下一修復位於可信任的 full-preparation 入口，保留
+  主機、profile、network 與候選分析界線，再以原 job Resume 重驗恢復。
+
+[r10 runtime／版本](../../artifacts/golden-gpx-repair-20260909/receipts/runtime-version-round-10-final.json)、
+[終止回執](../../artifacts/golden-gpx-repair-20260909/receipts/r10-g1-terminal-before-capability-fix.json)、
+[同名重送](../../artifacts/golden-gpx-repair-20260909/browser/r10/004-g1-same-name-resubmission.network.json)、
+[API 200 原始回應](../../artifacts/golden-gpx-repair-20260909/browser/r10/010-g1-compact-200-response.json)、
+[未接受的 Permission](../../artifacts/golden-gpx-repair-20260909/browser/r10/011-g1-permission-init-after-preparation.dom.json)。
+9 項 G3／G5 隔離故障案例於同版本再次通過；[結果](../../artifacts/golden-gpx-repair-20260909/tests/run-20260909T071251216682Z/results.json)。
+G2 已完成 Validate／Preview，尚未 Create；完整成功及同版本核心重跑均仍為 **0**。
+
+15:22 修復：可信任的完整準備入口完成 request 驗證後，僅對 `mac-workstation`、
+`prepare_cwa_imagery`、`explicit-fetch` 與 `allow_network_fetch=true` 的組合提供
+既有伺服器能力宣告。CLI primitive 不自動宣告、caller override 被拒；實際主機、
+profile、network、lock／限流守衛不變。已知影像守衛錯誤另存固定 `error_code`，
+不保存任意例外文字。31 項聚焦測試通過；[回執與凍結來源](../../artifacts/golden-gpx-repair-20260909/receipts/imagery-capability-repair/completion.json)。
+尚待新 runtime 以原 G1 job Resume 的真實證據，不能把測試結果改判為完整成功。
+
+### r9 舊版實測及 r10 修復測試
+
 2026-09-09 15:07（Asia/Taipei）修復 checkpoint：r10 的最終 MCP layer 更新及
 CWA 最終路線綁定修復已完成；同一原始碼 SHA `6bb93ae40b442e69` 的 22 項測試
 全部通過（CWA 順序／失敗 6、MCP 整合 10、既有 environment／connected 6）。
@@ -132,15 +166,16 @@ Mac 無 `.git` 是目前指定的正常架構，使用 Scout Commit Gateway 留�
     證據，不能把舊作業或單張零文字結果改稱 OCR 成功。
 
 實作與根因已回寫 [preparation runbook](scout-pretrip-full-preparation-runbook.md)。
-本輪沒有 commit、push、PR、部署或原始 workspace 的 Save/Accept/Rebuild；測試寫入
-限於獨立 QA targets。本輪重載自己的 Dashboard，並重啟本輪隔離 profile 的 QGIS
+以下 r2–r8 歷史輪次沒有 commit、push、PR、部署或原始 workspace 的 Save/Accept/Rebuild；測試寫入
+限於獨立 QA targets。當時重載自己的 Dashboard，並重啟本輪隔離 profile 的 QGIS
 以恢復橋接；原始使用者的 QGIS profile 與 workspace 保留，重啟證據如下。
 
 ## 程式版本與案例
 
-最後成功核對的 Git HEAD：`4ee2cfb416315461ecd2d19fb7b3213c48cb2e51`；目前 `.git`
-已不存在，無法重新取得 HEAD／dirty diff。工作樹原有大量未提交修改，
-本報告不把全部 dirty diff 歸為本次修復。每輪另保存所執行來源檔的 SHA 與 diff 指紋。
+r2–r8 記錄曾以 `4ee2cfb416315461ecd2d19fb7b3213c48cb2e51` 為最後可核對的
+本機 HEAD。後續已依目前指定的 Mac 無 `.git` 架構，透過 Scout Commit Gateway
+核對與提交 r9 `92a55d32`、r10 `e96efb60`；不能再把本機 `.git` 不存在當作 blocker。
+原有未提交修改保留；各輪另保存實際載入來源檔的 SHA、變更範圍及 Gateway 回執。
 
 | 版本 | 用途與證據 |
 |---|---|
