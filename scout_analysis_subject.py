@@ -30,6 +30,7 @@ class AnalysisSubject(BaseModel):
     geometry_fingerprint: str
     timing_fingerprint: str
     sources: dict[str, AnalysisSource]
+    original_golden_provenance: dict[str, Any] = Field(default_factory=dict)
     selected_baseline_ref: str | None = None
     selected_baseline_sha256: str | None = None
     schedule_status: str
@@ -84,7 +85,9 @@ class _Workspace:
         key = str(path)
         if key not in self.payloads:
             try:
-                payload = json.loads(path.read_text(encoding="utf-8"))
+                content = path.read_bytes()
+                payload = json.loads(content)
+                self.hashes[key] = hashlib.sha256(content).hexdigest()
             except (OSError, ValueError):
                 payload = {}
             self.payloads[key] = payload if isinstance(payload, dict) else {}
@@ -106,15 +109,20 @@ def _geometry_binding(ws: _Workspace, project: dict) -> dict:
     primary = report.get("primary") or {}
     refs = ws.read(project.get("reference_tracks_ref", "outputs/reference_tracks.json"))
     golden = refs.get("golden_route") or refs.get("primary_route") or {}
-    golden_ref = primary.get("output_path") or golden.get("source_path") or golden.get("source_gpx")
+    golden_ref = primary.get("output_path") or golden.get("source_uri") or golden.get("source_path")
     sources = {
-        "golden_geometry": ws.source(golden_ref, primary.get("output_sha256")),
+        "golden_geometry": ws.source(golden_ref, primary.get("output_sha256") or golden.get("sha256")),
         "checkpoints": ws.source(project.get("checkpoint_candidates_ref", "candidates/checkpoints.json")),
         "segments": ws.source(project.get("segment_display_geometry_ref", "outputs/segment_display_geometry.json")),
         "checkpoint_times": ws.source(project.get("checkpoint_events_ref", "outputs/checkpoint_events.json")),
         "reference_tracks": ws.source(project.get("reference_tracks_ref", "outputs/reference_tracks.json")),
         "recorded_pace": ws.source(project.get("reference_pace_energy_analysis_ref", "outputs/reference_pace_energy_analysis.json")),
     }
+    for role in ("segments", "checkpoint_times"):
+        payload = ws.read(sources[role]["ref"])
+        source_sha = (payload.get("source_gpx") or {}).get("sha256")
+        if source_sha and source_sha != sources["golden_geometry"]["sha256"]:
+            sources[role]["status"] = "changed"
     identity = {key: {k: value[k] for k in ("ref", "sha256", "status")}
                 for key, value in sources.items()}
     return {
@@ -124,7 +132,7 @@ def _geometry_binding(ws: _Workspace, project: dict) -> dict:
             "golden_geometry", "checkpoints", "segments", "reference_tracks",
         )}),
         "timing_fingerprint": _digest({key: identity[key] for key in (
-            "golden_geometry", "checkpoint_times", "recorded_pace",
+            "golden_geometry", "checkpoint_times",
         )}),
         "sources": sources,
     }
@@ -143,6 +151,9 @@ def _signed(payload: dict, field: str, expected: object = None) -> bool:
 
 
 def _schedule(ws: _Workspace, project: dict) -> tuple[str, dict, dict, list[str]]:
+    for directory in ("reviews/mission_baseline_accept_transactions", "reviews/contextual_permission_rebuild_transactions"):
+        if any(path.is_file() and not path.name.startswith(".") for path in (ws.root / directory).glob("*.json")):
+            return "rebuild_required", {}, {}, ["baseline_or_projection_write_in_doubt"]
     ref = project.get("reviewed_mission_baseline_ref")
     sha = project.get("reviewed_mission_baseline_sha256")
     if not ref and not sha:
@@ -161,13 +172,22 @@ def _schedule(ws: _Workspace, project: dict) -> tuple[str, dict, dict, list[str]
     candidate_sha = candidate.get("version_sha256")
     if (candidate_sha != reviewed.get("candidate_sha256")
             or not _signed(candidate, "version_sha256")
+            or candidate.get("project_id", project.get("project_id", ws.root.name)) != project.get("project_id", ws.root.name)
             or candidate.get("days") != reviewed.get("days")
             or candidate.get("reference_reconstruction") != reviewed.get("reference_reconstruction")):
         return "stale", {}, {}, ["baseline_candidate_lineage_mismatch"]
     reconstruction = reviewed.get("reference_reconstruction") or {}
+    if (not isinstance(reconstruction, dict)
+            or not isinstance(reconstruction.get("source_hashes", {}), dict)
+            or not isinstance(reviewed.get("days"), list)
+            or not all(isinstance(day, dict) for day in reviewed["days"])):
+        return "stale", {}, {}, ["invalid_reviewed_schedule"]
     for source_ref, expected in (reconstruction.get("source_hashes") or {}).items():
         if ws.digest(source_ref) != expected:
             return "stale", reviewed, {}, ["reviewed_source_changed"]
+    for source_ref, expected in (candidate.get("source_hashes") or {}).items():
+        if ws.digest(source_ref) != expected:
+            return "stale", reviewed, {}, ["reviewed_candidate_source_changed"]
     eta_ref = project.get("planned_eta_ref", "outputs/planned_eta.json")
     eta = ws.read(eta_ref)
     receipt = ws.read(project.get("contextual_permission_projection_rebuild_ref"))
@@ -199,6 +219,7 @@ def build_analysis_subject(project_root: Path) -> AnalysisSubject:
     ws = _Workspace(Path(project_root))
     project = ws.read("project.json")
     binding = _geometry_binding(ws, project)
+    original = ws.read(project.get("gpx_speed_filter_report_ref", "outputs/gpx_speed_filter_report.json")).get("primary") or {}
     status, reviewed, eta, issues = _schedule(ws, project)
     reconstruction = reviewed.get("reference_reconstruction") or {}
     days = eta.get("mission_day_estimates", []) if status == "adopted" else []
@@ -207,7 +228,9 @@ def build_analysis_subject(project_root: Path) -> AnalysisSubject:
     current = manifest.get("analysis_geometry_binding_current") or {}
     geometry_current = bool(previous and current
         and previous.get("geometry_fingerprint") == current.get("geometry_fingerprint") == binding["geometry_fingerprint"]
-        and not manifest.get("analysis_geometry_drift", True))
+        and not manifest.get("analysis_geometry_drift", True)
+        and all(binding["sources"][role]["status"] == "available"
+                for role in ("golden_geometry", "checkpoints", "segments")))
     timing_current = bool(geometry_current and previous.get("timing_fingerprint")
         == current.get("timing_fingerprint") == binding["timing_fingerprint"])
     outputs = manifest.get("analysis_projection_outputs") or {}
@@ -246,16 +269,34 @@ def build_analysis_subject(project_root: Path) -> AnalysisSubject:
         "historical_weather_status": "unknown",
     }
     mapping = []
+    segments = ws.read(binding["sources"]["segments"]["ref"]).get("segments", [])
     for day in days:
         replay = day.get("reference_replay") or {}
         windows = replay.get("checkpoint_windows", [])
+        first = (replay.get("start") or {}).get("point_index")
+        last = (replay.get("end") or {}).get("point_index")
+        cp_segments = []
+        if isinstance(first, int) and isinstance(last, int):
+            for segment in segments:
+                start = segment.get("route_point_start_index")
+                end = segment.get("route_point_end_index")
+                if not isinstance(start, int) or not isinstance(end, int) or end <= first or start >= last:
+                    continue
+                cp_segments.append({
+                    "segment_id": segment.get("segment_candidate_id"),
+                    "from_checkpoint_id": segment.get("from_candidate_id"),
+                    "to_checkpoint_id": segment.get("to_candidate_id"),
+                    "overlap_start_point_index": max(start, first),
+                    "overlap_end_point_index": min(end, last),
+                    "crosses_day_boundary": start < first or end > last,
+                })
         mapping.append({
             "mission_day_id": day.get("mission_day_id"),
             "source_day_id": replay.get("source_day_id"),
             "segment_ids": day.get("segment_ids", []),
             "checkpoint_ids": [item.get("anchor_id") for item in windows],
-            "start_point_index": (replay.get("start") or {}).get("point_index"),
-            "end_point_index": (replay.get("end") or {}).get("point_index"),
+            "start_point_index": first, "end_point_index": last,
+            "cp_segments": cp_segments,
         })
     revision = _digest({
         "project_id": binding["project_id"], "geometry": binding["geometry_fingerprint"],
@@ -270,6 +311,12 @@ def build_analysis_subject(project_root: Path) -> AnalysisSubject:
         analysis_revision=revision,
         geometry_fingerprint=binding["geometry_fingerprint"], timing_fingerprint=binding["timing_fingerprint"],
         sources=binding["sources"], selected_baseline_ref=project.get("reviewed_mission_baseline_ref"),
+        original_golden_provenance={
+            "source_ref": original.get("source_path"),
+            "recorded_sha256": original.get("source_sha256"),
+            "role": "original_import_provenance; filtered Golden is the geometry/time analysis source",
+            "source_file_reopened": False,
+        },
         selected_baseline_sha256=project.get("reviewed_mission_baseline_sha256"),
         schedule_status=status, schedule_time_role="historical_reconstruction" if reconstruction else "planning_assumption_or_unknown",
         timezone=reconstruction.get("timezone"), mission_day_estimates=days,

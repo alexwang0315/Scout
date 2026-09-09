@@ -889,3 +889,56 @@ def test_clone_resume_uses_effective_options_and_never_calls_clone_again(tmp_pat
     assert calls == ["clone", "prepare", "prepare"]
     assert seen[0] == seen[1]
     assert seen[1]["allow_network_fetch"] is False and seen[1]["seed_imagery_cache"] is False
+
+
+@pytest.mark.parametrize("changed_input", ["package", "document", "receipt"])
+def test_public_mcp_source_change_blocks_resume_before_writes(tmp_path, changed_input):
+    request = _request(tmp_path)
+    material = tmp_path / "material"
+    raw = material / "sources/mcp"
+    raw.mkdir(parents=True)
+    document = raw / "source.txt"
+    document.write_text("A recorded route passes the named checkpoint.")
+    receipt = raw / "fetch.json"
+    receipt.write_text(json.dumps({"outcome": "fixture", "network_called": False}))
+    package = raw / "public_source_evidence.json"
+    package.write_text(json.dumps({
+        "artifact_kind": "pretrip_mcp_public_source_records", "project_id": request.project_id,
+        "acquisition": {"attempted_source_families": ["public_web"], "attempts": [{
+            "source_family": "public_web", "query_or_url": "https://example.invalid/route",
+            "attempted_at": "2026-09-09T00:00:00Z", "outcome": "fixture",
+            "receipt_ref": receipt.name, "receipt_sha256": hashlib.sha256(receipt.read_bytes()).hexdigest(),
+        }]},
+        "documents": [{
+            "document_id": "test-source", "source_family": "public_web",
+            "url": "https://example.invalid/route", "canonical_url": "https://example.invalid/route",
+            "title": "Synthetic source", "retrieved_at": "2026-09-09T00:00:00Z",
+            "content_ref": document.name, "content_sha256": hashlib.sha256(document.read_bytes()).hexdigest(),
+            "route_relevance": "high", "accepted_for_route": True,
+            "route_match_reason": "fixture route", "stale_risk": "high", "mentions": [],
+        }],
+    }))
+    (material / "material_manifest.json").write_text(json.dumps({"sources": {
+        "mcp": {"supplemental_evidence_ref": str(package.relative_to(material))},
+    }}))
+    request = replace(request, material_root=material)
+    calls = []
+    def prepare(*args, **kwargs):
+        calls.append("prepare")
+        raise RuntimeError("synthetic interrupted preparation")
+    manager = _manager(request.workspace_root, preparation_runner=prepare)
+    job = manager.submit_import(request, "supplemental-source-binding")
+    failed = _terminal(manager, job["job_id"])
+    assert failed["status"] == "failed" and calls == ["prepare"]
+    envelope = json.loads(Path(failed["refs"]["request"]).read_text())
+    bound = {row["path"]: row["sha256"] for row in envelope["source_bindings"]}
+    for path in (package, document, receipt):
+        assert bound[str(path)] == hashlib.sha256(path.read_bytes()).hexdigest()
+    changed = {"package": package, "document": document, "receipt": receipt}[changed_input]
+    changed.write_bytes(changed.read_bytes() + b"\n")
+    before = _snapshot(tmp_path)
+    assert manager.get(job["job_id"])["resume_validation"] == "required_before_writes"
+    with pytest.raises(DashboardPreparationJobConflict) as conflict:
+        manager.resume(job["job_id"])
+    assert conflict.value.code == "source_changed"
+    assert calls == ["prepare"] and _snapshot(tmp_path) == before

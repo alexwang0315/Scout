@@ -473,11 +473,11 @@ class LayerPreparationRequest:
     osm_pbf_cache_ttl_days: int = DEFAULT_OSM_PBF_CACHE_TTL_DAYS
     osmium_bin: str = "osmium"
     run_qgis_terrain_workflow: bool = True
-    qgis_status_retry_attempts: int = 3
+    qgis_status_retry_attempts: int = 10
     qgis_status_retry_interval_s: float = 1.0
     qgis_terrain_analysis_margin_m: float = 250.0
     qgis_route_contact_distance_m: float = 10.0
-    qgis_terrain_workflow_timeout_s: float = 1_800.0
+    qgis_terrain_workflow_timeout_s: float | None = None
     qgis_terrain_poll_interval_s: float = 0.5
     qgis_requested_by: str = "map_preparation"
     prepared_at: str | None = None
@@ -492,6 +492,9 @@ def run_layer_preparation(request: LayerPreparationRequest) -> dict[str, Any]:
         request,
         workspace_file_mutation_allowed=True,
     )
+    from scout_analysis_subject import capture_analysis_geometry_binding
+
+    manifest["analysis_geometry_binding"] = capture_analysis_geometry_binding(project_root)
     outputs = manifest["outputs"]
     summary = _summary_from_manifest(manifest)
     map_preparation_summary = _map_preparation_summary_from_manifest(manifest)
@@ -660,6 +663,26 @@ def run_layer_preparation(request: LayerPreparationRequest) -> dict[str, Any]:
             outputs,
             manifest["finished_at"],
         )
+    mcp_evidence_collection = (
+        _run_mcp_evidence_collection_after_layer_preparation(
+            project_root=project_root, manifest=manifest, request=request,
+        )
+        if request.publish_preparation_outputs and request.run_post_layer_enrichments
+        else _skipped_connected_refresh_post_enrichment("mcp_evidence_collection")
+    )
+    manifest["mcp_evidence_collection"] = mcp_evidence_collection
+    if mcp_evidence_collection.get("output_refs"):
+        outputs.update(mcp_evidence_collection["output_refs"])
+        outputs.update(mcp_evidence_collection.get("counts", {}))
+        _update_project_refs(project_root / "project.json", project, outputs, manifest["finished_at"])
+        # Alignment consumes the newly compiled candidates before OCR/context,
+        # Boss synthesis and mileage/timing read their final input references.
+        mcp_alignment = _run_overpass_route_alignment_after_layer_preparation(
+            project_root=project_root, manifest=manifest,
+        )
+        manifest["mcp_overpass_route_alignment"] = mcp_alignment
+        outputs.update(mcp_alignment.get("output_refs", {}))
+        _update_project_refs(project_root / "project.json", project, outputs, manifest["finished_at"])
     raster_label_preparation = (
         _run_raster_label_preparation_after_layer_preparation(
             project_root=project_root,
@@ -813,6 +836,15 @@ def run_layer_preparation(request: LayerPreparationRequest) -> dict[str, Any]:
             outputs,
             manifest["finished_at"],
         )
+    manifest["analysis_geometry_binding_current"] = capture_analysis_geometry_binding(project_root)
+    manifest["analysis_geometry_drift"] = any(
+        manifest["analysis_geometry_binding"].get(key)
+        != manifest["analysis_geometry_binding_current"].get(key)
+        for key in ("geometry_fingerprint", "timing_fingerprint")
+    )
+    manifest["analysis_projection_outputs"] = _capture_preparation_projection_outputs(
+        project_root=project_root, manifest=manifest,
+    )
     _refresh_layer_preparation_aggregates(
         manifest=manifest,
         request=request,
@@ -858,6 +890,89 @@ def build_layer_preparation_preview(request: LayerPreparationRequest) -> dict[st
         "preview": True,
         "persisted": False,
     }
+
+
+def _capture_preparation_projection_outputs(
+    *, project_root: Path, manifest: dict[str, Any],
+) -> dict[str, list[dict[str, Any]]]:
+    """Bind only projections generated or explicitly revalidated by this attempt."""
+    stages = {
+        "route_context": (manifest.get("raster_label_preparation") or {}).get(
+            "route_context_collection", {}
+        ),
+        "architecture": manifest.get("architecture_preparation") or {},
+        "navigation": manifest.get("navigation_terrain_projection") or {},
+    }
+    bindings: dict[str, list[dict[str, Any]]] = {}
+    for role, stage in stages.items():
+        stage_status = stage.get("status")
+        rows: list[dict[str, Any]] = []
+        if stage_status not in {"completed", "ready", "partial"} or stage.get("fresh") is False:
+            bindings[role] = rows
+            continue
+        if role == "navigation" and (
+            (manifest.get("qgis_terrain_feature_stack") or {}).get("status") != "completed"
+            or stage.get("projection_state") in {"blocked", "unavailable", "failed"}
+        ):
+            bindings[role] = rows
+            continue
+        for ref_key, ref in sorted((stage.get("output_refs") or {}).items()):
+            if not isinstance(ref, str):
+                continue
+            path = _safe_project_relative_path(project_root, ref)
+            present = path is not None and path.is_file()
+            rows.append({
+                "ref": ref, "sha256": _sha256_file(path) if present else None,
+                "status": "ready" if present else "missing",
+                "producer_status": stage_status, "ref_key": ref_key,
+                "reused": stage.get("reused") is True,
+            })
+        bindings[role] = rows
+    return bindings
+
+
+def _run_mcp_evidence_collection_after_layer_preparation(
+    *, project_root: Path, manifest: dict[str, Any], request: LayerPreparationRequest,
+) -> dict[str, Any]:
+    boundary = {"candidate_only": True, "runtime_safety_truth": False}
+    if "mcp" not in set(manifest.get("normalized_layers") or []):
+        return {"status": "not_requested", "output_refs": {}, "boundary": boundary}
+    project = _load_json(project_root / "project.json")
+    explicit_ref = project.get("mcp_named_point_evidence_ref")
+    if explicit_ref and not project.get("mcp_evidence_collection_receipt_ref"):
+        explicit_path = _safe_project_relative_path(project_root, explicit_ref)
+        if explicit_path is not None and explicit_path.is_file():
+            return {
+                "status": "retained_explicit_input", "output_refs": {},
+                "source_ref": explicit_ref, "source_sha256": _sha256_file(explicit_path),
+                "boundary": boundary,
+            }
+    try:
+        from pretrip_mcp_evidence_collection import (
+            collect_mcp_evidence, discover_mcp_supplemental_evidence,
+        )
+
+        source_manifest_path = project_root / "inbox/source_manifest.json"
+        source_manifest = _load_json(source_manifest_path) if source_manifest_path.is_file() else {}
+        material_root = (source_manifest.get("preparation_inputs") or {}).get("material_root")
+        supplemental = (
+            discover_mcp_supplemental_evidence(Path(material_root)) if material_root else None
+        )
+        result = collect_mcp_evidence(
+            project_root, route_corridor_m=request.route_corridor_m,
+            supplemental_evidence_path=supplemental, write_outputs=True,
+            generated_at=manifest.get("finished_at"),
+        )
+        return {
+            "status": result.status, "output_refs": result.output_refs,
+            "counts": result.counts, "receipt": result.receipt,
+            "boundary": boundary,
+        }
+    except Exception as exc:
+        return {
+            "status": "failed", "reason": "mcp_evidence_collection_failed",
+            "error_type": type(exc).__name__, "output_refs": {}, "boundary": boundary,
+        }
 
 
 def _maybe_prepare_local_osm_pbf_evidence(request: LayerPreparationRequest) -> None:
@@ -3148,7 +3263,7 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--qgis-status-retry-attempts",
         type=int,
-        default=3,
+        default=10,
         help="Bounded health-check attempts before QGIS/GRASS preparation fails closed.",
     )
     parser.add_argument(
@@ -3172,8 +3287,8 @@ def main(argv: list[str] | None = None) -> None:
     parser.add_argument(
         "--qgis-terrain-workflow-timeout-s",
         type=float,
-        default=1_800.0,
-        help="Maximum wait for the bounded QGIS/GRASS terrain workflow.",
+        default=None,
+        help="Optional explicit QGIS/GRASS wait deadline; construction waits for completion by default.",
     )
     parser.add_argument(
         "--qgis-terrain-poll-interval-s",
@@ -6181,13 +6296,16 @@ def _run_qgis_terrain_feature_stack_after_layer_preparation(
                 request_id=request_id,
             ),
         )
-        deadline = time.monotonic() + request.qgis_terrain_workflow_timeout_s
+        deadline = (
+            time.monotonic() + request.qgis_terrain_workflow_timeout_s
+            if request.qgis_terrain_workflow_timeout_s is not None else None
+        )
         active_states = {
             SpatialWorkflowState.QUEUED.value,
             SpatialWorkflowState.RUNNING.value,
         }
         while _enum_text(run.state) in active_states:
-            if time.monotonic() >= deadline:
+            if deadline is not None and time.monotonic() >= deadline:
                 backend.cancel_workflow(
                     project_root=project_root,
                     workflow_run_id=run.workflow_run_id,
@@ -6211,7 +6329,8 @@ def _run_qgis_terrain_feature_stack_after_layer_preparation(
                 time.sleep(
                     min(
                         request.qgis_terrain_poll_interval_s,
-                        max(0.0, deadline - time.monotonic()),
+                        max(0.0, deadline - time.monotonic())
+                        if deadline is not None else request.qgis_terrain_poll_interval_s,
                     )
                 )
             run = backend.get_run(
@@ -6484,13 +6603,16 @@ def _run_qgis_terrain_route_hypothesis_after_layer_preparation(
                 request_id=request_id,
             ),
         )
-        deadline = time.monotonic() + request.qgis_terrain_workflow_timeout_s
+        deadline = (
+            time.monotonic() + request.qgis_terrain_workflow_timeout_s
+            if request.qgis_terrain_workflow_timeout_s is not None else None
+        )
         active_states = {
             SpatialWorkflowState.QUEUED.value,
             SpatialWorkflowState.RUNNING.value,
         }
         while _enum_text(run.state) in active_states:
-            if time.monotonic() >= deadline:
+            if deadline is not None and time.monotonic() >= deadline:
                 backend.cancel_workflow(
                     project_root=project_root,
                     workflow_run_id=run.workflow_run_id,
@@ -6518,7 +6640,8 @@ def _run_qgis_terrain_route_hypothesis_after_layer_preparation(
                 time.sleep(
                     min(
                         request.qgis_terrain_poll_interval_s,
-                        max(0.0, deadline - time.monotonic()),
+                        max(0.0, deadline - time.monotonic())
+                        if deadline is not None else request.qgis_terrain_poll_interval_s,
                     )
                 )
             run = backend.get_run(
@@ -13075,8 +13198,11 @@ def _validate_request(request: LayerPreparationRequest) -> None:
         raise ValueError("qgis_terrain_analysis_margin_m must be between 0 and 5000")
     if not 0 < request.qgis_route_contact_distance_m <= 1_000:
         raise ValueError("qgis_route_contact_distance_m must be between 0 and 1000")
-    if not 0 <= request.qgis_terrain_workflow_timeout_s <= 7_200:
-        raise ValueError("qgis_terrain_workflow_timeout_s must be between 0 and 7200")
+    if request.qgis_terrain_workflow_timeout_s is not None and (
+        not math.isfinite(request.qgis_terrain_workflow_timeout_s)
+        or request.qgis_terrain_workflow_timeout_s < 0
+    ):
+        raise ValueError("qgis_terrain_workflow_timeout_s must be finite and nonnegative when set")
     if not 0 <= request.qgis_terrain_poll_interval_s <= 5:
         raise ValueError("qgis_terrain_poll_interval_s must be between 0 and 5")
     if not request.qgis_requested_by.strip():

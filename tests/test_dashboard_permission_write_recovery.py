@@ -30,6 +30,7 @@ FUNCTION_NAMES = (
     "resetPermissionBaselineReviewChecks",
     "loadPermissionBaselineCandidates",
     "loadPermissionData",
+    "refreshSixAxisAfterBaselineChange",
     "postPermissionBaselineCommand",
     "closePermissionBaselineConfirmation",
     "submitPermissionBaselineWrite",
@@ -102,6 +103,7 @@ const state = {
       canonical_snapshot_sha256: HASH.snapshot, evaluator_version: "admission.v1"}},
 };
 const loadedDataScopes = new Set(["permission"]);
+const dataScopePromises = new Map();
 const calls = [];
 const timers = [];
 const clearedTimers = [];
@@ -131,6 +133,11 @@ async function loadDataScope(scope, options) {
   reads.push({scope, options});
   assert.equal(scope, "permission");
   return loadPermissionData();
+}
+async function loadDataForRoute(route, options) {
+  assert.equal(route, "outdoor-permission");
+  assert.equal(loadedDataScopes.size, 0);
+  return loadDataScope("permission", options);
 }
 function acceptedRow(overrides = {}) {
   return {...state.permissionBaselineSavedCandidate, accepted: true, ...overrides};
@@ -258,6 +265,23 @@ return summary();
     assert "Saved review recovered and verified" in result["status"]
     assert result["pending"] is None
     assert any(c["path"].endswith("/mission-baseline/candidates") for c in result["calls"])
+
+
+@pytest.mark.parametrize("kind", ["accept", "rebuild"])
+def test_verified_unknown_outcome_refreshes_the_same_six_axis_scopes_as_success(kind) -> None:
+    result = _run(
+        f"state.permissionBaselinePendingAction.kind = {json.dumps(kind)};"
+        "for (const scope of ['analysis_subject','project','briefing','permission','weather','navigation_terrain','qgis_spatial']) loadedDataScopes.add(scope);"
+        "state.analysisSubject = {analysis_revision:'before-write'};"
+        "postBehavior = transportLost; catalogPayload.candidates = [acceptedRow()];"
+        "await submitPermissionBaselineWrite();"
+        "return {...summary(), loadedScopes:[...loadedDataScopes], analysisSubject:state.analysisSubject};"
+    )
+    assert "recovered and verified" in result["status"]
+    assert result["pending"] is None
+    assert result["loadedScopes"] == []
+    assert result["analysisSubject"] is None
+    assert len(result["reads"]) == 2  # Outcome reconciliation, then common-view refresh.
 
 
 @pytest.mark.parametrize("mismatch", ["version_ref", "version_sha256", "not_accepted", "workspace"])

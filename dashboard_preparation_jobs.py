@@ -604,7 +604,7 @@ class DashboardPreparationJobManager:
                     entries.append(str(item.relative_to(resolved)))
             directories[str(resolved)] = {"path": str(resolved), "role": role,
                 "sha256": _digest(entries), "hash_basis": "directory_file_inventory"}
-        def bind_material(sources: dict[str, Any]) -> None:
+        def bind_material(sources: dict[str, Any], material_root: Path | None) -> None:
             for key in ("mcp_named_point_evidence", "local_osm_pbf"):
                 if key == "local_osm_pbf" and binding_version >= 2:
                     continue  # Version 2 binds the effective explicit/default PBF below.
@@ -612,6 +612,16 @@ class DashboardPreparationJobManager:
                 path = value.get("path") if isinstance(value, dict) else value
                 if path:
                     bind(Path(path), key)
+            if material_root is not None:
+                from pretrip_mcp_evidence_collection import (
+                    discover_mcp_supplemental_evidence, mcp_supplemental_source_bindings,
+                )
+                supplemental = discover_mcp_supplemental_evidence(material_root)
+                if supplemental is not None:
+                    # Bind raw documents and acquisition receipts as well as
+                    # the package. Resume cannot silently use edited evidence.
+                    for source in mcp_supplemental_source_bindings(supplemental):
+                        bind(Path(source["source_ref"]), "mcp_supplemental_" + source["role"])
         def record_pbf(path: Path | None) -> None:
             if path is not None:
                 path = path.expanduser().resolve()
@@ -640,14 +650,14 @@ class DashboardPreparationJobManager:
             from pretrip_import import _preparation_source_inputs, _resolve_mcp_named_point_evidence
             restored = self._restore(envelope)
             preparation_inputs = _preparation_source_inputs(restored)
+            material_root = preparation_inputs.get("material_root")
             material_sources = {}
             if preparation_inputs.get("material_manifest_path"):
                 manifest_path = Path(preparation_inputs["material_manifest_path"])
                 bind(manifest_path, "material_manifest")
                 material_sources = _read(manifest_path).get("sources", {})
-                bind_material(material_sources)
+            bind_material(material_sources, Path(material_root) if material_root else None)
             from dashboard_workspace_preparation import _resolve_original_osm_pbf
-            material_root = preparation_inputs.get("material_root")
             raw_pbf = _resolve_original_osm_pbf(
                 root=self._target(values["project_id"]), project={},
                 material_root=Path(material_root) if material_root else None,
@@ -681,7 +691,7 @@ class DashboardPreparationJobManager:
                 bind(path, "reference_gpx")
             if material_root and (material_root / "material_manifest.json").is_file():
                 bind(material_root / "material_manifest.json", "material_manifest")
-            bind_material(material.get("sources", {}))
+            bind_material(material.get("sources", {}), material_root)
             raw_pbf = inputs.local_osm_pbf
             record_pbf(Path(raw_pbf["path"]) if raw_pbf else None)
             for directory in inputs.dtm_dirs:

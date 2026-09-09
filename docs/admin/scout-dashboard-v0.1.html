@@ -12156,6 +12156,7 @@
       "outdoor-navigation": Object.freeze({maturity: "partial", surface: "Terrain reading workbench", data: "Workspace DEM + candidate morphology", action: "Read-only feature inspection", verification: "Workspace API + UX verified", provenance: "Prepared DTM + GPX source ledger", mode: "Operational analysis"}),
     });
     const ROUTE_DATA_SCOPES = Object.freeze({
+      analysis_subject: ["outdoor-route-context", "outdoor-pace-fit", "outdoor-permission", "outdoor-architecture", "outdoor-weather", "outdoor-navigation"],
       project: ["home", "timeline", "features-lbs", "features-workspace", "features-import-new-trip", "surface-debug", "emergency", "outdoor-route-context", "outdoor-pace-fit", "outdoor-architecture", "outdoor-weather"],
       briefing: ["outdoor-route-context"],
       body: ["outdoor-pace-fit", "outdoor-pace-fit-body-index"],
@@ -12742,6 +12743,8 @@
         hardware: {status: "idle"},
       },
       dataScopeErrors: {},
+      analysisSubject: null,
+      analysisSubjectStatus: "loading",
       surfaceFrameHealth: {},
       settingsSaveState: {status: "idle", detail: "Not changed in this view", reloadPending: false},
       pendingTabFocus: null,
@@ -13902,8 +13905,13 @@
     async function loadDataForRoute(route, {force = false} = {}) {
       document.getElementById("dashboardRouteStatus").textContent = projectId();
       const scopes = dataScopesForRoute(route);
+      if (scopes.includes("analysis_subject")) {
+        // Re-check the shared identity on every six-axis transition. An accepted
+        // schedule or preparation may have changed in another view or session.
+        await loadDataScope("analysis_subject", {force: true}).catch(() => {});
+      }
       const results = await Promise.allSettled(
-        scopes.map(scope => loadDataScope(scope, {force})),
+        scopes.map(scope => loadDataScope(scope, {force: scope === "analysis_subject" ? false : force})),
       );
       const failedScopes = results
         .map((result, index) => ({result, scope: scopes[index]}))
@@ -13940,6 +13948,7 @@
     }
 
     async function performDataScope(scope) {
+      if (scope === "analysis_subject") return loadAnalysisSubject();
       if (scope === "project") return loadProjectData();
       if (scope === "briefing") return loadBriefingData();
       if (scope === "body") return loadBodyIndexData();
@@ -13951,6 +13960,45 @@
       if (scope === "hardware") return loadHardwareData();
       if (scope === "living") return loadLivingData();
       if (scope === "runtime_audit") return loadRuntimeAuditData();
+    }
+
+    async function loadAnalysisSubject() {
+      const expectedProjectId = resolvedPretripProjectId();
+      state.analysisSubjectStatus = "loading";
+      try {
+        const payload = await fetchFirstPretripJson(
+          candidateId => `/admin/pretrip/projects/${encodeURIComponent(candidateId)}/analysis-subject`,
+          {timeoutMs: PRETRIP_PROJECT_FETCH_TIMEOUT_MS},
+        );
+        if (resolvedPretripProjectId() !== expectedProjectId) return;
+        const previous = state.analysisSubject;
+        if (previous && (previous.project_id !== payload.project_id
+            || previous.analysis_revision !== payload.analysis_revision)) {
+          const dependentScopes = ["project", "briefing", "permission", "weather", "navigation_terrain", "qgis_spatial"];
+          await Promise.allSettled(dependentScopes.map(scope => dataScopePromises.get(scope)).filter(Boolean));
+          if (resolvedPretripProjectId() !== expectedProjectId) return;
+          for (const scope of dependentScopes) loadedDataScopes.delete(scope);
+        }
+        state.analysisSubject = payload;
+        state.analysisSubjectStatus = "ready";
+      } catch (error) {
+        if (resolvedPretripProjectId() !== expectedProjectId) return;
+        state.analysisSubject = null;
+        state.analysisSubjectStatus = String(error?.message || error);
+        throw error;
+      }
+      refreshCurrentDataView();
+    }
+
+    async function refreshSixAxisAfterBaselineChange() {
+      const expectedProjectId = resolvedPretripProjectId();
+      const scopes = ["analysis_subject", "project", "briefing", "permission", "weather", "navigation_terrain", "qgis_spatial"];
+      await Promise.allSettled(scopes.map(scope => dataScopePromises.get(scope)).filter(Boolean));
+      if (resolvedPretripProjectId() !== expectedProjectId) return;
+      for (const scope of scopes) loadedDataScopes.delete(scope);
+      state.analysisSubject = null;
+      state.analysisSubjectStatus = "loading";
+      await loadDataForRoute(state.route, {force: true});
     }
 
     async function loadRuntimeAuditData({limit = 200} = {}) {
@@ -16267,6 +16315,8 @@
       const readinessChip = document.getElementById("readinessChip");
       if (readinessChip) readinessChip.textContent = readiness;
       renderTruthStrip(state.route);
+      const subjectBanner = document.querySelector("[data-analysis-subject]");
+      if (subjectBanner) subjectBanner.outerHTML = renderAnalysisSubject(state.route);
       if (state.route === "outdoor-route-context"
           && state.briefingArtifactStatus?.status === "available") {
         const frame = document.querySelector("iframe[data-route-context-briefing]");
@@ -16670,6 +16720,23 @@
         truth.surface = "Degraded";
         truth.verification = `Data load failed · ${failedScopes.join(", ")}`;
         truth.mode = "Degraded";
+      }
+      return applyAnalysisSubjectTruth(truth, route);
+    }
+
+    function applyAnalysisSubjectTruth(truth, route) {
+      const subject = selectedAnalysisSubject();
+      const role = route.replace("outdoor-", "").replaceAll("-", "_");
+      const dependency = subject?.dependencies?.[role];
+      if (["stale_or_unverified", "stale", "rebuild_required"].includes(dependency?.status)) {
+        return {...truth, surface: "Sources need review", mode: "Retained evidence",
+          verification: dependency.reason || subject.issues?.join(" · ") || "Rebuild the adopted schedule before using this projection"};
+      }
+      if (role === "pace_fit" && subject?.schedule_status === "adopted") {
+        return {...truth, surface: "Historical pace analysis", mode: "Adopted schedule analysis",
+          data: `${subject.mission_day_estimates.length} adopted days · recorded time + explicit gaps`,
+          verification: "Reviewed schedule and immutable Rebuild hashes verified",
+          provenance: `Golden ${subject.sources.golden_geometry.sha256?.slice(0, 16) || "unknown"} · runtime truth=false`};
       }
       return truth;
     }
@@ -23375,7 +23442,60 @@
         <div class="route-tabs ${activeRoute === "outdoor-navigation" ? "is-navigation-active" : ""}" role="tablist" aria-label="Exploring for Six Axis">
           ${SIX_FORCES.map((force) => `<button type="button" role="tab" aria-selected="${force.route === activeRoute ? "true" : "false"}" class="${force.route === activeRoute ? "is-active" : ""}" data-route="${escapeHtml(force.route)}">${escapeHtml(force.label)}</button>`).join("")}
         </div>
+        ${renderAnalysisSubject(activeRoute)}
       `;
+    }
+
+    function selectedAnalysisSubject() {
+      return state.analysisSubject?.project_id === resolvedPretripProjectId()
+        ? state.analysisSubject : null;
+    }
+
+    function renderAnalysisSubject(route) {
+      const subject = selectedAnalysisSubject();
+      if (!subject) return `<section class="panel" data-analysis-subject="loading"><p class="status">共同分析來源：${escapeHtml(state.analysisSubjectStatus || "loading")}。來源核對完成前，保留內容不代表本版已完成分析。</p></section>`;
+      const role = route.replace("outdoor-", "").replaceAll("-", "_");
+      const dependency = subject.dependencies?.[role] || {};
+      const golden = subject.sources?.golden_geometry || {};
+      return `<section class="panel" data-analysis-subject="${escapeHtml(subject.subject_id)}" data-analysis-project="${escapeHtml(subject.project_id)}" data-analysis-revision="${escapeHtml(subject.analysis_revision)}" data-analysis-dependency="${escapeHtml(dependency.status || "unknown")}">
+        <div class="metric-line">
+          <div class="metric-row"><span>共同分析</span><strong>${escapeHtml(subject.project_id)} · ${escapeHtml(subject.analysis_revision.slice(0, 16))}</strong></div>
+          <div class="metric-row"><span>Golden / CP / Segment</span><span>${escapeHtml((golden.sha256 || "missing").slice(0, 16))} · ${escapeHtml(subject.geometry_fingerprint.slice(0, 16))}</span></div>
+          <div class="metric-row"><span>採用日程</span><span>${escapeHtml(subject.schedule_status)} · ${subject.mission_day_estimates?.length || 0} 日 · ${escapeHtml(subject.timezone || "時區未知")}</span></div>
+          <div class="metric-row"><span>本頁來源狀態</span><span>${escapeHtml(dependency.status || "unknown")}</span></div>
+        </div>
+        <p class="status">${escapeHtml(dependency.time_role || "時間基準尚未確認")}${dependency.reason ? ` · ${escapeHtml(dependency.reason)}` : ""}</p>
+        <details><summary>來源與版次</summary><p>${escapeHtml(subject.subject_id)}<br>analysis revision: ${escapeHtml(subject.analysis_revision)}<br>recorded timing: ${escapeHtml(subject.timing_fingerprint)}<br>adopted baseline: ${escapeHtml(subject.selected_baseline_sha256 || "尚未採用")}</p>
+        ${Object.entries(subject.sources || {}).map(([key, source]) => `<p>${escapeHtml(key)} · ${escapeHtml(source.status)} · ${escapeHtml(source.ref || "missing")}<br>${escapeHtml(source.sha256 || "unknown")}</p>`).join("")}
+        <p>原始匯入 Golden：${escapeHtml(subject.original_golden_provenance?.recorded_sha256 || "unknown")}。上方幾何／時間分析使用 filtered Golden；原始來源 hash 保留在 import provenance。</p>
+        ${asArray(subject.day_segment_mapping).map(day => `<p>${escapeHtml(day.mission_day_id)} → ${escapeHtml(day.source_day_id || "planning assumption")} · source points ${day.start_point_index ?? "unknown"}–${day.end_point_index ?? "unknown"} · ${asArray(day.checkpoint_ids).length} CP · ${asArray(day.cp_segments).length} CP segments</p>`).join("")}
+        ${subject.issues?.length ? `<p>${escapeHtml(subject.issues.join(" · "))}</p>` : ""}</details>
+      </section>`;
+    }
+
+    function renderAdoptedPaceSchedule() {
+      const subject = selectedAnalysisSubject();
+      const days = subject?.schedule_status === "adopted" ? asArray(subject.mission_day_estimates) : [];
+      if (!days.length) return `<section class="panel" data-pace-adopted-schedule="unavailable"><h3>採用後分日與節奏</h3><p class="status">${escapeHtml(subject?.schedule_status || "loading")}：需有來源一致的 Accept 與 Rebuild，才顯示採用日程。幾何與原始 CP 可繼續研究。</p></section>`;
+      const number = value => value == null || !Number.isFinite(Number(value)) ? "未知" : `${Number(value).toFixed(1)} 分`;
+      return `<section class="panel" data-pace-adopted-schedule="${escapeHtml(subject.analysis_revision)}"><h3>採用後分日與節奏 · ${days.length} 日</h3>
+        <p class="status">${escapeHtml(subject.schedule_time_role)} · ${escapeHtml(subject.timezone || "時區未知")}。停留由軌跡推估；缺口不是休息，GPX 不證明本人腳程或當次安全。</p>
+        <div class="pace-table-scroll"><table class="pace-budget-table"><thead><tr><th>日</th><th>啟程 → 到達</th><th>總經過</th><th>推估停留</th><th>CP / 缺口</th></tr></thead><tbody>
+        ${days.map(day => {
+          const replay = day.reference_replay || {};
+          const stops = asArray(replay.rest_stops);
+          const gaps = asArray(replay.unknown_ranges);
+          return `<tr data-pace-mission-day="${escapeHtml(day.mission_day_id)}"><th>${escapeHtml(day.mission_day_id)}<br>${escapeHtml(replay.source_day_id || "planning assumption")}</th><td>${escapeHtml(replay.departure_clock || "未知")} → ${escapeHtml(replay.arrival_clock || "未知")}</td><td>${number(replay.elapsed_minutes ?? day.eta?.observed_elapsed_minutes)}</td><td>${stops.length} 段 · ${number(stops.reduce((sum, stop) => sum + Number(stop.duration_minutes || 0), 0))}</td><td>${asArray(replay.checkpoint_windows).length} / ${gaps.length}</td></tr>`;
+        }).join("")}</tbody></table></div>
+        <p class="status">過夜間隔 ${asArray(subject.overnight_gaps).length}；全程未知範圍 ${asArray(subject.unknown_ranges).length}。Recorded CP clock 與分日依同一 Golden；未用每日八小時或 Ref. crowd pace 重新切日。</p>
+        <details><summary>各日停留、CP 時刻與未知範圍</summary>${days.map(day => {
+          const replay = day.reference_replay || {};
+          return `<h4>${escapeHtml(day.mission_day_id)}</h4><p>${escapeHtml(replay.start?.label || "起點未知")} → ${escapeHtml(replay.end?.label || "終點未知")}</p>
+            ${asArray(replay.rest_stops).map(stop => `<p>${escapeHtml(stop.label || stop.stop_id)} · ${escapeHtml(stop.start_clock || "未知")} → ${escapeHtml(stop.end_clock || "未知")} · ${number(stop.duration_minutes)} · 推估停留</p>`).join("")}
+            ${asArray(replay.checkpoint_windows).map(cp => `<p>${escapeHtml(cp.anchor_id)} · ${escapeHtml(cp.arrival_clock || "未知")} · ${escapeHtml(cp.status || "unknown")}</p>`).join("")}
+            ${asArray(replay.unknown_ranges).map(gap => `<p>未知：${escapeHtml(gap.reason || gap.reason_code || JSON.stringify(gap))}</p>`).join("")}`;
+        }).join("")}</details>
+      </section>`;
     }
 
     function paceFitSubTabs(activeRoute) {
@@ -33319,6 +33439,7 @@
         ${outdoorTabs(force.route)}
         ${paceFitSubTabs("outdoor-pace-fit")}
         <section class="pace-fit-dashboard" data-pace-fit-dashboard="true">
+          ${renderAdoptedPaceSchedule()}
           <div class="pace-fit-status-grid" aria-label="Pace fit route status">
             <div class="pace-fit-status-cell"><span>Workspace route</span><strong>${escapeHtml(routeLabel)}</strong><em>${escapeHtml(`${context.checkpoints.length} checkpoint candidates`)}</em></div>
             <div class="pace-fit-status-cell"><span>Selected CP</span><strong>${escapeHtml(context.label)}</strong><em>${escapeHtml(context.selectionReason)}</em></div>
@@ -37803,8 +37924,7 @@
           writeReceipt = result;
           if (candidateProjectId !== resolvedPretripProjectId()) return;
           state.permissionBaselineStatus = `Bounded projection rebuilt · ${String(result.workbench_seed_sha256 || "").slice(0, 16)} · rules remain review_only · runtime authority=false`;
-          loadedDataScopes.delete("permission");
-          await loadDataScope("permission", {force: true});
+          await refreshSixAxisAfterBaselineChange();
         } else {
           if (!saved) throw new Error("Saved candidate is no longer available");
           if (draft?.proposal_profile === "ref_gpx_proposal_v1" && !permissionBaselineReviewComplete()) {
@@ -37827,8 +37947,7 @@
           writeReceipt = result;
           if (candidateProjectId !== resolvedPretripProjectId()) return;
           state.permissionBaselineStatus = `Reviewed baseline appended · ${result.reviewed_baseline_ref || "reviewed artifact"} · current session not rebound`;
-          loadedDataScopes.delete("permission");
-          await loadDataScope("permission", {force: true});
+          await refreshSixAxisAfterBaselineChange();
         }
         state.permissionBaselinePendingAction = null;
       } catch (error) {
@@ -37857,6 +37976,12 @@
             state.permissionBaselineStatus = accepted
               ? "Saved review recovered and verified for this candidate. Inspect the projection and rebuild if required."
               : "Rebuilt projection recovered and verified for the selected reviewed baseline.";
+            try {
+              await refreshSixAxisAfterBaselineChange();
+            } catch (refreshError) {
+              if (candidateProjectId !== resolvedPretripProjectId()) return;
+              state.permissionBaselineStatus += ` Display refresh incomplete; reload to inspect the verified receipt · ${String(refreshError?.message || refreshError)}`;
+            }
           } else {
             state.permissionBaselineStatus = `Write outcome unconfirmed. Reload or refresh saved versions before retrying; the same command reuses its receipt key · ${detail}`;
           }

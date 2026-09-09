@@ -100,9 +100,10 @@ API／fixture tests 與真實 browser 成果分開報告；HTTP 200、圖層數�
 並修復 job catalog 逾時；G2 主機重啟後沿用 import.1 完成第 3 次續跑，終止為
 `completed_with_gaps`，Permission 初始化完成且未接受，唯讀重建保留完整九日語意。
 r8 已修復 OCR 過短的預設逾時並載入新 runtime，尚待完整 preparation 重驗。
-目前仍為 **NOT QUALIFIED**：QGIS 當次未執行、MCP 缺來源整理 producer，新案
-G1／G2、G4／G6 的瀏覽器鏈受控制連線中斷阻擋，六力共同分析版次也未證明。
-隔離測試成功不能替代上述完整鏈。
+r9 已恢復 worker／Dashboard 瀏覽器，完成 MCP 真實來源整理及六頁共同分析版次
+修復。真實唯讀試算 G1 為 7 MCP、G2 為 47 MCP，合成無 gap；新 workspace 的
+完整 UI 鏈正重跑。仍為 **NOT QUALIFIED**，須完成 G1／G2、Save／Accept／Rebuild
+各次 reload、跨專案六頁觀測及同版本三次核心重跑。隔離測試成功不能替代完整鏈。
 
 ## 4. 第二項：人工行程如何生成 Planned GPX
 

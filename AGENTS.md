@@ -501,6 +501,27 @@ The commit command includes all eligible changed and untracked files as one
 snapshot. If selective file commits are required, stop and ask the user rather
 than recreating a local Git repository.
 
+## Scout-to-Mac SSH Access
+
+When an agent running on Scout must connect to the Mac checkout, the Mac login
+account is `alexwang0315`. Use the dedicated Scout-to-Mac key; do not rely on a
+default SSH identity:
+
+```bash
+ssh -i /home/alexwang0315/.ssh/scout-to-mac \
+  -o IdentitiesOnly=yes \
+  -o StrictHostKeyChecking=yes \
+  -o UserKnownHostsFile=/home/alexwang0315/.ssh/known_hosts \
+  -o ConnectTimeout=10 \
+  alexwang0315@Lamb780722de-MacBook-Pro.local
+```
+
+If mDNS resolution fails, use `alexwang0315@192.168.8.155`. The private key
+must never be printed, copied into prompts, or committed. The verified Mac host
+key fingerprint is `SHA256:cFmaGA0olTmjLeQ1laeURtl0oBscHsfA4H0l/s+9i8g`, and
+the Scout-to-Mac public key fingerprint is
+`SHA256:pLCijCRBUa1mpJOtvVTiaqgJE9ZedaO4I+MJuUJN/vM`.
+
 ## Graphify
 
 - `graphify` (`~/.Codex/skills/graphify/SKILL.md`) converts input to a knowledge

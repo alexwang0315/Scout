@@ -5,10 +5,34 @@
 Dashboard 重驗。驗收依據維持 [delivery plan §3.2](scout-golden-planned-gpx-delivery-plan.md#32-驗收矩陣)。
 [2026-09-08 首輪失敗紀錄](scout-golden-gpx-g1-g6-qualification-20260908.md)保留不改判。
 
-> 本輪 G2 已取得終止回執，結果為 `completed_with_gaps`。修復與後端重驗已完成下列
-> 範圍；瀏覽器控制連線中斷，新的完整 UI 驗收尚未完成，不得以隔離測試代替。
+> r9 已恢復 QGIS worker 與 Dashboard 瀏覽器，完成真實 MCP 整理器、來源綁定及
+> 六頁共同分析版次修復。新的完整 UI 驗收仍在執行；不可把下列試算或隔離 PASS
+> 當成 G1–G6 全數通過。
 
-## 本輪 G1–G6 checkpoint
+## r9 整合與重驗進度
+
+2026-09-09 14:13（Asia/Taipei）：以真實原始 GPX、OSM 與已取得公開文件試算，
+G1 有 32 份合格來源、7 個 MCP（5 個有 CP 支持、2 個保留建議插入）；G2 有
+14 份合格來源、47 個 MCP，均有 CP 支持。兩案 compiler gaps 為空。
+這是來源與合成能力的證據，尚未包含新 workspace 的完整 preparation／Permission 操作。
+
+- MCP producer／原有 synthesis：32 項測試通過；[來源與完整試算回執](../../artifacts/golden-gpx-repair-20260909/reports/r9-mcp-evidence-collection.md)。
+- 新原始文件、package、取得回執變更，以及 Clone／真實 import 入口：6 項測試通過；[結果](../../artifacts/golden-gpx-repair-20260909/tests/run-20260909T055947869884Z/results.json)。
+- MCP 先於下游分析發布、projection hash、derived 變化不冒充 raw input drift：2 項整合測試通過；[結果](../../artifacts/golden-gpx-repair-20260909/tests/run-20260909T060155639924Z/results.json)。
+- QGIS 等待預設不再取消持續執行的工作，顯式故障注入 deadline 保留：11 項測試通過；[結果](../../artifacts/golden-gpx-repair-20260909/tests/run-20260909T054911390811Z/results.json)。
+- analysis subject、ETA 原回執、來源漂移：9 項 API／來源案例通過。Dashboard 保存、逾時恢復與六頁失效：48 項 VM 案例通過；[實作及各輪測試](../../artifacts/golden-gpx-repair-20260909/reports/g6-six-axis-implementation.json)。
+- `pnpm lint`、`pnpm typecheck`、`pnpm test`（27 項）通過，使用 env／network 隔離；[執行回執](../../artifacts/golden-gpx-repair-20260909/tests/r9-pnpm/results.json)。最後的 recovery 分支變更另由同 HTML hash 的 48 項 VM 與 syntax 驗證。
+- repo layer-contract verifier：33 層契約通過；[結果](../../artifacts/golden-gpx-repair-20260909/tests/r9-repo-layer-contract.json)。真實新 workspace 的圖層結果仍須在準備完成後驗證。
+
+新測試 ID 為 `golden_g1_chilai_20260909_r9`、`golden_g2_dongqing_20260909_r9`；
+G1 Clone 由新 G1 的原始素材重建。新 material root 僅放原始公開文件及來源宣告，
+沒有複製 MCP／terrain／Permission 等衍生輸出。[素材宣告](../../artifacts/golden-gpx-repair-20260909/sources/r9-materials/input-selection.json)。
+完整成功次數仍為 **0**，相同版本三次核心重跑尚未開始。
+
+Mac 無 `.git` 是目前指定的正常架構，使用 Scout Commit Gateway 留下可追蹤版本；
+不再將缺少本機 `.git` 當作修復或驗收 blocker。
+
+## r8 G1–G6 checkpoint（歷史紀錄）
 
 截至 r8，完整瀏覽器重驗受到連線中斷阻擋；以下區分已執行的測試、既有實際操作
 與尚未滿足的前置條件。**這不是六項重驗全部完成的宣告。**

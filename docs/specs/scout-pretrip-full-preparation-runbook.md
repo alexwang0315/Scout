@@ -19,6 +19,49 @@ Use this file when a rerun must include all of:
 
 If any required step is skipped, report the run as partial.
 
+### 2026-09-09 Golden r9: raw MCP compilation and recovery provenance
+
+The old New Import path could create GPX/CP artifacts but had no producer for a
+real MCP evidence set. Preparation now compiles the original source-manifest
+GPX documents and the actual OSM snapshot, with optional fetched public text
+declared by `material_manifest.json` at
+`sources.mcp.supplemental_evidence_ref`. This is a raw input package; do not
+copy a previous workspace's candidates or reviews into a new import.
+
+The compiler publishes four refs under `outputs/mcp`: named-point evidence,
+MCP candidates, CP support reconciliation and the collection receipt. It runs
+before the final MCP alignment, OCR/context collection, Boss synthesis and
+mileage/timing/architecture stages. Keep the existing 11-document, 5-percent
+mention, 1000 m spacing and 250 m CP-support rules. GPX waypoints or OSM nodes
+are records within documents, not independent website pages. Same-activity
+diaries and GPX dependencies are deduplicated. Place-type gaps discovered on
+real data included named pools and saddles; classify only explicit names,
+without inventing coordinates or ambiguous aliases.
+
+The durable preparation job binds the package, readable text, raw HTML and
+acquisition receipts before starting. Resume verifies those inputs again
+before any writes. A package may be reused by a new QA ID/Clone only through
+an exact raw Golden SHA binding; its acquisition project remains provenance,
+and no Permission review is transferred.
+
+Each preparation manifest records its starting/current geometry and timing
+fingerprints, plus hashes of projections produced or revalidated in that run.
+Compare immutable inputs for drift; regenerated recorded-pace metadata alone
+must not be counted as changed raw input. Failed or retained projections are
+not marked current. The shared Dashboard analysis subject consumes these
+receipts and the immutable Permission Rebuild receipt.
+
+The default outer QGIS preparation wait now observes terminal completion
+without a Scout cumulative deadline; explicit deadlines remain supported for
+operator requests/fault tests. Health preflight defaults to 10 attempts.
+Underlying provider/worker limits remain independently observable. Reuse the
+task's existing authenticated QGIS worker; wait for a Dashboard listener before
+browser navigation, and never multiply servers when startup is slow.
+
+Real source-only trial: G1 32 accepted documents / 7 MCP; G2 14 / 47, both with
+no compiler gap. This does not certify the full import/preparation/UI chain.
+See [r9 qualification progress](scout-golden-gpx-g1-g6-qualification-20260909.md#r9-整合與重驗進度).
+
 ### 2026-09-07 Route Context recovery for the exact legacy newImport workspace
 
 The reported workspace was `dongqing_batongguan_historic_trail_newImport`.
