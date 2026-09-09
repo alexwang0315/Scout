@@ -24,6 +24,28 @@ analysis subject 及嚴格 CWA 驗證。33-layer 與 Navigation report-only guar
 G2 與 Clone0 完成後才重載 Dashboard。首次完整成功及其後三次重跑仍為 **0**。
 [修復與同版測試回執](../../artifacts/golden-gpx-repair-20260909/receipts/r11-adopted-eta-view-repair/completion.json)。
 
+16:12 更新：G2、Clone0 準備均 `completed`；Dashboard 已載入 r12 `e3d379d6`，
+PID `26541`，重載前後 56 份 job／來源／Permission 檔案 hashes 全部相同。
+G1 的 compact project 已在真實瀏覽器恢復 200，Pace 顯示 35 CP，起終點 inspector
+保留原始時刻；Architecture 圖表及 Navigation 地形圖已收斂。Weather 的可見地圖
+包含實際路線、CP 及雷達疊圖，numeric rainfall no_coverage 仍明示未知。
+Route Context 的來源脈絡與新行程建議缺口分開，不把已採用歷史日程當新出發核准。
+
+但 Navigation 的 2D footer 無條件寫 `complete GPX + R1`，與同頁
+`TERRAIN HYPOTHESIS · UNAVAILABLE` 矛盾。r13 將修正這一處文字，不修改地圖
+幾何或為缺資料生成 R1。G6 尚不改判；G2 與 Clone0 的採用全鏈及三次重跑仍待完成。
+[載入版本](../../artifacts/golden-gpx-repair-20260909/receipts/runtime-version-round-12-final.json)、
+[Pace 地圖](../../artifacts/golden-gpx-repair-20260909/browser/r12/002-g1-pace-map-converged.png)、
+[Weather 可見地圖](../../artifacts/golden-gpx-repair-20260909/browser/r12/011-g1-weather-map-visible.png)、
+[Navigation 矛盾觀測](../../artifacts/golden-gpx-repair-20260909/browser/r12/008-g1-navigation-current.dom.json)。
+
+r13 已凍結為單一 footer 字串修正；HTML SHA256 `3432e72d782618a5`。
+既有 Navigation VM／readiness 聚焦 46 項、`pnpm test` 27 項全部通過，
+lint／typecheck／inline syntax 通過；兩套隔離 guard 的 env／network 事件皆為 0。
+Navigation guard 保持 suspended report-only，沒有變更 baseline 或圖層／幾何邏輯。
+[聚焦測試](../../artifacts/golden-gpx-repair-20260909/tests/run-20260909T081404890797Z/results.json)、
+[前端檢查](../../artifacts/golden-gpx-repair-20260909/tests/r13-pnpm/results.json)。
+
 ### r11 真實 Resume／採用完成，G6 因舊 ETA reader 仍未通過
 
 2026-09-09 15:42（Asia/Taipei）：`739a1229`、Dashboard PID `22378`，

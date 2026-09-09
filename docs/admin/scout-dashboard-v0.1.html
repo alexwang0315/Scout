@@ -30202,7 +30202,7 @@
                 : "";
               status.title = `${mapScopeText} · ${formatInteger(dem.tile_count)} complete Terrain RGB tiles · ${routeCoverageText} · ${terrainScopeText} · ${rudyBlend}${qgisOverlay} · ${valueOrDash(dem.source_cell_resolution_m)}m source cells · ${interpolationText}${terrainEvidence}`;
               status.setAttribute("aria-label", lensSummary.status_text);
-              status.innerHTML = `<strong>${mode === "3d" ? "MAPLIBRE 3D · DEM DECODED" : "MAPLIBRE 2D · READY"}</strong>${escapeHtml(`${valueOrDash(dem.source_cell_resolution_m)}m DEM · ${localHypothesisFocus ? selectedHypothesisLabel : mode === "3d" ? "local terrain" : "complete GPX + R1"} · candidate-only`)}`;
+              status.innerHTML = `<strong>${mode === "3d" ? "MAPLIBRE 3D · DEM DECODED" : "MAPLIBRE 2D · READY"}</strong>${escapeHtml(`${valueOrDash(dem.source_cell_resolution_m)}m DEM · ${localHypothesisFocus ? selectedHypothesisLabel : mode === "3d" ? "local terrain" : "complete GPX"} · candidate-only`)}`;
             }
           };
           const verifyTerrainElevation = (attempt, verificationSequence) => {

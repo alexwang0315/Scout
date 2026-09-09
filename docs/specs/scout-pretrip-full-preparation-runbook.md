@@ -45,6 +45,16 @@ Load this source only after current preparation jobs finish, then verify the
 actual browser maps and six-page convergence; the isolated result alone is not
 G6 acceptance.
 
+The actual r12 reload preserved all 56 recorded job/source/Permission hashes.
+G1 compact GET, Pace checkpoints and Architecture then loaded successfully.
+For the embedded Weather map, inspect an actual visible screenshot before
+classifying an empty iframe accessibility snapshot as a missing map: the real
+Rudy/route/CP/radar view rendered even when the outer snapshot omitted its DOM.
+Keep numeric rainfall no-coverage distinct from the available imagery overlay.
+Also inspect map footers against actual hypothesis availability: the unconditional
+`complete GPX + R1` label contradicted `TERRAIN HYPOTHESIS · UNAVAILABLE`; the
+scoped correction removes that false R1 claim without changing terrain output.
+
 The same attempt's primary QGIS/GRASS terrain workflow completed with 27 outputs.
 A separate Terrain Route Hypothesis workflow failed its strict DEM metadata
 guard; workspace DEM resolution metadata was unavailable and navigation tile
