@@ -39,7 +39,11 @@ from admin_local_raster_tiles import (
     build_imagery_tile_cache_plan,
     seed_imagery_tile_cache,
 )
-from cwa_route_identity import load_cwa_route_identity
+from cwa_route_identity import (
+    load_cwa_route_identity,
+    validate_cwa_artifact_route_identity,
+    validate_cwa_pair_identity,
+)
 from pretrip_models import RouteBBox
 from pretrip_osm_pbf_ingest import (
     build_osm_trail_visibility_candidates,
@@ -683,6 +687,14 @@ def run_layer_preparation(request: LayerPreparationRequest) -> dict[str, Any]:
         manifest["mcp_overpass_route_alignment"] = mcp_alignment
         outputs.update(mcp_alignment.get("output_refs", {}))
         _update_project_refs(project_root / "project.json", project, outputs, manifest["finished_at"])
+    _refresh_mcp_layer_record_after_collection(project_root=project_root, manifest=manifest)
+    if _defer_cwa_route_jobs(request):
+        # A new import may gain its first alignment only after QGIS risk/MCP.
+        # Route-bound weather must consume those durable final references.
+        manifest["cwa_route_evidence"] = _finalize_cwa_route_evidence(
+            project_root=project_root, manifest=manifest, request=request,
+        )
+        outputs.update(manifest["cwa_route_evidence"].get("output_refs", {}))
     raster_label_preparation = (
         _run_raster_label_preparation_after_layer_preparation(
             project_root=project_root,
@@ -1390,12 +1402,16 @@ def _prepare_cwa_environment_artifacts(
             )
             )
 
-    rainfall_grid_outputs = _maybe_prepare_cwa_precipitation_grid_job(
-        project_root=project_root,
-        project=project,
-        request=request,
-        bbox=bbox,
-        prepared_at=prepared_at,
+    rainfall_grid_outputs = (
+        {"cwa_rainfall_grid_status": "deferred_until_final_route"}
+        if _defer_cwa_route_jobs(request)
+        else _maybe_prepare_cwa_precipitation_grid_job(
+            project_root=project_root,
+            project=project,
+            request=request,
+            bbox=bbox,
+            prepared_at=prepared_at,
+        )
     )
     if rainfall_grid_outputs.get("cwa_rainfall_grid_status") == "ready":
         fetch_results.extend(
@@ -1569,11 +1585,15 @@ def _prepare_cwa_environment_artifacts(
         artifact["cache_policy"] = cache_policy
         artifact["cwa_time_metadata"] = time_metadata
 
-    imagery_outputs = _maybe_prepare_cwa_imagery_server_job(
-        project_root=project_root,
-        project=project,
-        request=request,
-        prepared_at=prepared_at,
+    imagery_outputs = (
+        {"cwa_weather_imagery_status": "deferred_until_final_route"}
+        if _defer_cwa_route_jobs(request)
+        else _maybe_prepare_cwa_imagery_server_job(
+            project_root=project_root,
+            project=project,
+            request=request,
+            prepared_at=prepared_at,
+        )
     )
     cwa_evidence["weather_imagery"] = {
         "status": imagery_outputs.get("cwa_weather_imagery_status", "not_requested"),
@@ -1631,6 +1651,182 @@ def _prepare_cwa_environment_artifacts(
         **rainfall_grid_outputs,
         **imagery_outputs,
     }
+
+
+def _defer_cwa_route_jobs(request: LayerPreparationRequest) -> bool:
+    return bool(
+        request.publish_preparation_outputs
+        and request.run_post_layer_enrichments
+        and {"cwa-weather", "cwa-qpf"} & set(_normalize_layer_ids(request.layers))
+    )
+
+
+def _verify_cwa_route_job_outputs(
+    *, project_root: Path, project: dict[str, Any], outputs: dict[str, Any],
+    status_key: str, ref_keys: tuple[str, ...],
+) -> dict[str, Any]:
+    if outputs.get(status_key) != "ready":
+        return outputs
+    try:
+        artifacts = []
+        for ref_key in ref_keys:
+            path = _safe_project_relative_path(project_root, outputs.get(ref_key))
+            if path is None or not path.is_file():
+                raise ValueError(f"CWA producer did not publish {ref_key}")
+            artifact = _load_json(path)
+            if validate_cwa_artifact_route_identity(
+                project_root, project, artifact, artifact_label=ref_key,
+            ) != "verified":
+                raise ValueError(f"CWA producer left {ref_key} unverified")
+            if artifacts and validate_cwa_pair_identity(
+                artifacts[0], artifact, first_label=ref_keys[0], second_label=ref_key,
+            ) != "verified":
+                raise ValueError(f"CWA producer left {ref_key} pair unverified")
+            artifacts.append(artifact)
+    except (OSError, ValueError, TypeError) as exc:
+        # Keep any prior artifacts intact. Failed verification never relabels
+        # them or publishes these refs as evidence of the current route.
+        return {
+            status_key: "blocked_route_identity",
+            status_key.removesuffix("_status") + "_error": _safe_exception_summary(exc),
+        }
+    return outputs
+
+
+def _finalize_cwa_route_evidence(
+    *, project_root: Path, manifest: dict[str, Any], request: LayerPreparationRequest,
+) -> dict[str, Any]:
+    project_path = project_root / "project.json"
+    project = _load_json(project_path)
+    evidence = _load_project_ref_if_exists(project_root, project, "cwa_weather_evidence_ref")
+    if not evidence:
+        return {"status": "blocked_missing_cwa_evidence", "output_refs": {}}
+    if not any((evidence.get(key) or {}).get("status") == "deferred_until_final_route"
+               for key in ("rainfall_grids", "weather_imagery")):
+        return {"status": "blocked_missing_deferred_cwa_evidence", "output_refs": {}}
+    route_summary = _load_project_ref(project_root, project, "route_summary_ref", required=True)
+    route_bbox = normalize_bbox_wgs84(request.bbox or route_summary["bbox_wgs84"])
+    # Numeric projection bounds must include the final aligned corridor too.
+    try:
+        identity, points = load_cwa_route_identity(project_root, project)
+        route_bbox = {
+            "west": min(route_bbox["west"], min(lon for _, lon in points)),
+            "south": min(route_bbox["south"], min(lat for lat, _ in points)),
+            "east": max(route_bbox["east"], max(lon for _, lon in points)),
+            "north": max(route_bbox["north"], max(lat for lat, _ in points)),
+        }
+    except (OSError, ValueError):
+        identity = None
+    bbox = _expand_bbox_by_meters(route_bbox, request.route_corridor_m)
+    prepared_at = request.prepared_at or _utc_now()
+    rainfall = _maybe_prepare_cwa_precipitation_grid_job(
+        project_root=project_root, project=project, request=request,
+        bbox=bbox, prepared_at=prepared_at,
+    )
+    imagery = _maybe_prepare_cwa_imagery_server_job(
+        project_root=project_root, project=project, request=request, prepared_at=prepared_at,
+    )
+    current_project = _load_json(project_path)
+    rainfall = _verify_cwa_route_job_outputs(
+        project_root=project_root, project=current_project, outputs=rainfall,
+        status_key="cwa_rainfall_grid_status",
+        ref_keys=("cwa_rainfall_grid_manifest_ref", "cwa_rainfall_route_projection_ref",
+                  "cwa_rainfall_route_trend_ref"),
+    )
+    imagery = _verify_cwa_route_job_outputs(
+        project_root=project_root, project=current_project, outputs=imagery,
+        status_key="cwa_weather_imagery_status",
+        ref_keys=("cwa_weather_imagery_manifest_ref", "route_imagery_sampling_ref",
+                  "route_weather_risk_package_ref"),
+    )
+    substatuses = {
+        "rainfall": rainfall["cwa_rainfall_grid_status"],
+        "imagery": imagery["cwa_weather_imagery_status"],
+    }
+    failures = {key: value for key, value in substatuses.items()
+                if value != "ready" and not value.startswith("not_requested")}
+    result = {
+        "status": "partial" if failures else "completed",
+        "prepared_at": prepared_at,
+        "route_identity": identity,
+        "substatuses": substatuses,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+    evidence.setdefault("rainfall_grids", {}).update({
+        "status": substatuses["rainfall"],
+        "manifest_ref": rainfall.get("cwa_rainfall_grid_manifest_ref"),
+        "route_projection_ref": rainfall.get("cwa_rainfall_route_projection_ref"),
+        "route_trend_ref": rainfall.get("cwa_rainfall_route_trend_ref"),
+    })
+    evidence.setdefault("weather_imagery", {}).update({
+        "status": substatuses["imagery"],
+        "manifest_ref": imagery.get("cwa_weather_imagery_manifest_ref"),
+        "route_weather_risk_package_ref": imagery.get("route_weather_risk_package_ref"),
+    })
+    evidence["route_evidence"] = result
+    if substatuses["rainfall"] == "ready":
+        evidence.setdefault("datasets", []).extend(
+            _environment_fetch_result(dataset_id, status="ready")
+            for dataset_id in ("O-B0045-001", "F-B0046-001")
+        )
+    external_calls_made = bool(
+        evidence.get("external_api_calls_made")
+        or rainfall.get("cwa_rainfall_grid_external_api_calls_made")
+        or substatuses["imagery"] == "ready"
+    )
+    evidence["external_api_calls_made"] = external_calls_made
+    evidence["boundary"] = _environment_boundary(external_calls_made=external_calls_made)
+    if failures:
+        evidence["status"] = "ready_with_data_gaps" if external_calls_made else "not_available"
+    elif "ready" in substatuses.values():
+        evidence["status"] = "ready"
+    # Scalar forecast/observation source times remain the times of their fetch.
+    _write_json(project_root / project["cwa_weather_evidence_ref"], evidence)
+    outputs = {**rainfall, **imagery, "cwa_external_api_calls_made": external_calls_made,
+               "cwa_route_evidence_status": result["status"],
+               "cwa_route_evidence_updated_at": prepared_at}
+    project = {**current_project, **outputs}
+    outputs.update(_write_environment_synthesis_artifacts(
+        project_root=project_root, project=project, route_summary=route_summary,
+        bbox=bbox, prepared_at=evidence["generated_at"], requested_cwa=True,
+        requested_gee=bool({"soil-moisture", "antecedent-rain"}
+                           & set(_normalize_layer_ids(request.layers))),
+    ))
+    project.update(outputs)
+    _write_json(project_path, project)
+    source_refs = _project_source_refs(project_root, project)
+    for index, old_layer in enumerate(manifest.get("layers", [])):
+        layer_id = old_layer.get("layer_id")
+        if layer_id not in {"cwa-weather", "cwa-qpf"}:
+            continue
+        layer = _build_layer_record(
+            layer_id, project_root=project_root, project=project,
+            bbox=manifest["bbox_wgs84"], route_corridor=manifest["route_corridor"],
+            route_summary=route_summary, request=request, source_refs=source_refs,
+            gpx_filter=manifest["inputs"]["gpx_speed_filter"],
+        )
+        kind = "rainfall" if layer_id == "cwa-qpf" else "imagery"
+        child_outputs = rainfall if kind == "rainfall" else imagery
+        recorded_refs = {source["ref"] for source in layer["source_refs"]}
+        for key, value in child_outputs.items():
+            if not key.endswith("_ref") or not isinstance(value, str):
+                continue
+            source = source_refs.get(key)
+            if source and source.get("exists") and value not in recorded_refs:
+                layer["source_refs"].append(source)
+                recorded_refs.add(value)
+                layer["output_refs"][key] = value
+        layer["route_evidence"] = {**result, "status": substatuses[kind]}
+        if kind in failures:
+            layer["status"] = "partial_route_evidence"
+            layer["warnings"].append(f"CWA {kind} final route evidence: {failures[kind]}.")
+        _refresh_lifecycle(layer)
+        manifest["layers"][index] = layer
+    manifest["inputs"]["source_refs"].update({
+        key: value for key, value in source_refs.items() if key.startswith("cwa_")
+    })
+    return {**result, "output_refs": outputs}
 
 
 def _maybe_prepare_cwa_precipitation_grid_job(
@@ -2486,7 +2682,10 @@ def _write_environment_synthesis_artifacts(
                 project.get("gee_external_api_calls_made")
             ),
             "gee_environment_status": project.get("gee_environment_status"),
+            "cwa_rainfall_grid_status": project.get("cwa_rainfall_grid_status"),
+            "cwa_weather_imagery_status": project.get("cwa_weather_imagery_status"),
         },
+        "cwa_route_evidence": cwa_weather.get("route_evidence"),
         "boundary": _environment_boundary(
             external_calls_made=bool(
                 project.get("cwa_external_api_calls_made")
@@ -2536,6 +2735,12 @@ def _environment_source_refs(project_root: Path, project: dict[str, Any]) -> lis
         "cwa_forecast_timeline_ref",
         "cwa_astronomy_timeline_ref",
         "cwa_tide_marine_timeline_ref",
+        "cwa_rainfall_grid_manifest_ref",
+        "cwa_rainfall_route_projection_ref",
+        "cwa_rainfall_route_trend_ref",
+        "cwa_weather_imagery_manifest_ref",
+        "route_imagery_sampling_ref",
+        "route_weather_risk_package_ref",
         "soil_moisture_grid_ref",
         "smap_l4_timeseries_ref",
         "smap_l4_corridor_summary_ref",
@@ -2590,6 +2795,9 @@ def _environment_missing_evidence(
                 "reason": "not_fetched_in_current_run",
             }
         )
+    for kind, state in (cwa_weather.get("route_evidence") or {}).get("substatuses", {}).items():
+        if state != "ready" and not str(state).startswith("not_requested"):
+            missing.append({"source_kind": f"cwa_route_{kind}", "reason": state})
     if requested_gee and not smap:
         missing.append({"source_kind": "gee_smap_l4_corridor_summary", "reason": "missing"})
     if requested_gee and not gpm:
@@ -5069,6 +5277,65 @@ def _persist_qgis_risk_adapter_failure(
     }
 
 
+def _refresh_mcp_layer_record_after_collection(
+    *, project_root: Path, manifest: dict[str, Any],
+) -> None:
+    collection = manifest.get("mcp_evidence_collection") or {}
+    if collection.get("status") in {
+        None, "not_requested", "retained_explicit_input", "skipped_connected_refresh",
+    }:
+        return
+    collection_refs = collection.get("output_refs") or {}
+    alignment = manifest.get("mcp_overpass_route_alignment") or {}
+    alignment_refs = alignment.get("output_refs") or {}
+    ref_key = "mcp_candidates_ref"
+    expected_ref = collection_refs.get(ref_key)
+    blockers = []
+    if collection.get("status") != "completed":
+        blockers.append(
+            f"MCP evidence collection is {collection.get('status')}: "
+            f"{collection.get('reason') or 'current source evidence is incomplete'}."
+        )
+    blockers.extend(
+        f"MCP evidence collection gap: {gap}"
+        for gap in (collection.get("receipt") or {}).get("gaps", [])
+    )
+    if alignment.get("status") == "completed":
+        if alignment_refs.get("overpass_aligned_mcp_candidates_ref"):
+            ref_key = "overpass_aligned_mcp_candidates_ref"
+            expected_ref = alignment_refs[ref_key]
+        else:
+            blockers.append("MCP alignment completed without a current aligned MCP output ref.")
+    elif alignment.get("status") not in {None, "not_requested"}:
+        blockers.append(
+            f"MCP route alignment is {alignment.get('status')}: "
+            f"{alignment.get('reason') or 'current aligned evidence is unavailable'}."
+        )
+    project = _load_json(project_root / "project.json")
+    # A retained project ref is not proof that this collection/alignment produced it.
+    current_refs = {}
+    if expected_ref and project.get(ref_key) == expected_ref:
+        current_refs[ref_key] = expected_ref
+    elif expected_ref:
+        blockers.append(f"Published {ref_key} does not match the current MCP producer output.")
+    for index, layer in enumerate(manifest.get("layers", [])):
+        if layer.get("layer_id") != "mcp":
+            continue
+        record = _project_ref_layer_record(
+            layer, project_root=project_root, project=current_refs, ref_key=ref_key,
+            status_if_missing="missing_source",
+            counts_from_payload=lambda payload: _generic_project_counts("mcp", payload),
+            stale_risk="low", output_refs=current_refs,
+            missing_warning="mcp project ref is missing from the current collection output.",
+        )
+        if record["source_refs"]:
+            record["counts"] = {**collection.get("counts", {}), **record["counts"]}
+        if blockers:
+            record["status"] = "blocked_mcp_evidence"
+            record["blockers"].extend(blockers)
+        manifest["layers"][index] = _with_lifecycle(record)
+
+
 def _refresh_qgis_risk_layer_records(
     *,
     project_root: Path,
@@ -5486,6 +5753,7 @@ def _summary_from_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
         ],
         "network_policy": manifest["network_policy"],
         "overpass_route_alignment": manifest.get("overpass_route_alignment"),
+        "cwa_route_evidence": manifest.get("cwa_route_evidence"),
         "raster_label_preparation": manifest.get("raster_label_preparation"),
         "boss_point_synthesis": manifest.get("boss_point_synthesis"),
         "mileage_tag_alignment": manifest.get("mileage_tag_alignment"),
@@ -5567,6 +5835,7 @@ def _map_preparation_summary_from_manifest(manifest: dict[str, Any]) -> dict[str
         },
         "gpx_speed_filter": manifest["inputs"]["gpx_speed_filter"],
         "overpass_route_alignment": manifest.get("overpass_route_alignment"),
+        "cwa_route_evidence": manifest.get("cwa_route_evidence"),
         "raster_label_preparation": manifest.get("raster_label_preparation"),
         "boss_point_synthesis": manifest.get("boss_point_synthesis"),
         "mileage_tag_alignment": manifest.get("mileage_tag_alignment"),
@@ -5677,23 +5946,33 @@ def _augment_map_projection_layers(
                     ),
                 }
             )
-        if "mcp" in by_id:
-            by_id["mcp"].setdefault("output_refs", {}).update(
-                {
-                    key: output_refs[key]
-                    for key in ("overpass_aligned_mcp_candidates_ref",)
-                    if key in output_refs
-                }
-            )
-            by_id["mcp"].setdefault("counts", {}).update(
-                {
-                    "overpass_aligned": True,
-                    "overpass_alignment_snapped_point_count": counts.get(
-                        "snapped_point_count",
-                        0,
-                    ),
-                }
-            )
+    collection_status = (manifest.get("mcp_evidence_collection") or {}).get("status")
+    mcp_alignment = (
+        overpass_alignment
+        if collection_status in {
+            None, "not_requested", "retained_explicit_input", "skipped_connected_refresh",
+        }
+        else manifest.get("mcp_overpass_route_alignment")
+    )
+    if (
+        "mcp" in by_id and by_id["mcp"]["status"] in READY_STATUSES
+        and isinstance(mcp_alignment, dict) and mcp_alignment.get("status") == "completed"
+    ):
+        output_refs = mcp_alignment.get("output_refs") or {}
+        counts = mcp_alignment.get("counts") or {}
+        by_id["mcp"].setdefault("output_refs", {}).update(
+            {
+                key: output_refs[key]
+                for key in ("overpass_aligned_mcp_candidates_ref",)
+                if key in output_refs
+            }
+        )
+        by_id["mcp"].setdefault("counts", {}).update(
+            {
+                "overpass_aligned": True,
+                "overpass_alignment_snapped_point_count": counts.get("snapped_point_count", 0),
+            }
+        )
 
     boss = manifest.get("boss_point_synthesis")
     if isinstance(boss, dict) and boss.get("status") == "completed":

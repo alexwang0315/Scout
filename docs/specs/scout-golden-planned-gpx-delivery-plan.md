@@ -101,9 +101,11 @@ API／fixture tests 與真實 browser 成果分開報告；HTTP 200、圖層數�
 `completed_with_gaps`，Permission 初始化完成且未接受，唯讀重建保留完整九日語意。
 r8 已修復 OCR 過短的預設逾時並載入新 runtime，尚待完整 preparation 重驗。
 r9 已恢復 worker／Dashboard 瀏覽器，完成 MCP 真實來源整理及六頁共同分析版次
-修復。真實唯讀試算 G1 為 7 MCP、G2 為 47 MCP，合成無 gap；新 workspace 的
-完整 UI 鏈正重跑。仍為 **NOT QUALIFIED**，須完成 G1／G2、Save／Accept／Rebuild
-各次 reload、跨專案六頁觀測及同版本三次核心重跑。隔離測試成功不能替代完整鏈。
+修復。新 G1 已實際產生 7 MCP，並完成 Save／Accept／Rebuild 各次 reload 及
+A→B→A 恢復。G2 匯入後正進行完整準備。然而 G1 最終 MCP layer 狀態過時，且
+CWA 先於最終路線對齊產製，造成專案 API 422、六頁載入不完整；r10 正修復。
+仍為 **NOT QUALIFIED**，須完成新 Import／Clone、G2 全鏈、六頁觀測及首次完整
+成功後的同版本三次核心重跑。隔離測試或共同 banner 相符不能替代完整鏈。
 
 ## 4. 第二項：人工行程如何生成 Planned GPX
 

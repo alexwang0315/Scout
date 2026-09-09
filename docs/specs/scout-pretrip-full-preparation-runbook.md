@@ -19,6 +19,45 @@ Use this file when a rerun must include all of:
 
 If any required step is skipped, report the run as partial.
 
+### 2026-09-09 Golden r9 live findings: final layer state and CWA route binding
+
+The new G1 completed real QGIS/GRASS and produced seven MCP candidates, but
+the final preparation manifest retained the initial MCP `missing_source` row.
+Updating project refs alone is insufficient: rebuild the layer's verified
+source refs, counts and lifecycle before publishing the final aggregates and
+map projection. Preserve collection/alignment failures and genuine warnings;
+do not remove the Overpass TTL warning together with the stale MCP warning.
+
+The same live run exposed `rainfall projection route identity mismatch` at the
+compact project endpoint. Rainfall products were created against the importer
+segment geometry before the later Overpass geometry became the active CWA
+route. Keep the route-identity validator strict. Bind route-dependent weather
+processing to the final geometry, or truly reproject the original source data;
+changing only artifact hashes is invalid. A successful 33-layer verifier does
+not replace the actual project API and six-page browser check.
+
+The r10 repair refreshes the MCP layer from the actual current collection and
+late-alignment outputs. Complete preparation defers numeric rainfall grids and
+weather imagery until that final alignment is durable; scalar weather remains
+early and connected refresh retains its immediate route jobs. Verify each
+published artifact and pair with the existing strict route validators. Publish
+child failures to the evidence, project status, environmental gaps and layer
+lifecycle together; never mark retained stale weather as current. The 22 focused
+tests passed on one frozen source, including late alignment, stale/mixed output
+rejection, fetch failures, MCP integration and connected-refresh compatibility.
+Real Dashboard qualification is a separate gate.
+
+The older PBF is genuinely outside its 30-day TTL. Qualification acquired a
+new dated public snapshot with a verified upstream MD5 and local SHA256. Use
+a new material declaration and a new import identity; do not replace sources
+already bound by an existing job or manufacture a newer mtime for old data.
+Preserve the old job, receipts and source files for recovery evidence.
+
+While a large preparation is active, inspect its durable job and newest raw
+tile timestamps before declaring a stall. The r9 G2 remained in `prepare`
+while imagery tiles continued arriving. Do not start duplicate workers or
+interrupt useful work merely because the coarse stage has not changed.
+
 ### 2026-09-09 Golden r9: raw MCP compilation and recovery provenance
 
 The old New Import path could create GPX/CP artifacts but had no producer for a

@@ -11,6 +11,48 @@ Dashboard 重驗。驗收依據維持 [delivery plan §3.2](scout-golden-planned
 
 ## r9 整合與重驗進度
 
+2026-09-09 15:07（Asia/Taipei）修復 checkpoint：r10 的最終 MCP layer 更新及
+CWA 最終路線綁定修復已完成；同一原始碼 SHA `6bb93ae40b442e69` 的 22 項測試
+全部通過（CWA 順序／失敗 6、MCP 整合 10、既有 environment／connected 6）。
+測試的真實 `.env` 讀取及網路連線均為 0，33-layer 與 Navigation report-only
+guard 通過。[完整修復回執](../../artifacts/golden-gpx-repair-20260909/receipts/before-r10-cwa-final-route/completion.json)。
+這是修復驗證，尚非 r10 真實 Dashboard G1–G6 通過。
+
+r9 G2 已於 15:03:54 終止為 `completed_with_gaps`，三階段均有完整回執，
+Permission 初始化完成且未接受。QGIS/GRASS 實際完成 27 份輸出；MCP 收集
+14 份合格文件，產生 47 個 CP-supported candidates、compiler gaps 為空。
+沒有因 coarse job timestamp 未變而中斷。r9 結果保留，r10 使用新的 raw-material
+宣告與新 QA ID 重跑，不替舊 job 更換來源。完整成功及同版本核心重跑均為 **0**。
+
+2026-09-09 14:46（Asia/Taipei）實際 Dashboard 更新：runtime PID `13890`、
+worker `11290`、QGIS `5214` 持續執行。已載入版本為 `92a55d32`；以下是該版
+觀測，後續 r10 原始碼修復尚未載入這個服務。
+
+| 門檻 | 本次實際結果 |
+|---|---|
+| G1 | New Import 完成，25 個原始來源 hash 全符、35 CP／34 segments；QGIS/GRASS 實際完成、MCP 產生 7 個、Permission 初始化未自動接受。準備清單仍誤留 MCP `missing_source`，且 OSM TTL 確實過期，job 為 `completed_with_gaps`。新 Clone 尚未執行。 |
+| G2 | 4 個原始來源 hash 全符、219 CP／218 segments。匯入完成後沿用同一 job 等候 preparation slot，現在持續下載九日路線的原始圖磚；尚未到 Permission 初始化。 |
+| G3 | r9 的隔離故障案例通過；與真實 Dashboard 操作分開記錄。 |
+| G4 | G1 的 Save → reload → Restore、Accept → reload、Rebuild → reload、A→B→A 均已實際完成。版本 `version.aa997f8c3399edcf`、candidate hash `07a9f49c34e89012` 可找回；未接受時沒有自動接受。Rebuild 後仍為單日、35 CP clocks、共同版次 `a08ecb533b23503b`；G2 沒有繼承 G1 的日程。G2 的完整操作仍待準備完成。 |
+| G5 | 確認按鈕的真實雙擊 Save／Accept 各只有一次 POST，落盤各一份 version／review。G1 匯入期間 reload 仍為同一 job。完整失敗恢復與同版本三次核心重跑尚未完成。 |
+| G6 | **FAIL**。六頁共同分析版次相同，但專案 `?compact=1` 實際回傳 422 `rainfall projection route identity mismatch`，Pace 地圖與 Architecture 無法完整載入。不能把共同 banner 或 layer verifier PASS 當成六頁通過。 |
+
+[G1 匯入來源](../../artifacts/golden-gpx-repair-20260909/receipts/r9-g1-import-parity.json)、
+[G2 匯入來源](../../artifacts/golden-gpx-repair-20260909/receipts/r9-g2-import-parity.json)、
+[實際保存／接受產物](../../artifacts/golden-gpx-repair-20260909/receipts/r9-g1-save-accept-artifacts.json)、
+[G1 重建後 reload](../../artifacts/golden-gpx-repair-20260909/browser/r9/026-g1-rebuild-reload.dom.json)、
+[跨專案返回](../../artifacts/golden-gpx-repair-20260909/browser/r9/036-g1-return-after-b.dom.json)、
+[422 原始回應](../../artifacts/golden-gpx-repair-20260909/browser/r9/028-g1-compact-422-response.json)。
+每個 browser checkpoint 同目錄保留 `.png`、`.dom.json`、`.network.json`。
+真實 G1 的 [33-layer verifier](../../artifacts/golden-gpx-repair-20260909/tests/r9-g1-workspace-layer-contract.json)
+雖通過，沒有涵蓋上述 route identity 語意錯誤。
+
+r10 修復聚焦最終 MCP layer 紀錄與 CWA 對最終 Overpass 路線的來源綁定，不放寬
+validator 或 MCP 門檻。另已實際下載 2026-09-08 OSM 快照，官方 MD5、長度及
+本機 SHA256 已驗證，舊檔未修改；[取得回執](../../artifacts/golden-gpx-repair-20260909/sources/r10-osm/fetch-receipt.json)。
+新原始素材宣告位於 `artifacts/golden-gpx-repair-20260909/sources/r10-materials`，
+沒有複製 preparation、Permission 或 terrain 等衍生輸出。完整成功仍為 **0**。
+
 2026-09-09 14:13（Asia/Taipei）：以真實原始 GPX、OSM 與已取得公開文件試算，
 G1 有 32 份合格來源、7 個 MCP（5 個有 CP 支持、2 個保留建議插入）；G2 有
 14 份合格來源、47 個 MCP，均有 CP 支持。兩案 compiler gaps 為空。
