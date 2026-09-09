@@ -50,6 +50,7 @@ nodes.set('[data-terrain-guidance-generate-r4]', {disabled:false});
 const QGIS_TERRAIN_ROUTE_WORKFLOW_ID = 'terrain_route_hypothesis.v1';
 const QGIS_NAVIGATION_PRIMARY_WORKFLOW_ID = 'terrain_feature_stack.v1';
 const QGIS_SPATIAL_FETCH_TIMEOUT_MS = 45000;
+const QGIS_SPATIAL_WORKFLOW_TIMEOUT_MS = 180000;
 const NAVIGATION_TERRAIN_FETCH_TIMEOUT_MS = 45000;
 const asArray = value => Array.isArray(value) ? value : [];
 const healthy = {availability:'available', enabled:true, configured:true, reachable:true,
@@ -157,6 +158,7 @@ await loadQgisSpatialWorkflow('failed-run');
 assert.match(state.qgisSpatialMessage, /NODATA_PRESENT/);
 assert.match(state.qgisSpatialMessage, /上一個/);
 assert.match(state.qgisSpatialMessage, /不是本次/);
+assert.equal(calls[0].options.timeoutMs, QGIS_SPATIAL_WORKFLOW_TIMEOUT_MS);
 console.log(JSON.stringify({visible:true}));
 """)
     assert payload["visible"] is True
@@ -345,7 +347,8 @@ def test_completed_trh_submission_names_the_loaded_candidate_result() -> None:
     payload = _run((*BACKEND_FUNCTIONS, "startQgisSpatialWorkflow"), """
 state.qgisSpatialStatus = healthy;
 const run = {workflow_id:QGIS_TERRAIN_ROUTE_WORKFLOW_ID,state:'completed',artifacts:[]};
-globalThis.postJson = async () => run;
+let submitOptions = null;
+globalThis.postJson = async (_path, _payload, options) => { submitOptions = options; return run; };
 globalThis.rememberQgisSpatialWorkflow = () => {};
 globalThis.loadQgisSpatialAnalysisRoute = async () => {};
 globalThis.refreshNavigationTerrainAfterCompletedRouteHypothesis = async () => true;
@@ -354,6 +357,7 @@ globalThis.refreshCurrentDataView = () => {};
 assert.equal(await startQgisSpatialWorkflow(QGIS_TERRAIN_ROUTE_WORKFLOW_ID), run);
 assert.equal(state.qgisSpatialMessage, 'TRH 候選已就緒 · 地圖已載入對應 A/B 結果');
 assert.equal(state.qgisSpatialBusy, false);
+assert.equal(submitOptions.timeoutMs, QGIS_SPATIAL_WORKFLOW_TIMEOUT_MS);
 console.log(JSON.stringify({completedCandidate:true}));
 """)
     assert payload["completedCandidate"] is True

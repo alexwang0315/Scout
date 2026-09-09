@@ -356,10 +356,26 @@ class PretripImportRequest:
     material_root: Path | None = None
     dtm_dirs: tuple[Path, ...] = ()
     mcp_named_point_evidence: Path | None = None
+    dtm_raster_sources: tuple[DtmRasterSource, ...] = ()
+    resolve_default_material_root: bool = True
+
+
+class PretripPreparationInputError(ValueError):
+    """A declared raw preparation source cannot be replayed as requested."""
+
+    def __init__(self, *, field: str, path: Path | str, code: str = "PREPARATION_SOURCE_MISSING") -> None:
+        self.code = code
+        self.field = field
+        self.path = str(path)
+        super().__init__(f"{code}: {field}: {path}")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"code": self.code, "field": self.field, "path": self.path}
 
 
 def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
     _validate_request(request)
+    preparation_inputs = _preparation_source_inputs(request)
     project_root = request.workspace_root.expanduser() / request.project_id
     _prepare_project_root(
         project_root=project_root,
@@ -375,6 +391,7 @@ def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
         project_id=request.project_id,
         primary_gpx=primary_gpx,
         reference_paths=reference_paths,
+        preparation_inputs=preparation_inputs,
     )
     primary_artifact_id = f"artifact.gpx.{request.project_id}"
     package_id = f"pretrip.{request.project_id}.v0"
@@ -1056,8 +1073,8 @@ def _validate_request(request: PretripImportRequest) -> None:
         raise FileNotFoundError(f"reference directory not found: {request.reference_dir}")
     if request.template_project_root is not None and not request.template_project_root.expanduser().exists():
         raise FileNotFoundError(f"template project root not found: {request.template_project_root}")
-    if request.material_root is not None and not request.material_root.expanduser().exists():
-        raise FileNotFoundError(f"material root not found: {request.material_root}")
+    if request.material_root is not None and not request.material_root.expanduser().is_dir():
+        raise PretripPreparationInputError(field="material_root", path=request.material_root)
     if (
         request.mcp_named_point_evidence is not None
         and not request.mcp_named_point_evidence.expanduser().exists()
@@ -1066,8 +1083,8 @@ def _validate_request(request: PretripImportRequest) -> None:
             f"MCP named-point evidence not found: {request.mcp_named_point_evidence}"
         )
     for dtm_dir in request.dtm_dirs:
-        if not dtm_dir.expanduser().exists():
-            raise FileNotFoundError(f"DTM directory not found: {dtm_dir}")
+        if not dtm_dir.expanduser().is_dir():
+            raise PretripPreparationInputError(field="dtm_dirs", path=dtm_dir)
 
 
 def _prepare_project_root(
@@ -1106,6 +1123,7 @@ def _stage_source_inbox(
     project_id: str,
     primary_gpx: Path,
     reference_paths: list[Path],
+    preparation_inputs: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     inbox_root = project_root / "inbox"
     gpx_root = inbox_root / "gpx"
@@ -1142,6 +1160,7 @@ def _stage_source_inbox(
         "source_file_count": len(sources),
         "raw_payloads_embedded": False,
         "sources": sources,
+        "preparation_inputs": preparation_inputs or {},
         "boundary": {
             "pretrip_candidate_evidence_only": True,
             "runtime_safety_truth": False,
@@ -1962,6 +1981,8 @@ def _build_dtm_coverage_from_material(
 def _material_root_for_request(request: PretripImportRequest) -> Path | None:
     if request.material_root is not None:
         return request.material_root.expanduser()
+    if not request.resolve_default_material_root:
+        return None
     env_value = os.environ.get("SCOUT_PRETRIP_MATERIAL_ROOT")
     if env_value:
         return Path(env_value).expanduser()
@@ -1981,19 +2002,20 @@ def _material_manifest(request: PretripImportRequest) -> dict[str, Any]:
 
 def _dtm_source_dirs(request: PretripImportRequest) -> list[Path]:
     manifest = _material_manifest(request)
-    manifest_dirs = [
-        Path(value).expanduser()
-        for value in manifest.get("sources", {}).get("dtm_dirs", [])
-        if Path(value).expanduser().exists()
-    ]
-    explicit_dirs = [
-        path.expanduser()
-        for path in request.dtm_dirs
-        if path.expanduser().exists()
-    ]
+    declared_dirs = manifest.get("sources", {}).get("dtm_dirs", [])
+    if not isinstance(declared_dirs, list):
+        raise ValueError("material manifest sources.dtm_dirs must be a list")
+    manifest_dirs: list[Path] = []
+    for value in declared_dirs:
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("material manifest DTM directory must be a path")
+        manifest_dirs.append(Path(value).expanduser())
+    explicit_dirs = [path.expanduser() for path in request.dtm_dirs]
     deduped: list[Path] = []
     seen: set[str] = set()
     for path in [*manifest_dirs, *explicit_dirs]:
+        if not path.is_dir():
+            raise PretripPreparationInputError(field="dtm_dirs", path=path)
         key = path.resolve().as_posix()
         if key in seen:
             continue
@@ -2002,33 +2024,96 @@ def _dtm_source_dirs(request: PretripImportRequest) -> list[Path]:
     return deduped
 
 
+def _preparation_source_inputs(request: PretripImportRequest) -> dict[str, Any]:
+    """Retain raw source declarations, including explicit dirs without a material root."""
+    material_root = _material_root_for_request(request)
+    if material_root is not None:
+        material_root = material_root.resolve()
+        if not material_root.is_dir():
+            raise PretripPreparationInputError(field="material_root", path=material_root)
+    material_manifest_path = (
+        material_root / "material_manifest.json" if material_root is not None else None
+    )
+    return {
+        "schema_version": "scout.workspace.preparation_inputs.v1",
+        "material_root": str(material_root) if material_root is not None else None,
+        "material_manifest_path": (
+            str(material_manifest_path)
+            if material_manifest_path is not None and material_manifest_path.is_file()
+            else None
+        ),
+        "material_manifest_sha256": (
+            sha256_file(material_manifest_path)
+            if material_manifest_path is not None and material_manifest_path.is_file()
+            else None
+        ),
+        "dtm_dirs": [str(path.resolve()) for path in _dtm_source_dirs(request)],
+        "explicit_dtm_dirs": [str(path.expanduser().resolve()) for path in request.dtm_dirs],
+        "dtm_rasters": [source.model_dump(mode="json") for source in _dtm_raster_sources(request)],
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "derived_terrain_copied": False,
+    }
+
+
 def _dtm_raster_sources(request: PretripImportRequest) -> list[DtmRasterSource]:
     manifest = _material_manifest(request)
     raw_sources = manifest.get("sources", {}).get("dtm_rasters", [])
     if not isinstance(raw_sources, list):
         raise ValueError("material manifest sources.dtm_rasters must be a list")
+    raw_sources = [
+        *raw_sources,
+        *(source.model_dump(mode="json") for source in request.dtm_raster_sources),
+    ]
     sources: list[DtmRasterSource] = []
-    seen: set[str] = set()
+    seen: dict[str, int] = {}
     for raw_source in raw_sources:
-        if not isinstance(raw_source, dict):
-            raise ValueError("material manifest DTM raster source must be an object")
-        raw_path = raw_source.get("path")
-        if not isinstance(raw_path, str) or not raw_path.strip():
-            raise ValueError("material manifest DTM raster source has no path")
-        path = Path(raw_path).expanduser().resolve()
-        if path.suffix.lower() not in {".tif", ".tiff"}:
-            raise ValueError("material manifest DTM raster source must be GeoTIFF")
-        if not path.is_file():
-            raise FileNotFoundError(f"DTM raster not found: {path}")
-        key = path.as_posix()
+        source = validate_dtm_raster_source(raw_source)
+        key = source.path
         if key in seen:
+            previous = sources[seen[key]]
+            if source.crs_evidence_sha256 is not None:
+                if previous.crs_evidence_sha256 not in {None, source.crs_evidence_sha256}:
+                    raise PretripPreparationInputError(
+                        field="crs_evidence_sha256", path=source.crs_evidence or key,
+                        code="PREPARATION_SOURCE_CONFLICT",
+                    )
+                # Keep a declared metadata integrity binding when the material
+                # manifest's duplicate source predates that optional field.
+                sources[seen[key]] = source
             continue
-        seen.add(key)
-        source = DtmRasterSource.model_validate({**raw_source, "path": key})
-        if sha256_file(path) != source.sha256:
-            raise ValueError(f"DTM raster sha256 mismatch: {path}")
+        seen[key] = len(sources)
         sources.append(source)
     return sources
+
+
+def validate_dtm_raster_source(raw_source: dict[str, Any] | DtmRasterSource) -> DtmRasterSource:
+    """Validate the original raster and any declared CRS metadata checksum."""
+    source = DtmRasterSource.model_validate(raw_source)
+    path = Path(source.path).expanduser().resolve()
+    if path.suffix.lower() not in {".tif", ".tiff"}:
+        raise ValueError("material manifest DTM raster source must be GeoTIFF")
+    if not path.is_file():
+        raise PretripPreparationInputError(field="dtm_rasters", path=path)
+    if sha256_file(path) != source.sha256:
+        raise PretripPreparationInputError(
+            field="dtm_rasters.sha256", path=path, code="PREPARATION_SOURCE_CHANGED"
+        )
+    changes: dict[str, Any] = {"path": str(path)}
+    if source.crs_evidence_sha256 is not None:
+        if not source.crs_evidence:
+            raise PretripPreparationInputError(
+                field="crs_evidence", path="<undeclared>", code="PREPARATION_SOURCE_MISSING"
+            )
+        metadata_path = Path(source.crs_evidence).expanduser().resolve()
+        if not metadata_path.is_file():
+            raise PretripPreparationInputError(field="crs_evidence", path=metadata_path)
+        if sha256_file(metadata_path) != source.crs_evidence_sha256:
+            raise PretripPreparationInputError(
+                field="crs_evidence_sha256", path=metadata_path, code="PREPARATION_SOURCE_CHANGED"
+            )
+        changes["crs_evidence"] = str(metadata_path)
+    return source.model_copy(update=changes)
 
 
 def _resolve_mcp_named_point_evidence(request: PretripImportRequest) -> Path | None:
@@ -2586,6 +2671,7 @@ def _build_import_manifest(
             "notes": "pi-offline（Pi 離線模式）and mac-workstation import local files only in this slice.",
         },
         "inputs": {
+            "preparation_inputs": source_inbox_manifest.get("preparation_inputs", {}),
             "source_inbox": {
                 "manifest_ref": output_refs["source_inbox_manifest_ref"],
                 "source_file_count": source_inbox_manifest["source_file_count"],

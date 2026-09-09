@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from bisect import bisect_left
 from datetime import datetime, timezone as datetime_timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -153,9 +154,61 @@ def _rest_stops(day: dict, points, axis, zone: ZoneInfo) -> list[dict]:
     """A derived stay needs observations, not a long unobserved timestamp jump."""
     stops = []
     index, last = day["start_point_index"], day["end_point_index"]
+    run_ends = [-1] * len(points)
+    observed_seconds = [None] * len(points)
+    cursor = index
+    while cursor <= last:
+        point = points[cursor]
+        if point.observed_at is None:
+            cursor += 1
+            continue
+        observed_seconds[cursor] = point.observed_at.timestamp()
+        run_start = cursor
+        run_end = cursor
+        while run_end < last:
+            current = points[run_end]
+            following = points[run_end + 1]
+            if following.observed_at is None:
+                break
+            observed_seconds[run_end + 1] = following.observed_at.timestamp()
+            gap = (following.observed_at - current.observed_at).total_seconds()
+            if not 0 < gap <= REST_MAX_OBSERVATION_GAP_SECONDS:
+                break
+            run_end += 1
+        for position in range(run_start, run_end + 1):
+            run_ends[position] = run_end
+        cursor = run_end + 1
     while index < last:
         first = points[index]
         if first.observed_at is None:
+            index += 1
+            continue
+        run_end = run_ends[index]
+        if run_end < index or index + REST_MIN_POINTS - 1 > run_end:
+            index += 1
+            continue
+        first_seconds = observed_seconds[index]
+        if first_seconds is None:
+            index += 1
+            continue
+        minimum_duration_index = bisect_left(
+            observed_seconds,
+            first_seconds + (REST_MIN_MINUTES * 60),
+            lo=index,
+            hi=run_end + 1,
+        )
+        if minimum_duration_index > run_end:
+            index += 1
+            continue
+        if (
+            haversine_m(
+                first.lat,
+                first.lon,
+                points[minimum_duration_index].lat,
+                points[minimum_duration_index].lon,
+            )
+            > REST_RADIUS_M
+        ):
             index += 1
             continue
         end = index

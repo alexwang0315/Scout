@@ -4,13 +4,13 @@ This interface gives Scout AI a deterministic way to read available tool
 contracts and run read-only local evidence tools without depending on prompt-only
 knowledge.
 
-## Implementation Update 2026-09-07
+## Implementation Update 2026-09-09
 
-Scout AI's Mac runtime and Pi dependency manifests target Pydantic AI v2.40.0.
-The September 7 upgrade is local only, not a new hardware deployment.
+Scout AI's Mac runtime and Pi dependency manifests target Pydantic AI v2.41.0.
+The September 9 upgrade is local only, not a new hardware deployment.
 Tool execution remains deterministic and read-only by default:
 
-- `pydantic-ai-slim[duckduckgo,mcp,openai,openrouter]` is pinned to v2.40.0 for Pi
+- `pydantic-ai-slim[duckduckgo,mcp,openai,openrouter]` is pinned to v2.41.0 for Pi
   admin/live runtimes and the local development venv.
 - Scout keeps `pydantic_ai.Agent(end_strategy="early")` for typed Scout
   provider calls. This intentionally avoids Pydantic AI v2's default graceful
@@ -71,6 +71,16 @@ Tool execution remains deterministic and read-only by default:
   output, MCP stream events, traced search/fetch, visible tool failure, and
   retry. See the
   [2.40/Praison 1.7.4 report](../evals/scout-ai-pydantic-240-praison-174-smoke-20260907.md).
+- Pydantic AI v2.41 deprecates `fallback_model` on `ImageGeneration` and
+  `XSearch` in favor of `fallback_subagent_model`. Scout has no existing use of
+  those capabilities; compatibility checks cover the new name and legacy alias
+  and reject ambiguous constructor/merge combinations without enabling
+  additional providers or network research paths. The new
+  `openai-codex` provider and `ImageGenerator` API are not automatically routed
+  or activated by upgrading. Image generation is tested only with the SDK's
+  local fixture model, and provider search usage survives message serialization.
+  See the
+  [2.41 compatibility report](../evals/scout-ai-pydantic-241-smoke-20260909.md).
 - Optional Praison intelligence dependencies target `praisonaiagents==1.7.4`.
   Real SDK orchestration, MCP lifecycle, Scout Model Gateway replay, and isolated
   opt-in file memory are compatibility checks, not new authority or implicit

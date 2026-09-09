@@ -46,7 +46,7 @@ from scout.agents.pydantic_ai_compat import (
     pydantic_native_research_capabilities,
 )
 
-REQUIRED_VERSION = "2.40.0"
+REQUIRED_VERSION = "2.41.0"
 DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4-flash-0731"
 DEFAULT_TIMEOUT_SECONDS = 120.0
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -167,6 +167,7 @@ def _offline_checks(
         ),
         ("v236_capability_contract", _offline_v236_capability_contract),
         ("v237_zai_finish_reasons", _offline_v237_zai_finish_reasons),
+        ("v241_capability_contract", _offline_v241_capability_contract),
         ("openrouter_web_search_annotations", _offline_openrouter_annotations),
         ("instrumentation_v6_tool_role", _offline_instrumentation_v6_tool_role),
         ("function_tool_call", _offline_function_tool_call),
@@ -404,6 +405,45 @@ async def _zai_finish_reason_case(
         "provider_finish_reason": provider_reason,
         "finish_reason": response.finish_reason,
         "partial_answer_preserved": output == partial,
+    }
+
+
+async def _offline_v241_capability_contract() -> dict[str, Any]:
+    from pydantic_ai import ImageGenerator
+    from pydantic_ai.capabilities import ImageGeneration, XSearch
+    from pydantic_ai.images import TestImageGenerationModel
+    from pydantic_ai.providers.openai_codex import OpenAICodexProvider
+
+    model = TestModel()
+    for capability_type in (ImageGeneration, XSearch):
+        capability = capability_type(fallback_subagent_model=model)
+        _require(
+            capability.fallback_subagent_model is model,
+            f"{capability_type.__name__} lost its fallback subagent model",
+        )
+
+    image_model = TestImageGenerationModel(model_name="scout-fixture-image")
+    result = await ImageGenerator(image_model, instrument=False).generate(
+        "Compatibility fixture only.", settings={"aspect_ratio": "16:9"}
+    )
+    _require(result.image.media_type == "image/png", "Fixture image type changed")
+    _require(
+        result.provider_name == "test" and result.model_name == image_model.model_name,
+        "Image fixture unexpectedly used a real provider",
+    )
+    _require(
+        image_model.last_settings == {"aspect_ratio": "16:9"},
+        "Image settings were not forwarded",
+    )
+    return {
+        "fallback_parameter": "fallback_subagent_model",
+        "capabilities": ["ImageGeneration", "XSearch"],
+        "codex_provider_class": OpenAICodexProvider.__name__,
+        "image_model": result.model_name,
+        "image_media_type": result.image.media_type,
+        "image_provider": result.provider_name,
+        "network_performed": False,
+        "subscription_authentication_performed": False,
     }
 
 

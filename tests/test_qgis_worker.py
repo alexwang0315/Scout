@@ -7,6 +7,7 @@ import re
 import struct
 import time
 import zlib
+from types import SimpleNamespace
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +16,9 @@ from fastapi.testclient import TestClient
 
 from qgis_worker import (
     QgisWorkerConfig,
+    QgisWorkerService,
     _MAX_TERRAIN_ROUTE_METRIC_SAMPLES,
+    _WorkerProcessingFailed,
     _WorkerCrsUnresolved,
     _bounded_mcp_exception_detail,
     _bounded_route_sample_positions,
@@ -196,9 +199,11 @@ class FakeQgisMcpClient:
         available_algorithms: set[str] | None = None,
         clip_grid_padding: tuple[int, int] = (0, 0),
         guided_route_anchors: list[list[float]] | None = None,
+        processing_failures: dict[str, dict[str, Any]] | None = None,
     ) -> None:
         self.processing_count = 0
         self.operation_outputs: dict[str, dict[str, str]] = {}
+        self.operation_failures: dict[str, dict[str, Any]] = {}
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.screenshot_bytes = screenshot_bytes or _rgb_png(
             blank=False,
@@ -219,6 +224,7 @@ class FakeQgisMcpClient:
         self.clip_grid_padding = clip_grid_padding
         self.guided_route_anchors = guided_route_anchors or []
         self.terrain_route_mode = False
+        self.processing_failures = processing_failures or {}
         self.available_algorithms = available_algorithms or {
             "gdal:assignprojection",
             "gdal:buildvirtualraster",
@@ -659,6 +665,10 @@ class FakeQgisMcpClient:
         if tool == "qgis_processing_start":
             self.processing_count += 1
             operation_id = f"op-{self.processing_count}"
+            failure = self.processing_failures.get(arguments["algorithm"])
+            if failure is not None:
+                self.operation_failures[operation_id] = failure
+                return {"id": operation_id, "status": "queued"}
             output_keys = {
                 "gdal:assignprojection": (),
                 "gdal:buildvirtualraster": ("OUTPUT",),
@@ -739,6 +749,19 @@ class FakeQgisMcpClient:
             return {"id": operation_id, "status": "queued"}
         if tool == "qgis_operation":
             operation_id = arguments["operation_id"]
+            if operation_id in self.operation_failures:
+                failure = self.operation_failures[operation_id]
+                return {
+                    "id": operation_id,
+                    "status": "failed",
+                    "progress": failure.get("progress", 0.0),
+                    "error": failure.get("error", {}),
+                    "feedback_log": failure.get("feedback_log", ""),
+                    "validation": failure.get(
+                        "validation",
+                        {"passed": False, "issues": []},
+                    ),
+                }
             outputs = self.operation_outputs[operation_id]
             return {
                 "id": operation_id,
@@ -855,6 +878,18 @@ def test_qgis_worker_persists_completed_candidate_artifacts(tmp_path: Path) -> N
     )
     assert response.status_code == 202
     worker_run_id = response.json()["worker_run_id"]
+    assert client.get(f"/workflows/{worker_run_id}/request").status_code == 401
+    request_response = client.get(
+        f"/workflows/{worker_run_id}/request",
+        headers={"Authorization": f"Bearer {_test_access_value()}"},
+    )
+    assert request_response.status_code == 200
+    request_receipt = request_response.json()
+    assert request_receipt["project_id"] == "qgis_demo"
+    assert request_receipt["request_id"] == "request-demo"
+    assert request_receipt["candidate_only"] is True
+    assert request_receipt["runtime_safety_truth"] is False
+    assert request_response.headers["x-scout-runtime-safety-truth"] == "false"
     payload: dict[str, Any] = {}
     for _ in range(100):
         payload = client.get(
@@ -981,6 +1016,217 @@ def test_qgis_worker_persists_completed_candidate_artifacts(tmp_path: Path) -> N
         for tool, arguments in mcp.calls
     )
     assert sum(tool == "qgis_layer_manage" for tool, _ in mcp.calls) == 4
+
+
+def test_qgis_worker_falls_back_to_native_gdalbuildvrt_for_qgis_temp_failure(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_native_mosaic(
+        self: QgisWorkerService,
+        worker_run_id: str,
+        prepared_refs: tuple[Path, ...],
+        vrt_path: Path,
+    ) -> None:
+        assert worker_run_id
+        assert len(prepared_refs) == 2
+        assert all(path.is_file() for path in prepared_refs)
+        vrt_path.write_text("<VRTDataset rasterXSize=\"1\" rasterYSize=\"1\" />", encoding="utf-8")
+
+    monkeypatch.setattr(
+        QgisWorkerService,
+        "_build_dem_mosaic_with_native_gdal",
+        fake_native_mosaic,
+    )
+    mcp = FakeQgisMcpClient(
+        processing_failures={
+            "gdal:buildvirtualraster": {
+                "error": {"message": "Processing failed."},
+                "feedback_log": (
+                    "Traceback FileNotFoundError: No such file or directory: "
+                    "buildvrtInputFiles.txt"
+                ),
+            }
+        }
+    )
+    client, source_root = _client(tmp_path, mcp)
+    dem_a = source_root / "dem_a.grd"
+    dem_b = source_root / "dem_b.grd"
+    dem_a.write_bytes(b"fixture-dem-a")
+    dem_b.write_bytes(b"fixture-dem-b")
+    request_payload = _request(dem_a)
+    request_payload["dem_refs"] = [str(dem_a), str(dem_b)]
+
+    payload = _start_and_wait(client, dem_a, request_payload=request_payload)
+
+    assert payload["state"] == "completed"
+    algorithms = payload["result"]["processing_algorithms"]
+    assert "native:gdalbuildvrt" in algorithms
+    assert "gdal:buildvirtualraster" not in algorithms
+    assert (
+        payload["result"]["output_resolution"]["analysis_extent"]["dem_mosaic"][
+            "actual_processor"
+        ]
+        == "native_gdalbuildvrt"
+    )
+    assert any(
+        tool == "qgis_processing_start"
+        and arguments["algorithm"] == "gdal:cliprasterbyextent"
+        and arguments["parameters"]["INPUT"].endswith("dem_mosaic.vrt")
+        for tool, arguments in mcp.calls
+    )
+
+
+def test_qgis_worker_native_gdalbuildvrt_uses_bounded_non_shell_command(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    executable = tmp_path / "bin" / "gdalbuildvrt"
+    executable.parent.mkdir()
+    executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    executable.chmod(0o700)
+    config = QgisWorkerConfig(
+        enabled=True,
+        auth_token=_test_access_value(),
+        root=tmp_path / "worker",
+        source_roots=(tmp_path / "sources",),
+        timeout_s=2.0,
+        poll_interval_s=0.01,
+    )
+    service = QgisWorkerService(config=config, mcp_client=FakeQgisMcpClient())
+    worker_run_id = "qgis-worker-test-native-vrt"
+    run_root = config.root / "runs" / worker_run_id
+    run_root.mkdir(parents=True)
+    source_a = run_root / "dem_a.tif"
+    source_b = run_root / "dem_b.tif"
+    source_a.write_bytes(b"a")
+    source_b.write_bytes(b"b")
+    vrt = run_root / "dem_mosaic.vrt"
+    monkeypatch.setenv("SCOUT_GDALBUILDVRT_COMMAND", str(executable))
+    calls: list[dict[str, Any]] = []
+
+    def fake_run(command: list[str], **kwargs: Any) -> SimpleNamespace:
+        calls.append({"command": command, **kwargs})
+        assert command[0] == str(executable.resolve(strict=False))
+        assert "-input_file_list" in command
+        input_list = Path(command[command.index("-input_file_list") + 1])
+        assert input_list.read_text(encoding="utf-8").splitlines() == [
+            str(source_a.resolve(strict=True)),
+            str(source_b.resolve(strict=True)),
+        ]
+        assert Path(command[-1]) == vrt
+        assert kwargs["shell"] is False
+        assert "SCOUT_QGIS_WORKER_TOKEN" not in kwargs["env"]
+        vrt.write_text("<VRTDataset rasterXSize=\"1\" rasterYSize=\"1\" />", encoding="utf-8")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("qgis_worker.subprocess.run", fake_run)
+
+    service._build_dem_mosaic_with_native_gdal(
+        worker_run_id,
+        (source_a, source_b),
+        vrt,
+    )
+
+    assert len(calls) == 1
+    assert vrt.is_file()
+
+
+def test_qgis_worker_native_gdalbuildvrt_rejects_input_newline_before_exec(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    executable = tmp_path / "bin" / "gdalbuildvrt"
+    executable.parent.mkdir()
+    executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    executable.chmod(0o700)
+    config = QgisWorkerConfig(
+        enabled=True,
+        auth_token=_test_access_value(),
+        root=tmp_path / "worker",
+        source_roots=(tmp_path / "sources",),
+        timeout_s=2.0,
+        poll_interval_s=0.01,
+    )
+    service = QgisWorkerService(config=config, mcp_client=FakeQgisMcpClient())
+    worker_run_id = "qgis-worker-test-native-vrt-newline"
+    run_root = config.root / "runs" / worker_run_id
+    run_root.mkdir(parents=True)
+    safe_source = run_root / "dem_a.tif"
+    newline_source = run_root / "dem_b\nunauthorized.tif"
+    safe_source.write_bytes(b"a")
+    newline_source.write_bytes(b"b")
+    monkeypatch.setenv("SCOUT_GDALBUILDVRT_COMMAND", str(executable))
+
+    def fail_if_called(*args: Any, **kwargs: Any) -> None:
+        raise AssertionError("gdalbuildvrt subprocess must not run")
+
+    monkeypatch.setattr("qgis_worker.subprocess.run", fail_if_called)
+
+    with pytest.raises(_WorkerProcessingFailed, match="line separator"):
+        service._build_dem_mosaic_with_native_gdal(
+            worker_run_id,
+            (safe_source, newline_source),
+            run_root / "dem_mosaic.vrt",
+        )
+
+    assert not (run_root / "dem_mosaic_sources.txt").exists()
+
+
+def test_qgis_worker_preserves_dem_mosaic_processing_diagnostics(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_native_mosaic(
+        self: QgisWorkerService,
+        worker_run_id: str,
+        prepared_refs: tuple[Path, ...],
+        vrt_path: Path,
+    ) -> None:
+        raise _WorkerProcessingFailed("native fallback unavailable in fixture")
+
+    monkeypatch.setattr(
+        QgisWorkerService,
+        "_build_dem_mosaic_with_native_gdal",
+        fail_native_mosaic,
+    )
+    mcp = FakeQgisMcpClient(
+        processing_failures={
+            "gdal:buildvirtualraster": {
+                "error": {
+                    "message": "Processing failed.",
+                    "issues": [
+                        {
+                            "code": "output.missing",
+                            "message": "Expected output file was not created: dem_mosaic.vrt",
+                        }
+                    ],
+                },
+                "feedback_log": (
+                    "Traceback FileNotFoundError: No such file or directory: "
+                    "buildvrtInputFiles.txt"
+                ),
+            }
+        }
+    )
+    client, source_root = _client(tmp_path, mcp)
+    dem_a = source_root / "dem_a.grd"
+    dem_b = source_root / "dem_b.grd"
+    dem_a.write_bytes(b"fixture-dem-a")
+    dem_b.write_bytes(b"fixture-dem-b")
+    request_payload = _request(dem_a)
+    request_payload["dem_refs"] = [str(dem_a), str(dem_b)]
+
+    payload = _start_and_wait(client, dem_a, request_payload=request_payload)
+
+    assert payload["state"] == "failed"
+    assert payload["processing_status"] == "failed"
+    assert payload["error"]["code"] == "PROCESSING_FAILED"
+    detail = payload["error"]["detail"]
+    assert "QGIS DEM mosaic build failed during gdal:buildvirtualraster" in detail
+    assert "source_count=2" in detail
+    assert "output=dem_mosaic.vrt" in detail
+    assert "buildvrtInputFiles.txt" in detail
 
 
 def test_qgis_worker_persists_candidate_only_terrain_route_hypothesis(

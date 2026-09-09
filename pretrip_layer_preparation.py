@@ -813,6 +813,13 @@ def run_layer_preparation(request: LayerPreparationRequest) -> dict[str, Any]:
             outputs,
             manifest["finished_at"],
         )
+    _refresh_layer_preparation_aggregates(
+        manifest=manifest,
+        request=request,
+        project_root=project_root,
+        workspace_file_mutation_allowed=True,
+        route_evidence_bundle=manifest["inputs"]["route_evidence_bundle"],
+    )
     summary = _summary_from_manifest(manifest)
     map_preparation_summary = _map_preparation_summary_from_manifest(manifest)
     adapter_manifest = _adapter_manifest_from_manifest(manifest)
@@ -828,6 +835,10 @@ def run_layer_preparation(request: LayerPreparationRequest) -> dict[str, Any]:
             map_preparation_summary,
         )
         _write_json(project_root / outputs["layer_adapter_manifest_ref"], adapter_manifest)
+        _write_json(
+            project_root / outputs["layer_validation_report_ref"],
+            manifest["validation"],
+        )
         _write_json(project_root / outputs["layer_map_projection_ref"], map_projection)
         _write_jsonl(
             project_root / outputs["layer_debug_projection_events_ref"],
@@ -4700,6 +4711,7 @@ def _finalize_qgis_dependent_risk_state(
     project_root: Path,
     manifest: dict[str, Any],
     qgis_terrain_feature_stack: dict[str, Any],
+    force_refresh: bool = False,
 ) -> dict[str, Any]:
     project_path = project_root / "project.json"
     project = _load_json(project_path)
@@ -4711,6 +4723,21 @@ def _finalize_qgis_dependent_risk_state(
         project.get("risk_score_qgis_workflow_run_id") or ""
     )
     qgis_completed = qgis_terrain_feature_stack.get("status") == "completed"
+    valid_workflow_run_id = (
+        isinstance(qgis_terrain_feature_stack.get("workflow_run_id"), str)
+        and bool(workflow_run_id)
+        and workflow_run_id not in {".", ".."}
+        and all(char.isascii() and (char.isalnum() or char in "._-") for char in workflow_run_id)
+    )
+    if force_refresh and qgis_completed and not valid_workflow_run_id:
+        return {
+            "status": "unavailable",
+            "reason": "qgis_workflow_run_id_invalid",
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "operational": False,
+        }
+    refresh_requested = force_refresh and qgis_completed and valid_workflow_run_id
     refresh_for_new_qgis_run = (
         qgis_completed
         and bool(workflow_run_id)
@@ -4720,6 +4747,7 @@ def _finalize_qgis_dependent_risk_state(
     if (
         risk_generation_status != "awaiting_qgis_grass_processor"
         and not refresh_for_new_qgis_run
+        and not refresh_requested
     ):
         return {
             "status": "not_applicable",
@@ -5705,6 +5733,29 @@ def _job_payload_from_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
         "outputs": manifest["outputs"],
         "boundary": manifest["boundary"],
     }
+
+
+def _refresh_layer_preparation_aggregates(
+    *,
+    manifest: dict[str, Any],
+    request: LayerPreparationRequest,
+    project_root: Path,
+    workspace_file_mutation_allowed: bool,
+    route_evidence_bundle: dict[str, Any],
+) -> None:
+    layers = manifest.get("layers")
+    if not isinstance(layers, list):
+        return
+    validation = _validation_report(
+        request=request,
+        layers=layers,
+        project_root=project_root,
+        workspace_file_mutation_allowed=workspace_file_mutation_allowed,
+        route_evidence_bundle=route_evidence_bundle,
+    )
+    manifest["validation"] = validation
+    manifest["counts"] = _layer_counts(layers, validation)
+    manifest["stage_statuses"] = _stage_statuses(layers)
 
 
 def _validation_report(
@@ -8278,6 +8329,8 @@ def _stamp_synced_risk_output_provenance(
     project_root: Path,
     project: dict[str, Any],
 ) -> None:
+    route_path = _project_ref_path(project_root, project, "risk_route_profile_ref")
+    route_sha256_before = _sha256_file(route_path) if route_path else None
     _stamp_risk_geojson_provenance(
         project_root=project_root,
         project=project,
@@ -8293,6 +8346,13 @@ def _stamp_synced_risk_output_provenance(
         default_confidence="medium",
         default_stale_risk="medium",
     )
+    if route_path and route_sha256_before:
+        _rebind_stamped_risk_route_hash(
+            project_root=project_root,
+            project=project,
+            route_path=route_path,
+            previous_sha256=route_sha256_before,
+        )
     _stamp_risk_geojson_provenance(
         project_root=project_root,
         project=project,
@@ -8325,6 +8385,44 @@ def _stamp_synced_risk_output_provenance(
         default_confidence="medium",
         default_stale_risk="medium",
     )
+
+
+def _rebind_stamped_risk_route_hash(
+    *,
+    project_root: Path,
+    project: dict[str, Any],
+    route_path: Path,
+    previous_sha256: str,
+) -> None:
+    final_sha256 = _sha256_file(route_path)
+    for prefix in ("risk_score_points", "risk_ribbon"):
+        metadata_path = _project_ref_path(project_root, project, prefix + "_metadata_ref")
+        output_path = _project_ref_path(project_root, project, prefix + "_ref")
+        if metadata_path is None or output_path is None:
+            continue
+        metadata = _load_json(metadata_path)
+        payload = _load_json(output_path)
+        if not isinstance(metadata, dict) or not isinstance(payload, dict):
+            continue
+        source_ref = metadata.get("source_route_risk_ref")
+        if not isinstance(source_ref, str) or not source_ref:
+            continue
+        source_path = Path(source_ref)
+        if not source_path.is_absolute():
+            source_path = project_root / source_path
+        # Rebind only the parent bytes changed by this stamp, never an unrelated
+        # or already inconsistent derivation. The risk producer can rebuild it.
+        if (
+            source_path.resolve() != route_path.resolve()
+            or metadata.get("source_route_risk_sha256") != previous_sha256
+        ):
+            continue
+        metadata["source_route_risk_sha256"] = final_sha256
+        embedded = payload.get("metadata")
+        if isinstance(embedded, dict):
+            embedded["source_route_risk_sha256"] = final_sha256
+        _write_json(metadata_path, metadata)
+        _write_json(output_path, payload)
 
 
 def _stamp_calibrated_risk_provenance(

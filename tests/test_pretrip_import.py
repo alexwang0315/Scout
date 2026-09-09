@@ -648,6 +648,7 @@ def test_pretrip_import_uses_material_root_for_terrain_weather_and_retreat(
             "sha256": dtm_raster_sha256,
             "crs": "EPSG:3826",
             "crs_evidence": None,
+            "crs_evidence_sha256": None,
             "source_resolution_m": 20.0,
             "candidate_only": True,
             "runtime_safety_truth": False,

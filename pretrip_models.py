@@ -141,6 +141,7 @@ class DtmRasterSource(BaseModel):
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     crs: str = Field(min_length=1)
     crs_evidence: str | None = None
+    crs_evidence_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
     source_resolution_m: float = Field(gt=0.0)
     candidate_only: Literal[True] = True
     runtime_safety_truth: Literal[False] = False

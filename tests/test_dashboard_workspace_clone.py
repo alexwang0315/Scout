@@ -269,7 +269,7 @@ def test_clean_clone_runs_one_import_then_full_preparation_without_source_mutati
     assert preparations[0].qgis_route_contact_distance_m == 10.0
     assert result["receipt"]["osm_input_policy"] == {
         "configured_path": str(material_root / "sources" / "osm" / "taiwan.osm.pbf"),
-        "configured_sha256": None,
+        "configured_sha256": _sha256(material_root / "sources" / "osm" / "taiwan.osm.pbf"),
         "osmium_bin": "osmium",
         "parser_available": True,
         "status": "local_pbf_selected",

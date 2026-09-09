@@ -104,6 +104,19 @@ class QgisRuntimeController:
         if issue:
             return QgisRuntimeControlResult(project_id=project_id, status="unavailable", code=issue)
         if self._last is not None and self._last.project_id == project_id:
+            try:
+                status = self.host.probe(project_id)
+            except (OSError, ValueError, RuntimeError):
+                return self._last
+            if _ready(status):
+                return QgisRuntimeControlResult(
+                    project_id=project_id,
+                    request_id=self._last.request_id,
+                    status="ready",
+                    code=QgisRuntimeControlCode.READY,
+                    can_start=True,
+                    actions=self._last.actions,
+                )
             return self._last
         return QgisRuntimeControlResult(
             project_id=project_id, status="idle", code=QgisRuntimeControlCode.IDLE, can_start=True,

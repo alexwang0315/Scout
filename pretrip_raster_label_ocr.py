@@ -34,7 +34,9 @@ DEFAULT_OCR_TILE_CACHE_REF = "outputs/layers/cache/raster_label_ocr_tiles"
 DEFAULT_RASTER_LABEL_PLAN_REF = "outputs/layers/plans/raster_label_plan.json"
 DEFAULT_TESSERACT_LANG = "chi_tra+eng"
 DEFAULT_MIN_CONFIDENCE = 0.35
-DEFAULT_TESSERACT_TIMEOUT_S = 10.0
+# Construction runs wait for useful OCR work; an explicit positive setting may
+# still impose a deadline. Pytesseract uses zero to disable its timeout.
+DEFAULT_TESSERACT_TIMEOUT_S = 0.0
 DEFAULT_OCR_MAX_WORKERS = 4
 DEFAULT_OCR_SOURCE_IDS = ("happyman_rudy_twmap", "happyman_rudy")
 CELLULAR_KEYWORDS = ("通訊點", "通信點", "遠傳", "台哥大", "台灣大", "中華", "亞太", "台灣之星", "112")
@@ -588,7 +590,7 @@ def _build_tesseract_cli_runner(
             check=False,
             capture_output=True,
             text=True,
-            timeout=_tesseract_timeout_s(),
+            timeout=_tesseract_timeout_s() or None,
         )
         if result.returncode != 0:
             error = (result.stderr or "tesseract CLI failed").replace("\n", " ")[:200]

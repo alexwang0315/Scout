@@ -5,12 +5,14 @@ import json
 import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
 import pytest
 
 from geo_utils import haversine_m
 from pretrip_historical_daily_departures import build_historical_daily_departures
+import scout_reference_gpx_reconstruction as reconstruction
 from scout_reference_gpx_reconstruction import build_reference_gpx_reconstruction
 
 
@@ -18,6 +20,82 @@ PRIMARY_REF = "normalized/routes/filtered/primary.reconstruction-fixture.speed_f
 PACE_REF = "outputs/reference_reconstruction_fixture_pace.json"
 CP_REF = "outputs/reference_reconstruction_fixture_checkpoint_events.json"
 ZONE = ZoneInfo("Asia/Taipei")
+
+
+def _original_rest_stops(day: dict, points, axis, zone: ZoneInfo) -> list[dict]:
+    stops = []
+    index, last = day["start_point_index"], day["end_point_index"]
+    while index < last:
+        first = points[index]
+        if first.observed_at is None:
+            index += 1
+            continue
+        end = index
+        while end < last:
+            following = points[end + 1]
+            if following.observed_at is None:
+                break
+            gap = (following.observed_at - points[end].observed_at).total_seconds()
+            if not 0 < gap <= reconstruction.REST_MAX_OBSERVATION_GAP_SECONDS:
+                break
+            if reconstruction.haversine_m(first.lat, first.lon, following.lat, following.lon) > reconstruction.REST_RADIUS_M:
+                break
+            end += 1
+        minutes = (points[end].observed_at - first.observed_at).total_seconds() / 60
+        net_distance = reconstruction.haversine_m(first.lat, first.lon, points[end].lat, points[end].lon)
+        if (end - index + 1 >= reconstruction.REST_MIN_POINTS and minutes >= reconstruction.REST_MIN_MINUTES
+                and net_distance / minutes <= reconstruction.REST_MAX_NET_SPEED_M_PER_MINUTE):
+            cluster = points[index : end + 1]
+            lat = sum(point.lat for point in cluster) / len(cluster)
+            lon = sum(point.lon for point in cluster) / len(cluster)
+            representative = min(
+                range(index, end + 1),
+                key=lambda pos: reconstruction.haversine_m(lat, lon, points[pos].lat, points[pos].lon),
+            )
+            stops.append({
+                "stop_id": f"{day['day_id']}.stay.{index}.{end}",
+                "label": f"Derived stay {len(stops) + 1}",
+                "start_clock": reconstruction._clock(first.observed_at, zone),
+                "end_clock": reconstruction._clock(points[end].observed_at, zone),
+                "duration_minutes": minutes,
+                "route_order_m": axis[representative],
+                "point_index": representative,
+                "start_point_index": index,
+                "end_point_index": end,
+                "point_count": end - index + 1,
+                "lat": points[representative].lat,
+                "lon": points[representative].lon,
+                "status": "derived",
+                "basis": "monotonic_filtered_primary_short_distance_observations",
+                "semantic_rest_verified": False,
+            })
+            index = end + 1
+        else:
+            index += 1
+    return stops
+
+
+def _rest_point(minute: float | None, lon: float) -> SimpleNamespace:
+    stamp = None
+    if minute is not None:
+        stamp = datetime(2020, 12, 26, 6, tzinfo=ZONE) + timedelta(minutes=minute)
+    return SimpleNamespace(lat=23.0, lon=lon, observed_at=stamp)
+
+
+def _rest_axis(points) -> list[float]:
+    axis = [0.0]
+    for first, second in zip(points, points[1:]):
+        axis.append(axis[-1] + haversine_m(first.lat, first.lon, second.lat, second.lon))
+    return axis
+
+
+def _rest_day(points) -> dict:
+    return {
+        "day_id": "historical_day.test.001",
+        "day_index": 1,
+        "start_point_index": 0,
+        "end_point_index": len(points) - 1,
+    }
 
 
 def _point(clock: str | None, lon: float) -> dict:
@@ -88,6 +166,59 @@ def add_reference_sources(
     project.update(reference_pace_energy_analysis_ref=PACE_REF, checkpoint_events_ref=CP_REF)
     project_path.write_text(json.dumps(project))
     return project
+
+
+def test_rest_stop_acceleration_matches_original_edge_cases(monkeypatch):
+    cases = {
+        "short_stop": [_rest_point(index, 121.0) for index in range(16)],
+        "long_stop": [_rest_point(index * 1.5, 121.0 + 0.000001 * (index % 3)) for index in range(18)],
+        "threshold": [_rest_point(index * (20 / 15), 121.0 + 0.000001 * (index % 2)) for index in range(16)],
+        "missing": [_rest_point(index * 1.5 if index != 10 else None, 121.0) for index in range(18)],
+        "nonmonotonic": [
+            *[_rest_point(index, 121.0) for index in range(10)],
+            _rest_point(8.5, 121.0),
+            *[_rest_point(index + 11, 121.0) for index in range(20)],
+        ],
+        "gap": [_rest_point(index if index < 10 else index + 11, 121.0) for index in range(30)],
+        "inside_outside_return": [
+            *[_rest_point(index, 121.0) for index in range(10)],
+            _rest_point(10, 121.001),
+            *[_rest_point(index + 11, 121.0) for index in range(20)],
+        ],
+        "moving_window": [
+            _rest_point(index * 0.5, 121.0 + index * 0.00002)
+            for index in range(240)
+        ],
+    }
+    telemetry: dict[str, tuple[int, int]] = {}
+    original_distance = reconstruction.haversine_m
+
+    for name, points in cases.items():
+        axis = _rest_axis(points)
+        day = _rest_day(points)
+        old_calls = 0
+        new_calls = 0
+
+        def count_old(*args):
+            nonlocal old_calls
+            old_calls += 1
+            return original_distance(*args)
+
+        def count_new(*args):
+            nonlocal new_calls
+            new_calls += 1
+            return original_distance(*args)
+
+        monkeypatch.setattr(reconstruction, "haversine_m", count_old)
+        expected = _original_rest_stops(day, points, axis, ZONE)
+        monkeypatch.setattr(reconstruction, "haversine_m", count_new)
+        actual = reconstruction._rest_stops(day, points, axis, ZONE)
+
+        assert actual == expected, name
+        telemetry[name] = (old_calls, new_calls)
+
+    assert telemetry["short_stop"][1] < telemetry["short_stop"][0]
+    assert telemetry["moving_window"][1] < telemetry["moving_window"][0]
 
 
 def _snapshot(root: Path) -> dict:

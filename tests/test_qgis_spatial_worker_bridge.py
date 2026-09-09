@@ -1101,6 +1101,10 @@ class TerrainRouteWorkerTransport(AsyncWorkerTransport):
                 "qgis_version": "3.44.12",
                 "qgis_mcp_plugin_version": "0.4.9",
             }
+        if url.endswith("/workflows/qgis-worker-demo-run/request"):
+            if self.request_payload is None:
+                raise AssertionError("terrain route request was not submitted")
+            return self.request_payload
         if url.endswith("/workflows/qgis-worker-demo-run"):
             return self._run("completed")
         raise AssertionError(f"unexpected GET: {url}")
@@ -1162,6 +1166,82 @@ def prepared_ab_workspace(tmp_path: Path):
         ),
     )
     return root, project, full_dem, backend, transport, request
+
+
+def test_qgis_backend_recovers_missing_wrapper_from_authenticated_worker(
+    prepared_ab_workspace,
+) -> None:
+    root, project, _, backend, _, request = prepared_ab_workspace
+    queued = backend.start_workflow(
+        project_id=project["project_id"],
+        project_root=root,
+        project=project,
+        request=request,
+    )
+    wrapper = (
+        root
+        / "outputs"
+        / "spatial"
+        / "qgis"
+        / queued.workflow_run_id
+        / "workflow_run.json"
+    )
+    wrapper.unlink()
+
+    completed = backend.get_run(
+        project_id=project["project_id"],
+        project_root=root,
+        workflow_run_id=queued.workflow_run_id,
+    )
+
+    assert completed.state is SpatialWorkflowState.COMPLETED
+    assert wrapper.is_file()
+    assert completed.candidate_only is True
+    assert completed.runtime_safety_truth is False
+    assert completed.operational is False
+    assert any(
+        item.get("event") == "worker_workflow_wrapper_recovered"
+        for item in completed.audit_trail
+    )
+    assert any(
+        "workspace workflow wrapper was unavailable" in warning
+        for warning in completed.warnings
+    )
+
+
+def test_qgis_backend_rejects_orphan_recovery_when_request_identity_changes(
+    prepared_ab_workspace,
+) -> None:
+    root, project, _, backend, transport, request = prepared_ab_workspace
+    queued = backend.start_workflow(
+        project_id=project["project_id"],
+        project_root=root,
+        project=project,
+        request=request,
+    )
+    wrapper = (
+        root
+        / "outputs"
+        / "spatial"
+        / "qgis"
+        / queued.workflow_run_id
+        / "workflow_run.json"
+    )
+    wrapper.unlink()
+    assert transport.request_payload is not None
+    transport.request_payload = {
+        **transport.request_payload,
+        "project_id": "different_project",
+    }
+
+    with pytest.raises(QgisSpatialBackendError, match="identity did not match"):
+        backend.get_run(
+            project_id=project["project_id"],
+            project_root=root,
+            workflow_run_id=queued.workflow_run_id,
+        )
+
+    assert not wrapper.exists()
 
 
 def test_arbitrary_ab_uses_parent_bound_full_dem_not_previous_gpx_crop(prepared_ab_workspace):

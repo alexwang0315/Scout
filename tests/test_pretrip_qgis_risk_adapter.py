@@ -129,6 +129,93 @@ def test_qgis_grass_risk_adapter_fails_closed_for_fixture_samples(
     assert not (project_root / "outputs/risk/route_risk.geojson").exists()
 
 
+def test_risk_provenance_stamp_binds_children_to_final_route_bytes(
+    tmp_path: Path,
+) -> None:
+    from pretrip_layer_preparation import _stamp_synced_risk_output_provenance
+
+    project_root, project = _prepare_risk_workspace(tmp_path)
+    route_path = project_root / project["risk_route_profile_ref"]
+    before_sha256 = hashlib.sha256(route_path.read_bytes()).hexdigest()
+    before_features = {
+        prefix: _load(project_root / project[prefix + "_ref"])["features"]
+        for prefix in ("risk_score_points", "risk_ribbon")
+    }
+
+    _stamp_synced_risk_output_provenance(project_root=project_root, project=project)
+
+    final_sha256 = hashlib.sha256(route_path.read_bytes()).hexdigest()
+    assert final_sha256 != before_sha256
+    for prefix, originals in before_features.items():
+        metadata_path = project_root / project[prefix + "_metadata_ref"]
+        metadata = _load(metadata_path)
+        payload = _load(project_root / project[prefix + "_ref"])
+        assert metadata["source_route_risk_sha256"] == final_sha256
+        assert payload["metadata"]["source_route_risk_sha256"] == final_sha256
+        for original, stamped in zip(originals, payload["features"], strict=True):
+            assert stamped["geometry"] == original["geometry"]
+            for key in ("rs", "pretrip_risk", "risk_level"):
+                assert stamped["properties"].get(key) == original["properties"].get(key)
+            refs = {ref["ref"]: ref for ref in stamped["properties"]["source_refs"]}
+            assert refs[project["risk_route_profile_ref"]]["sha256"] == final_sha256
+            assert refs[project[prefix + "_metadata_ref"]]["sha256"] == (
+                hashlib.sha256(metadata_path.read_bytes()).hexdigest()
+            )
+            assert stamped["properties"]["candidate_only"] is True
+            assert stamped["properties"]["runtime_safety_truth"] is False
+    stamped_bytes = {
+        ref: (project_root / ref).read_bytes()
+        for ref in QGIS_GRASS_RISK_OUTPUT_REFS.values()
+    }
+    _stamp_synced_risk_output_provenance(project_root=project_root, project=project)
+    assert {ref: (project_root / ref).read_bytes() for ref in stamped_bytes} == stamped_bytes
+
+
+@pytest.mark.parametrize("changed_field", ["source_route_risk_ref", "source_route_risk_sha256"])
+def test_risk_stamp_does_not_rebind_unrelated_or_inconsistent_parent(
+    tmp_path: Path, changed_field: str,
+) -> None:
+    from pretrip_layer_preparation import _stamp_synced_risk_output_provenance
+
+    project_root, project = _prepare_risk_workspace(tmp_path)
+    metadata_path = project_root / project["risk_score_points_metadata_ref"]
+    metadata = _load(metadata_path)
+    metadata[changed_field] = "unrelated.geojson" if changed_field.endswith("_ref") else "0" * 64
+    _write_json(metadata_path, metadata)
+    expected_bytes = metadata_path.read_bytes()
+
+    _stamp_synced_risk_output_provenance(project_root=project_root, project=project)
+
+    assert metadata_path.read_bytes() == expected_bytes
+
+
+def _prepare_risk_workspace(tmp_path: Path) -> tuple[Path, dict]:
+    project_root = tmp_path / "workspace"
+    project_root.mkdir()
+    overpass_path = project_root / "normalized/map/overpass.geojson"
+    reference_gpx_path = project_root / "normalized/routes/reference.gpx"
+    samples_ref = "outputs/spatial/qgis/qgis-run-001/terrain_feature_route_samples.geojson"
+    samples_path = project_root / samples_ref
+    _write_overpass(overpass_path)
+    _write_reference_gpx(reference_gpx_path)
+    _write_qgis_samples(samples_path)
+    _write_qgis_run(
+        project_root / "outputs/spatial/qgis/qgis-run-001/workflow_run.json",
+        samples_ref=samples_ref,
+        samples_path=samples_path,
+    )
+    result = prepare_qgis_grass_risk_outputs(
+        project_root=project_root,
+        project_id="dongqing_new_import",
+        qgis_workflow_run_id="qgis-run-001",
+        overpass_geojson_path=overpass_path,
+        reference_gpx_path=reference_gpx_path,
+        prepared_at="2026-08-28T12:00:00Z",
+        route_corridor_m=500.0,
+    )
+    return project_root, result["output_refs"]
+
+
 def _write_qgis_samples(path: Path, *, fixture: bool = False) -> None:
     features = []
     for index, (lon, distance_m, slope, elevation, geomorphon, flow) in enumerate(

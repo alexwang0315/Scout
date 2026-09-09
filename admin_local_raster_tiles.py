@@ -430,6 +430,9 @@ def seed_imagery_tile_cache(
         )
         if path.exists():
             if _cached_tile_is_fresh(path, tile_ttl_days=tile_ttl_days, now=now):
+                if _tile_is_blank_or_transparent(path.read_bytes()):
+                    tiles_blank_or_transparent += 1
+                    continue
                 tiles_skipped_existing += 1
                 continue
             stale_existing = True

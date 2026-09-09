@@ -68,6 +68,10 @@ from dashboard_workspace_clone import (
     WorkspaceClonePreparationError,
     clone_pretrip_workspace_from_inputs,
 )
+from dashboard_preparation_jobs import (
+    DashboardPreparationJobConflict,
+    DashboardPreparationJobManager,
+)
 from dashboard_workspace_publication import dashboard_project_id_from_read_path
 from navigation_terrain_projection import (
     NavigationTerrainProjectionError,
@@ -1737,6 +1741,22 @@ class PreTripPrepareLayersRunRequest(PreTripPrepareLayersRequest):
     confirm_prepare: bool = False
 
 
+class DashboardImportPreparationRequest(PreTripImportGpxRunRequest):
+    confirm_prepare: bool = False
+    idempotency_key: str = Field(min_length=1, max_length=160)
+    requested_by: str = Field(default="dashboard_operator", min_length=1, max_length=80)
+    preparation: PreTripPrepareLayersRequest | None = None
+
+
+class DashboardClonePreparationRequest(DashboardWorkspaceCloneRunRequest):
+    idempotency_key: str = Field(min_length=1, max_length=160)
+
+
+class DashboardPreparationResumeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    confirm_resume: bool = False
+
+
 class PreTripRainfallCurrentPosition(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, populate_by_name=True)
 
@@ -2754,6 +2774,11 @@ def create_admin_router(
 ) -> APIRouter:
     load_scout_env_files(repo_root=ROOT)
     router = APIRouter(prefix="/admin", tags=["admin"])
+    preparation_jobs = (
+        DashboardPreparationJobManager(Path(pretrip_workspace_root))
+        if pretrip_workspace_root is not None
+        else None
+    )
     pretrip_view_cache_lock = threading.Lock()
     pretrip_view_cache: dict[str, tuple[str, dict[str, Any]]] = {}
     router.include_router(
@@ -3040,6 +3065,74 @@ def create_admin_router(
             "executed": False,
             "source_ref": str(WORKSPACE_OPERATION_REQUESTS_REF),
         }
+
+    def require_preparation_jobs() -> DashboardPreparationJobManager:
+        if preparation_jobs is None:
+            raise HTTPException(status_code=503, detail="A workspace root is required for preparation jobs")
+        return preparation_jobs
+
+    def preparation_job_response(payload: dict[str, Any], *, status_code: int = 200) -> JSONResponse:
+        return JSONResponse(
+            status_code=status_code,
+            content=payload,
+            headers={"Cache-Control": "no-store", "X-Scout-Candidate-Only": "true", "X-Scout-Runtime-Safety-Truth": "false"},
+        )
+
+    @router.get("/dashboard/preparation-jobs")
+    def dashboard_preparation_job_list(project_id: str | None = None) -> JSONResponse:
+        try:
+            payload = require_preparation_jobs().list(project_id=project_id)
+            return preparation_job_response(payload if isinstance(payload, dict) else {"jobs": payload})
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.get("/dashboard/preparation-jobs/{job_id}")
+    def dashboard_preparation_job_get(job_id: str) -> JSONResponse:
+        try:
+            return preparation_job_response(require_preparation_jobs().get(job_id))
+        except (KeyError, FileNotFoundError) as exc:
+            raise HTTPException(status_code=404, detail="Preparation job not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/dashboard/preparation-jobs/{job_id}/resume", status_code=202)
+    def dashboard_preparation_job_resume(job_id: str, request: DashboardPreparationResumeRequest) -> JSONResponse:
+        if not request.confirm_resume:
+            raise HTTPException(status_code=400, detail="confirm_resume=true is required")
+        try:
+            return preparation_job_response(require_preparation_jobs().resume(job_id), status_code=202)
+        except DashboardPreparationJobConflict as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (KeyError, FileNotFoundError) as exc:
+            raise HTTPException(status_code=404, detail="Preparation job not found") from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/dashboard/workspaces/{project_id}/clone-jobs", status_code=202)
+    def dashboard_workspace_clone_job(project_id: str, request: DashboardClonePreparationRequest) -> JSONResponse:
+        if not request.confirm_clone:
+            raise HTTPException(status_code=400, detail="confirm_clone=true is required")
+        context = dashboard_workspace_context(project_id)
+        if not context["workspace_backed"] or pretrip_workspace_root is None:
+            raise HTTPException(status_code=409, detail="clone requires a workspace-backed source project")
+        try:
+            result = require_preparation_jobs().submit_clone(
+                WorkspaceCloneRequest(
+                    source_project_id=context["project_id"],
+                    target_project_id=request.target_project_id,
+                    source_project_root=Path(context["resolved_project_root"]),
+                    workspace_root=Path(pretrip_workspace_root),
+                    requested_by=request.requested_by,
+                ),
+                idempotency_key=request.idempotency_key,
+            )
+            return preparation_job_response(result, status_code=202)
+        except (DashboardPreparationJobConflict, FileExistsError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, OSError, ValidationError, ParseError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @router.post(
         "/dashboard/workspaces/{project_id}/clone",
@@ -5569,6 +5662,7 @@ def create_admin_router(
             run = qgis_spatial_backend.get_run(
                 project_root=project_root,
                 workflow_run_id=workflow_run_id,
+                project_id=project_id,
             )
         except QgisSpatialNotFound as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -7146,6 +7240,56 @@ def create_admin_router(
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except (ValueError, OSError, ParseError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/pretrip/projects/{project_id}/import-and-prepare", status_code=202)
+    def dashboard_import_and_prepare(project_id: str, request: DashboardImportPreparationRequest) -> JSONResponse:
+        if not request.confirm_import or not request.confirm_prepare:
+            raise HTTPException(status_code=400, detail="confirm_import=true and confirm_prepare=true are required")
+        if request.overwrite:
+            raise HTTPException(status_code=409, detail="Preparation jobs do not overwrite an existing workspace; resume its job instead")
+        if request.workspace_root is not None:
+            raise HTTPException(status_code=422, detail="Import workspace root is resolved by the server")
+        if request.preparation is not None and request.preparation.workspace_root is not None:
+            raise HTTPException(status_code=422, detail="Preparation workspace root is resolved by the server")
+        try:
+            manager = require_preparation_jobs()
+            workspace_root = _pretrip_import_workspace_root(pretrip_workspace_root, request=request)
+            domain_request = PretripImportRequest(
+                project_id=project_id,
+                primary_gpx=_path_from_admin_request(request.golden_route_gpx),
+                reference_dir=_optional_path_from_admin_request(request.reference_dir),
+                reference_gpx_paths=tuple(_path_from_admin_request(path) for path in request.reference_gpx_paths),
+                workspace_root=workspace_root,
+                profile=request.profile,
+                template_project_root=_optional_path_from_admin_request(request.template_project_root),
+                checkpoint_spacing_m=request.checkpoint_spacing_m,
+                max_reference_display_points=request.max_reference_display_points,
+                max_reasonable_gpx_speed_kmh=request.max_reasonable_gpx_speed_kmh,
+                max_previous_gpx_speed_ratio=request.max_previous_gpx_speed_ratio,
+                material_root=_optional_path_from_admin_request(request.material_root),
+                dtm_dirs=tuple(_path_from_admin_request(path) for path in request.dtm_dirs),
+                mcp_named_point_evidence=_optional_path_from_admin_request(request.mcp_named_point_evidence),
+                overwrite=False,
+                import_timestamp=request.import_timestamp,
+                import_stage="pretrip",
+                resolve_default_material_root=False,
+            )
+            result = manager.submit_import(
+                domain_request,
+                idempotency_key=request.idempotency_key,
+                requested_by=request.requested_by,
+                preparation_options=(
+                    request.preparation.model_dump(mode="json", exclude={"workspace_root"}, exclude_unset=True)
+                    if request.preparation is not None else None
+                ),
+            )
+            return preparation_job_response(result, status_code=202)
+        except (DashboardPreparationJobConflict, FileExistsError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, OSError, ValidationError, ParseError) as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     @router.post("/pretrip/projects/{project_id}/import-gpx")

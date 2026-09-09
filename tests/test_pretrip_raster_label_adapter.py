@@ -6,6 +6,8 @@ import subprocess
 import threading
 from pathlib import Path
 
+import pytest
+
 from admin_local_raster_tiles import raster_tile_cache_path
 from pretrip_raster_label_adapter import build_raster_label_evidence
 from pretrip_raster_label_ocr import extract_raster_label_ocr
@@ -23,6 +25,60 @@ FIXTURE_PROJECT = (
 
 def _load(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("configured, expected", [(None, 0.0), ("0", 0.0), ("42", 42.0)])
+def test_pytesseract_runner_preserves_unlimited_default_and_explicit_deadline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, configured: str | None, expected: float,
+) -> None:
+    from PIL import Image
+    import pytesseract
+    from pretrip_raster_label_ocr import _build_pytesseract_runner
+
+    if configured is None:
+        monkeypatch.delenv("SCOUT_TESSERACT_TIMEOUT_S", raising=False)
+    else:
+        monkeypatch.setenv("SCOUT_TESSERACT_TIMEOUT_S", configured)
+    image_path = tmp_path / "tile.png"
+    Image.new("RGB", (2, 2)).save(image_path)
+    observed = []
+
+    def image_to_data(_image, **kwargs):
+        observed.append(kwargs["timeout"])
+        return {"text": ["5K"], "conf": [90], "left": [0], "top": [0],
+                "width": [1], "height": [1]}
+
+    monkeypatch.setattr(pytesseract, "image_to_data", image_to_data)
+    runner, missing = _build_pytesseract_runner(tesseract_lang="chi_tra+eng")
+    assert runner is not None and missing == []
+    assert runner(image_path)[0]["label_text"] == "5K"
+    assert observed == [expected]
+
+
+@pytest.mark.parametrize("configured, expected", [(None, None), ("0", None), ("42", 42.0)])
+def test_tesseract_cli_runner_preserves_unlimited_default_and_explicit_deadline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, configured: str | None,
+    expected: float | None,
+) -> None:
+    from pretrip_raster_label_ocr import _build_tesseract_cli_runner
+
+    if configured is None:
+        monkeypatch.delenv("SCOUT_TESSERACT_TIMEOUT_S", raising=False)
+    else:
+        monkeypatch.setenv("SCOUT_TESSERACT_TIMEOUT_S", configured)
+    observed = []
+    image_path = tmp_path / "tile.png"
+
+    def run(command, **kwargs):
+        observed.append(kwargs["timeout"])
+        assert command == ["/test/tesseract", str(image_path), "stdout", "-l", "chi_tra+eng", "tsv"]
+        return subprocess.CompletedProcess(command, 0,
+            "text\tconf\tleft\ttop\twidth\theight\n5K\t90\t0\t0\t1\t1\n", "")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    runner = _build_tesseract_cli_runner(tesseract_bin=Path("/test/tesseract"), tesseract_lang="chi_tra+eng")
+    assert runner(image_path)[0]["label_text"] == "5K"
+    assert observed == [expected]
 
 
 def test_raster_label_ocr_extractor_writes_explicit_adapter_input(tmp_path: Path) -> None:

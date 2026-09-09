@@ -95,6 +95,33 @@ def test_qgis_mcp_stdio_preserves_gis_runtime_environment(
     assert "SCOUT_TEST_SECRET" not in env
 
 
+def test_qgis_mcp_stdio_uses_worker_owned_processing_temp(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("TMPDIR", "/tmp/scout-outside-tmpdir")
+    monkeypatch.setenv("TMP", "/tmp/scout-outside-tmp")
+    monkeypatch.setenv("TEMP", "/tmp/scout-outside-temp")
+    run_root = tmp_path / "runs"
+    client = QgisMcpStdioClient(
+        QgisMcpClientConfig(
+            command=(sys.executable, str(tmp_path / "unused.py")),
+            run_root=run_root,
+            source_roots=(tmp_path / "source",),
+        )
+    )
+
+    env = client._subprocess_env()
+
+    processing_temp = run_root.resolve(strict=False) / ".processing-tmp"
+    assert processing_temp.is_dir()
+    assert Path(env["TMPDIR"]).resolve(strict=False) == processing_temp
+    assert Path(env["TMP"]).resolve(strict=False) == processing_temp
+    assert Path(env["TEMP"]).resolve(strict=False) == processing_temp
+    assert Path(env["QGIS_PROCESSING_TEMP_FOLDER"]).resolve(strict=False) == processing_temp
+    assert processing_temp.relative_to(run_root.resolve(strict=False))
+
+
 def test_qgis_mcp_stdio_initializes_and_wraps_allowlisted_specialist_tool(
     tmp_path: Path,
 ) -> None:

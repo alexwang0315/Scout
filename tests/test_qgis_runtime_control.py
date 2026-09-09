@@ -153,6 +153,29 @@ def test_listening_port_does_not_prove_readiness(tmp_path: Path) -> None:
     assert host.events.count("start_worker") == 1
 
 
+def test_runtime_snapshot_clears_stale_timeout_after_live_probe_is_ready(
+    tmp_path: Path,
+) -> None:
+    host = FakeHost()
+    host.become_ready = False
+    controller = _controller(tmp_path, host)
+    timed_out = controller.ensure_ready(project_id="demo")
+    start_count = host.events.count("start_worker")
+    host.ready = True
+
+    recovered = controller.snapshot(project_id="demo")
+
+    assert timed_out.code == QgisRuntimeControlCode.START_TIMEOUT
+    assert recovered.status == "ready"
+    assert recovered.code == QgisRuntimeControlCode.READY
+    assert recovered.request_id == timed_out.request_id
+    assert host.events.count("start_worker") == start_count
+    receipts = (
+        tmp_path / "runtime" / "qgis-runtime-control.jsonl"
+    ).read_text().splitlines()
+    assert len(receipts) == 2
+
+
 def test_repeat_start_is_bounded_and_does_not_duplicate_worker(tmp_path: Path) -> None:
     host = FakeHost()
     controller = _controller(tmp_path, host)

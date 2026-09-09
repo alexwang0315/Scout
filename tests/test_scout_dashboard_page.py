@@ -1170,16 +1170,16 @@ def test_scout_dashboard_workspace_tab_exposes_structure_cache_and_operations() 
     assert 'id="workspaceSwitchProject"' in html
     assert 'id="workspaceRefreshExternalEvidence"' in html
     assert "operator-triggered" in html
-    assert "Clone creates a new target with one clean GPX import" in html
-    assert "refuses to overwrite an existing target" in html
-    assert "/clone`" in html
+    assert "Clone starts a saved preparation job" in html
+    assert "Existing targets are never overwritten" in html
+    assert "/clone-jobs`" in html
     assert "confirm_clone: true" in html
-    assert "WORKSPACE_CLONE_TIMEOUT_MS" in html
-    assert "const WORKSPACE_CLONE_TIMEOUT_MS = 7200000;" in html
-    assert "The browser stopped waiting, but the server may still be preparing" in html
-    assert "Do not retry this workspace name." in html
-    assert 'result.status === "completed_with_degraded_terrain"' in html
-    assert "QGIS/GRASS terrain is unavailable" in html
+    assert "WORKSPACE_CLONE_TIMEOUT_MS" not in html
+    assert 'data-preparation-job-action="resume"' in html
+    assert "job.can_resume" in html
+    assert "idempotency_key: idempotencyKey" in html
+    assert 'job.status === "completed_with_gaps"' in html
+    assert "Opening the workspace does not mean Golden qualification passed" in html
     assert "Delete requires an explicit destructive approval outside this dashboard." in html
     assert 'fetchJson("/admin/dashboard/workspaces")' in html
     assert "/operation-requests" in html
@@ -1321,7 +1321,6 @@ def test_scout_dashboard_import_new_trip_tab_contract() -> None:
         "importMaxReferenceDisplayPoints",
         "importMaxReasonableGpxSpeedKmh",
         "importMaxPreviousGpxSpeedRatio",
-        "importOverwriteWorkspace",
         "prepareLayersList",
         "prepareBBox",
         "prepareRouteEvidenceBundle",
@@ -1388,8 +1387,11 @@ def test_scout_dashboard_import_new_trip_tab_contract() -> None:
     assert "referenceGpxSources: fieldValue(\"importReferenceGpxSources\")" in html
     assert "targetName: targetNameValue()" in html
     assert "/import-gpx-preview" in html
-    assert "/import-gpx`" in html
+    assert "/import-and-prepare`" in html
     assert "confirm_import: true" in html
+    assert "confirm_prepare: true" in html
+    assert 'id="importOverwriteWorkspace"' not in html
+    assert 'scout.dashboardImportDraft.v1' in html
     assert "max_previous_gpx_speed_ratio: maxPreviousSpeedRatio" in html
     assert "importPayload.material_root = materialRoot" in html
     assert "importPayload.dtm_dirs = dtmDirs" in html
@@ -3361,6 +3363,47 @@ def test_navigation_architecture_permission_zoom_keep_evidence_screen_sized() ->
         assert "data-dashboard-map-screen-stroke=" in renderer
         assert 'vector-effect="non-scaling-stroke"' in renderer
     assert 'dashboardMapScreenSymbolTransform("architecture-map"' in architecture_map
+
+
+def test_dashboard_map_pan_preserves_evidence_clicks_until_dragging() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    handlers = "const onPointerDown =" + html.split(
+        "const onPointerDown =", 1
+    )[1].split("const finishPointer =", 1)[0]
+    program = """
+let pointerState = null;
+const viewState = {mode: "pan"};
+const captures = [];
+const viewport = {
+  dataset: {}, focus() {},
+  setPointerCapture(id) { captures.push(id); },
+  hasPointerCapture(id) { return captures.includes(id); },
+};
+const pointInViewport = event => ({x: event.clientX, y: event.clientY});
+const panBy = () => {};
+const updateSelection = () => {};
+const event = {button: 0, pointerId: 7, clientX: 0, clientY: 0,
+  target: {closest: () => null}, preventDefault() {}};
+""" + handlers + """
+onPointerDown(event);
+const afterDown = [...captures];
+onPointerMove({...event, clientX: 3});
+const afterSmallMove = [...captures];
+onPointerMove({...event, clientX: 18});
+const afterDrag = [...captures];
+viewState.mode = "box";
+onPointerDown({...event, pointerId: 8});
+process.stdout.write(JSON.stringify({afterDown, afterSmallMove, afterDrag, captures}));
+"""
+    result = subprocess.run(
+        ["node", "-e", program], capture_output=True, text=True, check=True
+    )
+    assert json.loads(result.stdout) == {
+        "afterDown": [],
+        "afterSmallMove": [],
+        "afterDrag": [7],
+        "captures": [7, 8],
+    }
 
 
 def test_dashboard_map_zoom_ceiling_uses_rudy_native_max_matrix() -> None:
@@ -5607,7 +5650,7 @@ def test_dashboard_joint_review_information_architecture_and_qa_contract() -> No
         "Request deletion review",
         "Preview Import",
         "Create Workspace",
-        "Clone creates a new target with one clean GPX import",
+        "Clone starts a saved preparation job",
         "33 canonical layers",
         "completed-track is after-action only",
         "Remaining Mission Projection",

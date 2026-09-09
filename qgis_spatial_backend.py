@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Protocol
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
 from uuid import uuid4
@@ -50,7 +50,7 @@ from qgis_spatial_contracts import (
     SpatialWorkflowStepStatus,
     qgis_candidate_boundary,
 )
-from qgis_worker_contracts import QgisWorkerRun
+from qgis_worker_contracts import QgisWorkerRun, QgisWorkerWorkflowRequest
 from route_matching import load_gpx_route
 from pretrip_source_ingest import wgs84_to_twd97
 from workspace_terrain_dem import (
@@ -634,8 +634,26 @@ class QgisSpatialBackend:
             status=status,
         )
 
-    def get_run(self, *, project_root: Path, workflow_run_id: str) -> SpatialWorkflowRun:
-        run = self._load_run(project_root=project_root, workflow_run_id=workflow_run_id)
+    def get_run(
+        self,
+        *,
+        project_root: Path,
+        workflow_run_id: str,
+        project_id: str | None = None,
+    ) -> SpatialWorkflowRun:
+        try:
+            run = self._load_run(
+                project_root=project_root,
+                workflow_run_id=workflow_run_id,
+            )
+        except QgisSpatialNotFound:
+            if project_id is None:
+                raise
+            run = self._recover_worker_run(
+                project_id=project_id,
+                project_root=project_root,
+                workflow_run_id=workflow_run_id,
+            )
         if (
             run.state in {SpatialWorkflowState.QUEUED, SpatialWorkflowState.RUNNING}
             and run.backend_run_id
@@ -643,6 +661,164 @@ class QgisSpatialBackend:
         ):
             return self._poll_worker_run(project_root=project_root, run=run)
         return run
+
+    def _recover_worker_run(
+        self,
+        *,
+        project_id: str,
+        project_root: Path,
+        workflow_run_id: str,
+    ) -> SpatialWorkflowRun:
+        _validate_safe_id(project_id, "project_id")
+        _validate_safe_id(workflow_run_id, "workflow_run_id")
+        if (
+            self.config.fixture_mode
+            or not self.config.enabled
+            or not self.config.worker_url
+            or not self.config.worker_token
+            or not workflow_run_id.startswith("qgis-worker-")
+        ):
+            raise QgisSpatialNotFound("QGIS spatial workflow run not found")
+        try:
+            worker_run = QgisWorkerRun.model_validate(
+                self.transport.get_json(
+                    urljoin(
+                        self.config.worker_url.rstrip("/") + "/",
+                        f"workflows/{workflow_run_id}",
+                    ),
+                    timeout_s=self.config.timeout_s,
+                )
+            )
+            worker_request = QgisWorkerWorkflowRequest.model_validate(
+                self.transport.get_json(
+                    urljoin(
+                        self.config.worker_url.rstrip("/") + "/",
+                        f"workflows/{workflow_run_id}/request",
+                    ),
+                    timeout_s=self.config.timeout_s,
+                )
+            )
+        except HTTPError as exc:
+            if exc.code == 404:
+                raise QgisSpatialNotFound(
+                    "QGIS spatial workflow run not found"
+                ) from exc
+            raise QgisSpatialBackendError(
+                "QGIS worker workflow recovery is temporarily unavailable"
+            ) from exc
+        except (TimeoutError, OSError, URLError) as exc:
+            raise QgisSpatialBackendError(
+                "QGIS worker workflow recovery is temporarily unavailable"
+            ) from exc
+        except (TypeError, ValueError, ValidationError, json.JSONDecodeError) as exc:
+            raise QgisSpatialBackendError(
+                "QGIS worker workflow recovery receipt failed validation"
+            ) from exc
+        if (
+            worker_run.worker_run_id != workflow_run_id
+            or worker_run.project_id != project_id
+            or worker_request.project_id != project_id
+            or worker_run.request_id != worker_request.request_id
+            or worker_run.workflow_id != worker_request.workflow_id
+            or worker_run.requested_by != worker_request.requested_by
+        ):
+            raise QgisSpatialBackendError(
+                "QGIS worker workflow recovery identity did not match the project request"
+            )
+        try:
+            project = _read_json(project_root / "project.json")
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            raise QgisSpatialBackendError(
+                "QGIS worker workflow recovery requires a valid project manifest"
+            ) from exc
+        if not isinstance(project, dict) or project.get("project_id") != project_id:
+            raise QgisSpatialBackendError(
+                "QGIS worker workflow recovery project identity did not match"
+            )
+        if (
+            not worker_request.source_refs
+            or set(worker_request.source_refs) != set(worker_request.source_hashes)
+            or any(
+                not re.fullmatch(r"[a-f0-9]{64}", value)
+                for value in worker_request.source_hashes.values()
+            )
+        ):
+            raise QgisSpatialBackendError(
+                "QGIS worker workflow recovery sources are not fully hash-bound"
+            )
+        if (
+            worker_request.workflow_id == TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_ID
+            and worker_request.terrain_route_cache_keys is None
+        ):
+            raise QgisSpatialBackendError(
+                "QGIS worker terrain route recovery omitted deterministic cache identity"
+            )
+        workflow_version = (
+            TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_VERSION
+            if worker_run.workflow_id == TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_ID
+            else TERRAIN_FEATURE_STACK_WORKFLOW_VERSION
+            if worker_run.workflow_id == TERRAIN_FEATURE_STACK_WORKFLOW_ID
+            else TERRAIN_CONTEXT_PREVIEW_WORKFLOW_VERSION
+        )
+        recovered = SpatialWorkflowRun(
+            project_id=project_id,
+            workflow_id=worker_run.workflow_id,
+            workflow_version=workflow_version,
+            workflow_run_id=worker_run.worker_run_id,
+            backend_run_id=worker_run.worker_run_id,
+            request_id=worker_run.request_id,
+            requested_by=worker_run.requested_by,
+            state=worker_run.state,
+            created_at=worker_run.created_at,
+            started_at=worker_run.started_at,
+            updated_at=worker_run.updated_at,
+            completed_at=worker_run.completed_at,
+            processing_status=worker_run.processing_status,
+            render_status=worker_run.render_status,
+            visual_review_status="pending",
+            human_review_status="pending",
+            steps=_public_worker_steps(worker_run.steps),
+            source_refs=worker_request.source_refs,
+            source_hashes=worker_request.source_hashes,
+            source_resolution=worker_request.source_resolution,
+            warnings=[
+                *worker_run.warnings,
+                (
+                    "Recovered an authenticated QGIS worker receipt after the "
+                    "workspace workflow wrapper was unavailable; all outputs remain "
+                    "candidate-only and pending review."
+                ),
+            ],
+            error=_public_worker_error(worker_run.error),
+            audit_trail=[
+                {
+                    "event": "worker_workflow_wrapper_recovered",
+                    "at": self._now_iso(),
+                    "request_id": worker_run.request_id,
+                    "backend_run_id": worker_run.worker_run_id,
+                    "recovery_source": "authenticated_worker_state_and_request",
+                },
+                *worker_run.audit_trail,
+            ],
+        )
+        if recovered.state in _TERMINAL_WORKFLOW_STATES:
+            recovered = self._normalize_worker_run(
+                project_root=project_root,
+                local_run=recovered,
+                worker_run=worker_run,
+            )
+        self._persist_run(project_root, recovered)
+        self._record_workspace_io(
+            project_id=project_id,
+            artifact_ref=(
+                f"{QGIS_WORKFLOW_ROOT_REF}/{workflow_run_id}/workflow_run.json"
+            ),
+            artifact_kind="qgis_spatial_workflow_run",
+            record_count=len(recovered.artifact_refs),
+            byte_count=len(_json_bytes(recovered.model_dump(mode="json"))),
+            summary="Recovered authenticated QGIS worker workflow wrapper",
+        )
+        return recovered
 
     def get_latest_run(
         self,

@@ -465,8 +465,41 @@ Productization Mode reports every required gate as `PASS`, `FAIL`, or
 `NOT APPLICABLE` with evidence. Do not claim production completion while a
 required productization gate fails.
 
-Do not commit, push, merge, publish, or open a PR unless the user explicitly
-requests it.
+After every completed change, create a corresponding Git commit using the
+applicable repository workflow so that it can be tracked and rolled back later.
+Do not push, merge, publish, or open a PR unless the user explicitly requests
+it.
+
+## Mac Git Workflow: Scout Commit Gateway
+
+This Mac checkout intentionally has no `.git` directory. The canonical Git
+repository is hosted on Scout:
+
+`alexwang0315@scout.local:/home/alexwang0315/git/scout-fusion.git`
+
+Do not run `git init`, `git add`, `git commit`, `git push`, or recreate `.git`
+inside the Mac checkout.
+
+To inspect pending changes, run:
+
+```bash
+/Users/alexwang0315/bin/scout-commit status
+```
+
+After every completed change, run:
+
+```bash
+/Users/alexwang0315/bin/scout-commit commit "descriptive commit message"
+```
+
+The gateway synchronizes the Mac project to Scout, creates the commit on Scout,
+and pushes it to the local Scout bare repository. It excludes `.git`,
+`artifacts`, `node_modules`, `reports`, `.env*`, virtual environments, caches,
+and `.DS_Store`.
+
+The commit command includes all eligible changed and untracked files as one
+snapshot. If selective file commits are required, stop and ask the user rather
+than recreating a local Git repository.
 
 ## Graphify
 

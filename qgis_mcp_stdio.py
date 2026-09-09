@@ -563,6 +563,9 @@ class QgisMcpClientConfig:
         if not 0.25 <= float(self.timeout_s) <= 300:
             raise ValueError("QGIS MCP timeout must be between 0.25 and 300 seconds")
 
+    def processing_temp_root(self) -> Path:
+        return self.run_root.expanduser().resolve(strict=False) / ".processing-tmp"
+
 
 class QgisMcpStdioClient:
     """Bounded stdio MCP client; it never invokes a shell or forwards arbitrary tools."""
@@ -1537,6 +1540,8 @@ class QgisMcpStdioClient:
             "HOME",
             "PATH",
             "TMPDIR",
+            "TMP",
+            "TEMP",
             "LANG",
             "LC_ALL",
             "GDAL_DATA",
@@ -1553,6 +1558,13 @@ class QgisMcpStdioClient:
             }
         )
         env.setdefault("PATH", os.defpath)
+        processing_temp_root = self.config.processing_temp_root()
+        processing_temp_root.mkdir(parents=True, exist_ok=True, mode=0o700)
+        processing_temp = str(processing_temp_root)
+        env["TMPDIR"] = processing_temp
+        env["TMP"] = processing_temp
+        env["TEMP"] = processing_temp
+        env["QGIS_PROCESSING_TEMP_FOLDER"] = processing_temp
         if self.config.pythonpath:
             env["PYTHONPATH"] = self.config.pythonpath
         return env

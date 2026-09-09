@@ -319,6 +319,67 @@ class _WorkerProcessingFailed(RuntimeError):
     pass
 
 
+_DEM_MOSAIC_QGIS_PROCESSOR = "qgis_processing_gdal_buildvirtualraster"
+_DEM_MOSAIC_NATIVE_PROCESSOR = "native_gdalbuildvrt"
+
+
+def _dem_mosaic_failure_detail(
+    cause: BaseException | str,
+    *,
+    source_count: int,
+    output_path: Path,
+) -> str:
+    cause_text = " ".join(str(cause).split())
+    if len(cause_text) > 1500:
+        cause_text = cause_text[-1500:]
+    return (
+        "QGIS DEM mosaic build failed during gdal:buildvirtualraster; "
+        f"source_count={source_count}; "
+        f"output={output_path.name}; "
+        f"cause={cause_text or 'unknown'}"
+    )
+
+
+def _dem_mosaic_processing_algorithms(
+    source_count: int,
+    actual_processor: str | None,
+) -> list[str]:
+    if source_count <= 1:
+        return []
+    if actual_processor == _DEM_MOSAIC_NATIVE_PROCESSOR:
+        return ["native:gdalbuildvrt"]
+    return ["gdal:buildvirtualraster"]
+
+
+def _is_qgis_dem_mosaic_temp_failure(cause: BaseException | str) -> bool:
+    text = str(cause).casefold()
+    return (
+        "buildvrtinputfiles.txt" in text
+        and (
+            "no such file or directory" in text
+            or "filenotfounderror" in text
+            or "feedback.traceback" in text
+        )
+    )
+
+
+def _bounded_process_text(value: str) -> str:
+    return " ".join(str(value or "").split())[-1500:]
+
+
+def _path_relative_to(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+def _path_contains_line_separator(path: Path) -> bool:
+    text = str(path)
+    return "\n" in text or "\r" in text
+
+
 class _WorkerCapabilityUnavailable(RuntimeError):
     pass
 
@@ -563,6 +624,11 @@ class QgisWorkerService:
 
     def get(self, worker_run_id: str) -> QgisWorkerRun:
         return QgisWorkerRun.model_validate(_read_json(self._run_path(worker_run_id)))
+
+    def request(self, worker_run_id: str) -> QgisWorkerWorkflowRequest:
+        return QgisWorkerWorkflowRequest.model_validate(
+            _read_json(self._run_root(worker_run_id) / "request.json")
+        )
 
     def cancel(self, worker_run_id: str, *, requested_by: str) -> QgisWorkerRun:
         run = self.get(worker_run_id)
@@ -813,6 +879,7 @@ class QgisWorkerService:
                 dem_normalized_source_count,
                 dem_normalization_resolution_m,
                 dem_analysis_extent,
+                dem_mosaic_actual_processor,
             ) = self._prepare_dem(
                 run.worker_run_id,
                 dem_refs,
@@ -1103,6 +1170,7 @@ class QgisWorkerService:
                 },
                 output_resolution={
                     "slope_raster": "QGIS Processing output; inspect artifact metadata",
+                    "analysis_extent": dem_analysis_extent,
                     "render_width_px": render_artifact.width_px,
                     "render_height_px": render_artifact.height_px,
                 },
@@ -1112,7 +1180,10 @@ class QgisWorkerService:
                         if dem_normalized_source_count
                         else []
                     ),
-                    *(["gdal:buildvirtualraster"] if len(dem_refs) > 1 else []),
+                    *_dem_mosaic_processing_algorithms(
+                        len(dem_refs),
+                        dem_mosaic_actual_processor,
+                    ),
                     "gdal:cliprasterbyextent",
                     "gdal:assignprojection",
                     "gdal:slope",
@@ -1694,6 +1765,7 @@ class QgisWorkerService:
                 dem_normalized_source_count,
                 dem_normalization_resolution_m,
                 dem_analysis_extent,
+                dem_mosaic_actual_processor,
             ) = self._prepare_dem(
                 run.worker_run_id,
                 dem_refs,
@@ -3049,7 +3121,20 @@ class QgisWorkerService:
             completed_at = self._now_iso()
             processing_algorithms = list(
                 dict.fromkeys(
-                    item["algorithm"] for item in processing_invocations
+                    [
+                        *(
+                            ["gdal:warpreproject"]
+                            if dem_normalized_source_count
+                            else []
+                        ),
+                        *_dem_mosaic_processing_algorithms(
+                            len(dem_refs),
+                            dem_mosaic_actual_processor,
+                        ),
+                        "gdal:cliprasterbyextent",
+                        "gdal:assignprojection",
+                        *(item["algorithm"] for item in processing_invocations),
+                    ]
                 )
             )
             result = QgisWorkerResult(
@@ -3607,6 +3692,7 @@ class QgisWorkerService:
                 dem_normalized_source_count,
                 dem_normalization_resolution_m,
                 dem_analysis_extent,
+                dem_mosaic_actual_processor,
             ) = self._prepare_dem(
                 run.worker_run_id,
                 dem_refs,
@@ -4435,7 +4521,10 @@ class QgisWorkerService:
                     if dem_normalized_source_count
                     else []
                 ),
-                *(["gdal:buildvirtualraster"] if len(dem_refs) > 1 else []),
+                *_dem_mosaic_processing_algorithms(
+                    len(dem_refs),
+                    dem_mosaic_actual_processor,
+                ),
                 "gdal:cliprasterbyextent",
                 "grass:r.slope.aspect",
                 "grass:r.relief",
@@ -5392,6 +5481,119 @@ class QgisWorkerService:
         _write_private_json(visual_context_path, visual_context_payload)
         return screenshot, render_bytes, slope_inspection
 
+    def _native_gdalbuildvrt_executable(self) -> Path:
+        configured = _env_str("SCOUT_GDALBUILDVRT_COMMAND")
+        candidates: list[str] = []
+        if configured:
+            candidates.append(configured)
+        discovered = shutil.which("gdalbuildvrt")
+        if discovered:
+            candidates.append(discovered)
+        candidates.append("/Applications/QGIS-LTR.app/Contents/MacOS/gdalbuildvrt")
+        for candidate in candidates:
+            candidate_path = (
+                Path(candidate).expanduser()
+                if Path(candidate).is_absolute()
+                else Path(shutil.which(candidate) or "")
+            )
+            if (
+                str(candidate_path)
+                and candidate_path.is_file()
+                and os.access(candidate_path, os.X_OK)
+                and candidate_path.name == "gdalbuildvrt"
+            ):
+                return candidate_path.resolve(strict=False)
+        raise _WorkerProcessingFailed(
+            "Native GDAL DEM mosaic fallback is unavailable: gdalbuildvrt not found"
+        )
+
+    def _build_dem_mosaic_with_native_gdal(
+        self,
+        worker_run_id: str,
+        prepared_refs: tuple[Path, ...],
+        vrt_path: Path,
+    ) -> None:
+        run_root = self._run_root(worker_run_id)
+        resolved_run_root = run_root.resolve(strict=False)
+        resolved_output = vrt_path.resolve(strict=False)
+        if not _path_relative_to(resolved_output, resolved_run_root):
+            raise _WorkerProcessingFailed(
+                "Native GDAL DEM mosaic output escaped the worker run root"
+            )
+        allowed_roots = (
+            resolved_run_root,
+            *(
+                root.expanduser().resolve(strict=False)
+                for root in self.config.source_roots
+            ),
+        )
+        resolved_inputs: list[Path] = []
+        for ref in prepared_refs:
+            resolved = ref.expanduser().resolve(strict=True)
+            if _path_contains_line_separator(resolved):
+                raise _WorkerProcessingFailed(
+                    "Native GDAL DEM mosaic input path contains a line separator"
+                )
+            if not any(_path_relative_to(resolved, root) for root in allowed_roots):
+                raise _WorkerProcessingFailed(
+                    "Native GDAL DEM mosaic input escaped bounded roots"
+                )
+            resolved_inputs.append(resolved)
+        input_list = run_root / "dem_mosaic_sources.txt"
+        input_list.write_text(
+            "\n".join(str(path) for path in resolved_inputs) + "\n",
+            encoding="utf-8",
+        )
+        os.chmod(input_list, 0o600)
+        executable = self._native_gdalbuildvrt_executable()
+        environment = {
+            "HOME": os.environ.get("HOME", str(Path.home())),
+            "PATH": os.environ.get("PATH", os.defpath),
+            "LANG": os.environ.get("LANG", "C"),
+            "LC_ALL": os.environ.get("LC_ALL", "C"),
+        }
+        for name in ("GDAL_DATA", "PROJ_LIB"):
+            if os.environ.get(name):
+                environment[name] = os.environ[name]
+        try:
+            completed = subprocess.run(
+                [
+                    str(executable),
+                    "-overwrite",
+                    "-resolution",
+                    "highest",
+                    "-r",
+                    "nearest",
+                    "-input_file_list",
+                    str(input_list),
+                    str(vrt_path),
+                ],
+                capture_output=True,
+                check=False,
+                env=environment,
+                shell=False,
+                text=True,
+                timeout=min(self.config.timeout_s, 300.0),
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise _WorkerProcessingFailed(
+                "Native GDAL DEM mosaic fallback timed out"
+            ) from exc
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise _WorkerProcessingFailed(
+                f"Native GDAL DEM mosaic fallback could not run: {exc}"
+            ) from exc
+        if completed.returncode != 0:
+            raise _WorkerProcessingFailed(
+                "Native GDAL DEM mosaic fallback failed; "
+                f"returncode={completed.returncode}; "
+                f"stderr={_bounded_process_text(completed.stderr)}"
+            )
+        if not vrt_path.is_file():
+            raise _WorkerProcessingFailed(
+                "Native GDAL DEM mosaic fallback did not create dem_mosaic.vrt"
+            )
+
     def _prepare_dem(
         self,
         worker_run_id: str,
@@ -5400,7 +5602,7 @@ class QgisWorkerService:
         route_extent: Any,
         corridor_m: float,
         cancel_event: threading.Event,
-    ) -> tuple[Path, int, float, dict[str, Any]]:
+    ) -> tuple[Path, int, float, dict[str, Any], str | None]:
         normalized_refs: list[Path] = []
         normalization_resolution_m: float | None = None
         normalized_source_count = 0
@@ -5453,6 +5655,7 @@ class QgisWorkerService:
             normalized_source_count += 1
 
         prepared_refs = tuple(normalized_refs)
+        dem_mosaic_actual_processor: str | None = None
         if len(prepared_refs) == 1:
             prepared_source = prepared_refs[0]
         else:
@@ -5478,9 +5681,42 @@ class QgisWorkerService:
                     "allow_main_thread": False,
                 },
             )
-            self._poll_operation(worker_run_id, _operation_id(operation), cancel_event)
+            try:
+                self._poll_operation(worker_run_id, _operation_id(operation), cancel_event)
+            except _WorkerProcessingFailed as exc:
+                if not _is_qgis_dem_mosaic_temp_failure(exc):
+                    raise _WorkerProcessingFailed(
+                        _dem_mosaic_failure_detail(
+                            exc,
+                            source_count=len(prepared_refs),
+                            output_path=vrt_path,
+                        )
+                    ) from exc
+                try:
+                    self._build_dem_mosaic_with_native_gdal(
+                        worker_run_id,
+                        prepared_refs,
+                        vrt_path,
+                    )
+                except _WorkerProcessingFailed as fallback_exc:
+                    raise _WorkerProcessingFailed(
+                        _dem_mosaic_failure_detail(
+                            f"{exc}; native_fallback={fallback_exc}",
+                            source_count=len(prepared_refs),
+                            output_path=vrt_path,
+                        )
+                    ) from fallback_exc
+                dem_mosaic_actual_processor = _DEM_MOSAIC_NATIVE_PROCESSOR
+            else:
+                dem_mosaic_actual_processor = _DEM_MOSAIC_QGIS_PROCESSOR
             if not vrt_path.is_file():
-                raise _WorkerProcessingFailed("QGIS DEM mosaic output file was not created")
+                raise _WorkerProcessingFailed(
+                    _dem_mosaic_failure_detail(
+                        "QGIS DEM mosaic output file was not created",
+                        source_count=len(prepared_refs),
+                        output_path=vrt_path,
+                    )
+                )
             prepared_source = vrt_path
 
         resolution_m = normalization_resolution_m or _square_source_resolution(
@@ -5491,6 +5727,21 @@ class QgisWorkerService:
             corridor_m=corridor_m,
             resolution_m=resolution_m,
         )
+        if dem_mosaic_actual_processor is not None:
+            analysis_extent = {
+                **analysis_extent,
+                "dem_mosaic": {
+                    "actual_processor": dem_mosaic_actual_processor,
+                    "fallback_used": (
+                        dem_mosaic_actual_processor == _DEM_MOSAIC_NATIVE_PROCESSOR
+                    ),
+                    "source_count": len(prepared_refs),
+                    "output": "dem_mosaic.vrt",
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                    "operational": False,
+                },
+            }
         clipped_path = self._run_root(worker_run_id) / "dem_route_bbox.tif"
         operation = self._call(
             "qgis_processing_start",
@@ -5530,6 +5781,7 @@ class QgisWorkerService:
             normalized_source_count,
             resolution_m,
             analysis_extent,
+            dem_mosaic_actual_processor,
         )
 
     def _poll_operation(
@@ -5862,6 +6114,24 @@ def create_qgis_worker_app(
         return JSONResponse(
             content=run.model_dump(mode="json"),
             headers={"Cache-Control": "no-store", "X-Scout-Runtime-Safety-Truth": "false"},
+        )
+
+    @app.get(
+        "/workflows/{worker_run_id}/request",
+        dependencies=[Depends(authorize)],
+    )
+    def workflow_request(worker_run_id: str) -> JSONResponse:
+        try:
+            request = service.request(worker_run_id)
+        except (FileNotFoundError, ValueError, ValidationError, json.JSONDecodeError) as exc:
+            raise HTTPException(status_code=404, detail="QGIS worker request not found") from exc
+        return JSONResponse(
+            content=request.model_dump(mode="json"),
+            headers={
+                "Cache-Control": "no-store",
+                "X-Scout-Candidate-Only": "true",
+                "X-Scout-Runtime-Safety-Truth": "false",
+            },
         )
 
     @app.post("/workflows/{worker_run_id}/cancel", dependencies=[Depends(authorize)])

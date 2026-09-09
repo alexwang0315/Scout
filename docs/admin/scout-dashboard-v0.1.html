@@ -1161,6 +1161,7 @@
     .route-briefing-inline-document {
       border-top: 1px solid var(--line);
       background: #071014;
+      overflow-anchor: none;
     }
 
     .route-briefing-frame {
@@ -7008,6 +7009,8 @@
       .architecture-map-canvas,
       .architecture-map-canvas svg { min-height: 390px; }
       .architecture-map-surface { min-height: 390px; }
+      .architecture-map-heading { flex-wrap: wrap; }
+      .architecture-map-heading > div { min-width: 0; }
       .architecture-map-legend-scale { grid-template-columns: 1fr 1fr; }
       .route-architecture-shell[data-mobile-view="segment"] .architecture-segment-inspector {
         position: sticky;
@@ -12087,6 +12090,7 @@
     const ROUTE_CONTEXT_REGENERATION_TIMEOUT_MS = null;
     const NAVIGATION_TERRAIN_FETCH_TIMEOUT_MS = 60000;
     const QGIS_SPATIAL_FETCH_TIMEOUT_MS = 45000;
+    const QGIS_SPATIAL_WORKFLOW_TIMEOUT_MS = 180000;
     const TERRAIN_GUIDANCE_FETCH_TIMEOUT_MS = 240000;
     const QGIS_NAVIGATION_PRIMARY_WORKFLOW_ID = "terrain_feature_stack.v1";
     const QGIS_TERRAIN_ROUTE_WORKFLOW_ID = "terrain_route_hypothesis.v1";
@@ -12096,7 +12100,6 @@
     const NAVIGATION_TERRAIN_EVENT_LOCATION_CLUSTER_M = 30;
     const NAVIGATION_TERRAIN_EVENT_FOCUS_MAX_ATTEMPTS = 30;
     const PRETRIP_PROJECT_FETCH_TIMEOUT_MS = 180000;
-    const WORKSPACE_CLONE_TIMEOUT_MS = 7200000;
     const MAP_EVIDENCE_FOCUS_MAX_ATTEMPTS = 45;
     const BODY_INDEX_FETCH_TIMEOUT_MS = 180000;
     const BODY_INDEX_STATUS_PATH = "/admin/dashboard/body-index";
@@ -12789,6 +12792,9 @@
       permissionBaselineMapContext: null,
       permissionBaselineMapStatus: "idle",
       permissionBaselineSavedCandidate: null,
+      permissionBaselineCandidates: [],
+      permissionBaselineCandidateRef: "",
+      permissionBaselineCatalogStatus: "idle",
       permissionBaselinePatchText: "",
       permissionBaselinePatchPreview: null,
       permissionBaselinePendingAction: null,
@@ -13004,10 +13010,10 @@
         allowNetworkFetch: true,
         aiMode: "fixture-or-precomputed",
         aiOutputPolicy: "hash-and-summary",
-        imageryMinZoom: "12",
-        imageryMaxZoom: "17",
-        seedImageryCache: false,
-        imageryProviderAllowsOfflinePrefetch: false,
+        imageryMinZoom: "5",
+        imageryMaxZoom: "14",
+        seedImageryCache: true,
+        imageryProviderAllowsOfflinePrefetch: true,
         imagerySeedMaxTiles: "",
         imageryCacheFallbackProjectIds: "",
         osmPbfPath: "",
@@ -13023,12 +13029,23 @@
       },
       importTripPreview: null,
       importTripResult: null,
+      preparationJobs: [],
+      preparationJobsError: null,
       layerEnabled: {
         ...Object.fromEntries(SCOUT_LAYER_IDS.map((layerId) => [layerId, layerId !== "osm"])),
         "historical-map": false,
         ...WEATHER_LAYER_DEFAULTS,
       },
     };
+
+    try {
+      const savedIntake = JSON.parse(localStorage.getItem("scout.dashboardImportDraft.v1") || "null");
+      if (savedIntake && typeof savedIntake === "object" && !Array.isArray(savedIntake)) {
+        state.importTripDraft = {...state.importTripDraft, ...savedIntake, overwrite: false};
+      }
+    } catch { /* Invalid local drafts never restore validation or approval. */ }
+    let preparationJobsPollTimer = null;
+    let preparationJobsLoading = false;
 
     const routeMeta = {
       home: ["Home", "Scout Dashboard v0.1 alpha overview"],
@@ -14021,6 +14038,7 @@
         await loadPermissionBaselineMapContext(
           resolvedPretripProjectId(),
         );
+        await loadPermissionBaselineCandidates(resolvedPretripProjectId());
         if (projection?.daily_review?.mission_day_instance_id) {
           state.permissionReviewSession = await fetchJson(
             permissionDailyReviewPath(
@@ -15685,7 +15703,7 @@
             operational: false,
             safe_or_walkable: "not_determined",
           },
-          {timeoutMs: QGIS_SPATIAL_FETCH_TIMEOUT_MS},
+          {timeoutMs: QGIS_SPATIAL_WORKFLOW_TIMEOUT_MS},
         );
         state.qgisSpatialWorkflow = run;
         rememberQgisSpatialWorkflow(run);
@@ -15842,7 +15860,7 @@
       const expectedApiBase = apiBase();
       const run = await fetchJson(
         `${qgisSpatialBasePath()}/workflows/${encodeURIComponent(workflowRunId)}`,
-        {timeoutMs: QGIS_SPATIAL_FETCH_TIMEOUT_MS},
+        {timeoutMs: QGIS_SPATIAL_WORKFLOW_TIMEOUT_MS},
       );
       if (projectId() !== expectedProjectId || apiBase() !== expectedApiBase) return null;
       state.qgisSpatialWorkflow = run;
@@ -17654,6 +17672,7 @@
         || "pending status read";
       const startupRecovery = state.connectedPreparation?.startupRecovery || "none";
       return `
+        ${renderPreparationJobsPanel()}
         <section class="panel workspace-command-panel" data-workspace-operations="true">
           <div class="panel-header">
             <h3>Workspace Operations</h3>
@@ -17690,7 +17709,7 @@
                 <button type="button" id="workspaceSwitchProject">Open workspace</button>
               </div>
               <p class="workspace-status" id="workspaceOperationStatus">
-                Clone creates a new target with one clean GPX import followed by the full map preparation defaults, and refuses to overwrite an existing target. Transfer, Package, Restore and Delete review remain append-only requests. ${requestCount} request${requestCount === 1 ? "" : "s"} recorded${latestRequest ? `; latest ${escapeHtml(latestRequest.operation)} · ${escapeHtml(latestRequest.request_id)}` : ""}. Delete requires an explicit destructive approval outside this dashboard.
+                Clone starts a saved preparation job: GPX import, map preparation, then Permission authoring initialization. Follow its stages above, reopen it after reload, or resume a failed stage. Existing targets are never overwritten. Transfer, Package, Restore and Delete review remain append-only requests. ${requestCount} request${requestCount === 1 ? "" : "s"} recorded${latestRequest ? `; latest ${escapeHtml(latestRequest.operation)} · ${escapeHtml(latestRequest.request_id)}` : ""}. Delete requires an explicit destructive approval outside this dashboard.
               </p>
               <p class="workspace-status">
                 Dashboard startup and status GETs read cached evidence only and never schedule a writer. The current published snapshot stays readable while refresh is running; a validated generation replaces it only after completion. After an explicit “Refresh evidence” or Scout AI weather refresh, the server may continue every ${refreshIntervalMinutes} min; next ${escapeHtml(nextScheduledRefresh)}; last ${escapeHtml(lastConnectedRefresh)}. Cross-process lock: ${escapeHtml(crossProcessLock)}; Recovery journal: ${escapeHtml(recoveryJournalStatus)}; startup recovery: ${escapeHtml(startupRecovery)}. CWA, GEE and Overpass stay refreshable without replacing the full prepared-layer manifest; geology stays a runtime provider and is not frozen into the import snapshot.
@@ -17907,6 +17926,7 @@
       const targetName = draft.targetName || draft.targetWorkspace || importTripProjectId(tripId);
       const derivedProjectRoot = importTripProjectRoot(workspaceRoot, targetName);
       return `
+        ${renderPreparationJobsPanel()}
         <section class="panel" data-import-new-trip="true">
           <div class="panel-header">
             <h3>Import New Trip</h3>
@@ -17955,7 +17975,7 @@
                 </div>
                 <div class="import-context-path">
                   <span>Project root</span>
-                  <strong>${escapeHtml(derivedProjectRoot)}</strong>
+                  <strong id="importDerivedProjectRoot">${escapeHtml(derivedProjectRoot)}</strong>
                 </div>
                 <div class="import-context-path">
                   <span>Pretrip source</span>
@@ -17968,7 +17988,7 @@
               </div>
             </div>
             <p class="workspace-status" id="importTripStatus">
-              Provide a trip id and Golden route GPX path, validate it, preview the exact import, then explicitly create the workspace. Preview is read-only; Create Workspace writes only inside the server-resolved workspace root.
+              Validate the Golden GPX and preview the import, then Create Workspace to start import, map preparation using the selected network settings, and Permission authoring initialization. The saved job remains available after reload. Historical candidates still require review.
             </p>
           </div>
         </section>
@@ -17999,8 +18019,8 @@
                 <div class="import-trip-controls-grid">
                   ${renderImportTextareaField("importReferenceGpxSources", "Reference GPX directory or paths", draft.referenceGpxSources || "", "/path/to/reference_tracks\n/path/a.gpx, /path/b.gpx")}
                   ${renderImportTextField("importTemplateProjectRoot", "Template project root", draft.templateProjectRoot || "", "/path/to/template/project")}
-                  ${renderImportTextField("importMaterialRoot", "Material root", draft.materialRoot || defaults.materialRoot || "", defaults.materialRoot || "/data/scout/materials/pretrip/new_trip")}
-                  ${renderImportTextField("importDtmDirs", "DTM directories", draft.dtmDirs || defaults.dtmDirs || "", defaults.dtmDirs || "/path/to/dtm_a, /path/to/dtm_b")}
+                  ${renderImportTextField("importMaterialRoot", "Material root", draft.materialRoot ?? "", defaults.materialRoot || "/path/to/raw/materials")}
+                  ${renderImportTextareaField("importDtmDirs", "DTM directories", draft.dtmDirs ?? "", "/path/to/dtm_a, /path/to/dtm_b")}
                   ${renderImportTextField("importMcpNamedPointEvidence", "MCP named-point evidence", draft.mcpNamedPointEvidence || "", "/path/to/named_point_evidence.json")}
                   ${renderImportTextField("importProfile", "Import profile", draft.importProfile || defaults.importProfile || "pi-offline", defaults.importProfile || "pi-offline")}
                   ${renderImportTextField("importStage", "Import stage", draft.importStage || "pretrip", "pretrip")}
@@ -18009,7 +18029,7 @@
                   ${renderImportNumberField("importMaxReasonableGpxSpeedKmh", "Max reasonable GPX speed (km/h)", draft.maxReasonableGpxSpeedKmh || "120")}
                   ${renderImportNumberField("importMaxPreviousGpxSpeedRatio", "Max previous speed ratio", draft.maxPreviousGpxSpeedRatio || "8")}
                 </div>
-                ${renderImportCheckbox("importOverwriteWorkspace", "Overwrite existing project workspace", Boolean(draft.overwrite))}
+                <p class="workspace-status">Existing targets are preserved. Use Resume in Preparation Jobs to continue a saved job.</p>
               </div>
               <div class="optional-parameter-group" data-map-preparation-parameters="true">
                 <h4>Map Preparation Defaults</h4>
@@ -18110,15 +18130,16 @@
       const steps = [
         ["01", "Select GPX", "operator chooses local GPX or trip folder"],
         ["02", "Normalize Route", "route id and points are validated"],
-        ["03", "Create Workspace", "project shell is prepared by admin tooling"],
-        ["04", "Prepare Layers", "32-layer contract, terrain and evidence refs"],
-        ["05", "Open Workspace", "dashboard points at the new project id"],
+        ["03", "Create Workspace", "import progress is saved in a preparation job"],
+        ["04", "Prepare Maps", "terrain and evidence preparation uses the declared sources"],
+        ["05", "Initialize Permission", "create the review workspace with source references"],
+        ["06", "Open Workspace", "inspect preparation results and review the Golden route"],
       ];
       return `
         <section class="panel" data-import-trip-pipeline="true">
           <div class="panel-header">
             <h3>Import Pipeline</h3>
-            <span class="chip info">manual alpha path</span>
+            <span class="chip info">tracked preparation</span>
           </div>
           <div class="panel-body">
             <div class="import-trip-pipeline">
@@ -23390,7 +23411,7 @@
     function permissionBaselineReviewComplete() {
       const draft = state.permissionBaselineDraft;
       const saved = state.permissionBaselineSavedCandidate;
-      if (!draft || draft.proposal_profile !== "ref_gpx_proposal_v1" || !saved?.version_sha256) return false;
+      if (!draft || draft.proposal_profile !== "ref_gpx_proposal_v1" || !saved?.version_sha256 || saved.review_ready !== true) return false;
       const requirements = permissionBaselineReviewRequirements(draft);
       const checks = state.permissionBaselineReviewChecks || {};
       if (checks.candidateSha256 !== saved.version_sha256) return false;
@@ -23939,7 +23960,7 @@
       const saved = state.permissionBaselineSavedCandidate;
       const requirements = permissionBaselineReviewRequirements(draft);
       const checks = state.permissionBaselineReviewChecks || {};
-      const candidateCurrent = Boolean(saved?.version_sha256) && checks.candidateSha256 === saved.version_sha256;
+      const candidateCurrent = Boolean(saved?.version_sha256) && saved.review_ready === true && checks.candidateSha256 === saved.version_sha256;
       const disabled = candidateCurrent ? "" : "disabled";
       return `
         <section class="permission-review-panel" data-permission-quick-review="true">
@@ -23947,7 +23968,7 @@
           <label class="permission-review-control ${candidateCurrent ? "" : "is-disabled"}"><input type="checkbox" data-permission-review-check="dayEnds" ${checks.dayEnds && candidateCurrent ? "checked" : ""} ${disabled}><span>${isReferenceReplay ? "I adopt the reference trip’s recorded daily starts, endpoints, route and time windows shown in this immutable candidate." : "I confirm the exact day-end target shown for every day in this immutable candidate."}<small>${requirements.dayIds.length} exact day ID${requirements.dayIds.length === 1 ? "" : "s"} will be enumerated in the receipt.</small></span></label>
           ${requirements.uncertaintyIds.length ? `<label class="permission-review-control ${candidateCurrent ? "" : "is-disabled"}"><input type="checkbox" data-permission-review-check="timingUncertainty" ${checks.timingUncertainty && candidateCurrent ? "checked" : ""} ${disabled}><span>${isReferenceReplay ? "I acknowledge every disclosed recording gap and uncertainty. Stationary clusters are inferred stops; missing CP clocks and unrecorded movement remain unknown." : "I acknowledge every listed timing uncertainty. Supported subtotals are not whole-day ETAs, and no missing duration was inferred."}<small>${requirements.uncertaintyIds.length} exact uncertainty ID${requirements.uncertaintyIds.length === 1 ? "" : "s"}.</small></span></label>` : ""}
           ${requirements.handoffRequired ? `<label class="permission-review-control ${candidateCurrent ? "" : "is-disabled"}"><input type="checkbox" data-permission-review-check="safetyHandoff" ${checks.safetyHandoff && candidateCurrent ? "checked" : ""} ${disabled}><span>I acknowledge that the listed retreat, emergency-bivy and route-reversal items remain pending separate Safety / Emergency review. This does not approve them.<small>${requirements.handoffIds.length} exact handoff item${requirements.handoffIds.length === 1 ? "" : "s"}.</small></span></label>` : ""}
-          <p class="emergency-review-status">${candidateCurrent ? (permissionBaselineReviewComplete() ? "Review complete for this candidate hash · open the final acceptance sheet." : "Complete the required checks for this exact saved candidate.") : "Save the current candidate version first. Review controls are hash-bound and reset after every change."}</p>
+          <p class="emergency-review-status">${candidateCurrent ? (permissionBaselineReviewComplete() ? "Review complete for this candidate hash · open the final acceptance sheet." : "Complete the required checks for this exact saved candidate.") : saved?.version_sha256 && saved.review_ready !== true ? "This saved version is not ready for review. Inspect its source status and regenerate from current sources." : "Save the current candidate version first. Review controls are hash-bound and reset after every change."}</p>
         </section>
       `;
     }
@@ -23960,6 +23981,20 @@
             <span class="chip info">Immutable versions</span>
           </div>
           <div class="permission-card-body">
+            <div class="permission-authoring-toolbar" data-permission-saved-versions="true">
+              <div class="permission-authoring-source">
+                <label class="permission-eyebrow" for="permissionSavedCandidate">Saved candidate versions</label>
+                <select id="permissionSavedCandidate" data-permission-saved-candidate="true" ${state.permissionBaselineCandidates.length ? "" : "disabled"}>
+                  <option value="">Select a saved version</option>
+                  ${state.permissionBaselineCandidates.map(item => `<option value="${escapeHtml(item.version_ref)}" ${state.permissionBaselineCandidateRef === item.version_ref ? "selected" : ""}>${escapeHtml(item.version_id)} · ${escapeHtml(item.status)}${item.accepted ? " · accepted" : ""}</option>`).join("")}
+                </select>
+                <p class="emergency-review-status">${escapeHtml(state.permissionBaselineCatalogStatus === "ready" ? `${state.permissionBaselineCandidates.length} saved versions. Restore to inspect; review checks must be completed for the selected hash.` : state.permissionBaselineCatalogStatus)}</p>
+              </div>
+              <div class="permission-authoring-actions">
+                <button type="button" class="permission-button" data-permission-candidates-refresh="true">Refresh saved versions</button>
+                <button type="button" class="permission-button" data-permission-candidate-restore="true" ${state.permissionBaselineCandidateRef && !state.permissionBaselineBusy ? "" : "disabled"}>Restore saved candidate</button>
+              </div>
+            </div>
             <div class="permission-authoring-tabs" role="tablist" aria-label="Baseline authoring mode">
               <button type="button" role="tab" aria-selected="${state.permissionBaselineMode === "human_text"}" class="${state.permissionBaselineMode === "human_text" ? "is-active" : ""}" data-permission-baseline-mode="human_text">Human Design</button>
               <button type="button" role="tab" aria-selected="${state.permissionBaselineMode === "reference_gpx"}" class="${state.permissionBaselineMode === "reference_gpx" ? "is-active" : ""}" data-permission-baseline-mode="reference_gpx">Generate from Ref. GPX</button>
@@ -23991,7 +24026,7 @@
               <section class="permission-patch-panel" data-permission-baseline-patch-panel="true">
                 <div class="permission-detail-list">
                   <div class="permission-detail-row"><span>Current immutable candidate</span><strong>${escapeHtml(state.permissionBaselineSavedCandidate.version_id || "candidate")}<br>${escapeHtml(String(state.permissionBaselineSavedCandidate.version_sha256 || "").slice(0, 16))}</strong></div>
-                  <div class="permission-detail-row"><span>Review readiness</span><strong>${state.permissionBaselineSavedCandidate.review_ready ? "ready for explicit review" : `${escapeHtml(state.permissionBaselineSavedCandidate.validation_state || "needs_review")} · ${asArray(state.permissionBaselineSavedCandidate.unresolved_gaps).length} gap`}</strong></div>
+                  <div class="permission-detail-row"><span>Review readiness</span><strong>${state.permissionBaselineSavedCandidate.review_ready === true ? "ready for explicit review" : `not ready for review · ${escapeHtml(state.permissionBaselineSavedCandidate.validation_state || "needs_review")} · ${asArray(state.permissionBaselineSavedCandidate.unresolved_gaps).length} gap`}</strong></div>
                 </div>
                 <label class="permission-eyebrow" for="permissionBaselinePatchText">Scout conversation correction</label>
                 <textarea id="permissionBaselinePatchText" data-permission-baseline-patch-text="true" maxlength="2000" placeholder="Describe one bounded correction or assumption. Scout previews a child-version patch; it never edits the candidate in place.">${escapeHtml(state.permissionBaselinePatchText || "")}</textarea>
@@ -34441,7 +34476,7 @@
         };
         viewport.dataset.mapDragging = "true";
         viewport.focus({preventScroll: true});
-        viewport.setPointerCapture?.(event.pointerId);
+        if (pointerState.kind === "box") viewport.setPointerCapture?.(event.pointerId);
       };
 
       const onPointerMove = (event) => {
@@ -34450,6 +34485,10 @@
         const moved = pointerState.moved
           || Math.abs(point.x - pointerState.startX) > 6
           || Math.abs(point.y - pointerState.startY) > 6;
+        // Capture pans only once dragging starts, preserving clicks on map evidence.
+        if (moved && !viewport.hasPointerCapture?.(event.pointerId)) {
+          viewport.setPointerCapture?.(event.pointerId);
+        }
         if (pointerState.kind === "pan") {
           const dx = event.clientX - pointerState.previousClientX;
           const dy = event.clientY - pointerState.previousClientY;
@@ -37539,6 +37578,59 @@
       }
     }
 
+    async function loadPermissionBaselineCandidates(candidateProjectId) {
+      state.permissionBaselineCatalogStatus = "Loading saved versions…";
+      try {
+        const result = await fetchJson(`/admin/pretrip/projects/${encodeURIComponent(candidateProjectId)}/mission-baseline/candidates`, {cache: "no-store"});
+        if (candidateProjectId !== resolvedPretripProjectId()) return;
+        if (result.project_id !== candidateProjectId) throw new Error("Saved versions belong to a different workspace");
+        state.permissionBaselineCandidates = asArray(result.candidates);
+        if (!state.permissionBaselineCandidates.some(item => item.version_ref === state.permissionBaselineCandidateRef)) state.permissionBaselineCandidateRef = "";
+        state.permissionBaselineCatalogStatus = "ready";
+      } catch (error) {
+        if (candidateProjectId !== resolvedPretripProjectId()) return;
+        state.permissionBaselineCandidates = [];
+        state.permissionBaselineCandidateRef = "";
+        state.permissionBaselineCatalogStatus = `Saved versions unavailable · ${String(error?.message || error)}`;
+      }
+    }
+
+    async function restorePermissionBaselineCandidate() {
+      if (state.permissionBaselineBusy || !state.permissionBaselineCandidateRef) return;
+      const candidateProjectId = resolvedPretripProjectId();
+      const candidateRef = state.permissionBaselineCandidateRef;
+      state.permissionBaselineBusy = true;
+      state.permissionBaselineDraft = null;
+      state.permissionBaselineSavedCandidate = null;
+      state.permissionBaselinePendingAction = null;
+      resetPermissionBaselineReviewChecks();
+      state.permissionBaselineStatus = "Reading the saved version and checking its source bindings…";
+      render();
+      try {
+        const result = await fetchJson(`/admin/pretrip/projects/${encodeURIComponent(candidateProjectId)}/mission-baseline/candidates/detail?candidate_ref=${encodeURIComponent(candidateRef)}`, {cache: "no-store"});
+        if (candidateProjectId !== resolvedPretripProjectId()) return;
+        if (result.project_id !== candidateProjectId) throw new Error("Saved candidate belongs to a different workspace");
+        if (!result.draft || !result.saved_candidate || result.saved_candidate.version_ref !== candidateRef) throw new Error("Saved candidate identity could not be verified");
+        state.permissionBaselineDraft = result.draft;
+        state.permissionBaselineSavedCandidate = {...result.saved_candidate, review_ready: result.status === "current" && result.saved_candidate.review_ready === true};
+        state.permissionBaselineMode = result.draft.source_mode;
+        if (result.draft.source_mode === "human_text") state.permissionBaselineText = result.draft.source_text || "";
+        state.permissionBaselinePendingAction = null;
+        state.permissionBaselinePatchPreview = null;
+        state.permissionBaselinePatchText = "";
+        resetPermissionBaselineReviewChecks(result.saved_candidate.version_sha256 || "");
+        if (result.draft.proposal_profile === "ref_gpx_proposal_v1") await loadPermissionBaselineMapContext(candidateProjectId);
+        state.permissionBaselineStatus = result.status === "current"
+          ? `Restored ${result.saved_candidate.version_id} · no write · review checks reset for this candidate hash.`
+          : `Restored for inspection · ${result.reason || result.status} · regenerate from current sources before acceptance.`;
+      } catch (error) {
+        state.permissionBaselineStatus = `Restore failed closed · ${String(error?.message || error)}`;
+      } finally {
+        state.permissionBaselineBusy = false;
+        if (state.route === "outdoor-permission") render();
+      }
+    }
+
     async function previewPermissionBaseline(generateDraft = false) {
       state.permissionBaselineStatus = generateDraft
         ? "Generating a typed, no-write baseline draft…"
@@ -37615,11 +37707,31 @@
       }
     }
 
+    async function postPermissionBaselineCommand(candidateProjectId, pending, path, payload) {
+      pending.submitted = true;
+      const {idempotency_key: previousKey, ...content} = payload;
+      const commandHash = await sha256Hex(JSON.stringify({project_id: candidateProjectId, kind: pending.kind, payload: content}));
+      pending.idempotencyKey = `dashboard-baseline-${pending.kind}-${commandHash}`;
+      return postJson(path, {...content, idempotency_key: pending.idempotencyKey}, {timeoutMs: null});
+    }
+
+    function closePermissionBaselineConfirmation() {
+      const submitted = state.permissionBaselinePendingAction?.submitted === true;
+      state.permissionBaselinePendingAction = null;
+      state.permissionBaselineStatus = submitted
+        ? "Confirmation closed. The submitted command may still complete; inspect saved versions and projection status."
+        : "Baseline write cancelled before submission · no command sent.";
+      render();
+    }
+
     async function submitPermissionBaselineWrite() {
       const pending = state.permissionBaselinePendingAction;
       const draft = state.permissionBaselineDraft;
       const saved = state.permissionBaselineSavedCandidate;
       if (!pending || state.permissionBaselineBusy) return;
+      const candidateProjectId = resolvedPretripProjectId();
+      const expectedRebuildSha = state.permissionProjection?.rebuild?.reviewed_baseline_sha256;
+      let writeReceipt = null;
       state.permissionBaselineBusy = true;
       state.permissionBaselineStatus = pending.kind === "save"
         ? "Creating a new immutable candidate version…"
@@ -37630,10 +37742,9 @@
             : "Revalidating and appending the reviewed-baseline receipt…";
       render();
       try {
-        const candidateProjectId = resolvedPretripProjectId();
         if (pending.kind === "save") {
           if (!draft) throw new Error("Typed draft is no longer available");
-          const result = await postJson(
+          const result = await postPermissionBaselineCommand(candidateProjectId, pending,
             `/admin/pretrip/projects/${encodeURIComponent(candidateProjectId)}/mission-baseline/candidates`,
             {
               draft,
@@ -37642,7 +37753,11 @@
               explicit_confirmation: true,
             },
           );
+          writeReceipt = result;
+          if (candidateProjectId !== resolvedPretripProjectId()) return;
           state.permissionBaselineSavedCandidate = result;
+          state.permissionBaselineCandidateRef = result.version_ref;
+          await loadPermissionBaselineCandidates(candidateProjectId);
           resetPermissionBaselineReviewChecks(result.version_sha256 || "");
           state.permissionBaselinePatchText = "";
           state.permissionBaselinePatchPreview = null;
@@ -37650,7 +37765,7 @@
         } else if (pending.kind === "save_patch") {
           const patch = state.permissionBaselinePatchPreview;
           if (!patch || !saved) throw new Error("Patch preview is no longer current");
-          const result = await postJson(
+          const result = await postPermissionBaselineCommand(candidateProjectId, pending,
             `/admin/pretrip/projects/${encodeURIComponent(candidateProjectId)}/mission-baseline/candidates/from-patch`,
             {
               patch,
@@ -37659,7 +37774,11 @@
               explicit_confirmation: true,
             },
           );
+          writeReceipt = result;
+          if (candidateProjectId !== resolvedPretripProjectId()) return;
           state.permissionBaselineSavedCandidate = result;
+          state.permissionBaselineCandidateRef = result.version_ref;
+          await loadPermissionBaselineCandidates(candidateProjectId);
           state.permissionBaselineDraft = patch.draft;
           resetPermissionBaselineReviewChecks(result.version_sha256 || "");
           state.permissionBaselinePatchPreview = null;
@@ -37671,7 +37790,7 @@
           if (!rebuild.canonical_snapshot_sha256 || !rebuild.evaluator_version) {
             throw new Error("Projection rebuild admission snapshot is unavailable");
           }
-          const result = await postJson(
+          const result = await postPermissionBaselineCommand(candidateProjectId, pending,
             `/admin/pretrip/projects/${encodeURIComponent(candidateProjectId)}/contextual-permission-dashboard/rebuilds`,
             {
               expected_reviewed_baseline_sha256: rebuild.reviewed_baseline_sha256,
@@ -37681,6 +37800,8 @@
               explicit_confirmation: true,
             },
           );
+          writeReceipt = result;
+          if (candidateProjectId !== resolvedPretripProjectId()) return;
           state.permissionBaselineStatus = `Bounded projection rebuilt · ${String(result.workbench_seed_sha256 || "").slice(0, 16)} · rules remain review_only · runtime authority=false`;
           loadedDataScopes.delete("permission");
           await loadDataScope("permission", {force: true});
@@ -37690,7 +37811,7 @@
             throw new Error("Quick review is incomplete for this candidate hash");
           }
           const requirements = permissionBaselineReviewRequirements(draft);
-          const result = await postJson(
+          const result = await postPermissionBaselineCommand(candidateProjectId, pending,
             `/admin/pretrip/projects/${encodeURIComponent(candidateProjectId)}/mission-baseline/reviews/accept`,
             {
               candidate_ref: saved.version_ref,
@@ -37703,13 +37824,43 @@
               explicit_confirmation: true,
             },
           );
+          writeReceipt = result;
+          if (candidateProjectId !== resolvedPretripProjectId()) return;
           state.permissionBaselineStatus = `Reviewed baseline appended · ${result.reviewed_baseline_ref || "reviewed artifact"} · current session not rebound`;
           loadedDataScopes.delete("permission");
           await loadDataScope("permission", {force: true});
         }
         state.permissionBaselinePendingAction = null;
       } catch (error) {
-        state.permissionBaselineStatus = `Baseline write not recorded · ${String(error?.message || error)}`;
+        if (candidateProjectId !== resolvedPretripProjectId()) return;
+        const detail = String(error?.message || error);
+        if (writeReceipt) {
+          state.permissionBaselinePendingAction = null;
+          state.permissionBaselineStatus = `Baseline write completed; display refresh incomplete. Reload to inspect the saved receipt · ${detail}`;
+        } else {
+          state.permissionBaselineStatus = `Write outcome unconfirmed; checking saved versions and projection status · ${detail}`;
+          let refreshed = false;
+          try {
+            await loadDataScope("permission", {force: true});
+            refreshed = true;
+          } catch { /* A read failure cannot prove that a submitted write failed. */ }
+          if (candidateProjectId !== resolvedPretripProjectId()) return;
+          const accepted = refreshed && pending.kind === "accept" && saved && state.permissionBaselineCandidates.some(
+            item => item.version_ref === saved.version_ref && item.version_sha256 === saved.version_sha256 && item.accepted === true,
+          );
+          const rebuilt = refreshed && pending.kind === "rebuild" && expectedRebuildSha
+            && state.permissionProjection?.project_id === candidateProjectId
+            && state.permissionProjection?.baseline?.baseline_sha256 === expectedRebuildSha
+            && ["ready", "degraded"].includes(state.permissionProjection?.status);
+          if (accepted || rebuilt) {
+            state.permissionBaselinePendingAction = null;
+            state.permissionBaselineStatus = accepted
+              ? "Saved review recovered and verified for this candidate. Inspect the projection and rebuild if required."
+              : "Rebuilt projection recovered and verified for the selected reviewed baseline.";
+          } else {
+            state.permissionBaselineStatus = `Write outcome unconfirmed. Reload or refresh saved versions before retrying; the same command reuses its receipt key · ${detail}`;
+          }
+        }
       } finally {
         state.permissionBaselineBusy = false;
         if (state.route === "outdoor-permission") render();
@@ -38045,6 +38196,17 @@
       document.querySelector("[data-permission-baseline-preview]")?.addEventListener("click", () => {
         void previewPermissionBaseline(false);
       });
+      document.querySelector("[data-permission-saved-candidate]")?.addEventListener("change", event => {
+        state.permissionBaselineCandidateRef = event.currentTarget.value;
+        render();
+      });
+      document.querySelector("[data-permission-candidate-restore]")?.addEventListener("click", () => {
+        void restorePermissionBaselineCandidate();
+      });
+      document.querySelector("[data-permission-candidates-refresh]")?.addEventListener("click", async () => {
+        await loadPermissionBaselineCandidates(resolvedPretripProjectId());
+        if (state.route === "outdoor-permission") render();
+      });
       document.querySelector("[data-permission-baseline-generate]")?.addEventListener("click", () => {
         void previewPermissionBaseline(true);
       });
@@ -38072,7 +38234,7 @@
       document.querySelectorAll("[data-permission-review-check]").forEach(input => {
         input.addEventListener("change", () => {
           const savedSha = state.permissionBaselineSavedCandidate?.version_sha256 || "";
-          if (!savedSha || state.permissionBaselineReviewChecks?.candidateSha256 !== savedSha) return;
+          if (!savedSha || state.permissionBaselineSavedCandidate.review_ready !== true || state.permissionBaselineReviewChecks?.candidateSha256 !== savedSha) return;
           state.permissionBaselineReviewChecks = {
             ...state.permissionBaselineReviewChecks,
             [input.dataset.permissionReviewCheck]: input.checked,
@@ -38102,9 +38264,7 @@
         window.requestAnimationFrame(() => document.querySelector("[data-permission-baseline-confirm-sheet]")?.focus({preventScroll: true}));
       });
       document.querySelector("[data-permission-baseline-confirm-cancel]")?.addEventListener("click", () => {
-        state.permissionBaselinePendingAction = null;
-        state.permissionBaselineStatus = "Baseline write cancelled · no file or receipt created.";
-        render();
+        closePermissionBaselineConfirmation();
       });
       document.querySelector("[data-permission-baseline-confirm-submit]")?.addEventListener("click", () => {
         void submitPermissionBaselineWrite();
@@ -38112,15 +38272,11 @@
       document.querySelector("[data-permission-baseline-confirm-sheet]")?.addEventListener("keydown", event => {
         if (event.key !== "Escape") return;
         event.preventDefault();
-        state.permissionBaselinePendingAction = null;
-        state.permissionBaselineStatus = "Baseline write cancelled · no file or receipt created.";
-        render();
+        closePermissionBaselineConfirmation();
       });
       document.querySelector("[data-permission-baseline-confirm-backdrop]")?.addEventListener("click", event => {
         if (event.target !== event.currentTarget) return;
-        state.permissionBaselinePendingAction = null;
-        state.permissionBaselineStatus = "Baseline write cancelled · no file or receipt created.";
-        render();
+        closePermissionBaselineConfirmation();
       });
 
       document.querySelectorAll("[data-emergency-review-view]").forEach(button => {
@@ -39066,7 +39222,112 @@
       };
     }
 
+    function renderPreparationJobsContents() {
+      const jobs = state.preparationJobs || [];
+      return `
+        <p class="workspace-status" role="status">${state.preparationJobsError
+          ? escapeHtml(`Job status unavailable: ${state.preparationJobsError}. Refresh to reconnect; no new import is required.`)
+          : "Saved on the server. Reloading this page does not stop preparation or accept a candidate."}</p>
+        <button type="button" data-preparation-job-action="refresh">Refresh job status</button>
+        ${jobs.length ? jobs.map(job => `
+          <article class="item" data-preparation-job-id="${escapeHtml(job.job_id)}" data-preparation-job-status="${escapeHtml(job.status)}">
+            <strong>${escapeHtml(job.project_id)} · ${escapeHtml(job.status)}</strong>
+            <p>Stage: ${escapeHtml(job.stage || "queued")} · Job ${escapeHtml(job.job_id)}</p>
+            ${job.error ? `<p class="workspace-status" data-status="bad">${escapeHtml(job.error.code || "preparation_error")}: ${escapeHtml(job.error.message || "Inspect the saved job before retrying.")}</p>` : ""}
+            ${job.status === "completed_with_gaps" ? '<p class="workspace-status" data-status="warn">Preparation has missing evidence. Opening the workspace does not mean Golden qualification passed.</p>' : ""}
+            ${job.resume_blocker && !job.can_resume ? `<p class="workspace-status">${escapeHtml(typeof job.resume_blocker === "string" ? job.resume_blocker : JSON.stringify(job.resume_blocker))}</p>` : ""}
+            ${job.can_resume && job.resume_validation === "required_before_writes" ? '<p class="workspace-status">Source files will be verified again before preparation resumes.</p>' : ""}
+            <button type="button" data-preparation-job-action="open" data-project-id="${escapeHtml(job.project_id)}" ${job.workspace_available ? "" : "disabled"}>Open ${escapeHtml(job.project_id)}</button>
+            <button type="button" data-preparation-job-action="resume" data-job-id="${escapeHtml(job.job_id)}" ${job.can_resume ? "" : "disabled"}>Resume ${escapeHtml(job.project_id)}</button>
+          </article>`).join("") : '<p class="workspace-status">No saved preparation jobs.</p>'}
+      `;
+    }
+
+    function renderPreparationJobsPanel() {
+      return `<section class="panel" aria-label="Preparation jobs">
+        <div class="panel-header"><h3>Preparation Jobs</h3><span class="chip info">import → maps → Permission</span></div>
+        <div class="panel-body" id="preparationJobsPanel">${renderPreparationJobsContents()}</div>
+      </section><div style="height:12px"></div>`;
+    }
+
+    function updatePreparationJobsPanel() {
+      const panel = document.getElementById("preparationJobsPanel");
+      if (panel) panel.innerHTML = renderPreparationJobsContents();
+      const target = document.getElementById("importTargetNameInput")?.value.trim();
+      const job = (state.preparationJobs || []).find(item => item.project_id === target && item.workspace_available);
+      if (job) state.importTripResult = {projectId: target, result: job};
+      if (target) updateImportStageButton(target, document.getElementById("importGoldenRouteGpxPath")?.value || "");
+    }
+
+    async function loadPreparationJobs() {
+      if (preparationJobsLoading) return;
+      preparationJobsLoading = true;
+      try {
+        const payload = await fetchJson("/admin/dashboard/preparation-jobs", {cache: "no-store"});
+        state.preparationJobs = Array.isArray(payload) ? payload : (payload.jobs || []);
+        state.preparationJobsError = null;
+      } catch (error) {
+        state.preparationJobsError = String(error?.message || error);
+      } finally {
+        preparationJobsLoading = false;
+        updatePreparationJobsPanel();
+        if (preparationJobsPollTimer) clearTimeout(preparationJobsPollTimer);
+        if (document.getElementById("preparationJobsPanel") && (state.preparationJobsError || state.preparationJobs.some(job => ["queued", "running"].includes(job.status)))) {
+          preparationJobsPollTimer = setTimeout(loadPreparationJobs, 5000);
+        }
+      }
+    }
+
+    async function openPreparationWorkspace(targetProjectId) {
+      await validateWorkspaceSelection(targetProjectId);
+      localStorage.setItem("scout.dashboardProjectId", targetProjectId);
+      const url = new URL(window.location.href);
+      url.searchParams.set("projectId", targetProjectId);
+      url.hash = "features-workspace";
+      window.location.href = url.toString();
+    }
+
+    function preparationSubmissionKey(kind, targetProjectId, payload) {
+      const signature = JSON.stringify({kind, targetProjectId, payload});
+      const storageKey = `scout.preparationSubmission.v1.${kind}.${targetProjectId}`;
+      try {
+        const previous = JSON.parse(localStorage.getItem(storageKey) || "null");
+        if (previous?.signature === signature && previous?.key) return previous.key;
+      } catch { /* A malformed draft cannot supply a receipt. */ }
+      const key = crypto.randomUUID();
+      try { localStorage.setItem(storageKey, JSON.stringify({signature, key})); } catch { /* Server jobs remain discoverable without local storage. */ }
+      return key;
+    }
+
+    function bindPreparationJobControls() {
+      const panel = document.getElementById("preparationJobsPanel");
+      if (!panel || panel.dataset.bound === "true") return;
+      panel.dataset.bound = "true";
+      panel.addEventListener("click", async event => {
+        const button = event.target.closest("button[data-preparation-job-action]");
+        if (!button || !panel.contains(button) || button.disabled) return;
+        button.disabled = true;
+        try {
+          if (button.dataset.preparationJobAction === "open") {
+            await openPreparationWorkspace(button.dataset.projectId);
+            return;
+          }
+          if (button.dataset.preparationJobAction === "resume") {
+            await postJson(`/admin/dashboard/preparation-jobs/${encodeURIComponent(button.dataset.jobId)}/resume`, {confirm_resume: true});
+          }
+          await loadPreparationJobs();
+        } catch (error) {
+          state.preparationJobsError = String(error?.message || error);
+          updatePreparationJobsPanel();
+        } finally {
+          button.disabled = false;
+        }
+      });
+      void loadPreparationJobs();
+    }
+
     function bindImportTripControls() {
+      bindPreparationJobControls();
       const tripInput = document.getElementById("importTripIdInput");
       const goldenRouteInput = document.getElementById("importGoldenRouteGpxPath");
       const workspaceRootInput = document.getElementById("importWorkspaceRoot");
@@ -39091,8 +39352,8 @@
           targetWorkspace: targetNameValue(),
           workspaceRoot: workspaceRootValue(),
           templateProjectRoot: fieldValue("importTemplateProjectRoot"),
-          materialRoot: fieldValue("importMaterialRoot") || currentPoolDefaults.materialRoot || "",
-          dtmDirs: fieldValue("importDtmDirs") || currentPoolDefaults.dtmDirs || "",
+          materialRoot: fieldValue("importMaterialRoot"),
+          dtmDirs: fieldValue("importDtmDirs"),
           mcpNamedPointEvidence: fieldValue("importMcpNamedPointEvidence"),
           importProfile: fieldValue("importProfile") || currentPoolDefaults.importProfile || "pi-offline",
           importStage: fieldValue("importStage") || "pretrip",
@@ -39100,7 +39361,7 @@
           maxReferenceDisplayPoints: fieldValue("importMaxReferenceDisplayPoints") || "1000",
           maxReasonableGpxSpeedKmh: fieldValue("importMaxReasonableGpxSpeedKmh") || "120",
           maxPreviousGpxSpeedRatio: fieldValue("importMaxPreviousGpxSpeedRatio") || "8",
-          overwrite: fieldChecked("importOverwriteWorkspace"),
+          overwrite: false,
           prepareLayers: fieldValue("prepareLayersList") || importTripDefaultLayerIds(),
           prepareWorkspaceRoot: workspaceRootValue(),
           prepareProjectRoot: derivedProjectRoot(),
@@ -39126,6 +39387,9 @@
           preparedAt: fieldValue("preparePreparedAt"),
         };
         state.activeCountryMaterialPool = state.importTripDraft.countryMaterialPool;
+        const targetRootLabel = document.getElementById("importDerivedProjectRoot");
+        if (targetRootLabel) targetRootLabel.textContent = derivedProjectRoot();
+        try { localStorage.setItem("scout.dashboardImportDraft.v1", JSON.stringify(state.importTripDraft)); } catch { /* Draft persistence is optional; server receipts are authoritative. */ }
         if (!importTripValidationMatches(targetNameValue(), goldenRouteInput.value)) {
           state.importTripValidation = {
             status: "idle",
@@ -39265,7 +39529,7 @@
             max_reasonable_gpx_speed_kmh: maxReasonableSpeed,
             max_previous_gpx_speed_ratio: maxPreviousSpeedRatio,
             import_stage: "pretrip",
-            overwrite: fieldChecked("importOverwriteWorkspace"),
+            overwrite: false,
           };
           const templateProjectRoot = fieldValue("importTemplateProjectRoot");
           if (templateProjectRoot) importPayload.template_project_root = templateProjectRoot;
@@ -39323,19 +39587,48 @@
               return;
             }
             button.disabled = true;
-            setImportTripStatus(`Creating ${nextProjectId} inside the server-resolved workspace root...`, "warn");
+            setImportTripStatus(`Submitting preparation for ${nextProjectId}...`, "info");
             try {
+              const preparation = {
+                layers,
+                profile: fieldValue("prepareLayersProfile") || "mac-workstation",
+                network_mode: fieldValue("prepareLayersNetworkMode") || "explicit-fetch",
+                allow_network_fetch: fieldChecked("prepareAllowNetworkFetch"),
+                prepare_cwa_imagery: fieldChecked("prepareAllowNetworkFetch"),
+                route_corridor_m: routeCorridor,
+                reference_track_corridor_m: referenceTrackCorridor,
+                ai_mode: fieldValue("prepareAiMode") || "fixture-or-precomputed",
+                ai_output_policy: fieldValue("prepareAiOutputPolicy") || "hash-and-summary",
+                imagery_min_zoom: Number(fieldValue("prepareImageryMinZoom")),
+                imagery_max_zoom: Number(fieldValue("prepareImageryMaxZoom")),
+                seed_imagery_cache: fieldChecked("prepareSeedImageryCache"),
+                imagery_provider_allows_offline_prefetch: fieldChecked("prepareImageryProviderAllowsOfflinePrefetch"),
+                imagery_cache_fallback_project_ids: splitImportReferenceGpxSources(fieldValue("prepareImageryCacheFallbackProjectIds")),
+                osm_pbf_cache_ttl_days: Number(fieldValue("prepareOsmPbfCacheTtlDays")),
+                osmium_bin: fieldValue("prepareOsmiumBin") || "osmium",
+              };
+              if (fieldValue("prepareImagerySeedMaxTiles")) preparation.imagery_seed_max_tiles = Number(fieldValue("prepareImagerySeedMaxTiles"));
+              for (const [field, key] of [["prepareRouteEvidenceBundle", "route_evidence_bundle"], ["prepareOsmPbfPath", "osm_pbf_path"], ["prepareOsmPbfSourceUrl", "osm_pbf_source_url"], ["preparePreparedAt", "prepared_at"]]) {
+                if (fieldValue(field)) preparation[key] = fieldValue(field);
+              }
+              if (fieldValue("prepareBBox")) {
+                const values = fieldValue("prepareBBox").split(",").map(value => Number(value.trim()));
+                if (values.length !== 4 || !values.every(Number.isFinite)) throw new Error("BBox must contain south,west,north,east numbers");
+                preparation.bbox = {south: values[0], west: values[1], north: values[2], east: values[3]};
+              }
+              const payload = {...importPayload, preparation, confirm_import: true, confirm_prepare: true};
+              const idempotencyKey = preparationSubmissionKey("import", nextProjectId, payload);
               const result = await postJson(
-                `/admin/pretrip/projects/${encodeURIComponent(nextProjectId)}/import-gpx`,
-                {...importPayload, confirm_import: true},
+                `/admin/pretrip/projects/${encodeURIComponent(nextProjectId)}/import-and-prepare`,
+                {...payload, idempotency_key: idempotencyKey},
                 {timeoutMs: PRETRIP_PROJECT_FETCH_TIMEOUT_MS},
               );
-              state.importTripResult = {projectId: nextProjectId, result};
-              await loadWorkspaceCatalog();
-              setImportTripStatus(`Workspace ${nextProjectId} created. Import manifest persisted; no layer preparation, external refresh or runtime load was started.`, "ok");
+              state.importTripResult = result.workspace_available ? {projectId: nextProjectId, result} : null;
+              await loadPreparationJobs();
+              setImportTripStatus(`Preparation job ${result.job_id} saved for ${nextProjectId}. Follow its stages in Preparation Jobs; reloading this page keeps the job.`, "ok");
             } catch (error) {
-              state.importTripResult = null;
-              setImportTripStatus(`Workspace creation failed: ${error.message || error}`, "bad");
+              await loadPreparationJobs();
+              setImportTripStatus(`Submission was not confirmed: ${error.message || error}. Check Preparation Jobs before resubmitting; the same request keeps its submission key.`, "warn");
             } finally {
               button.disabled = false;
               updateImportStageButton(nextProjectId, goldenRouteGpx);
@@ -39374,6 +39667,7 @@
     }
 
     function bindWorkspaceControls() {
+      bindPreparationJobControls();
       const status = document.getElementById("workspaceOperationStatus");
       const cloneButton = document.getElementById("workspaceCloneProject");
       const cloneTargetInput = document.getElementById("workspaceCloneTargetInput");
@@ -39397,44 +39691,36 @@
           cloneButton.disabled = true;
           cloneTargetInput.disabled = true;
           if (status) {
-            status.textContent = `Creating ${targetProjectId}: one clean GPX import, then full map preparation. The source workspace will remain unchanged.`;
+            status.textContent = `Submitting ${targetProjectId}: GPX import, full map preparation and Permission initialization.`;
             status.dataset.status = "warn";
           }
           try {
-            const result = await postJson(
-              `/admin/dashboard/workspaces/${encodeURIComponent(projectId())}/clone`,
-              {
+            const payload = {
                 target_project_id: targetProjectId,
                 confirm_clone: true,
                 requested_by: "dashboard_operator",
-              },
-              {timeoutMs: WORKSPACE_CLONE_TIMEOUT_MS},
+              };
+            const idempotencyKey = preparationSubmissionKey(`clone-${projectId()}`, targetProjectId, payload);
+            const result = await postJson(
+              `/admin/dashboard/workspaces/${encodeURIComponent(projectId())}/clone-jobs`,
+              {...payload, idempotency_key: idempotencyKey},
+              {timeoutMs: PRETRIP_PROJECT_FETCH_TIMEOUT_MS},
             );
-            await loadWorkspaceCatalog();
-            localStorage.setItem("scout.dashboardProjectId", targetProjectId);
-            const url = new URL(window.location.href);
-            url.searchParams.set("projectId", targetProjectId);
-            url.hash = "features-workspace";
+            await loadPreparationJobs();
             if (status) {
-              const layerCount = result.map_preparation?.normalized_layers?.length || 0;
-              const terrainDegraded = result.status === "completed_with_degraded_terrain";
-              status.textContent = terrainDegraded
-                ? `${targetProjectId} created with ${layerCount} non-GIS/map layers, but QGIS/GRASS terrain is unavailable. Opening the explicitly degraded workspace...`
-                : `${targetProjectId} created and prepared with ${layerCount} layers. Opening the new workspace...`;
-              status.dataset.status = terrainDegraded ? "warn" : "ok";
+              status.textContent = `Preparation job ${result.job_id} saved for ${targetProjectId}. Follow its stages above, then open the new workspace.`;
+              status.dataset.status = "ok";
             }
-            window.location.href = url.toString();
           } catch (error) {
             const errorMessage = String(error?.message || error);
-            const requestTimedOut = errorMessage.includes("request timed out after");
+            await loadPreparationJobs();
             if (status) {
-              status.textContent = requestTimedOut
-                ? `The browser stopped waiting, but the server may still be preparing ${targetProjectId}. Do not retry this workspace name. Reload the Workspace page later and open it after preparation completes.`
-                : `Clone failed without overwriting the source: ${errorMessage}`;
-              status.dataset.status = requestTimedOut ? "warn" : "bad";
+              status.textContent = `Clone submission was not confirmed: ${errorMessage}. Check Preparation Jobs; reloading and repeating the same submission keep its job identity.`;
+              status.dataset.status = "warn";
             }
-            cloneButton.disabled = requestTimedOut;
-            cloneTargetInput.disabled = requestTimedOut;
+          } finally {
+            cloneButton.disabled = false;
+            cloneTargetInput.disabled = false;
           }
         });
       }

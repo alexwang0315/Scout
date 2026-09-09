@@ -1637,6 +1637,40 @@ class BaselineCandidateSaveReceipt(WorkbenchModel):
     departure_approval_granted: bool = False
 
 
+class BaselineCandidateCatalogItem(WorkbenchModel):
+    version_ref: str
+    version_id: str
+    version_sha256: str
+    status: Literal["current", "stale", "invalid"]
+    reason: str
+    source_mode: Literal["human_text", "reference_gpx"]
+    accepted: bool | None = None
+    baseline_id: str
+    source_sha256: str
+    validation_state: Literal["valid", "needs_review", "blocked"]
+    review_ready: bool
+    candidate_only: bool = True
+    runtime_safety_truth: bool = False
+    departure_approval_granted: bool = False
+
+
+class BaselineCandidateCatalog(WorkbenchModel):
+    project_id: str
+    candidates: list[BaselineCandidateCatalogItem]
+    writes_performed: bool = False
+
+
+class BaselineCandidateDetail(WorkbenchModel):
+    project_id: str
+    candidate_ref: str
+    status: Literal["current", "stale", "invalid"]
+    reason: str
+    draft: MissionBaselineDraft
+    saved_candidate: BaselineCandidateSaveReceipt
+    source_issues: list[str] = Field(default_factory=list)
+    writes_performed: bool = False
+
+
 class BaselinePatchOperation(WorkbenchModel):
     operation: Literal[
         "add_target",
@@ -3613,6 +3647,47 @@ class ContextualPermissionWorkbench:
                     f"Required baseline input is missing: {ref}",
                 )
             source_hashes[ref_key] = _file_sha256(path)
+        bound_eta_sha256 = seed.baseline.source_hashes.get("planned_eta_ref")
+        if (
+            bound_eta_sha256
+            and bound_eta_sha256 != source_hashes["planned_eta_ref"]
+        ):
+            raise ContextualPermissionConflict(
+                "contextual_permission_projection_stale",
+                "The planned ETA changed after this projection was built; rebuild explicitly before using the remaining plan.",
+            )
+        # A selected rebuild receipt retains the original ETA binding even if
+        # someone rewrites both the ETA and the mutable seed afterwards.
+        rebuild_ref = project.get("contextual_permission_projection_rebuild_ref")
+        if rebuild_ref:
+            try:
+                rebuild_payload = json.loads(
+                    self._resolve_project_ref(str(rebuild_ref)).read_text(encoding="utf-8")
+                )
+                rebuild_receipt = ContextualPermissionProjectionRebuildReceipt.model_validate(
+                    rebuild_payload
+                )
+            except (OSError, ValueError) as exc:
+                raise ContextualPermissionConflict(
+                    "contextual_permission_projection_stale",
+                    "The selected projection rebuild receipt is unavailable or invalid.",
+                ) from exc
+            if (
+                rebuild_receipt.rebuild_sha256 != _digest({
+                    key: value for key, value in rebuild_payload.items()
+                    if key != "rebuild_sha256"
+                })
+                or rebuild_receipt.rebuild_sha256 != project.get(
+                    "contextual_permission_projection_rebuild_sha256"
+                )
+                or rebuild_receipt.reviewed_baseline_sha256 != seed.baseline.baseline_sha256
+                or rebuild_receipt.planned_eta_ref != project.get("planned_eta_ref")
+                or rebuild_receipt.planned_eta_sha256 != source_hashes["planned_eta_ref"]
+            ):
+                raise ContextualPermissionConflict(
+                    "contextual_permission_projection_stale",
+                    "The ETA and projection no longer match the selected immutable rebuild receipt.",
+                )
         selected_baseline_ref = str(
             project.get("reviewed_mission_baseline_ref") or ""
         )
@@ -9615,6 +9690,239 @@ class ContextualPermissionWorkbench:
             review_ready=bool(payload["review_ready"]),
         )
 
+    def _candidate_source_issues(self, candidate: dict[str, object]) -> list[str]:
+        issues: list[str] = []
+        source_hashes = candidate.get("source_hashes")
+        if not isinstance(source_hashes, dict):
+            return ["source_hashes_missing"]
+        for ref, expected in source_hashes.items():
+            if not isinstance(ref, str) or not isinstance(expected, str):
+                issues.append("source_hash_invalid")
+                continue
+            if "://" in ref:
+                continue
+            try:
+                path = self._resolve_project_ref(ref)
+            except ContextualPermissionConflict:
+                issues.append(f"source_ref_unsafe:{ref}")
+                continue
+            if not path.is_file():
+                issues.append(f"source_missing:{ref}")
+                continue
+            if _file_sha256(path) != expected:
+                issues.append(f"source_stale:{ref}")
+        return issues
+
+    def _resolve_baseline_candidate_version_ref(self, candidate_ref: str) -> Path:
+        candidate_path = self._resolve_project_ref(candidate_ref)
+        root = self._resolve_project_write_path("candidates", "mission_baselines").resolve(
+            strict=False
+        )
+        try:
+            relative = candidate_path.relative_to(root)
+        except ValueError as exc:
+            raise ContextualPermissionConflict(
+                "unsafe_baseline_candidate_ref",
+                "Baseline candidate refs must stay under the candidate version store.",
+            ) from exc
+        parts = relative.parts
+        if (
+            len(parts) != 3
+            or parts[1] != "versions"
+            or not parts[2].endswith(".json")
+        ):
+            raise ContextualPermissionConflict(
+                "unsafe_baseline_candidate_ref",
+                "Baseline candidate refs must point to an immutable version JSON file.",
+            )
+        return candidate_path
+
+    def _candidate_acceptance_status(
+        self, *, candidate_ref: str, candidate_sha256: str
+    ) -> bool | None:
+        try:
+            project = json.loads(
+                self._resolve_project_ref("project.json").read_text(encoding="utf-8")
+            )
+        except (OSError, json.JSONDecodeError, ContextualPermissionConflict):
+            return None
+        reviewed_ref = str(project.get("reviewed_mission_baseline_ref") or "")
+        reviewed_sha256 = str(project.get("reviewed_mission_baseline_sha256") or "")
+        if not reviewed_ref or not _SHA256_PATTERN.fullmatch(reviewed_sha256):
+            return None
+        try:
+            reviewed_path = self._resolve_project_ref(reviewed_ref)
+            reviewed = json.loads(reviewed_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, ContextualPermissionConflict):
+            return None
+        if not isinstance(reviewed, dict):
+            return None
+        computed = _digest(
+            {
+                key: value
+                for key, value in reviewed.items()
+                if key != "reviewed_baseline_sha256"
+            }
+        )
+        if (
+            reviewed.get("artifact_kind") != "reviewed_mission_baseline"
+            or reviewed.get("schema_version") != "reviewedMissionBaseline.v1"
+            or reviewed.get("reviewed_baseline_sha256") != reviewed_sha256
+            or computed != reviewed_sha256
+        ):
+            return None
+        accepted_ref = str(reviewed.get("candidate_ref") or "")
+        accepted_sha256 = str(reviewed.get("candidate_sha256") or "")
+        return accepted_ref == candidate_ref and accepted_sha256 == candidate_sha256
+
+    def _is_initialization_authoring_seed_candidate(
+        self, candidate: dict[str, object]
+    ) -> bool:
+        draft = candidate.get("draft")
+        draft_id = str(draft.get("draft_id") or "") if isinstance(draft, dict) else ""
+        return (
+            str(candidate.get("baseline_id") or "").endswith(
+                ".permission-initialization"
+            )
+            and str(candidate.get("version_id") or "").startswith(
+                "version.reference-gpx.authoring-seed."
+            )
+            and str(candidate.get("idempotency_key") or "").startswith(
+                "permission-initialization-"
+            )
+            and draft_id == "baseline-draft.reference-gpx.permission-initialization.v1"
+            and candidate.get("validation_state") == "needs_review"
+            and candidate.get("review_ready") is False
+        )
+
+    def _candidate_save_receipt_from_payload(
+        self,
+        *,
+        candidate_ref: str,
+        candidate: dict[str, object],
+        source_issues: list[str],
+    ) -> BaselineCandidateSaveReceipt:
+        review_ready = bool(candidate.get("review_ready")) and not source_issues
+        return BaselineCandidateSaveReceipt(
+            baseline_id=str(candidate["baseline_id"]),
+            version_id=str(candidate["version_id"]),
+            version_ref=candidate_ref,
+            version_sha256=str(candidate["version_sha256"]),
+            source_sha256=str(candidate["source_sha256"]),
+            idempotency_key=str(candidate.get("idempotency_key") or "persisted-candidate"),
+            parent_version_id=(
+                str(candidate.get("parent_version_id"))
+                if candidate.get("parent_version_id")
+                else None
+            ),
+            validation_state=str(candidate["validation_state"]),
+            unresolved_gaps=list(candidate.get("unresolved_gaps") or []),
+            review_ready=review_ready,
+            writes_performed=False,
+            candidate_only=True,
+            runtime_safety_truth=False,
+            departure_approval_granted=False,
+        )
+
+    def list_baseline_candidates(self) -> BaselineCandidateCatalog:
+        root = self._resolve_project_write_path("candidates", "mission_baselines")
+        items: list[BaselineCandidateCatalogItem] = []
+        if root.is_dir():
+            for path in sorted(root.glob("*/versions/*.json")):
+                candidate_ref = path.relative_to(self.project_root).as_posix()
+                try:
+                    candidate_path = self._resolve_baseline_candidate_version_ref(
+                        candidate_ref
+                    )
+                    raw = json.loads(candidate_path.read_text(encoding="utf-8"))
+                    if not isinstance(raw, dict):
+                        raise ValueError("candidate payload must be an object")
+                    if self._is_initialization_authoring_seed_candidate(raw):
+                        continue
+                    expected = str(raw.get("version_sha256") or "")
+                    _, candidate = self._load_immutable_baseline_candidate(
+                        candidate_ref, expected
+                    )
+                    draft = MissionBaselineDraft.model_validate(candidate.get("draft"))
+                except (OSError, json.JSONDecodeError, ValueError, ContextualPermissionConflict):
+                    items.append(
+                        BaselineCandidateCatalogItem(
+                            version_ref=candidate_ref,
+                            version_id=path.stem,
+                            version_sha256="0" * 64,
+                            status="invalid",
+                            reason="invalid_baseline_candidate",
+                            source_mode="reference_gpx",
+                            accepted=None,
+                            baseline_id=path.parent.parent.name,
+                            source_sha256="0" * 64,
+                            validation_state="blocked",
+                            review_ready=False,
+                            candidate_only=True,
+                            runtime_safety_truth=False,
+                            departure_approval_granted=False,
+                        )
+                    )
+                    continue
+                source_issues = self._candidate_source_issues(candidate)
+                status: Literal["current", "stale", "invalid"] = (
+                    "stale" if source_issues else "current"
+                )
+                reason = ";".join(source_issues) if source_issues else "candidate_sources_current"
+                items.append(
+                    BaselineCandidateCatalogItem(
+                        version_ref=candidate_ref,
+                        version_id=str(candidate["version_id"]),
+                        version_sha256=str(candidate["version_sha256"]),
+                        status=status,
+                        reason=reason,
+                        source_mode=str(candidate["source_mode"]),
+                        accepted=self._candidate_acceptance_status(
+                            candidate_ref=candidate_ref,
+                            candidate_sha256=str(candidate["version_sha256"]),
+                        ),
+                        baseline_id=str(candidate["baseline_id"]),
+                        source_sha256=str(candidate["source_sha256"]),
+                        validation_state=str(candidate["validation_state"]),
+                        review_ready=bool(candidate.get("review_ready")) and not source_issues,
+                        candidate_only=True,
+                        runtime_safety_truth=False,
+                        departure_approval_granted=False,
+                    )
+                )
+        return BaselineCandidateCatalog(project_id=self.project_id, candidates=items)
+
+    def baseline_candidate_detail(self, candidate_ref: str) -> BaselineCandidateDetail:
+        candidate_path = self._resolve_baseline_candidate_version_ref(candidate_ref)
+        try:
+            raw = json.loads(candidate_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ContextualPermissionConflict(
+                "invalid_baseline_candidate", "The baseline candidate is not valid JSON."
+            ) from exc
+        expected = str(raw.get("version_sha256") or "") if isinstance(raw, dict) else ""
+        _, candidate = self._load_immutable_baseline_candidate(candidate_ref, expected)
+        draft = MissionBaselineDraft.model_validate(candidate.get("draft"))
+        source_issues = self._candidate_source_issues(candidate)
+        status: Literal["current", "stale", "invalid"] = (
+            "stale" if source_issues else "current"
+        )
+        reason = ";".join(source_issues) if source_issues else "candidate_sources_current"
+        return BaselineCandidateDetail(
+            project_id=self.project_id,
+            candidate_ref=candidate_ref,
+            status=status,
+            reason=reason,
+            draft=draft,
+            saved_candidate=self._candidate_save_receipt_from_payload(
+                candidate_ref=candidate_ref,
+                candidate=candidate,
+                source_issues=source_issues,
+            ),
+            source_issues=source_issues,
+            writes_performed=False,
+        )
+
     def accept_reviewed_baseline(
         self, request: BaselineReviewAcceptRequest
     ) -> BaselineReviewAcceptReceipt:
@@ -11471,8 +11779,17 @@ class ContextualPermissionWorkbench:
                        if day.reference_replay is not None else {}),
                 }
             )
+        retired = {
+            key: existing[key]
+            for key in ("estimates", "assumption", "assumptions")
+            if key in existing
+        }
+        retained = {
+            key: value for key, value in existing.items()
+            if key not in {"estimates", "assumption", "assumptions"}
+        }
         return {
-            **existing,
+            **retained,
             "artifact_kind": "pretrip_planned_eta",
             "schema_version": "plannedEta.v1",
             "project_id": self.project_id,
@@ -11483,6 +11800,14 @@ class ContextualPermissionWorkbench:
             "reviewed_baseline_sha256": reviewed_sha256,
             "review_scope": reviewed.get("review_scope"),
             "mission_day_estimates": mission_day_estimates,
+            "authoritative_collection": "mission_day_estimates",
+            **({"retired_legacy_timing": {
+                "status": "superseded",
+                "former_plan_id": existing.get("plan_id"),
+                "former_artifact_sha256": _file_sha256(path),
+                "reason": "Rebuild derives the adopted schedule from the reviewed baseline; these earlier fields are not current estimates.",
+                "values": retired,
+            }} if retired else {}),
             "source_refs": source_refs,
             "source_hashes": source_hashes,
             "candidate_only": True,

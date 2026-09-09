@@ -7,19 +7,25 @@ import json
 import os
 import re
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Literal
 from urllib.parse import urlparse
 
 from pretrip_import import PretripImportRequest, run_pretrip_import
+from dashboard_workspace_preparation import (
+    PREPARATION_OPTION_FIELDS,
+    build_workspace_preparation_request,
+    resolve_workspace_preparation_inputs,
+)
 from pretrip_layer_preparation import (
     DEFAULT_LAYERS,
     LayerPreparationRequest,
     run_layer_preparation,
 )
 from pretrip_mcp_synthesis import load_named_point_evidence
+from pretrip_models import DtmRasterSource
 from pretrip_source_ingest import sha256_file
 
 
@@ -86,17 +92,13 @@ def clone_pretrip_workspace_from_inputs(
         source_project_id=request.source_project_id,
         target_project_id=request.target_project_id,
     )
-    material_root, material_manifest = _source_material_manifest(
-        source_root=source_root,
-        source_project=source_project,
-        source_manifest=source_manifest,
-    )
+    preparation_inputs = resolve_workspace_preparation_inputs(source_root)
+    material_root = preparation_inputs.material_root
+    material_manifest = preparation_inputs.material_manifest
     material_sources = material_manifest.get("sources", {})
     if not isinstance(material_sources, dict):
         material_sources = {}
-    local_osm_pbf = material_sources.get("local_osm_pbf", {})
-    if not isinstance(local_osm_pbf, dict):
-        local_osm_pbf = {}
+    local_osm_pbf = preparation_inputs.local_osm_pbf or {}
     configured_osm_pbf_path = _existing_file(local_osm_pbf.get("path"))
     osm_pbf_path, osm_input_policy = _select_osm_preparation_input(
         configured_path=configured_osm_pbf_path,
@@ -126,13 +128,7 @@ def clone_pretrip_workspace_from_inputs(
             source_records=source_records,
         )
     )
-    dtm_dirs = tuple(
-        path
-        for value in material_sources.get("dtm_dirs", [])
-        if isinstance(value, str)
-        for path in (Path(value).expanduser().resolve(),)
-        if path.is_dir()
-    )
+    dtm_dirs = preparation_inputs.dtm_dirs
     mcp_source_evidence = _existing_file(
         material_sources.get("mcp_named_point_evidence")
     )
@@ -157,7 +153,12 @@ def clone_pretrip_workspace_from_inputs(
                 max_reasonable_gpx_speed_kmh=120.0,
                 max_previous_gpx_speed_ratio=8.0,
                 material_root=material_root,
+                resolve_default_material_root=False,
                 dtm_dirs=dtm_dirs,
+                dtm_raster_sources=tuple(
+                    DtmRasterSource.model_validate(source)
+                    for source in preparation_inputs.dtm_rasters
+                ),
                 mcp_named_point_evidence=mcp_named_point_evidence,
                 overwrite=False,
                 import_timestamp=imported_at,
@@ -174,44 +175,22 @@ def clone_pretrip_workspace_from_inputs(
     )
 
     try:
-        preparation_manifest = preparation_runner(
-            LayerPreparationRequest(
-                project_id=request.target_project_id,
-                project_root=target_root,
-                layers=request.layers,
-                profile=request.profile,
-                network_mode=request.network_mode,
-                allow_network_fetch=request.allow_network_fetch,
-                prepare_cwa_imagery=request.prepare_cwa_imagery,
-                route_corridor_m=request.route_corridor_m,
-                reference_track_corridor_m=request.reference_track_corridor_m,
-                imagery_min_zoom=request.imagery_min_zoom,
-                imagery_max_zoom=request.imagery_max_zoom,
-                seed_imagery_cache=(
-                    request.seed_imagery_cache
-                    and request.network_mode == "explicit-fetch"
-                    and request.allow_network_fetch
-                ),
-                imagery_provider_allows_offline_prefetch=(
-                    request.imagery_provider_allows_offline_prefetch
-                ),
-                imagery_seed_max_tiles=request.imagery_seed_max_tiles,
-                imagery_cache_root=(
-                    target_root / "cache" / "raster-tiles"
-                ).resolve(),
-                imagery_cache_fallback_project_ids=(request.source_project_id,),
-                run_post_layer_enrichments=True,
-                run_map_preparation_spec_artifacts=True,
-                osm_pbf_path=osm_pbf_path,
-                osm_pbf_source_url=osm_pbf_source_url,
-                osm_pbf_cache_ttl_days=osm_pbf_cache_ttl_days,
-                osmium_bin=request.osmium_bin,
-                run_qgis_terrain_workflow=True,
-                qgis_terrain_analysis_margin_m=250.0,
-                qgis_route_contact_distance_m=10.0,
-                qgis_requested_by=request.requested_by,
-            )
-        )
+        preparation_options = {
+            field.name: getattr(request, field.name)
+            for field in fields(request)
+            if field.name in PREPARATION_OPTION_FIELDS
+        }
+        preparation_options.update({
+            "osm_pbf_path": osm_pbf_path,
+            "osm_pbf_source_url": osm_pbf_source_url,
+            "osm_pbf_cache_ttl_days": osm_pbf_cache_ttl_days,
+        })
+        preparation_manifest = preparation_runner(build_workspace_preparation_request(
+            target_root,
+            source_project_id=request.source_project_id,
+            requested_by=request.requested_by,
+            preparation_options=preparation_options,
+        ))
     except Exception as exc:
         safe_error = (
             f"{type(exc).__name__}: map preparation failed; "
@@ -488,30 +467,10 @@ def _source_material_manifest(
     source_project: dict[str, Any],
     source_manifest: dict[str, Any],
 ) -> tuple[Path | None, dict[str, Any]]:
-    candidates: list[Path] = []
-    mcp_source = _existing_file(source_project.get("mcp_named_point_evidence_source_path"))
-    if mcp_source is not None:
-        candidates.extend(mcp_source.parents)
-    for source in source_manifest.get("sources", []):
-        if not isinstance(source, dict):
-            continue
-        original = _existing_file(source.get("original_path"))
-        if original is not None:
-            candidates.extend(original.parents)
-    candidates.extend(source_root.parents)
-
-    seen: set[Path] = set()
-    for candidate in candidates:
-        resolved = candidate.expanduser().resolve()
-        if resolved in seen:
-            continue
-        seen.add(resolved)
-        manifest_path = resolved / "material_manifest.json"
-        if not manifest_path.is_file():
-            continue
-        manifest = _load_json_object(manifest_path)
-        return resolved, manifest
-    return None, {}
+    """Compatibility wrapper for source preflight and persisted job bindings."""
+    del source_project, source_manifest
+    inputs = resolve_workspace_preparation_inputs(source_root)
+    return inputs.material_root, inputs.material_manifest
 
 
 def _clone_receipt(

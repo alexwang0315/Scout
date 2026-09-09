@@ -3295,6 +3295,17 @@ def test_layer_preparation_runs_qgis_risk_adapter_before_packaging_and_projectio
     assert layers["risk-heatmap"]["status"] == "ready_from_project_ref"
     assert layers["risk-delta"]["status"] == "ready_from_project_ref"
     assert layers["risk-score"]["blockers"] == []
+    assert manifest["validation"]["status"] in {"ready", "ready_with_warnings"}
+    assert manifest["validation"]["blocker_count"] == 0
+    assert manifest["counts"]["blocker_count"] == 0
+    assert manifest["counts"]["blocked_layer_count"] == 0
+    assert "python_dem_terrain_analysis_disabled" not in json.dumps(
+        manifest["validation"], ensure_ascii=False
+    )
+    validation_report = _load(
+        project_root / manifest["outputs"]["layer_validation_report_ref"]
+    )
+    assert validation_report == manifest["validation"]
     assert project.get("calibrated_risk_heatmap_sync_error") is None
     heatmap_metadata = _load(
         project_root / project["calibrated_risk_heatmap_metadata_ref"]
@@ -3325,6 +3336,100 @@ def test_layer_preparation_runs_qgis_risk_adapter_before_packaging_and_projectio
     assert rerun_project["risk_score_qgis_workflow_run_id"] == (
         "preparation-order-rerun"
     )
+
+
+def test_qgis_risk_force_refresh_rebuilds_same_completed_run(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project_root = _write_minimal_overpass_dtm_workspace(tmp_path)
+    _write_risk_score_outputs(project_root / "outputs/risk")
+    project_path = project_root / "project.json"
+    project = {
+        **_load(project_path),
+        **pretrip_layer_preparation.SCOUT_RISK_OUTPUT_REFS,
+        "risk_score_generation_status": "completed",
+        "risk_score_qgis_workflow_run_id": "qgis-existing-run",
+    }
+    _write_json(project_path, project)
+    before = project_path.read_bytes()
+    calls = []
+
+    def prepare_risk(**kwargs: object) -> dict[str, object]:
+        calls.append(kwargs)
+        return {
+            "status": "completed",
+            "adapter": "scout_qgis_grass_risk_profile_adapter.v1",
+            "output_refs": dict(pretrip_layer_preparation.SCOUT_RISK_OUTPUT_REFS),
+        }
+
+    monkeypatch.setattr(pretrip_layer_preparation, "prepare_qgis_grass_risk_outputs", prepare_risk)
+    monkeypatch.setattr(
+        pretrip_layer_preparation, "_sync_calibrated_risk_outputs",
+        lambda *, project, **_kwargs: project,
+    )
+    monkeypatch.setattr(
+        pretrip_layer_preparation, "sync_reviewed_qgis_spatial_risk_inputs",
+        lambda *, project, **_kwargs: project,
+    )
+    monkeypatch.setattr(
+        pretrip_layer_preparation, "_refresh_qgis_risk_layer_records", lambda **_kwargs: None,
+    )
+    manifest = {"project_id": project["project_id"], "finished_at": "2026-09-08T03:00:00Z"}
+    terrain = {"status": "completed", "workflow_run_id": "qgis-existing-run"}
+    default_result = pretrip_layer_preparation._finalize_qgis_dependent_risk_state(
+        project_root=project_root, manifest=manifest, qgis_terrain_feature_stack=terrain,
+    )
+    assert default_result == {
+        "status": "not_applicable", "reason": "risk_outputs_already_match_qgis_workflow",
+    }
+    assert calls == []
+    assert project_path.read_bytes() == before
+
+    forced_result = pretrip_layer_preparation._finalize_qgis_dependent_risk_state(
+        project_root=project_root, manifest=manifest,
+        qgis_terrain_feature_stack=terrain, force_refresh=True,
+    )
+    assert forced_result["status"] == "completed"
+    assert len(calls) == 1
+    assert calls[0]["qgis_workflow_run_id"] == "qgis-existing-run"
+    updated = _load(project_path)
+    assert updated["risk_score_candidate_only"] is True
+    assert updated["risk_score_runtime_safety_truth"] is False
+    assert updated["risk_score_operational"] is False
+
+
+@pytest.mark.parametrize(
+    ("terrain_status", "run_id"),
+    [("failed", "qgis-existing-run"), ("unavailable", "qgis-existing-run"),
+     ("completed", ""), ("completed", None), ("completed", "../escape"),
+     ("completed", ".."), ("completed", " ")],
+)
+def test_qgis_risk_force_refresh_requires_completed_terrain_and_valid_run_id(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    terrain_status: str,
+    run_id: str | None,
+) -> None:
+    project_root = _write_minimal_overpass_dtm_workspace(tmp_path)
+    project_path = project_root / "project.json"
+    project = _load(project_path)
+    project.update(risk_score_generation_status="completed", risk_score_qgis_workflow_run_id="qgis-existing-run")
+    _write_json(project_path, project)
+    before = project_path.read_bytes()
+
+    def unexpected_call(**_kwargs: object) -> None:
+        pytest.fail("Force refresh must not prepare inputs or execute an ineligible workflow")
+
+    monkeypatch.setattr(pretrip_layer_preparation, "prepare_qgis_grass_risk_outputs", unexpected_call)
+    monkeypatch.setattr(pretrip_layer_preparation, "_workspace_scout_risk_generation_inputs", unexpected_call)
+    result = pretrip_layer_preparation._finalize_qgis_dependent_risk_state(
+        project_root=project_root, manifest={"project_id": project["project_id"]},
+        qgis_terrain_feature_stack={"status": terrain_status, "workflow_run_id": run_id},
+        force_refresh=True,
+    )
+    assert result["status"] in {"not_applicable", "unavailable", "awaiting_qgis_grass_processor"}
+    assert project_path.read_bytes() == before
 
 
 def test_qgis_risk_adapter_failure_remains_typed_unavailable(
