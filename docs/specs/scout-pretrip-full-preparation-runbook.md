@@ -5895,6 +5895,72 @@ Final G1–G6 qualification still requires the three independent repeat cycles.
 See the
 [qualification checkpoint](scout-golden-gpx-g1-g6-qualification-20260909.md#r14b-啟動設定修復與同作業-resume).
 
+### 2026-09-09 Browser reload and delayed navigation evidence
+
+Browser qualification must prove a full document reload. Navigating to the same
+URL with a fragment may leave the existing document and saved selection intact.
+Use the supported browser `Page.reload` operation and verify a changed loader ID
+and a main Document request, then wait for the exact workspace and persisted
+candidate. A same-document navigation is not reload evidence.
+
+During repeat2, return from the nine-day workspace encountered CDP dispatch
+deadlines and a navigation wait timeout. A fresh browser tab recovered the saved
+candidate; the old tab later completed its pending navigation. No persistent
+Save, Accept or Rebuild was repeated. The root cause remains unconfirmed: do not
+infer that a control timeout proves either an application failure or tool-only
+failure. Preserve action attempts and delayed outcomes, re-observe state before
+retrying, and retain this browser flow as FLAKY. Recovery does not count as a
+clean consecutive qualification repeat; restart the required success streak.
+
+### 2026-09-09 Scout storage for Golden qualification evidence
+
+When the Mac ran out of space, the user asked to use Scout storage. A strict,
+key-authenticated SSH preflight confirmed approximately 721 GiB free under
+`alexwang0315@scout.local:/home/alexwang0315/work`. The Mac independently recovered
+approximately 7.6 GiB before this task removed any files; no removal occurred.
+Re-measure live capacity instead of treating an older disk-full report as current.
+
+The task streamed a sealed inventory of 3,882 regular files (973,198,792 bytes)
+directly to this new, private Scout directory, without a local archive file:
+
+```text
+/home/alexwang0315/work/scout-golden-gpx-qualification/20260909/sealed-snapshot-20260909T112754Z-85d029df
+```
+
+`payload/` retains relative paths; `manifest.json` binds file hashes, sizes and
+metadata, and `verification.json` records full remote read-back. Every selected
+file was stable and rehashed while streaming, then fully rehashed on Scout;
+file modes/mtimes, directory modes and the exact relative-path inventory matched.
+A separate SSH connection verified the manifest and verification receipt hashes.
+The manifest SHA-256 is
+`f770a96eba4ec3950d81003aa8506da5da94dd644a8c9168247330a338f95640`.
+
+The selected roots were existing qualification browser/receipts/reports and two
+completed pytest fixture directories. Symlinks were not followed; 21 symlinks
+and an environment-named receipt were explicitly excluded. This is a per-file
+snapshot, not an atomic whole-tree snapshot. Later log/checkpoint appends and
+new browser evidence require a later snapshot. Ownership, ACLs, extended
+attributes and hard-link identity were not preserved. See the
+[storage receipt](../../artifacts/golden-gpx-repair-20260909/storage/scout-storage-summary.md)
+for exact selections, exclusions, scripts and measurements.
+
+Copying to Scout does not reclaim Mac space. Do not remove originals, replace
+active workspaces with symlinks, change credentials, or mount a remote filesystem
+as an implicit part of backup. Exact-target deletion still needs the user's
+explicit approval. The restored Mac capacity was sufficient to resume the three
+fresh Golden repeat cycles on the same r14 code and GIS environment; remote
+storage success does not itself pass G1–G6 or establish ARM64 execution parity.
+
+Before recovery, Dashboard/Worker listeners and their old process handles were
+absent, the prepared Scout QGIS connection referred to an exited process, and
+all preparation jobs were terminal. Starting the existing Scout QGIS profile,
+`tools/run_qgis_worker.sh`, then the documented Dashboard launcher with
+`SCOUT_DASHBOARD_AUTO_QGIS_WORKER=false` and
+`SCOUT_DASHBOARD_QGIS_WORKER_REQUIRED=true` restored authenticated readiness.
+All 387 persisted evidence files, 16 tested source hashes, launcher and served
+HTML remained unchanged. Preserve this recovery evidence separately from the
+new repeat-cycle qualification results.
+
 ### 2026-09-02 Dashboard-managed local QGIS worker
 
 `tools/run_dashboard_workspace.sh` now manages the local QGIS worker by

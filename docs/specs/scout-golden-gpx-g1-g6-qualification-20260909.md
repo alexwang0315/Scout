@@ -5,11 +5,62 @@
 Dashboard 重驗。驗收依據維持 [delivery plan §3.2](scout-golden-planned-gpx-delivery-plan.md#32-驗收矩陣)。
 [2026-09-08 首輪失敗紀錄](scout-golden-gpx-g1-g6-qualification-20260908.md)保留不改判。
 
-> r9 已恢復 QGIS worker 與 Dashboard 瀏覽器，完成真實 MCP 整理器、來源綁定及
-> 六頁共同分析版次修復。新的完整 UI 驗收仍在執行；不可把下列試算或隔離 PASS
-> 當成 G1–G6 全數通過。
+> 最新進度以最上方 r14c／r14d 紀錄為準；下方保留各次觀測當時的結論與失敗。
+> 不可把隔離測試、已恢復的產物或單輪成功當成 G1–G6 全數通過。
 
 ## 整合與重驗進度
+
+### r14c Scout 儲存已驗證，恢復同版本獨立重驗
+
+2026-09-09 19:30（Asia/Taipei），依使用者詢問實測 Scout 儲存空間。
+SSH preflight 確認約 721 GiB 可用；Mac 空間亦已恢復約 7.6 GiB，未由本任務
+刪除檔案。先前儲存阻塞已解除，驗收標準及首次核心觀測 1 次、後續 0/3 的
+計數不因此改判。
+
+已將既有 browser／receipts／reports 與兩個完成的 pytest 暫存目錄，直接串流
+封存至 Scout 的獨立新目錄。3,882 個 regular files、973,198,792 bytes
+（928.11 MiB）均經來源重讀及遠端全檔 SHA-256 核對；另以新 SSH 連線核對
+封存清單與驗證回執。沒有建立本機大型壓縮檔，也沒有刪除、搬移原檔或改用
+symlink。排除 21 個 symlinks 及一個環境名稱檔案，逐項列在清單中；這是逐檔
+封存，不是整個目錄的原子快照，之後追加的紀錄不包含在內。
+
+Scout 目錄：
+`/home/alexwang0315/work/scout-golden-gpx-qualification/20260909/sealed-snapshot-20260909T112754Z-85d029df`。
+[儲存摘要](../../artifacts/golden-gpx-repair-20260909/storage/scout-storage-summary.md)、
+[傳輸與回讀回執](../../artifacts/golden-gpx-repair-20260909/storage/sealed-snapshot-20260909T112754Z-85d029df/receipt.json)。
+
+先前 Dashboard／Worker／QGIS 程序已不存在且 9099／9876 無 listener，準備
+作業皆終止，才恢復原 Scout QGIS profile 與正式 launcher。新的 Dashboard
+PID 1728、Worker 1668、QGIS 1663；387 份保存檔案未變，16 個受測來源檔、
+launcher 與實際供應的 HTML 均和 r14b 相同。仍使用 Mac 上原本的 GIS 執行
+環境，沒有把 ARM64 Scout 執行結果混成同環境重驗。
+[版本與恢復觀測](../../artifacts/golden-gpx-repair-20260909/receipts/runtime-version-round-14c.json)。
+
+第一輪全新 Clone `golden_g1_chilai_repeat1_20260909_r14`，作業
+`prep.93163d259198dfd92f3a57393ef49ec5`，已完成第一次準備、完整採用與六頁，
+並經[獨立稽核](../../artifacts/golden-gpx-repair-20260909/reports/r14c-repeat1-review.md)
+確認一輪核心／恢復操作成立。60 份採用產物、25 份原始來源、六份作業檔案及
+387 份恢復前綁定均未變；實際新 Document reload、同名重送、雙擊冪等與
+A→B→A 均有證據。兩次觀測程式的按鈕 readiness 錯誤保留，沒有重送寫入。
+
+第二輪 `golden_g1_chilai_repeat2_20260909_r14`，作業
+`prep.bc99fada7642f7bad3df81aec3f9c7f3`，也在 attempt 1 完成準備；原始來源、
+35/35 CP 時刻、採用產物及 33-layer contract 通過，Save／Accept／Rebuild
+各只有一次成功寫入。完整 reload 與六頁有證據；同 URL 含 fragment 的
+`goto` 並未重載文件，該觀測明確排除，於 Accept 前補做實際 `Page.reload`。
+
+但從九日專案返回 A 時，原分頁多次發生 CDP 指令送出前逾時，直接導航亦曾
+等待逾時。新分頁可恢復原候選；原分頁稍後也完成先前的導航，原版與 35 個
+時刻仍完整。這不能證明工具或應用程式的單一根因，亦不能改判成乾淨通過。
+依原驗收規則，第二輪列 **FLAKY**，連續成功計數重置為 **0/3**；第一輪只
+保留為歷史成功。[逾時與恢復紀錄](../../artifacts/golden-gpx-repair-20260909/reports/r14c-repeat2-browser-control-stall.json)、
+[原分頁稍後恢復原日程](../../artifacts/golden-gpx-repair-20260909/browser/r14c/074-repeat2-late-return-original-itinerary.dom.json)、
+[新分頁完整重載後恢復](../../artifacts/golden-gpx-repair-20260909/browser/r14d/003-repeat2-recovered-original-itinerary.dom.json)。
+
+20:28（Asia/Taipei），第三個新案 `golden_g1_chilai_repeat3_20260909_r14` 的
+`prep.d6069757db746ac41286703ee2980198` 正在 prepare，attempt 1；完整文件
+重載與同名重送已找回同一作業。須由此重新取得連續三輪成功，仍為
+**NOT QUALIFIED**；Scout 封存成功不計入驗收成功次數。
 
 ### r14b 新 Import／Clone 完整核心流程已觀測；三次重跑待空間
 
@@ -30,7 +81,7 @@ Save／reload／Restore、Accept／reload、明確 Rebuild／reload、六頁實�
 Rebuild、ETA 與 CWA route/pair 稽核均 PASS。兩個真實 workspace 的 33-layer
 contract 及 Navigation report-only guard 亦通過。
 
-G2 九日案例保留 r13 真實 New Import／採用全鏈的歷史證據，r14 又驗證其
+G2 九日案例保留 r11 真實 New Import、r13 採用全鏈的歷史證據，r14 又驗證其
 原版本恢復、九日、219 CP、32 停留、8 過夜間隔、10 未知、143 個缺失時間戳
 及六頁。既有 G1/G2 的 99 份採用產物 hashes 相同；這是未變分析邏輯的當前
 回歸，不宣稱 G2 在 r14 又新建了一次。G3/G5 的同碼九項隔離故障測試皆 PASS。
