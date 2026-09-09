@@ -5,10 +5,42 @@
 Dashboard 重驗。驗收依據維持 [delivery plan §3.2](scout-golden-planned-gpx-delivery-plan.md#32-驗收矩陣)。
 [2026-09-08 首輪失敗紀錄](scout-golden-gpx-g1-g6-qualification-20260908.md)保留不改判。
 
-> 最新進度以最上方 r14c／r14d 紀錄為準；下方保留各次觀測當時的結論與失敗。
+> 最新進度以最上方 r14e 紀錄為準；下方保留各次觀測當時的結論與失敗。
 > 不可把隔離測試、已恢復的產物或單輪成功當成 G1–G6 全數通過。
 
 ## 整合與重驗進度
+
+### r14e 觀測流程修正；第五輪 FLAKY 後重新累計
+
+r14d 第三、第四個全新 Clone 的核心／恢復操作經獨立稽核成立，曾累計為
+1/3、2/3。兩案各有 60 份採用產物、25 份原始 GPX、六份作業檔案與受測
+程式／launcher 的 hash 核對；四次真實 Document reload、雙擊 Save／Accept
+各一次效果、六頁同源，以及同分頁 A→九日 G2→A 原版本恢復均有證據。
+第四輪最後的觀測 predicate 把 `35 / 35` 寫成 `35/35` 而回傳 false；同一份
+DOM 已有完整時刻和 Restore 成功訊息，沒有重做操作。該 predicate 仍記 FAIL，
+不可宣稱所有自動化探針皆通過。
+
+[第三輪獨立審查](../../artifacts/golden-gpx-repair-20260909/reports/r14d-repeat3-review.md)、
+[第四輪獨立審查](../../artifacts/golden-gpx-repair-20260909/reports/r14d-repeat4-review.md)。
+
+第五輪 `golden_g1_chilai_repeat5_20260909_r14` 的
+`prep.f8343213395b984552a2829fbacba494` 在 attempt 1 完成準備；候選
+`version.0d5eb866d2bdced6` 的 Save／Accept／Rebuild 與產物稽核成立，返回後
+仍為原版本、35/35 時刻。但準備頁重載後，只等待 job card 就操作尚未就緒的
+來源表單，`fill` 實際拋出 disabled-field deadline，稍後再填入成功。這是
+**操作失敗後重試，列 FLAKY，連續成功重置為 0/3**；不能與第四輪的字串
+predicate 錯誤混為一談。後段地圖追蹤另有截斷，原始 trace 與缺口均保留。
+
+[第五輪觀測錯誤](../../artifacts/golden-gpx-repair-20260909/reports/r14d-repeat5-observer-note.json)、
+[來源表單尚未就緒](../../artifacts/golden-gpx-repair-20260909/browser/r14d/069b-repeat5-after-form-readiness.dom.json)、
+[返回原候選](../../artifacts/golden-gpx-repair-20260909/browser/r14d/096-repeat5-restored-original.dom.json)。
+
+21:30（Asia/Taipei），r14e 第六個新案 `golden_g1_chilai_repeat6_20260909_r14`，
+作業 `prep.b0298f6c0a59d0649e2bce1070a4d8a7` 已開始。觀測修正為每輪使用新
+分頁、先等待確切來源資料與啟用的表單，再操作；網路事件在操作前後與等待中
+持續收集。初次掛接前未捕捉的事件不補造。應用程式與 GIS runtime 沒有為此
+改版或重啟；原受測版本仍為 r14 `a069a000`。須重新取得連續三輪核心成功，
+**目前仍 NOT QUALIFIED**。
 
 ### r14c Scout 儲存已驗證，恢復同版本獨立重驗
 

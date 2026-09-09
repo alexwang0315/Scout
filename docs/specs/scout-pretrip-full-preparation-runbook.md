@@ -5912,6 +5912,30 @@ failure. Preserve action attempts and delayed outcomes, re-observe state before
 retrying, and retain this browser flow as FLAKY. Recovery does not count as a
 clean consecutive qualification repeat; restart the required success streak.
 
+The repeat5 reload exposed a different observer error: preparation job cards
+became available before the source workspace catalog and compact project data.
+The `New workspace name` input was still disabled. A premature `fill` threw an
+actionability deadline; filling it later after the same document became ready
+is an actual action retry and remains FLAKY. Wait for the exact source project
+data and enabled form before invoking an action. A visible job card alone does
+not prove that every independent UI dependency has loaded.
+
+Keep observer predicate failures distinct from action retries. Repeat4 expected
+the literal `35/35`, while the same captured DOM already showed `35 / 35 CP
+clocks`, the original endpoint times, and a successful no-write Restore. Preserve
+the failed predicate; independently verify the completed action from that same
+capture instead of repeating it or rewriting the outcome.
+
+Later repeat5 map observations lost part of the CDP event history. Preserve
+`truncated=true` and never infer missing responses. Use a fresh task-owned tab
+for each independent cycle, collect events before and after screenshots/actions
+and during readiness waits, and bind cursor ranges to that tab. Initial events
+before instrumentation are not full-navigation evidence. New Document requests
+and changed loader IDs prove subsequent reloads; screenshots and immutable
+artifact hashes corroborate visible state but do not recreate a missing trace.
+These are observer repairs, not a source/runtime version change. Recollect the
+required consecutive successful cycles after a failed action.
+
 ### 2026-09-09 Scout storage for Golden qualification evidence
 
 When the Mac ran out of space, the user asked to use Scout storage. A strict,
