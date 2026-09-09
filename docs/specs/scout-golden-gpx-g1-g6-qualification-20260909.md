@@ -39,6 +39,16 @@ template 回歸全數通過，env／socket guard 事件皆為 0；33-layer contr
 [檔名修復測試](../../artifacts/golden-gpx-repair-20260909/tests/run-20260909T085015813826Z/results.json)、
 [既有匯入回歸](../../artifacts/golden-gpx-repair-20260909/tests/run-20260909T085144677097Z/results.json)。
 
+r14 已提交 `a069a000` 並載入 Dashboard PID `30791`；重載前後 74 份作業、
+來源、候選／review 與失敗目標檔案完全相同。原 G1 已接受版本仍可在瀏覽器
+找回。原失敗 Clone 的 25 個來源檔名經新規則處理均在 255 UTF-8 bytes 內，
+最長 filtered 檔名已由作業系統實際建立；這是檔名修復證据，不能替代完整 Clone。
+目前磁碟僅餘約 285 MiB，已提出一個 519 MiB、沒有開啟中檔案的已完成
+`pytest-base` 暫存目錄清理申請；尚未取得同意，沒有刪除。
+待空間允許後，以 r14 重新蒐集完整流程及三次連續核心重跑證據。
+[r14 載入回執](../../artifacts/golden-gpx-repair-20260909/receipts/runtime-version-round-14-final.json)、
+[實際來源檔名核對](../../artifacts/golden-gpx-repair-20260909/reports/r14-real-filenames-verified.json)。
+
 ### r12 顯示層修復完成，等待 runtime 重載與瀏覽器重驗
 
 2026-09-09 15:55（Asia/Taipei）：`pretrip_admin_view.py` 已改讀採用後的
