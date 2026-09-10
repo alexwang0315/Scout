@@ -141,8 +141,15 @@ def build_reference_segment_timing(
     source_index_ref: str = DEFAULT_SOURCE_INDEX_REF,
     route_guide_timing_ref: str = DEFAULT_ROUTE_GUIDE_TIMING_REF,
     target_segments: tuple[ReferenceSegmentSpec, ...] | None = None,
+    target_checkpoint_coordinates: dict[str, tuple[float, float]] | None = None,
+    target_checkpoint_match_radius_m: float | None = None,
 ) -> dict[str, Any]:
     project_root = Path(project_root)
+    match_radius_m = CHECKPOINT_MATCH_RADIUS_M
+    if target_checkpoint_match_radius_m is not None:
+        if target_checkpoint_coordinates is None or not math.isfinite(target_checkpoint_match_radius_m) or target_checkpoint_match_radius_m <= 0:
+            raise ValueError("A positive target radius requires explicit target checkpoint coordinates")
+        match_radius_m = target_checkpoint_match_radius_m
     project_path = project_root / "project.json"
     project = _load_json(project_path) if project_path.exists() else {}
     source_index_path = project_root / source_index_ref
@@ -174,7 +181,18 @@ def build_reference_segment_timing(
         if target_segments is None
         else []
     )
-    if len(workspace_nodes) >= 2:
+    if target_checkpoint_coordinates is not None:
+        if target_segments is None:
+            raise ValueError("Explicit checkpoint coordinates require explicit target segments")
+        for lat, lon in target_checkpoint_coordinates.values():
+            if not math.isfinite(lat) or not math.isfinite(lon) or abs(lat) > 90 or abs(lon) > 180:
+                raise ValueError("Explicit target checkpoint coordinates must be finite WGS84 coordinates")
+        resolved_target_segments = target_segments
+        canonical_checkpoints = dict(target_checkpoint_coordinates)
+        checkpoint_quality = {key: {"source": "explicit_target_route_axis", "coordinate_sha256": _stable_hash(value)}
+                              for key, value in canonical_checkpoints.items()}
+        checkpoint_source = "explicit_target_route_axis"
+    elif len(workspace_nodes) >= 2:
         resolved_target_segments = _workspace_reference_segments(workspace_nodes)
         canonical_checkpoints = {
             node.key: (node.lat, node.lon) for node in workspace_nodes
@@ -246,7 +264,7 @@ def build_reference_segment_timing(
                 for point in part
             ]
             visits = {
-                key: _checkpoint_visits(flat_points, canonical_checkpoints[key])
+                key: _checkpoint_visits(flat_points, canonical_checkpoints[key], match_radius_m=match_radius_m)
                 for key in required_checkpoint_keys
             }
             for spec in resolved_target_segments:
@@ -312,7 +330,7 @@ def build_reference_segment_timing(
         "method": {
             "checkpoint_source": checkpoint_source,
             "checkpoint_cluster_radius_m": CHECKPOINT_CLUSTER_RADIUS_M,
-            "checkpoint_match_radius_m": CHECKPOINT_MATCH_RADIUS_M,
+            "checkpoint_match_radius_m": match_radius_m,
             "workspace_timing_node_spacing_m": (
                 WORKSPACE_TIMING_NODE_SPACING_M
                 if checkpoint_source == "workspace_route_distance_cp_mcp"
@@ -1046,6 +1064,8 @@ def _clusters(rows: list[tuple[float, float, str, str]]) -> list[list[tuple[floa
 def _checkpoint_visits(
     points: list[dict[str, Any]],
     checkpoint: tuple[float, float],
+    *,
+    match_radius_m: float = CHECKPOINT_MATCH_RADIUS_M,
 ) -> list[dict[str, Any]]:
     visits: list[dict[str, Any]] = []
     active: dict[str, Any] | None = None
@@ -1058,7 +1078,7 @@ def _checkpoint_visits(
             checkpoint[0],
             checkpoint[1],
         )
-        inside = distance_m <= CHECKPOINT_MATCH_RADIUS_M
+        inside = distance_m <= match_radius_m
         point_time = point["time"]
         if inside:
             if (

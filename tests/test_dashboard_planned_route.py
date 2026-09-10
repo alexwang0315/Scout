@@ -26,7 +26,7 @@ const win = dom.window;
 win.eval(fs.readFileSync(process.argv[1],"utf8"));
 const ui = win.ScoutPlannedRoute;
 let project = "project-a", pendingPreview = null, failSaveOnce = false, refreshes = 0;
-const calls = [], versions = [];
+const calls = [], versions = [], runs = [];
 let selection = {subject_kind:"golden_gpx",selection_sha256:null}, saved = null;
 const points = [{lat:24,lon:121},{lat:24.001,lon:121.001},{lat:24.002,lon:121.002}];
 const anchors = [{anchor_id:"golden.p0.i0",label:"起點",source_id:"golden",part_index:0,point_index:0,...points[0]},
@@ -35,6 +35,10 @@ const anchors = [{anchor_id:"golden.p0.i0",label:"起點",source_id:"golden",par
  {anchor_id:"ref.one.p0.i2",label:"山頭",source_id:"ref.one",part_index:0,point_index:2,...points[2]}];
 const catalog = {source_snapshot_sha256:"c".repeat(64),source_hashes:{"golden.gpx":"g".repeat(64)},golden_source_id:"golden",anchors,
  sources:[{source_id:"golden",label:"Golden",kind:"golden",parts:[points]},{source_id:"ref.one",label:"支線Ref",kind:"reference_gpx",parts:[points]}]};
+function analysisJob(status="queued", extra={}) {
+ const binding={project_id:project,version_id:saved.manifest.version_id,manifest_sha256:saved.manifest.manifest_sha256,geometry_sha256:"g".repeat(64),itinerary_sha256:"t".repeat(64)};
+ return {...binding,run_id:"analysis."+"b".repeat(32),binding,status,stage:status==="queued"?"prepare":"analysis",attempt:1,can_resume:status==="interrupted",execution_location:"scout",candidate_only:true,runtime_safety_truth:false,...extra};
+}
 const route = {type:"FeatureCollection",features:[
  {type:"Feature",properties:{source_id:"ref.one",source_kind:"reference_gpx",part_index:0,source_start_index:0,source_end_index:2,length_m:300,direction:"forward"},geometry:{type:"LineString",coordinates:[[121,24],[121.001,24.001]]}},
  {type:"Feature",properties:{source_id:"ref.one",source_kind:"reference_gpx",part_index:0,source_start_index:2,source_end_index:0,length_m:300,direction:"reverse"},geometry:{type:"LineString",coordinates:[[121.004,24.004],[121.003,24.003]]}}]};
@@ -50,12 +54,14 @@ function fill(selector,value){const input=el(selector);input.value=value;input.d
 function click(action){el(`[data-planned-action="${action}"]`).click();}
 function check(selector){const input=el(selector);input.checked=true;input.dispatchEvent(new win.Event("change",{bubbles:true}));}
 const host = {projectId:()=>project,apiBase:()=>"",refreshAnalysis:async()=>{refreshes++;},
- fetchJson:async path=>{calls.push({method:"GET",path});if(path.endsWith("/catalog"))return {...catalog,project_id:project};if(path.endsWith("/versions"))return {versions,head_version_id:versions[0]?.version_id||null};if(path.endsWith("/analysis-selection"))return selection;if(path.includes("/versions/"))return saved;throw Error(path);},
+ fetchJson:async path=>{calls.push({method:"GET",path});if(path.endsWith("/catalog"))return {...catalog,project_id:project};if(path.endsWith("/versions"))return {versions,head_version_id:versions[0]?.version_id||null};if(path.endsWith("/analysis-selection"))return selection;if(path.includes("/versions/"))return saved;if(/\/analysis-runs(?:\?|$)/.test(path))return {project_id:project,runs:runs.map(job=>({...job}))};if(path.includes("/analysis-runs/"))return {...runs.find(job=>path.endsWith(job.run_id))};throw Error(path);},
  postJson:async(path,body)=>{calls.push({method:"POST",path,body:JSON.parse(JSON.stringify(body))});
   if(path.endsWith("/preview")){if(pendingPreview)return pendingPreview;return preview(body);}
   if(path.endsWith("/versions")){if(failSaveOnce){failSaveOnce=false;throw Error("response timeout");}saved={manifest:{version_id:"plan."+"a".repeat(16),manifest_sha256:"m".repeat(64)},preview:preview(body.request),review:null,source_status:{status:"current"}};if(!versions.length)versions.push({...saved.manifest,status:"needs_review"});return {...saved.manifest};}
   if(path.endsWith("/review")){saved.review={status:"reviewed_planning_candidate",review_sha256:"r".repeat(64)};return saved.review;}
   if(path.endsWith("/analysis-selection")){selection={...body,selection_sha256:"s".repeat(64)};return selection;}
+  if(path.endsWith("/analysis-runs")){const job=analysisJob();runs.unshift(job);return job;}
+  if(path.endsWith("/resume")){const job=runs.find(item=>path.includes(item.run_id));Object.assign(job,{status:"queued",attempt:job.attempt+1,can_resume:false});return {...job};}
   throw Error(path);},
  render:()=>{win.document.getElementById("root").innerHTML=ui.render({projectId:project});ui.bind(host);}};
 host.render();
@@ -149,6 +155,190 @@ assert.ok(parsed.querySelector("[data-planned-legacy-golden]").textContent.inclu
 return {new_axis_visible:true,historical_content_labeled:true};
 ''')
     assert result == {"new_axis_visible": True, "historical_content_labeled": True}
+
+
+def test_analysis_run_controls_restore_resume_and_only_update_job_panel():
+    result = _probe(r'''
+assert.equal(el('[data-planned-run-action="start"]').disabled,true);
+click("preview");await flush();click("save");await flush();
+for(const name of ["sources","geometry","timing","uncertainty"])check(`[data-planned-review-check="${name}"]`);
+check('[data-planned-review-issue="gap.1"]');click("review");await flush();
+const savedVersion=saved.manifest.version_id;
+assert.ok(calls.some(call=>call.method==="GET"&&call.path.endsWith(`/analysis-runs?version_id=${savedVersion}`)));
+assert.equal(el('[data-planned-run-action="start"]').disabled,false);
+const input=el('[data-planned-human-text]');input.focus();
+el('[data-planned-run-action="start"]').click();await flush();
+assert.equal(el('[data-planned-human-text]'),input);
+assert.equal(win.document.activeElement,input);
+assert.equal(el('[data-planned-analysis-run]').dataset.plannedAnalysisRunState,"queued");
+assert.ok(el('[data-planned-analysis-run]').textContent.includes("scout"));
+assert.equal(el('[data-planned-run-action="start"]').disabled,true);
+const started=calls.find(call=>call.method==="POST"&&call.path.endsWith("/analysis-runs"));
+assert.equal(started.body.version_id,savedVersion);
+assert.equal(started.body.expected_manifest_sha256,saved.manifest.manifest_sha256);
+assert.equal(started.body.explicit_confirmation,true);
+const runId=runs[0].run_id;
+Object.assign(runs[0],{status:"interrupted",can_resume:true,error:{code:"worker_interrupted",message:"persisted job is recoverable"}});
+el('[data-planned-run-action="read"]').click();await flush();
+assert.equal(el('[data-planned-human-text]'),input);
+assert.ok(el('[data-planned-analysis-run]').textContent.includes("worker_interrupted"));
+assert.equal(el('[data-planned-run-action="resume"]').disabled,false);
+el('[data-planned-run-action="resume"]').click();await flush();
+assert.equal(el('[data-planned-analysis-run]').dataset.plannedAnalysisRun,runId);
+assert.equal(runs[0].attempt,2);
+assert.equal(calls.filter(call=>call.method==="POST"&&call.path.endsWith("/analysis-runs")).length,1);
+Object.assign(runs[0],{status:"completed_with_gaps",stage:"complete",can_resume:true,updated_at:"2026-09-10T08:00:00Z",preparation:{status:"partial",summary:"DEM incomplete"},projections:{navigation:{status:"partial",summary:"新支線 DEM 待補"}}});
+el('[data-planned-run-action="read"]').click();await flush();
+assert.equal(refreshes,1);assert.ok(el('[data-planned-analysis-run]').textContent.includes("新支線 DEM 待補"));
+el('[data-planned-run-action="read"]').click();await flush();assert.equal(refreshes,1);
+project="project-b";host.render();await flush();project="project-a";host.render();await flush();
+fill('[data-planned-version]',savedVersion);click("restore");await flush();
+assert.equal(el('[data-planned-analysis-run]').dataset.plannedAnalysisRun,runId);
+assert.equal(el('[data-planned-run-action="resume"]').disabled,false);
+assert.equal(calls.filter(call=>call.method==="POST"&&call.path.endsWith("/analysis-runs")).length,1);
+fill('[data-planned-human-text]',"edited draft");
+assert.equal(el('[data-planned-run-action="start"]').disabled,true);
+assert.equal(el('[data-planned-run-action="resume"]').disabled,true);
+return {version_filtered:true,original_form_retained:true,persisted_same_run:true,explicit_resume:true,dirty_guard:true};
+''')
+    assert result == {"version_filtered": True, "original_form_retained": True, "persisted_same_run": True, "explicit_resume": True, "dirty_guard": True}
+
+
+def test_uncertain_analysis_start_reuses_request_and_source_conflict_is_visible():
+    result = _probe(r'''
+click("preview");await flush();click("save");await flush();
+for(const name of ["sources","geometry","timing","uncertainty"])check(`[data-planned-review-check="${name}"]`);
+check('[data-planned-review-issue="gap.1"]');click("review");await flush();
+const posted=[],basePost=host.postJson;
+host.postJson=async(path,body)=>{if(!path.endsWith("/analysis-runs"))return basePost(path,body);posted.push(JSON.parse(JSON.stringify(body)));throw Error(posted.length===1?"connection interrupted":"HTTP 409 planned_analysis_sources_changed");};
+el('[data-planned-run-action="start"]').click();await flush();
+assert.ok(el('[data-planned-analysis-run-status]').textContent.includes("connection interrupted"));
+el('[data-planned-run-action="start"]').click();await flush();
+assert.equal(posted.length,2);assert.equal(posted[0].idempotency_key,posted[1].idempotency_key);
+assert.ok(el('[data-planned-analysis-run-status]').textContent.includes("HTTP 409 planned_analysis_sources_changed"));
+assert.equal(win.document.querySelector('[data-planned-analysis-run]'),null);
+assert.equal(el('[data-planned-run-action="start"]').disabled,true);
+return {request_identity_reused:true,source_conflict_visible:true};
+''')
+    assert result == {"request_identity_reused": True, "source_conflict_visible": True}
+
+
+def test_completed_run_metadata_waits_for_receipt_without_claiming_reanalysis_needed():
+    result = _probe(r'''
+click("preview");await flush();click("save");await flush();
+const job=analysisJob("completed_with_gaps",{stage:"complete",can_resume:true,preparation:{status:"completed",summary:"5/5 terrain parts prepared"},projections:Object.fromEntries(["permission","pace_fit","architecture","navigation","weather","route_context"].map(role=>[role,{status:"partial",summary:`${role} assessed with explicit gaps`}])),artifact_ref:"outputs/report.json"});
+const baseFetch=host.fetchJson;
+host.fetchJson=async path=>{
+ if(/\/analysis-runs(?:\?|$)/.test(path)){const {preparation,projections,...metadata}=job;return {project_id:project,runs:[metadata]};}
+ if(path.endsWith(job.run_id))return job;
+ return baseFetch(path);
+};
+el('[data-planned-run-action="list"]').click();await flush();
+const panel=el('[data-planned-analysis-run]');
+assert.equal(panel.dataset.plannedAnalysisRunState,"completed_with_gaps");
+assert.ok(el('[data-planned-run-receipt="pending"]').textContent.includes("作業已完成"));
+assert.ok(panel.textContent.includes("結果尚未讀取"));
+assert.ok(!panel.textContent.includes("尚未完成"));assert.ok(!panel.textContent.includes("needs_reanalysis"));
+assert.equal(el('[data-planned-run-action="read"]').disabled,false);
+el('[data-planned-run-action="read"]').click();await flush();
+assert.equal(win.document.querySelector('[data-planned-run-receipt="pending"]'),null);
+assert.ok(el('[data-planned-analysis-run]').textContent.includes("5/5 terrain parts prepared"));
+assert.ok(el('[data-planned-analysis-run]').textContent.includes("permission assessed with explicit gaps"));
+return {metadata_not_misclassified:true,explicit_read_loads_receipt:true};
+''')
+    assert result == {"metadata_not_misclassified": True, "explicit_read_loads_receipt": True}
+
+
+def test_late_analysis_detail_cannot_enter_another_project_or_version():
+    result = _probe(r'''
+click("preview");await flush();click("save");await flush();
+for(const name of ["sources","geometry","timing","uncertainty"])check(`[data-planned-review-check="${name}"]`);
+check('[data-planned-review-issue="gap.1"]');click("review");await flush();
+el('[data-planned-run-action="start"]').click();await flush();
+const oldJob={...runs[0]},baseFetch=host.fetchJson;let finish;
+host.fetchJson=path=>path.endsWith(oldJob.run_id)?new Promise(resolve=>{finish=resolve;}):baseFetch(path);
+el('[data-planned-run-action="read"]').click();await tick();
+project="project-b";host.render();await flush();
+finish({...oldJob,status:"completed",updated_at:"late A"});await flush();
+assert.equal(el('[data-planned-workbench]').dataset.plannedWorkbench,"project-b");
+assert.equal(win.document.querySelector('[data-planned-analysis-run]'),null);assert.equal(refreshes,0);
+project="project-a";host.render();await flush();fill('[data-planned-version]',saved.manifest.version_id);click("restore");await flush();
+el('[data-planned-run-action="read"]').click();await tick();
+const nextVersion="plan."+"c".repeat(16);
+saved={...saved,manifest:{...saved.manifest,version_id:nextVersion,manifest_sha256:"n".repeat(64)}};
+versions.push({...saved.manifest});click("refresh");await flush();fill('[data-planned-version]',nextVersion);click("restore");await flush();
+finish({...oldJob,status:"completed",updated_at:"late old version"});await flush();
+assert.equal(el('[data-planned-review-version]').dataset.plannedReviewVersion,nextVersion);
+assert.equal(win.document.querySelector('[data-planned-analysis-run]'),null);
+assert.equal(refreshes,0);
+return {late_project_ignored:true,late_version_ignored:true};
+''')
+    assert result == {"late_project_ignored": True, "late_version_ignored": True}
+
+
+def test_six_force_results_require_exact_version_geometry_timing_and_authority():
+    result = _probe(r'''
+saved={manifest:{version_id:"plan."+"a".repeat(16),manifest_sha256:"m".repeat(64)}};
+const job=analysisJob("completed_with_gaps"),roles=["permission","pace_fit","architecture","navigation","weather","route_context"];
+job.projections=Object.fromEntries(roles.map(role=>[role,{status:role==="navigation"?"partial":"ready",summary:`${role} 真實評估摘要`,artifact_ref:`outputs/planned_analysis/${job.run_id}/${role}.json`,artifact_sha256:"f".repeat(64),input_binding:{...job.binding},candidate_only:true,runtime_safety_truth:false,missing_inputs:role==="navigation"?[{code:"dem_missing",reason:"新支線缺少 DEM",source_ref:"dem.tif"}]:[],result:{decision:"candidate_review",answerability:"partial",field_answer:`${role} field evidence`,deep_payload:"lazy evidence",...(role==="architecture"?{cp_graph:{nodes:[{candidate_id:"planned.new.cp",point_index:9}],edges:[{segment_id:"planned.new.edge"}]}}:{})}}]));
+job.projections.permission.result.field_answer="不要在此停留，請先前往下一個安全CP";
+job.projections.navigation.result.required_actions=["補充 Planned DEM 資料"];
+const rawBefore=JSON.stringify(job.projections);
+const subject={project_id:project,subject_kind:"planned_gpx",subject_id:saved.manifest.version_id,selected_plan_version_id:saved.manifest.version_id,planned_bundle_sha256:saved.manifest.manifest_sha256,analysis_revision:"a".repeat(64),geometry_fingerprint:job.binding.geometry_sha256,timing_fingerprint:job.binding.itinerary_sha256,planned_analysis:job,dependencies:Object.fromEntries(roles.map(role=>[role,{status:role==="navigation"?"partial_planned_analysis":"current_planned_analysis"}]))};
+for(const role of roles){
+ win.document.getElementById("root").innerHTML=ui.renderSubject(subject,"outdoor-"+role.replaceAll("_","-"));ui.bind(host);
+ const panel=el(`[data-planned-force-projection="${role}"]`);
+ assert.equal(panel.dataset.plannedForceRun,job.run_id);assert.equal(panel.dataset.plannedForceCurrent,"true");
+ assert.ok(panel.textContent.includes(`${role} 真實評估摘要`));assert.ok(panel.textContent.includes(`/${role}.json`));
+ assert.ok(panel.textContent.includes("評估結果"));assert.ok(!panel.textContent.includes("現場摘要"));
+ assert.ok(!panel.textContent.includes(job.projections[role].result.field_answer));
+ assert.ok(!panel.textContent.includes("lazy evidence"));
+ const details=panel.querySelector('[data-planned-result-details]');details.open=true;details.dispatchEvent(new win.Event("toggle"));
+ assert.ok(details.textContent.includes("lazy evidence"));
+ assert.ok(details.textContent.includes(job.projections[role].result.field_answer));
+ if(role==="navigation"){assert.ok(el('[data-planned-force-limitations]').textContent.includes("新支線缺少 DEM"));assert.ok(panel.textContent.includes("準備／待補項目"));assert.ok(!panel.textContent.includes("需要的動作"));}
+ if(role==="architecture")assert.ok(el('[data-planned-force-cp-graph]').textContent.includes("planned.new.cp"));
+}
+for(const key of ["project_id","version_id","manifest_sha256","geometry_sha256","itinerary_sha256","run_id"]){
+ const wrong=JSON.parse(JSON.stringify(subject));wrong.planned_analysis.projections.navigation.input_binding[key]="wrong";
+ const markup=ui.renderSubject(wrong,"outdoor-navigation");assert.ok(!markup.includes('data-planned-force-projection="navigation"'));assert.ok(markup.includes('data-planned-force-binding-error'));
+}
+for(const mutation of [value=>value.planned_analysis.status="stale",value=>value.planned_analysis.projections.navigation.runtime_safety_truth=true,value=>value.planned_analysis.candidate_only=false]){
+ const wrong=JSON.parse(JSON.stringify(subject));mutation(wrong);assert.ok(!ui.renderSubject(wrong,"outdoor-navigation").includes('data-planned-force-projection="navigation"'));
+}
+assert.equal(JSON.stringify(job.projections),rawBefore);
+return {six_real_projections:6,full_binding_required:true,stale_hidden:true,lazy_summary:true,limitations_visible:true,field_in_details_only:true};
+''')
+    assert result == {"six_real_projections": 6, "full_binding_required": True, "stale_hidden": True, "lazy_summary": True, "limitations_visible": True, "field_in_details_only": True}
+
+
+def test_planned_light_tables_and_missing_reasons_are_readable_on_dark_page():
+    result = _probe(r'''
+win.document.body.style.color="#edf3f5";win.document.body.style.backgroundColor="#0c1512";
+win.document.getElementById("root").innerHTML=`<section class="planned-subject">
+ <table class="planned-table"><thead><tr><th>評估欄位</th></tr></thead><tbody><tr><td data-test-main-body>保留深底白字</td></tr></tbody></table>
+ <div class="planned-issues"><p data-test-missing>新支線缺少資料</p><section data-planned-table="contrast" data-planned-total-rows="1"><div class="planned-map-tools"><span data-test-pagination>完整 1 筆</span></div>
+ <table class="planned-table"><thead><tr><th>原因</th></tr></thead><tbody><tr><td data-test-reason>缺少 safety buffer</td></tr></tbody></table></section></div>
+ <div class="planned-map"><div class="planned-map-tools"><span data-test-map>原有 map 工具</span></div></div>
+ </section>`;
+ui.bind(host);
+const color=(selector,key="color")=>win.getComputedStyle(el(selector))[key];
+const luminance=css=>css.match(/[\d.]+/g).slice(0,3).map(Number).map(v=>{v/=255;return v<=0.04045?v/12.92:((v+0.055)/1.055)**2.4;}).reduce((sum,v,i)=>sum+v*[0.2126,0.7152,0.0722][i],0);
+const contrast=(fg,bg)=>{const a=luminance(fg),b=luminance(bg);return (Math.max(a,b)+0.05)/(Math.min(a,b)+0.05);};
+const ratios=[contrast(color('.planned-table th'),color('.planned-table th','backgroundColor')),
+ contrast(color('[data-test-missing]'),color('.planned-issues','backgroundColor')),
+ contrast(color('[data-test-reason]'),color('.planned-issues','backgroundColor')),
+ contrast(color('[data-test-pagination]'),color('[data-planned-table] > .planned-map-tools','backgroundColor'))];
+assert.ok(ratios.every(value=>value>=4.5),JSON.stringify(ratios));
+assert.equal(color('[data-test-main-body]'),"rgb(237, 243, 245)");
+assert.equal(color('[data-test-map]'),"rgb(237, 243, 245)");
+assert.ok(contrast(color('[data-test-main-body]'),color('body','backgroundColor'))>=4.5);
+return {light_surfaces_readable:true,main_body_preserved:true,map_style_preserved:true,minimum_contrast:Math.min(...ratios)};
+''')
+    assert result["light_surfaces_readable"] is True
+    assert result["main_body_preserved"] is True
+    assert result["map_style_preserved"] is True
+    assert result["minimum_contrast"] >= 4.5
 
 
 def test_large_catalog_and_timeline_keep_complete_geometry_and_page_to_last_record():

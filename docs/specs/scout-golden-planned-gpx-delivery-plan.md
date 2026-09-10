@@ -2,6 +2,10 @@
 
 建立日期：2026-09-08；更新日期：2026-09-10
 狀態：Golden G1–G6 的 2026-09-09 指定版本與案例維持 PASS，後續核心重驗連續 3/3；證據及限制見 §3.2。Planned 第二項已完成指定範圍的 P1–P9 驗收，為 SCOPED PASS / WORKING PROTOTYPE；操作見 §4，真實／fixture 證據及限制見[驗收報告](scout-planned-gpx-p1-p9-qualification-20260910.md)。
+
+P8 追加準備與六力實算亦已 **SCOPED PASS**：Scout 真實 P2 兩次完成、
+Resume／完整重載與六頁同版通過；六力實際資料缺口仍為 partial。
+見 §4.7 及[追加驗收](scout-planned-gpx-p8-reanalysis-qualification-20260910.md)。
 依據：[Outdoor AI Standard §5.2、§18.4–§18.7](SCOUT_OUTDOOR_AI_AGENT_STANDARD.md)。
 
 本計畫交付兩件事：先證明「依循 Golden」能從 Dashboard 完成並可靠恢復，再建立
@@ -177,7 +181,8 @@ Golden 的 accepted baseline，也不會用舊 graph 接受新支線；候選中
 | 地圖／TRH 候選 | [scout_planned_route_sources.py](../../scout_planned_route_sources.py) 接入 Overpass 查詢與已保存向量圖的起終點／途經點連通搜尋；讀入已審查的 Rudy 描繪、具來源鏈的 R1–R3 及沿用人工錨點審查的 R4。 | 來源檔案與 hash 綁定、候選路段及不可用原因；不將 raster 圖像或 TRH 成本直接變成可通行性／耗時。 |
 | 保存、審查與匯出 | [scout_planned_route_artifacts.py](../../scout_planned_route_artifacts.py) 重新編譯核對 preview，檢查父版本、來源及冪等鍵，原子發布 immutable bundle；獨立記錄四面向審查與分析選擇。 | `reviews/planned_routes` 下的版本、審查、選擇回執；GPX、manifest、ZIP bundle。 |
 | HTTP 入口 | [scout_planned_route_api.py](../../scout_planned_route_api.py) 透過既有 [workbench router](../../scout_contextual_permission_workbench_api.py) 的 `project_root_for` 接入相同 workspace。 | §4.5 的 `/admin/pretrip/projects/{project_id}/planned-route` API；來源衝突回報具體 code。 |
-| 分析主體 | [scout_analysis_subject.py](../../scout_analysis_subject.py) 增加 reviewed Planned bundle 選擇，提供完整新軸與分日；來源／版本無效時保留具體失效原因。 | Permission／Pace 的 Planned 日程，以及其他各力 `needs_reanalysis`／`coverage_needed`；不把舊報告標成新結果。 |
+| 分析主體 | [scout_analysis_subject.py](../../scout_analysis_subject.py) 選擇 reviewed Planned bundle，提供完整新軸與分日，並核對版本專屬準備／六力回執。 | 未重算時明示 `needs_reanalysis`／`coverage_needed`；有有效回執時顯示 `current_planned_analysis` 或 `partial_planned_analysis`。 |
+| 追加準備與六力重算 | [scout_planned_analysis.py](../../scout_planned_analysis.py) 管理持久作業、獨立 attempts 與 Resume；[preparation](../../scout_planned_preparation.py) 準備各分段地圖／原生 DEM；[producers](../../scout_planned_analysis_producers.py) 實際執行六力。 | `outputs/planned_analysis/runs/`；版本、geometry、itinerary、owner／RAW／producer／output hashes 綁定；大型工作可在 Scout 執行。 |
 | Dashboard | [scout-planned-route.js](../admin/scout-planned-route.js) 接入 [Permission Human Design](../admin/scout-dashboard-v0.1.html)，提供差異表單、來源選段、疊圖、時間軸、版本審查及匯出。 | 下節可見操作鏈；原始逐點時間軸保留，畫面採分頁與相鄰移動摘要。 |
 | 重匯入來源隔離 | [pretrip_import.py](../../pretrip_import.py)、[pretrip_gpx_corpus.py](../../pretrip_gpx_corpus.py) 保留 Planned XML provenance；[reference timing](../../pretrip_reference_segment_timing.py) 與 [daily departures](../../pretrip_historical_daily_departures.py) 排除計畫時間。 | Planned 可作規劃來源；不能藉重匯入成為本人 Recorded 或歷史觀測。 |
 
@@ -286,7 +291,7 @@ CP／segments、itinerary 及各力 dependency 狀態。重送相同冪等鍵與
 Overpass 原始／向量來源存於 `normalized/map/planned-overpass/{來源內容識別碼}/`，
 只追加 `project.planned_overpass_source_refs`；Golden refs 與原 accepted baseline 保留。
 
-### 4.6 目前能力邊界與未完成重算
+### 4.6 目前能力邊界與資料缺口
 
 文字解析以換行、分號或句號分句，目前直接支援以下句型；A／B／C 必須替換成
 目錄可辨識的地名或錨點。解析成功後仍須核對定位與來源路段。
@@ -310,17 +315,40 @@ R4 仍在既有 Navigation 敘事引導流程選人工錨點、審查並產生�
 與該來源、A/B、DEM、審查版本一致的產物。這次沒有把一般登山日誌直接變成
 免錨點審查的 R4。
 
-切換 Planned 已更新共同分析主體。當來源與新軸有效時，Permission／Pace 的日程
-dependency 為 `current_planned_candidate`；Architecture 的完整 producer 尚未依
-新版本重新產生，保留 `needs_reanalysis`。Navigation、Weather、
-Route Context 亦依來源與幾何範圍顯示待重算或 `coverage_needed`，目前預報不冒充
-Golden 歷史天候。新幾何即使位於 Golden 外框內，DEM coverage 仍屬未驗證；這次
-沒有把 Planned 選擇直接接成額外 map／DEM 自動準備作業。
+切換 Planned 會更新共同分析主體；尚未執行版本專屬分析時，Permission／Pace
+保留日程 candidate，其他各力明示待重算／追加準備。已接入獨立的追加準備與
+六力重算作業，操作見 §4.7，[實測與資料缺口](scout-planned-gpx-p8-reanalysis-qualification-20260910.md)
+分開記錄。有效回執才會使各力顯示 current／partial Planned analysis；新幾何
+不會僅因位於 Golden 外框內就自動具有 DEM coverage，目前預報也不冒充歷史天候。
 
 來源 elapsed time 只作計畫估計，停留辨識方法與腳程假設可回查；未知移動時間
 不補成完整 ETA。GPX 預設不輸出 `<time>`，日程留在同版 bundle；即使外部加入
 預估時間且保留 Planned provenance，重匯入也不能進入歷史觀測樣本。所有候選、
 審查、匯出與六力顯示維持 `candidate_only: true`、`runtime_safety_truth: false`。
+
+### 4.7 Planned 追加準備與六力重算
+
+1. 在 Permission 的 Human Design 選擇已保存版本，按 `Restore Planned Version`。
+2. 確認來源 current、該 manifest 已完成規劃審查；未保存的文字修改不納入作業。
+3. 讀取作業列表，按「追加準備並重算六力」。POST 202 後會顯示 run、attempt、
+   執行位置、進度；每個 attempt 有獨立輸入副本、地圖／DEM 與六力產物。
+4. 重開 Dashboard 後讀取相同作業。完成的列表摘要若尚未載入 receipt，會明示
+   「結果尚未讀取」；按「讀取作業狀態」取得完整結果。
+5. 失敗、中斷或仍有缺資料的作業，可明確按 `Resume 此作業` 重跑新 attempt；
+   舊 attempt 保留。來源／manifest 已過期時須重新檢查版本，不繞過 hash guard。
+6. 查看六力各頁的 run、版本、artifact 與缺資料原因。`partial` 是實算後的資料
+   完整程度，不是已取得出發許可。舊 Golden 區保持歷史標示。
+
+本輪 P2 在 Scout 完成五分段 QGIS／GRASS 與 9,775/9,775 DEM 點取樣，
+包括超出舊 Golden DEM 的 322 點；六個 producer 全部執行，但均保留具體
+partial，包含個人体能、安全餘裕、未匹配歷史路段、未知 ETA、有效預報與敘事審查。
+原 774 個檔案保持不變。此能力不會自動補未知路徑、時間、許可或生成 Recorded。
+
+Scout 執行目錄及操作入口見上述驗收報告。原生 Scout 的 GPX catalog 已可讀
+25 個來源，但首次完整構建曾耗 102.72 秒；既有 Overpass 舊候選 hash 不符、
+Rudy／TRH 未就緒仍有明確拒絕原因。版本專屬 prepare 已另取得新 corridor 地圖
+來源。這些 catalog 整理與一般自然語言日期／R4 推論仍是後續工作，不能視為
+P8 回執已一併補完。
 
 ## 5. 第二項驗收矩陣
 
@@ -329,7 +357,8 @@ P1／P2／P7／P8 與 P9 核心由真實 Dashboard 操作；P3–P6 與故障案
 fixtures，另有真實 Overpass 取源與既有 R1–R3 讀取。下表維持原始完成標準；
 逐例結果、版本及證據見[驗收報告](scout-planned-gpx-p1-p9-qualification-20260910.md)。
 P9 的再次 Accept 經 409 後成功找回既有 review，不宣稱新 Accept 或新的 Rebuild。
-P8 通過的是共同新版本與具體待重算狀態；後四力完整 producer 重算仍見 §4.6。
+原 P8 通過共同新版本與具體待重算狀態；後續已新增版本專屬準備與六力實算，
+操作與真實資料缺口見 §4.7 及追加驗收報告。
 
 | ID | 輸入／操作 | 完成證據 |
 |---|---|---|

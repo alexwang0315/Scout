@@ -56,6 +56,23 @@ def _json(root: Path, ref: str, hashes: dict) -> Any:
     return json.loads(_read(root, ref, hashes))
 
 
+def _filtered_gpx_ref(root: Path, project_id: str, record: dict) -> str:
+    ref = record["output_path"]
+    path = Path(ref)
+    if not path.is_absolute() or root in path.parents:
+        return ref
+    # Imported workspaces may retain a former host's absolute output path.
+    # Only this hash-bound filtered-route layout has a portable interpretation.
+    expected_sha = record.get("output_sha256")
+    suffix = (project_id, "normalized", "routes", "filtered", path.name)
+    if (not isinstance(project_id, str) or not project_id or
+            Path(project_id).parts != (project_id,) or project_id in {".", ".."} or
+            ".." in path.parts or path.parts[-5:] != suffix or
+            not isinstance(expected_sha, str) or not re.fullmatch(r"[0-9a-f]{64}", expected_sha)):
+        raise PlannedRouteConflict("source_missing_or_outside_project", f"Unavailable project source: {ref}")
+    return Path(*suffix[1:]).as_posix()
+
+
 def _stamp(value: Any) -> datetime | None:
     if not isinstance(value, str):
         return None
@@ -116,8 +133,9 @@ def load_planned_catalog(project_root: Path) -> dict:
             if number == 0:
                 raise PlannedRouteConflict("golden_source_missing", "Choose and prepare a Golden GPX first.")
             continue
-        raw = _read(root, ref, hashes)
-        relative = _path(root, ref).relative_to(root).as_posix()
+        local_ref = _filtered_gpx_ref(root, project.get("project_id", root.name), record)
+        raw = _read(root, local_ref, hashes)
+        relative = _path(root, local_ref).relative_to(root).as_posix()
         sha = hashes[relative]
         if record.get("output_sha256") and record["output_sha256"] != sha:
             raise PlannedRouteConflict("source_hash_changed", f"Filtered GPX changed: {relative}")

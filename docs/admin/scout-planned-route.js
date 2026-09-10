@@ -11,6 +11,8 @@
   const number = (value, unit = "") => value == null || !Number.isFinite(Number(value)) ? "未知" : `${Number(value).toFixed(1)}${unit}`;
   const hash = value => String(value || "").slice(0, 16) || "未提供";
   const button = (action, label, enabled = true, extra = "") => `<button type="button" class="permission-button" data-planned-action="${action}" ${enabled ? "" : "disabled"} ${extra}>${label}</button>`;
+  const forceNames = {permission: "Permission", pace_fit: "Pace Fit", architecture: "Architecture", navigation: "Navigation", weather: "Weather", route_context: "Route Context"};
+  const activeRunStatuses = new Set(["queued", "running"]);
   let host = null;
   let epoch = 0;
   let current = freshState("");
@@ -23,6 +25,8 @@
       text: "", departure: "", timezone: "+08:00", speed: "", paceMode: "source_preferred", operations: [], selections: [],
       nameResolutions: {}, reviewChecks: {}, reviewIssues: {}, keys: {}, focusAnchor: "",
       anchorScope: "route", anchorQuery: "", anchorPage: 0, pages: {}, tableViews: new Map(), exportResults: {},
+      analysisRuns: [], analysisRun: null, selectedRunId: "", runListStatus: "idle", runStatus: "尚未讀取準備／重算作業",
+      runReadBusy: false, runCommandBusy: false, runRequestId: 0, runPollTimer: null, runRefreshKey: "", runListVersion: null, runViewVersion: null, resultDetails: new Map(),
       bbox: {south: "", west: "", north: "", east: ""},
       editor: {kind: "stop", at: "", to: "", visit: "", toVisit: "", duration: "40", departure: "",
         sourceId: "", partIndex: "0", sourceFrom: "", sourceTo: "", roundTrip: true, label: "", sourceText: "",
@@ -30,7 +34,10 @@
   }
 
   function ensureProject(projectId) {
-    if (String(projectId || "") !== current.projectId) current = freshState(String(projectId || ""));
+    if (String(projectId || "") !== current.projectId) {
+      stopRunPolling(current);
+      current = freshState(String(projectId || ""));
+    }
     return current;
   }
 
@@ -94,6 +101,11 @@
     });
     container.querySelectorAll("[data-planned-export]").forEach(element => {
       element.disabled = state.busy || !version(state) || !manifestSha(state);
+    });
+    container.querySelectorAll("[data-planned-run-action]").forEach(element => {
+      const action = element.dataset.plannedRunAction;
+      element.disabled = state.busy || state.runCommandBusy || (action === "start" ? !canStartAnalysis(state)
+        : action === "resume" ? !canResumeAnalysis(state) : action === "read" ? !state.selectedRunId || state.runReadBusy : state.runReadBusy);
     });
     container.querySelectorAll("[data-planned-review-check], [data-planned-review-issue], [data-planned-review-all-issues]").forEach(element => {
       element.disabled = state.busy || !savedMatches(state);
@@ -403,6 +415,60 @@
       <p class="status">Rudy+TWMap 線索、已核對向量與 R1–R4 由 workspace 來源目錄讀入；未定位或未完成審查的來源保持缺口。</p>
       ${array(state.catalog?.issues).length ? issuesHtml(state.catalog.issues, `catalog:${state.catalog.source_snapshot_sha256}:issues`) : ""}</details>`;
   }
+  function runMatchesVersion(state, job) {
+    return Boolean(job && job.project_id === state.projectId && job.version_id === version(state) && job.manifest_sha256 === manifestSha(state));
+  }
+  function canStartAnalysis(state) {
+    return reviewed(state) && !state.runReadBusy && state.runListStatus === "ready" && state.runListVersion === runTargetVersion(state)
+      && !state.analysisRuns.some(job => runMatchesVersion(state, job) && activeRunStatuses.has(job.status));
+  }
+  function canResumeAnalysis(state) {
+    const job = state.analysisRun;
+    return reviewed(state) && !state.runReadBusy && runMatchesVersion(state, job) && job.can_resume === true && !activeRunStatuses.has(job.status) && job.status !== "stale";
+  }
+  function chooseAnalysisRun(state) {
+    const preferred = version(state) || state.selection?.version_id;
+    const chosen = state.analysisRuns.find(job => job.run_id === state.selectedRunId && (!preferred || job.version_id === preferred))
+      || state.analysisRuns.find(job => !preferred || job.version_id === preferred);
+    state.selectedRunId = chosen?.run_id || "";
+    state.analysisRun = chosen || null;
+  }
+  function runStageRows(job) {
+    return Object.entries(job?.stages || {}).map(([name, stage]) => [escape(name), escape(stage?.status || "unknown"), escape(stage?.reason || stage?.message || compact(stage?.error || ""))]);
+  }
+  function analysisRunsHtml(state) {
+    const targetVersion = runTargetVersion(state);
+    const job = !targetVersion || state.analysisRun?.version_id === targetVersion ? state.analysisRun : null;
+    const rows = state.analysisRuns.filter(item => !targetVersion || item.version_id === targetVersion);
+    const preparation = job?.preparation || {};
+    const receiptPending = ["completed", "completed_with_gaps"].includes(job?.status)
+      && (!Object.hasOwn(job, "preparation") || !Object.hasOwn(job, "projections"));
+    return `<section class="planned-review" data-planned-analysis-runs="${escape(state.projectId)}">
+      <h3>Planned 追加準備與六力重算</h3><p>以已審查的保存版本準備獨立分析資料，保留該版 route axis、CP 與 segments；未保存草稿不會納入。</p>
+      <div class="permission-authoring-actions"><button type="button" class="permission-button" data-planned-run-action="start" ${!state.busy && !state.runCommandBusy && canStartAnalysis(state) ? "" : "disabled"}>追加準備並重算六力</button>
+      <button type="button" class="permission-button" data-planned-run-action="list" ${state.runCommandBusy || state.runReadBusy ? "disabled" : ""}>重新讀取作業列表</button></div>
+      <label>此版本保存的作業<select data-planned-analysis-run-select="true" ${state.runCommandBusy || state.runReadBusy ? "disabled" : ""}>${options(rows, state.selectedRunId, item => item.run_id, item => `${item.run_id} · ${item.status} · attempt ${item.attempt ?? "?"}`, "選擇作業")}</select></label>
+      <div class="permission-authoring-actions"><button type="button" class="permission-button" data-planned-run-action="read" ${state.selectedRunId && !state.runCommandBusy && !state.runReadBusy ? "" : "disabled"}>讀取作業狀態</button>
+      <button type="button" class="permission-button" data-planned-run-action="resume" ${!state.busy && !state.runCommandBusy && canResumeAnalysis(state) ? "" : "disabled"}>Resume 此作業</button></div>
+      <p role="status" data-planned-analysis-run-status="true">${escape(state.runStatus)}</p>
+      ${job ? `<section data-planned-analysis-run="${escape(job.run_id)}" data-planned-analysis-run-state="${escape(job.status)}" data-planned-analysis-run-version="${escape(job.version_id)}" data-planned-analysis-run-manifest="${escape(job.manifest_sha256)}">
+        <p>${escape(job.version_id)} · ${escape(job.run_id)} · ${escape(job.status)} · 階段 ${escape(job.stage || "unknown")} · attempt ${escape(job.attempt ?? "?")} · 執行位置 ${escape(job.execution_location || "未提供")}</p>
+        <p>${escape(typeof job.progress === "string" ? job.progress : compact(job.progress || {}))}</p>
+        ${tableHtml(["階段", "狀態", "結果／原因"], runStageRows(job))}
+        ${receiptPending ? '<p data-planned-run-receipt="pending">作業已完成，請讀取作業狀態取得準備／六力結果。</p>' : ""}
+        <p>準備：${escape(receiptPending ? "結果尚未讀取" : preparation.status || "尚未完成")} · ${escape(preparation.reason || preparation.summary || "")}</p>
+        ${job.error ? `<p class="planned-issues">${escape(compact(job.error))}</p>` : ""}
+        ${tableHtml(["六力", "此作業結果", "摘要／待補資料"], Object.entries(forceNames).map(([role, label]) => {
+          const projection = job.projections?.[role];
+          return [escape(label), escape(receiptPending ? "結果尚未讀取" : projection?.status || "needs_reanalysis"), escape(receiptPending ? "按「讀取作業狀態」取得此作業結果" : projection?.summary || "尚無綁定此作業的結果")];
+        }))}
+        <p data-planned-run-artifact="true">作業產物：<code>${escape(job.artifact_ref || job.report_ref || "尚未產生")}</code></p>
+        ${resultDetailsHtml(state, `run:${job.run_id}:${job.attempt}:${job.updated_at || job.status}`, {binding: job.binding, preparation, artifact_ref: job.artifact_ref || job.report_ref,
+          projections: Object.fromEntries(Object.entries(job.projections || {}).map(([role, projection]) => [role, {status: projection.status, artifact_ref: projection.artifact_ref, artifact_sha256: projection.artifact_sha256, missing_inputs: projection.missing_inputs, gaps: projection.gaps}]))}, "作業來源、準備與產物引用")}
+        <p class="status">${job.status === "stale" ? "此作業來源或版本已過期；舊結果不能標為新版分析。" : "作業可重整後找回；只有與目前選定 Planned 版本一致的已驗證結果會顯示在六力頁。"}</p>
+      </section>` : ""}
+    </section>`;
+  }
   function reviewHtml(state) {
     if (!version(state)) return "";
     return `<section class="planned-review" data-planned-review-version="${escape(version(state))}" data-planned-review-manifest="${escape(manifestSha(state))}">
@@ -420,6 +486,7 @@
   }
   function render(context) {
     const state = ensureProject(context.projectId);
+    syncAnalysisRunTarget(state);
     return `<section class="planned-workbench" data-planned-workbench="${escape(state.projectId)}" data-planned-input-revision="${state.inputRevision}">
       <div class="permission-card-head"><div><h3>Human Design → Planned GPX</h3><p>依 Golden 編排行程差異，從 Ref. 或地圖候選取得實際路段，建立自己的路線與節奏版本。</p></div><span class="chip info">Planned candidate</span></div>
       <p data-planned-catalog-status="${escape(state.catalogStatus)}">${escape(state.catalogStatus)} · ${catalogSources(state).length} 來源 · ${anchors(state).length} 錨點 · 來源 ${escape(hash(state.catalog?.source_snapshot_sha256))}</p>
@@ -432,7 +499,7 @@
       ${state.operations.length || state.selections.length ? `<section><h4>已加入的差異／路段</h4>${[...state.operations.map((operation, index) => ({type: "operation", index, value: operation})), ...state.selections.map((selection, index) => ({type: "selection", index, value: selection}))].map(item => `<div class="planned-operation"><code>${escape(compact(item.value))}</code>${button("remove", "移除", !state.busy, `data-planned-remove-type="${item.type}" data-planned-remove-index="${item.index}"`)}</div>`).join("")}</section>` : ""}
       <div class="permission-authoring-actions">${button("preview", "預覽 Planned 幾何與節奏", Boolean(state.catalog) && !state.busy)}${button("save", "Save Planned Version", canSave(state) && !state.busy)}${button("refresh", "重新讀取來源與版本", !state.busy)}</div>
       <p class="status" aria-live="polite" data-planned-preview-status="true">${escape(state.previewStatus)}</p><p role="status" data-planned-status="true">${escape(state.status)}</p>
-      ${previewHtml(state)}${reviewHtml(state)}
+      ${previewHtml(state)}${reviewHtml(state)}${analysisRunsHtml(state)}
       <section class="planned-versions"><h4>保存版本與分析主體</h4><div class="planned-grid">
       <label>Planned 版本<select data-planned-version="true">${options(state.versions, state.versionId, item => item.version_id, item => `${item.version_id} · ${item.review_status || item.status || "saved"}`)}</select></label>
       <label>比較另一版本<select data-planned-compare-version="true">${options(state.versions, state.compareId, item => item.version_id, item => item.version_id)}</select></label></div>
@@ -471,6 +538,134 @@
       if (results[2].status === "fulfilled") state.selection = results[2].value.selection || results[2].value;
       state.status = errors.length ? errors.join(" · ") : explicit ? "來源與保存版本已重新讀取。" : "來源目錄已就緒；預覽不寫入 workspace。";
     } finally { if (live(state)) { state.busy = false; refresh(); } }
+  }
+  function stopRunPolling(state) {
+    if (state.runPollTimer != null) global.clearTimeout(state.runPollTimer);
+    state.runPollTimer = null;
+  }
+  function refreshRunPanel(state) {
+    if (!live(state)) return;
+    const panel = global.document.querySelector("[data-planned-analysis-runs]");
+    if (!panel || panel.dataset.plannedAnalysisRuns !== state.projectId) return;
+    panel.outerHTML = analysisRunsHtml(state);
+    bindTables(global.document);
+    bindResultDetails(global.document, state);
+    bindAnalysisRunControls(global.document, state);
+    updateButtons(state);
+    maybeLoadAnalysisRuns(state);
+  }
+  function runTargetVersion(state) { return version(state) || state.selection?.version_id || ""; }
+  function syncAnalysisRunTarget(state) {
+    const targetVersion = runTargetVersion(state);
+    if (state.runViewVersion === targetVersion) return;
+    stopRunPolling(state);
+    state.runRequestId += 1;
+    state.runReadBusy = false;
+    state.runListVersion = null; state.runViewVersion = targetVersion; state.runListStatus = "idle";
+    state.analysisRuns = []; state.analysisRun = null; state.selectedRunId = "";
+    state.runStatus = "尚未讀取此版本的準備／重算作業。";
+  }
+  function maybeLoadAnalysisRuns(state) {
+    if (live(state) && state.catalogStatus === "ready" && !state.busy && !state.runReadBusy && !state.runCommandBusy
+        && state.runListStatus === "idle" && global.document.querySelector("[data-planned-analysis-runs]")) void loadAnalysisRuns(state);
+  }
+  function scheduleRunPolling(state) {
+    stopRunPolling(state);
+    if (!live(state) || state.runReadBusy || state.runCommandBusy || !activeRunStatuses.has(state.analysisRun?.status)
+        || !global.document.querySelector("[data-planned-analysis-runs]")) return;
+    state.runPollTimer = global.setTimeout(() => {
+      state.runPollTimer = null;
+      if (live(state) && global.document.querySelector("[data-planned-analysis-runs]")) void readAnalysisRun(state);
+    }, 3000);
+  }
+  function acceptAnalysisRun(state, job) {
+    if (!job || job.project_id !== state.projectId || !job.run_id) throw new Error("分析作業回應缺少目前專案的 run binding。");
+    const expected = runTargetVersion(state);
+    if (expected && job.version_id !== expected) throw new Error("分析作業屬於另一 Planned 版本，已拒絕套用。");
+    if (version(state) && job.manifest_sha256 !== manifestSha(state)) throw new Error("分析作業 manifest 與目前保存版不一致。");
+    const index = state.analysisRuns.findIndex(item => item.run_id === job.run_id);
+    if (index < 0) state.analysisRuns.unshift(job); else state.analysisRuns[index] = job;
+    state.analysisRun = job; state.selectedRunId = job.run_id;
+    state.runStatus = `${job.run_id} · ${job.status} · ${job.stage || "unknown"} · attempt ${job.attempt ?? "?"}`;
+  }
+  async function refreshCompletedAnalysis(state, job) {
+    if (!["completed", "completed_with_gaps", "stale"].includes(job.status)) return;
+    const refreshKey = `${job.run_id}:${job.status}:${job.updated_at || job.attempt || ""}`;
+    if (state.runRefreshKey === refreshKey) return;
+    state.runRefreshKey = refreshKey;
+    try { await host.refreshAnalysis(); }
+    catch (error) {
+      if (live(state)) { state.runRefreshKey = ""; state.runStatus += `；作業已保存，六力重讀失敗：${String(error?.message || error)}`; }
+    }
+  }
+  async function loadAnalysisRuns(state) {
+    if (!host || !live(state) || state.runReadBusy || state.runCommandBusy) return;
+    stopRunPolling(state);
+    const targetVersion = runTargetVersion(state), requestId = ++state.runRequestId;
+    state.runReadBusy = true; state.runListStatus = "loading"; refreshRunPanel(state);
+    try {
+      const suffix = `analysis-runs${targetVersion ? `?version_id=${encodeURIComponent(targetVersion)}` : ""}`;
+      const payload = await host.fetchJson(path(state, suffix));
+      if (!live(state) || requestId !== state.runRequestId || targetVersion !== runTargetVersion(state)) return;
+      if (payload.project_id !== state.projectId) throw new Error("作業列表不屬於目前專案。");
+      state.analysisRuns = array(payload.runs).filter(job => job.project_id === state.projectId && (!targetVersion || job.version_id === targetVersion));
+      state.runListVersion = targetVersion;
+      state.runListStatus = "ready";
+      chooseAnalysisRun(state);
+      state.runStatus = state.analysisRun ? `${state.analysisRun.run_id} · ${state.analysisRun.status}` : "此版本尚無準備／重算作業。";
+    } catch (error) {
+      if (live(state) && requestId === state.runRequestId) { state.runListStatus = "unavailable"; state.runListVersion = targetVersion; state.runStatus = `無法讀取作業列表：${String(error?.message || error)}`; }
+    } finally {
+      if (live(state) && requestId === state.runRequestId) { state.runReadBusy = false; refreshRunPanel(state); scheduleRunPolling(state); }
+    }
+  }
+  async function readAnalysisRun(state) {
+    if (!host || !live(state) || state.runReadBusy || state.runCommandBusy || !state.selectedRunId) return;
+    stopRunPolling(state);
+    const selectedId = state.selectedRunId, targetVersion = runTargetVersion(state), requestId = ++state.runRequestId;
+    state.runReadBusy = true; refreshRunPanel(state);
+    try {
+      const job = await host.fetchJson(path(state, `analysis-runs/${encodeURIComponent(selectedId)}`));
+      if (!live(state) || requestId !== state.runRequestId || selectedId !== state.selectedRunId || targetVersion !== runTargetVersion(state)) return;
+      if (job.run_id !== selectedId) throw new Error("作業狀態回應的 run ID 不一致。");
+      acceptAnalysisRun(state, job);
+      await refreshCompletedAnalysis(state, job);
+    } catch (error) {
+      if (live(state) && requestId === state.runRequestId) state.runStatus = `作業狀態讀取失敗：${String(error?.message || error)}。已保存的工作不會因此重新啟動。`;
+    } finally {
+      if (live(state) && requestId === state.runRequestId) { state.runReadBusy = false; refreshRunPanel(state); scheduleRunPolling(state); }
+    }
+  }
+  async function submitAnalysisRun(state, resume = false) {
+    if (!host || !live(state) || state.busy || state.runCommandBusy || (resume ? !canResumeAnalysis(state) : !canStartAnalysis(state))) return;
+    stopRunPolling(state);
+    const selectedVersion = version(state), selectedManifest = manifestSha(state);
+    const previous = state.analysisRun;
+    const latest = state.analysisRuns.find(job => runMatchesVersion(state, job));
+    const suffix = resume ? `analysis-runs/${encodeURIComponent(previous.run_id)}/resume` : "analysis-runs";
+    const payload = {expected_manifest_sha256: selectedManifest, explicit_confirmation: true,
+      idempotency_key: key(state, resume ? "analysis-resume" : "analysis-start", resume ? `${previous.run_id}:${previous.attempt || 1}` : `${selectedManifest}:${latest?.run_id || "first"}`)};
+    if (!resume) payload.version_id = selectedVersion;
+    state.runCommandBusy = true; state.runStatus = resume ? "正在請求恢復同一作業…" : "正在建立此版本的準備／重算作業…"; refreshRunPanel(state);
+    try {
+      const job = await host.postJson(path(state, suffix), payload);
+      if (!live(state) || version(state) !== selectedVersion || manifestSha(state) !== selectedManifest) return;
+      if (resume && job.run_id !== previous.run_id) throw new Error("Resume 未返回原作業 ID，已拒絕套用。");
+      acceptAnalysisRun(state, job);
+      state.runListStatus = "ready"; state.runListVersion = selectedVersion;
+      await refreshCompletedAnalysis(state, job);
+    } catch (error) {
+      if (live(state) && version(state) === selectedVersion && manifestSha(state) === selectedManifest) {
+        const message = String(error?.message || error);
+        if (/planned_analysis_(sources|manifest|binding)_changed/.test(message)) {
+          state.saved.source_status = {status: "stale", reason: message};
+          state.previewStatus = "伺服器核對到版本或來源變更，請重新讀取並恢復可用的保存版本。";
+        }
+        state.runStatus = `${resume ? "恢復" : "建立"}作業未完成：${message}。可重新讀取已保存作業；同一請求重試使用原 key。`;
+      }
+    } finally {
+      if (live(state)) { state.runCommandBusy = false; refreshRunPanel(state); scheduleRunPolling(state); }
+    }
   }
   async function exportVersion(state, kind) {
     if (!host || state.busy || !["gpx", "manifest", "bundle"].includes(kind)) return;
@@ -708,10 +903,47 @@
       });
     });
   }
+  function bindAnalysisRunControls(root, state) {
+    const panel = root.querySelector("[data-planned-analysis-runs]");
+    if (!panel || panel.dataset.plannedRunBound === "true") return;
+    panel.dataset.plannedRunBound = "true";
+    panel.querySelector("[data-planned-analysis-run-select]")?.addEventListener("change", event => {
+      if (!live(state) || state.runReadBusy || state.runCommandBusy) return;
+      stopRunPolling(state);
+      state.selectedRunId = event.currentTarget.value;
+      state.analysisRun = state.analysisRuns.find(job => job.run_id === state.selectedRunId) || null;
+      state.runStatus = state.analysisRun ? `${state.analysisRun.run_id} · ${state.analysisRun.status}；可讀取完整作業狀態。` : "請選擇作業。";
+      refreshRunPanel(state); scheduleRunPolling(state);
+    });
+    panel.querySelectorAll("[data-planned-run-action]").forEach(control => control.addEventListener("click", () => {
+      if (!live(state) || control.disabled) return;
+      const action = control.dataset.plannedRunAction;
+      if (action === "list") void loadAnalysisRuns(state);
+      else if (action === "read") void readAnalysisRun(state);
+      else void submitAnalysisRun(state, action === "resume");
+    }));
+  }
+  function resultDetailsHtml(state, id, payload, label) {
+    state.resultDetails.set(id, payload);
+    return `<details data-planned-result-details="${escape(id)}"><summary>${escape(label)}</summary><pre data-planned-result-body="true">展開後讀取此作業的評估內容。</pre></details>`;
+  }
+  function bindResultDetails(root, state) {
+    root.querySelectorAll("[data-planned-result-details]").forEach(details => {
+      if (details.dataset.plannedResultBound === "true") return;
+      details.dataset.plannedResultBound = "true";
+      details.addEventListener("toggle", () => {
+        if (!details.open || !live(state) || details.dataset.plannedResultLoaded === "true") return;
+        const payload = state.resultDetails.get(details.dataset.plannedResultDetails);
+        if (payload === undefined) return;
+        details.querySelector("[data-planned-result-body]").textContent = JSON.stringify(payload, null, 2);
+        details.dataset.plannedResultLoaded = "true";
+      });
+    });
+  }
   function installStyle() {
     if (global.document.getElementById("plannedRouteStyle")) return;
     const style = global.document.createElement("style"); style.id = "plannedRouteStyle";
-    style.textContent = `.planned-workbench{border:1px solid #9eb7ad;border-radius:12px;margin:16px 0;padding:14px;background:#f8fcfa;color:#203a30}.planned-workbench h3,.planned-workbench h4{color:#183e2c}.planned-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:12px 0}.planned-grid label,.planned-text{display:flex;flex-direction:column;gap:5px;font-size:13px}.planned-grid input,.planned-grid select,.planned-text textarea,.planned-workbench select{max-width:100%;min-width:0;padding:8px;border:1px solid #a8bab1;border-radius:5px;background:white;color:#163526}.planned-text textarea{width:100%;box-sizing:border-box}.planned-check{display:flex;gap:8px;align-items:center;margin:8px 0}.planned-grid .planned-check{flex-direction:row}.planned-editor,.planned-review,.planned-versions{border-top:1px solid #ccd9d2;margin-top:16px;padding-top:14px}.planned-operation{display:flex;align-items:center;gap:12px;margin:8px 0}.planned-operation code{white-space:pre-wrap;overflow-wrap:anywhere;flex:1}.planned-table-scroll{overflow:auto;max-height:420px}.planned-table{border-collapse:collapse;width:100%;font-size:12px;text-align:left}.planned-table th,.planned-table td{padding:8px;border-bottom:1px solid #d1dbd5;vertical-align:top;white-space:normal;min-width:110px}.planned-table th{background:#ecf4ee;position:sticky;top:0}.planned-workbench pre,.planned-subject pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow:auto}.planned-issues{border-left:4px solid #b07816;padding:4px 12px;background:#fff8e8}.planned-issues li{overflow-wrap:anywhere;margin:8px 0}.planned-map{border:1px solid #a5b9ad;border-radius:8px;overflow:hidden;margin:12px 0;background:#f2f5ef}.planned-map-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px;background:white;font-size:12px}.planned-map svg{display:block;width:100%;height:420px;touch-action:none;cursor:grab}.planned-map path{fill:none;stroke-linejoin:round;stroke-linecap:round}.planned-map-golden{stroke:#687f99;stroke-width:5;opacity:.65}.planned-map-planned{stroke:#d35424;stroke-width:2.5}.planned-map-anchor{fill:#fff;stroke:#214e3a;stroke-width:1;cursor:pointer}.planned-map-anchor.is-selected{fill:#edc34d;r:7}.planned-map .status{padding:0 10px}.planned-subject{border:2px solid #cc6c37}.planned-legacy-golden{border:1px dashed #999;padding:12px;margin:16px 0}.planned-legacy-golden>summary{font-weight:600;color:#75542e;cursor:pointer}.planned-legacy-golden[open]>summary{margin-bottom:16px}@media(max-width:600px){.planned-map svg{height:300px}.planned-grid{grid-template-columns:1fr}.planned-workbench{padding:10px}.planned-operation{align-items:flex-start}}`;
+    style.textContent = `.planned-workbench{border:1px solid #9eb7ad;border-radius:12px;margin:16px 0;padding:14px;background:#f8fcfa;color:#203a30}.planned-workbench h3,.planned-workbench h4{color:#183e2c}.planned-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:12px 0}.planned-grid label,.planned-text{display:flex;flex-direction:column;gap:5px;font-size:13px}.planned-grid input,.planned-grid select,.planned-text textarea,.planned-workbench select{max-width:100%;min-width:0;padding:8px;border:1px solid #a8bab1;border-radius:5px;background:white;color:#163526}.planned-text textarea{width:100%;box-sizing:border-box}.planned-check{display:flex;gap:8px;align-items:center;margin:8px 0}.planned-grid .planned-check{flex-direction:row}.planned-editor,.planned-review,.planned-versions{border-top:1px solid #ccd9d2;margin-top:16px;padding-top:14px}.planned-operation{display:flex;align-items:center;gap:12px;margin:8px 0}.planned-operation code{white-space:pre-wrap;overflow-wrap:anywhere;flex:1}.planned-table-scroll{overflow:auto;max-height:420px}.planned-table{border-collapse:collapse;width:100%;font-size:12px;text-align:left}.planned-table th,.planned-table td{padding:8px;border-bottom:1px solid #d1dbd5;vertical-align:top;white-space:normal;min-width:110px}.planned-table th{background:#ecf4ee;color:#203a30;position:sticky;top:0}.planned-workbench pre,.planned-subject pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow:auto}.planned-issues{border-left:4px solid #b07816;padding:4px 12px;background:#fff8e8;color:#203a30}.planned-issues li{overflow-wrap:anywhere;margin:8px 0}.planned-map{border:1px solid #a5b9ad;border-radius:8px;overflow:hidden;margin:12px 0;background:#f2f5ef}.planned-map-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px;background:white;font-size:12px}[data-planned-table]>.planned-map-tools{color:#203a30}.planned-map svg{display:block;width:100%;height:420px;touch-action:none;cursor:grab}.planned-map path{fill:none;stroke-linejoin:round;stroke-linecap:round}.planned-map-golden{stroke:#687f99;stroke-width:5;opacity:.65}.planned-map-planned{stroke:#d35424;stroke-width:2.5}.planned-map-anchor{fill:#fff;stroke:#214e3a;stroke-width:1;cursor:pointer}.planned-map-anchor.is-selected{fill:#edc34d;r:7}.planned-map .status{padding:0 10px}.planned-subject{border:2px solid #cc6c37}.planned-legacy-golden{border:1px dashed #999;padding:12px;margin:16px 0}.planned-legacy-golden>summary{font-weight:600;color:#75542e;cursor:pointer}.planned-legacy-golden[open]>summary{margin-bottom:16px}@media(max-width:600px){.planned-map svg{height:300px}.planned-grid{grid-template-columns:1fr}.planned-workbench{padding:10px}.planned-operation{align-items:flex-start}}`;
     global.document.head.appendChild(style);
   }
   function bind(context) {
@@ -719,8 +951,11 @@
     installStyle();
     bindTables(global.document);
     bindMaps(global.document);
+    bindResultDetails(global.document, state);
     const root = global.document.querySelector("[data-planned-workbench]");
-    if (!root || root.dataset.plannedBound === "true") return;
+    if (!root) { stopRunPolling(state); return; }
+    bindAnalysisRunControls(root, state);
+    if (root.dataset.plannedBound === "true") return;
     root.dataset.plannedBound = "true";
     if (state.busy) root.querySelectorAll("input, textarea, select").forEach(input => { input.disabled = true; });
     root.querySelector("[data-planned-human-text]")?.addEventListener("input", event => { state.text = event.currentTarget.value; changed(state, false); });
@@ -760,10 +995,57 @@
       } catch (error) { state.status = String(error?.message || error); refresh(); }
     }));
     if (state.catalogStatus === "idle") void loadCatalog(state);
+    maybeLoadAnalysisRuns(state);
+    scheduleRunPolling(state);
+  }
+
+  function forceProjectionHtml(state, subject, role) {
+    const job = subject.planned_analysis;
+    const projection = job?.projections?.[role];
+    const dependency = subject.dependencies?.[role] || {};
+    const expected = {project_id: subject.project_id, version_id: subject.selected_plan_version_id,
+      manifest_sha256: subject.planned_bundle_sha256, geometry_sha256: subject.geometry_fingerprint, itinerary_sha256: subject.timing_fingerprint};
+    const matches = binding => binding && Object.entries(expected).every(([name, value]) => Boolean(value) && binding[name] === value);
+    const verified = subject.subject_kind === "planned_gpx" && subject.schedule_status !== "stale"
+      && ["completed", "completed_with_gaps"].includes(job?.status)
+      && job.project_id === expected.project_id && job.version_id === expected.version_id && job.manifest_sha256 === expected.manifest_sha256
+      && matches(job.binding) && matches(projection?.input_binding)
+      && (!projection.input_binding.run_id || projection.input_binding.run_id === job.run_id)
+      && job.candidate_only === true && job.runtime_safety_truth === false
+      && projection.candidate_only === true && projection.runtime_safety_truth === false
+      && ["ready", "partial", "blocked"].includes(projection.status) && projection.artifact_ref && projection.artifact_sha256;
+    if (!verified) return `<section data-planned-force-pending="${escape(role)}"><h4>${escape(forceNames[role] || role)} Planned 分析</h4>
+      <p>${escape(job?.status || dependency.status || "needs_reanalysis")} · ${escape(dependency.reason || "尚無與此版來源、幾何與時程一致的已驗證作業結果。")}</p>
+      ${job ? `<p data-planned-force-binding-error="true">作業 ${escape(job.run_id || "未提供")} 的結果尚未通過目前分析主體的完整綁定核對。</p>` : ""}</section>`;
+    const result = projection.result || {};
+    const viewId = `force:${subject.analysis_revision}:${job.run_id}:${role}`;
+    const limitations = [...array(projection.missing_inputs), ...array(projection.gaps)];
+    const currentResult = ["current_planned_analysis", "partial_planned_analysis"].includes(dependency.status);
+    const resultSummary = [
+      ["評估結果", result.decision], ["可回答程度", result.answerability],
+      ["Navigation demand", result.navigation_demand_level], ["準備／待補項目", result.required_actions],
+    ].filter(([, value]) => value != null && value !== "");
+    const graph = result.cp_graph;
+    return `<section class="planned-review" data-planned-force-projection="${escape(role)}" data-planned-force-run="${escape(job.run_id)}"
+      data-planned-force-version="${escape(job.version_id)}" data-planned-force-status="${escape(projection.status)}" data-planned-force-current="${currentResult ? "true" : "false"}"
+      data-planned-force-manifest="${escape(expected.manifest_sha256)}" data-planned-force-geometry="${escape(expected.geometry_sha256)}" data-planned-force-itinerary="${escape(expected.itinerary_sha256)}">
+      <h4>${escape(forceNames[role] || role)} · 此 Planned 作業分析</h4>
+      <p>${escape(job.run_id)} · ${escape(projection.status)} · 執行位置 ${escape(job.execution_location || "未提供")}</p>
+      <p data-planned-force-summary="true">${escape(projection.summary || "請查看此作業評估結果。")}</p>
+      ${currentResult ? "" : `<p class="planned-issues">${escape(dependency.reason || "此作業結果仍有待補資料，尚未構成完整的本頁分析。")}</p>`}
+      ${resultSummary.length ? tableHtml(["評估欄位", "此作業結果"], resultSummary.map(([label, value]) => [escape(label), escape(compact(value))])) : ""}
+      ${limitations.length ? `<div class="planned-issues" data-planned-force-limitations="true"><p>此作業仍有 ${limitations.length} 筆缺少資料／限制：</p>${pagedTable(["代碼", "原因", "來源"], limitations, issue => [escape(issue?.code || issue?.kind || "gap"), escape(typeof issue === "string" ? issue : issue?.reason || issue?.message || compact(issue)), escape(issue?.source_ref || issue?.artifact_ref || "")], `${viewId}:gaps`)}</div>` : ""}
+      ${graph ? `<details data-planned-force-cp-graph="true"><summary>此版本 CP graph · ${array(graph.nodes).length} CP / ${array(graph.edges).length} edges</summary>
+        ${pagedTable(["CP", "位置／距離"], array(graph.nodes), node => [escape(node.label || node.candidate_id || node.checkpoint_id || node.id), escape(node.point_index ?? node.route_order_m ?? node.distance_m ?? "未知")], `${viewId}:nodes`)}
+        ${pagedTable(["Edge", "來源與端點"], array(graph.edges), edge => [escape(edge.segment_id || edge.edge_id || edge.id), escape(compact(edge))], `${viewId}:edges`)}</details>` : ""}
+      <p data-planned-force-artifact="true">產物：<code>${escape(projection.artifact_ref)}</code><br>SHA-256：<code>${escape(projection.artifact_sha256)}</code></p>
+      ${resultDetailsHtml(state, viewId, {result, coverage: projection.coverage, input_binding: projection.input_binding}, "查看此作業評估摘要與來源綁定；完整評估保存在上述產物")}
+      <p class="status">${escape(projection.status)} 表示此作業資料的完整程度；評估仍為候選，不能代替安全判斷或出發許可。runtime safety truth=false。</p>
+    </section>`;
   }
 
   function renderSubject(subject, route) {
-    ensureProject(subject.project_id);
+    const state = ensureProject(subject.project_id);
     const role = route.replace("outdoor-", "").replaceAll("-", "_");
     const dependency = subject.dependencies?.[role] || {};
     const routeGeojson = subject.planned_route_geojson || subject.route_geojson || subject.route_axis?.geojson;
@@ -775,6 +1057,7 @@
       <div class="metric-line"><div class="metric-row"><span>新路線 / CP / Segment</span><strong>${escape(hash(subject.geometry_fingerprint))} · ${checkpoints.length} CP · ${segments.length} segments</strong></div>
       <div class="metric-row"><span>本頁新版分析</span><strong>${escape(dependency.status || "needs_reanalysis")}</strong></div></div>
       <p class="status">${escape(dependency.reason || "各力依此版 route axis 與時間計畫重算；尚未重算的內容保留明確狀態。")}</p>
+      ${forceProjectionHtml(state, subject, role)}
       ${mapHtml(routeGeojson, subject.golden_route_geojson, checkpoints, "analysis")}${itineraryHtml(preview, `analysis:${role}`)}
       <details><summary>此 Planned 的 CP、路段與版次</summary>${tableHtml(["CP", "序列／距離", "時刻"], checkpoints.map(cp => [escape(cp.label || cp.checkpoint_id || cp.anchor_id), escape(cp.route_order_m ?? cp.distance_m ?? cp.point_index ?? "未知"), escape(cp.arrival_at || cp.planned_at || "未知")]))}
       ${tableHtml(["Segment", "端點", "距離／來源"], segments.map(segment => [escape(segment.segment_id || segment.id), `${escape(segment.from_checkpoint_id || segment.start_anchor_id || segment.start_point_index || "")} → ${escape(segment.to_checkpoint_id || segment.end_anchor_id || segment.end_point_index || "")}`, `${number(segment.length_m ?? segment.distance_m, " m")}<br>${escape(segment.source_id || "")}`]))}

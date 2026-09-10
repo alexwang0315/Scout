@@ -53,6 +53,7 @@ class AnalysisSubject(BaseModel):
     itinerary: dict[str, Any] | None = None
     comparison: dict[str, Any] | None = None
     coverage: dict[str, Any] | None = None
+    planned_analysis: dict[str, Any] | None = None
     candidate_only: Literal[True] = True
     runtime_safety_truth: Literal[False] = False
     departure_approval_granted: Literal[False] = False
@@ -376,6 +377,42 @@ def _build_planned_analysis_subject(project_root: Path, bundle: dict) -> Analysi
             "projection_refs": [], "legacy_projection_status": "golden_only_not_applicable_to_planned",
         }
     dependencies["weather"].update(historical_weather_status="unknown", current_forecast_status="requires_planned_route_binding")
+    from scout_planned_analysis import latest_planned_analysis
+    from scout_planned_route_models import PlannedRouteConflict
+
+    try:
+        analysis = latest_planned_analysis(project_root, bundle)
+    except (PlannedRouteConflict, OSError, ValueError) as exc:
+        analysis = {"status": "unavailable", "projections": {},
+                    "error": {"code": getattr(exc, "code", "planned_analysis_unavailable"),
+                              "message": "The Planned analysis evidence is unavailable; refresh its job status."}}
+    if analysis:
+        binding = analysis.get("binding") or {}
+        bound = all(binding.get(key) == manifest.get(key) for key in (
+            "project_id", "version_id", "manifest_sha256", "geometry_sha256", "itinerary_sha256"))
+        admitted = current and bound and analysis.get("status") in {"completed", "completed_with_gaps"}
+        if admitted:
+            for role, projection in (analysis.get("projections") or {}).items():
+                if role not in dependencies:
+                    continue
+                status = projection.get("status")
+                dependencies[role].update(
+                    status=("current_planned_analysis" if status == "ready" else
+                            "partial_planned_analysis" if status == "partial" else "needs_reanalysis"),
+                    run_id=analysis.get("run_id"), producer_status=status,
+                    reason=projection.get("summary"), missing_inputs=projection.get("missing_inputs", []),
+                    projection_refs=[projection["artifact_ref"]] if projection.get("artifact_ref") else [],
+                    projection_sha256=projection.get("artifact_sha256"),
+                )
+            prepared_coverage = (analysis.get("preparation") or {}).get("coverage")
+            if isinstance(prepared_coverage, dict):
+                coverage = {**prepared_coverage, "run_id": analysis.get("run_id"),
+                            "source": "verified_planned_preparation", "saved_preview_coverage": preview.get("coverage")}
+        else:
+            # Never leak unverifiable output summaries under a selected subject.
+            analysis = {**analysis, "projections": {}, "preparation": None}
+            for dependency in dependencies.values():
+                dependency.update(analysis_run_status=analysis.get("status"), run_id=analysis.get("run_id"))
     sources = {
         "planned_geometry": ws.source(f"{prefix}/planned.gpx", manifest["files"]["planned.gpx"]["sha256"]),
         "planned_itinerary": ws.source(f"{prefix}/itinerary.json", manifest["files"]["itinerary.json"]["sha256"]),
@@ -389,7 +426,9 @@ def _build_planned_analysis_subject(project_root: Path, bundle: dict) -> Analysi
         project_id=manifest["project_id"], subject_kind="planned_gpx", subject_id=version_id,
         analysis_revision=_digest({"selection": bundle["selection"]["selection_sha256"],
                                    "manifest": manifest["manifest_sha256"], "source_status": bundle["source_status"],
-                                   "dependencies": dependencies}),
+                                   "dependencies": dependencies,
+                                   "analysis_run": {key: (analysis or {}).get(key) for key in (
+                                       "run_id", "status", "attempt", "report_sha256")}}),
         geometry_fingerprint=manifest["geometry_sha256"], timing_fingerprint=manifest["itinerary_sha256"],
         sources=sources, selected_plan_version_id=version_id,
         planned_bundle_ref=f"{prefix}/manifest.json", planned_bundle_sha256=manifest["manifest_sha256"],
@@ -406,7 +445,7 @@ def _build_planned_analysis_subject(project_root: Path, bundle: dict) -> Analysi
         overnight_gaps=[item for item in itinerary.get("timeline", []) if item.get("kind") in {"camp", "overnight"}],
         dependencies=dependencies, issues=[reason] if reason else [],
         route_axis=axis, planned_route_geojson=preview.get("route_geojson"), checkpoints=checkpoints, segments=segments,
-        itinerary=itinerary, comparison=preview.get("comparison"), coverage=coverage,
+        itinerary=itinerary, comparison=preview.get("comparison"), coverage=coverage, planned_analysis=analysis,
     )
 
 

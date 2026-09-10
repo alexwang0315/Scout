@@ -270,6 +270,108 @@ def test_source_snapshot_is_checked_and_untrusted_path_cannot_escape_project(tmp
         compile_planned_route(root, _request())
 
 
+def _filtered_workspace(tmp_path):
+    root = planned_workspace(tmp_path)
+    report = json.loads((root / 'outputs/gpx_speed_filter_report.json').read_text())
+    for record in [report['primary'], *report['references']]:
+        original = root / record['output_path']
+        record['output_path'] = f'normalized/routes/filtered/{original.name}'
+        assert _write(root, record['output_path'], original.read_text()) == record['output_sha256']
+    _write(root, 'outputs/gpx_speed_filter_report.json', report)
+    return root, report
+
+
+def test_filtered_catalog_relocates_hash_bound_golden_and_references_without_writes(tmp_path):
+    root, report = _filtered_workspace(tmp_path)
+    original_catalog = load_planned_catalog(root)
+    request = _request(human_text='從營地 A 單攻山頭 B 後回營地 A', default_speed_kmh=2)
+    original_preview = compile_planned_route(root, request)
+    for record in [report['primary'], *report['references']]:
+        old_path = tmp_path / 'old-mac' / root.name / record['output_path']
+        _write(tmp_path, old_path.relative_to(tmp_path), 'not GPX: this external file must never be read')
+        record['output_path'] = str(old_path)
+    _write(root, 'outputs/gpx_speed_filter_report.json', report)
+    before = _hashes(tmp_path)
+
+    relocated = load_planned_catalog(root)
+    preview = compile_planned_route(root, request)
+
+    assert relocated['sources'] == original_catalog['sources']
+    assert relocated['anchors'] == original_catalog['anchors']
+    assert {s['ref'] for s in relocated['sources']} == {
+        'normalized/routes/filtered/golden.gpx', 'normalized/routes/filtered/branch.gpx'}
+    assert preview['geometry_sha256'] == original_preview['geometry_sha256']
+    assert preview['itinerary_sha256'] == original_preview['itinerary_sha256']
+    assert preview['status'] == original_preview['status'] == 'needs_review'
+    assert _hashes(tmp_path) == before
+
+
+@pytest.mark.parametrize(('path_template', 'sha_override', 'error_code'), [
+    ('/old/other_project/normalized/routes/filtered/branch.gpx', 'keep', 'source_missing_or_outside_project'),
+    ('/old/{project_id}/unrelated/branch.gpx', 'keep', 'source_missing_or_outside_project'),
+    ('/old/{project_id}/normalized/routes/raw/branch.gpx', 'keep', 'source_missing_or_outside_project'),
+    ('/old/{project_id}/normalized/routes/filtered/nested/branch.gpx', 'keep', 'source_missing_or_outside_project'),
+    ('/old/../{project_id}/normalized/routes/filtered/branch.gpx', 'keep', 'source_missing_or_outside_project'),
+    ('/old/{project_id}/normalized/routes/filtered/branch.gpx', None, 'source_missing_or_outside_project'),
+    ('/old/{project_id}/normalized/routes/filtered/branch.gpx', '', 'source_missing_or_outside_project'),
+    ('/old/{project_id}/normalized/routes/filtered/branch.gpx', 'not-a-sha256', 'source_missing_or_outside_project'),
+    ('/old/{project_id}/normalized/routes/filtered/branch.gpx', 'a' * 63, 'source_missing_or_outside_project'),
+    ('/old/{project_id}/normalized/routes/filtered/branch.gpx', '0' * 64, 'source_hash_changed'),
+    ('/old/{project_id}/normalized/routes/filtered/missing.gpx', 'keep', 'source_missing_or_outside_project'),
+])
+def test_filtered_catalog_portability_rejects_unbound_or_mismatched_sources(tmp_path, path_template, sha_override, error_code):
+    root, report = _filtered_workspace(tmp_path)
+    record = report['references'][0]
+    record['output_path'] = path_template.format(project_id=root.name)
+    if sha_override is None:
+        record.pop('output_sha256')
+    elif sha_override != 'keep':
+        record['output_sha256'] = sha_override
+    _write(root, 'outputs/gpx_speed_filter_report.json', report)
+    before = _hashes(root)
+    with pytest.raises(PlannedRouteConflict) as exc:
+        load_planned_catalog(root)
+    assert exc.value.code == error_code
+    assert _hashes(root) == before
+
+
+def test_filtered_catalog_portability_uses_project_identity_not_directory_name(tmp_path):
+    root, report = _filtered_workspace(tmp_path)
+    _write(root, 'project.json', {'project_id': 'actual_project_identity'})
+    record = report['primary']
+    record['output_path'] = '/old/actual_project_identity/normalized/routes/filtered/golden.gpx'
+    _write(root, 'outputs/gpx_speed_filter_report.json', report)
+    assert load_planned_catalog(root)['project_id'] == 'actual_project_identity'
+    record['output_path'] = f'/old/{root.name}/normalized/routes/filtered/golden.gpx'
+    _write(root, 'outputs/gpx_speed_filter_report.json', report)
+    with pytest.raises(PlannedRouteConflict) as exc:
+        load_planned_catalog(root)
+    assert exc.value.code == 'source_missing_or_outside_project'
+
+
+def test_filtered_catalog_portability_cannot_follow_external_symlink(tmp_path):
+    root, report = _filtered_workspace(tmp_path)
+    external = tmp_path / 'outside.gpx'
+    external.write_bytes((root / report['primary']['output_path']).read_bytes())
+    (root / 'normalized/routes/filtered/linked.gpx').symlink_to(external)
+    report['primary']['output_path'] = f'/old/{root.name}/normalized/routes/filtered/linked.gpx'
+    _write(root, 'outputs/gpx_speed_filter_report.json', report)
+    before = _hashes(tmp_path)
+    with pytest.raises(PlannedRouteConflict) as exc:
+        load_planned_catalog(root)
+    assert exc.value.code == 'source_missing_or_outside_project'
+    assert _hashes(tmp_path) == before
+
+
+def test_filtered_catalog_preserves_local_absolute_path_without_sha(tmp_path):
+    root = planned_workspace(tmp_path)
+    report = json.loads((root / 'outputs/gpx_speed_filter_report.json').read_text())
+    report['primary']['output_path'] = str(root / 'normalized/golden.gpx')
+    report['primary'].pop('output_sha256')
+    _write(root, 'outputs/gpx_speed_filter_report.json', report)
+    assert load_planned_catalog(root)['sources'][0]['ref'] == 'normalized/golden.gpx'
+
+
 def test_p7_export_reimport_keeps_planning_role_and_rejects_recorded_stage(tmp_path):
     from pretrip_import import PretripImportRequest, _golden_route_role, _stage_source_inbox, _validate_request
     root = planned_workspace(tmp_path)

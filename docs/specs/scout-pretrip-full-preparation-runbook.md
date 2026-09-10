@@ -1,5 +1,47 @@
 # Scout Pretrip Full Preparation Runbook
 
+## 2026-09-10 Planned P8 追加準備與六力重算（SCOPED PASS）
+
+- 本輪來源：`golden_g1_chilai_repeat8_20260909_r14` 的
+  `plan.0a660d68411af4df633339d2`；manifest
+  `fd1e71ba8f297dbc26346061cc1cf19f84ffb7fc74cea7c25dfdbd424c9457aa`。
+  起跑前已重新驗證 32 個保存版來源 hashes 為 current。
+- 使用者明確指定使用 Scout 空間。大型準備、DEM、QGIS 產物、作業
+  scratch 與測試證據放在
+  `/home/alexwang0315/work/scout-planned-p8-reanalysis-20260910/`；
+  Mac 不建立完整 workspace copy 或大型壓縮包，不刪除既有資料。
+- 必須建立版本綁定的獨立輸入 snapshot／run。原 Golden project、
+  accepted baseline 與 immutable Planned bundle 保持不變。
+- 分析主體保留 9,775 點、10 CP、5 geometry parts；點 117 前
+  1,179.089 m 的缺口及其他 source joins 不得用直線補齊。QGIS
+  單 LineString 工作按 continuous part 分開提交；衍生 CP-edge graph
+  需保留 canonical point、CP 與 segment 對映。
+- 真實評估結果必須綁定 project、version、manifest、geometry、
+  itinerary、來源及 producer hashes。GET 僅觀測，POST 才啟動／恢復；
+  中斷後由 lease 與持久 checkpoint 判斷，不以 PID 存在當作成功。
+- P8 可明示實際缺資料造成的 partial／待重算，例如原始時間缺口、
+  未提供個人體能、行程日期超出預報有效期。已有 Ref. GPX、DEM 或
+  地圖素材時須實際計算其新路線投影，不能以固定待重算字樣代替 producer。
+- 指定 P2 已通過追加準備、六力實算、Resume 重現與六頁同版驗收。
+  這是 Construction Mode 的能力證據；六力各自保留 partial，詳見
+  [完整回執與限制](scout-planned-gpx-p8-reanalysis-qualification-20260910.md)。
+- 真實 Dashboard 已提交
+  `analysis.51645da345e5e32184ae12c472aada79`，attempt 1，HTTP 202。
+  執行位置為 Scout；五個地形分段已全部 completed，9,775 點原生 DEM
+  覆蓋 verified，其中 322 點超出舊 Golden DEM；六力實算皆 partial。
+  同 URL goto 沒有 Document request，已撤回其完整 reload 判定；專用
+  server 重啟後，新 Document／JS／GET 已找回同 run 與相同 report hash。
+  UI Resume 的 attempt 2 亦 completed_with_gaps，真實 Document 重載找回
+  同 run 與進度；兩次六力 status／summary／missing_inputs 全相同。
+  attempt 1 的 259 產物及原 774 檔全部保持不變。來源目錄另發現保留
+  Mac 絕對 filtered-GPX 路徑，需以同專案相對位置與 SHA 核對後讀取，
+  不修改舊 source report 或保存版以掩蓋搬移。
+- 最終六頁都綁 attempt 2 的 report
+  `3900df64666a975a6b6712fab7032f302d1d31588eaaec4ddda9ba5c8fd52107`。
+  新作業兩次共 523 檔／203,586,798 bytes 在 Scout；119 個整合測試與
+  33-layer contract 通過。GPX catalog 可攜已修復，但既有 map candidate
+  hash 不符仍拒絕，未把這項後續清理算作本 P8 已補完。
+
 ## Purpose
 
 This is the no-skip operator runbook for rebuilding a Scout pretrip workspace

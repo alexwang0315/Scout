@@ -22,6 +22,9 @@ from scout_planned_route_artifacts import (
     select_analysis_subject,
 )
 from scout_planned_route_models import PlannedRouteConflict, PlannedRouteRequest
+from scout_planned_analysis import (
+    PlannedAnalysisResumeRequest, PlannedAnalysisRunRequest, manager_for,
+)
 
 
 def _http_error(error: PlannedRouteConflict) -> HTTPException:
@@ -81,6 +84,34 @@ def create_planned_route_router(*, project_root_for: Callable[[str], Path]) -> A
     @router.post(prefix + "/analysis-selection")
     def select(project_id: str, request: PlannedAnalysisSelectionRequest) -> dict:
         return run(project_id, select_analysis_subject, request)
+
+    @router.get(prefix + "/analysis-runs")
+    def analysis_runs(project_id: str, response: Response, version_id: str | None = None) -> dict:
+        response.headers["Cache-Control"] = "no-store"
+        return run(project_id, lambda root: manager_for(root).list(version_id))
+
+    @router.post(prefix + "/analysis-runs", status_code=202)
+    def start_analysis(project_id: str, request: PlannedAnalysisRunRequest) -> dict:
+        return run(project_id, lambda root: manager_for(root).submit(request))
+
+    @router.get(prefix + "/analysis-runs/{run_id}")
+    def analysis_run(project_id: str, run_id: str, response: Response) -> dict:
+        response.headers["Cache-Control"] = "no-store"
+        return run(project_id, lambda root: manager_for(root).get(run_id))
+
+    @router.post(prefix + "/analysis-runs/{run_id}/resume", status_code=202)
+    def resume_analysis(project_id: str, run_id: str, request: PlannedAnalysisResumeRequest) -> dict:
+        return run(project_id, lambda root: manager_for(root).resume(run_id, request))
+
+    @router.get(prefix + "/analysis-runs/{run_id}/artifact")
+    def analysis_artifact(project_id: str, run_id: str, ref: str) -> Response:
+        import mimetypes
+        from urllib.parse import quote
+        data, filename = run(project_id, lambda root: manager_for(root).artifact(run_id, ref))
+        return Response(data, media_type=mimetypes.guess_type(filename)[0] or "application/octet-stream",
+                        headers={"Cache-Control": "no-store",
+                                 "Content-Disposition": f"attachment; filename*=UTF-8''{quote(filename)}",
+                                 "X-Scout-Runtime-Safety-Truth": "false"})
 
     @router.get(prefix + "/export/{version_id}/{format}")
     def export(project_id: str, version_id: str, format: Literal["gpx", "manifest", "bundle"]) -> Response:
