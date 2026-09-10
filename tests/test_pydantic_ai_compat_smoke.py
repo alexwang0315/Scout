@@ -29,8 +29,8 @@ def test_offline_pydantic_ai_compatibility_smoke_passes() -> None:
     assert report["status"] == "passed"
     assert report["required_version"] == installed_version
     assert report["configured_version"] == REQUIRED_VERSION
-    assert report["check_count"] == 20
-    assert report["passed_count"] == 20
+    assert report["check_count"] == 23
+    assert report["passed_count"] == 23
     assert report["failed_count"] == 0
     assert report["live_openrouter_requested"] is False
     assert {item["name"] for item in report["checks"]} == {
@@ -38,6 +38,9 @@ def test_offline_pydantic_ai_compatibility_smoke_passes() -> None:
         "v236_capability_contract",
         "v237_zai_finish_reasons",
         "v241_capability_contract",
+        "v242_deferred_approvals",
+        "v242_tool_content_history",
+        "v242_code_mode_refs",
         "openrouter_web_search_annotations",
         "instrumentation_v6_tool_role",
         "function_tool_call",
@@ -64,6 +67,9 @@ def test_offline_pydantic_ai_compatibility_smoke_passes() -> None:
     assert v241["image_provider"] == "test"
     assert v241["network_performed"] is False
     assert v241["subscription_authentication_performed"] is False
+    assert by_name["v242_deferred_approvals"]["details"]["invalid_approval_rejected"]
+    assert by_name["v242_tool_content_history"]["details"]["source_refs_preserved"]
+    assert by_name["v242_code_mode_refs"]["details"]["non_object_refs_inlined"]
     mcp_details = by_name["mcp_instructions_and_tool"]["details"]
     assert "FunctionToolCallEvent" in mcp_details["event_types"]
     assert "FunctionToolResultEvent" in mcp_details["event_types"]
@@ -95,8 +101,8 @@ def test_runtime_and_deployment_dependency_pins_stay_aligned() -> None:
         "requirements.pi.live.txt",
     } <= dependency_sets.keys()
     expected_versions = {
-        "pydantic-ai-slim": "2.41.0",
-        "pydantic-evals": "2.41.0",
+        "pydantic-ai-slim": "2.42.0",
+        "pydantic-evals": "2.42.0",
         "praisonaiagents": "1.7.4",
     }
     seen = set()

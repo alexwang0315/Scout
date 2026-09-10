@@ -7,9 +7,15 @@ Harness runtime, Monty integration smoke, immutable execution receipt, and
 100-case readiness/live runner are implemented. The runtime remains outside
 the production dependency set.
 
-The host agent facade currently runs on Pydantic AI 2.41.0. L5 keeps its own
+The host agent facade currently runs on Pydantic AI 2.42.0. L5 keeps its own
 optional Harness 0.7.0 and Monty 0.0.18 attestation pins; these are compatible
 surfaces, not a request to downgrade the host facade.
+
+The 2.42 compatibility smoke verifies that Code Mode signatures inline
+non-object `$ref` aliases (strings, numbers, arrays, enums and unions) without
+losing argument or return types. This is a schema-rendering fixture check, not
+proof of Monty execution or permission to install generated capabilities. See
+[the local upgrade report](../evals/scout-ai-pydantic-242-smoke-20260910.md).
 
 Set this process-level development flag while implementing and evaluating L5:
 

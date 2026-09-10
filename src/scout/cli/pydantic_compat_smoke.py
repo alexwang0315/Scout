@@ -46,7 +46,7 @@ from scout.agents.pydantic_ai_compat import (
     pydantic_native_research_capabilities,
 )
 
-REQUIRED_VERSION = "2.41.0"
+REQUIRED_VERSION = "2.42.0"
 DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4-flash-0731"
 DEFAULT_TIMEOUT_SECONDS = 120.0
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -168,6 +168,9 @@ def _offline_checks(
         ("v236_capability_contract", _offline_v236_capability_contract),
         ("v237_zai_finish_reasons", _offline_v237_zai_finish_reasons),
         ("v241_capability_contract", _offline_v241_capability_contract),
+        ("v242_deferred_approvals", _offline_v242_deferred_approvals),
+        ("v242_tool_content_history", _offline_v242_tool_content_history),
+        ("v242_code_mode_refs", _offline_v242_code_mode_refs),
         ("openrouter_web_search_annotations", _offline_openrouter_annotations),
         ("instrumentation_v6_tool_role", _offline_instrumentation_v6_tool_role),
         ("function_tool_call", _offline_function_tool_call),
@@ -444,6 +447,136 @@ async def _offline_v241_capability_contract() -> dict[str, Any]:
         "image_provider": result.provider_name,
         "network_performed": False,
         "subscription_authentication_performed": False,
+    }
+
+
+async def _offline_v242_deferred_approvals() -> dict[str, Any]:
+    from pydantic_ai import DeferredToolRequests, DeferredToolResults
+
+    executions: list[str] = []
+    agent = Agent(
+        TestModel(custom_output_text="Fixture candidate read complete."),
+        output_type=str | DeferredToolRequests,
+    )
+
+    @agent.tool_plain(requires_approval=True)
+    def read_candidate() -> str:
+        executions.append("fixture-read")
+        return "candidate_only=true; runtime_safety_truth=false"
+
+    pending = await agent.run("Read the approval-protected fixture candidate.")
+    assert isinstance(pending.output, DeferredToolRequests)
+    assert len(pending.output.approvals) == 1
+    assert not executions
+    call_id = pending.output.approvals[0].tool_call_id
+    history = ModelMessagesTypeAdapter.validate_json(pending.all_messages_json())
+    try:
+        await agent.run(
+            message_history=history,
+            deferred_tool_results=DeferredToolResults(approvals={call_id: "true"}),
+        )
+    except UserError:
+        pass
+    else:
+        raise AssertionError("String approval must not execute the protected tool")
+    assert not executions
+    denied = await agent.run(
+        message_history=history,
+        deferred_tool_results=DeferredToolResults(approvals={call_id: False}),
+    )
+    assert not executions
+    assert any(
+        isinstance(part, ToolReturnPart) and "denied" in str(part.content).lower()
+        for message in denied.new_messages()
+        for part in message.parts
+    )
+    approved = await agent.run(
+        message_history=history,
+        deferred_tool_results=DeferredToolResults(approvals={call_id: True}),
+    )
+    assert executions == ["fixture-read"]
+    assert isinstance(approved.output, str)
+    return {
+        "invalid_approval_rejected": True,
+        "denied_tool_executions": 0,
+        "approved_tool_executions": len(executions),
+        "serialized_history_resumed": True,
+        "network_performed": False,
+    }
+
+
+def _offline_v242_tool_content_history() -> dict[str, Any]:
+    from pydantic_ai.messages import ImageUrl, ModelRequest
+
+    cards = [
+        {
+            "id": f"fixture-{index}",
+            "source_ref": f"outputs/risk/fixture.json#/features/{index}",
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "values": [index, None, True, {"freshness": "fixture"}],
+        }
+        for index in range(300)
+    ]
+    content = {
+        "cards": cards,
+        "media": {
+            "kind": "image-url",
+            "url": "https://scout.invalid/report",
+            "nested": [
+                ImageUrl("https://scout.invalid/map", media_type="image/png"),
+            ],
+        },
+    }
+    messages = [ModelRequest(parts=[ToolReturnPart(
+        tool_name="scout_workspace_evidence", tool_call_id="fixture-read", content=content,
+    )])]
+    raw = ModelMessagesTypeAdapter.dump_json(messages)
+    restored = ModelMessagesTypeAdapter.validate_json(raw)
+    part = restored[0].parts[0]
+    assert isinstance(part, ToolReturnPart)
+    assert part.tool_call_id == "fixture-read"
+    assert part.content["cards"] == cards
+    media = part.content["media"]
+    assert isinstance(media, dict)
+    assert media["url"] == content["media"]["url"]
+    assert isinstance(media["nested"][0], ImageUrl)
+    assert media["nested"][0].media_type == "image/png"
+    assert ModelMessagesTypeAdapter.dump_json(restored) == raw
+    return {
+        "evidence_card_count": len(cards),
+        "history_bytes": len(raw),
+        "source_refs_preserved": True,
+        "ambiguous_mapping_preserved": True,
+        "nested_image_restored": True,
+        "network_performed": False,
+    }
+
+
+def _offline_v242_code_mode_refs() -> dict[str, Any]:
+    from pydantic_ai.function_signature import FunctionSignature
+
+    definitions = {
+        "CheckpointId": {"type": "string"},
+        "CheckpointList": {"type": "array", "items": {"$ref": "#/$defs/CheckpointId"}},
+    }
+    signature = FunctionSignature.from_schema(
+        name="read_candidate_checkpoints",
+        parameters_schema={
+            "type": "object", "$defs": definitions,
+            "properties": {"checkpoints": {"$ref": "#/$defs/CheckpointList"}},
+            "required": ["checkpoints"],
+        },
+        return_schema={"$defs": definitions, "$ref": "#/$defs/CheckpointList"},
+    )
+    assert str(signature.params["checkpoints"].type) == "list[str]"
+    assert str(signature.return_type) == "list[str]"
+    assert not signature.referenced_types
+    return {
+        "signature": signature.render("..."),
+        "non_object_refs_inlined": True,
+        "sandbox_execution_performed": False,
+        "network_performed": False,
     }
 
 
