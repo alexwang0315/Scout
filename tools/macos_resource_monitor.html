@@ -1,0 +1,772 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>Scout / Mac Resource Observatory</title>
+    <style>
+      :root {
+        --ink: #e9f0e7;
+        --muted: #8e9b91;
+        --faint: #5f6e64;
+        --canvas: #111715;
+        --surface: #18201c;
+        --surface-2: #1d2822;
+        --line: rgba(194, 225, 202, 0.14);
+        --line-strong: rgba(194, 225, 202, 0.25);
+        --mint: #9ce8b7;
+        --mint-deep: #3ca56a;
+        --amber: #f4bd6a;
+        --coral: #f0806b;
+        --blue: #83c5e8;
+        --display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+        --mono: "SFMono-Regular", "Cascadia Code", "IBM Plex Mono", Menlo, monospace;
+        --shadow: 0 28px 80px rgba(0, 0, 0, 0.25);
+      }
+
+      * { box-sizing: border-box; }
+
+      html { background: var(--canvas); }
+
+      body {
+        margin: 0;
+        min-width: 320px;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at 75% 0%, rgba(72, 130, 88, 0.14), transparent 30rem),
+          radial-gradient(circle at 0% 35%, rgba(244, 189, 106, 0.07), transparent 24rem),
+          var(--canvas);
+        font-family: var(--mono);
+        line-height: 1.5;
+      }
+
+      body::before {
+        position: fixed;
+        inset: 0;
+        z-index: -1;
+        pointer-events: none;
+        content: "";
+        opacity: 0.24;
+        background-image:
+          linear-gradient(rgba(181, 220, 193, 0.05) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(181, 220, 193, 0.05) 1px, transparent 1px);
+        background-size: 48px 48px;
+        mask-image: linear-gradient(to bottom, black, transparent 86%);
+      }
+
+      button, select { font: inherit; }
+
+      button, select:focus-visible {
+        outline: 2px solid var(--amber);
+        outline-offset: 3px;
+      }
+
+      button { cursor: pointer; }
+
+      .shell {
+        width: min(1440px, 100%);
+        margin: 0 auto;
+        padding: 26px clamp(18px, 4vw, 62px) 48px;
+      }
+
+      .masthead {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+        padding-bottom: 22px;
+        border-bottom: 1px solid var(--line);
+      }
+
+      .brandlock, .masthead-status, .eyebrow, .metric-kicker, .panel-kicker,
+      .host-label, .toolbar-label, .boundary-label {
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+      }
+
+      .brandlock {
+        display: flex;
+        align-items: center;
+        gap: 13px;
+        color: var(--ink);
+        font-size: 0.73rem;
+        font-weight: 700;
+      }
+
+      .brand-mark {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        align-items: end;
+        gap: 3px;
+        width: 30px;
+        height: 30px;
+        padding: 6px;
+        border: 1px solid var(--line-strong);
+        background: rgba(156, 232, 183, 0.06);
+      }
+
+      .brand-mark i {
+        display: block;
+        background: var(--mint);
+      }
+
+      .brand-mark i:nth-child(1) { height: 42%; }
+      .brand-mark i:nth-child(2) { height: 76%; }
+      .brand-mark i:nth-child(3) { height: 100%; background: var(--amber); }
+
+      .masthead-status {
+        display: flex;
+        align-items: center;
+        gap: 11px;
+        color: var(--muted);
+        font-size: 0.64rem;
+      }
+
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--mint);
+        box-shadow: 0 0 0 5px rgba(156, 232, 183, 0.12), 0 0 18px var(--mint);
+        animation: pulse 2.6s ease-in-out infinite;
+      }
+
+      .masthead-status[data-state="attention"] .status-dot { background: var(--coral); box-shadow: 0 0 0 5px rgba(240, 128, 107, 0.12); }
+      .masthead-status[data-state="partial"] .status-dot { background: var(--amber); box-shadow: 0 0 0 5px rgba(244, 189, 106, 0.12); }
+
+      @keyframes pulse {
+        0%, 100% { opacity: 0.7; transform: scale(0.9); }
+        50% { opacity: 1; transform: scale(1.1); }
+      }
+
+      main { padding-top: clamp(44px, 7vw, 92px); }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.2fr) minmax(300px, 0.8fr);
+        align-items: end;
+        gap: clamp(30px, 7vw, 120px);
+        margin-bottom: 42px;
+      }
+
+      .eyebrow, .panel-kicker, .metric-kicker, .host-label, .toolbar-label, .boundary-label {
+        margin: 0;
+        color: var(--amber);
+        font-size: 0.62rem;
+        font-weight: 700;
+      }
+
+      h1 {
+        max-width: 760px;
+        margin: 17px 0 20px;
+        font-family: var(--display);
+        font-size: clamp(3.7rem, 9vw, 8.8rem);
+        font-weight: 400;
+        letter-spacing: -0.085em;
+        line-height: 0.83;
+      }
+
+      h1 em {
+        color: var(--mint);
+        font-style: italic;
+      }
+
+      .hero-copy > p:last-child {
+        max-width: 610px;
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.82rem;
+        line-height: 1.8;
+      }
+
+      .host-card {
+        position: relative;
+        overflow: hidden;
+        min-height: 210px;
+        padding: 24px;
+        border: 1px solid var(--line-strong);
+        background:
+          linear-gradient(135deg, rgba(156, 232, 183, 0.07), transparent 52%),
+          var(--surface);
+        box-shadow: var(--shadow);
+      }
+
+      .host-card::after {
+        position: absolute;
+        right: -44px;
+        bottom: -64px;
+        width: 190px;
+        height: 190px;
+        border: 1px solid rgba(156, 232, 183, 0.32);
+        border-radius: 50%;
+        box-shadow: 0 0 0 20px rgba(156, 232, 183, 0.025), 0 0 0 40px rgba(156, 232, 183, 0.025);
+        content: "";
+      }
+
+      .host-name {
+        position: relative;
+        z-index: 1;
+        margin: 9px 0 5px;
+        font-family: var(--display);
+        font-size: 2.1rem;
+        letter-spacing: -0.045em;
+      }
+
+      .host-meta {
+        position: relative;
+        z-index: 1;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+        margin-top: 26px;
+      }
+
+      .host-meta span { display: block; color: var(--faint); font-size: 0.58rem; text-transform: uppercase; letter-spacing: 0.08em; }
+      .host-meta strong { display: block; margin-top: 4px; color: var(--ink); font-size: 0.73rem; font-weight: 500; }
+
+      .toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 15px;
+      }
+
+      .toolbar-left, .toolbar-actions { display: flex; align-items: center; gap: 12px; }
+      .toolbar-label { color: var(--faint); font-size: 0.6rem; }
+      .sync-status { color: var(--muted); font-size: 0.65rem; }
+
+      .control {
+        padding: 9px 12px;
+        border: 1px solid var(--line-strong);
+        border-radius: 0;
+        color: var(--ink);
+        background: rgba(24, 32, 28, 0.84);
+        font-size: 0.65rem;
+      }
+
+      .control:hover { border-color: var(--mint); }
+
+      .metrics-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .metric-card, .panel {
+        border: 1px solid var(--line);
+        background: linear-gradient(145deg, rgba(255, 255, 255, 0.025), transparent 70%), var(--surface);
+      }
+
+      .metric-card {
+        position: relative;
+        min-height: 214px;
+        padding: 20px;
+        overflow: hidden;
+        transition: border-color 180ms ease, transform 180ms ease;
+      }
+
+      .metric-card:hover { border-color: var(--line-strong); transform: translateY(-2px); }
+      .metric-card[data-state="attention"] { border-color: rgba(240, 128, 107, 0.55); }
+      .metric-card[data-state="unavailable"] { opacity: 0.72; }
+
+      .metric-header { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
+      .metric-name { margin: 7px 0 0; color: var(--ink); font-family: var(--display); font-size: 1.45rem; letter-spacing: -0.04em; }
+      .metric-source { color: var(--faint); font-size: 0.58rem; }
+
+      .ring {
+        --angle: 0deg;
+        position: relative;
+        display: grid;
+        place-items: center;
+        width: 74px;
+        height: 74px;
+        flex: 0 0 auto;
+        border-radius: 50%;
+        background: conic-gradient(var(--mint) var(--angle), rgba(156, 232, 183, 0.1) 0deg);
+      }
+
+      .ring::after {
+        position: absolute;
+        inset: 6px;
+        border-radius: 50%;
+        background: var(--surface);
+        content: "";
+      }
+
+      .ring[data-state="attention"] { background: conic-gradient(var(--coral) var(--angle), rgba(240, 128, 107, 0.1) 0deg); }
+      .ring[data-state="unavailable"] { background: conic-gradient(var(--faint) 0deg, rgba(142, 155, 145, 0.1) 0deg); }
+      .ring span { position: relative; z-index: 1; color: var(--ink); font-size: 0.68rem; }
+
+      .metric-value-row { display: flex; align-items: baseline; gap: 8px; margin-top: 30px; }
+      .metric-value { color: var(--ink); font-size: 2.25rem; letter-spacing: -0.08em; line-height: 1; }
+      .metric-unit { color: var(--muted); font-size: 0.66rem; }
+      .metric-detail { min-height: 38px; margin: 9px 0 0; color: var(--muted); font-size: 0.65rem; line-height: 1.6; }
+
+      .power-card { display: flex; flex-direction: column; justify-content: space-between; }
+      .power-readout { margin-top: 28px; }
+      .power-value { margin: 0; color: var(--mint); font-family: var(--display); font-size: 2.2rem; letter-spacing: -0.06em; }
+      .power-state { margin: 4px 0 0; color: var(--muted); font-size: 0.68rem; }
+      .thermal-line { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.62rem; }
+      .thermal-line strong { color: var(--mint); font-weight: 500; }
+      .thermal-line[data-state="attention"] strong { color: var(--coral); }
+
+      .dashboard-grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1.45fr) minmax(290px, 0.55fr);
+        gap: 12px;
+        margin-top: 12px;
+      }
+
+      .panel { padding: 24px; }
+      .panel-head { display: flex; align-items: start; justify-content: space-between; gap: 18px; margin-bottom: 24px; }
+      .panel-title { margin: 6px 0 0; font-family: var(--display); font-size: 1.65rem; font-weight: 400; letter-spacing: -0.05em; }
+      .panel-note { max-width: 290px; margin: 5px 0 0; color: var(--muted); font-size: 0.63rem; line-height: 1.7; text-align: right; }
+
+      .chart-panel { min-height: 310px; }
+      .chart-legend { display: flex; gap: 18px; color: var(--muted); font-size: 0.61rem; }
+      .legend-item { display: flex; align-items: center; gap: 7px; }
+      .legend-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--mint); }
+      .legend-dot.memory { background: var(--amber); }
+      .chart-box { position: relative; height: 183px; margin: 10px -8px 0; }
+      .chart-box svg { width: 100%; height: 100%; overflow: visible; }
+      .chart-gridline { stroke: rgba(194, 225, 202, 0.1); stroke-dasharray: 2 7; }
+      .chart-axis-label { fill: var(--faint); font-family: var(--mono); font-size: 9px; }
+      .chart-path { fill: none; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2.5; }
+      .chart-path.cpu { stroke: var(--mint); filter: drop-shadow(0 0 5px rgba(156, 232, 183, 0.38)); }
+      .chart-path.memory { stroke: var(--amber); filter: drop-shadow(0 0 5px rgba(244, 189, 106, 0.3)); }
+      .chart-empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--faint); font-size: 0.68rem; }
+
+      .attention-panel { background: linear-gradient(165deg, rgba(244, 189, 106, 0.09), transparent 50%), var(--surface); }
+      .attention-count { min-width: 30px; padding: 6px 8px; border: 1px solid rgba(244, 189, 106, 0.35); color: var(--amber); font-size: 0.65rem; text-align: center; }
+      .observation-list { display: grid; gap: 9px; margin: 0; padding: 0; list-style: none; }
+      .observation-list li { display: grid; grid-template-columns: 8px 1fr; gap: 10px; align-items: start; color: var(--muted); font-size: 0.68rem; line-height: 1.6; }
+      .observation-list li::before { width: 7px; height: 7px; margin-top: 6px; border-radius: 50%; background: var(--coral); content: ""; }
+      .observation-list li.empty { display: block; padding: 15px; border: 1px dashed var(--line-strong); color: var(--mint); }
+      .observation-list li.empty::before { display: none; }
+      .boundary-box { margin-top: 32px; padding-top: 17px; border-top: 1px solid var(--line); }
+      .boundary-label { color: var(--faint); font-size: 0.57rem; }
+      .boundary-box p { margin: 9px 0 0; color: var(--muted); font-size: 0.62rem; line-height: 1.75; }
+
+      .process-panel { margin-top: 12px; }
+      .process-summary { display: flex; align-items: baseline; gap: 9px; color: var(--muted); font-size: 0.65rem; }
+      .process-summary strong { color: var(--mint); font-size: 1.25rem; font-weight: 400; }
+      .table-wrap { overflow-x: auto; }
+      table { width: 100%; border-collapse: collapse; min-width: 610px; }
+      th { padding: 0 12px 12px; color: var(--faint); font-size: 0.57rem; font-weight: 500; letter-spacing: 0.12em; text-align: left; text-transform: uppercase; }
+      td { padding: 13px 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.67rem; }
+      td:first-child, td:nth-child(2) { color: var(--ink); }
+      td:first-child { font-weight: 600; }
+      td.numeric { text-align: right; }
+      tr:hover td { background: rgba(156, 232, 183, 0.035); }
+      .empty-row td { padding: 26px 12px; color: var(--faint); text-align: center; }
+
+      footer { display: flex; justify-content: space-between; gap: 22px; margin-top: 23px; color: var(--faint); font-size: 0.58rem; line-height: 1.7; }
+      footer span:last-child { text-align: right; }
+
+      @media (max-width: 1080px) {
+        .metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      }
+
+      @media (max-width: 780px) {
+        .shell { padding-top: 18px; }
+        .hero, .dashboard-grid { grid-template-columns: 1fr; }
+        .hero { gap: 28px; }
+        .host-card { min-height: 180px; }
+        .panel-note { text-align: left; }
+        .toolbar, .toolbar-left { align-items: flex-start; flex-direction: column; }
+        .toolbar { gap: 14px; }
+      }
+
+      @media (max-width: 510px) {
+        .masthead-status { font-size: 0.55rem; }
+        .brandlock { font-size: 0.64rem; }
+        h1 { font-size: clamp(3.4rem, 18vw, 5.5rem); }
+        .metrics-grid { grid-template-columns: 1fr; }
+        .metric-card { min-height: 190px; }
+        .panel { padding: 18px; }
+        .panel-head { flex-direction: column; }
+        footer { flex-direction: column; }
+        footer span:last-child { text-align: left; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <header class="masthead">
+        <div class="brandlock">
+          <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span>SCOUT / RESOURCE OBSERVATORY</span>
+        </div>
+        <div id="mastheadStatus" class="masthead-status" data-state="partial">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span id="mastheadStatusText">等待本機取樣</span>
+        </div>
+      </header>
+
+      <main>
+        <section class="hero" aria-labelledby="pageTitle">
+          <div class="hero-copy">
+            <p class="eyebrow">LOCAL OBSERVATORY / MACOS</p>
+            <h1 id="pageTitle">Resource<br /><em>field notes.</em></h1>
+            <p>一個為 Scout 工作負載準備的本機資源觀測面板。資料來自這台 MacBook 的即時快照，保留足夠的上下文，讓你知道下一個實驗是否正在撞上 CPU、記憶體、磁碟或熱限制。</p>
+          </div>
+          <div class="host-card" aria-label="Host identity">
+            <p class="host-label">OBSERVED HOST</p>
+            <p id="hostName" class="host-name">MacBook / loading</p>
+            <div class="host-meta">
+              <div><span>Model</span><strong id="hostModel">—</strong></div>
+              <div><span>OS</span><strong id="hostOs">—</strong></div>
+              <div><span>Logical cores</span><strong id="hostCores">—</strong></div>
+              <div><span>Scout scope</span><strong id="hostScope">—</strong></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="toolbar" aria-label="Monitor controls">
+          <div class="toolbar-left">
+            <span class="toolbar-label">RESOURCE POSTURE</span>
+            <span id="syncStatus" class="sync-status">尚未取得快照</span>
+            <span aria-hidden="true">·</span>
+            <span id="capturedAt" class="sync-status">—</span>
+          </div>
+          <div class="toolbar-actions">
+            <label class="toolbar-label" for="intervalSelect">POLL</label>
+            <select id="intervalSelect" class="control" aria-label="更新間隔">
+              <option value="5000">5 秒</option>
+              <option value="10000">10 秒</option>
+              <option value="30000">30 秒</option>
+            </select>
+            <button id="pauseButton" class="control" type="button">暫停</button>
+            <button id="refreshButton" class="control" type="button">立即取樣</button>
+          </div>
+        </section>
+
+        <section class="metrics-grid" aria-label="Resource metrics">
+          <article id="cpuCard" class="metric-card" data-state="unavailable">
+            <div class="metric-header">
+              <div><p class="metric-kicker">01 / PROCESSOR</p><h2 class="metric-name">CPU load</h2></div>
+              <div id="cpuRing" class="ring" data-state="unavailable"><span id="cpuRingLabel">—</span></div>
+            </div>
+            <div class="metric-value-row"><span id="cpuValue" class="metric-value">—</span><span class="metric-unit">active %</span></div>
+            <p id="cpuDetail" class="metric-detail">等待 top 快照</p>
+            <span class="metric-source">source / top + getloadavg</span>
+          </article>
+
+          <article id="memoryCard" class="metric-card" data-state="unavailable">
+            <div class="metric-header">
+              <div><p class="metric-kicker">02 / MEMORY</p><h2 class="metric-name">Memory field</h2></div>
+              <div id="memoryRing" class="ring" data-state="unavailable"><span id="memoryRingLabel">—</span></div>
+            </div>
+            <div class="metric-value-row"><span id="memoryValue" class="metric-value">—</span><span class="metric-unit">used %</span></div>
+            <p id="memoryDetail" class="metric-detail">等待 vm_stat 快照</p>
+            <span class="metric-source">source / vm_stat + memory_pressure</span>
+          </article>
+
+          <article id="diskCard" class="metric-card" data-state="unavailable">
+            <div class="metric-header">
+              <div><p class="metric-kicker">03 / STORAGE</p><h2 class="metric-name">System disk</h2></div>
+              <div id="diskRing" class="ring" data-state="unavailable"><span id="diskRingLabel">—</span></div>
+            </div>
+            <div class="metric-value-row"><span id="diskValue" class="metric-value">—</span><span class="metric-unit">used %</span></div>
+            <p id="diskDetail" class="metric-detail">等待磁碟快照</p>
+            <span class="metric-source">source / disk_usage /</span>
+          </article>
+
+          <article class="metric-card power-card" data-state="unavailable">
+            <div>
+              <div class="metric-header"><div><p class="metric-kicker">04 / POWER</p><h2 class="metric-name">Power trace</h2></div><span class="metric-source">source / pmset</span></div>
+              <div class="power-readout"><p id="powerValue" class="power-value">—</p><p id="powerState" class="power-state">等待電源快照</p></div>
+            </div>
+            <div id="thermalLine" class="thermal-line" data-state="normal"><span>Thermal / performance</span><strong id="thermalValue">—</strong></div>
+          </article>
+        </section>
+
+        <section class="dashboard-grid">
+          <article class="panel chart-panel" aria-labelledby="historyTitle">
+            <div class="panel-head">
+              <div><p class="panel-kicker">TIME SERIES / LAST 30 SAMPLES</p><h2 id="historyTitle" class="panel-title">Pressure over time</h2></div>
+              <div class="chart-legend" aria-label="Chart legend"><span class="legend-item"><i class="legend-dot"></i>CPU active</span><span class="legend-item"><i class="legend-dot memory"></i>Memory used</span></div>
+            </div>
+            <div class="chart-box">
+              <svg id="historyChart" viewBox="0 0 760 180" role="img" aria-label="CPU and memory history chart">
+                <line class="chart-gridline" x1="30" y1="20" x2="750" y2="20"></line>
+                <line class="chart-gridline" x1="30" y1="85" x2="750" y2="85"></line>
+                <line class="chart-gridline" x1="30" y1="150" x2="750" y2="150"></line>
+                <text class="chart-axis-label" x="0" y="24">100</text>
+                <text class="chart-axis-label" x="8" y="89">50</text>
+                <text class="chart-axis-label" x="14" y="154">0</text>
+                <path id="cpuPath" class="chart-path cpu" d=""></path>
+                <path id="memoryPath" class="chart-path memory" d=""></path>
+              </svg>
+              <div id="chartEmpty" class="chart-empty">等待第二個取樣點以繪製趨勢</div>
+            </div>
+          </article>
+
+          <aside class="panel attention-panel" aria-labelledby="attentionTitle">
+            <div class="panel-head">
+              <div><p class="panel-kicker">SIGNALS / REVIEW QUEUE</p><h2 id="attentionTitle" class="panel-title">注意事項</h2></div>
+              <span id="attentionCount" class="attention-count">0</span>
+            </div>
+            <ul id="observationList" class="observation-list"><li class="empty">目前沒有資源注意事項。</li></ul>
+            <div class="boundary-box">
+              <p class="boundary-label">BOUNDARY</p>
+              <p>這是只讀的 Mac 資源觀測，不會改變 Scout runtime safety truth、任務狀態、硬體、通知或外部服務。未偵測到 Scout process 也不代表 Scout 發生錯誤。</p>
+            </div>
+          </aside>
+        </section>
+
+        <section class="panel process-panel" aria-labelledby="processTitle">
+          <div class="panel-head">
+            <div><p class="panel-kicker">SCOUT WORKLOAD / MATCHED PROCESSES</p><h2 id="processTitle" class="panel-title">工作負載剖面</h2></div>
+            <div class="process-summary"><strong id="processCount">0</strong><span>個 matching process</span><span aria-hidden="true">·</span><span id="processTotal">尚未取樣</span></div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Process label</th><th>PID</th><th>Elapsed</th><th>CPU %</th><th>Memory %</th><th>RSS</th></tr></thead>
+              <tbody id="processTable"><tr class="empty-row"><td colspan="6">等待 ps 快照</td></tr></tbody>
+            </table>
+          </div>
+        </section>
+
+        <footer>
+          <span>SCOUT / macOS resource monitor v0.1 · loopback-first · no persistence</span>
+          <span>Runtime authority remains closed to this UI.</span>
+        </footer>
+      </main>
+    </div>
+
+    <script>
+      const state = { history: { cpu: [], memory: [] }, polling: true, timer: null, requestInFlight: false };
+      const $ = (selector) => document.querySelector(selector);
+      const MAX_POINTS = 30;
+
+      function setText(id, value) {
+        const node = document.getElementById(id);
+        if (node) node.textContent = value;
+      }
+
+      function finiteNumber(value) {
+        return typeof value === "number" && Number.isFinite(value) ? value : null;
+      }
+
+      function formatPercent(value) {
+        const number = finiteNumber(value);
+        return number === null ? "—" : `${number.toFixed(1)}%`;
+      }
+
+      function formatBytes(value) {
+        const number = finiteNumber(value);
+        if (number === null) return "—";
+        const units = ["B", "KB", "MB", "GB", "TB"];
+        let scaled = number;
+        let unitIndex = 0;
+        while (scaled >= 1024 && unitIndex < units.length - 1) { scaled /= 1024; unitIndex += 1; }
+        return `${scaled >= 100 || unitIndex === 0 ? scaled.toFixed(0) : scaled.toFixed(1)} ${units[unitIndex]}`;
+      }
+
+      function formatCapturedAt(value) {
+        if (!value) return "—";
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? value : date.toLocaleTimeString("zh-TW", { hour12: false });
+      }
+
+      function setCardState(cardId, stateName) {
+        const node = document.getElementById(cardId);
+        if (node) node.dataset.state = stateName;
+      }
+
+      function setMeter(ringId, labelId, value, stateName) {
+        const ring = document.getElementById(ringId);
+        const label = document.getElementById(labelId);
+        const number = finiteNumber(value);
+        if (!ring || !label) return;
+        ring.dataset.state = number === null ? "unavailable" : stateName;
+        ring.style.setProperty("--angle", number === null ? "0deg" : `${Math.max(0, Math.min(100, number)) * 3.6}deg`);
+        label.textContent = number === null ? "—" : `${number.toFixed(0)}%`;
+      }
+
+      function pushHistory(bucket, value) {
+        const number = finiteNumber(value);
+        if (number === null) return;
+        state.history[bucket].push(number);
+        if (state.history[bucket].length > MAX_POINTS) state.history[bucket].shift();
+      }
+
+      function renderPath(id, values) {
+        const path = document.getElementById(id);
+        if (!path) return;
+        if (values.length < 2) { path.setAttribute("d", ""); return; }
+        const left = 32;
+        const right = 748;
+        const top = 20;
+        const bottom = 150;
+        const step = (right - left) / Math.max(1, values.length - 1);
+        const commands = values.map((value, index) => {
+          const x = left + index * step;
+          const y = bottom - (Math.max(0, Math.min(100, value)) / 100) * (bottom - top);
+          return `${index === 0 ? "M" : "L"}${x.toFixed(2)} ${y.toFixed(2)}`;
+        });
+        path.setAttribute("d", commands.join(" "));
+      }
+
+      function renderHistory() {
+        renderPath("cpuPath", state.history.cpu);
+        renderPath("memoryPath", state.history.memory);
+        $("#chartEmpty").style.display = state.history.cpu.length >= 2 || state.history.memory.length >= 2 ? "none" : "grid";
+      }
+
+      function renderObservations(observations) {
+        const list = $("#observationList");
+        list.replaceChildren();
+        const items = Array.isArray(observations) ? observations : [];
+        setText("attentionCount", String(items.length));
+        if (!items.length) {
+          const empty = document.createElement("li");
+          empty.className = "empty";
+          empty.textContent = "目前沒有資源注意事項。";
+          list.append(empty);
+          return;
+        }
+        items.forEach((item) => {
+          const row = document.createElement("li");
+          row.textContent = item && item.label ? String(item.label) : "未命名觀測";
+          list.append(row);
+        });
+      }
+
+      function cell(row, value, className = "") {
+        const node = document.createElement("td");
+        node.className = className;
+        node.textContent = value;
+        row.append(node);
+      }
+
+      function renderProcesses(scout) {
+        const processes = scout && Array.isArray(scout.processes) ? scout.processes : [];
+        setText("processCount", String(scout && Number.isFinite(scout.process_count) ? scout.process_count : 0));
+        const totalCpu = formatPercent(scout && scout.cpu_percent);
+        const totalMemory = formatPercent(scout && scout.memory_percent);
+        setText("processTotal", processes.length ? `合計 CPU ${totalCpu} / 記憶體 ${totalMemory}` : (scout && scout.status === "unavailable" ? "ps unavailable" : "未偵測到"));
+        const table = $("#processTable");
+        table.replaceChildren();
+        if (!processes.length) {
+          const row = document.createElement("tr");
+          row.className = "empty-row";
+          const empty = document.createElement("td");
+          empty.colSpan = 6;
+          empty.textContent = scout && scout.status === "unavailable" ? "無法取得 ps 快照；不影響本機觀測面板運作。" : "目前沒有符合 Scout matching scope 的 process。";
+          row.append(empty);
+          table.append(row);
+          return;
+        }
+        processes.forEach((process) => {
+          const row = document.createElement("tr");
+          cell(row, process.label || "unknown");
+          cell(row, String(process.pid ?? "—"));
+          cell(row, process.elapsed || "—");
+          cell(row, formatPercent(process.cpu_percent), "numeric");
+          cell(row, formatPercent(process.memory_percent), "numeric");
+          cell(row, formatBytes(process.rss_bytes), "numeric");
+          table.append(row);
+        });
+      }
+
+      function renderSnapshot(snapshot) {
+        const host = snapshot.host || {};
+        const cpu = snapshot.cpu || {};
+        const memory = snapshot.memory || {};
+        const disk = snapshot.disk || {};
+        const power = snapshot.power || {};
+        const thermal = snapshot.thermal || {};
+        const overall = snapshot.overall || {};
+        const pressure = memory.pressure || {};
+        const cpuPercent = finiteNumber(cpu.active_percent);
+        const memoryPercent = finiteNumber(memory.used_percent);
+        const diskPercent = finiteNumber(disk.used_percent);
+
+        setText("hostName", host.name || "MacBook");
+        setText("hostModel", host.model || "—");
+        setText("hostOs", host.os_version || "—");
+        setText("hostCores", host.logical_cores ? `${host.logical_cores} threads` : "—");
+        setText("hostScope", host.scout_scope || "scout-fusion");
+
+        const cpuState = cpuPercent === null ? "unavailable" : cpuPercent >= 85 ? "attention" : "normal";
+        const memoryState = memoryPercent === null ? "unavailable" : pressure.level === "critical" || pressure.level === "elevated" ? "attention" : "normal";
+        const diskState = diskPercent === null ? "unavailable" : diskPercent >= 90 ? "attention" : "normal";
+        setCardState("cpuCard", cpuState);
+        setCardState("memoryCard", memoryState);
+        setCardState("diskCard", diskState);
+        setMeter("cpuRing", "cpuRingLabel", cpuPercent, cpuState);
+        setMeter("memoryRing", "memoryRingLabel", memoryPercent, memoryState);
+        setMeter("diskRing", "diskRingLabel", diskPercent, diskState);
+        setText("cpuValue", cpuPercent === null ? "—" : cpuPercent.toFixed(1));
+        const load = cpu.load_average && finiteNumber(cpu.load_average.one_minute) !== null ? `1m load ${cpu.load_average.one_minute.toFixed(2)} · ${cpu.logical_cores || "?"} cores` : "load unavailable";
+        setText("cpuDetail", cpuPercent === null ? "無法取得 top 快照" : `${formatPercent(cpu.user_percent)} user · ${formatPercent(cpu.system_percent)} system · ${load}`);
+        setText("memoryValue", memoryPercent === null ? "—" : memoryPercent.toFixed(1));
+        setText("memoryDetail", memoryPercent === null ? "無法取得 vm_stat 快照" : `${formatBytes(memory.used_bytes)} / ${formatBytes(memory.total_bytes)} · pressure ${pressure.level || "unknown"}${pressure.estimated ? "*" : ""}`);
+        setText("diskValue", diskPercent === null ? "—" : diskPercent.toFixed(1));
+        setText("diskDetail", diskPercent === null ? "無法取得磁碟快照" : `${formatBytes(disk.free_bytes)} free · ${disk.path || "/"}`);
+
+        setText("powerValue", power.battery_percent === null || power.battery_percent === undefined ? (power.power_source || "—") : `${power.battery_percent}%`);
+        setText("powerState", [power.power_source, power.state].filter(Boolean).join(" · ") || "電源資料 unavailable");
+        const thermalAttention = thermal.throttled === true;
+        $("#thermalLine").dataset.state = thermalAttention ? "attention" : "normal";
+        setText("thermalValue", thermal.status !== "ok" ? "unavailable" : thermalAttention ? "限制中" : "未見限制");
+
+        const overallState = ["nominal", "attention", "partial"].includes(overall.status) ? overall.status : "partial";
+        const masthead = $("#mastheadStatus");
+        masthead.dataset.state = overallState;
+        setText("mastheadStatusText", overallState === "nominal" ? "本機資源觀測正常" : overallState === "attention" ? "需要檢視資源訊號" : "部分資料 unavailable");
+        setText("syncStatus", overall.summary || "快照已取得");
+        setText("capturedAt", formatCapturedAt(snapshot.captured_at));
+        renderObservations(overall.observations);
+        renderProcesses(snapshot.scout || {});
+        pushHistory("cpu", cpuPercent);
+        pushHistory("memory", memoryPercent);
+        renderHistory();
+      }
+
+      function renderError() {
+        $("#mastheadStatus").dataset.state = "partial";
+        setText("mastheadStatusText", "本機取樣失敗");
+        setText("syncStatus", "collector unavailable · 保留上次畫面");
+      }
+
+      async function refreshSnapshot() {
+        if (state.requestInFlight) return;
+        state.requestInFlight = true;
+        setText("syncStatus", "本機取樣中…");
+        try {
+          const response = await fetch("/api/snapshot", { cache: "no-store" });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          renderSnapshot(await response.json());
+        } catch (error) {
+          renderError();
+        } finally {
+          state.requestInFlight = false;
+        }
+      }
+
+      function schedulePolling() {
+        if (state.timer) window.clearInterval(state.timer);
+        if (state.polling) state.timer = window.setInterval(refreshSnapshot, Number($("#intervalSelect").value));
+      }
+
+      $("#refreshButton").addEventListener("click", refreshSnapshot);
+      $("#intervalSelect").addEventListener("change", schedulePolling);
+      $("#pauseButton").addEventListener("click", () => {
+        state.polling = !state.polling;
+        $("#pauseButton").textContent = state.polling ? "暫停" : "繼續";
+        schedulePolling();
+      });
+      refreshSnapshot();
+      schedulePolling();
+    </script>
+  </body>
+</html>
