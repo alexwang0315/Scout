@@ -347,11 +347,16 @@ Pydantic AI v2.42.0 operating rules:
   Copilot authentication, unrestricted code execution or new providers. See the
   [2.42 compatibility report](../evals/scout-ai-pydantic-242-smoke-20260910.md).
 
-- Local September 7 compatibility also covers optional
-  `praisonaiagents==1.7.4`. The SDK remains behind the candidate-only Scout
-  Intelligence Gateway; its CLI, persistent memory, and hardware deployment are
-  not activated by a package upgrade. The 1.7.3 baseline remains documented in
-  [the earlier report](../evals/scout-ai-pydantic-237-praison-173-smoke-20260903.md).
+- Local September 11 compatibility also covers optional
+  `praisonaiagents==1.7.5`, with Pydantic AI retained at 2.42.0. The SDK remains
+  behind the candidate-only Scout Intelligence Gateway; its CLI, persistent
+  memory, and hardware deployment are
+  not activated by a package upgrade. Per-request Team/Task/approval scopes must
+  remain isolated. Configured local embeddings are fixture-tested at both
+  document-ingestion and query boundaries; this does not qualify an installed
+  local embedding server or enable automatic knowledge ingestion. Three upstream
+  SDK issues remain explicitly expected failures, not passing checks. See the
+  [1.7.5 qualification report](../evals/scout-ai-praison-175-smoke-20260911.md).
 - Scout's package path uses `pydantic-ai-slim` with `duckduckgo`, `openai`, and
   `openrouter` extras for Pi compatibility and grounded local web search.
 - `pydantic_ai.Agent` calls must keep `end_strategy="early"` unless a future

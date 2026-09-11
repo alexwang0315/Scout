@@ -63,6 +63,14 @@ class LiveStructuredSmokeOutput(BaseModel):
     runtime_version: str
 
 
+class SmokeCheckFailure(AssertionError):
+    """Retain non-sensitive fixture evidence when a compatibility assertion fails."""
+
+    def __init__(self, message: str, details: dict[str, Any]):
+        super().__init__(message)
+        self.details = details
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
@@ -230,6 +238,7 @@ async def _run_checks(
                     "status": "failed",
                     "error_type": type(exc).__name__,
                     "error": _redact_error(str(exc)),
+                    **({"details": exc.details} if isinstance(exc, SmokeCheckFailure) else {}),
                 }
             )
     return results
@@ -1117,13 +1126,15 @@ async def _live_mcp(model: Any) -> dict[str, Any]:
     from pydantic_ai.mcp import MCPToolset
 
     marker = "SCOUT_LIVE_MCP_INSTRUCTION"
+    receipts: list[str] = []
     server = FastMCP("scout-live-smoke", instructions=f"{marker}: call route_marker.")
 
     @server.tool()
     def route_marker() -> str:
         """Return the live smoke route marker."""
 
-        return "MCP-CP-07"
+        receipts.append("MCP-CP-07")
+        return receipts[-1]
 
     agent = Agent(
         model,
@@ -1131,6 +1142,15 @@ async def _live_mcp(model: Any) -> dict[str, Any]:
         toolsets=[MCPToolset(server, include_instructions=True)],
         **pydantic_agent_runtime_kwargs(),
     )
+
+    @agent.output_validator
+    def require_mcp_evidence(output: str) -> str:
+        if not receipts:
+            raise ModelRetry("No MCP evidence was returned. Call route_marker before answering.")
+        if receipts[-1] not in output:
+            raise ModelRetry("Use the marker returned by route_marker in the final answer.")
+        return output
+
     result = None
     event_types: list[str] = []
     async with asyncio.timeout(DEFAULT_TIMEOUT_SECONDS):
@@ -1151,25 +1171,24 @@ async def _live_mcp(model: Any) -> dict[str, Any]:
     instructions = [
         getattr(message, "instructions", None) for message in result.all_messages()
     ]
-    _require(
-        any(marker in (item or "") for item in instructions),
-        "live MCP instructions were not attached",
-    )
-    _require("route_marker" in trace["tool_names"], "live MCP tool was not called")
-    _require(
-        "FunctionToolCallEvent" in event_types,
-        "live MCP stream omitted the tool call event",
-    )
-    _require(
-        "FunctionToolResultEvent" in event_types,
-        "live MCP stream omitted the tool result event",
-    )
-    return {
+    details = {
         **trace,
-        "output": str(result.output),
-        "instructions_present": True,
+        "output": _redact_error(_bounded_text(str(result.output))),
+        "instructions_present": any(marker in (item or "") for item in instructions),
         "event_types": event_types,
+        "server_execution_count": len(receipts),
+        "result_used": bool(receipts) and receipts[-1] in str(result.output),
     }
+    for condition, message in (
+        (details["instructions_present"], "live MCP instructions were not attached"),
+        ("route_marker" in trace["tool_names"], "live MCP tool was not called"),
+        ("FunctionToolCallEvent" in event_types, "live MCP stream omitted the tool call event"),
+        ("FunctionToolResultEvent" in event_types, "live MCP stream omitted the tool result event"),
+        (details["result_used"], "live MCP result was not used"),
+    ):
+        if not condition:
+            raise SmokeCheckFailure(message, details)
+    return details
 
 
 async def _live_stream_events(model: Any) -> dict[str, Any]:

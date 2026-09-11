@@ -4,7 +4,7 @@ This interface gives Scout AI a deterministic way to read available tool
 contracts and run read-only local evidence tools without depending on prompt-only
 knowledge.
 
-## Implementation Update 2026-09-10
+## Implementation Update 2026-09-11
 
 Scout AI's Mac runtime and Pi dependency manifests target Pydantic AI v2.42.0.
 The September 10 upgrade is local only, not a new hardware deployment.
@@ -94,10 +94,20 @@ Tool execution remains deterministic and read-only by default:
   `$ref` definitions must retain scalar/list/union types in signatures instead
   of becoming empty object types. See the
   [2.42 compatibility report](../evals/scout-ai-pydantic-242-smoke-20260910.md).
-- Optional Praison intelligence dependencies remain `praisonaiagents==1.7.4`.
+- Optional Praison intelligence dependencies target `praisonaiagents==1.7.5`.
   Real SDK orchestration, MCP lifecycle, Scout Model Gateway replay, and isolated
   opt-in file memory are compatibility checks, not new authority or implicit
-  memory activation. Version 1.7.3 remains the pre-upgrade baseline.
+  memory activation. Scout creates a fresh Team, Tasks and approval scopes per
+  request; do not reuse one SDK Team across concurrent asyncio tasks. Fixture
+  tests cover sync/async/stream tool call-return pairing, tool-error recovery,
+  handoff history restoration, local embedding routing, and explicit typed
+  workflow variables. Preserve Scout's own clocks and model transport: upstream
+  sync latency and initial SSE tool arguments still have known defects. See the
+  [1.7.5 report](../evals/scout-ai-praison-175-smoke-20260911.md).
+- The live MCP compatibility smoke now requires an actual server execution and
+  the returned marker in the answer. Missing evidence triggers model feedback
+  within the unchanged 10/10 budget, not a fabricated tool receipt. Assertions
+  retain fixture trace details; model prose without tool execution is a failure.
 - MCP compatibility is now exercised through `run_stream_events()`. A valid
   trace must include both `FunctionToolCallEvent` and
   `FunctionToolResultEvent` before `AgentRunResultEvent`; merely listing an MCP

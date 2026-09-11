@@ -103,7 +103,7 @@ def test_runtime_and_deployment_dependency_pins_stay_aligned() -> None:
     expected_versions = {
         "pydantic-ai-slim": "2.42.0",
         "pydantic-evals": "2.42.0",
-        "praisonaiagents": "1.7.4",
+        "praisonaiagents": "1.7.5",
     }
     seen = set()
     for surface, dependencies in dependency_sets.items():
@@ -117,6 +117,40 @@ def test_runtime_and_deployment_dependency_pins_stay_aligned() -> None:
                 seen.add(requirement.name)
     assert seen == expected_versions.keys()
     assert REQUIRED_VERSION == expected_versions["pydantic-ai-slim"]
+
+
+def test_live_mcp_path_repairs_missing_call_and_requires_actual_return():
+    from pydantic_ai.messages import ToolCallPart
+    from pydantic_ai.models.function import DeltaToolCall, FunctionModel
+
+    requests = []
+
+    async def stream(messages, info):
+        requests.append(messages)
+        if len(requests) == 1:
+            yield "I have not read the marker yet."
+        elif len(requests) == 2:
+            yield {0: DeltaToolCall(name="route_marker", json_args="{}")}
+        else:
+            yield "MCP-CP-07"
+
+    details = asyncio.run(smoke._live_mcp(FunctionModel(stream_function=stream)))
+    assert len(requests) == 3
+    assert details["server_execution_count"] == 1
+    assert details["result_used"]
+    assert details["retry_prompt_count"] == 1
+    assert details["tool_names"] == ["route_marker"]
+    assert details["tool_return_contents"] == "MCP-CP-07"
+    assert any(isinstance(part, ToolCallPart) for message in requests[-1] for part in message.parts)
+
+
+def test_smoke_failure_retains_diagnostic_trace():
+    def fail():
+        raise smoke.SmokeCheckFailure("MCP result missing", {"tool_call_count": 0})
+
+    report = asyncio.run(smoke._run_checks([("fixture-mcp", fail)]))
+    assert report[0]["status"] == "failed"
+    assert report[0]["details"] == {"tool_call_count": 0}
 
 
 def test_candidate_version_is_verified_without_changing_runtime_pin(monkeypatch):

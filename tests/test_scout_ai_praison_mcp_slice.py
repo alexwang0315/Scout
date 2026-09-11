@@ -627,6 +627,48 @@ def test_real_praison_specialists_share_one_typed_model_gateway_session() -> Non
     assert response.runtime_safety_truth is False
 
 
+@pytest.mark.parametrize("model_backed", [False, True])
+def test_scout_requests_do_not_reuse_team_tasks_or_approval_scopes(monkeypatch, tmp_path, model_backed):
+    sdk = pytest.importorskip("praisonaiagents")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("PRAISONAI_HOME", str(tmp_path / ".praisonai"))
+    monkeypatch.setenv("OPENAI_API_KEY", "fixture-only")
+    monkeypatch.setenv("PRAISONAI_TELEMETRY_DISABLED", "true")
+    teams = []
+
+    class ObservedTeam(sdk.AgentTeam):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            teams.append(self)
+
+    monkeypatch.setattr(sdk, "AgentTeam", ObservedTeam)
+    runtime = build_praison_model_replay_runtime() if model_backed else PraisonAgentTeamRuntime()
+    service = PraisonIntelligenceService(runtime=runtime, evidence_catalog=_catalog(), max_concurrency=1)
+    requests = [_request(), _request()]
+    try:
+        responses = [service.execute(request) for request in requests]
+        assert len(teams) == 2 and teams[0] is not teams[1]
+        assert not {id(t) for t in teams[0].tasks.values()} & {id(t) for t in teams[1].tasks.values()}
+        scopes = [{agent._approval_scope_id for agent in team.agents} for team in teams]
+        assert scopes[0] and scopes[1] and scopes[0].isdisjoint(scopes[1])
+        for request, response in zip(requests, responses, strict=True):
+            assert len(response.findings) == 3
+            assert response.candidate_only and not response.runtime_safety_truth
+            validation = PydanticContractGateway().validate_response(
+                request=request, response=response, current_binding=request.workspace_binding,
+            )
+            assert validation.accepted
+            if model_backed:
+                assert {r.parent_request_id for r in response.provenance.model_execution_records} == {request.request_id}
+    finally:
+        for team in teams:
+            for agent in team.agents:
+                agent.close()
+        if model_backed:
+            runtime.close()
+
+
 @pytest.mark.skipif(
     importlib.util.find_spec("praisonaiagents") is None,
     reason="optional praisonaiagents dependency is not installed",

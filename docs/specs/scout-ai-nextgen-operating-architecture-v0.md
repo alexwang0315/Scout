@@ -4,10 +4,10 @@ Status: experimental working architecture, not production promotion
 Date: 2026-08-23
 Authority: candidate-only; production Scout behavior is unchanged
 
-## Dependency Compatibility Update 2026-09-10
+## Dependency Compatibility Update 2026-09-11
 
 The local control plane now targets Pydantic AI 2.42.0, and the optional
-intelligence SDK targets `praisonaiagents==1.7.4` in the package extra.
+intelligence SDK targets `praisonaiagents==1.7.5` in the package extra.
 The in-progress Pi intelligence sidecar remains a separate deployment change.
 Earlier 1.7.0 qualification evidence below remains a
 historical baseline, not proof that Pi has been upgraded. The separate
@@ -19,8 +19,23 @@ public live search/fetch, and temporary fixture-only file-memory isolation.
 No persistent Scout memory is enabled implicitly. Pydantic AI and deterministic
 Scout services remain authoritative; SDK memory or model output cannot alter
 runtime safety state. See the
-[local upgrade report](../evals/scout-ai-pydantic-242-smoke-20260910.md)
+[local upgrade report](../evals/scout-ai-praison-175-smoke-20260911.md)
 for transport, grounding, and test outcomes separately.
+
+The SDK-only September 11 update leaves the Pydantic 2.42.0 family and provider
+model unchanged. New fixture qualification covers handoff history isolation,
+approval cleanup in the granting context, tool loops, explicit local embedding
+configuration, and opt-in typed workflow state. Workflow handlers must return
+`StepResult(variables=...)`; mutating a handler's context copy does not persist
+updates. Include generated `input` and named step-output fields when validating
+the complete returned variables against a typed state model.
+
+Do not infer safe same-event-loop Team reuse, accurate SDK sync latency, or
+arbitrary provider SSE support from this upgrade. Three upstream limitations
+reproduce under both 1.7.4 and 1.7.5 and remain strict expected-failure tests.
+Scout retains fresh per-request Teams, Scout Model Gateway transport, and
+separate monotonic MCP timing. No new SDK hosted tools, knowledge ingestion or
+memory-consolidation scheduler is activated by the dependency pin.
 
 The previous Praison model-replay deadline issue is diagnosed separately with
 process-spawn, MCP initialize/import, and tool-execution timing. A passing
