@@ -10,7 +10,7 @@
 ./tools/run_macos_resource_monitor.sh
 ```
 
-然後開啟 <http://127.0.0.1:8765>。預設只監聽 loopback；若要換 port：
+然後開啟 <http://127.0.0.1:8877>。預設只監聽 loopback；若要換 port：
 
 ```bash
 ./tools/run_macos_resource_monitor.sh --port 9877
@@ -19,7 +19,7 @@
 按 `Ctrl-C` 停止。也可以直接使用既有 Python：
 
 ```bash
-./venv/bin/python tools/macos_resource_monitor.py --host 127.0.0.1 --port 8765
+./venv/bin/python tools/macos_resource_monitor.py --host 127.0.0.1 --port 8877
 ```
 
 ## 顯示內容

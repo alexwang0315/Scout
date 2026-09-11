@@ -628,7 +628,7 @@ def main() -> int:
         description="Serve a read-only local Scout macOS resource monitor."
     )
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", default=8765, type=int)
+    parser.add_argument("--port", default=8877, type=int)
     args = parser.parse_args()
     uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
     return 0
