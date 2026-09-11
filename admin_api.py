@@ -2475,7 +2475,6 @@ def create_dashboard_app(
     assistant_environ: Mapping[str, str] | None = None,
     runtime_audit_root: Path | None = None,
     runtime_audit_ledger: FileRuntimeAuditLedger | None = None,
-    resource_monitor_collector: Any | None = None,
     hardware_monitor_fetcher: Callable[[str, Mapping[str, str]], tuple[int, Any]]
     | None = None,
 ) -> FastAPI:
@@ -2504,15 +2503,8 @@ def create_dashboard_app(
         runtime_audit_root=runtime_audit_root,
         runtime_audit_ledger=runtime_audit_ledger,
     )
-    from tools.macos_resource_monitor import create_resource_monitor_router
     from tools.hardware_monitor_proxy import create_hardware_monitor_proxy_router
 
-    app.include_router(
-        create_resource_monitor_router(
-            collector=resource_monitor_collector,
-            prefix="/admin/dashboard/scout-monitor",
-        )
-    )
     app.include_router(
         create_hardware_monitor_proxy_router(
             prefix="/admin/dashboard/scout-monitor",

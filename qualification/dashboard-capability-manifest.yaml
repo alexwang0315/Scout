@@ -63,24 +63,9 @@ surfaces:
         required_tests: [typed_read_only_projection, malformed_store_fail_closed, get_only_api, desktop_mobile_telemetry_smoke]
         required_evidence: [ui, network, server_state, trace]
         authority_boundary: {source: server, runtime_authority: false}
-  - id: macos-resource-monitor
+  - id: scout-hardware-monitor
     route: /admin/dashboard#scout-monitor
     capabilities:
-      - id: dashboard.system.macos_resource_monitor
-        criticality: P1
-        status: partial
-        qualification_state: outside_boundary
-        owner: dashboard
-        expected_behavior:
-          - System > scout monitor opens a same-origin embedded read-only macOS resource monitor.
-          - CPU, memory, disk, power, thermal-limit, and matched Scout workload observations retain typed unavailable states when a local source cannot be read.
-          - The monitor remains candidate-only telemetry and exposes no runtime safety, permission, notification, hardware, outbound, or workspace authority.
-        forbidden_behavior:
-          - Opening, refreshing, or polling the monitor must not persist samples or mutate Scout runtime, workspace, database, hardware, or external state.
-          - Process rows must not expose complete command lines or credential-like arguments.
-        required_tests: [dashboard_scout_monitor_route, dashboard_scout_monitor_read_only_api, dashboard_scout_monitor_degraded_state]
-        required_evidence: [ui, network, server_state, trace]
-        authority_boundary: {source: server, runtime_authority: false}
       - id: dashboard.system.hardware_monitor_read_only
         criticality: P1
         status: partial
@@ -93,6 +78,7 @@ surfaces:
           - Hardware telemetry remains read-only, candidate-only presentation and does not add hardware control or runtime-safety authority.
         forbidden_behavior:
           - The browser must not call 127.0.0.1:9151 directly or issue POST, PUT, PATCH, or DELETE requests for hardware monitoring.
+          - The Dashboard monitor must not display local macOS metrics or request the removed Mac snapshot/health endpoints.
           - A fan reading of 0 RPM must not alone produce a hardware-fault state, and missing history points must not be fabricated.
         required_tests: [hardware_monitor_proxy_same_origin, hardware_monitor_stale_503, hardware_monitor_browser_smoke]
         required_evidence: [ui, network, server_state, trace]

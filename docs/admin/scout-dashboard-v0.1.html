@@ -12148,7 +12148,7 @@
       "agent": Object.freeze({maturity: "partial", surface: "Degraded", data: "Local evidence context", action: "Operator-triggered model request", verification: "Connection not checked", provenance: "Provider configured · readiness unknown", mode: "Operational"}),
       "runtime-audit": Object.freeze({maturity: "live", surface: "Operational", data: "Loading unified runtime records", action: "Read-only filters and refresh", verification: "Hash-chain check pending", provenance: "Local append-only telemetry ledger", mode: "Telemetry only"}),
       "surface-intelligence": Object.freeze({maturity: "partial", surface: "Degraded", data: "Loading candidate intelligence jobs", action: "Read-only telemetry", verification: "Typed store projection pending", provenance: "Praison background queue · candidate-only", mode: "Telemetry only"}),
-      "scout-monitor": Object.freeze({maturity: "partial", surface: "Degraded", data: "Loading macOS + Scout hardware telemetry", action: "Read-only observation", verification: "Same-origin monitor and hardware proxy pending", provenance: "Local macOS counters + Scout API telemetry · candidate-only", mode: "Telemetry only"}),
+      "scout-monitor": Object.freeze({maturity: "partial", surface: "Degraded", data: "Loading Scout hardware telemetry", action: "Read-only observation", verification: "Same-origin hardware proxy pending", provenance: "Scout API telemetry · candidate-only", mode: "Telemetry only"}),
       "surface-debug": Object.freeze({maturity: "live", surface: "Operational", data: "Runtime + replay evidence", action: "Diagnostics · projected clear is explicit", verification: "Full page verified", provenance: "Per-event provenance", mode: "Operational"}),
       "debug": Object.freeze({maturity: "partial", surface: "Operational", data: "Runtime + replay evidence", action: "Read-only · retry", verification: "Endpoints + tabs verified", provenance: "Per-event provenance", mode: "Technical Prototype"}),
       "settings": Object.freeze({maturity: "live", surface: "Operational", data: "Browser-local settings", action: "Local browser mutation only", verification: "Validation + save path", provenance: "Browser settings", mode: "Operational"}),
@@ -13072,7 +13072,7 @@
       diagnostic: ["Diagnostic", "48 read-only Dashboard checks"],
       "runtime-audit": ["Logs", "以日／月索引檢視統一運行紀錄、API 成敗與 workspace I/O"],
       "surface-intelligence": ["Intelligence", "candidate-only background job telemetry"],
-      "scout-monitor": ["scout monitor", "觀測本機 macOS 資源與 Scout 主機硬體狀態"],
+      "scout-monitor": ["scout monitor", "觀測 Scout 主機硬體狀態"],
     };
 
     document.addEventListener("DOMContentLoaded", () => {
@@ -16916,7 +16916,7 @@
           route,
           title: "scout monitor",
           src: "/admin/dashboard/scout-monitor",
-          summary: "本機 macOS 資源與 Scout 主機硬體的唯讀監控。",
+          summary: "Scout 主機硬體的唯讀監控。",
         });
       }
       if (route === "agent") return renderAgentPage();

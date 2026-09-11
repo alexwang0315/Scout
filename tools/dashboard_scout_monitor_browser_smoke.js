@@ -29,6 +29,10 @@ async function run() {
   const consoleErrors = [];
   const failedResponses = [];
   const hardwareResponses = [];
+  const macMonitorRequests = [];
+  page.on("request", (request) => {
+    if (/\/admin\/dashboard\/scout-monitor\/api\/(snapshot|health)$/.test(new URL(request.url()).pathname)) macMonitorRequests.push(request.url());
+  });
   const pageErrors = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
   page.on("console", (message) => {
@@ -53,6 +57,8 @@ async function run() {
   await page.getByRole("button", { name: "scout monitor" }).click();
   const frame = page.frameLocator('iframe[src="/admin/dashboard/scout-monitor"]');
   await frame.getByRole("heading", { name: "硬體監控" }).waitFor({ state: "visible", timeout: 30000 });
+  const macUiElements = await frame.locator("#hostName, #cpuCard, #memoryCard, #diskCard, #historyChart, #processTable, #intervalSelect").count();
+  if (macUiElements) fail("Mac monitoring elements remain in the Dashboard monitor");
   await frame.locator("#hardwareOverallStatus").waitFor({ state: "visible", timeout: 30000 });
   await frame.locator("#hardwareTrendMeta").filter({ hasText: "歷史紀錄" }).waitFor({ state: "visible", timeout: 30000 });
   const statusPayload = await (await firstStatusResponse).json();
@@ -114,6 +120,7 @@ async function run() {
   await mobileFrame.locator("#hardwareThermalCard").screenshot({ path: mobileThermalScreenshot });
 
   if (hardwareResponses.some(entry => entry.origin !== new URL(baseUrl).origin)) fail("browser made a cross-origin hardware request");
+  if (macMonitorRequests.length) fail(`Mac monitor requests remain: ${JSON.stringify(macMonitorRequests)}`);
   if (hardwareResponses.some(entry => entry.status !== 200)) fail(`live hardware HTTP failure: ${JSON.stringify(hardwareResponses)}`);
   if (consoleErrors.length || pageErrors.length || failedResponses.length) fail(`browser errors: ${JSON.stringify({ consoleErrors, pageErrors, failedResponses })}`);
   const methods = new Set(hardwareResponses.map((entry) => entry.method));
@@ -131,6 +138,8 @@ async function run() {
     eventText,
     nvmeSourceVisible: nvmeText.includes("/sys/class/hwmon/"),
     hardwareResponses,
+    macUiElements,
+    macMonitorRequests,
     consoleErrors,
     pageErrors,
     failedResponses,

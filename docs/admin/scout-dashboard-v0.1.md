@@ -46,6 +46,39 @@ Each entry should include:
 
 ## Implementation Record
 
+### 2026-09-11 - Keep only Scout host monitoring in System
+
+User request: remove the Mac monitoring portion of scout monitor.
+
+- The Dashboard now serves `tools/scout_hardware_monitor.html`, containing
+  only the Scout hardware status, metrics, disks, history, alerts, and events.
+  Local Mac identity, resource cards, polling controls, local trend, and
+  process observations were removed from this page.
+- Both Dashboard application factories stopped mounting the macOS collector;
+  the former monitor `/api/health` and `/api/snapshot` paths return 404. The
+  Scout hardware proxy, 60-second polling, and stale/null handling are retained.
+- Updated the page description and capability manifest to reflect Scout-only
+  monitoring. The standalone macOS utility remains separate from Dashboard.
+- Verification: 94 focused Python tests passed, all 12 browser state replays
+  passed (including stale 503, nulls, 60-second polling, and leave/restore), and
+  `pnpm lint`, `pnpm typecheck`, and `pnpm test` passed. JavaScript syntax,
+  focused Ruff, and the 20-capability manifest validation also passed.
+- Reloaded the existing native Mac Dashboard on `127.0.0.1:9099`; the QGIS
+  worker (PID 1668) and existing Scout API SSH forward (PID 53539) were retained.
+  Dashboard PID 63012 was observed after reload. The former Mac health and
+  snapshot endpoints returned 404; the Scout status, history, and events proxy
+  endpoints returned 200 with host `scout`, 60 history items, and 37 events.
+- Real Chrome desktop/mobile/keyboard smoke on 9099 passed with zero Mac UI
+  elements, zero Mac monitoring requests, no browser errors, and no mobile
+  horizontal overflow. All nine observed hardware requests were same-origin
+  GET requests. Evidence is under
+  `artifacts/scout-monitor-scout-only-20260911/`: `state-replay.json`,
+  `live-browser/browser-smoke.json`, and desktop/mobile screenshots.
+- The pre/post Navigation guard reported `NAVIGATION_FREEZE_SUSPENDED` in
+  report-only mode; no Navigation/GIS behavior or baseline was changed. This
+  is scoped working-prototype evidence, not full Dashboard qualification or
+  production promotion. The 9151 SSH forward remains temporary.
+
 ### 2026-09-11 - Integrate Scout hardware monitoring into scout monitor
 
 User request:

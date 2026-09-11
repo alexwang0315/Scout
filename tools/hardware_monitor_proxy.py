@@ -10,13 +10,14 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Callable, Mapping
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 from fastapi import APIRouter, Query
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 HARDWARE_MONITOR_UPSTREAM = "http://127.0.0.1:9151"
 HARDWARE_MONITOR_PROXY_PREFIX = "/admin/dashboard/scout-monitor"
@@ -162,6 +163,13 @@ def create_hardware_monitor_proxy_router(
             )
 
     router = APIRouter(prefix=prefix, tags=["hardware-monitor-proxy"])
+
+    @router.get("", response_class=FileResponse)
+    def monitor_page() -> FileResponse:
+        return FileResponse(
+            Path(__file__).with_name("scout_hardware_monitor.html"),
+            media_type="text/html",
+        )
 
     def proxy(endpoint: str, *, kind: str, limit: int | None = None) -> JSONResponse:
         params = {} if limit is None else {"limit": str(limit)}

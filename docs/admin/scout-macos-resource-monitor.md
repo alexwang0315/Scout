@@ -24,7 +24,7 @@
 
 ## Dashboard 分頁
 
-使用 Mac Dashboard workspace runtime 時，開啟 `http://127.0.0.1:9099/admin/dashboard`，在 `System` 底下選擇 `scout monitor`。這個分頁透過 Dashboard 同源路徑讀取本機 collector，並由 Dashboard 後端唯讀代理 Scout 硬體 API；不需要另外啟動 8877。8877 仍可作為獨立 macOS monitor 頁面使用。
+開啟 `http://127.0.0.1:9099/admin/dashboard`，在 `System` 底下選擇 `scout monitor`。依 2026-09-11 使用者要求，這個分頁現在只監控 Scout 主機；Mac 本機資源、程序清單與輪詢已移除，Dashboard 下原有的 Mac `/api/health`、`/api/snapshot` 也已移除。Dashboard 使用 `tools/scout_hardware_monitor.html` 與同源硬體 API 代理。8877 的獨立 macOS 工具仍保留，與 Dashboard 分開使用。
 
 ## Scout 硬體監控整合
 

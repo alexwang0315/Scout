@@ -107,8 +107,10 @@ async function runScenario(browser, name, fixture) {
   }
   await page.addInitScript(() => {
     window.hardwareRequestEvidence = [];
+    window.macMonitorRequestEvidence = [];
     const fetchOriginal = window.fetch.bind(window);
     window.fetch = (input, options) => {
+      if (/\/api\/(snapshot|health)$/.test(String(input))) window.macMonitorRequestEvidence.push(String(input));
       if (String(input).includes("hardware-monitor/")) {
         const evidence = { url: String(input), aborted: false };
         window.hardwareRequestEvidence.push(evidence);
@@ -143,6 +145,7 @@ async function runScenario(browser, name, fixture) {
   if (fixture.expectedNotice) await waitForText(frame, "#hardwareNoticeText", fixture.expectedNotice);
   if (!fixture.stallHistory) await page.waitForFunction(() => !document.querySelector("#hardwareRefreshButton").disabled);
   if (fixture.check) await fixture.check(frame, page, fixture);
+  assert(await page.evaluate(() => window.macMonitorRequestEvidence.length) === 0, `${name}: Mac monitor polling remains`);
   assert(pageErrors.length === 0, `${name}: JavaScript errors: ${pageErrors.join("; ")}`);
   completedScenarios.push(name);
   await page.close();
