@@ -13227,7 +13227,10 @@
 
     function surfaceSrc(path) {
       const delimiter = path.includes("?") ? "&" : "?";
-      return `${path}${delimiter}projectId=${encodeURIComponent(projectId())}`;
+      const renderer = new URLSearchParams(window.location.search).get("mapRenderer");
+      const rendererQuery = path === "/admin/pretrip" && ["auto", "svg", "maplibre"].includes(renderer)
+        ? `&mapRenderer=${renderer}` : "";
+      return `${path}${delimiter}projectId=${encodeURIComponent(projectId())}${rendererQuery}`;
     }
 
     function resolvedPretripProjectId() {
@@ -37560,6 +37563,10 @@
           .control-group[aria-label="Map view controls"] { display:block !important; padding:0 !important; border:0 !important; background:transparent !important; box-shadow:none !important; }
           .control-group[aria-label="Map view controls"] .control-group-header { display:none !important; }
           .toolbar-row[aria-label="Map tools"] { display:flex !important; justify-content:flex-end !important; gap:4px !important; padding:5px !important; border:1px solid rgba(42,64,74,.7) !important; border-radius:8px !important; background:rgba(247,250,252,.94) !important; box-shadow:0 8px 24px rgba(0,0,0,.25) !important; pointer-events:auto !important; }
+          #refreshWeatherMapTiles { display:inline-flex !important; white-space:nowrap !important; }
+          .toolbar-row[aria-label="Map tools"] { flex-wrap:wrap !important; max-width:calc(100vw - 28px) !important; }
+          #zoomLevel { overflow-wrap:anywhere !important; white-space:normal !important; }
+          #mapRendererStatus { bottom:66px !important; max-width:calc(100% - 24px) !important; }
           .map-wrap { position:absolute !important; inset:0 !important; width:100% !important; height:100% !important; min-height:0 !important; }
           #map { display:block !important; width:100% !important; height:100% !important; min-height:100% !important; }
           #mapRendererShell[data-map-renderer-active="maplibre"] #map { display:none !important; }

@@ -1239,7 +1239,8 @@ def test_weather_map_tile_failure_keeps_the_current_interaction_view() -> None:
     )[1].split("function markRasterLayerGenerationActive", 1)[0]
 
     assert "group.dataset.nativeTileFailure = reason;" in failure_handler
-    assert "previous complete tiles retained at current view" in failure_handler
+    assert "updateRudyTileStatus(group, true)" in failure_handler
+    assert "group.dataset.requestedTileZoom = String(failedTileZoom)" in failure_handler
     assert "state.lastFailedNativeMapZoom = failedZoom;" in failure_handler
     assert "state.zoom =" not in failure_handler
     assert "state.panX =" not in failure_handler
@@ -1267,7 +1268,8 @@ def test_weather_rudy_twmap_uses_scout_cache_proxy_instead_of_direct_wmts():
         in html
     )
     assert "tileCountForZoom(bounds, zoom) > effectiveMaxTiles" in html
-    assert "definition.initialMaxZoom + Math.ceil(Math.log2(Math.max(1, state.zoom)))" in html
+    assert "function rasterMapWorldPixelScale" in html
+    assert "Math.ceil(Math.log2(worldPixelsAtFit / 256))" in html
     assert "function mapInteractionMaxZoom()" in html
     assert 'document.getElementById("zoomIn")' in html
     assert 'state.zoom >= mapInteractionMaxZoom() - 0.001' in html

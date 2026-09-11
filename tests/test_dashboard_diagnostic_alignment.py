@@ -32,6 +32,20 @@ assert.equal(enabled.route, true);
 ''')
 
 
+def test_explicit_renderer_replay_is_scoped_to_pretrip_and_preserves_workspace():
+    node(function('surfaceSrc') + r'''
+const assert = require('node:assert/strict');
+const window = {location:{search:'?mapRenderer=svg'}};
+const projectId = () => 'dongqing_real';
+assert.equal(surfaceSrc('/admin/pretrip'),'/admin/pretrip?projectId=dongqing_real&mapRenderer=svg');
+assert.equal(surfaceSrc('/admin/navigation'),'/admin/navigation?projectId=dongqing_real');
+window.location.search='?mapRenderer=untrusted';
+assert.equal(surfaceSrc('/admin/pretrip'),'/admin/pretrip?projectId=dongqing_real');
+window.location.search='';
+assert.equal(surfaceSrc('/admin/pretrip'),'/admin/pretrip?projectId=dongqing_real');
+''')
+
+
 def test_project_resolution_never_falls_back_or_adopts_another_workspace():
     node('\n'.join(function(n) for n in ['resolvedPretripProjectId', 'pretripDataProjectIds', 'fetchFirstPretripJson']) + r'''
 const assert = require('node:assert/strict');

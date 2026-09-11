@@ -117,3 +117,35 @@ aa176008 2026-09-10T15:56:54+08:00 feat(pretrip): integrate planning context map
 檢查紀錄存於 Scout `rudy-9099-repair-20260911/`：後端／頁面初次組合 93 passed、1 項既有 historical-map auxiliary 文字斷言失敗；該斷言在修補前 HEAD 也不成立，未為它回退已存在的圖層契約。最終前端組合 50 passed，API／adapter 組合 26 passed；pnpm lint、typecheck 通過，pnpm test 使用 Scout 已有 QA 依賴後 27 passed。JavaScript 語法檢查與現行 33-layer 契約通過。Navigation guard 仍是 `NAVIGATION_FREEZE_SUSPENDED`，沒有變更 baseline。
 
 **未完成整併**：Mac 仍缺少 TASK 的四個 Permission／recorded／exploration 前端模組，不能宣稱 9099 已包含另一分支全部功能。這次沒有覆蓋任一工作區、改動審查決定、重跑行前準備或把 Mapsforge `.map` 加成底圖。教學會保留既有 34 頁截圖的歷史來源，另補本輪實測地圖操作頁，避免把舊畫面標成 9099 當前版本。
+
+## Chrome Weather 的 SVG 模糊問題追蹤
+
+使用者指定的 Chrome 分頁實際顯示 `113.29x native Z20 unavailable`。讀取原頁而未重設視角時，DOM 為 `auto → svg / webgl_unavailable`，保留的背景只有 Z14，圖磚請求為 `cache_only=1&exact=1`。先前內建瀏覽器的 MapLibre Z16 成功，不能用來判定這個 SVG 視角可用。
+
+原因與修補：
+
+1. Weather 隱藏 Layers，連唯一的圖磚更新按鈕也被隱藏。新增可見的「更新圖磚／停止更新」，與既有 Layers 更新控制共用同一個狀態與執行函式。預設仍為快取模式。
+2. SVG 原本以固定 Z13 加上放大倍率推算層級，忽略路線範圍及實際畫面尺寸。改由 Mercator 投影比例和 SVG CSS 尺寸決定基準層級，再依放大倍率升級。保留 Fit 後第一次＋即提升層級的行為，最多額外取一級解析度，仍受 160 張及來源最大層級限制。最大互動縮放亦依相同比例計算。
+3. 快取不完整不等於來源沒有 Z20。失敗畫面改列「需要 Z19／目前 Z14」這類實際層級，另顯示更新操作。整批載入成功後清除舊錯誤；隱藏的 SVG 不得覆蓋 MapLibre 狀態。
+4. 原本整批 12 秒逾時曾在 Z20 的 70 張中成功 64 張時取消剩餘請求。改為 12 秒沒有新圖磚完成才逾時；每張新圖磚重設計時，仍須全部完成才替換背景。舊世代不得覆蓋新世代，成功後不留計時器。
+5. MapLibre 更新不再同步下載隱藏 SVG 的圖磚；載入完成後亦不再保留 Loading 文字。
+
+Chrome 重新載入後曾恢復 MapLibre，故 WebGL 失效只代表先前觀測時刻，不推定為永久瀏覽器設定。為重播 SVG，Dashboard 支援明確的 `mapRenderer=svg` 查詢參數，僅傳至 Pre-trip 地圖；不寫入瀏覽器偏好或工作區。驗證後使用者入口保持原本未強制 renderer 的 9099 URL。
+
+已保存的瀏覽器證據位於 Scout 的 `rudy-9099-repair-20260911/`：
+
+- 原頁：`chrome-weather-z20-before.jpg`、`chrome-weather-z20-frame-before.json`。
+- SVG Fit Z12 → 第一次＋ Z13：54 張 HTTP 200，`chrome-svg-fit-plus-network.json`。
+- 同一路段約 115 倍：原先保留 Z13；按更新取得 35 張 Z19 原生圖磚後，等高線清晰且 viewBox 不變，`chrome-svg-native-z19-network.json`、`chrome-svg-native-z19-state.json`、`chrome-svg-native-z19.jpg`。
+- Z20 首輪的舊逾時失敗與後續快取成功分開保留，未把 retry-pass 當成首次成功：`chrome-svg-native-z20-network.json`、`chrome-svg-z20-cache-reuse.json`。進度逾時修正後的最終重驗另存 `chrome-svg-final-*`。
+- 主地圖既有教學控制檢查：`chrome-main-guide-impact.json`；Fit、＋、Layers 與 ↻ 仍存在且可操作。Chrome 主地圖曾遇到 MapLibre 初始化逾時後改用 SVG，因此不宣稱所有瀏覽器均穩定採用 MapLibre。
+
+本次是指定視角的圖磚修復與重播，不代表全路線離線覆蓋、天候資料更新、Mapsforge 底圖整合或 runtime safety truth。
+
+### 最終 SVG 重驗結果
+
+進度逾時修正後，Chrome 在鄰近路段以相同操作完成 **30/30 Z19** 與 **70/70 Z20** 原生圖磚請求，均為 HTTP 200、`remote_refresh_cache_replace`，沒有取消。Z20 完成狀態為 `ready`、requested/displayed 同為 20、沒有殘留 failure。按「停止更新」後，**70/70 Z20** 改由 `local_source_cache` 讀取，請求保留 `cache_only=1&exact=1`，viewBox 不變。
+
+截圖及按鈕定位：`ui-weather-update-tiles.jpg/.json`、`ui-weather-tile-status.jpg/.json`。最終網路／狀態：`chrome-svg-final-z19-network.json`、`chrome-svg-final-z20-network.json`、`chrome-svg-final-z20-state.json`、`chrome-svg-final-cache-network.json`、`chrome-svg-final-cache-state.json`。主地圖更新開關 `false → true → false` 另記錄於 `chrome-main-refresh-toggle.json`。
+
+最終聚焦測試 **70 passed、1 deselected**；排除項為前述修補前即失敗的 historical-map auxiliary 舊文字斷言。`pnpm lint`、`pnpm typecheck` 通過，`pnpm test` **27 passed**；HTML 內嵌 JavaScript 語法及現行 **33 層**契約通過。Navigation guard 為 report-only `NAVIGATION_FREEZE_SUSPENDED`，未變更 baseline。這是指定功能的 construction 驗證，不是全站產品化驗收。

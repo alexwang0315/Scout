@@ -1792,6 +1792,7 @@
               <button id="panMode" class="tool-button is-active" type="button" title="Mouse drag pan is active" aria-label="Mouse drag pan" aria-pressed="true">Pan</button>
               <button id="boxZoomMode" class="tool-button compact" type="button" title="Persistent box zoom: click or drag in any direction to zoom in; use minus to zoom out" aria-label="Rectangle drag zoom" aria-pressed="false">▣</button>
               <span id="zoomLevel" class="zoom-level" title="Map zoom">1.00x</span>
+              <button id="refreshWeatherMapTiles" class="tool-button" type="button" style="display:none" title="Update checked raster layers from WMTS" aria-label="Update Weather map tiles" aria-pressed="false">更新圖磚</button>
               <details class="layer-menu">
                 <summary id="layerControl" title="Show layer controls" aria-label="Layer controls">Layers <strong id="layerEnabledCount">-</strong></summary>
                 <div class="layer-menu-panel" aria-label="Map layer controls">
@@ -2589,9 +2590,13 @@
               const degraded = states
                 .filter(item => item.state === "degraded")
                 .map(item => item.layer_id);
-              statusOutput.textContent = `部分圖磚未載入：${degraded.join(", ")}。背景可能仍顯示較低層級影像；開啟 Layers 並按 ↻ 更新圖磚或重試。`;
+              statusOutput.textContent = `部分圖磚未載入：${degraded.join(", ")}。背景可能仍顯示較低層級影像；按「更新圖磚」或 Layers 內的 ↻ 重試。`;
             } else if (aggregate === "loading") {
               statusOutput.textContent = "Loading prepared raster tiles.";
+            } else if (aggregate === "available") {
+              statusOutput.textContent = state.rasterRemoteRefreshEnabled
+                ? "MapLibre 地圖 · 圖磚已載入；可按「停止更新」回到快取模式。"
+                : "MapLibre 地圖 · 圖磚已載入；使用工作區快取。";
             }
           },
         }, featureCollection);
@@ -3617,13 +3622,26 @@
       while (zoom > OSM_MIN_ZOOM && tileCountForZoom(bounds, zoom) > maxTiles) zoom -= 1;
       return zoom;
     }
+    function rasterMapWorldPixelScale(view, zoom = 1) {
+      if (!view?.route) return null;
+      const frame = mercatorFrameForBounds(boundsFor(view));
+      const rect = svg.getBoundingClientRect();
+      const width = Number(rect.width) > 0 ? Number(rect.width) : MAP_WIDTH;
+      const height = Number(rect.height) > 0 ? Number(rect.height) : MAP_HEIGHT;
+      // SVG uses xMidYMid meet; CSS pixels keep the 256 px tile scale consistent.
+      const cssScale = Math.min(width / MAP_WIDTH, height / MAP_HEIGHT);
+      const worldPixels = frame.scale * cssScale * Math.max(MAP_MIN_ZOOM, Number(zoom) || 1);
+      return Number.isFinite(worldPixels) && worldPixels > 0 ? worldPixels : null;
+    }
     function chooseRasterZoom(view, bounds, maxTiles = RASTER_MAX_TILES, layerId = "imagery") {
       const range = rasterZoomRangeFor(view, layerId);
       const effectiveMaxTiles = layerId === "rudy-twmap" ? RUDY_TWMAP_MAX_TILES : maxTiles;
-      const definition = rasterSourceDefinitionFor(layerId, rasterLayerFor(view, layerId));
-      let zoom = layerId === "rudy-twmap"
+      const worldPixelsAtFit = layerId === "rudy-twmap" ? rasterMapWorldPixelScale(view) : null;
+      // Keep Fit + first zoom advancing native detail; separate rounding can
+      // request at most one extra level versus the current CSS pixel scale.
+      let zoom = worldPixelsAtFit
         ? clamp(
-            definition.initialMaxZoom + Math.ceil(Math.log2(Math.max(1, state.zoom))),
+            Math.ceil(Math.log2(worldPixelsAtFit / 256)) + Math.ceil(Math.log2(Math.max(1, state.zoom))),
             range.min,
             range.max,
           )
@@ -4783,8 +4801,32 @@
         "rudy-twmap",
       );
       group.dataset.nativeTileFailure = reason;
-      updateMapZoomIndicator(`native Z${failedTileZoom} unavailable · previous complete tiles retained at current view`);
+      group.dataset.requestedTileZoom = String(failedTileZoom);
+      if (state.mapRenderer?.active !== "maplibre") updateRudyTileStatus(group, true);
       state.lastFailedNativeMapZoom = failedZoom;
+    }
+    function updateRudyTileStatus(group, failed = false) {
+      const zooms = [...new Set([...group.querySelectorAll('image[data-raster-tile]')]
+        .map(image => Number(image.getAttribute("data-raster-tile").split("/")[0]))
+        .filter(Number.isFinite))].sort((a, b) => a - b);
+      const displayed = zooms.length ? (zooms.length === 1 ? `Z${zooms[0]}` : `Z${zooms[0]}–${zooms.at(-1)}`) : "無";
+      group.dataset.displayedTileZoom = zooms.join(",");
+      const requested = group.dataset.requestedTileZoom || zooms.at(-1) || "?";
+      const statusOutput = document.getElementById("mapRendererStatus");
+      const shell = document.getElementById("mapRendererShell");
+      if (shell) shell.dataset.mapRasterState = failed ? "degraded" : "available";
+      if (failed) {
+        updateMapZoomIndicator(`· 需要 Z${requested}／目前 ${displayed}`);
+        if (statusOutput) statusOutput.textContent = state.rasterRemoteRefreshEnabled
+          ? `Z${requested} 圖磚未能完整載入；保留 ${displayed} 圖磚與目前視角。可停止更新後重試。`
+          : `快取未能提供完整 Z${requested} 圖磚；目前放大 ${displayed} 圖磚。按「更新圖磚」或 Layers 內的 ↻ 載入細節。`;
+      } else {
+        delete group.dataset.nativeTileFailure;
+        delete state.lastFailedNativeMapZoom;
+        group.dataset.requestedTileZoom = String(zooms.at(-1) || "");
+        updateMapZoomIndicator(`· 圖磚 ${displayed}`);
+        if (statusOutput) statusOutput.textContent = `SVG 地圖 · 已載入 ${displayed} 圖磚；${state.rasterRemoteRefreshEnabled ? "圖磚更新已開啟，可按「停止更新」回到快取模式。" : "使用工作區快取。"}`;
+      }
     }
     function markRasterLayerGenerationActive(group) {
       group.dataset.activeTileGenerationKey = rasterLayerTileGenerationKey(group);
@@ -4850,8 +4892,12 @@
       group.dataset.pendingTileGenerationKey = generationKey;
       group.dataset.tileGenerationState = "loading";
 
+      const isCurrentGeneration = () => (
+        group.dataset.pendingTileGenerationKey === generationKey
+        && candidate.parentNode === group
+      );
       const clearPendingState = () => {
-        if (group.dataset.pendingTileGenerationKey === generationKey) {
+        if (isCurrentGeneration()) {
           delete group.dataset.pendingTileGenerationKey;
         }
       };
@@ -4859,23 +4905,33 @@
         if (settled) return;
         settled = true;
         if (timeoutId !== null) window.clearTimeout(timeoutId);
+        timeoutId = null;
+        const wasCurrentGeneration = isCurrentGeneration();
+        clearPendingState();
         images.forEach(image => image.removeAttribute("href"));
         candidate.remove();
-        const isCurrentGeneration = group.dataset.pendingTileGenerationKey === generationKey;
-        clearPendingState();
-        if (isCurrentGeneration) {
+        if (wasCurrentGeneration) {
           group.dataset.tileGenerationState = "retained-previous";
           onFailure?.({group, generationKey, reason});
         }
       };
+      const resetIdleTimeout = () => {
+        if (settled || !isCurrentGeneration()) return;
+        if (timeoutId !== null) window.clearTimeout(timeoutId);
+        timeoutId = window.setTimeout(
+          () => discardCandidate("timeout"),
+          RASTER_TILE_SWAP_TIMEOUT_MS,
+        );
+      };
       const promoteCandidate = () => {
         if (settled) return;
-        if (group.dataset.pendingTileGenerationKey !== generationKey) {
+        if (!isCurrentGeneration()) {
           discardCandidate();
           return;
         }
         settled = true;
         if (timeoutId !== null) window.clearTimeout(timeoutId);
+        timeoutId = null;
         Array.from(group.children).forEach(child => {
           if (child !== candidate) child.remove();
         });
@@ -4886,14 +4942,22 @@
         group.dataset.tileGenerationState = "ready";
         rememberRudyMapView(group, requestedViewState);
         clearPendingState();
+        if (group.dataset.layerGroup === "rudy-twmap" && state.mapRenderer?.active !== "maplibre") {
+          updateRudyTileStatus(group);
+        }
         enforceMapRenderPolicy(svg);
       };
 
       images.forEach(image => {
         image.addEventListener("load", () => {
           if (settled || image.dataset.tileGenerationLoaded === "true") return;
+          if (!isCurrentGeneration()) {
+            discardCandidate("superseded");
+            return;
+          }
           image.dataset.tileGenerationLoaded = "true";
           loadedCount += 1;
+          resetIdleTimeout();
           if (loadedCount !== images.length) return;
           promoteCandidate();
         });
@@ -4902,11 +4966,8 @@
         }, {once: true});
       });
       group.appendChild(candidate);
+      resetIdleTimeout();
       images.forEach(image => image.setAttribute("href", initialHrefs.get(image)));
-      timeoutId = window.setTimeout(
-        () => discardCandidate("timeout"),
-        RASTER_TILE_SWAP_TIMEOUT_MS,
-      );
       return true;
     }
     function renderRasterBasemapLayers(view) {
@@ -5126,10 +5187,10 @@
     }
     function mapInteractionMaxZoom() {
       if (!layerInputChecked("rudy-twmap")) return MAP_MAX_ZOOM;
-      const definition = RASTER_SOURCE_LAYER_BY_ID["rudy-twmap"];
-      const initialZoom = Number(definition?.initialMaxZoom) || 13;
-      const nativeMaxZoom = Number(definition?.maxZoom) || initialZoom;
-      return Math.max(1, 2 ** Math.max(0, nativeMaxZoom - initialZoom));
+      const worldPixelsAtFit = rasterMapWorldPixelScale(state.view);
+      if (!worldPixelsAtFit) return MAP_MAX_ZOOM;
+      const nativeMaxZoom = rasterZoomRangeFor(state.view, "rudy-twmap").max;
+      return Math.max(1, 256 * (2 ** nativeMaxZoom) / worldPixelsAtFit);
     }
     function panMap(dx, dy) {
       state.panX += dx / state.zoom;
@@ -8621,6 +8682,7 @@
       const enabled = state.rasterRemoteRefreshEnabled;
       const buttons = [
         document.getElementById("refreshRasterTiles"),
+        document.getElementById("refreshWeatherMapTiles"),
         document.querySelector("[data-historical-map-fetch]"),
       ].filter(Boolean);
       buttons.forEach(button => {
@@ -8632,6 +8694,10 @@
             ? "Update selected historical map and cache it in this workspace"
             : "Update checked raster layers from WMTS";
         button.setAttribute("aria-label", button.title);
+        if (button.id === "refreshWeatherMapTiles") {
+          button.textContent = enabled ? "停止更新" : "更新圖磚";
+          button.setAttribute("aria-label", enabled ? "停止 Weather 圖磚更新" : "更新 Weather 地圖圖磚");
+        }
       });
     }
     function toggleRasterRemoteRefresh() {
@@ -8641,8 +8707,11 @@
       syncHistoricalMapControls();
       if (state.mapLibreRenderer && state.view) {
         state.mapLibreRenderer.setRasterLayers(pretripMapLibreRasterLayers(state.view));
+      } else if (state.view) {
+        const shell = document.getElementById("mapRendererShell");
+        if (shell) shell.dataset.mapRasterState = "loading";
+        renderRasterBasemapLayers(state.view);
       }
-      if (state.view) renderRasterBasemapLayers(state.view);
       const statusOutput = document.getElementById("mapRendererStatus");
       if (statusOutput) {
         statusOutput.textContent = state.rasterRemoteRefreshEnabled
@@ -8718,6 +8787,7 @@
         button.addEventListener("click", () => applyLayerPreset(button.dataset.layerPreset));
       });
       document.getElementById("refreshRasterTiles").addEventListener("click", toggleRasterRemoteRefresh);
+      document.getElementById("refreshWeatherMapTiles").addEventListener("click", toggleRasterRemoteRefresh);
       document.querySelector("[data-historical-map-fetch]").addEventListener("click", toggleRasterRemoteRefresh);
       syncRasterRefreshButton();
       document.querySelectorAll(".tab-button").forEach(button => button.addEventListener("click", () => setActiveTab(button.dataset.tab)));
