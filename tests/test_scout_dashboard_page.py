@@ -5559,6 +5559,7 @@ def test_dashboard_joint_review_truth_semantics_and_pagination_contract() -> Non
         "outdoor-weather",
         "agent",
         "surface-debug",
+        "scout-monitor",
         "debug",
         "settings",
         "diagnostic",

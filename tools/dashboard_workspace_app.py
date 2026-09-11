@@ -34,6 +34,10 @@ from mock_outbound_transport import MockOutboundTransport  # noqa: E402
 from qgis_local_runtime import create_local_qgis_runtime_controller  # noqa: E402
 from runtime_debug_log import MemoryRuntimeDebugEventLog  # noqa: E402
 from tools.admin_ui_smoke_app import _debug_events  # noqa: E402
+from tools.macos_resource_monitor import create_resource_monitor_router  # noqa: E402
+from tools.hardware_monitor_proxy import (  # noqa: E402
+    create_hardware_monitor_proxy_router,
+)
 
 
 def load_repo_env(root: Path = ROOT) -> ScoutEnvLoadResult:
@@ -84,6 +88,14 @@ def create_dashboard_workspace_app(*, workspace_root: Path) -> FastAPI:
             pretrip_workspace_root=workspace_root,
             connected_preparation_manager=connected_preparation_manager,
             qgis_runtime_controller=qgis_runtime_controller,
+        )
+    )
+    app.include_router(
+        create_resource_monitor_router(prefix="/admin/dashboard/scout-monitor")
+    )
+    app.include_router(
+        create_hardware_monitor_proxy_router(
+            prefix="/admin/dashboard/scout-monitor"
         )
     )
     app.router.on_shutdown.append(connected_preparation_manager.stop)

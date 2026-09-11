@@ -46,6 +46,137 @@ Each entry should include:
 
 ## Implementation Record
 
+### 2026-09-11 - Integrate Scout hardware monitoring into scout monitor
+
+User request:
+
+- Integrate the existing Scout hardware monitor into the Dashboard's `System >
+  scout monitor` page, using Traditional Chinese, real API data, and a
+  same-origin Dashboard proxy.
+
+Implementation:
+
+- Added a fixed, GET-only Dashboard proxy for
+  `/api/v1/hardware-monitor/status`, `history?limit=60`, and
+  `events?limit=50`. The Dashboard server reads the local Scout upstream at
+  `http://127.0.0.1:9151`; the browser never calls that upstream directly.
+- Extended the existing monitor frame with hardware status, Taipei sample time,
+  data age, battery/power, memory and Swap, disk/inode/read-only rows,
+  CPU/load, temperatures, source-qualified NVMe sensors, fan RPM, uptime,
+  history trend, current alerts, thresholds, and status-change events.
+- Added explicit loading, unavailable, stale-503, null, empty, warning, and
+  critical states. A stale 503 remains stale even when its retained snapshot
+  reports `data.status=ok`; a 503 `unavailable` remains disconnected. Sample
+  age advances between requests and changes fresh status to stale after 150
+  seconds. History uses actual timestamps and breaks at null or missing samples.
+- Status, history, and events render independently, with bounded requests,
+  60-second polling, pagehide cancellation, and pageshow restoration. Metric
+  states use the supplied thresholds; missing metrics have unknown icons.
+- Added focused proxy coverage and a candidate-only capability entry. No
+  Navigation/GIS or hardware-control behavior was changed.
+
+Boundary and safety:
+
+- The new surface is read-only telemetry and does not write samples, mutate
+  Scout runtime safety truth, control hardware, send notifications, or call
+  outbound services. Refresh and polling issue GET requests only.
+- The verified local process is Dashboard `127.0.0.1:9099`; its fixed Scout
+  upstream is the local SSH-forwarded `127.0.0.1:9151`. This is a Mac process,
+  not a container. The proxy rejects redirects and ignores ambient HTTP proxy
+  settings. It runs inside the existing Dashboard application/access boundary;
+  this loopback workspace entrypoint has no separate login middleware.
+- After confirming all 21 preparation jobs were terminal, the existing 9099
+  process (PID 1728) was gracefully restarted through its original launcher.
+  The updated Dashboard runs as PID 60087, parent 60078. QGIS PID 1668 and the
+  SSH forward PID 53539 were preserved. No additional Dashboard port is needed.
+
+Verification:
+
+- Live OpenAPI was read in full for the affected contracts. The 9099 main page,
+  monitor page, and all three proxy endpoints returned 200. The live API sample
+  at 2026-09-11 10:59 Asia/Taipei was `ok`, with 60 history samples, 2 disks,
+  and 12 event records.
+- Focused collector/proxy/Dashboard tests: `13 passed`; project `pnpm lint`,
+  `pnpm typecheck` (1 test), and `pnpm test` (27 tests) passed. The earlier
+  qualification bootstrap had `81 passed`; manifest validation still reports
+  21 capabilities. Targeted Ruff and JavaScript syntax checks passed. Tests
+  supply an empty assistant environment and do not load real `.env` values.
+- After the final UI changes, both targeted Dashboard route/action-contract
+  regressions passed. The 12-case replay was rerun using the served 9099 HTML.
+- Real Chrome smoke used the existing 9099 Dashboard, navigated System to
+  scout monitor, activated refresh using the keyboard, and checked desktop
+  and 390px mobile. All 9 hardware requests were same-origin GETs returning
+  200; console errors, page errors, and failed hardware requests were empty.
+  Mobile document width and scroll width were both 364px.
+- A separate browser replay passed 12 cases, including stale 503, disconnected
+  503, null readings, empty data, thresholds/GiB/zero-RPM, timestamp/null gaps,
+  local age expiration, retained/partial list failures, request timeout,
+  exactly-60-second polling, and in-flight abort/restore on pagehide/pageshow.
+- Final live evidence at 11:03 Asia/Taipei also passed after increasing mobile
+  text size/contrast: 60 history samples, 2 disks, and 14 event records.
+- Evidence: `artifacts/scout-monitor-20260911/state-live-entrypoint.json`,
+  `artifacts/scout-monitor-20260911/live-browser-final/browser-smoke.json`, and the
+  desktop/mobile hardware screenshots alongside that browser report.
+- The pre/post Navigation freeze guard remained report-only with
+  `NAVIGATION_FREEZE_SUSPENDED`; no Navigation/GIS files were intentionally
+  changed.
+
+Known remaining gaps:
+
+- This is a Construction Mode integration, not an official full Dashboard
+  qualification or productization verdict. The live upstream depends on the
+  existing temporary SSH forward. The older Dashboard static suite had one
+  unrelated failure for its existing FETCH_TIMEOUT_MS fallback assertion
+  (`149 passed, 1 failed`); that fallback was not changed here.
+
+### 2026-09-11 - Add the macOS resource monitor to System
+
+User request:
+
+- Add the Scout macOS resource monitor to Dashboard as a new System page named
+  `scout monitor`.
+
+Implementation:
+
+- Added `scout monitor` to the System navigation, route truth contract, route
+  metadata, and Dashboard's existing same-origin embedded-surface frame.
+- Mounted the monitor collector at
+  `/admin/dashboard/scout-monitor` for both the Dashboard factory and the
+  `tools/dashboard_workspace_app.py` 9099 entrypoint. The standalone 8877
+  monitor remains available.
+- Made the monitor resolve its snapshot API relative to the embedded route,
+  while preserving its standalone `/api/snapshot` path.
+- Added the route to the browser action contract and a candidate-only,
+  read-only capability entry. Added deterministic API/route coverage.
+
+Boundary and safety:
+
+- The page only observes local macOS resources; samples are not persisted and
+  the UI cannot change runtime safety truth, workspace state, notifications,
+  outbound transports, or hardware.
+- No Navigation map, route, GIS, worker, or freeze baseline behavior was
+  changed. The existing 9099 process was not restarted during verification.
+
+Verification:
+
+- Focused monitor, Dashboard route, manifest, and contract tests: `6 passed`.
+- Manifest validation, Python/JavaScript parsing, and browser smoke passed.
+  Isolated Chrome interaction opened System → `scout monitor`, rendered a real
+  macOS snapshot in the same-origin frame, and observed no console or HTTP
+  failures with the fixture workspace.
+- The real `tools/dashboard_workspace_app.py` entrypoint returned HTTP 200 for
+  Dashboard, monitor page, and monitor health.
+- The broader Dashboard page/telemetry run reached `157 passed, 1 failed`; the
+  remaining failure is an unrelated existing timeout-string assertion in the
+  Dashboard source and was not changed by this slice.
+
+Known remaining gaps:
+
+- The user-started 9099 process predates this change and must be restarted by
+  the operator before the new page appears there.
+- This is a Construction Mode integration, not an official full Dashboard
+  qualification or productization verdict.
+
 ### 2026-08-17 - Q0057 required weather/hydrology layers and Q0060 compact readability
 
 User decisions:

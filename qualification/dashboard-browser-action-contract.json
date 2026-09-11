@@ -68,6 +68,7 @@
     {"id": "living", "guard_state": "inventory_only"},
     {"id": "runtime-audit", "guard_state": "inventory_only"},
     {"id": "surface-intelligence", "guard_state": "inventory_only"},
+    {"id": "scout-monitor", "guard_state": "inventory_only"},
     {"id": "surface-debug", "guard_state": "inventory_only"},
     {"id": "debug", "guard_state": "inventory_only"},
     {"id": "observer", "guard_state": "inventory_only"},

@@ -22,6 +22,40 @@
 ./venv/bin/python tools/macos_resource_monitor.py --host 127.0.0.1 --port 8877
 ```
 
+## Dashboard 分頁
+
+使用 Mac Dashboard workspace runtime 時，開啟 `http://127.0.0.1:9099/admin/dashboard`，在 `System` 底下選擇 `scout monitor`。這個分頁透過 Dashboard 同源路徑讀取本機 collector，並由 Dashboard 後端唯讀代理 Scout 硬體 API；不需要另外啟動 8877。8877 仍可作為獨立 macOS monitor 頁面使用。
+
+## Scout 硬體監控整合
+
+`scout monitor` 內的「硬體監控」區塊使用 Dashboard 後端固定代理下列 Scout API：
+
+- `GET /api/v1/hardware-monitor/status`
+- `GET /api/v1/hardware-monitor/history?limit=60`
+- `GET /api/v1/hardware-monitor/events?limit=50`
+
+Dashboard server 在 Mac 上以 `http://127.0.0.1:9151` 作為本機 Scout upstream；瀏覽器只發送同源相對 GET，不直接連接 9151。狀態資料每 60 秒更新，離開頁面會清除輪詢並 abort 請求，手動重新讀取也只使用 GET。
+
+已整合到既有 9099 服務，直接開啟：
+
+```bash
+open -a "Google Chrome" "http://127.0.0.1:9099/admin/dashboard#scout-monitor"
+```
+
+不需要再啟動另一個 9099 程序。2026-09-11 已確認 Dashboard 在 Mac 原生程序中執行，9151 是暫時 SSH 轉接；若以後移到容器，容器的 localhost 並非 Mac 或 Scout，必須先確認後端可達的固定 upstream。本機 Dashboard 使用既有 loopback 存取方式，沒有額外登入層。
+
+狀態、告警門檻與告警內容分別以 `status.data`、`data.thresholds`、`data.alerts` 為準。HTTP 503 的 `status=stale` 會顯示「資料已過期」，即使回應仍帶有上一筆 `data.status=ok`；null 顯示「未知」，空的事件 items 不補造紀錄。電池功率正值標示充電、負值標示放電；同名 NVMe 感測器會以 source 分列，風扇 0 RPM 不單獨視為故障。
+
+503 `unavailable` 會顯示斷線，保留值會標示為上次採樣。資料年齡每秒更新，超過 150 秒會在下一次 API 輪詢前先顯示過期。三個請求獨立呈現，12 秒逾時後可再次重新讀取；後端 upstream 請求逾時為 8 秒。歷史圖以真實採樣時間定位，null 或缺失採樣會斷線。單獨開啟的 8877 macOS 頁面不啟動 Scout 硬體 API 輪詢。
+
+針對性驗證：
+
+```bash
+./venv/bin/python -m pytest -q tests/test_hardware_monitor_proxy.py tests/test_dashboard_scout_monitor.py tests/test_macos_resource_monitor.py
+node tools/dashboard_scout_monitor_browser_smoke.js --base-url http://127.0.0.1:9099
+node tools/dashboard_scout_monitor_state_smoke.js http://127.0.0.1:9099
+```
+
 ## 顯示內容
 
 - CPU：macOS `top` 的 user/system/idle 與 load average。

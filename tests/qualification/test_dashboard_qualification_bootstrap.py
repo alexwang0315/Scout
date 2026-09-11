@@ -154,8 +154,9 @@ def test_browser_action_contract_freezes_maplibre_pre_migration_guard() -> None:
     )
     contracted_routes = {route["id"] for route in contract["routes"]}
     assert contracted_routes == navigation_routes
-    assert len(contracted_routes) == 24
+    assert len(contracted_routes) == 25
     assert "surface-intelligence" in contracted_routes
+    assert "scout-monitor" in contracted_routes
 
     assert contract["schema"] == "scout.dashboardBrowserActionContract.v2"
     assert contract["version"] == 2

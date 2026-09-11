@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Any, Mapping, Protocol, Sequence
 
 import uvicorn
-from fastapi import FastAPI
+from fastapi import APIRouter, FastAPI
 from fastapi.responses import FileResponse
 
 
@@ -585,26 +585,22 @@ class MacResourceCollector:
         }
 
 
-def create_resource_monitor_app(
+def create_resource_monitor_router(
     *,
     collector: MacResourceCollector | None = None,
-) -> FastAPI:
-    """Create the local read-only monitor application."""
+    prefix: str = "",
+) -> APIRouter:
+    """Create read-only monitor routes for standalone or Dashboard hosting."""
 
     resource_collector = collector or MacResourceCollector()
-    app = FastAPI(
-        title="Scout macOS Resource Monitor",
-        version="0.1.0",
-        docs_url=None,
-        redoc_url=None,
-        openapi_url=None,
-    )
+    router = APIRouter(prefix=prefix, tags=["resource-monitor"])
+    index_path = "/" if not prefix else ""
 
-    @app.get("/", response_class=FileResponse)
+    @router.get(index_path, response_class=FileResponse)
     def index() -> FileResponse:
         return FileResponse(HTML_PATH, media_type="text/html")
 
-    @app.get("/api/health")
+    @router.get("/api/health")
     def health() -> dict[str, Any]:
         return {
             "status": "ok",
@@ -613,10 +609,27 @@ def create_resource_monitor_app(
             "platform": platform.system(),
         }
 
-    @app.get("/api/snapshot")
+    @router.get("/api/snapshot")
     def snapshot() -> dict[str, Any]:
         return resource_collector.snapshot()
 
+    return router
+
+
+def create_resource_monitor_app(
+    *,
+    collector: MacResourceCollector | None = None,
+) -> FastAPI:
+    """Create the local read-only monitor application."""
+
+    app = FastAPI(
+        title="Scout macOS Resource Monitor",
+        version="0.1.0",
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
+    )
+    app.include_router(create_resource_monitor_router(collector=collector))
     return app
 
 
@@ -643,6 +656,7 @@ __all__ = [
     "MacResourceCollector",
     "SCHEMA_VERSION",
     "app",
+    "create_resource_monitor_router",
     "create_resource_monitor_app",
     "main",
     "parse_memory_pressure",
