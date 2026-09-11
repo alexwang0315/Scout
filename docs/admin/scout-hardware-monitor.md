@@ -3,6 +3,11 @@
 Construction Mode：獨立的每分鐘本機監控，使用 Python 標準函式庫及 user systemd timer。
 使用者於 2026-09-11 明確選擇持續背景監控與異常提示。
 
+Dashboard 可透過新增的唯讀 HTTP API 讀取結果：
+[`scout-hardware-monitor-api.md`](scout-hardware-monitor-api.md)。
+可直接交給 UI 實作任務的提示詞：
+[`scout-hardware-monitor-dashboard-prompt.md`](scout-hardware-monitor-dashboard-prompt.md)。
+
 ## 讀取範圍
 
 - 電池電量、充放電、電池功率、四芯電壓與 5V 供電。
