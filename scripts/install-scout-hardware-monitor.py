@@ -42,6 +42,9 @@ def main() -> int:
         installed.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(Path(__file__).resolve().parents[1] / "tools/scout_hardware_monitor.py", installed)
         installed.chmod(0o600)
+        inventory = installed.with_name("scout_hardware_inventory.py")
+        shutil.copy2(Path(__file__).resolve().parents[1] / "tools/scout_hardware_inventory.py", inventory)
+        inventory.chmod(0o600)
         state.mkdir(parents=True, exist_ok=True, mode=0o700)
     for path, value in files.items():
         path.write_text(value)

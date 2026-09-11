@@ -26,10 +26,13 @@ def main() -> int:
     unit = directory / (JOB + ".service")
     if unit.exists() or unit.is_symlink() or (not args.render_only and installed.exists()):
         parser.error("API installation already exists; inspect it before replacing anything")
-    command = [sys.executable, str(installed)]
+    assets = installed.parent / "static"
+    command = [sys.executable, str(installed), "--static-dir", str(assets)]
     def quote(value: str) -> str:
         return json.dumps(value.replace("%", "%%").replace("$", "$$"))
-    text = ("[Unit]\nDescription=Scout hardware monitor read-only loopback API\n\n"
+    text = ("[Unit]\nDescription=Scout hardware monitor read-only loopback API\n"
+            "Wants=scout-hardware-monitor.service scout-hardware-monitor.timer\n"
+            "After=scout-hardware-monitor.service\n\n"
             "[Service]\nType=simple\nUMask=0077\nNoNewPrivileges=true\n"
             "Environment=PYTHONDONTWRITEBYTECODE=1\nRestart=on-failure\nRestartSec=5\n"
             "ExecStart=" + " ".join(quote(arg) for arg in command) + "\n\n"
@@ -39,6 +42,7 @@ def main() -> int:
         installed.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(Path(__file__).resolve().parents[1] / "scout_hardware_monitor_api.py", installed)
         installed.chmod(0o600)
+        shutil.copytree(Path(__file__).resolve().parents[1] / "docs/admin/hardware-monitor", assets)
     unit.write_text(text)
     unit.chmod(0o600)
     if not args.render_only:

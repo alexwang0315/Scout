@@ -10,6 +10,7 @@ Scout 主機 base URL：`http://127.0.0.1:9151`。
 
 | 方法 | 路徑 | 用途 |
 | --- | --- | --- |
+| GET | `/` 或 `/monitor` | 獨立硬體總覽 UI，與 API 使用同一個 9151 埠 |
 | GET | `/api/v1/hardware-monitor/status` | 最新快照與查詢當下重新計算的資料年齡 |
 | GET | `/api/v1/hardware-monitor/history?limit=60` | 最近 N 筆採樣，回傳由舊到新；預設 60，最多 1440 |
 | GET | `/api/v1/hardware-monitor/events?limit=50` | 最近 N 批狀態變更事件，由舊到新；預設 50，最多 200 |
@@ -61,6 +62,7 @@ curl --fail-with-body 'http://127.0.0.1:9151/api/v1/hardware-monitor/history?lim
 | 溫度／風扇 | `sensors[]` 的 `name`, `source`, `temperature_c`, `rpm`；以 `source` 作穩定識別，不能只按 `name` 合併 NVMe 感測器 |
 | CPU／系統 | `cpu_used_percent`, `cpu_count`, `load_average[1/5/15 分鐘]`, `uptime_seconds`, `host` |
 | 告警／門檻 | `alerts` 是 `{key: {severity, message}}`；另有 `thresholds` 與 `errors` |
+| 連線／裝置 | `inventory.sections` 包含 `network`, `bluetooth`, `usb`, `pcie`, `i2c`, `gpio`, `serial`；舊採樣為 null |
 
 `power.flow` 是 `charging / discharging / idle`。`battery_power_w` 正值充電、負值放電，
 可用絕對值加方向顯示；不要從 UPS VBUS=0 就推斷 Scout 已斷電。
@@ -76,6 +78,36 @@ GiB = bytes / 1024³。低溫時風扇 0 RPM 不單獨代表故障。
 讀取目前檔及 `.1`～`.3`，每次最多掃描 8 MiB，保留狀況可能不足所要求筆數。
 `has_more` 是更早紀錄存在的提示，沒有 cursor 分頁。不可把 60 筆直接標成完整一小時，
 要使用採樣時間；圖表缺口保留，不自行補造數據。
+
+### 裝置清單契約
+
+`data.inventory` 的共同欄位為 `captured_at`, `status=ok/partial`, `sections`,
+`read_only=true`, `active_scan_performed=false`, `gpio_value_sampling_performed=false`。
+這是 v1 的新增選填欄位，既有資料和呼叫端仍相容。
+
+每個 section 回傳 `status=ok/partial/unavailable`, `summary`, `items[]`, `notes[]`, `errors[]`。
+section 的 `ok` 表示資訊讀取成功，**不等於每個裝置功能正常**。每個 item 為：
+
+```text
+{id, name, state, driver, properties: {欄位: 純量或字串陣列}, lines: GPIO 線路陣列}
+```
+
+`state` 可為 `present`, `connected`, `disconnected`, `blocked`, `powered_on`,
+`powered_off`, `observed`, `unknown`。GPIO `lines[]` 含 `offset`, `name`, `direction`,
+`consumer`, `active_low`, `value=null`，不會要求線路或讀取／設定高低電位。
+
+| Section | 主要內容 |
+| --- | --- |
+| network | 只列實體介面；properties 包含 kind=wifi/ethernet、operstate、ipv4/ipv6；Wi-Fi 另有 ssid、signal_dbm、frequency_mhz、tx_bitrate_mbps、soft_blocked、hard_blocked |
+| bluetooth | kind=controller 的電源／配對／探索旗標，以及 kind=connected_device 的目前連線；不列周邊探索快取 |
+| usb | idVendor、idProduct、manufacturer、speed、root_hub、interface_drivers；區分根集線器與外接裝置 |
+| pcie | vendor、device、class、device_class、vendor_name、current_link_speed、current_link_width，加上 driver |
+| i2c | kind=adapter / registered_device / telemetry_device；UPS 0x2d 來自既有有效電源資料，不另執行 I²C 交易或位址掃描 |
+| gpio | 控制器／線路數、方向與 consumer；使用 gpiodetect/gpioinfo，沒有 gpioget/gpioset 或 export/unexport |
+| serial | UART／USB serial 的 device_node；不開啟裝置或讀取位置資料 |
+
+資料未讀到要顯示未知。I²C 沒被系統登錄的裝置可能仍已接上；GPIO direction 並非電位。
+UI 將裝置名稱、SSID、consumer 等值當作純文字處理，不能插入 `innerHTML`。
 
 ## 接到 Dashboard
 
@@ -117,6 +149,9 @@ systemctl --user disable --now scout-hardware-monitor-api.service
 
 安裝副本：`~/.local/lib/scout-hardware-monitor/api.py`。API 使用安裝當下的 venv Python；
 清除此 venv 前須重新指定執行環境。安裝器拒絕覆蓋同名 service 或副本。
+總覽頁資產複製到相同目錄的 `static/`，以 `--static-dir` 指定。
+API unit 的 `Wants` 包含採樣 service 與 timer，`After` 先等初次採樣完成。
+兩個可啟用 unit 均已 enabled，且 Scout `Linger=yes`；開機會自動帶起，不需要登入 shell。
 
 Mac 文件：`http://127.0.0.1:9151/docs`。若暫時 forward 已斷，Mac 可自行開啟：
 
@@ -141,10 +176,32 @@ systemd unit 驗證通過。真實 HTTP 的 status／history／events／OpenAPI 
 `~/.local/state/scout-hardware-monitor/api-verification.json`。
 
 安全檢視：固定檔名、只讀目錄、Pydantic 白名單欄位、有限檔案讀取、loopback 綁定、
-Host allowlist、無 wildcard CORS、GET 無採樣或通知副作用。未修改採樣器或 Dashboard
-既有 API／HTML／CSS／JavaScript，因此沒有跑 Dashboard 瀏覽器／GIS 圖層測試。
+Host allowlist、無 wildcard CORS、GET 無採樣或通知副作用。既有 Dashboard／Navigation／GIS
+檔案未更動；新增獨立總覽 UI 的瀏覽器檢查另列如下。
 Navigation freeze guard 在本 Scout checkout 缺少 `tools/verify_navigation_freeze.py`，
 無法執行；保留現有 policy／baseline，僅新增獨立 API，沒有補造或繞過 guard。
 
 未產品化：目前未提供公網驗證／流量限制；請留在私有後端轉接範圍。
 API 可辨識採樣停止後的過期資料，整台 Scout 離線則由 Dashboard 顯示連線失敗。
+
+## 硬體清單與總覽頁擴充（2026-09-11）
+
+- 真實裝置清單耗時約 0.07 秒；讀到 2 個實體網路介面、1 個藍牙控制器、
+  4 個 USB 根集線器／0 個外接 USB、10 個 PCIe 裝置／橋接器（含 Hailo 與 NVMe）、
+  3 條 I²C、5 個 GPIO 控制器／111 線路、3 個 UART／序列節點。
+- `36` 項針對性 Python 測試通過；涵蓋被動偵測、錯誤隔離、舊快照相容及啟動 unit 依賴。
+- 真實 Chromium／Playwright 在預覽與常駐 9151 都通過：1440/1024/768/320px、
+  GPIO 展開後刷新維持展開、鍵盤操作、warning/critical/stale/unavailable/unknown/offline/empty，
+  以及將 API 文字當作純文字的 XSS fixture；無 pageerror、無橫向頁面溢出。
+- pnpm 入口的既有快取缺少 pnpm.cjs；直接執行 package.json 同一組 lint/typecheck/test 腳本
+  全部通過（typecheck 1 項、test 17 項），並另外檢查新增 JS 語法。沒有更動套件或工具鏈。
+- systemd unit 驗證通過，已驗證 API service 重啟、啟動依賴及其後每分鐘自動採樣。
+  沒有重開整台 Scout，避免中斷其他正在運作的任務。
+- 11:36 真實採樣結果為 ok；採樣器記憶體峰值約 17.4 MiB、CPU 時間約 229 ms。
+  API 當時記憶體約 36.9 MiB。Mac 讀取 `/monitor` 回 200，已送出 Chrome 開啟請求。
+- 更新前備份：`~/.local/state/scout-hardware-monitor/backups/20260911T033515Z/`。
+  瀏覽器收據與圖：`/tmp/scout-hardware-monitor-browser-live/`。
+
+Navigation guard 在擴充前後仍因本 checkout 缺檔無法執行，沒有修改或建立替代 guard。
+API GET 只讀快照；背景採樣只做本機 metadata 查詢，不掃描 Wi-Fi／藍牙／I²C，不做配對、
+GPIO line request、硬體寫入或網路設定變更。

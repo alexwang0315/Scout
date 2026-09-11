@@ -23,6 +23,11 @@ import tempfile
 import time
 from typing import Any
 
+try:
+    from tools.scout_hardware_inventory import collect_inventory
+except ModuleNotFoundError:  # Installed next to monitor.py, outside the checkout.
+    from scout_hardware_inventory import collect_inventory
+
 
 DEFAULT_SOURCE = Path.home() / "scout-power-path-monitor/power-path-telemetry.jsonl"
 DEFAULT_STATE = Path.home() / ".local/state/scout-hardware-monitor"
@@ -169,6 +174,7 @@ def collect(power_source: Path, previous: dict[str, Any]) -> dict[str, Any]:
             snapshot["errors"]["sensor:" + directory.name] = type(exc).__name__
     if not any(s["name"] == "cpu_thermal" for s in snapshot["sensors"]):
         snapshot["errors"]["cpu_temperature"] = "sensor unavailable"
+    snapshot["inventory"] = collect_inventory(snapshot["power"])
     return snapshot
 
 
@@ -217,6 +223,14 @@ def alerts_for(snapshot: dict[str, Any]) -> dict[str, dict[str, str]]:
         add("cpu_load", "warning", f"5 分鐘系統負載偏高：{snapshot['load_average'][1]:.2f}")
     for key in snapshot["errors"]:
         add("sensor:" + key, "warning", "無法讀取硬體指標：" + key)
+    inventory = snapshot.get("inventory", {})
+    if inventory.get("status") == "partial":
+        add("inventory_partial", "warning", "部分連線或裝置資訊無法讀取，請查看硬體偵測詳情")
+    network = inventory.get("sections", {}).get("network", {})
+    if network.get("status") == "ok" and network.get("items") and not any(
+        item["state"] == "connected" for item in network["items"]
+    ):
+        add("network_disconnected", "warning", "所有實體網路介面目前均未連線")
     return alerts
 
 
@@ -233,6 +247,17 @@ def transitions(snapshot: dict[str, Any], previous: dict[str, Any]) -> list[str]
         events.append("電池狀態改變：" + {"charging": "充電中", "discharging": "放電中", "idle": "待機"}[power["flow"]])
     if previous.get("boot_id") and previous["boot_id"] != snapshot["boot_id"]:
         events.append("Scout 已重新啟動")
+    old_sections = previous.get("inventory", {}).get("sections", {})
+    sections = snapshot.get("inventory", {}).get("sections", {})
+    for kind in ("network", "bluetooth", "usb", "pcie"):
+        old_section, new_section = old_sections.get(kind, {}), sections.get(kind, {})
+        if old_section.get("status") != "ok" or new_section.get("status") != "ok":
+            continue
+        old_states = {d["id"]: d["state"] for d in old_section["items"]}
+        new_states = {d["id"]: d["state"] for d in new_section["items"]}
+        if old_states != new_states:
+            title = {"network": "網路", "bluetooth": "藍牙", "usb": "USB", "pcie": "PCIe"}[kind]
+            events.append(title + "裝置或連線狀態改變：" + new_section["summary"])
     return events
 
 
@@ -292,6 +317,8 @@ def describe(snapshot: dict[str, Any]) -> str:
         lines.append(f"欠壓／降頻旗標 {power['throttled_hex']}")
     lines.append("系統負載 1/5/15 分鐘：" + "/".join(f"{v:.2f}" for v in snapshot["load_average"]))
     lines.extend(alert["severity"].upper() + ": " + alert["message"] for alert in snapshot["alerts"].values())
+    for name, group in snapshot.get("inventory", {}).get("sections", {}).items():
+        lines.append(f"{name} [{group['status']}] {group['summary']}")
     return "\n".join(lines) + "\n"
 
 

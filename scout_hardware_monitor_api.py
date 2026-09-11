@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, FastAPI, Query, Response
+from fastapi.responses import FileResponse
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
@@ -95,6 +96,41 @@ class Threshold(PublicModel):
     critical: float
 
 
+class GpioLine(PublicModel):
+    offset: NonNegative
+    name: str | None
+    direction: Literal["input", "output", "unknown"]
+    consumer: str | None
+    active_low: bool
+    value: None = None
+
+
+class HardwareDevice(PublicModel):
+    id: str
+    name: str
+    state: Literal["present", "connected", "disconnected", "blocked", "powered_on", "powered_off", "observed", "unknown"]
+    driver: str | None = None
+    properties: dict[str, str | int | float | bool | None | list[str]]
+    lines: list[GpioLine] = Field(default_factory=list)
+
+
+class HardwareSection(PublicModel):
+    status: Literal["ok", "partial", "unavailable"]
+    summary: str
+    items: list[HardwareDevice]
+    notes: list[str]
+    errors: list[str]
+
+
+class HardwareInventory(PublicModel):
+    captured_at: AwareDatetime
+    status: Literal["ok", "partial"]
+    sections: dict[Literal["network", "bluetooth", "usb", "pcie", "i2c", "gpio", "serial"], HardwareSection]
+    read_only: Literal[True] = True
+    active_scan_performed: Literal[False] = False
+    gpio_value_sampling_performed: Literal[False] = False
+
+
 class Snapshot(PublicModel):
     captured_at: AwareDatetime
     host: str
@@ -110,6 +146,7 @@ class Snapshot(PublicModel):
     alerts: dict[str, Alert]
     errors: dict[str, str]
     thresholds: dict[str, Threshold | float]
+    inventory: HardwareInventory | None = None
 
 
 class Freshness(PublicModel):
@@ -282,11 +319,25 @@ def create_hardware_monitor_router(*, state_dir: Path = DEFAULT_STATE) -> APIRou
     return router
 
 
-def create_hardware_monitor_app(*, state_dir: Path = DEFAULT_STATE) -> FastAPI:
+def create_hardware_monitor_app(*, state_dir: Path = DEFAULT_STATE, static_dir: Path | None = None) -> FastAPI:
     app = FastAPI(title="Scout Hardware Monitor API", version="1.0.0",
                   description="Read-only monitor snapshots, history and events. Loopback access; proxy through the Dashboard backend.")
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1", "localhost", "[::1]"])
     app.include_router(create_hardware_monitor_router(state_dir=state_dir))
+    assets = static_dir or Path(__file__).resolve().parent / "docs/admin/hardware-monitor"
+
+    @app.get("/", include_in_schema=False)
+    @app.get("/monitor", include_in_schema=False)
+    def monitor_page() -> FileResponse:
+        return FileResponse(assets / "index.html", media_type="text/html", headers={"Cache-Control": "no-store"})
+
+    @app.get("/monitor/style.css", include_in_schema=False)
+    def monitor_style() -> FileResponse:
+        return FileResponse(assets / "style.css", media_type="text/css", headers={"Cache-Control": "no-store"})
+
+    @app.get("/monitor/app.js", include_in_schema=False)
+    def monitor_script() -> FileResponse:
+        return FileResponse(assets / "app.js", media_type="application/javascript", headers={"Cache-Control": "no-store"})
 
     @app.get("/healthz")
     def healthz(response: Response) -> dict:
@@ -301,12 +352,13 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--state-dir", type=Path, default=DEFAULT_STATE)
     parser.add_argument("--port", type=int, default=PORT)
+    parser.add_argument("--static-dir", type=Path)
     args = parser.parse_args()
     if not 1 <= args.port <= 65535:
         parser.error("port must be between 1 and 65535")
     import uvicorn
 
-    uvicorn.run(create_hardware_monitor_app(state_dir=args.state_dir), host="127.0.0.1",
+    uvicorn.run(create_hardware_monitor_app(state_dir=args.state_dir, static_dir=args.static_dir), host="127.0.0.1",
                 port=args.port, access_log=False)
     return 0
 

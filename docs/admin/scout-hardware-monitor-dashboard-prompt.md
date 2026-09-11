@@ -8,6 +8,8 @@
 /home/alexwang0315/work/scout-fusion/docs/admin/scout-hardware-monitor-api.md
 /home/alexwang0315/work/scout-fusion/scout_hardware_monitor_api.py
 完整欄位契約可從已運作的 http://127.0.0.1:9151/openapi.json 取得。
+已有可運作的獨立總覽頁 http://127.0.0.1:9151/monitor，可參考其資料接線與互動。
+9151 API、採樣器與 timer 已配置隨 Scout 開機啟動，請沿用這個埠。
 
 API 路徑：
 GET /api/v1/hardware-monitor/status
@@ -28,6 +30,10 @@ UI 要有：
 5. CPU／散熱卡：CPU 使用率、1/5/15 分鐘負載、CPU 與各 NVMe 溫度、風扇 RPM、開機時間。
 6. 最近採樣趨勢：電池、記憶體、CPU／NVMe 溫度；使用真實 captured_at 作 X 軸。
 7. 目前告警及最近狀態變更事件，顯示嚴重度與可採取的下一步。
+8. data.inventory.sections：Wi-Fi／Ethernet 連線、SSID／訊號／IP，藍牙控制器與已連線裝置，
+   USB／PCIe 裝置與驅動、I²C 匯流排與已登錄裝置、GPIO 方向／consumer、UART 節點。
+   每類可展開查看 properties；GPIO 可展開 lines，value=null 表示未採樣。
+   section.status=ok 只表示資訊可讀，裝置的實際連線／電源狀態看 item.state。
 
 資料來自 status 回應的 data.power／memory／disks／sensors／alerts／thresholds。
 history.items[] 與 data 共用 Snapshot schema；events.items[] 是 {captured_at, events: string[]}。
@@ -41,6 +47,8 @@ history.items[] 與 data 共用 Snapshot schema；events.items[] 是 {captured_a
 - null／缺失顯示「未知」或「—」，不可補零；歷史缺口不補造數據。
 - GiB = bytes / 1024^3；battery_power_w 正值充電、負值放電，顯示絕對值與方向。
 - 同名 NVMe 感測器以 source 區分；風扇 0 RPM 與歷史欠壓旗標不能直接當成目前故障。
+- inventory=null 是舊採樣未包含清單；I²C 未列出不等於未接上。不可加入主動位址掃描、
+  藍牙配對／探索或 GPIO 電位讀寫；裝置名稱與 SSID 以純文字渲染。
 - 告警與門檻採後端值；用文字／圖示加顏色表達，兼顧桌面、手機及鍵盤操作。
 
 保留現有 Dashboard 與未提交修改；只做這個監控頁所需的接線與 UI，不改 Navigation/GIS。

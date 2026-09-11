@@ -156,12 +156,38 @@ def test_router_can_mount_in_dashboard_without_loading_its_runtime(tmp_path):
         assert client.get(api.PREFIX + "/status").json()["data"]["host"] == "scout"
 
 
-def test_api_installer_render_is_separate_from_sampler(tmp_path):
+def test_api_installer_starts_sampler_and_timer_before_api(tmp_path):
     script = Path(__file__).resolve().parents[1] / "scripts/install-scout-hardware-monitor-api.py"
     command = [sys.executable, str(script), "--render-only", str(tmp_path)]
     result = subprocess.run(command, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     text = (tmp_path / "scout-hardware-monitor-api.service").read_text()
     assert "api.py" in text
-    assert "scout-hardware-monitor.timer" not in text
+    assert "Wants=scout-hardware-monitor.service scout-hardware-monitor.timer" in text
+    assert "After=scout-hardware-monitor.service" in text
+    assert "--static-dir" in text
+    assert "Restart=on-failure" in text
+    assert "WantedBy=default.target" in text
     assert subprocess.run(command, capture_output=True).returncode != 0
+
+
+def test_hardware_overview_assets_are_served_with_no_directory_browsing(client):
+    assert client.get("/monitor").status_code == 200
+    assert "硬體與連線" in client.get("/").text
+    assert client.get("/monitor/app.js").status_code == 200
+    assert client.get("/monitor/style.css").status_code == 200
+    assert client.get("/monitor/../../scout_hardware_monitor_api.py").status_code == 404
+
+
+def test_inventory_fields_are_additive_and_gpio_values_cannot_claim_sampling(client, tmp_path):
+    raw = sample()
+    raw["inventory"] = {"captured_at": raw["captured_at"], "status": "ok", "sections": {
+        "gpio": {"status": "ok", "summary": "1 chip", "notes": [], "errors": [], "items": [
+            {"id": "gpiochip0", "name": "pinctrl-rp1", "state": "present", "properties": {"line_count": 1},
+             "lines": [{"offset": 5, "name": "GPIO5", "direction": "output", "consumer": "lg", "active_low": False, "value": None}]}]}}}
+    save(tmp_path, raw)
+    body = client.get(api.PREFIX + "/status").json()
+    assert body["data"]["inventory"]["sections"]["gpio"]["items"][0]["lines"][0]["value"] is None
+    raw["inventory"]["gpio_value_sampling_performed"] = True
+    save(tmp_path, raw)
+    assert client.get(api.PREFIX + "/status").status_code == 503
