@@ -46,6 +46,86 @@ Each entry should include:
 
 ## Implementation Record
 
+### 2026-09-11 - Expand Scout hardware monitoring with device inventory
+
+User request: integrate the seven passive inventory sections from the resident
+Scout Hardware Monitor API into the existing Dashboard page.
+
+- Read the Mac checkout `AGENTS.md`, the API guide at
+  `scout:/home/alexwang0315/work/scout-fusion/docs/admin/scout-hardware-monitor-api.md`,
+  and the live 9151 OpenAPI contract before implementation. The existing 9099
+  Dashboard is native on the Mac (PID 63012); 9151 is the existing temporary
+  SSH forward (PID 53539), not a container or permanent Mac deployment setting.
+- Expanded only the Scout monitor HTML, focused test harnesses, and capability
+  documentation. The existing fixed same-origin GET proxy and permissions are
+  unchanged. No service restart, Mac metrics, active scan, pairing, GPIO
+  read/write control, or serial-port access was added.
+- Added Network, Bluetooth, USB, PCIe, I²C, GPIO, and UART/serial sections from
+  `data.inventory.sections`. Read status is labelled 已讀取 / 部分讀取 /
+  無法讀取, independently of device connection or power state. USB root hubs
+  and external devices have separate counts; PCIe counts are API-driven.
+- Device fields, raw properties, notes, errors, and GPIO line tables use DOM
+  text nodes. Missing values remain unknown; GPIO null values are 未採樣.
+  I²C and serial sections explain the limits of passive enumeration. Null or
+  missing inventory in an older sample shows a waiting state.
+- Section, properties, notes, and line-table expansion survives refresh,
+  including keyboard focus and table scroll position. Stale or disconnected
+  readings remain visible with explicit retained-data notices. The page keeps
+  the original 60-second cadence and cancels in-flight reads on pagehide.
+- Narrow-screen spacing was adjusted within this monitor only. The first live
+  smoke observed one interrupted history request; a separate real history read
+  returned HTTP 200 with 835442 bytes in 13.355503 seconds. The exact original
+  interruption cause was not captured. Since that observed transfer exceeds the
+  old 12-second client bound, history now has a bounded 30-second timeout while
+  status/events retain 12 seconds and independent rendering. This does not
+  change the backend 8-second socket timeout or make the SSH forward permanent.
+- Verification: 10 focused Dashboard/proxy Python tests passed, including
+  preservation of inventory, null GPIO values, and a stale 503 envelope.
+  `pnpm lint`, `pnpm typecheck` (1 test), and `pnpm test` (27 tests) passed;
+  focused Ruff, JavaScript syntax, and the 20-capability manifest passed.
+- The final synthetic browser harness passed all 28 scenarios in 49.475 seconds,
+  including warning/critical, stale-503, disconnected/recovered inventory,
+  old/null inventory, partial/empty sections, pure-text injection protection,
+  dynamic device counts, GPIO null/false/direction semantics, 60-second polling,
+  expansion persistence, independent 12/30-second timeouts, and a successful
+  13-second history response. It produced 42 screenshots at
+  `artifacts/scout-monitor-state-synthetic-y82dqM/`. The initial provisional
+  harness run at `artifacts/scout-monitor-state-synthetic-aVppm9/` is retained:
+  its five failures were outdated timeout expectations and provisional
+  fixture/wording expectations, corrected against the API contract rather than
+  changing device semantics. Synthetic evidence is not real hardware testing.
+- Final Chrome smoke on the existing 9099 service passed at desktop 1440px and
+  mobile 390/320px. It operated all seven category summaries, their notes and
+  first-device properties, a GPIO line disclosure with the keyboard, and manual
+  refresh; all expanded keys survived. All nine hardware requests were
+  same-origin GET/200, with no Mac-monitor requests or browser errors. Live
+  counts matched the API: 2 network interfaces, 1 Bluetooth controller, 4 USB
+  root hubs / 0 external devices, 10 PCIe entries, 3 I²C adapters + 1 UPS
+  telemetry item, 5 GPIO controllers / 111 lines, and 3 serial nodes.
+- Evidence: `artifacts/scout-monitor-inventory-20260911/` contains
+  `runtime-verification.json`, `initial-live-observation.md`, and
+  `live-browser-final/browser-smoke.json` with 15 desktop/mobile screenshots.
+  The final live report SHA-256 is
+  `904aa96e173094f3a0e411e95f360bcb2986272f3ddc5c37d36e1b938766cc59`.
+  The Dashboard and SSH listener PIDs stayed unchanged. Pre/post Navigation
+  guards reported `NAVIGATION_FREEZE_SUSPENDED` with the same existing drift;
+  no Navigation/GIS source or baseline was changed. The 32-layer change gate
+  is not applicable. These are WORKING PROTOTYPE construction proofs, not
+  official full qualification, independent GPT Pro review, or production
+  promotion; the initial intermittent history transport observation is retained.
+
+Reproduce (use a new artifact directory/report path per run):
+
+```bash
+./venv/bin/python -m pytest -q tests/test_dashboard_scout_monitor.py tests/test_hardware_monitor_proxy.py
+node tools/dashboard_scout_monitor_state_smoke.js http://127.0.0.1:9099
+node tools/dashboard_scout_monitor_browser_smoke.js --base-url http://127.0.0.1:9099 --screenshots-dir artifacts/scout-monitor-inventory-new-live
+pnpm lint && pnpm typecheck && pnpm test
+```
+
+Open `http://127.0.0.1:9099/admin/dashboard#scout-monitor` on the Mac. The direct
+same-origin monitor URL is `http://127.0.0.1:9099/admin/dashboard/scout-monitor`.
+
 ### 2026-09-11 - Keep only Scout host monitoring in System
 
 User request: remove the Mac monitoring portion of scout monitor.

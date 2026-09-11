@@ -31,7 +31,7 @@
 
       body {
         margin: 0;
-        min-width: 320px;
+        min-width: 0;
         color: var(--ink);
         background:
           radial-gradient(circle at 75% 0%, rgba(72, 130, 88, 0.14), transparent 30rem),
@@ -180,6 +180,43 @@
       .hardware-event-row { grid-template-columns: minmax(112px, 0.27fr) minmax(0, 1fr); }
       .hardware-event-row strong { color: var(--blue); font-weight: 500; }
 
+      .inventory-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
+      .inventory-grid[hidden] { display: none; }
+      .inventory-section { min-width: 0; border: 1px solid var(--line-strong); background: rgba(17, 23, 21, 0.32); }
+      .inventory-section > summary { position: relative; padding: 18px 34px 18px 18px; cursor: pointer; list-style: none; }
+      .inventory-section > summary::-webkit-details-marker { display: none; }
+      .inventory-section > summary::after { position: absolute; top: 17px; right: 15px; content: "+"; color: var(--blue); }
+      .inventory-section[open] > summary::after { content: "−"; }
+      .inventory-section > summary:hover { background: rgba(156, 232, 183, 0.035); }
+      .inventory-section-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; }
+      .inventory-section-name { color: var(--ink); font-size: 0.95rem; }
+      .inventory-section-status, .inventory-item-state { padding: 3px 7px; border: 1px solid var(--line-strong); color: var(--blue); font-size: 0.72rem; }
+      .inventory-section-status[data-state="partial"], .inventory-section-status[data-state="stale"], .inventory-item-state[data-state="blocked"] { color: var(--amber); }
+      .inventory-section-status[data-state="unavailable"] { color: var(--coral); }
+      .inventory-section-summary, .inventory-counts { display: block; margin-top: 9px; color: var(--muted); font-size: 0.75rem; overflow-wrap: anywhere; }
+      .inventory-counts { color: var(--blue); }
+      .inventory-body { padding: 0 18px 18px; }
+      .inventory-caution { margin: 0 0 15px; padding-left: 10px; border-left: 2px solid var(--blue); color: var(--faint); font-size: 0.75rem; line-height: 1.7; overflow-wrap: anywhere; }
+      .inventory-device { min-width: 0; padding: 18px 0; border-top: 1px solid var(--line); }
+      .inventory-device-head { display: flex; align-items: start; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+      .inventory-device-head h4 { min-width: 0; margin: 0; color: var(--ink); font-size: 0.85rem; font-weight: 500; overflow-wrap: anywhere; }
+      .inventory-kind { margin: 5px 0 0; color: var(--blue); font-size: 0.72rem; }
+      .inventory-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 18px; margin: 15px 0 0; }
+      .inventory-fields > div { min-width: 0; }
+      .inventory-fields dt { color: var(--faint); font-size: 0.72rem; }
+      .inventory-fields dd { margin: 4px 0 0; color: var(--ink); font-size: 0.78rem; overflow-wrap: anywhere; white-space: pre-wrap; }
+      .inventory-properties, .inventory-lines, .inventory-notes { margin-top: 16px; }
+      .inventory-properties > summary, .inventory-lines > summary, .inventory-notes > summary { padding: 9px 0; color: var(--blue); font-size: 0.75rem; cursor: pointer; overflow-wrap: anywhere; }
+      .inventory-lines .table-wrap { max-height: 340px; margin-top: 10px; }
+      .inventory-lines table { min-width: 660px; }
+      .inventory-lines th { position: sticky; top: 0; padding: 10px; background: var(--surface); font-size: 0.72rem; }
+      .inventory-lines td { max-width: 220px; padding: 10px; font-size: 0.75rem; overflow-wrap: anywhere; }
+      .inventory-notes ul { margin: 8px 0; padding-left: 20px; color: var(--faint); font-size: 0.75rem; overflow-wrap: anywhere; }
+      .inventory-notes .inventory-errors { color: var(--coral); }
+      #hardwareInventoryMeta { max-width: none; margin: 0 0 16px; text-align: left; }
+      #hardwareInventoryPanel[data-state="stale"], #hardwareInventoryPanel[data-state="unavailable"] { border-color: var(--amber); }
+      #hardwareInventoryPanel[data-state="stale"] #hardwareInventoryMeta, #hardwareInventoryPanel[data-state="unavailable"] #hardwareInventoryMeta { color: var(--amber); }
+
       .panel { padding: 24px; }
       .panel-head { display: flex; align-items: start; justify-content: space-between; gap: 18px; margin-bottom: 24px; }
       .panel-title { margin: 6px 0 0; font-family: var(--display); font-size: 1.65rem; font-weight: 400; letter-spacing: -0.05em; }
@@ -219,12 +256,16 @@
         .hardware-statusbar, .hardware-dual-grid { grid-template-columns: 1fr; }
         .hardware-statusbar > .control { width: 100%; }
         .hardware-source-badge { align-self: flex-start; }
+        .inventory-grid { grid-template-columns: 1fr; }
       }
       @media (max-width: 510px) {
+        .shell { padding-right: 8px; padding-left: 8px; }
         .hardware-metrics-grid { grid-template-columns: 1fr; }
         .hardware-card { min-height: 0; }
-        .panel { padding: 18px; }
+        .panel, .hardware-subpanel { padding: 12px; }
         .panel-head { flex-direction: column; }
+        .inventory-fields { grid-template-columns: 1fr; }
+        .inventory-body { padding: 0 12px 14px; }
       }
       @media (prefers-reduced-motion: reduce) {
         *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
@@ -340,6 +381,15 @@
             </div>
           </section>
 
+          <section id="hardwareInventoryPanel" class="hardware-subpanel" aria-labelledby="hardwareInventoryTitle" data-state="loading">
+            <div class="panel-head">
+              <div><p class="panel-kicker">設備 / 被動觀測</p><h2 id="hardwareInventoryTitle" class="panel-title">連線與設備清單</h2></div>
+              <p class="panel-note">展開分類查看裝置、屬性與觀測來源。<br />已讀取 ≠ 設備功能正常。</p>
+            </div>
+            <p id="hardwareInventoryMeta" class="panel-note" role="status">正在讀取設備清單…</p>
+            <div id="hardwareInventoryGrid" class="inventory-grid" aria-busy="true"></div>
+          </section>
+
           <div class="hardware-dual-grid">
             <section class="hardware-subpanel" aria-labelledby="hardwareTrendTitle">
               <div class="panel-head">
@@ -392,6 +442,9 @@
       const $ = (selector) => document.querySelector(selector);
       const HARDWARE_REFRESH_INTERVAL_MS = 60 * 1000;
       const HARDWARE_REQUEST_TIMEOUT_MS = 12 * 1000;
+      // History now includes inventory for each sample; allow bounded transfer time
+      // through the temporary SSH forward without delaying the latest status.
+      const HARDWARE_HISTORY_TIMEOUT_MS = 30 * 1000;
       const HARDWARE_UNKNOWN = "未知";
       const hardwareState = {
         active: true,
@@ -511,6 +564,242 @@
 
       function hardwareObject(value) {
         return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+      }
+
+      const INVENTORY_SECTIONS = [
+        ["network", "Wi-Fi／Ethernet", "只顯示實體介面與目前連線；不掃描周邊 Wi-Fi。"],
+        ["bluetooth", "藍牙", "電源、配對與探索旗標僅供觀測；此頁不發起配對或探索。"],
+        ["usb", "USB", "根集線器與外接裝置分開計數；裝置存在不等於功能測試通過。"],
+        ["pcie", "PCIe", "裝置與橋接器依 API 清單呈現；鏈路資訊不代表功能測試結果。"],
+        ["i2c", "I²C", "未執行主動位址掃描；未列出不代表沒有接上。UPS 0x2d 的觀測來自既有有效電源紀錄。"],
+        ["gpio", "GPIO", "方向表示輸入／輸出，不是電位；未讀寫電位或要求線路。"],
+        ["serial", "UART／序列埠", "只表示系統存在該節點，不代表已連上外部設備或正在傳輸資料。"],
+      ];
+      const INVENTORY_STATES = {
+        present: "◇ 裝置存在", connected: "● 已連線", disconnected: "○ 未連線",
+        blocked: "△ 已停用", powered_on: "◉ 電源開啟", powered_off: "○ 電源關閉",
+        observed: "◈ 已有觀測", unknown: "? 未知",
+      };
+      const INVENTORY_SECTION_STATES = { ok: "✓ 已讀取", partial: "△ 部分讀取", unavailable: "? 無法讀取" };
+      const INVENTORY_KINDS = {
+        wifi: "Wi-Fi 實體介面", ethernet: "Ethernet 實體介面", controller: "藍牙控制器",
+        connected_device: "目前連線裝置", adapter: "I²C 匯流排轉接器",
+        registered_device: "系統已登錄裝置", telemetry_device: "既有紀錄觀測裝置",
+      };
+      const INVENTORY_PROPERTY_LABELS = {
+        id: "識別碼", driver: "驅動", kind: "類型", operstate: "介面連線狀態", connected: "連線",
+        ipv4: "IPv4", ipv6: "IPv6", ssid: "SSID", signal_dbm: "訊號", frequency_mhz: "頻率",
+        tx_bitrate_mbps: "傳送速率", soft_blocked: "軟體無線停用", hard_blocked: "硬體無線停用",
+        address: "位址", powered: "控制器電源", discoverable: "允許被發現", pairable: "允許配對",
+        discovering: "正在探索", idVendor: "廠商 ID", idProduct: "產品 ID", manufacturer: "製造商",
+        speed: "USB 速率", root_hub: "根集線器", interface_drivers: "介面驅動", authorized: "系統授權旗標",
+        vendor: "廠商 ID", device: "裝置 ID", class: "分類代碼", device_class: "裝置分類",
+        vendor_name: "廠商", current_link_speed: "目前鏈路速率", current_link_width: "目前鏈路寬度",
+        bus: "匯流排", evidence: "觀測來源", captured_at: "觀測時間 · 台北",
+        device_node: "裝置節點", line_count: "線路數",
+      };
+      const inventoryExpansion = new Map();
+
+      function inventoryLabel(labels, key, fallback = HARDWARE_UNKNOWN) {
+        return Object.hasOwn(labels, key) ? labels[key] : fallback;
+      }
+
+      function inventoryTextNode(tag, className, text) {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined) node.textContent = text;
+        return node;
+      }
+
+      function inventoryValue(key, value) {
+        if (value === null || value === undefined || value === "") return HARDWARE_UNKNOWN;
+        if (Array.isArray(value)) return value.length ? value.map((part) => inventoryValue("", part)).join("\n") : "—";
+        if (typeof value === "boolean") {
+          if (["soft_blocked", "hard_blocked"].includes(key)) return value ? "已停用" : "未停用";
+          if (key === "powered") return value ? "開啟" : "關閉";
+          return value ? "是" : "否";
+        }
+        if (typeof value !== "string" && typeof value !== "number") return HARDWARE_UNKNOWN;
+        if (typeof value === "number" && !Number.isFinite(value)) return HARDWARE_UNKNOWN;
+        if (key === "kind") return inventoryLabel(INVENTORY_KINDS, value, String(value));
+        if (key === "operstate") return inventoryLabel({ up: "已啟用 (up)", down: "未啟用 (down)", dormant: "待命 (dormant)", unknown: "未知" }, value, String(value));
+        if (key === "captured_at") return formatHardwareDate(value);
+        if (key === "evidence" && value === "existing_ups_telemetry") return "既有有效電源紀錄 (existing_ups_telemetry)";
+        if (key === "current_link_width") return `×${value}`;
+        const unit = inventoryLabel({ signal_dbm: " dBm", frequency_mhz: " MHz", tx_bitrate_mbps: " Mbps", speed: " Mbps", line_count: " 條" }, key, "");
+        return `${value}${unit}`;
+      }
+
+      function inventoryFields(entries, rawKeys = false) {
+        const list = inventoryTextNode("dl", "inventory-fields");
+        entries.forEach(([key, value]) => {
+          const field = document.createElement("div");
+          field.dataset.property = key;
+          const label = inventoryLabel(INVENTORY_PROPERTY_LABELS, key, key);
+          field.append(
+            inventoryTextNode("dt", "", rawKeys && label !== key ? `${label} · ${key}` : label),
+            inventoryTextNode("dd", "", inventoryValue(key, value)),
+          );
+          list.append(field);
+        });
+        return list;
+      }
+
+      function inventoryDetails(key, className, label) {
+        const details = inventoryTextNode("details", className);
+        details.dataset.detailKey = key;
+        details.open = inventoryExpansion.get(key) === true;
+        const summary = inventoryTextNode("summary", "", label);
+        summary.dataset.focusKey = key;
+        details.append(summary);
+        return details;
+      }
+
+      function inventoryCounts(key, items) {
+        if (!items) return "裝置數量未知";
+        const countKind = (kind) => items.filter((item) => item.properties?.kind === kind).length;
+        if (key === "usb") {
+          const roots = items.filter((item) => item.properties?.root_hub === true).length;
+          const external = items.filter((item) => item.properties?.root_hub === false).length;
+          const unknown = items.length - roots - external;
+          return `根集線器 ${roots} · 外接裝置 ${external}${unknown ? ` · 類型未知 ${unknown}` : ""}`;
+        }
+        if (key === "bluetooth") return `控制器 ${countKind("controller")} · 連線裝置 ${countKind("connected_device")}`;
+        if (key === "i2c") return `轉接器 ${countKind("adapter")} · 已登錄 ${countKind("registered_device")} · 紀錄觀測 ${countKind("telemetry_device")}`;
+        if (key === "gpio") {
+          const counts = items.map((item) => hardwareNumber(item.properties?.line_count));
+          return `控制器 ${items.length} · 線路 ${counts.some((count) => count === null) ? HARDWARE_UNKNOWN : counts.reduce((sum, count) => sum + count, 0)}`;
+        }
+        if (key === "network") return `實體介面 ${items.length} · 已連線 ${items.filter((item) => item.state === "connected").length}`;
+        return `${items.length} ${key === "serial" ? "個裝置節點" : "個裝置／橋接器"}`;
+      }
+
+      function inventoryDevice(sectionKey, item, itemIndex) {
+        const properties = hardwareObject(item.properties) || {};
+        const key = JSON.stringify([sectionKey, item.id ?? itemIndex]);
+        const article = inventoryTextNode("article", "inventory-device");
+        article.dataset.deviceId = item.id ?? "";
+        const header = inventoryTextNode("div", "inventory-device-head");
+        const heading = inventoryTextNode("div", "");
+        heading.append(inventoryTextNode("h4", "", inventoryValue("", item.name)));
+        let kind = properties.kind;
+        if (sectionKey === "usb") kind = properties.root_hub === true ? "根集線器" : properties.root_hub === false ? "外接裝置" : "類型未知";
+        if (kind !== undefined) heading.append(inventoryTextNode("p", "inventory-kind", inventoryValue("kind", kind)));
+        const state = Object.hasOwn(INVENTORY_STATES, item.state) ? item.state : "unknown";
+        const badge = inventoryTextNode("span", "inventory-item-state", INVENTORY_STATES[state]);
+        badge.dataset.state = state;
+        header.append(heading, badge);
+        article.append(header);
+        const keys = {
+          network: ["kind", "operstate", "ipv4", "ipv6", ...(properties.kind === "wifi" ? ["ssid", "signal_dbm", "frequency_mhz", "tx_bitrate_mbps", "soft_blocked", "hard_blocked"] : [])],
+          bluetooth: properties.kind === "controller" ? ["address", "powered", "soft_blocked", "hard_blocked", "discoverable", "pairable", "discovering"] : ["kind", "address"],
+          usb: ["idVendor", "idProduct", "manufacturer", "speed", "root_hub", "interface_drivers"],
+          pcie: ["vendor_name", "vendor", "device", "device_class", "class", "current_link_speed", "current_link_width"],
+          i2c: properties.kind === "adapter" ? ["bus", "device_node"] : ["kind", "bus", "address", "evidence", "captured_at"],
+          gpio: ["device_node", "line_count"],
+          serial: ["device_node"],
+        }[sectionKey];
+        const entries = [["id", item.id], ["driver", item.driver], ...keys.map((field) => [field,
+          sectionKey === "i2c" && properties.kind === "adapter" && field === "bus" ? properties.bus ?? item.id : properties[field],
+        ])];
+        article.append(inventoryFields(entries));
+        const full = inventoryDetails(`${key}:properties`, "inventory-properties", "完整屬性");
+        const propertyEntries = Object.entries(properties);
+        full.append(propertyEntries.length ? inventoryFields(propertyEntries, true) : inventoryTextNode("p", "inventory-caution", "沒有提供詳細屬性"));
+        article.append(full);
+        if (sectionKey === "gpio") {
+          const lines = Array.isArray(item.lines) ? item.lines.filter(hardwareObject) : null;
+          const detail = inventoryDetails(`${key}:lines`, "inventory-lines", `線路明細（${lines ? lines.length : HARDWARE_UNKNOWN}）`);
+          if (lines?.length) {
+            const wrapper = inventoryTextNode("div", "table-wrap");
+            wrapper.tabIndex = 0;
+            wrapper.setAttribute("role", "region");
+            wrapper.setAttribute("aria-label", `${inventoryValue("", item.name)} 線路明細，可水平與垂直捲動`);
+            wrapper.dataset.focusKey = `${key}:line-table`;
+            const table = document.createElement("table");
+            const thead = document.createElement("thead");
+            const tr = document.createElement("tr");
+            ["偏移 offset", "名稱 name", "方向 direction", "使用者 consumer", "低態有效 active_low", "電位 value"].forEach((label) => {
+              const th = inventoryTextNode("th", "", label);
+              th.scope = "col";
+              tr.append(th);
+            });
+            thead.append(tr);
+            const tbody = document.createElement("tbody");
+            lines.forEach((line) => {
+              const row = document.createElement("tr");
+              cell(row, inventoryValue("", line.offset));
+              cell(row, inventoryValue("", line.name));
+              cell(row, inventoryLabel({ input: "輸入", output: "輸出", unknown: HARDWARE_UNKNOWN }, line.direction));
+              cell(row, inventoryValue("", line.consumer));
+              cell(row, inventoryValue("", line.active_low));
+              cell(row, line.value === null || line.value === undefined ? "未採樣" : inventoryValue("", line.value));
+              tbody.append(row);
+            });
+            table.append(thead, tbody);
+            wrapper.append(table);
+            detail.append(wrapper);
+          } else detail.append(inventoryTextNode("p", "inventory-caution", lines ? "沒有回傳線路明細" : "線路明細未知"));
+          article.append(detail);
+        }
+        return article;
+      }
+
+      function renderHardwareInventory(data, overallState) {
+        const grid = $("#hardwareInventoryGrid");
+        const focusedKey = grid.contains(document.activeElement) ? document.activeElement.dataset.focusKey : null;
+        const scrollPositions = new Map();
+        grid.querySelectorAll("details[data-detail-key]").forEach((details) => inventoryExpansion.set(details.dataset.detailKey, details.open));
+        grid.querySelectorAll(".table-wrap").forEach((table) => scrollPositions.set(table.dataset.focusKey, [table.scrollLeft, table.scrollTop]));
+        grid.replaceChildren();
+        grid.setAttribute("aria-busy", "false");
+        const inventory = hardwareObject(data && data.inventory);
+        const sections = hardwareObject(inventory && inventory.sections);
+        const invalid = ["stale", "unavailable", "unknown"].includes(overallState);
+        $("#hardwareInventoryPanel").dataset.state = overallState;
+        grid.hidden = !inventory;
+        const validity = { stale: "資料已過期 · 保留最後設備清單，無法確認目前狀態。", unavailable: "無法連線 · 保留上次設備清單，無法確認目前狀態。", unknown: "資料有效性未知，以下僅供參考。" }[overallState] || "";
+        if (!inventory) {
+          setText("hardwareInventoryMeta", `${validity} ${data ? "這筆採樣沒有設備清單，等待更新。" : "尚無設備資料，等待更新。"}`.trim());
+          return;
+        }
+        const status = inventoryLabel(INVENTORY_SECTION_STATES, inventory.status, "? 未知");
+        setText("hardwareInventoryMeta", `${validity} ${status} · 設備觀測 ${formatHardwareDate(inventory.captured_at)} · 讀取狀態不代表功能測試結果。`.trim());
+        INVENTORY_SECTIONS.forEach(([key, name, caution]) => {
+          const section = hardwareObject(sections && sections[key]);
+          const items = section && Array.isArray(section.items) ? section.items.filter(hardwareObject) : null;
+          const details = inventoryDetails(key, "inventory-section");
+          details.dataset.section = key;
+          const summary = details.firstElementChild;
+          const heading = inventoryTextNode("span", "inventory-section-heading");
+          const label = inventoryTextNode("strong", "inventory-section-name", name);
+          const readStatus = inventoryLabel(INVENTORY_SECTION_STATES, section?.status, "? 未知");
+          const badge = inventoryTextNode("span", "inventory-section-status", `${readStatus}${invalid ? " · 上次採樣" : ""}`);
+          badge.dataset.state = invalid ? overallState : section?.status || "unknown";
+          heading.append(label, badge);
+          summary.append(heading, inventoryTextNode("span", "inventory-section-summary", section ? inventoryValue("", section.summary) : "尚未提供此分類，等待更新。"));
+          summary.append(inventoryTextNode("span", "inventory-counts", inventoryCounts(key, items)));
+          const body = inventoryTextNode("div", "inventory-body");
+          body.append(inventoryTextNode("p", "inventory-caution", caution));
+          if (items?.length) items.forEach((item, index) => body.append(inventoryDevice(key, item, index)));
+          else body.append(inventoryTextNode("p", "hardware-empty", items ? "此採樣未列出裝置" : "裝置清單未知，等待更新。"));
+          const notes = inventoryDetails(`${key}:notes`, "inventory-notes", "觀測備註與錯誤");
+          ["notes", "errors"].forEach((field) => {
+            notes.append(inventoryTextNode("p", "inventory-kind", field === "notes" ? "備註" : "讀取錯誤"));
+            const list = inventoryTextNode("ul", field === "errors" ? "inventory-errors" : "");
+            const values = section && Array.isArray(section[field]) ? section[field] : null;
+            (values?.length ? values : [values ? "沒有回報" : HARDWARE_UNKNOWN]).forEach((value) => list.append(inventoryTextNode("li", "", inventoryValue("", value))));
+            notes.append(list);
+          });
+          body.append(notes);
+          details.append(body);
+          grid.append(details);
+        });
+        grid.querySelectorAll(".table-wrap").forEach((table) => {
+          const position = scrollPositions.get(table.dataset.focusKey);
+          if (position) { table.scrollLeft = position[0]; table.scrollTop = position[1]; }
+        });
+        if (focusedKey) Array.from(grid.querySelectorAll("[data-focus-key]")).find((node) => node.dataset.focusKey === focusedKey)?.focus({ preventScroll: true });
       }
 
       function hardwareStatusLabel(stateName) {
@@ -968,7 +1257,7 @@
         const abort = () => controller.abort();
         signal.addEventListener("abort", abort, { once: true });
         if (signal.aborted) controller.abort();
-        const timeout = window.setTimeout(abort, HARDWARE_REQUEST_TIMEOUT_MS);
+        const timeout = window.setTimeout(abort, endpoint === "history" ? HARDWARE_HISTORY_TIMEOUT_MS : HARDWARE_REQUEST_TIMEOUT_MS);
         try {
           const response = await fetch(hardwareApiPath(endpoint, params), {
             method: "GET",
@@ -1011,6 +1300,7 @@
         renderHardwareAlerts(data, effectiveState);
         renderHardwareSourceErrors(data);
         renderHardwareNotice(effectiveState, payload);
+        renderHardwareInventory(data, effectiveState);
       }
 
       function updateHardwareAge() {

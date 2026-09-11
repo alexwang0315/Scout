@@ -43,6 +43,12 @@ def test_dashboard_mounts_scout_monitor_system_page_and_read_only_api(
     assert "MacBook" not in monitor_page.text
     assert 'id="processTable"' not in monitor_page.text
     assert 'id="intervalSelect"' not in monitor_page.text
+    assert 'id="hardwareInventoryPanel"' in monitor_page.text
+    assert 'id="hardwareInventoryGrid"' in monitor_page.text
+    assert 'renderHardwareInventory(data, effectiveState)' in monitor_page.text
+    assert 'inventoryExpansion' in monitor_page.text
+    assert '未採樣' in monitor_page.text
+    assert '已讀取 ≠ 設備功能正常' in monitor_page.text
 
     assert health.status_code == 404
     assert snapshot.status_code == 404

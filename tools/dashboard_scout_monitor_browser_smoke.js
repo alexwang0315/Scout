@@ -30,6 +30,7 @@ async function run() {
   const failedResponses = [];
   const hardwareResponses = [];
   const macMonitorRequests = [];
+  let phase = "initial-load";
   page.on("request", (request) => {
     if (/\/admin\/dashboard\/scout-monitor\/api\/(snapshot|health)$/.test(new URL(request.url()).pathname)) macMonitorRequests.push(request.url());
   });
@@ -46,7 +47,7 @@ async function run() {
     }
   });
   page.on("requestfailed", (request) => {
-    if (request.url().includes("/api/v1/hardware-monitor/")) failedResponses.push(request.url());
+    if (request.url().includes("/api/v1/hardware-monitor/")) failedResponses.push({ url: request.url(), error: request.failure()?.errorText, phase, at: new Date().toISOString(), timing: request.timing() });
   });
 
   await page.goto(`${baseUrl}/admin/dashboard#home`, { waitUntil: "domcontentloaded", timeout: 60000 });
@@ -87,23 +88,66 @@ async function run() {
   if (overallStatus !== expectedState) fail(`status mismatch: ${overallStatus} vs ${expectedState}`);
   if (!nvmeText.includes("/sys/class/hwmon/")) fail(`NVMe source is missing: ${nvmeText}`);
 
+  const inventorySections = statusPayload.data.inventory?.sections;
+  if (!inventorySections) fail("live API has no inventory for device smoke verification");
+  const inventoryEvidence = [];
+  const inventoryScreenshots = [];
+  phase = "desktop-inventory";
+  for (const key of ["network", "bluetooth", "usb", "pcie", "i2c", "gpio", "serial"]) {
+    const section = frame.locator(`.inventory-section[data-section="${key}"]`);
+    const expected = inventorySections[key];
+    if (!expected) fail(`live API is missing ${key} inventory`);
+    await section.locator(":scope > summary").click();
+    const itemCount = await section.locator(".inventory-device").count();
+    if (itemCount !== expected.items.length) fail(`${key}: item count differs from the live API`);
+    const text = await section.innerText();
+    for (const item of expected.items) {
+      if (!text.includes(item.name) || !text.includes(item.id)) fail(`${key}: a live device name or id is missing`);
+    }
+    const sectionStatus = await section.locator(".inventory-section-status").innerText();
+    const expectedSectionState = { ok: "已讀取", partial: "部分讀取", unavailable: "無法讀取" }[expected.status];
+    if (!sectionStatus.includes(expectedSectionState)) fail(`${key}: incorrect information-read state`);
+    const properties = section.locator(".inventory-properties").first();
+    if (itemCount) await properties.locator(":scope > summary").click();
+    await section.locator(".inventory-notes > summary").click();
+    if (key === "gpio" && itemCount) {
+      await section.locator(".inventory-lines > summary").first().focus();
+      await section.locator(".inventory-lines > summary").first().press("Enter");
+      const lineRows = section.locator(".inventory-lines").first().locator("tbody tr");
+      if (await lineRows.count() !== expected.items[0].lines.length) fail("GPIO line count differs from the API");
+      if (expected.items[0].lines.some((line) => line.value === null) && !(await section.innerText()).includes("未採樣")) fail("GPIO null voltage is not marked unsampled");
+    }
+    const screenshot = path.join(screenshotDir, `desktop-inventory-${key}.png`);
+    await section.evaluate((node) => node.scrollIntoView({ block: "start" }));
+    await page.screenshot({ path: screenshot });
+    inventoryScreenshots.push(screenshot);
+    inventoryEvidence.push({ section: key, itemCount, expectedItems: expected.items.length, sectionStatus, notesOpened: true, propertiesOpened: itemCount > 0 });
+  }
+  const expandedBefore = await frame.locator("#hardwareInventoryGrid details[open]").evaluateAll((nodes) => nodes.map((node) => node.dataset.detailKey).sort());
+
   const refreshResponse = page.waitForResponse((response) => response.url().includes("/api/v1/hardware-monitor/status"));
+  phase = "manual-refresh";
   const refreshButton = frame.getByRole("button", { name: /重新讀取/ });
   await refreshButton.focus();
   const focusedControl = await frame.locator("body").evaluate(() => document.activeElement && document.activeElement.id);
   if (focusedControl !== "hardwareRefreshButton") fail(`refresh button is not keyboard focusable: ${focusedControl}`);
   await refreshButton.press("Enter");
   await refreshResponse;
+  await frame.locator("#hardwareRefreshButton:not([disabled])").waitFor();
+  const expandedAfter = await frame.locator("#hardwareInventoryGrid details[open]").evaluateAll((nodes) => nodes.map((node) => node.dataset.detailKey).sort());
+  if (JSON.stringify(expandedBefore) !== JSON.stringify(expandedAfter)) fail("device expansion changed after manual refresh");
 
   const desktopScreenshot = path.join(screenshotDir, "desktop.png");
   await frame.locator("#hardwareMonitorPanel").evaluate((panel) => panel.scrollIntoView({ block: "start" }));
   await page.screenshot({ path: desktopScreenshot, fullPage: false });
 
   await page.setViewportSize({ width: 390, height: 844 });
+  phase = "mobile-reload";
   await page.reload({ waitUntil: "domcontentloaded" });
   const mobileFrame = page.frameLocator('iframe[src="/admin/dashboard/scout-monitor"]');
   await mobileFrame.getByRole("heading", { name: "硬體監控" }).waitFor({ state: "visible", timeout: 30000 });
   await mobileFrame.locator("#hardwareTrendMeta").filter({ hasText: "歷史紀錄" }).waitFor({ state: "visible", timeout: 30000 });
+  phase = "mobile-inventory";
   const mobileLayout = await mobileFrame.locator("body").evaluate((body) => ({
     clientWidth: document.documentElement.clientWidth,
     scrollWidth: document.documentElement.scrollWidth,
@@ -119,6 +163,27 @@ async function run() {
   const mobileThermalScreenshot = path.join(screenshotDir, "mobile-thermal.png");
   await mobileFrame.locator("#hardwareThermalCard").screenshot({ path: mobileThermalScreenshot });
 
+  const inventoryLayouts = [];
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 844 });
+    for (const key of ["network", "gpio"]) {
+      const section = mobileFrame.locator(`.inventory-section[data-section="${key}"]`);
+      if (!(await section.getAttribute("open") === "")) await section.locator(":scope > summary").click();
+      if (key === "gpio") {
+        const lines = section.locator(".inventory-lines").first();
+        if (await lines.count() && await lines.getAttribute("open") !== "") await lines.locator(":scope > summary").click();
+      }
+      await section.evaluate((node) => node.scrollIntoView({ block: "start" }));
+      const shot = path.join(screenshotDir, `mobile-${width}-inventory-${key}.png`);
+      await page.screenshot({ path: shot });
+      inventoryScreenshots.push(shot);
+    }
+    const layout = await mobileFrame.locator("body").evaluate(() => ({ clientWidth: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth }));
+    if (layout.scrollWidth > layout.clientWidth + 2) fail(`expanded inventory overflows at ${width}px: ${JSON.stringify(layout)}`);
+    inventoryLayouts.push({ viewport: width, ...layout });
+  }
+
+  fs.writeFileSync(path.join(screenshotDir, "network-observations.json"), JSON.stringify({ at: new Date().toISOString(), hardwareResponses, macMonitorRequests, consoleErrors, pageErrors, failedResponses }, null, 2));
   if (hardwareResponses.some(entry => entry.origin !== new URL(baseUrl).origin)) fail("browser made a cross-origin hardware request");
   if (macMonitorRequests.length) fail(`Mac monitor requests remain: ${JSON.stringify(macMonitorRequests)}`);
   if (hardwareResponses.some(entry => entry.status !== 200)) fail(`live hardware HTTP failure: ${JSON.stringify(hardwareResponses)}`);
@@ -144,7 +209,10 @@ async function run() {
     pageErrors,
     failedResponses,
     mobileLayout,
-    screenshots: [desktopScreenshot, mobileScreenshot, mobileMemoryScreenshot, mobileThermalScreenshot],
+    inventoryEvidence,
+    inventoryExpansionPreserved: true,
+    inventoryLayouts,
+    screenshots: [desktopScreenshot, mobileScreenshot, mobileMemoryScreenshot, mobileThermalScreenshot, ...inventoryScreenshots],
   };
   fs.writeFileSync(path.join(screenshotDir, "browser-smoke.json"), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result, null, 2));

@@ -36,11 +36,53 @@ def _status_payload(*, status: str = "ok", data: Any = None) -> dict[str, Any]:
     }
 
 
+def _inventory() -> dict[str, Any]:
+    return {
+        "captured_at": "2026-09-11T01:59:00Z",
+        "status": "partial",
+        "read_only": True,
+        "active_scan_performed": False,
+        "gpio_value_sampling_performed": False,
+        "sections": {
+            "gpio": {
+                "status": "partial",
+                "summary": "部分線路資訊",
+                "items": [
+                    {
+                        "id": "gpiochip-test",
+                        "name": "測試控制器",
+                        "state": "present",
+                        "driver": None,
+                        "properties": {"line_count": 1},
+                        "lines": [
+                            {
+                                "offset": 0,
+                                "name": "測試",
+                                "direction": "input",
+                                "consumer": "<img src=x>",
+                                "active_low": False,
+                                "value": None,
+                            }
+                        ],
+                    }
+                ],
+                "notes": ["未讀取電位"],
+                "errors": ["部分資訊無法讀取"],
+            },
+        },
+    }
+
+
 def test_dashboard_proxy_keeps_hardware_api_same_origin_and_forwards_limits(
     tmp_path: Path,
 ) -> None:
     calls: list[tuple[str, Mapping[str, str]]] = []
-    status_data = {"status": "ok", "alerts": {}, "thresholds": {}}
+    status_data = {
+        "status": "ok",
+        "alerts": {},
+        "thresholds": {},
+        "inventory": _inventory(),
+    }
 
     def fetcher(endpoint: str, params: Mapping[str, str]) -> tuple[int, Any]:
         calls.append((endpoint, params))
@@ -63,7 +105,9 @@ def test_dashboard_proxy_keeps_hardware_api_same_origin_and_forwards_limits(
     )
 
     with TestClient(app) as client:
-        status = client.get("/admin/dashboard/scout-monitor/api/v1/hardware-monitor/status")
+        status = client.get(
+            "/admin/dashboard/scout-monitor/api/v1/hardware-monitor/status"
+        )
         history = client.get(
             "/admin/dashboard/scout-monitor/api/v1/hardware-monitor/history?limit=60"
         )
@@ -89,7 +133,12 @@ def test_dashboard_proxy_keeps_hardware_api_same_origin_and_forwards_limits(
 def test_dashboard_proxy_preserves_stale_503_and_old_data_is_not_reclassified(
     tmp_path: Path,
 ) -> None:
-    stale_data = {"status": "ok", "alerts": {}, "thresholds": {}}
+    stale_data = {
+        "status": "ok",
+        "alerts": {},
+        "thresholds": {},
+        "inventory": _inventory(),
+    }
     stale_payload = _status_payload(status="stale", data=stale_data)
 
     def fetcher(endpoint: str, params: Mapping[str, str]) -> tuple[int, Any]:
