@@ -37563,7 +37563,7 @@
           .control-group[aria-label="Map view controls"] { display:block !important; padding:0 !important; border:0 !important; background:transparent !important; box-shadow:none !important; }
           .control-group[aria-label="Map view controls"] .control-group-header { display:none !important; }
           .toolbar-row[aria-label="Map tools"] { display:flex !important; justify-content:flex-end !important; gap:4px !important; padding:5px !important; border:1px solid rgba(42,64,74,.7) !important; border-radius:8px !important; background:rgba(247,250,252,.94) !important; box-shadow:0 8px 24px rgba(0,0,0,.25) !important; pointer-events:auto !important; }
-          #refreshWeatherMapTiles { display:inline-flex !important; white-space:nowrap !important; }
+          #refreshMapTiles { display:inline-flex !important; white-space:nowrap !important; }
           .toolbar-row[aria-label="Map tools"] { flex-wrap:wrap !important; max-width:calc(100vw - 28px) !important; }
           #zoomLevel { overflow-wrap:anywhere !important; white-space:normal !important; }
           #mapRendererStatus { bottom:66px !important; max-width:calc(100% - 24px) !important; }
@@ -40421,7 +40421,8 @@
             #zoomOut,
             #fitRoute,
             #boxZoomMode,
-            #zoomLevel {
+            #zoomLevel,
+            #refreshMapTiles {
               pointer-events: auto !important;
             }
             .layer-menu {
@@ -40546,6 +40547,7 @@
             #fitRoute,
             #boxZoomMode,
             #zoomLevel,
+            #refreshMapTiles,
             .map-pan-controls {
               position: absolute !important;
               right: 14px !important;
@@ -40556,10 +40558,18 @@
             #fitRoute { top: 98px !important; }
             #zoomIn { top: 140px !important; }
             #zoomOut { top: 182px !important; }
+            #refreshMapTiles {
+              top: 376px !important;
+              width: 88px !important;
+              min-width: 88px !important;
+              font-size: 12px !important;
+              white-space: nowrap !important;
+            }
             #zoomLevel {
               top: 224px !important;
-              width: 56px !important;
+              width: max-content !important;
               min-width: 56px !important;
+              max-width: 160px !important;
               min-height: 28px !important;
               padding: 5px 4px !important;
               font-size: 11px !important;
@@ -40587,6 +40597,7 @@
               #fitRoute,
               #boxZoomMode,
               #zoomLevel,
+              #refreshMapTiles,
               .map-pan-controls {
                 right: ${mapToolRight} !important;
               }

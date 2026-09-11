@@ -82,28 +82,63 @@ try {diagnosticRequire(false,'authority violation');assert.fail();} catch(e) {as
 ''')
 
 
-def test_actual_weather_tile_url_is_cache_only_until_explicit_refresh():
+def test_shared_rudy_tiles_fill_missing_detail_and_preserve_cache_only_mode():
     pretrip = ROOT/'docs/admin/phase4-pretrip-planning.html'
     node(function('rasterTileTemplate',pretrip) + r'''
 const assert = require('node:assert/strict');
 const PROJECT_ID='selected_scoutAI', HISTORICAL_MAP_LAYER_ID='historical-map';
 const RASTER_WORKSPACE_CACHE_QUERY='cache_only=1', RASTER_TILE_CACHE_BUST='test';
-const state={rasterRemoteRefreshEnabled:false,rasterRefreshNonce:'one'};
+const state={rasterRemoteRefreshEnabled:true,rasterForceRemoteRefresh:false,rasterRefreshNonce:'one'};
 const rasterLayerFor=()=>({});
-const rasterSourceDefinitionFor=()=>({sourceId:'happyman_rudy_twmap'});
+const rasterSourceDefinitionFor=id=>({sourceId:id==='rudy-twmap'?'happyman_rudy_twmap':'historical-map-source'});
 const apiUrlTemplate=s=>s;
 let url=new URL(rasterTileTemplate({},'rudy-twmap'),'http://localhost');
+assert.equal(url.searchParams.has('cache_only'),false);
+assert.equal(url.searchParams.get('native'),'1');
+assert.equal(url.searchParams.has('refresh'),false, 'automatic detail loading must reuse native cache');
+assert.equal(url.searchParams.get('exact'),'1');
+const historical=new URL(rasterTileTemplate({},'historical-map'),'http://localhost');
+assert.equal(historical.searchParams.get('cache_only'),'1');
+assert.equal(historical.searchParams.has('native'),false, 'Rudy auto-fill must not download historical layers');
+state.rasterRemoteRefreshEnabled=false;
+url=new URL(rasterTileTemplate({},'rudy-twmap'),'http://localhost');
 assert.equal(url.searchParams.get('cache_only'),'1');
 assert.equal(url.searchParams.has('native'),false);
 assert.equal(url.searchParams.has('refresh'),false);
 assert.equal(url.searchParams.get('source_id'),'happyman_rudy_twmap');
 assert.equal(url.searchParams.get('exact'),'1');
 state.rasterRemoteRefreshEnabled=true;
+state.rasterForceRemoteRefresh=true;
 url=new URL(rasterTileTemplate({},'rudy-twmap'),'http://localhost');
 assert.equal(url.searchParams.has('cache_only'),false);
 assert.equal(url.searchParams.get('native'),'1');
 assert.equal(url.searchParams.get('refresh'),'1');
 assert.equal(url.searchParams.get('exact'),'1');
+''')
+
+
+def test_shared_tile_toggle_stops_auto_fill_and_can_explicitly_refresh_historical_maps():
+    pretrip = ROOT/'docs/admin/phase4-pretrip-planning.html'
+    node(function('toggleRasterRemoteRefresh',pretrip) + r'''
+const assert = require('node:assert/strict');
+const state={rasterRemoteRefreshEnabled:true,rasterForceRemoteRefresh:false,rasterRefreshNonce:0};
+const syncRasterRefreshButton=()=>{}, syncHistoricalMapControls=()=>{};
+const document={getElementById:()=>null};
+toggleRasterRemoteRefresh();
+assert.equal(state.rasterRemoteRefreshEnabled,false);
+assert.equal(state.rasterForceRemoteRefresh,false);
+toggleRasterRemoteRefresh();
+assert.equal(state.rasterRemoteRefreshEnabled,true);
+assert.equal(state.rasterForceRemoteRefresh,true);
+state.rasterRemoteRefreshEnabled=true;
+state.rasterForceRemoteRefresh=false;
+const event={currentTarget:{hasAttribute:()=>true}};
+toggleRasterRemoteRefresh(event);
+assert.equal(state.rasterRemoteRefreshEnabled,true);
+assert.equal(state.rasterForceRemoteRefresh,true,'first historical click must enable its explicit refresh');
+toggleRasterRemoteRefresh(event);
+assert.equal(state.rasterRemoteRefreshEnabled,false);
+assert.equal(state.rasterForceRemoteRefresh,false);
 ''')
 
 
@@ -135,6 +170,21 @@ updateMapZoomIndicator('',{zoom:15.675839,minZoom:0,maxZoom:22});
 assert.equal(nodes.zoomLevel.textContent,'z15.7');
 assert.equal(nodes.zoomIn.disabled,false);
 assert.equal(nodes.zoomOut.disabled,false);
+Object.assign(nodes.mapLibreEvidenceMap.dataset,{
+ maplibreRasterNativeZoom:'20',maplibreRasterVerifiedNativeZoom:'',
+ maplibreRasterRequiredCount:'12',maplibreRasterSuccessCount:'8',maplibreRasterErrorCount:'0'
+});
+updateMapZoomIndicator('pan',{zoom:18,minZoom:0,maxZoom:22});
+assert.equal(nodes.zoomLevel.textContent,'z18.0 · 載入 Z20');
+nodes.mapLibreEvidenceMap.dataset.maplibreRasterErrorCount='4';
+updateMapZoomIndicator('box',{zoom:18,minZoom:0,maxZoom:22});
+assert.equal(nodes.zoomLevel.textContent,'z18.0 · 缺 Z20');
+assert.ok(nodes.zoomLevel.title.includes('8/12'));
+Object.assign(nodes.mapLibreEvidenceMap.dataset,{
+ maplibreRasterVerifiedNativeZoom:'20',maplibreRasterSuccessCount:'12',maplibreRasterErrorCount:'0'
+});
+updateMapZoomIndicator('pan',{zoom:18,minZoom:0,maxZoom:22});
+assert.equal(nodes.zoomLevel.textContent,'z18.0 · 圖磚 Z20');
 updateMapZoomIndicator('',{zoom:22,minZoom:0,maxZoom:22});
 assert.equal(nodes.zoomIn.disabled,true);
 ''')

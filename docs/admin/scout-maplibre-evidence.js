@@ -21,6 +21,7 @@
   const RASTER_LAYER_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,79}$/;
   const MAX_RASTER_TILE_TEMPLATES = 4;
   let mapLibreModulePromise = null;
+  let rasterProtocolSequence = 0;
 
   function normalizeRendererPreference(value) {
     const normalized = String(value || "auto").trim().toLowerCase();
@@ -1304,6 +1305,209 @@
     });
   }
 
+  function rasterTileCoverage(layer, map) {
+    const bounds = map?.getBounds?.();
+    const zoom = Number(map?.getZoom?.());
+    if (!bounds || !Number.isFinite(zoom)) return null;
+    // RasterTileSource.roundZoom is true in MapLibre 6.2; its map tile size is 512.
+    const z = Math.max(Math.ceil(layer.minzoom), Math.min(Math.floor(layer.maxzoom),
+      Math.round(zoom + Math.log2(512 / layer.tile_size))));
+    const size = 2 ** z;
+    const rangeFor = ([west, south, east, north]) => {
+      if (![west, south, east, north].every(Number.isFinite) || south > north) return null;
+      if (east < west) east += 360;
+      const y = latitude => {
+        const radians = Math.max(-85.05112878, Math.min(85.05112878, latitude)) * Math.PI / 180;
+        return size * (1 - Math.log(Math.tan(radians) + 1 / Math.cos(radians)) / Math.PI) / 2;
+      };
+      const xMin = Math.floor(size * (west + 180) / 360);
+      const xMax = Math.max(xMin, Math.ceil(size * (east + 180) / 360) - 1);
+      const wrap = value => ((value % size) + size) % size;
+      const xs = xMax - xMin + 1 >= size ? [[0, size - 1]]
+        : wrap(xMin) <= wrap(xMax) ? [[wrap(xMin), wrap(xMax)]]
+          : [[0, wrap(xMax)], [wrap(xMin), size - 1]];
+      return {xs, yMin: Math.max(0, Math.floor(y(north))),
+        yMax: Math.min(size - 1, Math.max(Math.floor(y(north)), Math.ceil(y(south)) - 1))};
+    };
+    let range = rangeFor([bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()]);
+    if (!range) return null;
+    if (layer.bounds) {
+      const source = rangeFor(layer.bounds);
+      if (!source) return null;
+      range = {
+        xs: range.xs.flatMap(viewX => source.xs.map(sourceX => [
+          Math.max(viewX[0], sourceX[0]), Math.min(viewX[1], sourceX[1]),
+        ]).filter(([min, max]) => min <= max)),
+        yMin: Math.max(range.yMin, source.yMin), yMax: Math.min(range.yMax, source.yMax),
+      };
+    }
+    const count = range.xs.reduce((sum, [min, max]) => sum + max - min + 1, 0)
+      * Math.max(0, range.yMax - range.yMin + 1);
+    return {z, count, key: JSON.stringify([z, range.xs, range.yMin, range.yMax]),
+      contains: tile => tile.z === z && tile.y >= range.yMin && tile.y <= range.yMax
+        && range.xs.some(([min, max]) => tile.x >= min && tile.x <= max)};
+  }
+
+  class RasterTileTransport {
+    constructor({maplibregl, getMap, onState, container}) {
+      this.maplibregl = maplibregl;
+      this.getMap = getMap;
+      this.onState = onState;
+      this.container = container;
+      this.protocol = `scout-raster-${++rasterProtocolSequence}`;
+      this.revision = 0;
+      this.requestSequence = 0;
+      this.layers = new Map();
+      this.records = new Map();
+      this.controllers = new Set();
+      this.viewErrors = new Map();
+      this.destroyed = false;
+      this.enabled = typeof maplibregl.addProtocol === "function"
+        && typeof maplibregl.removeProtocol === "function" && typeof global.fetch === "function";
+      if (this.enabled) maplibregl.addProtocol(this.protocol, (request, controller) => this.load(request, controller));
+      container.dataset.maplibreRasterTransport = this.enabled ? "same-origin-protocol" : "event-only";
+    }
+
+    configure(layers) {
+      this.revision += 1;
+      this.controllers.forEach(controller => controller.abort());
+      this.controllers.clear();
+      this.records.clear();
+      this.viewErrors.clear();
+      this.layers.clear();
+      const origin = String(global.location?.origin || "");
+      layers.forEach(layer => {
+        if (layer.source_type !== "raster" || !origin) return;
+        try {
+          const templates = layer.tiles.map(template => new URL(template, origin));
+          if (!templates.every(url => url.origin === origin && !url.username && !url.password
+            && !/\{(?!z\}|x\}|y\})/.test(decodeURI(url.href)))) return;
+          this.layers.set(layer.layer_id, {layer, visible: layer.visible,
+            templates: layer.tiles.map(template => new URL(template, origin).href
+              .replace(/%7B([zxy])%7D/gi, "{$1}"))});
+        } catch (_error) { /* Unsupported sources retain their existing public loader. */ }
+      });
+    }
+
+    sourceDefinition(layer) {
+      const source = rasterSourceDefinition(layer);
+      if (!this.enabled || !this.layers.has(layer.layer_id)) return source;
+      source.tiles = layer.tiles.map((_template, index) => (
+        `${this.protocol}://${this.revision}/${layer.layer_id}/${index}/{z}/{x}/{y}`
+      ));
+      return source;
+    }
+
+    handles(layerId) {
+      return !this.destroyed && this.layers.has(layerId);
+    }
+
+    publish(layerId) {
+      const entry = this.layers.get(layerId);
+      if (this.destroyed || !entry) return;
+      const coverage = rasterTileCoverage(entry.layer, this.getMap());
+      const records = [...this.records.values()].filter(record => record.layerId === layerId && coverage?.contains(record));
+      const errors = records.filter(record => record.state === "error");
+      const pending = records.filter(record => record.state === "pending").length;
+      const successes = records.filter(record => record.state === "success").length;
+      const viewError = this.viewErrors.get(layerId)?.key === coverage?.key;
+      const missing = Math.max(0, Number(coverage?.count || 0) - successes - pending - errors.length);
+      let settled = false;
+      try { settled = this.getMap()?.isSourceLoaded?.(entry.layer.map_source_id) === true; } catch (_error) { /* Source removal. */ }
+      const state = !entry.visible ? "hidden" : !this.enabled || errors.length || viewError ? "degraded"
+        : !coverage ? "loading" : !coverage.count ? "configured"
+          : settled && !pending ? missing ? "degraded" : "available" : "loading";
+      const reason = !entry.visible ? "layer_hidden" : !this.enabled ? "tile_transport_unavailable"
+        : errors.length ? "native_tile_http_error" : viewError ? "tile_decode_failed"
+          : !coverage ? "viewport_pending" : !coverage.count ? "outside_source_bounds"
+            : state === "available" ? "native_tiles_loaded" : state === "degraded" ? "native_tiles_unverified" : "tiles_loading";
+      this.onState(layerId, {state, reason, visible: entry.visible, error_count: errors.length + Number(viewError),
+        pending_count: pending, success_count: successes, unverified_count: missing,
+        required_count: coverage?.count || 0, required_tile_count: coverage?.count || 0,
+        native_zoom: coverage?.z ?? null, verified_native_zoom: state === "available" ? coverage.z : null,
+        last_http_status: errors.at(-1)?.status || null, transport_revision: this.revision,
+        transport: this.enabled ? "same-origin-protocol" : "unavailable"});
+    }
+
+    publishAll() {
+      this.layers.forEach((_entry, layerId) => this.publish(layerId));
+    }
+
+    setVisibility(layerId, visible) {
+      const entry = this.layers.get(layerId);
+      if (!entry) return;
+      entry.visible = Boolean(visible);
+      this.publish(layerId);
+    }
+
+    recordMapError(layerId) {
+      const entry = this.layers.get(layerId);
+      if (!entry) return;
+      const coverage = rasterTileCoverage(entry.layer, this.getMap());
+      this.viewErrors.set(layerId, {key: coverage?.key});
+      this.publish(layerId);
+    }
+
+    async load(request, controller) {
+      const abortError = () => Object.assign(new Error("Raster request cancelled"), {name: "AbortError"});
+      const match = String(request.url).match(new RegExp(`^${this.protocol}://(\\d+)/([a-z0-9._-]+)/(\\d+)/(\\d+)/(\\d+)/(\\d+)$`));
+      const entry = match && this.layers.get(match[2]);
+      if (this.destroyed || !entry || Number(match[1]) !== this.revision || controller.signal.aborted) throw abortError();
+      const [index, z, x, y] = match.slice(3).map(Number);
+      const template = entry.templates[index];
+      if (!template || z < Math.floor(entry.layer.minzoom) || z > Math.ceil(entry.layer.maxzoom)
+        || x >= 2 ** z || y >= 2 ** z) throw new Error("invalid_raster_protocol_tile");
+      const url = new URL(template.replaceAll("{z}", String(z)).replaceAll("{x}", String(x)).replaceAll("{y}", String(y)));
+      if (url.origin !== global.location.origin || url.username || url.password) throw new Error("invalid_raster_protocol_origin");
+      const revision = this.revision;
+      const key = `${match[2]}:${z}/${x}/${y}`;
+      const previous = this.records.get(key);
+      const record = {layerId: match[2], z, x, y, state: "pending", status: null, attempt: ++this.requestSequence};
+      const current = () => !this.destroyed && revision === this.revision && this.records.get(key) === record;
+      this.records.set(key, record);
+      this.viewErrors.delete(record.layerId);
+      this.controllers.add(controller);
+      this.publish(record.layerId);
+      try {
+        const response = await global.fetch(url.href, {signal: controller.signal, credentials: "same-origin",
+          redirect: "error", headers: {Accept: "image/webp,*/*"}});
+        if (controller.signal.aborted) throw abortError();
+        record.status = response.status;
+        if (!response.ok) throw Object.assign(new Error(`Raster tile HTTP ${response.status}`), {status: response.status});
+        const data = await response.arrayBuffer();
+        if (controller.signal.aborted) throw abortError();
+        if (current()) record.state = "success";
+        return {data, cacheControl: response.headers.get("Cache-Control"), expires: response.headers.get("Expires")};
+      } catch (error) {
+        if (current()) {
+          if (controller.signal.aborted || error?.name === "AbortError") {
+            if (previous && previous.state !== "pending") this.records.set(key, previous);
+            else this.records.delete(key);
+          } else record.state = "error";
+        }
+        // MapLibre may suppress HTTP 404 events; HTTP status is already recorded above.
+        throw Object.assign(new Error(error?.message || "Raster transport failed"), {
+          name: controller.signal.aborted ? "AbortError" : error?.name || "Error",
+          status: error?.status, scoutRasterTransport: true,
+        });
+      } finally {
+        this.controllers.delete(controller);
+        if (!this.destroyed && revision === this.revision) this.publish(record.layerId);
+      }
+    }
+
+    destroy() {
+      this.destroyed = true;
+      this.controllers.forEach(controller => controller.abort());
+      this.controllers.clear();
+      if (this.enabled) this.maplibregl.removeProtocol(this.protocol);
+      this.layers.clear();
+      this.records.clear();
+      this.viewErrors.clear();
+      this.container.dataset.maplibreRasterTransport = "destroyed";
+    }
+  }
+
   class MapLibreEvidenceRenderer {
     constructor({
       maplibregl,
@@ -1342,6 +1546,10 @@
       ]));
       this.timeoutMs = timeoutMs;
       this.map = null;
+      this.destroyed = false;
+      this.rasterTransport = new RasterTileTransport({maplibregl, container,
+        getMap: () => this.map, onState: (layerId, patch) => this.updateRasterLayerState(layerId, patch)});
+      this.rasterTransport.configure(this.rasterLayers);
       this.featureCollection = createEvidenceFeatureCollection();
       this.index = buildEvidenceIndex();
       this.hiddenLayerIds = new Set();
@@ -1361,6 +1569,7 @@
     }
 
     updateRasterLayerState(layerId, patch = {}) {
+      if (this.destroyed) return null;
       const key = String(layerId || "");
       const current = this.rasterLayerStates.get(key);
       if (!current) return null;
@@ -1379,6 +1588,14 @@
               ? "configured"
               : "not_configured";
       this.container.dataset.maplibreRasterState = aggregate;
+      const native = values.find(value => value.layer_id === "rudy-twmap" && value.visible);
+      this.container.dataset.maplibreRasterNativeZoom = native?.native_zoom == null ? "" : String(native.native_zoom);
+      this.container.dataset.maplibreRasterVerifiedNativeZoom = native?.verified_native_zoom == null
+        ? "" : String(native.verified_native_zoom);
+      ["required_count", "success_count", "pending_count", "error_count", "unverified_count"].forEach((field, index) => {
+        const key = ["RequiredCount", "SuccessCount", "PendingCount", "ErrorCount", "UnverifiedCount"][index];
+        this.container.dataset[`maplibreRaster${key}`] = String(native?.[field] || 0);
+      });
       if (this.onRasterStatus) this.onRasterStatus(next, values);
       return next;
     }
@@ -1396,9 +1613,16 @@
           });
         }
       });
+      ["move", "moveend", "idle"].forEach(event => {
+        this.map.on(event, () => this.rasterTransport.publishAll());
+      });
       this.map.on("sourcedata", event => {
         const layer = this.rasterLayerForSource(event?.sourceId);
         if (!layer || event?.isSourceLoaded !== true) return;
+        if (this.rasterTransport.handles(layer.layer_id)) {
+          this.rasterTransport.publish(layer.layer_id);
+          return;
+        }
         const patch = rasterLayerEventPatch(
           this.rasterLayerStates.get(layer.layer_id),
           "source_loaded",
@@ -1408,6 +1632,11 @@
       this.map.on("error", event => {
         const layer = this.rasterLayerForSource(event?.sourceId);
         if (!layer) return;
+        if (event.error?.name === "AbortError" || event.error?.scoutRasterTransport) return;
+        if (this.rasterTransport.handles(layer.layer_id)) {
+          this.rasterTransport.recordMapError(layer.layer_id);
+          return;
+        }
         const current = this.rasterLayerStates.get(layer.layer_id);
         const patch = rasterLayerEventPatch(current, "tile_error");
         if (patch) this.updateRasterLayerState(layer.layer_id, patch);
@@ -1420,6 +1649,7 @@
       if (nextSignature === this.rasterLayerSignature) return false;
 
       const previousLayers = this.rasterLayers;
+      this.rasterTransport.configure(nextLayers);
       if (this.map) {
         [...previousLayers].reverse().forEach(layer => {
           if (this.map.getLayer(layer.map_layer_id)) this.map.removeLayer(layer.map_layer_id);
@@ -1445,7 +1675,7 @@
 
       if (this.map) {
         nextLayers.forEach(layer => {
-          this.map.addSource(layer.map_source_id, rasterSourceDefinition(layer));
+          this.map.addSource(layer.map_source_id, this.rasterTransport.sourceDefinition(layer));
         });
         nextLayers.filter(layer => layer.render_position === "base").forEach(layer => {
           this.map.addLayer(
@@ -1496,11 +1726,13 @@
       this.emitStatus("loading", "map_initializing");
       this.featureCollection = createEvidenceFeatureCollection(featureCollection.features || []);
       this.index = buildEvidenceIndex(this.featureCollection.features);
+      const style = createEvidenceStyle(this.visibleFeatureCollection(), {rasterLayers: this.rasterLayers});
+      this.rasterLayers.forEach(layer => {
+        style.sources[layer.map_source_id] = this.rasterTransport.sourceDefinition(layer);
+      });
       this.map = new this.maplibregl.Map({
         container: this.container,
-        style: createEvidenceStyle(this.visibleFeatureCollection(), {
-          rasterLayers: this.rasterLayers,
-        }),
+        style,
         center: [0, 0],
         zoom: 1,
         attributionControl: true,
@@ -1866,6 +2098,7 @@
               : "tiles_loading"
             : "layer_hidden",
         });
+        this.rasterTransport.setVisibility(rasterLayer.layer_id, visible);
       });
       const source = this.map?.getSource(EVIDENCE_SOURCE_ID);
       if (typeof source?.setData === "function") source.setData(this.visibleFeatureCollection());
@@ -2026,6 +2259,8 @@
     }
 
     destroy() {
+      this.destroyed = true;
+      this.rasterTransport.destroy();
       this.cancelRectangleZoom();
       if (this.interactionSurface?.removeEventListener) {
         this.interactionSurface.removeEventListener("pointerdown", this.boundRectangleZoomStart, true);
@@ -2045,7 +2280,12 @@
 
   async function createRenderer(options, featureCollection = createEvidenceFeatureCollection()) {
     const renderer = new MapLibreEvidenceRenderer(options);
-    return renderer.initialize(featureCollection);
+    try {
+      return await renderer.initialize(featureCollection);
+    } catch (error) {
+      renderer.destroy();
+      throw error;
+    }
   }
 
   async function loadMapLibre(moduleUrl = DEFAULT_MODULE_URL) {

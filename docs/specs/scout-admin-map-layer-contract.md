@@ -52,6 +52,21 @@ Historical map evidence is candidate-only and never a verified trail or safety t
 
 ## Tile Provider And Cache Policy
 
+Interactive Main Map and Weather Rudy+TW maps share the same source revision,
+workspace cache namespace and native tile selection. They automatically fill a
+missing native tile while reusing an existing exact tile (`native=1&exact=1`,
+without forced refresh). The shared map toolbar can stop updates and return to
+`cache_only=1&exact=1`; starting updates explicitly may refresh the checked
+raster layers. Read-only diagnostic probes always begin in cache-only mode.
+Automatic Rudy detail loading does not enable historical-map, CWA product
+refresh, route preparation or other analysis jobs.
+
+A renderer reporting that its source has settled is not evidence of native
+detail coverage. Missing requested tiles, including HTTP 404, must remain
+visible as degraded detail even when the renderer retains and enlarges a
+lower-resolution parent tile. Verification must include the default load,
+successive zooms, a new viewport and cache reuse on both Main Map and Weather.
+
 The admin map supports many basemap providers, but only one rendered-map source
 is currently allowed to enter route-bbox cache preparation:
 

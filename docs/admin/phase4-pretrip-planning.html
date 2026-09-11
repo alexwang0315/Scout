@@ -1792,7 +1792,7 @@
               <button id="panMode" class="tool-button is-active" type="button" title="Mouse drag pan is active" aria-label="Mouse drag pan" aria-pressed="true">Pan</button>
               <button id="boxZoomMode" class="tool-button compact" type="button" title="Persistent box zoom: click or drag in any direction to zoom in; use minus to zoom out" aria-label="Rectangle drag zoom" aria-pressed="false">▣</button>
               <span id="zoomLevel" class="zoom-level" title="Map zoom">1.00x</span>
-              <button id="refreshWeatherMapTiles" class="tool-button" type="button" style="display:none" title="Update checked raster layers from WMTS" aria-label="Update Weather map tiles" aria-pressed="false">更新圖磚</button>
+              <button id="refreshMapTiles" class="tool-button" type="button" title="Update map tiles" aria-label="更新地圖圖磚" aria-pressed="false">更新圖磚</button>
               <details class="layer-menu">
                 <summary id="layerControl" title="Show layer controls" aria-label="Layer controls">Layers <strong id="layerEnabledCount">-</strong></summary>
                 <div class="layer-menu-panel" aria-label="Map layer controls">
@@ -2297,6 +2297,8 @@
       : DEFAULT_PROJECT_ID;
     const DASHBOARD_MAP_ONLY = new URLSearchParams(window.location.search).get("mapOnly") === "1";
     const DIAGNOSTIC_MAP_PROBE = new URLSearchParams(window.location.search).get("diagnosticMapProbe") === "1";
+    const DIAGNOSTIC_NATIVE_TILE_PROBE = DIAGNOSTIC_MAP_PROBE
+      && new URLSearchParams(window.location.search).get("diagnosticNativeTiles") === "1";
     document.body.classList.toggle("dashboard-map-only", DASHBOARD_MAP_ONLY);
     function requestedMapRendererPreference() {
       const requested = new URLSearchParams(window.location.search).get("mapRenderer")
@@ -2454,7 +2456,9 @@
       mapLibreRenderer: null,
       mapLibreLoadResult: null,
       historicalMapSourceId: initialHistoricalMapSourceId(),
-      rasterRemoteRefreshEnabled: false,
+      // Interactive Rudy maps fill missing native tiles; diagnostic probes remain read-only.
+      rasterRemoteRefreshEnabled: !DIAGNOSTIC_MAP_PROBE || DIAGNOSTIC_NATIVE_TILE_PROBE,
+      rasterForceRemoteRefresh: false,
       rasterRefreshNonce: 0
     };
     let pretripProjectBridgeSnapshot = Object.freeze({
@@ -2584,19 +2588,26 @@
           onRasterStatus: (_status, states) => {
             const aggregate = host.dataset.maplibreRasterState || "configured";
             shell.dataset.mapRasterState = aggregate;
+            updateMapZoomIndicator();
             const statusOutput = document.getElementById("mapRendererStatus");
             if (!statusOutput) return;
+            const rudy = states.find(item => item.layer_id === "rudy-twmap" && item.visible);
+            const nativeDetail = rudy?.native_zoom != null
+              ? `Z${rudy.native_zoom}：${rudy.success_count}/${rudy.required_count} 張原生圖磚已載入`
+              : "";
             if (aggregate === "degraded") {
               const degraded = states
                 .filter(item => item.state === "degraded")
                 .map(item => item.layer_id);
-              statusOutput.textContent = `部分圖磚未載入：${degraded.join(", ")}。背景可能仍顯示較低層級影像；按「更新圖磚」或 Layers 內的 ↻ 重試。`;
+              const detail = nativeDetail ? `${nativeDetail}；缺少 ${rudy.error_count} 張。` : "";
+              statusOutput.textContent = `${detail}部分圖磚未載入：${degraded.join(", ")}。背景可能仍顯示較低層級影像；${state.rasterRemoteRefreshEnabled ? "可先停止更新，再按「更新圖磚」重試。" : "按「更新圖磚」或 Layers 內的 ↻ 載入細節。"}`;
             } else if (aggregate === "loading") {
-              statusOutput.textContent = "Loading prepared raster tiles.";
+              statusOutput.textContent = nativeDetail ? `${nativeDetail}；正在載入細節。` : "正在載入地圖圖磚。";
             } else if (aggregate === "available") {
+              const detail = rudy?.verified_native_zoom != null ? `原生 Z${rudy.verified_native_zoom} 圖磚已完整載入` : "圖磚已載入";
               statusOutput.textContent = state.rasterRemoteRefreshEnabled
-                ? "MapLibre 地圖 · 圖磚已載入；可按「停止更新」回到快取模式。"
-                : "MapLibre 地圖 · 圖磚已載入；使用工作區快取。";
+                ? `MapLibre 地圖 · ${detail}；可按「停止更新」回到快取模式。`
+                : `MapLibre 地圖 · ${detail}；使用工作區快取。`;
             }
           },
         }, featureCollection);
@@ -2887,10 +2898,12 @@
       const params = new URLSearchParams(query);
       params.set("source_id", definition.sourceId);
       if (definition.sourceId === "happyman_rudy_twmap") params.set("exact", "1");
-      if (state.rasterRemoteRefreshEnabled) {
+      const rudyBasemap = definition.sourceId === "happyman_rudy_twmap";
+      if (state.rasterRemoteRefreshEnabled && (rudyBasemap || state.rasterForceRemoteRefresh)) {
         params.delete("cache_only");
         params.set("native", "1");
-        params.set("refresh", "1");
+        if (state.rasterForceRemoteRefresh) params.set("refresh", "1");
+        else params.delete("refresh");
         params.set("v", `${RASTER_TILE_CACHE_BUST}-${state.rasterRefreshNonce}`);
       } else {
         params.delete("native");
@@ -5071,8 +5084,9 @@
     function updateMapZoomIndicator(extraLabel = "", viewState = null) {
       const zoomIn = document.getElementById("zoomIn");
       const zoomOut = document.getElementById("zoomOut");
+      const mapLibreHost = document.getElementById("mapLibreEvidenceMap");
       const mapLibreZoom = viewState?.zoom ?? (state.mapRenderer.active === "maplibre"
-        ? document.getElementById("mapLibreEvidenceMap")?.dataset.maplibreZoom
+        ? mapLibreHost?.dataset.maplibreZoom
         : null);
       const hasMapLibreZoom = mapLibreZoom != null && mapLibreZoom !== "" && Number.isFinite(Number(mapLibreZoom));
       if (zoomIn) zoomIn.disabled = hasMapLibreZoom
@@ -5086,10 +5100,19 @@
       const zoomText = hasMapLibreZoom
         ? `z${Number(mapLibreZoom).toFixed(1)}`
         : `${state.zoom.toFixed(2)}x`;
-      node.textContent = extraLabel ? `${zoomText} ${extraLabel}` : zoomText;
-      node.title = state.mapInteractionMode === "box"
-        ? "Map zoom; point and rectangle zoom are active."
-        : "Map zoom; mouse drag pan is active.";
+      const raster = hasMapLibreZoom ? mapLibreHost?.dataset : null;
+      const nativeZoom = raster?.maplibreRasterNativeZoom;
+      const verifiedZoom = raster?.maplibreRasterVerifiedNativeZoom;
+      const tileLabel = nativeZoom != null && nativeZoom !== ""
+        ? verifiedZoom != null && verifiedZoom !== ""
+          ? `· 圖磚 Z${verifiedZoom}`
+          : Number(raster.maplibreRasterErrorCount) > 0 ? `· 缺 Z${nativeZoom}` : `· 載入 Z${nativeZoom}`
+        : extraLabel;
+      node.textContent = tileLabel ? `${zoomText} ${tileLabel}` : zoomText;
+      const interaction = state.mapInteractionMode === "box" ? "點選或框選放大" : "拖曳平移";
+      node.title = nativeZoom != null && nativeZoom !== ""
+        ? `視角 ${zoomText}；原生圖磚 Z${nativeZoom}：${raster.maplibreRasterSuccessCount || 0}/${raster.maplibreRasterRequiredCount || 0} 張已載入；${interaction}。`
+        : `地圖縮放；${interaction}。`;
     }
     function setMapInteractionMode(mode) {
       state.mapInteractionMode = mode === "box" ? "box" : "pan";
@@ -8648,7 +8671,7 @@
       if (status) {
         status.dataset.sourceId = definition.sourceId;
         status.dataset.cacheLayerId = definition.cacheLayerId;
-        status.textContent = `${definition.labelZh} · ${state.rasterRemoteRefreshEnabled ? "updating + caching" : "cache only"}`;
+        status.textContent = `${definition.labelZh} · ${state.rasterRemoteRefreshEnabled && state.rasterForceRemoteRefresh ? "updating + caching" : "cache only"}`;
       }
     }
     function handleHistoricalMapSourceChange(event) {
@@ -8679,14 +8702,14 @@
       syncHistoricalMapControls();
     }
     function syncRasterRefreshButton() {
-      const enabled = state.rasterRemoteRefreshEnabled;
       const buttons = [
         document.getElementById("refreshRasterTiles"),
-        document.getElementById("refreshWeatherMapTiles"),
+        document.getElementById("refreshMapTiles"),
         document.querySelector("[data-historical-map-fetch]"),
       ].filter(Boolean);
       buttons.forEach(button => {
         const historicalOnly = button.hasAttribute("data-historical-map-fetch");
+        const enabled = state.rasterRemoteRefreshEnabled && (!historicalOnly || state.rasterForceRemoteRefresh);
         button.setAttribute("aria-pressed", enabled ? "true" : "false");
         button.title = enabled
           ? "Stop map updates and use workspace cache only"
@@ -8694,14 +8717,19 @@
             ? "Update selected historical map and cache it in this workspace"
             : "Update checked raster layers from WMTS";
         button.setAttribute("aria-label", button.title);
-        if (button.id === "refreshWeatherMapTiles") {
+        if (button.id === "refreshMapTiles") {
           button.textContent = enabled ? "停止更新" : "更新圖磚";
-          button.setAttribute("aria-label", enabled ? "停止 Weather 圖磚更新" : "更新 Weather 地圖圖磚");
+          button.setAttribute("aria-label", enabled ? "停止地圖圖磚更新" : "更新地圖圖磚");
         }
       });
     }
-    function toggleRasterRemoteRefresh() {
-      state.rasterRemoteRefreshEnabled = !state.rasterRemoteRefreshEnabled;
+    function toggleRasterRemoteRefresh(event) {
+      const historicalOnly = event?.currentTarget?.hasAttribute("data-historical-map-fetch");
+      const enabled = historicalOnly
+        ? state.rasterRemoteRefreshEnabled && state.rasterForceRemoteRefresh
+        : state.rasterRemoteRefreshEnabled;
+      state.rasterRemoteRefreshEnabled = !enabled;
+      state.rasterForceRemoteRefresh = state.rasterRemoteRefreshEnabled;
       state.rasterRefreshNonce += 1;
       syncRasterRefreshButton();
       syncHistoricalMapControls();
@@ -8787,7 +8815,7 @@
         button.addEventListener("click", () => applyLayerPreset(button.dataset.layerPreset));
       });
       document.getElementById("refreshRasterTiles").addEventListener("click", toggleRasterRemoteRefresh);
-      document.getElementById("refreshWeatherMapTiles").addEventListener("click", toggleRasterRemoteRefresh);
+      document.getElementById("refreshMapTiles").addEventListener("click", toggleRasterRemoteRefresh);
       document.querySelector("[data-historical-map-fetch]").addEventListener("click", toggleRasterRemoteRefresh);
       syncRasterRefreshButton();
       document.querySelectorAll(".tab-button").forEach(button => button.addEventListener("click", () => setActiveTab(button.dataset.tab)));
