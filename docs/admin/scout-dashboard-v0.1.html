@@ -11778,7 +11778,7 @@
     <aside class="dashboard-sidebar" id="dashboardSidebar" aria-label="Scout dashboard sections">
       <header class="brand">
         <h1>Scout Dashboard v0.1</h1>
-        <div class="route" id="dashboardRouteStatus">chilai_nanhua_day1_scoutAI</div>
+        <div class="route" id="dashboardRouteStatus">Loading workspace…</div>
       </header>
       <nav class="nav" aria-label="Scout dashboard navigation">
         <button class="nav-item" type="button" data-nav-primary data-route="home" data-route-truth="live"><span class="mark"></span><span>Overview</span></button>
@@ -11883,7 +11883,7 @@
               <h3>Scout AI Agent</h3>
               <p>Same-origin Scout AI conversation through /assistant/query. Answers stay read-only and cite local Scout evidence.</p>
               <div class="agent-context-strip" aria-label="Agent context">
-                <span class="chip info" id="agentProjectChip">project=chilai_nanhua_day1_scoutAI</span>
+                <span class="chip info" id="agentProjectChip">project=loading</span>
                 <span class="chip info">surface=pretrip</span>
                 <label class="agent-fallback-toggle" title="Request AI HAT+2 local fallback for the next answers">
                   <input type="checkbox" id="agentFallbackToggle">
@@ -16808,6 +16808,12 @@
 
     function render() {
       if (DIAGNOSTIC_MAP_PROBE) return;
+      const selectedProjectId = projectId();
+      document.title = `Scout Dashboard · ${selectedProjectId}`;
+      const projectLabel = document.getElementById("dashboardRouteStatus");
+      if (projectLabel && !projectLabel.textContent.startsWith(`${selectedProjectId} · retrying `)) {
+        projectLabel.textContent = selectedProjectId;
+      }
       destroyNavigationTerrainMapLibre();
       hideDashboardMapHint();
       const workspace = document.getElementById("workspace");
@@ -19691,7 +19697,7 @@
             ["Persistence", "localStorage only"],
             ["No mutation", "does not modify workspace or runtime"],
             ["Default port", "http://127.0.0.1:9099"],
-            ["Project", PROJECT_ID],
+            ["Project", projectId()],
             ["Workspace root", resolvedWorkspaceRoot()],
           ])}
         </div>
@@ -40430,6 +40436,9 @@
               padding: 8px 10px !important;
               box-shadow: 0 10px 26px rgba(0, 0, 0, .24) !important;
               letter-spacing: 0 !important;
+            }
+            .layer-menu[open] {
+              z-index: 75 !important;
             }
             .layer-menu summary strong {
               color: #f5b62f !important;

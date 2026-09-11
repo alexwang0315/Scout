@@ -706,12 +706,13 @@ def load_or_build_raster_tile_payload(
     allow_remote_fetch: bool = False,
     prefer_native_zoom: bool = False,
     force_remote_refresh: bool = False,
+    require_exact_zoom: bool = False,
     remote_fetch_timeout_seconds: float = 10.0,
     remote_fetcher: Any = fetch_remote_imagery_tile,
 ) -> AdminRasterTilePayload:
     source_scoped_cache = bool(
         imagery_source is not None
-        and (prefer_native_zoom or force_remote_refresh)
+        and (prefer_native_zoom or force_remote_refresh or require_exact_zoom)
     )
     cache_path = (
         imagery_source_raster_tile_cache_path(
@@ -733,13 +734,58 @@ def load_or_build_raster_tile_payload(
             cache_root=cache_root,
         )
     )
-    cached_body = cache_path.read_bytes() if cache_path.exists() else None
+    cache_candidates: list[tuple[Path, bool]] = []
+    if imagery_source is not None:
+        source_layers = [layer_id]
+        # Older Rudy+TW native tiles used the imagery namespace. Only reuse
+        # the same registered source revision, never a bare imagery tile.
+        if (
+            imagery_source.get("source_id") == "happyman_rudy_twmap"
+            and layer_id in {"rudy-twmap", "imagery"}
+        ):
+            source_layers.append("imagery" if layer_id == "rudy-twmap" else "rudy-twmap")
+        for source_layer in source_layers:
+            cache_candidates.append(
+                (
+                    imagery_source_raster_tile_cache_path(
+                        project_id, source_layer, imagery_source, z, x, y,
+                        cache_root=cache_root,
+                    ),
+                    True,
+                )
+            )
+    allow_legacy_cache = not (prefer_native_zoom or force_remote_refresh) and (
+        not require_exact_zoom
+        or imagery_source is None
+        or (
+            layer_id == "rudy-twmap"
+            and imagery_source.get("source_id") == "happyman_rudy_twmap"
+        )
+    )
+    if allow_legacy_cache:
+        cache_candidates.append((
+            raster_tile_cache_path(project_id, layer_id, z, x, y, cache_root=cache_root),
+            False,
+        ))
+    cached_body = None
+    cached_path = cache_path
+    cached_source_scoped = source_scoped_cache
+    for candidate_path, candidate_source_scoped in cache_candidates:
+        if not candidate_path.is_file():
+            continue
+        candidate_body = candidate_path.read_bytes()
+        if require_exact_zoom and _is_placeholder_tile(candidate_body):
+            continue
+        cached_body = candidate_body
+        cached_path = candidate_path
+        cached_source_scoped = candidate_source_scoped
+        break
     if cached_body is not None and not force_remote_refresh:
         return AdminRasterTilePayload(
             body=cached_body,
             media_type=_tile_media_type(cached_body, default="image/png"),
-            source="local_source_cache" if source_scoped_cache else "local_cache",
-            cache_path=cache_path,
+            source="local_source_cache" if cached_source_scoped else "local_cache",
+            cache_path=cached_path,
             body_sha256=hashlib.sha256(cached_body).hexdigest(),
             imagery_source_id=(
                 str(imagery_source.get("source_id"))
@@ -755,6 +801,8 @@ def load_or_build_raster_tile_payload(
             int(y),
             timeout_seconds=remote_fetch_timeout_seconds,
         )
+        if require_exact_zoom and _is_placeholder_tile(remote_tile.body):
+            raise FileNotFoundError("Requested imagery tile has no native detail")
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         cache_path.write_bytes(remote_tile.body)
         return AdminRasterTilePayload(
@@ -784,11 +832,11 @@ def load_or_build_raster_tile_payload(
                     body=cached_body,
                     media_type=_tile_media_type(cached_body, default="image/png"),
                     source="stale_cache_after_remote_error",
-                    cache_path=cache_path,
+                    cache_path=cached_path,
                     body_sha256=hashlib.sha256(cached_body).hexdigest(),
                     imagery_source_id=str(imagery_source.get("source_id") or "") or None,
                 )
-            if not fallback_enabled:
+            if not fallback_enabled and not require_exact_zoom:
                 raise
             remote_refresh_failed = True
 
@@ -798,10 +846,15 @@ def load_or_build_raster_tile_payload(
         and allow_remote_fetch
         and imagery_source is not None
     ):
-        return fetch_native_payload()
+        try:
+            return fetch_native_payload()
+        except Exception as exc:
+            if require_exact_zoom:
+                raise FileNotFoundError("Requested imagery tile is unavailable") from exc
+            raise
 
     parent_payload = None
-    if not source_scoped_cache:
+    if not source_scoped_cache and not require_exact_zoom:
         parent_payload = _parent_raster_cache_tile_payload(
             project_id,
             layer_id,
@@ -822,9 +875,9 @@ def load_or_build_raster_tile_payload(
         try:
             return fetch_native_payload()
         except Exception:
-            if not fallback_enabled:
+            if not fallback_enabled and not require_exact_zoom:
                 raise
-    if not fallback_enabled:
+    if require_exact_zoom or not fallback_enabled:
         raise FileNotFoundError(str(cache_path))
 
     validate_osm_tile_coords(z, x, y)
@@ -845,6 +898,17 @@ def load_or_build_raster_tile_payload(
             else None
         ),
     )
+
+
+def _is_placeholder_tile(body: bytes) -> bool:
+    if body == TRANSPARENT_PNG_TILE:
+        return True
+    if body.startswith(b"\x89PNG\r\n\x1a\n") and len(body) >= 24:
+        return (
+            int.from_bytes(body[16:20], "big") <= 1
+            or int.from_bytes(body[20:24], "big") <= 1
+        )
+    return False
 
 
 def _parent_raster_cache_tile_payload(

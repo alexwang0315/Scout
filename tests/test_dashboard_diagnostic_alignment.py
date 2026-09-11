@@ -83,11 +83,63 @@ assert.equal(url.searchParams.get('cache_only'),'1');
 assert.equal(url.searchParams.has('native'),false);
 assert.equal(url.searchParams.has('refresh'),false);
 assert.equal(url.searchParams.get('source_id'),'happyman_rudy_twmap');
+assert.equal(url.searchParams.get('exact'),'1');
 state.rasterRemoteRefreshEnabled=true;
 url=new URL(rasterTileTemplate({},'rudy-twmap'),'http://localhost');
 assert.equal(url.searchParams.has('cache_only'),false);
 assert.equal(url.searchParams.get('native'),'1');
 assert.equal(url.searchParams.get('refresh'),'1');
+assert.equal(url.searchParams.get('exact'),'1');
+''')
+
+
+def test_rudy_detail_zoom_is_not_limited_to_prepared_coverage():
+    pretrip = ROOT/'docs/admin/phase4-pretrip-planning.html'
+    node('\n'.join(function(n, pretrip) for n in ['parseZoomRange', 'rasterZoomRangeFor']) + r'''
+const assert = require('node:assert/strict');
+const OSM_MIN_ZOOM=8, OSM_MAX_ZOOM=20, OSM_TARGET_ZOOM=14;
+const clamp=(n,low,high)=>Math.min(high,Math.max(low,n));
+const rasterLayerFor=()=>({raster_tile_min_zoom:8,raster_tile_max_zoom:14});
+const rasterSourceDefinitionFor=id=>({sourceId:id==='rudy-twmap'?'happyman_rudy_twmap':'nlsc_photo2',maxZoom:20});
+assert.deepEqual(rasterZoomRangeFor({},'rudy-twmap'),{min:8,max:20});
+assert.deepEqual(rasterZoomRangeFor({},'imagery'),{min:8,max:14});
+''')
+
+
+def test_map_zoom_badge_tracks_camera_without_scanning_feature_collection():
+    pretrip = ROOT/'docs/admin/phase4-pretrip-planning.html'
+    node(function('updateMapZoomIndicator', pretrip) + r'''
+const assert=require('node:assert/strict');
+const nodes={zoomIn:{},zoomOut:{},zoomLevel:{},mapLibreEvidenceMap:{dataset:{}}};
+const document={getElementById:id=>nodes[id]};
+const state={zoom:1,mapInteractionMode:'pan',mapRenderer:{active:'maplibre'},
+ mapLibreRenderer:{snapshot:()=>{throw Error('must not scan features')}}};
+const MAP_MIN_ZOOM=1, mapInteractionMaxZoom=()=>8;
+updateMapZoomIndicator();
+assert.equal(nodes.zoomLevel.textContent,'1.00x');
+updateMapZoomIndicator('',{zoom:15.675839,minZoom:0,maxZoom:22});
+assert.equal(nodes.zoomLevel.textContent,'z15.7');
+assert.equal(nodes.zoomIn.disabled,false);
+assert.equal(nodes.zoomOut.disabled,false);
+updateMapZoomIndicator('',{zoom:22,minZoom:0,maxZoom:22});
+assert.equal(nodes.zoomIn.disabled,true);
+''')
+
+
+def test_direct_map_entry_sets_workspace_label_without_loading_other_scopes():
+    render_identity = function('render').split('      destroyNavigationTerrainMapLibre();', 1)[0] + '\n    }'
+    node(render_identity + function('setRoute') + r'''
+const assert=require('node:assert/strict');
+const nodes={dashboardRouteStatus:{textContent:'old_demo'},pageTitle:{}};
+const document={getElementById:id=>nodes[id],querySelectorAll:()=>[]};
+const projectId=()=> 'dongqing_batongguan_historic_trail_newImport';
+const DIAGNOSTIC_MAP_PROBE=false;
+const state={}, SIX_FORCES=[], routeMeta={map:['Map'],home:['Home']};
+const stopLivingRefresh=()=>{};
+const loadDataForRoute=()=>{throw Error('direct entry should not require this call');};
+setRoute('map');
+assert.equal(nodes.dashboardRouteStatus.textContent,projectId());
+assert.equal(document.title,`Scout Dashboard · ${projectId()}`);
 ''')
 
 

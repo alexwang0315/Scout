@@ -7771,6 +7771,7 @@ def create_admin_router(
         native: bool = False,
         refresh: bool = False,
         cache_only: bool = False,
+        exact: bool = False,
     ) -> Response:
         try:
             if native and not source_id:
@@ -7810,6 +7811,7 @@ def create_admin_router(
                 ),
                 prefer_native_zoom=native,
                 force_remote_refresh=refresh,
+                require_exact_zoom=exact,
                 remote_fetch_timeout_seconds=(
                     min(_imagery_remote_fetch_timeout_from_env(), 3.0)
                     if native
@@ -7821,10 +7823,14 @@ def create_admin_router(
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
+        headers = payload.headers()
+        if exact:
+            headers["X-Scout-Tile-Exact"] = "true"
+            headers["X-Scout-Tile-Zoom"] = str(z)
         return Response(
             payload.body,
             media_type=payload.media_type,
-            headers=payload.headers(),
+            headers=headers,
         )
 
     @router.post("/pretrip/projects/{project_id}/workspace")

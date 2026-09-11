@@ -366,6 +366,9 @@
   function rasterLayerEventPatch(current = {}, eventKind = "") {
     if (current?.visible !== true) return null;
     if (eventKind === "source_loaded") {
+      // A settled source can still contain failed tiles. Retry/reconfiguration
+      // clears errors; a later source event must not hide a missing detail tile.
+      if (Number(current.error_count || 0) > 0) return null;
       return Object.freeze({state: "available", reason: "source_loaded"});
     }
     if (eventKind === "tile_error") {
@@ -1310,6 +1313,7 @@
       onFeatureLeave = null,
       onStatus = null,
       onRasterStatus = null,
+      onViewState = null,
       rasterLayers = [],
       timeoutMs = 15000,
     } = {}) {
@@ -1322,6 +1326,7 @@
       this.onFeatureLeave = typeof onFeatureLeave === "function" ? onFeatureLeave : null;
       this.onStatus = typeof onStatus === "function" ? onStatus : null;
       this.onRasterStatus = typeof onRasterStatus === "function" ? onRasterStatus : null;
+      this.onViewState = typeof onViewState === "function" ? onViewState : null;
       this.rasterLayers = normalizeRasterLayers(rasterLayers);
       this.rasterLayerSignature = rasterLayersSignature(this.rasterLayers);
       this.rasterLayerStates = new Map(this.rasterLayers.map(layer => [
@@ -1581,6 +1586,9 @@
         if (Number.isFinite(zoom)) this.container.dataset.maplibreZoom = zoom.toFixed(6);
         if (center && Number.isFinite(Number(center.lng)) && Number.isFinite(Number(center.lat))) {
           this.container.dataset.maplibreCenter = `${Number(center.lng).toFixed(7)},${Number(center.lat).toFixed(7)}`;
+        }
+        if (this.onViewState && Number.isFinite(zoom)) {
+          this.onViewState({zoom, minZoom: this.map.getMinZoom?.(), maxZoom: this.map.getMaxZoom?.()});
         }
         this.syncSelectionLabel();
       };

@@ -124,7 +124,8 @@ const result = {
     hiddenLoaded: adapter.rasterLayerEventPatch({visible: false, error_count: 0}, "source_loaded"),
     visibleLoaded: adapter.rasterLayerEventPatch({visible: true, error_count: 0}, "source_loaded"),
     hiddenError: adapter.rasterLayerEventPatch({visible: false, error_count: 2}, "tile_error"),
-    visibleError: adapter.rasterLayerEventPatch({visible: true, error_count: 2}, "tile_error")
+    visibleError: adapter.rasterLayerEventPatch({visible: true, error_count: 2}, "tile_error"),
+    settledAfterError: adapter.rasterLayerEventPatch({visible: true, error_count: 1}, "source_loaded")
   },
   rasterStyle: {
     source: rasterStyle.sources[rasterLayer.map_source_id],
@@ -365,6 +366,7 @@ def test_raster_adapter_is_bounded_candidate_only_and_renderer_ordered() -> None
     )
     assert result["rasterStateTransitions"] == {
         "hiddenLoaded": None,
+        "settledAfterError": None,
         "visibleLoaded": {"state": "available", "reason": "source_loaded"},
         "hiddenError": None,
         "visibleError": {

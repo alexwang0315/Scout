@@ -2488,7 +2488,9 @@
       shell.dataset.mapRendererActive = nextState.active || "svg";
       shell.dataset.mapRendererState = nextState.state || "degraded";
       shell.dataset.mapRendererReason = nextState.reason || "unknown";
-      if (status) status.textContent = nextState.detail || nextState.reason || "Map renderer unavailable.";
+      if (status && !(nextState.state === "ready" && shell.dataset.mapRasterState === "degraded")) {
+        status.textContent = nextState.detail || nextState.reason || "Map renderer unavailable.";
+      }
       return state.mapRenderer;
     }
     function activateSvgMapFallback(reason, detail = "") {
@@ -2573,6 +2575,7 @@
           onFeatureSelect: selectPretripMapLibreFeature,
           onFeatureHover: hoverPretripMapLibreFeature,
           onFeatureLeave: hideHint,
+          onViewState: viewState => updateMapZoomIndicator("", viewState),
           onStatus: status => {
             shell.dataset.mapRendererState = status.state;
             shell.dataset.mapRendererReason = status.reason;
@@ -2586,7 +2589,7 @@
               const degraded = states
                 .filter(item => item.state === "degraded")
                 .map(item => item.layer_id);
-              statusOutput.textContent = `Raster unavailable: ${degraded.join(", ")}. Vector evidence remains available.`;
+              statusOutput.textContent = `部分圖磚未載入：${degraded.join(", ")}。背景可能仍顯示較低層級影像；開啟 Layers 並按 ↻ 更新圖磚或重試。`;
             } else if (aggregate === "loading") {
               statusOutput.textContent = "Loading prepared raster tiles.";
             }
@@ -2878,6 +2881,7 @@
       const query = queryIndex >= 0 ? resolvedTemplate.slice(queryIndex + 1) : RASTER_WORKSPACE_CACHE_QUERY;
       const params = new URLSearchParams(query);
       params.set("source_id", definition.sourceId);
+      if (definition.sourceId === "happyman_rudy_twmap") params.set("exact", "1");
       if (state.rasterRemoteRefreshEnabled) {
         params.delete("cache_only");
         params.set("native", "1");
@@ -2927,7 +2931,10 @@
       const definition = rasterSourceDefinitionFor(layerId, layer);
       const parsed = parseZoomRange(layer.raster_tile_zoom_range || layer.zoom_range);
       const min = Number(layer.raster_tile_min_zoom ?? layer.min_zoom ?? parsed?.min ?? definition?.minZoom ?? OSM_MIN_ZOOM);
-      const max = Number(layer.raster_tile_max_zoom ?? layer.max_zoom ?? parsed?.max ?? definition?.maxZoom ?? OSM_TARGET_ZOOM);
+      // Preparation coverage is not the provider's native detail limit.
+      const max = Number(definition?.sourceId === "happyman_rudy_twmap"
+        ? definition.maxZoom
+        : layer.raster_tile_max_zoom ?? layer.max_zoom ?? parsed?.max ?? definition?.maxZoom ?? OSM_TARGET_ZOOM);
       const safeMin = Number.isFinite(min) ? clamp(Math.round(min), OSM_MIN_ZOOM, OSM_MAX_ZOOM) : OSM_MIN_ZOOM;
       const safeMax = Number.isFinite(max) ? clamp(Math.round(max), safeMin, OSM_MAX_ZOOM) : OSM_TARGET_ZOOM;
       return {min: safeMin, max: safeMax};
@@ -5000,17 +5007,22 @@
         state.mapKeyboardActive = false;
       }
     }
-    function updateMapZoomIndicator(extraLabel = "") {
+    function updateMapZoomIndicator(extraLabel = "", viewState = null) {
       const zoomIn = document.getElementById("zoomIn");
       const zoomOut = document.getElementById("zoomOut");
-      if (zoomIn) zoomIn.disabled = state.zoom >= mapInteractionMaxZoom() - 0.001;
-      if (zoomOut) zoomOut.disabled = state.zoom <= MAP_MIN_ZOOM + 0.001;
+      const mapLibreZoom = viewState?.zoom ?? (state.mapRenderer.active === "maplibre"
+        ? document.getElementById("mapLibreEvidenceMap")?.dataset.maplibreZoom
+        : null);
+      const hasMapLibreZoom = mapLibreZoom != null && mapLibreZoom !== "" && Number.isFinite(Number(mapLibreZoom));
+      if (zoomIn) zoomIn.disabled = hasMapLibreZoom
+        ? Number(mapLibreZoom) >= (viewState?.maxZoom ?? state.mapLibreRenderer?.map?.getMaxZoom?.() ?? 22) - 0.001
+        : state.zoom >= mapInteractionMaxZoom() - 0.001;
+      if (zoomOut) zoomOut.disabled = hasMapLibreZoom
+        ? Number(mapLibreZoom) <= (viewState?.minZoom ?? state.mapLibreRenderer?.map?.getMinZoom?.() ?? 0) + 0.001
+        : state.zoom <= MAP_MIN_ZOOM + 0.001;
       const node = document.getElementById("zoomLevel");
       if (!node) return;
-      const mapLibreZoom = state.mapRenderer.active === "maplibre"
-        ? state.mapLibreRenderer?.snapshot?.().zoom
-        : null;
-      const zoomText = Number.isFinite(Number(mapLibreZoom))
+      const zoomText = hasMapLibreZoom
         ? `z${Number(mapLibreZoom).toFixed(1)}`
         : `${state.zoom.toFixed(2)}x`;
       node.textContent = extraLabel ? `${zoomText} ${extraLabel}` : zoomText;
