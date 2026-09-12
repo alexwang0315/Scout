@@ -549,6 +549,7 @@ def validator_source(html: str) -> str:
     ))
     return "\n".join((
         NAVIGATION_EVIDENCE_FIXTURE,
+        'global.apiBase = () => "";',
         _array_constant(html, "NAVIGATION_TERRAIN_ROUTE_CORRIDOR_MODES"),
         *(_function(html, name) for name in names),
     ))
@@ -940,6 +941,22 @@ assert.equal(diagnosticNavigationScopeKey(), explicitKey);
 process.stdout.write(JSON.stringify({changed}));
 """)
     assert payload["changed"] == ["idle"] * 5
+
+
+def test_api_switch_invalidates_every_navigation_diagnostic_case(batch_source: str) -> None:
+    payload = _run_node(batch_source, """
+const oldScope = diagnosticNavigationScopeKey();
+for (const id of NAVIGATION_DIAGNOSTIC_CASE_IDS) {
+  state.diagnosticResults[id] = {status: "passed", detail: "old API evidence", scopeKey: diagnosticCaseScopeKey(id)};
+}
+global.apiBase = () => "http://another-navigation-runtime.invalid";
+assert.notEqual(diagnosticNavigationScopeKey(), oldScope);
+const rows = NAVIGATION_DIAGNOSTIC_CASE_IDS.map(id => ({id, status: diagnosticResult(id).status}));
+assert.equal(rows.length, 7);
+assert(rows.every(row => row.status === "idle"));
+process.stdout.write(JSON.stringify({rows}));
+""")
+    assert {row["id"] for row in payload["rows"]} == {"DASH-025", "DASH-038", "DASH-039", "DASH-040", "DASH-041", "DASH-042", "DASH-043"}
 
 
 @pytest.mark.parametrize("selection_mode", ("explicit", "displayed-default"))

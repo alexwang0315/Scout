@@ -359,9 +359,14 @@ const retry = tile(renderer, 877000, 454000);
 retry.request.respond(200);
 await retry.pending;
 settle(renderer);
-console.log(JSON.stringify({failed, repaired: snap(renderer)}));
+const stillFailed = snap(renderer);
+renderer.setRasterLayers([definition({tiles: [definition().tiles[0] + "&retry=1"]})]);
+await loadView(renderer);
+settle(renderer);
+console.log(JSON.stringify({failed, stillFailed, repaired: snap(renderer)}));
 """)
     assert result["failed"]["state"]["state"] == "degraded"
     assert result["failed"]["state"]["reason"] == "tile_decode_failed"
     assert result["failed"]["state"]["verified_native_zoom"] is None
+    assert result["stillFailed"]["state"]["reason"] == "tile_decode_failed"
     assert result["repaired"]["state"]["state"] == "available"

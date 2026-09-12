@@ -498,6 +498,22 @@
     #mapRendererShell[data-map-renderer-state="ready"]:not([data-map-raster-state="loading"]):not([data-map-raster-state="degraded"]) #mapRendererStatus {
       display: none;
     }
+    .pretrip-map-evidence-picker {
+      position: absolute;
+      left: 12px;
+      top: 12px;
+      z-index: 8;
+      display: flex;
+      gap: 4px;
+      max-width: calc(100% - 70px);
+      padding: 4px;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: rgba(255, 255, 255, .96);
+    }
+    .pretrip-map-evidence-picker[hidden] { display: none; }
+    .pretrip-map-evidence-picker select { max-width: min(240px, 45vw); }
+    .pretrip-map-evidence-picker button:focus-visible { outline: 2px solid #28666e; outline-offset: 2px; }
     #map {
       display: block;
       width: 100%;
@@ -2499,6 +2515,7 @@
       return state.mapRenderer;
     }
     function activateSvgMapFallback(reason, detail = "") {
+      disposePretripMapEvidenceControls();
       const shell = document.getElementById("mapRendererShell");
       const mapLibreHost = document.getElementById("mapLibreEvidenceMap");
       if (shell) {
@@ -2543,6 +2560,120 @@
       const pointerEvent = event?.originalEvent || event;
       if (item && pointerEvent) showHint(pointerEvent, item);
     }
+    function disposePretripMapEvidenceControls() {
+      state.mapEvidenceControlsCleanup?.();
+      state.mapEvidenceControlsCleanup = null;
+      const host = document.getElementById("mapLibreEvidenceMap");
+      host?.querySelector(".pretrip-map-evidence-picker")?.remove();
+      if (host) host.dataset.mapKeyboardEvidenceCount = "0";
+      hideHint();
+    }
+    function configurePretripMapEvidenceControls(renderer) {
+      disposePretripMapEvidenceControls();
+      const map = renderer?.map;
+      if (!map) return;
+      const sync = () => syncPretripMapKeyboardEvidence(renderer);
+      map.on("idle", sync);
+      map.on("moveend", sync);
+      state.mapEvidenceControlsCleanup = () => {
+        map.off?.("idle", sync);
+        map.off?.("moveend", sync);
+      };
+      sync();
+    }
+    function syncPretripMapKeyboardEvidence(renderer = state.mapLibreRenderer) {
+      if (state.mapRenderer.active !== "maplibre" || renderer !== state.mapLibreRenderer) return;
+      const host = document.getElementById("mapLibreEvidenceMap");
+      if (!host || !renderer?.map) return;
+      let rendered;
+      try { rendered = renderer.map.queryRenderedFeatures(); }
+      catch (_error) { rendered = []; }
+      const features = new Map();
+      rendered.forEach(item => {
+        if (item.source !== window.ScoutMapLibreEvidence.sourceId) return;
+        const feature = renderer.index.feature(item.id ?? item.properties?.identity_key);
+        if (feature) features.set(String(feature.id), feature);
+      });
+      host.dataset.mapKeyboardEvidenceCount = String(features.size);
+      let picker = host.querySelector(".pretrip-map-evidence-picker");
+      if (!features.size) {
+        if (picker) {
+          picker.hidden = true;
+          const button = picker.querySelector("button");
+          button.disabled = true;
+          button.pretripMapLibreFeature = null;
+          hideHint();
+        }
+        return;
+      }
+      if (!picker) {
+        picker = document.createElement("div");
+        picker.className = "pretrip-map-evidence-picker";
+        picker.setAttribute("role", "group");
+        picker.setAttribute("aria-label", "目前地圖視野的證據");
+        const select = document.createElement("select");
+        select.setAttribute("aria-label", "選擇目前地圖視野的證據");
+        const button = document.createElement("button");
+        button.type = "button";
+        button.tabIndex = 0;
+        button.textContent = "檢視證據";
+        button.dataset.mapHover = "true";
+        const inspect = event => {
+          syncPretripMapKeyboardEvidence(renderer);
+          const feature = button.pretripMapLibreFeature;
+          if (button.disabled || !feature || picker.hidden) return;
+          const rect = button.getBoundingClientRect();
+          const item = pretripEvidenceForMapLibreFeature(feature) || feature.properties;
+          // Text nodes keep source labels readable without interpreting source text as HTML.
+          const title = document.createElement("strong"), summary = document.createElement("span");
+          title.textContent = hintTitle(item);
+          summary.textContent = hintSummary(item);
+          hoverHint.replaceChildren(title, summary);
+          moveHint(event?.type === "focus" ? {clientX: rect.left + rect.width / 2, clientY: rect.bottom} : event);
+          hoverHint.classList.remove("is-hidden");
+          if (event?.type === "focus") renderer.focus(feature.id, {fit: false});
+        };
+        button.addEventListener("mouseenter", inspect);
+        button.addEventListener("mousemove", moveHint);
+        button.addEventListener("mouseleave", hideHint);
+        button.addEventListener("focus", inspect);
+        button.addEventListener("blur", hideHint);
+        button.addEventListener("click", () => {
+          syncPretripMapKeyboardEvidence(renderer);
+          if (!button.disabled && button.pretripMapLibreFeature) selectPretripMapLibreFeature(button.pretripMapLibreFeature);
+        });
+        button.addEventListener("keydown", event => {
+          if (event.key === "Escape") { event.preventDefault(); hideHint(); }
+        });
+        select.addEventListener("change", () => { hideHint(); syncPretripMapKeyboardEvidence(renderer); });
+        picker.append(select, button);
+        host.appendChild(picker);
+      }
+      picker.hidden = false;
+      const select = picker.querySelector("select"), button = picker.querySelector("button");
+      const ordered = [...features].sort(([left], [right]) => left.localeCompare(right));
+      const selected = features.has(select.value) ? select.value : ordered[0][0];
+      const signature = JSON.stringify(ordered.map(([id, feature]) => [id, hintTitle(feature.properties)]));
+      if (picker.dataset.featureSignature !== signature) {
+        select.replaceChildren(...ordered.map(([id, feature]) => {
+          const option = document.createElement("option");
+          option.value = id;
+          option.textContent = hintTitle(feature.properties);
+          return option;
+        }));
+        picker.dataset.featureSignature = signature;
+      }
+      select.value = selected;
+      const feature = features.get(selected);
+      button.disabled = false;
+      button.pretripMapLibreFeature = feature;
+      button.dataset.featureId = String(feature.id);
+      button.dataset.mapRef = String(feature.properties?.source_id || feature.properties?.identity_key || feature.id);
+      button.dataset.evidenceType = String(feature.properties?.evidence_type || "pretrip_evidence");
+      button.dataset.mapFeatureKind = String(feature.geometry?.type || "feature").toLowerCase();
+      button.dataset.mapRendererEvidence = "maplibre";
+      button.setAttribute("aria-label", `檢視 ${hintTitle(feature.properties)}`);
+    }
     function syncPretripMapLibreEvidence(view) {
       if (!state.mapLibreRenderer || !view) return null;
       const featureCollection = pretripMapLibreFeatureCollection(view);
@@ -2560,7 +2691,43 @@
       }
       return featureCollection;
     }
+    async function disposePretripMapRenderer() {
+      if (state.mapLibreDisposePromise) return state.mapLibreDisposePromise;
+      state.mapLibreDisposed = true;
+      state.mapLibreRendererGeneration = (state.mapLibreRendererGeneration || 0) + 1;
+      const renderers = new Set([state.mapLibreRenderer, ...(state.mapLibrePendingRenderers || [])].filter(Boolean));
+      state.mapLibreRenderer = null;
+      const errors = [];
+      try { disposePretripMapEvidenceControls(); }
+      catch (error) { errors.push({phase: "evidence_controls_destroy", errorName: error?.name === "TypeError" ? "TypeError" : "Error"}); }
+      for (const group of svg?.querySelectorAll?.("[data-layer-group]") || []) {
+        try {
+          const pending = [...group.querySelectorAll('[data-tile-generation="pending"]')];
+          if (pending.some(generation => typeof generation.cancelRasterGeneration !== "function")) {
+            errors.push({phase: "svg_tiles_destroy", errorName: "MissingCancellationHook"});
+          }
+          discardPendingRasterLayerGeneration(group);
+          if (group.dataset.pendingTileGenerationKey || group.querySelector('[data-tile-generation="pending"]')) {
+            errors.push({phase: "svg_tiles_destroy", errorName: "PendingGenerationRemains"});
+          }
+        } catch (error) { errors.push({phase: "svg_tiles_destroy", errorName: error?.name || "Error"}); }
+      }
+      for (const renderer of renderers) {
+        try { renderer.destroy(); }
+        catch (error) { errors.push({phase: "renderer_destroy", errorName: error?.name === "TypeError" ? "TypeError" : "Error"}); }
+      }
+      state.mapLibreDisposePromise = (async () => {
+        await Promise.allSettled([...(state.mapLibreInitializations || [])]);
+        const result = {disposed: errors.length === 0, activeMaps: errors.length ? null : 0,
+          pendingInitializations: errors.length ? null : 0, errors};
+        const host = document.getElementById("mapLibreEvidenceMap");
+        if (host) host.dataset.maplibreDisposeReceipt = JSON.stringify(result);
+        return result;
+      })();
+      return state.mapLibreDisposePromise;
+    }
     async function activatePretripMapLibreRenderer(maplibregl, view) {
+      if (state.mapLibreDisposed) return null;
       const adapter = window.ScoutMapLibreEvidence;
       const shell = document.getElementById("mapRendererShell");
       const host = document.getElementById("mapLibreEvidenceMap");
@@ -2570,11 +2737,23 @@
       const featureCollection = pretripMapLibreFeatureCollection(view);
       host.hidden = false;
       svg.hidden = true;
+      const generation = state.mapLibreRendererGeneration = (state.mapLibreRendererGeneration || 0) + 1;
+      state.mapLibrePendingRenderers ||= new Set();
+      state.mapLibreInitializations ||= new Set();
+      let creation = null;
+      let pendingRenderer = null;
       try {
+        disposePretripMapEvidenceControls();
+        for (const previous of state.mapLibrePendingRenderers) previous.destroy();
         state.mapLibreRenderer?.destroy();
-        state.mapLibreRenderer = await adapter.createRenderer({
+        state.mapLibreRenderer = null;
+        creation = adapter.createRenderer({
           maplibregl,
           container: host,
+          onCreated: renderer => {
+            pendingRenderer = renderer;
+            state.mapLibrePendingRenderers.add(renderer);
+          },
           timeoutMs: 20000,
           rasterLayers: pretripMapLibreRasterLayers(state.view),
           onFeatureSelect: selectPretripMapLibreFeature,
@@ -2582,10 +2761,12 @@
           onFeatureLeave: hideHint,
           onViewState: viewState => updateMapZoomIndicator("", viewState),
           onStatus: status => {
+            if (state.mapLibreDisposed || generation !== state.mapLibreRendererGeneration) return;
             shell.dataset.mapRendererState = status.state;
             shell.dataset.mapRendererReason = status.reason;
           },
           onRasterStatus: (_status, states) => {
+            if (state.mapLibreDisposed || generation !== state.mapLibreRendererGeneration) return;
             const aggregate = host.dataset.maplibreRasterState || "configured";
             shell.dataset.mapRasterState = aggregate;
             updateMapZoomIndicator();
@@ -2611,6 +2792,13 @@
             }
           },
         }, featureCollection);
+        state.mapLibreInitializations.add(creation);
+        const renderer = await creation;
+        if (state.mapLibreDisposed || generation !== state.mapLibreRendererGeneration) {
+          renderer.destroy();
+          return null;
+        }
+        state.mapLibreRenderer = renderer;
         document.querySelectorAll("[data-layer]").forEach(input => {
           state.mapLibreRenderer.setLayerVisibility(input.dataset.layer, input.checked);
         });
@@ -2635,14 +2823,20 @@
         } else {
           state.mapLibreRenderer.fitLayer("route", {duration: 0, maxZoom: 15});
         }
+        configurePretripMapEvidenceControls(state.mapLibreRenderer);
         return state.mapLibreRenderer;
       } catch (error) {
+        if (state.mapLibreDisposed || generation !== state.mapLibreRendererGeneration || error?.name === "AbortError") return null;
         state.mapLibreRenderer?.destroy();
         state.mapLibreRenderer = null;
         return activateSvgMapFallback("maplibre_render_failed", String(error?.message || error));
+      } finally {
+        state.mapLibrePendingRenderers.delete(pendingRenderer);
+        state.mapLibreInitializations.delete(creation);
       }
     }
     async function initializePretripMapRenderer() {
+      if (state.mapLibreDisposed) return null;
       const adapter = window.ScoutMapLibreEvidence;
       const shell = document.getElementById("mapRendererShell");
       if (!adapter || !shell) {
@@ -2674,6 +2868,32 @@
       return activatePretripMapLibreRenderer(loaded.maplibregl, state.view);
     }
     window.scoutPretripMapRendererBridge = Object.freeze({
+      dispose: disposePretripMapRenderer,
+      getViewLimits() {
+        const renderer = state.mapLibreRenderer;
+        return renderer ? {viewZoom: renderer.map?.getZoom?.(), maxViewZoom: renderer.map?.getMaxZoom?.(),
+          nativeCamera: renderer.publishCameraLimitReceipt()}
+          : {viewZoom: state.zoom, maxViewZoom: mapInteractionMaxZoom(), nativeCamera: null};
+      },
+      getRenderPolicySources() {
+        const renderer = state.mapLibreRenderer;
+        return {activeRenderer: state.mapRenderer.active,
+          ...window.ScoutMapLibreEvidence.inspectRasterRenderPolicySources(renderer?.map, renderer?.rasterTransport)};
+      },
+      getRudyTileView() {
+        const renderer = state.mapLibreRenderer;
+        const layer = renderer?.rasterLayers?.find(item => item.layer_id === "rudy-twmap");
+        const bounds = renderer?.map?.getBounds?.();
+        if (!layer || !bounds) return null;
+        const coverage = window.ScoutMapLibreEvidence.rasterTileCoverage(layer, renderer.map);
+        return {bounds: {west: bounds.getWest(), east: bounds.getEast(),
+          north: bounds.getNorth(), south: bounds.getSouth()},
+          tileTemplate: layer.tiles?.[0], minzoom: layer.minzoom,
+          maxzoom: layer.maxzoom, tileSize: layer.tile_size,
+          tiles: coverage?.tiles, coverageBasis: coverage?.coverage_basis,
+          nativeZooms: coverage?.native_zooms, viewZoom: renderer.map.getZoom(),
+          maxViewZoom: renderer.map.getMaxZoom(), nativeCamera: renderer.publishCameraLimitReceipt()};
+      },
       inspectLayerOrder() {
         const adapter = window.ScoutMapLibreEvidence;
         const foreground = new Set(MAP_ROUTE_FOREGROUND_LAYER_IDS);
@@ -2710,6 +2930,14 @@
       screenPoint(reference) {
         return state.mapLibreRenderer?.screenPoint(reference) || null;
       },
+    });
+    window.addEventListener("pagehide", () => { void disposePretripMapRenderer(); });
+    window.addEventListener("pageshow", event => {
+      if (event.persisted && state.mapLibreDisposed) {
+        state.mapLibreDisposed = false;
+        state.mapLibreDisposePromise = null;
+        void initializePretripMapRenderer();
+      }
     });
     const hoverHint = document.getElementById("hoverHint");
     let treeClickFocusTimer = null;
@@ -3745,14 +3973,16 @@
           opacity: Number.isFinite(opacity) ? opacity.toFixed(2) : "0.92"
         });
         positionTileImage(image, bounds, tile);
-        attachTileFallback(
-          image,
-          bounds,
-          tile,
-          fallbackTile => rasterTileUrl(view, layerId, fallbackTile.z, fallbackTile.x, fallbackTile.y),
-          range.min,
-          "data-raster-tile"
-        );
+        if (layerId !== "rudy-twmap") {
+          attachTileFallback(
+            image,
+            bounds,
+            tile,
+            fallbackTile => rasterTileUrl(view, layerId, fallbackTile.z, fallbackTile.x, fallbackTile.y),
+            range.min,
+            "data-raster-tile"
+          );
+        }
         group.appendChild(image);
       });
     }
@@ -4851,6 +5081,7 @@
         group.querySelectorAll('[data-tile-generation="pending"]'),
       );
       pendingGenerations.forEach(pending => {
+        pending.cancelRasterGeneration?.();
         pending.querySelectorAll("image").forEach(image => image.removeAttribute("href"));
         pending.remove();
       });
@@ -4862,6 +5093,7 @@
       return discarded;
     }
     function replaceRasterLayerWhenReady(group, renderCandidate, onFailure = null) {
+      if (state.mapLibreDisposed) return false;
       const requestedViewState = mapViewStateSnapshot();
       const candidate = el("g", {
         "data-tile-generation": "pending",
@@ -4902,6 +5134,11 @@
       let loadedCount = 0;
       let settled = false;
       let timeoutId = null;
+      candidate.cancelRasterGeneration = () => {
+        settled = true;
+        if (timeoutId !== null) window.clearTimeout(timeoutId);
+        timeoutId = null;
+      };
       group.dataset.pendingTileGenerationKey = generationKey;
       group.dataset.tileGenerationState = "loading";
 
@@ -4951,6 +5188,7 @@
         candidate.setAttribute("data-tile-generation", "active");
         candidate.removeAttribute("opacity");
         candidate.removeAttribute("pointer-events");
+        candidate.removeAttribute("aria-hidden");
         group.dataset.activeTileGenerationKey = generationKey;
         group.dataset.tileGenerationState = "ready";
         rememberRudyMapView(group, requestedViewState);
@@ -7378,6 +7616,7 @@
       node.addEventListener("blur", hideHint);
       node.addEventListener("click", event => { selectEvidence(item, {timeline: true, expandEvidenceGroup: true}); focusMapFor(item); showHint(event, item); });
       node.addEventListener("keydown", event => {
+        if (event.key === "Escape") { event.preventDefault(); hideHint(); return; }
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           selectEvidence(item, {timeline: true, expandEvidenceGroup: true});
@@ -7652,9 +7891,15 @@
 
       RASTER_OVERLAY_LAYER_DEFINITIONS.forEach(layer => {
         const rasterGroup = el("g", {"data-layer-group": layer.layerId});
-        if (layerInputChecked(layer.layerId)) renderRasterLayer(rasterGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT, layer.layerId, coverageBounds);
-        markRasterLayerGenerationActive(rasterGroup);
         svg.appendChild(rasterGroup);
+        if (layer.layerId === "rudy-twmap") {
+          replaceRasterLayerWhenReady(rasterGroup, candidate => {
+            if (layerInputChecked(layer.layerId)) renderRasterLayer(candidate, view, bounds, MAP_WIDTH, MAP_HEIGHT, layer.layerId, coverageBounds);
+          }, ({reason}) => retainRudyMapViewAfterTileFailure(rasterGroup, reason));
+        } else {
+          if (layerInputChecked(layer.layerId)) renderRasterLayer(rasterGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT, layer.layerId, coverageBounds);
+          markRasterLayerGenerationActive(rasterGroup);
+        }
       });
 
       const osmGroup = el("g", {"data-layer-group": "osm"});
@@ -8729,7 +8974,7 @@
         ? state.rasterRemoteRefreshEnabled && state.rasterForceRemoteRefresh
         : state.rasterRemoteRefreshEnabled;
       state.rasterRemoteRefreshEnabled = !enabled;
-      state.rasterForceRemoteRefresh = state.rasterRemoteRefreshEnabled;
+      state.rasterForceRemoteRefresh = state.rasterRemoteRefreshEnabled && !DIAGNOSTIC_NATIVE_TILE_PROBE;
       state.rasterRefreshNonce += 1;
       syncRasterRefreshButton();
       syncHistoricalMapControls();

@@ -122,6 +122,7 @@ def test_shared_tile_toggle_stops_auto_fill_and_can_explicitly_refresh_historica
     node(function('toggleRasterRemoteRefresh',pretrip) + r'''
 const assert = require('node:assert/strict');
 const state={rasterRemoteRefreshEnabled:true,rasterForceRemoteRefresh:false,rasterRefreshNonce:0};
+let DIAGNOSTIC_NATIVE_TILE_PROBE=false;
 const syncRasterRefreshButton=()=>{}, syncHistoricalMapControls=()=>{};
 const document={getElementById:()=>null};
 toggleRasterRemoteRefresh();
@@ -139,6 +140,10 @@ assert.equal(state.rasterForceRemoteRefresh,true,'first historical click must en
 toggleRasterRemoteRefresh(event);
 assert.equal(state.rasterRemoteRefreshEnabled,false);
 assert.equal(state.rasterForceRemoteRefresh,false);
+DIAGNOSTIC_NATIVE_TILE_PROBE=true;
+toggleRasterRemoteRefresh();
+assert.equal(state.rasterRemoteRefreshEnabled,true);
+assert.equal(state.rasterForceRemoteRefresh,false,'approved native probe must not force refresh');
 ''')
 
 

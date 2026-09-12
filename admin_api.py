@@ -271,6 +271,7 @@ DEFAULT_MAPLIBRE_EVIDENCE_SCRIPT = (
     ROOT / "docs" / "admin" / "scout-maplibre-evidence.js"
 )
 DEFAULT_PLANNED_ROUTE_SCRIPT = ROOT / "docs" / "admin" / "scout-planned-route.js"
+DEFAULT_RUDY_LIVE_DIAGNOSTIC_SCRIPT = ROOT / "docs" / "admin" / "scout-rudy-live-diagnostic.js"
 DEFAULT_MAPLIBRE_DISTRIBUTION_ROOT = (
     ROOT / "docs" / "admin" / "vendor" / "maplibre-gl" / "6.2.0"
 )
@@ -3321,6 +3322,16 @@ def create_admin_router(
             )
         return Response(
             DEFAULT_MAPLIBRE_EVIDENCE_SCRIPT.read_text(encoding="utf-8"),
+            media_type="application/javascript",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @router.get("/scout-rudy-live-diagnostic.js")
+    def rudy_live_diagnostic_script() -> Response:
+        if not DEFAULT_RUDY_LIVE_DIAGNOSTIC_SCRIPT.exists():
+            raise HTTPException(status_code=404, detail="Rudy live diagnostic not found")
+        return Response(
+            DEFAULT_RUDY_LIVE_DIAGNOSTIC_SCRIPT.read_text(encoding="utf-8"),
             media_type="application/javascript",
             headers={"Cache-Control": "no-store"},
         )

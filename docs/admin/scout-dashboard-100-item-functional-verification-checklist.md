@@ -917,6 +917,20 @@ candidate/shadow prototype 可收錄，但必須把 no-authority 邊界當成必
 
 ### DASH-026 所有 Dashboard 地圖 evidence hover hint 一致性
 
+**2026-09-12 現行範圍修訂（026–029 共用）：** 使用者要求補齊漏測，原九類入口
+須展開為 40 個實際 renderer／domain／lens 分支，另加 Debug 的 SVG／MapLibre 及目前
+Ref. GPX 候選的每個 on-trail 每日圖。不得只檢查 registry 名稱或隱藏 SVG，便
+宣稱 MapLibre 已通過。每個分支須操作真正顯示的 evidence／控制，核對目前
+workspace、最終 iframe document／URL／bridge，並確認清理後沒有殘留地圖或
+初始化工作。每日資料缺失、未知／重複分支、缺控制、無法採證或清理失敗均不算通過。
+互動檢查維持 cache-only；Rudy 未命中後的 native 補載由核准的 D037 驗證。
+這個分母仍未包含尚待用途仲裁的九個 Planned 比較圖實例及 Legacy Emergency
+示意原型；完整盤點見 `docs/specs/scout-dashboard-map-coverage-inventory-20260912.md`。
+
+下列 2026-08-03 的 9/9 PASS 為歷史紀錄，不能代替上述擴充範圍的現行驗證。
+D027「反向框選縮小」與現行共用 SVG「任意方向框選放大」的衝突仍待使用者
+仲裁；不得因補測而自行改寫預期或宣稱各頁操作已一致。
+
 - 頁面／範圍：Overview、LBS、Permission、Map、Weather、Navigation、
   Safety / Emergency、Architecture、Pace Fit 的全部 9 個 Dashboard 地圖實例。
 - 頁面分類：Map & Evidence。
@@ -1280,10 +1294,33 @@ candidate/shadow prototype 可收錄，但必須把 no-authority 邊界當成必
   network 攔截結果為 0 POST。
 - 缺陷編號：
 
-### DASH-037 Navigation／Architecture 倍率與 Weather 快取優先契約
+### DASH-037 所有 Rudy 地圖原生圖磚、缺圖與恢復
 
+**2026-09-12 使用者核准修訂（現行）：** D037-A 改驗實際原生圖磚與可見範圍，
+移除綁定旧倍率公式字串的斷言；D037-B 保留離線快取測試，新增同源、同 workspace
+的 `native=1&exact=1` Rudy GET，允許未命中時補快取，不使用 forced refresh。
+CWA 仍 cache-only，禁止觸發準備／重建、候選批准或行程寫入。
 
-**2026-09-07 核准修訂：** 以下舊版實際倍率實驗保留為歷史紀錄，Weather 的
+現行 Rudy 矩陣包含 36 組固定入口／renderer／domain／lens，加上每個既有
+on-trail day；本次指定 workspace 有九日，因此為 45 組、450 個階段。每日資料
+缺失不可當零項適用。Architecture 包含七個 lens；Navigation 三個 domain 的
+loading 分別列測，ready 則僅 observed 使用 Rudy，terrain／prior 的純向量互動
+由 026–029 驗證。來源、DOM 或實際按鈕多出未列分支時，不可直接回報全量通過。
+每組依序驗首次載入、重載、Fit、第一次 `+`、原生 Z20、實際最大倍率、Z20 平移、
+快取命中、真實快取未命中、同一視角恢復。首次 `+` 必須提升原生層級；每張所需
+图磚的 URL、HTTP、來源、解碼尺寸及 renderer generation 須一致，且全部成功。
+最大倍率須實測，不能停在第一次取得 Z20；來源像素不得被額外放大而仍報成功。
+Navigation 3D 必須核對 renderer 未截斷的實際混合層級 cohort。
+
+停止更新後須觀測真正 404，保留上一組完整圖磚並明示未完成；恢復更新後須證明
+同視角、同缺失 tile path 成功，不能先預填快取再宣稱恢復。每組的 cleanup 收據
+同樣必須通過。任何 FAIL／WARN／SKIP／未執行／無法確認均不能算入成功分子。
+本節現行狀態為 **未完成**；隔離的既有 renderer 矩陣與真實 Chrome 操作分別留證，
+局部 replay、source assertions 或一個功能頁面的成功不能代替全矩陣。
+
+以下保留舊政策與實驗的日期、結果，僅供追溯；不再作為現行一般 Rudy 載入政策。
+
+**2026-09-07 核准修訂（歷史）：** 以下舊版實際倍率實驗保留為歷史紀錄，當時 Weather 的
 現行政策優先適用：預設 `cache_only=1`，不含 `native`／`refresh`；只有明確
 Refresh 才以 `native=1&refresh=1` 請求遠端，且移除 `cache_only`。Diagnostic
 僅檢查程式契約及倍率計算，不按 Refresh、不把契約 PASS 當作下載成功。
@@ -1342,6 +1379,11 @@ Refresh 才以 `native=1&refresh=1` 請求遠端，且移除 `cache_only`。Diag
 
 ### DASH-038 Navigation MapLibre 2D/3D 鏡頭持久化
 
+- 2026-09-12 補漏狀態：原 deterministic camera helper 回放不能代替以下實際頁面
+  控制操作。正在加入指定 workspace 的隔離頁面 probe，涵蓋實際 2D／3D／Split、
+  evidence domain、lens、候選與垂直誇張造成的重建，以及 Fit／Reset 的獨立性。
+  必須保存每階段 renderer、source、camera 與清理收據；未就緒或缺少可測資料
+  保留未驗證，不能沿用下方 2026-08-24 的 PASS 當成本輪結果。
 - 頁面／範圍：Exploring for Six Axis → Navigation。
 - 頁面分類：Navigation。
 - 優先級：P1。

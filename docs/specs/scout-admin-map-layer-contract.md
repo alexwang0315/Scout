@@ -52,12 +52,17 @@ Historical map evidence is candidate-only and never a verified trail or safety t
 
 ## Tile Provider And Cache Policy
 
-Interactive Main Map and Weather Rudy+TW maps share the same source revision,
-workspace cache namespace and native tile selection. They automatically fill a
+All interactive Dashboard Rudy+TW surfaces (Main, Weather, Overview, LBS,
+Permission context and daily maps, Architecture, Pace Fit, Emergency review,
+Navigation 2D/3D and SVG fallback, and Debug MapLibre/SVG) share the same source
+revision, workspace cache namespace and exact native delivery policy. They automatically fill a
 missing native tile while reusing an existing exact tile (`native=1&exact=1`,
 without forced refresh). The shared map toolbar can stop updates and return to
 `cache_only=1&exact=1`; starting updates explicitly may refresh the checked
-raster layers. Read-only diagnostic probes always begin in cache-only mode.
+raster layers. Read-only diagnostic probes always begin in cache-only mode;
+the 2026-09-12 D037-B user decision additionally authorizes explicit native
+Rudy GET probes and their tile cache writes, without forced refresh. Offline
+probes remain separate and CWA remains cache-only.
 Automatic Rudy detail loading does not enable historical-map, CWA product
 refresh, route preparation or other analysis jobs.
 
@@ -65,7 +70,18 @@ A renderer reporting that its source has settled is not evidence of native
 detail coverage. Missing requested tiles, including HTTP 404, must remain
 visible as degraded detail even when the renderer retains and enlarges a
 lower-resolution parent tile. Verification must include the default load,
-successive zooms, a new viewport and cache reuse on both Main Map and Weather.
+successive zooms, a new viewport, real cache misses, recovery and cache reuse
+on every applicable surface and renderer. The D037-A user decision replaces
+literal old-formula checks with these observable outcomes. Permission daily
+maps are interactive under the same decision; static composite images cannot
+substitute for their interaction and native tile checks.
+
+For pitched/rotated MapLibre views, native coverage follows the renderer's
+public tile-coverage API, including mixed native zoom levels; camera zoom or
+a rectangular geographic envelope alone is not full visible-tile evidence.
+SVG generations become complete only after every required image loads. A
+failed generation retains the previous complete background at the current
+view, leaves verified zoom empty, and reports missing detail visibly.
 
 The admin map supports many basemap providers, but only one rendered-map source
 is currently allowed to enter route-bbox cache preparation:

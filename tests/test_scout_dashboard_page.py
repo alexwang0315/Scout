@@ -933,7 +933,7 @@ def test_scout_dashboard_data_fetches_have_timeout_fallback() -> None:
     assert "const ASSISTANT_QUERY_TIMEOUT_MS = 240000;" in html
     assert "const PRETRIP_PROJECT_FETCH_TIMEOUT_MS = 180000;" in html
     assert "new AbortController()" in html
-    assert "const timeoutMs = Number(options.timeoutMs) || FETCH_TIMEOUT_MS;" in html
+    assert "Number(options.timeoutMs) || FETCH_TIMEOUT_MS" in html
     assert "signal: controller.signal" in html
     assert "window.clearTimeout(timer)" in html
     assert "{ timeoutMs: PRETRIP_PROJECT_FETCH_TIMEOUT_MS }" in html
@@ -2754,7 +2754,7 @@ def test_navigation_map_always_compares_typed_known_gpx_with_candidate_r1() -> N
     assert "TERRAIN HYPOTHESIS" not in annotation_models
     assert 'element.dataset.navigationTerrainRouteAnnotation = annotation.kind' in html
     assert 'const routeAnnotations = addNavigationTerrainRouteAnnotations(' in html
-    assert 'const entry = {map, mode, host, scopeKey, routeAnnotations};' in html
+    assert 'map, mode, host, scopeKey, routeAnnotations' in html
     assert 'asArray(entry.routeAnnotations).forEach(annotation => annotation.remove());' in html
     assert 'data-navigation-terrain-route-map-key="true"' in html
     assert "Golden Route GPX" in html
@@ -3291,7 +3291,9 @@ def test_navigation_workspace_map_uses_dynamic_rudy_tw_tiles_with_shared_box_zoo
     assert "dashboardMapSvgVisibleRatios(viewport)" in html
     assert '"/admin/tiles/imagery"' in html
     assert "encodeURIComponent(projectId())" in html
-    assert "source_id=${encodeURIComponent(NAVIGATION_RUDY_TILE_SOURCE.sourceId)}&native=1" in html
+    tile_url = html.split("function navigationRudyTileUrl", 1)[1].split("function navigationRudyTileLongitude", 1)[0]
+    assert 'exact: "1"' in tile_url
+    assert 'options.cacheOnly ? "cache_only" : "native"' in tile_url
     assert "let zoom = NAVIGATION_RUDY_TILE_SOURCE.initialMaxZoom" in html
     assert "NAVIGATION_RUDY_TILE_SOURCE.maxZoom," in tile_refresh
     assert "NAVIGATION_RUDY_TILE_SOURCE.preparedMaxZoom," not in tile_refresh
@@ -3300,7 +3302,7 @@ def test_navigation_workspace_map_uses_dynamic_rudy_tw_tiles_with_shared_box_zoo
     assert "tile.happyman.idv.tw" not in html.split(
         "function navigationRudyTileUrl", 1
     )[1].split("function navigationRudyTileLongitude", 1)[0]
-    assert "URLSearchParams" not in html.split(
+    assert "URLSearchParams" in html.split(
         "function navigationRudyTileUrl", 1
     )[1].split("function navigationRudyTileLongitude", 1)[0]
     assert "tileLayer.innerHTML =" not in tile_refresh
@@ -3315,7 +3317,7 @@ def test_navigation_workspace_map_uses_dynamic_rudy_tw_tiles_with_shared_box_zoo
         "onRudyTileGenerationFailed)"
         in map_controller
     )
-    assert 'viewport.dataset.dashboardTileLoadState = "native-unavailable-retained-previous";' in tile_failure_handler
+    assert 'LoadState: "retained-previous", VerifiedZoom: ""' in tile_generation
     assert "announce(" in tile_failure_handler
     assert "viewState =" not in tile_failure_handler
     assert "apply(" not in tile_failure_handler
@@ -4103,8 +4105,12 @@ def test_contextual_permission_workbench_uses_typed_projection_and_dedicated_sco
     assert "mission-baseline/map-context" in html
     assert "mission-baseline/rudy-background.png" in html
     assert "data-permission-day-map" in html
-    assert 'data-permission-rudy-background="true"' in html
-    assert 'data-rudy-image-policy="single-composite"' in html
+    # 2026-09-12 user arbitration: daily Permission maps must be interactive.
+    assert "permissionDayMapViewportId" in html
+    daily_map = html.split("function renderPermissionDayMap(", 1)[1].split("\n    function ", 1)[0]
+    assert "renderDashboardRudyTileLayer(" in daily_map
+    assert "renderDashboardMapViewport(" in daily_map
+    assert 'data-rudy-image-policy="single-composite"' not in daily_map
     assert "permission-day-grid" in html
     assert "permissionDayAnchorContext" in html
     assert "permissionDailyLabelAnchors" in html
@@ -5886,7 +5892,7 @@ def test_dashboard_diagnostic_page_runs_38_read_only_checks() -> None:
         "Safety / Emergency 專屬決策與權限邊界",
         "Contextual Permission Evidence lineage 與隱私邊界",
         "Candidate Simulation 明確觸發與 no-write contract",
-        "Navigation／Architecture 倍率與 Weather 快取優先契約",
+        "所有 Rudy 地圖原生圖磚、缺圖與恢復",
         "Navigation MapLibre 2D/3D 鏡頭持久化",
         "DASHBOARD_MAP_APPROVED_SINGLE_IMAGE_THEMES",
         "const DASHBOARD_MAP_SURFACES = Object.freeze([",
@@ -6093,7 +6099,7 @@ def test_dashboard_diagnostic_checks_probe_runtime_data_and_rendered_behavior() 
         "firstMatrix > initialMatrix",
         "NAVIGATION_RUDY_TILE_SOURCE.preparedMaxZoom + 1",
         "diagnosticWeatherLiveTiles",
-        "definition.initialMaxZoom + Math.ceil(Math.log2(Math.max(1, state.zoom)))",
+        "diagnosticOpenRudyProbe(testCase, context)",
         "navigationTerrainMapLibreStoredCamera",
         "rememberNavigationTerrainMapLibreCamera",
         "changedProjection === null",

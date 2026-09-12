@@ -2,6 +2,8 @@
   "use strict";
 
   const MAPLIBRE_VERSION = "6.2.0";
+  // The shipped MapLibre camera transform uses a 512-CSS-pixel world tile.
+  const MAPLIBRE_WORLD_TILE_SIZE = 512;
   const DEFAULT_MODULE_URL = "/admin/vendor/maplibre-gl/6.2.0/maplibre-gl.mjs";
   const RENDERER_PREFERENCES = new Set(["auto", "maplibre", "svg"]);
   const EVIDENCE_SOURCE_ID = "scout-evidence";
@@ -1284,28 +1286,180 @@
     ]);
   }
 
-  function waitForMapLoad(map, timeoutMs = 15000) {
-    if (map.loaded?.()) return Promise.resolve();
+  function waitForMapLoad(map, timeoutMs = 15000, container = null, signal = null) {
+    const startedAt = Date.now();
+    const receipt = {version: 1, phase: "waiting", elapsedMs: 0, eventCount: 0,
+      droppedEvents: 0, styleLoadEventSeen: false, firstRenderElapsedMs: null, events: []};
+    const publicBoolean = method => {
+      try { return typeof map?.[method] === "function" ? map[method]() === true : null; }
+      catch (_error) { return null; }
+    };
+    const sourceSnapshot = () => {
+      let sourceIds = [];
+      try { sourceIds = Object.keys(map.getStyle?.()?.sources || {}); } catch (_error) { /* Removed style. */ }
+      const safeId = value => String(value).replace(/[^a-zA-Z0-9_.-]/g, "_").slice(0, 96);
+      const waitingSourceIds = [], unknownSourceIds = [];
+      sourceIds.slice(0, 64).forEach(sourceId => {
+        try {
+          const loaded = map.isSourceLoaded?.(sourceId);
+          if (loaded === false) waitingSourceIds.push(safeId(sourceId));
+          else if (loaded !== true) unknownSourceIds.push(safeId(sourceId));
+        } catch (_error) { unknownSourceIds.push(safeId(sourceId)); }
+      });
+      return {sourceCount: sourceIds.length, sourcesTruncated: sourceIds.length > 64,
+        waitingSourceIds, unknownSourceIds};
+    };
+    const record = (type, event = {}, terminal = false) => {
+      if (type === "style.load") receipt.styleLoadEventSeen = true;
+      receipt.elapsedMs = Math.max(0, Date.now() - startedAt);
+      receipt.styleReady = publicBoolean("isStyleLoaded");
+      receipt.allTilesLoaded = publicBoolean("areTilesLoaded");
+      receipt.mapLoaded = publicBoolean("loaded");
+      receipt.documentVisibility = ["visible", "hidden", "prerender"]
+        .includes(global.document?.visibilityState) ? global.document.visibilityState : "unknown";
+      try {
+        const bounds = container?.getBoundingClientRect?.();
+        const canvas = map.getCanvas?.();
+        receipt.containerWidth = Number.isFinite(bounds?.width) ? Math.round(bounds.width) : null;
+        receipt.containerHeight = Number.isFinite(bounds?.height) ? Math.round(bounds.height) : null;
+        receipt.canvasWidth = Number.isFinite(canvas?.width) ? canvas.width : null;
+        receipt.canvasHeight = Number.isFinite(canvas?.height) ? canvas.height : null;
+      } catch (_error) { /* Detached canvas is still observable through the remove event. */ }
+      if (type === "render" && receipt.firstRenderElapsedMs === null) receipt.firstRenderElapsedMs = receipt.elapsedMs;
+      const item = {type, elapsedMs: receipt.elapsedMs, styleReady: receipt.styleReady,
+        allTilesLoaded: receipt.allTilesLoaded, mapLoaded: receipt.mapLoaded,
+        documentVisibility: receipt.documentVisibility};
+      let sources = {};
+      try { sources = map.getStyle?.()?.sources || {}; } catch (_error) { /* Removed style. */ }
+      if (Object.prototype.hasOwnProperty.call(sources, event.sourceId)) {
+        item.sourceId = String(event.sourceId).replace(/[^a-zA-Z0-9_.-]/g, "_").slice(0, 96);
+      }
+      if (["metadata", "content", "visibility", "idle"].includes(event.sourceDataType)) {
+        item.dataType = event.sourceDataType;
+      }
+      if (typeof event.isSourceLoaded === "boolean") item.isSourceLoaded = event.isSourceLoaded;
+      if (type === "error") {
+        item.errorName = ["Error", "TypeError", "RangeError", "AbortError", "GPUInitializationError"]
+          .includes(event.error?.name) ? event.error.name : "Error";
+      }
+      receipt.eventCount += 1;
+      if (receipt.events.length >= 64) {
+        receipt.events.splice(1, 1); // Preserve the start and the most recent observations.
+        receipt.droppedEvents += 1;
+      }
+      receipt.events.push(item);
+      if (terminal || type === "start") Object.assign(receipt, sourceSnapshot());
+      if (container?.dataset) container.dataset.maplibreInitReceipt = JSON.stringify(receipt);
+    };
+    record("start");
+    if (map.loaded?.()) {
+      receipt.phase = "already_loaded";
+      record("already_loaded", {}, true);
+      return Promise.resolve();
+    }
     return new Promise((resolve, reject) => {
       let settled = false;
       let timer = null;
+      let abortListener = null;
+      const listeners = new Map();
+      const listen = (type, callback) => {
+        listeners.set(type, callback);
+        map.on(type, callback);
+      };
+      const removeListeners = () => {
+        listeners.forEach((listener, type) => map.off?.(type, listener));
+        listeners.clear();
+      };
       const finish = callback => value => {
         if (settled) return;
         settled = true;
         global.clearTimeout(timer);
+        if (abortListener) signal?.removeEventListener("abort", abortListener);
+        removeListeners();
         callback(value);
       };
       const complete = finish(resolve);
       const fail = finish(reject);
+      abortListener = () => {
+        receipt.phase = "cancelled";
+        record("cancelled", {}, true);
+        fail(Object.assign(new Error("maplibre_initialization_cancelled"), {name: "AbortError"}));
+      };
+      if (signal?.aborted) { abortListener(); return; }
+      signal?.addEventListener("abort", abortListener, {once: true});
+      listen("render", event => {
+        record("render", event);
+        map.off?.("render", listeners.get("render"));
+        listeners.delete("render");
+      });
+      ["style.load", "sourcedata", "dataloading", "error", "remove"].forEach(type => {
+        listen(type, event => {
+          record(type, event, type === "remove");
+          // Observe teardown without changing the existing timeout outcome.
+          if (type === "remove") removeListeners();
+        });
+      });
+      listen("load", event => {
+        receipt.phase = "loaded";
+        record("load", event, true);
+        complete(event);
+      });
       timer = global.setTimeout(
-        () => fail(new Error("maplibre_initialization_timeout")),
+        () => {
+          receipt.phase = "timeout";
+          record("timeout", {}, true);
+          fail(new Error("maplibre_initialization_timeout"));
+        },
         Math.max(1000, Number(timeoutMs) || 15000),
       );
-      map.once("load", complete);
     });
   }
 
   function rasterTileCoverage(layer, map) {
+    if (typeof map?.coveringTiles === "function") {
+      // Use the renderer's frustum and variable-LOD selection. A pitched terrain
+      // view does not require every tile in its axis-aligned bounds at one zoom.
+      try {
+        const source = map.getSource?.(layer.map_source_id);
+        const ideal = map.coveringTiles({
+          tileSize: source?.tileSize ?? layer.tile_size,
+          minzoom: source?.minzoom ?? layer.minzoom,
+          maxzoom: source?.maxzoom ?? layer.maxzoom,
+          roundZoom: source?.roundZoom ?? true,
+          reparseOverscaled: source?.reparseOverscaled ?? false,
+          terrain: map.terrain,
+          calculateTileZoom: source?.calculateTileZoom,
+        });
+        const tileKeys = new Set();
+        const zooms = new Set();
+        for (const tileId of ideal) {
+          if (typeof source?.hasTile === "function" && !source.hasTile(tileId)) continue;
+          const tile = tileId.canonical;
+          if (!tile || ![tile.z, tile.x, tile.y].every(Number.isInteger)) return null;
+          tileKeys.add(`${tile.z}/${tile.x}/${tile.y}`);
+          zooms.add(tile.z);
+        }
+        const nativeZooms = [...zooms].sort((left, right) => left - right);
+        const keys = [...tileKeys].sort();
+        return {
+          z: nativeZooms.at(-1) ?? null,
+          native_zooms: nativeZooms,
+          coverage_basis: "maplibre-covering-tiles",
+          tiles: keys.map(key => {
+            const [z, x, y] = key.split("/").map(Number);
+            return {z, x, y};
+          }),
+          count: keys.length,
+          key: JSON.stringify(keys),
+          contains: tile => tileKeys.has(`${tile.z}/${tile.x}/${tile.y}`),
+        };
+      } catch (_error) {
+        // Never substitute an optimistic rectangle when the active renderer's
+        // coverage cannot be established (style loading/removal, for example).
+        return null;
+      }
+    }
+    if (Number(map?.getPitch?.() || 0) !== 0 || Number(map?.getBearing?.() || 0) !== 0) return null;
     const bounds = map?.getBounds?.();
     const zoom = Number(map?.getZoom?.());
     if (!bounds || !Number.isFinite(zoom)) return null;
@@ -1343,17 +1497,83 @@
     }
     const count = range.xs.reduce((sum, [min, max]) => sum + max - min + 1, 0)
       * Math.max(0, range.yMax - range.yMin + 1);
-    return {z, count, key: JSON.stringify([z, range.xs, range.yMin, range.yMax]),
+    return {z, count, native_zooms: [z], coverage_basis: "unpitched-bounds-fallback",
+      key: JSON.stringify([z, range.xs, range.yMin, range.yMax]),
       contains: tile => tile.z === z && tile.y >= range.yMin && tile.y <= range.yMax
         && range.xs.some(([min, max]) => tile.x >= min && tile.x <= max)};
   }
 
+  function inspectRasterRenderPolicySources(map, transport) {
+    const style = map?.getStyle?.();
+    return {available: Boolean(style?.sources),
+      sources: Object.entries(style?.sources || {}).filter(([, source]) =>
+        source.type === "raster" || source.type === "image").map(([id, source]) => {
+          const layers = (style.layers || []).filter(layer => layer.source === id);
+          // Metadata identifies the candidate mapping; the actual source ID and
+          // protocol URLs (including revision) must also match the live transport.
+          const matching = layers.map(layer => transport?.layers?.get(layer.metadata?.["scout:layer_id"]))
+            .find(entry => entry?.layer.map_source_id === id
+              && JSON.stringify(transport.sourceDefinition(entry.layer).tiles) === JSON.stringify(source.tiles));
+          return {
+            id, type: source.type, tiles: source.tiles ? [...source.tiles] : null,
+            requestTemplates: matching ? [...matching.templates] : null,
+            url: source.url || null, coordinates: source.coordinates?.map(pair => [...pair]) || null,
+            tileSize: source.tileSize ?? null, minzoom: source.minzoom ?? null, maxzoom: source.maxzoom ?? null,
+            layers: layers.map(layer => ({
+              id: layer.id, type: layer.type, source: layer.source,
+              metadata: Object.fromEntries(Object.entries(layer.metadata || {})
+                .filter(([key]) => key.startsWith("scout:"))),
+            })),
+          };
+        })};
+  }
+
+  function rasterNativeCameraPolicy(layers = [], defaultMaxZoom = 22) {
+    const rudy = layers.find(layer => layer.layer_id === "rudy-twmap"
+      && layer.source_type === "raster" && layer.visible !== false);
+    const nativeTileSize = rudy?.tile_size || null;
+    const nativeMaxZoom = rudy?.maxzoom ?? null;
+    return {
+      active: Boolean(rudy), layerId: rudy?.layer_id || null,
+      maxCameraZoom: rudy ? Math.min(defaultMaxZoom,
+        nativeMaxZoom - Math.log2(MAPLIBRE_WORLD_TILE_SIZE / nativeTileSize)) : defaultMaxZoom,
+      providerNativeMaxZoom: nativeMaxZoom, nativeTileSize,
+      worldTileSize: MAPLIBRE_WORLD_TILE_SIZE,
+    };
+  }
+
+  function rasterNativeCameraReceipt(map, layer, policy = rasterNativeCameraPolicy(layer ? [layer] : [])) {
+    const cameraZoom = Number(map?.getZoom?.());
+    const pitch = Number(map?.getPitch?.() || 0);
+    const receipt = {...policy, cameraZoom: Number.isFinite(cameraZoom) ? cameraZoom : null,
+      maxCameraZoom: Number(map?.getMaxZoom?.() ?? policy.maxCameraZoom), pitch,
+      worldPixelsPerProviderPixel: policy.active && Number.isFinite(cameraZoom)
+        ? MAPLIBRE_WORLD_TILE_SIZE * (2 ** cameraZoom) / (policy.nativeTileSize * (2 ** policy.providerNativeMaxZoom)) : null,
+      pixelScaleScope: pitch ? "camera-world-scale-only" : "unpitched-camera-pixel-scale",
+      requestedNativeZooms: [], requestedAboveNativeMax: null};
+    if (policy.active && layer && typeof map?.coveringTiles === "function") {
+      try {
+        const source = map.getSource?.(layer.map_source_id);
+        const requested = map.coveringTiles({tileSize: source?.tileSize ?? layer.tile_size,
+          minzoom: source?.minzoom ?? layer.minzoom, maxzoom: 24, roundZoom: source?.roundZoom ?? true,
+          reparseOverscaled: source?.reparseOverscaled ?? false, terrain: map.terrain,
+          calculateTileZoom: source?.calculateTileZoom});
+        const inBounds = requested.filter(tile => typeof source?.hasTile !== "function" || source.hasTile(tile));
+        receipt.requestedNativeZooms = [...new Set(inBounds.map(tile => tile.canonical?.z).filter(Number.isInteger))].sort((a, b) => a - b);
+        receipt.requestedAboveNativeMax = receipt.requestedNativeZooms.length
+          ? receipt.requestedNativeZooms.some(zoom => zoom > policy.providerNativeMaxZoom) : null;
+      } catch (_error) { /* Unavailable selection remains explicitly unknown. */ }
+    }
+    return receipt;
+  }
+
   class RasterTileTransport {
-    constructor({maplibregl, getMap, onState, container}) {
+    constructor({maplibregl, getMap, onState, container, coverageResolver = rasterTileCoverage}) {
       this.maplibregl = maplibregl;
       this.getMap = getMap;
       this.onState = onState;
       this.container = container;
+      this.coverageResolver = coverageResolver;
       this.protocol = `scout-raster-${++rasterProtocolSequence}`;
       this.revision = 0;
       this.requestSequence = 0;
@@ -1405,7 +1625,7 @@
     publish(layerId) {
       const entry = this.layers.get(layerId);
       if (this.destroyed || !entry) return;
-      const coverage = rasterTileCoverage(entry.layer, this.getMap());
+      const coverage = this.coverageResolver(entry.layer, this.getMap(), this.records);
       const records = [...this.records.values()].filter(record => record.layerId === layerId && coverage?.contains(record));
       const errors = records.filter(record => record.state === "error");
       const pending = records.filter(record => record.state === "pending").length;
@@ -1425,6 +1645,9 @@
         pending_count: pending, success_count: successes, unverified_count: missing,
         required_count: coverage?.count || 0, required_tile_count: coverage?.count || 0,
         native_zoom: coverage?.z ?? null, verified_native_zoom: state === "available" ? coverage.z : null,
+        native_zooms: coverage?.native_zooms || (coverage ? [coverage.z] : []),
+        verified_native_zooms: state === "available" ? coverage.native_zooms || [coverage.z] : [],
+        coverage_basis: coverage?.coverage_basis || "viewport-bounds",
         last_http_status: errors.at(-1)?.status || null, transport_revision: this.revision,
         transport: this.enabled ? "same-origin-protocol" : "unavailable"});
     }
@@ -1443,7 +1666,7 @@
     recordMapError(layerId) {
       const entry = this.layers.get(layerId);
       if (!entry) return;
-      const coverage = rasterTileCoverage(entry.layer, this.getMap());
+      const coverage = this.coverageResolver(entry.layer, this.getMap(), this.records);
       this.viewErrors.set(layerId, {key: coverage?.key});
       this.publish(layerId);
     }
@@ -1465,7 +1688,8 @@
       const record = {layerId: match[2], z, x, y, state: "pending", status: null, attempt: ++this.requestSequence};
       const current = () => !this.destroyed && revision === this.revision && this.records.get(key) === record;
       this.records.set(key, record);
-      this.viewErrors.delete(record.layerId);
+      // A different tile succeeding cannot repair a decoder failure in this view.
+      // Only a new configured source generation clears that failure.
       this.controllers.add(controller);
       this.publish(record.layerId);
       try {
@@ -1547,6 +1771,7 @@
       this.timeoutMs = timeoutMs;
       this.map = null;
       this.destroyed = false;
+      this.initializationAbortController = new AbortController();
       this.rasterTransport = new RasterTileTransport({maplibregl, container,
         getMap: () => this.map, onState: (layerId, patch) => this.updateRasterLayerState(layerId, patch)});
       this.rasterTransport.configure(this.rasterLayers);
@@ -1589,6 +1814,10 @@
               : "not_configured";
       this.container.dataset.maplibreRasterState = aggregate;
       const native = values.find(value => value.layer_id === "rudy-twmap" && value.visible);
+      this.container.dataset.maplibreRudyState = native?.state || "hidden";
+      this.container.dataset.maplibreRasterNativeZooms = (native?.native_zooms || []).join(",");
+      this.container.dataset.maplibreRasterVerifiedNativeZooms = (native?.verified_native_zooms || []).join(",");
+      this.container.dataset.maplibreRasterCoverageBasis = native?.coverage_basis || "pending";
       this.container.dataset.maplibreRasterNativeZoom = native?.native_zoom == null ? "" : String(native.native_zoom);
       this.container.dataset.maplibreRasterVerifiedNativeZoom = native?.verified_native_zoom == null
         ? "" : String(native.verified_native_zoom);
@@ -1614,7 +1843,10 @@
         }
       });
       ["move", "moveend", "idle"].forEach(event => {
-        this.map.on(event, () => this.rasterTransport.publishAll());
+        this.map.on(event, () => {
+          this.publishCameraLimitReceipt();
+          this.rasterTransport.publishAll();
+        });
       });
       this.map.on("sourcedata", event => {
         const layer = this.rasterLayerForSource(event?.sourceId);
@@ -1694,6 +1926,7 @@
       }
 
       const states = [...this.rasterLayerStates.values()];
+      this.syncRasterCameraLimits();
       const aggregate = states.some(state => state.state === "loading")
         ? "loading"
         : states.length
@@ -1702,6 +1935,24 @@
       this.container.dataset.maplibreRasterState = aggregate;
       if (this.onRasterStatus) this.onRasterStatus(null, states);
       return true;
+    }
+
+    syncRasterCameraLimits() {
+      const layers = this.rasterLayers.map(layer => ({...layer,
+        visible: this.rasterLayerStates.get(layer.layer_id)?.visible ?? layer.visible}));
+      this.nativeCameraPolicy = rasterNativeCameraPolicy(layers);
+      if (this.map && this.map.getMaxZoom?.() !== this.nativeCameraPolicy.maxCameraZoom) {
+        this.map.setMaxZoom?.(this.nativeCameraPolicy.maxCameraZoom);
+      }
+      return this.publishCameraLimitReceipt();
+    }
+
+    publishCameraLimitReceipt() {
+      const layer = this.rasterLayers.find(item => item.layer_id === "rudy-twmap");
+      const policy = this.nativeCameraPolicy || rasterNativeCameraPolicy(this.rasterLayers);
+      const receipt = rasterNativeCameraReceipt(this.map, layer, policy);
+      this.container.dataset.maplibreNativeCameraReceipt = JSON.stringify(receipt);
+      return receipt;
     }
 
     emitStatus(state, reason, detail = "") {
@@ -1723,6 +1974,7 @@
     }
 
     async initialize(featureCollection = createEvidenceFeatureCollection()) {
+      if (this.destroyed) throw Object.assign(new Error("maplibre_initialization_cancelled"), {name: "AbortError"});
       this.emitStatus("loading", "map_initializing");
       this.featureCollection = createEvidenceFeatureCollection(featureCollection.features || []);
       this.index = buildEvidenceIndex(this.featureCollection.features);
@@ -1735,16 +1987,19 @@
         style,
         center: [0, 0],
         zoom: 1,
+        maxZoom: rasterNativeCameraPolicy(this.rasterLayers).maxCameraZoom,
         attributionControl: true,
         dragRotate: false,
         pitchWithRotate: false,
         boxZoom: false,
       });
+      this.syncRasterCameraLimits();
       this.bindRasterStatus();
       if (typeof this.maplibregl.NavigationControl === "function") {
         this.map.addControl(new this.maplibregl.NavigationControl({showCompass: false}), "top-right");
       }
-      await waitForMapLoad(this.map, this.timeoutMs);
+      await waitForMapLoad(this.map, this.timeoutMs, this.container, this.initializationAbortController.signal);
+      if (this.destroyed) throw Object.assign(new Error("maplibre_initialization_cancelled"), {name: "AbortError"});
       this.bindFeatureInteractions();
       this.bindRectangleZoomInteractions();
       this.bindViewState();
@@ -1971,7 +2226,8 @@
           const east = Math.max(Number(northWest.lng), Number(southEast.lng));
           const south = Math.min(Number(northWest.lat), Number(southEast.lat));
           const north = Math.max(Number(northWest.lat), Number(southEast.lat));
-          const maxZoom = Math.min(Number(this.map?.getZoom?.() || 0) + 2, 18);
+          const maxZoom = Math.min(Number(this.map?.getZoom?.() || 0) + 2,
+            Number(this.map?.getMaxZoom?.() ?? 22));
           this.map.fitBounds([[west, south], [east, north]], {
             padding: 24,
             maxZoom,
@@ -1985,7 +2241,8 @@
         const center = this.map?.unproject?.([selection.start.x, selection.start.y]);
         this.map?.easeTo?.({
           center,
-          zoom: Math.min(Number(this.map?.getZoom?.() || 0) + 1, 18),
+          zoom: Math.min(Number(this.map?.getZoom?.() || 0) + 1,
+            Number(this.map?.getMaxZoom?.() ?? 22)),
           duration: 220,
         });
       }
@@ -2103,6 +2360,7 @@
       const source = this.map?.getSource(EVIDENCE_SOURCE_ID);
       if (typeof source?.setData === "function") source.setData(this.visibleFeatureCollection());
       this.container.dataset.maplibreHiddenLayers = [...this.hiddenLayerIds].sort().join(",");
+      this.syncRasterCameraLimits();
       return !this.hiddenLayerIds.has(requestedLayerId);
     }
 
@@ -2259,32 +2517,49 @@
     }
 
     destroy() {
+      if (this.destroyed) return;
       this.destroyed = true;
-      this.rasterTransport.destroy();
-      this.cancelRectangleZoom();
-      if (this.interactionSurface?.removeEventListener) {
-        this.interactionSurface.removeEventListener("pointerdown", this.boundRectangleZoomStart, true);
-        this.interactionSurface.removeEventListener("pointermove", this.boundRectangleZoomMove, true);
-        this.interactionSurface.removeEventListener("pointerup", this.boundRectangleZoomEnd, true);
-        this.interactionSurface.removeEventListener("pointercancel", this.boundRectangleZoomCancel, true);
-      }
-      this.rectangleZoomOverlay?.remove?.();
-      this.interactionCapture?.remove?.();
-      this.selectionLabel?.remove?.();
-      if (this.onFeatureLeave) this.onFeatureLeave();
-      this.map?.remove();
+      this.initializationAbortController.abort();
+      const map = this.map;
       this.map = null;
-      this.emitStatus("disabled", "renderer_destroyed");
+      try {
+        this.rasterTransport.destroy();
+        this.cancelRectangleZoom();
+        if (this.interactionSurface?.removeEventListener) {
+          this.interactionSurface.removeEventListener("pointerdown", this.boundRectangleZoomStart, true);
+          this.interactionSurface.removeEventListener("pointermove", this.boundRectangleZoomMove, true);
+          this.interactionSurface.removeEventListener("pointerup", this.boundRectangleZoomEnd, true);
+          this.interactionSurface.removeEventListener("pointercancel", this.boundRectangleZoomCancel, true);
+        }
+        this.rectangleZoomOverlay?.remove?.();
+        this.interactionCapture?.remove?.();
+        this.selectionLabel?.remove?.();
+        if (this.onFeatureLeave) this.onFeatureLeave();
+      } finally {
+        try { map?.remove(); }
+        finally { this.emitStatus("disabled", "renderer_destroyed"); }
+      }
     }
   }
 
   async function createRenderer(options, featureCollection = createEvidenceFeatureCollection()) {
+    if (options.signal?.aborted) throw Object.assign(new Error("maplibre_initialization_cancelled"), {name: "AbortError"});
     const renderer = new MapLibreEvidenceRenderer(options);
+    let cancellationFailure = null;
+    const cancel = () => {
+      try { renderer.destroy(); }
+      catch (error) { cancellationFailure = error; }
+    };
+    options.signal?.addEventListener("abort", cancel, {once: true});
     try {
+      options.onCreated?.(renderer);
+      if (options.signal?.aborted) renderer.destroy();
       return await renderer.initialize(featureCollection);
     } catch (error) {
       renderer.destroy();
-      throw error;
+      throw cancellationFailure || error;
+    } finally {
+      options.signal?.removeEventListener("abort", cancel);
     }
   }
 
@@ -2336,6 +2611,11 @@
     normalizeEvidenceIdentity,
     normalizeRasterLayer,
     normalizeRasterLayers,
+    RasterTileTransport,
+    rasterTileCoverage,
+    inspectRasterRenderPolicySources,
+    rasterNativeCameraPolicy,
+    rasterNativeCameraReceipt,
     rasterLayerEventPatch,
     buildEvidenceIndex,
     geometryBounds,

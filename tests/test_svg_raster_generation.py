@@ -230,6 +230,58 @@ console.log(JSON.stringify({currentKey: current.key, afterOldLoads, complete: sn
     assert len(result["complete"]["statusUpdates"]) == 1
 
 
+def _dispose_source() -> str:
+    match = re.search(r"(?ms)^    async function disposePretripMapRenderer\(.*?^    \}", PAGE.read_text())
+    assert match
+    return "const disposePretripMapEvidenceControls=()=>{};\n" + match.group(0)
+
+
+def test_explicit_dispose_cancels_pending_svg_timer_and_rejects_late_generation() -> None:
+    result = _run(_dispose_source() + """
+(async()=>{
+const pending=start('dispose-pending',3);
+const before=snapshot();
+const receipt=await disposePretripMapRenderer();
+load(pending.images[0]);advance(60000);
+const after=snapshot();
+const late=start('late-after-dispose',2);
+console.log(JSON.stringify({before,receipt,after,late:late.changed,hrefs:pending.images.map(image=>image.getAttribute('href'))}));
+})().catch(error=>{console.error(error);process.exitCode=1});
+""")
+    assert result["before"]["timers"] == 1
+    assert result["receipt"]["disposed"] is True
+    assert result["after"]["timers"] == 0
+    assert result["after"]["pendingKey"] is None
+    assert result["after"]["failures"] == []
+    assert result["after"]["previousVisible"] is True
+    assert result["hrefs"] == [None, None, None]
+    assert result["late"] is False
+
+
+def test_missing_svg_cancellation_hook_keeps_disposal_failed() -> None:
+    result = _run(_dispose_source() + """
+(async()=>{
+start('missing-hook',2);
+const pending=group.querySelector('[data-tile-generation="pending"]');
+delete pending.cancelRasterGeneration;
+const receipt=await disposePretripMapRenderer();
+console.log(JSON.stringify({receipt,repeated:await disposePretripMapRenderer(),timers:timers.size}));
+})().catch(error=>{console.error(error);process.exitCode=1});
+""")
+    assert result["receipt"] == result["repeated"]
+    assert result["receipt"]["disposed"] is False
+    assert {"phase": "svg_tiles_destroy", "errorName": "MissingCancellationHook"} in result["receipt"]["errors"]
+    assert result["timers"] == 1
+
+
+def test_superseding_svg_generation_cancels_previous_timer_immediately() -> None:
+    result = _run("""
+start('first-pending',2);const before=timers.size;
+start('second-pending',2);console.log(JSON.stringify({before,after:timers.size}));
+""")
+    assert result == {"before": 1, "after": 1}
+
+
 def test_synchronous_cached_loads_leave_no_timer_after_promotion() -> None:
     result = _run("""
 start("synchronous-cache", 3, true);

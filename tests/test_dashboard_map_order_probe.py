@@ -101,3 +101,51 @@ console.log(JSON.stringify(await diagnosticCheck044()));
 """)
     assert result["status"] == "warning"
     assert result["mapLayerOrder"]["surfaces"][0]["variant"] == "source"
+
+
+def test_architecture_order_probe_visits_every_visible_lens_and_retains_failure() -> None:
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("Node is required for the Diagnostic runner")
+    html = PAGE.read_text(encoding="utf-8")
+    map_source = _function(html, "renderArchitectureMap")
+    buttons = re.search(r"const lensButtons = \[(.*?)\n      \];", map_source, re.S)
+    assert buttons is not None
+    visible_lenses = re.findall(r'\["([^"\n]+)",', buttons.group(1))
+    assert "time_window" in visible_lenses
+    source = "\n".join(_function(html, name) for name in (
+        "diagnosticProbeMapLayerOrder", "diagnosticRequire", "diagnosticSafeDetail",
+    ))
+    program = source + r'''
+const state = {}, rendered = [];
+let cleaned = false;
+const root = {style: {}, innerHTML: '', replaceChildren() { cleaned = true; }};
+const document = {getElementById: () => root};
+const DIAGNOSTIC_MAP_PROBE = true;
+const DASHBOARD_MAP_ORDER_SURFACES = [{id: 'architecture-map', route: 'outdoor-architecture', family: 'architecture'}];
+const loadDataScope = async () => {};
+const architectureSnapshot = () => ({candidate_only: true});
+const renderArchitectureMap = () => {
+  rendered.push(state.architectureLens);
+  return `<svg data-lens="${state.architectureLens}"></svg>`;
+};
+const diagnosticInspectMapOrderRoot = (node, surface, lens) => [{
+  variant: lens, rendered: node.innerHTML,
+  status: lens === 'time_window' ? 'failed' : 'passed',
+  violations: lens === 'time_window' ? [{code: 'background_over_route'}] : [],
+}];
+const diagnosticMapOrderGap = (surface, variant, detail) => ({status: 'warning', variant, detail});
+const destroyNavigationTerrainMapLibre = () => {};
+diagnosticProbeMapLayerOrder('architecture-map').then(reports => {
+  console.log(JSON.stringify({reports, rendered, cleaned}));
+}).catch(error => { console.error(error); process.exitCode = 1; });
+'''
+    completed = subprocess.run([node], input=program, text=True, capture_output=True, cwd=ROOT, timeout=30)
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads(completed.stdout)
+    assert result["rendered"] == visible_lenses
+    assert [row["variant"] for row in result["reports"]] == visible_lenses
+    time_window = next(row for row in result["reports"] if row["variant"] == "time_window")
+    assert time_window["status"] == "failed"
+    assert time_window["violations"] == [{"code": "background_over_route"}]
+    assert result["cleaned"] is True
