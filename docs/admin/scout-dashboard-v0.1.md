@@ -46,6 +46,85 @@ Each entry should include:
 
 ## Implementation Record
 
+### 2026-09-13 - Separate UPS battery readability from host supply observations
+
+User request: investigate unreadable battery/power, then apply the proposed
+software-only separation. Status: **PARTIAL / not acceptance complete**.
+
+- Reproduced the existing 9099 entry and compared the real 9151 response with
+  Scout's existing power observer record. UPS I²C reads failed while PMIC 5V and
+  throttle flags remained valid. The old aggregate `power.status` gate discarded
+  both groups, hiding independently valid supply observations. This change does
+  not establish the physical cause of the UPS communication failure.
+- The Mac 9099 Dashboard remains a native process (PID 7361) with workspace
+  `/Users/alexwang0315/workspace`; its backend and fixed same-origin GET proxy
+  were not restarted or changed. Mac 9151 remains the temporary SSH forward
+  (PID 7075), not permanent deployment. In-app browser workspace:
+  `golden_g1_chilai_repeat8_20260909_r14`; the isolated live smoke profile used
+  the server's default `chilai_nanhua_day1_scoutAI`. Hardware APIs are host-wide
+  and do not receive or change workspace selection.
+- Scout changes are limited to the existing hardware sampler normalization,
+  API Power model, passive I²C telemetry provenance, standalone monitor UI,
+  their focused tests/browser harness, and API guide. Optional `ups_status`,
+  `supply_status` and fixed error codes preserve backward compatibility. UPS,
+  PMIC voltage, and throttle flags are checked independently from the same raw
+  row; missing/invalid/stale values are never filled from an older successful
+  sample. Battery alerts, flow events, history, and text summaries use the
+  appropriate source, without masking independent low-voltage/throttle alerts.
+- Dashboard changes are limited to `tools/scout_hardware_monitor.html`, its
+  two existing smoke harnesses, the capability manifest, this record, and the
+  new power guide/PDF. Missing battery readings remain 未知. Valid host 5V and
+  flags remain visible, including older samples whose new status fields are
+  null. A visible UPS 通訊失敗（I²C） notice does not claim UPS recovery. Top-level
+  warning/critical/stale state, 60-second polling, abort cleanup, and expanded
+  inventory state are retained.
+- Added `DASH-050` to the existing Regular System Diagnostic using the existing
+  inline pattern, with `docs/admin/scout-monitor-power-diagnostic.js` as its
+  tested mirror and `tests/test_scout_monitor_power_diagnostic.py`. No module
+  route, service, Navigation/GIS behavior, hardware controls, active scan,
+  notifications, or Mac hardware metrics were added. The existing parent
+  iframe readiness timing was investigated but not changed.
+- Scout installed copies were backed up to
+  `/home/alexwang0315/.local/state/scout-hardware-monitor/backups/power-split-20260913.H8NebU/`.
+  Only the resident API was restarted once to load its added response fields
+  (PID 1011 → 879901). The existing raw observer PID 1486, timer cadence, and
+  hardware operations were not changed. The next scheduled sample retained
+  roughly 5.15–5.16 V and flags 0, with battery null and a backend warning.
+  The final 19:24 browser run observed 5.13 V with the same UPS failure.
+- Backend focused tests passed 55/55 on Mac and Scout; Scout still emitted its
+  existing Starlette/AnyIO deprecation warning. The standalone real-API browser
+  smoke passed all 12 scenarios at 1440/1024/768/320 px. Dashboard live smoke
+  passed desktop/mobile, keyboard refresh, all seven device lists and disclosure
+  persistence. Final live `DASH-050` passed 24/24 at 19:17:44 Taipei (one real
+  API check plus 23 synthetic render checks), explicitly not hardware health.
+  A final real-API desktop/mobile run after the legacy-null correction passed
+  at 19:24 (`live-dashboard-served-final`); its served HTML SHA-256 matched
+  `e9db2b15a92d8ed779cd18d64c2aec4019b3da940aaa8943eabc5fc905545328`.
+- Retained failures: the final-version 34-scenario Dashboard run passed 29 and
+  failed 5 (loading capture, three screenshot timeouts, one simulated-clock
+  reversal). The 24-test Diagnostic/proxy run had 8 subprocess timeouts;
+  unchanged sequential retry passed 24/24. A later full 9099 served-entrypoint
+  replay passed 34/34 (`scout-monitor-state-synthetic-xAFEjP`). These
+  timing-sensitive results are not relabelled as unconditional success.
+  Earlier 33/33 smoke evidence used the intermediate version before the
+  additional legacy-null case.
+- **Arbitration required:** `tests/test_diagnostic_advanced_entrypoint.py`
+  expects exactly 48 Regular cases, but the pre-change registry already had 49;
+  adding `DASH-050` gives 50. The test failed 50 != 48. The original check and
+  its evidence remain unchanged. Proposed decision: update the count to 50
+  while retaining the rule that Advanced cases stay separate. No approval has
+  yet been received for that expectation change.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test`, the 20-capability manifest, and
+  existing Diagnostic coverage/alignment checks were run. The Navigation guard
+  stayed report-only with the same pre-existing drift; its baseline was not
+  edited. Full map/runtime/GPT Pro qualification was not performed; this is
+  scoped construction evidence, not promotion or runtime safety truth.
+- Evidence index: `artifacts/scout-power-split-20260913/verification.md`;
+  reports preserve both failures and later checks. Operator instructions:
+  `docs/admin/scout-monitor-power-guide.md` and its one-page, visually checked
+  Traditional-Chinese PDF. Entry:
+  `http://127.0.0.1:9099/admin/dashboard#scout-monitor`.
+
 ### 2026-09-11 - Expand Scout hardware monitoring with device inventory
 
 User request: integrate the seven passive inventory sections from the resident

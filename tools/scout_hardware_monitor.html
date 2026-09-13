@@ -321,6 +321,7 @@
                 <div><span>供電狀態</span><strong id="hardwareSupplyStatus">未知</strong></div>
               </div>
               <p id="hardwareBatteryNote" class="hardware-card-note">等待電源資料</p>
+              <p id="hardwarePowerNotice" class="hardware-card-note" role="status" aria-live="polite" hidden></p>
             </article>
 
             <article id="hardwareMemoryCard" class="hardware-card" data-state="unavailable">
@@ -926,13 +927,16 @@
         const powerAge = hardwareNumber(power && power.age_seconds);
         const powerStaleAfter = hardwareNumber(thresholds && thresholds.ups_stale_seconds);
         const powerStale = powerAge !== null && powerStaleAfter !== null && powerAge > powerStaleAfter;
-        const batteryState = !power || power.status !== "ok" || powerStale ? "unknown" : hardwareThresholdState(power.battery_percent, thresholds, "battery_percent");
+        const upsReadable = power && (power.ups_status || power.status) === "ok";
+        // Numeric presence in a typed API record is observation, not a health verdict.
+        const supplyKnown = Boolean(power);
+        const batteryState = !upsReadable || powerStale ? "unknown" : hardwareThresholdState(power.battery_percent, thresholds, "battery_percent");
         const thermalStates = [
           ...cpuSensors.map((sensor) => hardwareThresholdState(sensor.temperature_c, thresholds, "cpu_temperature_c")),
           ...nvmeSensors.map((sensor) => hardwareThresholdState(sensor.temperature_c, thresholds, "nvme_temperature_c")),
         ];
         [
-          ["hardwareBatteryCard", "hardwareBatteryIcon", cardState(["battery_percent"], batteryState)],
+          ["hardwareBatteryCard", "hardwareBatteryIcon", cardState(["battery", "battery_percent", "battery_cell", "power_telemetry", "power_throttling", "supply_voltage"], batteryState)],
           ["hardwareMemoryCard", "hardwareMemoryIcon", cardState(["memory_used_percent"], hardwareThresholdState(memory && memory.used_percent, thresholds, "memory_used_percent"))],
           ["hardwareCpuCard", "hardwareCpuIcon", cardState([], hardwareNumber(snapshot && snapshot.cpu_used_percent) === null ? "unknown" : "ok")],
           ["hardwareThermalCard", "hardwareThermalIcon", cardState(["cpu_temperature_c", "nvme_temperature_c"], hardwareWorstState(thermalStates))],
@@ -949,27 +953,35 @@
           }
         });
 
-        const batteryPercent = power && power.battery_percent;
+        const batteryPercent = upsReadable ? power.battery_percent : null;
         setText("hardwareBatteryPercent", formatHardwarePercent(batteryPercent));
-        const batteryPower = power && power.battery_power_w;
+        const batteryPower = upsReadable ? power.battery_power_w : null;
         const powerNumber = hardwareNumber(batteryPower);
         const powerLabel = powerNumber === null ? HARDWARE_UNKNOWN : powerNumber > 0 ? "充電" : powerNumber < 0 ? "放電" : "待機";
         setText("hardwareBatteryPower", powerNumber === null ? HARDWARE_UNKNOWN : `${powerLabel} ${formatHardwareWatts(powerNumber)}`);
-        const flow = power && power.flow;
+        const flow = upsReadable ? power.flow : null;
         const flowLabel = powerNumber !== null ? powerNumber > 0 ? "充電中" : powerNumber < 0 ? "放電中" : "待機" : flow === "charging" ? "充電中" : flow === "discharging" ? "放電中" : flow === "idle" ? "待機" : HARDWARE_UNKNOWN;
         setText("hardwareBatteryFlow", flowLabel);
-        setText("hardwareBatteryVoltage", formatHardwareVoltage(power && power.battery_voltage_mv));
-        const powerStatus = power && power.status;
+        setText("hardwareBatteryVoltage", formatHardwareVoltage(upsReadable ? power.battery_voltage_mv : null));
         const supplyParts = [];
-        const upsPower = hardwareNumber(power && power.ups_vbus_power_mw);
-        const ext5v = hardwareNumber(power && power.ext5v_v);
+        const upsPower = hardwareNumber(upsReadable ? power.ups_vbus_power_mw : null);
+        const ext5v = hardwareNumber(supplyKnown ? power.ext5v_v : null);
         if (upsPower !== null) supplyParts.push(`UPS ${(upsPower / 1000).toFixed(2)} W`);
         if (ext5v !== null) supplyParts.push(`5V ${ext5v.toFixed(2)} V`);
-        const throttleBits = hardwareNumber(power && power.active_throttle_bits);
+        const throttleBits = hardwareNumber(supplyKnown ? power.active_throttle_bits : null);
         if (throttleBits !== null) supplyParts.push(throttleBits === 0 ? "未見供電／效能限制" : `供電／效能限制旗標 ${throttleBits}`);
-        const powerReading = powerStatus === "ok" && supplyParts.length ? supplyParts.join(" · ") : HARDWARE_UNKNOWN;
+        const powerReading = supplyParts.length ? supplyParts.join(" · ") : HARDWARE_UNKNOWN;
         setText("hardwareSupplyStatus", `${connectionState || powerStale ? "上次採樣 · " : ""}${powerReading}`);
         setText("hardwareBatteryNote", power && power.captured_at ? `${powerStale ? "電源資料已過期 · " : ""}電源採樣 ${formatHardwareDate(power.captured_at)}` : "電源採樣時間未知");
+        const powerMessages = [];
+        if (power && !upsReadable) powerMessages.push(power.ups_error_code === "communication_error" ? "UPS 通訊失敗（I²C），電池讀值未知" : "UPS 電池資料未知或不可讀");
+        if (power && power.supply_status === "unavailable") powerMessages.push("主機供電資料部分不可讀；缺失讀值維持未知");
+        if (power && !upsReadable && ext5v !== null) powerMessages.push("主機 5V 供電仍有讀值，不代表 UPS 通訊已恢復");
+        const powerNotice = document.getElementById("hardwarePowerNotice");
+        if (powerNotice) {
+          powerNotice.hidden = powerMessages.length === 0;
+          powerNotice.textContent = powerMessages.length ? `${connectionState || powerStale ? "上次採樣 · " : ""}△ ${powerMessages.join("；")}` : "";
+        }
 
         setText("hardwareMemoryPercent", formatHardwarePercent(memory && memory.used_percent));
         setText("hardwareMemoryUsed", formatHardwareGiB(memory && memory.used_bytes));

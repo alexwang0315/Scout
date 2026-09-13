@@ -86,6 +86,13 @@ async function run() {
   const expectedState = statusPayload.status === "stale" || statusPayload.freshness.state === "stale" ? "資料已過期"
     : ({ ok: "正常", warning: "警告", critical: "嚴重告警", unavailable: "無法連線" })[statusPayload.status];
   if (overallStatus !== expectedState) fail(`status mismatch: ${overallStatus} vs ${expectedState}`);
+  const livePower = statusPayload.data.power;
+  const powerEvidence = { battery: await frame.locator("#hardwareBatteryPercent").innerText(),
+    supply: await frame.locator("#hardwareSupplyStatus").innerText(), notice: await frame.locator("#hardwarePowerNotice").innerText(),
+    ups_status: livePower.ups_status, supply_status: livePower.supply_status, ext5v_v: livePower.ext5v_v };
+  if (livePower.ups_status === "unavailable" && powerEvidence.battery !== "未知") fail("failed UPS was rendered as a battery value");
+  if (livePower.supply_status && Number.isFinite(livePower.ext5v_v) && !powerEvidence.supply.includes(`5V ${livePower.ext5v_v.toFixed(2)} V`)) fail("live supply voltage lost when UPS failed");
+  if (livePower.ups_error_code === "communication_error" && !powerEvidence.notice.includes("UPS 通訊失敗（I²C）")) fail("live UPS communication failure not explained");
   if (!nvmeText.includes("/sys/class/hwmon/")) fail(`NVMe source is missing: ${nvmeText}`);
 
   const inventorySections = statusPayload.data.inventory?.sections;
@@ -143,6 +150,7 @@ async function run() {
 
   await page.setViewportSize({ width: 390, height: 844 });
   phase = "mobile-reload";
+  const mobileStatusResponse = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/api/v1/hardware-monitor/status"));
   await page.reload({ waitUntil: "domcontentloaded" });
   const mobileFrame = page.frameLocator('iframe[src="/admin/dashboard/scout-monitor"]');
   await mobileFrame.getByRole("heading", { name: "硬體監控" }).waitFor({ state: "visible", timeout: 30000 });
@@ -158,6 +166,13 @@ async function run() {
   const mobileScreenshot = path.join(screenshotDir, "mobile.png");
   await mobileFrame.locator("#hardwareMonitorPanel").evaluate((panel) => panel.scrollIntoView({ block: "start" }));
   await page.screenshot({ path: mobileScreenshot, fullPage: false });
+  const mobilePower = (await (await mobileStatusResponse).json()).data.power;
+  const mobilePowerText = await mobileFrame.locator("#hardwareBatteryCard").innerText();
+  if (mobilePower.supply_status && Number.isFinite(mobilePower.ext5v_v) && !mobilePowerText.includes(`5V ${mobilePower.ext5v_v.toFixed(2)} V`)) fail("mobile supply voltage lost when UPS failed");
+  if (mobilePower.ups_error_code === "communication_error" && !mobilePowerText.includes("UPS 通訊失敗（I²C）")) fail("mobile UPS failure notice missing");
+  const mobilePowerScreenshot = path.join(screenshotDir, "mobile-power.png");
+  await mobileFrame.locator("#hardwareBatteryCard").evaluate((card) => card.scrollIntoView({ block: "start" }));
+  await page.screenshot({ path: mobilePowerScreenshot });
   const mobileMemoryScreenshot = path.join(screenshotDir, "mobile-memory.png");
   await mobileFrame.locator("#hardwareMemoryCard").screenshot({ path: mobileMemoryScreenshot });
   const mobileThermalScreenshot = path.join(screenshotDir, "mobile-thermal.png");
@@ -196,6 +211,7 @@ async function run() {
     baseUrl,
     route: "scout-monitor",
     overallStatus,
+    powerEvidence,
     lastSampleAt,
     dataAge,
     diskRows,
@@ -212,7 +228,8 @@ async function run() {
     inventoryEvidence,
     inventoryExpansionPreserved: true,
     inventoryLayouts,
-    screenshots: [desktopScreenshot, mobileScreenshot, mobileMemoryScreenshot, mobileThermalScreenshot, ...inventoryScreenshots],
+    mobilePowerText,
+    screenshots: [desktopScreenshot, mobileScreenshot, mobilePowerScreenshot, mobileMemoryScreenshot, mobileThermalScreenshot, ...inventoryScreenshots],
   };
   fs.writeFileSync(path.join(screenshotDir, "browser-smoke.json"), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result, null, 2));

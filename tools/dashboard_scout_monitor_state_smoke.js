@@ -721,6 +721,79 @@ async function run() {
   console.error(`Synthetic harness artifacts: ${artifactDir}`);
   const browser = await chromium.launch({ headless: true, executablePath: chromePath });
   try {
+    const splitPower = {
+      status: "unavailable", ups_status: "unavailable", supply_status: "ok",
+      captured_at: snapshot().captured_at, age_seconds: 1,
+      ups_error_code: "communication_error", supply_error_code: null,
+      battery_percent: null, flow: null, battery_power_w: null, battery_voltage_mv: null,
+      ups_vbus_power_mw: null, ext5v_v: 5.18, active_throttle_bits: 0,
+    };
+    for (const state of ["fresh", "stale", "critical"]) {
+      const status = state === "fresh" ? "warning" : state;
+      await runScenario(browser, `split-power-ups-failure-${state}`, {
+        statusCode: state === "stale" ? 503 : 200,
+        statusPayload: envelope({ status, freshnessState: state === "stale" ? "stale" : "fresh", age: state === "stale" ? 181 : 1,
+          data: snapshot({ status: state === "critical" ? "critical" : "warning", power: { ...splitPower, active_throttle_bits: state === "critical" ? 1 : 0 },
+            alerts: { power_telemetry: { severity: "warning", message: "UPS 通訊失敗（I²C），主機 5V 供電仍可讀" },
+              ...(state === "critical" ? { power_throttling: { severity: "critical", message: "Scout 偵測到欠壓" } } : {}) } }) }),
+        expectedStatus: { fresh: "警告", stale: "資料已過期", critical: "嚴重告警" }[state],
+        check: async (frame, page, fixture) => {
+          assert(await frame.locator("#hardwareBatteryPercent").innerText() === "未知", "failed UPS became a battery reading");
+          assert((await frame.locator("#hardwareSupplyStatus").innerText()).includes("5V 5.18 V"), "valid 5V hidden by UPS failure");
+          assert((await frame.locator("#hardwarePowerNotice").innerText()).includes("UPS 通訊失敗（I²C）"), "UPS error not explained");
+          assert(await frame.locator("#hardwareBatteryCard").getAttribute("data-state") === status, "power alert or staleness was hidden");
+          if (state === "stale") assert((await frame.locator("#hardwareSupplyStatus").innerText()).includes("上次採樣"), "stale supply looks current");
+          await page.setViewportSize({ width: 390, height: 844 });
+          assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 2), "partial power overflows mobile");
+          await fixture.capture("mobile");
+          if (state === "fresh") {
+            fixture.disconnect = true;
+            await frame.locator("#hardwareRefreshButton").click();
+            await waitForText(frame, "#hardwareOverallStatus", "無法連線");
+            assert((await frame.locator("#hardwareSupplyStatus").innerText()).includes("上次採樣"), "offline supply looks current");
+            fixture.disconnect = false;
+            fixture.statusPayload = envelope();
+            await frame.locator("#hardwareRefreshButton").click();
+            await waitForText(frame, "#hardwareOverallStatus", "正常");
+            assert(await frame.locator("#hardwarePowerNotice").isHidden(), "recovery retained UPS failure notice");
+            assert((await frame.locator("#hardwareBatteryPercent").innerText()).includes("80"), "recovered UPS not restored");
+          }
+        },
+      });
+    }
+    await runScenario(browser, "split-power-supply-failure-keeps-battery", {
+      statusPayload: envelope({ status: "critical", data: snapshot({ status: "critical",
+        power: { ...snapshot().power, status: "unavailable", ups_status: "ok", supply_status: "unavailable",
+          supply_error_code: "communication_error", battery_percent: 10, ext5v_v: null, active_throttle_bits: null },
+        alerts: { battery: { severity: "critical", message: "電池剩餘 10%" } } }) }),
+      expectedStatus: "嚴重告警",
+      check: async (frame) => {
+        assert((await frame.locator("#hardwareBatteryPercent").innerText()).includes("10"), "supply failure erased battery");
+        assert(!(await frame.locator("#hardwareSupplyStatus").innerText()).includes("5V 0"), "missing voltage filled with zero");
+        assert((await frame.locator("#hardwarePowerNotice").innerText()).includes("主機供電資料部分不可讀"), "supply failure not explained");
+        assert(await frame.locator("#hardwareBatteryCard").getAttribute("data-state") === "critical", "battery alert erased by supply failure");
+      },
+    });
+    await runScenario(browser, "split-power-missing-throttle-keeps-voltage", {
+      statusPayload: envelope({ status: "warning", data: snapshot({ status: "warning", power: {
+        ...snapshot().power, status: "unavailable", ups_status: "ok", supply_status: "unavailable",
+        ext5v_v: 5.18, active_throttle_bits: null, supply_error_code: "communication_error",
+      } }) }), expectedStatus: "警告",
+      check: async (frame) => {
+        const text = await frame.locator("#hardwareSupplyStatus").innerText();
+        assert(text.includes("5V 5.18 V"), "failed throttle read erased voltage");
+        assert(!text.includes("未見供電／效能限制"), "unknown flags were treated as zero");
+      },
+    });
+    await runScenario(browser, "split-power-legacy-unavailable-keeps-valid-supply", {
+      statusPayload: envelope({ status: "warning", data: snapshot({ status: "warning", power: {
+        ...splitPower, ups_status: null, supply_status: null, ups_error_code: null, supply_error_code: null,
+      } }) }), expectedStatus: "警告",
+      check: async (frame) => {
+        assert((await frame.locator("#hardwareSupplyStatus").innerText()).includes("5V 5.18 V"), "legacy null component statuses hid valid voltage");
+        assert(await frame.locator("#hardwareBatteryPercent").innerText() === "未知", "legacy aggregate unavailable was promoted to healthy UPS");
+      },
+    });
     const staleData = snapshot({ power: { ...snapshot().power, battery_percent: null, flow: null, battery_power_w: null }, memory: null });
     await runScenario(browser, "loading-and-stale", {
       loading: true,
