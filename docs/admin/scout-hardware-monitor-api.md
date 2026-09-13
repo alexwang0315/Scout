@@ -68,6 +68,30 @@ curl --fail-with-body 'http://127.0.0.1:9151/api/v1/hardware-monitor/history?lim
 可用絕對值加方向顯示；不要從 UPS VBUS=0 就推斷 Scout 已斷電。
 `power.age_seconds` 是**採樣當時**的 UPS 資料年齡；API 當下的整份快照年齡請看
 `freshness.age_seconds`。`power.status=unavailable` 時電池讀值可能全為 null。
+
+### 電池與主機供電分離（2026-09-13）
+
+`power.status` 保留既有 `ok / unavailable`：只有完整電源資料均可讀才是 ok。
+新增選填 `ups_status`、`supply_status`，值為 `ok / unavailable`；null 代表舊採樣，
+呼叫端可回到舊 `power.status` 判讀 UPS 可讀性；舊紀錄若仍有有限的主機電壓／旗標，
+應保留為觀測值，不因缺少新狀態欄位而隱藏，也不可因此宣稱整體正常。
+UPS I²C 與主機 PMIC／欠壓旗標獨立驗證。
+
+- UPS 失敗：電池、充放電、電池功率／電壓與 UPS VBUS 維持 null；有效的
+  `ext5v_v`、`active_throttle_bits`、`historical_throttle_bits` 仍保留。
+- 主機供電失敗：有效 UPS 電池讀值與低電量告警不受影響。PMIC 電壓與降頻旗標
+  也各自保留有效值；`supply_status=unavailable` 可能仍有部分有效讀值。
+- `ups_error_code`、`supply_error_code` 為 null 或固定代碼：
+  `communication_error / invalid_telemetry / stale / missing / unreadable`。
+  不公開原始 exception、指令或檔案路徑。UPS communication_error 顯示
+  「UPS 通訊失敗（I²C），電池讀值未知」，不能推論接線或 UPS 本體故障。
+- 所有值只來自同一筆既有採樣，不查找舊成功數值填補；來源過期／時間無效時
+  兩組都不可用。整份快照 stale 503 仍保留最後 data，必須明確標示過期。
+- 頂層告警仍使用 `data.alerts`；部分失敗保留 `power_telemetry` 警告，
+  可讀的欠壓／低電量等告警各自生效。5V 可讀不代表 UPS 通訊恢復。
+- I²C `telemetry_device` 與電池歷史曲線以 `ups_status` 判斷，不因主機供電
+  單獨失敗而隱藏有效的 UPS 觀測；舊紀錄維持原判讀。
+
 GiB = bytes / 1024³。低溫時風扇 0 RPM 不單獨代表故障。
 只有 `active_throttle_bits` 表示當下限制；歷史旗標需另標為本次開機曾發生。
 

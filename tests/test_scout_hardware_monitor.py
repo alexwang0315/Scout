@@ -71,6 +71,99 @@ def test_memory_uses_available_including_reclaimable_cache():
     assert result["swap_used_bytes"] == 0
 
 
+def test_ups_communication_failure_keeps_independent_supply(tmp_path):
+    now = datetime.now(timezone.utc)
+    raw = {"captured_at": now.isoformat(), "ext5v_v": 5.18, "throttled_hex": "0x10001",
+           "errors": ["ups_i2c:OSError:[Errno 5] Input/output error /private/path"]}
+    source = tmp_path / "power.jsonl"
+    source.write_text(json.dumps(raw) + "\n")
+    power = monitor.read_power(source, now)
+    assert power["status"] == "unavailable"
+    assert power["ups_status"] == "unavailable"
+    assert power["ups_error_code"] == "communication_error"
+    assert power["supply_status"] == "ok"
+    assert power["supply_error_code"] is None
+    assert power["ext5v_v"] == 5.18
+    assert power["active_throttle_bits"] == power["historical_throttle_bits"] == 1
+    assert power.get("battery_percent") is None
+    assert "/private/path" not in json.dumps(power)
+    current = snapshot(tmp_path)
+    current["power"] = power
+    alerts = monitor.alerts_for(current)
+    assert alerts["power_telemetry"]["severity"] == "warning"
+    assert "UPS 通訊失敗" in alerts["power_telemetry"]["message"]
+    assert alerts["power_throttling"]["severity"] == "critical"
+    power["ext5v_v"] = 4.7
+    assert "supply_voltage" in monitor.alerts_for(current)
+
+
+@pytest.mark.parametrize("problem", ["missing", "null", "bool", "nan", "error"])
+def test_bad_supply_does_not_hide_ups_or_battery_alerts(tmp_path, problem):
+    now = datetime.now(timezone.utc)
+    raw = power_record(now)
+    raw["battery_percent"] = 10
+    if problem == "missing":
+        del raw["ext5v_v"]
+    elif problem == "error":
+        raw["errors"] = ["ext5v:OSError:failed"]
+    else:
+        raw["ext5v_v"] = {"null": None, "bool": True, "nan": float("nan")}[problem]
+    source = tmp_path / "power.jsonl"
+    source.write_text(json.dumps(raw) + "\n")
+    power = monitor.read_power(source, now)
+    assert power["status"] == "unavailable"
+    assert power["ups_status"] == "ok"
+    assert power["supply_status"] == "unavailable"
+    assert power["battery_percent"] == 10
+    assert power.get("ext5v_v") is None
+    current = snapshot(tmp_path)
+    current["power"] = power
+    assert monitor.alerts_for(current)["battery"]["severity"] == "critical"
+
+
+@pytest.mark.parametrize("problem", ["stale", "future", "malformed", "missing"])
+def test_invalid_source_never_retains_current_supply(tmp_path, problem):
+    now = datetime.now(timezone.utc)
+    source = tmp_path / "power.jsonl"
+    raw = power_record(now - timedelta(seconds=16) if problem == "stale" else now + timedelta(seconds=20))
+    if problem != "missing":
+        source.write_text("broken\n" if problem == "malformed" else json.dumps(raw) + "\n")
+    power = monitor.read_power(source, now)
+    assert power["ups_status"] == power["supply_status"] == "unavailable"
+    assert power.get("ext5v_v") is None
+    assert power.get("battery_percent") is None
+
+
+def test_failed_throttle_read_keeps_valid_voltage(tmp_path):
+    now = datetime.now(timezone.utc)
+    raw = power_record(now)
+    raw["errors"] = ["throttled:OSError:failed"]
+    source = tmp_path / "power.jsonl"
+    source.write_text(json.dumps(raw) + "\n")
+    power = monitor.read_power(source, now)
+    assert power["ext5v_v"] == 5.2
+    assert power.get("active_throttle_bits") is None
+    assert power["ups_status"] == "ok"
+    assert power["supply_status"] == "unavailable"
+
+
+def test_power_text_and_events_use_independent_sources(tmp_path):
+    current = snapshot(tmp_path)
+    current.update(status="warning", alerts={})
+    current["power"].update(status="unavailable", supply_status="unavailable", ext5v_v=None)
+    previous = copy.deepcopy(current)
+    current["power"]["flow"] = "charging"
+    assert monitor.transitions(current, previous) == ["電池狀態改變：充電中"]
+    text = monitor.describe(current)
+    assert "電池 80%" in text and "主機 5V 供電未知" in text
+    current["power"] = {"status": "unavailable", "ups_status": "unavailable", "supply_status": "ok",
+                        "ups_error_code": "communication_error", "ext5v_v": 5.18, "throttled_hex": "0x0"}
+    assert monitor.transitions(current, previous) == []
+    text = monitor.describe(current)
+    assert "UPS 通訊失敗（I²C）" in text and "主機 5V 供電 5.18V" in text
+    assert "欠壓／降頻旗標 0x0" in text
+
+
 def test_mounts_and_df_reserved_space(tmp_path, monkeypatch):
     mounts = monitor.mount_paths("1 2 3:4 / / rw - ext4 /dev/root rw\n"
                                  "2 3 0:1 / /tmp rw - tmpfs tmpfs rw\n"

@@ -62,40 +62,77 @@ def latest_record(path: Path) -> dict[str, Any]:
 
 
 def read_power(path: Path, now: datetime) -> dict[str, Any]:
-    result: dict[str, Any] = {"source": str(path), "status": "unavailable"}
+    result: dict[str, Any] = {"source": str(path), "status": "unavailable",
+                              "ups_status": "unavailable", "supply_status": "unavailable",
+                              "ups_error_code": None, "supply_error_code": None}
     try:
         raw = latest_record(path)
         captured = datetime.fromisoformat(raw["captured_at"])
         age = (now - captured).total_seconds()
-        result.update(captured_at=raw["captured_at"], age_seconds=round(age, 2))
+        result.update(captured_at=captured.isoformat(), age_seconds=round(age, 2))
         if not -5 <= age <= THRESHOLDS["ups_stale_seconds"]:
-            raise ValueError("UPS telemetry is stale or timestamp is in the future")
+            result.update(ups_error_code="stale", supply_error_code="stale")
+            return result
+        errors = raw.get("errors", [])
+        if not isinstance(errors, list) or any(not isinstance(e, str) for e in errors):
+            raise ValueError("invalid observer errors")
+    except (OSError, ValueError, KeyError, TypeError, OverflowError) as exc:
+        code = "missing" if isinstance(exc, FileNotFoundError) else "unreadable" if isinstance(exc, OSError) else "invalid_telemetry"
+        result.update(ups_error_code=code, supply_error_code=code)
+        return result
+
+    def numeric(key: str) -> float | int:
+        value = raw[key]
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+            raise ValueError("invalid numeric power field")
+        if key != "battery_current_ma" and value < 0:
+            raise ValueError("invalid negative power field")
+        return value
+
+    # The observer reads UPS I2C, PMIC voltage and throttle flags independently.
+    # Validate those same boundaries; never fill missing UPS data from an older row.
+    unclassified_error = any(not e.startswith(("ups_i2c:", "ext5v:", "throttled:")) for e in errors)
+    ups_failed = unclassified_error or any(e.startswith("ups_i2c:") for e in errors)
+    try:
+        if ups_failed:
+            raise ValueError("observer UPS read failed")
         fields = ("battery_percent", "battery_voltage_mv", "battery_current_ma",
-                  "ups_vbus_power_mw", "remaining_capacity_mah", "ext5v_v")
-        for key in fields:
-            value = raw[key]
-            if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
-                raise ValueError("invalid numeric UPS field: " + key)
-        if not 0 <= raw["battery_percent"] <= 100:
+                  "ups_vbus_power_mw", "remaining_capacity_mah")
+        values = {key: numeric(key) for key in fields}
+        if values["battery_percent"] > 100:
             raise ValueError("invalid battery percentage")
         cells = raw["cell_voltage_mv"]
         if not isinstance(cells, list) or len(cells) != 4 or any(
             isinstance(v, bool) or not isinstance(v, (int, float)) or not 1000 <= v <= 5000 for v in cells
         ):
             raise ValueError("invalid cell voltage telemetry")
-        errors = raw.get("errors", [])
-        if errors:
-            raise ValueError("UPS observer reported a sensor error")
-        throttled = int(raw["throttled_hex"], 16)
-        current = raw["battery_current_ma"]
+        current = values["battery_current_ma"]
         flow = "discharging" if current < 0 else "charging" if current > 0 else "idle"
-        result.update(status="ok", **{key: raw[key] for key in fields},
-                      cell_voltage_mv=cells, flow=flow, throttled_hex=hex(throttled),
-                      active_throttle_bits=throttled & 0xF,
-                      historical_throttle_bits=(throttled >> 16) & 0xF,
-                      battery_power_w=round(raw["battery_voltage_mv"] * current / 1_000_000, 2))
-    except (OSError, ValueError, KeyError, TypeError, OverflowError) as exc:
-        result["error"] = f"{type(exc).__name__}: {exc}"
+        result.update(ups_status="ok", **values, cell_voltage_mv=cells, flow=flow,
+                      battery_power_w=round(values["battery_voltage_mv"] * current / 1_000_000, 2))
+    except (ValueError, KeyError, TypeError, OverflowError):
+        result["ups_error_code"] = "communication_error" if ups_failed else "invalid_telemetry"
+
+    for component in ("ext5v", "throttled"):
+        failed = unclassified_error or any(e.startswith(component + ":") for e in errors)
+        try:
+            if failed:
+                raise ValueError("observer supply read failed")
+            if component == "ext5v":
+                result["ext5v_v"] = numeric("ext5v_v")
+            else:
+                value = raw["throttled_hex"]
+                if not isinstance(value, str) or not re.fullmatch(r"0x[0-9a-fA-F]{1,8}", value):
+                    raise ValueError("invalid throttle flags")
+                throttled = int(value, 16)
+                result.update(throttled_hex=hex(throttled), active_throttle_bits=throttled & 0xF,
+                              historical_throttle_bits=(throttled >> 16) & 0xF)
+        except (ValueError, KeyError, TypeError, OverflowError):
+            result["supply_error_code"] = "communication_error" if failed else "invalid_telemetry"
+    if result["supply_error_code"] is None:
+        result["supply_status"] = "ok"
+    if result["ups_status"] == result["supply_status"] == "ok":
+        result["status"] = "ok"
     return result
 
 
@@ -190,18 +227,23 @@ def alerts_for(snapshot: dict[str, Any]) -> dict[str, dict[str, str]]:
 
     power = snapshot["power"]
     if power["status"] != "ok":
-        add("power_telemetry", "warning", "電池／電源感測資料無法讀取或已過期")
-    else:
+        message = "UPS 通訊失敗（I²C），電池讀值未知" if power.get("ups_error_code") == "communication_error" else "電池／電源感測資料無法讀取或已過期"
+        if power.get("ups_status") == "ok" and power.get("supply_status") == "unavailable":
+            message = "主機供電感測資料部分不可讀；UPS 電池資料仍可讀"
+        elif power.get("supply_status") == "ok":
+            message += "；主機 5V 供電資料仍可讀"
+        add("power_telemetry", "warning", message)
+    if power.get("ups_status", power["status"]) == "ok":
         percent = power["battery_percent"]
         if percent <= THRESHOLDS["battery_percent"]["warning"]:
             add("battery", "critical" if percent <= THRESHOLDS["battery_percent"]["critical"] else "warning",
                 f"電池剩餘 {percent}%：請接上電源")
         if min(power["cell_voltage_mv"]) < 3150:
             add("battery_cell", "critical", "電池單芯電壓低於 3.15V")
-        if power["active_throttle_bits"]:
-            add("power_throttling", "critical", "Scout 偵測到欠壓、頻率限制或過熱降頻")
-        if power["ext5v_v"] < 4.8:
-            add("supply_voltage", "warning", f"5V 供電偏低：{power['ext5v_v']:.2f}V")
+    if power.get("active_throttle_bits"):
+        add("power_throttling", "critical", "Scout 偵測到欠壓、頻率限制或過熱降頻")
+    if power.get("ext5v_v") is not None and power["ext5v_v"] < 4.8:
+        add("supply_voltage", "warning", f"5V 供電偏低：{power['ext5v_v']:.2f}V")
     memory = snapshot.get("memory")
     if memory:
         high("memory", memory["used_percent"], THRESHOLDS["memory_used_percent"],
@@ -243,7 +285,8 @@ def transitions(snapshot: dict[str, Any], previous: dict[str, Any]) -> list[str]
     for key in old.keys() - snapshot["alerts"].keys():
         events.append("已恢復：" + old[key]["message"])
     old_power, power = previous.get("power", {}), snapshot["power"]
-    if old_power.get("status") == power.get("status") == "ok" and old_power["flow"] != power["flow"]:
+    if (old_power.get("ups_status", old_power.get("status")) == power.get("ups_status", power.get("status")) == "ok"
+            and old_power["flow"] != power["flow"]):
         events.append("電池狀態改變：" + {"charging": "充電中", "discharging": "放電中", "idle": "待機"}[power["flow"]])
     if previous.get("boot_id") and previous["boot_id"] != snapshot["boot_id"]:
         events.append("Scout 已重新啟動")
@@ -298,11 +341,12 @@ def describe(snapshot: dict[str, Any]) -> str:
     stamp = datetime.fromisoformat(snapshot["captured_at"]).astimezone().isoformat(timespec="seconds")
     lines = [f"Scout 硬體監控 [{snapshot['status'].upper()}] {stamp}"]
     power = snapshot["power"]
-    if power["status"] == "ok":
+    if power.get("ups_status", power["status"]) == "ok":
         flow = {"charging": "充電", "discharging": "放電", "idle": "待機"}[power["flow"]]
-        lines.append(f"電池 {power['battery_percent']}%／{flow} {abs(power['battery_power_w']):.2f}W／5V 供電 {power['ext5v_v']:.2f}V")
+        lines.append(f"電池 {power['battery_percent']}%／{flow} {abs(power['battery_power_w']):.2f}W")
     else:
-        lines.append("電池／電源資料不可用：" + power.get("error", "unknown"))
+        lines.append("UPS 通訊失敗（I²C），電池讀值未知" if power.get("ups_error_code") == "communication_error" else "UPS 電池資料未知或不可讀")
+    lines.append(f"主機 5V 供電 {power['ext5v_v']:.2f}V" if power.get("ext5v_v") is not None else "主機 5V 供電未知")
     memory = snapshot.get("memory")
     if memory:
         lines.append(f"記憶體 {memory['used_bytes'] / 2**30:.2f}/{memory['total_bytes'] / 2**30:.2f} GiB（{memory['used_percent']:.1f}%），可用 {memory['available_bytes'] / 2**30:.2f} GiB；Swap {memory['swap_used_bytes'] / 2**30:.2f} GiB")
@@ -313,7 +357,7 @@ def describe(snapshot: dict[str, Any]) -> str:
             lines.append(f"{sensor['name']} {sensor['temperature_c']:.1f}°C")
         elif "rpm" in sensor:
             lines.append(f"{sensor['name']} {sensor['rpm']} RPM")
-    if power["status"] == "ok":
+    if power.get("throttled_hex") is not None:
         lines.append(f"欠壓／降頻旗標 {power['throttled_hex']}")
     lines.append("系統負載 1/5/15 分鐘：" + "/".join(f"{v:.2f}" for v in snapshot["load_average"]))
     lines.extend(alert["severity"].upper() + ": " + alert["message"] for alert in snapshot["alerts"].values())

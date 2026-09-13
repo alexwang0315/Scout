@@ -34,6 +34,10 @@ class PublicModel(BaseModel):
 
 class Power(PublicModel):
     status: Literal["ok", "unavailable"]
+    ups_status: Literal["ok", "unavailable"] | None = None
+    supply_status: Literal["ok", "unavailable"] | None = None
+    ups_error_code: Literal["communication_error", "invalid_telemetry", "stale", "missing", "unreadable"] | None = None
+    supply_error_code: Literal["communication_error", "invalid_telemetry", "stale", "missing", "unreadable"] | None = None
     captured_at: AwareDatetime | None = None
     age_seconds: float | None = None
     battery_percent: Percent | None = None
@@ -51,6 +55,18 @@ class Power(PublicModel):
 
     @model_validator(mode="after")
     def require_ok_metrics(self) -> Power:
+        ups_fields = ("battery_percent", "flow", "battery_power_w", "battery_voltage_mv",
+                      "battery_current_ma", "cell_voltage_mv")
+        if self.ups_status == "ok" and (self.captured_at is None or self.ups_error_code is not None
+                                       or any(getattr(self, field) is None for field in ups_fields)):
+            raise ValueError("healthy UPS telemetry requires its measured fields")
+        if self.ups_status == "unavailable" and any(getattr(self, field) is not None for field in ups_fields):
+            raise ValueError("unavailable UPS telemetry cannot claim battery readings")
+        if self.supply_status == "ok" and (self.captured_at is None or self.supply_error_code is not None
+                                          or self.ext5v_v is None or self.active_throttle_bits is None):
+            raise ValueError("healthy supply telemetry requires its measured fields")
+        if self.status == "ok" and "unavailable" in (self.ups_status, self.supply_status):
+            raise ValueError("partial power cannot claim healthy overall telemetry")
         if self.status == "ok" and any(getattr(self, field) is None for field in (
             "captured_at", "battery_percent", "flow", "battery_power_w", "battery_voltage_mv",
             "battery_current_ma", "cell_voltage_mv", "ext5v_v", "active_throttle_bits",

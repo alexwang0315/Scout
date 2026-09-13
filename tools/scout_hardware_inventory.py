@@ -174,7 +174,7 @@ def i2c(sys_root: Path, power: dict) -> dict:
             items.append(device(path.name, read_text(path / "name") or path.name,
                                 properties={"kind": "registered_device", "bus": bus, "address": hex(int(address, 16))},
                                 bound_driver=driver(path)))
-    if power.get("status") == "ok":
+    if power.get("ups_status", power.get("status")) == "ok":
         items.append(device("ups-telemetry-1-002d", "Waveshare UPS HAT E", "observed",
                             properties={"kind": "telemetry_device", "bus": "1", "address": "0x2d",
                                         "evidence": "existing_ups_telemetry", "captured_at": power.get("captured_at")}))

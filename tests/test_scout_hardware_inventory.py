@@ -96,6 +96,15 @@ def test_stale_ups_is_not_claimed_as_detected_i2c_device(tmp_path):
     assert not any(v["properties"]["kind"] == "telemetry_device" for v in result["items"])
 
 
+def test_ups_inventory_follows_ups_not_host_supply(tmp_path):
+    sys_root, _ = fixture_tree(tmp_path)
+    power = {"status": "unavailable", "ups_status": "ok", "supply_status": "unavailable",
+             "captured_at": "2026-09-13T00:00:00Z"}
+    assert any(v["properties"]["kind"] == "telemetry_device" for v in inventory.i2c(sys_root, power)["items"])
+    power.update(ups_status="unavailable", supply_status="ok")
+    assert not any(v["properties"]["kind"] == "telemetry_device" for v in inventory.i2c(sys_root, power)["items"])
+
+
 def test_a_failed_optional_command_preserves_other_categories(tmp_path):
     sys_root, dev_root = fixture_tree(tmp_path)
     def run(args):

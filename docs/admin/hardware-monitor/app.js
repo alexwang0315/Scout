@@ -33,10 +33,16 @@ function renderStatus(body) {
   current = body; receivedAt = Date.now(); offline = false; statusClock();
   const d = body.data; $("metrics").setAttribute("aria-busy", "false");
   if (!d) { $("metrics").replaceChildren(make("p", "目前沒有可顯示的有效採樣。", "panel muted")); $("inventory").replaceChildren(make("p", "裝置資訊不可用", "panel muted")); $("resources").textContent = "資源資訊不可用"; $("alerts").textContent = body.summary; $("alert-count").textContent = "—"; $("uptime").textContent = ""; return; }
-  const power = d.power?.status === "ok" ? d.power : {}, mem = d.memory || {}, disk = d.disks.find((v) => v.mount === "/") || {}, temp = d.sensors.find((v) => v.name === "cpu_thermal");
+  const rawPower = d.power || {}, upsReadable = (rawPower.ups_status || rawPower.status) === "ok";
+  const power = upsReadable ? rawPower : {}, supply = rawPower;
+  const powerMessages = [];
+  if (!upsReadable) powerMessages.push(rawPower.ups_error_code === "communication_error" ? "UPS 通訊失敗（I²C），電池讀值未知" : "UPS 電池資料未知或不可讀");
+  if (rawPower.supply_status === "unavailable") powerMessages.push("主機供電資料部分不可讀；缺失讀值維持未知");
+  if (!upsReadable && finite(supply.ext5v_v)) powerMessages.push("主機 5V 供電仍有讀值，不代表 UPS 通訊已恢復");
+  const mem = d.memory || {}, disk = d.disks.find((v) => v.mount === "/") || {}, temp = d.sensors.find((v) => v.name === "cpu_thermal");
   const flow = {charging: "充電中", discharging: "放電中", idle: "待機"}[power.flow] || "未知";
   $("metrics").replaceChildren(
-    metric("電池", `${number(power.battery_percent, 0)}%`, [`${flow} · ${number(finite(power.battery_power_w) ? Math.abs(power.battery_power_w) : null)} W`, `5V 供電 ${number(power.ext5v_v, 2)} V`], power.battery_percent),
+    metric("電池", `${number(power.battery_percent, 0)}%`, [`${flow} · ${number(finite(power.battery_power_w) ? Math.abs(power.battery_power_w) : null)} W`, `5V 供電 ${number(supply.ext5v_v, 2)} V`, ...powerMessages.map((message) => `△ ${message}`)], power.battery_percent),
     metric("記憶體", `${number(mem.used_percent)}%`, [`${gib(mem.used_bytes)} / ${gib(mem.total_bytes)}`, `可用 ${gib(mem.available_bytes)} · Swap ${gib(mem.swap_used_bytes)}`], mem.used_percent),
     metric("主磁碟", `${number(disk.used_percent)}%`, [`可用 ${gib(disk.available_bytes)}`, `總量 ${gib(disk.total_bytes)}`], disk.used_percent),
     metric("CPU 溫度", `${number(temp?.temperature_c)}°C`, [`CPU 使用 ${number(d.cpu_used_percent)}%`, `負載 ${d.load_average.map((v) => number(v, 2)).join(" / ")}`]));
@@ -46,8 +52,8 @@ function renderStatus(body) {
   const rows = [
     ["電池電壓／電流", `${number(power.battery_voltage_mv)} mV / ${number(power.battery_current_ma)} mA`],
     ["四芯電壓", power.cell_voltage_mv ? `${power.cell_voltage_mv.join(" / ")} mV` : "—"],
-    ["目前欠壓／降頻旗標", power.active_throttle_bits ?? "未知"],
-    ["本次開機歷史旗標", power.historical_throttle_bits ?? "未知"],
+    ["目前欠壓／降頻旗標", supply.active_throttle_bits ?? "未知"],
+    ["本次開機歷史旗標", supply.historical_throttle_bits ?? "未知"],
     ...d.disks.map((v) => [`磁碟 ${v.mount}`, `${gib(v.used_bytes)} / ${gib(v.total_bytes)} · 可用 ${gib(v.available_bytes)} · inode ${number(v.inode_used_percent)}% · ${v.read_only ? "唯讀" : "可讀寫"}`]),
     ...d.sensors.map((v) => [`${v.name} · ${v.source.split("/").at(-1)}`, finite(v.temperature_c) ? `${number(v.temperature_c)}°C` : `${number(v.rpm, 0)} RPM`])
   ];
@@ -109,7 +115,7 @@ function renderHistory(body) {
   if (body.status === "unavailable") { $("history-range").textContent = "歷史資料不可用"; $("history").replaceChildren(make("p", body.summary, "panel warning")); return; }
   const items = body.items || [];
   $("history-range").textContent = items.length ? `${date(items[0].captured_at)} — ${date(items.at(-1).captured_at)}${body.status === "partial" ? " · 部分紀錄不可用" : ""}` : "尚無歷史紀錄";
-  $("history").replaceChildren(chart("電池電量", items, (v) => v.power?.status === "ok" ? v.power.battery_percent : null, "%"), chart("記憶體使用率", items, (v) => v.memory?.used_percent, "%"));
+  $("history").replaceChildren(chart("電池電量", items, (v) => (v.power?.ups_status || v.power?.status) === "ok" ? v.power.battery_percent : null, "%"), chart("記憶體使用率", items, (v) => v.memory?.used_percent, "%"));
 }
 
 function renderEvents(body) {

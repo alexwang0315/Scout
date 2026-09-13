@@ -156,6 +156,62 @@ def test_router_can_mount_in_dashboard_without_loading_its_runtime(tmp_path):
         assert client.get(api.PREFIX + "/status").json()["data"]["host"] == "scout"
 
 
+def test_partial_power_preserves_supply_in_status_history_and_stale_503(client, tmp_path):
+    raw = sample()
+    raw["status"] = "warning"
+    raw["power"] = {"status": "unavailable", "ups_status": "unavailable", "supply_status": "ok",
+                    "captured_at": raw["captured_at"], "age_seconds": 0.2,
+                    "ups_error_code": "communication_error", "supply_error_code": None,
+                    "ext5v_v": 5.18, "active_throttle_bits": 0, "historical_throttle_bits": 0,
+                    "error": "/private/observer/error"}
+    raw["alerts"] = {"power_telemetry": {"severity": "warning", "message": "UPS 通訊失敗（I²C）"}}
+    save(tmp_path, raw)
+    (tmp_path / "history.jsonl").write_text(json.dumps(raw) + "\n")
+    response = client.get(api.PREFIX + "/status")
+    assert response.status_code == 200
+    power = response.json()["data"]["power"]
+    assert power["ext5v_v"] == 5.18
+    assert power["battery_percent"] is None
+    assert power["ups_error_code"] == "communication_error"
+    assert power["ups_status"] == "unavailable" and power["supply_status"] == "ok"
+    assert "/private" not in response.text
+    assert client.get(api.PREFIX + "/history").json()["items"][0]["power"] == power
+    raw["captured_at"] = (datetime.now(timezone.utc) - timedelta(seconds=151)).isoformat()
+    save(tmp_path, raw)
+    response = client.get(api.PREFIX + "/status")
+    assert response.status_code == 503
+    assert response.json()["status"] == "stale"
+    assert response.json()["data"]["power"] == power
+
+
+@pytest.mark.parametrize("bad", ["healthy_overall", "missing_supply_value", "false_ups_value", "unsafe_error"])
+def test_split_power_contract_rejects_inconsistent_or_unsafe_claims(client, tmp_path, bad):
+    raw = sample()
+    raw["power"].update(ups_status="ok", supply_status="ok")
+    if bad == "healthy_overall":
+        raw["power"]["supply_status"] = "unavailable"
+    elif bad == "missing_supply_value":
+        raw["power"]["ext5v_v"] = None
+    elif bad == "false_ups_value":
+        raw["power"].update(status="unavailable", ups_status="unavailable")
+    else:
+        raw["power"]["ups_error_code"] = "<img src=x onerror=bad> /private/path"
+    save(tmp_path, raw)
+    response = client.get(api.PREFIX + "/status")
+    assert response.status_code == 503
+    assert response.json()["data"] is None
+    assert "/private" not in response.text
+
+
+def test_legacy_power_remains_compatible_without_component_status(client, tmp_path):
+    raw = sample()
+    save(tmp_path, raw)
+    body = client.get(api.PREFIX + "/status").json()
+    assert body["data"]["power"]["ups_status"] is None
+    assert body["data"]["power"]["supply_status"] is None
+    assert body["data"]["power"]["battery_percent"] == 81
+
+
 def test_api_installer_starts_sampler_and_timer_before_api(tmp_path):
     script = Path(__file__).resolve().parents[1] / "scripts/install-scout-hardware-monitor-api.py"
     command = [sys.executable, str(script), "--render-only", str(tmp_path)]
