@@ -133,7 +133,7 @@ const key=(node,value)=>{const event=new window.KeyboardEvent('keydown',{key:val
 ''' .replace("LENS", json.dumps(lens)).replace("MODE", json.dumps(mode)) + _functions(
         NAVIGATION, "dashboardMapHintNode", "positionDashboardMapHint", "showDashboardMapHint", "hideDashboardMapHint",
         "navigationTerrainRenderedKeyboardFeatures", "highlightNavigationTerrainKeyboardFeature",
-        "syncNavigationTerrainKeyboardEvidence", "configureNavigationTerrainEvidenceControls",
+        "syncNavigationTerrainKeyboardEvidence", "configureNavigationTerrainBoxInteraction", "configureNavigationTerrainEvidenceControls",
     ) + r'''
 configureNavigationTerrainEvidenceControls(entry);
 '''

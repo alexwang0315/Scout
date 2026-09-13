@@ -196,12 +196,13 @@ assert.equal(window.snapshot(),before,'Diagnostic changed live state');
 assert.equal(window.document.body.textContent,'untouched','Diagnostic leaked DOM');
 assert.equal(rows.length,8);
 assert.equal(new Set(rows.map(row=>row.id)).size,2);
-for (const row of rows) assert.equal(row.status,row.check==='DASH-027'?'warning':'passed',row.check+': '+row.detail);
+for (const row of rows) assert.equal(row.status,'passed',row.check+': '+row.detail);
 for (const row of rows.filter(row=>row.check==='DASH-027')) {
   assert.equal(row.evidence.keys.length,4);
   assert.equal(row.evidence.reverseRectangleZoomIn,true);
   assert.equal(row.evidence.wheelDefaultNotPrevented,true);
-  assert.equal(row.evidence.reverse_rectangle_policy,'pending_user_arbitration');
+  assert.equal(row.evidence.reverse_rectangle_policy,'any_direction_zoom_in_minus_zoom_out');
+  assert.equal(row.evidence.minusZoomOut,true);
   assert.ok(row.evidence.subchecks.every(check=>check.status==='passed'));
 }
 for (const row of rows) {
@@ -327,21 +328,21 @@ for(const row of rows) {
   assert.equal(find('wheel_page_scroll').status,failure==='missing-box'?'passed':'failed');
   assert.equal(find('editable_key_preserved').status,'passed');
   assert.equal(find('outside_focus_key_preserved').status,'passed');
-  assert.equal(row.evidence.reverse_rectangle_policy,'pending_user_arbitration');
+  assert.equal(row.evidence.reverse_rectangle_policy,'any_direction_zoom_in_minus_zoom_out');
 }
 console.log(JSON.stringify({cases:rows.length,failuresPreserved:true}));
 """)
     assert result == {"cases": 2, "failuresPreserved": True}
 
 
-def test_navigation_ready_domain_checks_absence_while_loading_keeps_existing_vector_gate():
+def test_navigation_ready_domain_requires_vectors_while_loading_requires_truthful_state():
     result = _run(r"""
 const cases=window.interactionCases();
 const policy={vectorCount:2,unapprovedImageCount:0,rudySourceCount:0,rasterTileSourceCount:0,tileUrls:[],evidenceDomain:'terrain',basemapLayer:'none'};
 const ready=cases.filter(surface=>['terrain','prior'].includes(surface.domain) && !surface.variant.includes(':loading:'));
 assert.equal(ready.length,6);
 for(const entry of ready) {
-  const actual={...policy,evidenceDomain:entry.domain};
+  const actual={...policy,evidenceDomain:entry.domain,navigationState:{renderer:entry.renderer,state:'ready',noVectorsClaim:false}};
   assert.equal(window.verifyPolicy(entry,actual).inspectedRudySources,0);
   assert.throws(()=>window.verifyPolicy(entry,{...actual,evidenceDomain:'observed'}),/domain or basemap/);
   assert.throws(()=>window.verifyPolicy(entry,{...actual,basemapLayer:'rudy-twmap'}),/domain or basemap/);
@@ -349,18 +350,36 @@ for(const entry of ready) {
   assert.throws(()=>window.verifyPolicy(entry,{...actual,rasterTileSourceCount:1}),/unexpectedly includes a Rudy source/,'Unlabelled raster cannot disguise Rudy');
   assert.throws(()=>window.verifyPolicy(entry,{...actual,rudySourceCount:undefined}),/absence cannot be verified/);
   assert.throws(()=>window.verifyPolicy(entry,{...actual,vectorCount:0}),/vector evidence is absent/);
+  assert.throws(()=>window.verifyPolicy(entry,{...actual,navigationState:{...actual.navigationState,state:'loading'}}),/not ready/);
 }
 const url='http://localhost/admin/tiles/imagery/dongqing_batongguan_historic_trail_newImport/imagery/12/1/1.png?source_id=happyman_rudy_twmap&exact=1&cache_only=1';
 for(const entry of cases.filter(surface=>surface.family==='navigation'&&surface.variant.includes(':loading:'))) {
-  const loading={...policy,evidenceDomain:undefined,basemapLayer:'rudy-twmap',rudySourceCount:1,tileUrls:[url],vectorCount:0};
-  assert.throws(()=>window.verifyPolicy(entry,loading),/vector evidence is absent/,'Loading must remain FAIL until criteria arbitration');
-  assert.throws(()=>window.verifyPolicy(entry,{...loading,vectorCount:1,tileUrls:[]}),/no actual Rudy tile URL/);
-  assert.equal(window.verifyPolicy(entry,{...loading,vectorCount:1}).inspectedRudyTileUrls,1);
-  assert.throws(()=>window.verifyPolicy(entry,{...loading,vectorCount:1,tileUrls:[url.replace('cache_only=1','native=1')]}),/cache-only boundary/);
+  const loading={...policy,evidenceDomain:undefined,basemapLayer:'rudy-twmap',rudySourceCount:1,tileUrls:[url],vectorCount:0,
+    navigationState:{renderer:'svg',state:'loading',workspaceState:'loading',statusVisible:true,claimVisible:true,noVectorsClaim:true,
+      title:'Loading workspace terrain evidence.',svgLabel:'Navigation orientation map; terrain evidence loading'}};
+  const checked=window.verifyPolicy(entry,loading);
+  assert.equal(checked.mapState,'loading');assert.equal(checked.readyVectorEvidenceVerified,false);
+  assert.throws(()=>window.verifyPolicy(entry,{...loading,navigationState:undefined}),/does not truthfully expose/);
+  assert.throws(()=>window.verifyPolicy(entry,{...loading,navigationState:{...loading.navigationState,state:'ready'}}),/does not truthfully expose/);
+  assert.throws(()=>window.verifyPolicy(entry,{...loading,tileUrls:[]}),/no actual Rudy tile URL/);
+  assert.equal(checked.inspectedRudyTileUrls,1);
+  assert.throws(()=>window.verifyPolicy(entry,{...loading,tileUrls:[url.replace('cache_only=1','native=1')]}),/cache-only boundary/);
 }
 console.log(JSON.stringify({readyCases:ready.length,loadingDomains:3}));
 """)
     assert result == {"readyCases": 6, "loadingDomains": 3}
+
+
+def test_daily_d028_retains_visible_vectors_and_cache_only_tile_requirement():
+    result = _run(r"""
+const present=(await window.exercise()).filter(row=>row.check==='DASH-028');
+assert.equal(present.length,2);
+for(const row of present){assert.equal(row.status,'passed',row.detail);assert.ok(row.evidence.vectorCount>0);assert.equal(row.evidence.readyVectorEvidenceVerified,true)}
+const absent=(await window.exercise('missing-tiles')).filter(row=>row.check==='DASH-028');
+for(const row of absent){assert.equal(row.status,'warning');assert.equal(row.evidence.readyVectorEvidenceVerified,false)}
+console.log(JSON.stringify({ready:present.length,missingTiles:absent.length}));
+""")
+    assert result == {"ready": 2, "missingTiles": 2}
 
 
 def test_unverified_or_failed_cleanup_never_becomes_pass_and_preserves_failed_evidence():
@@ -481,7 +500,7 @@ def test_all_four_existing_checks_include_additional_dom_verification():
         assert f'diagnosticMapInteractionCoverage("DASH-0{number}"' in body
 
 
-@pytest.mark.parametrize("broken", ["", "zoom", "wheel", "image"])
+@pytest.mark.parametrize("broken", ["", "zoom", "wheel", "image", "reverse-shrinks", "minus-noop"])
 def test_debug_adapter_runs_actual_bound_svg_camera_and_hint_handlers(broken):
     debug = (ROOT / "docs/admin/phase-3-5-runtime-debug.html").read_text()
     dashboard = PAGE.read_text()
@@ -531,6 +550,7 @@ runtimeMap.createSVGPoint=()=>({x:0,y:0,matrixTransform(){
         "diagnosticRequire", "diagnosticUnavailable", "diagnosticMapInteractionRow",
         "diagnosticExerciseMapInteractionDom", "diagnosticMapInteractionRenderPolicy",
         "diagnosticDebugMapInteractionAdapter", "diagnosticDebugMapImageApproved",
+        "diagnosticMapInteractionNodeVisible", "diagnosticMapInteractionSvgVectorCount",
     )) + r"""
 const point=svgEl('circle',{r:5});
 attachMapEvidence(point,{source_id:'cp-1',display_label:'Checkpoint',evidence_type:'candidate route'},'cp-1');
@@ -545,13 +565,28 @@ adapter.settle=async()=>{};
 if(broken==='zoom')document.getElementById('zoomIn').addEventListener('click',event=>event.stopImmediatePropagation(),true);
 if(broken==='wheel')runtimeMap.addEventListener('wheel',event=>event.preventDefault());
 if(broken==='image')runtimeMap.appendChild(svgEl('image',{href:'arbitrary.png',width:100,height:100}));
+if(broken==='reverse-shrinks')runtimeMap.addEventListener('pointerup',()=>{
+  const selection=debugPageState.zoomSelection;
+  if(selection?.moved&&isZoomOutDrag(selection)){
+    const before=debugPageState.zoom;cancelMapRectangleZoom();debugPageState.zoom=before/2;applyMapViewport();
+  }
+},true);
+if(broken==='minus-noop')document.getElementById('zoomOut').addEventListener('click',event=>event.stopImmediatePropagation(),true);
 (async()=>{
 const rows=await diagnosticExerciseMapInteractionDom({id:'debug-map',renderer:'svg'},adapter);
 if(!broken)for(const row of rows)assert.equal(row.status,'passed',row.check+': '+row.detail);
-if(!broken)assert.equal(rows.find(row=>row.check==='DASH-027').evidence.reverseRectangleZoomIn,false);
+if(!broken)assert.equal(rows.find(row=>row.check==='DASH-027').evidence.reverseRectangleZoomIn,true);
 if(broken==='zoom')assert.equal(rows.find(row=>row.check==='DASH-029').status,'failed');
 if(broken==='wheel')assert.equal(rows.find(row=>row.check==='DASH-027').status,'failed');
 if(broken==='image')assert.equal(rows.find(row=>row.check==='DASH-028').status,'failed');
+if(['reverse-shrinks','minus-noop'].includes(broken)){
+  const row=rows.find(row=>row.check==='DASH-027');assert.equal(row.status,'failed');
+  const name=broken==='reverse-shrinks'?'reverse_rectangle':'minus_zoom_out';
+  assert.equal(row.evidence.subchecks.find(item=>item.name===name).status,'failed');
+  assert.equal(row.evidence.subchecks.find(item=>item.name==='forward_rectangle').status,'passed');
+  assert.equal(row.evidence.subchecks.find(item=>item.name==='wheel_page_scroll').status,'passed');
+  assert.equal(row.evidence.subchecks.find(item=>item.name==='outside_focus_key_preserved').status,'passed');
+}
 console.log(JSON.stringify(rows));
 })().catch(error=>{console.error(error);process.exitCode=1}).finally(()=>window.close());
 """

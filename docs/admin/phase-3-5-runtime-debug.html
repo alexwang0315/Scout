@@ -2343,7 +2343,7 @@
                 <button id="fitRoute" class="tool-button" type="button" title="Reset map view" aria-label="Reset map view">Fit</button>
                 <button id="refreshMapTiles" class="tool-button" type="button" aria-pressed="true">停止更新</button>
                 <button id="panMode" class="tool-button is-active" type="button" title="Mouse drag pan is active" aria-label="Mouse drag pan" aria-pressed="true">Pan</button>
-                <button id="boxZoomMode" class="tool-button compact" type="button" title="Point or rectangle zoom: click to zoom in, drag down-right to zoom in, up-left to zoom out" aria-label="Rectangle drag zoom" aria-pressed="false">▣</button>
+                <button id="boxZoomMode" class="tool-button compact" type="button" title="Point or rectangle zoom: click or drag in any direction to zoom in; use minus to zoom out" aria-label="Rectangle zoom in in any direction" aria-pressed="false">▣</button>
                 <span id="zoomLevel" class="zoom-level" title="Map zoom">1.00x</span>
                 <details class="layer-menu">
                   <summary id="layerControl" title="Show layer controls" aria-label="Layer controls">Layers <strong id="layerEnabledCount">-</strong></summary>
@@ -7559,8 +7559,7 @@
       clearZoomSelectionOverlay();
       if (selection?.moved) {
         const box = boxFromPoints(selection.start, selection.current);
-        if (isZoomOutDrag(selection)) zoomMapOutFromBox(box, selectionZoomFactor(selection));
-        else zoomMapToBox(box);
+        zoomMapToBox(box);
       } else if (selection?.clickTarget) {
         zoomMap(1);
         selectTimelineForMapTarget(selection.clickTarget);

@@ -198,6 +198,7 @@ def _check_html_surfaces(
     for surface, relative_path in SCOUT_LAYER_HTML_FILES.items():
         html_path = repo_root / relative_path
         text = html_path.read_text()
+        expected = set(SCOUT_SURFACE_LAYER_IDS[surface])
         controls = {
             match.group(2)
             for match in re.finditer(
@@ -205,11 +206,13 @@ def _check_html_surfaces(
                 text,
             )
             if "$" not in match.group(2)
-            and 'data-layer-contract="auxiliary"' not in match.group(0)
+            and (
+                match.group(2) in expected
+                or 'data-layer-contract="auxiliary"' not in match.group(0)
+            )
         }
         ranks = _extract_map_layer_ranks(text)
         groups = _extract_static_layer_groups(text)
-        expected = set(SCOUT_SURFACE_LAYER_IDS[surface])
         missing_controls = sorted(expected - controls)
         extra_controls = sorted(controls - expected)
         if missing_controls:

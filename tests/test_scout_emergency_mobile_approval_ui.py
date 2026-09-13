@@ -38,7 +38,10 @@ def test_emergency_mobile_approval_ui_v0_contract() -> None:
     assert "Emergency Package Draft" in html
     assert "Workspace Resources" in html
     assert html.index("Production Path State") < html.index("Workspace Resources")
-    assert html.index("Offline Map") < html.index("Workspace Resources")
+    assert html.index("Legacy 示意地圖") < html.index("Workspace Resources")
+    assert html.count('data-map-purpose="illustrative-only"') == 2
+    assert html.count('data-workspace-route-evidence="false"') == 2
+    assert 'data-map-source="static-prototype-geometry"' in html
     assert "WORKSPACE_LAYOUT_VERSION" in html
     assert "scout.workspace.v1" in html
     assert "workspaceResourcePaths" in html
@@ -54,7 +57,7 @@ def test_emergency_mobile_approval_ui_v0_contract() -> None:
     assert "Production Path State" in html
     assert "Quick Decision" in html
     assert "Decision Controls" in html
-    assert "Offline Map" in html
+    assert "Legacy 示意地圖" in html
     assert "Emergency Call Out" in html
     assert "Cached Rudy+TW" in html
     assert "Cached Imagery" in html

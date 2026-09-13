@@ -329,7 +329,7 @@ class DebugPageTests(unittest.TestCase):
         self.assertIn('id="fitRoute"', html)
         self.assertIn('id="boxZoomMode"', html)
         self.assertIn('id="zoomLevel"', html)
-        self.assertIn('aria-label="Rectangle drag zoom"', html)
+        self.assertIn('aria-label="Rectangle zoom in in any direction"', html)
         self.assertIn("function updateMapZoomIndicator", html)
         self.assertIn('id="panUp"', html)
         self.assertIn('id="panDown"', html)

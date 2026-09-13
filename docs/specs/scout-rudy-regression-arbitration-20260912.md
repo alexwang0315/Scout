@@ -5,6 +5,94 @@
 指定入口：`http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#map`。
 使用者瀏覽器為 Chrome。Dashboard 仍以 9099 為單一入口；19111 不得恢復。
 
+## 追加仲裁（2026-09-13 使用者已確認）
+
+使用者確認 Chrome 已重整，並逐項裁決如下。下文 2026-09-12 的「待仲裁」及
+舊結果保留為歷史；目前對應修改已獲授權，仍須以新版本實測，不能直接改成 PASS。
+
+| 項目 | 使用者決定與實作邊界 |
+| --- | --- |
+| D027 | 任意方向框選皆放大，以減號縮小；补齊 Navigation Box／B 並統一 Debug。 |
+| 古地圖 | 增加 `auxiliary` 標記，其餘照舊：保留正式 layer registry、順序、來源、預設關閉、快取及 candidate-only 邊界，不套用先前改掉 auxiliary 斷言的候選。 |
+| Planned／Legacy | 分別驗向量比較與示意用途；九個 Planned 實例仍須逐一驗來源、幾何與互動，Legacy 不得宣稱真實 Rudy、目前路線或安全證據。 |
+| D028 loading | ready 才要求完整向量；loading 必須如實標示，不能把 failed、缺資料或偽 ready 包成通過。 |
+| D038 候選定位 | 保留定位，列為鏡頭保存的明確例外；其他 view／domain／lens 切換仍須保存獨立鏡頭。 |
+| 標記清理 | 改驗實際清理結果及故障情境，保留其餘 known GPX／reference／candidate 邊界斷言。 |
+
+本輪紀錄保存於 Scout `main-rudy-zoom-20260913/`。9099 的 Chrome 分頁已重新
+取得並讀到指定 workspace 的 Diagnostic；程式重驗、完整地圖操作與教學更新尚在進行。
+
+### 2026-09-13 11:30 台北續作證據（仍未完成）
+
+- 新來源整合第一輪 `integrated-verification-030823/`：875 passed、1 failed；
+  漏掉的是 Navigation registry 測試仍只建立 48 題 stub。新增 D049 後已補成
+  49 題。第二輪 `integrated-verification-031659/`：876 passed、0 failed、
+  0 skipped；既有 Starlette／AnyIO deprecation warning 1 則仍未解。
+  所有 parse、pnpm、repository／真 workspace layer contract 及前後 guard 通過，
+  每輪前後來源 SHA 相同。之後的 Legacy 入口修正仍須另測，不沿用此輪作完整證明。
+- 9099 已以原 workspace-root 重載為 PID 92044；新 D049／Planned JS 的 HTTP
+  bytes 與工作樹相同，`no-store`；analysis subject 仍為東清 Golden，新增 Golden
+  comparison 欄位可讀。19111 未啟動。19120／19121 僅恢復原教學與報告的 SSH 轉送。
+- Chrome 真主圖曾取得 MapLibre ready 畫面；首次 `+` 由 Z12 升到 Z13，24 張
+  必要圖磚全部成功。這是單一視角證據，不是 45 組／450 階段全面通過。
+- 同 Chrome 的正式 D049 首次結果為 0/10。九列缺 selected Planned；Legacy
+  則因 replay projection stale，Emergency unavailable 分支沒有示意入口。
+  不重建 Permission、不保存假計畫；正在保留原阻擋訊息的前提下分離示意入口。
+  原始失敗 JSON：`planned-purpose/scout-d049-live-20260913.json`。
+- D037 已從同一 Chrome 的正式按鈕重新啟動，但採證連線在進度讀取時再次逾時，
+  尚未取得完整結果。分頁 1275391296 已保留供續作；請勿把未讀回的結果當成通過。
+- 首次 Main 載入 trace、實際畫面與唯讀效能盤點在 `main-load-readonly/`。
+  小範圍 DOM／截圖曾可經正式 CDP capability 讀取，但高階 DOM 操作曾逾時；
+  後續亦有 `Debugger unattached`。已量到重複 SVG／feature 工作量，但尚未證明
+  它是連線中斷、OOM 或 GPU 故障根因，不以其他瀏覽器的成功替代。
+- 使用者提供真實四日主線＋支線案，19 段來源盤點及 D4.3 的 151 點預覽已存
+  `planned-four-day-case/`，並加入 workbench 規格。尚未保存 Planned、review 或
+  變更 analysis selection；完整四日仍缺幾何、端點與日期，不能用片段補綠 D049。
+- 教學 slide／PDF 仍待其餘必要實際畫面與步驟座標，未宣稱更新交付。
+
+### 2026-09-13 11:42 台北：Legacy 實際重驗
+
+`planned-purpose/scout-d049-legacy-repair-live-20260913.json` 保存修正後 Chrome／
+9099／東清的完整 D049 結果：Legacy 1 列 passed（4 階段與 2 次清理均通過），
+Planned 9 列仍 failed，原因仍為沒有 selected Planned。修正僅使 Emergency 的
+ready／loading／blocked 分支共用有用途標示的 Legacy 示意入口；原 stale 訊息、
+審查與權限未改，也沒有重建 Permission 或產生 Saved Planned 來滿足測試。
+此結果不能算 D049 或全部地圖通過。其 50 項相關程式測試通過，最終整合仍待
+加入四日人工行程的換行及地名解析修正後重跑。
+
+### 2026-09-13 11:51 台北：四日原文實際預覽
+
+9099 重載為 PID 92888 後，實際 API 的 15 項檢查通過；Chrome 也從 Permission
+`Preview source` 取得四天、27 個未解項目的候選。C1 座標仍待 CRS 確認，H1648
+留在 D2，Nas-maya 未拆開，兩個單攻保持待審。沒有保存版本、review 或變更分析
+選擇。API 收據與 Chrome 截圖保存在 `planned-four-day-case/`。
+原 D037 採證中斷的分頁仍保留；服務重載後不把該輪算作此版驗收。
+另觀測 Preview 後既有文字區塊會收合，需重新展開；此 UI 限制未修復。
+
+### 2026-09-13 12:11 台北：本版整合與新 D037 失敗
+
+- `integrated-verification-040041/`：1021 passed、0 failed、0 skipped，仍有
+  1 則既有 Starlette／AnyIO deprecation warning；parse、pnpm、兩組 layer
+  contract 與前後 report-only guard 皆退出 0，前後來源 SHA 一致。
+- Preview 收合缺口已另外修正：保存操作者展開／收合選擇並忽略已卸載節點的
+ 延遲 toggle。54 項相關測試通過且無 warning；正式 Chrome 重載後按 Preview
+ 直接看見四日／27 個未解項目，無需再次展開。修前證據保留，修後截圖為
+ `planned-four-day-case/qa/scout-human-itinerary-chrome-fixed-20260913.png`。
+- 四日審閱報告已加入真截圖與 1／2／3 對位標記，並經 Chrome 重新載入核對。
+ 這是此案例的審閱材料，原教學 slide／PDF 的全面更新仍未完成。
+- 新 D037 在 Chrome 分頁 1275391305 執行中；已讀回主圖兩組失敗，原始檔為
+ `scout-d037-partial-20260913-0408.json`。MapLibre 的 initial 等待逾時，最後
+ 狀態 loading／矩陣未知；SVG 的 Z12 15/15 ready 後，額外 HTTP/decode 驗證
+ 請求中止。兩組 cleanup 通過，但後續階段仍為 not_checked，不可補成 PASS。
+ `scout-d037-visibility-20260913.json` 顯示單一觀測時刻為 visible/focused，
+ 進度 21/450、1 個階段通過；不能以該瞬間推論整輪前景狀態或完整結果。
+- 原始 SVG 訊息 `The user aborted a request` 來自瀏覽器錯誤；程式另有每次
+ tile read 的 15 秒 AbortController，不能據此宣稱使用者手動中止。
+ 缺逐張 URL／耗時／abort reason 收據，尚未確認是哪個 HTTP 或 decode 請求。
+
+整體仍未完成：D037 完整矩陣、九張真實 Planned 比較、其他相關 Chrome 地圖
+操作／重載以及原教學／PDF 尚未全部通過。上述程式測試不可替代它們。
+
 ## 目前續作檢查點（2026-09-12 12:17 台北）
 
 - 凍結來源整合 `integrated-verification-041315/`：720 項中 718 passed、2 failed、

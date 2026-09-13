@@ -1174,7 +1174,8 @@
           </section>
 
           <section class="section" aria-labelledby="mobile-map-title">
-            <h2 id="mobile-map-title">Offline Map</h2>
+            <h2 id="mobile-map-title">Legacy 示意地圖</h2>
+            <p data-legacy-map-purpose="illustrative-only">固定 SVG 幾何與 CSS 底圖示意，供檢視圖層操作介面。圖層名稱不代表已載入圖資；本圖沒有目前 workspace 的路線、定位或安全判斷權限。</p>
             <div class="layer-controls" aria-label="Offline map layer controls">
               <button class="layer-toggle" type="button" data-layer-toggle="rudy-twmap" aria-pressed="true"><span class="swatch rudy"></span>Cached Rudy+TW</button>
               <button class="layer-toggle" type="button" data-layer-toggle="imagery" aria-pressed="true"><span class="swatch imagery"></span>Cached Imagery</button>
@@ -1184,7 +1185,7 @@
               <button class="layer-toggle" type="button" data-layer-toggle="route-notes" aria-pressed="true"><span class="swatch note"></span>Note</button>
               <button class="layer-toggle" type="button" data-layer-toggle="terrain" aria-pressed="true"><span class="swatch terrain"></span>Terrain</button>
             </div>
-            <div class="map-frame" data-map-surface="mobile">
+            <div class="map-frame" data-map-surface="mobile" data-map-purpose="illustrative-only" data-map-source="static-prototype-geometry" data-workspace-route-evidence="false" data-runtime-safety-truth="false">
               <div class="map-layer layer-imagery" data-layer-group="imagery"></div>
               <div class="map-layer layer-rudy" data-layer-group="rudy-twmap"></div>
               <div class="map-layer layer-terrain" data-layer-group="terrain"></div>
@@ -1366,7 +1367,8 @@
         </div>
 
         <section class="section" aria-labelledby="desktop-map-title">
-          <h2 id="desktop-map-title">Offline Map</h2>
+          <h2 id="desktop-map-title">Legacy 示意地圖</h2>
+          <p data-legacy-map-purpose="illustrative-only">固定 SVG 幾何與 CSS 底圖示意，供檢視圖層操作介面。圖層名稱不代表已載入圖資；本圖沒有目前 workspace 的路線、定位或安全判斷權限。</p>
           <div class="layer-controls" aria-label="Offline map layer controls">
             <button class="layer-toggle" type="button" data-layer-toggle="rudy-twmap" aria-pressed="true"><span class="swatch rudy"></span>Cached Rudy+TW</button>
             <button class="layer-toggle" type="button" data-layer-toggle="imagery" aria-pressed="true"><span class="swatch imagery"></span>Cached Imagery</button>
@@ -1376,7 +1378,7 @@
             <button class="layer-toggle" type="button" data-layer-toggle="route-notes" aria-pressed="true"><span class="swatch note"></span>Note</button>
             <button class="layer-toggle" type="button" data-layer-toggle="terrain" aria-pressed="true"><span class="swatch terrain"></span>Terrain</button>
           </div>
-          <div class="map-frame desktop-map" data-map-surface="desktop">
+          <div class="map-frame desktop-map" data-map-surface="desktop" data-map-purpose="illustrative-only" data-map-source="static-prototype-geometry" data-workspace-route-evidence="false" data-runtime-safety-truth="false">
             <div class="map-layer layer-imagery" data-layer-group="imagery"></div>
             <div class="map-layer layer-rudy" data-layer-group="rudy-twmap"></div>
             <div class="map-layer layer-terrain" data-layer-group="terrain"></div>
@@ -1568,6 +1570,7 @@
     let approvalArtifact = buildDecisionArtifact("pending_review");
     let livingProjection = null;
     let livingRefreshTimer = null;
+    const diagnosticMapPurposeProbe = new URLSearchParams(location.search).get("diagnosticMapProbe") === "1";
 
     function initialWorkspaceProjectId() {
       const params = new URLSearchParams(location.search);
@@ -1610,6 +1613,7 @@
     }
 
     async function postLivingAction(path, payload) {
+      if (diagnosticMapPurposeProbe) throw new Error("Diagnostic map purpose probe is read-only.");
       const response = await fetch(workspaceUrl(path), {
         method: "POST",
         headers: { "Accept": "application/json", "Content-Type": "application/json" },
@@ -2361,8 +2365,17 @@
       });
     });
 
+    if (diagnosticMapPurposeProbe) window.scoutLegacyMapPurposeBridge = Object.freeze({
+      snapshot: () => ({pendingRefresh: livingRefreshTimer !== null, livingConnected: livingProjection !== null,
+        externalSendPerformed: approvalArtifact.external_send_performed === true}),
+      dispose: () => {
+        if (livingRefreshTimer !== null) window.clearTimeout(livingRefreshTimer);
+        livingRefreshTimer = null;
+        return {disposed: true, pendingRefresh: false, errors: []};
+      },
+    });
     render(activePayload);
-    if (new URLSearchParams(location.search).get("living") === "1") {
+    if (!diagnosticMapPurposeProbe && new URLSearchParams(location.search).get("living") === "1") {
       loadLivingProjection().catch((error) => {
         bindText("livingStatus", `Living failed: ${error.message || error}`);
       });

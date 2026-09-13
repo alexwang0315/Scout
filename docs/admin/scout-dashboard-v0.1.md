@@ -587,6 +587,25 @@ Verification at correction time:
 - This camera behavior is presentation state only and does not create route,
   terrain, operational, or runtime safety authority.
 
+### 2026-09-13 - Approved candidate-focus exception to DASH-MAP-REG-003
+
+The user explicitly retained candidate positioning as an exception to camera
+preservation. The 2026-08-24 report above is historical; its broad prohibition
+on candidate-driven camera movement no longer defines the current expectation.
+
+Selecting a candidate may center each applicable view on that exact candidate.
+The focus zoom is at least Z15 for 2D or Z16 for 3D, bounded by the source's
+native maximum and retaining an already higher zoom. Pitch and bearing remain
+unchanged. DASH-038 checks the selected candidate, actual focus receipt and
+native cap before accepting this exception. Later lens, Evidence, exaggeration
+or view-mode rerenders must preserve the resulting independent cameras; they
+cannot reuse the exception to justify another movement. Explicit Fit / Reset
+and changed route/DEM scope retain their existing meanings.
+
+The updated probe has 26 phases. Focused replays establish the decision logic;
+the matching 9099 Chrome run remains required before reporting this repair as
+accepted. No camera behavior grants route or runtime safety authority.
+
 ### 2026-07-28 - Repair false zero Evidence counts and explain empty states
 
 User request:

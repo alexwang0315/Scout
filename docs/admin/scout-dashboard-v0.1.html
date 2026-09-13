@@ -7938,6 +7938,7 @@
       color: #ffd0c3;
     }
     .navigation-map-pan-control,
+    .navigation-map-box-control,
     .navigation-map-evidence-picker {
       position: absolute;
       z-index: 9;
@@ -7947,6 +7948,7 @@
       color: #f2f2e8;
     }
     .navigation-map-pan-control { right: 10px; top: 178px; min-height: 32px; padding: 5px 7px; }
+    .navigation-map-box-control { right: 10px; top: 218px; min-height: 32px; padding: 5px 7px; }
     .navigation-map-evidence-picker {
       left: 12px; top: 112px; display: flex; gap: 4px; padding: 4px;
       max-width: calc(100% - 92px);
@@ -7959,7 +7961,8 @@
       border: 1px solid rgba(233, 234, 220, .35); border-radius: 3px;
     }
     .navigation-map-evidence-picker button:focus-visible,
-    .navigation-map-pan-control:focus-visible { outline: 2px solid #b7cf63; outline-offset: 2px; }
+    .navigation-map-pan-control:focus-visible,
+    .navigation-map-box-control:focus-visible { outline: 2px solid #b7cf63; outline-offset: 2px; }
 
     .navigation-terrain-maplibre-shell .maplibregl-ctrl-top-right {
       top: 10px;
@@ -12304,8 +12307,8 @@
       {id: "DASH-024", category: "Exploring for Six Axis", title: "Architecture workbench 與 Segment Microscope", description: "確認 route architecture projection 與 candidate boundary。", run: diagnosticCheck024},
       {id: "DASH-025", category: "Navigation", title: "Navigation Terrain Intelligence 與 Rudy+TW", description: "確認 bounded terrain projection 與唯一 Rudy+TW basemap contract。", run: diagnosticCheck025},
       {id: "DASH-026", category: "Map & Evidence", title: "所有 Dashboard 地圖 evidence hover hint", description: "確認目前 registry 內每張地圖的 evidence 在滑鼠移入與鍵盤 focus 時都能顯示內容提示。", run: diagnosticCheck026},
-      {id: "DASH-027", category: "Map & Evidence", title: "所有 Dashboard 地圖框選縮放與鍵盤平移", description: "確認目前 registry 內每張地圖都支援矩形框選放大／縮小、方向鍵平移，並停用滑鼠滾輪縮放。", run: diagnosticCheck027},
-      {id: "DASH-028", category: "Map & Evidence", title: "所有 Dashboard 地圖圖磚、向量與單圖例外政策", description: "確認主 Map 保留完整圖層，其餘 8 張圖只用 Rudy+TW basemap；單一圖片僅限明確允許的主題 overlay。", run: diagnosticCheck028},
+      {id: "DASH-027", category: "Map & Evidence", title: "所有 Dashboard 地圖框選縮放與鍵盤平移", description: "逐一驗證任意方向框選放大、減號縮小、方向鍵平移與取消操作，並停用滑鼠滾輪縮放。", run: diagnosticCheck027},
+      {id: "DASH-028", category: "Map & Evidence", title: "所有 Dashboard 地圖圖磚、向量與單圖例外政策", description: "核對各頁與 Navigation domain 的實際來源、圖磚、向量及允許的圖片；ready 要有向量，loading 必須如實標示。", run: diagnosticCheck028},
       {id: "DASH-029", category: "Map & Evidence", title: "所有 Dashboard 地圖基本 Zoom、Pan 與 Fit", description: "確認目前 registry 內每張地圖都具備按鈕／框選縮放、滑鼠平移與 Fit／Reset。", run: diagnosticCheck029},
       {id: "DASH-030", category: "Map & Evidence", title: "Evidence 是否有計數為 0 的類別", description: "確認 Evidence 群組與 Evidence Timeline 子類別的 count=0 都有原因；合理且具 typed reason 的零值顯示黃燈，無法解釋的零值顯示紅燈。", run: diagnosticCheck030},
       {id: "DASH-031", category: "Exploring for Six Axis / Contextual Permission", title: "Contextual Permission 專案範圍與只讀 API", description: "確認 selected project、schema 與 candidate/no-authority 邊界；只執行 GET。", run: diagnosticCheck031},
@@ -12326,6 +12329,7 @@
       {id: "DASH-046", category: "System", title: "Living sandbox 與模擬收據邊界", description: "只讀 sandbox projection 與既有模擬 receipt；不執行情境、批准或傳送。", run: diagnosticCheck046},
       {id: "DASH-047", category: "System", title: "Intelligence 內嵌頁面與工作紀錄", description: "確認 iframe、telemetry GET、store 與 candidate-only 工作資料；不執行模型。", run: diagnosticCheck047},
       {id: "DASH-048", category: "Assistant / System / Safety", title: "Emergency packet、Field 與離線就緒狀態", description: "讀取 mission-day packet 與 field group，檢查離線 API 能力；不寫入離線資料或執行安全決策。", run: diagnosticCheck048},
+      {id: "DASH-049", category: "Map & Evidence", title: "Planned 比較圖與 Legacy 示意圖用途", description: "9 個 Planned 正式入口核對已選 Saved 來源、版本、完整雙線幾何及操作；Legacy 桌面圖核對示意用途、7 個圖層與權限邊界。隔離正式 render/bind，只讀 GET，不生成計畫、不更改 selection，不代替 Rudy 原生圖磚或完整 Chrome 頁面驗收。", run: diagnosticCheck049},
     ]);
     const NAVIGATION_DIAGNOSTIC_CASE_IDS = Object.freeze([
       "DASH-025", "DASH-038", "DASH-039", "DASH-040", "DASH-041", "DASH-042", "DASH-043",
@@ -12900,6 +12904,7 @@
       permissionSimulationState: "idle",
       permissionSimulationMessage: "",
       permissionBaselineMode: "human_text",
+      permissionLegacyTextAuthoringExpanded: false,
       permissionBaselineText: "D0: city - trailhead C0\nD1: C0 - reviewed junction - reviewed camp C1",
       permissionBaselineDraft: null,
       permissionBaselineMapContext: null,
@@ -13176,7 +13181,7 @@
       debug: ["Debug Message", "read-only runtime and projection messages"],
       observer: ["MQTT / Observer Message", "observer stream review without publish controls"],
       settings: ["Settings / Configure", "local alpha route and API settings"],
-      diagnostic: ["Diagnostic", "48 read-only Dashboard checks"],
+      diagnostic: ["Diagnostic", "49 Dashboard checks · read-only workspace evidence and approved Rudy native GET"],
       "runtime-audit": ["Logs", "以日／月索引檢視統一運行紀錄、API 成敗與 workspace I/O"],
       "surface-intelligence": ["Intelligence", "candidate-only background job telemetry"],
       "scout-monitor": ["scout monitor", "觀測 Scout 主機硬體狀態"],
@@ -18911,6 +18916,13 @@
       `;
     }
 
+    function renderEmergencyLegacyIllustration() {
+      return `<details class="safety-emergency-frame-shell" data-emergency-legacy-illustration="true">
+        <summary class="safety-emergency-frame-toolbar"><div><strong>Legacy 示意地圖</strong><span>固定 SVG／CSS 圖層操作示意；不代表目前 workspace 路線、每日審查結果或任何安全權限。</span></div></summary>
+        <iframe class="safety-emergency-frame" title="Legacy safety and emergency desktop illustration" src="${escapeHtml(surfaceSrc("/admin/dashboard/emergency-approval-desktop-v0"))}" loading="lazy" data-emergency-approval-frame="desktop"></iframe>
+      </details>`;
+    }
+
     function renderEmergencyPage() {
       const session = state.permissionReviewSession;
       const projection = state.permissionProjection || {};
@@ -18931,6 +18943,7 @@
               </div>
               <p>Safety / Emergency is still present. Runtime authorization, Safety API, outbound transport and Phase 1 mutation remain closed while the packet is unavailable.</p>
             </div>
+            ${renderEmergencyLegacyIllustration()}
           </section>
         `;
       }
@@ -18938,6 +18951,7 @@
         return `
           <section class="emergency-review-shell" data-daily-emergency-review="loading">
             <div class="permission-loading" role="status"><h3>Loading Daily Emergency Review</h3><p>Opening the same mission-day packet used by Contextual Permission. No decision is available until server truth is loaded.</p></div>
+            ${renderEmergencyLegacyIllustration()}
           </section>
         `;
       }
@@ -19190,10 +19204,7 @@
             </aside>
           </div>
 
-          <details class="safety-emergency-frame-shell">
-            <summary class="safety-emergency-frame-toolbar"><div><strong>Legacy Emergency prototype</strong><span>Open the existing desktop console for comparison; it does not own this daily review state.</span></div></summary>
-            <iframe class="safety-emergency-frame" title="Legacy safety and emergency desktop approval console" src="/admin/dashboard/emergency-approval-desktop-v0" loading="lazy" data-emergency-approval-frame="desktop"></iframe>
-          </details>
+          ${renderEmergencyLegacyIllustration()}
 
           <div class="emergency-boundary-banner">Daily review receipt only · no automatic night authorization · no clock-based day rollover · no leader sleep roll call · no heartbeat requirement · no message, MQTT, hardware or Phase 1 effect</div>
           ${renderEmergencyConfirmationSheet(packet)}
@@ -20126,6 +20137,10 @@
 
     function diagnosticCaseScopeKey(caseId) {
       if (caseId === "DASH-044") return `${apiBase()}|${projectId()}|map-layer-order-v1`;
+      if (caseId === "DASH-049") {
+        const subject = selectedAnalysisSubject();
+        return `${apiBase()}|${resolvedPretripProjectId()}|map-purpose-v1|${subject?.subject_kind || "unloaded"}|${subject?.selected_plan_version_id || ""}|${subject?.analysis_revision || ""}`;
+      }
       return NAVIGATION_DIAGNOSTIC_CASE_IDS.includes(caseId) ? diagnosticNavigationScopeKey() : `${apiBase()}|${resolvedPretripProjectId()}|diagnostic-v2`;
     }
 
@@ -20185,6 +20200,7 @@
             ${renderDiagnosticEvidenceStatus(result)}
             ${item.id === "DASH-037" ? renderDiagnosticRudyResults(result.rudyNativeReport, result) : ""}
             ${item.id === "DASH-044" ? renderDiagnosticMapOrderResults(result.mapLayerOrder) : ""}
+            ${item.id === "DASH-049" ? renderDiagnosticMapPurposeResults(result.mapPurposeReport) : ""}
             ${showMapEvidence ? `<details data-diagnostic-map-evidence><summary>地圖檢查明細</summary>
               <pre data-diagnostic-map-evidence-json>${escapeHtml(JSON.stringify(mapEvidence, null, 2))}</pre></details>` : ""}
           </div>
@@ -20312,7 +20328,7 @@
     function renderDiagnosticAdvanced() {
       return `<section class="diagnostic-category" data-diagnostic-advanced>
         <h3>進階隔離重播</h3>
-        <p>以下五項需單獨點選，不包含在 Diag all 或 48 題統計。使用目前正式函式與隔離測試資料；不呼叫模型、不傳送訊息、不變更目前專案或使用者資料。離線測試會寫入專用測試資料庫，重開頁面再執行可驗證持久化；後端拒用與送達需另外驗證。</p>
+        <p>以下五項需單獨點選，不包含在 Diag all 或 ${DASHBOARD_DIAGNOSTIC_CASES.length} 題統計。使用目前正式函式與隔離測試資料；不呼叫模型、不傳送訊息、不變更目前專案或使用者資料。離線測試會寫入專用測試資料庫，重開頁面再執行可驗證持久化；後端拒用與送達需另外驗證。</p>
         <div class="diagnostic-case-list">${DIAGNOSTIC_ADVANCED_CASES.map(item => {
           const stored = state.diagnosticAdvancedResults?.[item.id];
           const result = stored?.scopeKey === diagnosticCaseScopeKey("DASH-003") ? stored : null;
@@ -21615,7 +21631,7 @@
       const doc = frame.contentDocument;
       const viewport = doc.getElementById(renderer === "maplibre" ? "mapLibreEvidenceMap" : "map");
       const names = {"zoom-in": "zoomIn", "zoom-out": "zoomOut", reset: "fitRoute", pan: "panMode", "box-zoom": "boxZoomMode"};
-      return {doc, viewport, rudyCacheLayer: "rudy-twmap", reverseZoomIn: renderer === "maplibre",
+      return {doc, viewport, rudyCacheLayer: "rudy-twmap", reverseZoomIn: true,
         control: action => doc.getElementById(names[action]),
         camera: () => {
           if (renderer === "maplibre") { const current = bridge.getSnapshot(); return {zoom: current.zoom, x: current.center?.[0], y: current.center?.[1]}; }
@@ -21630,7 +21646,7 @@
         hintPointerEvent: "mouseenter", hintLeaveEvent: "mouseleave",
         hint: () => doc.getElementById("hoverHint"), hintVisible: hint => Boolean(hint && !hint.classList.contains("is-hidden")),
         policy: () => renderer === "maplibre" ? diagnosticMapLibreInteractionPolicy(bridge) : {
-          vectorCount: viewport.querySelectorAll("path, circle, polyline").length,
+          vectorCount: diagnosticMapInteractionSvgVectorCount(viewport),
           unapprovedImageCount: [...viewport.querySelectorAll("image")].filter(image => !diagnosticDebugMapImageApproved(image)).length,
           tileUrls: [...viewport.querySelectorAll('[data-layer-group="rudy-twmap"] image[data-raster-tile]')].map(image => image.getAttribute("href")),
         },
@@ -21663,7 +21679,8 @@
           && (!hint.classList.contains("map-hover-tooltip") || hint.classList.contains("is-visible"))),
         policy: () => ({...diagnosticMapLibreInteractionPolicy(bridge),
           evidenceDomain: host.dataset.navigationEvidenceDomain,
-          basemapLayer: host.dataset.dashboardBasemapLayer}),
+          basemapLayer: host.dataset.dashboardBasemapLayer,
+          navigationState: diagnosticMapInteractionNavigationState(host)}),
       };
     }
 
@@ -21978,8 +21995,7 @@
       });
       await run("DASH-027", async () => {
         const subchecks = [];
-        const evidence = {subchecks, reverse_rectangle_policy: adapter.reverseZoomIn
-          ? "pending_user_arbitration" : "reverse_rectangle_zoom_out"};
+        const evidence = {subchecks, reverse_rectangle_policy: "any_direction_zoom_in_minus_zoom_out"};
         const observe = async (name, action) => {
           try {
             const observed = await action();
@@ -21993,8 +22009,10 @@
         };
         await observe("camera_setup", async () => {
           await click("reset");
-          await click("zoom-in");
-          await click("zoom-in");
+          if (surface.renderer !== "maplibre") {
+            await click("zoom-in");
+            await click("zoom-in");
+          }
           viewport.focus({preventScroll: true});
         });
         const keys = [];
@@ -22014,6 +22032,7 @@
           diagnosticRequire(adapter.mode() === "box", `${surface.id}: B did not activate box mode.`);
         });
         await observe("forward_rectangle", async () => {
+          await click("reset");
           await click("box-zoom");
           const beforeBox = camera();
           await gesture("box");
@@ -22023,14 +22042,21 @@
           evidence.forwardRectangleZoomIn = true;
         });
         await observe("reverse_rectangle", async () => {
+          await click("reset");
           await click("box-zoom");
           const beforeReverse = camera();
           await gesture("box", true);
           const afterReverse = camera();
-          diagnosticRequire(adapter.reverseZoomIn ? afterReverse.zoom > beforeReverse.zoom : afterReverse.zoom < beforeReverse.zoom,
-            `${surface.id}: reverse rectangle did not preserve this renderer's existing direction contract.`);
+          diagnosticRequire(afterReverse.zoom > beforeReverse.zoom,
+            `${surface.id}: reverse rectangle did not zoom in.`);
           evidence.reverseRectangleZoomIn = afterReverse.zoom > beforeReverse.zoom;
           return {zoomIn: evidence.reverseRectangleZoomIn, policy: evidence.reverse_rectangle_policy};
+        });
+        await observe("minus_zoom_out", async () => {
+          const beforeMinus = camera();
+          await click("zoom-out");
+          diagnosticRequire(camera().zoom < beforeMinus.zoom, `${surface.id}: minus did not zoom out.`);
+          evidence.minusZoomOut = true;
         });
         await observe("cancel_rectangle", async () => {
           await click("box-zoom");
@@ -22074,9 +22100,8 @@
         } finally { input.remove(); outside.remove(); }
         const failed = subchecks.filter(item => item.status === "failed");
         const gaps = subchecks.filter(item => item.status !== "passed");
-        if (gaps.length || evidence.reverse_rectangle_policy === "pending_user_arbitration") {
+        if (gaps.length) {
           const detail = gaps.map(item => `${item.name}: ${item.detail}`);
-          if (evidence.reverse_rectangle_policy === "pending_user_arbitration") detail.push("Reverse rectangle direction awaits user arbitration; observed controls remain recorded.");
           const error = new Error(detail.join(" · "));
           error.diagnosticStatus = failed.length ? "failed" : "warning";
           error.diagnosticEvidence = evidence;
@@ -22110,14 +22135,87 @@
       return reports;
     }
 
+    function diagnosticMapInteractionNodeVisible(node) {
+      if (!node?.isConnected) return false;
+      const win = node.ownerDocument.defaultView;
+      for (let current = node; current?.nodeType === 1; current = current.parentElement) {
+        const style = win.getComputedStyle(current);
+        if (current.hidden || current.getAttribute("aria-hidden") === "true" || style.display === "none"
+          || ["hidden", "collapse"].includes(style.visibility) || style.opacity === "0") return false;
+      }
+      return true;
+    }
+
+    function diagnosticMapInteractionSvgVectorCount(viewport) {
+      const selector = viewport.localName === "svg" ? "path, circle, polyline, polygon, line"
+        : "svg path, svg circle, svg polyline, svg polygon, svg line";
+      return [...viewport.querySelectorAll(selector)].filter(node => {
+        if (node.closest("defs, marker, clipPath, pattern, mask, button") || !diagnosticMapInteractionNodeVisible(node)) return false;
+        // Navigation's grid, arrow definitions and route halo are presentation,
+        // not data. Terrain/prior mesh faces are explicit prepared DEM geometry.
+        if (viewport.hasAttribute("data-navigation-workspace-map")
+          && !(node.localName === "polygon" && ["terrain", "prior"].includes(viewport.dataset.navigationEvidenceDomain))
+          && !node.closest("[data-dashboard-map-hint-source], [data-navigation-route-path]")) return false;
+        if (node.localName === "circle") return Number(node.getAttribute("r")) > 0;
+        if (node.localName === "path") {
+          const geometry = node.getAttribute("d") || "";
+          const coordinates = geometry.match(/-?(?:\d*\.)?\d+(?:e[-+]?\d+)?/gi) || [];
+          return !/NaN|Infinity/.test(geometry)
+            && (coordinates.length >= 4 || coordinates.length >= 3 && /[lhv]/i.test(geometry));
+        }
+        if (node.localName === "line") return ["x1", "y1", "x2", "y2"].every(name => Number.isFinite(Number(node.getAttribute(name))))
+          && (node.getAttribute("x1") !== node.getAttribute("x2") || node.getAttribute("y1") !== node.getAttribute("y2"));
+        const points = node.getAttribute("points")?.trim().split(/[\s,]+/).filter(Boolean).map(Number) || [];
+        return points.length >= (node.localName === "polygon" ? 6 : 4) && points.length % 2 === 0
+          && points.every(Number.isFinite);
+      }).length;
+    }
+
+    function diagnosticMapInteractionNavigationState(viewport) {
+      const maplibre = viewport.hasAttribute("data-navigation-maplibre-map");
+      if (!maplibre && !viewport.hasAttribute("data-navigation-workspace-map")) return null;
+      const status = maplibre ? viewport.parentElement?.querySelector("[data-navigation-maplibre-state]")
+        : viewport.querySelector(".navigation-workspace-map-status");
+      const claim = viewport.querySelector(".navigation-workspace-scale");
+      const workspaceState = viewport.dataset.navigationWorkspaceMap || null;
+      return {renderer: maplibre ? "maplibre" : "svg",
+        state: maplibre ? viewport.dataset.navigationMaplibreStatus || null
+          : viewport.dataset.navigationEvidenceState || (workspaceState === "true" ? "ready" : null),
+        workspaceState, title: status?.querySelector("strong")?.textContent?.trim() || "",
+        statusText: status?.textContent?.trim() || "", statusVisible: diagnosticMapInteractionNodeVisible(status),
+        noVectorsClaim: Boolean(claim?.textContent?.includes("No terrain vectors or terrain tiles are claimed in this state.")),
+        claimVisible: diagnosticMapInteractionNodeVisible(claim),
+        svgLabel: viewport.querySelector("svg")?.getAttribute("aria-label") || ""};
+    }
+
     function diagnosticMapInteractionRenderPolicy(surface, adapter) {
       const policy = adapter.policy();
       const doc = adapter.doc;
-      diagnosticRequire(policy.vectorCount > 0, `${surface.id}: active vector evidence is absent.`);
+      const [domain, mode, lens] = String(surface.variant || "").split(":");
+      const navigation = surface.id === "navigation-map" && surface.family === "navigation";
+      const loading = navigation && surface.renderer === "svg" && surface.domain === domain
+        && ["observed", "terrain", "prior"].includes(domain) && mode === "loading" && lens === "structure";
+      try {
+      if (loading) {
+        const current = policy.navigationState;
+        const title = {loading: "Loading workspace terrain evidence.", preparing: "Workspace terrain projection is preparing."}[current?.state];
+        diagnosticRequire(title && current.renderer === "svg" && current.workspaceState === current.state
+          && current.statusVisible && current.claimVisible && current.noVectorsClaim
+          && current.title === title && current.svgLabel.includes(`terrain evidence ${current.state}`),
+          `${surface.id}: loading shell does not truthfully expose its loading/preparing state; ready, missing or failed data cannot substitute.`);
+      } else {
+        if (navigation) diagnosticRequire(policy.navigationState?.state === "ready"
+          && policy.navigationState?.renderer === surface.renderer && !policy.navigationState?.noVectorsClaim,
+          `${surface.id}: requested ready Navigation view is not ready or still claims a loading-only shell.`);
+        diagnosticRequire(policy.vectorCount > 0, `${surface.id}: active vector evidence is absent.`);
+      }
+      diagnosticRequire(Number.isInteger(policy.vectorCount) && policy.vectorCount >= 0, `${surface.id}: vector inventory is unavailable.`);
+      const stateEvidence = {mapState: loading ? policy.navigationState.state : navigation ? "ready" : "vector-content-present",
+        vectorEvidenceRequired: !loading, readyVectorEvidenceVerified: !loading,
+        ...(navigation ? {navigationState: policy.navigationState} : {})};
       if (!Number.isInteger(policy.unapprovedImageCount)) diagnosticUnavailable("incomplete", `${surface.id}: active renderer image source inventory is unavailable.`);
       if (policy.unmappedRudySourceCount) diagnosticUnavailable("incomplete", `${surface.id}: active Rudy source has no verified transport-template mapping.`);
       diagnosticRequire(policy.unapprovedImageCount === 0, `${surface.id}: unapproved single image is present.`);
-      const [domain, mode, lens] = String(surface.variant || "").split(":");
       const noExternalBasemap = surface.id === "navigation-map" && surface.family === "navigation"
         && surface.domain === domain && ["terrain", "prior"].includes(domain)
         && ["2d", "3d", "fallback"].includes(mode) && lens === "structure";
@@ -22127,7 +22225,7 @@
         if (!Number.isInteger(policy.rudySourceCount) || !Number.isInteger(policy.rasterTileSourceCount)) diagnosticUnavailable("incomplete", `${surface.id}: Rudy absence cannot be verified without the active source inventory.`);
         diagnosticRequire(policy.rudySourceCount === 0 && policy.rasterTileSourceCount === 0 && policy.tileUrls.length === 0,
           `${surface.id}: ready ${domain} view unexpectedly includes a Rudy source.`);
-        return {vectorCount: policy.vectorCount, evidenceDomain: policy.evidenceDomain,
+        return {...stateEvidence, vectorCount: policy.vectorCount, evidenceDomain: policy.evidenceDomain,
           basemapLayer: policy.basemapLayer, inspectedRudySources: policy.rudySourceCount,
           inspectedRasterTileSources: policy.rasterTileSourceCount,
           unapprovedImageCount: policy.unapprovedImageCount,
@@ -22145,8 +22243,18 @@
         diagnosticRequire(url.searchParams.get("cache_only") === "1"
           && !url.searchParams.has("native") && !url.searchParams.has("refresh"), `${surface.id}: interaction probe escaped its cache-only boundary.`);
       }
-      return {vectorCount: policy.vectorCount, inspectedRudyTileUrls: policy.tileUrls.length,
-        unapprovedImageCount: policy.unapprovedImageCount, scope: "rendered source/policy only; native completeness belongs to DASH-037"};
+      return {...stateEvidence, vectorCount: policy.vectorCount, inspectedRudyTileUrls: policy.tileUrls.length,
+        unapprovedImageCount: policy.unapprovedImageCount,
+        scope: loading ? "loading UI and rendered basemap policy only; ready vector completeness remains unverified"
+          : "rendered source/policy only; native completeness belongs to DASH-037"};
+      } catch (error) {
+        error.diagnosticEvidence = {...error.diagnosticEvidence, mapState: policy.navigationState?.state || null,
+          navigationState: policy.navigationState || null, vectorCount: policy.vectorCount ?? null,
+          vectorEvidenceRequired: !loading, readyVectorEvidenceVerified: false,
+          actualRudyTileUrlCount: Array.isArray(policy.tileUrls) ? policy.tileUrls.length : null,
+          unapprovedImageCount: policy.unapprovedImageCount ?? null};
+        throw error;
+      }
     }
 
     function diagnosticSharedMapInteractionAdapter(viewport) {
@@ -22158,7 +22266,8 @@
         selectionVisible: () => viewport.querySelector("[data-dashboard-map-selection]")?.hidden === false,
         hintTargets: () => [...viewport.querySelectorAll("[data-dashboard-map-hint-title]")],
         hint: () => doc.getElementById("dashboardMapHoverHint"), hintVisible: hint => Boolean(hint && !hint.hidden),
-        policy: () => ({vectorCount: viewport.querySelectorAll("svg path, svg circle, svg polyline").length,
+        policy: () => ({vectorCount: diagnosticMapInteractionSvgVectorCount(viewport),
+          navigationState: diagnosticMapInteractionNavigationState(viewport),
           evidenceDomain: viewport.dataset.navigationEvidenceDomain,
           basemapLayer: viewport.dataset.dashboardBasemapLayer,
           rudySourceCount: viewport.querySelectorAll('[data-dashboard-rudy-tile-layer], image[data-dashboard-rudy-tile]').length,
@@ -22234,7 +22343,7 @@
       const viewport = doc.getElementById(renderer === "svg" ? "runtimeMap" : "runtimeMapLibre");
       const names = {"zoom-in": "zoomIn", "zoom-out": "zoomOut", reset: "fitRoute", pan: "panMode", "box-zoom": "boxZoomMode"};
       return {doc, viewport, rudyCacheLayer: "rudy-twmap",
-        reverseZoomIn: renderer === "maplibre", control: action => doc.getElementById(names[action]),
+        reverseZoomIn: true, control: action => doc.getElementById(names[action]),
         camera: () => {
           if (renderer === "maplibre") { const snapshot = bridge.getSnapshot(); return {zoom: snapshot.zoom, x: snapshot.center?.[0], y: snapshot.center?.[1]}; }
           const box = viewport.getAttribute("viewBox").trim().split(/[\s,]+/).map(Number);
@@ -22248,7 +22357,7 @@
         hintPointerEvent: "pointermove", hintLeaveTarget: viewport, hintLeaveEvent: "pointerleave",
         hint: () => doc.querySelector(".map-hover-tooltip"), hintVisible: hint => Boolean(hint?.classList.contains("is-visible")),
         policy: () => renderer === "maplibre" ? diagnosticMapLibreInteractionPolicy(bridge)
-          : {vectorCount: viewport.querySelectorAll("path, circle, polyline").length,
+          : {vectorCount: diagnosticMapInteractionSvgVectorCount(viewport),
               unapprovedImageCount: [...viewport.querySelectorAll("image")].filter(image => !diagnosticDebugMapImageApproved(image)).length,
               tileUrls: [...viewport.querySelectorAll('[data-layer-group="rudy-twmap"] image[data-raster-tile]')].map(image => image.getAttribute("href"))},
       };
@@ -23691,8 +23800,13 @@
         );
         diagnosticRequire(
           selectionFocusSource.includes('const minimumZoom = entry.mode === "3d" ? 16 : 15')
+            && selectionFocusSource.includes("entry.map.getMaxZoom?.()")
+            && selectionFocusSource.includes("const targetZoom = Math.min(")
+            && selectionFocusSource.includes("center: target.coordinates")
+            && selectionFocusSource.includes("pitch: entry.map.getPitch()")
+            && selectionFocusSource.includes("bearing: entry.map.getBearing()")
             && selectionFocusSource.includes("entry.map.easeTo"),
-          "MAP MARKER focus does not zoom to bounded 2D/3D detail.",
+          "MAP MARKER focus must target the selected candidate, retain pitch/bearing, and respect the native camera cap.",
         );
         diagnosticRequire(
           styleSource.includes('id: "scout-selected-marker-halo"')
@@ -23721,7 +23835,7 @@
             && controlsSource.includes('data-navigation-terrain-inspector-toggle="true"'),
           "Navigation terrain layer or detail-inspector controls are not bound.",
         );
-        return "2D Z13.75 · 3D Z17 · independent center / zoom / pitch / bearing · same-mode movement only · in-place layer toggles · marker focus Z15/Z16 + halo · changed projection Fit gate · rerender restore wired";
+        return "2D Z13.75 · 3D Z17 · independent center / zoom / pitch / bearing · same-mode movement only · in-place layer toggles · explicit candidate focus exception: selected center + native-capped Z15/Z16 floor, pitch/bearing retained · changed projection Fit gate · rerender restore wired";
       } finally {
         navigationTerrainMapLibreRuntime.cameraByMode = originalCameraByMode;
         navigationTerrainMapLibreRuntime.maps = originalMaps;
@@ -23858,11 +23972,12 @@
         initializationSettled: navigationTerrainMapLibreRuntime.initializationSettled,
         hosts: [...(root?.querySelectorAll("[data-navigation-maplibre-map]") || [])].map(diagnosticNavigationCameraPaneEvidence),
         renderers: navigationTerrainMapLibreRuntime.maps.filter(entry => entry.host.isConnected).map(entry => {
-          let style = null, styleReady = false, camera = null, terrain = null, moving = true;
+          let style = null, styleReady = false, camera = null, terrain = null, moving = true, maxCameraZoom = null;
           try {
             style = entry.map.getStyle(); styleReady = entry.map.isStyleLoaded();
             camera = navigationTerrainMapLibreCameraSnapshot(entry.map); terrain = entry.map.getTerrain?.() || null;
             moving = entry.map.isMoving();
+            maxCameraZoom = Number(entry.map.getMaxZoom());
           } catch (_error) { /* Pending or disposed maps remain unverified. */ }
           const sources = Object.entries(style?.sources || {}).map(([id, source]) => ({
             id, type: source.type,
@@ -23876,6 +23991,9 @@
           catch (error) { sourceInspectionError = error?.name || "Error"; }
           return {mode: entry.mode, domain: entry.host.dataset.navigationEvidenceDomain, lens: entry.host.dataset.navigationTerrainLens,
             status: entry.host.dataset.navigationMaplibreStatus, renderer: "maplibre", styleReady, moving, camera, terrain,
+            maxCameraZoom, nativeCamera: entry.nativeCameraReceipt ? {...entry.nativeCameraReceipt} : null,
+            focusedSelectionId: entry.host.dataset.navigationTerrainFocusedSelectionId || "",
+            focusedSelectionLens: entry.host.dataset.navigationTerrainFocusedSelectionLens || "",
             nativeState: entry.host.dataset.maplibreRasterState || "unavailable", sourceInspectionError,
             terrainElevationStatus: entry.host.dataset.navigationTerrainElevationStatus,
             terrainCenterElevation: Number(entry.host.dataset.navigationTerrainCenterElevation), sources,
@@ -23941,6 +24059,43 @@
       return evidence;
     }
 
+    function diagnosticNavigationCameraVerifyCandidateFocus(before, after, target) {
+      diagnosticRequire(target?.id && target.lens && Array.isArray(target.coordinates)
+        && target.coordinates.length === 2 && target.coordinates.every(Number.isFinite),
+        "D038 selected candidate has no verified point coordinates.");
+      diagnosticRequire(after.selectedCandidate === target.id && after.lens === target.lens,
+        "D038 candidate control did not retain the selected candidate and lens.");
+      const modes = [];
+      for (const current of after.renderers) {
+        const prior = before.renderers.find(renderer => renderer.mode === current.mode);
+        diagnosticRequire(prior?.camera && current.camera && Number.isFinite(current.maxCameraZoom)
+          && current.maxCameraZoom === prior.maxCameraZoom,
+          `${current.mode} candidate focus changed or lost its camera cap.`);
+        const native = current.nativeCamera;
+        const sourceCap = native?.providerNativeMaxZoom - Math.log2(native?.worldTileSize / native?.nativeTileSize);
+        diagnosticRequire(native?.active === true && Number.isFinite(sourceCap)
+          && current.maxCameraZoom <= sourceCap + .00001,
+          `${current.mode} candidate focus has no valid native source camera cap.`);
+        diagnosticRequire(current.focusedSelectionId === target.id && current.focusedSelectionLens === target.lens,
+          `${current.mode} did not execute focus for the selected candidate.`);
+        diagnosticRequire(target.coordinates.every((value, index) => Math.abs(current.camera.center[index] - value) < .00001),
+          `${current.mode} candidate focus moved to the wrong coordinates.`);
+        const minimumZoom = current.mode === "3d" ? 16 : 15;
+        const expectedZoom = Math.min(current.maxCameraZoom, Math.max(prior.camera.zoom, minimumZoom));
+        diagnosticRequire(Math.abs(current.camera.zoom - expectedZoom) < .00001,
+          `${current.mode} candidate focus violated its detail floor, retained zoom, or native cap.`);
+        diagnosticRequire(Math.abs(current.camera.pitch - prior.camera.pitch) < .00001
+          && Math.abs(current.camera.bearing - prior.camera.bearing) < .00001,
+          `${current.mode} candidate focus changed pitch or bearing.`);
+        modes.push({mode: current.mode, minimumZoom, nativeSourceCap: sourceCap,
+          maxCameraZoom: current.maxCameraZoom, expectedZoom, actualCamera: current.camera});
+      }
+      diagnosticRequire(JSON.stringify(modes.map(item => item.mode).sort()) === JSON.stringify(["2d", "3d"]),
+        "D038 candidate focus requires both visible Split renderers.");
+      return {exception: "explicit-candidate-selection", target, modes, verified: true,
+        candidate_only: true, runtime_safety_truth: false};
+    }
+
     async function diagnosticDisposeNavigationCameraPage() {
       navigationCameraPageProbeState.active = false;
       const receipt = await diagnosticDisposeNavigationMaps();
@@ -23958,7 +24113,7 @@
       const phases = ["observed-2d-seed", "observed-3d-seed", "observed-split", "split-independent-2d-move",
         "return-2d", "return-3d", "return-split", "terrain-domain", "prior-domain", "return-observed",
         "split-2d-plus", "split-3d-plus", "split-3d-arrow-pan",
-        "lens-retreat", "lens-pressure", "lens-events", "lens-risk", "lens-structure", "candidate-selection",
+        "candidate-selection", "lens-retreat", "lens-pressure", "lens-events", "lens-risk", "lens-structure",
         "evidence-open", "evidence-close", "exaggeration-1.5", "exaggeration-2", "exaggeration-1",
         "fit-2d-only", "reset-3d-only"];
       const report = {projectId: context.projectId, verification: "isolated-production-page", status: "running",
@@ -24017,7 +24172,9 @@
         try {
           await action();
           const current = await ready();
-          if (compare) {
+          if (typeof compare === "function") {
+            compare(row, current);
+          } else if (compare) {
             diagnosticRequire(verifiedSeeds.size === 2, "Earlier camera seed was not verified; persistence remains unverified.");
             diagnosticValidateNavigationCameraPage(current, view, expected);
           }
@@ -24071,28 +24228,46 @@
           canvas.focus({preventScroll: true});
           canvas.dispatchEvent(new KeyboardEvent("keydown", {key: "ArrowRight", code: "ArrowRight", keyCode: 39, which: 39, bubbles: true}));
         }, "arrow-pan"));
-        for (const lens of ["retreat", "pressure", "events", "risk", "structure"]) {
-          await step(`lens-${lens}`, () => click("data-navigation-terrain-lens", lens));
-        }
-        await step("candidate-selection", () => {
+        await step("candidate-selection", async () => {
+          const row = report.phases.find(phase => phase.phase === "candidate-selection");
+          row.before = await ready();
           const select = document.querySelector('select[data-navigation-candidate-select="true"]');
           const option = [...(select?.options || [])].find(item => item.value && item.value !== select.value && !item.disabled);
           if (!select || select.disabled || !option) {
             const error = new Error("No second existing candidate is available for the camera persistence check.");
             error.name = "DiagnosticDataUnavailable"; throw error;
           }
+          const lens = select.dataset.navigationSelectionLens || state.navigationTerrainLens;
+          const target = navigationTerrainSelectionFocusTarget(navigationTerrainSnapshot(), lens, option.value);
+          if (!target) {
+            const error = new Error("The selected existing candidate has no prepared point geometry for focus verification.");
+            error.name = "DiagnosticDataUnavailable"; throw error;
+          }
+          row.candidateTarget = {id: target.id, lens: target.lens, coordinates: [...target.coordinates]};
           select.value = option.value;
           select.dispatchEvent(new Event("change", {bubbles: true}));
+          // Load/ready alone may precede the existing delayed marker-focus callback.
+          // Require both new map instances to acknowledge this exact selection.
+          await diagnosticWaitForMapOrder(() => {
+            const current = diagnosticNavigationCameraPageEvidence();
+            return current.renderers.length === 2 && current.renderers.every(renderer => !renderer.moving
+              && renderer.focusedSelectionId === target.id && renderer.focusedSelectionLens === target.lens) ? current : null;
+          }, 45000);
+        }, (row, current) => {
+          row.candidateFocus = diagnosticNavigationCameraVerifyCandidateFocus(row.before, current, row.candidateTarget);
         });
-        // Preserve the candidate phase's result, including the unresolved
-        // marker-focus/persistence conflict. Subsequent independent controls
-        // compare against its actual ending cameras, without erasing that result.
+        // Only explicit candidate selection permits this relocation. Preserve any
+        // failure, and compare subsequent independent controls with the observed
+        // ending view so a failed focus cannot hide those controls' own behavior.
         const candidatePhase = report.phases.find(phase => phase.phase === "candidate-selection");
         try {
           const actual = await ready();
           actual.renderers.forEach(renderer => { expected[renderer.mode] = renderer.camera; });
           candidatePhase.followingPhaseBaseline = actual;
         } catch (error) { candidatePhase.followingPhaseBaselineError = String(error.message || error); }
+        for (const lens of ["retreat", "pressure", "events", "risk", "structure"]) {
+          await step(`lens-${lens}`, () => click("data-navigation-terrain-lens", lens));
+        }
         for (const [phase, expanded] of [["evidence-open", true], ["evidence-close", false]]) {
           await step(phase, () => {
             if ((state.navigationTerrainInspectorExpanded === true) !== expanded) click("data-navigation-terrain-inspector-toggle", "true");
@@ -25146,6 +25321,190 @@
       return diagnosticCoverageResult(ready ? "ready" : "incomplete", `Emergency 介面與 packet binding 正常；${freshPackets.length}/${session.alternatives.length} 筆新鮮候選，${projection.movement_groups.length} 個 field group；offline API=${offlineAvailable ? "具備" : "缺少"}。來源 GET contextual-permission-dashboard／night-review；未驗證 offline 儲存或實際送達。`);
     }
 
+    function renderDiagnosticMapPurposeResults(report) {
+      if (!report) return "";
+      const rows = [...asArray(report.rows)];
+      if (report.activeResult && !rows.some(row => row.key === report.activeResult.key)) rows.push(report.activeResult);
+      const open = document.querySelector('[data-diagnostic-map-purpose-evidence]')?.open;
+      return `<p data-diagnostic-map-purpose-progress>${escapeHtml(report.projectId)} · ${escapeHtml(report.status)} · ${rows.filter(row => row.status === "passed").length}/10 入口 · ${escapeHtml(report.activeCase || "")} ${escapeHtml(report.activeResult?.activeStage || "")}</p>
+        <details data-diagnostic-map-purpose-evidence ${open ? "open" : ""}><summary>Planned／Legacy 用途矩陣與完整來源證據</summary>
+        <p>隔離載入正式頁面的地圖元件並使用正式事件綁定。GET 讀取目前 workspace 已選 Saved Planned；不保存、不審查、不切換分析選擇。完整 Chrome 頁面操作另行驗證。</p>
+        ${rows.map(row => `<p data-diagnostic-map-purpose-row="${escapeHtml(row.key)}"><strong>${escapeHtml(row.key)} · ${escapeHtml(row.status)}</strong><br>${asArray(row.stages).map(stage => `${escapeHtml(stage.stage)}: ${escapeHtml(stage.status)}${stage.detail ? ` · ${escapeHtml(stage.detail)}` : ""}`).join("<br>")}</p>`).join("")}
+        <pre data-diagnostic-map-purpose-json>${escapeHtml(JSON.stringify(report, null, 2))}</pre></details>`;
+    }
+
+    async function diagnosticMapPurposeRead(path) {
+      const url = new URL(path, location.href), prefix = `/admin/pretrip/projects/${encodeURIComponent(resolvedPretripProjectId())}`;
+      diagnosticRequire(url.origin === location.origin && (url.pathname === prefix || url.pathname.startsWith(`${prefix}/`))
+        && !["refresh", "rebuild", "native"].some(key => url.searchParams.has(key)), "Purpose GET escaped its selected workspace or read-only policy.");
+      diagnosticRequire(!apiBase() || new URL(apiBase(), location.href).origin === location.origin, "Purpose GET requires the current same-origin Dashboard API.");
+      return fetchJson(url.pathname + url.search, {timeoutMs: null, cache: "no-store"});
+    }
+
+    async function diagnosticPrepareMapPurposeEntry(testCase, context) {
+      diagnosticRequire(DIAGNOSTIC_MAP_PROBE && resolvedPretripProjectId() === context.projectId, "Purpose probe workspace differs from the active selection.");
+      const mount = document.getElementById("workspace");
+      diagnosticRequire(mount, "Purpose probe workspace root is unavailable.");
+      state.route = testCase.route;
+      if (testCase.purpose === "illustrative-only") {
+        await loadDataScope("permission");
+        const emergencyPage = new DOMParser().parseFromString(renderEmergencyPage(), "text/html");
+        const entry = emergencyPage.querySelector('iframe[src*="emergency-approval-desktop-v0"]');
+        diagnosticRequire(entry, "The actual Emergency entry no longer includes the Legacy desktop illustration.");
+        const dailyReviewContext = {state: emergencyPage.querySelector("[data-daily-emergency-review]")?.dataset.dailyEmergencyReview || "missing",
+          projectionStatus: state.permissionProjection?.status || "unknown", projectionErrorCode: state.permissionProjection?.error?.code || null};
+        const url = new URL(entry.getAttribute("src"), location.href);
+        diagnosticRequire(url.origin === location.origin, "Legacy illustration escaped the same-origin entry.");
+        url.searchParams.set("projectId", context.projectId); url.searchParams.set("diagnosticMapProbe", "1");
+        url.searchParams.delete("living");
+        mount.innerHTML = "";
+        const frame = document.createElement("iframe");
+        frame.title = "Diagnostic 049 Legacy desktop illustration"; frame.src = url.href;
+        frame.style.cssText = "width:100%;height:680px;border:0"; mount.appendChild(frame);
+        const ready = await diagnosticWaitForMapOrder(() => diagnosticRudyFrameDocument(frame, url.href, {
+          rootSelector: '[data-map-surface="desktop"]', bridgeName: "scoutLegacyMapPurposeBridge",
+        }), 60000);
+        return {root: ready.root, doc: ready.doc, sourceBasis: "production-desktop-illustration-entry", dailyReviewContext,
+          boundary: () => ready.bridge.snapshot()};
+      }
+      diagnosticRequire(!context.plannedError && context.subject?.project_id === context.projectId, context.plannedError || "Selected Planned subject is unavailable.");
+      await loadDataScope("project");
+      state.analysisSubject = await diagnosticMapPurposeRead(`/admin/pretrip/projects/${encodeURIComponent(context.projectId)}/analysis-subject`);
+      diagnosticRequire(state.analysisSubject.analysis_revision === context.subject.analysis_revision,
+        "Selected Planned analysis changed while opening its actual entry.");
+      state.analysisSubjectStatus = "ready"; state.route = testCase.route;
+      const ui = window.ScoutPlannedRoute;
+      diagnosticRequire(ui && typeof ui.bind === "function" && typeof ui.dispose === "function", "Production Planned UI binding or cleanup is unavailable.");
+      if (testCase.mapId !== "analysis") {
+        state.permissionProjection = await diagnosticMapPurposeRead(permissionProjectionPath(context.projectId, "baseline"));
+        diagnosticRequire(state.permissionProjection.project_id === context.projectId, "Permission source belongs to another workspace.");
+        state.permissionDataStatus = state.permissionProjection.status || "ready";
+        state.permissionBaselineMode = "human_text";
+      }
+      const selector = testCase.mapId === "analysis" ? "[data-planned-analysis-subject]" : "[data-planned-workbench]";
+      const fragments = new DOMParser().parseFromString(renderOutdoorPage(testCase.route), "text/html").querySelectorAll(selector);
+      diagnosticRequire(fragments.length === 1, `Actual ${testCase.route} entry is missing or duplicates its ${testCase.mapId} map component.`);
+      const fragment = fragments[0];
+      mount.replaceChildren(document.importNode(fragment, true));
+      const requestLog = [], catalogRows = [], entryActions = [];
+      const host = {projectId: resolvedPretripProjectId, apiBase: () => "",
+        fetchJson: async path => {
+          requestLog.push({method: "GET", path});
+          const payload = await diagnosticMapPurposeRead(path);
+          if (new URL(path, location.href).pathname.endsWith("/catalog")) {
+            diagnosticRequire(payload.project_id === context.projectId, "Planned catalog belongs to another workspace.");
+            catalogRows.splice(0, catalogRows.length, ...asArray(payload.anchors));
+          }
+          return payload;
+        },
+        postJson: async () => { throw new Error("Purpose probe cannot create, save, review or select a Planned candidate."); },
+        refreshAnalysis: async () => { throw new Error("Purpose probe cannot change analysis selection."); },
+        render: () => {
+          if (!mount.isConnected) return;
+          mount.innerHTML = ui.render({projectId: context.projectId, subject: state.analysisSubject}); ui.bind(host);
+        }};
+      ui.bind(host);
+      if (testCase.mapId !== "analysis") {
+        await diagnosticWaitForMapOrder(() => {
+          const select = mount.querySelector("[data-planned-version]");
+          return select && !select.disabled && [...select.options].some(option => option.value === context.binding.version);
+        }, 60000);
+        const select = mount.querySelector("[data-planned-version]"); select.value = context.binding.version;
+        select.dispatchEvent(new Event("change", {bubbles: true}));
+        const restore = mount.querySelector('[data-planned-action="restore"]');
+        diagnosticRequire(restore && !restore.disabled, "Saved Planned Restore is unavailable."); restore.click();
+        await diagnosticWaitForMapOrder(() => mount.querySelector(`[data-planned-map="preview"][data-planned-map-manifest-sha256="${context.binding.manifest_sha256}"] svg[data-planned-bound="true"]`), 60000);
+        entryActions.push({action: "restore", versionId: context.binding.version, method: "GET", persistentSelectionChanged: false});
+        if (testCase.mapId === "compare") {
+          diagnosticRequire(!context.compareError && context.compareBinding, context.compareError || "No second saved comparison version.");
+          const selectOther = mount.querySelector("[data-planned-compare-version]");
+          diagnosticRequire(selectOther && !selectOther.disabled && [...selectOther.options].some(option => option.value === context.compareBinding.version), "Saved comparison version is unavailable.");
+          selectOther.value = context.compareBinding.version; selectOther.dispatchEvent(new Event("change", {bubbles: true}));
+          const compare = mount.querySelector('[data-planned-action="compare"]');
+          diagnosticRequire(compare && !compare.disabled, "Saved comparison action is unavailable."); compare.click();
+          await diagnosticWaitForMapOrder(() => mount.querySelector(`[data-planned-map="compare"][data-planned-map-manifest-sha256="${context.compareBinding.manifest_sha256}"] svg[data-planned-bound="true"]`), 60000);
+          entryActions.push({action: "compare", versionId: context.compareBinding.version, method: "GET", persistentSelectionChanged: false});
+        }
+      }
+      const root = mount.querySelector(`[data-planned-map="${testCase.mapId}"]`);
+      diagnosticRequire(root, "The actual Planned map instance is missing after binding.");
+      const detail = testCase.mapId === "compare" ? context.comparison : context.selected;
+      const request = context.selected?.manifest?.request || context.selected?.preview?.request || {};
+      const selectedIds = new Set([...Object.values(request.name_resolutions || {}),
+        ...asArray(request.operations).flatMap(operation => [operation.at, operation.to])].filter(Boolean));
+      const sourceAnchors = testCase.mapId === "analysis" ? state.analysisSubject.checkpoints
+        : [...asArray(detail.preview.checkpoints), ...catalogRows.filter(anchor => selectedIds.has(String(anchor.anchor_id || anchor.candidate_id || anchor.checkpoint_id || anchor.id || anchor.name || anchor.label || "")))];
+      return {root, doc: document, sourceBasis: "production-entry-map-fragment", sourceAnchors, requestLog, entryActions};
+    }
+
+    async function diagnosticDisposeMapPurposeProbe() {
+      const errors = [], children = [];
+      for (const frame of document.querySelectorAll('iframe[src*="emergency-approval-desktop-v0"]')) {
+        try {
+          const receipt = await frame.contentWindow?.scoutLegacyMapPurposeBridge?.dispose();
+          children.push({entry: "legacy-emergency", receipt});
+          if (receipt?.disposed !== true || receipt.pendingRefresh !== false) errors.push({phase: "legacy-dispose", errorName: "IncompleteCleanupReceipt"});
+        } catch (error) { errors.push({phase: "legacy-dispose", errorName: error.name || "Error"}); }
+        finally { frame.remove(); }
+      }
+      try {
+        const receipt = window.ScoutPlannedRoute?.dispose(); children.push({entry: "planned-ui", receipt});
+        if (receipt?.disposed !== true || receipt.pendingPolls !== 0) errors.push({phase: "planned-dispose", errorName: "IncompleteCleanupReceipt"});
+        const mapReceipt = await diagnosticDisposeRudyProbe(); children.push({entry: "unused-map-shells", receipt: mapReceipt});
+        errors.push(...asArray(mapReceipt.errors));
+      } catch (error) { errors.push({phase: "purpose-dispose", errorName: error.name || "Error"}); }
+      document.getElementById("workspace")?.replaceChildren();
+      return {disposed: !errors.length, children, errors};
+    }
+
+    if (DIAGNOSTIC_MAP_PROBE) window.scoutDashboardMapPurposeProbe = Object.freeze({
+      prepare: diagnosticPrepareMapPurposeEntry, dispose: diagnosticDisposeMapPurposeProbe,
+    });
+
+    async function diagnosticOpenMapPurposeProbe(testCase, context) {
+      const frame = document.createElement("iframe"), url = new URL("/admin/dashboard", location.origin);
+      url.searchParams.set("projectId", context.projectId); url.searchParams.set("diagnosticMapProbe", "1");
+      frame.title = `Diagnostic 049: ${testCase.key}`; frame.tabIndex = -1; frame.setAttribute("aria-hidden", "true");
+      frame.style.cssText = "position:fixed;left:0;top:0;width:1120px;max-width:100vw;height:720px;opacity:0.01;pointer-events:none;border:0;z-index:1";
+      frame.src = url.href; document.body.appendChild(frame);
+      let closing = null;
+      const close = () => closing || (closing = (async () => {
+        try {
+          const dispose = frame.contentWindow?.scoutDashboardMapPurposeProbe?.dispose;
+          diagnosticRequire(typeof dispose === "function", "Purpose cleanup bridge is unavailable.");
+          return await dispose();
+        } catch (error) { return {disposed: false, errors: [{phase: "purpose-frame-dispose", errorName: error.name || "Error"}]}; }
+        finally { frame.remove(); }
+      })());
+      try {
+        const loaded = await diagnosticWaitForMapOrder(() => diagnosticRudyFrameDocument(frame, url.href, {
+          rootSelector: "#workspace", bridgeName: "scoutDashboardMapPurposeProbe", requireProbeReady: true,
+        }), 60000);
+        const descriptor = await loaded.bridge.prepare(testCase, context);
+        diagnosticRequire(resolvedPretripProjectId() === context.projectId && frame.contentDocument === loaded.doc
+          && descriptor.root?.isConnected, "Purpose entry changed workspace or document during preparation.");
+        return {descriptor, close};
+      } catch (error) { error.cleanupReceipt = await close(); throw error; }
+    }
+
+    async function diagnosticCheck049() {
+      const selectedProject = resolvedPretripProjectId();
+      const selectedScope = diagnosticCaseScopeKey("DASH-049");
+      const publish = report => {
+        if (selectedScope !== diagnosticCaseScopeKey("DASH-049")) return;
+        diagnosticSetResult("DASH-049", {mapPurposeReport: structuredClone(report),
+          detail: report.detail || `${selectedProject} · ${report.activeCase || "讀取目前 Saved Planned"} · ${report.activeResult?.activeStage || ""}`});
+        updateDiagnosticDom("DASH-049");
+      };
+      publish({projectId: selectedProject, status: "running", rows: []});
+      if (!window.ScoutMapPurposeDiagnostic) await import("/admin/scout-map-purpose-diagnostic.js");
+      diagnosticRequire(typeof window.ScoutMapPurposeDiagnostic?.run === "function", "Purpose diagnostic module is unavailable.");
+      const report = await window.ScoutMapPurposeDiagnostic.run({projectId: selectedProject,
+        currentProjectId: resolvedPretripProjectId, read: diagnosticMapPurposeRead,
+        open: diagnosticOpenMapPurposeProbe, onProgress: publish});
+      return {status: report.status, detail: report.detail};
+    }
+
     function updateDiagnosticDom(caseId = null) {
       const items = caseId ? DASHBOARD_DIAGNOSTIC_CASES.filter(candidate => candidate.id === caseId) : DASHBOARD_DIAGNOSTIC_CASES;
       for (const item of items) {
@@ -26133,7 +26492,7 @@
               <button type="button" role="tab" aria-selected="${state.permissionBaselineMode === "reference_gpx"}" class="${state.permissionBaselineMode === "reference_gpx" ? "is-active" : ""}" data-permission-baseline-mode="reference_gpx">Generate from Ref. GPX</button>
             </div>
             ${state.permissionBaselineMode === "human_text" && typeof window !== "undefined" && window.ScoutPlannedRoute ? window.ScoutPlannedRoute.render({projectId: resolvedPretripProjectId(), subject: selectedAnalysisSubject()}) : ""}
-            ${state.permissionBaselineMode === "human_text" ? '<details data-permission-legacy-text-authoring="true"><summary>既有文字候選與 assumption patch（不變更 GPX 幾何）</summary>' : ""}
+            ${state.permissionBaselineMode === "human_text" ? `<details data-permission-legacy-text-authoring="true" ${state.permissionLegacyTextAuthoringExpanded ? "open" : ""}><summary>既有文字候選與 assumption patch（不變更 GPX 幾何）</summary>` : ""}
             <div class="permission-authoring-toolbar" style="margin-top:12px">
               <div class="permission-authoring-source">
                 ${state.permissionBaselineMode === "human_text" ? `
@@ -32050,21 +32409,137 @@
       button.setAttribute("aria-label", `檢視 ${label(feature)}`);
     }
 
-    function configureNavigationTerrainEvidenceControls(entry) {
+    function configureNavigationTerrainBoxInteraction(entry, pan, box) {
       const {host, map} = entry;
       const canvas = map.getCanvas();
+      const surface = map.getCanvasContainer?.() || host;
+      const capture = document.createElement("div");
+      capture.className = "scout-maplibre-box-capture";
+      capture.dataset.navigationBoxCapture = "true";
+      capture.setAttribute("aria-hidden", "true");
+      Object.assign(capture.style, {position: "absolute", inset: "0", zIndex: "4", background: "transparent",
+        pointerEvents: "none", touchAction: "none", cursor: "crosshair"});
+      const overlay = document.createElement("div");
+      overlay.className = "scout-maplibre-box-selection";
+      overlay.hidden = true;
+      Object.assign(overlay.style, {position: "absolute", zIndex: "8", pointerEvents: "none",
+        border: "2px solid #f7c948", background: "rgba(247,201,72,.14)", boxSizing: "border-box"});
+      surface.append(capture, overlay);
+      const previousShortcuts = canvas.getAttribute("aria-keyshortcuts");
+      canvas.setAttribute("aria-keyshortcuts", [...new Set(`${previousShortcuts || ""} P B Escape`.trim().split(/\s+/))].join(" "));
+      let selection = null, disposed = false;
+      const clear = () => {
+        const pointerId = selection?.pointerId;
+        selection = null;
+        overlay.hidden = true;
+        if (pointerId !== undefined) {
+          try { capture.releasePointerCapture?.(pointerId); } catch (_error) { /* Capture may already have ended. */ }
+        }
+      };
+      const setMode = mode => {
+        if (disposed) return;
+        clear();
+        const boxActive = mode === "box";
+        host.dataset.mapInteractionMode = boxActive ? "box" : "pan";
+        capture.style.pointerEvents = boxActive ? "auto" : "none";
+        map.boxZoom?.disable?.();
+        if (boxActive) map.dragPan?.disable?.();
+        else map.dragPan?.enable?.();
+        pan.setAttribute("aria-pressed", String(!boxActive));
+        box.setAttribute("aria-pressed", String(boxActive));
+      };
+      const point = event => {
+        const bounds = capture.getBoundingClientRect();
+        if (!(bounds.width > 0 && bounds.height > 0) || !Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return null;
+        return {x: Math.max(0, Math.min(bounds.width, event.clientX - bounds.left)),
+          y: Math.max(0, Math.min(bounds.height, event.clientY - bounds.top)), width: bounds.width, height: bounds.height};
+      };
+      const start = event => {
+        if (disposed || host.dataset.mapInteractionMode !== "box" || event.button !== 0 || event.isPrimary === false
+          || event.altKey || event.ctrlKey || event.metaKey || selection) return;
+        const first = point(event);
+        if (!first) return;
+        selection = {pointerId: event.pointerId, start: first, current: first};
+        canvas.focus({preventScroll: true});
+        try { capture.setPointerCapture?.(event.pointerId); } catch (_error) { clear(); return; }
+        event.preventDefault(); event.stopPropagation();
+      };
+      const move = event => {
+        if (!selection || selection.pointerId !== event.pointerId) return;
+        const current = point(event);
+        if (!current) return;
+        selection.current = current;
+        Object.assign(overlay.style, {left: `${Math.min(selection.start.x, current.x)}px`,
+          top: `${Math.min(selection.start.y, current.y)}px`, width: `${Math.abs(current.x - selection.start.x)}px`,
+          height: `${Math.abs(current.y - selection.start.y)}px`});
+        overlay.hidden = false;
+        event.preventDefault(); event.stopPropagation();
+      };
+      const finish = event => {
+        if (!selection || selection.pointerId !== event.pointerId) return;
+        const selected = selection;
+        const current = point(event) || selected.current;
+        const width = Math.abs(current.x - selected.start.x), height = Math.abs(current.y - selected.start.y);
+        const clicked = width < 8 && height < 8;
+        clear();
+        event.preventDefault(); event.stopPropagation();
+        if (!clicked && (width < 8 || height < 8)) { host.dataset.navigationBoxZoomResult = "ignored-thin-selection"; return; }
+        const zoom = Number(map.getZoom()), maximum = Number(map.getMaxZoom());
+        const center = map.unproject([(selected.start.x + current.x) / 2, (selected.start.y + current.y) / 2]);
+        const bearing = Number(map.getBearing()), pitch = Number(map.getPitch());
+        if (![zoom, maximum, center?.lng, center?.lat, bearing, pitch].every(Number.isFinite)) {
+          host.dataset.navigationBoxZoomResult = "invalid-camera"; return;
+        }
+        const factor = clicked ? 2 : Math.max(1, Math.min(4, current.width / width, current.height / height));
+        const targetZoom = Math.min(maximum, zoom + Math.log2(factor));
+        if (targetZoom <= zoom) { host.dataset.navigationBoxZoomResult = "at-maximum-or-full-view"; return; }
+        map.easeTo({center: [center.lng, center.lat], zoom: targetZoom, bearing, pitch, duration: 280});
+        host.dataset.navigationBoxZoomResult = "zoom-in";
+      };
+      const cancel = event => {
+        if (event?.pointerId !== undefined && selection && event.pointerId !== selection.pointerId) return;
+        clear();
+        host.dataset.navigationBoxZoomResult = "cancelled";
+      };
+      const keydown = event => {
+        if (event.target !== canvas || event.altKey || event.ctrlKey || event.metaKey) return;
+        if (event.key.toLowerCase() === "p" || event.key.toLowerCase() === "b") {
+          event.preventDefault(); setMode(event.key.toLowerCase() === "b" ? "box" : "pan");
+        } else if (event.key === "Escape" && selection) { event.preventDefault(); cancel(); }
+      };
+      const panClick = () => { setMode("pan"); canvas.focus({preventScroll: true}); };
+      const boxClick = () => { setMode("box"); canvas.focus({preventScroll: true}); };
+      const suppressClick = event => { event.preventDefault(); event.stopPropagation(); };
+      const listeners = [[capture, "pointerdown", start], [capture, "pointermove", move], [capture, "pointerup", finish],
+        [capture, "pointercancel", cancel], [capture, "lostpointercapture", cancel], [capture, "click", suppressClick],
+        [canvas, "keydown", keydown], [pan, "click", panClick], [box, "click", boxClick]];
+      listeners.forEach(([target, type, listener]) => target.addEventListener(type, listener));
+      setMode("pan");
+      return {setMode, cancel, dispose: () => {
+        if (disposed) return;
+        disposed = true; clear();
+        listeners.forEach(([target, type, listener]) => target.removeEventListener(type, listener));
+        capture.remove(); overlay.remove();
+        if (previousShortcuts === null) canvas.removeAttribute("aria-keyshortcuts");
+        else canvas.setAttribute("aria-keyshortcuts", previousShortcuts);
+      }};
+    }
+
+    function configureNavigationTerrainEvidenceControls(entry) {
+      const {host, map} = entry;
       const pan = document.createElement("button");
       pan.className = "navigation-map-pan-control";
       pan.type = "button";
       pan.dataset.navigationMapControl = "pan";
       pan.textContent = "平移";
       pan.title = "拖曳平移地圖（P）";
-      const enablePan = () => {
-        map.dragPan?.enable?.();
-        host.dataset.mapInteractionMode = "pan";
-        pan.setAttribute("aria-pressed", "true");
-      };
-      pan.addEventListener("click", () => { enablePan(); canvas.focus({preventScroll: true}); });
+      const box = document.createElement("button");
+      box.className = "navigation-map-box-control";
+      box.type = "button";
+      box.dataset.navigationMapControl = "box-zoom";
+      box.textContent = "框選";
+      box.title = "任意方向框選放大（B）；減號縮小；Escape 取消選框";
+      const boxInteraction = configureNavigationTerrainBoxInteraction(entry, pan, box);
       const picker = document.createElement("div");
       picker.className = "navigation-map-evidence-picker";
       picker.hidden = true;
@@ -32105,13 +32580,8 @@
       });
       select.addEventListener("change", () => { hide(); syncNavigationTerrainKeyboardEvidence(entry); });
       picker.append(select, button);
-      host.append(pan, picker);
+      host.append(pan, box, picker);
       const sync = () => syncNavigationTerrainKeyboardEvidence(entry);
-      const keydown = event => {
-        if (event.target !== canvas || event.altKey || event.ctrlKey || event.metaKey) return;
-        if (event.key.toLowerCase() === "p") { event.preventDefault(); enablePan(); }
-      };
-      canvas.addEventListener("keydown", keydown);
       host.addEventListener("pointerleave", hide);
       map.on("idle", sync);
       map.on("moveend", sync);
@@ -32119,12 +32589,11 @@
         entry.disposed = true;
         map.off?.("idle", sync);
         map.off?.("moveend", sync);
-        canvas.removeEventListener("keydown", keydown);
+        boxInteraction.dispose();
         host.removeEventListener("pointerleave", hide);
         hideDashboardMapHint(button);
-        pan.remove(); picker.remove();
+        pan.remove(); box.remove(); picker.remove();
       };
-      enablePan();
       sync();
     }
 
@@ -40708,6 +41177,11 @@
     }
 
     function bindPermissionControls() {
+      const legacyTextAuthoring = document.querySelector('[data-permission-legacy-text-authoring="true"]');
+      legacyTextAuthoring?.addEventListener("toggle", () => {
+        if (!legacyTextAuthoring.isConnected) return;
+        state.permissionLegacyTextAuthoringExpanded = legacyTextAuthoring.open;
+      });
       window.ScoutPlannedRoute?.bind({projectId: resolvedPretripProjectId, render,
         fetchJson: path => fetchJson(path, {timeoutMs: null, cache: "no-store"}),
         postJson: (path, payload) => postJson(path, payload, {timeoutMs: null}),

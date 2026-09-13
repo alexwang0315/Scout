@@ -118,12 +118,14 @@ const dom=new JSDOM('<body><div id="workspace" tabindex="0"></div><div id="dashb
 const window=dom.window,document=window.document,location=window.location,Event=window.Event,KeyboardEvent=window.KeyboardEvent;
 const Element=window.Element,getComputedStyle=window.getComputedStyle;
 const requestAnimationFrame=fn=>queueMicrotask(fn);window.requestAnimationFrame=requestAnimationFrame;
+window.setTimeout=fn=>{queueMicrotask(fn);return 1;};
 const options=OPTIONS,DIAGNOSTIC_MAP_PROBE=true;
 const state={route:'home',navigationTerrainLens:'structure',navigationTerrainViewMode:'map',navigationTerrainEvidenceDomain:'observed',
  navigationTerrainInspectorExpanded:false,navigationTerrainVerticalExaggeration:1,selected:'a',navigationTerrainData:null,
  navigationTerrainHypothesisId:'',navigationTerrainHypothesisBand:'top_10_percent_corridor'};
 const navigationCameraPageProbeState={active:false,report:null};
-const navigationTerrainMapLibreRuntime={maps:[],pendingInitializations:new Set(),initializationStarted:0,initializationSettled:0,cameraByMode:{}};
+const navigationTerrainMapLibreRuntime={generation:0,maps:[],pendingInitializations:new Set(),initializationStarted:0,initializationSettled:0,cameraByMode:{}};
+const NAVIGATION_TERRAIN_EVENT_FOCUS_MAX_ATTEMPTS=3;
 const projectId=()=> 'project-a',apiBase=()=>'',navigationTerrainEvidenceDomain=()=>state.navigationTerrainEvidenceDomain;
 const asArray=value=>Array.isArray(value)?value:[],cssEscape=value=>value;
 const diagnosticRequire=(value,message)=>{if(!value)throw Error(message);};
@@ -148,9 +150,8 @@ const navigationTerrainRouteHypothesisImageSource=(snapshot,band)=>{
 const renderTruthStrip=()=>{},hideDashboardMapHint=()=>{},routeUsesFullFrame=()=>true,routeUsesWideFrame=()=>false,evidenceDrawerCollapsed=()=>false;
 const renderEvidenceDrawer=()=>'',bindRenderedControls=()=>bindNavigationTerrainControls();
 const setNavigationTerrainSelection=(_lens,value)=>{state.selected=value;return true;};
-const focusNavigationTerrainSelection=()=>{
- if(options.candidateMoves) for(const entry of navigationTerrainMapLibreRuntime.maps) entry.map.jumpTo({center:[121.2,23.2],zoom:entry.mode==='2d'?15:16});
-};
+const navigationTerrainMapLibreLensOverlayFeatures=()=>['a',...(options.noCandidateGeometry?[]:['b'])].map(id=>({
+ properties:{id},geometry:{type:'Point',coordinates:id==='a'?[121.1,23.1]:[121.2,23.2]}}));
 const buttons=(attribute,values)=>values.map(value=>`<button ${attribute}="${value}">${value}</button>`).join('');
 const renderOutdoorPage=()=>{
  const modes=state.navigationTerrainViewMode==='split'?['2d','3d']:[state.navigationTerrainViewMode==='terrain'?'3d':'2d'];
@@ -172,7 +173,7 @@ const defaultCamera=mode=>({center:mode==='2d'?[121,23]:[121.01,23.01],zoom:mode
 const copy=value=>JSON.parse(JSON.stringify(value));
 const destroyNavigationTerrainMapLibre=()=>{for(const entry of navigationTerrainMapLibreRuntime.maps){
  navigationTerrainMapLibreRuntime.cameraByMode[entry.mode]=copy(entry.map.camera);
-}navigationTerrainMapLibreRuntime.maps=[];};
+}navigationTerrainMapLibreRuntime.maps=[];navigationTerrainMapLibreRuntime.generation++;};
 const navigationTerrainMapLibreCameraSnapshot=map=>copy(map.camera);
 function initializeNavigationTerrainMapLibre(){
  const runtime=navigationTerrainMapLibreRuntime;runtime.initializationStarted++;
@@ -183,14 +184,25 @@ function initializeNavigationTerrainMapLibre(){
   const style={sources:{'scout-terrain-dem':{type:'raster-dem'},'scout-known-gpx-reference':{type:'geojson',data:{features:[{geometry:{type:'LineString'}}]}}},layers:[]};
   style.sources['scout-terrain-route-corridor-top-10']=navigationTerrainRouteHypothesisImageSource(payload,'top_10_percent_corridor');
   if(rudy)style.sources['scout-rudy-tw']={type:'raster'};
-  const map={camera:copy(runtime.cameraByMode[mode]||defaultCamera(mode)),getStyle:()=>style,isStyleLoaded:()=>true,isMoving:()=>false,
+  const map={camera:copy(runtime.cameraByMode[mode]||defaultCamera(mode)),maxZoom:19,getStyle:()=>style,isStyleLoaded:()=>true,isMoving:()=>false,loaded:()=>true,
    getTerrain:()=>mode==='3d'?{source:'scout-terrain-dem',exaggeration:state.navigationTerrainVerticalExaggeration}:null,
-   getCenter(){return {lng:this.camera.center[0],lat:this.camera.center[1]};},getZoom(){return this.camera.zoom;},getMaxZoom:()=>19,
-   getCanvas:()=>host.querySelector('canvas'),resize:()=>{},jumpTo(value){Object.assign(this.camera,value);}};
+   getCenter(){return {lng:this.camera.center[0],lat:this.camera.center[1]};},getZoom(){return this.camera.zoom;},getMaxZoom(){return this.maxZoom;},
+   getPitch(){return this.camera.pitch;},getBearing(){return this.camera.bearing;},
+   getCanvas:()=>host.querySelector('canvas'),resize:()=>{},jumpTo(value){Object.assign(this.camera,value);},
+   once(name,callback){this.moveend=callback;},easeTo(value){
+    if(!options.missingFocus)Object.assign(this.camera,value);
+    if(options.wrongFocusTarget)this.camera.center=[122,24];
+    if(options.wrongFocusZoom)this.camera.zoom=12;
+    if(options.wrongFocusPitch)this.camera.pitch=22;
+    if(options.focusRaisesCap)this.maxZoom=20;
+    if(options.wrongFocusReceipt)host.dataset.navigationTerrainFocusedSelectionId='wrong';
+    this.moveend?.();
+   }};
   if(options.restoreReset&&runtime.initializationStarted>2)map.camera=defaultCamera(mode);
+  if(options.postFocusLensDrift&&state.selected==='b'&&state.navigationTerrainLens==='retreat')map.camera.center[0]+=.01;
   host.dataset.navigationMaplibreStatus=options.failed3d&&mode==='3d'?'degraded':'ready';
   host.dataset.navigationTerrainElevationStatus='decoded';host.dataset.navigationTerrainCenterElevation='2000';
-  const entry={mode,host,map};runtime.maps.push(entry);
+  const entry={mode,host,map,nativeCameraReceipt:{active:rudy,providerNativeMaxZoom:20,worldTileSize:512,nativeTileSize:256}};runtime.maps.push(entry);
   host.querySelector('button').onclick=()=>{map.camera.zoom++;if(options.crossModeZoom)for(const other of runtime.maps)if(other!==entry)other.map.camera.zoom++;};
   map.getCanvas().onkeydown=event=>{if(event.key==='ArrowRight')map.camera.center[0]+=.001;};
   host.parentElement.querySelector('[data-navigation-maplibre-fit]').onclick=()=>{map.camera=defaultCamera(mode);};
@@ -206,10 +218,12 @@ const diagnosticDisposeNavigationMaps=async()=>{destroyNavigationTerrainMapLibre
  return {disposed:!options.cleanupFails,activeMaps:0,pendingInitializations:0,errors:options.cleanupFails?[{errorName:'FixtureCleanupFailure'}]:[]};};
 '''.replace("OPTIONS", json.dumps(options))
     program += _functions("render", "bindNavigationTerrainControls", "diagnosticNavigationScopeKey",
+                          "navigationTerrainSelectionFocusTarget", "focusNavigationTerrainSelection",
                           "diagnosticNavigationCameraApiSource", "diagnosticNavigationCameraSourceIdentity", "diagnosticNavigationCameraSourceContext",
                           "diagnosticNavigationCameraResolveSource", "diagnosticNavigationCameraVerifySource",
                           "diagnosticNavigationCameraPaneEvidence", "diagnosticNavigationCameraPageEvidence",
                           "diagnosticValidateNavigationCameraPage", "diagnosticDisposeNavigationCameraPage",
+                          "diagnosticNavigationCameraVerifyCandidateFocus",
                           "diagnosticProbeNavigationCameraPage")
     program += r'''
 (async()=>{
@@ -251,14 +265,110 @@ def test_actual_bound_transitions_preserve_renderer_and_camera_failures(options:
     assert result["active"] is False and result["maps"] == 0
 
 
-def test_candidate_focus_conflict_stays_failed_and_later_phases_still_run() -> None:
-    report = _workflow({"candidateMoves": True})["report"]
+def test_approved_candidate_focus_targets_both_modes_and_later_lenses_keep_their_camera() -> None:
+    report = _workflow({})["report"]
+    rows = {row["phase"]: row for row in report["phases"]}
+    assert report["status"] == rows["candidate-selection"]["status"] == "passed"
+    receipt = rows["candidate-selection"]["candidateFocus"]
+    assert receipt["exception"] == "explicit-candidate-selection" and receipt["verified"] is True
+    assert receipt["target"] == {"id": "b", "lens": "structure", "coordinates": [121.2, 23.2]}
+    assert [mode["expectedZoom"] for mode in receipt["modes"]] == [15, 16.15]
+    assert "followingPhaseBaseline" in rows["candidate-selection"]
+    for phase in ["lens-retreat", "lens-pressure", "lens-events", "lens-risk", "lens-structure",
+                  "evidence-open", "evidence-close", "exaggeration-1.5", "fit-2d-only", "reset-3d-only"]:
+        assert rows[phase]["status"] == "passed", rows[phase]
+
+
+@pytest.mark.parametrize("option", ["missingFocus", "wrongFocusTarget", "wrongFocusZoom", "wrongFocusPitch", "focusRaisesCap", "wrongFocusReceipt"])
+def test_candidate_focus_exception_does_not_hide_wrong_or_missing_focus(option: str) -> None:
+    report = _workflow({option: True})["report"]
     rows = {row["phase"]: row for row in report["phases"]}
     assert report["status"] == rows["candidate-selection"]["status"] == "failed"
-    assert "camera was changed" in rows["candidate-selection"]["detail"]
-    assert "followingPhaseBaseline" in rows["candidate-selection"]
-    for phase in ["evidence-open", "evidence-close", "exaggeration-1.5", "fit-2d-only", "reset-3d-only"]:
-        assert rows[phase]["status"] == "passed", rows[phase]
+    assert "candidateTarget" in rows["candidate-selection"] and "evidence" in rows["candidate-selection"]
+    assert rows["candidate-selection"]["evidence"]["sourceIdentity"]["fingerprints"]["projection"] == "projection-sha"
+    assert rows["lens-pressure"]["status"] != "not_run"
+
+
+def test_candidate_focus_does_not_exempt_later_lens_camera_drift() -> None:
+    report = _workflow({"postFocusLensDrift": True})["report"]
+    rows = {row["phase"]: row for row in report["phases"]}
+    assert rows["candidate-selection"]["status"] == "passed"
+    assert report["status"] == rows["lens-retreat"]["status"] == "failed"
+    assert "camera was changed" in rows["lens-retreat"]["detail"]
+
+
+def test_candidate_without_prepared_geometry_is_not_verified() -> None:
+    report = _workflow({"noCandidateGeometry": True})["report"]
+    row = next(item for item in report["phases"] if item["phase"] == "candidate-selection")
+    assert report["status"] == "failed" and row["status"] == "not_verified"
+    assert "prepared point geometry" in row["detail"]
+
+
+def _candidate_focus(cap: float, zooms: list[float], mutation: str = "") -> dict:
+    program = r'''
+const diagnosticRequire=(value,message)=>{if(!value)throw Error(message);};
+const copy=value=>JSON.parse(JSON.stringify(value));
+const state={route:'outdoor-navigation'},window={setTimeout:()=>1};
+const NAVIGATION_TERRAIN_EVENT_FOCUS_MAX_ATTEMPTS=3,asArray=value=>Array.isArray(value)?value:[];
+const navigationTerrainSnapshot=()=>({});
+const navigationTerrainMapLibreLensOverlayFeatures=()=>[{properties:{id:'prepared-b'},geometry:{type:'Point',coordinates:[121.2,23.2]}}];
+const navigationTerrainMapLibreRuntime={generation:1,maps:['2d','3d'].map((mode,index)=>({mode,host:{dataset:{}},map:{
+ camera:{center:[121,23],zoom:ZOOMS[index],pitch:index?58:0,bearing:index?-28:0},maxZoom:CAP,
+ loaded:()=>true,getZoom(){return this.camera.zoom;},getMaxZoom(){return this.maxZoom;},
+ getPitch(){return this.camera.pitch;},getBearing(){return this.camera.bearing;},
+ once(_name,fn){this.moveend=fn;},easeTo(value){
+  this.camera={center:[...value.center],zoom:value.zoom,pitch:value.pitch,bearing:value.bearing};this.moveend();
+ }
+}}))};
+const read=()=>({selectedCandidate:'prepared-b',lens:'structure',renderers:navigationTerrainMapLibreRuntime.maps.map(entry=>({
+ mode:entry.mode,camera:copy(entry.map.camera),maxCameraZoom:entry.map.getMaxZoom(),
+ nativeCamera:{active:true,providerNativeMaxZoom:20,worldTileSize:512,nativeTileSize:256},
+ focusedSelectionId:entry.host.dataset.navigationTerrainFocusedSelectionId,
+ focusedSelectionLens:entry.host.dataset.navigationTerrainFocusedSelectionLens
+}))});
+'''.replace("ZOOMS", json.dumps(zooms)).replace("CAP", json.dumps(cap))
+    program += _functions("navigationTerrainSelectionFocusTarget", "focusNavigationTerrainSelection",
+                          "diagnosticNavigationCameraVerifyCandidateFocus")
+    program += r'''
+const before=read(),target=navigationTerrainSelectionFocusTarget({},'structure','prepared-b');
+const applied=focusNavigationTerrainSelection('structure','prepared-b'),after=read();
+''' + mutation + r'''
+let failure=null,receipt=null;
+try{receipt=diagnosticNavigationCameraVerifyCandidateFocus(before,after,target);}catch(error){failure=error.message;}
+console.log(JSON.stringify({applied,before,after,receipt,failure}));
+'''
+    return _node(program)
+
+
+@pytest.mark.parametrize("cap,zooms,expected", [
+    (19, [12, 13], [15, 16]),
+    (19, [17.25, 18.5], [17.25, 18.5]),
+    (14, [12, 13], [14, 14]),
+    (15.5, [15.25, 15.25], [15.25, 15.5]),
+])
+def test_real_candidate_focus_respects_floor_retained_zoom_and_actual_native_cap(
+    cap: float, zooms: list[float], expected: list[float],
+) -> None:
+    result = _candidate_focus(cap, zooms)
+    assert result["applied"] is True and result["failure"] is None, result
+    assert [item["actualCamera"]["zoom"] for item in result["receipt"]["modes"]] == expected
+    assert result["after"]["renderers"][1]["camera"]["bearing"] == -28
+    assert all(item["camera"]["center"] == [121.2, 23.2] for item in result["after"]["renderers"])
+
+
+@pytest.mark.parametrize("mutation,expected", [
+    ("after.renderers[1].camera.bearing=0;", "pitch or bearing"),
+    ("after.renderers.pop();", "both visible Split"),
+    ("after.selectedCandidate='prepared-a';", "selected candidate and lens"),
+    ("after.renderers[0].nativeCamera.active=false;", "native source camera cap"),
+    ("after.renderers[0].nativeCamera.nativeTileSize=128;", "native source camera cap"),
+    ("after.renderers[0].nativeCamera.worldTileSize=0;", "native source camera cap"),
+    ("after.renderers[1].camera.zoom=16;", "retained zoom"),
+])
+def test_candidate_focus_receipt_rejects_false_exception_evidence(mutation: str, expected: str) -> None:
+    result = _candidate_focus(19, [17.25, 18.5], mutation)
+    assert expected in result["failure"]
+    assert result["receipt"] is None
 
 
 def test_missing_candidate_is_not_verified_and_never_a_success() -> None:

@@ -252,6 +252,66 @@ D3：C2 - 單攻阿桑來戛 - 巨石獵營 (275487/2583228) - 1148鞍C3
 D4：C3 - 單攻異祿閣 - 腰繞至Nas-maya - 卓溪山岔 - 卓溪山 - 卓溪山產道
 ```
 
+#### 2026-09-13 actual four-day reconstruction case
+
+The user supplied the following actual-itinerary case for
+`dongqing_batongguan_historic_trail_newImport`. It is distinct from the planned
+itinerary above: retain its C1 coordinate, short Asang exploration and daily
+boundaries exactly. Do not migrate the older proposed camps or branch days into
+this request.
+
+```text
+D1：中平林道18K - 沛源石礦岔路 - 石礦鞍部 - 森林鞍西北側迷你鞍C1
+(273689/2589087)
+D2：C1 - 崩坡絕壁 - 三岔峰營地 - 玉里山 - 清八岔 - 單攻往阿桑來戛探一小段 -
+H1648營C2
+D3：C2 - 巨石獵營 - 1148鞍 - 單攻異祿閣 - 1148鞍旁平地C3
+D4：C3 - 腰繞至Nas-maya - 卓溪山岔 - 卓溪山 - 卓溪山產道
+```
+
+The source inventory is stored on Scout under
+`main-rudy-zoom-20260913/planned-four-day-case/`. At intake, the true 9099 catalog
+snapshot is `e62bdd859b60876e29bc31189551d0c260876248237df4233e0162b4effe0eb4`.
+Nineteen legs have explicit source/gap records. C1's datum, the short Asang
+turnaround, the north-ridge geometry and the C2/1148-saddle/C3 bindings remain
+unresolved; pending R4 review is not accepted route geometry. A bounded search
+did not find a same-trip GPX, which is not a claim that none exists.
+
+The source-supported D4.3 fragment uses Ref004
+`ref.b0714258aaa8bf5d`, part 0, inclusive indices 20158–20308. A real 9099
+preview compiled its 151 points and 868.843 m in source order, with status
+`needs_review`: departure and map/DEM coverage are still unverified. This
+fragment does not represent the full D4 or the four-day plan. Its difference
+from the full Golden length must not be reported as the itinerary's distance
+change. No Saved Planned, review or analysis selection was created.
+
+Retain the full user intent beside the explicit typed selections. Explanatory
+report titles are metadata, not free-form itinerary commands. The first preview
+that included such a title returned `unresolved_itinerary_clause`; its receipt
+is retained alongside the corrected typed request. Neither a successful HTTP
+response nor a partial geometry is grounds to pass the nine Planned comparison
+surfaces in DASH-049.
+
+The corrected human-text intake keeps explicit route continuations and a
+standalone coordinate under the preceding day, preserves `Nas-maya` as one
+name, and hashes the exact submitted text. It does not resolve the coordinate
+datum or approve either branch. The actual 9099 API and Chrome `Preview source`
+both returned four day rows with 27 unresolved items; C1, H1648 and Nas-maya were
+retained. Candidate catalogs, analysis selection and `project.json` were
+unchanged across the API preview. Normal HTTP audit receipts are separate from
+workspace authoring. Evidence is in `scout-human-itinerary-postchange-9099.json`
+and `qa/scout-human-itinerary-chrome-20260913.*` under the case directory.
+
+The first Chrome replay exposed a UI defect: `Preview source` re-rendered the
+enclosing legacy-text details closed. The follow-up preserves the operator's
+open/closed choice through pending, successful and failed requests and ignores
+detached-node toggle events. A second actual Chrome replay kept the four-day
+result visible without reopening. Both before/after screenshots are retained;
+the final one is `qa/scout-human-itinerary-chrome-fixed-20260913.png`. This
+intake repair does not resolve the route gaps or qualify full map acceptance.
+
+#### Intake invariants
+
 The intake pipeline must preserve the source text and hash, segment ordered
 `D0...Dn` days, extract ordered place mentions, treat `C0...Cn` as operator
 aliases until resolved, and recognize terms such as `單攻` only as a branch or

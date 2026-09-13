@@ -8464,17 +8464,42 @@ class ContextualPermissionWorkbench:
 
     def preview_baseline(self, request: BaselineAuthoringRequest) -> MissionBaselineDraft:
         if request.mode == "human_text":
-            source = (request.human_text or "").strip()
+            source = request.human_text or ""
             days: list[BaselineDayDraft] = []
             unresolved: list[str] = []
+            # Keep the submitted text as provenance; only parse a separate day
+            # view. A wrapped route or coordinate belongs to its preceding day,
+            # while an unrelated standalone line remains an explicit gap.
+            day_blocks: list[tuple[str, list[str]]] = []
+            active_lines: list[str] | None = None
+            separator = r"(?:[–—－>→]+|(?<![A-Za-z])-+|-+(?![A-Za-z]))"
+            coordinate_pattern = r"[（(](\d{5,7}/\d{6,8})[)）]"
             for line in source.splitlines():
                 match = re.match(r"^\s*(D\d+)\s*[:：]\s*(.+?)\s*$", line)
-                if not match:
-                    if line.strip():
-                        unresolved.append(f"unparsed_line:{line.strip()}")
+                if match:
+                    day_id, day_text = match.groups()
+                    active_lines = [day_text]
+                    day_blocks.append((day_id, active_lines))
                     continue
-                day_id, day_text = match.groups()
-                tokens = [token.strip() for token in re.split(r"\s*[-–—>]\s*", day_text)]
+                stripped = line.strip()
+                if not stripped:
+                    active_lines = None
+                    continue
+                if active_lines is not None and not re.match(r"D\d+\b", stripped) and (
+                    re.fullmatch(coordinate_pattern, stripped)
+                    or re.search(rf"{separator}\s*$", active_lines[-1])
+                    or re.match(rf"{separator}\s*", stripped)
+                ):
+                    active_lines.append(stripped)
+                else:
+                    unresolved.append(f"unparsed_line:{stripped}")
+                    active_lines = None
+            for day_id, day_lines in day_blocks:
+                day_text = "\n".join(day_lines)
+                tokens = [
+                    token.strip()
+                    for token in re.split(rf"\s*{separator}\s*", day_text)
+                ]
                 mentions: list[str] = []
                 aliases: list[str] = []
                 coordinate_hints: list[dict[str, object]] = []
@@ -8484,7 +8509,7 @@ class ContextualPermissionWorkbench:
                     aliases.extend(
                         re.findall(r"(?<![A-Za-z0-9])C\d+(?!\d)", token)
                     )
-                    for coordinate in re.findall(r"\((\d{5,7}/\d{6,8})\)", token):
+                    for coordinate in re.findall(coordinate_pattern, token):
                         coordinate_hints.append(
                             {
                                 "raw_text": coordinate,
@@ -8492,7 +8517,7 @@ class ContextualPermissionWorkbench:
                                 "reviewed": False,
                             }
                         )
-                    cleaned = re.sub(r"\(\d{5,7}/\d{6,8}\)", "", token)
+                    cleaned = re.sub(coordinate_pattern, "", token)
                     cleaned = re.sub(
                         r"(?<![A-Za-z0-9])C\d+(?!\d)", "", cleaned
                     ).strip()

@@ -44,6 +44,7 @@ function source(name) {
 }
 const registry = html.match(/^    const DASHBOARD_MAP_SURFACES = Object.freeze\(\[[\s\S]*?^    \]\);/m)[0];
 const names = ['diagnosticMapInteractionSurfaceCases','diagnosticMapInteractionFrameContext',
+  'diagnosticMapInteractionNodeVisible','diagnosticMapInteractionSvgVectorCount','diagnosticMapInteractionNavigationState',
   'diagnosticPretripMapInteractionAdapter','diagnosticNavigationMapInteractionAdapter',
   'diagnosticPrepareMapInteractionSurface','discardDashboardPendingRudyTileGeneration'];
 window.eval(registry+'\n'+names.map(source).join('\n')+String.raw`

@@ -48,6 +48,7 @@ class AnalysisSubject(BaseModel):
     planning_review_ref: str | None = None
     route_axis: dict[str, Any] | list[Any] | None = None
     planned_route_geojson: dict[str, Any] | None = None
+    golden_route_geojson: dict[str, Any] | None = None
     checkpoints: list[dict[str, Any]] = Field(default_factory=list)
     segments: list[dict[str, Any]] = Field(default_factory=list)
     itinerary: dict[str, Any] | None = None
@@ -415,6 +416,7 @@ def _build_planned_analysis_subject(project_root: Path, bundle: dict) -> Analysi
                 dependency.update(analysis_run_status=analysis.get("status"), run_id=analysis.get("run_id"))
     sources = {
         "planned_geometry": ws.source(f"{prefix}/planned.gpx", manifest["files"]["planned.gpx"]["sha256"]),
+        "planned_comparison_preview": ws.source(f"{prefix}/preview.json", manifest["files"]["preview.json"]["sha256"]),
         "planned_itinerary": ws.source(f"{prefix}/itinerary.json", manifest["files"]["itinerary.json"]["sha256"]),
         "planned_route_axis": ws.source(f"{prefix}/route_axis.json", manifest["files"]["route_axis.json"]["sha256"]),
         "checkpoints": ws.source(f"{prefix}/checkpoints.json", manifest["files"]["checkpoints.json"]["sha256"]),
@@ -444,7 +446,8 @@ def _build_planned_analysis_subject(project_root: Path, bundle: dict) -> Analysi
         unknown_ranges=[item if isinstance(item, dict) else {"reason": str(item)} for item in itinerary.get("unknowns", [])],
         overnight_gaps=[item for item in itinerary.get("timeline", []) if item.get("kind") in {"camp", "overnight"}],
         dependencies=dependencies, issues=[reason] if reason else [],
-        route_axis=axis, planned_route_geojson=preview.get("route_geojson"), checkpoints=checkpoints, segments=segments,
+        route_axis=axis, planned_route_geojson=preview.get("route_geojson"),
+        golden_route_geojson=preview.get("golden_geojson"), checkpoints=checkpoints, segments=segments,
         itinerary=itinerary, comparison=preview.get("comparison"), coverage=coverage, planned_analysis=analysis,
     )
 

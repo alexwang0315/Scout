@@ -50,6 +50,13 @@ share one unchecked comparison control, with separate per-theme workspace caches
 and explicit remote refresh. Control presence does not prove cached coverage.
 Historical map evidence is candidate-only and never a verified trail or safety truth.
 
+The 2026-09-13 user decision adds `data-layer-contract="auxiliary"` to the
+historical comparison control and keeps the remaining contract unchanged. This
+UI purpose label does not remove `historical-map` from the 33-layer registry,
+the pretrip control census, its rank, or its cache and authority requirements.
+The verifier must continue checking every required registry layer even when a
+control carries the auxiliary label; unrelated auxiliary controls stay separate.
+
 ## Tile Provider And Cache Policy
 
 All interactive Dashboard Rudy+TW surfaces (Main, Weather, Overview, LBS,

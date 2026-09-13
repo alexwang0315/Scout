@@ -2755,7 +2755,46 @@ def test_navigation_map_always_compares_typed_known_gpx_with_candidate_r1() -> N
     assert 'element.dataset.navigationTerrainRouteAnnotation = annotation.kind' in html
     assert 'const routeAnnotations = addNavigationTerrainRouteAnnotations(' in html
     assert 'map, mode, host, scopeKey, routeAnnotations' in html
-    assert 'asArray(entry.routeAnnotations).forEach(annotation => annotation.remove());' in html
+    destroy_match = re.search(
+        r"(?ms)^    function destroyNavigationTerrainMapLibre\(.*?^    \}", html
+    )
+    assert destroy_match, "The actual Navigation cleanup entrypoint must exist."
+    node_program = "\n".join((
+        "const assert = require('node:assert/strict');",
+        "const asArray = value => Array.isArray(value) ? value : [];",
+        "let navigationTerrainMapLibreRuntime;",
+        "const rememberNavigationTerrainMapLibreCamera = entry => entry.calls.push('camera');",
+        destroy_match.group(),
+        r"""
+for (const failingAnnotation of [null, 'first', 'second']) {
+  const calls = [];
+  const annotations = ['first', 'second', 'third'].map(name => ({
+    remove() {
+      calls.push(name);
+      if (name === failingAnnotation) throw new Error('annotation cleanup failed');
+    },
+  }));
+  const entry = {
+    calls,
+    routeAnnotations: annotations,
+    evidenceControlsCleanup() { calls.push('evidence-controls'); },
+    rudyTransport: {destroy() { calls.push('tile-transport'); }},
+    map: {remove() { calls.push('map-remove'); }},
+  };
+  navigationTerrainMapLibreRuntime = {maps: [entry], generation: 7, synchronizing: true};
+  destroyNavigationTerrainMapLibre();
+  assert.deepEqual(calls, ['camera', 'first', 'second', 'third', 'evidence-controls', 'tile-transport', 'map-remove'],
+    'Every annotation and the map must be released even if another annotation throws');
+  assert.equal(navigationTerrainMapLibreRuntime.maps.length, 0);
+  assert.equal(navigationTerrainMapLibreRuntime.generation, 8);
+  assert.equal(navigationTerrainMapLibreRuntime.synchronizing, false);
+  assert.equal(entry.mapDisposeReceipt.mapRemoved, true);
+  assert.equal(entry.mapDisposeReceipt.disposed, failingAnnotation === null);
+  assert.equal(entry.mapDisposeReceipt.errors.length, failingAnnotation === null ? 0 : 1);
+}
+""",
+    ))
+    subprocess.run(["node"], input=node_program, text=True, capture_output=True, check=True)
     assert 'data-navigation-terrain-route-map-key="true"' in html
     assert "Golden Route GPX" in html
     assert 'terrain hypothesis</b><em>candidate_only · not verified' in html
@@ -4026,6 +4065,9 @@ def test_scout_dashboard_moves_pace_fit_emergency_ui_to_safety_emergency() -> No
 
 def test_scout_dashboard_safety_emergency_embeds_desktop_approval_console() -> None:
     html = PAGE.read_text(encoding="utf-8")
+    legacy_illustration = html.split("function renderEmergencyLegacyIllustration()", 1)[1].split(
+        "function renderEmergencyPage()", 1
+    )[0]
     emergency_page = html.split("function renderEmergencyPage()", 1)[1].split(
         "function renderDebugPage()", 1
     )[0]
@@ -4041,9 +4083,11 @@ def test_scout_dashboard_safety_emergency_embeds_desktop_approval_console() -> N
     assert "state.permissionDataError" in emergency_page
     assert 'data-emergency-decision="${decision}"' in emergency_page
     assert 'data-emergency-confirm-submit="true"' in html
-    assert 'data-emergency-approval-frame="desktop"' in emergency_page
-    assert 'src="/admin/dashboard/emergency-approval-desktop-v0"' in emergency_page
-    assert 'title="Legacy safety and emergency desktop approval console"' in emergency_page
+    assert emergency_page.count("renderEmergencyLegacyIllustration()") == 3
+    assert 'data-emergency-approval-frame="desktop"' in legacy_illustration
+    assert 'surfaceSrc("/admin/dashboard/emergency-approval-desktop-v0")' in legacy_illustration
+    assert 'title="Legacy safety and emergency desktop illustration"' in legacy_illustration
+    assert "不代表目前 workspace 路線、每日審查結果或任何安全權限" in legacy_illustration
     assert "emergency-mobile-approval-v0" not in emergency_page
     assert 'renderMapPanel("emergency")' in emergency_page
     assert ".safety-emergency-shell" in html
@@ -5841,7 +5885,7 @@ process.stdout.write(JSON.stringify({{assistantCases, weatherCases, invalid, fai
     assert payload["successReceipt"]["reloadDisabled"] is False
 
 
-def test_dashboard_diagnostic_page_runs_38_read_only_checks() -> None:
+def test_dashboard_diagnostic_page_registers_49_checks() -> None:
     html = PAGE.read_text(encoding="utf-8")
 
     settings_nav = (
@@ -5856,15 +5900,15 @@ def test_dashboard_diagnostic_page_runs_38_read_only_checks() -> None:
     assert diagnostic_nav in html
     assert html.index(diagnostic_nav) > html.index(settings_nav)
     assert '"diagnostic": Object.freeze' in html
-    assert 'diagnostic: ["Diagnostic", "48 read-only Dashboard checks"]' in html
+    assert 'diagnostic: ["Diagnostic", "49 Dashboard checks · read-only workspace evidence and approved Rudy native GET"]' in html
     assert 'if (route === "diagnostic") return renderDiagnosticPage();' in html
 
     case_source = html.split(
         "const DASHBOARD_DIAGNOSTIC_CASES = Object.freeze([", 1
     )[1].split("]);", 1)[0]
-    for index in range(1, 49):
+    for index in range(1, 50):
         assert f'id: "DASH-{index:03d}"' in case_source
-    assert case_source.count('id: "DASH-') == 48
+    assert case_source.count('id: "DASH-') == 49
     assert "postJson(" not in case_source
 
     for marker in (
@@ -6181,11 +6225,11 @@ def test_navigation_maplibre_camera_fail_case_and_diagnostic_gate_are_documented
         assert marker in failure_log
 
     for marker in (
-        "目前版本：48 / 100",
-        "DASH-001～DASH-048",
+        "目前版本：49 / 100",
+        "DASH-001～DASH-049",
         "### DASH-038 Navigation MapLibre 2D/3D 鏡頭持久化",
         "DASH-MAP-REG-003",
-        "下一個可用編號為 `DASH-049`",
+        "下一個可用編號為 `DASH-050`",
     ):
         assert marker in checklist
 

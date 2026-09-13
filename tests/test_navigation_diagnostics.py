@@ -347,11 +347,11 @@ def test_guidance_evidence_markup_is_keyboard_accessible_and_binder_is_used(html
     assert "bindTerrainRouteGuidanceFocusControls(" in _function(html, "bindQgisSpatialControls")
 
 
-def test_navigation_diagnostics_register_48_unique_cases_with_executable_handlers(html: str) -> None:
+def test_navigation_diagnostics_register_49_unique_cases_with_executable_handlers(html: str) -> None:
     cases = _array_constant(html, "DASHBOARD_DIAGNOSTIC_CASES")
     stubs = "\n".join(
         f"const diagnosticCheck{number:03d} = () => 'DASH-{number:03d}';"
-        for number in range(1, 49)
+        for number in range(1, 50)
     )
     payload = _run_node(stubs + "\n" + cases, """
 const cases = DASHBOARD_DIAGNOSTIC_CASES.map(({id, category, title, description, run}) => ({
@@ -361,8 +361,8 @@ const cases = DASHBOARD_DIAGNOSTIC_CASES.map(({id, category, title, description,
 process.stdout.write(JSON.stringify({cases}));
 """)
     cases_by_id = {case["id"]: case for case in payload["cases"]}
-    assert len(payload["cases"]) == len(cases_by_id) == 48
-    assert set(cases_by_id) == {f"DASH-{number:03d}" for number in range(1, 49)}
+    assert len(payload["cases"]) == len(cases_by_id) == 49
+    assert set(cases_by_id) == {f"DASH-{number:03d}" for number in range(1, 50)}
     for case_id in NAVIGATION_CASE_IDS:
         case = cases_by_id[case_id]
         assert case["callable"] and case["result"] == case_id

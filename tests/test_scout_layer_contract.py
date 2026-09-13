@@ -21,6 +21,25 @@ def test_scout_layer_contract_static_gate_passes() -> None:
     assert tuple(result["layers"].keys()) == SCOUT_LAYER_IDS
 
 
+def test_auxiliary_label_cannot_hide_a_missing_required_historical_control(monkeypatch) -> None:
+    page = ROOT / "docs/admin/phase4-pretrip-planning.html"
+    read_text = Path.read_text
+    original = read_text(page)
+    control = 'data-layer="historical-map" data-layer-contract="auxiliary"'
+    assert control in original
+
+    def without_historical_control(path, *args, **kwargs):
+        text = read_text(path, *args, **kwargs)
+        if path == page:
+            return text.replace(control, 'data-layer="other-auxiliary" data-layer-contract="auxiliary"')
+        return text
+
+    monkeypatch.setattr(Path, "read_text", without_historical_control)
+    result = run_checks(repo_root=ROOT)
+    assert not result["ok"]
+    assert "pretrip:historical-map: missing data-layer control" in result["errors"]
+
+
 def test_completed_track_is_after_action_only_but_still_in_contract() -> None:
     assert "completed-track" in SCOUT_LAYER_IDS
     assert "completed-track" not in SCOUT_SURFACE_LAYER_IDS["pretrip"]

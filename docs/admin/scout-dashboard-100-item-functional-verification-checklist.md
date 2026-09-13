@@ -7,7 +7,7 @@
 空狀態、跨頁一致性，以及操作後不應發生的副作用。
 
 - 目標：100 個可執行、可判定、可留證據的主檢查項目。
-- 目前版本：48 / 100。
+- 目前版本：49 / 100。
 - 維護狀態：持續記錄中。
 - 起始日期：2026-07-28。
 - 維護方式：本對話串中新增或修改的檢查項目，持續追加到本文件。
@@ -50,7 +50,7 @@
 ## Dashboard Diagnostic UI
 
 Dashboard 已在 `System → Diagnostic`（位於 Settings 之後）放入目前的
-`DASH-001～DASH-048`。
+`DASH-001～DASH-049`。
 
 - 尚未測試：灰燈。
 - 測試中：黃燈與 `測試中`。
@@ -58,7 +58,7 @@ Dashboard 已在 `System → Diagnostic`（位於 Settings 之後）放入目前
 - 測試提醒：黃燈，缺少人工 review、執行證據或 unresolved evidence 保留 UNKNOWN。
 - 測試失敗：紅燈與 `測試失敗`，並顯示失敗原因。
 - 每題都有獨立的 `重新測試`。
-- 頁首 `Diag all` 依序執行 48 題，避免大型 project projection API
+- 頁首 `Diag all` 依序執行 49 題，避免大型 project projection API
   同時被大量呼叫。
 - `Navigation 體檢` 獨立執行 `DASH-025`、`DASH-038～DASH-043` 七題，不重跑其他分類。
   結果綁定目前 project、TRH selection 與 corridor band；切換後重測，並防止批次／單題重測
@@ -79,7 +79,7 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 |---|---|
 | 全域與 Overview | DASH-001、DASH-002、DASH-011 |
 | Plan Trip 與 Workspace | DASH-003、DASH-007、DASH-012～DASH-014 |
-| Map & Evidence | DASH-004～DASH-006、DASH-016、DASH-017、DASH-026～DASH-030、DASH-037、DASH-044 |
+| Map & Evidence | DASH-004～DASH-006、DASH-016、DASH-017、DASH-026～DASH-030、DASH-037、DASH-044、DASH-049 |
 | Navigation | DASH-025、DASH-038～DASH-043 |
 | Exploring for Six Axis | DASH-008、DASH-018～DASH-024、DASH-031～DASH-036 |
 | Assistant、System 與 Safety / Emergency | DASH-009、DASH-010、DASH-015 |
@@ -89,7 +89,7 @@ candidate/shadow prototype 可收錄，但必須把 no-authority 邊界當成必
 通過條件；只有具備可操作 UI、API／artifact 與明確 PASS／FAIL 證據的功能
 才會成為正式檢查項目。
 
-## 目前可驗收的 44 項功能
+## 目前已登錄的 49 項功能
 
 ### DASH-001 Dashboard 啟動、入口與必要 API 可用
 
@@ -924,12 +924,13 @@ Ref. GPX 候選的每個 on-trail 每日圖。不得只檢查 registry 名稱或
 workspace、最終 iframe document／URL／bridge，並確認清理後沒有殘留地圖或
 初始化工作。每日資料缺失、未知／重複分支、缺控制、無法採證或清理失敗均不算通過。
 互動檢查維持 cache-only；Rudy 未命中後的 native 補載由核准的 D037 驗證。
-這個分母仍未包含尚待用途仲裁的九個 Planned 比較圖實例及 Legacy Emergency
-示意原型；完整盤點見 `docs/specs/scout-dashboard-map-coverage-inventory-20260912.md`。
+這個分母不包含九個 Planned 比較圖實例及 Legacy Emergency 示意原型；使用者
+2026-09-13 已裁決分別驗向量比較與示意用途，另以用途矩陣逐例驗證，不當成 Rudy
+native 圖磚案例。完整盤點見 `docs/specs/scout-dashboard-map-coverage-inventory-20260912.md`。
 
 下列 2026-08-03 的 9/9 PASS 為歷史紀錄，不能代替上述擴充範圍的現行驗證。
-D027「反向框選縮小」與現行共用 SVG「任意方向框選放大」的衝突仍待使用者
-仲裁；不得因補測而自行改寫預期或宣稱各頁操作已一致。
+D027 的使用者仲裁（2026-09-13）：任意方向框選放大，減號縮小。以下步驟依
+此決定更新；舊 9/9 PASS 保留為歷史，不能充作新版本跨頁操作已一致的證據。
 
 - 頁面／範圍：Overview、LBS、Permission、Map、Weather、Navigation、
   Safety / Emergency、Architecture、Pace Fit 的全部 9 個 Dashboard 地圖實例。
@@ -973,14 +974,14 @@ D027「反向框選縮小」與現行共用 SVG「任意方向框選放大」的
 
 1. 在每張圖啟用 Box／矩形縮放模式。
 2. 由左上往右下拖曳一個矩形，確認局部放大且選取框在拖曳時可見。
-3. 由右下往左上拖曳矩形，確認支援局部縮小。
+3. 由右下往左上及另外兩個方向拖曳矩形，皆確認局部放大；按減號確認縮小。
 4. 聚焦地圖後依序按方向鍵，確認四個方向均能平移。
 5. 使用 `B`、`P` 與 Escape 切換或取消操作，確認不影響頁面捲動與表單。
 6. 在每張圖上轉動滑鼠滾輪，確認地圖 zoom 不變且頁面可正常捲動。
 
 通過條件：
 
-- Registry 內全部 9 張圖都能完成矩形放大與反向矩形縮小。
+- 現行矩陣每個適用地圖都能任意方向矩形放大，以減號縮小。
 - 四個方向鍵都會改變地圖位置，且只有地圖取得操作焦點時攔截按鍵。
 - 取消後不留下選取框、拖曳狀態或錯誤游標。
 - 全部地圖使用一致的快捷鍵與操作語意。
@@ -996,6 +997,12 @@ D027「反向框選縮小」與現行共用 SVG「任意方向框選放大」的
 - 備註：選取後均以 Fit 還原並切回 Pan。
 
 ### DASH-028 所有 Dashboard 地圖圖磚、向量與單圖例外政策
+
+2026-09-13 仲裁：ready 必須具有完整、可見且非裝飾的向量證據；loading／preparing
+可以尚無向量，但必須以真實狀態與可見文字如實標示，不能冒稱 ready。failed、
+unavailable、缺資料或假 ready 不得透過 loading 例外通過。Navigation ready 的
+terrain／prior 保留原本不載入 Rudy 的來源界線；observed 與三個 domain 的 loading
+按實際 renderer 逐例驗證。底下 2026-08-03 的 9/9 為歷史證據，不代替擴充矩陣。
 
 - 頁面／範圍：Overview、LBS、Permission、Map、Weather、Navigation、
   Safety / Emergency、Architecture、Pace Fit 的全部 9 個 Dashboard 地圖實例。
@@ -1379,8 +1386,8 @@ Refresh 才以 `native=1&refresh=1` 請求遠端，且移除 `cache_only`。Diag
 
 ### DASH-038 Navigation MapLibre 2D/3D 鏡頭持久化
 
-- 2026-09-12 補漏狀態：原 deterministic camera helper 回放不能代替以下實際頁面
-  控制操作。正在加入指定 workspace 的隔離頁面 probe，涵蓋實際 2D／3D／Split、
+- 2026-09-13 補漏狀態：原 deterministic camera helper 回放不能代替以下實際頁面
+  控制操作。已加入指定 workspace 的 26 階段隔離頁面 probe，涵蓋實際 2D／3D／Split、
   evidence domain、lens、候選與垂直誇張造成的重建，以及 Fit／Reset 的獨立性。
   必須保存每階段 renderer、source、camera 與清理收據；未就緒或缺少可測資料
   保留未驗證，不能沿用下方 2026-08-24 的 PASS 當成本輪結果。
@@ -1395,7 +1402,7 @@ Refresh 才以 `native=1&refresh=1` 請求遠端，且移除 `cache_only`。Diag
    pitch 與 bearing。
 2. 2D、3D 各按一次 `+`，確認兩邊倍率各自增加，另一張圖的 zoom 不變。
 3. 拖曳或以方向鍵移動 3D；確認 2D 的 center 與 zoom 都維持操作前數值。
-4. 依序觸發候選點、lens、Evidence、垂直誇張或 2D／3D／Split 切換所造成的
+4. 依序觸發 lens、Evidence、垂直誇張或 2D／3D／Split 切換所造成的
    Dashboard rerender，等待新 MapLibre instances ready。
 5. 比較重建前後 camera；2D 與 3D 的 center、zoom、pitch、bearing 必須各自
    恢復，不得回到 Fit。
@@ -1403,12 +1410,17 @@ Refresh 才以 `native=1&refresh=1` 請求遠端，且移除 `cache_only`。Diag
 7. 明確按 2D `Fit`，確認只重設 2D；再按 3D `Reset`，確認只重設 3D。
 8. 以不同 route projection fingerprint 執行 deterministic probe；舊 camera
    必須失效並回傳未命中，不能跨路線沿用。
+9. 明確點選候選，核對地圖定位至該候選；2D／3D 目標倍率分別至少 15／16，
+   但不得超出原生来源上限，也不降低已較高的有效倍率。pitch／bearing 保留。
+   以定位後鏡頭為新基準再切 lens，驗證此例外不擴及一般重绘。
 
 通過條件：
 
 - 契約維持「中心、尺度、俯角與方位各自獨立」；3D 移動不會改寫 2D camera。
-- 候選點與所有 Navigation 顯示切換造成的 rerender 都不會遺失有效 camera。
-- 只有明確 Fit／Reset 可重設對應 map，且不連帶重設另一個 mode 的 camera。
+- 一般 Navigation 顯示切換造成的 rerender 不會遺失有效 camera。
+- 明確點選候選的定位是使用者 2026-09-13 核准的鏡頭移動例外，必須核對目標
+  候選與可用原生倍率；不能用此例外放過其他非預期移動。
+- 明確 Fit／Reset 只重設對應 map，不連帶重設另一個 mode 的 camera。
 - route／DEM scope 改變時 fail closed，不沿用舊 camera。
 - Diagnostic probe 不發送 POST、不寫 workspace，也不建立 terrain 或 safety truth。
 
@@ -1523,7 +1535,7 @@ standard 161 項通過，checker 修正後的 Diagnostic／camera 六項再測�
 
 ## 後續項目收錄門檻
 
-下一個可用編號為 `DASH-049`。新項目只有在功能已實作，且具備可操作 UI、
+下一個可用編號為 `DASH-050`。新項目只有在功能已實作，且具備可操作 UI、
 API／artifact、測試資料與明確 PASS／FAIL 條件時才加入。未完成、未接線、
 preview placeholder 或只存在於未來規劃的能力不列入正式項目。
 
@@ -1586,6 +1598,28 @@ job schema與candidate-only。store／job缺資料為提醒；authority越界為
 唯讀replay projection及night-review，核對project／mission-day、packet hash欄位、
 field groups、freshness與瀏覽器offline API能力。缺前置資料為提醒。
 未執行offline write／sync、批准、真實傳送或安全判斷；完整離線流程仍未驗證。
+
+### DASH-049 Planned 向量比較與 Legacy 示意圖用途
+
+2026-09-13 依使用者仲裁新增。共十列：Permission preview、Permission compare、
+Route Context／Permission／Weather／Navigation／Architecture／Pace Fit／Body Index
+七張 analysis 比較圖，以及 Legacy Emergency 示意圖。此項補用途驗收，不冒充
+Rudy 原生圖磚驗收；後者仍由 DASH-037 負責。
+
+1. 從目前 workspace 唯讀取得 Saved Planned、analysis selection、immutable preview
+   與 analysis subject；逐一核对 project、version、manifest／preview／geometry SHA。
+2. 在正式 renderer／binder 產生的實際 UI 節點核對 Golden 與 Planned 兩條來源幾何、
+   圖層、來源錨點、縮放／Fit 控制、重載，以及 candidate-only 邊界。
+   Analysis 的 Golden 必須來自同一已選版本的 preview，不可借用另一版本補綠燈。
+3. Legacy 沿真實入口載入，核對明示 illustrative-only、圖層控制及重載；不得宣稱
+   固定示意線和 CSS 背景是離線 Rudy 圖磚或實際導航幾何。
+4. 每列保存各階段與清理結果；缺少 selected Planned 時仍驗 Legacy，九張比較圖
+   明確失敗，不跳過、不代選、不生成候選。讀取失敗、錯誤 SHA、缺幾何、控制無效
+   或清理失敗皆不能通過。
+
+登錄不等於真實驗收通過。東清 workspace 目前沒有 Saved Planned；使用者提供的
+四日主線與支線行程正在核對來源，尚未保存、review 或切換 analysis subject。
+2026-09-07 以下的 48 題敘述保留為當時紀錄，不代表目前登錄數。
 
 ## 2026-09-07 優先補強檢測：003／037／044
 

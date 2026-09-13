@@ -236,7 +236,7 @@
       ...state.operations.flatMap(operation => [operation.at, operation.to])].filter(Boolean));
     return [...array(preview?.checkpoints), ...anchors(state).filter(anchor => ids.has(anchorId(anchor)))];
   }
-  function mapHtml(planned, golden, points = [], mapId = "preview") {
+  function mapHtml(planned, golden, points = [], mapId = "preview", binding = {}) {
     const layers = [...geoLines(golden).map(line => ({...line, layer: "golden"})), ...geoLines(planned).map(line => ({...line, layer: "planned"}))];
     const coordinates = layers.flatMap(line => line.coordinates).filter(coord => Array.isArray(coord) && Number.isFinite(Number(coord[0])) && Number.isFinite(Number(coord[1])));
     if (!coordinates.length) return `<p class="status" data-planned-map-empty="true">尚無可顯示的來源幾何；缺口不補直線。</p>`;
@@ -259,12 +259,16 @@
       const id = anchorId(point);
       return `<circle cx="${x.toFixed(3)}" cy="${y.toFixed(3)}" r="4" class="planned-map-anchor${current.focusAnchor === id ? " is-selected" : ""}" data-planned-map-anchor="${escape(id)}" tabindex="0"><title>${escape(anchorLabel(point))}</title></circle>`;
     }).join("");
-    return `<div class="planned-map" data-planned-map="${escape(mapId)}"><div class="planned-map-tools">
-      <label><input type="checkbox" data-planned-map-toggle="golden" checked> Golden</label>
-      <label><input type="checkbox" data-planned-map-toggle="planned" checked> Planned</label>
+    const hasGolden = layers.some(line => line.layer === "golden"), hasPlanned = layers.some(line => line.layer === "planned");
+    const identity = {project: current.projectId, ...binding};
+    const attributes = Object.entries(identity).map(([name, value]) => `data-planned-map-${name.replaceAll("_", "-")}="${escape(value || "")}"`).join(" ");
+    return `<div class="planned-map" data-planned-map="${escape(mapId)}" data-map-purpose="vector-comparison" data-candidate-only="true" data-runtime-safety-truth="false" data-departure-approval-granted="false" ${attributes}><div class="planned-map-tools">
+      <label><input type="checkbox" data-planned-map-toggle="golden" ${hasGolden ? "checked" : "disabled"}> Golden${hasGolden ? "" : "（來源幾何未提供）"}</label>
+      <label><input type="checkbox" data-planned-map-toggle="planned" ${hasPlanned ? "checked" : "disabled"}> Planned${hasPlanned ? "" : "（來源幾何未提供）"}</label>
       ${button("map-in", "+", true, 'aria-label="放大 Planned 地圖"')}${button("map-out", "−", true, 'aria-label="縮小 Planned 地圖"')}${button("map-fit", "Fit")}
       <span>拖曳平移 · 點選錨點查核</span></div>
-      <svg viewBox="0 0 900 420" role="img" aria-label="Golden 與 Planned 完整來源幾何疊圖" data-planned-map-svg="true">${paths}${markers}</svg>
+      <svg viewBox="0 0 900 420" role="img" aria-label="${hasGolden && hasPlanned ? "Golden 與 Planned 完整來源幾何疊圖" : hasPlanned ? "Planned 候選來源幾何" : "Golden 來源幾何"}" data-planned-map-svg="true">${paths}${markers}</svg>
+      <p class="status" data-planned-map-purpose>向量比較：保留各來源段、方向與缺口，用於檢視候選規劃差異。版本 ${escape(binding.version || "未保存預覽")}；來源 ${escape(binding.source_status || "未驗證")}；不授予通行、出發或即時安全權限。</p>
       <p class="status" data-planned-map-selection="true">${layers.filter(line => line.layer === "planned").length} 個 Planned 幾何段；每個來源缺口均保留。</p></div>`;
   }
   function itinerary(preview) { return preview?.itinerary || preview?.planned_itinerary || {}; }
@@ -348,10 +352,17 @@
     const unresolvedNames = array(preview.unresolved_names || preview.intent?.unresolved_names).length
       ? array(preview.unresolved_names || preview.intent?.unresolved_names)
       : issues.filter(issue => issue.name || issue.unresolved_name || issue.anchor_name).map(issue => issue.name || issue.unresolved_name || issue.anchor_name);
+    const saved = prefix ? state.compare : state.saved;
+    const savedManifest = saved?.manifest || saved || {};
+    const bound = savedManifest.preview_sha256 === preview.preview_sha256;
     return `<section data-planned-preview="${escape(preview.preview_sha256 || "unbound")}">
       <h3>${escape(prefix)} Golden / Planned 差異</h3>
       <p>${escape(preview.status || "candidate")} · ${escape(hash(preview.preview_sha256))} · ${number(preview.comparison?.planned_length_m == null ? summary.distance_m == null ? summary.distance_km : summary.distance_m / 1000 : preview.comparison.planned_length_m / 1000, " km")}</p>
-      ${mapHtml(geometry(preview), goldenGeometry(preview, state.catalog), mapAnchors(state, preview), prefix ? "compare" : "preview")}
+      ${mapHtml(geometry(preview), bound ? preview.golden_geojson : goldenGeometry(preview, state.catalog), mapAnchors(state, preview), prefix ? "compare" : "preview", {
+        preview_sha256: preview.preview_sha256, version: bound ? savedManifest.version_id : "",
+        manifest_sha256: bound ? savedManifest.manifest_sha256 : "", geometry_sha256: bound ? savedManifest.geometry_sha256 : "",
+        source_status: bound ? saved?.source_status?.status || saved?.source_status || "unknown" : "unsaved-preview",
+      })}
       ${preview.comparison ? `<details open data-planned-comparison="true"><summary>原 Golden 與此 Planned 的差異</summary><pre>${escape(JSON.stringify(preview.comparison, null, 2))}</pre></details>` : ""}
       ${itineraryHtml(preview, prefix ? "compare" : "preview")}
       <details open><summary>來源段、方向與點範圍 · ${pieces.length}</summary>
@@ -868,7 +879,12 @@
         else { const factor = name === "map-in" ? 0.7 : 1 / 0.7; const width = view[2] * factor, height = view[3] * factor; view = [view[0] + (view[2] - width) / 2, view[1] + (view[3] - height) / 2, width, height]; }
         apply();
       }));
-      svg.addEventListener("pointerdown", event => { drag = {x: event.clientX, y: event.clientY, view: [...view]}; svg.setPointerCapture?.(event.pointerId); });
+      svg.addEventListener("pointerdown", event => {
+        drag = {x: event.clientX, y: event.clientY, view: [...view]};
+        // Capture may be unavailable after cancellation or for isolated DOM
+        // diagnostic events; dragging within the SVG still uses the same handler.
+        try { svg.setPointerCapture?.(event.pointerId); } catch (_) { /* No active pointer to capture. */ }
+      });
       svg.addEventListener("pointermove", event => {
         if (!drag) return;
         const rect = svg.getBoundingClientRect();
@@ -1058,7 +1074,11 @@
       <div class="metric-row"><span>本頁新版分析</span><strong>${escape(dependency.status || "needs_reanalysis")}</strong></div></div>
       <p class="status">${escape(dependency.reason || "各力依此版 route axis 與時間計畫重算；尚未重算的內容保留明確狀態。")}</p>
       ${forceProjectionHtml(state, subject, role)}
-      ${mapHtml(routeGeojson, subject.golden_route_geojson, checkpoints, "analysis")}${itineraryHtml(preview, `analysis:${role}`)}
+      ${mapHtml(routeGeojson, subject.golden_route_geojson, checkpoints, "analysis", {
+        version: subject.selected_plan_version_id || subject.version_id || subject.planned_version_id,
+        manifest_sha256: subject.planned_bundle_sha256, geometry_sha256: subject.geometry_fingerprint,
+        analysis_revision: subject.analysis_revision, analysis_role: role, source_status: subject.schedule_status,
+      })}${itineraryHtml(preview, `analysis:${role}`)}
       <details><summary>此 Planned 的 CP、路段與版次</summary>${tableHtml(["CP", "序列／距離", "時刻"], checkpoints.map(cp => [escape(cp.label || cp.checkpoint_id || cp.anchor_id), escape(cp.route_order_m ?? cp.distance_m ?? cp.point_index ?? "未知"), escape(cp.arrival_at || cp.planned_at || "未知")]))}
       ${tableHtml(["Segment", "端點", "距離／來源"], segments.map(segment => [escape(segment.segment_id || segment.id), `${escape(segment.from_checkpoint_id || segment.start_anchor_id || segment.start_point_index || "")} → ${escape(segment.to_checkpoint_id || segment.end_anchor_id || segment.end_point_index || "")}`, `${number(segment.length_m ?? segment.distance_m, " m")}<br>${escape(segment.source_id || "")}`]))}
       <pre>${escape(JSON.stringify({sources: subject.sources, dependencies: subject.dependencies, subject_guard: subject.subject_guard}, null, 2))}</pre>
@@ -1070,5 +1090,12 @@
     if (!["planned_gpx", "unresolved_selection"].includes(subject?.subject_kind) || route === "outdoor-permission" || route === "outdoor-pace-fit-body-index") return content;
     return `${header}<details class="planned-legacy-golden" data-planned-legacy-golden="${escape(route)}"><summary>Golden 歷史資料與既有工具 · 此區尚未重算為 Planned ${escape(subject.selected_plan_version_id || subject.version_id || subject.subject_id)}</summary>${content.replace(header, "")}</details>`;
   }
-  global.ScoutPlannedRoute = {render, bind, renderSubject, wrapHistorical};
+  function dispose() {
+    stopRunPolling(current);
+    const project = current.projectId;
+    host = null;
+    current = freshState(project);
+    return {disposed: true, pendingPolls: 0};
+  }
+  global.ScoutPlannedRoute = {render, bind, renderSubject, wrapHistorical, dispose};
 })(typeof window === "undefined" ? globalThis : window);
