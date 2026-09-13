@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+from datetime import datetime
+import os
 from typing import Callable, Literal
 
 from fastapi import APIRouter, HTTPException, Response
@@ -21,10 +23,19 @@ from scout_planned_route_artifacts import (
     save_planned_version,
     select_analysis_subject,
 )
-from scout_planned_route_models import PlannedRouteConflict, PlannedRouteRequest
+from scout_planned_route_models import PlannedModel, PlannedRouteConflict, PlannedRouteRequest
 from scout_planned_analysis import (
     PlannedAnalysisResumeRequest, PlannedAnalysisRunRequest, manager_for,
 )
+
+from scout_planned_review_context import (PlannedReviewContextRequest, save_planned_review_context, get_planned_review_context, current_planned_review_context)
+
+
+class PlannedIntentParseRequest(PlannedModel):
+    human_text: str
+    departure_at: datetime | None = None
+    name_resolutions: dict[str, str] = {}
+    use_configured_model: bool = False
 
 
 def _http_error(error: PlannedRouteConflict) -> HTTPException:
@@ -52,6 +63,18 @@ def create_planned_route_router(*, project_root_for: Callable[[str], Path]) -> A
     def overpass_sources(project_id: str, request: PlannedTrailSourceRequest) -> dict:
         return run(project_id, acquire_planned_trail_sources, request)
 
+    @router.post(prefix + "/intent")
+    def parse_intent(project_id: str, request: PlannedIntentParseRequest, response: Response):
+        from scout_planned_route import load_planned_catalog
+        from scout_planned_intent import parse_configured_planned_intent
+        response.headers["Cache-Control"] = "no-store"
+        catalog = run(project_id, load_planned_catalog)
+        config = (os.environ.get("SCOUT_PLANNED_INTENT_MODEL_CONFIG") or
+                  str(Path(__file__).parent / "configs/assistant-models.dashboard-aihat2.json")) if request.use_configured_model else None
+        return parse_configured_planned_intent(request.human_text, catalog,
+            planner_config_path=config, model_calls_authorized=request.use_configured_model,
+            departure_at=request.departure_at, name_resolutions=request.name_resolutions)
+
     @router.post(prefix + "/preview")
     def preview(project_id: str, request: PlannedRouteRequest, response: Response) -> dict:
         from scout_planned_route import compile_planned_route
@@ -75,6 +98,17 @@ def create_planned_route_router(*, project_root_for: Callable[[str], Path]) -> A
     @router.post(prefix + "/review")
     def review(project_id: str, request: PlannedReviewRequest) -> dict:
         return run(project_id, review_planned_version, request)
+
+    @router.get(prefix + "/versions/{version_id}/review-context")
+    def review_context(project_id: str, version_id: str, response: Response, revision_id: str | None = None) -> dict:
+        response.headers["Cache-Control"] = "no-store"
+        if revision_id:
+            return run(project_id, get_planned_review_context, version_id, revision_id)
+        return {"context": run(project_id, current_planned_review_context, version_id)}
+
+    @router.post(prefix + "/review-context")
+    def save_review_context(project_id: str, request: PlannedReviewContextRequest) -> dict:
+        return run(project_id, save_planned_review_context, request)
 
     @router.get(prefix + "/analysis-selection")
     def selection(project_id: str, response: Response) -> dict:

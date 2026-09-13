@@ -1,17 +1,20 @@
 # Golden 復刻驗證與 Planned GPX 交付計畫
 
-建立日期：2026-09-08；更新日期：2026-09-10
-狀態：Golden G1–G6 的 2026-09-09 指定版本與案例維持 PASS，後續核心重驗連續 3/3；證據及限制見 §3.2。Planned 第二項已完成指定範圍的 P1–P9 驗收，為 SCOPED PASS / WORKING PROTOTYPE；操作見 §4，真實／fixture 證據及限制見[驗收報告](scout-planned-gpx-p1-p9-qualification-20260910.md)。
+建立日期：2026-09-08；更新日期：2026-09-13
+目前狀態：**整合中／尚未全面驗收**。Scout 既有 W1–W7 正重新整合到唯一入口 `9099`，本次指定 workspace 為 `dongqing_batongguan_historic_trail_newImport`；Diagnostic 仍有未通過項，完整教學與 PDF 尚未全面同步。既有要求與操作見 §4.8；歷史回執不替代目前版本的全面驗收。
 
-P8 追加準備與六力實算亦已 **SCOPED PASS**：Scout 真實 P2 兩次完成、
+歷史回執：Golden G1–G6 的 2026-09-09 指定版本與案例為 PASS，後續核心重驗連續 3/3；證據及限制見 §3.2。Planned P1–P9 的 2026-09-10 指定範圍為 SCOPED PASS / WORKING PROTOTYPE；真實／fixture 證據及限制見[驗收報告](scout-planned-gpx-p1-p9-qualification-20260910.md)。
+
+原 P8 追加準備與六力實算的指定版回執為 **SCOPED PASS**：Scout 真實 P2 兩次完成、
 Resume／完整重載與六頁同版通過；六力實際資料缺口仍為 partial。
 見 §4.7 及[追加驗收](scout-planned-gpx-p8-reanalysis-qualification-20260910.md)。
 依據：[Outdoor AI Standard §5.2、§18.4–§18.7](SCOUT_OUTDOOR_AI_AGENT_STANDARD.md)。
 
 本計畫交付兩件事：先證明「依循 Golden」能從 Dashboard 完成並可靠恢復，再建立
 「Permission 人工行程 → Ref. GPX 剪接／地圖尋徑 → Planned GPX 與新節奏」的完整能力。
-六力共同分析選定軌跡／計畫；零 Ref. 的 AOI 起始 workspace 留在後續情境三，不是
-這兩項交付的先決條件。情境二仍包含新增路段所需的 R1–R4。
+六力共同分析選定軌跡／計畫。原兩項之外，既有七項追加要求已納入零 Ref. AOI
+與 Recorded，見 §4.8；不回寫原 G1–G6／P1–P9 成績。R1–R4 候選契約保留，
+依使用者裁決 **R4 暫時待審，TRH 先以 R1–R3 為主**。
 
 ## 1. 計畫建立時的現況判定與直接證據
 
@@ -304,16 +307,26 @@ Overpass 原始／向量來源存於 `normalized/map/planned-overpass/{來源內
 | `早上6點出發` | 修改已填計畫日期的出發時刻；完整日期與時區仍由欄位提供。 |
 | `在 A 紮營`、`改到 A 過夜` | 新增營地事件；停留或離營日期由明確操作補足，未有依據時列未知。 |
 
-「第三天」「第四天改營地」「隔天六點」與任意敘事沒有通用日期／意圖推論能力。
-以表單選實際位置、完整啟程／離營日期時間，必要時在「此操作對應的原文句子」
-填入完整待解句，保留原文並明確表達該句。多日、歧義地名及相同地點重訪不能
-靠未解析文字靜默略過。
+既有 W4 要求補入多日逐句意圖編譯：「第三天」「隔天六點」、改營地與相同地點
+第幾次經過，須以本次起始日期／時區及來源目錄解析。每句保留原文、來源錨點、
+日序與操作順序；有歧義時以表單補足位置、來源點範圍或完整日期，不默默跳過。
+按「使用已設定模型協助產生可核對草稿」才使用已設定模型，回覆仍須通過相同
+來源與型別驗證。這些能力正在整合與重驗，不代表任意敘事都能自動定位。
 
-Rudy 僅接受 `project.planned_rudy_trace_refs` 中已有的人工描繪向量，且需
-`human_reviewed`、審查者／時間、Rudy 圖層及地圖證據 hash；沒有此來源就保持待查。
-R4 仍在既有 Navigation 敘事引導流程選人工錨點、審查並產生候選，Planned 只讀取
-與該來源、A/B、DEM、審查版本一致的產物。這次沒有把一般登山日誌直接變成
-免錨點審查的 R4。
+W5 的 Rudy 來源分為兩條，不能互相冒充：
+
+- 真正 Mapsforge `.map`：專案登錄 `rudy_mapsforge_ref`，由可選的官方 Java
+  reader 擷取保有 source hash、地圖版本、tags 及原幾何的候選，供明確選段／
+  剪裁。沒有 OSM node IDs 時，不能猜測交叉線連通或加入圖尋徑。
+- 圖磚人工描線：保留 `project.planned_rudy_trace_refs`、`human_reviewed`、
+  審查者／時間、Rudy 圖層及證據 hash；軟體草稿仍待人工審查。
+
+PBF 來源須由已登錄原檔建立新的 immutable materialization，依真正 node IDs
+尋徑；舊向量 hash 不符仍拒絕，不改舊 bytes 來偽造一致。
+
+**R4 暫時待審，TRH 先使用 R1–R3。** 原 R4 人工錨點及來源、A/B、DEM、審查版本
+綁定契約不變；不代填 G1／G6／G7／G11 核可，不以 Rudy 向量代表舊 raster 草稿
+或敘事錨點已通過，也不把一般登山日誌直接變成免錨點審查的 R4。
 
 切換 Planned 會更新共同分析主體；尚未執行版本專屬分析時，Permission／Pace
 保留日程 candidate，其他各力明示待重算／追加準備。已接入獨立的追加準備與
@@ -339,16 +352,59 @@ R4 仍在既有 Navigation 敘事引導流程選人工錨點、審查並產生�
 6. 查看六力各頁的 run、版本、artifact 與缺資料原因。`partial` 是實算後的資料
    完整程度，不是已取得出發許可。舊 Golden 區保持歷史標示。
 
-本輪 P2 在 Scout 完成五分段 QGIS／GRASS 與 9,775/9,775 DEM 點取樣，
+2026-09-10 原 P8 的 P2 回執記錄 Scout 五分段 QGIS／GRASS 與 9,775/9,775 DEM 點取樣，
 包括超出舊 Golden DEM 的 322 點；六個 producer 全部執行，但均保留具體
 partial，包含個人体能、安全餘裕、未匹配歷史路段、未知 ETA、有效預報與敘事審查。
 原 774 個檔案保持不變。此能力不會自動補未知路徑、時間、許可或生成 Recorded。
 
-Scout 執行目錄及操作入口見上述驗收報告。原生 Scout 的 GPX catalog 已可讀
+原 Scout 執行目錄及操作入口見上述歷史驗收報告。當時 GPX catalog 可讀
 25 個來源，但首次完整構建曾耗 102.72 秒；既有 Overpass 舊候選 hash 不符、
 Rudy／TRH 未就緒仍有明確拒絕原因。版本專屬 prepare 已另取得新 corridor 地圖
-來源。這些 catalog 整理與一般自然語言日期／R4 推論仍是後續工作，不能視為
-P8 回執已一併補完。
+來源。後續七項要求補入 catalog、多日文字、R1–R3 與同版補件／報告；目前正
+重新整合、尚未全面驗收，不能視為原 P8 回執已一併補完。任意敘事自動定位
+仍無通用保證，R4 依使用者指示保持待審。
+
+### 4.8 既有 W1–W7 整合要求與操作路徑
+
+本節補回 Scout 原有七項追加要求；**目前整合中／尚未全面驗收**。以下流程是
+整合版必須提供與逐一驗證的操作，不代表每個控制已在目前 9099 通過實測。
+
+1. **補件與綜合報告（W1／W2）：** 還原已保存 Planned，在「同版行前補件」填寫
+   本次日期、隊伍／個別腳程、裝備、離線地圖、目標、交通與返程限制，保存新的
+   context revision。啟動作業時核對 manifest 和 context SHA，完成後下載同版
+   綜合報告。補件改變使舊 run 失去 current 資格，須啟動綁定新補件的作業，
+   不直接修改舊 run；缺資料、替代／折返方案未知仍須可見。
+2. **地形與分日（W3）：** 在「地形、隊伍與分日估時」設定平地／上升／下降腳程、
+   情境不確定性、休息週期、最慢隊員及每日限制；保留固定停留與營地事件。
+   未知路段中斷完整 ETA，可見小計不代表全程估計，營地位置不等於可過夜資格。
+3. **文字意圖（W4）：** 先填起始日期／時區及原文，解析後逐句查對日序、地名、
+   重訪、來源範圍及離營／最晚到達限制，再預覽幾何和節奏；未處理句保持待釐清。
+4. **地圖來源（W5）：** 在 Permission 的「地圖來源與候選描線」讀取專案已登錄
+   PBF／Rudy 向量，建立新 source materialization，再到 Planned 來源選段。
+   可依真正拓樸尋徑的 PBF 與不可推定拓樸的 Mapsforge 分開呈現；既有互動地圖
+   必須保留，不能以來源表格或示意圖取代。
+5. **零 Ref（W6）：** 使用「無 GPX 的探索工作區」輸入 AOI、分析目的及可選 A/B，
+   保存並準備區域地圖／DEM，不偽造 Golden。有效 A/B 才能產生具體 TRH 請求；
+   Navigation 執行 R1–R3 後讀回候選，再選段保存／匯出 Planned。區域 DEM 準備
+   與後續已選路線的原生地形準備各自留存回執。
+6. **行後復盤（W7）：** 在「歸來後復盤 · Recorded / Golden / Planned」選擇 GPX、
+   記錄性質、隊員及裝置；多檔可指定 primary／backup／member_context。選擇原
+   Planned，建立不可覆寫 Recorded 版本，檢查比較／缺口並匯出；再選為六力主體，
+   按「準備此記錄並重算六力」。重開後讀取版本／作業，Resume 建立新 attempt，
+   保留原檔與舊產物。`observation_kind` 區分歷史／本人本次／fixture，現時預報
+   不冒充當時天候；切換主體不覆寫原 Golden 或 Planned。
+
+對應模組包括 `scout_planned_review_context.py`、`scout_planned_pretrip_report.py`、
+`scout_planned_timing.py`、`scout_planned_intent.py`、`scout_planned_map_materialization.py`、
+`scout_mapsforge_source.py`、`scout_exploration_*.py`、`scout_recorded_*.py` 及相應
+Dashboard 控制，共用版本、來源、候選權限與 deterministic persistence／job contracts。
+
+`completed_with_gaps` 必須拆讀原因：缺個人或天候資料可保留分析 partial；若 map／
+native terrain 執行失敗，完整準備驗收仍未通過。原生準備要求每個分段
+`qgis_processing_grass / completed`、每個 canonical 點 DEM verified，再核對六頁
+同版；只看終態字樣或 producer 有輸出不足以宣稱流程完成。全部適用 Diagnostic
+及相依回歸須實際取得 100% PASS，並同步教學截圖、步驟定位與 PDF，才可宣稱完成；
+FAIL、WARN、SKIP、未驗證及不穩定不能算成功。Diagnostic 語意衝突由使用者裁決。
 
 ## 5. 第二項驗收矩陣
 
@@ -359,6 +415,9 @@ fixtures，另有真實 Overpass 取源與既有 R1–R3 讀取。下表維持�
 P9 的再次 Accept 經 409 後成功找回既有 review，不宣稱新 Accept 或新的 Rebuild。
 原 P8 通過共同新版本與具體待重算狀態；後續已新增版本專屬準備與六力實算，
 操作與真實資料缺口見 §4.7 及追加驗收報告。
+
+本表與數字保留原驗收範圍，不代表 2026-09-13 整合版通過。P5 的 R4 部分依使用者
+裁決仍待審，不以 R1–R3 成功取代，也不改列 N/A 或通過。
 
 | ID | 輸入／操作 | 完成證據 |
 |---|---|---|

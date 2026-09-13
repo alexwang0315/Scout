@@ -55,6 +55,7 @@
     return state.keys[id];
   }
   function changed(state, renderNow = true) {
+    global.ScoutPlannedReviewUI?.invalidateIntent(state);
     state.inputRevision += 1;
     state.previewStatus = "輸入已變更：前次預覽與審查已過期，請重新預覽。";
     state.reviewChecks = {};
@@ -115,6 +116,7 @@
     });
     const reviewCount = container.querySelector("[data-planned-review-issue-count]");
     if (reviewCount) reviewCount.textContent = `已確認 ${reviewIssues(state.preview).filter(id => state.reviewIssues[id] === true).length} / ${reviewIssues(state.preview).length} 筆版本限制`;
+    global.ScoutPlannedReviewUI?.updateInputControls(container, state);
     const status = container.querySelector("[data-planned-preview-status]");
     if (status) status.textContent = state.previewStatus;
   }
@@ -200,6 +202,7 @@
     if (state.speed !== "") result.default_speed_kmh = Number(state.speed);
     if (version(state) || state.headVersionId) result.parent_version_id = version(state) || state.headVersionId;
     if (Object.keys(state.nameResolutions).length) result.name_resolutions = copy(state.nameResolutions);
+    Object.assign(result, global.ScoutPlannedReviewUI?.requestExtras(state) || {});
     return result;
   }
   function addOperation(state, selectionOnly = false) {
@@ -230,13 +233,13 @@
     return [];
   }
   function geometry(preview) { return preview?.geojson || preview?.route_geojson || preview?.planned_geojson || preview?.geometry?.geojson; }
-  function goldenGeometry(preview, catalog) { return preview?.golden_geojson || catalog?.golden_geojson || catalog?.golden_route_geojson; }
+  function goldenGeometry(preview, catalog) { return preview && Object.hasOwn(preview, "golden_geojson") ? preview.golden_geojson : catalog?.golden_geojson || catalog?.golden_route_geojson; }
   function mapAnchors(state, preview) {
     const ids = new Set([state.focusAnchor, ...Object.values(state.nameResolutions),
       ...state.operations.flatMap(operation => [operation.at, operation.to])].filter(Boolean));
     return [...array(preview?.checkpoints), ...anchors(state).filter(anchor => ids.has(anchorId(anchor)))];
   }
-  function mapHtml(planned, golden, points = [], mapId = "preview", binding = {}) {
+  function mapHtml(planned, golden, points = [], mapId = "preview", binding = {}, subjectLabel = "Planned") {
     const layers = [...geoLines(golden).map(line => ({...line, layer: "golden"})), ...geoLines(planned).map(line => ({...line, layer: "planned"}))];
     const coordinates = layers.flatMap(line => line.coordinates).filter(coord => Array.isArray(coord) && Number.isFinite(Number(coord[0])) && Number.isFinite(Number(coord[1])));
     if (!coordinates.length) return `<p class="status" data-planned-map-empty="true">尚無可顯示的來源幾何；缺口不補直線。</p>`;
@@ -262,14 +265,15 @@
     const hasGolden = layers.some(line => line.layer === "golden"), hasPlanned = layers.some(line => line.layer === "planned");
     const identity = {project: current.projectId, ...binding};
     const attributes = Object.entries(identity).map(([name, value]) => `data-planned-map-${name.replaceAll("_", "-")}="${escape(value || "")}"`).join(" ");
-    return `<div class="planned-map" data-planned-map="${escape(mapId)}" data-map-purpose="vector-comparison" data-candidate-only="true" data-runtime-safety-truth="false" data-departure-approval-granted="false" ${attributes}><div class="planned-map-tools">
+    return `<div class="planned-map" data-planned-map="${escape(mapId)}" data-map-purpose="vector-comparison" data-comparison-subject-kind="${escape(subjectLabel.toLowerCase())}" data-candidate-only="true" data-runtime-safety-truth="false" data-departure-approval-granted="false" ${attributes}><div class="planned-map-tools">
       <label><input type="checkbox" data-planned-map-toggle="golden" ${hasGolden ? "checked" : "disabled"}> Golden${hasGolden ? "" : "（來源幾何未提供）"}</label>
-      <label><input type="checkbox" data-planned-map-toggle="planned" ${hasPlanned ? "checked" : "disabled"}> Planned${hasPlanned ? "" : "（來源幾何未提供）"}</label>
-      ${button("map-in", "+", true, 'aria-label="放大 Planned 地圖"')}${button("map-out", "−", true, 'aria-label="縮小 Planned 地圖"')}${button("map-fit", "Fit")}
+      ${hasGolden ? "" : '<span data-planned-golden-unavailable="true">無 Golden 比較來源</span>'}
+      <label><input type="checkbox" data-planned-map-toggle="planned" ${hasPlanned ? "checked" : "disabled"}> ${escape(subjectLabel)}${hasPlanned ? "" : "（來源幾何未提供）"}</label>
+      ${button("map-in", "+", true, `aria-label="放大 ${escape(subjectLabel)} 地圖"`)}${button("map-out", "−", true, `aria-label="縮小 ${escape(subjectLabel)} 地圖"`)}${button("map-fit", "Fit")}
       <span>拖曳平移 · 點選錨點查核</span></div>
-      <svg viewBox="0 0 900 420" role="img" aria-label="${hasGolden && hasPlanned ? "Golden 與 Planned 完整來源幾何疊圖" : hasPlanned ? "Planned 候選來源幾何" : "Golden 來源幾何"}" data-planned-map-svg="true">${paths}${markers}</svg>
+      <svg viewBox="0 0 900 420" role="img" aria-label="${hasGolden && hasPlanned ? `Golden 與 ${subjectLabel} 完整來源幾何疊圖` : hasPlanned ? `${subjectLabel} 候選來源幾何` : "Golden 來源幾何"}" data-planned-map-svg="true">${paths}${markers}</svg>
       <p class="status" data-planned-map-purpose>向量比較：保留各來源段、方向與缺口，用於檢視候選規劃差異。版本 ${escape(binding.version || "未保存預覽")}；來源 ${escape(binding.source_status || "未驗證")}；不授予通行、出發或即時安全權限。</p>
-      <p class="status" data-planned-map-selection="true">${layers.filter(line => line.layer === "planned").length} 個 Planned 幾何段；每個來源缺口均保留。</p></div>`;
+      <p class="status" data-planned-map-selection="true">${layers.filter(line => line.layer === "planned").length} 個 ${escape(subjectLabel)} 幾何段；每個來源缺口均保留。</p></div>`;
   }
   function itinerary(preview) { return preview?.itinerary || preview?.planned_itinerary || {}; }
   function dayRows(preview) { return array(itinerary(preview).days || preview?.days || preview?.mission_day_estimates); }
@@ -297,42 +301,62 @@
         && (previous.timing_method || previous.method || previous.time_role) === method
         && previous.point_index === event.from_point_index
         && (previous.duration_minutes == null) === (event.duration_minutes == null)
-        && previous.mission_day_id === event.mission_day_id;
+        && (previous.mission_day_id || previous.day_id) === (event.mission_day_id || event.day_id)
+        && Boolean(previous.conditional_on_explicit_departure) === Boolean(event.conditional_on_explicit_departure);
       if (merge) {
         previous.point_index = event.point_index;
         previous.end_at = event.end_at;
         previous.arrival_at = event.arrival_at;
-        if (previous.duration_minutes != null) previous.duration_minutes += event.duration_minutes;
+        previous.arrival_at_lower = event.arrival_at_lower; previous.arrival_at_upper = event.arrival_at_upper;
+        for (const field of ["duration_minutes", "lower_minutes", "upper_minutes"]) {
+          previous[field] = previous[field] == null || event[field] == null ? null : previous[field] + event[field];
+        }
         previous.raw_end_index = index;
         previous.raw_count += 1;
       } else summary.push({...event, raw_start_index: index, raw_end_index: index, raw_count: 1});
     });
     return summary;
   }
-  function itineraryHtml(preview, viewId = "preview") {
+  function minuteEstimate(value, lower, upper, subtotal = false) {
+    const range = lower != null && upper != null ? `<br>情境區間 ${number(lower)}–${number(upper, " 分")}` : "";
+    return `${number(value, " 分")}${subtotal ? "（已知小計）" : ""}${range}`;
+  }
+  function arrivalEstimate(item) {
+    const value = item.arrival_at || item.end_at;
+    const range = item.arrival_at_lower && item.arrival_at_upper ? `<br>區間 ${escape(item.arrival_at_lower)} → ${escape(item.arrival_at_upper)}` : "";
+    const conditional = item.conditional_on_prior_unknown || item.conditional_on_explicit_departure;
+    const note = conditional ? `<br><span class="status">前段含未知；${item.conditional_arrival_at ? `僅後段條件估計 ${escape(item.conditional_arrival_at)}` : "不可視為完整行程 ETA"}</span>` : "";
+    return `${escape(value || "未知")}${range}${note}`;
+  }
+  function itineraryHtml(preview, viewId = "preview", subjectLabel = "Planned") {
     const plan = itinerary(preview);
     const days = dayRows(preview);
     const events = array(plan.events || plan.timeline || preview?.timetable);
     const binding = `${viewId}:${preview?.preview_sha256 || preview?.analysis_revision || preview?.itinerary_sha256 || "timeline"}`;
-    const eventRow = event => [
-      escape(`${event.kind || event.type || "event"} · ${event.label || event.anchor_id || event.at || event.segment_id || `p${event.from_point_index ?? event.point_index ?? "?"} → p${event.point_index ?? "?"}`}${event.raw_count > 1 ? ` · ${event.raw_count} 原始移動紀錄` : ""}`),
-      `${escape(event.start_at || (event.kind === "camp" ? event.arrival_at : event.departure_at) || "未知")}<br>→ ${escape(event.end_at || (event.kind === "camp" ? event.departure_at : event.arrival_at) || "未知")}`,
-      `${number(event.duration_minutes, " 分")}<br>${escape(event.timing_method || event.method || event.time_role || "")}`,
-    ];
+    const eventRow = event => {
+      const stationary = ["camp", "source_rest", "fixed_stop", "rest"].includes(event.kind);
+      return [
+        escape(`${event.kind || event.type || "event"} · ${event.label || event.anchor_id || event.at || event.segment_id || `p${event.from_point_index ?? event.start_point_index ?? event.point_index ?? "?"} → p${event.to_point_index ?? event.end_point_index ?? event.point_index ?? "?"}`}${event.raw_count > 1 ? ` · ${event.raw_count} 原始移動紀錄` : ""} · ${event.mission_day_id || event.day_id || "日序未知"}`),
+        `${escape(event.start_at || (stationary ? event.arrival_at : event.departure_at) || "未知")}<br>→ ${stationary ? escape(event.end_at || event.departure_at || "未知") : arrivalEstimate(event)}`,
+        `${minuteEstimate(event.duration_minutes,event.lower_minutes,event.upper_minutes)}<br>${escape(event.timing_method || event.method || event.time_role || "")}`,
+      ];
+    };
     const summary = movementSummary(events);
-    return `<section data-planned-itinerary="true"><h4>Planned 分日、移動與停留</h4>
+    return `<section data-planned-itinerary="true"><h4>${escape(subjectLabel)} 分日、移動與停留</h4>
       ${tableHtml(["日", "啟程 → 到達", "移動", "停留／營地", "距離／限制"], days.map(day => [
         escape(day.day_id || day.mission_day_id || day.date || "日"),
-        `${escape(day.departure_at || day.start_at || "未知")}<br>→ ${escape(day.arrival_at || day.end_at || "未知")}`,
-        number(day.moving_minutes ?? day.movement_minutes, " 分"),
-        `${number(day.stop_minutes ?? day.rest_minutes, " 分")}<br>${escape(compact(day.camp || day.camp_anchor || day.stays || ""))}`,
+        `${escape(day.departure_at || day.start_at || "未知")}<br>→ ${arrivalEstimate(day)}`,
+        minuteEstimate(day.moving_minutes ?? day.movement_minutes,day.moving_minutes_lower,day.moving_minutes_upper,day.moving_minutes_is_known_subtotal === true),
+        `${number(day.stop_minutes ?? day.rest_minutes, " 分")}${day.fixed_rest_minutes != null ? `<br>固定 ${number(day.fixed_rest_minutes, " 分")} · 估計 ${number(day.estimated_rest_minutes, " 分")}` : ""}<br>${escape(compact(day.camp === true ? day.end_label || "紮營" : day.camp || day.camp_anchor || day.stays || ""))}`,
         `${number(day.distance_m == null ? day.distance_km : day.distance_m / 1000, " km")}<br>${escape(compact(day.issues || day.conflicts || []))}`,
       ]))}
+      ${subjectLabel === "Recorded" && plan.summary ? `<section data-recorded-observation-summary><p>有記錄區間的分類小計；記錄缺口不計為移動或休息。</p>${tableHtml(["移動分類", "停留分類", "未觀測", "記錄距離"], [[number(plan.summary.moving_seconds == null ? null : plan.summary.moving_seconds / 60, " 分"), number(plan.summary.rest_seconds == null ? null : plan.summary.rest_seconds / 60, " 分"), number(plan.summary.unobserved_seconds == null ? null : plan.summary.unobserved_seconds / 60, " 分"), number(plan.summary.distance_m == null ? null : plan.summary.distance_m / 1000, " km")]])}</section>` : ""}
       ${events.length ? `<details open><summary>時間軸：移動、固定停留、離營與未知 · ${events.length} 原始紀錄</summary>
       <p class="status">相鄰且估計方法相同的移動合併顯示；固定停留、紮營、已知／未知切換各自保留。原始時間軸可逐頁核對與完整匯出。</p>
       ${pagedTable(["事件／位置", "開始 → 結束", "分鐘／方法"], summary, eventRow, `${binding}:summary`)}
       <details data-planned-raw-timeline="true"><summary>完整原始時間軸 · ${events.length} 筆</summary>${pagedTable(["事件／位置", "開始 → 結束", "分鐘／方法"], events, eventRow, `${binding}:raw`)}</details></details>` : ""}
-      <p class="status">${escape(plan.time_role || plan.timing_role || "planned estimates")} · ${escape(plan.timezone || "+08:00")}；未知耗時維持未知，規劃時間不作 Recorded。</p>
+      ${plan.assumptions || plan.camp_reviews || plan.unknowns ? resultDetailsHtml(current,`${binding}:timing-basis`,{assumptions:plan.assumptions,member_inputs:plan.member_inputs,source_refs:plan.source_refs,camp_reviews:plan.camp_reviews,unknowns:plan.unknowns,conflicts:plan.conflicts,complete_route_eta:plan.complete_route_eta},"估時假設、隊伍依據、營地未知與限制") : ""}
+      <p class="status">${escape(plan.time_role || plan.timing_role || "planned estimates")} · ${escape(plan.timezone || "+08:00")}；未知耗時維持未知，${subjectLabel === "Recorded" ? "使用此實錄來源的時間角色。" : "規劃時間不作 Recorded。"}</p>
     </section>`;
   }
   function issueList(preview) {
@@ -363,7 +387,7 @@
         manifest_sha256: bound ? savedManifest.manifest_sha256 : "", geometry_sha256: bound ? savedManifest.geometry_sha256 : "",
         source_status: bound ? saved?.source_status?.status || saved?.source_status || "unknown" : "unsaved-preview",
       })}
-      ${preview.comparison ? `<details open data-planned-comparison="true"><summary>原 Golden 與此 Planned 的差異</summary><pre>${escape(JSON.stringify(preview.comparison, null, 2))}</pre></details>` : ""}
+      ${preview.comparison ? `<details open data-planned-comparison="true"><summary>${preview.comparison.golden_available === false ? "未提供 Golden：無法進行基準差異比較" : "原 Golden 與此 Planned 的差異"}</summary><pre>${escape(JSON.stringify(preview.comparison, null, 2))}</pre></details>` : ""}
       ${itineraryHtml(preview, prefix ? "compare" : "preview")}
       <details open><summary>來源段、方向與點範圍 · ${pieces.length}</summary>
       ${tableHtml(["來源／種類", "Track／trkseg／點範圍", "方向／長度／時間"], pieces.map(piece => [
@@ -403,7 +427,7 @@
       ${["camp", "depart", "deadline"].includes(editor.kind) ? `<label>${editor.kind === "deadline" ? "最晚到達" : "啟程／離營"}<input type="datetime-local" data-planned-editor="departure" value="${escape(editor.departure)}"></label>` : ""}
       <label>顯示名稱（可留空）<input data-planned-editor="label" value="${escape(editor.label)}"></label>
       <label>此操作對應的原文句子（可留空）<input data-planned-editor="sourceText" value="${escape(editor.sourceText)}" placeholder="貼入待解句子；以此明確操作表達該句"></label></div>
-      <details ${routeOperation ? "open" : ""}><summary>Ref.／地圖／TRH 候選來源段</summary><div class="planned-grid">
+      <details data-planned-source-details="true" ${routeOperation || state.sourceDetailsOpen ? "open" : ""}><summary>Ref.／地圖／TRH 候選來源段</summary><div class="planned-grid">
         <label>來源<select data-planned-editor="sourceId">${options(catalogSources(state), editor.sourceId, sourceId, source => `${source.label || source.name || sourceId(source)} · ${source.source_kind || source.kind || "source"}`)}</select></label>
         <label>不跨缺口的來源段<select data-planned-editor="partIndex">${options(sourceParts(editorSource(state)), editor.partIndex, (part) => part.part_index ?? sourceParts(editorSource(state)).indexOf(part), (part) => `trkseg ${part.part_index ?? sourceParts(editorSource(state)).indexOf(part)} · ${part.point_count ?? "?"} points`, "選擇來源段")}</select></label>
         <label>來源起點<select data-planned-editor="sourceFrom">${endpointOptions}</select></label>
@@ -430,12 +454,12 @@
     return Boolean(job && job.project_id === state.projectId && job.version_id === version(state) && job.manifest_sha256 === manifestSha(state));
   }
   function canStartAnalysis(state) {
-    return reviewed(state) && !state.runReadBusy && state.runListStatus === "ready" && state.runListVersion === runTargetVersion(state)
+    return reviewed(state) && (!global.ScoutPlannedReviewUI || global.ScoutPlannedReviewUI.contextReady(state)) && !state.runReadBusy && state.runListStatus === "ready" && state.runListVersion === runTargetVersion(state)
       && !state.analysisRuns.some(job => runMatchesVersion(state, job) && activeRunStatuses.has(job.status));
   }
   function canResumeAnalysis(state) {
     const job = state.analysisRun;
-    return reviewed(state) && !state.runReadBusy && runMatchesVersion(state, job) && job.can_resume === true && !activeRunStatuses.has(job.status) && job.status !== "stale";
+    return reviewed(state) && (!global.ScoutPlannedReviewUI || (global.ScoutPlannedReviewUI.contextReady(state) && global.ScoutPlannedReviewUI.contextMatchesJob(state, job))) && !state.runReadBusy && runMatchesVersion(state, job) && job.can_resume === true && !activeRunStatuses.has(job.status) && job.status !== "stale";
   }
   function chooseAnalysisRun(state) {
     const preferred = version(state) || state.selection?.version_id;
@@ -473,6 +497,7 @@
           const projection = job.projections?.[role];
           return [escape(label), escape(receiptPending ? "結果尚未讀取" : projection?.status || "needs_reanalysis"), escape(receiptPending ? "按「讀取作業狀態」取得此作業結果" : projection?.summary || "尚無綁定此作業的結果")];
         }))}
+        ${global.ScoutPlannedReviewUI?.reportHtml(state, job) || ""}
         <p data-planned-run-artifact="true">作業產物：<code>${escape(job.artifact_ref || job.report_ref || "尚未產生")}</code></p>
         ${resultDetailsHtml(state, `run:${job.run_id}:${job.attempt}:${job.updated_at || job.status}`, {binding: job.binding, preparation, artifact_ref: job.artifact_ref || job.report_ref,
           projections: Object.fromEntries(Object.entries(job.projections || {}).map(([role, projection]) => [role, {status: projection.status, artifact_ref: projection.artifact_ref, artifact_sha256: projection.artifact_sha256, missing_inputs: projection.missing_inputs, gaps: projection.gaps}]))}, "作業來源、準備與產物引用")}
@@ -506,11 +531,12 @@
       <label>時區<input data-planned-field="timezone" value="${escape(state.timezone)}" placeholder="+08:00" pattern="[+-][0-9]{2}:[0-9]{2}"></label>
       <label>腳程估計<select data-planned-field="paceMode"><option value="source_preferred" ${state.paceMode === "source_preferred" ? "selected" : ""}>可用來源節奏優先</option><option value="fixed_speed" ${state.paceMode === "fixed_speed" ? "selected" : ""}>全程使用固定腳程</option></select></label>
       <label>腳程 km/h（可留空）<input type="number" min="0.1" max="20" step="0.1" data-planned-field="speed" value="${escape(state.speed)}" placeholder="來源不足時維持未知"></label></div>
+      ${global.ScoutPlannedReviewUI?.renderInputs(state) || ""}
       ${editorHtml(state)}${sourceQueryHtml(state)}
       ${state.operations.length || state.selections.length ? `<section><h4>已加入的差異／路段</h4>${[...state.operations.map((operation, index) => ({type: "operation", index, value: operation})), ...state.selections.map((selection, index) => ({type: "selection", index, value: selection}))].map(item => `<div class="planned-operation"><code>${escape(compact(item.value))}</code>${button("remove", "移除", !state.busy, `data-planned-remove-type="${item.type}" data-planned-remove-index="${item.index}"`)}</div>`).join("")}</section>` : ""}
       <div class="permission-authoring-actions">${button("preview", "預覽 Planned 幾何與節奏", Boolean(state.catalog) && !state.busy)}${button("save", "Save Planned Version", canSave(state) && !state.busy)}${button("refresh", "重新讀取來源與版本", !state.busy)}</div>
       <p class="status" aria-live="polite" data-planned-preview-status="true">${escape(state.previewStatus)}</p><p role="status" data-planned-status="true">${escape(state.status)}</p>
-      ${previewHtml(state)}${reviewHtml(state)}${analysisRunsHtml(state)}
+      ${previewHtml(state)}${reviewHtml(state)}${global.ScoutPlannedReviewUI?.renderSupplement(state) || ""}${analysisRunsHtml(state)}
       <section class="planned-versions"><h4>保存版本與分析主體</h4><div class="planned-grid">
       <label>Planned 版本<select data-planned-version="true">${options(state.versions, state.versionId, item => item.version_id, item => `${item.version_id} · ${item.review_status || item.status || "saved"}`)}</select></label>
       <label>比較另一版本<select data-planned-compare-version="true">${options(state.versions, state.compareId, item => item.version_id, item => item.version_id)}</select></label></div>
@@ -562,6 +588,7 @@
     bindTables(global.document);
     bindResultDetails(global.document, state);
     bindAnalysisRunControls(global.document, state);
+    global.ScoutPlannedReviewUI?.bind(global.document, state, workflowApi(state));
     updateButtons(state);
     maybeLoadAnalysisRuns(state);
   }
@@ -594,6 +621,9 @@
     const expected = runTargetVersion(state);
     if (expected && job.version_id !== expected) throw new Error("分析作業屬於另一 Planned 版本，已拒絕套用。");
     if (version(state) && job.manifest_sha256 !== manifestSha(state)) throw new Error("分析作業 manifest 與目前保存版不一致。");
+    if (global.ScoutPlannedReviewUI && state.workflow?.review?.loaded && !global.ScoutPlannedReviewUI.contextMatchesJob(state, job)) {
+      job = {...job, status: "stale", stale_reason: "review_context_changed", projections: {}, pretrip_report: null, can_resume: false};
+    }
     const index = state.analysisRuns.findIndex(item => item.run_id === job.run_id);
     if (index < 0) state.analysisRuns.unshift(job); else state.analysisRuns[index] = job;
     state.analysisRun = job; state.selectedRunId = job.run_id;
@@ -656,6 +686,11 @@
     const suffix = resume ? `analysis-runs/${encodeURIComponent(previous.run_id)}/resume` : "analysis-runs";
     const payload = {expected_manifest_sha256: selectedManifest, explicit_confirmation: true,
       idempotency_key: key(state, resume ? "analysis-resume" : "analysis-start", resume ? `${previous.run_id}:${previous.attempt || 1}` : `${selectedManifest}:${latest?.run_id || "first"}`)};
+    if (global.ScoutPlannedReviewUI) {
+      payload.expected_review_context_sha256 = resume ? previous.binding?.review_context_sha256 ?? previous.review_context_sha256 ?? null : global.ScoutPlannedReviewUI.contextSha(state);
+      payload.idempotency_key = key(state, resume ? "analysis-resume-ctx" : "analysis-start-ctx",
+        `${resume ? `${previous.run_id}:${previous.attempt || 1}` : `${selectedManifest}:${latest?.run_id || "first"}`}:${payload.expected_review_context_sha256 || "none"}`);
+    }
     if (!resume) payload.version_id = selectedVersion;
     state.runCommandBusy = true; state.runStatus = resume ? "正在請求恢復同一作業…" : "正在建立此版本的準備／重算作業…"; refreshRunPanel(state);
     try {
@@ -809,6 +844,7 @@
           const departure = request.departure_at || "";
           state.departure = departure ? departure.slice(0, 16) : "";
           state.timezone = departure.match(/([+-]\d{2}:\d{2})$/)?.[1] || "+08:00";
+          global.ScoutPlannedReviewUI?.restoreRequest(state, request);
           state.inputRevision += 1; state.saved = detail; state.preview = detail.preview;
           state.request = request; state.previewRevision = state.inputRevision;
           state.reviewChecks = {}; state.reviewIssues = {};
@@ -962,6 +998,21 @@
     style.textContent = `.planned-workbench{border:1px solid #9eb7ad;border-radius:12px;margin:16px 0;padding:14px;background:#f8fcfa;color:#203a30}.planned-workbench h3,.planned-workbench h4{color:#183e2c}.planned-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px;margin:12px 0}.planned-grid label,.planned-text{display:flex;flex-direction:column;gap:5px;font-size:13px}.planned-grid input,.planned-grid select,.planned-text textarea,.planned-workbench select{max-width:100%;min-width:0;padding:8px;border:1px solid #a8bab1;border-radius:5px;background:white;color:#163526}.planned-text textarea{width:100%;box-sizing:border-box}.planned-check{display:flex;gap:8px;align-items:center;margin:8px 0}.planned-grid .planned-check{flex-direction:row}.planned-editor,.planned-review,.planned-versions{border-top:1px solid #ccd9d2;margin-top:16px;padding-top:14px}.planned-operation{display:flex;align-items:center;gap:12px;margin:8px 0}.planned-operation code{white-space:pre-wrap;overflow-wrap:anywhere;flex:1}.planned-table-scroll{overflow:auto;max-height:420px}.planned-table{border-collapse:collapse;width:100%;font-size:12px;text-align:left}.planned-table th,.planned-table td{padding:8px;border-bottom:1px solid #d1dbd5;vertical-align:top;white-space:normal;min-width:110px}.planned-table th{background:#ecf4ee;color:#203a30;position:sticky;top:0}.planned-workbench pre,.planned-subject pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:260px;overflow:auto}.planned-issues{border-left:4px solid #b07816;padding:4px 12px;background:#fff8e8;color:#203a30}.planned-issues li{overflow-wrap:anywhere;margin:8px 0}.planned-map{border:1px solid #a5b9ad;border-radius:8px;overflow:hidden;margin:12px 0;background:#f2f5ef}.planned-map-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px;background:white;font-size:12px}[data-planned-table]>.planned-map-tools{color:#203a30}.planned-map svg{display:block;width:100%;height:420px;touch-action:none;cursor:grab}.planned-map path{fill:none;stroke-linejoin:round;stroke-linecap:round}.planned-map-golden{stroke:#687f99;stroke-width:5;opacity:.65}.planned-map-planned{stroke:#d35424;stroke-width:2.5}.planned-map-anchor{fill:#fff;stroke:#214e3a;stroke-width:1;cursor:pointer}.planned-map-anchor.is-selected{fill:#edc34d;r:7}.planned-map .status{padding:0 10px}.planned-subject{border:2px solid #cc6c37}.planned-legacy-golden{border:1px dashed #999;padding:12px;margin:16px 0}.planned-legacy-golden>summary{font-weight:600;color:#75542e;cursor:pointer}.planned-legacy-golden[open]>summary{margin-bottom:16px}@media(max-width:600px){.planned-map svg{height:300px}.planned-grid{grid-template-columns:1fr}.planned-workbench{padding:10px}.planned-operation{align-items:flex-start}}`;
     global.document.head.appendChild(style);
   }
+  function workflowApi(state) {
+    return {live: () => live(state), changed: renderNow => changed(state, renderNow), refresh,
+      refreshRun: () => refreshRunPanel(state), updateButtons: () => updateButtons(state), dateTime,
+      fetchJson: suffix => host.fetchJson(path(state, suffix)), postJson: (suffix, payload) => host.postJson(path(state, suffix), payload),
+      url: suffix => (host.apiBase?.() || "") + path(state, suffix),
+      afterContextSaved: async () => {
+        stopRunPolling(state); state.runRequestId += 1; state.runReadBusy = false; state.runRefreshKey = "";
+        const stale = job => global.ScoutPlannedReviewUI.contextMatchesJob(state, job) ? job
+          : {...job, status:"stale", stale_reason:"review_context_changed", projections:{}, pretrip_report:null, can_resume:false};
+        state.analysisRuns = state.analysisRuns.map(stale);
+        if (state.analysisRun) state.analysisRun = stale(state.analysisRun);
+        state.runStatus = "同版補件已更新；舊結果已失效，請建立採用新補件的準備／重算作業。";
+        await host.refreshAnalysis();
+      }};
+  }
   function bind(context) {
     host = context; const state = ensureProject(context.projectId());
     installStyle();
@@ -971,8 +1022,12 @@
     const root = global.document.querySelector("[data-planned-workbench]");
     if (!root) { stopRunPolling(state); return; }
     bindAnalysisRunControls(root, state);
+    global.ScoutPlannedReviewUI?.bind(root, state, workflowApi(state));
     if (root.dataset.plannedBound === "true") return;
     root.dataset.plannedBound = "true";
+    root.querySelector("[data-planned-source-details]")?.addEventListener("toggle", event => {
+      if (live(state) && event.currentTarget.isConnected) state.sourceDetailsOpen = event.currentTarget.open;
+    });
     if (state.busy) root.querySelectorAll("input, textarea, select").forEach(input => { input.disabled = true; });
     root.querySelector("[data-planned-human-text]")?.addEventListener("input", event => { state.text = event.currentTarget.value; changed(state, false); });
     root.querySelectorAll("[data-planned-field]").forEach(input => input.addEventListener("input", event => { state[event.currentTarget.dataset.plannedField] = event.currentTarget.value; changed(state, false); }));
@@ -1010,19 +1065,26 @@
         void action(state, name);
       } catch (error) { state.status = String(error?.message || error); refresh(); }
     }));
-    if (state.catalogStatus === "idle") void loadCatalog(state);
+    if (state.catalogRefreshRequested && !state.busy) {
+      state.catalogRefreshRequested = false; void loadCatalog(state, true);
+    } else if (state.catalogStatus === "idle") void loadCatalog(state);
     maybeLoadAnalysisRuns(state);
     scheduleRunPolling(state);
   }
 
   function forceProjectionHtml(state, subject, role) {
-    const job = subject.planned_analysis;
+    const recorded = subject.subject_kind === "recorded_gpx", subjectLabel = recorded ? "Recorded" : "Planned";
+    const job = recorded ? subject.recorded_analysis : subject.planned_analysis;
     const projection = job?.projections?.[role];
     const dependency = subject.dependencies?.[role] || {};
-    const expected = {project_id: subject.project_id, version_id: subject.selected_plan_version_id,
-      manifest_sha256: subject.planned_bundle_sha256, geometry_sha256: subject.geometry_fingerprint, itinerary_sha256: subject.timing_fingerprint};
+    const expected = {project_id: subject.project_id, version_id: recorded ? subject.recorded_version_id : subject.selected_plan_version_id,
+      manifest_sha256: recorded ? subject.recorded_bundle_sha256 : subject.planned_bundle_sha256, geometry_sha256: subject.geometry_fingerprint, itinerary_sha256: subject.timing_fingerprint};
     const matches = binding => binding && Object.entries(expected).every(([name, value]) => Boolean(value) && binding[name] === value);
-    const verified = subject.subject_kind === "planned_gpx" && subject.schedule_status !== "stale"
+    const contextMatches = recorded || !global.ScoutPlannedReviewUI || !state.workflow?.review?.loaded
+      || version(state) !== expected.version_id || (global.ScoutPlannedReviewUI.contextMatchesJob(state, job)
+        && (projection?.input_binding?.review_context_sha256 ?? null) === global.ScoutPlannedReviewUI.contextSha(state));
+    const verified = ["planned_gpx", "recorded_gpx"].includes(subject.subject_kind) && subject.schedule_status !== "stale" && contextMatches
+      && (!recorded || job?.binding?.subject_kind === "recorded_gpx" || job?.binding?.kind === "recorded_gpx")
       && ["completed", "completed_with_gaps"].includes(job?.status)
       && job.project_id === expected.project_id && job.version_id === expected.version_id && job.manifest_sha256 === expected.manifest_sha256
       && matches(job.binding) && matches(projection?.input_binding)
@@ -1030,22 +1092,22 @@
       && job.candidate_only === true && job.runtime_safety_truth === false
       && projection.candidate_only === true && projection.runtime_safety_truth === false
       && ["ready", "partial", "blocked"].includes(projection.status) && projection.artifact_ref && projection.artifact_sha256;
-    if (!verified) return `<section data-planned-force-pending="${escape(role)}"><h4>${escape(forceNames[role] || role)} Planned 分析</h4>
+    if (!verified) return `<section data-planned-force-pending="${escape(role)}"><h4>${escape(forceNames[role] || role)} ${subjectLabel} 分析</h4>
       <p>${escape(job?.status || dependency.status || "needs_reanalysis")} · ${escape(dependency.reason || "尚無與此版來源、幾何與時程一致的已驗證作業結果。")}</p>
       ${job ? `<p data-planned-force-binding-error="true">作業 ${escape(job.run_id || "未提供")} 的結果尚未通過目前分析主體的完整綁定核對。</p>` : ""}</section>`;
     const result = projection.result || {};
     const viewId = `force:${subject.analysis_revision}:${job.run_id}:${role}`;
     const limitations = [...array(projection.missing_inputs), ...array(projection.gaps)];
-    const currentResult = ["current_planned_analysis", "partial_planned_analysis"].includes(dependency.status);
+    const currentResult = (recorded ? ["current_recorded_analysis", "partial_recorded_analysis"] : ["current_planned_analysis", "partial_planned_analysis"]).includes(dependency.status);
     const resultSummary = [
       ["評估結果", result.decision], ["可回答程度", result.answerability],
       ["Navigation demand", result.navigation_demand_level], ["準備／待補項目", result.required_actions],
     ].filter(([, value]) => value != null && value !== "");
     const graph = result.cp_graph;
     return `<section class="planned-review" data-planned-force-projection="${escape(role)}" data-planned-force-run="${escape(job.run_id)}"
-      data-planned-force-version="${escape(job.version_id)}" data-planned-force-status="${escape(projection.status)}" data-planned-force-current="${currentResult ? "true" : "false"}"
+      data-planned-force-subject-kind="${escape(subject.subject_kind)}" data-planned-force-version="${escape(job.version_id)}" data-planned-force-status="${escape(projection.status)}" data-planned-force-current="${currentResult ? "true" : "false"}"
       data-planned-force-manifest="${escape(expected.manifest_sha256)}" data-planned-force-geometry="${escape(expected.geometry_sha256)}" data-planned-force-itinerary="${escape(expected.itinerary_sha256)}">
-      <h4>${escape(forceNames[role] || role)} · 此 Planned 作業分析</h4>
+      <h4>${escape(forceNames[role] || role)} · 此 ${subjectLabel} 作業分析</h4>
       <p>${escape(job.run_id)} · ${escape(projection.status)} · 執行位置 ${escape(job.execution_location || "未提供")}</p>
       <p data-planned-force-summary="true">${escape(projection.summary || "請查看此作業評估結果。")}</p>
       ${currentResult ? "" : `<p class="planned-issues">${escape(dependency.reason || "此作業結果仍有待補資料，尚未構成完整的本頁分析。")}</p>`}
@@ -1063,32 +1125,44 @@
   function renderSubject(subject, route) {
     const state = ensureProject(subject.project_id);
     const role = route.replace("outdoor-", "").replaceAll("-", "_");
+    const recorded = subject.subject_kind === "recorded_gpx", subjectLabel = recorded ? "Recorded" : "Planned";
     const dependency = subject.dependencies?.[role] || {};
-    const routeGeojson = subject.planned_route_geojson || subject.route_geojson || subject.route_axis?.geojson;
+    const routeGeojson = (recorded ? subject.recorded_route_geojson : subject.planned_route_geojson) || subject.route_geojson || subject.route_axis?.geojson;
     const checkpoints = array(subject.checkpoints || subject.route_axis?.checkpoints);
     const segments = array(subject.segments || subject.route_axis?.segments);
-    const preview = {analysis_revision: subject.analysis_revision, itinerary: subject.itinerary || subject.planned_itinerary, days: subject.mission_day_estimates, timetable: subject.timetable};
-    return `<section class="panel planned-subject" data-analysis-subject="${escape(subject.subject_id)}" data-analysis-project="${escape(subject.project_id)}" data-analysis-revision="${escape(subject.analysis_revision)}" data-analysis-dependency="${escape(dependency.status || "needs_reanalysis")}" data-planned-analysis-subject="true">
-      <h3>${subject.subject_kind === "unresolved_selection" ? "Planned 分析選擇待恢復" : "共同分析主體：Planned GPX"}</h3><p>${escape(subject.selected_plan_version_id || subject.version_id || subject.planned_version_id || subject.subject_id)} · ${escape(hash(subject.analysis_revision))}</p>
+    const preview = {analysis_revision: subject.analysis_revision, itinerary: subject.itinerary || (recorded ? subject.recorded_itinerary : subject.planned_itinerary), days: subject.mission_day_estimates, timetable: subject.timetable};
+    return `<section class="panel planned-subject" data-analysis-subject="${escape(subject.subject_id)}" data-analysis-project="${escape(subject.project_id)}" data-analysis-revision="${escape(subject.analysis_revision)}" data-analysis-dependency="${escape(dependency.status || "needs_reanalysis")}" data-planned-analysis-subject="true" data-analysis-subject-kind="${escape(subject.subject_kind)}" ${recorded ? 'data-recorded-analysis-subject="true"' : ""}>
+      <h3>${subject.subject_kind === "unresolved_selection" ? "Planned 分析選擇待恢復" : `共同分析主體：${subjectLabel} GPX`}</h3><p>${escape(subject.recorded_version_id || subject.selected_plan_version_id || subject.version_id || subject.planned_version_id || subject.subject_id)} · ${escape(hash(subject.analysis_revision))}</p>
       <div class="metric-line"><div class="metric-row"><span>新路線 / CP / Segment</span><strong>${escape(hash(subject.geometry_fingerprint))} · ${checkpoints.length} CP · ${segments.length} segments</strong></div>
       <div class="metric-row"><span>本頁新版分析</span><strong>${escape(dependency.status || "needs_reanalysis")}</strong></div></div>
       <p class="status">${escape(dependency.reason || "各力依此版 route axis 與時間計畫重算；尚未重算的內容保留明確狀態。")}</p>
       ${forceProjectionHtml(state, subject, role)}
       ${mapHtml(routeGeojson, subject.golden_route_geojson, checkpoints, "analysis", {
-        version: subject.selected_plan_version_id || subject.version_id || subject.planned_version_id,
-        manifest_sha256: subject.planned_bundle_sha256, geometry_sha256: subject.geometry_fingerprint,
-        analysis_revision: subject.analysis_revision, analysis_role: role, source_status: subject.schedule_status,
-      })}${itineraryHtml(preview, `analysis:${role}`)}
-      <details><summary>此 Planned 的 CP、路段與版次</summary>${tableHtml(["CP", "序列／距離", "時刻"], checkpoints.map(cp => [escape(cp.label || cp.checkpoint_id || cp.anchor_id), escape(cp.route_order_m ?? cp.distance_m ?? cp.point_index ?? "未知"), escape(cp.arrival_at || cp.planned_at || "未知")]))}
+        version: recorded ? subject.recorded_version_id : subject.selected_plan_version_id || subject.version_id || subject.planned_version_id,
+        manifest_sha256: recorded ? subject.recorded_bundle_sha256 : subject.planned_bundle_sha256,
+        geometry_sha256: subject.geometry_fingerprint, analysis_revision: subject.analysis_revision,
+        analysis_role: role, source_status: subject.schedule_status,
+      }, subjectLabel)}${itineraryHtml(preview, `analysis:${role}`, subjectLabel)}
+      <details><summary>此 ${subjectLabel} 的 CP、路段與版次</summary>${tableHtml(["CP", "序列／距離", "時刻"], checkpoints.map(cp => [escape(cp.label || cp.checkpoint_id || cp.anchor_id), escape(cp.route_order_m ?? cp.distance_m ?? cp.point_index ?? "未知"), escape(cp.arrival_at || cp.planned_at || "未知")]))}
       ${tableHtml(["Segment", "端點", "距離／來源"], segments.map(segment => [escape(segment.segment_id || segment.id), `${escape(segment.from_checkpoint_id || segment.start_anchor_id || segment.start_point_index || "")} → ${escape(segment.to_checkpoint_id || segment.end_anchor_id || segment.end_point_index || "")}`, `${number(segment.length_m ?? segment.distance_m, " m")}<br>${escape(segment.source_id || "")}`]))}
       <pre>${escape(JSON.stringify({sources: subject.sources, dependencies: subject.dependencies, subject_guard: subject.subject_guard}, null, 2))}</pre>
       ${array(subject.issues).length ? issuesHtml(subject.issues, `analysis:${subject.analysis_revision}:issues`) : ""}</details>
-      <p class="status">Planned 為候選分析；舊 Golden 地圖／報表尚未因此變成新版結果。歷史天候未知與目前預報分開，runtime safety truth=false。</p>
+      <p class="status">${subjectLabel} 的六力評估為候選分析；舊 Golden 地圖／報表保留原本角色。${recorded ? "Recorded 採用此實錄來源的幾何與時間；" : ""}歷史天候未知與目前預報分開，runtime safety truth=false。</p>
     </section>`;
   }
   function wrapHistorical(content, header, route, subject) {
-    if (!["planned_gpx", "unresolved_selection"].includes(subject?.subject_kind) || route === "outdoor-permission" || route === "outdoor-pace-fit-body-index") return content;
-    return `${header}<details class="planned-legacy-golden" data-planned-legacy-golden="${escape(route)}"><summary>Golden 歷史資料與既有工具 · 此區尚未重算為 Planned ${escape(subject.selected_plan_version_id || subject.version_id || subject.subject_id)}</summary>${content.replace(header, "")}</details>`;
+    if (!["planned_gpx", "recorded_gpx", "unresolved_selection"].includes(subject?.subject_kind) || route === "outdoor-permission" || route === "outdoor-pace-fit-body-index") return content;
+    return `${header}<details class="planned-legacy-golden" data-planned-legacy-golden="${escape(route)}"><summary>Golden 歷史資料與既有工具 · 此區尚未重算為 ${subject.subject_kind === "recorded_gpx" ? "Recorded" : "Planned"} ${escape(subject.recorded_version_id || subject.selected_plan_version_id || subject.version_id || subject.subject_id)}</summary>${content.replace(header, "")}</details>`;
+  }
+  function refreshSources(projectId) {
+    if (!host || String(host.projectId()) !== String(projectId)) return;
+    const state = ensureProject(projectId);
+    state.catalogRefreshRequested = true;
+    if (!state.busy) { state.catalogRefreshRequested = false; void loadCatalog(state, true); }
+  }
+  function applyAnalysisSelection(projectId, selection) {
+    if (!host || String(host.projectId()) !== String(projectId) || selection?.project_id !== projectId) return;
+    ensureProject(projectId).selection = copy(selection);
   }
   function dispose() {
     stopRunPolling(current);
@@ -1097,5 +1171,5 @@
     current = freshState(project);
     return {disposed: true, pendingPolls: 0};
   }
-  global.ScoutPlannedRoute = {render, bind, renderSubject, wrapHistorical, dispose};
+  global.ScoutPlannedRoute = {render, bind, renderSubject, wrapHistorical, refreshSources, applyAnalysisSelection, dispose};
 })(typeof window === "undefined" ? globalThis : window);

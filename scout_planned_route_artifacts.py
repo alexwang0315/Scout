@@ -57,8 +57,8 @@ class PlannedReviewRequest(PlannedModel):
 
 
 class PlannedAnalysisSelectionRequest(PlannedModel):
-    subject_kind: Literal["golden_gpx", "planned_gpx"]
-    version_id: str | None = Field(default=None, pattern=VERSION_PATTERN.pattern)
+    subject_kind: Literal["golden_gpx", "planned_gpx", "recorded_gpx"]
+    version_id: str | None = Field(default=None, pattern=r"^(?:plan\.[a-f0-9]{16,64}|recorded\.[a-f0-9]{24})$")
     expected_manifest_sha256: str | None = Field(default=None, pattern=SHA_PATTERN)
     expected_selection_sha256: str | None = Field(default=None, pattern=SHA_PATTERN)
     idempotency_key: str = Field(min_length=1, max_length=200)
@@ -66,7 +66,7 @@ class PlannedAnalysisSelectionRequest(PlannedModel):
 
     @model_validator(mode="after")
     def planned_binding(self):
-        if self.subject_kind == "planned_gpx":
+        if self.subject_kind in {"planned_gpx", "recorded_gpx"}:
             if not self.version_id or not self.expected_manifest_sha256:
                 raise ValueError("Planned selection requires a version and manifest hash.")
         elif self.version_id is not None or self.expected_manifest_sha256 is not None:
@@ -550,8 +550,13 @@ def get_analysis_selection(project_root: Path) -> dict:
                 "selection_sha256": None, "selection_status": "default", **AUTHORITY}
     value = _read_json(root, ref)
     _verify_signed(value, "selection_sha256")
-    _assert_authority(value)
-    if value.get("project_id") != project_id or value.get("subject_kind") not in {"golden_gpx", "planned_gpx"}:
+    if value.get("subject_kind") == "recorded_gpx":
+        expected_authority = {**AUTHORITY, "recorded_track": True}
+        if any(value.get(key) is not expected for key, expected in expected_authority.items()):
+            raise PlannedRouteConflict("planned_authority_mismatch", "Recorded selection is a review candidate only.")
+    else:
+        _assert_authority(value)
+    if value.get("project_id") != project_id or value.get("subject_kind") not in {"golden_gpx", "planned_gpx", "recorded_gpx"}:
         raise PlannedRouteConflict("planned_selection_binding_mismatch", "Analysis selection does not match this project.")
     return value
 
@@ -586,6 +591,12 @@ def select_analysis_subject(project_root: Path, request: PlannedAnalysisSelectio
             if not records:
                 raise PlannedRouteConflict("planned_review_required", "Review sources, geometry, timing and uncertainty before selecting Planned.")
             review = records[-1]
+        elif request.subject_kind == "recorded_gpx":
+            from scout_recorded_analysis import get_recorded_version
+            recorded = get_recorded_version(root, request.version_id, request.expected_manifest_sha256)
+            if recorded["source_status"]["status"] != "current":
+                raise PlannedRouteConflict("recorded_source_stale", "Recordings or comparison baselines changed; save a new version.")
+            manifest = recorded["manifest"]
         record = earlier or _signed({
             "schema_version": "plannedAnalysisSelection.v1", "project_id": project_id,
             "subject_kind": request.subject_kind, "version_id": request.version_id,
@@ -595,7 +606,7 @@ def select_analysis_subject(project_root: Path, request: PlannedAnalysisSelectio
             "previous_selection_sha256": request.expected_selection_sha256,
             "idempotency_key_sha256": key_sha, "command_sha256": command_sha,
             "created_at": datetime.now(timezone.utc).isoformat(), "selection_status": "selected",
-            **AUTHORITY,
+            **AUTHORITY, "recorded_track": request.subject_kind == "recorded_gpx",
         }, "selection_sha256")
         if earlier is None:
             _atomic_json(root, history_ref, record)

@@ -859,6 +859,12 @@ def create_contextual_permission_workbench_router(
             raise _http_conflict(exc) from exc
 
     router.include_router(create_planned_route_router(project_root_for=project_root_for))
+    from scout_planned_map_api import create_planned_map_router
+    router.include_router(create_planned_map_router(project_root_for=project_root_for))
+    from scout_recorded_api import create_recorded_router
+    router.include_router(create_recorded_router(project_root_for=project_root_for))
+    from scout_exploration_api import create_exploration_router
+    router.include_router(create_exploration_router(workspace_root=Path(pretrip_workspace_root or DEFAULT_FIXTURE_WORKSPACE_ROOT)))
     return router
 
 

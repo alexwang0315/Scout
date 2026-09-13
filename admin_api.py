@@ -3305,6 +3305,18 @@ def create_admin_router(
             media_type="application/javascript",
         )
 
+    @router.get("/scout-planned-map-review.js")
+    @router.get("/scout-planned-review-ui.js")
+    @router.get("/scout-exploration-workflow.js")
+    @router.get("/scout-recorded-workflow.js")
+    def pretrip_workflow_script(request: Request) -> Response:
+        name = request.url.path.rsplit("/", 1)[-1]
+        allowed = {"scout-planned-map-review.js", "scout-planned-review-ui.js", "scout-exploration-workflow.js", "scout-recorded-workflow.js"}
+        if name not in allowed or not (ROOT / "docs/admin" / name).is_file():
+            raise HTTPException(status_code=404, detail="Pre-trip workflow script not found")
+        return Response((ROOT / "docs/admin" / name).read_text(encoding="utf-8"),
+            media_type="application/javascript", headers={"Cache-Control": "no-store"})
+
     @router.get("/scout-planned-route.js")
     def planned_route_script() -> Response:
         if not DEFAULT_PLANNED_ROUTE_SCRIPT.exists():

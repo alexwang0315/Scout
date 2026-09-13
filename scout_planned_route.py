@@ -125,6 +125,9 @@ def load_planned_catalog(project_root: Path) -> dict:
     root = Path(project_root).resolve()
     hashes: dict[str, str] = {}
     project = _json(root, "project.json", hashes)
+    if project.get("workspace_kind") == "exploration":
+        from scout_exploration_workspace import load_exploration_catalog
+        return load_exploration_catalog(root)
     report = _json(root, project.get("gpx_speed_filter_report_ref", "outputs/gpx_speed_filter_report.json"), hashes)
     sources, anchors, issues = [], [], []
     for number, record in enumerate([report.get("primary") or {}, *report.get("references", [])]):
@@ -220,45 +223,148 @@ def _resolve(name: str | None, catalog: dict, request: PlannedRouteRequest, issu
     return matches[0]
 
 
-def _text_intent(request: PlannedRouteRequest, catalog: dict, issues: list) -> tuple[list, datetime | None]:
+def _text_intent(request: PlannedRouteRequest, catalog: dict, issues: list) -> tuple:
+    from scout_planned_intent import golden_day_windows, parse_planned_intent
+    if request.intent_input_sha256 and request.intent_input_sha256 != hashlib.sha256(request.human_text.encode()).hexdigest():
+        raise PlannedRouteConflict("intent_text_changed", "Human itinerary changed; regenerate its grounded draft.")
+    planner = None
+    if request.intent_draft is not None:
+        class SavedDraft:
+            def run(self, prompt, *, timeout_seconds=None):
+                return request.intent_draft.model_dump_json()
+        planner = SavedDraft()
+    intent = parse_planned_intent(request.human_text, catalog, departure_at=request.departure_at,
+                                  name_resolutions=request.name_resolutions, planner=planner)
     operations = list(request.operations)
-    departure = request.departure_at
-    text = request.human_text.strip()
-    if not text:
-        return operations, departure
-    # Explicit forms are editable typed intent, with the full original text kept.
-    # A clause represented by a form operation must bind its exact source_text.
+    for operation in operations:
+        if operation.source_span is not None:
+            span = operation.source_span
+            if span.end <= span.start or request.human_text[span.start:span.end] != operation.source_text:
+                issues.append(_issue("operation_source_span_mismatch", "明確操作的原文位置與實際文字不一致。", severity="error",
+                                     source_span=span.model_dump(), source_text=operation.source_text))
     represented = {op.source_text.strip() for op in operations if op.source_text}
-    for clause in re.split(r"[\n；;。]+", text):
-        clause = clause.strip()
-        if not clause or clause in represented or re.fullmatch(r"(?:沿|依循|沿用)\s*Golden(?:\s*路線)?", clause, re.I):
+    represented_ids = {c["clause_id"] for c in intent["clauses"] if c["source_text"] in represented}
+    for clause in intent["clauses"]:
+        if clause["clause_id"] in represented_ids:
+            clause["status"] = "resolved_by_explicit_operation"
+            clause["explicit_operation_indices"] = [i for i, op in enumerate(operations) if op.source_text and op.source_text.strip() == clause["source_text"]]
+    intent["issues"] = [issue for issue in intent["issues"] if issue.get("clause_id") not in represented_ids]
+    intent["unresolved_clause_ids"] = [key for key in intent["unresolved_clause_ids"] if key not in represented_ids]
+    intent["status"] = "needs_clarification" if intent["issues"] or intent["unresolved_clause_ids"] else "resolved"
+    for problem in intent["issues"]:
+        # Keep the stable old error category used by callers of the simple form.
+        problem = copy.deepcopy(problem)
+        if problem["code"] == "unsupported_itinerary_clause":
+            problem["reason_code"] = problem["code"]
+            problem["code"] = "unresolved_itinerary_clause"
+        issues.append(problem)
+    for raw in intent["operations"]:
+        if raw["clause_id"] in represented_ids:
             continue
-        stop = re.fullmatch(r"(?:在)?(.+?)(?:多停|停留|休息|停)\s*(\d+(?:\.\d+)?)\s*分鐘", clause)
-        branch = re.fullmatch(r"從(.+?)(?:單攻|往返|前往)(.+?)(?:後)?(?:回|返回)(.+)", clause)
-        depart = re.fullmatch(r"(?:早上|凌晨|下午|晚上)?\s*(\d{1,2})(?::(\d{2})|點)?\s*(?:出發|啟程)", clause)
-        camp = re.fullmatch(r"(?:在|改到)(.+?)(?:紮營|扎營|過夜)(?:，?隔天\s*(\d{1,2})(?::(\d{2})|點)出發)?", clause)
-        if stop:
-            operations.append(ItineraryOperation(kind="stop", at=stop[1].strip(), duration_minutes=float(stop[2]), source_text=clause))
-        elif branch:
-            at, target, returned = (part.strip() for part in branch.groups())
-            if returned != at:
-                issues.append(_issue("unresolved_itinerary_clause", "支線返回地名不一致，請以路段取代操作明確指定。", severity="error", clause=clause))
-            else:
-                operations.append(ItineraryOperation(kind="branch", at=at, to=target, source_text=clause))
-        elif depart and departure:
-            hour = int(depart[1]) + (12 if clause.startswith(("下午", "晚上")) and int(depart[1]) < 12 else 0)
-            minute = int(depart[2] or 0)
-            if hour > 23 or minute > 59:
-                issues.append(_issue("invalid_departure_clock", "啟程時刻無效。", severity="error", clause=clause))
-            else:
-                departure = departure.replace(hour=hour, minute=minute, second=0, microsecond=0)
-        elif camp:
-            operations.append(ItineraryOperation(kind="camp", at=camp[1].strip(), label=camp[1].strip(), source_text=clause))
-            if camp[2]:
-                issues.append(_issue("camp_departure_date_required", "請為營地填入完整的離營日期與時區。", severity="error", clause=clause))
+        payload = {key: value for key, value in raw.items() if key in ItineraryOperation.model_fields}
+        if not raw.get("day_context_explicit") and raw["kind"] not in ("depart",):
+            payload["day_index"] = None
+            payload["calendar_date"] = None
+        operations.append(ItineraryOperation.model_validate(payload))
+    for operation in operations:
+        for condition in operation.preconditions:
+            issues.append(_issue("itinerary_precondition_unverified", "出發前置條件仍需人工確認。",
+                                 precondition=condition, source_text=operation.source_text, at=operation.at))
+    route_intents = [row for row in intent["route_intents"] if row["clause_id"] not in represented_ids]
+    follow = [row for row in route_intents if row["kind"] == "follow_golden"]
+    effective = request
+    start_day = 1
+    if follow:
+        requested = []
+        windows = golden_day_windows(catalog)
+        for row in follow:
+            for selection in row["selections"]:
+                days = [w["day_index"] for w in windows if all(w[k] == selection[k] for k in ("source_id", "part_index", "start_index", "end_index"))]
+                requested.append(RouteSegmentSelection(**selection, day_index=days[0] if len(days) == 1 else None))
+        explicit_follow = any(row.get("day_context_explicit") for row in follow)
+        if explicit_follow and requested:
+            start_day = min(row.day_index or 1 for row in requested)
+            end_day = max([start_day] + [op.location_day_index or op.day_index or start_day for op in operations if op.kind != "depart" or op.at])
+            for day in range(start_day, end_day + 1):
+                if not any(row.day_index == day for row in requested):
+                    available = [w for w in windows if w["day_index"] == day]
+                    if not available:
+                        issues.append(_issue("golden_day_geometry_missing", "此行程日沒有可核對的 Golden 來源範圍。", severity="error", day_index=day))
+                    requested.extend(RouteSegmentSelection(**{k: w[k] for k in ("source_id", "part_index", "start_index", "end_index", "day_index")}) for w in available)
+            requested.sort(key=lambda row: (row.day_index or 1, row.part_index, row.start_index))
+        if request.route_selections:
+            def bare(rows):
+                return [r.model_dump(exclude={"day_index"}) for r in rows]
+            if bare(request.route_selections) != bare(requested):
+                issues.append(_issue("text_route_selection_conflict", "文字指定的 Golden 日段與明確路段選擇不一致。", severity="error"))
         else:
-            issues.append(_issue("unresolved_itinerary_clause", "這段文字尚未轉成可核對的行程操作；請定位地名或使用下方明確操作。", severity="error", clause=clause))
-    return operations, departure
+            effective = request.model_copy(update={"route_selections": requested})
+    for route in route_intents:
+        if route["kind"] != "replace_path":
+            continue
+        op = next((op for op in operations if op.clause_id == route["clause_id"] and op.kind in ("replace", "trim")), None)
+        if op is None or op.selection is not None or op.kind == "trim":
+            continue
+        at = _resolve(op.at, catalog, request, issues)
+        to = _resolve(op.to, catalog, request, issues)
+        if not at or not to:
+            continue
+        if route.get("source_id"):
+            source = next((row for row in catalog["sources"] if row["source_id"] == route["source_id"]), None)
+            matches = []
+            if source:
+                for pi, points in enumerate(source["parts"]):
+                    if not points:
+                        continue
+                    start = min(range(len(points)), key=lambda i: distance(points[i], at))
+                    end = min(range(len(points)), key=lambda i: distance(points[i], to))
+                    if distance(points[start], at) > JOIN_TOLERANCE_M or distance(points[end], to) > JOIN_TOLERANCE_M or start == end:
+                        continue
+                    if any(abs(i - selected) > 10 and distance(point, anchor) <= 3
+                           for anchor, selected in ((at, start), (to, end)) for i, point in enumerate(points)):
+                        continue
+                    matches.append(RouteSegmentSelection(source_id=source["source_id"], part_index=pi, start_index=start, end_index=end))
+            if len(matches) == 1:
+                op.selection = matches[0]
+            else:
+                issues.append(_issue("replacement_source_endpoints_ambiguous", "替代來源沒有唯一可核對的起迄點，請選擇明確索引。", severity="error"))
+        else:
+            from scout_planned_route_models import TrailPathSelection
+            op.selection = RouteSegmentSelection(trail_search=TrailPathSelection(start_anchor_id=op.at,
+                end_anchor_id=op.to, via_anchor_ids=route.get("via_anchor_ids", [])))
+    departure = request.departure_at + timedelta(days=start_day - 1) if request.departure_at else None
+    for op in operations:
+        if op.kind == "depart" and not op.at and op.departure_at:
+            departure = op.departure_at
+            break
+    return operations, departure, intent, effective, start_day
+
+
+def _tag_source_days(nodes: list, catalog: dict) -> None:
+    from scout_planned_intent import golden_day_windows
+    windows = golden_day_windows(catalog)
+    for node in nodes:
+        if node.get("day_index") is not None:
+            continue
+        days = {w["day_index"] for w in windows if node["source_id"] == w["source_id"] and
+                node["part_index"] == w["part_index"] and w["start_index"] <= node["source_point_index"] <= w["end_index"]}
+        if len(days) == 1:
+            node["day_index"] = next(iter(days))
+
+
+def _operation_location(nodes: list, anchor: dict | None, operation: ItineraryOperation,
+                        issues: list, *, to: bool = False) -> int | None:
+    day = operation.location_day_index or operation.day_index
+    if day is None:
+        return _location(nodes, anchor, operation.to_visit if to else operation.visit, issues)
+    visible = [(i, node) for i, node in enumerate(nodes) if node.get("day_index") == day]
+    if not visible:
+        # Planned days may differ from recorded Golden days. A unique route
+        # occurrence is still grounded; the scheduler checks its requested date.
+        # Multiple occurrences remain unresolved rather than borrowing another day.
+        return _location(nodes, anchor, operation.to_visit if to else operation.visit, issues)
+    result = _location([node for _, node in visible], anchor, operation.to_visit if to else operation.visit, issues)
+    return visible[result][0] if result is not None else None
 
 
 def _nodes(source: dict, part: int, first: int, last: int) -> list[dict]:
@@ -325,9 +431,16 @@ def _selection(selection: RouteSegmentSelection, catalog: dict, request: Planned
                                  "所選來源有步行權限或方向限制；請改選可接續的來源。", severity="error", source_id=source["source_id"]))
             return []
     nodes = _nodes(source, selection.part_index, first, last)
+    if selection.day_index is not None:
+        for node in nodes:
+            node["day_index"] = selection.day_index
     if selection.round_trip:
         nodes[-1]["round_trip_turnaround"] = True
-        nodes.extend(_nodes(source, selection.part_index, last, first))
+        returning = _nodes(source, selection.part_index, last, first)
+        if selection.day_index is not None:
+            for node in returning:
+                node["day_index"] = selection.day_index
+        nodes.extend(returning)
     return nodes
 
 
@@ -383,13 +496,17 @@ def _compose(catalog: dict, request: PlannedRouteRequest, operations: list, issu
     if request.route_selections:
         nodes = [p for s in request.route_selections for p in _selection(s, catalog, request, issues)]
     else:
-        golden = catalog["sources"][0]
+        golden = next((source for source in catalog["sources"] if source["source_id"] == catalog.get("golden_source_id")), None)
+        if golden is None:
+            issues.append(_issue("exploration_route_selection_required", "無 Golden 的探索工作區需要明確選擇候選路段。", severity="error"))
+            return []
         nodes = [p for pi, part in enumerate(golden["parts"]) for p in _nodes(golden, pi, 0, len(part) - 1)]
+    _tag_source_days(nodes, catalog)
     for op in operations:
         if op.kind not in ("branch", "replace", "trim"):
             continue
         at = _resolve(op.at, catalog, request, issues)
-        first = _location(nodes, at, op.visit, issues)
+        first = _operation_location(nodes, at, op, issues)
         if first is None:
             continue
         if op.kind == "branch":
@@ -401,6 +518,8 @@ def _compose(catalog: dict, request: PlannedRouteRequest, operations: list, issu
                 continue
             selection = selection.model_copy(update={"round_trip": True})
             branch = _selection(selection, catalog, request, issues)
+            for point in branch:
+                point["day_index"] = nodes[first].get("day_index", op.day_index)
             if not branch:
                 continue
             if distance(nodes[first], branch[0]) > JOIN_TOLERANCE_M:
@@ -419,7 +538,7 @@ def _compose(catalog: dict, request: PlannedRouteRequest, operations: list, issu
             nodes = nodes[:first + 1] + branch + suffix
         else:
             to = _resolve(op.to, catalog, request, issues)
-            last = _location(nodes, to, op.to_visit, issues)
+            last = _operation_location(nodes, to, op, issues, to=True)
             if last is None:
                 continue
             if last <= first:
@@ -429,6 +548,8 @@ def _compose(catalog: dict, request: PlannedRouteRequest, operations: list, issu
                 nodes = copy.deepcopy(nodes[first:last + 1]); nodes[0]["break_before"] = True
             elif op.selection:
                 middle = _selection(op.selection, catalog, request, issues)
+                for point in middle:
+                    point["day_index"] = nodes[first].get("day_index", op.day_index)
                 suffix = copy.deepcopy(nodes[last:]); suffix[0]["break_before"] = True
                 nodes = nodes[:first + 1] + middle + suffix
             else:
@@ -457,7 +578,8 @@ def _geometry(nodes: list, catalog: dict, issues: list) -> tuple[dict, list, lis
         item = {"point_index": i, "route_order_m": round(cumulative, 3),
                 "lat": point["lat"], "lon": point["lon"], "ele": point.get("ele"),
                 "source_id": point["source_id"], "source_part_index": point["part_index"],
-                "source_point_index": point["source_point_index"], "break_before": point["break_before"]}
+                "source_point_index": point["source_point_index"], "break_before": point["break_before"],
+                "source_day_index": point.get("day_index")}
         axis.append(item); parts[-1].append(item)
     features, segments = [], []
     by_id = {s["source_id"]: s for s in catalog["sources"]}
@@ -481,12 +603,12 @@ def _geometry(nodes: list, catalog: dict, issues: list) -> tuple[dict, list, lis
 
 
 def _timing(nodes: list, operations: list, catalog: dict, request: PlannedRouteRequest,
-            departure: datetime | None, issues: list) -> tuple[dict, list]:
+            departure: datetime | None, issues: list, start_day_index: int = 1) -> tuple[dict, list]:
     events: dict[int, list] = {}
     for op in operations:
-        if op.kind in ("stop", "camp", "depart", "deadline"):
+        if op.kind in ("stop", "camp", "depart", "deadline", "arrival"):
             anchor = _resolve(op.at, catalog, request, issues) if op.at else None
-            index = _location(nodes, anchor, op.visit, issues) if anchor else (0 if op.kind == "depart" else None)
+            index = _operation_location(nodes, anchor, op, issues) if anchor else (0 if op.kind == "depart" else None)
             if index is None:
                 if not op.at and op.kind != "depart":
                     issues.append(_issue("event_location_required", "停留、营地或到達限制需要明確位置。", severity="error", operation=op.kind))
@@ -497,7 +619,7 @@ def _timing(nodes: list, operations: list, catalog: dict, request: PlannedRouteR
     clock = departure
     replaced_stay_anchor = None
     timeline, unknowns, conflicts, days, checkpoints = [], [], [], [], []
-    day = {"day_id": "D1", "mission_day_id": "D1", "departure_at": clock.isoformat() if clock else None,
+    day = {"day_id": f"D{start_day_index}", "mission_day_id": f"D{start_day_index}", "departure_at": clock.isoformat() if clock else None,
            "start_point_index": 0, "moving_minutes": 0.0, "rest_minutes": 0.0, "unknown_count": 0,
            "source_rest_minutes": 0.0, "fixed_rest_minutes": 0.0}
     by_id = {s["source_id"]: s for s in catalog["sources"]}
@@ -554,16 +676,22 @@ def _timing(nodes: list, operations: list, catalog: dict, request: PlannedRouteR
                              "method": method, "arrival_at": clock.isoformat() if clock else None,
                              "departure_at": before.isoformat() if before else None, "time_role": "planned_estimate"})
         arrival = clock
-        for op in sorted(events.get(i, []), key=lambda item: {"deadline": 0, "stop": 1, "camp": 2, "depart": 3}[item.kind]):
-            if op.kind == "deadline":
-                if op.latest_arrival_at is None:
+        for op in sorted(events.get(i, []), key=lambda item: {"deadline": 0, "arrival": 0, "stop": 1, "camp": 2, "depart": 3}[item.kind]):
+            if op.calendar_date and arrival and arrival.date() != op.calendar_date and op.kind != "depart":
+                conflicts.append({"code": "event_date_constraint_mismatch", "point_index": i, "calendar_date": op.calendar_date.isoformat(), "arrival_at": arrival.isoformat()})
+            if op.kind in ("deadline", "arrival"):
+                target = op.latest_arrival_at or op.arrival_at
+                if target is None:
                     conflicts.append({"code": "arrival_limit_missing", "point_index": i})
                 elif arrival is None:
                     conflicts.append({"code": "arrival_constraint_unverifiable", "point_index": i,
-                                      "latest_arrival_at": op.latest_arrival_at.isoformat()})
-                elif arrival > op.latest_arrival_at:
+                                      "latest_arrival_at": target.isoformat()})
+                elif arrival > target:
                     conflicts.append({"code": "arrival_constraint_unsatisfied", "point_index": i,
-                                      "arrival_at": arrival.isoformat(), "latest_arrival_at": op.latest_arrival_at.isoformat()})
+                                      "arrival_at": arrival.isoformat(), "latest_arrival_at": target.isoformat()})
+                elif op.arrival_at is not None and arrival != op.arrival_at:
+                    conflicts.append({"code": "exact_arrival_requires_review", "point_index": i,
+                                      "arrival_at": arrival.isoformat(), "requested_arrival_at": op.arrival_at.isoformat()})
             elif op.kind == "stop":
                 if op.duration_minutes is None:
                     conflicts.append({"code": "fixed_stop_duration_missing", "point_index": i}); continue
@@ -592,7 +720,7 @@ def _timing(nodes: list, operations: list, catalog: dict, request: PlannedRouteR
                                  "time_role": "explicit_planning_constraint"})
                 clock = next_clock
                 replaced_stay_anchor = point
-                day = {"day_id": f"D{len(days) + 1}", "mission_day_id": f"D{len(days) + 1}",
+                day = {"day_id": f"D{start_day_index + len(days)}", "mission_day_id": f"D{start_day_index + len(days)}",
                        "departure_at": clock.isoformat() if clock else None, "start_point_index": i,
                        "moving_minutes": 0.0, "rest_minutes": 0.0, "unknown_count": 0,
                        "source_rest_minutes": 0.0, "fixed_rest_minutes": 0.0}
@@ -647,6 +775,68 @@ def _export(parts: list, project_id: str, geometry_sha: str, itinerary_sha: str)
     return ET.tostring(tree, encoding="unicode", xml_declaration=True)
 
 
+def _terrain_timing(nodes: list, operations: list, catalog: dict, request: PlannedRouteRequest,
+                    departure: datetime | None, issues: list, start_day: int) -> tuple[dict, list]:
+    from scout_planned_timing import TimingEvent, plan_terrain_schedule
+    if len(nodes) < 2:
+        return _timing(nodes, operations, catalog, request, departure, issues, start_day)
+    events, labels = [], {}
+    for op in operations:
+        if op.kind not in ("stop", "camp", "depart", "deadline", "arrival"):
+            continue
+        anchor = _resolve(op.at, catalog, request, issues) if op.at else None
+        index = _operation_location(nodes, anchor, op, issues) if anchor else (0 if op.kind == "depart" else None)
+        if index is None:
+            if not op.at and op.kind != "depart":
+                issues.append(_issue("event_location_required", "時間約束需要明確位置。", severity="error", operation=op.kind))
+            continue
+        data = {key: value for key, value in op.model_dump(mode="json").items() if key in TimingEvent.model_fields}
+        data.update(point_index=index, kind="deadline" if op.kind == "arrival" else op.kind,
+                    candidate_id=f"planned.cp.event.{index:03d}", label=op.label or (anchor or {}).get("label"))
+        events.append(data)
+        labels[index] = data["label"]
+    schedule = plan_terrain_schedule(nodes, options=request.terrain_timing, departure_at=departure,
+                                     events=events, start_day_index=start_day)
+    schedule.update(schema_version="plannedItinerary.v1", timing_schema_version="plannedTerrainTiming.v1",
+                    timezone=departure.isoformat()[-6:] if departure else None)
+    schedule.setdefault("assumptions", {}).update(pace_mode="terrain_team_model", historical_dates_reused=False,
+                                                  fixed_stops_are_additional=True)
+    if schedule["unknowns"] or schedule.get("campsite_missing_inputs"):
+        issues.append(_issue("planned_time_unknown", "地形、隊伍或營地資料不足的項目保留未知，不補完整行程 ETA。",
+                             count=len(schedule["unknowns"]), missing_campsite_inputs=schedule.get("campsite_missing_inputs", [])))
+    if schedule["conflicts"]:
+        issues.append(_issue("itinerary_constraints_conflict", "時間、日照或營地約束不相容；不會自動加速。",
+                             severity="error", conflicts=schedule["conflicts"]))
+    required = {0, len(nodes) - 1, *[event["point_index"] for event in events],
+                *[event["point_index"] for event in schedule.get("generated_camp_events", [])]}
+    for index, node in enumerate(nodes):
+        if index and node.get("break_before"):
+            required.update((index - 1, index))
+    arrivals = {row["point_index"]: row for row in schedule.get("point_arrivals", [])}
+    departure_rows = {}
+    for row in schedule["timeline"]:
+        if row.get("kind") != "move" and row.get("departure_at") is not None:
+            departure_rows[row["point_index"]] = row
+    checkpoints = []
+    for index in sorted(required):
+        node = nodes[index]
+        arrival = arrivals.get(index, {})
+        post_event = departure_rows.get(index, arrival)
+        conditional = arrival.get("conditional_on_prior_unknown", False)
+        point = {"candidate_id": f"planned.cp.{len(checkpoints):03d}", "point_index": index,
+                 "label": labels.get(index) or f"Plan point {index}", "lat": node["lat"], "lon": node["lon"],
+                 "mission_day_id": arrival.get("day_id", f"D{start_day}"),
+                 "arrival_at": None if conditional else arrival.get("arrival_at"),
+                 "departure_at": None if conditional else post_event.get("departure_at", arrival.get("arrival_at")),
+                 "arrival_at_lower": None if conditional else arrival.get("arrival_at_lower"),
+                 "arrival_at_upper": None if conditional else arrival.get("arrival_at_upper"),
+                 "conditional_arrival_at": arrival.get("arrival_at") if conditional else None,
+                 "conditional_departure_at": post_event.get("departure_at", arrival.get("arrival_at")) if conditional else None,
+                 "candidate_only": True, "runtime_safety_truth": False}
+        checkpoints.append(point)
+    return schedule, checkpoints
+
+
 def compile_planned_route(project_root: Path, request: PlannedRouteRequest | dict) -> dict:
     request = PlannedRouteRequest.model_validate(request)
     root = Path(project_root).resolve()
@@ -654,38 +844,50 @@ def compile_planned_route(project_root: Path, request: PlannedRouteRequest | dic
     if request.source_snapshot_sha256 and request.source_snapshot_sha256 != catalog["source_snapshot_sha256"]:
         raise PlannedRouteConflict("source_snapshot_changed", "Sources changed; regenerate the Planned preview.")
     issues: list[dict] = []
-    operations, departure = _text_intent(request, catalog, issues)
-    nodes = _compose(catalog, request, operations, issues)
+    operations, departure, intent, effective_request, start_day = _text_intent(request, catalog, issues)
+    nodes = _compose(catalog, effective_request, operations, issues)
     route_geojson, axis, segments, parts = _geometry(nodes, catalog, issues)
-    itinerary, checkpoints = _timing(nodes, operations, catalog, request, departure, issues)
-    golden = catalog["sources"][0]
-    golden_nodes = [p for pi, part in enumerate(golden["parts"]) for p in _nodes(golden, pi, 0, len(part) - 1)]
-    golden_geojson, _, _, golden_parts = _geometry(golden_nodes, catalog, [])
-    golden_coordinates = [[[p["lon"], p["lat"], p.get("ele")] for p in part] for part in golden_parts]
+    if request.terrain_timing is not None:
+        itinerary, checkpoints = _terrain_timing(nodes, operations, catalog, request, departure, issues, start_day)
+    else:
+        itinerary, checkpoints = _timing(nodes, operations, catalog, request, departure, issues, start_day)
+    for point in axis:
+        point["planned_day_ids"] = [day["day_id"] for day in itinerary["days"]
+                                    if day["start_point_index"] <= point["point_index"] <= day["end_point_index"]]
+    golden = next((source for source in catalog["sources"] if source["source_id"] == catalog.get("golden_source_id")), None)
+    golden_coordinates, golden_parts, golden_length = None, None, None
+    golden_geojson = None
+    if golden:
+        golden_nodes = [p for pi, part in enumerate(golden["parts"]) for p in _nodes(golden, pi, 0, len(part) - 1)]
+        golden_geojson, _, _, golden_parts = _geometry(golden_nodes, catalog, [])
+        golden_coordinates = [[[p["lon"], p["lat"], p.get("ele")] for p in part] for part in golden_parts]
+        golden_length = sum(distance(a, b) for part in golden["parts"] for a, b in zip(part, part[1:]) if distance(a, b) <= SOURCE_GAP_M)
     planned_coordinates = [[[p["lon"], p["lat"], p.get("ele")] for p in part] for part in parts]
     geometry_sha = digest(planned_coordinates)
     itinerary_sha = digest(itinerary)
-    geometry_changed = planned_coordinates != golden_coordinates
-    golden_length = sum(distance(a, b) for part in golden["parts"] for a, b in zip(part, part[1:]) if distance(a, b) <= SOURCE_GAP_M)
+    geometry_changed = planned_coordinates != golden_coordinates if golden is not None else None
     planned_length = axis[-1]["route_order_m"] if axis else 0
-    bbox = {"min_lat": min(p["lat"] for part in golden["parts"] for p in part),
-            "max_lat": max(p["lat"] for part in golden["parts"] for p in part),
-            "min_lon": min(p["lon"] for part in golden["parts"] for p in part),
-            "max_lon": max(p["lon"] for part in golden["parts"] for p in part)}
-    # Golden extent is only a conservative scope comparison, never DEM proof.
-    outside = [s["segment_id"] for s in segments if any(
-        not (bbox["min_lat"] <= p["lat"] <= bbox["max_lat"] and bbox["min_lon"] <= p["lon"] <= bbox["max_lon"])
-        for p in axis[s["start_point_index"]:s["end_point_index"] + 1])]
-    coverage = {"status": "coverage_needed" if outside else "unverified" if geometry_changed else "existing_golden_scope",
-                "reason": "New route needs map/DEM coverage verification; Golden bounds alone do not prove terrain coverage." if geometry_changed else "Original Golden geometry retained; producer freshness is checked separately.",
+    if golden:
+        bbox = {"min_lat": min(p["lat"] for part in golden["parts"] for p in part),
+                "max_lat": max(p["lat"] for part in golden["parts"] for p in part),
+                "min_lon": min(p["lon"] for part in golden["parts"] for p in part),
+                "max_lon": max(p["lon"] for part in golden["parts"] for p in part)}
+        outside = [segment["segment_id"] for segment in segments if any(
+            not (bbox["min_lat"] <= point["lat"] <= bbox["max_lat"] and bbox["min_lon"] <= point["lon"] <= bbox["max_lon"])
+            for point in axis[segment["start_point_index"]:segment["end_point_index"] + 1])]
+    else:
+        outside = [segment["segment_id"] for segment in segments]
+    coverage = {"status": "coverage_needed" if outside else "unverified" if geometry_changed else "existing_golden_scope" if golden else "coverage_needed",
+                "reason": "No Golden reference exists; candidate route needs independent map/DEM verification." if golden is None else
+                          "New route needs map/DEM coverage verification; Golden bounds alone do not prove terrain coverage." if geometry_changed else
+                          "Original Golden geometry retained; producer freshness is checked separately.",
                 "affected_segments": outside, "dem_coverage_verified": False}
-    if geometry_changed:
-        issues.append(_issue("coverage_needed" if outside else "map_coverage_unverified", coverage["reason"], affected_segments=outside))
-    source_lookup = {s["source_id"]: s for s in catalog["sources"]}
+    if geometry_changed or golden is None:
+        issues.append(_issue("coverage_needed" if outside or golden is None else "map_coverage_unverified", coverage["reason"], affected_segments=outside))
+    source_lookup = {source["source_id"]: source for source in catalog["sources"]}
     for segment in segments:
         if source_lookup[segment["source_id"]]["kind"].startswith("trh"):
             issues.append(_issue("terrain_candidate_non_operational", "Terrain hypothesis remains candidate-only; review/export do not prove walkability.", source_id=segment["source_id"]))
-    # Re-read bound inputs at the end so one preview cannot straddle changed files.
     for ref, expected in catalog["source_hashes"].items():
         h = hashlib.sha256()
         with _path(root, ref).open("rb") as stream:
@@ -695,18 +897,21 @@ def compile_planned_route(project_root: Path, request: PlannedRouteRequest | dic
             raise PlannedRouteConflict("source_changed_during_preview", f"Source changed during composition: {ref}")
     result = {"schema_version": "plannedRoutePreview.v1", "project_id": catalog["project_id"],
               "request": request.model_dump(mode="json"), "intent_operations": [op.model_dump(mode="json") for op in operations],
+              "intent_report": intent, "effective_route_selections": [row.model_dump(mode="json") for row in effective_request.route_selections],
               "source_snapshot_sha256": catalog["source_snapshot_sha256"], "source_hashes": catalog["source_hashes"],
               "geometry_sha256": geometry_sha, "itinerary_sha256": itinerary_sha,
               "planned_gpx": _export(parts, catalog["project_id"], geometry_sha, itinerary_sha),
               "route_geojson": route_geojson, "golden_geojson": golden_geojson,
               "route_axis": axis, "checkpoints": checkpoints, "segments": segments, "itinerary": itinerary,
-              "comparison": {"geometry_changed": geometry_changed, "golden_geometry_sha256": digest(golden_coordinates),
-                             "golden_length_m": round(golden_length, 3), "planned_length_m": planned_length,
-                             "added_distance_m": round(planned_length - golden_length, 3),
+              "comparison": {"status": "available" if golden else "unavailable", "golden_available": golden is not None,
+                             "geometry_changed": geometry_changed,
+                             "golden_geometry_sha256": digest(golden_coordinates) if golden else None,
+                             "golden_length_m": round(golden_length, 3) if golden else None, "planned_length_m": planned_length,
+                             "added_distance_m": round(planned_length - golden_length, 3) if golden else None,
                              "geometry_comparison_policy": "full_source_points_in_order_with_recording_gaps_split.v1",
-                             "golden_original_segment_count": len(golden["parts"]),
-                             "golden_gap_preserving_segment_count": len(golden_parts),
-                             "golden_source_sha256": golden["sha256"], "original_timestamps_preserved": True},
+                             "golden_original_segment_count": len(golden["parts"]) if golden else None,
+                             "golden_gap_preserving_segment_count": len(golden_parts) if golden else None,
+                             "golden_source_sha256": golden["sha256"] if golden else None, "original_timestamps_preserved": True},
               "coverage": coverage, "issues": issues,
               "status": "blocked" if any(i.get("severity") == "error" for i in issues) else "needs_review" if issues else "ready",
               "candidate_only": True, "runtime_safety_truth": False, "departure_approval_granted": False,

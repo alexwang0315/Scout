@@ -23,6 +23,23 @@ CANONICAL_FILES = {"route_axis": "route_axis.json", "checkpoints": "checkpoints.
                    "segments": "segments.json", "itinerary": "itinerary.json",
                    "route_geojson": "route.geojson", "planned_gpx": "planned.gpx"}
 SCHEMA = "scout_planned_preparation.v1"
+RECORDED_CANONICAL_FILES = {**{key: value for key, value in CANONICAL_FILES.items() if key != "planned_gpx"},
+                            "recorded_gpx": "recorded.gpx"}
+
+
+def _is_recorded(binding: dict) -> bool:
+    return binding.get("kind") == "recorded_gpx" or binding.get("subject_kind") == "recorded_gpx"
+
+
+def _subject_boundary(binding: dict) -> dict:
+    return {**BOUNDARY, **({"recorded_track": True, "post_analysis_only": True,
+                           "subject_kind": "recorded_gpx", "source_times_role": binding.get("source_times_role")}
+                          if _is_recorded(binding) else {})}
+
+
+def _canonical_files(binding: dict) -> dict:
+    return RECORDED_CANONICAL_FILES if _is_recorded(binding) else CANONICAL_FILES
+
 MAX_WORKER_POINTS = 20_000
 # Keep the unchanged coarse geomorphon search radius (20 cells) usable even
 # when a Planned part occupies only a few metres in the native 20 m DEM.
@@ -88,13 +105,21 @@ def _notify(progress: Callable | None, stage: str, status: str, **details: Any) 
 
 def _canonical_inputs(owner: Path, bundle: dict) -> tuple[dict, dict, dict[str, bytes]]:
     supplied = bundle.get("manifest") or {}
-    manifest, preview = _load_version(owner, supplied.get("version_id", ""), supplied.get("manifest_sha256"))
+    if _is_recorded(supplied):
+        from scout_recorded_analysis import get_recorded_version
+        saved = get_recorded_version(owner, supplied.get("version_id", ""), supplied.get("manifest_sha256"))
+        if saved["source_status"]["status"] != "current":
+            raise PlannedPreparationError("Recorded source inputs changed before preparation")
+        manifest, preview = saved["manifest"], saved["preview"]
+        prefix = saved["bundle_ref"]
+    else:
+        manifest, preview = _load_version(owner, supplied.get("version_id", ""), supplied.get("manifest_sha256"))
+        prefix = f"{STORE_REF}/versions/{manifest['version_id']}"
     provided_preview = bundle.get("preview") or {}
     if manifest != supplied or any(provided_preview.get(key) != value for key, value in preview.items()):
         raise PlannedPreparationError("Requested bundle is not the saved Planned version")
-    prefix = f"{STORE_REF}/versions/{manifest['version_id']}"
     contents = {key: _path(owner, f"{prefix}/{filename}").read_bytes()
-                for key, filename in CANONICAL_FILES.items()}
+                for key, filename in _canonical_files(manifest).items()}
     contents["manifest"] = _path(owner, f"{prefix}/manifest.json").read_bytes()
     return manifest, preview, contents
 
@@ -232,7 +257,10 @@ def _bind_raw_tiles(raw: dict, coverage: dict) -> None:
             tile["grid_sha256" if field == "grid_uri" else "header_sha256"] = sha
 
 
-def _part_gpx(points: list[dict]) -> bytes:
+def _part_gpx(points: list[dict], *, binding: dict | None = None) -> bytes:
+    if binding and _is_recorded(binding):
+        from scout_recorded_analysis import _recorded_gpx
+        return _recorded_gpx(points, binding["project_id"], binding["observation_kind"])
     from scout_planned_route import PLAN_NS
     tree = ET.Element("gpx", {"version": "1.1", "xmlns": "http://www.topografix.com/GPX/1/1", "creator": "Scout Planned Preparation"})
     metadata = ET.SubElement(tree, "metadata")
@@ -264,17 +292,17 @@ def _part_workspace(run_root: Path, points: list[dict], indices: list[int], raw:
     root = _path(run_root, f"terrain-parts/p{part_index:03d}.c{chunk_index:03d}.{identity}")
     root.mkdir(parents=True, exist_ok=True)
     gpx_ref, route_ref = "inputs/route.gpx", "inputs/route_evidence_bundle.json"
-    gpx_sha = _write(root, gpx_ref, _part_gpx(points))
+    gpx_sha = _write(root, gpx_ref, _part_gpx(points, binding=binding))
     _write(root, "inputs/route_mapping.json", {"subject_binding": binding, "planned_point_indices": indices,
-                                              "part_index": part_index, "chunk_index": chunk_index, **BOUNDARY})
-    summary = summarize_gpx(root / gpx_ref, f"planned.{identity}")
+                                              "part_index": part_index, "chunk_index": chunk_index, **_subject_boundary(binding)})
+    summary = summarize_gpx(root / gpx_ref, f"{'recorded' if _is_recorded(binding) else 'planned'}.{identity}")
     bounds = _bbox(points, TERRAIN_ANALYSIS_MARGIN_M)
     coverage_summary = summary.model_copy(update={"bbox_wgs84": RouteBBox(min_lat=bounds["south"],
         max_lat=bounds["north"], min_lon=bounds["west"], max_lon=bounds["east"])})
     coverage = scan_dtm_coverage(route_summary=coverage_summary, source_dirs=[Path(p) for p in raw["directories"]],
                                  summary_id=f"planned-dem.{identity}").model_dump(mode="json")
     coverage["raster_sources"] = raw["rasters"]
-    coverage["coverage_scope"] = "planned_part_bbox_plus_500m"
+    coverage["coverage_scope"] = "recorded_part_bbox_plus_500m" if _is_recorded(binding) else "planned_part_bbox_plus_500m"
     coverage["analysis_margin_m"] = TERRAIN_ANALYSIS_MARGIN_M
     if not raw["rasters"] and len(coverage.get("candidate_tiles", [])) > 32:
         raise PlannedPreparationError("Planned part needs more than 32 DTM tiles; prepare a bound raw-source mosaic first")
@@ -282,12 +310,17 @@ def _part_workspace(run_root: Path, points: list[dict], indices: list[int], raw:
     _write(root, "normalized/terrain/dtm_coverage_summary.json", coverage)
     _write(root, "normalized/routes/route_summary.json", summary.model_dump(mode="json"))
     _write(root, route_ref, {"project_id": root.name, "subject_binding": binding,
-        "golden_route": {"role": "planned_gpx_reference", "gpx_provenance_role": "planned",
-                         "filtered_geometry_ref": gpx_ref, "filtered_geometry_sha256": gpx_sha}, "boundary": BOUNDARY})
-    project = {"project_id": root.name, "route_role": "planned_gpx_reference", "gpx_provenance_role": "planned",
+        "golden_route": {"role": "recorded_gpx_observation" if _is_recorded(binding) else "planned_gpx_reference",
+                         "gpx_provenance_role": "reference_observation" if _is_recorded(binding) else "planned",
+                         "time_role": binding.get("source_times_role", "planned_estimate"),
+                         "filtered_geometry_ref": gpx_ref, "filtered_geometry_sha256": gpx_sha},
+        "boundary": _subject_boundary(binding)})
+    project = {"project_id": root.name,
+               "route_role": "recorded_gpx_observation" if _is_recorded(binding) else "planned_gpx_reference",
+               "gpx_provenance_role": "reference_observation" if _is_recorded(binding) else "planned",
                "route_evidence_bundle_ref": route_ref, "route_summary_ref": "normalized/routes/route_summary.json",
                "dtm_coverage_summary_ref": "normalized/terrain/dtm_coverage_summary.json",
-               "planned_preparation_subject": binding, **BOUNDARY}
+               "planned_preparation_subject": binding, **_subject_boundary(binding)}
     # Worker activation owns only this part workspace's project.json after its
     # first creation. Do not replace a completed/partially completed activation.
     if not (root / "project.json").exists():
@@ -375,11 +408,15 @@ def _terrain_artifacts(run_root: Path, root: Path, result: dict, points: list[di
         raise PlannedPreparationError("Terrain sample count does not match the complete input part")
     sample_ref = (root / "outputs/planned_terrain_samples.json").relative_to(run_root).as_posix()
     part_mapping = _read(run_root / refs["route_mapping_ref"])
+    if _is_recorded(part_mapping["subject_binding"]):
+        sampled["sampling_method"] = "native_dem_cell_at_exact_recorded_point"
+        for row in samples:
+            row["recorded_point_index"] = row["planned_point_index"]
     hashes[sample_ref] = _write(run_root, sample_ref, {"points": samples, "dem_ref": dem_ref,
         "dem_sha256": hashes[dem_ref], "parent_ref": parent_ref, "parent_sha256": hashes[parent_ref],
         "subject_binding": part_mapping["subject_binding"], "mapping_ref": refs["route_mapping_ref"],
         "mapping_sha256": hashes[refs["route_mapping_ref"]],
-        **{key: value for key, value in sampled.items() if key != "values"}, **BOUNDARY}, immutable=False)
+        **{key: value for key, value in sampled.items() if key != "values"}, **_subject_boundary(part_mapping["subject_binding"])}, immutable=False)
     refs["terrain_samples_ref"] = sample_ref
     refs["terrain_route_samples_ref"] = sample_ref
     unsupported = [row["planned_point_index"] for row in samples if row["elevation_m"] is None]
@@ -465,7 +502,9 @@ def _prepare_map(run_root: Path, workspace: Path, axis: list[dict], binding: dic
     hashes[ref] = _write(run_root, ref, {"subject_binding": binding, "bbox_wgs84": query_bbox,
         "sources": sources, "source_ref_base": prefix, "query": bundle["query"],
         "acquired_source_count": len(acquired_sources), "corridor_margin_m": 500,
-        "interpretation": "Acquired map context; vector presence does not establish trail continuity or walkability.", **BOUNDARY}, immutable=False)
+        "interpretation": "Acquired map context; vector presence does not establish trail continuity or walkability.",
+        "evidence_time_role": "current_map_context_not_historical_ground_truth" if _is_recorded(binding) else "current_map_context",
+        **_subject_boundary(binding)}, immutable=False)
     return {"status": "completed" if sources else "no_trail_candidates", "catalog_ref": ref,
             "source_count": len(sources), "source_hashes": hashes, "bbox_wgs84": query_bbox,
             "coverage_scope": "planned_route_parts_corridor_500m", "acquisition_scope": "planned_route_bbox_plus_500m",
@@ -483,15 +522,26 @@ def prepare_planned_inputs(owner_root: Path, bundle: dict, run_root: Path, *,
     Raw DEM/CRS paths may be relocated for a Scout run only with matching hashes.
     """
     owner, run = Path(owner_root).resolve(), Path(run_root).resolve()
-    allowed_nested_root = owner / "outputs/planned_analysis/runs"
+    recorded = _is_recorded(bundle.get("manifest") or {})
+    allowed_nested_root = owner / ("outputs/recorded_analysis/runs" if recorded else "outputs/planned_analysis/runs")
     if (run == owner or owner.is_relative_to(run)
             or (run.is_relative_to(owner) and not run.is_relative_to(allowed_nested_root))):
         raise PlannedPreparationError("Preparation run must be isolated from owner inputs and saved Planned versions")
     manifest, preview, contents = _canonical_inputs(owner, bundle)
     mapping = build_planned_route_mapping(preview)
     axis = preview["route_axis"]
-    from scout_planned_analysis import planned_binding
-    binding = planned_binding(bundle)
+    if recorded:
+        from scout_recorded_jobs import recorded_binding
+        binding = recorded_binding(bundle)
+        mapping.update(_subject_boundary(binding))
+        mapping["schema_version"] = "scout_recorded_route_mapping.v1"
+        for part in mapping["parts"]:
+            part["recorded_point_indices"] = part["planned_point_indices"]
+        for checkpoint in mapping["checkpoints"]:
+            checkpoint["recorded_point_index"] = checkpoint["planned_point_index"]
+    else:
+        from scout_planned_analysis import planned_binding
+        binding = planned_binding(bundle)
     if binding["manifest_file_sha256"] != hashlib.sha256(contents["manifest"]).hexdigest():
         raise PlannedPreparationError("Manifest byte identity does not match the requested analysis binding")
     identity = _digest({"schema": SCHEMA, "subject_binding": binding,
@@ -499,7 +549,7 @@ def prepare_planned_inputs(owner_root: Path, bundle: dict, run_root: Path, *,
     run.mkdir(parents=True, exist_ok=True)
     _write(run, "inputs/subject_binding.json", binding)
     canonical_refs, source_hashes = {}, {}
-    for key, filename in {**CANONICAL_FILES, "manifest": "manifest.json"}.items():
+    for key, filename in {**_canonical_files(manifest), "manifest": "manifest.json"}.items():
         ref = f"inputs/{filename}"
         canonical_refs[key] = ref
         source_hashes[ref] = _write(run, ref, contents[key])
@@ -508,7 +558,7 @@ def prepare_planned_inputs(owner_root: Path, bundle: dict, run_root: Path, *,
     workspace = _path(run, f"workspaces/prep.{identity[:20]}")
     workspace.mkdir(parents=True, exist_ok=True)
     if not (workspace / "project.json").exists():
-        _write(workspace, "project.json", {"project_id": workspace.name, "planned_preparation_subject": binding, **BOUNDARY})
+        _write(workspace, "project.json", {"project_id": workspace.name, "planned_preparation_subject": binding, **_subject_boundary(binding)})
     gaps, terrain_parts = [], []
     _notify(progress, "canonical_inputs", "completed", point_count=len(axis), part_count=len(mapping["parts"]))
     _notify(progress, "map", "running")
@@ -584,6 +634,12 @@ def prepare_planned_inputs(owner_root: Path, bundle: dict, run_root: Path, *,
             "terrain_point_coverage": "verified" if terrain_ready else "unverified_or_partial",
             "gap_count": len(mapping["parts"])-1, "gaps_filled": False,
             "safe_or_walkable": "not_determined", "map_status": maps["status"]},
-        "gaps": gaps, **BOUNDARY}
+        "gaps": gaps, **_subject_boundary(binding)}
+    if recorded:
+        result["schema_version"] = "scout_recorded_preparation.v1"
+        result["weather_evaluation_mode"] = "historical_at_observation_time"
+        result["coverage"]["recorded_point_count"] = len(axis)
+        for part in terrain_parts:
+            part["recorded_point_indices"] = part["planned_point_indices"]
     _write(run, "preparation_result.json", result, immutable=False)
     return result

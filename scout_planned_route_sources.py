@@ -117,7 +117,16 @@ def load_map_route_sources(root: Path, project: dict[str, Any]) -> dict[str, Any
     reader = _Reader(Path(root))
     sources: list[dict[str, Any]] = []
     issues: list[dict[str, Any]] = []
-    descriptors = list(project.get("planned_overpass_source_refs") or [])
+    from scout_planned_map_materialization import read_materialization_catalog
+    source_states = []
+    registered = {"overpass": [], "rudy_trace": [], "mapsforge_vector": []}
+    try:
+        registered = read_materialization_catalog(reader.root, project.get("project_id", reader.root.name))
+        issues.extend(registered.get("issues", []))
+        source_states.extend(registered.get("source_states", []))
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        issues.append(_issue("MAP_MATERIALIZATION_CATALOG_UNAVAILABLE", str(exc)))
+    descriptors = [*(project.get("planned_overpass_source_refs") or []), *registered["overpass"]]
     if project.get("overpass_map_context_ref"):
         descriptors.insert(0, {"ref": project["overpass_map_context_ref"],
                               "raw_ref": project.get("overpass_raw_payload_ref") or project.get("osm_pbf_raw_payload_ref"),
@@ -131,13 +140,18 @@ def load_map_route_sources(root: Path, project: dict[str, Any]) -> dict[str, Any
             issues.append(_issue("OVERPASS_SOURCE_UNAVAILABLE", str(exc), kind="overpass"))
     if not descriptors:
         issues.append(_issue("OVERPASS_SOURCE_UNAVAILABLE", "No bound Overpass vectors are prepared.", kind="overpass"))
-    trace_refs = project.get("planned_rudy_trace_refs") or []
+    for descriptor in registered.get("mapsforge_vector", []):
+        try:
+            sources.extend(_mapsforge_sources(reader, descriptor))
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            issues.append(_issue("MAPSFORGE_SOURCE_UNAVAILABLE", str(exc), kind="mapsforge_vector"))
+    trace_refs = [*(project.get("planned_rudy_trace_refs") or []), *registered["rudy_trace"]]
     for descriptor in trace_refs:
         try:
             sources.extend(_rudy_sources(reader, descriptor))
         except (OSError, ValueError, KeyError, TypeError) as exc:
             issues.append(_issue("RUDY_TRACE_UNAVAILABLE", str(exc), kind="rudy_trace"))
-    if not trace_refs:
+    if not trace_refs and not any(s["kind"] == "mapsforge_vector" for s in sources):
         issues.append(_issue("RUDY_TRACE_PENDING", "Rudy+TWMap raster context has no bound human trace geometry.", kind="rudy_trace"))
     try:
         found, gaps = _trh_sources(reader, project)
@@ -162,8 +176,15 @@ def load_map_route_sources(root: Path, project: dict[str, Any]) -> dict[str, Any
                                 "source_id": source["source_id"], "part_index": part_index,
                                 "point_index": point_index, "lat": point["lat"], "lon": point["lon"],
                                 **({"osm_node_id": point["osm_node_id"]} if "osm_node_id" in point else {})})
+    for kind, families in (("overpass", {"overpass"}), ("mapsforge_vector", {"mapsforge_vector"}), ("rudy_trace", {"rudy_trace"}),
+                           ("trh", {"trh_r1", "trh_r2", "trh_r3", "trh_r4"})):
+        count = sum(source["kind"] in families for source in unique.values())
+        source_states.append({"source_kind": kind, "status": "available" if count else "unavailable",
+                              "usable_candidate_count": count,
+                              "issues": [item["code"] for item in issues if item.get("source_kind") in families | {kind}]})
     return {"sources": list(unique.values()), "anchors": anchors,
-            "source_hashes": reader.source_hashes, "issues": issues, **BOUNDARY}
+            "source_hashes": reader.source_hashes, "issues": issues,
+            "source_states": source_states, **BOUNDARY}
 
 
 def _overpass_sources(reader: _Reader, descriptor: dict[str, Any]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -171,7 +192,14 @@ def _overpass_sources(reader: _Reader, descriptor: dict[str, Any]) -> tuple[list
     payload = reader.read(ref, descriptor.get("sha256"))
     if payload.get("type") != "FeatureCollection":
         raise ValueError("Overpass source is not a FeatureCollection")
-    evidence = reader.read(descriptor["evidence_ref"]) if descriptor.get("evidence_ref") else {}
+    dependencies = {ref: reader.bind(ref)}
+    for dependency, expected in descriptor.get("input_source_hashes", {}).items():
+        dependencies[dependency] = reader.bind(dependency, expected)
+    if descriptor.get("manifest_ref"):
+        dependencies[descriptor["manifest_ref"]] = reader.bind(descriptor["manifest_ref"], descriptor["manifest_sha256"])
+    evidence = reader.read(descriptor["evidence_ref"], descriptor.get("evidence_sha256")) if descriptor.get("evidence_ref") else {}
+    if descriptor.get("evidence_ref"):
+        dependencies[descriptor["evidence_ref"]] = reader.bind(descriptor["evidence_ref"])
     request = evidence.get("request", {})
     sources, issues = [], []
     missing_nodes = 0
@@ -225,7 +253,7 @@ def _overpass_sources(reader: _Reader, descriptor: dict[str, Any]) -> tuple[list
         sources.append(_source(source_id, str(props.get("name") or source_id), "overpass", ref, reader, parts,
                                {"osm_type": osm_type, "osm_id": osm_id, "osm_tags": tags,
                                 "raw_ref": raw_ref, "raw_sha256": reader.bind(raw_ref),
-                                "source_hashes": {ref: reader.bind(ref), raw_ref: reader.bind(raw_ref)},
+                                "source_hashes": {**dependencies, raw_ref: reader.bind(raw_ref)},
                                 "topology_status": "osm_node_ids" if nodes_complete else "missing_osm_node_ids",
                                 "review_state": props.get("review_state", "needs_review"),
                                 "observed_at": props.get("last_verified_at") or request.get("request_timestamp"),
@@ -237,6 +265,32 @@ def _overpass_sources(reader: _Reader, descriptor: dict[str, Any]) -> tuple[list
     return sources, issues
 
 
+def _mapsforge_sources(reader: _Reader, descriptor: dict[str, Any]) -> list[dict[str, Any]]:
+    ref = descriptor["ref"]
+    payload = reader.read(ref, descriptor["sha256"])
+    props = payload.get("properties", {})
+    if (payload.get("type") != "FeatureCollection" or props.get("source_kind") != "mapsforge_vector"
+            or props.get("extractor") != "mapsforge-map-reader" or props.get("topology_available") is not False
+            or any(props.get(key) != value for key, value in BOUNDARY.items())):
+        raise ValueError("Mapsforge source authority/reader contract mismatch")
+    hashes = {ref: reader.bind(ref), descriptor["manifest_ref"]: reader.bind(descriptor["manifest_ref"], descriptor["manifest_sha256"])}
+    for dependency, expected in descriptor.get("input_source_hashes", {}).items():
+        hashes[dependency] = reader.bind(dependency, expected)
+    source_ref = props["source_ref"]
+    if hashes.get(source_ref) != props["source_sha256"]:
+        raise ValueError("Mapsforge source map is not bound")
+    result = []
+    for feature in payload.get("features", []):
+        tags = feature.get("properties", {}).get("tags", {})
+        if feature.get("properties", {}).get("topology_available") is not False:
+            raise ValueError("Mapsforge feature cannot assert graph connectivity")
+        result.append(_source(f"mapsforge.{reader.bind(ref)[:12]}.{feature['id'][:16]}",
+            str(tags.get("name") or tags.get("ref") or tags.get("highway") or "Mapsforge path"),
+            "mapsforge_vector", ref, reader, _parts(feature["geometry"]),
+            {**props, **feature["properties"], "source_hashes": hashes, "timing_semantics": "unknown_no_recorded_timestamps"}))
+    return result
+
+
 def _rudy_sources(reader: _Reader, descriptor: dict[str, Any] | str) -> list[dict[str, Any]]:
     descriptor = {"ref": descriptor} if isinstance(descriptor, str) else descriptor
     ref = descriptor["ref"]
@@ -244,7 +298,11 @@ def _rudy_sources(reader: _Reader, descriptor: dict[str, Any] | str) -> list[dic
     props = payload.get("properties", {})
     if payload.get("type") != "FeatureCollection" or props.get("candidate_only") is not True or props.get("runtime_safety_truth") is not False:
         raise ValueError("Rudy trace requires candidate-only FeatureCollection provenance")
-    if props.get("trace_method") != "human_map_trace" or props.get("review_state") != "human_reviewed" or not props.get("reviewed_by") or not props.get("reviewed_at"):
+    method = props.get("trace_method")
+    allowed_method = method == "human_map_trace" or (
+        method == "software_authored_map_trace" and props.get("trace_author_kind") == "software"
+        and props.get("human_reviewed") is True and props.get("reviewer_kind") == "human")
+    if not allowed_method or props.get("review_state") != "human_reviewed" or not props.get("reviewed_by") or not props.get("reviewed_at"):
         raise ValueError("Rudy trace needs explicit human drawing/review provenance")
     if props.get("source_layer") not in {"rudy-twmap", "happyman_rudy_twmap"}:
         raise ValueError("Rudy trace has no Rudy+TWMap source-layer binding")
@@ -252,6 +310,10 @@ def _rudy_sources(reader: _Reader, descriptor: dict[str, Any] | str) -> list[dic
     if not isinstance(dependencies, list) or not dependencies:
         raise ValueError("Rudy trace must bind its map evidence artifacts")
     hashes = {ref: reader.bind(ref)}
+    for dependency, expected in descriptor.get("input_source_hashes", {}).items():
+        hashes[dependency] = reader.bind(dependency, expected)
+    if descriptor.get("manifest_ref"):
+        hashes[descriptor["manifest_ref"]] = reader.bind(descriptor["manifest_ref"], descriptor["manifest_sha256"])
     for artifact in dependencies:
         hashes[artifact["ref"]] = reader.bind(artifact["ref"], artifact["sha256"])
     result = []

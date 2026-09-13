@@ -1747,6 +1747,9 @@ Scout Decision：CONDITIONAL_GO
 | Planned GPX | 依本次意圖形成的新規劃幾何，搭配獨立的行程與節奏計畫。 | 有 Golden 時保留相對修改；各情境均保留路段來源。即使幾何相同而只改節奏，也建立新計畫版本。 |
 | Recorded GPX | 歸來後匯入的本次真實裝置紀錄，可由多日、多檔與多位參與者組成。 | 保留實際時間、裝置、參與者與記錄缺口；不得由 Ref.／Golden／Planned 冒充。 |
 
+相同入口可測試歷史記錄或 fixture，但必須保留 `observation_kind` 與時間角色；
+只有本次本人真實活動才能標記為個人完成紀錄。
+
 Golden 有效的歷史節奏應先完整重建，包括來源分日、CP 時間、休息、住宿端點與
 記錄缺口；重建不能擅自改成固定每日時數。歷史日曆日期／當地時刻是來源證據，
 採用到本次行程的日期與出發時刻則另存為計畫，不得改寫成當次觀測。
@@ -1786,9 +1789,10 @@ Golden 有效的歷史節奏應先完整重建，包括來源分日、CP 時間�
 
 - **Ref. GPX 剪接：** 修剪或串接不同軌跡的路段，保留來源範圍、方向與返回主線的
   接點；支線往返必須包含去回兩段，不能只計去程。
-- **既有山徑查找：** 從 Overpass 的向量資料或 Rudy+TWMap 的圖上線索尋找路段。
-  圖磚中的路線須經辨識／描繪與對位才能成為規劃幾何，不能直接當成可路由的向量；
-  保存資料日期及來源，地圖有線不代表當下已確認可通行。
+- **既有山徑查找：** 從 Overpass／PBF 或已登錄 Rudy Mapsforge 向量尋找路段。
+  PBF 可依真正 node IDs 尋徑；Mapsforge 保留圖上幾何與 tags，但沒有 node IDs
+  時只供明確選段／剪裁，不從交叉線猜測拓樸。Rudy+TWMap 圖磚仍須經辨識／
+  描繪、對位及人工審查；保存資料日期及來源，地圖有線不代表已確認可通行。
 - **TRH R1–R3：** 缺少可參考路段時，以明示 A/B 和 DEM 產生
   `R1 drainage_averse`、`R2 balanced`、`R3 terrain_only_baseline`，供比較與選擇。
 - **敘事引導 R4：** 從登山日誌或歷史描述擷取路序／地形線索，經地圖對位、人工
@@ -1826,7 +1830,7 @@ AOI 準備地圖與 DEM，建立探索 workspace，再進入候選分析，不�
 ### 18.6 共同規劃產物與六力重分析
 
 新的規劃能力須同時交付「路線幾何」與「行程節奏」，GPX 不能單獨承載全部意圖。
-以下是待實作／整合的產品契約，不指定新的既有 API 或檔名：
+以下是共用產品契約；既有 W1–W7 要求與目前整合狀態見 §18.7 及交付計畫 §4.8：
 
 | 產物 | 最少需要保留的內容 |
 |---|---|
@@ -1860,21 +1864,26 @@ flowchart TD
 ```
 
 每次六力分析只使用一個明示的主路線軸。若分析 Planned，新增支線與營地必須納入
-軸與時間計畫；原 Golden 留作比較，不再用它截掉新路段。此需求是 §9 既有
-Golden-bound projection 的後續整合方向，不能僅切換 UI 名稱而沿用舊輸出。
+軸與時間計畫；原 Golden 留作比較，不再用它截掉新路段。共用分析主體與版本專屬
+producer 須引用新輸出或明示缺資料，不能僅切換 UI 名稱而沿用舊輸出。
 
 ### 18.7 與現有實作的銜接及完成條件
 
 下表保留初次文件整理時的基礎與整合方向；實際交付狀態以指定版本的驗收證據為準。
 
-**2026-09-10 交付狀態補充：** 情境一已取得指定版本／路線的 G1–G6 SCOPED PASS，
+**2026-09-13 現況：整合中／尚未全面驗收。** Scout 原有 W1–W7 正重新整合到
+唯一 Dashboard 入口 `9099`；本次指定 workspace 為
+`dongqing_batongguan_historic_trail_newImport`。以下歷史成績不代表目前版本已通過；
+Diagnostic 仍有未通過項，完整教學截圖、步驟定位與 PDF 也尚未全面同步。
+
+**2026-09-10 指定版本歷史回執：** 情境一已取得指定版本／路線的 G1–G6 SCOPED PASS，
 包含完整 Dashboard 操作與連續 3/3 核心恢復驗證。情境二已新增「人工行程與明確
 表單 → Ref. 剪接／向量山徑及 TRH 候選 → Planned GPX 與新節奏」並完成 P1–P9
 指定範圍驗收，為 WORKING PROTOTYPE。真實 Dashboard 與 fixture 證據分列於
 [Planned 驗收報告](scout-planned-gpx-p1-p9-qualification-20260910.md)；不是通用
 自然語言推論、所有六力 producer 重算或現場安全資格。未重算與 coverage 缺口
-仍明示；Rudy 需人工向量描繪，R4 需原有人工錨點審查。情境三與 Recorded 共同
-閉環仍是後續工作。具體階段、修改範圍、操作方式及驗收案例見
+仍明示。後續七項追加要求另納入 Mapsforge 向量、零 Ref 與 Recorded 共同閉環，
+不能由原 P1–P9 回執推定它們已在目前入口通過。具體階段、修改範圍、操作方式及驗收案例見
 [Golden 復刻驗證與 Planned GPX 交付計畫](scout-golden-planned-gpx-delivery-plan.md)。
 
 | 範圍 | 現有基礎 | 後續改善與驗證重點 |
@@ -1885,6 +1894,22 @@ Golden-bound projection 的後續整合方向，不能僅切換 UI 名稱而沿�
 | 零 Ref. 入口 | TRH 核心輸入為準備好的 DEM 與 A/B；現有 GPX import 仍要求 Golden／primary GPX。 | 新增 AOI 起始的 workspace／map preparation 入口；六力可呈現部分結果，不能以假 Golden 補依賴。 |
 | 新節奏估計 | 既有歷史重建與 segment timing 可作來源。 | 新估計須另存方法／假設，保留 workbench 原有 non-imputing 歷史時間與未知值，避免冒充觀測或全日 ETA。 |
 | 行後復盤 | [Capability Timeline](post-analysis-capability-timeline.md) 已定義 completed recording set 與本人能力證據邊界。 | 串接實錄作為新分析 Golden 的角色、原計畫比較及六力重跑；不得將行前 GPX 當成個人完成紀錄。 |
+
+既有七項追加要求如下；本次補回契約與操作範圍，**全部仍待目前整合版全面驗收**：
+
+| 工作 | 整合要求 | 驗證與資料邊界 |
+|---|---|---|
+| W1 行前補件 | Permission 保存路線版本綁定的 context；六力讀取同版聲明與證據。 | 日期、隊伍、裝備與審查未提供時保持未知；新補件使舊 run 失去 current 資格。 |
+| W2 綜合報告 | 同版六力、CP graph、時程及 readiness assessor 組成 §18.2 報告。 | 下載與來源 hashes 可核對；待補項、折返／替代方案未知不得補成准許。 |
+| W3 節奏與營地 | 地形／固定腳程、最慢隊員假設、固定停留、分日及時間限制。 | 顯示方法、情境區間、已知小計與未解 ETA；營地位置不等於水源或過夜資格。 |
+| W4 多日文字 | 原文分句、相對日序、地名／來源對位、重訪及可選模型草稿。 | 歧義逐句待確認；不得跳過未解析句或由願望直接推定腳程。 |
+| W5 地圖與候選 | 不可覆寫的 PBF source rebuild、Mapsforge 向量及既有 TRH catalog。 | PBF 真實 node IDs 與 Mapsforge 幾何選段分開；R1–R3 與新路線須有同版準備／分析證據，R4 暫緩。 |
+| W6 零 Ref 入口 | AOI／DEM／A/B 起始的探索 workspace，再由候選保存 Planned。 | 不依賴假 Golden；AOI 證據與已選路線的 corridor 準備分開。 |
+| W7 行後復盤 | 多檔／隊員／裝置 Recorded 保存、與原 Golden／Planned 比較、獨立六力作業。 | 歷史／本人本次／fixture 身分分開；保留時間戳、來源缺口及版本，現時預報不冒充當時天候。 |
+
+使用者已指定 **R4 暫時待審，TRH 先以 R1–R3 為主**。不得代填人工錨點核可，
+或以 Rudy 向量冒充舊 raster 草稿／R4 已審查。Recorded 換作分析主體不覆寫原
+Golden 或 Planned；操作與版本契約見交付計畫 §4.8。
 
 建議重整順序：先統一 GPX 角色、分析版本與 CP／segment 對應，串通情境一；再做
 情境二的「一條支線＋一項停留變更」完整切片，證明 Planned 幾何與節奏都能重算；
@@ -1900,6 +1925,10 @@ Golden-bound projection 的後續整合方向，不能僅切換 UI 名稱而沿�
    不需偽造 GPX，未解路段及估計假設可見。
 4. **共同閉環：** 歸來後以真實 Recorded 建立新分析，能比較原 Golden、Planned 與
    實走差異；不覆寫舊版本，也不將候選分析直接寫入 runtime safety truth。
+
+宣稱完成前，須依目前版本、指定入口與 workspace 實際跑完全部適用的 Diagnostic
+及相依回歸，取得 100% PASS，並同步教學／PDF。FAIL、WARN、SKIP、未驗證或不穩定
+仍屬未完成；Diagnostic 與既有需求衝突由使用者裁決，不自行改成 N/A 或通過。
 
 ---
 

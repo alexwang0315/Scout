@@ -12032,6 +12032,10 @@
   </div>
 
   <script src="/admin/scout-maplibre-evidence.js"></script>
+  <script src="/admin/scout-planned-map-review.js"></script>
+  <script src="/admin/scout-planned-review-ui.js"></script>
+  <script src="/admin/scout-exploration-workflow.js"></script>
+  <script src="/admin/scout-recorded-workflow.js"></script>
   <script src="/admin/scout-planned-route.js"></script>
   <script>
 // diagnostic-advanced-inline:start
@@ -16855,9 +16859,10 @@
       const subject = selectedAnalysisSubject();
       const role = route.replace("outdoor-", "").replaceAll("-", "_");
       const dependency = subject?.dependencies?.[role];
-      if (["planned_gpx", "unresolved_selection"].includes(subject?.subject_kind)) {
-        return {...truth, surface: "Planned candidate analysis", mode: dependency?.status || "needs_reanalysis",
-          data: `${subject.checkpoints?.length || 0} Planned CP · ${subject.segments?.length || 0} segments`,
+      if (["planned_gpx", "recorded_gpx", "unresolved_selection"].includes(subject?.subject_kind)) {
+        const label = subject.subject_kind === "recorded_gpx" ? "Recorded" : "Planned";
+        return {...truth, surface: `${label} candidate analysis`, mode: dependency?.status || "needs_reanalysis",
+          data: `${subject.checkpoints?.length || 0} ${label} CP · ${subject.segments?.length || 0} segments`,
           verification: dependency?.reason || "Inspect this version's route axis and pending analyses",
           provenance: `${subject.selected_plan_version_id || subject.subject_id} · runtime truth=false`};
       }
@@ -25782,9 +25787,16 @@
         "outdoor-navigation": renderNavigationPage, "outdoor-architecture": renderArchitecturePage,
         "outdoor-pace-fit": renderPaceFitPage,
       };
-      const content = (renderers[route] || renderRouteContextPage)(force);
+      const workflows = route === "outdoor-permission"
+        ? (window.ScoutExplorationWorkflow?.render({projectId: resolvedPretripProjectId()}) || "")
+          + (window.ScoutRecordedWorkflow?.render({projectId: resolvedPretripProjectId()}) || "")
+          + (window.ScoutPlannedMapReview?.render({projectId: resolvedPretripProjectId()}) || "") : "";
+      const rendered = (renderers[route] || renderRouteContextPage)(force);
+      const planningEntry = route === "outdoor-permission" && !rendered.includes("data-planned-workbench")
+        ? (window.ScoutPlannedRoute?.render({projectId: resolvedPretripProjectId(), subject: selectedAnalysisSubject()}) || "") : "";
+      const content = workflows + planningEntry + rendered;
       const subject = selectedAnalysisSubject();
-      if (["planned_gpx", "unresolved_selection"].includes(subject?.subject_kind) && typeof window !== "undefined" && window.ScoutPlannedRoute) {
+      if (["planned_gpx", "recorded_gpx", "unresolved_selection"].includes(subject?.subject_kind) && typeof window !== "undefined" && window.ScoutPlannedRoute) {
         return window.ScoutPlannedRoute.wrapHistorical(content, outdoorTabs(route), route, subject);
       }
       return content;
@@ -25807,7 +25819,7 @@
     function renderAnalysisSubject(route) {
       const subject = selectedAnalysisSubject();
       if (!subject) return `<section class="panel" data-analysis-subject="loading"><p class="status">共同分析來源：${escapeHtml(state.analysisSubjectStatus || "loading")}。來源核對完成前，保留內容不代表本版已完成分析。</p></section>`;
-      if (["planned_gpx", "unresolved_selection"].includes(subject.subject_kind) && typeof window !== "undefined" && window.ScoutPlannedRoute) {
+      if (["planned_gpx", "recorded_gpx", "unresolved_selection"].includes(subject.subject_kind) && typeof window !== "undefined" && window.ScoutPlannedRoute) {
         return window.ScoutPlannedRoute.renderSubject(subject, route);
       }
       const role = route.replace("outdoor-", "").replaceAll("-", "_");
@@ -26679,8 +26691,8 @@
 
           ${renderPermissionBaselineAuthoring()}
 
-          <details class="permission-projection-details" data-permission-projection-details="true" ${selectedAnalysisSubject()?.subject_kind === "planned_gpx" ? 'data-planned-legacy-golden="permission"' : projection.lens === "baseline" ? "" : "open"}>
-            <summary><span>${selectedAnalysisSubject()?.subject_kind === "planned_gpx" ? "Golden 歷史 Permission projection · 未重算為 Planned" : "Projection details"}</span><strong>${escapeHtml(decision.decision || "UNKNOWN")} · ${nodes.length} plan nodes · ${asArray(projection.evidence).length} evidence sources</strong></summary>
+          <details class="permission-projection-details" data-permission-projection-details="true" ${["planned_gpx", "recorded_gpx"].includes(selectedAnalysisSubject()?.subject_kind) ? 'data-planned-legacy-golden="permission"' : projection.lens === "baseline" ? "" : "open"}>
+            <summary><span>${["planned_gpx", "recorded_gpx"].includes(selectedAnalysisSubject()?.subject_kind) ? `Golden 歷史 Permission projection · 未重算為 ${selectedAnalysisSubject()?.subject_kind === "recorded_gpx" ? "Recorded" : "Planned"}` : "Projection details"}</span><strong>${escapeHtml(decision.decision || "UNKNOWN")} · ${nodes.length} plan nodes · ${asArray(projection.evidence).length} evidence sources</strong></summary>
 
           <div class="permission-mobile-switcher" role="tablist" aria-label="Permission mobile views">
             ${[["now", "Now"], ["remaining", "Remaining"], ["safety", "Safety"], ["evidence", "Evidence"]].map(([view, label]) => `
@@ -41178,6 +41190,15 @@
     }
 
     function bindPermissionControls() {
+      const workflowHost = {apiGet: path => fetchJson(path, {timeoutMs: null, cache: "no-store"}),
+        apiPost: (path, payload) => postJson(path, payload, {timeoutMs: null}), refresh: render,
+        refreshAnalysis: refreshSixAxisAfterBaselineChange,
+        onSourcesReady: catalog => window.ScoutPlannedRoute?.refreshSources(catalog.project_id),
+        onProjectCreated: id => { const url = new URL(window.location.href); url.searchParams.set("projectId", id); window.location.assign(url.href); }};
+      window.ScoutExplorationWorkflow?.bind(document, workflowHost);
+      window.ScoutRecordedWorkflow?.bind(document, workflowHost);
+      window.ScoutPlannedMapReview?.bind(document, workflowHost);
+
       const legacyTextAuthoring = document.querySelector('[data-permission-legacy-text-authoring="true"]');
       legacyTextAuthoring?.addEventListener("toggle", () => {
         if (!legacyTextAuthoring.isConnected) return;

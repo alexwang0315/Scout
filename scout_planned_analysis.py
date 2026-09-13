@@ -33,6 +33,8 @@ RUN_PATTERN = re.compile(r"^analysis\.[a-f0-9]{32}$")
 ROLES = ("permission", "pace_fit", "architecture", "navigation", "weather", "route_context")
 ACTIVE = {"queued", "running"}
 TERMINAL = {"completed", "completed_with_gaps"}
+SUBJECT_BINDING_KEYS = ("project_id", "version_id", "manifest_sha256", "geometry_sha256",
+                        "itinerary_sha256", "review_context_revision_id", "review_context_sha256")
 RESUMABLE = {"interrupted", "failed", "completed_with_gaps"}
 _FILE_HASHES: dict[str, tuple[tuple[int, ...], str]] = {}
 
@@ -40,12 +42,14 @@ _FILE_HASHES: dict[str, tuple[tuple[int, ...], str]] = {}
 class PlannedAnalysisRunRequest(PlannedModel):
     version_id: str = Field(pattern=VERSION_PATTERN.pattern)
     expected_manifest_sha256: str = Field(pattern=SHA_PATTERN)
+    expected_review_context_sha256: str | None = Field(default=None, pattern=SHA_PATTERN)
     idempotency_key: str = Field(min_length=1, max_length=200)
     explicit_confirmation: Literal[True]
 
 
 class PlannedAnalysisResumeRequest(PlannedModel):
     expected_manifest_sha256: str = Field(pattern=SHA_PATTERN)
+    expected_review_context_sha256: str | None = Field(default=None, pattern=SHA_PATTERN)
     idempotency_key: str = Field(min_length=1, max_length=200)
     explicit_confirmation: Literal[True]
 
@@ -71,6 +75,9 @@ def file_sha(path: Path, *, cached: bool = False) -> str:
 
 def planned_binding(bundle: dict) -> dict:
     manifest = bundle["manifest"]
+    context = bundle.get("analysis_review_context")
+    context_binding = ({"review_context_revision_id": context["revision_id"],
+                        "review_context_sha256": context["context_sha256"]} if context else {})
     return {
         "project_id": manifest["project_id"], "version_id": manifest["version_id"],
         "manifest_sha256": manifest["manifest_sha256"],
@@ -81,7 +88,7 @@ def planned_binding(bundle: dict) -> dict:
         "source_hashes": manifest["source_hashes"],
         "canonical_files": {name: manifest["files"][name]["sha256"] for name in (
             "planned.gpx", "route_axis.json", "checkpoints.json", "segments.json", "itinerary.json")},
-        **AUTHORITY,
+        **context_binding, **AUTHORITY,
     }
 
 
@@ -93,7 +100,9 @@ def _producer_sources() -> dict:
              "scout_route_architecture_tool.py", "scout_pace_guardian_tool.py",
              "scout_contextual_permission_tool.py", "scout_weather_window_tool.py",
              "pretrip_navigation_terrain_collection.py", "pretrip_route_context_collection.py",
-             "scout_weather_integration.py", "pretrip_gpx_corpus.py", "navigation_terrain_dem.py")
+             "scout_weather_integration.py", "pretrip_gpx_corpus.py", "navigation_terrain_dem.py",
+             "scout_planned_review_context.py", "scout_planned_pretrip_report.py",
+             "scout_route_readiness_tool.py", "scout_recorded_analysis.py", "scout_recorded_jobs.py")
     return {name: file_sha(root / name, cached=True) for name in names if (root / name).is_file()}
 
 
@@ -105,6 +114,8 @@ def _admit(root: Path, version: str, expected: str) -> dict:
         raise PlannedRouteConflict("planned_analysis_sources_changed", "Saved Planned sources changed; create and review a new version.")
     if not bundle.get("review"):
         raise PlannedRouteConflict("planned_review_required", "Review the saved Planned geometry, timing and uncertainty before preparing it.")
+    from scout_planned_review_context import current_planned_review_context
+    bundle["analysis_review_context"] = current_planned_review_context(root, version)
     return bundle
 
 
@@ -126,6 +137,17 @@ def _default_analyse(root, bundle, run_root, preparation, *, progress):
 
 
 class PlannedAnalysisManager:
+    authority = AUTHORITY
+    runs_ref = RUNS_REF
+    version_pattern = VERSION_PATTERN
+    worker_module = "scout_planned_analysis"
+
+    def _admit_bundle(self, version: str, expected: str) -> dict:
+        return _admit(self.root, version, expected)
+
+    def _binding(self, bundle: dict) -> dict:
+        return planned_binding(bundle)
+
     def __init__(self, root: Path, *, prepare: Callable | None = None,
                  analyse: Callable | None = None, launch: Callable | None = None):
         self.root, self.project_id = _project(root)
@@ -137,11 +159,11 @@ class PlannedAnalysisManager:
     def _ref(self, run_id: str, filename: str = "") -> str:
         if not RUN_PATTERN.fullmatch(run_id):
             raise PlannedRouteConflict("invalid_planned_analysis_run", "Invalid Planned analysis run ID.")
-        return f"{RUNS_REF}/{run_id}" + (f"/{filename}" if filename else "")
+        return f"{self.runs_ref}/{run_id}" + (f"/{filename}" if filename else "")
 
     @contextmanager
     def _registry(self):
-        path = _safe_path(self.root, f"{RUNS_REF}/.registry.lock")
+        path = _safe_path(self.root, f"{self.runs_ref}/.registry.lock")
         path.parent.mkdir(parents=True, exist_ok=True)
         fd = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
         try:
@@ -152,9 +174,9 @@ class PlannedAnalysisManager:
             os.close(fd)
 
     def _lease(self, version_id: str, *, create: bool = False) -> int | None:
-        if not VERSION_PATTERN.fullmatch(version_id):
+        if not self.version_pattern.fullmatch(version_id):
             raise PlannedRouteConflict("invalid_planned_version", "Invalid Planned version ID.")
-        path = _safe_path(self.root, f"{RUNS_REF}/.{version_id}.lease")
+        path = _safe_path(self.root, f"{self.runs_ref}/.{version_id}.lease")
         try:
             fd = os.open(path, os.O_RDWR | os.O_NOFOLLOW | (os.O_CREAT if create else 0), 0o600)
         except FileNotFoundError:
@@ -186,8 +208,8 @@ class PlannedAnalysisManager:
         _atomic_json(self.root, self._ref(state["run_id"], "state.json"), _signed(state, "state_sha256"))
 
     def _bound_bundle(self, state: dict) -> dict:
-        bundle = _admit(self.root, state["version_id"], state["manifest_sha256"])
-        if planned_binding(bundle) != state["binding"]:
+        bundle = self._admit_bundle(state["version_id"], state["manifest_sha256"])
+        if self._binding(bundle) != state["binding"]:
             raise PlannedRouteConflict("planned_analysis_binding_changed", "The Planned source or planning review changed after this run was created.")
         return bundle
 
@@ -200,7 +222,9 @@ class PlannedAnalysisManager:
                 if existing["command_sha256"] != command_sha:
                     raise PlannedRouteConflict("planned_idempotency_conflict", "This analysis key already identifies another request.")
                 return self.get(run_id)
-            bundle = _admit(self.root, request.version_id, request.expected_manifest_sha256)
+            bundle = self._admit_bundle(request.version_id, request.expected_manifest_sha256)
+            if getattr(request, "expected_review_context_sha256", None) != (bundle.get("analysis_review_context") or {}).get("context_sha256"):
+                raise PlannedRouteConflict("planned_review_context_changed", "Refresh the supplement before starting analysis.")
             lease = self._lease(request.version_id, create=True)
             if lease is None:
                 raise PlannedRouteConflict("planned_analysis_busy", "This Planned version already has a running analysis; inspect that job.")
@@ -209,12 +233,12 @@ class PlannedAnalysisManager:
                     "schema_version": "plannedAnalysisRun.v1", "run_id": run_id,
                     "project_id": self.project_id, "version_id": request.version_id,
                     "manifest_sha256": request.expected_manifest_sha256,
-                    "command_sha256": command_sha, "binding": planned_binding(bundle),
+                    "command_sha256": command_sha, "binding": self._binding(bundle),
                     "status": "queued", "stage": "prepare", "attempt": 1,
                     "created_at": _now(), "updated_at": _now(), "stages": {}, "progress": {},
                     "error": None, "resume_commands": {},
                     "execution_location": os.environ.get("SCOUT_PLANNED_EXECUTION_LOCATION", "local"),
-                    "producer_sources": _producer_sources(), **AUTHORITY,
+                    "producer_sources": _producer_sources(), **self.authority,
                 }
                 _atomic_json(self.root, self._ref(run_id, "request.json"), request.model_dump(mode="json"))
                 self._write(state)
@@ -233,7 +257,7 @@ class PlannedAnalysisManager:
         # scheduler is installed; a crashed process requires explicit Resume.
         with log.open("ab") as stream:
             subprocess.Popen(
-                [sys.executable, "-m", "scout_planned_analysis", "--worker", str(self.root), run_id, str(lease)],
+                [sys.executable, "-m", self.worker_module, "--worker", str(self.root), run_id, str(lease)],
                 cwd=Path(__file__).resolve().parent, stdin=subprocess.DEVNULL,
                 stdout=stream, stderr=subprocess.STDOUT, start_new_session=True, pass_fds=(lease,),
             )
@@ -257,7 +281,8 @@ class PlannedAnalysisManager:
             if verify_outputs and state["status"] in TERMINAL:
                 report = self._report(state)
                 state.update(preparation=report["preparation"], projections=report["projections"],
-                             artifact_ref=state["report_ref"], artifact_sha256=state["report_sha256"])
+                             artifact_ref=state["report_ref"], artifact_sha256=state["report_sha256"],
+                             pretrip_report=report.get("pretrip_report"))
             state["can_resume"] = state["status"] in RESUMABLE
         except (PlannedRouteConflict, OSError, ValueError) as exc:
             state.update(status="stale", can_resume=False, preparation=None, projections={},
@@ -266,7 +291,7 @@ class PlannedAnalysisManager:
         return state
 
     def list(self, version_id: str | None = None) -> dict:
-        directory = _safe_path(self.root, RUNS_REF)
+        directory = _safe_path(self.root, self.runs_ref)
         states = []
         if directory.is_dir():
             for path in directory.glob("analysis.*/state.json"):
@@ -274,13 +299,15 @@ class PlannedAnalysisManager:
                 if version_id is None or item["version_id"] == version_id:
                     # Lists carry status, not six complete assessment documents.
                     states.append({k: v for k, v in item.items() if k not in {"preparation", "projections"}})
-        return {"project_id": self.project_id, "runs": sorted(states, key=lambda v: v["created_at"], reverse=True), **AUTHORITY}
+        return {"project_id": self.project_id, "runs": sorted(states, key=lambda v: v["created_at"], reverse=True), **self.authority}
 
     def resume(self, run_id: str, request: PlannedAnalysisResumeRequest) -> dict:
         with self._registry():
             observed = self.get(run_id)
             if request.expected_manifest_sha256 != observed["manifest_sha256"]:
                 raise PlannedRouteConflict("planned_analysis_manifest_changed", "Resume must identify the original Planned manifest.")
+            if request.expected_review_context_sha256 != observed["binding"].get("review_context_sha256"):
+                raise PlannedRouteConflict("planned_review_context_changed", "Resume must identify the original supplement revision.")
             command = _digest(request.model_dump(mode="json"))
             key = _digest(request.idempotency_key)
             earlier = observed.get("resume_commands", {}).get(key)
@@ -358,8 +385,8 @@ class PlannedAnalysisManager:
             finally:
                 self._release(fd)
             _boundary(prepared)
-            if any((prepared.get("subject_binding") or {}).get(key) != state["binding"][key]
-                   for key in ("project_id", "version_id", "manifest_sha256", "geometry_sha256", "itinerary_sha256")):
+            if any((prepared.get("subject_binding") or {}).get(key) != state["binding"].get(key)
+                   for key in SUBJECT_BINDING_KEYS):
                 raise PlannedRouteConflict("planned_analysis_binding_mismatch", "Preparation belongs to another Planned version.")
             for ref, expected in prepared.get("source_hashes", {}).items():
                 if file_sha(_safe_path(run_root, ref)) != expected:
@@ -378,8 +405,8 @@ class PlannedAnalysisManager:
                 _boundary(projection)
                 if projection.get("status") not in {"ready", "partial", "blocked"}:
                     raise PlannedRouteConflict("invalid_planned_projection", "A projection must explicitly report ready, partial, or blocked.")
-                if any((projection.get("input_binding") or {}).get(key) != state["binding"][key]
-                       for key in ("project_id", "version_id", "manifest_sha256", "geometry_sha256", "itinerary_sha256")):
+                if any((projection.get("input_binding") or {}).get(key) != state["binding"].get(key)
+                       for key in SUBJECT_BINDING_KEYS):
                     raise PlannedRouteConflict("planned_analysis_binding_mismatch", "A producer analysed a different Planned geometry or timetable.")
                 ref = projection.get("artifact_ref")
                 path = _safe_path(run_root, ref or "")
@@ -387,14 +414,36 @@ class PlannedAnalysisManager:
                     raise PlannedRouteConflict("planned_analysis_output_changed", "A producer result does not match its artifact hash.")
                 artifact = _read_json(run_root, ref)
                 _boundary(artifact)
-                if (artifact.get("role") != role or any((artifact.get("input_binding") or {}).get(key) != state["binding"][key]
-                        for key in ("project_id", "version_id", "manifest_sha256", "geometry_sha256", "itinerary_sha256"))):
+                if (artifact.get("role") != role or any((artifact.get("input_binding") or {}).get(key) != state["binding"].get(key)
+                        for key in SUBJECT_BINDING_KEYS)):
                     raise PlannedRouteConflict("planned_analysis_binding_mismatch", "An assessment artifact belongs to another role or Planned subject.")
                 artifact_sources.extend(artifact.get("source_report", []))
                 # Store the complete assessor artifact separately; the response
                 # is a bounded summary plus the producer's explicit result.
                 published[role] = {**projection, "artifact_ref": f"{attempt_ref}/{ref}",
                                    "input_binding": {**projection["input_binding"], "run_id": run_id}}
+            extra_report = analysed.get("pretrip_report")
+            if extra_report:
+                _boundary(extra_report)
+                if any(extra_report.get("input_binding", {}).get(k) != state["binding"].get(k)
+                       for k in SUBJECT_BINDING_KEYS):
+                    raise PlannedRouteConflict("planned_analysis_binding_mismatch", "The pre-trip report belongs to a different plan or supplement.")
+                if file_sha(_safe_path(run_root, extra_report["artifact_ref"])) != extra_report.get("artifact_sha256"):
+                    raise PlannedRouteConflict("planned_analysis_output_changed", "The pre-trip report bytes changed before publication.")
+                full_report = _read_json(run_root, extra_report["artifact_ref"])
+                _boundary(full_report)
+                if any(full_report.get("input_binding", {}).get(k) != state["binding"].get(k)
+                       for k in SUBJECT_BINDING_KEYS):
+                    raise PlannedRouteConflict("planned_analysis_binding_mismatch", "The full pre-trip report belongs to a different plan or supplement.")
+                expected_hashes = {role: projection["artifact_sha256"] for role, projection in published.items()}
+                provenance = full_report.get("provenance", {})
+                if (provenance.get("projection_hashes") != expected_hashes
+                        or any(provenance.get(k) != state["binding"].get(k)
+                               for k in ("review_context_revision_id", "review_context_sha256"))):
+                    raise PlannedRouteConflict("planned_analysis_binding_mismatch", "The pre-trip report does not reference the six results being published.")
+                if (extra_report.get("report") != full_report
+                        or any(extra_report.get(k) != full_report.get(k) for k in ("status", "decision"))):
+                    raise PlannedRouteConflict("planned_analysis_binding_mismatch", "The pre-trip summary and downloadable report disagree.")
             self._bound_bundle(state)
             if state["producer_sources"] != _producer_sources():
                 raise PlannedRouteConflict("planned_analysis_producer_changed", "Producer source changed during analysis; resume with one code version.")
@@ -419,12 +468,16 @@ class PlannedAnalysisManager:
                 "created_at": _now(), "producer_sources": state["producer_sources"],
                 "preparation": {**prepared, "artifact_base_ref": attempt_ref},
                 "projections": published, "output_hashes": output_hashes,
+                "pretrip_report": ({**analysed["pretrip_report"],
+                    "artifact_ref": f"{attempt_ref}/{analysed['pretrip_report']['artifact_ref']}"}
+                    if analysed.get("pretrip_report") else None),
                 "owner_source_hashes": owner_hashes,
-                "external_source_bindings": prepared.get("external_source_bindings", []), **AUTHORITY,
+                "external_source_bindings": prepared.get("external_source_bindings", []), **self.authority,
             }, "report_sha256")
             report_ref = self._ref(run_id, f"reports/attempt-{state['attempt']:04d}.json")
             _atomic_json(self.root, report_ref, report)
             gaps = prepared.get("status") != "completed" or any(row["status"] != "ready" for row in published.values())
+            state["progress"] = {"stage": "complete", "status": "completed_with_gaps" if gaps else "completed"}
             state.update(status="completed_with_gaps" if gaps else "completed", stage="complete",
                          completed_at=_now(), report_ref=report_ref,
                          report_sha256=file_sha(_safe_path(self.root, report_ref)), error=None)

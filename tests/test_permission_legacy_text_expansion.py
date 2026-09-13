@@ -71,6 +71,9 @@ const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g,
   char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const resolvedPretripProjectId = () => 'dongqing_batongguan_historic_trail_newImport';
 const bindPermissionDayMaps = () => {};
+// The restored workflow host references this dependency. This isolated Legacy
+// replay must never invoke it or mutate the shared six-force analysis selection.
+const refreshSixAxisAfterBaselineChange = () => {throw Error('Unexpected six-force analysis refresh')};
 const calls = [];
 let completeRequest, rejectRequest;
 const postJson = (path,payload) => {

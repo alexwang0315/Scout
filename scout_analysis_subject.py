@@ -55,6 +55,13 @@ class AnalysisSubject(BaseModel):
     comparison: dict[str, Any] | None = None
     coverage: dict[str, Any] | None = None
     planned_analysis: dict[str, Any] | None = None
+    recorded_version_id: str | None = None
+    recorded_bundle_ref: str | None = None
+    recorded_bundle_sha256: str | None = None
+    recorded_analysis: dict[str, Any] | None = None
+    recorded_route_geojson: dict[str, Any] | None = None
+    actual_user_recorded_activity: bool = False
+    pretrip_report: dict[str, Any] | None = None
     candidate_only: Literal[True] = True
     runtime_safety_truth: Literal[False] = False
     departure_approval_granted: Literal[False] = False
@@ -449,14 +456,76 @@ def _build_planned_analysis_subject(project_root: Path, bundle: dict) -> Analysi
         route_axis=axis, planned_route_geojson=preview.get("route_geojson"),
         golden_route_geojson=preview.get("golden_geojson"), checkpoints=checkpoints, segments=segments,
         itinerary=itinerary, comparison=preview.get("comparison"), coverage=coverage, planned_analysis=analysis,
+        pretrip_report=(analysis or {}).get("pretrip_report"),
     )
 
 
+def _build_recorded_analysis_subject(project_root: Path, selection: dict) -> AnalysisSubject:
+    from scout_recorded_analysis import get_recorded_version
+    from scout_recorded_jobs import RecordedAnalysisManager
+
+    root = Path(project_root)
+    bundle = get_recorded_version(root, selection["version_id"], selection["manifest_sha256"])
+    manifest, preview = bundle["manifest"], bundle["preview"]
+    ws = _Workspace(root)
+    current = bundle["source_status"]["status"] == "current"
+    manager = RecordedAnalysisManager(root)
+    runs = manager.list(manifest["version_id"])["runs"]
+    analysis = manager.get(runs[0]["run_id"]) if runs else None
+    admitted = bool(current and analysis and analysis["status"] in {"completed", "completed_with_gaps"}
+        and all(analysis["binding"].get(k) == manifest[k] for k in
+            ("project_id", "version_id", "manifest_sha256", "geometry_sha256", "itinerary_sha256")))
+    if analysis and not admitted:
+        analysis = {**analysis, "projections": {}, "preparation": None}
+    dependencies = {}
+    for role in ("permission", "pace_fit", "architecture", "navigation", "route_context", "weather"):
+        projection = (analysis or {}).get("projections", {}).get(role, {})
+        status = projection.get("status")
+        dependencies[role] = {"status": "current_recorded_analysis" if admitted and status == "ready"
+            else "partial_recorded_analysis" if admitted and status == "partial" else "needs_reanalysis",
+            "subject_version_id": manifest["version_id"], "geometry_sha256": manifest["geometry_sha256"],
+            "itinerary_sha256": manifest["itinerary_sha256"], "time_role": manifest["source_times_role"],
+            "schedule_dependency": "recorded_device_observations", "run_id": (analysis or {}).get("run_id"),
+            "reason": projection.get("summary") or "Recorded geometry and time require their own six-force reanalysis.",
+            "missing_inputs": projection.get("missing_inputs", []), "producer_status": status,
+            "projection_refs": [projection["artifact_ref"]] if projection.get("artifact_ref") else [],
+            "projection_sha256": projection.get("artifact_sha256"),
+            "legacy_projection_status": "golden_and_planned_comparison_only"}
+    dependencies["weather"].update(weather_evaluation_mode="historical_at_observation_time",
+        current_forecast_status="not_evidence_of_recorded_weather")
+    prefix = bundle["bundle_ref"]
+    sources = {name: ws.source(f"{prefix}/{name}", item["sha256"]) for name, item in manifest["files"].items()
+               if name in {"recorded.gpx", "itinerary.json", "route_axis.json", "comparison.json", "graph.json"}}
+    sources.update({f"source_{i}": ws.source(ref, sha) for i, (ref, sha) in enumerate(manifest["source_hashes"].items())})
+    itinerary = preview["itinerary"]
+    return AnalysisSubject(project_id=manifest["project_id"], subject_kind="recorded_gpx",
+        subject_id=manifest["version_id"], recorded_version_id=manifest["version_id"],
+        analysis_revision=_digest({"selection": selection["selection_sha256"], "manifest": manifest["manifest_sha256"],
+            "current": current, "dependencies": dependencies, "report": (analysis or {}).get("report_sha256")}),
+        geometry_fingerprint=manifest["geometry_sha256"], timing_fingerprint=manifest["itinerary_sha256"],
+        sources=sources, recorded_bundle_ref=f"{prefix}/manifest.json", recorded_bundle_sha256=manifest["manifest_sha256"],
+        selected_plan_version_id=preview["request"].get("planned_version_id"),
+        original_golden_provenance={"golden_baseline_mutated": False, "original_planned_mutated": False,
+            "recording_origin": manifest["observation_kind"], "physical_activity_authenticity_verified": False},
+        schedule_status="recorded_observations" if current else "stale", schedule_time_role=manifest["source_times_role"],
+        timezone=itinerary.get("timezone"), mission_day_estimates=itinerary["days"] if current else [],
+        unknown_ranges=itinerary["unknowns"], overnight_gaps=[v for v in itinerary["timeline"] if v["kind"] == "camp"],
+        dependencies=dependencies, issues=[] if current else ["recorded_source_stale"],
+        route_axis=preview["route_axis"], recorded_route_geojson=preview["route_geojson"],
+        checkpoints=preview["checkpoints"], segments=preview["segments"], itinerary=itinerary,
+        comparison=preview["comparison"], coverage=(analysis or {}).get("preparation", {}).get("coverage")
+            if admitted else preview["coverage"], recorded_analysis=analysis,
+        actual_user_recorded_activity=manifest.get("actual_user_recorded_activity", False))
+
+
 def build_analysis_subject(project_root: Path) -> AnalysisSubject:
-    from scout_planned_route_artifacts import selected_planned_bundle
+    from scout_planned_route_artifacts import selected_planned_bundle, get_analysis_selection
     from scout_planned_route_models import PlannedRouteConflict
 
     try:
+        selection = get_analysis_selection(project_root)
+        if selection.get("subject_kind") == "recorded_gpx":
+            return _build_recorded_analysis_subject(project_root, selection)
         planned = selected_planned_bundle(project_root)
     except (PlannedRouteConflict, ValueError, TypeError, KeyError) as exc:
         # An invalid selected plan cannot silently reveal old Golden outputs as
