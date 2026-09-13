@@ -1097,8 +1097,8 @@ def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     assert "/admin/pretrip/projects/${PROJECT_ID}/weather-overlay" in html
     assert "state.weatherOverlay" in html
     reload_body = html.split("async function reloadProjectView()", 1)[1].split("async function loadOsmPbfVectorLayer", 1)[0]
-    assert "const osmPbfVectorPromise = loadOsmPbfVectorLayer(view);" in reload_body
-    assert reload_body.index("const osmPbfVectorPromise = loadOsmPbfVectorLayer(view);") < reload_body.index(
+    assert "const osmPbfVectorPromise = loadOsmPbfVectorLayer(view, {redraw: false});" in reload_body
+    assert reload_body.index("const osmPbfVectorPromise = loadOsmPbfVectorLayer(view, {redraw: false});") < reload_body.index(
         "/admin/pretrip/projects/${PROJECT_ID}/weather-overlay"
     )
     enhancement_barrier = reload_body.split(

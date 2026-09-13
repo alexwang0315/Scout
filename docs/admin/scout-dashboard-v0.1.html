@@ -20807,16 +20807,17 @@
         "map", "timeline", "features-lbs", "outdoor-route-context",
         "outdoor-pace-fit", "outdoor-pace-fit-body-index", "outdoor-permission",
         "outdoor-architecture", "outdoor-weather", "outdoor-navigation", "emergency",
-        "agent", "living", "runtime-audit", "surface-intelligence", "surface-debug", "debug", "observer",
+        "agent", "living", "runtime-audit", "surface-intelligence", "scout-monitor", "surface-debug", "debug", "observer",
         "settings", "diagnostic",
       ];
       const routeButtons = Array.from(document.querySelectorAll("#dashboardSidebar [data-route]"));
-      const missing = expectedRoutes.filter(route => !routeButtons.some(button => button.dataset.route === route));
+      const actualRoutes = routeButtons.map(button => button.dataset.route);
+      const missing = expectedRoutes.filter(route => !actualRoutes.includes(route));
+      const unexpected = actualRoutes.filter(route => !expectedRoutes.includes(route));
+      const duplicates = [...new Set(actualRoutes.filter((route, index) => actualRoutes.indexOf(route) !== index))];
       diagnosticRequire(!missing.length, `Missing navigation routes: ${missing.join(", ")}`);
-      diagnosticRequire(
-        new Set(routeButtons.map(button => button.dataset.route)).size === expectedRoutes.length,
-        "Sidebar route IDs contain duplicates or unregistered entries.",
-      );
+      diagnosticRequire(!duplicates.length, `Duplicate sidebar route IDs: ${duplicates.join(", ")}`);
+      diagnosticRequire(!unexpected.length, `Unregistered sidebar route IDs: ${unexpected.join(", ")}`);
       const settingsButton = routeButtons.find(button => button.dataset.route === "settings");
       diagnosticRequire(settingsButton?.nextElementSibling?.dataset?.route === "diagnostic", "Diagnostic is not immediately after Settings.");
       diagnosticRequire(expectedRoutes.every(route => ROUTE_TRUTH[route]), "One or more routes have no truth contract.");

@@ -506,6 +506,47 @@ def _default_pretrip_artifact(
     return _missing_artifact_status(artifact_key)
 
 
+def load_pretrip_weather_projection(
+    project_id: str,
+    *,
+    root: Path = ROOT,
+    project_root: Path | None = None,
+) -> dict[str, Any]:
+    """Read the weather overlay's inputs without rebuilding unrelated map evidence."""
+    # Keep the full resolver's project identity and artifact path containment checks.
+    # This projection has no cache: edited, removed, or newly created weather inputs
+    # are observed on the next request, including the existing missing-source ref.
+    artifacts = resolve_pretrip_project_artifacts(
+        project_id,
+        root=root,
+        project_root=project_root,
+    )
+    project = _load_json(artifacts["project"])
+    route_summary = _load_json(artifacts["route_summary"])
+    weather_daylight = _load_optional_json(
+        artifacts.get("weather_daylight")
+    ) or _default_pretrip_artifact(
+        "weather_daylight",
+        project_id=project_id,
+        project=project,
+        route_summary=route_summary,
+    )
+    weather = _weather_summary(
+        weather_daylight,
+        _relpath(
+            artifacts["weather_daylight"],
+            root if project_root is None else project_root,
+        ),
+    )
+    _ensure_admin_summary_metadata(weather)
+    return {
+        "weather": weather,
+        # Match the full view's route bounds, not its expanded reference/display
+        # bounds: this is the coordinate source used by the Open-Meteo request.
+        "route": {"bounds": route_summary["bbox_wgs84"]},
+    }
+
+
 def build_pretrip_admin_view(
     project_id: str,
     *,

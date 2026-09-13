@@ -10,6 +10,17 @@
   const number = value => value !== "" && value != null && Number.isFinite(Number(value)) ? Number(value) : null;
   const requireValue = (condition, message) => { if (!condition) throw new Error(message); };
   let lastReport = null;
+  let requestSequence = 0;
+
+  function errorEvidence(error, seen = new Set()) {
+    if (error == null) return null;
+    if (typeof error !== "object" && typeof error !== "function") return {name: typeof error, message: String(error)};
+    if (seen.has(error)) return {name: "CircularErrorCause", message: "Cause already recorded."};
+    seen.add(error);
+    return {name: String(error.name || "Error"), message: String(error.message || error),
+      ...(error.code == null ? {} : {code: String(error.code)}),
+      ...(error.cause == null ? {} : {cause: errorEvidence(error.cause, seen)})};
+  }
 
   function casesFor(registry, dailyIds) {
     const ids = new Set(registry.map(item => item.id));
@@ -187,14 +198,28 @@
       const domainVerified = !navigationDomain || navigationDomain.state === navigationDomain.requested
         && (navigationDomain.phase === "loading" ? Boolean(navigationDomain.renderedState)
           : navigationDomain.rendered === navigationDomain.requested);
-      return {activeRenderer, rendererReady: rendererReady && cohortVerified && transportVerified && domainVerified, matrix, verified, status: status || "unknown", failure,
+      const observedAt = Date.now();
+      const initializationObservation = {observedAt, basis: "current-renderer-dom",
+        documentUrl: doc.location?.href || null, documentReadyState: doc.readyState || null,
+        documentVisibility: doc.visibilityState || "unknown", documentHidden: typeof doc.hidden === "boolean" ? doc.hidden : null,
+        documentHasFocus: typeof doc.hasFocus === "function" ? doc.hasFocus() : null,
+        rootId: root.id || null, rootConnected: typeof root.isConnected === "boolean" ? root.isConnected : null,
+        requestedRenderer: renderer, activeRenderer: activeRenderer || null,
+        rendererState: shell?.dataset.mapRendererState || root.dataset.navigationMaplibreStatus || null,
+        rendererReason: shell?.dataset.mapRendererReason || root.dataset.navigationMaplibreReason || null,
+        projectLoadState: shell?.dataset.mapProjectLoadState || null,
+        initializationReceiptPresent: Boolean(receiptValue), initializationPhase: initializationReceipt?.phase || null,
+        adapterAvailable: Boolean(doc.defaultView?.ScoutMapLibreEvidence),
+        bridgeAvailable: kind === "pretrip" ? Boolean(doc.defaultView?.scoutPretripMapRendererBridge)
+          : kind === "debug" ? Boolean(doc.defaultView?.scoutDebugMapRendererBridge) : null};
+      return {observedAt, activeRenderer, rendererReady: rendererReady && cohortVerified && transportVerified && domainVerified, matrix, verified, status: status || "unknown", failure,
         required: prefix ? readCount("Required") : requestedImages.length,
         success: prefix ? readCount("Success") : requestedImages.filter(node => node.dataset.tileGenerationLoaded === "true").length,
         pending: prefix ? readCount("Pending") : pending, errors: prefix ? readCount("Error") : failure ? 1 : 0,
         unverified: prefix ? readCount("Unverified") : images.filter(node => node.dataset.tileGenerationLoaded !== "true").length,
         matrices: cohort.length ? cohort : matrix == null ? [] : [matrix], view: JSON.stringify(currentView),
         scrollTop: Number(root.scrollTop || 0), scrollLeft: Number(root.scrollLeft || 0),
-        initializationReceipt, navigationDomain, rendererState: shell?.dataset.mapRendererState || root.dataset.navigationMaplibreStatus || null,
+        initializationReceipt, initializationObservation, navigationDomain, rendererState: shell?.dataset.mapRendererState || root.dataset.navigationMaplibreStatus || null,
         viewLimits: viewLimits(),
         rendererReason: shell?.dataset.mapRendererReason || root.dataset.navigationMaplibreReason || null,
         otherRasterState: renderer === "maplibre" ? data.maplibreRasterState || "unknown" : undefined,
@@ -315,46 +340,112 @@
     return urls;
   }
 
-  async function readTile(value, descriptor, projectId, {allowMissing = false, decode = true, mode = "cache"} = {}) {
+  async function readTile(value, descriptor, projectId, {allowMissing = false, decode = true, mode = "cache", onReceipt = null} = {}) {
     const tile = tileUrl(value.href || value, descriptor.doc.location.href, projectId, mode);
     const controller = new AbortController();
-    const timer = global.setTimeout(() => controller.abort(), 15000);
+    const receipt = {requestId: ++requestSequence, purpose: "diagnostic-tile-verification", ...tile,
+      mode, method: "GET", fetchCache: "no-store", allowMissing, decodeRequested: decode,
+      startedAt: Date.now(), deadlineMs: 15000, phase: "fetch", outcome: "pending", httpStatus: null,
+      headers: null, blobBytes: null, bitmapWidth: null, bitmapHeight: null, decoded: false,
+      deadlineTriggered: false, abort: {aborted: false, reason: null, trigger: null}, events: [], error: null};
+    const copyReceipt = () => ({...receipt, headers: receipt.headers ? {...receipt.headers} : null,
+      abort: {...receipt.abort}, events: receipt.events.map(event => ({...event}))});
+    const publish = event => {
+      const observedAt = Date.now();
+      receipt.elapsedMs = Math.max(0, observedAt - receipt.startedAt);
+      receipt.observedAt = observedAt;
+      receipt.abort = {aborted: controller.signal.aborted, reason: errorEvidence(controller.signal.reason),
+        trigger: receipt.deadlineTriggered ? "diagnostic-readTile-deadline" : controller.signal.aborted ? "unknown" : null};
+      receipt.events.push({event, phase: receipt.phase, observedAt, elapsedMs: receipt.elapsedMs});
+      onReceipt?.(copyReceipt());
+    };
+    const phase = name => { receipt.phase = name; publish("phase"); };
+    const complete = outcome => { receipt.outcome = outcome; receipt.completedAt = Date.now(); phase("complete"); };
+    const timer = global.setTimeout(() => {
+      receipt.deadlineTriggered = true;
+      receipt.deadlineTriggeredAt = Date.now();
+      controller.abort();
+      publish("abort");
+    }, 15000);
     try {
+      publish("start");
       const response = await global.fetch(tile.href, {method: "GET", credentials: "same-origin", redirect: "error", cache: "no-store", signal: controller.signal});
-      if (allowMissing && response.status === 404) return {...tile, status: 404, decoded: false};
+      receipt.httpStatus = response.status;
+      receipt.headers = Object.fromEntries(["X-Scout-Tile-Exact", "X-Scout-Tile-Zoom", "X-Scout-Imagery-Source-Id",
+        "X-Scout-Tile-Source", "Content-Type", "Content-Length"].map(name => [name, response.headers?.get?.(name) ?? null]));
+      phase("headers");
+      if (allowMissing && response.status === 404) {
+        complete("missing");
+        return {...tile, status: 404, decoded: false, requestReceipt: copyReceipt()};
+      }
       requireValue(response.ok, `${tile.key}: HTTP ${response.status}.`);
       const source = response.headers.get("X-Scout-Tile-Source") || "";
+      phase("provenance");
       requireValue(response.headers.get("X-Scout-Tile-Exact") === "true"
         && Number(response.headers.get("X-Scout-Tile-Zoom")) === tile.z
         && response.headers.get("X-Scout-Imagery-Source-Id") === "happyman_rudy_twmap"
         && source && !/fallback|parent|transparent|placeholder|upsampl/i.test(source), `${tile.key}: native provenance is not verified.`);
       if (mode === "cache") requireValue(["local_source_cache", "local_cache"].includes(source), `${tile.key}: cache-only GET fetched remote bytes.`);
       if (decode) {
-        const bitmap = await global.createImageBitmap(await response.blob());
-        try { requireValue(bitmap.width >= 256 && bitmap.height >= 256, `${tile.key}: tile has no native 256 px detail.`); }
+        phase("blob");
+        const blob = await response.blob();
+        receipt.blobBytes = number(blob.size);
+        phase("decode");
+        const bitmap = await global.createImageBitmap(blob);
+        receipt.bitmapWidth = number(bitmap.width); receipt.bitmapHeight = number(bitmap.height);
+        try {
+          phase("dimensions");
+          requireValue(bitmap.width >= 256 && bitmap.height >= 256, `${tile.key}: tile has no native 256 px detail.`);
+          receipt.decoded = true;
+        }
         finally { bitmap.close(); }
       }
-      return {...tile, status: response.status, source, decoded: decode};
+      complete("verified");
+      return {...tile, status: response.status, source, decoded: decode, requestReceipt: copyReceipt()};
+    } catch (error) {
+      receipt.outcome = "failed"; receipt.completedAt = Date.now(); receipt.error = errorEvidence(error);
+      publish("error");
+      throw Object.assign(new Error(error.message, {cause: error}), {name: error.name || "Error", requestReceipt: copyReceipt()});
     } finally { global.clearTimeout(timer); }
   }
 
   async function waitFor(read, timeoutMs = 60000, progress = null) {
     let deadline = Date.now() + timeoutMs, token;
-    do {
-      const value = read();
-      if (value) return value;
-      const next = progress?.();
-      if (progress && next !== token) { token = next; deadline = Date.now() + timeoutMs; }
-      await sleep(150);
-    } while (Date.now() < deadline);
-    throw new Error("Native tile/view state did not settle before the diagnostic deadline.");
+    const evidence = {startedAt: Date.now(), timeoutMs, pollIntervalMs: 150, scheduler: "setTimeout",
+      readCount: 0, deadlineResetCount: 0, lastProgressAt: null};
+    try {
+      do {
+        evidence.readCount += 1; evidence.lastReadAt = Date.now();
+        const value = read();
+        if (value) return value;
+        const next = progress?.();
+        if (progress && next !== token) {
+          token = next; deadline = Date.now() + timeoutMs;
+          evidence.deadlineResetCount += 1; evidence.lastProgressAt = Date.now();
+        }
+        await sleep(150);
+      } while (Date.now() < deadline);
+      throw new Error("Native tile/view state did not settle before the diagnostic deadline.");
+    } catch (error) {
+      throw Object.assign(new Error(error.message, {cause: error}), {waitEvidence: {...evidence,
+        deadlineAt: deadline, completedAt: Date.now(), elapsedMs: Math.max(0, Date.now() - evidence.startedAt)}});
+    }
   }
 
-  async function ready(descriptor, projectId, {expected = null, previousView = null, previousGeneration = null, onSnapshot = null} = {}) {
+  async function ready(descriptor, projectId, {expected = null, previousView = null, previousGeneration = null, onSnapshot = null, onRequestReceipt = null} = {}) {
     let key = "", stable = 0, last, bestSuccess = -1, progressToken = 0;
+    const initializationObservations = [];
+    let initializationKey = "";
     try {
       const snapshot = await waitFor(() => {
         last = descriptor.snapshot();
+        const observation = last.initializationObservation || {observedAt: Date.now(), basis: "renderer-snapshot",
+          activeRenderer: last.activeRenderer, rendererState: last.rendererState || null,
+          rendererReason: last.rendererReason || null, initializationPhase: last.initializationReceipt?.phase || null};
+        const nextInitializationKey = JSON.stringify({...observation, observedAt: null});
+        if (nextInitializationKey !== initializationKey) {
+          initializationKey = nextInitializationKey; initializationObservations.push(observation);
+        }
         onSnapshot?.(last);
         requireValue(descriptor.projectId() === projectId, "Workspace changed during Rudy verification.");
         requireValue(last.scrollTop === 0 && last.scrollLeft === 0, "Map viewport scrolled independently of its camera; tile coverage is displaced.");
@@ -380,14 +471,16 @@
       });
       const urls = urlsFor(descriptor, snapshot, projectId);
       if (descriptor.renderer === "svg") {
-        await Promise.all(urls.map(url => readTile(url, descriptor, projectId)));
+        await Promise.all(urls.map(url => readTile(url, descriptor, projectId, {onReceipt: onRequestReceipt})));
         const current = descriptor.snapshot();
         requireValue(current.view === snapshot.view && current.generation === snapshot.generation
           && current.activeRenderer === descriptor.renderer && nativeComplete(current, expected), "SVG active generation changed during HTTP/decode verification.");
       }
       return {...snapshot, requestCount: urls.length};
     } catch (error) {
-      throw new Error(`${error.message} Actual Z${last?.matrix ?? "?"}; ${last?.success ?? "?"}/${last?.required ?? "?"}; state=${last?.status || "unknown"}.`);
+      throw Object.assign(new Error(`${error.message} Actual Z${last?.matrix ?? "?"}; ${last?.success ?? "?"}/${last?.required ?? "?"}; state=${last?.status || "unknown"}.`, {cause: error}),
+        {requestReceipt: error.requestReceipt || null, waitEvidence: error.waitEvidence || null,
+          initializationEvidence: {observations: initializationObservations, latestReceipt: last?.initializationReceipt || null}});
     }
   }
 
@@ -396,7 +489,7 @@
     await sleep(240);
   }
 
-  async function findCacheMiss(descriptor, snapshot, projectId) {
+  async function findCacheMiss(descriptor, snapshot, projectId, {onReceipt = null} = {}) {
     const view = descriptor.tileView(), z = snapshot.matrix;
     const native = view.tiles?.filter(tile => tile.z === z);
     const range = native?.length ? {xMin: Math.min(...native.map(tile => tile.x)), xMax: Math.max(...native.map(tile => tile.x)),
@@ -407,7 +500,7 @@
         ["down", midX, range.yMax + offset], ["up", midX, range.yMin - offset]]) {
         if (x < 0 || y < 0 || x >= 2 ** z || y >= 2 ** z) continue;
         const href = view.tileTemplate.replaceAll("{z}", z).replaceAll("{x}", x).replaceAll("{y}", y);
-        const result = await readTile(href, descriptor, projectId, {allowMissing: true, decode: false});
+        const result = await readTile(href, descriptor, projectId, {allowMissing: true, decode: false, onReceipt});
         if (result.status === 404) return {...result, direction};
       }
     }
@@ -432,16 +525,41 @@
     const result = {...testCase, stages: [], activeStage: "initial", cleanup: []};
     let probe, descriptor, stage = "initial";
     let lastPublishedAt = -Infinity, lastObserved = "";
-    const start = name => { stage = name; result.activeStage = name; options.onProgress?.(result); };
-    const observe = snapshot => {
-      result.liveSnapshot = snapshot;
-      const key = JSON.stringify([stage, snapshot.matrix, snapshot.verified, snapshot.required, snapshot.success,
-        snapshot.pending, snapshot.errors, snapshot.status, snapshot.scrollTop, snapshot.scrollLeft]);
+    let requests = new Map(), finalized = false;
+    const publish = key => {
       if (key !== lastObserved && Date.now() - lastPublishedAt >= 500) {
         lastObserved = key; lastPublishedAt = Date.now(); options.onProgress?.(result);
       }
     };
-    const settle = settings => ready(descriptor, options.projectId, {...settings, onSnapshot: observe});
+    const start = name => {
+      stage = name; result.activeStage = name; requests = new Map(); result.liveRequestReceipts = [];
+      options.onProgress?.(result);
+    };
+    const requestObserver = () => {
+      const stageRequests = requests, requestStage = stage;
+      return receipt => {
+        stageRequests.set(receipt.requestId, receipt);
+        if (!finalized && requestStage === stage) {
+          result.liveRequestReceipts = [...stageRequests.values()];
+          publish(JSON.stringify([stage, "requests", receipt.requestId, receipt.phase, receipt.outcome, receipt.deadlineTriggered]));
+        }
+      };
+    };
+    const readRequest = (value, settings = {}) => readTile(value, descriptor, options.projectId,
+      {...settings, onReceipt: requestObserver()});
+    const requestEvidence = () => ({capturedAt: Date.now(), requests: [...requests.values()],
+      inFlightCount: [...requests.values()].filter(receipt => receipt.outcome === "pending").length});
+    const observe = snapshot => {
+      result.liveSnapshot = snapshot;
+      const key = JSON.stringify([stage, snapshot.matrix, snapshot.verified, snapshot.required, snapshot.success,
+        snapshot.pending, snapshot.errors, snapshot.status, snapshot.scrollTop, snapshot.scrollLeft,
+        snapshot.activeRenderer, snapshot.rendererState, snapshot.rendererReason, snapshot.initializationReceipt?.phase,
+        snapshot.initializationObservation?.projectLoadState,
+        snapshot.initializationObservation?.documentVisibility, snapshot.initializationObservation?.documentHasFocus]);
+      publish(key);
+    };
+    const settle = settings => ready(descriptor, options.projectId,
+      {...settings, onSnapshot: observe, onRequestReceipt: requestObserver()});
     const addCleanup = receipt => {
       const complete = receipt?.disposed === true && receipt.activeMaps === 0 && receipt.pendingInitializations === 0
         && Array.isArray(receipt.errors) && receipt.errors.length === 0;
@@ -457,7 +575,7 @@
     };
     const record = (name, snapshot) => {
       result.liveSnapshot = snapshot;
-      result.stages.push({stage: name, status: "passed", snapshot});
+      result.stages.push({stage: name, status: "passed", snapshot, requestEvidence: requestEvidence()});
       options.onProgress?.(result);
     };
     const verifyDomains = () => {
@@ -511,10 +629,10 @@
       start("cache-hit");
       await act(descriptor, "stop-updates");
       const cached = await settle({expected: 20});
-      const hits = await Promise.all(urlsFor(descriptor, cached, options.projectId).map(url => readTile(url, descriptor, options.projectId)));
+      const hits = await Promise.all(urlsFor(descriptor, cached, options.projectId).map(url => readRequest(url)));
       record(stage, {...cached, cacheHits: hits.length, cachedSource: [...new Set(hits.map(hit => hit.source))]});
       start("cache-miss");
-      const missing = await findCacheMiss(descriptor, cached, options.projectId);
+      const missing = await findCacheMiss(descriptor, cached, options.projectId, {onReceipt: requestObserver()});
       for (let steps = 0; !containsTile(descriptor.tileView(), missing) && steps < 256; steps += 1) {
         await act(descriptor, descriptor.directionTo?.(missing) || missing.direction);
       }
@@ -526,14 +644,14 @@
         return snapshot.view !== cached.view && !nativeComplete(snapshot) && snapshot.pending === 0
           && (snapshot.errors > 0 || /retained|degraded/.test(snapshot.status)) ? snapshot : null;
       });
-      requireValue((await readTile(missing, descriptor, options.projectId, {allowMissing: true, decode: false})).status === 404,
+      requireValue((await readRequest(missing, {allowMissing: true, decode: false})).status === 404,
         "Missing tile was filled while updates were stopped; cache-only behavior failed.");
       record(stage, {...unavailable, genuineCacheMiss: missing.key, cacheHttpStatus: 404, failureDetected: true});
       start("recovery");
       await act(descriptor, "start-updates");
       const recovered = await settle({expected: 20});
       requireValue(recovered.view === unavailable.view && containsTile(descriptor.tileView(), missing), "Recovery reset the camera or left the missing tile outside the viewport.");
-      const recoveryTile = await readTile(missing, descriptor, options.projectId);
+      const recoveryTile = await readRequest(missing);
       record(stage, {...recovered, recoveredTile: recoveryTile.key, recoveryHttpStatus: recoveryTile.status});
     } catch (error) {
       if (error.cleanupReceipt) addCleanup(error.cleanupReceipt);
@@ -541,8 +659,10 @@
       try { if (descriptor) snapshot = descriptor.snapshot(); } catch (failure) { snapshotError = failure.message; }
       result.stages.push({stage, status: "warning", detail: error.message, snapshot, snapshotError,
         snapshotSource: descriptor ? "current-renderer" : snapshot ? "last-observed-before-initialization" : "unavailable",
-        initializationEvidence: error.initializationEvidence || null});
+        error: errorEvidence(error), requestReceipt: error.requestReceipt || null, requestEvidence: requestEvidence(),
+        waitEvidence: error.waitEvidence || null, initializationEvidence: error.initializationEvidence || null});
     } finally {
+      finalized = true;
       await closeProbe();
       for (const name of STAGES) if (!result.stages.some(item => item.stage === name)) {
         result.stages.push({stage: name, status: "not_checked", detail: `Blocked by ${stage}; not counted as passed.`});

@@ -113,6 +113,7 @@ from qgis_runtime_control import (
 from scout_gee_integration import build_gee_runtime_status
 from pretrip_admin_view import (
     build_pretrip_admin_view,
+    load_pretrip_weather_projection,
     list_pretrip_admin_projects,
     load_pretrip_admin_surface_projection,
     load_pretrip_debug_projection_view,
@@ -6276,7 +6277,7 @@ def create_admin_router(
                 pretrip_workspace_root,
                 project_id=project_id,
             )
-            view = build_pretrip_admin_view(project_id, project_root=project_root)
+            view = load_pretrip_weather_projection(project_id, project_root=project_root)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="Pre-trip project not found") from exc
 

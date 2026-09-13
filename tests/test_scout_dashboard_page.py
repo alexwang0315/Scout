@@ -1876,11 +1876,11 @@ def test_weather_embedded_map_loads_cwa_imagery_only_after_layer_enable() -> Non
     html = PAGE.read_text(encoding="utf-8")
     pretrip_html = PRETRIP_PAGE.read_text(encoding="utf-8")
     imagery_gate = pretrip_html.split(
-        "async function loadCwaWeatherImageryIfEnabled(projectId)", 1
+        "async function loadCwaWeatherImageryIfEnabled(projectId,", 1
     )[1].split("async function loadCwaRainfallGridOverlay(view)", 1)[0]
     project_reload = pretrip_html.split(
         "async function reloadProjectView()", 1
-    )[1].split("async function loadOsmPbfVectorLayer(view)", 1)[0]
+    )[1].split("async function loadOsmPbfVectorLayer(view,", 1)[0]
     layer_change_handler = pretrip_html.split(
         "function handleLayerChange(event)", 1
     )[1].split("function closeLayerMenus(", 1)[0]
@@ -1892,7 +1892,7 @@ def test_weather_embedded_map_loads_cwa_imagery_only_after_layer_enable() -> Non
     assert "return null;" in imagery_gate
     assert "await loadCwaWeatherImagery(projectId)" in imagery_gate
     assert (
-        "const imageryPromise = loadCwaWeatherImageryIfEnabled(PROJECT_ID);"
+        "const imageryPromise = loadCwaWeatherImageryIfEnabled(PROJECT_ID, {redraw: false});"
         in project_reload
     )
     assert (

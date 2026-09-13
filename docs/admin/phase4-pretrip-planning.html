@@ -2490,6 +2490,8 @@
         view: state.view,
         error: String(error || "")
       });
+      const shell = document.getElementById("mapRendererShell");
+      if (shell) shell.dataset.mapProjectLoadState = status;
       window.dispatchEvent(new CustomEvent("scout:pretrip-project-state", {
         detail: Object.freeze({status, projectId: PROJECT_ID, error: String(error || "")})
       }));
@@ -9477,19 +9479,19 @@
       cwaImageryUi.frameIndex = 0;
       syncCwaImageryControls();
     }
-    async function loadCwaWeatherImageryIfEnabled(projectId) {
+    async function loadCwaWeatherImageryIfEnabled(projectId, {redraw = true} = {}) {
       if (!cwaWeatherLayerInput()?.checked) {
         clearCwaWeatherImagery();
-        renderCurrentCwaImagerySurface();
+        if (redraw) renderCurrentCwaImagerySurface();
         return null;
       }
       const manifest = await loadCwaWeatherImagery(projectId);
       if (!cwaWeatherLayerInput()?.checked) {
         clearCwaWeatherImagery();
-        renderCurrentCwaImagerySurface();
+        if (redraw) renderCurrentCwaImagerySurface();
         return null;
       }
-      renderCurrentCwaImagerySurface();
+      if (redraw) renderCurrentCwaImagerySurface();
       return manifest;
     }
     async function loadCwaRainfallGridOverlay(view) {
@@ -9698,18 +9700,18 @@
       const rainfallPromise = loadCwaRainfallGridOverlay(view).then(nextView => {
         view = nextView;
         state.view = nextView;
-        renderMap(nextView);
-        publishPretripProjectBridge("base_ready");
         return nextView;
       });
-      const imageryPromise = loadCwaWeatherImageryIfEnabled(PROJECT_ID);
+      // The base map is already visible. Commit this enhancement batch once;
+      // rebuilding the complete SVG on each response blocks renderer startup
+      // and tile/decode callbacks on large real workspaces.
+      const imageryPromise = loadCwaWeatherImageryIfEnabled(PROJECT_ID, {redraw: false});
       const osmCartoPalettePromise = loadOsmCartoPalette();
-      const osmPbfVectorPromise = loadOsmPbfVectorLayer(view);
+      const osmPbfVectorPromise = loadOsmPbfVectorLayer(view, {redraw: false});
       const weatherOverlayPromise = fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/weather-overlay`)
         .then(async weatherOverlayResponse => {
           if (!weatherOverlayResponse.ok) throw new Error(`Weather overlay HTTP ${weatherOverlayResponse.status}`);
           state.weatherOverlay = await weatherOverlayResponse.json();
-          renderMap(state.view || view);
           return state.weatherOverlay;
         });
       const enhancementResults = await Promise.allSettled([
@@ -9728,7 +9730,7 @@
       }
       return state.view || view;
     }
-    async function loadOsmPbfVectorLayer(view) {
+    async function loadOsmPbfVectorLayer(view, {redraw = true} = {}) {
       const url = localOsmPbfVectorUrl(view);
       if (!url) {
         state.osmPbfVector = null;
@@ -9741,7 +9743,7 @@
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         state.osmPbfVector = await response.json();
         state.osmPbfVectorStatus = "ready";
-        renderMap(state.view || view);
+        if (redraw) renderMap(state.view || view);
       } catch (error) {
         state.osmPbfVector = null;
         state.osmPbfVectorStatus = `failed: ${error.message}`;
