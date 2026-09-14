@@ -18,6 +18,12 @@ from pretrip_candidate_generation import (
     generate_pretrip_candidates_from_gpx,
     generate_segment_candidates,
 )
+from pretrip_checkpoint_naming import (
+    REPORT_REF as CHECKPOINT_NAMING_REPORT_REF,
+    load_previous_naming,
+    name_checkpoints,
+)
+from pretrip_route_note_candidates import build_route_note_candidates_from_gpx
 from pretrip_geojson_import import import_pretrip_geojson_candidates
 from pretrip_gis_perception import build_gpx_gis_perception
 from pretrip_gpx_corpus import (
@@ -355,11 +361,16 @@ class PretripImportRequest:
     material_root: Path | None = None
     dtm_dirs: tuple[Path, ...] = ()
     mcp_named_point_evidence: Path | None = None
+    checkpoint_naming_source_root: Path | None = None
+    trusted_checkpoint_name_sha256s: tuple[str, ...] = ()
 
 
 def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
     _validate_request(request)
     project_root = request.workspace_root.expanduser() / request.project_id
+    previous_checkpoints, previous_reviews = load_previous_naming(
+        request.checkpoint_naming_source_root or request.template_project_root or project_root
+    )
     _prepare_project_root(
         project_root=project_root,
         template_project_root=request.template_project_root,
@@ -415,6 +426,22 @@ def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
         rest_area_report=rest_area_report,
         primary_gpx=primary_gpx,
         primary_artifact_id=primary_artifact_id,
+    )
+    naming_notes = [
+        build_route_note_candidates_from_gpx(
+            path,
+            project_id=request.project_id,
+            source_artifact_id=(primary_artifact_id if index == 0 else f"{primary_artifact_id}.reference.{index:03d}"),
+            source_key=f"checkpoint_names_{index:03d}",
+            freshness_as_of=import_timestamp,
+        )
+        for index, path in enumerate([primary_gpx, *reference_paths])
+    ]
+    checkpoint_candidates, checkpoint_naming = name_checkpoints(
+        route, checkpoint_candidates, naming_notes,
+        previous_checkpoints=previous_checkpoints,
+        reviews=previous_reviews,
+        trusted_source_sha256s=request.trusted_checkpoint_name_sha256s,
     )
     checkpoint_candidates = _stamp_import_checkpoint_candidates(
         checkpoint_candidates,
@@ -629,6 +656,7 @@ def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
         "map_context_ref": "normalized/map/map_context.geojson",
         "map_candidates_ref": "candidates/map_candidates.json",
         "checkpoint_candidates_ref": "candidates/checkpoints.json",
+        "checkpoint_naming_ref": CHECKPOINT_NAMING_REPORT_REF,
         "segment_candidates_ref": "candidates/segments.json",
         "retreat_routes_ref": "candidates/retreat_routes.json",
         "route_note_candidates_ref": "candidates/route_note_candidates.json",
@@ -750,6 +778,7 @@ def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
         skill_config_manifest=skill_config_manifest,
     )
 
+    write_json(project_root / output_refs["checkpoint_naming_ref"], checkpoint_naming)
     write_json(project_root / output_refs["package_ref"], package.model_dump(mode="json"))
     write_json(project_root / output_refs["route_summary_ref"], route_summary.model_dump(mode="json"))
     write_json(
@@ -983,6 +1012,8 @@ def main(argv: list[str] | None = None) -> None:
         ),
     )
     parser.add_argument("--checkpoint-spacing-m", type=float, default=DEFAULT_CHECKPOINT_SPACING_M)
+    parser.add_argument("--checkpoint-naming-source-root", type=Path, help="Read-only prior workspace supplying existing names and human review evidence.")
+    parser.add_argument("--trusted-checkpoint-name-sha256", action="append", default=[], help="Explicitly trusted GPX content SHA-256 for original waypoint names.")
     parser.add_argument("--max-reference-display-points", type=int, default=1_000)
     parser.add_argument(
         "--max-reasonable-gpx-speed-kmh",
@@ -1018,6 +1049,8 @@ def main(argv: list[str] | None = None) -> None:
             profile=args.profile,
             template_project_root=args.template_project_root,
             checkpoint_spacing_m=args.checkpoint_spacing_m,
+            checkpoint_naming_source_root=args.checkpoint_naming_source_root,
+            trusted_checkpoint_name_sha256s=tuple(args.trusted_checkpoint_name_sha256),
             max_reference_display_points=args.max_reference_display_points,
             max_reasonable_gpx_speed_kmh=args.max_reasonable_gpx_speed_kmh,
             max_previous_gpx_speed_ratio=args.max_previous_gpx_speed_ratio,
