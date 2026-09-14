@@ -8688,6 +8688,15 @@ def _compact_gis_perception_timeline(payload: Any) -> Any:
                     "review_category",
                     "semantic_aggregation_key",
                     "nearby_group_id",
+                    "nearby_group_label",
+                    "nearby_group_size",
+                    "cluster_name",
+                    "display_label",
+                    "map_label",
+                    "member_count",
+                    "route_alignment_status",
+                    "route_projection_distance_m",
+                    "route_projection_source_id",
                 ),
             )
             if isinstance(item, dict)
@@ -8706,6 +8715,11 @@ def _compact_gis_perception_timeline(payload: Any) -> Any:
                     "timeline_element_type",
                     "review_category",
                     "semantic_aggregation_key",
+                    "cluster_name",
+                    "display_label",
+                    "map_label",
+                    "anchor_candidate_id",
+                    "deterministic_coordinate_merge",
                 ),
             )
             if isinstance(item, dict)

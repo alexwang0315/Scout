@@ -436,6 +436,26 @@ def test_pretrip_project_api_compact_payload_removes_duplicate_tabs():
             is False
         )
     assert "checkpoint_candidates" not in compact_payload["gis_perception"]
+    clustered_cp = next(
+        candidate
+        for candidate in compact_payload["gis_perception_timeline"][
+            "checkpoint_candidates"
+        ]
+        if candidate.get("member_count", 1) > 1
+    )
+    assert clustered_cp["display_label"] == "上切點"
+    assert clustered_cp["cluster_name"] == "上切點"
+    assert clustered_cp["route_alignment_status"] == "aligned_to_walked_route"
+    assert not clustered_cp["display_label"].startswith("gis_cp_cluster.")
+    grouped_cp = next(
+        candidate
+        for candidate in compact_payload["gis_perception_timeline"][
+            "checkpoint_candidates"
+        ]
+        if candidate.get("nearby_group_label")
+    )
+    assert grouped_cp["nearby_group_label"].startswith("附近：")
+    assert not grouped_cp["nearby_group_label"].startswith("gis_cp_nearby_group.")
     assert len(compact_response.content) < len(full_response.content)
 
 

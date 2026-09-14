@@ -67,6 +67,7 @@ COMPANION_MATCH_REVIEW_REF = "outputs/companion_match_review.json"
 REFERENCE_SEGMENT_TIMING_REF = "outputs/reference_segment_timing.json"
 GIS_PERCEPTION_AGGREGATION_RADIUS_M = 80.0
 GIS_PERCEPTION_NEARBY_GROUP_RADIUS_M = 80.0
+GIS_PERCEPTION_ROUTE_CORRIDOR_M = 500.0
 GIS_PERCEPTION_LABEL_MAX_CHARS = 64
 ROUTE_PROJECTION_FILTER_VERSION = "pretrip_route_bounds_projection_filter.v1"
 ROUTE_DISPLAY_BOUNDS_VERSION = "pretrip_route_reference_display_bounds.v1"
@@ -1200,6 +1201,10 @@ def build_pretrip_admin_view(
         project_id,
         planning_tab["gis_perception"],
         overpass_evidence=planning_tab["overpass_evidence"],
+        walked_route_geometries=_gis_perception_walked_route_geometries(
+            route_display_geometry,
+            planning_tab.get("reference_tracks"),
+        ),
     )
     planning_tab["review_queue"] = _review_queue_with_gis_perception_items(
         planning_tab["review_queue"],
@@ -2494,6 +2499,10 @@ def load_pretrip_debug_projection_view(
         project_id,
         view["gis_perception"],
         overpass_evidence=view["overpass_evidence"],
+        walked_route_geometries=_gis_perception_walked_route_geometries(
+            route_display_geometry,
+            view.get("reference_tracks"),
+        ),
     )
     view["risk_delta"] = _risk_delta_summary(
         project_id,
@@ -3258,6 +3267,8 @@ def _gis_perception_timeline_summary(
     gis_perception: dict[str, Any],
     *,
     overpass_evidence: dict[str, Any] | None = None,
+    walked_route_geometries: list[dict[str, Any]] | None = None,
+    route_corridor_m: float = GIS_PERCEPTION_ROUTE_CORRIDOR_M,
 ) -> dict[str, Any]:
     source_path = (
         gis_perception.get("source_path") or "project.json#gis-perception-timeline"
@@ -3270,9 +3281,17 @@ def _gis_perception_timeline_summary(
         overpass_evidence
     )
     raw_candidates = [*gpx_raw_candidates, *overpass_raw_candidates]
+    route_eligible_candidates, filtered_outside_route_corridor_count = (
+        _gis_perception_candidates_in_walked_route_corridor(
+            raw_candidates,
+            walked_route_geometries=walked_route_geometries,
+            route_corridor_m=route_corridor_m,
+        )
+    )
     aggregated_candidates = _aggregate_gis_perception_timeline_checkpoints(
-        raw_candidates,
+        route_eligible_candidates,
         radius_m=GIS_PERCEPTION_AGGREGATION_RADIUS_M,
+        walked_route_geometries=walked_route_geometries,
     )
     candidates, nearby_groups = _apply_gis_perception_nearby_groups(
         aggregated_candidates,
@@ -3300,6 +3319,12 @@ def _gis_perception_timeline_summary(
         "status": "candidate_only",
         "counts": {
             "raw_checkpoint_candidate_count": len(raw_candidates),
+            "route_eligible_raw_checkpoint_candidate_count": len(
+                route_eligible_candidates
+            ),
+            "filtered_outside_walked_route_corridor_count": (
+                filtered_outside_route_corridor_count
+            ),
             "gpx_checkpoint_candidate_count": len(gpx_raw_candidates),
             "overpass_checkpoint_candidate_count": len(overpass_raw_candidates),
             "checkpoint_candidate_count": len(candidates),
@@ -3322,6 +3347,10 @@ def _gis_perception_timeline_summary(
             "semantic_compatibility_required": True,
             "semantic_judgement_source": "pydantic_ai_structured_judgement",
             "deterministic_coordinate_merge": True,
+            "coordinate_merge_strategy": "walked_route_projected_member_medoid",
+            "walked_route_corridor_m": route_corridor_m,
+            "walked_route_geometry_count": len(walked_route_geometries or []),
+            "outside_corridor_candidates_excluded": bool(walked_route_geometries),
             "pydantic_ai_sets_reason_not_final_truth": True,
         },
         "nearby_grouping": {
@@ -3504,7 +3533,11 @@ def _aggregate_gis_perception_timeline_checkpoints(
     candidates: list[dict[str, Any]],
     *,
     radius_m: float,
+    walked_route_geometries: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
+    walked_route_edges = _walked_route_projection_edges(
+        walked_route_geometries or []
+    )
     clusters: list[list[dict[str, Any]]] = []
     for candidate in candidates:
         for cluster in clusters:
@@ -3514,7 +3547,13 @@ def _aggregate_gis_perception_timeline_checkpoints(
         else:
             clusters.append([candidate])
     return [
-        _merged_gis_perception_timeline_checkpoint(index, cluster, radius_m=radius_m)
+        _merged_gis_perception_timeline_checkpoint(
+            index,
+            cluster,
+            radius_m=radius_m,
+            walked_route_geometries=walked_route_geometries,
+            walked_route_edges=walked_route_edges,
+        )
         for index, cluster in enumerate(clusters, start=1)
     ]
 
@@ -3553,10 +3592,28 @@ def _merged_gis_perception_timeline_checkpoint(
     cluster: list[dict[str, Any]],
     *,
     radius_m: float,
+    walked_route_geometries: list[dict[str, Any]] | None = None,
+    walked_route_edges: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     representative = cluster[0]
-    lat = sum(float(item["lat"]) for item in cluster) / len(cluster)
-    lon = sum(float(item["lon"]) for item in cluster) / len(cluster)
+    anchor = _gis_perception_cluster_member_medoid(cluster)
+    route_projection = anchor.get("walked_route_projection")
+    if route_projection is None and walked_route_geometries:
+        route_projection = _nearest_walked_route_projection(
+            anchor,
+            walked_route_geometries,
+            walked_route_edges=walked_route_edges,
+        )
+    if route_projection is not None:
+        lat = float(route_projection["lat"])
+        lon = float(route_projection["lon"])
+        route_alignment_status = "aligned_to_walked_route"
+        coordinate_merge_strategy = "walked_route_projected_member_medoid"
+    else:
+        lat = float(anchor["lat"])
+        lon = float(anchor["lon"])
+        route_alignment_status = "source_member_medoid"
+        coordinate_merge_strategy = "source_member_medoid"
     merged_candidate_ids = [item["candidate_id"] for item in cluster]
     source_attribution = _merge_source_attributions(cluster)
     summaries = _unique_limited(item.get("route_note_summary", "") for item in cluster)
@@ -3591,6 +3648,21 @@ def _merged_gis_perception_timeline_checkpoint(
         ),
         "lat": round(lat, 7),
         "lon": round(lon, 7),
+        "source_anchor_coordinate": {
+            "lat": round(float(anchor["lat"]), 7),
+            "lon": round(float(anchor["lon"]), 7),
+        },
+        "route_alignment_status": route_alignment_status,
+        "route_projection_distance_m": (
+            round(float(route_projection["projection_distance_m"]), 2)
+            if route_projection is not None
+            else None
+        ),
+        "route_projection_source_id": (
+            route_projection.get("route_source_id")
+            if route_projection is not None
+            else None
+        ),
         "source_attribution": source_attribution,
         "source_attribution_count": len(source_attribution),
         "source_refs": source_refs,
@@ -3618,6 +3690,7 @@ def _merged_gis_perception_timeline_checkpoint(
             "remain independent review items and runtime safety truth is false."
         ),
         "merged_candidate_ids": merged_candidate_ids,
+        "member_count": len(cluster),
         "route_note_summaries": summaries,
         "route_note_summary": (
             representative.get("route_note_summary", "")
@@ -3632,17 +3705,30 @@ def _merged_gis_perception_timeline_checkpoint(
             "semantic_aggregation_key": representative.get("semantic_aggregation_key"),
             "semantic_compatibility_required": True,
             "representative_candidate_id": representative["candidate_id"],
+            "anchor_candidate_id": anchor["candidate_id"],
             "merged_candidate_ids": merged_candidate_ids,
-            "deterministic_coordinate_merge": "centroid",
+            "deterministic_coordinate_merge": coordinate_merge_strategy,
+            "route_projection_distance_m": (
+                round(float(route_projection["projection_distance_m"]), 2)
+                if route_projection is not None
+                else None
+            ),
+            "route_projection_source_id": (
+                route_projection.get("route_source_id")
+                if route_projection is not None
+                else None
+            ),
             "semantic_judgement_source": "pydantic_ai_structured_judgement",
         },
     }
-    display_source = (
-        merged
+    merged.pop("walked_route_projection", None)
+    display_label = (
+        _gis_perception_candidate_display_label(merged)
         if len(cluster) == 1
-        else {**merged, "display_label": "", "map_label": "", "label": ""}
+        else _gis_perception_cluster_display_label(cluster)
     )
-    display_label = _gis_perception_candidate_display_label(display_source)
+    merged["cluster_name"] = display_label
+    merged["label"] = display_label
     merged["display_label"] = display_label
     merged["map_label"] = display_label
     return merged
@@ -3915,8 +4001,9 @@ def _apply_gis_perception_nearby_groups(
             }
             for item in group
         ]
-        center_lat = sum(float(item["lat"]) for item in group) / len(group)
-        center_lon = sum(float(item["lon"]) for item in group) / len(group)
+        group_anchor = _gis_perception_cluster_member_medoid(group)
+        center_lat = float(group_anchor["lat"])
+        center_lon = float(group_anchor["lon"])
         source_refs = _unique_limited(
             [
                 *[ref for item in group for ref in item.get("source_refs", [])],
@@ -3961,9 +4048,11 @@ def _apply_gis_perception_nearby_groups(
             ),
             "member_count": len(group),
             "member_candidate_ids": [item["candidate_id"] for item in group],
+            "anchor_candidate_id": group_anchor["candidate_id"],
             "lat": round(center_lat, 7),
             "lon": round(center_lon, 7),
             "radius_m": radius_m,
+            "deterministic_coordinate_merge": "member_medoid",
             "semantic_merge_allowed": False,
             "members": members,
             "semantic_keys": sorted(
@@ -3975,6 +4064,8 @@ def _apply_gis_perception_nearby_groups(
             ),
         }
         display_label = _gis_nearby_group_display_label(nearby_group)
+        nearby_group["cluster_name"] = display_label
+        nearby_group["label"] = display_label
         nearby_group["display_label"] = display_label
         nearby_group["map_label"] = display_label
         nearby_groups.append(nearby_group)
@@ -4012,14 +4103,13 @@ def _gis_perception_nearby_group_member(
     *,
     radius_m: float,
 ) -> bool:
-    center_lat = sum(float(item["lat"]) for item in group) / len(group)
-    center_lon = sum(float(item["lon"]) for item in group) / len(group)
+    anchor = _gis_perception_cluster_member_medoid(group)
     return (
         _haversine_m(
             float(candidate["lat"]),
             float(candidate["lon"]),
-            center_lat,
-            center_lon,
+            float(anchor["lat"]),
+            float(anchor["lon"]),
         )
         <= radius_m
     )
@@ -4065,6 +4155,229 @@ def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
         + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2) ** 2
     )
     return earth_radius_m * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def _gis_perception_walked_route_geometries(
+    primary_route_geometry: dict[str, Any] | None,
+    reference_tracks: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
+    geometries: list[dict[str, Any]] = []
+    if isinstance(primary_route_geometry, dict) and _display_geometry_coordinate_segments(
+        primary_route_geometry
+    ):
+        geometries.append(primary_route_geometry)
+    for track in (reference_tracks or {}).get("reference_tracks", []):
+        if not isinstance(track, dict):
+            continue
+        display_geometry = track.get("display_geometry")
+        if not isinstance(display_geometry, dict):
+            continue
+        if not _display_geometry_coordinate_segments(display_geometry):
+            continue
+        geometries.append(
+            {
+                **display_geometry,
+                "source_id": track.get("reference_id")
+                or display_geometry.get("source_id"),
+            }
+        )
+    return geometries
+
+
+def _gis_perception_candidates_in_walked_route_corridor(
+    candidates: list[dict[str, Any]],
+    *,
+    walked_route_geometries: list[dict[str, Any]] | None,
+    route_corridor_m: float,
+) -> tuple[list[dict[str, Any]], int]:
+    walked_route_edges = _walked_route_projection_edges(
+        walked_route_geometries or []
+    )
+    if not walked_route_edges:
+        return candidates, 0
+
+    eligible: list[dict[str, Any]] = []
+    filtered_count = 0
+    for candidate in candidates:
+        projection = _nearest_walked_route_projection(
+            candidate,
+            walked_route_geometries or [],
+            walked_route_edges=walked_route_edges,
+            max_distance_m=route_corridor_m,
+        )
+        if (
+            projection is None
+            or float(projection["projection_distance_m"]) > route_corridor_m
+        ):
+            filtered_count += 1
+            continue
+        eligible.append(
+            {
+                **candidate,
+                "walked_route_projection": projection,
+            }
+        )
+    return eligible, filtered_count
+
+
+def _walked_route_projection_edges(
+    walked_route_geometries: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    edges: list[dict[str, Any]] = []
+    for geometry_index, geometry in enumerate(walked_route_geometries):
+        if not isinstance(geometry, dict):
+            continue
+        route_source_id = str(
+            geometry.get("source_id") or f"walked_route_geometry.{geometry_index:03d}"
+        )
+        cumulative_m = 0.0
+        for segment_index, segment in enumerate(
+            _display_geometry_coordinate_segments(geometry)
+        ):
+            for edge_index, (start, end) in enumerate(zip(segment, segment[1:])):
+                edge_m = _haversine_m(
+                    start["lat"],
+                    start["lon"],
+                    end["lat"],
+                    end["lon"],
+                )
+                if edge_m <= 0:
+                    continue
+                edges.append(
+                    {
+                        "start": start,
+                        "end": end,
+                        "edge_m": edge_m,
+                        "route_distance_before_edge_m": cumulative_m,
+                        "route_source_id": route_source_id,
+                        "route_geometry_index": geometry_index,
+                        "route_segment_index": segment_index,
+                        "route_edge_index": edge_index,
+                        "min_lat": min(start["lat"], end["lat"]),
+                        "max_lat": max(start["lat"], end["lat"]),
+                        "min_lon": min(start["lon"], end["lon"]),
+                        "max_lon": max(start["lon"], end["lon"]),
+                    }
+                )
+                cumulative_m += edge_m
+    return edges
+
+
+def _nearest_walked_route_projection(
+    point: dict[str, Any],
+    walked_route_geometries: list[dict[str, Any]],
+    *,
+    walked_route_edges: list[dict[str, Any]] | None = None,
+    max_distance_m: float | None = None,
+) -> dict[str, Any] | None:
+    try:
+        point_lat = float(point["lat"])
+        point_lon = float(point["lon"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not (math.isfinite(point_lat) and math.isfinite(point_lon)):
+        return None
+
+    earth_radius_m = 6_371_000.0
+    meters_per_lat_degree = earth_radius_m * math.pi / 180.0
+    lat_margin = (
+        max_distance_m / meters_per_lat_degree
+        if max_distance_m is not None
+        else None
+    )
+    lon_margin = (
+        max_distance_m
+        / max(1.0, meters_per_lat_degree * math.cos(math.radians(point_lat)))
+        if max_distance_m is not None
+        else None
+    )
+    best: dict[str, Any] | None = None
+    edges = walked_route_edges
+    if edges is None:
+        edges = _walked_route_projection_edges(walked_route_geometries)
+    for edge in edges:
+        if lat_margin is not None and lon_margin is not None:
+            if (
+                float(edge["max_lat"]) < point_lat - lat_margin
+                or float(edge["min_lat"]) > point_lat + lat_margin
+                or float(edge["max_lon"]) < point_lon - lon_margin
+                or float(edge["min_lon"]) > point_lon + lon_margin
+            ):
+                continue
+        start = edge["start"]
+        end = edge["end"]
+        edge_m = float(edge["edge_m"])
+        reference_lat = math.radians(
+            (point_lat + start["lat"] + end["lat"]) / 3.0
+        )
+        meters_per_lon_degree = meters_per_lat_degree * math.cos(reference_lat)
+        start_x = (start["lon"] - point_lon) * meters_per_lon_degree
+        start_y = (start["lat"] - point_lat) * meters_per_lat_degree
+        end_x = (end["lon"] - point_lon) * meters_per_lon_degree
+        end_y = (end["lat"] - point_lat) * meters_per_lat_degree
+        vector_x = end_x - start_x
+        vector_y = end_y - start_y
+        vector_length_sq = vector_x * vector_x + vector_y * vector_y
+        fraction = (
+            0.0
+            if vector_length_sq <= 0
+            else max(
+                0.0,
+                min(
+                    1.0,
+                    -(start_x * vector_x + start_y * vector_y) / vector_length_sq,
+                ),
+            )
+        )
+        projected_lat = start["lat"] + (end["lat"] - start["lat"]) * fraction
+        projected_lon = start["lon"] + (end["lon"] - start["lon"]) * fraction
+        projection_distance_m = _haversine_m(
+            point_lat,
+            point_lon,
+            projected_lat,
+            projected_lon,
+        )
+        if best is None or projection_distance_m < float(
+            best["projection_distance_m"]
+        ):
+            best = {
+                "lat": projected_lat,
+                "lon": projected_lon,
+                "projection_distance_m": projection_distance_m,
+                "route_distance_m": float(edge["route_distance_before_edge_m"])
+                + edge_m * fraction,
+                "route_source_id": edge["route_source_id"],
+                "route_geometry_index": edge["route_geometry_index"],
+                "route_segment_index": edge["route_segment_index"],
+                "route_edge_index": edge["route_edge_index"],
+            }
+    return best
+
+
+def _gis_perception_cluster_member_medoid(
+    cluster: list[dict[str, Any]],
+) -> dict[str, Any]:
+    def score(index_and_item: tuple[int, dict[str, Any]]) -> tuple[float, ...]:
+        index, item = index_and_item
+        total_distance_m = sum(
+            _haversine_m(
+                float(item["lat"]),
+                float(item["lon"]),
+                float(other["lat"]),
+                float(other["lon"]),
+            )
+            for other in cluster
+        )
+        source_priority = (
+            0.0 if item.get("source_profile") == "gpx_corpus_route_notes" else 1.0
+        )
+        projection = item.get("walked_route_projection") or {}
+        projection_distance_m = float(
+            projection.get("projection_distance_m", float("inf"))
+        )
+        return source_priority, total_distance_m, projection_distance_m, float(index)
+
+    return min(enumerate(cluster), key=score)[1]
 
 
 def _safe_view_key(value: str) -> str:
@@ -4221,6 +4534,98 @@ def _gis_perception_candidate_display_label(candidate: dict[str, Any]) -> str:
     return _checkpoint_type_label(candidate.get("checkpoint_type"))
 
 
+def _gis_perception_cluster_display_label(
+    cluster: list[dict[str, Any]],
+) -> str:
+    cleaned: list[tuple[str, bool]] = []
+    generic_osm_labels = {
+        "泉水／水源",
+        "水源",
+        "避難點",
+        "涼亭／避難點",
+        "停車／接駁點",
+        "地形風險",
+        "路線候選",
+    }
+    for candidate in cluster:
+        label = str(
+            candidate.get("route_note_summary")
+            or candidate.get("display_label")
+            or candidate.get("map_label")
+            or _gis_perception_candidate_display_label(candidate)
+        )
+        label = re.sub(r"<[^>]+>", " ", label).split(" | ", 1)[0]
+        label = re.sub(r"^OSM\s+", "", label).strip()
+        label = label.replace("/", "／")
+        label = re.sub(r"^0*\d{1,3}\s*[-._]?\s*", "", label)
+        label = re.sub(r"(?<=[\u3400-\u9fff])0?\d{1,2}\s*$", "", label)
+        label = re.sub(r"\s+", " ", label).strip(" -／、")
+        if not label:
+            continue
+        generic_osm = (
+            candidate.get("source_profile") == "overpass_osm_tags"
+            and label in generic_osm_labels
+        )
+        cleaned.append((label, generic_osm))
+
+    if any(not generic_osm for _, generic_osm in cleaned):
+        cleaned = [item for item in cleaned if not item[1]]
+    labels = _unique_limited((label for label, _ in cleaned), limit=12)
+    if not labels:
+        return _semantic_key_label(cluster[0].get("semantic_aggregation_key")) or (
+            _checkpoint_type_label(cluster[0].get("checkpoint_type"))
+        )
+
+    semantic_key = cluster[0].get("semantic_aggregation_key")
+    compact_labels = [
+        re.sub(r"[（(][^）)]*[）)]", "", label).strip() for label in labels
+    ]
+    if semantic_key == "route:cut":
+        if all("上切" in label for label in compact_labels):
+            return "上切點"
+        if all("下切" in label for label in compact_labels):
+            return "下切點"
+
+    base_labels = [
+        re.sub(r"(?:起點|終點|結束)$", "", label).strip()
+        for label in compact_labels
+    ]
+    unique_base_labels = _unique_limited(base_labels, limit=12)
+    if len(unique_base_labels) == 1:
+        return _readable_label_text(unique_base_labels[0])
+
+    for suffix in ("避難營地", "營地", "水源", "崩塌地", "崩壁", "上切點", "下切點"):
+        if not all(label.endswith(suffix) for label in unique_base_labels):
+            continue
+        prefixes = _unique_limited(
+            (label[: -len(suffix)].strip() for label in unique_base_labels),
+            limit=4,
+        )
+        prefixes = [prefix for prefix in prefixes if prefix]
+        if prefixes and all(len(prefix) <= 6 for prefix in prefixes):
+            combined = f"{'／'.join(prefixes)}{suffix}"
+            if len(combined) <= 28:
+                return _readable_label_text(combined)
+
+    joined = "、".join(unique_base_labels)
+    if len(joined) <= 28:
+        return _readable_label_text(joined)
+    semantic_group_labels = {
+        "route:detour": "繞路點群",
+        "route:cut": "切線點群",
+        "route:vegetation": "植被路段群",
+        "route:path_condition": "路況點群",
+        "hazard:collapse": "崩塌點群",
+        "hazard:cliff": "斷崖點群",
+        "hazard:rope": "繩索地形群",
+        "hazard:terrain": "地形風險群",
+        "resource:water": "水源群",
+        "resource:camp_or_shelter": "營地／避難點群",
+        "access:parking": "停車／接駁點群",
+    }
+    return semantic_group_labels.get(str(semantic_key), "GIS CP 群")
+
+
 def _gis_nearby_group_display_label(group: dict[str, Any]) -> str:
     member_labels = _unique_limited(
         [
@@ -4232,15 +4637,15 @@ def _gis_nearby_group_display_label(group: dict[str, Any]) -> str:
     )
     member_labels = [label for label in member_labels if label]
     if member_labels:
-        return _readable_label_text(f"附近 CP: {' / '.join(member_labels)}")
+        return _readable_label_text(f"附近：{'、'.join(member_labels)}")
     semantic_labels = _unique_limited(
         [_semantic_key_label(key) for key in group.get("semantic_keys", [])],
         limit=2,
     )
     semantic_labels = [label for label in semantic_labels if label]
     if semantic_labels:
-        return _readable_label_text(f"附近 CP: {' / '.join(semantic_labels)}")
-    return "附近 CP"
+        return _readable_label_text(f"附近：{'、'.join(semantic_labels)}")
+    return "附近 CP 群"
 
 
 def _review_queue_with_gis_perception_items(

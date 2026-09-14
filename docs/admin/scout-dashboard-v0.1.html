@@ -28231,11 +28231,11 @@
         sublabel: `${item.checkpoint_type || "checkpoint"} | ${item.review_state || item.status || "candidate"}`,
       }), "checkpoint");
       add("default", "AI GIS CP", view.gis_perception_timeline?.checkpoint_candidates, (item) => ({
-        label: item.display_label || item.map_label || item.route_note_summary || item.candidate_id,
-        sublabel: `${item.checkpoint_type || "checkpoint"} | group ${item.nearby_group_id || "-"} | ${item.route_note_freshness || "unknown"}`,
+        label: item.display_label || item.map_label || item.cluster_name || item.label || item.route_note_summary || item.candidate_id,
+        sublabel: `${item.checkpoint_type || "checkpoint"} | ${item.member_count || 1} 筆來源 | ${item.nearby_group_label || (Number(item.nearby_group_size || 1) > 1 ? `附近 ${item.nearby_group_size} CP` : "單一位置")} | ${item.route_note_freshness || "unknown"}`,
       }), "checkpoint");
       add("default", "GIS CP Areas", view.gis_perception_timeline?.nearby_groups, (item) => ({
-        label: item.display_label || item.map_label || item.nearby_group_id,
+        label: item.display_label || item.map_label || item.cluster_name || item.label || item.nearby_group_id,
         sublabel: `${item.member_count || 0} CP | ${asArray(item.semantic_keys).join(", ") || "mixed"}`,
       }), "checkpoint");
       add("default", "Major Critical Points", view.major_critical_points?.candidates, (item) => ({
