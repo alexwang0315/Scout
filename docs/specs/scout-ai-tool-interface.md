@@ -4,13 +4,13 @@ This interface gives Scout AI a deterministic way to read available tool
 contracts and run read-only local evidence tools without depending on prompt-only
 knowledge.
 
-## Implementation Update 2026-09-11
+## Implementation Update 2026-09-14
 
-Scout AI's Mac runtime and Pi dependency manifests target Pydantic AI v2.42.0.
-The September 10 upgrade is local only, not a new hardware deployment.
+Scout AI's Mac runtime and Pi dependency manifests target Pydantic AI v2.43.0.
+The September 14 upgrade is local only, not a new hardware deployment.
 Tool execution remains deterministic and read-only by default:
 
-- `pydantic-ai-slim[duckduckgo,mcp,openai,openrouter]` is pinned to v2.42.0 for Pi
+- `pydantic-ai-slim[duckduckgo,mcp,openai,openrouter]` is pinned to v2.43.0 for Pi
   admin/live runtimes and the local development venv.
 - Scout keeps `pydantic_ai.Agent(end_strategy="early")` for typed Scout
   provider calls. This intentionally avoids Pydantic AI v2's default graceful
@@ -94,6 +94,19 @@ Tool execution remains deterministic and read-only by default:
   `$ref` definitions must retain scalar/list/union types in signatures instead
   of becoming empty object types. See the
   [2.42 compatibility report](../evals/scout-ai-pydantic-242-smoke-20260910.md).
+- The v2.43 smoke exercises OpenAI and OpenRouter text/tool/text streaming,
+  including thinking tags and multiple tool boundaries. Every text/reasoning
+  delta must belong to an open part, and source refs and tool-call/result IDs
+  must survive into the consumer stream. These are fixture-backed transport
+  regressions, not evidence of improved answer quality.
+- Pydantic AI v2.43 prints a first-run banner to interactive stderr. The smoke
+  requires machine-readable stdout to remain clean and verifies one banner per
+  process plus the `BANNER_ENABLED=False`, `PYDANTIC_AI_NO_BANNER=1`, and CI
+  suppression contracts in credential-free subprocesses. Scout does not disable
+  native research or change model policy to suppress informational output.
+  There is no Scout Temporal execution path to exercise the separate upstream
+  Temporal/MCP fix. See the
+  [2.43 compatibility report](../evals/scout-ai-pydantic-243-smoke-20260914.md).
 - Optional Praison intelligence dependencies target `praisonaiagents==1.7.5`.
   Real SDK orchestration, MCP lifecycle, Scout Model Gateway replay, and isolated
   opt-in file memory are compatibility checks, not new authority or implicit

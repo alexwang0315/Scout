@@ -45,8 +45,9 @@ from scout.agents.pydantic_ai_compat import (
     pydantic_agent_runtime_kwargs,
     pydantic_native_research_capabilities,
 )
+from scout.cli.pydantic_243_checks import check_banner_output, check_stream_boundaries
 
-REQUIRED_VERSION = "2.42.0"
+REQUIRED_VERSION = "2.43.0"
 DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4-flash-0731"
 DEFAULT_TIMEOUT_SECONDS = 120.0
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -179,6 +180,8 @@ def _offline_checks(
         ("v242_deferred_approvals", _offline_v242_deferred_approvals),
         ("v242_tool_content_history", _offline_v242_tool_content_history),
         ("v242_code_mode_refs", _offline_v242_code_mode_refs),
+        ("v243_stream_boundaries", check_stream_boundaries),
+        ("v243_banner_output", check_banner_output),
         ("openrouter_web_search_annotations", _offline_openrouter_annotations),
         ("instrumentation_v6_tool_role", _offline_instrumentation_v6_tool_role),
         ("function_tool_call", _offline_function_tool_call),

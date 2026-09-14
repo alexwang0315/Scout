@@ -4,9 +4,9 @@ Status: experimental working architecture, not production promotion
 Date: 2026-08-23
 Authority: candidate-only; production Scout behavior is unchanged
 
-## Dependency Compatibility Update 2026-09-11
+## Dependency Compatibility Update 2026-09-14
 
-The local control plane now targets Pydantic AI 2.42.0, and the optional
+The local control plane now targets Pydantic AI 2.43.0, and the optional
 intelligence SDK targets `praisonaiagents==1.7.5` in the package extra.
 The in-progress Pi intelligence sidecar remains a separate deployment change.
 Earlier 1.7.0 qualification evidence below remains a
@@ -29,6 +29,15 @@ configuration, and opt-in typed workflow state. Workflow handlers must return
 `StepResult(variables=...)`; mutating a handler's context copy does not persist
 updates. Include generated `input` and named step-output fields when validating
 the complete returned variables against a typed state model.
+
+The September 14 Pydantic-only upgrade keeps Praison 1.7.5, provider selection,
+and deployment state unchanged. The existing compatibility entrypoint gains
+OpenAI/OpenRouter text-tool-text stream lifecycle and isolated CLI banner/JSON
+checks. Real OpenRouter tool/MCP/search/fetch smoke remains separate from the
+network-free fixtures and from semantic answer qualification. No Temporal
+runtime is integrated in Scout, so its optional upstream fix is not a claim of
+local workflow execution. See the
+[2.43 verification report](../evals/scout-ai-pydantic-243-smoke-20260914.md).
 
 Do not infer safe same-event-loop Team reuse, accurate SDK sync latency, or
 arbitrary provider SSE support from this upgrade. Three upstream limitations

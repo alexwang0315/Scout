@@ -29,8 +29,8 @@ def test_offline_pydantic_ai_compatibility_smoke_passes() -> None:
     assert report["status"] == "passed"
     assert report["required_version"] == installed_version
     assert report["configured_version"] == REQUIRED_VERSION
-    assert report["check_count"] == 23
-    assert report["passed_count"] == 23
+    assert report["check_count"] == 25
+    assert report["passed_count"] == 25
     assert report["failed_count"] == 0
     assert report["live_openrouter_requested"] is False
     assert {item["name"] for item in report["checks"]} == {
@@ -41,6 +41,8 @@ def test_offline_pydantic_ai_compatibility_smoke_passes() -> None:
         "v242_deferred_approvals",
         "v242_tool_content_history",
         "v242_code_mode_refs",
+        "v243_stream_boundaries",
+        "v243_banner_output",
         "openrouter_web_search_annotations",
         "instrumentation_v6_tool_role",
         "function_tool_call",
@@ -70,6 +72,13 @@ def test_offline_pydantic_ai_compatibility_smoke_passes() -> None:
     assert by_name["v242_deferred_approvals"]["details"]["invalid_approval_rejected"]
     assert by_name["v242_tool_content_history"]["details"]["source_refs_preserved"]
     assert by_name["v242_code_mode_refs"]["details"]["non_object_refs_inlined"]
+    streams = by_name["v243_stream_boundaries"]["details"]
+    assert streams["case_count"] == 8
+    assert streams["network_performed"] is False
+    assert all(case["stream_lifecycle_valid"] for case in streams["cases"])
+    banners = by_name["v243_banner_output"]["details"]
+    assert len(banners["cases"]) == 4
+    assert all(case["stdout_json_valid"] for case in banners["cases"])
     mcp_details = by_name["mcp_instructions_and_tool"]["details"]
     assert "FunctionToolCallEvent" in mcp_details["event_types"]
     assert "FunctionToolResultEvent" in mcp_details["event_types"]
@@ -101,8 +110,8 @@ def test_runtime_and_deployment_dependency_pins_stay_aligned() -> None:
         "requirements.pi.live.txt",
     } <= dependency_sets.keys()
     expected_versions = {
-        "pydantic-ai-slim": "2.42.0",
-        "pydantic-evals": "2.42.0",
+        "pydantic-ai-slim": "2.43.0",
+        "pydantic-evals": "2.43.0",
         "praisonaiagents": "1.7.5",
     }
     seen = set()

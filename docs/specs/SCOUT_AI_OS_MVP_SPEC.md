@@ -35,7 +35,7 @@ architecture. The implemented core includes:
 - local notification gateway and runtime tick loop;
 - provider-backed agent facades with a local `FunctionModel` default;
 - model policy, timeout/cost SLA gateway, and external-model fallback handling;
-- Pydantic AI v2.42.0 compatibility helpers;
+- Pydantic AI v2.43.0 compatibility helpers;
 - generated capability sandbox verification;
 - FastAPI routes and focused API/runtime tests;
 - Scout AI read-only workspace tool workflow:
@@ -94,7 +94,7 @@ Build a Raspberry Pi-compatible Scout core that supports:
 
 - Natural-language request intake.
 - Pydantic AI-based workflow compilation.
-- Pydantic AI v2.42.0 model execution with explicit model policy, OpenRouter and
+- Pydantic AI v2.43.0 model execution with explicit model policy, OpenRouter and
   OpenAI-chat provider semantics, and local FunctionModel fallback.
 - Capability search and registry.
 - Execution planning.
@@ -304,8 +304,8 @@ MVP package choices:
 ```text
 python >= 3.12
 pydantic >= 2
-pydantic-ai-slim[duckduckgo,mcp,openai,openrouter] == 2.42.0
-pydantic-evals == 2.42.0
+pydantic-ai-slim[duckduckgo,mcp,openai,openrouter] == 2.43.0
+pydantic-evals == 2.43.0
 fastapi
 uvicorn
 aiosqlite or sqlite3 wrapper
@@ -328,9 +328,9 @@ dbos
 mcp clients
 ```
 
-Pydantic AI v2.42.0 operating rules:
+Pydantic AI v2.43.0 operating rules:
 
-- Slim, Evals and Graph must resolve to the same `2.42.0` family. The September 10
+- Slim, Evals and Graph must resolve to the same `2.43.0` family. The September 14
   upgrade covers local dependencies and compatibility only, not a new hardware
   deployment or improved answer accuracy. Focused regressions retain the 2.38
   capability merge, search/fetch, cancellation, and finish-reason contracts,
@@ -346,6 +346,15 @@ Pydantic AI v2.42.0 operating rules:
   Approval fixtures never authorize real effects; the upgrade does not enable
   Copilot authentication, unrestricted code execution or new providers. See the
   [2.42 compatibility report](../evals/scout-ai-pydantic-242-smoke-20260910.md).
+
+- The 2.43 update adds OpenAI/OpenRouter text-tool-text lifecycle regression
+  coverage, preserving tool receipts and source references across single and
+  repeated boundaries with or without reasoning tags. CLI JSON must not be
+  contaminated by the new interactive stderr banner; opt-out and CI behavior
+  are tested in isolated subprocesses. Temporal is not a Scout execution path
+  and is not installed merely to exercise an upstream optional-runtime fix.
+  Praison stays at 1.7.5. See the
+  [2.43 compatibility report](../evals/scout-ai-pydantic-243-smoke-20260914.md).
 
 - Local September 11 compatibility also covers optional
   `praisonaiagents==1.7.5`, with Pydantic AI retained at 2.42.0. The SDK remains
@@ -922,9 +931,9 @@ Output:
 
 - `LearningBundle`
 
-### 7.6 Pydantic AI v2.42.0 Provider Policy
+### 7.6 Pydantic AI v2.43.0 Provider Policy
 
-Scout AI OS uses Pydantic AI v2.42.0 as a typed provider facade, not as an
+Scout AI OS uses Pydantic AI v2.43.0 as a typed provider facade, not as an
 unbounded autonomous runtime.
 
 Provider modes:
