@@ -1,6 +1,17 @@
 import json
 from pathlib import Path
 
+from weather_workflow_fixtures import (
+    CWA_ENVIRONMENT_TOOL_ID,
+    GEE_ENVIRONMENT_TOOL_ID,
+    REFERENCE_TIME,
+    WEATHER_TOOLS,
+    assert_exact_weather_execution,
+    assert_exact_tool_calls,
+    weather_tool_calls,
+    write_missing_weather_project,
+)
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -39,6 +50,7 @@ from scout_ai_answer_synthesis import collect_and_synthesize_scout_ai_answer
 from scout_ai_full_workflow import run_scout_ai_full_workflow
 from scout_ai_question_eval import evaluate_question, load_question_corpus
 from scout_ai_tool_planner import (
+    ROUTE_STRUCTURE_TOOL_ID,
     ENERGY_VITALS_TOOL_ID,
     INS_DR_TRACE_TOOL_ID,
     LIVE_NAVIGATION_STATE_TOOL_ID,
@@ -100,7 +112,7 @@ def test_workflow_eval_passes_answerable_cp_question_from_200_question_rules():
     assert result["passed"] is True
 
 
-def test_workflow_eval_passes_missing_weather_question_from_200_question_rules():
+def test_workflow_eval_passes_missing_weather_question_from_200_question_rules(tmp_path, weather_tool_calls):
     question = "哪些 CP 附近適合紮營？"
     question_eval = evaluate_question(
         {
@@ -114,7 +126,16 @@ def test_workflow_eval_passes_missing_weather_question_from_200_question_rules()
     assert WEATHER_WINDOW_TOOL_ID in question_eval.recommended_tool_ids
     assert "fresh_weather_or_nowcast_with_ttl" in question_eval.missing_evidence
 
-    response = _query_pretrip(question)
+    response = _query_pretrip(question, project_root=write_missing_weather_project(tmp_path, PROJECT_ROOT))
+    (tmp_path / "seed-007-response.json").write_text(
+        response.model_dump_json(indent=2), encoding="utf-8",
+    )
+    assert_exact_tool_calls((ROUTE_STRUCTURE_TOOL_ID, *WEATHER_TOOLS), weather_tool_calls)
+    full_workflow = _source_by_id(response, PRETRIP_FULL_WORKFLOW_SOURCE_ID).context_summary
+    ids = [source["tool_id"] for source in full_workflow["sources"]]
+    assert len(ids) == len(WEATHER_TOOLS) + 1
+    assert len(ids) == len(set(ids))
+    assert set(ids) == {ROUTE_STRUCTURE_TOOL_ID, *WEATHER_TOOLS}
     case = ScoutAiAssistantWorkflowEvalCase(
         case_id="seed-007",
         question=question,
@@ -129,7 +150,7 @@ def test_workflow_eval_passes_missing_weather_question_from_200_question_rules()
             WEATHER_WINDOW_TOOL_ID: ("provider", "ttl_s", "route_weather_package"),
         },
         expected_full_workflow_answerability="partial_evidence_with_missing_context",
-        expected_full_workflow_source_tool_ids=(WEATHER_WINDOW_TOOL_ID,),
+        expected_full_workflow_source_tool_ids=(ROUTE_STRUCTURE_TOOL_ID, *WEATHER_TOOLS),
         expected_full_workflow_missing_fields_by_tool={
             WEATHER_WINDOW_TOOL_ID: ("provider", "ttl_s", "route_weather_package"),
         },
@@ -163,10 +184,14 @@ def test_workflow_eval_passes_missing_weather_question_from_200_question_rules()
     assert result["full_workflow"]["artifact_kind"] == "scout_ai_full_workflow"
     assert result["full_workflow"]["answerability"] == "partial_evidence_with_missing_context"
     assert result["full_workflow"]["contract_gap_count"] == 0
-    assert result["full_workflow"]["missing_evidence_count"] == 1
+    assert result["full_workflow"]["missing_evidence_count"] == 2
     assert result["full_workflow"]["workflow_policy"]["model_provider_used"] is False
     assert result["full_workflow"]["boundary"]["runtime_safety_truth"] is False
-    assert result["full_workflow"]["sources"][0]["tool_id"] == WEATHER_WINDOW_TOOL_ID
+    weather_source = next(
+        source for source in result["full_workflow"]["sources"]
+        if source["tool_id"] == WEATHER_WINDOW_TOOL_ID
+    )
+    assert weather_source["tool_id"] == WEATHER_WINDOW_TOOL_ID
     assert {"provider", "ttl_s"}.issubset(
         set(result["full_workflow"]["missing_evidence"][0]["missing_fields"])
     )
@@ -175,8 +200,12 @@ def test_workflow_eval_passes_missing_weather_question_from_200_question_rules()
     assert WEATHER_WINDOW_TOOL_ID not in registry_source.context_summary[
         "missing_evidence_fields_by_tool"
     ]
-    assert result["completed_tool_results"][0]["tool_id"] == WEATHER_WINDOW_TOOL_ID
-    assert result["completed_tool_results"][0]["answerability"] == "weather_placeholder_only"
+    completed_weather = next(
+        item for item in result["completed_tool_results"]
+        if item["tool_id"] == WEATHER_WINDOW_TOOL_ID
+    )
+    assert completed_weather["tool_id"] == WEATHER_WINDOW_TOOL_ID
+    assert completed_weather["answerability"] == "weather_placeholder_only"
     assert result["contract_gap_sources"][0]["tool_id"] == WEATHER_WINDOW_TOOL_ID
     assert result["contract_gap_sources"][0]["status"] == "completed"
     assert {
@@ -293,14 +322,16 @@ def test_workflow_eval_checks_answer_synthesis_risk_terrain_artifact():
     assert result["boundary"]["runtime_safety_truth"] is False
 
 
-def test_workflow_eval_checks_answer_synthesis_weather_missing_evidence_artifact():
+def test_workflow_eval_checks_answer_synthesis_weather_missing_evidence_artifact(tmp_path, weather_tool_calls):
     question = "明天午後雷雨是否要紮營?"
     artifact = collect_and_synthesize_scout_ai_answer(
         question,
-        project_root=PROJECT_ROOT,
+        project_root=write_missing_weather_project(tmp_path, PROJECT_ROOT),
         project_id="chilai_nanhua_day1",
+        reference_time=REFERENCE_TIME,
         limit=3,
     )
+    assert_exact_weather_execution(artifact, WEATHER_TOOLS, weather_tool_calls)
     case = ScoutAiAssistantWorkflowEvalCase(
         case_id="answer-synthesis-weather-gap",
         question=question,
@@ -328,7 +359,7 @@ def test_workflow_eval_checks_answer_synthesis_weather_missing_evidence_artifact
     )
 
     assert result["passed"] is True
-    assert result["completed_source_ids"] == [WEATHER_WINDOW_TOOL_ID]
+    assert result["completed_source_ids"] == list(WEATHER_TOOLS)
     assert result["missing_evidence"][0]["tool_id"] == WEATHER_WINDOW_TOOL_ID
     assert {"provider", "ttl_s"}.issubset(
         set(result["missing_evidence"][0]["missing_fields"])
@@ -383,14 +414,16 @@ def test_workflow_eval_checks_full_workflow_risk_terrain_artifact():
     assert result["boundary"]["runtime_safety_truth"] is False
 
 
-def test_workflow_eval_checks_full_workflow_weather_missing_evidence_artifact():
+def test_workflow_eval_checks_full_workflow_weather_missing_evidence_artifact(tmp_path, weather_tool_calls):
     question = "明天午後雷雨是否要紮營?"
     artifact = run_scout_ai_full_workflow(
         question,
-        project_root=PROJECT_ROOT,
+        project_root=write_missing_weather_project(tmp_path, PROJECT_ROOT),
         project_id="chilai_nanhua_day1",
+        reference_time=REFERENCE_TIME,
         limit=3,
     )
+    assert_exact_weather_execution(artifact, WEATHER_TOOLS, weather_tool_calls)
     case = ScoutAiAssistantWorkflowEvalCase(
         case_id="full-workflow-weather-gap",
         question=question,
@@ -418,7 +451,7 @@ def test_workflow_eval_checks_full_workflow_weather_missing_evidence_artifact():
     )
 
     assert result["passed"] is True
-    assert result["completed_source_ids"] == [WEATHER_WINDOW_TOOL_ID]
+    assert result["completed_source_ids"] == list(WEATHER_TOOLS)
     assert result["missing_evidence"][0]["tool_id"] == WEATHER_WINDOW_TOOL_ID
     assert {"provider", "ttl_s"}.issubset(
         set(result["missing_evidence"][0]["missing_fields"])
@@ -742,13 +775,17 @@ def test_workflow_eval_builtin_tool_manifest_and_payload_are_read_only(tmp_path)
     assert "Scout AI Assistant Workflow Eval Report" in payload["markdown"]
 
 
-def test_workflow_eval_builtin_tool_uses_default_selected_cases(tmp_path):
+def test_workflow_eval_builtin_tool_uses_default_selected_cases(tmp_path, weather_tool_calls):
+    missing_root = write_missing_weather_project(tmp_path, PROJECT_ROOT)
     request_path = tmp_path / "workflow-eval-default-request.json"
     request_path.write_text(
         json.dumps(
             {
                 "corpus_path": str(CORPUS_PATH),
                 "project_root": str(PROJECT_ROOT),
+                "case_project_roots": {
+                    "seed-007": str(missing_root),
+                },
                 "project_id": "chilai_nanhua_day1",
                 "limit": 3,
             }
@@ -760,6 +797,14 @@ def test_workflow_eval_builtin_tool_uses_default_selected_cases(tmp_path):
         ["ai-assistant-workflow-eval", "--input", str(request_path), "--json"]
     )
 
+    (tmp_path / "workflow-eval-result.json").write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8",
+    )
+    seed_weather_calls = [
+        call for call in weather_tool_calls
+        if call[0].get("project_root") == str(missing_root)
+    ]
+    assert_exact_tool_calls((ROUTE_STRUCTURE_TOOL_ID, *WEATHER_TOOLS), seed_weather_calls)
     assert exit_code == 0
     assert payload["case_ids"] == list(DEFAULT_SELECTED_WORKFLOW_CASE_IDS)
     assert payload["report"]["case_count"] == len(DEFAULT_SELECTED_WORKFLOW_CASE_IDS)
@@ -831,11 +876,11 @@ def test_default_selected_workflow_cases_include_route_weather_risk_and_terrain(
     )
 
 
-def _query_pretrip(question: str) -> ScoutAssistantResponse:
+def _query_pretrip(question: str, *, project_root: Path = PROJECT_ROOT) -> ScoutAssistantResponse:
     client = TestClient(
         create_assistant_app(
             provider=FailingProvider(),
-            context_resolver=_pretrip_router_context_resolver(PROJECT_ROOT),
+            context_resolver=_pretrip_router_context_resolver(project_root),
         )
     )
     response = client.post(

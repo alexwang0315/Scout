@@ -1,0 +1,569 @@
+{
+  "reference_time": "2026-06-24T06:00:00Z",
+  "scenario": "explicitly acquired synthetic CWA/GEE support; original corridor metrics remain elevated and are not erased",
+  "artifacts": {
+    "outputs/environment/cwa/astronomy_timeline.json": {
+      "artifact_kind": "cwa_astronomy_timeline",
+      "dataset_ids": [
+        "A-B0062-001",
+        "A-B0063-001"
+      ],
+      "raw_response_hash": "sha256:cwa-astronomy-fixture",
+      "stale_risk": "low",
+      "events": [
+        {
+          "event": "sunset",
+          "time": "2026-06-24T10:48:00Z",
+          "local_time": "18:48"
+        }
+      ],
+      "candidate_only": true,
+      "runtime_safety_truth": false,
+      "human_review_required": true,
+      "request_timestamp": "2026-06-24T05:00:00Z"
+    },
+    "outputs/environment/cwa/cwa_weather_evidence.json": {
+      "artifact_kind": "cwa_weather_evidence",
+      "schema_version": "scout_cwa_weather_evidence.v0",
+      "dataset_ids": [
+        "W-C0033-001",
+        "O-A0002-001",
+        "F-C0041-001",
+        "F-D0047-093",
+        "A-B0062-001",
+        "F-A0021-001"
+      ],
+      "request_timestamp": "2026-06-24T05:00:00Z",
+      "raw_response_hash": "sha256:cwa-fixture",
+      "stale_risk": "low",
+      "candidate_only": true,
+      "runtime_safety_truth": false,
+      "human_review_required": true
+    },
+    "outputs/environment/cwa/forecast_timeline.json": {
+      "artifact_kind": "cwa_forecast_timeline",
+      "dataset_id": "F-D0047-093",
+      "raw_response_hash": "sha256:cwa-forecast-fixture",
+      "stale_risk": "low",
+      "events": [
+        {
+          "event": "township_forecast",
+          "valid_time": "2026-06-24T12:00:00Z",
+          "rain_probability_percent": 70,
+          "wind": "moderate"
+        }
+      ],
+      "candidate_only": true,
+      "runtime_safety_truth": false,
+      "human_review_required": true,
+      "request_timestamp": "2026-06-24T05:00:00Z"
+    },
+    "outputs/environment/cwa/observations.geojson": {
+      "type": "FeatureCollection",
+      "artifact_kind": "cwa_observation_layer",
+      "dataset_id": "O-A0002-001",
+      "raw_response_hash": "sha256:cwa-observation-fixture",
+      "stale_risk": "low",
+      "features": [
+        {
+          "type": "Feature",
+          "properties": {
+            "station": "Lushan rain station",
+            "rain_1h_mm": 8.5,
+            "rain_24h_mm": 42.0,
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          },
+          "geometry": {
+            "type": "Point",
+            "coordinates": [
+              121.17,
+              24.02
+            ]
+          }
+        }
+      ],
+      "candidate_only": true,
+      "runtime_safety_truth": false,
+      "human_review_required": true,
+      "request_timestamp": "2026-06-24T05:00:00Z"
+    },
+    "outputs/environment/cwa/qpf_corridor_summary.json": {
+      "artifact_kind": "cwa_qpf_corridor_summary",
+      "dataset_ids": [
+        "F-C0041-001"
+      ],
+      "raw_response_hash": "sha256:cwa-qpf-summary-fixture",
+      "request_timestamp": "2026-06-24T05:00:00Z",
+      "stale_risk": "low",
+      "max_mm": 32.0,
+      "mean_mm": 18.4,
+      "p95_mm": 29.1,
+      "peak_window": "2026-06-24T12:00:00Z/2026-06-24T18:00:00Z",
+      "heavy_rain_event_count": 1,
+      "update_policy": "regular_6h",
+      "qpf_update_cadence": "regular_6h",
+      "qpf_lead_time": "18h",
+      "qpf_accumulation": "6h",
+      "qpf_uncertainty": "mountain_orographic_and_convective_uncertainty",
+      "severe_weather_intensified_operation": false,
+      "candidate_only": true,
+      "runtime_safety_truth": false,
+      "human_review_required": true
+    },
+    "outputs/environment/cwa/qpf_grid.geojson": {
+      "type": "FeatureCollection",
+      "artifact_kind": "cwa_qpf_grid_layer",
+      "dataset_id": "F-C0041-001",
+      "raw_response_hash": "sha256:cwa-qpf-grid-fixture",
+      "stale_risk": "low",
+      "features": [
+        {
+          "type": "Feature",
+          "properties": {
+            "valid_time": "2026-06-24T12:00:00Z",
+            "accumulation_window_h": 6,
+            "qpf_mm": 32.0,
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          },
+          "geometry": {
+            "type": "Point",
+            "coordinates": [
+              121.25,
+              24.03
+            ]
+          }
+        }
+      ],
+      "candidate_only": true,
+      "runtime_safety_truth": false,
+      "human_review_required": true,
+      "request_timestamp": "2026-06-24T05:00:00Z"
+    },
+    "outputs/environment/cwa/qpf_route_timeline.json": {
+      "artifact_kind": "cwa_qpf_route_timeline_evidence",
+      "dataset_id": "F-C0041-001",
+      "raw_response_hash": "sha256:cwa-qpf-timeline-fixture",
+      "stale_risk": "low",
+      "events": [
+        {
+          "event": "qpf_peak_window",
+          "valid_time": "2026-06-24T12:00:00Z",
+          "segment_id": "SEG-02",
+          "qpf_mm": 32.0,
+          "candidate_only": true,
+          "runtime_safety_truth": false
+        }
+      ],
+      "candidate_only": true,
+      "runtime_safety_truth": false,
+      "human_review_required": true,
+      "request_timestamp": "2026-06-24T05:00:00Z"
+    },
+    "outputs/environment/cwa/tide_marine_timeline.json": {
+      "artifact_kind": "cwa_tide_marine_timeline",
+      "dataset_ids": [
+        "F-A0021-001",
+        "O-B0075-001"
+      ],
+      "raw_response_hash": "sha256:cwa-tide-fixture",
+      "stale_risk": "low",
+      "events": [
+        {
+          "event": "not_applicable_inland_route",
+          "candidate_only": true,
+          "runtime_safety_truth": false
+        }
+      ],
+      "candidate_only": true,
+      "runtime_safety_truth": false,
+      "human_review_required": true,
+      "request_timestamp": "2026-06-24T05:00:00Z"
+    },
+    "outputs/environment/cwa/warnings.geojson": {
+      "type": "FeatureCollection",
+      "artifact_kind": "cwa_warning_layer",
+      "dataset_id": "W-C0033-001",
+      "raw_response_hash": "sha256:cwa-warning-fixture",
+      "stale_risk": "low",
+      "features": [
+        {
+          "type": "Feature",
+          "properties": {
+            "name": "Nantou mountain heavy rain advisory",
+            "event": "heavy_rain",
+            "severity": "moderate",
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          },
+          "geometry": {
+            "type": "Point",
+            "coordinates": [
+              121.28,
+              24.05
+            ]
+          }
+        }
+      ],
+      "candidate_only": true,
+      "runtime_safety_truth": false,
+      "human_review_required": true,
+      "request_timestamp": "2026-06-24T05:00:00Z"
+    },
+    "outputs/environment/environment_evidence_package.json": {
+      "artifact_kind": "environment_evidence_package",
+      "schema_version": "scout_environment_evidence_package.v0",
+      "project_id": "chilai_nanhua_day1",
+      "generated_at": "2026-06-24T05:00:00Z",
+      "candidate_only": true,
+      "runtime_safety_truth": false,
+      "human_review_required": true,
+      "source_refs": [
+        "outputs/environment/cwa/qpf_corridor_summary.json",
+        "outputs/environment/gee/smap_l4_corridor_summary.json"
+      ],
+      "request_timestamp": "2026-06-24T05:00:00Z"
+    },
+    "outputs/environment/environment_factor_matrix.json": {
+      "artifact_kind": "environment_factor_matrix",
+      "schema_version": "scout_environment_factor_matrix.v0",
+      "qpf_accumulation": "0-24h 6h accumulation",
+      "qpf_peak_window": "2026-06-24T12:00:00Z/2026-06-24T18:00:00Z",
+      "qpf_update_cadence": "regular_6h",
+      "qpf_lead_time": "18h",
+      "qpf_uncertainty": "mountain_orographic_and_convective_uncertainty",
+      "severe_weather_intensified_operation": false,
+      "smap_surface_wetness": "elevated",
+      "gpm_antecedent_rain": "moderate",
+      "candidate_only": true,
+      "runtime_safety_truth": false,
+      "human_review_required": true,
+      "request_timestamp": "2026-06-24T05:00:00Z"
+    },
+    "outputs/environment/gee/antecedent_rain_grid.geojson": {
+      "type": "FeatureCollection",
+      "artifact_kind": "gee_antecedent_rain_grid",
+      "collection_id": "NASA/GPM_L3/IMERG_V07",
+      "raw_response_hash": "sha256:gee-antecedent-grid-fixture",
+      "stale_risk": "low",
+      "features": [
+        {
+          "type": "Feature",
+          "properties": {
+            "name": "route corridor rain cell",
+            "rain_24h_mm": 42.0,
+            "rain_72h_mm": 88.0,
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          },
+          "geometry": {
+            "type": "Point",
+            "coordinates": [
+              121.25,
+              24.03
+            ]
+          }
+        }
+      ],
+      "candidate_only": true,
+      "runtime_safety_truth": false,
+      "human_review_required": true,
+      "request_timestamp": "2026-06-24T05:00:00Z"
+    },
+    "outputs/environment/gee/gpm_imerg_corridor_summary.json": {
+      "artifact_kind": "gee_gpm_imerg_corridor_summary",
+      "collection_id": "NASA/GPM_L3/IMERG_V07",
+      "raw_response_hash": "sha256:gee-gpm-summary-fixture",
+      "request_timestamp": "2026-06-24T05:00:00Z",
+      "stale_risk": "low",
+      "metrics": {
+        "rain_1h_mm": {
+          "latest": 4.0,
+          "mean": 1.2,
+          "max": 6.0,
+          "p95": 5.8,
+          "trend": "rising"
+        },
+        "rain_3h_mm": {
+          "latest": 12.0,
+          "mean": 7.4,
+          "max": 15.0,
+          "p95": 14.1,
+          "trend": "rising"
+        },
+        "rain_24h_mm": {
+          "latest": 42.0,
+          "mean": 35.0,
+          "max": 51.0,
+          "p95": 49.2,
+          "trend": "rising"
+        },
+        "rain_72h_mm": {
+          "latest": 88.0,
+          "mean": 74.0,
+          "max": 101.0,
+          "p95": 96.0,
+          "trend": "rising"
+        }
+      },
+      "candidate_only": true,
+      "runtime_safety_truth": false,
+      "human_review_required": true
+    },
+    "outputs/environment/gee/gpm_imerg_raw_summary.json": {
+      "artifact_kind": "gee_gpm_imerg_raw_summary",
+      "collection_id": "NASA/GPM_L3/IMERG_V07",
+      "raw_response_hash": "sha256:gee-gpm-raw-fixture",
+      "stale_risk": "low",
+      "image_count": 72,
+      "candidate_only": true,
+      "runtime_safety_truth": false,
+      "human_review_required": true,
+      "request_timestamp": "2026-06-24T05:00:00Z"
+    },
+    "outputs/environment/gee/gpm_imerg_timeseries.json": {
+      "artifact_kind": "gee_gpm_imerg_timeseries",
+      "collection_id": "NASA/GPM_L3/IMERG_V07",
+      "raw_response_hash": "sha256:gee-gpm-timeseries-fixture",
+      "stale_risk": "low",
+      "timeseries": [
+        {
+          "time": "2026-06-24T00:00:00Z",
+          "rain_1h_mm": 4.0,
+          "rain_24h_mm": 42.0,
+          "rain_72h_mm": 88.0
+        }
+      ],
+      "candidate_only": true,
+      "runtime_safety_truth": false,
+      "human_review_required": true,
+      "request_timestamp": "2026-06-24T05:00:00Z"
+    },
+    "outputs/environment/gee/smap_l4_corridor_summary.json": {
+      "artifact_kind": "gee_smap_l4_corridor_summary",
+      "collection_id": "NASA/SMAP/SPL4SMGP/008",
+      "raw_response_hash": "sha256:gee-smap-summary-fixture",
+      "request_timestamp": "2026-06-24T05:00:00Z",
+      "stale_risk": "low",
+      "metrics": {
+        "sm_surface": {
+          "mean": 0.2943,
+          "max": 0.331,
+          "p95": 0.322,
+          "latest": 0.301,
+          "trend": "rising"
+        },
+        "sm_rootzone": {
+          "mean": 0.3094,
+          "max": 0.351,
+          "p95": 0.344,
+          "latest": 0.318,
+          "trend": "rising"
+        },
+        "sm_profile": {
+          "mean": 0.2948,
+          "max": 0.333,
+          "p95": 0.326,
+          "latest": 0.302,
+          "trend": "stable"
+        },
+        "sm_surface_wetness": {
+          "mean": 0.66,
+          "max": 0.82,
+          "p95": 0.78,
+          "latest": 0.74,
+          "trend": "rising"
+        },
+        "sm_rootzone_wetness": {
+          "mean": 0.61,
+          "max": 0.77,
+          "p95": 0.72,
+          "latest": 0.68,
+          "trend": "rising"
+        },
+        "surface_temp": {
+          "mean": 286.2,
+          "max": 289.1,
+          "p95": 288.7,
+          "latest": 287.0,
+          "trend": "stable"
+        }
+      },
+      "candidate_only": true,
+      "runtime_safety_truth": false,
+      "human_review_required": true
+    },
+    "outputs/environment/gee/smap_l4_timeseries.json": {
+      "artifact_kind": "gee_smap_l4_timeseries",
+      "collection_id": "NASA/SMAP/SPL4SMGP/008",
+      "raw_response_hash": "sha256:gee-smap-timeseries-fixture",
+      "stale_risk": "low",
+      "timeseries": [
+        {
+          "time": "2026-06-24T01:30:00Z",
+          "sm_surface": 0.301,
+          "sm_rootzone": 0.318,
+          "sm_surface_wetness": 0.74
+        }
+      ],
+      "candidate_only": true,
+      "runtime_safety_truth": false,
+      "human_review_required": true,
+      "request_timestamp": "2026-06-24T05:00:00Z"
+    },
+    "outputs/environment/gee/soil_moisture_grid.geojson": {
+      "type": "FeatureCollection",
+      "artifact_kind": "gee_soil_moisture_grid",
+      "collection_id": "NASA/SMAP/SPL4SMGP/008",
+      "raw_response_hash": "sha256:gee-soil-grid-fixture",
+      "stale_risk": "low",
+      "features": [
+        {
+          "type": "Feature",
+          "properties": {
+            "name": "route corridor cell",
+            "sm_surface": 0.301,
+            "sm_surface_wetness": 0.74,
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          },
+          "geometry": {
+            "type": "Point",
+            "coordinates": [
+              121.25,
+              24.03
+            ]
+          }
+        }
+      ],
+      "candidate_only": true,
+      "runtime_safety_truth": false,
+      "human_review_required": true,
+      "request_timestamp": "2026-06-24T05:00:00Z"
+    },
+    "outputs/environment/go_no_go_review_draft.json": {
+      "artifact_kind": "go_no_go_review_draft",
+      "schema_version": "scout_go_no_go_review_draft.v0",
+      "project_id": "chilai_nanhua_day1",
+      "review_items": [
+        {
+          "category": "weather_environment",
+          "label": "QPF plus wet soil compound review",
+          "candidate_only": true,
+          "runtime_safety_truth": false,
+          "human_review_required": true
+        }
+      ],
+      "candidate_only": true,
+      "runtime_safety_truth": false,
+      "human_review_required": true,
+      "request_timestamp": "2026-06-24T05:00:00Z"
+    }
+  },
+  "cwa_profiles": {
+    "background": {
+      "outputs/environment/cwa/qpf_corridor_summary.json": {
+        "artifact_kind": "cwa_qpf_corridor_summary",
+        "dataset_ids": [
+          "F-C0041-001"
+        ],
+        "raw_response_hash": "sha256:synthetic-regional-background-qpf_corridor_summary",
+        "request_timestamp": "2026-06-24T05:00:00Z",
+        "stale_risk": "low",
+        "max_mm": 12.0,
+        "mean_mm": 8.4,
+        "p95_mm": 11.1,
+        "peak_window": "2026-06-24T12:00:00Z/2026-06-24T18:00:00Z",
+        "heavy_rain_event_count": 0,
+        "update_policy": "regular_6h",
+        "qpf_update_cadence": "regular_6h",
+        "qpf_lead_time": "18h",
+        "qpf_accumulation": "6h",
+        "qpf_uncertainty": "mountain_orographic_and_convective_uncertainty",
+        "severe_weather_intensified_operation": false,
+        "candidate_only": true,
+        "runtime_safety_truth": false,
+        "human_review_required": true,
+        "fixture_scenario": "complete_regional_background_without_active_warning"
+      },
+      "outputs/environment/cwa/qpf_grid.geojson": {
+        "type": "FeatureCollection",
+        "artifact_kind": "cwa_qpf_grid_layer",
+        "dataset_id": "F-C0041-001",
+        "raw_response_hash": "sha256:synthetic-regional-background-qpf_grid",
+        "stale_risk": "low",
+        "features": [
+          {
+            "type": "Feature",
+            "properties": {
+              "valid_time": "2026-06-24T12:00:00Z",
+              "accumulation_window_h": 6,
+              "qpf_mm": 12.0,
+              "candidate_only": true,
+              "runtime_safety_truth": false
+            },
+            "geometry": {
+              "type": "Point",
+              "coordinates": [
+                121.25,
+                24.03
+              ]
+            }
+          }
+        ],
+        "candidate_only": true,
+        "runtime_safety_truth": false,
+        "human_review_required": true,
+        "request_timestamp": "2026-06-24T05:00:00Z",
+        "fixture_scenario": "complete_regional_background_without_active_warning"
+      },
+      "outputs/environment/cwa/qpf_route_timeline.json": {
+        "artifact_kind": "cwa_qpf_route_timeline_evidence",
+        "dataset_id": "F-C0041-001",
+        "raw_response_hash": "sha256:synthetic-regional-background-qpf_route_timeline",
+        "stale_risk": "low",
+        "events": [
+          {
+            "event": "qpf_peak_window",
+            "valid_time": "2026-06-24T12:00:00Z",
+            "segment_id": "SEG-02",
+            "qpf_mm": 12.0,
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          }
+        ],
+        "candidate_only": true,
+        "runtime_safety_truth": false,
+        "human_review_required": true,
+        "request_timestamp": "2026-06-24T05:00:00Z",
+        "fixture_scenario": "complete_regional_background_without_active_warning"
+      },
+      "outputs/environment/cwa/warnings.geojson": {
+        "type": "FeatureCollection",
+        "artifact_kind": "cwa_warning_layer",
+        "dataset_id": "W-C0033-001",
+        "raw_response_hash": "sha256:synthetic-regional-background-warnings",
+        "stale_risk": "low",
+        "features": [],
+        "candidate_only": true,
+        "runtime_safety_truth": false,
+        "human_review_required": true,
+        "request_timestamp": "2026-06-24T05:00:00Z",
+        "fixture_scenario": "complete_regional_background_without_active_warning"
+      }
+    },
+    "elevated": {}
+  },
+  "scenario_notes": {
+    "background": "Complete synthetic regional CWA support: no active warning, 6h QPF max12mm. It intentionally leaves route-local thunderstorm/heat/disagreement scenarios independent.",
+    "elevated": "Original prepared support metrics remain untouched: active warning and 6h QPF max32mm; tests must preserve its stronger CHANGE_PLAN outcome."
+  },
+  "fixture_provenance": {
+    "kind": "synthetic_qualification_scenario",
+    "live_provider_request": false,
+    "reference_time": "2026-06-24T06:00:00Z",
+    "historical_shared_fixture_mutated": false,
+    "purpose": "User-approved Weather D missing/reviewed/temporal replay; not runtime or user-trip evidence"
+  }
+}

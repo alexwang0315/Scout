@@ -154,11 +154,13 @@ def assess_scout_media_literacy(
         input_state=input_state,
         missing_fields=missing_fields,
     )
+    action = _decision_action(biases=biases, input_state=input_state)
     guidance = _guidance(
         biases=biases,
         matches=matches,
         decision=decision,
         missing_fields=missing_fields,
+        action=action,
     )
     field_answer = _field_answer(
         decision=decision,
@@ -169,6 +171,7 @@ def assess_scout_media_literacy(
     )
     decision_output = _decision_output(
         decision=decision,
+        action=action,
         biases=biases,
         matches=matches,
         guidance=guidance,
@@ -667,6 +670,7 @@ def _guidance(
     matches: list[dict[str, Any]],
     decision: str,
     missing_fields: list[str],
+    action: str,
 ) -> dict[str, Any]:
     actions = [
         "Use reviewed route context, CP Graph, weather, equipment, and team pace evidence before copying media content.",
@@ -680,7 +684,7 @@ def _guidance(
         actions.insert(0, "Only consider this plan with qualified guide support or equivalent reviewed controls.")
     return {
         "counter_bias_actions": actions,
-        "next_action": _next_action(decision, biases=biases),
+        "next_action": _next_action(decision, biases=biases, action=action),
         "risk_reframe": _risk_reframe(biases, matches),
     }
 
@@ -707,6 +711,7 @@ def _field_answer(
 def _decision_output(
     *,
     decision: str,
+    action: str,
     biases: list[dict[str, Any]],
     matches: list[dict[str, Any]],
     guidance: dict[str, Any],
@@ -729,10 +734,11 @@ def _decision_output(
         decision=decision,
         matches=matches,
         biases=biases,
+        action=action,
     )
     first_layer = {
-        "decision": _decision_phrase(decision, biases=biases),
-        "limit": _limit_phrase(decision, biases=biases),
+        "decision": _decision_phrase(decision, biases=biases, action=action),
+        "limit": _limit_phrase(decision, biases=biases, action=action),
         "reason": " / ".join(reasons[:2]),
         "nextStep": guidance["next_action"],
     }
@@ -766,10 +772,10 @@ def _decision_output(
         ),
         "firstLayer": first_layer,
         "secondLayer": second_layer,
-        "action": _decision_action(biases=biases, input_state=input_state),
+        "action": action,
         "decision": decision,
         "allowed": allowed,
-        "locationConstraint": _limit_phrase(decision, biases=biases),
+        "locationConstraint": _limit_phrase(decision, biases=biases, action=action),
         "mainReasons": reasons[:3],
         "cost": {
             "timeBufferChangeMinutes": 0 if not allowed else None,
@@ -829,7 +835,14 @@ def _alternative_actions(
     decision: str,
     matches: list[dict[str, Any]],
     biases: list[dict[str, Any]],
+    action: str,
 ) -> list[str]:
+    if decision == "NO_GO" and action == "pace_adjustment":
+        return [
+            "以本隊最慢者的實測腳程為基準，重新估算 CP 時間。",
+            "保留休息、天氣、日照與撤退餘裕。",
+            "必要時調整節奏或縮短行程，勿追趕媒體配速。",
+        ]
     safe_points = [str(item.get("label")) for item in matches[:2] if item.get("label")]
     if decision == "NO_GO" and _has_sunk_cost_pressure(biases):
         return [
@@ -890,7 +903,11 @@ def _second_layer_details(
     return details
 
 
-def _decision_phrase(decision: str, *, biases: list[dict[str, Any]]) -> str:
+def _decision_phrase(
+    decision: str, *, biases: list[dict[str, Any]], action: str
+) -> str:
+    if decision == "NO_GO" and action == "pace_adjustment":
+        return "不建議直接採用媒體的行走速度。"
     if decision == "NO_GO" and _has_sunk_cost_pressure(biases):
         return "不建議因為已經投入時間而繼續前進或攻頂。"
     if decision == "NO_GO":
@@ -904,7 +921,11 @@ def _decision_phrase(decision: str, *, biases: list[dict[str, Any]]) -> str:
     return "建議延後判斷。"
 
 
-def _limit_phrase(decision: str, *, biases: list[dict[str, Any]]) -> str:
+def _limit_phrase(
+    decision: str, *, biases: list[dict[str, Any]], action: str
+) -> str:
+    if decision == "NO_GO" and action == "pace_adjustment":
+        return "不得把媒體的完程時間或配速直接套用本隊；必須按最慢者、路線與休息需求重新估算。"
     if decision == "NO_GO" and _has_sunk_cost_pressure(biases):
         return "不得把已投入時間、快到山頂或不想白走當成繼續理由。"
     if decision == "NO_GO":
@@ -1051,7 +1072,11 @@ def _risk_reframe(biases: list[dict[str, Any]], matches: list[dict[str, Any]]) -
     return "No clear media trigger was found; do not infer permission from this tool alone."
 
 
-def _next_action(decision: str, *, biases: list[dict[str, Any]] | None = None) -> str:
+def _next_action(
+    decision: str, *, action: str, biases: list[dict[str, Any]] | None = None
+) -> str:
+    if decision == "NO_GO" and action == "pace_adjustment":
+        return "先以本隊最慢者腳程，對照 CP Graph、天氣、日照與休息需求重算行程；不要追趕媒體配速。"
     if decision == "NO_GO" and _has_sunk_cost_pressure(biases or []):
         return "不要用已投入時間或快到山頂作為繼續理由；改以最近安全 CP、撤退或短版方案重新評估。"
     if decision == "NO_GO":

@@ -27,7 +27,7 @@ from assistant_api import (  # noqa: E402
     create_assistant_router,
 )
 from assistant_context import create_assistant_context_resolver  # noqa: E402
-from debug_api import create_debug_page_router, create_debug_router  # noqa: E402
+from debug_api import create_debug_router  # noqa: E402
 from debug_event_provenance import DebugEventIngestionChannel  # noqa: E402
 from hardware_readiness_api import create_hardware_readiness_router  # noqa: E402
 from mock_outbound_transport import MockOutboundTransport  # noqa: E402
@@ -110,8 +110,7 @@ def create_dashboard_workspace_app(*, workspace_root: Path) -> FastAPI:
             message_source=transport,
         )
     )
-    app.include_router(create_debug_page_router())
-    app.include_router(create_hardware_readiness_router())
+    app.include_router(create_hardware_readiness_router(include_assistant_ui_script=False))
 
     assistant_provider = create_assistant_provider_from_env(os.environ)
     app.include_router(

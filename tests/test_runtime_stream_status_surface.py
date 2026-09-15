@@ -6,6 +6,8 @@ import json
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from fastapi_route_inventory import registered_route_methods
+
 import runtime_stream_status_surface
 from runtime_input_admission import RuntimeInputAdmissionState
 from runtime_stream_controls import RuntimeStreamControlStore
@@ -55,11 +57,7 @@ def test_status_surface_router_exposes_only_get_read_only_status_route() -> None
     app.include_router(create_runtime_stream_status_router())
     client = TestClient(app)
 
-    route_methods = {
-        route.path: sorted(route.methods or [])
-        for route in app.routes
-        if route.path.startswith("/runtime/streams")
-    }
+    route_methods = registered_route_methods(app, prefix="/runtime/streams")
 
     assert route_methods == {"/runtime/streams/status-read-only": ["GET"]}
     response = client.get("/runtime/streams/status-read-only")

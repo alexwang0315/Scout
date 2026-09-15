@@ -131,10 +131,28 @@ def test_under_construction_flag_has_explicit_and_environment_entry_points() -> 
     assert resolve_l5_under_construction(environ={}) is False
 
 
-def test_missing_harness_never_falls_back_to_host_execution(tmp_path) -> None:
+@pytest.mark.parametrize(
+    "missing_modules",
+    [
+        {"pydantic_ai_harness"},
+        {"pydantic_monty"},
+        {"pydantic_ai_harness", "pydantic_monty"},
+    ],
+)
+def test_missing_harness_never_falls_back_to_host_execution(
+    tmp_path, monkeypatch, missing_modules
+) -> None:
+    from scout.services import l5_code_mode
+
+    original_find_spec = l5_code_mode.find_spec
+    monkeypatch.setattr(
+        l5_code_mode,
+        "find_spec",
+        lambda name: None if name in missing_modules else original_find_spec(name),
+    )
     status = detect_l5_code_mode_runtime()
-    if status.available:
-        pytest.skip("Harness runtime is installed in this environment")
+    assert status.available is False
+    assert status.runtime_attested is False
     project = tmp_path / "project"
     project.mkdir()
     (project / "project.json").write_text(

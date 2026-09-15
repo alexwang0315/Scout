@@ -637,7 +637,8 @@ def search_project_route_structure(
     root = Path(project_root)
     project = _load_json_object(root / "project.json")
     project_id = str(project.get("project_id") or root.name)
-    route = _load_json_object(_project_path(root, str(project.get("route_summary_ref", ""))))
+    route_ref = str(project.get("route_summary_ref") or "")
+    route = _load_json_object(_project_path(root, route_ref)) if route_ref else {}
     checkpoints, checkpoint_source = _load_project_list(root, project, "checkpoint_candidates_ref")
     segments, segment_source = _load_project_list(root, project, "segment_candidates_ref")
     resolved_limit = _bounded_limit(limit)
@@ -1024,9 +1025,9 @@ def _historical_gpx_overlap_summary(
     tracks_ref = str(project.get("reference_tracks_ref") or "")
     index_payload = _load_json_object(_project_path(root, index_ref)) if index_ref else {}
     tracks_payload = _load_json_object(_project_path(root, tracks_ref)) if tracks_ref else {}
-    raw_sources = index_payload.get("sources") if isinstance(index_payload, dict) else []
+    raw_sources = index_payload.get("sources", []) if isinstance(index_payload, dict) else []
     raw_tracks = (
-        tracks_payload.get("reference_tracks")
+        tracks_payload.get("reference_tracks", [])
         if isinstance(tracks_payload, dict)
         else []
     )
@@ -1272,7 +1273,7 @@ def _checkpoint_event_summary(
         project.get("checkpoint_events_ref") or "outputs/checkpoint_events.json"
     )
     payload = _load_json_object(_project_path(root, ref))
-    raw_events = payload.get("events") if isinstance(payload, dict) else []
+    raw_events = payload.get("events", []) if isinstance(payload, dict) else []
     events = [item for item in raw_events if isinstance(item, dict)]
     planned_keys = ("planned_at", "expected_at", "eta", "planned_arrival_at")
     actual_keys = ("actual_at", "actual_arrival_at", "live_observed_at")
@@ -2841,6 +2842,8 @@ def _load_project_list(
     ref_key: str,
 ) -> tuple[list[Any], str]:
     ref = str(project.get(ref_key) or "")
+    if not ref:
+        return [], ref
     payload = _load_json_object(_project_path(root, ref))
     if isinstance(payload, list):
         return payload, ref

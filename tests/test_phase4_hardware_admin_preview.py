@@ -83,13 +83,13 @@ def _source_by_id(payload: dict[str, object], source_id: str) -> dict[str, objec
     raise AssertionError(f"missing source {source_id}")
 
 
-def test_phase4_admin_runtime_serves_pretrip_and_mock_assistant_on_lan_profile() -> None:
+def test_phase4_admin_runtime_serves_pretrip_and_mock_assistant_on_lan_profile(tmp_path: Path) -> None:
     app = create_phase4_admin_runtime_app(
         environ={
             "SCOUT_RUNTIME_PROFILE": "pi-phase4-admin-preview",
-            "SCOUT_DATA_ROOT": "/data/scout",
-            "SCOUT_PRETRIP_WORKSPACE_ROOT": "/data/scout/admin/pretrip-workspaces",
-            "SCOUT_SAFETY_INCIDENT_STORE": "/data/scout/incidents",
+            "SCOUT_DATA_ROOT": str(tmp_path / "data"),
+            "SCOUT_PRETRIP_WORKSPACE_ROOT": str(ROOT / "tests/fixtures/pretrip/projects"),
+            "SCOUT_SAFETY_INCIDENT_STORE": str(tmp_path / "incidents"),
             "SCOUT_AI_ASSISTANT_ENABLED": "1",
             "SCOUT_WEATHER_API_ENABLED": "false",
         }
@@ -141,7 +141,7 @@ def test_phase4_admin_runtime_serves_pretrip_and_mock_assistant_on_lan_profile()
     assert status_payload["assistant_context_registry"] == registry
 
 
-def test_phase4_admin_runtime_loads_scout_env_before_snapshot(monkeypatch) -> None:
+def test_phase4_admin_runtime_loads_scout_env_before_snapshot(monkeypatch, tmp_path: Path) -> None:
     calls: list[Path] = []
 
     def fake_load_scout_env_files(*, repo_root: Path) -> object:
@@ -155,6 +155,11 @@ def test_phase4_admin_runtime_loads_scout_env_before_snapshot(monkeypatch) -> No
         fake_load_scout_env_files,
     )
 
+    monkeypatch.setenv("SCOUT_DATA_ROOT", str(tmp_path / "data"))
+    monkeypatch.setenv(
+        "SCOUT_PRETRIP_WORKSPACE_ROOT", str(ROOT / "tests/fixtures/pretrip/projects")
+    )
+    monkeypatch.setenv("SCOUT_SAFETY_INCIDENT_STORE", str(tmp_path / "incidents"))
     app = create_phase4_admin_runtime_app()
 
     assert app.title == "Scout Phase 4 Admin LAN Preview"
@@ -163,6 +168,7 @@ def test_phase4_admin_runtime_loads_scout_env_before_snapshot(monkeypatch) -> No
 
 def test_phase4_admin_runtime_explicit_environ_skips_process_env_loader(
     monkeypatch,
+    tmp_path: Path,
 ) -> None:
     def fail_load_scout_env_files(*, repo_root: Path) -> object:
         raise AssertionError(f"unexpected env load for {repo_root}")
@@ -174,6 +180,9 @@ def test_phase4_admin_runtime_explicit_environ_skips_process_env_loader(
 
     app = create_phase4_admin_runtime_app(
         environ={
+            "SCOUT_DATA_ROOT": str(tmp_path / "data"),
+            "SCOUT_PRETRIP_WORKSPACE_ROOT": str(ROOT / "tests/fixtures/pretrip/projects"),
+            "SCOUT_SAFETY_INCIDENT_STORE": str(tmp_path / "incidents"),
             "SCOUT_RUNTIME_PROFILE": "pi-phase4-admin-preview",
             "SCOUT_AI_ASSISTANT_ENABLED": "1",
         }
@@ -221,6 +230,7 @@ def test_phase4_admin_runtime_status_reports_live_evidence_config_without_path_v
 
 def test_phase4_admin_runtime_assistant_failure_returns_read_only_safe_response(
     monkeypatch,
+    tmp_path: Path,
 ) -> None:
     class FailingProvider:
         def answer(self, query, *, sources=None):
@@ -232,6 +242,9 @@ def test_phase4_admin_runtime_assistant_failure_returns_read_only_safe_response(
     )
     app = create_phase4_admin_runtime_app(
         environ={
+            "SCOUT_DATA_ROOT": str(tmp_path / "data"),
+            "SCOUT_PRETRIP_WORKSPACE_ROOT": str(ROOT / "tests/fixtures/pretrip/projects"),
+            "SCOUT_SAFETY_INCIDENT_STORE": str(tmp_path / "incidents"),
             "SCOUT_RUNTIME_PROFILE": "pi-phase4-admin-preview",
             "SCOUT_AI_ASSISTANT_ENABLED": "1",
         }
@@ -255,9 +268,12 @@ def test_phase4_admin_runtime_assistant_failure_returns_read_only_safe_response(
     assert payload["observability"]["latency_class"] == "timeout_or_error"
 
 
-def test_phase4_admin_runtime_pretrip_assistant_exposes_checkpoint_counts() -> None:
+def test_phase4_admin_runtime_pretrip_assistant_exposes_checkpoint_counts(tmp_path: Path) -> None:
     app = create_phase4_admin_runtime_app(
         environ={
+            "SCOUT_DATA_ROOT": str(tmp_path / "data"),
+            "SCOUT_PRETRIP_WORKSPACE_ROOT": str(ROOT / "tests/fixtures/pretrip/projects"),
+            "SCOUT_SAFETY_INCIDENT_STORE": str(tmp_path / "incidents"),
             "SCOUT_RUNTIME_PROFILE": "pi-phase4-admin-preview",
             "SCOUT_AI_ASSISTANT_ENABLED": "1",
         }
@@ -296,9 +312,12 @@ def test_phase4_admin_runtime_pretrip_assistant_exposes_checkpoint_counts() -> N
     )
 
 
-def test_phase4_admin_runtime_pretrip_assistant_exposes_mcp_cp_links() -> None:
+def test_phase4_admin_runtime_pretrip_assistant_exposes_mcp_cp_links(tmp_path: Path) -> None:
     app = create_phase4_admin_runtime_app(
         environ={
+            "SCOUT_DATA_ROOT": str(tmp_path / "data"),
+            "SCOUT_PRETRIP_WORKSPACE_ROOT": str(ROOT / "tests/fixtures/pretrip/projects"),
+            "SCOUT_SAFETY_INCIDENT_STORE": str(tmp_path / "incidents"),
             "SCOUT_RUNTIME_PROFILE": "pi-phase4-admin-preview",
             "SCOUT_AI_ASSISTANT_ENABLED": "1",
         }
@@ -526,6 +545,7 @@ def test_phase4_admin_runtime_pretrip_general_question_uses_tool_plan_fallback(
 
 def test_phase4_admin_runtime_pretrip_place_to_cp_skill_bypasses_failed_provider(
     monkeypatch,
+    tmp_path: Path,
 ) -> None:
     class FailingProvider:
         def answer(self, query, *, sources=None):
@@ -537,6 +557,9 @@ def test_phase4_admin_runtime_pretrip_place_to_cp_skill_bypasses_failed_provider
     )
     app = create_phase4_admin_runtime_app(
         environ={
+            "SCOUT_DATA_ROOT": str(tmp_path / "data"),
+            "SCOUT_PRETRIP_WORKSPACE_ROOT": str(ROOT / "tests/fixtures/pretrip/projects"),
+            "SCOUT_SAFETY_INCIDENT_STORE": str(tmp_path / "incidents"),
             "SCOUT_RUNTIME_PROFILE": "pi-phase4-admin-preview",
             "SCOUT_AI_ASSISTANT_ENABLED": "1",
         }
@@ -565,6 +588,7 @@ def test_phase4_admin_runtime_pretrip_place_to_cp_skill_bypasses_failed_provider
 
 def test_phase4_admin_runtime_pretrip_cp_count_skill_bypasses_failed_provider(
     monkeypatch,
+    tmp_path: Path,
 ) -> None:
     class FailingProvider:
         def answer(self, query, *, sources=None):
@@ -576,6 +600,9 @@ def test_phase4_admin_runtime_pretrip_cp_count_skill_bypasses_failed_provider(
     )
     app = create_phase4_admin_runtime_app(
         environ={
+            "SCOUT_DATA_ROOT": str(tmp_path / "data"),
+            "SCOUT_PRETRIP_WORKSPACE_ROOT": str(ROOT / "tests/fixtures/pretrip/projects"),
+            "SCOUT_SAFETY_INCIDENT_STORE": str(tmp_path / "incidents"),
             "SCOUT_RUNTIME_PROFILE": "pi-phase4-admin-preview",
             "SCOUT_AI_ASSISTANT_ENABLED": "1",
         }
@@ -600,15 +627,18 @@ def test_phase4_admin_runtime_pretrip_cp_count_skill_bypasses_failed_provider(
     assert payload["sources"][0]["source_id"] == "assistant_skill.pretrip.cp_count.v0"
 
 
-def test_phase4_admin_runtime_mounts_debug_projection_when_explicitly_enabled() -> None:
+def test_phase4_admin_runtime_mounts_debug_projection_when_explicitly_enabled(tmp_path: Path) -> None:
     app = create_phase4_admin_runtime_app(
         environ={
+            "SCOUT_DATA_ROOT": str(tmp_path / "data"),
+            "SCOUT_PRETRIP_WORKSPACE_ROOT": str(ROOT / "tests/fixtures/pretrip/projects"),
+            "SCOUT_SAFETY_INCIDENT_STORE": str(tmp_path / "incidents"),
             "SCOUT_RUNTIME_PROFILE": "pi-phase4-admin-preview",
             "SCOUT_ADMIN_AUTH_REQUIRED": "true",
             "SCOUT_ADMIN_BASIC_USERNAME": "scout-admin",
             "SCOUT_ADMIN_ACCESS_TOKEN": "test-token",
             "SCOUT_DEBUG_API_ENABLED": "true",
-            "SCOUT_DEBUG_LOG_PATH": "/tmp/scout-phase4-admin-debug-test.jsonl",
+            "SCOUT_DEBUG_LOG_PATH": str(tmp_path / "runtime-debug-events.jsonl"),
             "SCOUT_AI_ASSISTANT_ENABLED": "1",
         }
     )
@@ -706,6 +736,9 @@ def test_phase4_admin_runtime_mounts_mobile_wearable_ingress_status(
     )
     app = create_phase4_admin_runtime_app(
         environ={
+            "SCOUT_DATA_ROOT": str(tmp_path / "data"),
+            "SCOUT_PRETRIP_WORKSPACE_ROOT": str(ROOT / "tests/fixtures/pretrip/projects"),
+            "SCOUT_SAFETY_INCIDENT_STORE": str(tmp_path / "incidents"),
             "SCOUT_ADMIN_AUTH_REQUIRED": "true",
             "SCOUT_ADMIN_ACCESS_TOKEN": "test-token",
             "SCOUT_DEBUG_API_ENABLED": "true",
@@ -766,6 +799,9 @@ def test_phase4_admin_runtime_can_point_hardware_readiness_at_live_probe_fixture
     )
     app = create_phase4_admin_runtime_app(
         environ={
+            "SCOUT_DATA_ROOT": str(tmp_path / "data"),
+            "SCOUT_PRETRIP_WORKSPACE_ROOT": str(ROOT / "tests/fixtures/pretrip/projects"),
+            "SCOUT_SAFETY_INCIDENT_STORE": str(tmp_path / "incidents"),
             "SCOUT_RUNTIME_PROFILE": "pi-phase4-admin-preview",
             "SCOUT_HARDWARE_READINESS_FIXTURE_PATH": str(fixture_path),
             "SCOUT_AI_ASSISTANT_ENABLED": "1",
@@ -782,9 +818,12 @@ def test_phase4_admin_runtime_can_point_hardware_readiness_at_live_probe_fixture
     assert payload["interface_inventory"][0]["details"]["disk_model"] == "KINGSTON SNV3S1000G"
 
 
-def test_phase4_admin_runtime_can_require_basic_or_bearer_auth() -> None:
+def test_phase4_admin_runtime_can_require_basic_or_bearer_auth(tmp_path: Path) -> None:
     app = create_phase4_admin_runtime_app(
         environ={
+            "SCOUT_DATA_ROOT": str(tmp_path / "data"),
+            "SCOUT_PRETRIP_WORKSPACE_ROOT": str(ROOT / "tests/fixtures/pretrip/projects"),
+            "SCOUT_SAFETY_INCIDENT_STORE": str(tmp_path / "incidents"),
             "SCOUT_RUNTIME_PROFILE": "pi-phase4-admin-preview",
             "SCOUT_ADMIN_AUTH_REQUIRED": "true",
             "SCOUT_ADMIN_BASIC_USERNAME": "scout-admin",
@@ -819,9 +858,12 @@ def test_phase4_admin_runtime_can_require_basic_or_bearer_auth() -> None:
     assert basic.json()["provider"] == "mock"
 
 
-def test_phase4_admin_runtime_fails_closed_when_auth_required_without_token() -> None:
+def test_phase4_admin_runtime_fails_closed_when_auth_required_without_token(tmp_path: Path) -> None:
     app = create_phase4_admin_runtime_app(
         environ={
+            "SCOUT_DATA_ROOT": str(tmp_path / "data"),
+            "SCOUT_PRETRIP_WORKSPACE_ROOT": str(ROOT / "tests/fixtures/pretrip/projects"),
+            "SCOUT_SAFETY_INCIDENT_STORE": str(tmp_path / "incidents"),
             "SCOUT_ADMIN_AUTH_REQUIRED": "true",
             "SCOUT_AI_ASSISTANT_ENABLED": "1",
         }
@@ -972,7 +1014,11 @@ def test_phase4_admin_compose_keeps_runtime_9099_free_for_existing_service() -> 
 def test_phase4_admin_requirements_include_nextgen_http_client() -> None:
     requirements = read("requirements.pi.admin.txt")
 
-    assert "pydantic-ai-slim[duckduckgo,mcp,openai,openrouter]==2.36.0" in requirements
+    assert (
+        "pydantic-ai-slim[duckduckgo,mcp,openai,openrouter]==2.42.0"
+        in requirements.splitlines()
+    )
+    assert "pydantic-evals==2.42.0" in requirements.splitlines()
     assert "httpx>=0.28,<1" in requirements
 
 

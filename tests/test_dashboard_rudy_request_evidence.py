@@ -119,7 +119,7 @@ assert.ok(result.stages[0].snapshot.tiles.every(tile=>new URL(tile.href).searchP
 """)
 
 
-def test_svg_failure_retains_the_failed_tile_and_honest_unsettled_siblings_in_dom_export():
+def test_svg_failure_retains_first_failure_and_terminal_siblings_in_dom_export():
     node(BASE + r"""
 const {JSDOM}=require('jsdom');
 const dom=new JSDOM('<main id="mount"></main>',{url:base});
@@ -133,10 +133,11 @@ global.setTimeout=(callback,ms)=>{
 };
 global.clearTimeout=id=>{timerIds.delete(id)};
 const response=status=>({ok:status===200,status,headers:headers(),blob:async()=>new Blob(['tile'])});
-global.fetch=async url=>{
+global.fetch=async(url,{signal})=>{
  const x=Number(new URL(url).pathname.split('/').at(-2));
  if(x===850001)return new Promise(resolve=>{failResponse=resolve});
- if(x===850002)return new Promise(resolve=>{lateResponse=resolve});
+ if(x===850002)return new Promise((resolve,reject)=>{lateResponse=resolve;
+  signal.addEventListener('abort',()=>reject(new DOMException('Cohort cancelled.','AbortError')),{once:true});});
  return response(200);
 };
 global.createImageBitmap=async()=>({width:256,height:256,close(){failResponse?.(response(503))}});
@@ -153,8 +154,10 @@ const descriptor={renderer:'svg',doc:{location:{href:base}},projectId:()=>projec
  assert.match(failure.detail,/20\/850001\/450000: HTTP 503.*Actual Z20/);
  assert.equal(failure.requestReceipt.httpStatus,503);assert.equal(failure.requestReceipt.phase,'headers');
  assert.equal(failure.error.cause.cause.message,'20/850001/450000: HTTP 503.');
- assert.equal(failure.requestEvidence.requests.length,3);assert.equal(failure.requestEvidence.inFlightCount,1);
- assert.deepEqual(failure.requestEvidence.requests.map(item=>item.outcome),['verified','failed','pending']);
+ assert.equal(failure.requestEvidence.requests.length,3);assert.equal(failure.requestEvidence.inFlightCount,0);
+ assert.deepEqual(failure.requestEvidence.requests.map(item=>item.outcome),['verified','failed','cancelled']);
+ assert.equal(failure.cohortReceipt.firstFailure.inFlightCount,1,'Keep the original failure-time pending evidence');
+ assert.equal(failure.requestEvidence.requests.at(-1).abort.trigger,'diagnostic-cohort-cancelled');
  assert.equal(result.stages.filter(item=>item.status==='passed').length,0);
  assert.equal(result.stages.filter(item=>item.status==='not_checked').length,9);assert.equal(closed,1);
  const report={projectId:project,status:'warning',plannedCases:1,plannedStages:10,stageNames:api.STAGES,cases:[result]};
@@ -163,8 +166,8 @@ const descriptor={renderer:'svg',doc:{location:{href:base}},projectId:()=>projec
  assert.deepEqual(exported.cases[0].stages[0].requestEvidence,failure.requestEvidence);
  assert.equal(exported.cases[0].stages[0].error.cause.cause.message,'20/850001/450000: HTTP 503.');
  lateResponse(response(200));await new Promise(resolve=>setImmediate(resolve));
- assert.equal(failure.requestEvidence.inFlightCount,1,'Receipt is a snapshot at failure, not an assertion that later siblings settled');
- assert.equal(failure.requestEvidence.requests.at(-1).outcome,'pending');
+ assert.equal(failure.requestEvidence.inFlightCount,0,'Stage finalization waits for the complete verification cohort');
+ assert.equal(failure.requestEvidence.requests.at(-1).outcome,'cancelled');
  assert.equal(timerIds.size,0);dom.window.close();
 })().catch(error=>{console.error(error);process.exitCode=1});
 """)

@@ -3,6 +3,8 @@ from __future__ import annotations
 import importlib
 from pathlib import Path
 
+from fastapi.testclient import TestClient
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -52,7 +54,8 @@ def test_phase_1_scaffold_modules_are_importable() -> None:
 def test_phase_1_fastapi_app_scaffold_exists() -> None:
     from scout.main import app
 
-    assert app.title == "Scout AI OS"
+    with TestClient(app):
+        assert app.title == "Scout AI OS"
 
 
 def test_phase_1_docs_and_builtins_exist() -> None:

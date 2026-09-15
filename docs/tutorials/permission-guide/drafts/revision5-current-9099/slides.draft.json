@@ -1,0 +1,3649 @@
+{
+  "title": "Scout Permission 使用指南",
+  "version": "revision5-current-9099-capture-draft",
+  "basis_commit": "af973565ac967e6f4a4c772552a0085a174a337a",
+  "language": "zh-Hant",
+  "audience": "第一次使用新版 Permission 的 Scout 使用者",
+  "scope": "第 1–34 頁保留 TASK 歷史教學；第 35–36 頁保留較早的 9099 主地圖實拍，並另做本次影響檢查；第 37–38 頁為本次 Chrome SVG Weather 重播。Mac 仍缺部分 Scout Permission 模組，不宣稱全部歷史功能已在 9099 同步。",
+  "practice_workspace": "dongqing_batongguan_historic_trail_newImport",
+  "practice_dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+  "slides": [
+    {
+      "id": "start",
+      "kind": "screen",
+      "chapter": "開始",
+      "title": "Permission 使用指南",
+      "lead": "先選擇本次要查看的資料角色。",
+      "duration": 12,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "steps": [
+        {
+          "title": "Human Design",
+          "body": "行程有變化時，開啟 Planned 編排。"
+        },
+        {
+          "title": "Generate from Ref. GPX",
+          "body": "查看 Golden 參考基準的路線與節奏。"
+        },
+        {
+          "title": "Saved candidate versions",
+          "body": "已有保存候選時，選版本後繼續按 Restore。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 確認 URL 的 projectId 與實際 workspace 一致。 在 Permission 找 Baseline Authoring Workbench，讓兩個模式按鈕及 Saved 選單同窗可見。",
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "action_label": "開啟目前 9099 Dashboard ↗",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "historical_capture": {
+        "image": "ui-start.jpg",
+        "caption": "TASK 歷史畫面 · 東清八通關 · 2026-09-11",
+        "capture_context": "task-historical",
+        "markers": [
+          {
+            "step": 1,
+            "x": 283,
+            "y": 218.4140625,
+            "target": {
+              "height": 38,
+              "width": 105.453125,
+              "x": 273,
+              "y": 232.4140625
+            },
+            "locator": "[data-permission-baseline-mode=\"human_text\"]"
+          },
+          {
+            "step": 2,
+            "x": 392.453125,
+            "y": 218.4140625,
+            "target": {
+              "height": 38,
+              "width": 171.65625,
+              "x": 382.453125,
+              "y": 232.4140625
+            },
+            "locator": "[data-permission-baseline-mode=\"reference_gpx\"]"
+          },
+          {
+            "step": 3,
+            "x": 279,
+            "y": 146.4140625,
+            "target": {
+              "height": 44,
+              "width": 611.0703125,
+              "x": 269,
+              "y": 160.4140625
+            },
+            "locator": "[data-permission-saved-candidate]"
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "Human Design",
+          "body": "行程有變化時，開啟 Planned 編排。",
+          "locator": "[data-permission-baseline-mode=\"human_text\"]",
+          "ui_label": "Human Design"
+        },
+        {
+          "step": 2,
+          "title": "Generate from Ref. GPX",
+          "body": "查看 Golden 參考基準的路線與節奏。",
+          "locator": "[data-permission-baseline-mode=\"reference_gpx\"]",
+          "ui_label": "Generate from Ref. GPX"
+        },
+        {
+          "step": 3,
+          "title": "Saved candidate versions",
+          "body": "已有保存候選時，選版本後繼續按 Restore。",
+          "locator": "[data-permission-saved-candidate]",
+          "ui_label": "Saved candidate versions"
+        }
+      ]
+    },
+    {
+      "id": "golden-new",
+      "kind": "screen",
+      "chapter": "依循 Golden",
+      "title": "從參考紀錄產生基準草稿",
+      "lead": "先核對 workspace 與既有準備狀態。",
+      "duration": 18,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "steps": [
+        {
+          "title": "Reference trip",
+          "body": "此處引用 workspace 已準備的 reviewed route axis；需核對實際 Golden 來源。"
+        },
+        {
+          "title": "Preview source",
+          "body": "先看參考路線、分日與原始記錄資訊。"
+        },
+        {
+          "title": "Generate typed draft",
+          "body": "需要新草稿時才產生，再逐日核對；已有 Saved 版本可直接 Restore。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 選 Generate from Ref. GPX；只拍參考來源與操作入口可先不 Generate。 若要示範產生結果，另保存實際 preview receipt；不要為截圖重新 import／prepare。",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "historical_capture": {
+        "image": "ui-golden-new.jpg",
+        "caption": "TASK 歷史畫面 · 東清八通關 · 2026-09-11",
+        "capture_context": "task-historical",
+        "markers": [
+          {
+            "step": 1,
+            "x": 279,
+            "y": 347.640625,
+            "target": {
+              "height": 44,
+              "width": 681.6953125,
+              "x": 269,
+              "y": 361.640625
+            },
+            "locator": "[data-permission-baseline-ref]"
+          },
+          {
+            "step": 2,
+            "x": 970.6953125,
+            "y": 388.234375,
+            "target": {
+              "height": 44,
+              "width": 119.890625,
+              "x": 960.6953125,
+              "y": 402.234375
+            },
+            "locator": "[data-permission-baseline-preview]"
+          },
+          {
+            "step": 3,
+            "x": 1098.5859375,
+            "y": 388.234375,
+            "target": {
+              "height": 44,
+              "width": 158.4140625,
+              "x": 1088.5859375,
+              "y": 402.234375
+            },
+            "locator": "[data-permission-baseline-generate]"
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "Reference trip",
+          "body": "此處引用 workspace 已準備的 reviewed route axis；需核對實際 Golden 來源。",
+          "locator": "[data-permission-baseline-ref]",
+          "ui_label": "Reference trip"
+        },
+        {
+          "step": 2,
+          "title": "Preview source",
+          "body": "先看參考路線、分日與原始記錄資訊。",
+          "locator": "[data-permission-baseline-preview]",
+          "ui_label": "Preview source"
+        },
+        {
+          "step": 3,
+          "title": "Generate typed draft",
+          "body": "需要新草稿時才產生，再逐日核對；已有 Saved 版本可直接 Restore。",
+          "locator": "[data-permission-baseline-generate]",
+          "ui_label": "Generate typed draft"
+        }
+      ],
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "action_label": "開啟目前 9099 Dashboard ↗"
+    },
+    {
+      "id": "saved-select",
+      "kind": "screen",
+      "chapter": "依循 Golden · 既有版本",
+      "title": "選好 Saved candidate，接著按 Restore",
+      "lead": "下拉選單只選版本；Restore 才會載入。",
+      "duration": 18,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "steps": [
+        {
+          "title": "Refresh saved versions",
+          "body": "重新讀取東清 workspace 的保存清單。"
+        },
+        {
+          "title": "Saved candidate versions",
+          "body": "選要查看的版本，記下完整版本編號。"
+        },
+        {
+          "title": "Restore saved candidate",
+          "body": "載入選定版本後，接著核對 SHA 與 Review readiness。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 按 Refresh saved versions，先核對清單。 選 version.15f1d78018a8af8e（僅目前清單仍存在時），拍 Restore enabled 的選擇狀態，尚未按 Restore。",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "historical_capture": {
+        "image": "ui-saved-select.jpg",
+        "caption": "TASK 歷史畫面 · 東清八通關 · 2026-09-11",
+        "capture_context": "task-historical",
+        "markers": [
+          {
+            "step": 1,
+            "x": 900.0703125,
+            "y": 164.9140625,
+            "target": {
+              "height": 44,
+              "width": 171.2578125,
+              "x": 890.0703125,
+              "y": 178.9140625
+            },
+            "locator": "[data-permission-candidates-refresh]"
+          },
+          {
+            "step": 2,
+            "x": 279,
+            "y": 140.9140625,
+            "target": {
+              "height": 44,
+              "width": 611.0703125,
+              "x": 269,
+              "y": 154.9140625
+            },
+            "locator": "[data-permission-saved-candidate]"
+          },
+          {
+            "step": 3,
+            "x": 1079.328125,
+            "y": 164.9140625,
+            "target": {
+              "height": 44,
+              "width": 177.671875,
+              "x": 1069.328125,
+              "y": 178.9140625
+            },
+            "locator": "[data-permission-candidate-restore]"
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "Refresh saved versions",
+          "body": "重新讀取東清 workspace 的保存清單。",
+          "locator": "[data-permission-candidates-refresh]",
+          "ui_label": "Refresh saved versions"
+        },
+        {
+          "step": 2,
+          "title": "Saved candidate versions",
+          "body": "選要查看的版本，記下完整版本編號。",
+          "locator": "[data-permission-saved-candidate]",
+          "ui_label": "Saved candidate versions"
+        },
+        {
+          "step": 3,
+          "title": "Restore saved candidate",
+          "body": "載入選定版本後，接著核對 SHA 與 Review readiness。",
+          "locator": "[data-permission-candidate-restore]",
+          "ui_label": "Restore saved candidate"
+        }
+      ],
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "action_label": "開啟目前 9099 Dashboard ↗"
+    },
+    {
+      "id": "saved-identity",
+      "kind": "screen",
+      "chapter": "依循 Golden · 版本核對",
+      "title": "先核對版本，再決定能否審查",
+      "lead": "Restore 完成後，查看 Quick review 下方的版本資訊。",
+      "duration": 18,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "steps": [
+        {
+          "title": "Current immutable candidate",
+          "body": "版本 ID 與 SHA 必須對應剛還原的版本；來源變更須重新核對。"
+        },
+        {
+          "title": "Review readiness",
+          "body": "只有 ready for explicit review 才具備審查條件；not ready 或 rebuild_required 要保留並處理原因。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 由第3頁所選版本按 Restore，等待完整結果。 捲到 immutable candidate / readiness，記完整 ID、SHA 與所有 gap/rebuild 提示。",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "historical_capture": {
+        "image": "ui-saved-identity.jpg",
+        "caption": "TASK 歷史畫面 · 東清八通關 · 2026-09-11",
+        "capture_context": "task-historical",
+        "markers": [
+          {
+            "step": 1,
+            "x": 235,
+            "y": 306.4453125,
+            "target": {
+              "height": 50.796875,
+              "width": 950,
+              "x": 283,
+              "y": 281.4453125
+            },
+            "locator": "[data-permission-baseline-patch-panel] .permission-detail-row:nth-child(1)",
+            "leader": true
+          },
+          {
+            "step": 2,
+            "x": 171,
+            "y": 350.94140625,
+            "target": {
+              "height": 35.3984375,
+              "width": 950,
+              "x": 283,
+              "y": 333.2421875
+            },
+            "locator": "[data-permission-baseline-patch-panel] .permission-detail-row:nth-child(2)",
+            "leader": true
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "Current immutable candidate",
+          "body": "版本 ID 與 SHA 必須對應剛還原的版本；來源變更須重新核對。",
+          "locator": "[data-permission-baseline-patch-panel] .permission-detail-row:nth-child(1)",
+          "ui_label": "Current immutable candidate"
+        },
+        {
+          "step": 2,
+          "title": "Review readiness",
+          "body": "只有 ready for explicit review 才具備審查條件；not ready 或 rebuild_required 要保留並處理原因。",
+          "locator": "[data-permission-baseline-patch-panel] .permission-detail-row:nth-child(2)",
+          "ui_label": "Review readiness"
+        }
+      ],
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "action_label": "開啟目前 9099 Dashboard ↗"
+    },
+    {
+      "id": "saved-days",
+      "kind": "screen",
+      "chapter": "依循 Golden · 檢查內容",
+      "title": "還原後，逐日檢查路線與時間",
+      "lead": "每日地圖保留互動操作，逐日核對範圍與資料。",
+      "duration": 18,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "steps": [
+        {
+          "title": "當日標題",
+          "body": "核對日序、起終點與里程。"
+        },
+        {
+          "title": "＋／−、Fit、Pan",
+          "body": "縮放或拖曳平移；Fit 回到這一天的全程。"
+        },
+        {
+          "title": "圖磚狀態與更新",
+          "body": "讀取此日的載入／缺圖提示；按可見的更新或重試操作後再核對。"
+        },
+        {
+          "title": "Day route, ETA & evidence",
+          "body": "展開當日證據；未觀測時段不能自行視為休息或紮營。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 延續第4頁相同版本。 展開 D1，讓日標題、獨立地圖控制、圖磚狀態及證據 summary 可見。 依完整地圖驗收核對 D1 操作不會移動 D2 鏡頭；其他日仍須逐一檢查。",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "historical_capture": {
+        "image": "ui-saved-days.jpg",
+        "caption": "TASK 歷史畫面 · 東清八通關 · 2026-09-11",
+        "capture_context": "task-historical",
+        "markers": [
+          {
+            "step": 1,
+            "x": 280,
+            "y": 145.765625,
+            "target": {
+              "height": 92.484375,
+              "width": 481,
+              "x": 270,
+              "y": 159.765625
+            },
+            "locator": "[data-permission-proposal-day=\"D1\"] .permission-day-card-head"
+          },
+          {
+            "step": 2,
+            "x": 280,
+            "y": 238.25,
+            "target": {
+              "height": 180,
+              "width": 481,
+              "x": 270,
+              "y": 252.25
+            },
+            "locator": "[data-permission-day-map=\"D1\"]"
+          },
+          {
+            "step": 3,
+            "x": 280,
+            "y": 579.078125,
+            "target": {
+              "height": 44,
+              "width": 481,
+              "x": 270,
+              "y": 593.078125
+            },
+            "locator": "[data-permission-proposal-day=\"D1\"] .permission-day-details summary"
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "當日標題",
+          "body": "核對日序、起終點與里程。",
+          "locator": "[data-permission-proposal-day=\"D1\"] .permission-day-card-head",
+          "ui_label": "動態 D1 日標題、起終點與里程"
+        },
+        {
+          "step": 2,
+          "title": "＋／−、Fit、Pan",
+          "body": "縮放或拖曳平移；Fit 回到這一天的全程。",
+          "locator": "[data-permission-day-map=\"D1\"] [data-dashboard-map-controls]",
+          "ui_label": "+ / − / Fit / Pan / ▣"
+        },
+        {
+          "step": 3,
+          "title": "圖磚狀態與更新",
+          "body": "讀取此日的載入／缺圖提示；按可見的更新或重試操作後再核對。",
+          "locator": "[data-permission-day-map=\"D1\"] [data-dashboard-rudy-controls]",
+          "ui_label": "停止更新 或 更新圖磚；重試圖磚；實際 Rudy 圖磚狀態"
+        },
+        {
+          "step": 4,
+          "title": "Day route, ETA & evidence",
+          "body": "展開當日證據；未觀測時段不能自行視為休息或紮營。",
+          "locator": "[data-permission-proposal-day=\"D1\"] .permission-day-details summary",
+          "ui_label": "Day route, ETA & evidence"
+        }
+      ],
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "action_label": "開啟目前 9099 Dashboard ↗"
+    },
+    {
+      "id": "golden-review",
+      "kind": "screen",
+      "chapter": "依循 Golden · 人工審查",
+      "title": "Quick review：逐項核對本人要採用的內容",
+      "lead": "完成路線與不確定性檢查後，再由本人確認。",
+      "duration": 18,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "steps": [
+        {
+          "title": "每日起終點、路線與時間窗",
+          "body": "確認畫面所列的確切候選版本與每日內容。"
+        },
+        {
+          "title": "記錄缺口與不確定性",
+          "body": "確認每筆列出的缺口；未觀測移動及缺少時間仍為未知。"
+        },
+        {
+          "title": "Safety / Emergency 待審項目",
+          "body": "承認這些項目仍需另行審查；這個勾選不會核准它們。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 延續同版；展開 Quick review，不替使用者勾選。 依實際 required uncertainty/handoff 決定條件欄位是否存在；缺 target 必須留下版本與 requirements 證據，不能假造 checkbox。",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "historical_capture": {
+        "image": "ui-golden-review.jpg",
+        "caption": "TASK 歷史畫面 · 東清八通關 · 2026-09-11",
+        "capture_context": "task-historical",
+        "markers": [
+          {
+            "step": 1,
+            "x": 234,
+            "y": 184.3515625,
+            "target": {
+              "height": 48,
+              "width": 952,
+              "x": 282,
+              "y": 160.3515625
+            },
+            "locator": "label:has([data-permission-review-check=\"dayEnds\"])",
+            "leader": true
+          },
+          {
+            "step": 2,
+            "x": 170,
+            "y": 242.3515625,
+            "target": {
+              "height": 54.796875,
+              "width": 952,
+              "x": 282,
+              "y": 217.3515625
+            },
+            "locator": "label:has([data-permission-review-check=\"timingUncertainty\"])",
+            "leader": true
+          },
+          {
+            "step": 3,
+            "x": 234,
+            "y": 306.1484375,
+            "target": {
+              "height": 54.796875,
+              "width": 952,
+              "x": 282,
+              "y": 281.1484375
+            },
+            "locator": "label:has([data-permission-review-check=\"safetyHandoff\"])",
+            "leader": true
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "每日起終點、路線與時間窗",
+          "body": "確認畫面所列的確切候選版本與每日內容。",
+          "locator": "label:has([data-permission-review-check=\"dayEnds\"])",
+          "ui_label": "I adopt the reference trip’s recorded daily starts, endpoints, route and time windows shown in this immutable candidate."
+        },
+        {
+          "step": 2,
+          "title": "記錄缺口與不確定性",
+          "body": "確認每筆列出的缺口；未觀測移動及缺少時間仍為未知。",
+          "locator": "label:has([data-permission-review-check=\"timingUncertainty\"])",
+          "condition": "僅候選列出 uncertainty IDs 時顯示",
+          "ui_label": "I acknowledge every disclosed recording gap and uncertainty. Stationary clusters are inferred stops; missing CP clocks and unrecorded movement remain unknown."
+        },
+        {
+          "step": 3,
+          "title": "Safety / Emergency 待審項目",
+          "body": "承認這些項目仍需另行審查；這個勾選不會核准它們。",
+          "locator": "label:has([data-permission-review-check=\"safetyHandoff\"])",
+          "condition": "僅候選要求 handoff 時顯示",
+          "ui_label": "I acknowledge that the listed retreat, emergency-bivy and route-reversal items remain pending separate Safety / Emergency review. This does not approve them."
+        }
+      ],
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "action_label": "開啟目前 9099 Dashboard ↗"
+    },
+    {
+      "id": "golden-accept",
+      "kind": "screen",
+      "chapter": "依循 Golden · 保存與採用",
+      "title": "保存新候選，或採用已審查版本",
+      "lead": "未改動的還原版不需要重複保存。",
+      "duration": 18,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "steps": [
+        {
+          "title": "Save candidate version",
+          "body": "新草稿先保存為不可變版本。"
+        },
+        {
+          "title": "Accept reviewed baseline",
+          "body": "本人完成 Quick review 後，核對確認視窗與版本再採用。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 延續同版保存與採用按鈕；disabled 可如實拍攝。 只在已有針對本版的本人審查與確認時操作 Accept；不能為教學先採用。",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "historical_capture": {
+        "image": "ui-golden-accept.jpg",
+        "caption": "TASK 歷史畫面 · 東清八通關 · 2026-09-11",
+        "capture_context": "task-historical",
+        "markers": [
+          {
+            "step": 1,
+            "x": 279,
+            "y": 146.015625,
+            "target": {
+              "height": 44,
+              "width": 171.2578125,
+              "x": 269,
+              "y": 160.015625
+            },
+            "locator": "[data-permission-baseline-save]"
+          },
+          {
+            "step": 2,
+            "x": 458.2578125,
+            "y": 146.015625,
+            "target": {
+              "height": 44,
+              "width": 184.09375,
+              "x": 448.2578125,
+              "y": 160.015625
+            },
+            "locator": "[data-permission-baseline-accept]"
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "Save candidate version",
+          "body": "新草稿先保存為不可變版本。",
+          "locator": "[data-permission-baseline-save]",
+          "ui_label": "Save candidate version"
+        },
+        {
+          "step": 2,
+          "title": "Accept reviewed baseline",
+          "body": "本人完成 Quick review 後，核對確認視窗與版本再採用。",
+          "locator": "[data-permission-baseline-accept]",
+          "ui_label": "Accept reviewed baseline"
+        }
+      ],
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "action_label": "開啟目前 9099 Dashboard ↗"
+    },
+    {
+      "id": "planned-input",
+      "kind": "screen",
+      "chapter": "建立 Planned · 人工行程",
+      "title": "把四日行程與 Golden 的差異寫清楚",
+      "lead": "保留原文；待定位地名與未提供時刻保持未知。",
+      "duration": 18,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "steps": [
+        {
+          "title": "人工行程",
+          "body": "貼入 D1–D4 原文，逐日保留主線、支線往返與營地名稱。"
+        },
+        {
+          "title": "計畫啟程",
+          "body": "依本次實際安排填日期時間，核對時區；尚未決定就不要杜撰。"
+        },
+        {
+          "title": "腳程估計",
+          "body": "選可用來源節奏優先或固定腳程，清楚標示依據。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 選 Human Design，等待 catalog 的真實狀態。 可貼下方已授權四日原文；日期、腳程、休息分鐘未提供就保留未填。",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "historical_capture": {
+        "image": "ui-planned-input.jpg",
+        "caption": "TASK 歷史畫面 · 東清八通關 · 2026-09-11",
+        "capture_context": "task-historical",
+        "markers": [
+          {
+            "step": 1,
+            "x": 294,
+            "y": 146.203125,
+            "target": {
+              "height": 93.375,
+              "width": 948,
+              "x": 284,
+              "y": 160.203125
+            },
+            "locator": "[data-planned-human-text]"
+          },
+          {
+            "step": 2,
+            "x": 294,
+            "y": 275.421875,
+            "target": {
+              "height": 38.84375,
+              "width": 228,
+              "x": 284,
+              "y": 289.421875
+            },
+            "locator": "[data-planned-field=\"departure\"]"
+          },
+          {
+            "step": 3,
+            "x": 774,
+            "y": 275.421875,
+            "target": {
+              "height": 38,
+              "width": 228,
+              "x": 764,
+              "y": 289.421875
+            },
+            "locator": "[data-planned-field=\"paceMode\"]"
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "人工行程",
+          "body": "貼入 D1–D4 原文，逐日保留主線、支線往返與營地名稱。",
+          "locator": "[data-planned-human-text]",
+          "ui_label": "人工行程"
+        },
+        {
+          "step": 2,
+          "title": "計畫啟程",
+          "body": "依本次實際安排填日期時間，核對時區；尚未決定就不要杜撰。",
+          "locator": "[data-planned-field=\"departure\"]",
+          "ui_label": "計畫啟程"
+        },
+        {
+          "step": 3,
+          "title": "腳程估計",
+          "body": "選可用來源節奏優先或固定腳程，清楚標示依據。",
+          "locator": "[data-planned-field=\"paceMode\"]",
+          "ui_label": "腳程估計"
+        }
+      ],
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "action_label": "開啟目前 9099 Dashboard ↗"
+    },
+    {
+      "id": "planned-parse",
+      "kind": "screen",
+      "chapter": "建立 Planned · 逐句釐清",
+      "title": "解析後，逐句處理待定位事項",
+      "lead": "原文解析與逐句釐清已整合；實際結果仍待重拍驗證。",
+      "duration": 18,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "steps": [
+        {
+          "title": "使用已設定模型協助產生可核對草稿",
+          "body": "有模型設定及需要時再啟用；一般解析不必為拍攝開啟模型。"
+        },
+        {
+          "title": "解析人工行程",
+          "body": "取得逐句狀態；不確定地名不能直接當成已定位路段。"
+        },
+        {
+          "title": "逐句解析結果",
+          "body": "核對原句、修訂句、候選錨點與未解原因；修訂後重新解析。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 展開原文解析與逐句釐清；保留模型開關原狀，拍前記是否啟用。 使用實際四日原文執行一般解析，等待結果，保留 unresolved 句子與原文 SHA。 若解析失敗，保留錯誤與資料缺口，不拿舊結果補上。",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "historical_capture": {
+        "image": "ui-planned-parse.jpg",
+        "caption": "TASK 歷史畫面 · 東清八通關 · 2026-09-11",
+        "capture_context": "task-historical",
+        "markers": [
+          {
+            "step": 1,
+            "x": 236,
+            "y": 170.0625,
+            "target": {
+              "height": 20.296875,
+              "width": 948,
+              "x": 284,
+              "y": 159.9140625
+            },
+            "locator": "label:has([data-planned-intent-model])",
+            "leader": true
+          },
+          {
+            "step": 2,
+            "x": 172,
+            "y": 210.609375,
+            "target": {
+              "height": 44,
+              "width": 92.40625,
+              "x": 284,
+              "y": 188.609375
+            },
+            "locator": "[data-planned-intent-action=\"parse\"]",
+            "leader": true
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "使用已設定模型協助產生可核對草稿",
+          "body": "有模型設定及需要時再啟用；一般解析不必為拍攝開啟模型。",
+          "locator": "label:has([data-planned-intent-model])",
+          "ui_label": "使用已設定模型協助產生可核對草稿"
+        },
+        {
+          "step": 2,
+          "title": "解析人工行程",
+          "body": "取得逐句狀態；不確定地名不能直接當成已定位路段。",
+          "locator": "[data-planned-intent-action=\"parse\"]",
+          "ui_label": "解析人工行程"
+        },
+        {
+          "step": 3,
+          "title": "逐句解析結果",
+          "body": "核對原句、修訂句、候選錨點與未解原因；修訂後重新解析。",
+          "locator": "[data-planned-intent-result]",
+          "condition": "解析回應後才顯示",
+          "ui_label": "動態解析狀態／原文 SHA；原句／修訂句"
+        }
+      ],
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "action_label": "開啟目前 9099 Dashboard ↗"
+    },
+    {
+      "id": "planned-stop",
+      "kind": "screen",
+      "chapter": "建立 Planned · 明確操作",
+      "title": "設定停留或紮營的時間",
+      "lead": "先選已定位位置，再填實際規劃的時間。",
+      "duration": 18,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "steps": [
+        {
+          "title": "操作：固定停留／紮營",
+          "body": "依目的選固定停留或紮營／離營，對應欄位會改變。"
+        },
+        {
+          "title": "位置／起點",
+          "body": "選有來源的錨點；重複經過時須確認第幾次。"
+        },
+        {
+          "title": "停留／紮營分鐘",
+          "body": "輸入實際規劃時長。四日原文沒有分鐘數時先保留待補。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 展開明確行程差異與來源選段，選 stop 或 camp 以顯示 duration。 用真正錨點與已提供時程；原文沒給分鐘時只拍未填欄位，標資料待補。",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "historical_capture": {
+        "image": "ui-planned-stop.jpg",
+        "caption": "TASK 歷史畫面 · 東清八通關 · 2026-09-11",
+        "capture_context": "task-historical",
+        "markers": [
+          {
+            "step": 1,
+            "x": 294,
+            "y": 145.6875,
+            "target": {
+              "height": 38,
+              "width": 228,
+              "x": 284,
+              "y": 159.6875
+            },
+            "locator": "[data-planned-editor=\"kind\"]"
+          },
+          {
+            "step": 2,
+            "x": 534,
+            "y": 145.6875,
+            "target": {
+              "height": 38,
+              "width": 228,
+              "x": 524,
+              "y": 159.6875
+            },
+            "locator": "[data-planned-editor=\"at\"]"
+          },
+          {
+            "step": 3,
+            "x": 1014,
+            "y": 145.6875,
+            "target": {
+              "height": 36.84375,
+              "width": 228,
+              "x": 1004,
+              "y": 159.6875
+            },
+            "locator": "[data-planned-editor=\"duration\"]"
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "操作：固定停留／紮營",
+          "body": "依目的選固定停留或紮營／離營，對應欄位會改變。",
+          "locator": "[data-planned-editor=\"kind\"]",
+          "ui_label": "操作；選項 固定停留 或 紮營／離營"
+        },
+        {
+          "step": 2,
+          "title": "位置／起點",
+          "body": "選有來源的錨點；重複經過時須確認第幾次。",
+          "locator": "[data-planned-editor=\"at\"]",
+          "ui_label": "位置／起點"
+        },
+        {
+          "step": 3,
+          "title": "停留／紮營分鐘",
+          "body": "輸入實際規劃時長。四日原文沒有分鐘數時先保留待補。",
+          "locator": "[data-planned-editor=\"duration\"]",
+          "condition": "kind=stop 或 camp",
+          "ui_label": "停留／紮營分鐘"
+        }
+      ],
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "action_label": "開啟目前 9099 Dashboard ↗"
+    },
+    {
+      "id": "planned-branch",
+      "kind": "screen",
+      "chapter": "建立 Planned · Ref. 與地形候選",
+      "title": "用來源選段描述主線與支線",
+      "lead": "支線往返要有可核對的完整來源段。",
+      "duration": 18,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "steps": [
+        {
+          "title": "來源",
+          "body": "選對應 Ref. GPX 或已核對向量來源。"
+        },
+        {
+          "title": "不跨缺口的來源段",
+          "body": "選 trkseg；來源缺口不得用直線補成路徑。"
+        },
+        {
+          "title": "來源起點",
+          "body": "核對點編號、方向與本次切入位置。"
+        },
+        {
+          "title": "來源終點",
+          "body": "核對切出點；往返時另核對「從終點沿同一來源段返回」。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 R4 維持待審，TRH 以 R1–R3 為主。 kind 選支線往返（branch）或取代主線路段（replace）；展開來源選段。 選實際來源及 trkseg 後才會有 sourceFrom / sourceTo 選項。 阿桑來戛與異祿閣未定位／來源不完整時保持缺口；R4仍待審。",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "historical_capture": {
+        "image": "ui-planned-branch.jpg",
+        "caption": "TASK 歷史畫面 · 東清八通關 · 2026-09-11",
+        "capture_context": "task-historical",
+        "markers": [
+          {
+            "step": 1,
+            "x": 294,
+            "y": 146.015625,
+            "target": {
+              "height": 38,
+              "width": 228,
+              "x": 284,
+              "y": 160.015625
+            },
+            "locator": "[data-planned-editor=\"sourceId\"]"
+          },
+          {
+            "step": 2,
+            "x": 534,
+            "y": 146.015625,
+            "target": {
+              "height": 38,
+              "width": 228,
+              "x": 524,
+              "y": 160.015625
+            },
+            "locator": "[data-planned-editor=\"partIndex\"]"
+          },
+          {
+            "step": 3,
+            "x": 774,
+            "y": 146.015625,
+            "target": {
+              "height": 38,
+              "width": 228,
+              "x": 764,
+              "y": 160.015625
+            },
+            "locator": "[data-planned-editor=\"sourceFrom\"]"
+          },
+          {
+            "step": 4,
+            "x": 1014,
+            "y": 146.015625,
+            "target": {
+              "height": 38,
+              "width": 228,
+              "x": 1004,
+              "y": 160.015625
+            },
+            "locator": "[data-planned-editor=\"sourceTo\"]"
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "來源",
+          "body": "選對應 Ref. GPX 或已核對向量來源。",
+          "locator": "[data-planned-editor=\"sourceId\"]",
+          "ui_label": "來源"
+        },
+        {
+          "step": 2,
+          "title": "不跨缺口的來源段",
+          "body": "選 trkseg；來源缺口不得用直線補成路徑。",
+          "locator": "[data-planned-editor=\"partIndex\"]",
+          "ui_label": "不跨缺口的來源段"
+        },
+        {
+          "step": 3,
+          "title": "來源起點",
+          "body": "核對點編號、方向與本次切入位置。",
+          "locator": "[data-planned-editor=\"sourceFrom\"]",
+          "ui_label": "來源起點"
+        },
+        {
+          "step": 4,
+          "title": "來源終點",
+          "body": "核對切出點；往返時另核對「從終點沿同一來源段返回」。",
+          "locator": "[data-planned-editor=\"sourceTo\"]",
+          "ui_label": "來源終點"
+        }
+      ],
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "action_label": "開啟目前 9099 Dashboard ↗"
+    },
+    {
+      "id": "map-sources",
+      "kind": "screen",
+      "chapter": "建立 Planned · 補充來源",
+      "title": "讀取地圖來源與 Rudy 向量山徑",
+      "lead": "先核對本 workspace 登錄的來源，再決定需要哪項操作。",
+      "duration": 18,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "steps": [
+        {
+          "title": "重新讀取地圖來源",
+          "body": "讀取來源清單、版本、可用狀態與 SHA。"
+        },
+        {
+          "title": "由已登錄 PBF 重建新來源版本",
+          "body": "僅已有可用 PBF 時可建立新來源版本；它會改變來源，不是刷新畫面。"
+        },
+        {
+          "title": "讀取已登錄 Rudy 向量山徑",
+          "body": "僅已有可用 Mapsforge 來源時可讀取；底圖圖磚與向量路段需分別核對。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 R4 維持待審，TRH 以 R1–R3 為主。 在 Permission 上方找到地圖來源與候選描線。 先按重新讀取地圖來源，記 PBF 與 Mapsforge 是否 available、來源版本與 SHA。 其餘兩個按鈕 enabled 由來源決定；不為拍照重建來源。",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "historical_capture": {
+        "image": "ui-map-sources.jpg",
+        "caption": "TASK 歷史畫面 · 東清八通關 · 2026-09-11",
+        "capture_context": "task-historical",
+        "markers": [
+          {
+            "step": 1,
+            "x": 279,
+            "y": 145.96875,
+            "target": {
+              "height": 44,
+              "width": 113.203125,
+              "x": 269,
+              "y": 159.96875
+            },
+            "locator": "[data-planned-map-action=\"refresh\"]"
+          },
+          {
+            "step": 2,
+            "x": 400.6015625,
+            "y": 145.96875,
+            "target": {
+              "height": 44,
+              "width": 176.5078125,
+              "x": 390.6015625,
+              "y": 159.96875
+            },
+            "locator": "[data-planned-map-action=\"rebuild\"]"
+          },
+          {
+            "step": 3,
+            "x": 585.5078125,
+            "y": 145.96875,
+            "target": {
+              "height": 44,
+              "width": 162.125,
+              "x": 575.5078125,
+              "y": 159.96875
+            },
+            "locator": "[data-planned-map-action=\"mapsforge\"]"
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "重新讀取地圖來源",
+          "body": "讀取來源清單、版本、可用狀態與 SHA。",
+          "locator": "[data-planned-map-action=\"refresh\"]",
+          "ui_label": "重新讀取地圖來源"
+        },
+        {
+          "step": 2,
+          "title": "由已登錄 PBF 重建新來源版本",
+          "body": "僅已有可用 PBF 時可建立新來源版本；它會改變來源，不是刷新畫面。",
+          "locator": "[data-planned-map-action=\"rebuild\"]",
+          "ui_label": "由已登錄 PBF 重建新來源版本"
+        },
+        {
+          "step": 3,
+          "title": "讀取已登錄 Rudy 向量山徑",
+          "body": "僅已有可用 Mapsforge 來源時可讀取；底圖圖磚與向量路段需分別核對。",
+          "locator": "[data-planned-map-action=\"mapsforge\"]",
+          "ui_label": "讀取已登錄 Rudy 向量山徑"
+        }
+      ],
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "action_label": "開啟目前 9099 Dashboard ↗"
+    },
+    {
+      "id": "planned-timing",
+      "kind": "screen",
+      "chapter": "建立 Planned · 分日估時",
+      "title": "加入地形、隊伍與分日估時假設",
+      "lead": "估時計畫與 Recorded 原始時間不同，所有假設都要能回查。",
+      "duration": 18,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "steps": [
+        {
+          "title": "啟用此版的地形與隊伍估時",
+          "body": "展開「地形、隊伍與分日估時」後，依實際計畫決定是否啟用。"
+        },
+        {
+          "title": "假設平地腳程 km/h",
+          "body": "填有依據的腳程；未知項目保留未知。"
+        },
+        {
+          "title": "每日總耗時上限（分）",
+          "body": "同時核對移動、休息、過夜、隔日啟程與日照限制。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 展開地形、隊伍與分日估時。 只填已授權的真實假設；其他欄位維持未知，展開必要進階欄位核對。",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "historical_capture": {
+        "image": "ui-planned-timing.jpg",
+        "caption": "TASK 歷史畫面 · 東清八通關 · 2026-09-11",
+        "capture_context": "task-historical",
+        "markers": [
+          {
+            "step": 1,
+            "x": 294,
+            "y": 146.1015625,
+            "target": {
+              "height": 20.296875,
+              "width": 948,
+              "x": 284,
+              "y": 160.1015625
+            },
+            "locator": "label:has([data-planned-timing-enabled])"
+          },
+          {
+            "step": 2,
+            "x": 294,
+            "y": 239.9296875,
+            "target": {
+              "height": 33.4375,
+              "width": 228,
+              "x": 284,
+              "y": 253.9296875
+            },
+            "locator": "[data-planned-timing-field=\"assumed_flat_speed_kmh\"]"
+          },
+          {
+            "step": 3,
+            "x": 534,
+            "y": 326.6015625,
+            "target": {
+              "height": 33.4375,
+              "width": 228,
+              "x": 524,
+              "y": 340.6015625
+            },
+            "locator": "[data-planned-timing-field=\"max_daily_elapsed_minutes\"]"
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "啟用此版的地形與隊伍估時",
+          "body": "展開「地形、隊伍與分日估時」後，依實際計畫決定是否啟用。",
+          "locator": "label:has([data-planned-timing-enabled])",
+          "ui_label": "啟用此版的地形與隊伍估時"
+        },
+        {
+          "step": 2,
+          "title": "假設平地腳程 km/h",
+          "body": "填有依據的腳程；未知項目保留未知。",
+          "locator": "[data-planned-timing-field=\"assumed_flat_speed_kmh\"]",
+          "ui_label": "假設平地腳程 km/h"
+        },
+        {
+          "step": 3,
+          "title": "每日總耗時上限（分）",
+          "body": "同時核對移動、休息、過夜、隔日啟程與日照限制。",
+          "locator": "[data-planned-timing-field=\"max_daily_elapsed_minutes\"]",
+          "ui_label": "每日總耗時上限（分）"
+        }
+      ],
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "action_label": "開啟目前 9099 Dashboard ↗"
+    },
+    {
+      "id": "planned-preview",
+      "kind": "screen",
+      "chapter": "建立 Planned · 預覽與保存",
+      "title": "先預覽，再保存確切 Planned 版本",
+      "lead": "修改原文、來源或估時後，要重新預覽。",
+      "duration": 18,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "steps": [
+        {
+          "title": "加入行程差異",
+          "body": "把目前已核對的操作加入草稿。"
+        },
+        {
+          "title": "預覽 Planned 幾何與節奏",
+          "body": "讀取目前草稿的路線、時間與未解項，不把部分片段稱為完整四日計畫。"
+        },
+        {
+          "title": "Save Planned Version",
+          "body": "只有本次預覽符合保存條件時才保存，保留新版本與 manifest。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 在真實來源及已核對操作上建立 no-save preview。 只有 Save 條件成立且版本內容經確認才保存；照片可以保留 disabled，但不能代表保存成功。",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "historical_capture": {
+        "image": "ui-planned-preview.jpg",
+        "caption": "TASK 歷史畫面 · 東清八通關 · 2026-09-11",
+        "capture_context": "task-historical",
+        "markers": [
+          {
+            "step": 1,
+            "x": 294,
+            "y": 145.875,
+            "target": {
+              "height": 44,
+              "width": 92.40625,
+              "x": 284,
+              "y": 159.875
+            },
+            "locator": "[data-planned-action=\"add-operation\"]"
+          },
+          {
+            "step": 2,
+            "x": 294,
+            "y": 222.171875,
+            "target": {
+              "height": 44,
+              "width": 160.5859375,
+              "x": 284,
+              "y": 236.171875
+            },
+            "locator": "[data-planned-action=\"preview\"]"
+          },
+          {
+            "step": 3,
+            "x": 462.5859375,
+            "y": 222.171875,
+            "target": {
+              "height": 44,
+              "width": 158.4140625,
+              "x": 452.5859375,
+              "y": 236.171875
+            },
+            "locator": "[data-planned-action=\"save\"]"
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "加入行程差異",
+          "body": "把目前已核對的操作加入草稿。",
+          "locator": "[data-planned-action=\"add-operation\"]",
+          "ui_label": "加入行程差異"
+        },
+        {
+          "step": 2,
+          "title": "預覽 Planned 幾何與節奏",
+          "body": "讀取目前草稿的路線、時間與未解項，不把部分片段稱為完整四日計畫。",
+          "locator": "[data-planned-action=\"preview\"]",
+          "ui_label": "預覽 Planned 幾何與節奏"
+        },
+        {
+          "step": 3,
+          "title": "Save Planned Version",
+          "body": "只有本次預覽符合保存條件時才保存，保留新版本與 manifest。",
+          "locator": "[data-planned-action=\"save\"]",
+          "ui_label": "Save Planned Version"
+        }
+      ],
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "action_label": "開啟目前 9099 Dashboard ↗"
+    },
+    {
+      "id": "planned-map",
+      "kind": "screen",
+      "chapter": "Planned 保存版 · 教學樣本",
+      "title": "預覽結果：核對來源片段與缺口",
+      "lead": "Planned 地圖用於向量比較；逐段確認主線與支線。",
+      "duration": 18,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "steps": [
+        {
+          "title": "預覽狀態與 SHA",
+          "body": "確認結果對應目前輸入；needs_review 與未知項仍需處理。"
+        },
+        {
+          "title": "Golden / Planned 比較圖",
+          "body": "切換 Golden／Planned、縮放與拖曳，核對方向、往返與來源缺口。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 先完成第14頁的實際 preview。 確認只有主 preview（非比較版）targets；如同時顯示比較版，需將 query 限定當前預覽。 如僅 D4.3 來源片段，標示部分片段，四日主線與支線仍未完成。",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "historical_capture": {
+        "image": "ui-planned-map.jpg",
+        "caption": "TASK 歷史畫面 · 奇萊既有保存版 · 教學樣本 · 2026-09-11",
+        "capture_context": "task-historical",
+        "markers": [
+          {
+            "step": 1,
+            "x": 236,
+            "y": 170.296875,
+            "target": {
+              "height": 20.296875,
+              "width": 948,
+              "x": 284,
+              "y": 160.1484375
+            },
+            "locator": "[data-planned-preview] > p",
+            "leader": true
+          },
+          {
+            "step": 2,
+            "x": 172,
+            "y": 217.4453125,
+            "target": {
+              "height": 502.296875,
+              "width": 948,
+              "x": 284,
+              "y": 192.4453125
+            },
+            "locator": "[data-planned-map=\"preview\"]",
+            "leader": true
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "預覽狀態與 SHA",
+          "body": "確認結果對應目前輸入；needs_review 與未知項仍需處理。",
+          "locator": "[data-planned-preview]:has([data-planned-map=\"preview\"]) > p:first-of-type",
+          "ui_label": "動態 preview status · SHA · 距離"
+        },
+        {
+          "step": 2,
+          "title": "Golden / Planned 比較圖",
+          "body": "切換 Golden／Planned、縮放與拖曳，核對方向、往返與來源缺口。",
+          "locator": "[data-planned-map=\"preview\"]",
+          "ui_label": "Golden / Planned；+ / − / Fit；拖曳平移 · 點選錨點查核"
+        }
+      ],
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "action_label": "開啟目前 9099 Dashboard ↗"
+    },
+    {
+      "id": "planned-timeline",
+      "kind": "screen",
+      "chapter": "Planned 保存版 · 核對節奏",
+      "title": "核對分日表、移動與停留時間軸",
+      "lead": "不把已知時段小計當成完整一天 ETA。",
+      "duration": 18,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "steps": [
+        {
+          "title": "分日、移動與停留",
+          "body": "逐日核對啟程、到達、移動、停留與營地。"
+        },
+        {
+          "title": "時間軸：移動、固定停留、離營與未知",
+          "body": "展開完整原始時間軸，檢查來源方法與未知轉換。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 同版 preview 有 itinerary 與 events 後拍。 如果沒有 events，保留尚無資料畫面；時間軸教學仍列待補，不替換成示例。",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "historical_capture": {
+        "image": "ui-planned-timeline.jpg",
+        "caption": "TASK 歷史畫面 · 奇萊既有保存版 · 教學樣本 · 2026-09-11",
+        "capture_context": "task-historical",
+        "markers": [
+          {
+            "step": 1,
+            "x": 294,
+            "y": 145.7890625,
+            "target": {
+              "height": 103.59375,
+              "width": 948,
+              "x": 284,
+              "y": 159.7890625
+            },
+            "locator": "[data-planned-preview] [data-planned-itinerary] > .planned-table-scroll"
+          },
+          {
+            "step": 2,
+            "x": 294,
+            "y": 249.3828125,
+            "target": {
+              "height": 20.296875,
+              "width": 948,
+              "x": 284,
+              "y": 263.3828125
+            },
+            "locator": "[data-planned-preview] [data-planned-itinerary] > details:first-of-type > summary"
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "分日、移動與停留",
+          "body": "逐日核對啟程、到達、移動、停留與營地。",
+          "locator": "[data-planned-preview]:has([data-planned-map=\"preview\"]) [data-planned-itinerary] > .planned-table-scroll",
+          "ui_label": "Planned 分日、移動與停留；日／啟程 → 到達／移動／停留／營地／距離／限制"
+        },
+        {
+          "step": 2,
+          "title": "時間軸：移動、固定停留、離營與未知",
+          "body": "展開完整原始時間軸，檢查來源方法與未知轉換。",
+          "locator": "[data-planned-preview]:has([data-planned-map=\"preview\"]) [data-planned-itinerary] > details:has([data-planned-raw-timeline]) > summary",
+          "condition": "預覽有 events 時顯示",
+          "ui_label": "時間軸：移動、固定停留、離營與未知 · N 原始紀錄"
+        }
+      ],
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "action_label": "開啟目前 9099 Dashboard ↗"
+    },
+    {
+      "id": "planned-review",
+      "kind": "screen",
+      "chapter": "Planned 保存版 · 人工審查",
+      "title": "審查此 Planned 版本",
+      "lead": "四項確認都綁定目前保存版本的 immutable manifest。",
+      "duration": 18,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "steps": [
+        {
+          "title": "已檢視 來源與選段範圍",
+          "body": "逐段核對來源及切段範圍。"
+        },
+        {
+          "title": "已檢視 幾何順序、往返與缺口",
+          "body": "確認主線與支線方向，保留未連通缺口。"
+        },
+        {
+          "title": "已檢視 分日、腳程與固定停留",
+          "body": "確認自己的時程及仍未知的項目。"
+        },
+        {
+          "title": "已檢視 不確定性與候選來源限制",
+          "body": "由本人讀完限制後確認，不能為產生綠燈代勾。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 讀取真實 Saved Planned，核對 manifest 與來源 current。 不代勾四個人工 review checkbox；dirty 或來源改變的 disabled 狀態如實保留。",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "historical_capture": {
+        "image": "ui-planned-review.jpg",
+        "caption": "TASK 歷史畫面 · 奇萊既有保存版 · 教學樣本 · 2026-09-11",
+        "capture_context": "task-historical",
+        "markers": [
+          {
+            "step": 1,
+            "x": 236,
+            "y": 170.375,
+            "target": {
+              "height": 20.296875,
+              "width": 948,
+              "x": 284,
+              "y": 160.2265625
+            },
+            "locator": "label:has([data-planned-review-check=\"sources\"])",
+            "leader": true
+          },
+          {
+            "step": 2,
+            "x": 172,
+            "y": 198.671875,
+            "target": {
+              "height": 20.296875,
+              "width": 948,
+              "x": 284,
+              "y": 188.5234375
+            },
+            "locator": "label:has([data-planned-review-check=\"geometry\"])",
+            "leader": true
+          },
+          {
+            "step": 3,
+            "x": 236,
+            "y": 226.96875,
+            "target": {
+              "height": 20.296875,
+              "width": 948,
+              "x": 284,
+              "y": 216.8203125
+            },
+            "locator": "label:has([data-planned-review-check=\"timing\"])",
+            "leader": true
+          },
+          {
+            "step": 4,
+            "x": 172,
+            "y": 255.265625,
+            "target": {
+              "height": 20.296875,
+              "width": 948,
+              "x": 284,
+              "y": 245.1171875
+            },
+            "locator": "label:has([data-planned-review-check=\"uncertainty\"])",
+            "leader": true
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "已檢視 來源與選段範圍",
+          "body": "逐段核對來源及切段範圍。",
+          "locator": "label:has([data-planned-review-check=\"sources\"])",
+          "ui_label": "已檢視 來源與選段範圍"
+        },
+        {
+          "step": 2,
+          "title": "已檢視 幾何順序、往返與缺口",
+          "body": "確認主線與支線方向，保留未連通缺口。",
+          "locator": "label:has([data-planned-review-check=\"geometry\"])",
+          "ui_label": "已檢視 幾何順序、往返與缺口"
+        },
+        {
+          "step": 3,
+          "title": "已檢視 分日、腳程與固定停留",
+          "body": "確認自己的時程及仍未知的項目。",
+          "locator": "label:has([data-planned-review-check=\"timing\"])",
+          "ui_label": "已檢視 分日、腳程與固定停留"
+        },
+        {
+          "step": 4,
+          "title": "已檢視 不確定性與候選來源限制",
+          "body": "由本人讀完限制後確認，不能為產生綠燈代勾。",
+          "locator": "label:has([data-planned-review-check=\"uncertainty\"])",
+          "ui_label": "已檢視 不確定性與候選來源限制"
+        }
+      ],
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "action_label": "開啟目前 9099 Dashboard ↗"
+    },
+    {
+      "id": "planned-adopt",
+      "kind": "screen",
+      "chapter": "Planned 保存版 · 完成審查",
+      "title": "記錄審查，再選 Planned 作為分析主體",
+      "lead": "保存、審查、選分析主體是不同操作。",
+      "duration": 18,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "steps": [
+        {
+          "title": "版本限制逐項確認",
+          "body": "逐筆核對；全選只代表已讀完整清單，不能省略實際審查。"
+        },
+        {
+          "title": "記錄此版本審查",
+          "body": "確認審查綁定目前 manifest；草稿或來源改變時不可沿用。"
+        },
+        {
+          "title": "以此 Planned 分析六力",
+          "body": "選擇已審查的保存版本；接著補件與重新運算。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 延續同版 Saved Planned，讀完整限制。 有 actual human review 才記錄／選用，若零 issues，第1步須根據實際沒有限制的證據調整講稿及編號。",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "historical_capture": {
+        "image": "ui-planned-adopt.jpg",
+        "caption": "TASK 歷史畫面 · 奇萊既有保存版 · 教學樣本 · 2026-09-11",
+        "capture_context": "task-historical",
+        "markers": [
+          {
+            "step": 1,
+            "x": 294,
+            "y": 145.7109375,
+            "target": {
+              "height": 20.296875,
+              "width": 948,
+              "x": 284,
+              "y": 159.7109375
+            },
+            "locator": "label:has([data-planned-review-all-issues])"
+          },
+          {
+            "step": 2,
+            "x": 294,
+            "y": 206.3046875,
+            "target": {
+              "height": 44,
+              "width": 102.8046875,
+              "x": 284,
+              "y": 220.3046875
+            },
+            "locator": "[data-planned-action=\"review\"]"
+          },
+          {
+            "step": 3,
+            "x": 404.8046875,
+            "y": 206.3046875,
+            "target": {
+              "height": 44,
+              "width": 150.1875,
+              "x": 394.8046875,
+              "y": 220.3046875
+            },
+            "locator": "[data-planned-action=\"select\"]"
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "版本限制逐項確認",
+          "body": "逐筆核對；全選只代表已讀完整清單，不能省略實際審查。",
+          "locator": "label:has([data-planned-review-all-issues])",
+          "condition": "此版本有 review issues 時顯示",
+          "ui_label": "我已檢視以上完整 N 筆限制，將全部綁定此版本確認"
+        },
+        {
+          "step": 2,
+          "title": "記錄此版本審查",
+          "body": "確認審查綁定目前 manifest；草稿或來源改變時不可沿用。",
+          "locator": "[data-planned-action=\"review\"]",
+          "ui_label": "記錄此版本審查"
+        },
+        {
+          "step": 3,
+          "title": "以此 Planned 分析六力",
+          "body": "選擇已審查的保存版本；接著補件與重新運算。",
+          "locator": "[data-planned-action=\"select\"]",
+          "ui_label": "以此 Planned 分析六力"
+        }
+      ],
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "action_label": "開啟目前 9099 Dashboard ↗"
+    },
+    {
+      "id": "planned-context",
+      "kind": "screen",
+      "chapter": "Planned 保存版 · 補件",
+      "title": "填寫此版本的補件與審查資料",
+      "lead": "補件綁定此版幾何與時程，更新後舊作業需要重算。",
+      "duration": 18,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "steps": [
+        {
+          "title": "實際聲明者代號",
+          "body": "填真正提供本次資料的人，不使用教學假代號。"
+        },
+        {
+          "title": "聲明時間（ISO 與時區）",
+          "body": "填實際聲明時間與時區。"
+        },
+        {
+          "title": "隊伍人數",
+          "body": "依實際隊伍填寫，繼續核對地圖使用者與八項 Navigation 人工確認。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 先還原真實 Saved Planned，補件表只有 version_id 存在才 render。 先讀已保存補件；若未有真實聲明者與隊伍資料，拍空表並列缺項。",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "historical_capture": {
+        "image": "ui-planned-context.jpg",
+        "caption": "TASK 歷史畫面 · 奇萊既有保存版 · 教學樣本 · 2026-09-11",
+        "capture_context": "task-historical",
+        "markers": [
+          {
+            "step": 1,
+            "x": 294,
+            "y": 146.125,
+            "target": {
+              "height": 33.4375,
+              "width": 228,
+              "x": 284,
+              "y": 160.125
+            },
+            "locator": "[data-planned-context-field=\"declaredBy\"]"
+          },
+          {
+            "step": 2,
+            "x": 534,
+            "y": 146.125,
+            "target": {
+              "height": 33.4375,
+              "width": 228,
+              "x": 524,
+              "y": 160.125
+            },
+            "locator": "[data-planned-context-field=\"declaredAt\"]"
+          },
+          {
+            "step": 3,
+            "x": 774,
+            "y": 146.125,
+            "target": {
+              "height": 33.4375,
+              "width": 228,
+              "x": 764,
+              "y": 160.125
+            },
+            "locator": "[data-planned-context-field=\"teamSize\"]"
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "實際聲明者代號",
+          "body": "填真正提供本次資料的人，不使用教學假代號。",
+          "locator": "[data-planned-context-field=\"declaredBy\"]",
+          "ui_label": "實際聲明者代號"
+        },
+        {
+          "step": 2,
+          "title": "聲明時間（ISO 與時區）",
+          "body": "填實際聲明時間與時區。",
+          "locator": "[data-planned-context-field=\"declaredAt\"]",
+          "ui_label": "聲明時間（ISO 與時區）"
+        },
+        {
+          "step": 3,
+          "title": "隊伍人數",
+          "body": "依實際隊伍填寫，繼續核對地圖使用者與八項 Navigation 人工確認。",
+          "locator": "[data-planned-context-field=\"teamSize\"]",
+          "ui_label": "隊伍人數"
+        }
+      ],
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "action_label": "開啟目前 9099 Dashboard ↗"
+    },
+    {
+      "id": "planned-context-save",
+      "kind": "screen",
+      "chapter": "Planned 保存版 · 保存補件",
+      "title": "保存此版補件，保留未知與來源",
+      "lead": "補件不是出發核准，pending 審查不可寫成 reviewed。",
+      "duration": 18,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "steps": [
+        {
+          "title": "確認完整人工聲明",
+          "body": "本人核對已填資訊、未填未知及每份來源後再確認。"
+        },
+        {
+          "title": "保存此版補件",
+          "body": "保存版本綁定聲明；讀回 context SHA，再重新運算依賴這份補件的結果。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 讀完所有補件；pending 保持 pending。 本人完整聲明才勾確認並保存，讀回 context SHA；拍攝空表或 disabled 不能當成補件保存通過。",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "historical_capture": {
+        "image": "ui-planned-context-save.jpg",
+        "caption": "TASK 歷史畫面 · 奇萊既有保存版 · 教學樣本 · 2026-09-11",
+        "capture_context": "task-historical",
+        "markers": [
+          {
+            "step": 1,
+            "x": 294,
+            "y": 146.0234375,
+            "target": {
+              "height": 20.296875,
+              "width": 948,
+              "x": 284,
+              "y": 160.0234375
+            },
+            "locator": "label:has([data-planned-context-confirm])"
+          },
+          {
+            "step": 2,
+            "x": 488,
+            "y": 178.3203125,
+            "target": {
+              "height": 44,
+              "width": 92.40625,
+              "x": 478,
+              "y": 192.3203125
+            },
+            "locator": "[data-planned-context-action=\"save\"]"
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "確認完整人工聲明",
+          "body": "本人核對已填資訊、未填未知及每份來源後再確認。",
+          "locator": "label:has([data-planned-context-confirm])",
+          "ui_label": "我確認以上是此版本的完整人工聲明，未填項目維持未知"
+        },
+        {
+          "step": 2,
+          "title": "保存此版補件",
+          "body": "保存版本綁定聲明；讀回 context SHA，再重新運算依賴這份補件的結果。",
+          "locator": "[data-planned-context-action=\"save\"]",
+          "ui_label": "保存此版補件"
+        }
+      ],
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "action_label": "開啟目前 9099 Dashboard ↗"
+    },
+    {
+      "id": "planned-jobs",
+      "kind": "screen",
+      "chapter": "Planned 保存版 · 作業",
+      "title": "追加準備並重算此版六力",
+      "lead": "先核對保存版本、審查、補件與既有作業。",
+      "duration": 18,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "steps": [
+        {
+          "title": "追加準備並重算六力",
+          "body": "只對已審查且補件符合要求的保存版本啟動。"
+        },
+        {
+          "title": "此版本保存的作業",
+          "body": "選同版 run ID，避免把另一版或舊作業當成本版。"
+        },
+        {
+          "title": "讀取作業狀態",
+          "body": "讀取準備、六力與產物 receipt；只有完成標籤還不夠。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 同版 review/context ready 後先讀作業列表，避免重複 start。 啟動只限已授權真實工作，不用 fake plan 清空 gate；或可拍既有作業的入口與讀取。",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "historical_capture": {
+        "image": "ui-planned-jobs.jpg",
+        "caption": "TASK 歷史畫面 · 奇萊既有保存版 · 教學樣本 · 2026-09-11",
+        "capture_context": "task-historical",
+        "markers": [
+          {
+            "step": 1,
+            "x": 294,
+            "y": 146.3046875,
+            "target": {
+              "height": 44,
+              "width": 123.6015625,
+              "x": 284,
+              "y": 160.3046875
+            },
+            "locator": "[data-planned-run-action=\"start\"]"
+          },
+          {
+            "step": 2,
+            "x": 406,
+            "y": 190.3046875,
+            "target": {
+              "height": 39,
+              "width": 567.5,
+              "x": 396,
+              "y": 204.3046875
+            },
+            "locator": "[data-planned-analysis-run-select]"
+          },
+          {
+            "step": 3,
+            "x": 294,
+            "y": 241.3046875,
+            "target": {
+              "height": 44,
+              "width": 92.40625,
+              "x": 284,
+              "y": 255.3046875
+            },
+            "locator": "[data-planned-run-action=\"read\"]"
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "追加準備並重算六力",
+          "body": "只對已審查且補件符合要求的保存版本啟動。",
+          "locator": "[data-planned-run-action=\"start\"]",
+          "ui_label": "追加準備並重算六力"
+        },
+        {
+          "step": 2,
+          "title": "此版本保存的作業",
+          "body": "選同版 run ID，避免把另一版或舊作業當成本版。",
+          "locator": "[data-planned-analysis-run-select]",
+          "ui_label": "此版本保存的作業"
+        },
+        {
+          "step": 3,
+          "title": "讀取作業狀態",
+          "body": "讀取準備、六力與產物 receipt；只有完成標籤還不夠。",
+          "locator": "[data-planned-run-action=\"read\"]",
+          "ui_label": "讀取作業狀態"
+        }
+      ],
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "action_label": "開啟目前 9099 Dashboard ↗"
+    },
+    {
+      "id": "planned-results",
+      "kind": "screen",
+      "chapter": "Planned 保存版 · 結果判讀",
+      "title": "逐一讀取準備與六力結果",
+      "lead": "completed_with_gaps、unknown、needs_reanalysis 都要逐項處理。",
+      "duration": 18,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "steps": [
+        {
+          "title": "版本、作業與 attempt",
+          "body": "核對目前 version ID、run ID、attempt 及執行位置。"
+        },
+        {
+          "title": "準備結果",
+          "body": "結果尚未讀取時先按讀取作業狀態，保留失敗原因。"
+        },
+        {
+          "title": "六力結果與待補資料",
+          "body": "逐一確認六力狀態、摘要與缺項，不把作業結束視為全部通過。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 選同版 run 並按讀取作業狀態。 等待真正 preparation/projections receipt；逐六力記錄 pass/warn/fail/unknown，不把 completed 當全通過。",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "historical_capture": {
+        "image": "ui-planned-results.jpg",
+        "caption": "TASK 歷史畫面 · 奇萊既有保存版 · 教學樣本 · 2026-09-11",
+        "capture_context": "task-historical",
+        "markers": [
+          {
+            "step": 1,
+            "x": 236,
+            "y": 179.8984375,
+            "target": {
+              "height": 40.59375,
+              "width": 948,
+              "x": 284,
+              "y": 159.6015625
+            },
+            "locator": "[data-planned-analysis-run] > p:nth-of-type(1)",
+            "leader": true
+          },
+          {
+            "step": 2,
+            "x": 172,
+            "y": 333.8359375,
+            "target": {
+              "height": 20.296875,
+              "width": 948,
+              "x": 284,
+              "y": 323.6875
+            },
+            "locator": "[data-planned-analysis-run] > p:nth-of-type(3)",
+            "leader": true
+          },
+          {
+            "step": 3,
+            "x": 236,
+            "y": 368.984375,
+            "target": {
+              "height": 240.7890625,
+              "width": 948,
+              "x": 284,
+              "y": 343.984375
+            },
+            "locator": "[data-planned-analysis-run] > .planned-table-scroll:nth-of-type(2)",
+            "leader": true
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "版本、作業與 attempt",
+          "body": "核對目前 version ID、run ID、attempt 及執行位置。",
+          "locator": "[data-planned-analysis-run] > p:first-of-type",
+          "ui_label": "動態 version ID · run ID · status · 階段 · attempt · 執行位置"
+        },
+        {
+          "step": 2,
+          "title": "準備結果",
+          "body": "結果尚未讀取時先按讀取作業狀態，保留失敗原因。",
+          "locator": "[data-planned-analysis-run] > p",
+          "text_prefix": "準備：",
+          "ui_label": "準備：實際狀態／原因"
+        },
+        {
+          "step": 3,
+          "title": "六力結果與待補資料",
+          "body": "逐一確認六力狀態、摘要與缺項，不把作業結束視為全部通過。",
+          "locator": "[data-planned-analysis-run] > .planned-table-scroll:nth-of-type(2)",
+          "ui_label": "六力／此作業結果／摘要／待補資料"
+        }
+      ],
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "action_label": "開啟目前 9099 Dashboard ↗"
+    },
+    {
+      "id": "planned-report",
+      "kind": "screen",
+      "chapter": "Planned 保存版 · 行前報告",
+      "title": "閱讀同版行前綜合報告",
+      "lead": "報告必須對應目前路線、時程、補件與作業。",
+      "duration": 18,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "steps": [
+        {
+          "title": "候選規劃建議與完整度",
+          "body": "先讀 decision 與 status；這是候選評估，不是出發許可。"
+        },
+        {
+          "title": "版本、run 與補件",
+          "body": "確認報告對應本版與本次補件 SHA。"
+        },
+        {
+          "title": "前三大風險來源",
+          "body": "讀標題下的實際風險清單；若顯示尚無資料，維持缺項。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 同版作業必須已有 pretrip_report 且 geometry/timing/context 綁定匹配。 若只有 pending 報告提示，拍真實阻擋作補充證據，正向報告頁仍待補。 風險可能為空；標題後的實際 p/ul 要一同入鏡。",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "historical_capture": {
+        "image": "ui-planned-report.jpg",
+        "caption": "TASK 歷史畫面 · 奇萊既有保存版 · 教學樣本 · 2026-09-11",
+        "capture_context": "task-historical",
+        "markers": [
+          {
+            "step": 1,
+            "x": 236,
+            "y": 170.21875,
+            "target": {
+              "height": 20.296875,
+              "width": 948,
+              "x": 284,
+              "y": 160.0703125
+            },
+            "locator": "[data-planned-report-decision]",
+            "leader": true
+          },
+          {
+            "step": 2,
+            "x": 172,
+            "y": 200.6640625,
+            "target": {
+              "height": 40.59375,
+              "width": 948,
+              "x": 284,
+              "y": 180.3671875
+            },
+            "locator": "[data-planned-pretrip-report] > p:nth-of-type(2)",
+            "leader": true
+          },
+          {
+            "step": 3,
+            "x": 236,
+            "y": 281.7109375,
+            "target": {
+              "height": 153.265625,
+              "width": 948,
+              "x": 284,
+              "y": 256.7109375
+            },
+            "locator": "[data-planned-pretrip-report] > ul:nth-of-type(1)",
+            "leader": true
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "候選規劃建議與完整度",
+          "body": "先讀 decision 與 status；這是候選評估，不是出發許可。",
+          "locator": "[data-planned-report-decision]",
+          "ui_label": "候選規劃建議：decision · 完整度 status"
+        },
+        {
+          "step": 2,
+          "title": "版本、run 與補件",
+          "body": "確認報告對應本版與本次補件 SHA。",
+          "locator": "[data-planned-pretrip-report] > p:nth-of-type(2)",
+          "ui_label": "動態 version ID · run ID · 補件 context SHA"
+        },
+        {
+          "step": 3,
+          "title": "前三大風險來源",
+          "body": "讀標題下的實際風險清單；若顯示尚無資料，維持缺項。",
+          "locator": "[data-planned-pretrip-report] > h4",
+          "text_exact": "前三大風險來源",
+          "ui_label": "前三大風險來源"
+        }
+      ],
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "action_label": "開啟目前 9099 Dashboard ↗"
+    },
+    {
+      "id": "planned-download",
+      "kind": "screen",
+      "chapter": "Planned 保存版 · 下載",
+      "title": "核對來源並下載完整行前報告",
+      "lead": "下載後仍須核對實際檔案與報告 SHA。",
+      "duration": 18,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "steps": [
+        {
+          "title": "報告產物與 SHA-256",
+          "body": "記下這份報告的 artifact ref 與完整 SHA。"
+        },
+        {
+          "title": "核對並下載完整行前報告",
+          "body": "讀取保存產物並核對內容。"
+        },
+        {
+          "title": "下載狀態",
+          "body": "尚未下載、核對中或錯誤都不能當成已取得完整報告。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 延續第23頁匹配的報告。 拍 artifact SHA 與下載前後狀態；下載檔放 Scout，核對實際 bytes/SHA 才記完成。",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "historical_capture": {
+        "image": "ui-planned-download.jpg",
+        "caption": "TASK 歷史畫面 · 奇萊既有保存版 · 教學樣本 · 2026-09-11",
+        "capture_context": "task-historical",
+        "markers": [
+          {
+            "step": 1,
+            "x": 236,
+            "y": 180.4296875,
+            "target": {
+              "height": 40.59375,
+              "width": 948,
+              "x": 284,
+              "y": 160.1328125
+            },
+            "locator": "[data-planned-pretrip-report] > p:nth-of-type(3)",
+            "leader": true
+          },
+          {
+            "step": 2,
+            "x": 172,
+            "y": 222.7265625,
+            "target": {
+              "height": 44,
+              "width": 144.40625,
+              "x": 284,
+              "y": 200.7265625
+            },
+            "locator": "[data-planned-report-download]",
+            "leader": true
+          },
+          {
+            "step": 3,
+            "x": 236,
+            "y": 254.875,
+            "target": {
+              "height": 20.296875,
+              "width": 948,
+              "x": 284,
+              "y": 244.7265625
+            },
+            "locator": "[data-planned-report-download-status]",
+            "leader": true
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "報告產物與 SHA-256",
+          "body": "記下這份報告的 artifact ref 與完整 SHA。",
+          "locator": "[data-planned-pretrip-report] > p:has(> code)",
+          "ui_label": "動態 artifact ref；SHA-256：完整雜湊"
+        },
+        {
+          "step": 2,
+          "title": "核對並下載完整行前報告",
+          "body": "讀取保存產物並核對內容。",
+          "locator": "[data-planned-report-download]",
+          "ui_label": "核對並下載完整行前報告"
+        },
+        {
+          "step": 3,
+          "title": "下載狀態",
+          "body": "尚未下載、核對中或錯誤都不能當成已取得完整報告。",
+          "locator": "[data-planned-report-download-status]",
+          "ui_label": "尚未下載 或 實際下載核對結果"
+        }
+      ],
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "action_label": "開啟目前 9099 Dashboard ↗"
+    },
+    {
+      "id": "planned-export",
+      "kind": "screen",
+      "chapter": "Planned 保存版 · 匯出",
+      "title": "匯出保存版本，保留完整依據",
+      "lead": "未保存的草稿不會混入保存版本的匯出。",
+      "duration": 18,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "steps": [
+        {
+          "title": "匯出 Planned GPX",
+          "body": "取得這個版本的候選幾何。"
+        },
+        {
+          "title": "匯出 行程 Manifest",
+          "body": "保存版本、來源與時間依據。"
+        },
+        {
+          "title": "匯出 完整 Bundle",
+          "body": "保存可回查的完整版本包；核對下載位元組、檔名與 SHA。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 真實 Saved Planned manifest 已還原，三匯出控制可見。 實际 GPX/manifest/bundle 下載後核對內容與 SHA，沒下載只表示入口已拍。",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "historical_capture": {
+        "image": "ui-planned-export.jpg",
+        "caption": "TASK 歷史畫面 · 奇萊既有保存版 · 教學樣本 · 2026-09-11",
+        "capture_context": "task-historical",
+        "markers": [
+          {
+            "step": 1,
+            "x": 294,
+            "y": 145.8984375,
+            "target": {
+              "height": 44,
+              "width": 127.8515625,
+              "x": 284,
+              "y": 159.8984375
+            },
+            "locator": "[data-planned-export=\"gpx\"]"
+          },
+          {
+            "step": 2,
+            "x": 429.8515625,
+            "y": 145.8984375,
+            "target": {
+              "height": 44,
+              "width": 135.8125,
+              "x": 419.8515625,
+              "y": 159.8984375
+            },
+            "locator": "[data-planned-export=\"manifest\"]"
+          },
+          {
+            "step": 3,
+            "x": 573.6640625,
+            "y": 145.8984375,
+            "target": {
+              "height": 44,
+              "width": 122.96875,
+              "x": 563.6640625,
+              "y": 159.8984375
+            },
+            "locator": "[data-planned-export=\"bundle\"]"
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "匯出 Planned GPX",
+          "body": "取得這個版本的候選幾何。",
+          "locator": "[data-planned-export=\"gpx\"]",
+          "ui_label": "匯出 Planned GPX"
+        },
+        {
+          "step": 2,
+          "title": "匯出 行程 Manifest",
+          "body": "保存版本、來源與時間依據。",
+          "locator": "[data-planned-export=\"manifest\"]",
+          "ui_label": "匯出 行程 Manifest"
+        },
+        {
+          "step": 3,
+          "title": "匯出 完整 Bundle",
+          "body": "保存可回查的完整版本包；核對下載位元組、檔名與 SHA。",
+          "locator": "[data-planned-export=\"bundle\"]",
+          "ui_label": "匯出 完整 Bundle"
+        }
+      ],
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "action_label": "開啟目前 9099 Dashboard ↗"
+    },
+    {
+      "id": "planned-restore",
+      "kind": "screen",
+      "chapter": "Planned 保存版 · 恢復工作",
+      "title": "還原 Planned 版本，或切回 Golden",
+      "lead": "下拉選版本後，還要按 Restore Planned Version。",
+      "duration": 18,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "steps": [
+        {
+          "title": "Planned 版本",
+          "body": "選要檢查的保存版本。"
+        },
+        {
+          "title": "Restore Planned Version",
+          "body": "讀回該版 manifest、預覽與審查狀態，核對完整 SHA。"
+        },
+        {
+          "title": "切回 Golden 分析",
+          "body": "需要時才切換分析主體；原保存 Planned 版本保留。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 先重新讀取來源與版本，列真實 version ID。 選版本後按 Restore，核對 SHA。Golden 按鈕只在確定要切主體時操作。",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "historical_capture": {
+        "image": "ui-planned-restore.jpg",
+        "caption": "TASK 歷史畫面 · 奇萊既有保存版 · 教學樣本 · 2026-09-11",
+        "capture_context": "task-historical",
+        "markers": [
+          {
+            "step": 1,
+            "x": 236,
+            "y": 393.3046875,
+            "target": {
+              "height": 38,
+              "width": 468,
+              "x": 284,
+              "y": 374.3046875
+            },
+            "locator": "[data-planned-version]",
+            "leader": true
+          },
+          {
+            "step": 2,
+            "x": 172,
+            "y": 446.3046875,
+            "target": {
+              "height": 44,
+              "width": 177.671875,
+              "x": 284,
+              "y": 424.3046875
+            },
+            "locator": "[data-planned-action=\"restore\"]",
+            "leader": true
+          },
+          {
+            "step": 3,
+            "x": 236,
+            "y": 446.3046875,
+            "target": {
+              "height": 44,
+              "width": 122.96875,
+              "x": 549.2734375,
+              "y": 424.3046875
+            },
+            "locator": "[data-planned-action=\"golden\"]",
+            "leader": true
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "Planned 版本",
+          "body": "選要檢查的保存版本。",
+          "locator": "[data-planned-version]",
+          "ui_label": "Planned 版本"
+        },
+        {
+          "step": 2,
+          "title": "Restore Planned Version",
+          "body": "讀回該版 manifest、預覽與審查狀態，核對完整 SHA。",
+          "locator": "[data-planned-action=\"restore\"]",
+          "ui_label": "Restore Planned Version"
+        },
+        {
+          "step": 3,
+          "title": "切回 Golden 分析",
+          "body": "需要時才切換分析主體；原保存 Planned 版本保留。",
+          "locator": "[data-planned-action=\"golden\"]",
+          "ui_label": "切回 Golden 分析"
+        }
+      ],
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "action_label": "開啟目前 9099 Dashboard ↗"
+    },
+    {
+      "id": "planned-resume",
+      "kind": "screen",
+      "chapter": "Planned 保存版 · 作業恢復",
+      "title": "重新找回作業，符合條件才 Resume",
+      "lead": "重新載入後先讀既有作業，避免重複啟動。",
+      "duration": 18,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "steps": [
+        {
+          "title": "重新讀取作業列表",
+          "body": "讀取目前版本保存的 run ID。"
+        },
+        {
+          "title": "讀取作業狀態",
+          "body": "確認本版與補件綁定、stage、attempt、錯誤及 can_resume。"
+        },
+        {
+          "title": "Resume 此作業",
+          "body": "只有可恢復且非執行中、非 stale 的同版作業才可恢復。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 選本版 run 並刷新狀態，核對 can_resume/current context。 沒有真實可恢復作業時只能拍 disabled，恢復成功段落繼續待補；不可故意製造 live 故障。",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "historical_capture": {
+        "image": "ui-planned-resume.jpg",
+        "caption": "TASK 歷史畫面 · 奇萊既有保存版 · 教學樣本 · 2026-09-11",
+        "capture_context": "task-historical",
+        "markers": [
+          {
+            "step": 1,
+            "x": 425.6015625,
+            "y": 145.8046875,
+            "target": {
+              "height": 44,
+              "width": 113.203125,
+              "x": 415.6015625,
+              "y": 159.8046875
+            },
+            "locator": "[data-planned-run-action=\"list\"]"
+          },
+          {
+            "step": 2,
+            "x": 294,
+            "y": 240.8046875,
+            "target": {
+              "height": 44,
+              "width": 92.40625,
+              "x": 284,
+              "y": 254.8046875
+            },
+            "locator": "[data-planned-run-action=\"read\"]"
+          },
+          {
+            "step": 3,
+            "x": 394.40625,
+            "y": 240.8046875,
+            "target": {
+              "height": 44,
+              "width": 106.1484375,
+              "x": 384.40625,
+              "y": 254.8046875
+            },
+            "locator": "[data-planned-run-action=\"resume\"]"
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "重新讀取作業列表",
+          "body": "讀取目前版本保存的 run ID。",
+          "locator": "[data-planned-run-action=\"list\"]",
+          "ui_label": "重新讀取作業列表"
+        },
+        {
+          "step": 2,
+          "title": "讀取作業狀態",
+          "body": "確認本版與補件綁定、stage、attempt、錯誤及 can_resume。",
+          "locator": "[data-planned-run-action=\"read\"]",
+          "ui_label": "讀取作業狀態"
+        },
+        {
+          "step": 3,
+          "title": "Resume 此作業",
+          "body": "只有可恢復且非執行中、非 stale 的同版作業才可恢復。",
+          "locator": "[data-planned-run-action=\"resume\"]",
+          "ui_label": "Resume 此作業"
+        }
+      ],
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "action_label": "開啟目前 9099 Dashboard ↗"
+    },
+    {
+      "id": "exploration",
+      "kind": "screen",
+      "chapter": "沒有 Ref. GPX",
+      "title": "無 Ref. GPX：從分析區域開始",
+      "lead": "探索流程保留獨立入口；沒有參考路線不等於已有可行路線。",
+      "duration": 18,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "steps": [
+        {
+          "title": "探索 workspace 名稱",
+          "body": "使用實際要建立或讀取的探索專案名稱，勿覆用東清而覆寫資料。"
+        },
+        {
+          "title": "探索目的",
+          "body": "記錄這次探索的真實目的。"
+        },
+        {
+          "title": "座標系統",
+          "body": "依實際資料選 WGS84 或 TWD97；不可混用經緯度和公尺。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 R4 維持待審，TRH 以 R1–R3 為主。 Permission 上方找到無 Ref. GPX：從分析區域開始。 未提供實際探索名稱與 AOI 時只拍表單，不建立或切換專案。",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "historical_capture": {
+        "image": "ui-exploration.jpg",
+        "caption": "TASK 歷史畫面 · 東清八通關 · 2026-09-11",
+        "capture_context": "task-historical",
+        "markers": [
+          {
+            "step": 1,
+            "x": 279,
+            "y": 145.8984375,
+            "target": {
+              "height": 26.296875,
+              "width": 236.1015625,
+              "x": 269,
+              "y": 159.8984375
+            },
+            "locator": "[data-exploration-field=\"projectId\"]"
+          },
+          {
+            "step": 2,
+            "x": 526.296875,
+            "y": 145.8984375,
+            "target": {
+              "height": 26.296875,
+              "width": 236.1015625,
+              "x": 516.296875,
+              "y": 159.8984375
+            },
+            "locator": "[data-exploration-field=\"intent\"]"
+          },
+          {
+            "step": 3,
+            "x": 773.59375,
+            "y": 147.546875,
+            "target": {
+              "height": 24.6484375,
+              "width": 236.1015625,
+              "x": 763.59375,
+              "y": 161.546875
+            },
+            "locator": "[data-exploration-field=\"crs\"]"
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "探索 workspace 名稱",
+          "body": "使用實際要建立或讀取的探索專案名稱，勿覆用東清而覆寫資料。",
+          "locator": "[data-exploration-field=\"projectId\"]",
+          "ui_label": "探索 workspace 名稱"
+        },
+        {
+          "step": 2,
+          "title": "探索目的",
+          "body": "記錄這次探索的真實目的。",
+          "locator": "[data-exploration-field=\"intent\"]",
+          "ui_label": "探索目的"
+        },
+        {
+          "step": 3,
+          "title": "座標系統",
+          "body": "依實際資料選 WGS84 或 TWD97；不可混用經緯度和公尺。",
+          "locator": "[data-exploration-field=\"crs\"]",
+          "ui_label": "座標系統"
+        }
+      ],
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "action_label": "開啟目前 9099 Dashboard ↗"
+    },
+    {
+      "id": "exploration-aoi",
+      "kind": "screen",
+      "chapter": "沒有 Ref. GPX · 區域",
+      "title": "定義 AOI 邊界，先核對座標系統",
+      "lead": "四個邊界必須屬於同一套座標，範圍要覆蓋分析區域。",
+      "duration": 18,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "steps": [
+        {
+          "title": "AOI 最小 X／西界",
+          "body": "輸入已核對西界。"
+        },
+        {
+          "title": "AOI 最小 Y／南界",
+          "body": "輸入已核對南界。"
+        },
+        {
+          "title": "AOI 最大 X／東界",
+          "body": "核對大於西界。"
+        },
+        {
+          "title": "AOI 最大 Y／北界",
+          "body": "核對大於南界；A/B 起終點另按實際資料填寫。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 R4 維持待審，TRH 以 R1–R3 為主。 沿用探索表單，核對 CRS 選值。 待實際 AOI 四界提供後填寫；四日行程只有 C1 一組座標，不能據此捏造完整 AOI。",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "historical_capture": {
+        "image": "ui-exploration-aoi.jpg",
+        "caption": "TASK 歷史畫面 · 東清八通關 · 2026-09-11",
+        "capture_context": "task-historical",
+        "markers": [
+          {
+            "step": 1,
+            "x": 1020.890625,
+            "y": 145.8984375,
+            "target": {
+              "height": 26.296875,
+              "width": 236.109375,
+              "x": 1010.890625,
+              "y": 159.8984375
+            },
+            "locator": "[data-exploration-field=\"west\"]"
+          },
+          {
+            "step": 2,
+            "x": 279,
+            "y": 207.8828125,
+            "target": {
+              "height": 26.296875,
+              "width": 236.1015625,
+              "x": 269,
+              "y": 221.8828125
+            },
+            "locator": "[data-exploration-field=\"south\"]"
+          },
+          {
+            "step": 3,
+            "x": 526.296875,
+            "y": 207.8828125,
+            "target": {
+              "height": 26.296875,
+              "width": 236.1015625,
+              "x": 516.296875,
+              "y": 221.8828125
+            },
+            "locator": "[data-exploration-field=\"east\"]"
+          },
+          {
+            "step": 4,
+            "x": 773.59375,
+            "y": 207.8828125,
+            "target": {
+              "height": 26.296875,
+              "width": 236.1015625,
+              "x": 763.59375,
+              "y": 221.8828125
+            },
+            "locator": "[data-exploration-field=\"north\"]"
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "AOI 最小 X／西界",
+          "body": "輸入已核對西界。",
+          "locator": "[data-exploration-field=\"west\"]",
+          "ui_label": "AOI 最小 X／西界"
+        },
+        {
+          "step": 2,
+          "title": "AOI 最小 Y／南界",
+          "body": "輸入已核對南界。",
+          "locator": "[data-exploration-field=\"south\"]",
+          "ui_label": "AOI 最小 Y／南界"
+        },
+        {
+          "step": 3,
+          "title": "AOI 最大 X／東界",
+          "body": "核對大於西界。",
+          "locator": "[data-exploration-field=\"east\"]",
+          "ui_label": "AOI 最大 X／東界"
+        },
+        {
+          "step": 4,
+          "title": "AOI 最大 Y／北界",
+          "body": "核對大於南界；A/B 起終點另按實際資料填寫。",
+          "locator": "[data-exploration-field=\"north\"]",
+          "ui_label": "AOI 最大 Y／北界"
+        }
+      ],
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "action_label": "開啟目前 9099 Dashboard ↗"
+    },
+    {
+      "id": "exploration-prepare",
+      "kind": "screen",
+      "chapter": "沒有 Ref. GPX · 準備",
+      "title": "建立探索資料，再準備 DEM 與 A/B 請求",
+      "lead": "每個階段都先讀 receipt，再進下一步。",
+      "duration": 18,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "steps": [
+        {
+          "title": "建立探索 workspace",
+          "body": "確認名稱、目的、AOI 與來源後才建立。"
+        },
+        {
+          "title": "準備區域地圖與 DEM",
+          "body": "已有可準備 receipt 時啟動，保存 attempt 與結果。"
+        },
+        {
+          "title": "建立 A/B 地形候選請求",
+          "body": "這一步只建立請求；仍要在 Navigation 完成 R1–R3 計算與核對。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 R4 維持待審，TRH 以 R1–R3 為主。 只能在已授權探索 workspace 及真實 AOI/DEM receipt 上示範。 prepare needs can_prepare，trh needs trh_request_available；建立 A/B 請求不代表已算出 R1–R3。 Root若測真正探索 workspace，將實際 projectId 明示為探索案例；不得把另一專案截圖標為東清。",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "historical_capture": {
+        "image": "ui-exploration-prepare.jpg",
+        "caption": "TASK 歷史畫面 · 東清八通關 · 2026-09-11",
+        "capture_context": "task-historical",
+        "markers": [
+          {
+            "step": 1,
+            "x": 279,
+            "y": 146.28125,
+            "target": {
+              "height": 44,
+              "width": 135.8125,
+              "x": 269,
+              "y": 160.28125
+            },
+            "locator": "[data-exploration-action=\"create\"]"
+          },
+          {
+            "step": 2,
+            "x": 564.625,
+            "y": 146.28125,
+            "target": {
+              "height": 44,
+              "width": 128.484375,
+              "x": 554.625,
+              "y": 160.28125
+            },
+            "locator": "[data-exploration-action=\"prepare\"]"
+          },
+          {
+            "step": 3,
+            "x": 1029.5234375,
+            "y": 146.28125,
+            "target": {
+              "height": 44,
+              "width": 145.3046875,
+              "x": 1019.5234375,
+              "y": 160.28125
+            },
+            "locator": "[data-exploration-action=\"trh\"]"
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "建立探索 workspace",
+          "body": "確認名稱、目的、AOI 與來源後才建立。",
+          "locator": "[data-exploration-action=\"create\"]",
+          "ui_label": "建立探索 workspace"
+        },
+        {
+          "step": 2,
+          "title": "準備區域地圖與 DEM",
+          "body": "已有可準備 receipt 時啟動，保存 attempt 與結果。",
+          "locator": "[data-exploration-action=\"prepare\"]",
+          "ui_label": "準備區域地圖與 DEM"
+        },
+        {
+          "step": 3,
+          "title": "建立 A/B 地形候選請求",
+          "body": "這一步只建立請求；仍要在 Navigation 完成 R1–R3 計算與核對。",
+          "locator": "[data-exploration-action=\"trh\"]",
+          "ui_label": "建立 A/B 地形候選請求"
+        }
+      ],
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "action_label": "開啟目前 9099 Dashboard ↗"
+    },
+    {
+      "id": "recorded",
+      "kind": "screen",
+      "chapter": "Recorded · 來源",
+      "title": "歸來後復盤：先說明 GPX 是什麼記錄",
+      "lead": "Recorded、歷史參考與測試資料的性質必須明確。",
+      "duration": 18,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "steps": [
+        {
+          "title": "主要隊員",
+          "body": "填此記錄的真實隊員代號。"
+        },
+        {
+          "title": "記錄裝置",
+          "body": "填實際產生 GPX 的裝置代號。"
+        },
+        {
+          "title": "資料來源",
+          "body": "據實選本次實際活動、歷史參考或測試重放。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 展開歸來後復盤 · Recorded / Golden / Planned。 先核對資料性質選項，不用 Golden 文件冒充本次歸來記錄。",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "historical_capture": {
+        "image": "ui-recorded.jpg",
+        "caption": "TASK 歷史畫面 · 東清八通關 · 2026-09-11",
+        "capture_context": "task-historical",
+        "markers": [
+          {
+            "step": 1,
+            "x": 279,
+            "y": 146.015625,
+            "target": {
+              "height": 36.84375,
+              "width": 235.5,
+              "x": 269,
+              "y": 160.015625
+            },
+            "locator": "[data-recorded-field=\"member\"]"
+          },
+          {
+            "step": 2,
+            "x": 526.5,
+            "y": 146.015625,
+            "target": {
+              "height": 36.84375,
+              "width": 235.5,
+              "x": 516.5,
+              "y": 160.015625
+            },
+            "locator": "[data-recorded-field=\"device\"]"
+          },
+          {
+            "step": 3,
+            "x": 774,
+            "y": 146.015625,
+            "target": {
+              "height": 38,
+              "width": 235.5,
+              "x": 764,
+              "y": 160.015625
+            },
+            "locator": "[data-recorded-field=\"origin\"]"
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "主要隊員",
+          "body": "填此記錄的真實隊員代號。",
+          "locator": "[data-recorded-field=\"member\"]",
+          "ui_label": "主要隊員"
+        },
+        {
+          "step": 2,
+          "title": "記錄裝置",
+          "body": "填實際產生 GPX 的裝置代號。",
+          "locator": "[data-recorded-field=\"device\"]",
+          "ui_label": "記錄裝置"
+        },
+        {
+          "step": 3,
+          "title": "資料來源",
+          "body": "據實選本次實際活動、歷史參考或測試重放。",
+          "locator": "[data-recorded-field=\"origin\"]",
+          "ui_label": "資料來源"
+        }
+      ],
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "action_label": "開啟目前 9099 Dashboard ↗"
+    },
+    {
+      "id": "recorded-upload",
+      "kind": "screen",
+      "chapter": "Recorded · 匯入",
+      "title": "匯入原始 GPX，再選比較的計畫",
+      "lead": "原始時間與來源要保留，不能以規劃時間冒充觀測。",
+      "duration": 18,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "steps": [
+        {
+          "title": "GPX 檔案",
+          "body": "選已授權使用的真實檔案，多檔時核對成員、裝置與 primary／backup。"
+        },
+        {
+          "title": "匯入原始 GPX",
+          "body": "讀取上傳結果與來源，不修改原始記錄去消除缺口。"
+        },
+        {
+          "title": "比較的 Planned 版本",
+          "body": "選正確保存版；只有 Golden 時保留僅比較 Golden。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 需要實際授權 GPX 檔案及 observation kind。 尚未提供本次 GPX 時拍空表即可，upload 後及比較結果仍列待補。",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "historical_capture": {
+        "image": "ui-recorded-upload.jpg",
+        "caption": "TASK 歷史畫面 · 東清八通關 · 2026-09-11",
+        "capture_context": "task-historical",
+        "markers": [
+          {
+            "step": 1,
+            "x": 1021.5,
+            "y": 146.015625,
+            "target": {
+              "height": 42.5,
+              "width": 235.5,
+              "x": 1011.5,
+              "y": 160.015625
+            },
+            "locator": "[data-recorded-files]"
+          },
+          {
+            "step": 2,
+            "x": 279,
+            "y": 273.203125,
+            "target": {
+              "height": 44,
+              "width": 97.2890625,
+              "x": 269,
+              "y": 287.203125
+            },
+            "locator": "[data-recorded-action=\"upload\"]"
+          },
+          {
+            "step": 3,
+            "x": 279,
+            "y": 353.046875,
+            "target": {
+              "height": 38,
+              "width": 978,
+              "x": 269,
+              "y": 367.046875
+            },
+            "locator": "[data-recorded-field=\"plan\"]"
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "GPX 檔案",
+          "body": "選已授權使用的真實檔案，多檔時核對成員、裝置與 primary／backup。",
+          "locator": "[data-recorded-files]",
+          "ui_label": "GPX 檔案"
+        },
+        {
+          "step": 2,
+          "title": "匯入原始 GPX",
+          "body": "讀取上傳結果與來源，不修改原始記錄去消除缺口。",
+          "locator": "[data-recorded-action=\"upload\"]",
+          "ui_label": "匯入原始 GPX"
+        },
+        {
+          "step": 3,
+          "title": "比較的 Planned 版本",
+          "body": "選正確保存版；只有 Golden 時保留僅比較 Golden。",
+          "locator": "[data-recorded-field=\"plan\"]",
+          "ui_label": "比較的 Planned 版本"
+        }
+      ],
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "action_label": "開啟目前 9099 Dashboard ↗"
+    },
+    {
+      "id": "recorded-restore",
+      "kind": "screen",
+      "chapter": "Recorded · 保存與還原",
+      "title": "保存 Recorded，再找回同一版本",
+      "lead": "Recorded 版本不可覆寫，還原後核對資料性質與 SHA。",
+      "duration": 18,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "steps": [
+        {
+          "title": "建立不可覆寫的 Recorded 版本",
+          "body": "檔案與來源核對後才保存。"
+        },
+        {
+          "title": "讀取已存版本與作業",
+          "body": "重新載入後找回原本的版本與 run。"
+        },
+        {
+          "title": "還原版本",
+          "body": "先在已存復盤版本選定 ID，再載入 manifest、observations 與比較資料。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 只有真實已上傳檔案才能 Save Recorded；先讀既有版本是否存在。 從已存復盤版本下拉選 ID 再還原；原文沒有個人 Recorded 資料，存在性需實際讀取。",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "historical_capture": {
+        "image": "ui-recorded-restore.jpg",
+        "caption": "TASK 歷史畫面 · 東清八通關 · 2026-09-11",
+        "capture_context": "task-historical",
+        "markers": [
+          {
+            "step": 1,
+            "x": 279,
+            "y": 145.84375,
+            "target": {
+              "height": 44,
+              "width": 187.8125,
+              "x": 269,
+              "y": 159.84375
+            },
+            "locator": "[data-recorded-action=\"save\"]"
+          },
+          {
+            "step": 2,
+            "x": 470.3125,
+            "y": 145.84375,
+            "target": {
+              "height": 44,
+              "width": 123.6015625,
+              "x": 460.3125,
+              "y": 159.84375
+            },
+            "locator": "[data-recorded-action=\"reload\"]"
+          },
+          {
+            "step": 3,
+            "x": 279,
+            "y": 228.84375,
+            "target": {
+              "height": 44,
+              "width": 71.6015625,
+              "x": 269,
+              "y": 242.84375
+            },
+            "locator": "[data-recorded-action=\"restore\"]"
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "建立不可覆寫的 Recorded 版本",
+          "body": "檔案與來源核對後才保存。",
+          "locator": "[data-recorded-action=\"save\"]",
+          "ui_label": "建立不可覆寫的 Recorded 版本"
+        },
+        {
+          "step": 2,
+          "title": "讀取已存版本與作業",
+          "body": "重新載入後找回原本的版本與 run。",
+          "locator": "[data-recorded-action=\"reload\"]",
+          "ui_label": "讀取已存版本與作業"
+        },
+        {
+          "step": 3,
+          "title": "還原版本",
+          "body": "先在已存復盤版本選定 ID，再載入 manifest、observations 與比較資料。",
+          "locator": "[data-recorded-action=\"restore\"]",
+          "ui_label": "還原版本"
+        }
+      ],
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "action_label": "開啟目前 9099 Dashboard ↗"
+    },
+    {
+      "id": "recorded-analyse",
+      "kind": "screen",
+      "chapter": "Recorded · 分析與恢復",
+      "title": "以 Recorded 重算六力與恢復作業",
+      "lead": "回顧此行的優劣與缺口，結果須對應此份實際記錄。",
+      "duration": 18,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "steps": [
+        {
+          "title": "將此 Recorded 作為六力分析主體",
+          "body": "選已還原的同版 Recorded；歷史資料仍顯示為歷史。"
+        },
+        {
+          "title": "準備此記錄並重算六力",
+          "body": "讀取同版準備與六力結果，保留未觀測區間。"
+        },
+        {
+          "title": "恢復此作業",
+          "body": "僅 can_resume=true 時操作；先用讀取作業結果核對失敗位置。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 還原真實 Recorded 後才選分析主體／重算。 run.can_resume=true 才操作恢復，無資料不造 fake run。 補充：Timeline Evidence 的 Completed GPX lifecycle 若顯示已拒收，依 completed-gpx-recovery.draft.json 的四個步驟重新檢查與建立；這不是 Permission 的 Recorded 版本還原按鈕。該入口的現況／拒收／恢復畫面仍待擷取。",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "historical_capture": {
+        "image": "ui-recorded-analyse.jpg",
+        "caption": "TASK 歷史畫面 · 東清八通關 · 2026-09-11",
+        "capture_context": "task-historical",
+        "markers": [
+          {
+            "step": 1,
+            "x": 354.1015625,
+            "y": 145.84375,
+            "target": {
+              "height": 44,
+              "width": 198.2109375,
+              "x": 344.1015625,
+              "y": 159.84375
+            },
+            "locator": "[data-recorded-action=\"select\"]"
+          },
+          {
+            "step": 2,
+            "x": 555.8125,
+            "y": 145.84375,
+            "target": {
+              "height": 44,
+              "width": 134,
+              "x": 545.8125,
+              "y": 159.84375
+            },
+            "locator": "[data-recorded-action=\"analyse\"]"
+          },
+          {
+            "step": 3,
+            "x": 789.21875,
+            "y": 145.84375,
+            "target": {
+              "height": 44,
+              "width": 82,
+              "x": 779.21875,
+              "y": 159.84375
+            },
+            "locator": "[data-recorded-action=\"resume\"]"
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "將此 Recorded 作為六力分析主體",
+          "body": "選已還原的同版 Recorded；歷史資料仍顯示為歷史。",
+          "locator": "[data-recorded-action=\"select\"]",
+          "ui_label": "將此 Recorded 作為六力分析主體"
+        },
+        {
+          "step": 2,
+          "title": "準備此記錄並重算六力",
+          "body": "讀取同版準備與六力結果，保留未觀測區間。",
+          "locator": "[data-recorded-action=\"analyse\"]",
+          "ui_label": "準備此記錄並重算六力"
+        },
+        {
+          "step": 3,
+          "title": "恢復此作業",
+          "body": "僅 can_resume=true 時操作；先用讀取作業結果核對失敗位置。",
+          "locator": "[data-recorded-action=\"resume\"]",
+          "ui_label": "恢復此作業"
+        }
+      ],
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "action_label": "開啟目前 9099 Dashboard ↗",
+      "related_error_recovery_draft": "completed-gpx-recovery.draft.json"
+    },
+    {
+      "id": "main-map-native-zoom",
+      "kind": "screen",
+      "chapter": "9099 主地圖",
+      "title": "主地圖：放大並核對原生細節",
+      "lead": "在東清主圖核對這個視野的實際圖磚。",
+      "duration": 20,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "steps": [
+        {
+          "title": "＋ 放大",
+          "body": "先 Fit，再放大與平移，核對當前所需層級。"
+        },
+        {
+          "title": "實際圖磚層級",
+          "body": "讀取需求／顯示層級與載入狀態；舊圖被放大不代表細節已到齊。"
+        },
+        {
+          "title": "當前地圖細節",
+          "body": "核對等高線及路線向量，記錄實際 renderer 與完整圖磚證據。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 在 #map 使用 #pretripMapFrame 內的 canonical map，不換入口或 workspace。 Fit 後放大、平移到實際視野，記 native zoom、圖磚清單及向量；ready 才拍正向範例。",
+      "historical_capture": {
+        "image": "ui-main-map-native-zoom.jpg",
+        "caption": "9099 當前主地圖 · 原始 319×514 · 2026-09-11",
+        "capture_context": "mac-9099",
+        "markers": [
+          {
+            "step": 1,
+            "x": 232,
+            "y": 158,
+            "target": {
+              "x": 269,
+              "y": 140,
+              "width": 36,
+              "height": 36
+            },
+            "locator": "#zoomIn",
+            "leader": true
+          },
+          {
+            "step": 2,
+            "x": 225,
+            "y": 238,
+            "target": {
+              "x": 249,
+              "y": 224,
+              "width": 56,
+              "height": 28
+            },
+            "locator": "#zoomLevel",
+            "leader": true
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "＋ 放大",
+          "body": "先 Fit，再放大與平移，核對當前所需層級。",
+          "locator": "#zoomIn",
+          "ui_label": "+"
+        },
+        {
+          "step": 2,
+          "title": "實際圖磚層級",
+          "body": "讀取需求／顯示層級與載入狀態；舊圖被放大不代表細節已到齊。",
+          "locator": "#zoomLevel",
+          "ui_label": "動態 zoom level／native tile 載入資訊"
+        },
+        {
+          "step": 3,
+          "title": "當前地圖細節",
+          "body": "核對等高線及路線向量，記錄實際 renderer 與完整圖磚證據。",
+          "locator": "#mapRendererShell",
+          "ui_label": "實際 MapLibre 或 SVG 圖面，無固定文字標籤"
+        }
+      ],
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#map",
+      "action_label": "開啟目前 9099 Dashboard ↗"
+    },
+    {
+      "id": "main-map-tile-refresh",
+      "kind": "screen",
+      "chapter": "9099 主地圖",
+      "title": "主地圖：缺圖時查看原因並恢復",
+      "lead": "保留當前視野，依可見狀態處理。",
+      "duration": 20,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "steps": [
+        {
+          "title": "需求與顯示層級",
+          "body": "先核對目前需要的細節與已到齊的層級。"
+        },
+        {
+          "title": "實際缺圖／載入訊息",
+          "body": "僅在此提示可見時拍攝；不要把成功狀態隱藏的欄位當作標記。"
+        },
+        {
+          "title": "更新圖磚／停止更新",
+          "body": "按目前可見的更新圖磚取得此視野資料，再核對結果；停止更新後會只讀快取。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 沿同一 Main frame 保留真實 loading/missing/error 證據。 若現在全部 ready，不修改 DOM 造 missing；使用真實已記錄可重放故障，或保持此頁待拍。 恢復過程前後拍獨立 receipts；不清使用者快取來湊情境。",
+      "historical_capture": {
+        "image": "ui-main-map-tile-refresh.jpg",
+        "caption": "9099 當前主地圖 · 原始 319×514 · 2026-09-11",
+        "capture_context": "mac-9099",
+        "markers": [
+          {
+            "step": 1,
+            "x": 50,
+            "y": 32,
+            "target": {
+              "x": 70,
+              "y": 14,
+              "width": 223,
+              "height": 36
+            },
+            "locator": "#layerControl",
+            "leader": true
+          },
+          {
+            "step": 2,
+            "x": 53,
+            "y": 390,
+            "target": {
+              "x": 81,
+              "y": 376,
+              "width": 201,
+              "height": 28
+            },
+            "locator": "label:has([data-layer=\"rudy-twmap\"])",
+            "leader": true
+          },
+          {
+            "step": 3,
+            "x": 226,
+            "y": 73,
+            "target": {
+              "x": 255,
+              "y": 59,
+              "width": 28,
+              "height": 28
+            },
+            "locator": "#refreshRasterTiles",
+            "leader": true
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "需求與顯示層級",
+          "body": "先核對目前需要的細節與已到齊的層級。",
+          "locator": "#zoomLevel",
+          "ui_label": "動態 zoom level／native tile 載入資訊"
+        },
+        {
+          "step": 2,
+          "title": "實際缺圖／載入訊息",
+          "body": "僅在此提示可見時拍攝；不要把成功狀態隱藏的欄位當作標記。",
+          "locator": "#mapRendererStatus",
+          "condition": "真實 loading / missing / error 提示可見；ready 時可能隱藏",
+          "ui_label": "動態實際 renderer/loading/missing/error 訊息"
+        },
+        {
+          "step": 3,
+          "title": "更新圖磚／停止更新",
+          "body": "按目前可見的更新圖磚取得此視野資料，再核對結果；停止更新後會只讀快取。",
+          "locator": "#refreshMapTiles",
+          "ui_label": "更新圖磚 或 停止更新"
+        }
+      ],
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#map",
+      "action_label": "開啟目前 9099 Dashboard ↗"
+    },
+    {
+      "id": "weather-map-update",
+      "kind": "screen",
+      "chapter": "9099 Weather 地圖",
+      "title": "Weather：核對放大後的底圖細節",
+      "lead": "共用圖磚來源，仍要核對 Weather 當前視野。",
+      "duration": 22,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "steps": [
+        {
+          "title": "＋ 放大",
+          "body": "先 Fit，再按 ＋ 並平移，保留本頁實際結果。"
+        },
+        {
+          "title": "實際圖磚層級",
+          "body": "核對需求／顯示層級及本頁的載入完成證據。"
+        },
+        {
+          "title": "當前地圖細節",
+          "body": "核對本頁等高線與完整向量，記錄 renderer。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 切 #outdoor-weather，在 iframe[data-weather-cwa-map-frame] 中操作。 同 Main 標準核對當前所需原生圖磚、向量及 renderer；另一頁成功不替代本頁。",
+      "historical_capture": {
+        "image": "ui-weather-update-tiles.jpg",
+        "caption": "9099 Weather · Chrome SVG 重播 · 原始 1440×844 · 2026-09-11",
+        "capture_context": "mac-9099",
+        "markers": [
+          {
+            "step": 1,
+            "x": 850,
+            "y": 254,
+            "target": {
+              "height": 25.3984375,
+              "width": 186.828125,
+              "x": 762.171875,
+              "y": 193.9921875
+            },
+            "locator": "#zoomLevel",
+            "leader": false
+          },
+          {
+            "step": 2,
+            "x": 242,
+            "y": 649,
+            "target": {
+              "height": 30.1953125,
+              "width": 529.7890625,
+              "x": 277,
+              "y": 633.796875
+            },
+            "locator": "#mapRendererStatus",
+            "leader": true
+          },
+          {
+            "step": 3,
+            "x": 985,
+            "y": 254,
+            "target": {
+              "height": 24,
+              "width": 64,
+              "x": 953,
+              "y": 194.6875
+            },
+            "locator": "#refreshWeatherMapTiles",
+            "leader": false
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "＋ 放大",
+          "body": "先 Fit，再按 ＋ 並平移，保留本頁實際結果。",
+          "locator": "#zoomIn",
+          "ui_label": "+"
+        },
+        {
+          "step": 2,
+          "title": "實際圖磚層級",
+          "body": "核對需求／顯示層級及本頁的載入完成證據。",
+          "locator": "#zoomLevel",
+          "ui_label": "動態 zoom level／native tile 載入資訊"
+        },
+        {
+          "step": 3,
+          "title": "當前地圖細節",
+          "body": "核對本頁等高線與完整向量，記錄 renderer。",
+          "locator": "#mapRendererShell",
+          "ui_label": "實際 MapLibre 或 SVG 圖面，無固定文字標籤"
+        }
+      ],
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-weather",
+      "action_label": "開啟目前 9099 Dashboard ↗"
+    },
+    {
+      "id": "weather-map-status",
+      "kind": "screen",
+      "chapter": "9099 Weather 地圖",
+      "title": "Weather：缺圖時查看原因並恢復",
+      "lead": "在 Weather 的 canonical frame 操作同一組更新控制。",
+      "duration": 22,
+      "image": null,
+      "caption": "9099 revision5 畫面待擷取；此頁尚未完成更新。",
+      "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "steps": [
+        {
+          "title": "目前圖磚層級",
+          "body": "核對此視野的需要、顯示與快取狀態。"
+        },
+        {
+          "title": "實際缺圖／載入訊息",
+          "body": "讀取這個 frame 的真實原因；隱藏狀態不可硬加標記。"
+        },
+        {
+          "title": "更新圖磚／停止更新",
+          "body": "用更新控制恢復，再核對目前視野的細節與載入狀態。"
+        }
+      ],
+      "markers": [],
+      "note": "擷取與功能驗證尚未完成。 在 Weather canonical frame 保留實際失敗和恢復 receipt。 ready 時隱藏的 #mapRendererStatus 不能作有效 target；若無故障畫面本頁待拍，不能冒充目前失敗。",
+      "historical_capture": {
+        "image": "ui-weather-tile-status.jpg",
+        "caption": "9099 Weather · Chrome SVG 重播 · 原始 1440×844 · 2026-09-11",
+        "capture_context": "mac-9099",
+        "markers": [
+          {
+            "step": 1,
+            "x": 886,
+            "y": 254,
+            "target": {
+              "height": 25.3984375,
+              "width": 124.3984375,
+              "x": 824.6015625,
+              "y": 193.9921875
+            },
+            "locator": "#zoomLevel",
+            "leader": false
+          },
+          {
+            "step": 2,
+            "x": 230,
+            "y": 460,
+            "target": {
+              "height": 540,
+              "width": 756,
+              "x": 265,
+              "y": 189.9921875
+            },
+            "locator": "#map",
+            "leader": true
+          },
+          {
+            "step": 3,
+            "x": 985,
+            "y": 254,
+            "target": {
+              "height": 24,
+              "width": 64,
+              "x": 953,
+              "y": 194.6875
+            },
+            "locator": "#refreshWeatherMapTiles",
+            "leader": false
+          }
+        ]
+      },
+      "planned_targets": [
+        {
+          "step": 1,
+          "title": "目前圖磚層級",
+          "body": "核對此視野的需要、顯示與快取狀態。",
+          "locator": "#zoomLevel",
+          "ui_label": "動態 zoom level／native tile 載入資訊"
+        },
+        {
+          "step": 2,
+          "title": "實際缺圖／載入訊息",
+          "body": "讀取這個 frame 的真實原因；隱藏狀態不可硬加標記。",
+          "locator": "#mapRendererStatus",
+          "condition": "真實 loading / missing / error 提示可見；ready 時可能隱藏",
+          "ui_label": "動態實際 renderer/loading/missing/error 訊息"
+        },
+        {
+          "step": 3,
+          "title": "更新圖磚／停止更新",
+          "body": "用更新控制恢復，再核對目前視野的細節與載入狀態。",
+          "locator": "#refreshMapTiles",
+          "ui_label": "更新圖磚 或 停止更新"
+        }
+      ],
+      "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-weather",
+      "action_label": "開啟目前 9099 Dashboard ↗"
+    }
+  ],
+  "current_dashboard_source": {
+    "sha256": "fb17b74399b3677eeb1089b053079afd82032ebb386be091b0e71b1c03864e21",
+    "checkout_root": "/Users/alexwang0315/scout-fusion",
+    "observed_at": "2026-09-14T01:54:43.372935+00:00",
+    "source_status": "SOURCE_FILE_INVENTORY_ONLY_NOT_CAPTURE_OR_UI_QUALIFICATION",
+    "runtime_status": "ROOT_VERIFICATION_PENDING",
+    "required_current_ui_source_paths": [
+      "docs/admin/phase4-pretrip-planning.html",
+      "docs/admin/scout-dashboard-v0.1.html",
+      "docs/admin/scout-exploration-workflow.js",
+      "docs/admin/scout-maplibre-evidence.js",
+      "docs/admin/scout-planned-map-review.js",
+      "docs/admin/scout-planned-review-ui.js",
+      "docs/admin/scout-planned-route.js",
+      "docs/admin/scout-recorded-workflow.js"
+    ]
+  },
+  "status": "TEXT_AND_CAPTURE_PLAN_ONLY_NOT_PUBLISHED",
+  "updated_at": "2026-09-13T07:57:42.158801+00:00",
+  "buildable": false,
+  "build_blocker": "38 current-source screenshots and per-step DOM rectangles pending; actual workflow and all-surface Diagnostic not fully qualified.",
+  "prior_current_dashboard_source": {
+    "sha256": "de690e749e8a1c8c4fbb67c9edefafb20b6ff74c6e42552a108c0a05d9e110bc",
+    "source_status": "INTEGRATED_SOURCE_READ_ONLY_VERIFIED",
+    "runtime_status": "ROOT_VERIFICATION_PENDING"
+  },
+  "pending_capture_supplements": [
+    {
+      "id": "completed-gpx-rejection-recovery",
+      "draft": "completed-gpx-recovery.draft.json",
+      "status": "DRAFT_PENDING_CURRENT_CAPTURE",
+      "route": "timeline",
+      "capture_required": true
+    }
+  ]
+}

@@ -27,9 +27,10 @@ def test_dashboard_mounts_scout_monitor_system_page_and_read_only_api(
     assert 'data-route="scout-monitor"' in dashboard.text
     assert '<span>scout monitor</span>' in dashboard.text
     assert '"scout-monitor": ["scout monitor"' in dashboard.text
-    assert 'src: "/admin/dashboard/scout-monitor"' in dashboard.text
+    assert 'src: "/admin/dashboard/scout-monitor?ui=20260914-ssh1"' in dashboard.text
 
     assert monitor_page.status_code == 200
+    assert monitor_page.headers["cache-control"] == "no-store"
     assert "Scout Monitor · 硬體監控" in monitor_page.text
     assert "硬體監控" in monitor_page.text
     assert "v1/hardware-monitor/${endpoint}" in monitor_page.text

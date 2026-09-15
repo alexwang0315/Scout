@@ -164,6 +164,8 @@ def test_observer_flags_wrong_region_before_forwarder_health(tmp_path: Path) -> 
             udp_ports=(),
             led_status=True,
             led_dry_run=True,
+            rf_preflight_jsonl=tmp_path / "missing-rf_preflight_jsonl.jsonl",
+            rx_readiness_jsonl=tmp_path / "missing-rx_readiness_jsonl.jsonl",
         ),
         command_runner=_fake_gateway_runner,
     )
@@ -187,6 +189,8 @@ def test_observer_degrades_without_gateway_stack_or_config(tmp_path: Path) -> No
             config_paths=(tmp_path / "missing.toml",),
             tcp_ports=(),
             udp_ports=(),
+            rf_preflight_jsonl=tmp_path / "missing-rf_preflight_jsonl.jsonl",
+            rx_readiness_jsonl=tmp_path / "missing-rx_readiness_jsonl.jsonl",
         ),
         command_runner=_missing_command_runner,
     )
@@ -222,6 +226,8 @@ def test_observer_reports_control_plane_reachable_when_process_probe_is_unavaila
                 udp_ports=(),
                 oled_status=True,
                 oled_dry_run=True,
+                rf_preflight_jsonl=tmp_path / "missing-rf_preflight_jsonl.jsonl",
+                rx_readiness_jsonl=tmp_path / "missing-rx_readiness_jsonl.jsonl",
             ),
             command_runner=_missing_command_runner,
         )
@@ -270,6 +276,7 @@ def test_observer_uses_rf_preflight_evidence_when_no_uplink_has_arrived(tmp_path
             oled_dry_run=True,
             led_status=True,
             led_dry_run=True,
+            rx_readiness_jsonl=tmp_path / "missing-rx_readiness_jsonl.jsonl",
         ),
         command_runner=_missing_command_runner,
     )
@@ -463,6 +470,10 @@ def test_cli_once_writes_status_and_rejects_invalid_arguments(tmp_path: Path) ->
             "",
             "--command-timeout-seconds",
             "0.1",
+            "--uplink-jsonl", str(tmp_path / "missing-uplink_jsonl.jsonl"),
+            "--gateway-gps-jsonl", str(tmp_path / "missing-gateway_gps_jsonl.jsonl"),
+            "--rf-preflight-jsonl", str(tmp_path / "missing-rf_preflight_jsonl.jsonl"),
+            "--rx-readiness-jsonl", str(tmp_path / "missing-rx_readiness_jsonl.jsonl"),
         ],
         cwd=ROOT,
         text=True,

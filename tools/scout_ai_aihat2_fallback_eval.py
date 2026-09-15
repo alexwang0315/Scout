@@ -24,6 +24,7 @@ if str(ROOT) not in sys.path:
 
 from assistant_models import AssistantSurface, ScoutAssistantQuery  # noqa: E402
 from assistant_workspace_total_info import build_workspace_total_info_source_ref  # noqa: E402
+from scout.agents.pydantic_model_lifecycle import pydantic_model_session
 from pydantic_ai_runtime_compat import (  # noqa: E402
     pydantic_native_research_capabilities_for_model,
 )
@@ -2177,6 +2178,7 @@ def call_hailo_model(
     return answer, metadata
 
 
+@pydantic_model_session()
 def call_hailo_model_via_pydantic_ai(
     *,
     endpoint: str,
@@ -2226,7 +2228,7 @@ def call_hailo_model_via_pydantic_ai(
     try:
         result = Agent(
             FunctionModel(hailo_adapter, model_name=f"hailo-ollama:{model}"),
-            capabilities=pydantic_native_research_capabilities_for_model(model),
+            capabilities=pydantic_native_research_capabilities_for_model(f"hailo:{model}"),
         ).run_sync(prompt)
         output = str(getattr(result, "output", getattr(result, "data", "")))
         usage_value = getattr(result, "usage", None)

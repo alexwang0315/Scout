@@ -25,12 +25,12 @@ from tools.scout_ai_workspace_behavior_train import load_approved_training_corpu
 ROOT = Path(__file__).resolve().parents[1]
 TRAINING_CORPUS = (
     ROOT
-    / "artifacts/scout-ai-nextgen/workspace-training-gates-20260902"
+    / "tests/fixtures/nextgen/workspace-training"
     / "synthetic-training-corpus-human-reviewed.json"
 )
 FROZEN_BENCHMARK = (
     ROOT
-    / "artifacts/scout-ai-nextgen/workspace-training-gates-20260901"
+    / "tests/fixtures/nextgen/workspace-training"
     / "frozen-workspace-benchmark.json"
 )
 TRAINED_AT = datetime(2026, 9, 2, 2, 0, tzinfo=UTC)

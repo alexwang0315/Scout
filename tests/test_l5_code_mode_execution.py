@@ -7,6 +7,7 @@ from pydantic_ai import Agent
 from pydantic_ai.messages import ModelRequest, ModelResponse, TextPart, ToolCallPart, ToolReturnPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 
+from scout.agents.pydantic_model_lifecycle import pydantic_model_session
 from scout.schemas.l5_code_mode import L5ActivationRequest
 from scout.services.l5_code_mode import build_l5_code_mode_capability
 from scout.services.l5_code_mode_execution import (
@@ -107,7 +108,8 @@ def test_real_monty_code_mode_executes_allowlisted_tool_and_builds_receipt(
             ],
         }
 
-    result = agent.run_sync("Count checkpoints")
+    with pydantic_model_session():
+        result = agent.run_sync("Count checkpoints")
     receipt = build_l5_execution_receipt(
         result=result,
         activation_request=L5ActivationRequest(under_construction=True),

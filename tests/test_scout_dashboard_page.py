@@ -6,6 +6,8 @@ import re
 import subprocess
 import time
 import zipfile
+
+import pytest
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -1521,6 +1523,267 @@ def test_scout_dashboard_country_material_pool_contract() -> None:
     assert "catalog entries are not evidence by themselves" in html
     assert "This page sets default hints for import and layer preparation." not in html
     assert "It does not fetch, mutate workspace files, load runtime packages, or change safety truth." not in html
+
+
+
+@pytest.mark.parametrize("scenario", [
+    "render_rejection", "refresh_rejection", "refresh_rejection_base_failure",
+    "activation_rejection", "activation_fresh", "refresh_error_cached",
+    "activation_changed_selection", "switched_workspace", "concurrent_refresh",
+    "retry_restores_valid", "empty_catalog", "foreign_catalog",
+    "projection_rejected_after_catalog", "reference_preserved_on_failure",
+    "catalog_missing_validation", "activation_failed_post",
+])
+def test_completed_gpx_lifecycle_rejects_stale_evidence_and_recovers(scenario: str) -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    functions = "function renderCompletedGpxLifecycle" + html.split(
+        "function renderCompletedGpxLifecycle", 1
+    )[1].split("function renderPretripEvidencePanel", 1)[0]
+    program = r"""
+const assert = require("node:assert/strict");
+const {JSDOM} = require("jsdom");
+const state = {
+  completedTripCatalog: null, completedTripCatalogStatus: {},
+  completedTripActivationBusy: false, project: null,
+};
+let selectedProject = "audit_project_a";
+const resolvedPretripProjectId = () => selectedProject;
+const apiBase = () => "";
+const completedTripRecordingsPath = () => "/recordings?projectId=" + selectedProject;
+const completedTripRecordingSelectPath = id => "/select/" + id + "?projectId=" + selectedProject;
+const PRETRIP_PROJECT_FETCH_TIMEOUT_MS = 30000;
+const asArray = value => Array.isArray(value) ? value : [];
+const escapeHtml = value => String(value).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
+const formatInteger = value => String(value || 0);
+const formatDistanceKm = value => String(value || 0) + "m";
+const recording = {recording_id:"track.abcd", display_name:"My recording", point_count:3, distance_m:2000, loadable:true};
+const reference = {case_id:"audit_project_a_post_analysis", edges:[{edge_id:"ref", moving_time_s:10}]};
+const cached = {case_id:"audit_project_a.track.abcd", edges:[{edge_id:"cached", moving_time_s:100}], completed_trip_recording:recording};
+const fresh = {...cached, edges:[{edge_id:"fresh", moving_time_s:321}]};
+const goodCatalog = {
+  project_id:selectedProject, case_id:selectedProject, recording_count:1,
+  active_recording:recording, recordings:[recording],
+  active_projection_validation:{status:"validated", project_id:selectedProject, case_id:selectedProject, selection_id:recording.recording_id, issues:[]},
+};
+const reason = "GPX 已變動或由其他紀錄取代，後分析結果已過期；請重新選取紀錄。";
+const rejectedCatalog = {
+  ...goodCatalog, active_recording:null,
+  active_projection_validation:{...goodCatalog.active_projection_validation, status:"rejected", issues:[{code:"source_track_hash_mismatch", message:reason}]},
+};
+let catalogReply = goodCatalog;
+let projectReply = {
+  project_id:selectedProject, completed_trip_recordings:goodCatalog,
+  capability_timeline_import:reference, capability_timeline:fresh,
+  completed_trip_track:{recording_id:recording.recording_id},
+  active_completed_trip_recording:recording,
+};
+let fetchFailure = "";
+let projectFailure = false;
+let postReply = {project_id:selectedProject, recording, capability_timeline:cached, completed_trip_track:{recording_id:recording.recording_id}};
+let fetchHook = null, postHook = null;
+const calls = [], frames = [];
+const defer = () => {let resolve; const promise = new Promise(r => {resolve=r;}); return {promise, resolve};};
+async function fetchJson(path) {
+  calls.push(path);
+  if (fetchHook) return fetchHook(path);
+  if (fetchFailure) throw new Error(fetchFailure);
+  if (path.includes("/admin/pretrip/projects/")) {
+    if (projectFailure) throw new Error("workspace refresh failed");
+    return projectReply;
+  }
+  return catalogReply;
+}
+async function postJson(path) {calls.push(path); return postHook ? postHook(path) : postReply;}
+function inspect() {
+  const dom = new JSDOM(renderCompletedGpxLifecycle());
+  try {
+    const lane = dom.window.document.querySelector('[role="status"]');
+    const buttons = [...dom.window.document.querySelectorAll('[data-completed-gpx-recording-id]')];
+    return {
+      status:state.completedTripCatalogStatus.status,
+      text:lane.textContent, bad:lane.classList.contains("bad"),
+      active:buttons.some(b => b.textContent.trim() === "Active"),
+      controls:buttons.map(b => ({text:b.textContent.trim(),disabled:b.disabled})),
+      capability:state.project?.capability_timeline_import?.edges?.[0]?.edge_id || null,
+    };
+  } finally {dom.window.close();}
+}
+function render() {frames.push(inspect());}
+function installCached() {
+  state.completedTripCatalog = goodCatalog;
+  state.completedTripCatalogStatus = {status:"ready", text:"previous success"};
+  state.project = {
+    project_id:selectedProject, capability_timeline_import:cached,
+    capability_timeline:cached, completed_trip_track:{recording_id:recording.recording_id},
+    active_completed_trip_recording:recording,
+    reference_tracks:{sentinel:"preserve"}, unrelated:{sentinel:"unchanged"},
+  };
+}
+function installRejected() {
+  catalogReply = rejectedCatalog;
+  projectReply = {project_id:selectedProject, completed_trip_recordings:rejectedCatalog,
+    capability_timeline_import:reference};
+}
+function assertRejected() {
+  const ui = inspect();
+  assert.equal(ui.status,"error");
+  assert.equal(ui.bad,true);
+  assert.equal(ui.active,false);
+  assert.ok(ui.text.includes(reason),ui.text);
+  assert.ok(!ui.text.includes("已從 post-analysis 結果更新"));
+}
+""" + "\nconst scenario = " + json.dumps(scenario) + ";\n" + functions + r"""
+(async () => {
+  if (scenario === "render_rejection") {
+    installCached();
+    state.completedTripCatalog = {...rejectedCatalog, active_recording:recording};
+    const ui=inspect();
+    assert.equal(ui.active,false);
+    assert.equal(ui.bad,true);
+    assert.ok(ui.text.includes(reason));
+  } else if (scenario === "refresh_rejection") {
+    installCached(); installRejected();
+    await loadCompletedTripRecordings();
+    assertRejected();
+    assert.deepEqual(state.project.capability_timeline_import,reference);
+    assert.equal(state.project.completed_trip_track,null);
+    assert.deepEqual(state.project.reference_tracks,{sentinel:"preserve"});
+    assert.deepEqual(state.project.unrelated,{sentinel:"unchanged"});
+  } else if (scenario === "refresh_rejection_base_failure") {
+    installCached(); installRejected(); projectFailure=true;
+    await loadCompletedTripRecordings();
+    assertRejected();
+    assert.equal(state.project.capability_timeline_import,null);
+    assert.equal(state.project.completed_trip_track,null);
+    assert.deepEqual(state.project.reference_tracks,{sentinel:"preserve"});
+    assert.ok(inspect().text.includes("workspace refresh failed"));
+  } else if (scenario === "activation_rejection") {
+    state.project={project_id:selectedProject,capability_timeline_import:reference,reference_tracks:{sentinel:"preserve"}};
+    installRejected();
+    await activateCompletedTripRecording(recording.recording_id);
+    assertRejected();
+    assert.deepEqual(state.project.capability_timeline_import,reference);
+    assert.ok(frames.every(f => f.capability !== "cached"),JSON.stringify(frames));
+    assert.equal(state.completedTripActivationBusy,false);
+  } else if (scenario === "activation_fresh") {
+    state.project={project_id:selectedProject,capability_timeline_import:reference,reference_tracks:{sentinel:"preserve"}};
+    await activateCompletedTripRecording(recording.recording_id);
+    assert.equal(inspect().status,"ready");
+    assert.equal(inspect().active,true);
+    assert.deepEqual(state.project.capability_timeline_import,fresh);
+    assert.ok(frames.every(f => f.capability !== "cached"));
+    assert.equal(state.completedTripActivationBusy,false);
+  } else if (scenario === "refresh_error_cached") {
+    installCached(); fetchFailure="catalog offline";
+    await loadCompletedTripRecordings();
+    assert.equal(inspect().status,"error");
+    assert.equal(inspect().active,false);
+    assert.ok(inspect().text.includes("catalog offline"));
+    assert.ok(frames.every(f => !f.active));
+    assert.equal(state.project.capability_timeline_import,null);
+  } else if (scenario === "activation_changed_selection") {
+    state.project={project_id:selectedProject,capability_timeline_import:reference};
+    const other={...recording,recording_id:"other.5678"};
+    catalogReply={...goodCatalog,active_recording:other,
+      active_projection_validation:{...goodCatalog.active_projection_validation,selection_id:other.recording_id}};
+    projectReply={...projectReply,completed_trip_recordings:catalogReply};
+    await activateCompletedTripRecording(recording.recording_id);
+    assert.equal(inspect().status,"error");
+    assert.equal(inspect().active,false);
+    assert.ok(inspect().text.includes("選取"));
+    assert.ok(!inspect().text.includes("已從 post-analysis 結果更新"));
+    assert.ok(frames.every(f => f.capability !== "cached"));
+  } else if (scenario === "switched_workspace") {
+    state.project={project_id:selectedProject,capability_timeline_import:reference};
+    const pending=defer(); postHook=()=>pending.promise;
+    const task=activateCompletedTripRecording(recording.recording_id);
+    selectedProject="audit_project_b";
+    state.project={project_id:selectedProject,reference_tracks:{sentinel:"B"}};
+    pending.resolve(postReply); await task;
+    assert.deepEqual(state.project,{project_id:"audit_project_b",reference_tracks:{sentinel:"B"}});
+    assert.equal(calls.length,1);
+  } else if (scenario === "concurrent_refresh") {
+    installCached();
+    const old=defer(); let n=0;
+    fetchHook=path => {
+      if(path.includes("/admin/pretrip/projects/")) return projectReply;
+      n+=1; return n===1?old.promise:Promise.resolve(goodCatalog);
+    };
+    const first=loadCompletedTripRecordings();
+    const second=loadCompletedTripRecordings();
+    await second; old.resolve(rejectedCatalog); await first;
+    assert.equal(inspect().status,"ready");
+    assert.equal(inspect().active,true);
+    assert.deepEqual(state.project.capability_timeline_import,fresh);
+  } else if (scenario === "retry_restores_valid") {
+    installCached(); installRejected();
+    await loadCompletedTripRecordings(); assertRejected();
+    catalogReply=goodCatalog;
+    projectReply={project_id:selectedProject,completed_trip_recordings:goodCatalog,capability_timeline_import:reference,capability_timeline:fresh,completed_trip_track:{recording_id:recording.recording_id},active_completed_trip_recording:recording};
+    await activateCompletedTripRecording(recording.recording_id);
+    assert.equal(inspect().status,"ready");
+    assert.equal(inspect().active,true);
+    assert.deepEqual(state.project.capability_timeline_import,fresh);
+    assert.equal(state.completedTripActivationBusy,false);
+    assert.ok(frames.filter(f => f.status === "loading").every(f => f.text.includes("正在")));
+  } else if (scenario === "empty_catalog") {
+    catalogReply={...goodCatalog,active_recording:null,recordings:[],recording_count:0,active_projection_validation:null};
+    projectReply={project_id:selectedProject,completed_trip_recordings:catalogReply,capability_timeline_import:reference};
+    await loadCompletedTripRecordings();
+    assert.equal(inspect().status,"ready");
+    assert.equal(inspect().active,false);
+    assert.ok(inspect().text.includes("尚未找到"));
+    assert.deepEqual(state.project.capability_timeline_import,reference);
+  } else if (scenario === "foreign_catalog") {
+    installCached();
+    catalogReply={...goodCatalog,project_id:"audit_project_b",case_id:"audit_project_b"};
+    await loadCompletedTripRecordings();
+    assert.equal(inspect().status,"error");
+    assert.equal(inspect().active,false);
+    assert.ok(inspect().text.includes("workspace"));
+    assert.deepEqual(state.project.reference_tracks,{sentinel:"preserve"});
+  } else if (scenario === "projection_rejected_after_catalog") {
+    installCached();
+    projectReply={...projectReply,completed_trip_recording_projection_validation:rejectedCatalog.active_projection_validation};
+    await loadCompletedTripRecordings();
+    assertRejected();
+    assert.deepEqual(state.project.capability_timeline_import,reference);
+    assert.equal(state.project.completed_trip_track,null);
+  } else if (scenario === "reference_preserved_on_failure") {
+    installCached(); state.project.capability_timeline_import=reference; fetchFailure="catalog offline";
+    await loadCompletedTripRecordings();
+    assert.equal(inspect().status,"error");
+    assert.equal(inspect().active,false);
+    assert.deepEqual(state.project.capability_timeline_import,reference);
+    assert.deepEqual(state.project.reference_tracks,{sentinel:"preserve"});
+  } else if (scenario === "catalog_missing_validation") {
+    installCached();
+    catalogReply={...goodCatalog,active_projection_validation:null};
+    projectReply={...projectReply,completed_trip_recordings:catalogReply};
+    await loadCompletedTripRecordings();
+    assert.equal(inspect().status,"error");
+    assert.equal(inspect().active,false);
+    assert.ok(inspect().text.includes("核對"));
+    assert.equal(state.project.capability_timeline_import,null);
+  } else if (scenario === "activation_failed_post") {
+    installCached();
+    postHook=()=>{throw new Error("selected GPX unavailable");};
+    await activateCompletedTripRecording(recording.recording_id);
+    assert.equal(inspect().status,"error");
+    assert.equal(inspect().active,false);
+    assert.ok(inspect().text.includes("selected GPX unavailable"));
+    assert.equal(state.project.capability_timeline_import,null);
+    assert.equal(state.completedTripActivationBusy,false);
+    assert.equal(calls.length,1);
+  } else {throw new Error("unknown scenario");}
+  process.stdout.write(JSON.stringify({scenario,calls,final:inspect(),frames}));
+})().catch(error => {console.error(error); process.exitCode=1;});
+"""
+    result = subprocess.run(
+        ["node", "-e", program], capture_output=True, text=True, check=False, timeout=30
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["scenario"] == scenario
 
 
 def test_scout_dashboard_timeline_evidence_uses_pretrip_tree_categories() -> None:
@@ -5885,7 +6148,7 @@ process.stdout.write(JSON.stringify({{assistantCases, weatherCases, invalid, fai
     assert payload["successReceipt"]["reloadDisabled"] is False
 
 
-def test_dashboard_diagnostic_page_registers_49_checks() -> None:
+def test_dashboard_diagnostic_page_registers_50_checks() -> None:
     html = PAGE.read_text(encoding="utf-8")
 
     settings_nav = (
@@ -5900,15 +6163,15 @@ def test_dashboard_diagnostic_page_registers_49_checks() -> None:
     assert diagnostic_nav in html
     assert html.index(diagnostic_nav) > html.index(settings_nav)
     assert '"diagnostic": Object.freeze' in html
-    assert 'diagnostic: ["Diagnostic", "49 Dashboard checks · read-only workspace evidence and approved Rudy native GET"]' in html
+    assert 'diagnostic: ["Diagnostic", "50 Dashboard checks · read-only workspace evidence and approved Rudy native GET"]' in html
     assert 'if (route === "diagnostic") return renderDiagnosticPage();' in html
 
     case_source = html.split(
         "const DASHBOARD_DIAGNOSTIC_CASES = Object.freeze([", 1
     )[1].split("]);", 1)[0]
-    for index in range(1, 50):
+    for index in range(1, 51):
         assert f'id: "DASH-{index:03d}"' in case_source
-    assert case_source.count('id: "DASH-') == 49
+    assert case_source.count('id: "DASH-') == 50
     assert "postJson(" not in case_source
 
     for marker in (
@@ -6225,11 +6488,11 @@ def test_navigation_maplibre_camera_fail_case_and_diagnostic_gate_are_documented
         assert marker in failure_log
 
     for marker in (
-        "目前版本：49 / 100",
-        "DASH-001～DASH-049",
+        "目前版本：50 / 100",
+        "DASH-001～DASH-050",
         "### DASH-038 Navigation MapLibre 2D/3D 鏡頭持久化",
         "DASH-MAP-REG-003",
-        "下一個可用編號為 `DASH-050`",
+        "下一個可用編號為 `DASH-051`",
     ):
         assert marker in checklist
 

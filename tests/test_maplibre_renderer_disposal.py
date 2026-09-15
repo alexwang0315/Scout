@@ -160,6 +160,10 @@ window.ScoutMapLibreEvidence = {createRenderer(options) {
   return promise;
 }};
 """
+    if pretrip:
+        policy = [line for line in html.splitlines() if line.strip().startswith("const MAP_WHEEL_ZOOM_ENABLED = ")]
+        assert len(policy) == 1
+        program += '\nglobal.location = {search: ""};\n' + policy[0] + "\n"
     program += "\n" + functions + "\nconst current = " + ("state" if pretrip else "debugPageState") + ";"
     program += "\nconst activate = () => activate" + prefix + "MapLibreRenderer({}, {});"
     program += "\nconst dispose = dispose" + prefix + "MapRenderer;"

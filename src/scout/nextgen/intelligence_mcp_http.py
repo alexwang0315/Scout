@@ -47,6 +47,32 @@ from scout.nextgen.praison_background_queue import (
 )
 
 
+def probe_intelligence_mcp_http_health(
+    unix_socket: Path, *, timeout_seconds: float = 1.0,
+) -> tuple[int, bytes]:
+    """Read local health with the same owned async transport as MCP calls.
+
+    Keep the HTTP status and body intact: each caller retains its own health
+    predicate. Refused or absent sockets must release their transport as well.
+    """
+    path = Path(unix_socket)
+    if not path.is_absolute():
+        raise ValueError("Intelligence MCP Unix socket path must be absolute")
+
+    async def read_health() -> tuple[int, bytes]:
+        transport = _httpx.AsyncHTTPTransport(uds=str(path), retries=0)
+        async with _httpx.AsyncClient(
+            transport=transport, timeout=timeout_seconds, trust_env=False,
+        ) as client:
+            response = await client.get("http://localhost/health")
+            return response.status_code, response.content
+
+    try:
+        return asyncio.run(read_health())
+    except _httpx.TransportError as exc:
+        raise IntelligenceMcpUnavailable("Intelligence MCP health transport unavailable") from exc
+
+
 @dataclass(frozen=True)
 class IntelligenceMcpHttpClientConfig:
     unix_socket: Path

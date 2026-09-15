@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import closing
 import threading
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
@@ -379,7 +380,7 @@ def test_corrupt_persisted_progress_fails_closed_before_worker_start(
             response=None,
             event_type="submitted",
         )
-    with sqlite3.connect(store_path) as connection:
+    with closing(sqlite3.connect(store_path)) as connection, connection:
         connection.execute(
             "UPDATE background_intelligence_jobs SET progress_json = ?",
             ('{"state":"completed","runtime_safety_truth":true}',),

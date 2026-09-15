@@ -1,0 +1,630 @@
+{
+  "schema_version": "scout.workspace_snapshot_benchmark.v0",
+  "artifact_role": "model_evaluation",
+  "generated_at": "2026-09-01T10:40:00+00:00",
+  "source_case": "tests/fixtures/nextgen/model_runtime_qualification_case.json",
+  "source_case_sha256": "0debcfcdc5dad2f6e64e0800375f03de0cbb725e52ef4390d6a8be0b0fd3ed30",
+  "source_evidence_catalog": "tests/fixtures/nextgen/model_runtime_qualification_evidence.json",
+  "source_evidence_catalog_sha256": "846199ce7c8bb6567a0442659eebe39a532050a3d1c06bd2aebe816b07de7e32",
+  "normalization": "fixture timestamps normalized to generated_at",
+  "case_count": 5,
+  "modes": [
+    "full",
+    "missing",
+    "stale",
+    "conflicted",
+    "no_workspace"
+  ],
+  "expected_behaviors": [
+    "answer_with_evidence",
+    "more_evidence_required",
+    "refresh_required",
+    "preserve_conflict",
+    "more_evidence_required"
+  ],
+  "cases": [
+    {
+      "case_id": "terrain-workspace-full-v0",
+      "mode": "full",
+      "expected_behavior": "answer_with_evidence",
+      "snapshot": {
+        "schema_version": "scout.workspace_snapshot.v0",
+        "snapshot_id": "cda4beb0-c1a0-4784-a307-0928370d584b",
+        "snapshot_hash": "960b417661424ad56c744b0d5f94d64e0bd8a0f36be72fe79c21389da53aa5a2",
+        "compiled_at": "2026-09-01T10:40:00Z",
+        "task_type": "terrain_analysis",
+        "question": "Find ridge, saddle, and steep terrain candidate evidence around the reviewed route.",
+        "workspace_binding": {
+          "workspace_id": "workspace-http-qualification",
+          "workspace_revision": "workspace-revision-1",
+          "mission_id": "mission-http-qualification",
+          "mission_version": "mission-version-1",
+          "route_id": "route-http-qualification",
+          "route_version": "route-version-1",
+          "input_hash": "7f9003bc662365d5b4aa9dd1d57fe1ac414e497a693da467a0bdc03d987730c5",
+          "generated_at": "2026-09-01T10:40:00Z"
+        },
+        "mode": "full",
+        "required_domains": [
+          "route",
+          "terrain"
+        ],
+        "facts": [
+          {
+            "fact_id": "workspace:ev-qualification-route",
+            "domain": "route",
+            "status": "available",
+            "authority": "candidate",
+            "evidence_id": "ev-qualification-route",
+            "evidence_ref": "route:http-qualification",
+            "source_type": "route_geometry",
+            "summary": "Reviewed route geometry used as read-only qualification input.",
+            "content_hash": "route-http-qualification-hash",
+            "generated_at": "2026-09-01T10:40:00Z",
+            "observed_at": null,
+            "age_seconds": 0,
+            "method": null,
+            "resolution": null,
+            "candidate_features": [],
+            "conflict_descriptions": [],
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          },
+          {
+            "fact_id": "workspace:ev-qualification-dem",
+            "domain": "terrain",
+            "status": "available",
+            "authority": "candidate",
+            "evidence_id": "ev-qualification-dem",
+            "evidence_ref": "dem:http-qualification",
+            "source_type": "prepared_dem",
+            "summary": "Prepared DEM candidate artifact for qualification.",
+            "content_hash": "dem-http-qualification-hash",
+            "generated_at": "2026-09-01T10:40:00Z",
+            "observed_at": null,
+            "age_seconds": 0,
+            "method": null,
+            "resolution": null,
+            "candidate_features": [
+              {
+                "feature_id": "workspace:ev-qualification-dem:0:ridge",
+                "kind": "ridge",
+                "claim": "A ridge candidate is present near CP2.",
+                "confidence": 0.7,
+                "evidence_id": "ev-qualification-dem",
+                "candidate_only": true,
+                "runtime_safety_truth": false
+              },
+              {
+                "feature_id": "workspace:ev-qualification-dem:1:saddle",
+                "kind": "saddle",
+                "claim": "A saddle candidate is present near CP3.",
+                "confidence": 0.6,
+                "evidence_id": "ev-qualification-dem",
+                "candidate_only": true,
+                "runtime_safety_truth": false
+              }
+            ],
+            "conflict_descriptions": [],
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          },
+          {
+            "fact_id": "workspace:ev-qualification-qgis",
+            "domain": "terrain",
+            "status": "available",
+            "authority": "candidate",
+            "evidence_id": "ev-qualification-qgis",
+            "evidence_ref": "qgis:http-qualification",
+            "source_type": "qgis_candidate_artifact",
+            "summary": "QGIS slope candidate artifact for qualification.",
+            "content_hash": "qgis-http-qualification-hash",
+            "generated_at": "2026-09-01T10:40:00Z",
+            "observed_at": null,
+            "age_seconds": 0,
+            "method": null,
+            "resolution": null,
+            "candidate_features": [
+              {
+                "feature_id": "workspace:ev-qualification-qgis:0:steep_terrain",
+                "kind": "steep_terrain",
+                "claim": "Steep terrain is a candidate feature in the route corridor.",
+                "confidence": 0.8,
+                "evidence_id": "ev-qualification-qgis",
+                "candidate_only": true,
+                "runtime_safety_truth": false
+              }
+            ],
+            "conflict_descriptions": [],
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          }
+        ],
+        "evidence_refs": [
+          "route:http-qualification",
+          "dem:http-qualification",
+          "qgis:http-qualification"
+        ],
+        "irrelevant_evidence_refs": [],
+        "unknown_provenance_refs": [],
+        "sufficiency": {
+          "required_domains": [
+            "route",
+            "terrain"
+          ],
+          "available_domains": [
+            "route",
+            "terrain"
+          ],
+          "missing_domains": [],
+          "stale_domains": [],
+          "conflicted_domains": [],
+          "missing_evidence_refs": [],
+          "sufficient": true,
+          "behavior": "answer_with_evidence",
+          "candidate_only": true,
+          "runtime_safety_truth": false
+        },
+        "context_budget_tokens": 4096,
+        "estimated_tokens": 787,
+        "candidate_only": true,
+        "runtime_safety_truth": false
+      },
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "case_id": "terrain-workspace-missing-v0",
+      "mode": "missing",
+      "expected_behavior": "more_evidence_required",
+      "snapshot": {
+        "schema_version": "scout.workspace_snapshot.v0",
+        "snapshot_id": "ced3bc9e-5020-4838-9dc9-ea2f74df187a",
+        "snapshot_hash": "fc9474b5273cf134a081ed1e87af51de7ba79df372902ca7fd12d281ed0f372d",
+        "compiled_at": "2026-09-01T10:40:00Z",
+        "task_type": "terrain_analysis",
+        "question": "Find ridge, saddle, and steep terrain candidate evidence around the reviewed route.",
+        "workspace_binding": {
+          "workspace_id": "workspace-http-qualification",
+          "workspace_revision": "workspace-revision-1",
+          "mission_id": "mission-http-qualification",
+          "mission_version": "mission-version-1",
+          "route_id": "route-http-qualification",
+          "route_version": "route-version-1",
+          "input_hash": "7f9003bc662365d5b4aa9dd1d57fe1ac414e497a693da467a0bdc03d987730c5",
+          "generated_at": "2026-09-01T10:40:00Z"
+        },
+        "mode": "missing",
+        "required_domains": [
+          "route",
+          "terrain"
+        ],
+        "facts": [
+          {
+            "fact_id": "workspace:ev-qualification-route",
+            "domain": "route",
+            "status": "available",
+            "authority": "candidate",
+            "evidence_id": "ev-qualification-route",
+            "evidence_ref": "route:http-qualification",
+            "source_type": "route_geometry",
+            "summary": "Reviewed route geometry used as read-only qualification input.",
+            "content_hash": "route-http-qualification-hash",
+            "generated_at": "2026-09-01T10:40:00Z",
+            "observed_at": null,
+            "age_seconds": 0,
+            "method": null,
+            "resolution": null,
+            "candidate_features": [],
+            "conflict_descriptions": [],
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          }
+        ],
+        "evidence_refs": [
+          "route:http-qualification"
+        ],
+        "irrelevant_evidence_refs": [],
+        "unknown_provenance_refs": [],
+        "sufficiency": {
+          "required_domains": [
+            "route",
+            "terrain"
+          ],
+          "available_domains": [
+            "route"
+          ],
+          "missing_domains": [
+            "terrain"
+          ],
+          "stale_domains": [],
+          "conflicted_domains": [],
+          "missing_evidence_refs": [
+            "dem:http-qualification",
+            "qgis:http-qualification"
+          ],
+          "sufficient": false,
+          "behavior": "more_evidence_required",
+          "candidate_only": true,
+          "runtime_safety_truth": false
+        },
+        "context_budget_tokens": 4096,
+        "estimated_tokens": 353,
+        "candidate_only": true,
+        "runtime_safety_truth": false
+      },
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "case_id": "terrain-workspace-stale-v0",
+      "mode": "stale",
+      "expected_behavior": "refresh_required",
+      "snapshot": {
+        "schema_version": "scout.workspace_snapshot.v0",
+        "snapshot_id": "b95ab81c-d00a-45d8-befc-93e1a6f58dc1",
+        "snapshot_hash": "1b17646153cb7d83fe0f46bff2bd6822f978c2117a1c5c356203cf6a038dcb92",
+        "compiled_at": "2026-09-01T10:40:00Z",
+        "task_type": "terrain_analysis",
+        "question": "Find ridge, saddle, and steep terrain candidate evidence around the reviewed route.",
+        "workspace_binding": {
+          "workspace_id": "workspace-http-qualification",
+          "workspace_revision": "workspace-revision-1",
+          "mission_id": "mission-http-qualification",
+          "mission_version": "mission-version-1",
+          "route_id": "route-http-qualification",
+          "route_version": "route-version-1",
+          "input_hash": "7f9003bc662365d5b4aa9dd1d57fe1ac414e497a693da467a0bdc03d987730c5",
+          "generated_at": "2026-09-01T10:40:00Z"
+        },
+        "mode": "stale",
+        "required_domains": [
+          "route",
+          "terrain"
+        ],
+        "facts": [
+          {
+            "fact_id": "workspace:ev-qualification-route",
+            "domain": "route",
+            "status": "stale",
+            "authority": "candidate",
+            "evidence_id": "ev-qualification-route",
+            "evidence_ref": "route:http-qualification",
+            "source_type": "route_geometry",
+            "summary": "Reviewed route geometry used as read-only qualification input.",
+            "content_hash": "route-http-qualification-hash",
+            "generated_at": "2026-09-01T09:39:59Z",
+            "observed_at": null,
+            "age_seconds": 3601,
+            "method": null,
+            "resolution": null,
+            "candidate_features": [],
+            "conflict_descriptions": [],
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          },
+          {
+            "fact_id": "workspace:ev-qualification-dem",
+            "domain": "terrain",
+            "status": "stale",
+            "authority": "candidate",
+            "evidence_id": "ev-qualification-dem",
+            "evidence_ref": "dem:http-qualification",
+            "source_type": "prepared_dem",
+            "summary": "Prepared DEM candidate artifact for qualification.",
+            "content_hash": "dem-http-qualification-hash",
+            "generated_at": "2026-09-01T09:39:59Z",
+            "observed_at": null,
+            "age_seconds": 3601,
+            "method": null,
+            "resolution": null,
+            "candidate_features": [
+              {
+                "feature_id": "workspace:ev-qualification-dem:0:ridge",
+                "kind": "ridge",
+                "claim": "A ridge candidate is present near CP2.",
+                "confidence": 0.7,
+                "evidence_id": "ev-qualification-dem",
+                "candidate_only": true,
+                "runtime_safety_truth": false
+              },
+              {
+                "feature_id": "workspace:ev-qualification-dem:1:saddle",
+                "kind": "saddle",
+                "claim": "A saddle candidate is present near CP3.",
+                "confidence": 0.6,
+                "evidence_id": "ev-qualification-dem",
+                "candidate_only": true,
+                "runtime_safety_truth": false
+              }
+            ],
+            "conflict_descriptions": [],
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          },
+          {
+            "fact_id": "workspace:ev-qualification-qgis",
+            "domain": "terrain",
+            "status": "stale",
+            "authority": "candidate",
+            "evidence_id": "ev-qualification-qgis",
+            "evidence_ref": "qgis:http-qualification",
+            "source_type": "qgis_candidate_artifact",
+            "summary": "QGIS slope candidate artifact for qualification.",
+            "content_hash": "qgis-http-qualification-hash",
+            "generated_at": "2026-09-01T09:39:59Z",
+            "observed_at": null,
+            "age_seconds": 3601,
+            "method": null,
+            "resolution": null,
+            "candidate_features": [
+              {
+                "feature_id": "workspace:ev-qualification-qgis:0:steep_terrain",
+                "kind": "steep_terrain",
+                "claim": "Steep terrain is a candidate feature in the route corridor.",
+                "confidence": 0.8,
+                "evidence_id": "ev-qualification-qgis",
+                "candidate_only": true,
+                "runtime_safety_truth": false
+              }
+            ],
+            "conflict_descriptions": [],
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          }
+        ],
+        "evidence_refs": [
+          "route:http-qualification",
+          "dem:http-qualification",
+          "qgis:http-qualification"
+        ],
+        "irrelevant_evidence_refs": [],
+        "unknown_provenance_refs": [],
+        "sufficiency": {
+          "required_domains": [
+            "route",
+            "terrain"
+          ],
+          "available_domains": [
+            "route",
+            "terrain"
+          ],
+          "missing_domains": [],
+          "stale_domains": [
+            "route",
+            "terrain"
+          ],
+          "conflicted_domains": [],
+          "missing_evidence_refs": [],
+          "sufficient": false,
+          "behavior": "refresh_required",
+          "candidate_only": true,
+          "runtime_safety_truth": false
+        },
+        "context_budget_tokens": 4096,
+        "estimated_tokens": 790,
+        "candidate_only": true,
+        "runtime_safety_truth": false
+      },
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "case_id": "terrain-workspace-conflicted-v0",
+      "mode": "conflicted",
+      "expected_behavior": "preserve_conflict",
+      "snapshot": {
+        "schema_version": "scout.workspace_snapshot.v0",
+        "snapshot_id": "c254fd0d-8750-4689-b139-3b1fa0eaaa62",
+        "snapshot_hash": "376bf6f339d9cab448b0f0a221c4fcbfd21a0965da663271abcfc3c781644faf",
+        "compiled_at": "2026-09-01T10:40:00Z",
+        "task_type": "terrain_analysis",
+        "question": "Find ridge, saddle, and steep terrain candidate evidence around the reviewed route.",
+        "workspace_binding": {
+          "workspace_id": "workspace-http-qualification",
+          "workspace_revision": "workspace-revision-1",
+          "mission_id": "mission-http-qualification",
+          "mission_version": "mission-version-1",
+          "route_id": "route-http-qualification",
+          "route_version": "route-version-1",
+          "input_hash": "7f9003bc662365d5b4aa9dd1d57fe1ac414e497a693da467a0bdc03d987730c5",
+          "generated_at": "2026-09-01T10:40:00Z"
+        },
+        "mode": "conflicted",
+        "required_domains": [
+          "route",
+          "terrain"
+        ],
+        "facts": [
+          {
+            "fact_id": "workspace:ev-qualification-route",
+            "domain": "route",
+            "status": "available",
+            "authority": "candidate",
+            "evidence_id": "ev-qualification-route",
+            "evidence_ref": "route:http-qualification",
+            "source_type": "route_geometry",
+            "summary": "Reviewed route geometry used as read-only qualification input.",
+            "content_hash": "route-http-qualification-hash",
+            "generated_at": "2026-09-01T10:40:00Z",
+            "observed_at": null,
+            "age_seconds": 0,
+            "method": null,
+            "resolution": null,
+            "candidate_features": [],
+            "conflict_descriptions": [],
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          },
+          {
+            "fact_id": "workspace:ev-qualification-dem",
+            "domain": "terrain",
+            "status": "conflicted",
+            "authority": "candidate",
+            "evidence_id": "ev-qualification-dem",
+            "evidence_ref": "dem:http-qualification",
+            "source_type": "prepared_dem",
+            "summary": "Prepared DEM candidate artifact for qualification.",
+            "content_hash": "dem-http-qualification-hash",
+            "generated_at": "2026-09-01T10:40:00Z",
+            "observed_at": null,
+            "age_seconds": 0,
+            "method": null,
+            "resolution": null,
+            "candidate_features": [
+              {
+                "feature_id": "workspace:ev-qualification-dem:0:ridge",
+                "kind": "ridge",
+                "claim": "A ridge candidate is present near CP2.",
+                "confidence": 0.7,
+                "evidence_id": "ev-qualification-dem",
+                "candidate_only": true,
+                "runtime_safety_truth": false
+              },
+              {
+                "feature_id": "workspace:ev-qualification-dem:1:saddle",
+                "kind": "saddle",
+                "claim": "A saddle candidate is present near CP3.",
+                "confidence": 0.6,
+                "evidence_id": "ev-qualification-dem",
+                "candidate_only": true,
+                "runtime_safety_truth": false
+              }
+            ],
+            "conflict_descriptions": [
+              "Terrain evidence sources conflict."
+            ],
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          },
+          {
+            "fact_id": "workspace:ev-qualification-qgis",
+            "domain": "terrain",
+            "status": "available",
+            "authority": "candidate",
+            "evidence_id": "ev-qualification-qgis",
+            "evidence_ref": "qgis:http-qualification",
+            "source_type": "qgis_candidate_artifact",
+            "summary": "QGIS slope candidate artifact for qualification.",
+            "content_hash": "qgis-http-qualification-hash",
+            "generated_at": "2026-09-01T10:40:00Z",
+            "observed_at": null,
+            "age_seconds": 0,
+            "method": null,
+            "resolution": null,
+            "candidate_features": [
+              {
+                "feature_id": "workspace:ev-qualification-qgis:0:steep_terrain",
+                "kind": "steep_terrain",
+                "claim": "Steep terrain is a candidate feature in the route corridor.",
+                "confidence": 0.8,
+                "evidence_id": "ev-qualification-qgis",
+                "candidate_only": true,
+                "runtime_safety_truth": false
+              }
+            ],
+            "conflict_descriptions": [],
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          }
+        ],
+        "evidence_refs": [
+          "route:http-qualification",
+          "dem:http-qualification",
+          "qgis:http-qualification"
+        ],
+        "irrelevant_evidence_refs": [],
+        "unknown_provenance_refs": [],
+        "sufficiency": {
+          "required_domains": [
+            "route",
+            "terrain"
+          ],
+          "available_domains": [
+            "route",
+            "terrain"
+          ],
+          "missing_domains": [],
+          "stale_domains": [],
+          "conflicted_domains": [
+            "terrain"
+          ],
+          "missing_evidence_refs": [],
+          "sufficient": false,
+          "behavior": "preserve_conflict",
+          "candidate_only": true,
+          "runtime_safety_truth": false
+        },
+        "context_budget_tokens": 4096,
+        "estimated_tokens": 798,
+        "candidate_only": true,
+        "runtime_safety_truth": false
+      },
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "case_id": "terrain-workspace-no_workspace-v0",
+      "mode": "no_workspace",
+      "expected_behavior": "more_evidence_required",
+      "snapshot": {
+        "schema_version": "scout.workspace_snapshot.v0",
+        "snapshot_id": "5eb1e4ac-00bf-48aa-a221-a586ae31891c",
+        "snapshot_hash": "cc8a89d504df7729690a5b16cbc90590ea73ae495cb639fa744b423200f3f0ce",
+        "compiled_at": "2026-09-01T10:40:00Z",
+        "task_type": "terrain_analysis",
+        "question": "Find ridge, saddle, and steep terrain candidate evidence around the reviewed route.",
+        "workspace_binding": {
+          "workspace_id": "workspace-http-qualification",
+          "workspace_revision": "workspace-revision-1",
+          "mission_id": "mission-http-qualification",
+          "mission_version": "mission-version-1",
+          "route_id": "route-http-qualification",
+          "route_version": "route-version-1",
+          "input_hash": "7f9003bc662365d5b4aa9dd1d57fe1ac414e497a693da467a0bdc03d987730c5",
+          "generated_at": "2026-09-01T10:40:00Z"
+        },
+        "mode": "no_workspace",
+        "required_domains": [
+          "route",
+          "terrain"
+        ],
+        "facts": [],
+        "evidence_refs": [],
+        "irrelevant_evidence_refs": [],
+        "unknown_provenance_refs": [],
+        "sufficiency": {
+          "required_domains": [
+            "route",
+            "terrain"
+          ],
+          "available_domains": [],
+          "missing_domains": [
+            "route",
+            "terrain"
+          ],
+          "stale_domains": [],
+          "conflicted_domains": [],
+          "missing_evidence_refs": [
+            "route:http-qualification",
+            "dem:http-qualification",
+            "qgis:http-qualification"
+          ],
+          "sufficient": false,
+          "behavior": "more_evidence_required",
+          "candidate_only": true,
+          "runtime_safety_truth": false
+        },
+        "context_budget_tokens": 4096,
+        "estimated_tokens": 223,
+        "candidate_only": true,
+        "runtime_safety_truth": false
+      },
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    }
+  ],
+  "candidate_only": true,
+  "runtime_safety_truth": false,
+  "artifact_hash": "ffcd93729085da8e754af0ddccc5e84b15c9b3694a0014a77cb5a94905e9dca4"
+}

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
 from tests.qualification.contracts import canonical_sha256
+from tests.qualification.phase3_telemetry import READ_TELEMETRY_CONTRACTS
 from tests.qualification.phase3_catalog import (
     COMMAND_RESOURCES,
     DEPENDENCY_EDGES,
@@ -456,6 +457,14 @@ def _call_name(node: ast.Call) -> str | None:
 
 
 def _domain_for_source_symbol(source_ref: str, symbol: str, line: int) -> str:
+    owners = {
+        contract.domain_id for contract in READ_TELEMETRY_CONTRACTS
+        if source_ref in contract.sources
+    }
+    if len(owners) > 1:
+        raise ValueError(f"conflicting telemetry source ownership: {source_ref}")
+    if owners:
+        return next(iter(owners))
     lowered = f"{source_ref} {symbol}".casefold().replace("_", "-")
     if source_ref == "admin_api.py":
         if line < 1415 or "body-index" in lowered:
@@ -517,6 +526,31 @@ class _EffectVisitor(ast.NodeVisitor):
         self.class_stack: list[str] = []
         self.callsites: list[tuple[str, str, int, str, bool, str]] = []
         self.unclassified: list[str] = []
+        self._monitor_factory_imported = False
+        self._monitor_opener_bound = False
+
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
+        if self.source_ref == "tools/hardware_monitor_proxy.py" and node.module == "urllib.request":
+            self._monitor_factory_imported = any(
+                item.name == "build_opener" and item.asname in {None, "build_opener"}
+                for item in node.names
+            ) or self._monitor_factory_imported
+        self.generic_visit(node)
+
+    def _bind_monitor_opener(self, node: ast.FunctionDef) -> bool:
+        assignments = tuple(
+            item for item in ast.walk(node) if isinstance(item, ast.Assign)
+            and any(isinstance(target, ast.Name) and target.id == "opener" for target in item.targets)
+        )
+        factory_shadowed = any(
+            isinstance(item, ast.Name) and isinstance(item.ctx, ast.Store) and item.id == "build_opener"
+            for item in ast.walk(node)
+        ) or any(argument.arg == "build_opener" for argument in (*node.args.posonlyargs, *node.args.args, *node.args.kwonlyargs))
+        return (
+            self._monitor_factory_imported and not factory_shadowed
+            and len(assignments) == 1 and isinstance(assignments[0].value, ast.Call)
+            and _call_name(assignments[0].value) == "build_opener"
+        )
 
     def visit_ClassDef(self, node: ast.ClassDef) -> None:
         self.class_stack.append(node.name)
@@ -525,6 +559,8 @@ class _EffectVisitor(ast.NodeVisitor):
 
     def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
         self.stack.append(".".join((*self.class_stack, node.name)))
+        if self.source_ref == "tools/hardware_monitor_proxy.py" and self.stack[-1] == "fetch_hardware_monitor_json":
+            self._monitor_opener_bound = self._bind_monitor_opener(node)
         self.generic_visit(node)
         self.stack.pop()
 
@@ -538,7 +574,12 @@ class _EffectVisitor(ast.NodeVisitor):
         symbol = self.stack[-1] if self.stack else "module"
         normalized: str | None = None
         state_affecting = False
-        if name in _EXACT_CALLS:
+        if self.source_ref == "tools/hardware_monitor_proxy.py" and symbol == "fetch_hardware_monitor_json" and name == "opener.open":
+            if self._monitor_opener_bound:
+                normalized, state_affecting = "http", True
+            else:
+                self.unclassified.append(f"{self.source_ref}:{node.lineno}:opener.open:unbound-urllib-opener")
+        elif name in _EXACT_CALLS:
             normalized, state_affecting = _EXACT_CALLS[name]
         elif name:
             final = name.rsplit(".", 1)[-1]

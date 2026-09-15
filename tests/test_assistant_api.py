@@ -1763,7 +1763,13 @@ class AssistantApiTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        context_summary = response.json()["sources"][0]["context_summary"]
+        pretrip_sources = [
+            source
+            for source in response.json()["sources"]
+            if source["source_id"] == "assistant_context.pretrip"
+        ]
+        self.assertEqual(len(pretrip_sources), 1)
+        context_summary = pretrip_sources[0]["context_summary"]
         self.assertEqual(context_summary["selected_evidence"]["source_id"], "candidate.cp2")
         self.assertEqual(context_summary["selected_evidence"]["priority"], "high")
         self.assertEqual(context_summary["selected_evidence"]["review_focus"], ["timing", "water"])

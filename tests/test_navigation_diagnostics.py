@@ -347,26 +347,49 @@ def test_guidance_evidence_markup_is_keyboard_accessible_and_binder_is_used(html
     assert "bindTerrainRouteGuidanceFocusControls(" in _function(html, "bindQgisSpatialControls")
 
 
-def test_navigation_diagnostics_register_49_unique_cases_with_executable_handlers(html: str) -> None:
+def test_navigation_diagnostics_register_50_unique_cases_with_executable_handlers(html: str) -> None:
     cases = _array_constant(html, "DASHBOARD_DIAGNOSTIC_CASES")
     stubs = "\n".join(
         f"const diagnosticCheck{number:03d} = () => 'DASH-{number:03d}';"
-        for number in range(1, 50)
+        for number in range(1, 51)
     )
+    # D037 has an existing indirection for its live runner. Exercise the
+    # registry callback with that dependency stubbed, without running maps.
+    stubs += "\nconst diagnosticCheck037Runner = diagnosticCheck037;"
     payload = _run_node(stubs + "\n" + cases, """
 const cases = DASHBOARD_DIAGNOSTIC_CASES.map(({id, category, title, description, run}) => ({
   id, category, title, description, callable: typeof run === "function",
-  result: Number(id.slice(-3)) >= 39 ? run() : null,
+  result: typeof run === "function" ? run() : null,
 }));
 process.stdout.write(JSON.stringify({cases}));
 """)
     cases_by_id = {case["id"]: case for case in payload["cases"]}
-    assert len(payload["cases"]) == len(cases_by_id) == 49
-    assert set(cases_by_id) == {f"DASH-{number:03d}" for number in range(1, 50)}
-    for case_id in NAVIGATION_CASE_IDS:
-        case = cases_by_id[case_id]
+    assert len(payload["cases"]) == len(cases_by_id) == 50
+    assert set(cases_by_id) == {f"DASH-{number:03d}" for number in range(1, 51)}
+    for case_id, case in cases_by_id.items():
         assert case["callable"] and case["result"] == case_id
         assert all(case[key].strip() for key in ("category", "title", "description"))
+        _function(html, f"diagnosticCheck{case_id[-3:]}")
+
+
+@pytest.mark.parametrize(
+    ("original", "replacement"),
+    [
+        ('id: "DASH-050"', 'id: "DASH-051"'),
+        ('id: "DASH-050"', 'id: "DASH-049"'),
+        ("run: diagnosticCheck050", "run: undefined"),
+        ("run: diagnosticCheck050", "run: diagnosticCheck049"),
+    ],
+    ids=("unknown-id", "duplicate-id", "missing-handler", "miswired-handler"),
+)
+def test_diagnostic_registry_rejects_incomplete_or_invalid_registration(
+    html: str, original: str, replacement: str,
+) -> None:
+    cases = _array_constant(html, "DASHBOARD_DIAGNOSTIC_CASES")
+    assert cases.count(original) == 1
+    damaged = html.replace(cases, cases.replace(original, replacement, 1), 1)
+    with pytest.raises(AssertionError):
+        test_navigation_diagnostics_register_50_unique_cases_with_executable_handlers(damaged)
 
 
 @pytest.mark.parametrize(

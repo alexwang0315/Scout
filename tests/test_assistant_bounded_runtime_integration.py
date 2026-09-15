@@ -4,6 +4,9 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+from scout.agents.pydantic_model_lifecycle import pydantic_model_session
+
 from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.test import TestModel
@@ -50,6 +53,16 @@ WEATHER_WINDOW_TOOL_NAME = provider_module.REGISTERED_WORKSPACE_TOOL_NAMES[
 CWA_ENVIRONMENT_TOOL_NAME = provider_module.REGISTERED_WORKSPACE_TOOL_NAMES[
     provider_module.CWA_ENVIRONMENT_TOOL_ID
 ]
+
+
+
+
+@pytest.fixture(autouse=True)
+def owned_model_session():
+    # These tests directly call the synchronous SDK-facing internals.
+    # Supply and close the same owned session used by the public worker.
+    with pydantic_model_session():
+        yield
 
 
 def _checkpoint_count_response(

@@ -103,11 +103,17 @@ render(probe, item)();
     ("partial-supply-retains-valid-voltage", "hardwareSupplyStatus", "未知", "有效 5V"),
     ("partial-supply-retains-valid-flags", "hardwareSupplyStatus", "未知", "零限制旗標"),
     ("ups-communication_error-supply-preserved", "hardwarePowerNotice", "UPS 電池讀值未知", "通訊失敗原因"),
+    ("ssh_unavailable", "hardwareNoticeText", "確認本機 SSH 轉接是否仍在執行", "自動重試"),
+    ("scout_api_unavailable", "hardwareNoticeText", "每 60 秒自動重試，請確認 SSH", "失聯原因"),
 ])
 def test_guard_rejects_false_normal_and_lost_or_invented_values(case_id, selector, replacement, message):
     import json
     node("const [id, selector, replacement, message] = " + json.dumps([case_id, selector, replacement, message]) + r""";
-const probe = await monitor(), verify = render(probe, api.scenarios().find(row => row.id === id));
+const probe = await monitor(), item = api.scenarios().find(row => row.id === id);
+// A retained-value case requires an actual earlier good sample, even when
+// this mutation test runs independently of the full sequential matrix.
+if (item.retainedPower) render(probe, api.scenarios()[0])();
+const verify = render(probe, item);
 verify();
 probe.doc.getElementById(selector).textContent = replacement;
 assert.throws(verify, new RegExp(message));
@@ -124,10 +130,13 @@ const result = await api.readStatus({signal: controller.signal, fetch: async (pa
   assert.equal(options.method, 'GET'); assert.equal(options.signal, controller.signal);
   assert.equal(options.mode, 'same-origin'); assert.equal(options.credentials, 'same-origin');
   assert.equal(options.redirect, 'error'); assert.equal(options.cache, 'no-store');
-  return {status: 503, ok: false, json: async () => {decoded = true; return payload;}};
+  return {status: 503, ok: false, headers: {get: name => {
+    assert.equal(name, 'X-Scout-Monitor-Transport'); return 'ssh';
+  }}, json: async () => {decoded = true; return payload;}};
 }});
 assert.equal(count, 1); assert.equal(decoded, true);
 assert.equal(result.httpStatus, 503); assert.equal(result.payload.status, 'stale');
+assert.equal(result.transport, 'ssh');
 await assert.rejects(api.readStatus({signal: controller.signal, fetch: async () => {throw Error('offline')}}), /offline/);
 """)
 
@@ -138,6 +147,8 @@ const win = new JSDOM('<iframe id="user-frame"></iframe>', {url: 'http://127.0.0
 windows.push(win); const controller = new AbortController();
 const pending = api.openProbe({document: win.document, signal: controller.signal});
 assert.equal(win.document.querySelectorAll('iframe').length, 2);
+assert.equal(win.document.querySelector('iframe[aria-hidden="true"]').src,
+  'http://127.0.0.1:9099/admin/dashboard/scout-monitor?ui=20260914-ssh1');
 controller.abort(); await assert.rejects(pending, /已取消/);
 assert.equal(win.document.querySelectorAll('iframe').length, 1);
 assert.ok(win.document.getElementById('user-frame'));
@@ -161,6 +172,7 @@ def test_registered_only_in_existing_regular_diagnostic_not_navigation_or_advanc
     wrapper = re.search(r"(?ms)^    async function diagnosticCheck050\(\).*?^    }", source).group()
     inline = source.split("// scout-monitor-power-diagnostic-inline:start\n", 1)[1].split("// scout-monitor-power-diagnostic-inline:end", 1)[0]
     assert inline == MODULE.read_text()
+    assert 'src: "/admin/dashboard/scout-monitor?ui=20260914-ssh1"' in source
     assert 'ScoutMonitorPowerDiagnostic.run({document})' in wrapper
     assert 'import("/admin/scout-monitor-power-diagnostic.js")' not in source  # no new backend route/restart needed
     node(wrapper + r"""

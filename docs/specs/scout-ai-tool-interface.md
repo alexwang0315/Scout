@@ -916,6 +916,15 @@ Planner behavior:
 - Missing or stale CWA/GEE artifacts are reported as evidence gaps; Scout AI
   must not infer low weather risk from absent environment artifacts.
 
+Recent-rain aggregation (user arbitration, 2026-09-14):
+
+- When Weather emits the typed query-reported previous-24-hour-rain route-reassessment CHANGE_PLAN and BOTH CWA/GEE emit native missing-support DELAY decisions at the same existing source priority, use the Weather change-plan candidate as the first layer. This is a bounded aggregation rule, not a global ordering of CHANGE_PLAN above DELAY.
+- Both environment DELAYs must be attributable to their original missing/error source records. Stale, future or other freshness failures, or existing measured CWA warning/QPF or GEE wetness/antecedent-rain review pressure, do not qualify for this rule. Preserve the native readers' existing pressure predicates and decision branch order. Mixed or complete support and other typed Weather rules keep the existing aggregation behavior.
+- Retain every native source result and gap unchanged. The aggregate must retain Weather's existing action limit and add the CWA/GEE missing-support limits and next steps; all missing support is included in required conditions. The first layer must identify the reason as user-reported rain and state that missing evidence and human review still prevent departure authorization.
+- The aggregate remains allowed=false, candidate-only, human-review-required and runtime-safety-truth=false. Higher-priority Permission/Media decisions and source-specific factual answers retain their existing precedence. The projection cannot write or reclassify source evidence, clear gaps, approve a route, or alter runtime safety state.
+
+Arbitration receipt: weather_recent_rain_aggregation_20260914, SHA-256 a60d5a11eaf36dd6fba37455b47f6101211742dc39fac37b8ec0c52df791aed5; user chose “採建議：改計畫為主，保留缺口與限制”.
+
 Boundary:
 
 - These tools are pretrip/admin/debug evidence tools only.

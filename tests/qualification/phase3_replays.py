@@ -6,7 +6,8 @@ from pathlib import Path
 
 from tests.qualification.contracts import canonical_sha256
 from tests.qualification.effects import EffectAudit
-from tests.qualification.phase3_catalog import DOMAIN_SPECS
+from tests.qualification.phase3_catalog import CANONICAL_ROUTE_DISPOSITION, DOMAIN_SPECS
+from tests.qualification.phase3_telemetry import replay_read_telemetry
 from tests.qualification.phase3_contracts import Phase3CaseResult
 from tests.qualification.phase3_validation import private_sentinel_tokens
 
@@ -406,7 +407,7 @@ def _run_shell(execution_root: Path, repository_root: Path) -> ProductionReplayE
         for item in surface.manifest.entries
         if item.disposition == "separate-runtime-diagnostic"
     )
-    passed = not surface.findings and len(surface.routes) == 22 and bool(runtime_diagnostic)
+    passed = not surface.findings and len(surface.routes) == len(CANONICAL_ROUTE_DISPOSITION) and bool(runtime_diagnostic)
     return ProductionReplayEvidence(
         domain_id="dashboard-shell-control",
         replay_id="production:dashboard-shell-surface-closure",
@@ -446,7 +447,26 @@ def run_production_replay(
     if root.exists():
         raise ValueError("production replay execution root must not already exist")
     root.mkdir(parents=True)
-    return _RUNNERS[domain_id](root, Path(repository_root).resolve())
+    repository = Path(repository_root).resolve()
+    original = _RUNNERS[domain_id](root, repository)
+    telemetry = replay_read_telemetry(
+        domain_id, execution_root=root / "read-telemetry", repository_root=repository
+    )
+    if not telemetry:
+        return original
+    passed = original.status == "passed" and all(item.status == "passed" for item in telemetry)
+    (root / "read-telemetry-receipt.json").write_text(
+        json.dumps([item.__dict__ for item in telemetry], indent=2) + "\n", encoding="utf-8"
+    )
+    return ProductionReplayEvidence(
+        domain_id=original.domain_id, replay_id=original.replay_id,
+        status="passed" if passed else "failed",
+        terminal=original.terminal if passed else "read-telemetry-failed",
+        output_sha256=canonical_sha256({"original": original, "read_telemetry": telemetry}),
+        boundary=original.boundary,
+        attempted_effects=(*original.attempted_effects, *(effect for item in telemetry for effect in item.attempted_effects)),
+        detail_codes=(*original.detail_codes, *(f"read-telemetry-failed:{item.route}:{item.node_id}" for item in telemetry if item.status != "passed")),
+    )
 
 
 def fixture_case(domain_id: str, fixture_class: str) -> Phase3CaseResult:

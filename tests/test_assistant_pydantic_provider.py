@@ -11327,11 +11327,13 @@ def test_hailo_bounded_stream_checkpoints_when_payloads_have_no_visible_progress
         "urlopen",
         lambda *_args, **_kwargs: FakeThinkingOnlyResponse(),
     )
-    monkeypatch.setattr(
-        assistant_provider_module.time,
-        "monotonic",
-        lambda: next(monotonic_values),
-    )
+    # Scope the synthetic Hailo clock to this provider; asyncio cleanup and
+    # every other module keep the real monotonic clock.
+    from types import SimpleNamespace
+
+    clock = SimpleNamespace(**vars(assistant_provider_module.time))
+    clock.monotonic = lambda: next(monotonic_values)
+    monkeypatch.setattr(assistant_provider_module, "time", clock)
     runner = PydanticAIEnvRunner(
         model_name="hailo:qwen3:1.7b",
         base_url="http://127.0.0.1:8000",

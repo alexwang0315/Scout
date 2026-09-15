@@ -360,6 +360,7 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
             ),
             planned_eta_path=_str_or_none(arguments.get("planned_eta_path")),
             current_time=_str_or_none(arguments.get("current_time")),
+            reference_time=_str_or_none(arguments.get("reference_time")),
             valid_from=_str_or_none(arguments.get("valid_from")),
             valid_to=_str_or_none(arguments.get("valid_to")),
             segment=_str_or_none(arguments.get("segment")),
@@ -442,6 +443,7 @@ def _execute_ready_current_tool(tool_id: str, arguments: dict[str, Any]) -> dict
             include_grid=_bool_or_none(arguments.get("include_grid")),
             include_timeseries=_bool_or_none(arguments.get("include_timeseries")),
             stale_after_hours=_float_or_none(arguments.get("stale_after_hours")),
+            reference_time=_str_or_none(arguments.get("reference_time")),
             limit=limit,
         )
 

@@ -2782,6 +2782,7 @@ def create_admin_router(
     connected_preparation_manager: Any | None = None,
     qgis_runtime_controller: QgisRuntimeController | None = None,
     runtime_audit: FileRuntimeAuditLedger | None = None,
+    include_debug_page: bool = True,
     terrain_guidance_elevation_sampler: Any = (
         _AUTO_TERRAIN_GUIDANCE_ELEVATION_SAMPLER
     ),
@@ -2836,15 +2837,28 @@ def create_admin_router(
         runtime_audit=runtime_audit,
         now_factory=resolved_now_factory,
     )
-    if terrain_guidance_elevation_sampler is _AUTO_TERRAIN_GUIDANCE_ELEVATION_SAMPLER:
-        try:
-            terrain_guidance_elevation_sampler = GdalLocationInfoSampler.discover()
-        except TerrainRouteToolUnavailable:
-            terrain_guidance_elevation_sampler = None
+    automatic_terrain_guidance_sampler = (
+        terrain_guidance_elevation_sampler is _AUTO_TERRAIN_GUIDANCE_ELEVATION_SAMPLER
+    )
     terrain_route_guidance_service = TerrainRouteGuidanceWorkspaceService(
         now_factory=resolved_now_factory,
-        elevation_sampler=terrain_guidance_elevation_sampler,
+        elevation_sampler=(
+            None if automatic_terrain_guidance_sampler else terrain_guidance_elevation_sampler
+        ),
     )
+
+    def terrain_route_guidance_sampling_service() -> TerrainRouteGuidanceWorkspaceService:
+        # Router registration and non-sampling reads must not probe host GIS tools.
+        if not automatic_terrain_guidance_sampler:
+            return terrain_route_guidance_service
+        try:
+            sampler = GdalLocationInfoSampler.discover()
+        except TerrainRouteToolUnavailable:
+            sampler = None
+        return TerrainRouteGuidanceWorkspaceService(
+            now_factory=resolved_now_factory,
+            elevation_sampler=sampler,
+        )
 
     @router.get("", response_class=HTMLResponse)
     def admin_page() -> Response:
@@ -2866,15 +2880,16 @@ def create_admin_router(
             headers={"Cache-Control": "no-store"},
         )
 
-    @router.get("/debug", response_class=HTMLResponse)
-    def debug_admin_page() -> Response:
-        if not DEFAULT_DEBUG_ADMIN_PAGE.exists():
-            raise HTTPException(status_code=404, detail="Debug admin page not found")
-        return Response(
-            DEFAULT_DEBUG_ADMIN_PAGE.read_text(encoding="utf-8"),
-            media_type="text/html",
-            headers={"Cache-Control": "no-store"},
-        )
+    if include_debug_page:
+        @router.get("/debug", response_class=HTMLResponse)
+        def debug_admin_page() -> Response:
+            if not DEFAULT_DEBUG_ADMIN_PAGE.exists():
+                raise HTTPException(status_code=404, detail="Debug admin page not found")
+            return Response(
+                DEFAULT_DEBUG_ADMIN_PAGE.read_text(encoding="utf-8"),
+                media_type="text/html",
+                headers={"Cache-Control": "no-store"},
+            )
 
     @router.get("/dashboard", response_class=HTMLResponse)
     def scout_dashboard_page() -> Response:
@@ -5333,7 +5348,7 @@ def create_admin_router(
         if project_root is None:
             raise HTTPException(status_code=404, detail="Pre-trip project not found")
         try:
-            payload = terrain_route_guidance_service.map_review_scope(
+            payload = terrain_route_guidance_sampling_service().map_review_scope(
                 project_root,
                 project_id=project_id,
                 reference_hypothesis_id=reference_hypothesis_id,
@@ -5484,7 +5499,7 @@ def create_admin_router(
                 detail="terrain route guidance writes only workspace projects",
             )
         try:
-            payload = terrain_route_guidance_service.resolve(
+            payload = terrain_route_guidance_sampling_service().resolve(
                 project_root,
                 project_id=project_id,
                 request=request,
@@ -9084,6 +9099,9 @@ def _attach_completed_trip_scenario_projection(
     active = load_active_completed_trip_scenario_projection(data_root=data_root, root=ROOT)
     if not active:
         return
+    view["completed_trip_scenario_projection_validation"] = active.get("projection_validation")
+    if active.get("status") == "rejected":
+        return
     view["active_completed_trip_scenario"] = active.get("scenario")
     if active.get("scout_reaction_simulation"):
         view["scout_reaction_simulation"] = active.get("scout_reaction_simulation")
@@ -9114,6 +9132,9 @@ def _attach_completed_trip_recording_projection(
         project_root=project_root,
     )
     if not active:
+        return
+    view["completed_trip_recording_projection_validation"] = active.get("projection_validation")
+    if active.get("status") == "rejected":
         return
     view["active_completed_trip_recording"] = active.get("recording")
     if active.get("completed_trip_track"):

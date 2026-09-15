@@ -14,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from dataclasses import asdict, dataclass, replace
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 from urllib.parse import urlsplit
 
 from assistant_model_config import (
@@ -53,6 +53,7 @@ from scout.agents.hailo_native_research import (
     research_tool_return_trace,
 )
 from scout.agents.model_policy import resolve_model_policy
+from scout.agents.pydantic_model_lifecycle import run_in_model_worker
 from scout.agents.web_research_quality import (
     ResearchQuestionSpec,
     build_web_evidence_bundle,
@@ -3997,9 +3998,10 @@ def _risk_score_answer_prefix(question: str) -> str:
         term in normalized for term in ("出事", "事故", "最容易", "最高風險", "高風險")
     ):
         return "最高候選風險點"
-    if any(
-        term in normalized
-        for term in ("checkpoint", "cp", "檢查點", "設checkpoint", "設cp", "漏設")
+    if _looks_like_checkpoint_design_question(normalized) or re.search(
+        r"(?:設|新增)\s*(?:checkpoint|cp|檢查點)"
+        r"|\b(?:add|create|place|new)\s+(?:a\s+)?(?:checkpoint|cp)\b",
+        normalized,
     ):
         return "優先考慮設 checkpoint 的候選風險點"
     if any(term in normalized for term in ("拍照", "拍攝", "停留", "景觀點")):
@@ -5770,11 +5772,29 @@ def _build_terrain_score_tool_fallback_response(
     if not isinstance(latest, dict) or latest.get("status") != "completed":
         return None
     results = latest.get("results")
-    if not isinstance(results, list) or not results:
+    if not isinstance(results, list):
         return None
-    top = _first_dict(results)
-    concise_answer = _format_terrain_score_concise_answer(query, top)
-    evidence_lines = _format_terrain_score_evidence_lines(results)
+    if results:
+        top = _first_dict(results)
+        concise_answer = _format_terrain_score_concise_answer(query, top)
+        evidence_lines = _format_terrain_score_evidence_lines(results)
+    else:
+        # Empty samples can still carry a completed, bounded evidence-gap decision.
+        concise_answer = _format_decision_tool_fallback_answer(
+            query=query,
+            tool_id=TERRAIN_SCORE_TOOL_ID,
+            label="terrain score",
+            latest=latest,
+        )
+        if concise_answer is None:
+            field_answer = latest.get("field_answer")
+            concise_answer = field_answer.strip() if isinstance(field_answer, str) else ""
+        if not concise_answer:
+            return None
+        missing_fields = _extract_missing_fields(latest)
+        if missing_fields:
+            concise_answer += " 缺少證據欄位：" + "、".join(missing_fields) + "。"
+        evidence_lines = []
     other_candidates = ""
     if (
         _question_requests_multiple_candidates(query.question)
@@ -7987,6 +8007,14 @@ class PydanticAIEnvRunner:
             timeout_seconds=timeout_seconds,
         )
 
+    @staticmethod
+    def _run_worker_with_event_loop(
+        call: Callable[..., str], *args: object
+    ) -> str:
+        # This callback runs only in a new executor worker. Keep all initial,
+        # synthesis and recovery stages on one loop, then close it on exit.
+        return run_in_model_worker(call, *args)
+
     def run(self, prompt: str, *, timeout_seconds: int | None) -> str:
         local_slot_acquired = self._acquire_local_inference_slot()
         try:
@@ -8005,7 +8033,12 @@ class PydanticAIEnvRunner:
             self.last_raw_model_outputs = []
             self._reset_hailo_request_state()
             executor = ThreadPoolExecutor(max_workers=1)
-            future = executor.submit(self._run_model, prompt, timeout_seconds)
+            future = executor.submit(
+                self._run_worker_with_event_loop,
+                self._run_model,
+                prompt,
+                timeout_seconds,
+            )
             try:
                 return (
                     future.result()
@@ -8054,6 +8087,7 @@ class PydanticAIEnvRunner:
             if not self.workspace_tools_enabled:
                 run_args = (*run_args, False)
             future = executor.submit(
+                self._run_worker_with_event_loop,
                 self._run_model_with_workspace_tools,
                 *run_args,
             )

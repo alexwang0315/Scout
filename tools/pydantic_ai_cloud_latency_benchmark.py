@@ -25,6 +25,7 @@ from assistant_model_config import (  # noqa: E402
     AssistantModelProfile,
     load_assistant_model_config,
 )
+from scout.agents.pydantic_model_lifecycle import run_in_model_worker  # noqa: E402
 from pydantic_ai_runtime_compat import (  # noqa: E402
     build_chat_model,
     pydantic_agent_runtime_kwargs,
@@ -246,7 +247,9 @@ def _call_with_timeout(
     timeout_seconds: int,
 ) -> str:
     executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-    future = executor.submit(model_call, profile, api_key, prompt, max_tokens)
+    future = executor.submit(
+        run_in_model_worker, model_call, profile, api_key, prompt, max_tokens
+    )
     try:
         return str(future.result(timeout=timeout_seconds))
     except concurrent.futures.TimeoutError as exc:

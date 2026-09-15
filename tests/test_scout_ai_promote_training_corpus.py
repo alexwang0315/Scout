@@ -20,7 +20,7 @@ from tools.scout_ai_promote_training_corpus import (
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = (
     ROOT
-    / "artifacts/scout-ai-nextgen/workspace-training-gates-20260901"
+    / "tests/fixtures/nextgen/workspace-training"
     / "synthetic-training-corpus.json"
 )
 SOURCE_SHA256 = "c0eccf64c5012c0f53d0401919459cf0568b82cbb747d11a8b8ebdb750ee1f3f"

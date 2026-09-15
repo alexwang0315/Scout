@@ -4,6 +4,7 @@
 (function (root) {
   "use strict";
   const PAGE = "/admin/dashboard/scout-monitor";
+  const PAGE_URL = `${PAGE}?ui=20260914-ssh1`;
   const STATUS = `${PAGE}/api/v1/hardware-monitor/status`;
   const ERROR_CODES = Object.freeze(["communication_error", "invalid_telemetry", "stale", "missing", "unreadable"]);
   const finite = value => typeof value === "number" && Number.isFinite(value);
@@ -44,7 +45,13 @@
     const unavailable = !payload || !payload.data || (httpStatus !== 200 && !stale)
       || ["unknown", "unavailable"].includes(payload.status);
     if (stale) requireValue(overall === "資料已過期", "503／過期資料被畫成目前正常，或未標示資料已過期");
-    else if (unavailable) requireValue(["未知", "無法連線"].includes(overall), "無資料／斷線被畫成目前正常");
+    else if (unavailable) {
+      requireValue(["未知", "無法連線"].includes(overall), "無資料／斷線被畫成目前正常");
+      if (overall === "無法連線") requireValue(/每 60 秒自動重試/.test(text(doc, "hardwareNoticeText")), "斷線時缺少自動重試提示");
+      if (payload?.connection?.transport === "ssh") {
+        requireValue(text(doc, "hardwareNoticeText").includes(payload.next_steps[0]), "SSH 與 Scout API 失聯原因未分開呈現");
+      }
+    }
     else {
       requireValue(freshness?.state === "fresh", "freshness 非 fresh，不能通過即時資料檢查");
       const label = {ok: "正常", warning: "警告", critical: "嚴重告警"}[payload.status];
@@ -133,6 +140,12 @@
     rows.push({id: "empty-data", payload: {status: "unavailable", freshness: {state: "missing"}, data: null}});
     rows.push({id: "before-disconnect", payload: fixture()});
     rows.push({id: "disconnected-retains-not-current", payload: null, httpStatus: 0, retainedPower: fixture().data.power});
+    for (const [code, step] of [
+      ["ssh_unavailable", "請確認 Mac 可使用既有 scout SSH 設定連線；不需要開啟 Mac 9151。"],
+      ["scout_api_unavailable", "SSH 已連通，但 Scout 的 9151 API 無法連線；請確認 Scout 上的 API 服務。"],
+    ]) rows.push({id: code, httpStatus: 503, retainedPower: fixture().data.power,
+      payload: {status: "unavailable", data: null, freshness: {state: "unreadable"},
+        connection: {transport: "ssh", error_code: code}, next_steps: [step]}});
     rows.push({id: "recovery", payload: fixture()});
     return rows;
   }
@@ -154,7 +167,7 @@
       redirect: "error", cache: "no-store", signal, headers: {Accept: "application/json"}});
     // In particular, decode HTTP 503 JSON before deciding validity.
     const payload = await response.json();
-    return {payload, httpStatus: response.status};
+    return {payload, httpStatus: response.status, transport: response.headers?.get("X-Scout-Monitor-Transport") || null};
   }
 
   function openProbe({document: doc, signal, timeoutMs = 15000}) {
@@ -191,7 +204,7 @@
       signal.addEventListener("abort", abort, {once: true});
       timer = setTimeout(() => finish(new Error("scout monitor 檢查頁載入逾時")), timeoutMs);
       if (signal.aborted) { abort(); return; }
-      frame.src = PAGE; doc.body.appendChild(frame);
+      frame.src = PAGE_URL; doc.body.appendChild(frame);
     });
   }
 
@@ -213,6 +226,7 @@
       if (live) {
         try {
           verifyContract(live.payload);
+          requireValue(["ssh", "http"].includes(live.transport), "後端未提供監控傳輸資訊，請確認已載入目前代理版本");
           probe.apply({response: {status: live.httpStatus, ok: live.httpStatus === 200}, payload: live.payload});
           const evidence = verifyRendered(probe.doc, live.payload, live.httpStatus);
           const fresh = live.httpStatus === 200 && live.payload.data && live.payload.freshness?.state === "fresh"
@@ -221,7 +235,7 @@
             && live.payload.freshness.age_seconds <= live.payload.freshness.stale_after_seconds;
           report.dataStatus = fresh ? "current" : "unavailable_or_stale";
           report.rows.push({id: "live-status", status: fresh ? "passed" : "warning", evidence,
-            capturedAt: live.payload.data?.captured_at || null, httpStatus: live.httpStatus,
+            capturedAt: live.payload.data?.captured_at || null, httpStatus: live.httpStatus, transport: live.transport,
             detail: fresh ? "目前採樣的電源分離呈現吻合；不代表 UPS 通訊恢復" : "失效／無資料呈現已核對，但目前電源資料未驗證"});
         } catch (error) { report.rows.push({id: "live-status", status: "failed", detail: error.message}); }
       }

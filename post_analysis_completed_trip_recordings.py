@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from post_analysis_capability import build_capability_artifacts, summarize_capability_artifacts
+from post_analysis_projection_validation import load_validated_active_projection
 from post_analysis_scout_reaction_simulation import (
     NOTE_PREFIX,
     build_scout_reaction_simulation_from_gpx,
@@ -101,6 +102,7 @@ def list_completed_trip_recordings(
             context.recording_root / "recording_set_manifest.json"
         ),
         "active_recording": active.get("recording") if active else None,
+        "active_projection_validation": active.get("projection_validation") if active else None,
         "recordings": recordings,
         "boundary": _boundary(),
     }
@@ -242,30 +244,22 @@ def load_active_completed_trip_recording_projection(
         project_id=project_id,
         project_root=project_root,
     )
-    active_path = context.active_dir / "active_completed_trip_recording.json"
-    if not active_path.exists():
-        return None
-    active = _load_json(active_path)
-    outputs_dir = Path(active.get("outputs_dir", ""))
-    timeline_path = outputs_dir / "capability_timeline.json"
-    capsule_path = outputs_dir / "capability_capsule.json"
-    if timeline_path.exists() and capsule_path.exists():
-        active["capability_timeline"] = summarize_capability_artifacts(
-            timeline_path=timeline_path,
-            capsule_path=capsule_path,
-            root=root,
-        )
-    simulation_path = outputs_dir / "scout_reaction_simulation.json"
-    if simulation_path.exists():
-        active["scout_reaction_simulation"] = _load_json(simulation_path)
-    if active.get("active_completed_track_gpx") and not active.get("completed_trip_track"):
-        active_gpx = Path(active["active_completed_track_gpx"])
-        if active_gpx.exists() and active.get("recording"):
-            active["completed_trip_track"] = build_completed_trip_track_projection(
-                active_gpx,
-                recording=active["recording"],
-                source_path=active.get("source_gpx") or active["recording"].get("source_path"),
-            )
+    active = load_validated_active_projection(
+        active_path=context.active_dir / "active_completed_trip_recording.json",
+        case_id=context.case_id,
+        project_id=context.project_id if context.storage_scope == "workspace" else None,
+        selection_key="recording",
+        outputs_parent=context.outputs_dir,
+        outputs_leaf="",
+        active_track_path=context.inbox_dir / "latest_completed_trip.gpx",
+        route_family=context.route_family,
+        root=root,
+        completed_track_builder=lambda gpx, record: build_completed_trip_track_projection(
+            gpx,
+            recording=record["recording"],
+            source_path=record.get("source_gpx") or record["recording"].get("source_path"),
+        ),
+    )
     return active
 
 

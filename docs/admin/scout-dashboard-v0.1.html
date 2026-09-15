@@ -12045,6 +12045,7 @@
 (function (root) {
   "use strict";
   const PAGE = "/admin/dashboard/scout-monitor";
+  const PAGE_URL = `${PAGE}?ui=20260914-ssh1`;
   const STATUS = `${PAGE}/api/v1/hardware-monitor/status`;
   const ERROR_CODES = Object.freeze(["communication_error", "invalid_telemetry", "stale", "missing", "unreadable"]);
   const finite = value => typeof value === "number" && Number.isFinite(value);
@@ -12085,7 +12086,13 @@
     const unavailable = !payload || !payload.data || (httpStatus !== 200 && !stale)
       || ["unknown", "unavailable"].includes(payload.status);
     if (stale) requireValue(overall === "資料已過期", "503／過期資料被畫成目前正常，或未標示資料已過期");
-    else if (unavailable) requireValue(["未知", "無法連線"].includes(overall), "無資料／斷線被畫成目前正常");
+    else if (unavailable) {
+      requireValue(["未知", "無法連線"].includes(overall), "無資料／斷線被畫成目前正常");
+      if (overall === "無法連線") requireValue(/每 60 秒自動重試/.test(text(doc, "hardwareNoticeText")), "斷線時缺少自動重試提示");
+      if (payload?.connection?.transport === "ssh") {
+        requireValue(text(doc, "hardwareNoticeText").includes(payload.next_steps[0]), "SSH 與 Scout API 失聯原因未分開呈現");
+      }
+    }
     else {
       requireValue(freshness?.state === "fresh", "freshness 非 fresh，不能通過即時資料檢查");
       const label = {ok: "正常", warning: "警告", critical: "嚴重告警"}[payload.status];
@@ -12174,6 +12181,12 @@
     rows.push({id: "empty-data", payload: {status: "unavailable", freshness: {state: "missing"}, data: null}});
     rows.push({id: "before-disconnect", payload: fixture()});
     rows.push({id: "disconnected-retains-not-current", payload: null, httpStatus: 0, retainedPower: fixture().data.power});
+    for (const [code, step] of [
+      ["ssh_unavailable", "請確認 Mac 可使用既有 scout SSH 設定連線；不需要開啟 Mac 9151。"],
+      ["scout_api_unavailable", "SSH 已連通，但 Scout 的 9151 API 無法連線；請確認 Scout 上的 API 服務。"],
+    ]) rows.push({id: code, httpStatus: 503, retainedPower: fixture().data.power,
+      payload: {status: "unavailable", data: null, freshness: {state: "unreadable"},
+        connection: {transport: "ssh", error_code: code}, next_steps: [step]}});
     rows.push({id: "recovery", payload: fixture()});
     return rows;
   }
@@ -12195,7 +12208,7 @@
       redirect: "error", cache: "no-store", signal, headers: {Accept: "application/json"}});
     // In particular, decode HTTP 503 JSON before deciding validity.
     const payload = await response.json();
-    return {payload, httpStatus: response.status};
+    return {payload, httpStatus: response.status, transport: response.headers?.get("X-Scout-Monitor-Transport") || null};
   }
 
   function openProbe({document: doc, signal, timeoutMs = 15000}) {
@@ -12232,7 +12245,7 @@
       signal.addEventListener("abort", abort, {once: true});
       timer = setTimeout(() => finish(new Error("scout monitor 檢查頁載入逾時")), timeoutMs);
       if (signal.aborted) { abort(); return; }
-      frame.src = PAGE; doc.body.appendChild(frame);
+      frame.src = PAGE_URL; doc.body.appendChild(frame);
     });
   }
 
@@ -12254,6 +12267,7 @@
       if (live) {
         try {
           verifyContract(live.payload);
+          requireValue(["ssh", "http"].includes(live.transport), "後端未提供監控傳輸資訊，請確認已載入目前代理版本");
           probe.apply({response: {status: live.httpStatus, ok: live.httpStatus === 200}, payload: live.payload});
           const evidence = verifyRendered(probe.doc, live.payload, live.httpStatus);
           const fresh = live.httpStatus === 200 && live.payload.data && live.payload.freshness?.state === "fresh"
@@ -12262,7 +12276,7 @@
             && live.payload.freshness.age_seconds <= live.payload.freshness.stale_after_seconds;
           report.dataStatus = fresh ? "current" : "unavailable_or_stale";
           report.rows.push({id: "live-status", status: fresh ? "passed" : "warning", evidence,
-            capturedAt: live.payload.data?.captured_at || null, httpStatus: live.httpStatus,
+            capturedAt: live.payload.data?.captured_at || null, httpStatus: live.httpStatus, transport: live.transport,
             detail: fresh ? "目前採樣的電源分離呈現吻合；不代表 UPS 通訊恢復" : "失效／無資料呈現已核對，但目前電源資料未驗證"});
         } catch (error) { report.rows.push({id: "live-status", status: "failed", detail: error.message}); }
       }
@@ -13437,7 +13451,7 @@
       debug: ["Debug Message", "read-only runtime and projection messages"],
       observer: ["MQTT / Observer Message", "observer stream review without publish controls"],
       settings: ["Settings / Configure", "local alpha route and API settings"],
-      diagnostic: ["Diagnostic", "49 Dashboard checks · read-only workspace evidence and approved Rudy native GET"],
+      diagnostic: ["Diagnostic", "50 Dashboard checks · read-only workspace evidence and approved Rudy native GET"],
       "runtime-audit": ["Logs", "以日／月索引檢視統一運行紀錄、API 成敗與 workspace I/O"],
       "surface-intelligence": ["Intelligence", "candidate-only background job telemetry"],
       "scout-monitor": ["scout monitor", "觀測 Scout 主機硬體狀態"],
@@ -17293,7 +17307,7 @@
         return renderSurfaceFrame({
           route,
           title: "scout monitor",
-          src: "/admin/dashboard/scout-monitor",
+          src: "/admin/dashboard/scout-monitor?ui=20260914-ssh1",
           summary: "Scout 主機硬體的唯讀監控。",
         });
       }
@@ -21889,7 +21903,8 @@
       const doc = frame.contentDocument;
       const viewport = doc.getElementById(renderer === "maplibre" ? "mapLibreEvidenceMap" : "map");
       const names = {"zoom-in": "zoomIn", "zoom-out": "zoomOut", reset: "fitRoute", pan: "panMode", "box-zoom": "boxZoomMode"};
-      return {doc, viewport, rudyCacheLayer: "rudy-twmap", reverseZoomIn: true,
+      return {doc, viewport: renderer === "maplibre" ? viewport.querySelector("canvas") : viewport,
+        host: viewport, rudyCacheLayer: "rudy-twmap", reverseZoomIn: true,
         control: action => doc.getElementById(names[action]),
         camera: () => {
           if (renderer === "maplibre") { const current = bridge.getSnapshot(); return {zoom: current.zoom, x: current.center?.[0], y: current.center?.[1]}; }
@@ -22082,7 +22097,7 @@
             return {...selected, viewport: entry.host, bridge: adapter.bridge, adapter, dispose};
           }
           root.innerHTML = variant === "loading" ? renderNavigationWorkspaceLoading(snapshot)
-            : renderNavigationWorkspaceMap(snapshot, null, null, null, null);
+            : renderNavigationWorkspaceMap(snapshot, ...navigationTerrainWorkspaceSelection(snapshot));
         } else if (selected.family === "architecture") {
           state.architectureLens = selected.variant;
           root.innerHTML = renderArchitectureMap(architectureSnapshot());
@@ -22157,7 +22172,7 @@
       const dispatchPointer = (target, type, x, y) => {
         const event = new (win.PointerEvent || win.MouseEvent)(type, {
           clientX: x, clientY: y, button: 0, buttons: type === "pointerup" ? 0 : 1,
-          pointerId: 71, pointerType: "mouse", bubbles: true, cancelable: true,
+          pointerId: 71, pointerType: "mouse", isPrimary: true, bubbles: true, cancelable: true,
         });
         if (!Number.isFinite(event.pointerId)) Object.defineProperty(event, "pointerId", {value: 71});
         target.dispatchEvent(event);
@@ -22181,8 +22196,8 @@
           target.releasePointerCapture = () => { captured = false; };
           if (kind === "pan" && surface.renderer === "maplibre") {
             target.dispatchEvent(new win.MouseEvent("mousedown", {clientX: sx, clientY: sy, button: 0, buttons: 1, bubbles: true}));
-            win.dispatchEvent(new win.MouseEvent("mousemove", {clientX: ex, clientY: ey, button: 0, buttons: 1, bubbles: true}));
-            win.dispatchEvent(new win.MouseEvent("mouseup", {clientX: ex, clientY: ey, button: 0, bubbles: true}));
+            doc.dispatchEvent(new win.MouseEvent("mousemove", {clientX: ex, clientY: ey, button: 0, buttons: 1, bubbles: true}));
+            doc.dispatchEvent(new win.MouseEvent("mouseup", {clientX: ex, clientY: ey, button: 0, bubbles: true}));
           } else {
             dispatchPointer(target, "pointerdown", sx, sy);
             dispatchPointer(target, "pointermove", ex, ey);
@@ -22576,7 +22591,27 @@
                 || !url.pathname.startsWith(`/admin/pretrip/projects/${encodeURIComponent(projectId())}/weather-imagery/`)) return false;
             } catch (_error) { return false; }
           }
-          const theme = cwaFamily || normalizeDashboardSingleImageTheme(layerId.replace(/^terrain[-_]/, ""));
+          const navigationFamily = metadata["scout:source_family"];
+          if (navigationFamily === "navigation-terrain" || navigationFamily === "navigation-terrain-route") {
+            const definition = navigationTerrainImageLayerDefinition(layerId);
+            const sha = String(metadata["scout:artifact_sha256"] || "");
+            const ref = String(metadata["scout:source_ref"] || "");
+            if (!definition || definition.family !== navigationFamily
+              || definition.mode !== metadata["scout:overlay_mode"]
+              || definition.theme !== metadata["scout:single_image_theme"]
+              || !/^[a-f0-9]{64}$/.test(sha) || !ref.startsWith("outputs/") || ref.split("/").includes("..")) return false;
+            const selected = navigationTerrainImageLayerMetadata(navigationTerrainSnapshot(), layerId);
+            if (!selected || selected["scout:artifact_sha256"] !== sha
+              || selected["scout:source_ref"] !== ref) return false;
+            try {
+              const url = new URL(source.url, location.href);
+              if (url.origin !== location.origin
+                || url.pathname !== `/admin/pretrip/projects/${encodeURIComponent(projectId())}/${definition.endpoint}/${definition.mode}.png`
+                || url.searchParams.get("v") !== sha.slice(0, 16)) return false;
+            } catch (_error) { return false; }
+          }
+          const theme = ["navigation-terrain", "navigation-terrain-route"].includes(navigationFamily) ? metadata["scout:single_image_theme"]
+            : cwaFamily || normalizeDashboardSingleImageTheme(layerId.replace(/^terrain[-_]/, ""));
           return metadata["scout:source_type"] === "image" && metadata["scout:candidate_only"] === true
             && metadata["scout:runtime_safety_truth"] === false
             && DASHBOARD_MAP_APPROVED_SINGLE_IMAGE_THEMES.includes(theme);
@@ -23355,6 +23390,10 @@
       const current = active ? `${active.key} · ${failed ? `${failed.stage} 失敗：${failed.detail}` : active.activeStage || "initial"}` : "等待第一個地圖結果";
       const observed = active?.liveSnapshot;
       const fullReport = outcome ? {...report, diagnosticResult: {status: outcome.status, detail: outcome.detail, scopeKey: outcome.scopeKey}} : report;
+      // Serializing request receipts while a timed probe is running blocks that
+      // same probe's fetch/decode callbacks. Retain all receipts in the report;
+      // materialize the complete JSON after execution has stopped.
+      const jsonReady = report.status !== "running" || (outcome && ["passed", "warning", "failed"].includes(outcome.status));
       return `<section data-diagnostic-rudy-report data-rudy-report-project="${escapeHtml(report.projectId)}" data-rudy-report-status="${escapeHtml(report.status || "running")}" data-rudy-recorded-stages="${stages.length}" data-rudy-planned-stages="${planned}" data-rudy-passed-stages="${passed}">
         <p data-diagnostic-rudy-progress role="status" aria-live="polite">${escapeHtml(progress)}<br>${escapeHtml(current)}</p>
         ${observed ? `<p data-diagnostic-rudy-live-state>原生 Z${escapeHtml(observed.matrix ?? "?")} · ${escapeHtml(observed.success ?? "?")}/${escapeHtml(observed.required ?? "?")} 完成 · ${escapeHtml(observed.pending ?? "?")} 載入中 · ${escapeHtml(observed.errors ?? "?")} 錯誤 · ${escapeHtml(observed.status || "unknown")}</p>` : ""}
@@ -23375,18 +23414,58 @@
         </details>
         <details data-diagnostic-rudy-json-details ${jsonExpanded ? "open" : ""}>
           <summary>完整 JSON 證據（含失敗快照與初始化收據）</summary>
-          <pre data-diagnostic-rudy-json>${escapeHtml(JSON.stringify(fullReport, null, 2))}</pre>
+          ${jsonReady ? `<pre data-diagnostic-rudy-json>${escapeHtml(JSON.stringify(fullReport, null, 2))}</pre>`
+            : '<p data-diagnostic-rudy-json-pending>完整收據持續保留中；檢測結束後顯示完整 JSON，避免整理報告阻塞地圖驗證。</p>'}
         </details>
       </section>`;
     }
 
-    function diagnosticPublishRudyReport(report, detail = "") {
+    function diagnosticUpdateRudyProgress(report) {
+      const root = document.querySelector('[data-diagnostic-rudy-report]');
+      if (!root || root.dataset.rudyReportProject !== report.projectId) {
+        updateDiagnosticDom("DASH-037");
+        return;
+      }
+      const rows = asArray(report.cases).slice();
+      if (report.activeResult && !rows.some(row => row.key === report.activeResult.key)) rows.push(report.activeResult);
+      const stages = rows.flatMap(row => asArray(row.stages));
+      // Stage/case changes refresh the small result list. Request phases update
+      // only text nodes, keeping expanded details and the surrounding UI intact.
+      const revision = JSON.stringify([report.phase, report.status, ...rows.map(row =>
+        [row.key, row.status, row.activeStage, row.cleanupStatus, asArray(row.stages).length])]);
+      if (root.dataset.rudyProgressRevision !== revision) {
+        root.outerHTML = renderDiagnosticRudyResults(report);
+        const updated = document.querySelector('[data-diagnostic-rudy-report]');
+        if (updated) updated.dataset.rudyProgressRevision = revision;
+        return;
+      }
+      const active = report.activeResult;
+      const failed = asArray(active?.stages).find(stage => ["warning", "failed"].includes(stage.status));
+      const passed = stages.filter(stage => stage.status === "passed").length;
+      const planned = Number(report.plannedStages) || Number(report.required) || 0;
+      const progress = root.querySelector('[data-diagnostic-rudy-progress]');
+      if (progress) progress.textContent = `Workspace ${report.projectId} · ${report.phase || "native-matrix"} · ${stages.length}/${planned || "?"} 階段已有結果 · ${passed} 通過 · ${active ? `${active.key} · ${failed ? `${failed.stage} 失敗：${failed.detail}` : active.activeStage || "initial"}` : "等待第一個地圖結果"}`;
+      const observed = active?.liveSnapshot;
+      if (observed) {
+        let live = root.querySelector('[data-diagnostic-rudy-live-state]');
+        if (!live) {
+          live = document.createElement("p");
+          live.setAttribute("data-diagnostic-rudy-live-state", "");
+          progress?.after(live);
+        }
+        live.textContent = `原生 Z${observed.matrix ?? "?"} · ${observed.success ?? "?"}/${observed.required ?? "?"} 完成 · ${observed.pending ?? "?"} 載入中 · ${observed.errors ?? "?"} 錯誤 · ${observed.status || "unknown"}`;
+      }
+    }
+
+    function diagnosticPublishRudyReport(report, detail = "", {live = false} = {}) {
       if (!report || report.projectId !== projectId()) return;
       const previous = diagnosticResult("DASH-037").rudyNativeReport;
-      diagnosticSetResult("DASH-037", {rudyNativeReport: structuredClone({
-        ...(previous?.projectId === report.projectId ? previous : {}), ...report,
-      }), ...(detail ? {detail} : {})});
-      updateDiagnosticDom("DASH-037");
+      const merged = {...(previous?.projectId === report.projectId ? previous : {}), ...report};
+      // The running module owns its live receipts. A sealed publication gets an
+      // independent snapshot; do not deep-copy the growing archive per request.
+      diagnosticSetResult("DASH-037", {rudyNativeReport: live ? merged : structuredClone(merged), ...(detail ? {detail} : {})});
+      if (live) diagnosticUpdateRudyProgress(merged);
+      else updateDiagnosticDom("DASH-037");
     }
 
     function diagnosticRudySurfaces() {
@@ -23432,7 +23511,7 @@
           state.navigationTerrainEvidenceDomain = domain;
           for (const mode of ["2d", "3d", "fallback", "loading"]) {
             const markup = mode === "loading" ? renderNavigationWorkspaceLoading(snapshot)
-              : mode === "fallback" ? renderNavigationWorkspaceMap(snapshot, null, null, null, null)
+              : mode === "fallback" ? renderNavigationWorkspaceMap(snapshot, ...navigationTerrainWorkspaceSelection(snapshot))
                 : renderNavigationTerrainMapLibreHost(snapshot, mode);
             const parsed = parse(markup);
             const viewport = parsed.querySelector("[data-dashboard-map-viewport], [data-navigation-maplibre-map]");
@@ -23503,6 +23582,7 @@
         const {doc, root: mapRoot, bridge} = ready;
         return {kind: debug ? "debug" : "pretrip", renderer: testCase.renderer, root: mapRoot, doc,
           projectId: () => new URL(frame.contentWindow.location.href).searchParams.get("projectId"),
+          cameraMotion: () => bridge.getCameraMotion?.(),
           viewLimits: () => bridge.getViewLimits?.(),
           tileView: () => bridge.getRudyTileView?.()};
       }
@@ -23534,7 +23614,7 @@
         }
         diagnosticRequire(["fallback", "loading"].includes(variant), "Unknown Navigation SVG variant.");
         root.innerHTML = variant === "loading" ? renderNavigationWorkspaceLoading(snapshot)
-          : renderNavigationWorkspaceMap(snapshot, null, null, null, null);
+          : renderNavigationWorkspaceMap(snapshot, ...navigationTerrainWorkspaceSelection(snapshot));
       } else if (surface.family === "architecture") {
         state.architectureLens = testCase.variant;
         root.innerHTML = renderArchitectureMap(architectureSnapshot());
@@ -23853,7 +23933,7 @@
               const failed = result.stages.find(stage => ["warning", "failed"].includes(stage.status));
               const step = failed || result.stages.at(-1);
               diagnosticPublishRudyReport({...report, phase: "native-matrix"},
-                `${result.key} · ${failed?.stage || result.activeStage || "initial"}: ${failed?.detail || step?.status || "running"}`);
+                `${result.key} · ${failed?.stage || result.activeStage || "initial"}: ${failed?.detail || step?.status || "running"}`, {live: true});
             }});
           return {...(report.status === "passed" ? diagnosticAvailability("ready", report.detail)
             : diagnosticWarning(report.detail, "incomplete")), nativeTiles: report};
@@ -25366,7 +25446,7 @@
         reports.push(...domainReports);
         for (const lens of domain === "observed" ? ["structure", "pressure", "risk", "retreat", "events"] : ["structure"]) {
           state.navigationTerrainLens = lens;
-          root.innerHTML = renderNavigationWorkspaceMap(snapshot, null, null, null, null);
+          root.innerHTML = renderNavigationWorkspaceMap(snapshot, ...navigationTerrainWorkspaceSelection(snapshot));
           reports.push(...diagnosticInspectMapOrderRoot(root, surface, `${domain} · SVG ${lens}`, {requireRoute: domain === "observed"}));
         }
       }
@@ -30705,6 +30785,47 @@
       return navigationTerrainLayerVisibility()[layerKey] !== false;
     }
 
+    function navigationTerrainImageLayerDefinition(layerId) {
+      const modes = {
+        "scout-terrain-elevation-tint": "elevation_tint",
+        "scout-terrain-hillshade": "hillshade",
+        "scout-terrain-contours": "contours",
+        "scout-terrain-slope-shading": "slope_shading",
+        "scout-terrain-route-corridor-top-5": "top_5_percent_corridor",
+        "scout-terrain-route-corridor-top-10": "top_10_percent_corridor",
+        "scout-terrain-route-corridor-top-20": "top_20_percent_corridor",
+      };
+      const mode = modes[layerId];
+      if (!mode) return null;
+      const corridor = NAVIGATION_TERRAIN_ROUTE_CORRIDOR_MODES.includes(mode);
+      return {mode, theme: corridor ? "thematic" : mode,
+        family: corridor ? "navigation-terrain-route" : "navigation-terrain",
+        endpoint: corridor ? "terrain-route-overlays" : "terrain-overlays"};
+    }
+
+    function navigationTerrainImageLayerMetadata(snapshot, layerId) {
+      const definition = navigationTerrainImageLayerDefinition(layerId);
+      if (!definition) return null;
+      const overlay = definition.family === "navigation-terrain-route"
+        ? navigationTerrainRouteHypothesisOverlay(snapshot, definition.mode)
+        : navigationTerrainRasterOverlay(snapshot, definition.mode);
+      if (!overlay || !/^[a-f0-9]{64}$/.test(String(overlay.sha256 || ""))
+        || !String(overlay.source_ref || "").startsWith("outputs/")
+        || String(overlay.source_ref).split("/").includes("..")) return null;
+      return {
+        "scout:layer_id": layerId,
+        "scout:source_type": "image",
+        "scout:source_family": definition.family,
+        "scout:single_image_theme": definition.theme,
+        "scout:overlay_mode": definition.mode,
+        "scout:artifact_sha256": overlay.sha256,
+        "scout:source_ref": overlay.source_ref,
+        "scout:candidate_only": true,
+        "scout:runtime_safety_truth": false,
+        "scout:operational": false,
+      };
+    }
+
     function navigationTerrainRasterOverlay(snapshot, mode) {
       const overlay = asArray(snapshot?.terrain_surface?.overlays).find(
         item => item?.mode === mode,
@@ -32482,8 +32603,10 @@
         const visible = layerKey === "hypothesis" && corridorMode
           ? configuredVisibility.hypothesis && terrainRouteBand === corridorMode
           : configuredVisibility[layerKey];
+        const imageMetadata = navigationTerrainImageLayerMetadata(snapshot, layer.id);
         return {
           ...layer,
+          ...(imageMetadata ? {metadata: {...(layer.metadata || {}), ...imageMetadata}} : {}),
           layout: {
             ...(layer.layout || {}),
             visibility: visible ? "visible" : "none",
@@ -33266,12 +33389,14 @@
           const entry = {map, mode, host, scopeKey, routeAnnotations, rudyTransport, rudyLayer};
           navigationTerrainMapLibreRuntime.maps.push(entry);
           entry.updateNativeCameraLimit = () => {
-            const policy = window.ScoutMapLibreEvidence.rasterNativeCameraPolicy(entry.rudyLayer ? [entry.rudyLayer] : [], 20);
+            const policy = window.ScoutMapLibreEvidence.rasterNativeCameraPolicy(entry.rudyLayer ? [entry.rudyLayer] : [], 20, {map, maplibregl});
             if (map.getMaxZoom?.() !== policy.maxCameraZoom) map.setMaxZoom?.(policy.maxCameraZoom);
             entry.nativeCameraReceipt = window.ScoutMapLibreEvidence.rasterNativeCameraReceipt(map, entry.rudyLayer, policy);
             host.dataset.maplibreNativeCameraReceipt = JSON.stringify(entry.nativeCameraReceipt);
             const label = host.parentElement?.querySelector("[data-navigation-rudy-camera-status]");
-            if (label) label.textContent = entry.nativeCameraReceipt.requestedAboveNativeMax
+            if (label) label.textContent = policy.nativeDemandCap?.status === "unverified"
+              ? "3D 近景原生細節上限未驗證；請查看 Diagnostic 結果"
+              : entry.nativeCameraReceipt.requestedAboveNativeMax
               ? `3D 近景需求 ${entry.nativeCameraReceipt.requestedNativeZooms.map(zoom => `Z${zoom}`).join(" / ")}，超過 Rudy Z${policy.providerNativeMaxZoom} 細節上限`
               : policy.active ? "原生細節縮放上限" : "";
           };
@@ -33817,6 +33942,61 @@
       `;
     }
 
+    function renderNavigationQgisTerrainOverlay(features, bounds) {
+      const normalizedBounds = navigationRudyBounds(bounds);
+      if (!normalizedBounds) return "";
+      const styles = {
+        qgis_slope_candidate: {color: "#77d6c6", width: 12, opacity: .28, dash: "1.2 1.2"},
+        qgis_candidate_stream_network: {color: "#1769aa", width: 1.8, opacity: .92},
+        qgis_candidate_valley_line: {color: "#27b8d2", width: 2.4, opacity: .96, dash: "2.5 1.2"},
+        qgis_candidate_ridge_line: {color: "#ff9d00", width: 2.8, opacity: .98, dash: "1.2 .9"},
+        qgis_terrain_feature_sample: {color: "#8fa091", width: 1, opacity: 1},
+      };
+      const position = pair => {
+        if (!Array.isArray(pair) || pair.length < 2 || !pair.slice(0, 2).every(Number.isFinite)) return null;
+        // Preserve out-of-frame geometry; SVG clips it without clamping vertices
+        // onto the border or inventing a new line segment.
+        return dashboardRudyTilePointPosition({lon: pair[0], lat: pair[1]}, normalizedBounds, 1000, 392);
+      };
+      const line = coordinates => {
+        const points = asArray(coordinates).map(position);
+        if (points.length < 2 || points.some(point => !point || !Number.isFinite(point.x) || !Number.isFinite(point.y))) return "";
+        return points.map((point, index) => `${index ? "L" : "M"}${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(" ");
+      };
+      return asArray(features).map(feature => {
+        const properties = feature.properties || {};
+        const style = Object.prototype.hasOwnProperty.call(styles, properties.kind) ? styles[properties.kind] : null;
+        if (!style || properties.candidate_only !== true || properties.runtime_safety_truth !== false
+          || properties.operational !== false) return "";
+        const geometry = feature.geometry || {};
+        const pointLayer = properties.kind === "qgis_terrain_feature_sample";
+        if (pointLayer !== (geometry.type === "Point")) return "";
+        let shape = "";
+        if (geometry.type === "Point") {
+          const point = position(geometry.coordinates);
+          if (point && Number.isFinite(point.x) && Number.isFinite(point.y)) {
+            shape = `<circle cx="${point.x.toFixed(2)}" cy="${point.y.toFixed(2)}" r="3.5" fill="${style.color}" stroke="#07110e" stroke-width="1"></circle>`;
+          }
+        } else {
+          const lines = geometry.type === "LineString" ? [geometry.coordinates]
+            : ["MultiLineString", "Polygon"].includes(geometry.type) ? geometry.coordinates
+              : geometry.type === "MultiPolygon" ? asArray(geometry.coordinates).flat() : [];
+          const path = asArray(lines).map(line).filter(Boolean).join(" ");
+          if (path) shape = `<path d="${path}" fill="none" stroke="${style.color}" stroke-width="${style.width}" stroke-opacity="${style.opacity}" ${style.dash ? `stroke-dasharray="${style.dash}"` : ""} vector-effect="non-scaling-stroke"></path>`;
+        }
+        if (!shape) return "";
+        const id = String(properties.id || feature.id || "");
+        const label = String(properties.label || properties.kind);
+        return `<g data-navigation-qgis-feature-id="${escapeHtml(id)}" data-navigation-qgis-kind="${escapeHtml(properties.kind)}"
+          data-candidate-only="true" data-runtime-safety-truth="false" data-operational="false"
+          tabindex="0" role="img" aria-label="${escapeHtml(label)}"
+          data-dashboard-map-hint-source="qgis-spatial-evidence"
+          data-dashboard-map-hint-title="${escapeHtml(label)}"
+          data-dashboard-map-hint-summary="${escapeHtml("QGIS/GRASS prepared terrain candidate · not a verified trail or safety decision")}">
+          ${shape}<title>${escapeHtml(label)}</title></g>`;
+      }).join("");
+    }
+
     function renderNavigationWorkspaceMap(
       snapshot,
       selectedPoint,
@@ -33833,6 +34013,9 @@
       const bounds = snapshot?.terrain_surface?.bbox_wgs84;
       const baseZoom = navigationRudyBaseZoom(bounds);
       const routePath = revealObservedContext ? navigationTerrainRoutePath(snapshot) : "";
+      const qgisFeatures = lens === "structure" && navigationTerrainLayerVisible("candidates")
+        ? qgisSpatialMaplibreFeatures() : [];
+      const qgisOverlay = renderNavigationQgisTerrainOverlay(qgisFeatures, bounds);
       const pressurePoints = navigationTerrainPressureSamples(snapshot)
         .map(point => ({
           ...point,
@@ -33876,9 +34059,11 @@
       const structureGap = ["ridge", "valley", "saddle"]
         .filter(kind => !["candidate_vectors", "candidate_points"].includes(snapshot?.feature_extraction?.[kind]?.status));
       const statusText = evidenceDomain === "terrain"
-        ? `DEM-derived terrain evidence only；Rudy+TW、GPX、OSM/Overpass 與 learned prior 均未載入本視圖。${hierarchyEdges.length} 個低權威候選支持區。`
+        ? `DEM-derived terrain evidence only；Rudy+TW、GPX、OSM/Overpass 與 learned prior 均未載入本視圖。${hierarchyEdges.length} 個低權威候選支持區；${qgisFeatures.length} 個已備妥的 QGIS 地形圖徵。`
         : revealLearnedPrior
           ? `Learned prior 已明示揭露；僅顯示聚合地形模式，不捏造空間路線或可通行中心線。`
+          : lens === "structure" && qgisOverlay
+            ? `已備妥的 QGIS/GRASS 地形向量 · ${qgisFeatures.length} 個圖徵；候選資料，不代表步道或安全結論。`
           : lens === "structure" && hierarchyEdges.length
         ? `${hierarchyEdges.length} 個低權威候選支持區；不是精確中心線。Geometry gate: ${validationState}。`
         : lens === "events"
@@ -33898,6 +34083,7 @@
             ${revealObservedContext
               ? `<rect width="1000" height="392" fill="#101813"></rect>${renderNavigationRudyTileLayer(bounds, baseZoom)}`
               : renderNavigationTerrainTopDownLayer(snapshot?.terrain_mesh || {})}
+            ${qgisOverlay}
             ${["structure", "events"].includes(lens) ? hierarchyEdges.map(edge => `
               <path
                 class="navigation-terrain-hierarchy-band"
@@ -33931,6 +34117,9 @@
                 tabindex="${point.navigation_selection_id === selectedPressurePoint?.navigation_selection_id ? "0" : "-1"}"
                 data-navigation-pressure-point-id="${escapeHtml(point.navigation_selection_id)}"
                 data-navigation-pressure-selected="${point.navigation_selection_id === selectedPressurePoint?.navigation_selection_id ? "true" : "false"}"
+                data-dashboard-map-hint-source="navigation-pressure-evidence"
+                data-dashboard-map-hint-title="${escapeHtml(`Route pressure · ${formatDistanceKm(point.distance_m)}`)}"
+                data-dashboard-map-hint-summary="${escapeHtml(`TEII ${valueOrDash(point.teii_20m)} · pretrip risk ${valueOrDash(point.pretrip_risk)} · candidate evidence`)}"
                 aria-label="${escapeHtml(`坡度樣本 ${point.navigation_display_index}，${formatDistanceKm(point.distance_m)}，TEII ${valueOrDash(point.teii_20m)}`)}"
               >
                 <circle
@@ -33939,9 +34128,6 @@
                   cy="0"
                   r="${point.navigation_selection_id === selectedPressurePoint?.navigation_selection_id ? "10" : "6"}"
                   fill="${navigationPressureColor(point.teii_20m ?? point.pretrip_risk ?? point.tri)}"
-                  data-dashboard-map-hint-source="navigation-pressure-evidence"
-                  data-dashboard-map-hint-title="${escapeHtml(`Route pressure · ${formatDistanceKm(point.distance_m)}`)}"
-                  data-dashboard-map-hint-summary="${escapeHtml(`TEII ${valueOrDash(point.teii_20m)} · pretrip risk ${valueOrDash(point.pretrip_risk)} · candidate evidence`)}"
                 >
                   <title>${escapeHtml(`${formatDistanceKm(point.distance_m)} · TEII ${valueOrDash(point.teii_20m)}`)}</title>
                 </circle>
@@ -35033,6 +35219,20 @@
       )}`;
     }
 
+    function navigationTerrainWorkspaceSelection(snapshot) {
+      const riskPoints = asArray(snapshot?.risk_candidates?.points);
+      const selectedLivePoint = riskPoints.find(point => point.id === state.navigationSelectedLivePointId) || riskPoints[0] || null;
+      const pressurePoints = navigationTerrainPressureSamples(snapshot);
+      const selectedPressurePoint = pressurePoints.find(point => (
+        point.navigation_selection_id === state.navigationSelectedPressurePointId
+      )) || pressurePoints[0] || null;
+      const structurePoints = asArray(snapshot?.terrain_structures?.points);
+      const selectedStructurePoint = structurePoints.find(point => point.id === state.navigationSelectedStructurePointId) || structurePoints[0] || null;
+      const terrainEvents = asArray(snapshot?.route_terrain_events?.events);
+      const selectedTerrainEvent = terrainEvents.find(event => event.id === state.navigationSelectedTerrainEventId) || terrainEvents[0] || null;
+      return [selectedLivePoint, selectedStructurePoint, selectedTerrainEvent, selectedPressurePoint];
+    }
+
     function renderNavigationPage(force) {
       const features = navigationTerrainFeatures();
       const selected = features.find(feature => feature.id === state.navigationSelectedFeatureId) || features[2];
@@ -35051,16 +35251,8 @@
       const liveReady = !["loading", "unavailable", "preparing", "failed"].includes(snapshot.status)
         && Boolean(snapshot?.terrain_surface?.bbox_wgs84);
       const terrainWorkbenchReady = liveReady || navigationTerrainDemReady(snapshot);
-      const riskPoints = asArray(snapshot?.risk_candidates?.points);
-      const selectedLivePoint = riskPoints.find(point => point.id === state.navigationSelectedLivePointId) || riskPoints[0] || null;
-      const pressurePoints = navigationTerrainPressureSamples(snapshot);
-      const selectedPressurePoint = pressurePoints.find(point => (
-        point.navigation_selection_id === state.navigationSelectedPressurePointId
-      )) || pressurePoints[0] || null;
-      const structurePoints = asArray(snapshot?.terrain_structures?.points);
-      const selectedStructurePoint = structurePoints.find(point => point.id === state.navigationSelectedStructurePointId) || structurePoints[0] || null;
-      const terrainEvents = asArray(snapshot?.route_terrain_events?.events);
-      const selectedTerrainEvent = terrainEvents.find(event => event.id === state.navigationSelectedTerrainEventId) || terrainEvents[0] || null;
+      const [selectedLivePoint, selectedStructurePoint, selectedTerrainEvent, selectedPressurePoint]
+        = navigationTerrainWorkspaceSelection(snapshot);
       const lensOptions = evidenceDomain === "observed"
         ? [
             ["structure", "地形結構"],
@@ -38741,10 +38933,21 @@
 
     function renderCompletedGpxLifecycle() {
       const catalog = state.completedTripCatalog;
-      const recordings = asArray(catalog?.recordings);
-      const activeRecordingId = String(catalog?.active_recording?.recording_id || "");
-      const status = state.completedTripCatalogStatus || {};
-      const busy = Boolean(state.completedTripActivationBusy);
+      const sameProject = !catalog || String(catalog.project_id || catalog.case_id || "") === resolvedPretripProjectId();
+      const recordings = sameProject ? asArray(catalog?.recordings) : [];
+      const rejection = completedGpxRejectionText(catalog);
+      const status = rejection
+        ? state.completedTripCatalogStatus?.status === "loading"
+          ? { status: "loading", text: state.completedTripCatalogStatus.text + " 前次結果：" + rejection }
+          : { status: "error", text: (state.completedTripCatalogStatus?.text || "").includes(rejection)
+              ? state.completedTripCatalogStatus.text : rejection }
+        : !sameProject
+          ? { status: "error", text: "完成軌跡目錄屬於另一個 workspace；請重新檢查。" }
+          : state.completedTripCatalogStatus || {};
+      const activeRecordingId = sameProject && status.status === "ready"
+        && catalog?.active_projection_validation?.status === "validated"
+          ? String(catalog?.active_recording?.recording_id || "") : "";
+      const busy = Boolean(state.completedTripActivationBusy) || status.status === "loading";
       const statusTone = status.status === "error"
         ? "bad"
         : status.status === "ready"
@@ -38790,67 +38993,154 @@
       `;
     }
 
-    async function loadCompletedTripRecordings() {
-      state.completedTripCatalogStatus = {
-        status: "loading",
-        text: "正在檢查可用的完成軌跡…",
+    function completedGpxRejectionText(catalog) {
+      if (catalog?.active_projection_validation?.status !== "rejected") return "";
+      const reasons = asArray(catalog.active_projection_validation.issues)
+        .map((issue) => String(issue?.message || "").trim()).filter(Boolean);
+      return "完成軌跡後分析已拒收：" + (reasons.join("；") || "來源身分無法確認，請重新選取紀錄。");
+    }
+
+    function quarantineCompletedGpxProjection() {
+      const view = state.project;
+      if (!view) return;
+      const recordingId = String(view.active_completed_trip_recording?.recording_id
+        || view.completed_trip_track?.recording_id
+        || view.capability_timeline_import?.completed_trip_recording?.recording_id
+        || state.completedTripCatalog?.active_recording?.recording_id || "");
+      if (!recordingId) return;
+      const analysisCaseId = resolvedPretripProjectId() + "." + recordingId;
+      const previous = {};
+      for (const key of ["capability_timeline_import", "capability_timeline"]) {
+        const value = view[key];
+        if (value && (value.case_id === analysisCaseId
+            || value.completed_trip_recording?.recording_id === recordingId)) previous[key] = value;
+      }
+      if (view.completed_trip_track?.recording_id === recordingId) previous.completed_trip_track = view.completed_trip_track;
+      if (view.active_completed_trip_recording?.recording_id === recordingId) previous.active_completed_trip_recording = view.active_completed_trip_recording;
+      if (view.scout_reaction_simulation?.scenario_id === recordingId) previous.scout_reaction_simulation = view.scout_reaction_simulation;
+      if (!Object.keys(previous).length) return;
+      // Retain the previous evidence for inspection, without presenting it as current.
+      state.completedTripPreviousProjection = { projectId: resolvedPretripProjectId(), fields: previous };
+      state.project = { ...view, ...Object.fromEntries(Object.keys(previous).map((key) => [key, null])) };
+    }
+
+    function completedGpxRequestIsCurrent(request) {
+      return state.completedTripRequest === request
+        && resolvedPretripProjectId() === request.projectId && apiBase() === request.apiBase;
+    }
+
+    function checkCompletedGpxCatalogProject(catalog, projectId) {
+      if (!catalog || String(catalog.project_id || catalog.case_id || "") !== projectId) {
+        throw new Error("完成軌跡目錄的 workspace 不一致，請重新檢查。");
+      }
+    }
+
+    async function refreshCompletedGpxProjection(request, selectedRecordingId = "") {
+      const catalog = await fetchJson(completedTripRecordingsPath());
+      if (!completedGpxRequestIsCurrent(request)) return;
+      checkCompletedGpxCatalogProject(catalog, request.projectId);
+      state.completedTripCatalog = catalog;
+      const firstRejection = completedGpxRejectionText(catalog);
+      if (firstRejection) {
+        state.completedTripCatalogStatus = { status: "error", text: firstRejection };
+        render();
+      }
+      const view = await fetchJson(
+        "/admin/pretrip/projects/" + encodeURIComponent(request.projectId) + "?compact=1",
+        { timeoutMs: PRETRIP_PROJECT_FETCH_TIMEOUT_MS },
+      );
+      if (!completedGpxRequestIsCurrent(request)) return;
+      if (String(view?.project_id || "") !== request.projectId) {
+        throw new Error("workspace 最新資料的身分不一致，未套用後分析結果。");
+      }
+      let currentCatalog = view.completed_trip_recordings;
+      checkCompletedGpxCatalogProject(currentCatalog, request.projectId);
+      if (view.completed_trip_recording_projection_validation?.status === "rejected") {
+        currentCatalog = { ...currentCatalog, active_recording: null,
+          active_projection_validation: view.completed_trip_recording_projection_validation };
+      }
+      if (firstRejection) currentCatalog = catalog;
+      state.completedTripCatalog = currentCatalog;
+      const rejection = completedGpxRejectionText(currentCatalog);
+      const activeId = String(currentCatalog.active_recording?.recording_id || "");
+      const validated = currentCatalog.active_projection_validation?.status === "validated";
+      const capability = view.capability_timeline;
+      if (!rejection && activeId && (!validated || !capability
+          || capability.case_id !== request.projectId + "." + activeId)) {
+        throw new Error("目前選取紀錄的後分析尚未通過來源核對，請重新檢查。");
+      }
+      if (!rejection && selectedRecordingId && activeId !== selectedRecordingId) {
+        throw new Error("目前選取的完成軌跡已變動；請重新檢查後再選取。");
+      }
+      const active = !rejection && validated && Boolean(activeId);
+      state.project = {
+        ...(state.project || {}),
+        capability_timeline_import: active ? capability : view.capability_timeline_import || null,
+        capability_timeline: active ? capability : null,
+        completed_trip_track: active ? view.completed_trip_track || null : null,
+        active_completed_trip_recording: active ? view.active_completed_trip_recording || null : null,
+        scout_reaction_simulation: active ? view.scout_reaction_simulation || null : null,
+        completed_trip_recordings: currentCatalog,
+        completed_trip_recording_projection_validation: currentCatalog.active_projection_validation || null,
       };
+      if (rejection) {
+        state.completedTripCatalogStatus = { status: "error", text: rejection };
+        return;
+      }
+      const count = Number(currentCatalog.recording_count || asArray(currentCatalog.recordings).length);
+      state.completedTripCatalogStatus = {
+        status: "ready",
+        text: selectedRecordingId
+          ? "完成軌跡已啟用；Capability Timeline 與 Rest Intervals 已從 post-analysis 結果更新。"
+          : count ? "找到 " + count + " 份完成軌跡；選擇一份後才會建立 post-analysis evidence。"
+            : "尚未找到完成軌跡；Capability Timeline 與 Rest Intervals 保持未匯入。",
+      };
+    }
+
+    function completedGpxLoadFailure(prefix, error) {
+      const rejection = completedGpxRejectionText(state.completedTripCatalog);
+      state.completedTripCatalogStatus = {
+        status: "error", text: (rejection ? rejection + " 最新資料尚未恢復：" : prefix) + (error.message || error),
+      };
+    }
+
+    async function loadCompletedTripRecordings() {
+      if (state.completedTripActivationBusy) return;
+      const request = { projectId: resolvedPretripProjectId(), apiBase: apiBase() };
+      state.completedTripRequest = request;
+      quarantineCompletedGpxProjection();
+      state.completedTripCatalogStatus = { status: "loading", text: "正在檢查可用的完成軌跡…" };
       render();
       try {
-        const catalog = await fetchJson(completedTripRecordingsPath());
-        state.completedTripCatalog = catalog;
-        const count = Number(catalog.recording_count || asArray(catalog.recordings).length);
-        state.completedTripCatalogStatus = {
-          status: "ready",
-          text: count
-            ? `找到 ${count} 份完成軌跡；選擇一份後才會建立 post-analysis evidence。`
-            : "尚未找到完成軌跡；Capability Timeline 與 Rest Intervals 保持未匯入。",
-        };
+        await refreshCompletedGpxProjection(request);
       } catch (error) {
-        state.completedTripCatalogStatus = {
-          status: "error",
-          text: `完成軌跡目錄讀取失敗：${error.message || error}`,
-        };
+        if (completedGpxRequestIsCurrent(request)) completedGpxLoadFailure("完成軌跡目錄讀取失敗：", error);
       }
-      render();
+      if (completedGpxRequestIsCurrent(request)) render();
     }
 
     async function activateCompletedTripRecording(recordingId) {
       const safeRecordingId = String(recordingId || "").trim();
       if (!safeRecordingId || state.completedTripActivationBusy) return;
+      const request = { projectId: resolvedPretripProjectId(), apiBase: apiBase() };
+      state.completedTripRequest = request;
       state.completedTripActivationBusy = true;
-      state.completedTripCatalogStatus = {
-        status: "loading",
-        text: "正在建立 Capability Timeline 與 Rest Intervals…",
-      };
+      quarantineCompletedGpxProjection();
+      state.completedTripCatalogStatus = { status: "loading", text: "正在建立 Capability Timeline 與 Rest Intervals…" };
       render();
       try {
-        const result = await postJson(
+        await postJson(
           completedTripRecordingSelectPath(safeRecordingId),
           {},
           { timeoutMs: PRETRIP_PROJECT_FETCH_TIMEOUT_MS },
         );
-        if (result.capability_timeline) {
-          state.project = {
-            ...(state.project || {}),
-            capability_timeline_import: result.capability_timeline,
-            completed_trip_track: result.completed_trip_track || null,
-          };
-        }
-        const catalog = await fetchJson(completedTripRecordingsPath());
-        state.completedTripCatalog = catalog;
-        state.completedTripCatalogStatus = {
-          status: "ready",
-          text: "完成軌跡已啟用；Capability Timeline 與 Rest Intervals 已從 post-analysis 結果更新。",
-        };
+        if (!completedGpxRequestIsCurrent(request)) return;
+        await refreshCompletedGpxProjection(request, safeRecordingId);
       } catch (error) {
-        state.completedTripCatalogStatus = {
-          status: "error",
-          text: `完成軌跡處理失敗：${error.message || error}`,
-        };
+        if (completedGpxRequestIsCurrent(request)) completedGpxLoadFailure("完成軌跡處理失敗：", error);
       } finally {
-        state.completedTripActivationBusy = false;
-        render();
+        if (state.completedTripRequest === request) state.completedTripActivationBusy = false;
+        if (completedGpxRequestIsCurrent(request)) render();
       }
     }
 

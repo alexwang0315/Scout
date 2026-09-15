@@ -56,7 +56,7 @@ async function run() {
   const systemSection = page.locator('details[data-nav-primary]').filter({ hasText: "System" }).first();
   await systemSection.locator("summary").click();
   await page.getByRole("button", { name: "scout monitor" }).click();
-  const frame = page.frameLocator('iframe[src="/admin/dashboard/scout-monitor"]');
+  const frame = page.frameLocator('iframe[src="/admin/dashboard/scout-monitor?ui=20260914-ssh1"]');
   await frame.getByRole("heading", { name: "硬體監控" }).waitFor({ state: "visible", timeout: 30000 });
   const macUiElements = await frame.locator("#hostName, #cpuCard, #memoryCard, #diskCard, #historyChart, #processTable, #intervalSelect").count();
   if (macUiElements) fail("Mac monitoring elements remain in the Dashboard monitor");
@@ -152,7 +152,7 @@ async function run() {
   phase = "mobile-reload";
   const mobileStatusResponse = page.waitForResponse((response) => new URL(response.url()).pathname.endsWith("/api/v1/hardware-monitor/status"));
   await page.reload({ waitUntil: "domcontentloaded" });
-  const mobileFrame = page.frameLocator('iframe[src="/admin/dashboard/scout-monitor"]');
+  const mobileFrame = page.frameLocator('iframe[src="/admin/dashboard/scout-monitor?ui=20260914-ssh1"]');
   await mobileFrame.getByRole("heading", { name: "硬體監控" }).waitFor({ state: "visible", timeout: 30000 });
   await mobileFrame.locator("#hardwareTrendMeta").filter({ hasText: "歷史紀錄" }).waitFor({ state: "visible", timeout: 30000 });
   phase = "mobile-inventory";

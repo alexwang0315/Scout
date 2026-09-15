@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[2]
 def test_current_dashboard_surface_closes_without_inventory_drift() -> None:
     result = discover_dashboard_surface(ROOT)
 
-    assert len(result.routes) == 22
+    assert len(result.routes) == 25
     assert not result.findings
     assert result.manifest.entries
     classes = {entry.entrypoint_class for entry in result.manifest.entries}

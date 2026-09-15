@@ -29,6 +29,7 @@ def collect_pretrip_weather_decision(
     route_segments_path: str | None = None,
     default_township: str | None = None,
     generated_at: str | None = None,
+    reference_time: str | None = None,
     valid_until: str | None = None,
     provider: str = "workspace_local_weather_points",
 ) -> dict[str, Any]:
@@ -109,6 +110,7 @@ def collect_pretrip_weather_decision(
         weather_daylight_ref=weather_daylight_ref,
         route_weather_package=route_weather_package,
         dry_run=dry_run,
+        reference_time=reference_time,
     )
     candidate_payload = _decision_candidates_payload(
         project_id=project_id,
@@ -140,6 +142,7 @@ def collect_pretrip_weather_decision(
         },
         "decision": assessment.get("decision"),
         "answerability": assessment.get("answerability"),
+        "reference_time": assessment.get("filters", {}).get("reference_time"),
         "missing_fields": list(assessment.get("missing_fields") or []),
         "source_report": source_report,
         "standard_alignment": [
@@ -401,6 +404,7 @@ def _weather_assessment(
     weather_daylight_ref: str,
     route_weather_package: dict[str, Any] | None,
     dry_run: bool,
+    reference_time: str | None = None,
 ) -> dict[str, Any]:
     if route_weather_package is not None:
         import tempfile
@@ -428,10 +432,11 @@ def _weather_assessment(
                     temp_root / weather_daylight_ref,
                     _load_json_object(root / weather_daylight_ref),
                 )
-            return assess_scout_weather_window(temp_root, limit=12)
+            return assess_scout_weather_window(temp_root, reference_time=reference_time, limit=12)
     return assess_scout_weather_window(
         root,
         weather_evidence_path=weather_daylight_ref,
+        reference_time=reference_time,
         limit=12,
     )
 

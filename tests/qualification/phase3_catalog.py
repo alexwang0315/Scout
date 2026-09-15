@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
+from tests.qualification.phase3_telemetry import READ_TELEMETRY_CONTRACTS
+
 from tests.qualification.phase3_contracts import (
     AuthorityBoundarySpec,
     CommandResourceSpec,
@@ -54,7 +58,7 @@ CANONICAL_ROUTE_DISPOSITION: tuple[tuple[str, str], ...] = (
     ("observer", "observer-hardware-boundary"),
     ("settings", "dashboard-shell-control"),
     ("diagnostic", "separate-runtime-diagnostic"),
-)
+) + tuple((item.route, item.domain_id) for item in READ_TELEMETRY_CONTRACTS)
 
 FIXTURE_CLASSES = (
     "current",
@@ -333,6 +337,40 @@ DOMAIN_SPECS: tuple[DashboardDomainSpec, ...] = (
         ("reload-settings",),
     ),
 )
+
+
+# Rev2 remains an immutable historical packet. These obligations implement the
+# existing source-closure rule for the same 25-route list approved under D002.
+def _with_read_telemetry_contracts(spec: DashboardDomainSpec) -> DashboardDomainSpec:
+    additions = tuple(item for item in READ_TELEMETRY_CONTRACTS if item.domain_id == spec.domain_id)
+    if not additions:
+        return spec
+    def extend(field: str, contract_field: str) -> tuple[str, ...]:
+        return tuple(dict.fromkeys((*getattr(spec, field), *(value for item in additions for value in getattr(item, contract_field)))))
+    profile = replace(
+        spec.risk_profile,
+        source_refs=tuple(dict.fromkeys((*spec.risk_profile.source_refs, *(ref for item in additions for ref in item.sources)))),
+    )
+    if spec.domain_id == "dashboard-shell-control":
+        # Audit records carry sanitized private provenance and durable history.
+        # Raise the existing mechanical floor; never classify it as an exclusion.
+        profile = replace(profile, declared_tier=1, privacy_sensitive=True, durable_publication=True)
+    return replace(
+        spec, risk_profile=profile,
+        ui_routes=(*spec.ui_routes, *(item.route for item in additions)),
+        api_route_prefixes=extend("api_route_prefixes", "api_routes"),
+        production_source_refs=extend("production_source_refs", "sources"),
+        persisted_capabilities=extend("persisted_capabilities", "persisted_capabilities"),
+        fixture_classes=FIXTURE_CLASSES,
+        observation_fields=extend("observation_fields", "observation_fields"),
+        supported_start_states=extend("supported_start_states", "start_states"),
+        transitions=extend("transitions", "transitions"),
+        terminals=extend("terminals", "terminals"),
+        recovery_transitions=extend("recovery_transitions", "recovery_transitions"),
+    )
+
+
+DOMAIN_SPECS = tuple(_with_read_telemetry_contracts(spec) for spec in DOMAIN_SPECS)
 
 
 DEPENDENCY_EDGES: tuple[DependencyEdgeSpec, ...] = (

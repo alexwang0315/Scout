@@ -101,6 +101,7 @@ def test_dashboard_proxy_keeps_hardware_api_same_origin_and_forwards_limits(
         assistant_enabled=False,
         assistant_environ={},
         runtime_audit_root=tmp_path / "runtime-audit",
+        pretrip_workspace_root=tmp_path / "workspace",
         hardware_monitor_fetcher=fetcher,
     )
 
@@ -150,6 +151,7 @@ def test_dashboard_proxy_preserves_stale_503_and_old_data_is_not_reclassified(
         assistant_enabled=False,
         assistant_environ={},
         runtime_audit_root=tmp_path / "runtime-audit",
+        pretrip_workspace_root=tmp_path / "workspace",
         hardware_monitor_fetcher=fetcher,
     )
 
@@ -175,6 +177,7 @@ def test_dashboard_proxy_returns_typed_unavailable_payload_on_disconnect(
         assistant_enabled=False,
         assistant_environ={},
         runtime_audit_root=tmp_path / "runtime-audit",
+        pretrip_workspace_root=tmp_path / "workspace",
         hardware_monitor_fetcher=fetcher,
     )
 

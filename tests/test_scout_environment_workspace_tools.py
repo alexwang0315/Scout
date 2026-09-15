@@ -300,6 +300,7 @@ def test_gee_environment_tool_reads_workspace_artifacts_without_gee_init() -> No
     payload = assess_scout_gee_environment(
         PROJECT_ROOT,
         query="SMAP GPM hydrologic evidence?",
+        reference_time="2026-06-24T06:00:00Z",
         limit=4,
     )
 

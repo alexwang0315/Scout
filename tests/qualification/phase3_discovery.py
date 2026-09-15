@@ -3,7 +3,9 @@ from __future__ import annotations
 import ast
 import hashlib
 import re
+from collections import Counter
 from dataclasses import dataclass
+from html.parser import HTMLParser
 from pathlib import Path
 from typing import Iterable
 
@@ -102,6 +104,9 @@ def _domain_from_text(value: str) -> tuple[str | None, str]:
     if "diagnostic" in lowered:
         return None, "separate-runtime-diagnostic"
     rules: tuple[tuple[tuple[str, ...], str], ...] = (
+        (("runtime-audit", "runtimeaudit", "runtimelogs"), "dashboard-shell-control"),
+        (("hardware-monitor", "hardwaremonitor", "scout-hardware-monitor"), "observer-hardware-boundary"),
+        (("dashboard-telemetry", "intelligence-telemetry", "intelligencetelemetry"), "assistant-planner"),
         (("permission", "mission-baseline"), "contextual-permission"),
         (("body-index", "bodyindex", "wearable"), "body-index-privacy"),
         (("observer", "mqtt", "lorawan", "gnss", "sensorlogger"), "observer-hardware-boundary"),
@@ -120,6 +125,25 @@ def _domain_from_text(value: str) -> tuple[str | None, str]:
 def discover_dashboard_routes(html: str) -> tuple[str, ...]:
     return tuple(sorted(set(_STATIC_ROUTE_RE.findall(html))))
 
+
+
+class _SidebarRouteParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.routes: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        values = dict(attrs)
+        if "nav-item" in (values.get("class") or "").split():
+            route = values.get("data-route")
+            if route is not None:
+                self.routes.append(route)
+
+
+def _sidebar_routes(html: str) -> tuple[str, ...]:
+    parser = _SidebarRouteParser()
+    parser.feed(html)
+    return tuple(parser.routes)
 
 def _balanced_brace_delta(line: str) -> int:
     scrubbed = re.sub(r"(['\"]).*?\1", "", line)
@@ -140,7 +164,7 @@ def discover_frontend_entrypoints(
         if match:
             stack.append((depth + max(1, line[: match.end()].count("{")), match.group(1) or match.group(2)))
         symbol = stack[-1][1] if stack else "module-bootstrap"
-        context = f"{symbol} {line.strip()}"
+        context = f"{source_ref} {symbol} {line.strip()}"
         for entrypoint_class, pattern in _FRONTEND_PATTERNS:
             for occurrence, _ in enumerate(pattern.finditer(line), start=1):
                 domain, disposition = _domain_from_text(context)
@@ -265,7 +289,10 @@ class _PythonEntrypointVisitor(ast.NodeVisitor):
             item = _decorator_entrypoint(decorator)
             if item:
                 decorated = True
-                self._add(node, qualified, item[0], item[1])
+                # A handler may be registered at several distinct decorators.
+                # Bind each entry to its actual registration site, not the shared
+                # function definition that would collapse those identities.
+                self._add(decorator, qualified, item[0], item[1])
         lowered = qualified.casefold()
         if node.name == "main":
             self._add(node, qualified, "backend_cli", qualified)
@@ -365,9 +392,19 @@ def discover_dashboard_surface(
         findings.append(
             _finding(
                 "SURFACE-INVENTORY-DRIFT",
-                f"Dashboard routes differ from the accepted 22-route inventory: observed={routes!r} expected={expected_routes!r}.",
+                f"Dashboard routes differ from the accepted {len(expected_routes)}-route inventory: observed={routes!r} expected={expected_routes!r}.",
                 requirement="P3D-01",
                 evidence=(html_ref,),
+            )
+        )
+    sidebar_routes = _sidebar_routes(html)
+    duplicate_routes = tuple(sorted(route for route, count in Counter(sidebar_routes).items() if count > 1))
+    if tuple(sorted(sidebar_routes)) != expected_routes:
+        findings.append(
+            _finding(
+                "SURFACE-INVENTORY-DRIFT",
+                f"Sidebar route registrations differ from the accepted exact inventory; duplicates={duplicate_routes!r}, observed={sidebar_routes!r}.",
+                requirement="P3D-01", evidence=(html_ref,),
             )
         )
     design_ok, design_actual = verify_design_packet(root)
@@ -399,11 +436,16 @@ def discover_dashboard_surface(
                 )
             )
             continue
-        if path.suffix != ".py":
+        if path.suffix in {".html", ".js"}:
+            discovered, unresolved_source = discover_frontend_entrypoints(
+                path.read_text(encoding="utf-8"), source_ref=ref
+            )
+        elif path.suffix == ".py":
+            discovered, unresolved_source = discover_python_entrypoints(path, source_ref=ref)
+        else:
             continue
-        discovered, unresolved_python = discover_python_entrypoints(path, source_ref=ref)
         all_entries.extend(discovered)
-        all_unresolved.extend(unresolved_python)
+        all_unresolved.extend(unresolved_source)
 
     ids = [entry.entrypoint_id for entry in all_entries]
     if len(ids) != len(set(ids)):

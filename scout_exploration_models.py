@@ -21,14 +21,16 @@ def _transform(x: float, y: float, source: str, target: str) -> tuple[float, flo
         from pretrip_source_ingest import wgs84_to_twd97
         return wgs84_to_twd97(y, x)
     from osgeo import osr
-    source_srs, target_srs = osr.SpatialReference(), osr.SpatialReference()
-    for srs, code in ((source_srs, source), (target_srs, target)):
-        srs.ImportFromEPSG(int(code.split(":")[1]))
-        srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
-    values = osr.CoordinateTransformation(source_srs, target_srs).TransformPoint(x, y)
-    if not all(math.isfinite(value) for value in values[:2]):
-        raise ValueError("Coordinate transform failed")
-    return float(values[0]), float(values[1])
+    # Preserve Scout's return-value error policy without changing other callers.
+    with osr.ExceptionMgr(useExceptions=False):
+        source_srs, target_srs = osr.SpatialReference(), osr.SpatialReference()
+        for srs, code in ((source_srs, source), (target_srs, target)):
+            srs.ImportFromEPSG(int(code.split(":")[1]))
+            srs.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+        values = osr.CoordinateTransformation(source_srs, target_srs).TransformPoint(x, y)
+        if not all(math.isfinite(value) for value in values[:2]):
+            raise ValueError("Coordinate transform failed")
+        return float(values[0]), float(values[1])
 
 
 class ExplorationPoint(ExplorationModel):

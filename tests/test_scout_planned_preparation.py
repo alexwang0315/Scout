@@ -368,14 +368,15 @@ def test_native_dem_sampling_keeps_revisits_nodata_and_outside_unknown(tmp_path)
             dataset.write(data, 1)
     else:
         from osgeo import gdal, osr
-        dataset = gdal.GetDriverByName("GTiff").Create(str(path), 5, 5, 1, gdal.GDT_Float32)
-        crs = osr.SpatialReference()
-        crs.ImportFromEPSG(3826)
-        dataset.SetProjection(crs.ExportToWkt())
-        dataset.SetGeoTransform(transform)
-        dataset.GetRasterBand(1).SetNoDataValue(-9999)
-        dataset.GetRasterBand(1).WriteArray(data)
-        dataset = None
+        with gdal.ExceptionMgr(useExceptions=False), osr.ExceptionMgr(useExceptions=False):
+            dataset = gdal.GetDriverByName("GTiff").Create(str(path), 5, 5, 1, gdal.GDT_Float32)
+            crs = osr.SpatialReference()
+            crs.ImportFromEPSG(3826)
+            dataset.SetProjection(crs.ExportToWkt())
+            dataset.SetGeoTransform(transform)
+            dataset.GetRasterBand(1).SetNoDataValue(-9999)
+            dataset.GetRasterBand(1).WriteArray(data)
+            dataset = None
     sampled = preparation._sample_dem(path, [point, nodata_point, point, {"lat": 24.1, "lon": 121}])
     assert sampled["values"] == [713, None, 713, None]
     assert sampled["resolution_m"] == [20, 20]

@@ -123,76 +123,76 @@ def run_smoke(
             provider=provider,
             eval_jsonl_path=tmp_path / "evals" / "workflow_compiler.jsonl",
         )
-        client = TestClient(app)
+        with TestClient(app) as client:
 
-        active_context = {"now": now}
-        if surface:
-            active_context["surface"] = surface
+            active_context = {"now": now}
+            if surface:
+                active_context["surface"] = surface
 
-        created = client.post(
-            "/requests",
-            json={
-                "user_id": user_id,
-                "user_text": user_text,
-                "active_context": active_context,
-            },
-        )
-        created.raise_for_status()
-        created_payload = created.json()
+            created = client.post(
+                "/requests",
+                json={
+                    "user_id": user_id,
+                    "user_text": user_text,
+                    "active_context": active_context,
+                },
+            )
+            created.raise_for_status()
+            created_payload = created.json()
 
-        workflows = client.get("/workflows", params={"user_id": user_id})
-        workflows.raise_for_status()
-        capabilities = client.get("/capabilities")
-        capabilities.raise_for_status()
-        tick = client.post("/runtime/tick")
-        tick.raise_for_status()
+            workflows = client.get("/workflows", params={"user_id": user_id})
+            workflows.raise_for_status()
+            capabilities = client.get("/capabilities")
+            capabilities.raise_for_status()
+            tick = client.post("/runtime/tick")
+            tick.raise_for_status()
 
-        workflow_records = workflows.json()["workflows"]
-        workflow_payload = (
-            workflow_records[0]["workflow"] if workflow_records else None
-        )
-        route_payload = created_payload.get("route") or {}
-        ui_action_plan = created_payload.get("ui_action_plan") or {}
-        ui_actions = ui_action_plan.get("actions") or []
-        return {
-            "app_title": app.title,
-            "provider": "PydanticScoutAgentProvider",
-            "pydantic_ai_version": pydantic_ai_runtime_version(),
-            "model": reported_model,
-            "model_policy": model_policy.model_dump(mode="json"),
-            "model_sla": (
-                provider.last_sla_result.to_metadata()
-                if provider.last_sla_result is not None
-                else None
-            ),
-            "env_file_loaded": loaded_env_file,
-            "openrouter_api_key_present": bool(os.getenv("OPENROUTER_API_KEY")),
-            "nvidia_api_key_present": bool(os.getenv("NVIDIA_API_KEY")),
-            "request_status": created_payload["status"],
-            "workflow_id": created_payload.get("workflow_id"),
-            "workflow_name": workflow_payload["name"] if workflow_payload else None,
-            "trigger_type": (
-                workflow_payload["trigger"]["type"] if workflow_payload else None
-            ),
-            "permission_required": (
-                workflow_payload["permissions"]["required"] if workflow_payload else []
-            ),
-            "approval_required": (
-                workflow_payload["permissions"]["approval_required"]
-                if workflow_payload
-                else bool((route_payload.get("permission") or {}).get("requires_user_approval"))
-            ),
-            "workflow_count": len(workflow_records),
-            "route_class": route_payload.get("route_class"),
-            "ui_action_plan_status": ui_action_plan.get("status"),
-            "ui_action_kind": (
-                ui_actions[0].get("action_kind")
-                if ui_actions and isinstance(ui_actions[0], dict)
-                else None
-            ),
-            "capability_count": len(capabilities.json()["capabilities"]),
-            "runtime_tick": tick.json(),
-        }
+            workflow_records = workflows.json()["workflows"]
+            workflow_payload = (
+                workflow_records[0]["workflow"] if workflow_records else None
+            )
+            route_payload = created_payload.get("route") or {}
+            ui_action_plan = created_payload.get("ui_action_plan") or {}
+            ui_actions = ui_action_plan.get("actions") or []
+            return {
+                "app_title": app.title,
+                "provider": "PydanticScoutAgentProvider",
+                "pydantic_ai_version": pydantic_ai_runtime_version(),
+                "model": reported_model,
+                "model_policy": model_policy.model_dump(mode="json"),
+                "model_sla": (
+                    provider.last_sla_result.to_metadata()
+                    if provider.last_sla_result is not None
+                    else None
+                ),
+                "env_file_loaded": loaded_env_file,
+                "openrouter_api_key_present": bool(os.getenv("OPENROUTER_API_KEY")),
+                "nvidia_api_key_present": bool(os.getenv("NVIDIA_API_KEY")),
+                "request_status": created_payload["status"],
+                "workflow_id": created_payload.get("workflow_id"),
+                "workflow_name": workflow_payload["name"] if workflow_payload else None,
+                "trigger_type": (
+                    workflow_payload["trigger"]["type"] if workflow_payload else None
+                ),
+                "permission_required": (
+                    workflow_payload["permissions"]["required"] if workflow_payload else []
+                ),
+                "approval_required": (
+                    workflow_payload["permissions"]["approval_required"]
+                    if workflow_payload
+                    else bool((route_payload.get("permission") or {}).get("requires_user_approval"))
+                ),
+                "workflow_count": len(workflow_records),
+                "route_class": route_payload.get("route_class"),
+                "ui_action_plan_status": ui_action_plan.get("status"),
+                "ui_action_kind": (
+                    ui_actions[0].get("action_kind")
+                    if ui_actions and isinstance(ui_actions[0], dict)
+                    else None
+                ),
+                "capability_count": len(capabilities.json()["capabilities"]),
+                "runtime_tick": tick.json(),
+            }
 
 
 def _reported_model_name(model_policy: Any) -> str:

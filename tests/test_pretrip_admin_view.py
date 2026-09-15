@@ -954,6 +954,7 @@ def test_admin_view_bounds_overpass_aligned_segment_geometry_payload(
     _assert_pretrip_candidate_metadata(view["departure_bundle"]["terrain_refs"][0])
     assert [layer["layer_id"] for layer in view["map_layers"]] == [
         "imagery",
+        "historical-map",
         "rudy",
         "rudy-twmap",
         "relief",

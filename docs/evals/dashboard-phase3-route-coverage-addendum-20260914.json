@@ -1,0 +1,441 @@
+{
+  "schema_version": "scout.dashboard.phase3-route-addendum.v1",
+  "recorded_date": "2026-09-14",
+  "purpose": "Complete existing Phase 3 production read telemetry contracts for the approved 25-route Dashboard inventory. This is isolated construction evidence, not an official live Dashboard verdict.",
+  "historical_design": {
+    "path": "docs/evals/dashboard-internal-qualification-phase3-design-rev2.json",
+    "canonical_sha256": "5a3b14b3ea9fd64a086bb106b277140c0bb0ecc5ef3d6ed8415e347f43736112",
+    "original_route_count": 22,
+    "original_domain_count": 9,
+    "unchanged": true
+  },
+  "user_arbitration": {
+    "check_id": "DASH-002",
+    "decision": "依建議更新 D002",
+    "receipt_relative_to_task": "main-rudy-zoom-20260913/d002-recovery-audit/user-arbitration-approved-receipt.json",
+    "receipt_sha256": "3b3f10b156ba17672b4b187b3f4d0f71f659e4a4a82478e6637f3b110f501fb9",
+    "approved_scope": [
+      "Recognize existing scout-monitor route without removing monitor",
+      "Retain exact membership and add real duplicate rejection",
+      "Preserve all remaining D002 requirements"
+    ]
+  },
+  "existing_specification_basis": {
+    "path": "docs/specs/scout-dashboard-internal-qualification.md",
+    "sections": [
+      "9.5",
+      "9.8",
+      "9.10"
+    ],
+    "read_telemetry": "Read-only telemetry retains semantic, freshness, privacy, recovery and external-read obligations. These routes are not excluded as presentation-only shells.",
+    "synthetic_exception_quote": "unless an exact synthetic loopback primitive is declared by the domain contract",
+    "authority": "Parent reviewed the existing specification and authorized completing these contracts and the exact fixture primitive. No new runtime, hardware or database authority is granted."
+  },
+  "canonical_route_disposition": [
+    [
+      "home",
+      "dashboard-shell-control"
+    ],
+    [
+      "features-workspace",
+      "workspace-lifecycle"
+    ],
+    [
+      "features-import-new-trip",
+      "workspace-lifecycle"
+    ],
+    [
+      "features-country-material-pool",
+      "workspace-lifecycle"
+    ],
+    [
+      "map",
+      "geospatial-weather-navigation"
+    ],
+    [
+      "timeline",
+      "dashboard-shell-control"
+    ],
+    [
+      "features-lbs",
+      "geospatial-weather-navigation"
+    ],
+    [
+      "outdoor-route-context",
+      "route-intelligence"
+    ],
+    [
+      "outdoor-pace-fit",
+      "route-intelligence"
+    ],
+    [
+      "outdoor-pace-fit-body-index",
+      "body-index-privacy"
+    ],
+    [
+      "outdoor-permission",
+      "contextual-permission"
+    ],
+    [
+      "outdoor-architecture",
+      "route-intelligence"
+    ],
+    [
+      "outdoor-weather",
+      "geospatial-weather-navigation"
+    ],
+    [
+      "outdoor-navigation",
+      "geospatial-weather-navigation"
+    ],
+    [
+      "emergency",
+      "safety-emergency"
+    ],
+    [
+      "agent",
+      "assistant-planner"
+    ],
+    [
+      "living",
+      "safety-emergency"
+    ],
+    [
+      "surface-debug",
+      "dashboard-shell-control"
+    ],
+    [
+      "debug",
+      "dashboard-shell-control"
+    ],
+    [
+      "observer",
+      "observer-hardware-boundary"
+    ],
+    [
+      "settings",
+      "dashboard-shell-control"
+    ],
+    [
+      "diagnostic",
+      "separate-runtime-diagnostic"
+    ],
+    [
+      "runtime-audit",
+      "dashboard-shell-control"
+    ],
+    [
+      "surface-intelligence",
+      "assistant-planner"
+    ],
+    [
+      "scout-monitor",
+      "observer-hardware-boundary"
+    ]
+  ],
+  "domain_count": 9,
+  "new_route_contracts": [
+    {
+      "route": "runtime-audit",
+      "domain_id": "dashboard-shell-control",
+      "api_routes": [
+        "/admin/runtime-audit"
+      ],
+      "sources": [
+        "runtime_audit_api.py",
+        "runtime_audit_ledger.py",
+        "runtime_audit_models.py"
+      ],
+      "persisted_capabilities": [
+        "read-only-audit-query",
+        "verified-audit-prefix",
+        "audit-writer-health"
+      ],
+      "observation_fields": [
+        "audit_schema_version",
+        "audit_status",
+        "audit_integrity",
+        "audit_writer_health",
+        "audit_date_index",
+        "telemetry_boundary"
+      ],
+      "start_states": [
+        "audit-empty",
+        "audit-ready",
+        "audit-degraded",
+        "audit-partial-tail",
+        "audit-interrupted"
+      ],
+      "transitions": [
+        "read-audit",
+        "filter-audit-day",
+        "refresh-audit"
+      ],
+      "terminals": [
+        "audit-ready",
+        "audit-empty",
+        "audit-degraded"
+      ],
+      "recovery_transitions": [
+        "reload-changed-audit-file",
+        "observe-recovered-audit-manifest"
+      ],
+      "replay_nodes": [
+        "tests.test_runtime_audit_ledger::test_runtime_audit_model_is_typed_and_rejects_arbitrary_payload",
+        "tests.test_runtime_audit_ledger::test_file_ledger_is_append_only_hash_chained_rotated_and_queryable",
+        "tests.test_runtime_audit_ledger::test_query_builds_local_day_and_month_indexes",
+        "tests.test_runtime_audit_ledger::test_query_can_return_every_event_for_one_day_without_the_history_cap",
+        "tests.test_runtime_audit_ledger::test_ledger_redacts_secret_query_absolute_home_and_precise_coordinates",
+        "tests.test_runtime_audit_ledger::test_query_totals_and_rows_stop_at_verified_prefix_after_hash_mutation",
+        "tests.test_runtime_audit_ledger::test_partial_jsonl_tail_degrades_but_preserves_the_valid_prefix",
+        "tests.test_runtime_audit_ledger::test_query_reuses_unchanged_event_files_and_reloads_only_changed_file",
+        "tests.test_runtime_audit_ledger::test_new_runtime_marks_previous_unclosed_instance_interrupted",
+        "tests.test_runtime_audit_ledger::test_new_runtime_does_not_interrupt_an_active_sibling_writer",
+        "tests.test_runtime_audit_ledger::test_recovery_honors_a_durable_end_event_if_final_manifest_was_not_written",
+        "tests.test_runtime_audit_admin_api::test_runtime_audit_storage_cannot_be_nested_in_workspace",
+        "tests.test_runtime_audit_admin_api::test_admin_runtime_audit_api_records_lifecycle_http_and_workspace_io",
+        "tests.test_runtime_audit_admin_api::test_runtime_audit_api_accepts_a_complete_local_day_query",
+        "tests.test_runtime_audit_admin_api::test_audit_start_failure_does_not_fail_dashboard_and_is_visible"
+      ],
+      "synthetic_loopback_primitives": []
+    },
+    {
+      "route": "surface-intelligence",
+      "domain_id": "assistant-planner",
+      "api_routes": [
+        "/admin/intelligence",
+        "/admin/intelligence/telemetry"
+      ],
+      "sources": [
+        "src/scout/nextgen/dashboard_telemetry.py",
+        "src/scout/nextgen/dashboard_telemetry_api.py",
+        "src/scout/nextgen/background_job_store.py",
+        "docs/admin/scout-intelligence-telemetry.html"
+      ],
+      "persisted_capabilities": [
+        "readonly-intelligence-job-projection",
+        "committed-wal-view",
+        "intelligence-cross-binding"
+      ],
+      "observation_fields": [
+        "intelligence_schema_version",
+        "intelligence_status_reason",
+        "workspace_binding",
+        "capability_grant_binding",
+        "question_hash",
+        "candidate_only",
+        "runtime_safety_truth"
+      ],
+      "start_states": [
+        "telemetry-unconfigured",
+        "telemetry-missing",
+        "telemetry-ready",
+        "telemetry-invalid",
+        "telemetry-stale-binding"
+      ],
+      "transitions": [
+        "read-intelligence-telemetry",
+        "refresh-intelligence-telemetry"
+      ],
+      "terminals": [
+        "typed-read-only-projection",
+        "telemetry-unavailable",
+        "telemetry-degraded"
+      ],
+      "recovery_transitions": [
+        "reread-corrected-intelligence-store",
+        "observe-committed-wal-job"
+      ],
+      "replay_nodes": [
+        "production-intelligence:unconfigured",
+        "production-intelligence:missing",
+        "production-intelligence:ready",
+        "production-intelligence:unknown-schema",
+        "production-intelligence:malformed",
+        "production-intelligence:stale-binding",
+        "production-intelligence:wal-current",
+        "production-intelligence:restore",
+        "production-intelligence:api-read-only",
+        "production-intelligence:reason-codes"
+      ],
+      "synthetic_loopback_primitives": [
+        "sqlite3.connect:sealed-execution-fixture:mode=ro:query_only=on"
+      ]
+    },
+    {
+      "route": "scout-monitor",
+      "domain_id": "observer-hardware-boundary",
+      "api_routes": [
+        "/admin/dashboard/scout-monitor",
+        "/admin/dashboard/scout-monitor/api/v1/hardware-monitor/status",
+        "/admin/dashboard/scout-monitor/api/v1/hardware-monitor/history",
+        "/admin/dashboard/scout-monitor/api/v1/hardware-monitor/events"
+      ],
+      "sources": [
+        "tools/hardware_monitor_proxy.py",
+        "tools/scout_hardware_monitor.html",
+        "tools/hardware_monitor_ssh.py"
+      ],
+      "persisted_capabilities": [
+        "readonly-hardware-status",
+        "bounded-history-events",
+        "upstream-freshness-envelope"
+      ],
+      "observation_fields": [
+        "hardware_schema_version",
+        "hardware_status",
+        "captured_at",
+        "age_seconds",
+        "stale_after_seconds",
+        "read_only",
+        "upstream_http_status",
+        "monitor_transport",
+        "connection.error_code",
+        "connection.retry_interval_seconds",
+        "connection.local_forward_required",
+        "native_process_denied_before_invocation"
+      ],
+      "start_states": [
+        "monitor-fresh",
+        "monitor-stale",
+        "monitor-disconnected",
+        "monitor-invalid",
+        "monitor-ssh-unavailable",
+        "monitor-api-unavailable"
+      ],
+      "transitions": [
+        "read-fixed-monitor-upstream",
+        "refresh-monitor",
+        "read-monitor-through-darwin-ssh",
+        "read-monitor-through-linux-http"
+      ],
+      "terminals": [
+        "monitor-fresh",
+        "monitor-stale",
+        "monitor-unavailable"
+      ],
+      "recovery_transitions": [
+        "retry-monitor-after-disconnect",
+        "reread-current-monitor-envelope",
+        "fresh-monitor-ssh-request-after-failure"
+      ],
+      "replay_nodes": [
+        "tests.test_hardware_monitor_proxy::test_dashboard_proxy_keeps_hardware_api_same_origin_and_forwards_limits",
+        "tests.test_hardware_monitor_proxy::test_dashboard_proxy_preserves_stale_503_and_old_data_is_not_reclassified",
+        "tests.test_hardware_monitor_proxy::test_dashboard_proxy_returns_typed_unavailable_payload_on_disconnect",
+        "tests.test_hardware_monitor_proxy::test_fetcher_parses_json_body_from_upstream_stale_503",
+        "tests.test_hardware_monitor_proxy::test_fetcher_refuses_non_allowlisted_endpoints_before_network",
+        "tests.qualification.test_phase3_telemetry_recovery::test_monitor_disconnect_stale_then_fresh_recovery_keeps_get_only_boundary",
+        "tests.qualification.test_phase3_monitor_transports::test_monitor_platform_dispatch_keeps_fixed_ssh_and_http_scope",
+        "tests.qualification.test_phase3_monitor_transports::test_monitor_ssh_disconnect_stale_recovery_preserves_currentness",
+        "tests.qualification.test_phase3_monitor_transports::test_monitor_ssh_native_process_is_blocked_before_invocation"
+      ],
+      "synthetic_loopback_primitives": []
+    }
+  ],
+  "preserved_guards": [
+    "all original 22 route mappings",
+    "all original nine domains",
+    "unknown and duplicate route rejection",
+    "true duplicate executable identity rejection",
+    "four separate GET registrations with original handlers",
+    "all original transitions and controls",
+    "default database deny-before-invocation",
+    "all Phase 2 effect and absent-effect canaries",
+    "candidate-only and runtime-safety-truth boundaries",
+    "historical design packet and source hash"
+  ],
+  "risk_adjustment": {
+    "domain_id": "dashboard-shell-control",
+    "before_tier": 2,
+    "after_tier": 1,
+    "reason": "Audit ledger contains sanitized private and durable history; risk is strengthened mechanically, with no exemption."
+  },
+  "sqlite_fixture_primitive": {
+    "declaration": "sqlite3.connect:sealed-execution-fixture:mode=ro:query_only=on",
+    "location": "tests/qualification/sqlite_fixtures.py",
+    "fixture_setup": "Only synthetic fixture creation/corruption/recovery occurs before or between observed production read transitions.",
+    "production_calls": "The real SQLiteBackgroundIntelligenceTelemetryReader opens its native SQLite connection inside EffectAudit; no pre-opened reader, mocked reader, immutable snapshot or query substitution is used.",
+    "binding": [
+      "exact execution root",
+      "canonical URI and mode=ro",
+      "regular file with exactly one link",
+      "no symlink component",
+      "device and inode",
+      "main database SHA-256",
+      "existing WAL device/inode/SHA-256"
+    ],
+    "native_guards": [
+      "URI mode=ro remains unchanged",
+      "real query_only=ON is independently observed",
+      "native authorizer rejects writes, ATTACH, extensions and undeclared PRAGMAs",
+      "changed identity/content fails closed",
+      "unmatched connections are blocked before native connect"
+    ],
+    "wal_freshness": "A writer-open committed WAL is read by real native SQLite and proves newer rows are visible without immutable=1 or preloaded replacement data.",
+    "coordination": "The Intelligence fixture contract explicitly permits native creation of an empty -wal and local -shm coordination file. This is not described as zero filesystem activity: it is recorded, confined to the exact fixture, rejects nonempty new WAL, and preserves main database schema/rows/hash.",
+    "monitor_boundary": "Monitor transports use bounded synthetic responses in replay only; the actual router/fetcher error, freshness and GET-only behavior executes. No real monitor hardware or long-term state is accessed."
+  },
+  "production_source_fingerprints_at_validation": {
+    "docs/admin/scout-intelligence-telemetry.html": "51b8bbeee227825807a05123153bba3180ea02294db9b0a14154dde1cc888e70",
+    "runtime_audit_api.py": "3a3ad64dafca49347248e309667c05aa3ad65a83ed98ee5bea5a05d11904f55b",
+    "runtime_audit_ledger.py": "2d3865a3014f2537f66c4c03d8c8a3b69d29bbb9ac858db1f38fd0be5e05cfb9",
+    "runtime_audit_models.py": "f3442f4d991bf0a624d2baafb384afdf0f809b640586421013ce76b55fe7263c",
+    "src/scout/nextgen/background_job_store.py": "86de8bb65175a23248b473f8d29c4861a2fa6a1db23d7c30221ac142bc192774",
+    "src/scout/nextgen/dashboard_telemetry.py": "a8186e1229e7737fd0a5819eeb682088e517b2a569ab04281616b14fd5de9256",
+    "src/scout/nextgen/dashboard_telemetry_api.py": "2082c333b3f4b9d1cb3dd25f218f290956d9594d004740b8f061081e88c10ab5",
+    "tools/hardware_monitor_proxy.py": "c800b8467fb4825e03923ed2fb601c7987c029ed66fca9f222230b98707c4493",
+    "tools/hardware_monitor_ssh.py": "8e45a10aa04ef9e64c551432da3642904b420351bdf635d2178d51373aee92ba",
+    "tools/scout_hardware_monitor.html": "3c5cc6cbdc1a9f4b7552b814a139fb92d63f42fe562bdf4c46daf32ff81b6cc4"
+  },
+  "validation_boundary": {
+    "official_qualification_eligible": false,
+    "runtime_safety_truth": false,
+    "candidate_only": true,
+    "live_browser_actions_count": 0,
+    "merge_or_release_authorized": false,
+    "results": "See separate immutable verification receipts; this addendum does not declare completion."
+  },
+  "effect_inventory_completion": {
+    "ownership": "Exact source membership in READ_TELEMETRY_CONTRACTS governs telemetry effect callsites as well as route discovery. Conflicting owners are invalid; similarly named or copied paths do not match. All other classifier branches remain unchanged.",
+    "http_callsite": {
+      "source": "tools/hardware_monitor_proxy.py",
+      "symbol": "fetch_hardware_monitor_json",
+      "call": "opener.open",
+      "binding": "The opener must be assigned exactly once from the urllib.request build_opener import, without a local factory shadow. An unbound declaration is unclassified and blocks.",
+      "normalized_operation": "http",
+      "domain_id": "observer-hardware-boundary"
+    },
+    "census": "The original callsite census is preserved; ownership changes apply only to declared telemetry sources and the previously missing opener.open callsite is added.",
+    "native_guard": "The real fetcher is also exercised with a native socket spy and remains blocked before any actual network primitive. Revision 3 also exercises the actual SSH reader and Darwin default router inside EffectAudit with a native Popen spy; both are blocked before process creation."
+  },
+  "monitor_transport_source_update": {
+    "revision": 3,
+    "basis": "Current Monitor specification requires fresh bounded SSH stdio reads on Darwin and the unchanged fixed loopback HTTP upstream on Linux. Source closure and production-backed replay obligations follow the existing P3D-01/P3D-02/P3D-07 rules.",
+    "current_capability_manifest": "qualification/dashboard-capability-manifest.yaml",
+    "current_guide": "docs/admin/scout-monitor-power-guide.md",
+    "parent_supplied_snapshot_manifest_relative_to_recovery": "current-mac-source/manifest.json",
+    "snapshot_manifest_sha256": "50c686effbf54633547990d64a4598b7f3b240673dc3a73c4a807342ad252d24",
+    "prior_validation_fingerprints_preserved": {
+      "docs/admin/scout-intelligence-telemetry.html": "51b8bbeee227825807a05123153bba3180ea02294db9b0a14154dde1cc888e70",
+      "runtime_audit_api.py": "3a3ad64dafca49347248e309667c05aa3ad65a83ed98ee5bea5a05d11904f55b",
+      "runtime_audit_ledger.py": "2d3865a3014f2537f66c4c03d8c8a3b69d29bbb9ac858db1f38fd0be5e05cfb9",
+      "runtime_audit_models.py": "f3442f4d991bf0a624d2baafb384afdf0f809b640586421013ce76b55fe7263c",
+      "src/scout/nextgen/background_job_store.py": "86de8bb65175a23248b473f8d29c4861a2fa6a1db23d7c30221ac142bc192774",
+      "src/scout/nextgen/dashboard_telemetry.py": "a8186e1229e7737fd0a5819eeb682088e517b2a569ab04281616b14fd5de9256",
+      "src/scout/nextgen/dashboard_telemetry_api.py": "2082c333b3f4b9d1cb3dd25f218f290956d9594d004740b8f061081e88c10ab5",
+      "tools/hardware_monitor_proxy.py": "7fb2b5e478313f7485aa19152e8ef5a918a8967bc5359618283120580bf84b9c",
+      "tools/scout_hardware_monitor.html": "e9db2b15a92d8ed779cd18d64c2aec4019b3da940aaa8943eabc5fc905545328"
+    },
+    "source_added": "tools/hardware_monitor_ssh.py",
+    "source_owner": "observer-hardware-boundary",
+    "http_callsite": "Existing exact source/symbol/import/factory AST binding still observes opener.open at its current source line. No scanner or HTTP URL scope is relaxed.",
+    "native_process_callsite": "subprocess.Popen in read_scout_http is discovered by the existing exact-call scanner and remains forbidden before native invocation.",
+    "replay_boundary": "Three additive tests exercise all Darwin/Linux status/history/events dispatches, typed SSH/API failure then stale/fresh recovery using in-memory response fixtures and the real HTTP parser, and direct/default-router native SSH denial. No subprocess permission is added to EffectAudit. The native process spy must observe zero calls.",
+    "upstream_lifetime_tests": "tests/test_hardware_monitor_ssh.py uses local synthetic Python children to verify OS pipe/process lifetime. Its captured native POPEN is not imported into audited telemetry replay. These tests run separately as dependency validation and never use actual SSH or hardware.",
+    "original_replay_obligations_retained": 31,
+    "additive_replay_obligations": 3,
+    "new_runtime_authority": false,
+    "effect_audit_changed": false
+  }
+}

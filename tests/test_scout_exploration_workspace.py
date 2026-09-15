@@ -29,19 +29,20 @@ def _request(**updates):
 def _native_raster(tmp_path, *, nodata=False):
     import numpy as np
     from osgeo import gdal, osr
-    path = tmp_path / "raw_regional.tif"
-    data = gdal.GetDriverByName("GTiff").Create(str(path), 100, 100, 1, gdal.GDT_Float32)
-    data.SetGeoTransform((280000, 20, 0, 2660000, 0, -20))
-    srs = osr.SpatialReference()
-    srs.ImportFromEPSG(3826)
-    data.SetProjection(srs.ExportToWkt())
-    values = np.arange(10000, dtype=np.float32).reshape((100, 100)) / 10 + 1000
-    if nodata:
-        values[35:45, 20:30] = -9999
-    data.GetRasterBand(1).SetNoDataValue(-9999)
-    data.GetRasterBand(1).WriteArray(values)
-    data.FlushCache()
-    data = None
+    with gdal.ExceptionMgr(useExceptions=False), osr.ExceptionMgr(useExceptions=False):
+        path = tmp_path / "raw_regional.tif"
+        data = gdal.GetDriverByName("GTiff").Create(str(path), 100, 100, 1, gdal.GDT_Float32)
+        data.SetGeoTransform((280000, 20, 0, 2660000, 0, -20))
+        srs = osr.SpatialReference()
+        srs.ImportFromEPSG(3826)
+        data.SetProjection(srs.ExportToWkt())
+        values = np.arange(10000, dtype=np.float32).reshape((100, 100)) / 10 + 1000
+        if nodata:
+            values[35:45, 20:30] = -9999
+        data.GetRasterBand(1).SetNoDataValue(-9999)
+        data.GetRasterBand(1).WriteArray(values)
+        data.FlushCache()
+        data = None
     return {"dtm_rasters": [{"path": str(path), "role": "raw_regional_dem", "sha256": _sha(path),
                             "crs": "EPSG:3826", "source_resolution_m": 20}], "dtm_dirs": []}
 

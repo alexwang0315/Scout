@@ -138,7 +138,7 @@ def plan_scout_ai_tools(
     six_power_overview_question = _looks_like_standard_six_power_overview_question(
         normalized_question,
     )
-    route_context_question = _looks_like_route_context_question(normalized_question)
+    route_context_question = _looks_like_route_context_question(query.question)
     workspace_catalog_question = _looks_like_workspace_catalog_question(
         normalized_question,
     )
@@ -210,6 +210,7 @@ def plan_scout_ai_tools(
     if (
         _looks_like_route_structure_question(normalized_question)
         and not route_context_question
+        and not _looks_like_post_trip_route_context_update_question(normalized_question)
         and not _has_tool(selected, MAJOR_POINT_TOOL_ID)
     ):
         selected.append(
@@ -239,6 +240,10 @@ def plan_scout_ai_tools(
         _append_stop_photo_avoidance_support_tools(selected)
     if (
         _looks_like_terrain_question(normalized_question)
+        and (
+            not _looks_like_post_trip_review_question(normalized_question)
+            or requires_live_state
+        )
         and (
             not route_context_question
             or _has_any(
@@ -412,7 +417,7 @@ def plan_scout_ai_tools(
                 "Question asks for Review / Provenance Gap assessment: which candidate evidence cannot yet be promoted, which source refs need human review, or why evidence remains non-authoritative.",
             )
         )
-    if _looks_like_media_literacy_question(normalized_question):
+    if _looks_like_media_literacy_question(query.question):
         selected.append(
             (
                 MEDIA_LITERACY_TOOL_ID,
@@ -509,11 +514,21 @@ def plan_scout_ai_tools(
             )
         )
 
+    if (
+        _has_tool(selected, WEATHER_WINDOW_TOOL_ID)
+        and _looks_like_gee_weather_background_question(normalized_question)
+    ):
+        _append_weather_environment_support_tools(selected, normalized_question)
+
     workspace_domain_tools = _explicit_workspace_evidence_tools(
         normalized_question,
         expected_operations=expected_operations,
     )
     if workspace_domain_tools is not None:
+        preserve_environment_microdecision = (
+            GEE_ENVIRONMENT_TOOL_ID in workspace_domain_tools
+            and _has_tool(selected, CONTEXTUAL_PERMISSION_TOOL_ID)
+        )
         adjacent_verification_tools = [
             (tool_id, reason)
             for tool_id, reason in selected
@@ -528,6 +543,20 @@ def plan_scout_ai_tools(
                 TERRAIN_ROUTE_CONSISTENCY_TOOL_ID,
                 TERRAIN_ROUTE_GENERATE_TOOL_ID,
             }
+            or (
+                preserve_environment_microdecision
+                and tool_id
+                in {
+                    CONTEXTUAL_PERMISSION_TOOL_ID,
+                    LIVE_NAVIGATION_STATE_TOOL_ID,
+                    ROUTE_ARCHITECTURE_TOOL_ID,
+                    WEATHER_WINDOW_TOOL_ID,
+                    PACE_GUARDIAN_TOOL_ID,
+                    RISK_SCORE_TOOL_ID,
+                    CWA_ENVIRONMENT_TOOL_ID,
+                    GEE_ENVIRONMENT_TOOL_ID,
+                }
+            )
         ]
         selected = [
             (
@@ -1158,6 +1187,9 @@ def _explicit_workspace_evidence_tools(
             "tilecache",
             "相關輸出",
         ),
+    ) or (
+        _looks_like_team_status_question(question)
+        and _looks_like_workspace_catalog_question(question)
     )
     if live_navigation:
         catalog = False
@@ -1346,7 +1378,10 @@ def _explicit_workspace_evidence_tools(
         add(INS_DR_TRACE_TOOL_ID)
     if live_navigation:
         add(LIVE_NAVIGATION_STATE_TOOL_ID)
-    if _has_any(question, ("teamstatus", "隊員位置", "生命徵兆evidence")):
+    if _has_any(
+        question, ("teamstatus", "隊員位置", "生命徵兆evidence")
+    ) or _looks_like_team_status_question(question):
+        # A workspace query may also ask for the actual Team status.
         add(TEAM_STATUS_TOOL_ID)
     if _has_any(question, ("post-tripreview", "posttripreview")):
         add(POST_TRIP_REVIEW_TOOL_ID)
@@ -3134,7 +3169,7 @@ def _looks_like_standard_glossary_question(text: str) -> bool:
 
 
 def _looks_like_workspace_catalog_question(text: str) -> bool:
-    return _has_any(
+    if _has_any(
         text,
         (
             "workspace",
@@ -3143,6 +3178,18 @@ def _looks_like_workspace_catalog_question(text: str) -> bool:
             "output",
             "outputs",
             "metadata",
+            "toolregistry",
+            "資料型態",
+            "有哪些資料",
+            "圖層",
+            "工具",
+        ),
+    ):
+        return True
+    # Team preparation is not workspace preparation; explicit mixed queries above remain.
+    return not _looks_like_team_status_question(text) and _has_any(
+        text,
+        (
             "preparation",
             "prepared",
             "準備",
@@ -3150,11 +3197,6 @@ def _looks_like_workspace_catalog_question(text: str) -> bool:
             "仍缺",
             "缺的",
             "缺少",
-            "toolregistry",
-            "資料型態",
-            "有哪些資料",
-            "圖層",
-            "工具",
             "材料",
         ),
     )
@@ -4204,6 +4246,12 @@ def _has_complete_route_readiness_confirmation_bundle(text: str) -> bool:
 
 def _looks_like_energy_vitals_question(text: str) -> bool:
     text = text.replace("workspace", "")
+    if not _has_any(
+        text,
+        ("喝水", "飲水", "喝的", "喝了", "已喝", "飲用", "口渴", "流汗", "出汗", "尿量", "尿色"),
+    ):
+        # Stored water quantity alone does not imply physiological hydration.
+        text = text.replace("水量", "")
     return _has_any(
         text,
         (
@@ -4393,8 +4441,10 @@ def _looks_like_pace_guardian_question(text: str) -> bool:
         ),
     ):
         return False
+    # Daylight buffer alone is Weather evidence; explicit pace terms remain.
+    pace_text = re.sub(r"(?:日照|daylight)\s*buffer", "", text)
     return _has_any(
-        text,
+        pace_text,
         (
             "paceguardian",
             "teampacefit",
@@ -5351,6 +5401,8 @@ def _looks_like_buffer_cost_question(text: str) -> bool:
 
 
 def _looks_like_route_context_question(text: str) -> bool:
+    raw_text = text
+    text = _normalize(text)
     if _looks_like_forward_stop_candidate_question(text):
         return True
     if _looks_like_route_mileage_anchor_question(text):
@@ -5359,7 +5411,7 @@ def _looks_like_route_context_question(text: str) -> bool:
         return True
     if _looks_like_post_trip_route_context_update_question(text):
         return False
-    if _looks_like_media_literacy_question(text):
+    if _looks_like_media_literacy_question(raw_text):
         return False
     if _looks_like_contextual_permission_question(text):
         return _has_route_context_terms(text)
@@ -5502,10 +5554,14 @@ def _looks_like_route_briefing_question(text: str) -> bool:
 
 
 def _looks_like_media_literacy_question(text: str) -> bool:
-    return _has_any(
-        text,
+    ig_abbreviation = re.search(
+        r"(?<![a-z0-9_])ig(?![a-z0-9_])",
+        str(text or ""),
+        flags=re.IGNORECASE,
+    )
+    return bool(ig_abbreviation) or _has_any(
+        _normalize(text),
         (
-            "ig",
             "instagram",
             "網紅",
             "美照",

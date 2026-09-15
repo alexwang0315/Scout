@@ -28,6 +28,7 @@ GEE_ENVIRONMENT_OPTIONAL_FIELDS = (
     "include_grid",
     "include_timeseries",
     "stale_after_hours",
+    "reference_time",
 )
 
 DEFAULT_STALE_AFTER_HOURS = 24.0
@@ -55,6 +56,7 @@ def assess_scout_gee_environment(
     include_grid: bool | str | None = None,
     include_timeseries: bool | str | None = None,
     stale_after_hours: float | int | str | None = None,
+    reference_time: str | None = None,
     limit: int = DEFAULT_RESULT_LIMIT,
 ) -> dict[str, Any]:
     """Read prepared GEE SMAP/GPM environment evidence from a Scout workspace.
@@ -215,7 +217,12 @@ def assess_scout_gee_environment(
         "wetness_flash_flood": wetness_flash_flood,
     }
     missing_fields = _missing_fields(source_report)
-    stale_risks = _stale_risks(source_report, stale_after_hours=stale_hours)
+    reference_now = _reference_datetime(reference_time)
+    stale_risks = _stale_risks(
+        source_report, stale_after_hours=stale_hours, reference_time=reference_now,
+    )
+    if stale_risks:
+        missing_fields = [*missing_fields, "fresh_gee_environment_evidence"]
     warnings = _warnings(missing_fields=missing_fields, stale_risks=stale_risks)
     gee_summary = _gee_summary(artifacts, root=root)
     decision_output = _decision_output(
@@ -265,6 +272,7 @@ def assess_scout_gee_environment(
             "include_grid": include_grid_rows,
             "include_timeseries": include_timeseries_rows,
             "stale_after_hours": stale_hours,
+            "reference_time": reference_now.isoformat(),
         },
         "gee_environment": {
             "role": "GEE SMAP/GPM workspace hydrologic background evidence",
@@ -452,6 +460,7 @@ def _source_report(
                 "raw_response_hash": _raw_hash(payload),
                 "stale_risk": _stale_risk(payload),
                 "request_timestamp": _request_timestamp(payload),
+                "acquisition_timestamps": _acquisition_timestamps(payload),
                 "normalized_artifact_ref": payload.get("normalized_artifact_ref"),
             }
         )
@@ -925,6 +934,28 @@ def _request_timestamp(payload: dict[str, Any]) -> str | None:
     return None
 
 
+def _acquisition_timestamps(payload: dict[str, Any]) -> dict[str, str]:
+    # Preserve each acquisition/package clock so one alias cannot mask another.
+    clocks: dict[str, str] = {}
+    preserved = payload.get("acquisition_timestamps")
+    for key in ("request_timestamp", "requested_at", "generated_at", "updated_at"):
+        value = preserved.get(key) if isinstance(preserved, dict) else None
+        if isinstance(value, str) and value.strip():
+            clocks[key] = value.strip()
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            clocks[key] = value.strip()
+    return clocks
+
+
+def _future_acquisition(payload: dict[str, Any], reference_time: datetime) -> str | None:
+    for key, value in _acquisition_timestamps(payload).items():
+        parsed = _parse_datetime(value)
+        if parsed is not None and parsed > reference_time:
+            return f"{key}={value} is after reference_time={reference_time.isoformat()}"
+    return None
+
+
 def _missing_fields(source_report: list[dict[str, Any]]) -> list[str]:
     return [
         str(item["source_kind"])
@@ -937,9 +968,10 @@ def _stale_risks(
     source_report: list[dict[str, Any]],
     *,
     stale_after_hours: float,
+    reference_time: datetime | None = None,
 ) -> list[str]:
     risks: list[str] = []
-    now = datetime.now(timezone.utc)
+    reference_time = reference_time or datetime.now(timezone.utc)
     for item in source_report:
         if item.get("stale_risk") and str(item["stale_risk"]).lower() not in {
             "low",
@@ -947,18 +979,30 @@ def _stale_risks(
             "none",
         }:
             risks.append(f"{item['source_kind']} stale_risk={item['stale_risk']}")
+        future = _future_acquisition(item, reference_time)
+        if future:
+            risks.append(f"{item['source_kind']} {future}")
         timestamp = item.get("request_timestamp")
         if not isinstance(timestamp, str):
             continue
         parsed = _parse_datetime(timestamp)
         if parsed is None:
             continue
-        age_hours = (now - parsed).total_seconds() / 3600
+        age_hours = (reference_time - parsed).total_seconds() / 3600
         if age_hours > stale_after_hours:
             risks.append(
                 f"{item['source_kind']} age_hours={age_hours:.1f}>{stale_after_hours:g}"
             )
     return _dedupe_text(risks)
+
+
+def _reference_datetime(value: str | None) -> datetime:
+    if value is None:
+        return datetime.now(timezone.utc)
+    parsed = _parse_datetime(value)
+    if parsed is None:
+        raise ValueError("reference_time must be an ISO-8601 timestamp")
+    return parsed.astimezone(timezone.utc)
 
 
 def _parse_datetime(value: str) -> datetime | None:
@@ -994,6 +1038,16 @@ def _warnings(
     return _dedupe_text(warnings)
 
 
+def _has_review_pressure(summary: dict[str, Any]) -> bool:
+    smap = summary.get("smap_l4_corridor_summary")
+    gpm = summary.get("gpm_imerg_corridor_summary")
+    wetness = _metric_latest(smap, "sm_surface_wetness")
+    rain_72h = _metric_latest(gpm, "rain_72h_mm")
+    return (wetness is not None and wetness >= 0.7) or (
+        rain_72h is not None and rain_72h >= 80
+    )
+
+
 def _decision_output(
     *,
     summary: dict[str, Any],
@@ -1004,13 +1058,12 @@ def _decision_output(
     gpm = summary.get("gpm_imerg_corridor_summary")
     wetness = _metric_latest(smap, "sm_surface_wetness")
     rain_72h = _metric_latest(gpm, "rain_72h_mm")
+    review_pressure = _has_review_pressure(summary)
     if missing_fields:
         decision = "DELAY"
         reason = "GEE hydrologic background evidence is incomplete."
         next_step = "重新產生或補齊 GEE SMAP/GPM artifacts 後再做 compound review。"
-    elif (wetness is not None and wetness >= 0.7) or (
-        rain_72h is not None and rain_72h >= 80
-    ):
+    elif review_pressure:
         decision = "CHANGE_PLAN"
         reason = "SMAP/GPM evidence indicates elevated wetness or antecedent rain review pressure."
         next_step = "與 CWA QPF、terrain/geology、route notes 合併形成人工複核候選。"

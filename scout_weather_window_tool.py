@@ -110,7 +110,7 @@ def assess_scout_weather_window(
         route_package=route_package,
         weather_evidence=weather_evidence,
     )
-    reference_datetime = _parse_datetime(reference_time) or datetime.now(timezone.utc)
+    reference_datetime = _reference_datetime(reference_time)
     stale_warnings = _stale_warnings(
         route_package=route_package,
         weather_evidence=weather_evidence,
@@ -212,6 +212,7 @@ def assess_scout_weather_window(
             "segment": segment,
             "include_segments": include_segment_results,
             "stale_after_hours": stale_hours,
+            "reference_time": reference_datetime.isoformat(),
         },
         "weather_window": weather_window,
         "daylight_buffer_status": daylight_buffer_status,
@@ -1729,6 +1730,7 @@ def _query_stated_weather_rule(query: str) -> dict[str, Any] | None:
             "還能走",
             "能不能走",
             "改變計畫",
+            "改線",
             "改計畫",
             "改原計畫",
             "照原路線",
@@ -2346,6 +2348,10 @@ def _stale_warnings(
         warning = _stale_warning(source, stale_after_hours, reference_time)
         if warning:
             warnings.append(warning)
+    for segment in _route_weather_segments(route_package):
+        warning = _stale_warning(segment["source"], stale_after_hours, reference_time)
+        if warning:
+            warnings.append(f"Weather segment {segment['segment_id']}: {warning}")
     return _dedupe(warnings)
 
 
@@ -2356,12 +2362,18 @@ def _stale_warning(
 ) -> str | None:
     if not source:
         return None
+    # Publication and package creation are availability clocks. Forecast
+    # valid_from describes the target period and may legitimately be in the future.
+    for field in ("issued_at", "issuedAt", "generated_at", "generatedAt"):
+        parsed = _parse_datetime(source.get(field))
+        if parsed is not None and parsed > reference_time:
+            return f"Weather source {field}={source[field]} is after reference_time={reference_time.isoformat()}."
     valid_until = _first_present(source, "valid_until", "validUntil", "valid_to", "validTo")
     if valid_until:
         parsed = _parse_datetime(valid_until)
         if parsed and parsed < reference_time:
             return f"Weather source is past valid_until={valid_until}."
-    generated_at = _first_present(source, "generated_at", "generatedAt", "issued_at", "issuedAt")
+    generated_at = _first_present(source, "issued_at", "issuedAt", "generated_at", "generatedAt")
     parsed_generated_at = _parse_datetime(generated_at)
     if parsed_generated_at is None:
         return None
@@ -2371,6 +2383,15 @@ def _stale_warning(
     if age_hours > stale_after_hours:
         return f"Weather source age {age_hours:.1f}h exceeds stale_after_hours={stale_after_hours:g}."
     return None
+
+
+def _reference_datetime(value: str | None) -> datetime:
+    if value is None:
+        return datetime.now(timezone.utc)
+    parsed = _parse_datetime(value)
+    if parsed is None:
+        raise ValueError("reference_time must be an ISO-8601 timestamp")
+    return parsed.astimezone(timezone.utc)
 
 
 def _is_placeholder(weather_evidence: dict[str, Any]) -> bool:

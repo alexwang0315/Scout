@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -23,7 +24,10 @@ from tools.replay_scout_ai_six_forces_per095 import (
 
 ROOT = Path(__file__).resolve().parents[1]
 REAL_WORKSPACE = Path(
-    "/Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI"
+    os.environ.get(
+        "SCOUT_QA_SIX_FORCES_WORKSPACE_ROOT",
+        "/Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI",
+    )
 )
 CORPUS = ROOT / "docs/specs/scout-ai-six-forces-600-question-corpus.md"
 WEATHER_FIXTURE = (

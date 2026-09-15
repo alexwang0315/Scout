@@ -101,6 +101,7 @@ const navigationTerrainInterpolationText=()=>'',navigationTerrainCandidateScope=
 const navigationTerrainLensLabel=value=>value,navigationTerrainMapLibreLensSummary=()=>({qgis_count:0});
 const navigationTerrainMapLibreVisibilitySummary=()=>({}),navigationTerrainUsesStandardGrass=()=>false;
 const qgisSpatialOutwardCandidateCounts=()=>({total:0}),qgisTerrainRouteSelectionTarget=()=>'';
+const qgisSpatialWorkflowFeatures=()=>[]; // This source-inventory fixture has no prepared QGIS geometry.
 const qgisSpatialRouteFilterSummary=()=>({connected_counts:{},raw_counts:{}}),renderQgisTerrainRouteBuilder=()=>'';
 const navigationTerrainPressureSamples=()=>[],navigationTerrainRoutePath=()=>'';
 const navigationTerrainEventLocationSummary=()=>({locations:[]}),navigationTerrainEventLocationForEvent=()=>null;
@@ -108,7 +109,8 @@ const registry=['overview-map','lbs-map','permission-map','emergency-review-map'
  'map','weather-map','navigation-map','debug-map','permission-day-maps'].map(id=>({id}));
 const cases=api.casesFor(registry,['D1']);
 """
-    for name in ["navigationTerrainEvidenceDomain", "navigationTerrainMapLibreStyle",
+    for name in ["navigationTerrainWorkspaceSelection", "renderNavigationQgisTerrainOverlay", "qgisSpatialMaplibreFeatures",
+                 "navigationTerrainEvidenceDomain", "navigationTerrainMapLibreStyle",
                  "renderNavigationTerrainMapLibreHost", "renderNavigationTerrainReviewWorkbench",
                  "renderNavigationWorkspaceMap", "renderNavigationWorkspaceLoading",
                  "diagnosticNavigationRudyDomainEvidence"]:
@@ -817,7 +819,7 @@ const detail='missing native tile '+ 'evidence '.repeat(100)+'<img src=x onerror
 const row={key:'map/maplibre/default',activeStage:'recovery',status:'warning',cleanupStatus:'passed',
  stages:[{stage:'native-z20',status:'warning',detail,snapshot:{matrix:20,verified:19,required:144,success:15,pending:129,
  initializationReceipt:{reason:'native-load-error'}}},{stage:'recovery',status:'not_checked',detail:'Blocked by native-z20'}]};
-const report={projectId:project,status:'running',plannedCases:34,plannedStages:340,stageNames:api.STAGES,cases:[row],activeResult:row};
+const report={projectId:project,status:'warning',plannedCases:34,plannedStages:340,stageNames:api.STAGES,cases:[row],activeResult:row};
 const mount=document.querySelector('#mount');mount.innerHTML=renderDiagnosticRudyResults(report);
 assert.deepEqual(JSON.parse(mount.querySelector('[data-diagnostic-rudy-json]').textContent),report);
 assert.match(mount.querySelector('[data-diagnostic-rudy-first-failure]').textContent,/native-z20/);

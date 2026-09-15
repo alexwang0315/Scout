@@ -293,6 +293,7 @@ def _weather(root: Path, inputs: dict, preparation: dict) -> tuple[dict, list[di
         write_json(root, "project.json", project)
     result = assess_scout_weather_window(root, query="Planned 路段天氣與日照 buffer 後分析",
                                          planned_eta_path="outputs/planned_eta.json",
+                                         reference_time=inputs.get("reference_time"),
                                          current_time=next((d.get("departure_at") for d in items(inputs["itinerary"], "days") if d.get("departure_at")), None), limit=24)
     missing.extend(_field_missing(result))
     if inputs.get("is_recorded") and not matched:
@@ -418,7 +419,7 @@ def _public_result(role: str, result: dict) -> dict:
 
 
 def run_planned_analyses(owner_root: Path, bundle: dict, run_root: Path, preparation: dict,
-                         *, progress: Callable | None = None) -> dict:
+                         *, progress: Callable | None = None, reference_time: str | None = None) -> dict:
     """Return hash-bound projections after executing each actual assessor.
 
     A partial result is useful newly computed evidence with specific missing
@@ -432,6 +433,9 @@ def run_planned_analyses(owner_root: Path, bundle: dict, run_root: Path, prepara
     else:
         inputs = build_planned_analysis_inputs(owner_root, bundle, run_root, preparation)
     inputs["is_recorded"] = is_recorded
+    # A replay clock is explicit; neither departure nor source issue time is "now".
+    from scout_weather_window_tool import _reference_datetime
+    inputs["reference_time"] = _reference_datetime(reference_time).isoformat()
     root = safe_path(run_root, inputs["workspace_ref"])
     source_report: list[dict] = []
     _copy_sources(owner_root, root, source_report)

@@ -299,31 +299,31 @@ def _check_api_smoke(repo_root: Path) -> HardwareSmokeCheck:
     try:
         with TemporaryDirectory(prefix="scout-ai-os-hardware-api-") as tmp:
             app = create_app(Path(tmp) / "hardware.sqlite", root=repo_root)
-            client = TestClient(app)
-            capabilities = client.get("/capabilities")
-            scheduler = client.get("/runtime/scheduler")
-            refused = client.post(
-                "/request-router/preview",
-                json={
-                    "user_id": "hardware-smoke-user",
-                    "user_text": "請控制 Scout 硬體並直接發送 SOS",
-                    "active_context": {"surface": "debug"},
-                },
-            )
-            for response in (capabilities, scheduler, refused):
-                response.raise_for_status()
-            capability_names = {
-                item["name"] for item in capabilities.json()["capabilities"]
-            }
-            route = refused.json()["route"]
-            if route["route_class"] != "boundary_explainer":
-                return _check(
-                    "api_boundary_router",
-                    "H1",
-                    "failed",
-                    "Hardware/outbound mutation request did not route to the boundary explainer.",
-                    {"route": route},
+            with TestClient(app) as client:
+                capabilities = client.get("/capabilities")
+                scheduler = client.get("/runtime/scheduler")
+                refused = client.post(
+                    "/request-router/preview",
+                    json={
+                        "user_id": "hardware-smoke-user",
+                        "user_text": "請控制 Scout 硬體並直接發送 SOS",
+                        "active_context": {"surface": "debug"},
+                    },
                 )
+                for response in (capabilities, scheduler, refused):
+                    response.raise_for_status()
+                capability_names = {
+                    item["name"] for item in capabilities.json()["capabilities"]
+                }
+                route = refused.json()["route"]
+                if route["route_class"] != "boundary_explainer":
+                    return _check(
+                        "api_boundary_router",
+                        "H1",
+                        "failed",
+                        "Hardware/outbound mutation request did not route to the boundary explainer.",
+                        {"route": route},
+                    )
     except Exception as exc:
         return _check(
             "api_smoke",
@@ -438,26 +438,26 @@ def _check_ui_action_smoke(repo_root: Path) -> HardwareSmokeCheck:
 def _check_capability_metadata_gate(repo_root: Path) -> HardwareSmokeCheck:
     try:
         with TemporaryDirectory(prefix="scout-ai-os-hardware-capability-") as tmp:
-            client = TestClient(create_app(Path(tmp) / "capability.sqlite", root=repo_root))
-            created = client.post(
-                "/capabilities/build-candidate",
-                json={
-                    "user_id": "hardware-smoke-user",
-                    "capability_name": "hardware_payload_echo",
-                    "purpose": "Echo a low-risk JSON payload for hardware smoke.",
-                    "input_schema": {"type": "object"},
-                    "output_schema": {"type": "object"},
-                    "risk_level": "low",
-                },
-            )
-            created.raise_for_status()
-            created_payload = created.json()
-            approved = client.post(
-                "/capabilities/hardware_payload_echo/approve",
-                json={"user_id": "hardware-smoke-user", "approval_note": "Hardware smoke."},
-            )
-            approved.raise_for_status()
-            approved_payload = approved.json()
+            with TestClient(create_app(Path(tmp) / "capability.sqlite", root=repo_root)) as client:
+                created = client.post(
+                    "/capabilities/build-candidate",
+                    json={
+                        "user_id": "hardware-smoke-user",
+                        "capability_name": "hardware_payload_echo",
+                        "purpose": "Echo a low-risk JSON payload for hardware smoke.",
+                        "input_schema": {"type": "object"},
+                        "output_schema": {"type": "object"},
+                        "risk_level": "low",
+                    },
+                )
+                created.raise_for_status()
+                created_payload = created.json()
+                approved = client.post(
+                    "/capabilities/hardware_payload_echo/approve",
+                    json={"user_id": "hardware-smoke-user", "approval_note": "Hardware smoke."},
+                )
+                approved.raise_for_status()
+                approved_payload = approved.json()
     except Exception as exc:
         return _check(
             "capability_metadata_gate",

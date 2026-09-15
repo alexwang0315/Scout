@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import socket
 import subprocess
@@ -9,7 +10,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
-import httpx
 import pytest
 
 from scout.nextgen import (
@@ -21,7 +21,9 @@ from scout.nextgen import (
 from scout.nextgen.intelligence_mcp_http import (
     IntelligenceMcpHttpClient,
     IntelligenceMcpHttpClientConfig,
+    probe_intelligence_mcp_http_health,
 )
+from scout.nextgen.intelligence_mcp import IntelligenceMcpUnavailable
 from scout.nextgen.praison_background_queue import BackgroundIntelligenceJobState
 
 
@@ -130,23 +132,18 @@ def test_streamable_http_unix_socket_background_round_trip(tmp_path: Path) -> No
         # Cold MCP imports on a busy development host are not an inference SLO.
         deadline = time.monotonic() + 30
         ready = False
-        with httpx.Client(
-            transport=httpx.HTTPTransport(uds=str(socket_path)),
-            timeout=1,
-            trust_env=False,
-        ) as health_client:
-            while time.monotonic() < deadline:
-                if process.poll() is not None:
-                    stderr = process.stderr.read() if process.stderr is not None else ""
-                    raise AssertionError(f"MCP HTTP server exited early: {stderr}")
-                try:
-                    response = health_client.get("http://localhost/health")
-                    ready = response.status_code == 200 and response.json()["status"] == "ok"
-                except httpx.TransportError:
-                    ready = False
-                if ready:
-                    break
-                time.sleep(0.02)
+        while time.monotonic() < deadline:
+            if process.poll() is not None:
+                stderr = process.stderr.read() if process.stderr is not None else ""
+                raise AssertionError(f"MCP HTTP server exited early: {stderr}")
+            try:
+                status, body = probe_intelligence_mcp_http_health(socket_path, timeout_seconds=1)
+                ready = status == 200 and json.loads(body)["status"] == "ok"
+            except IntelligenceMcpUnavailable:
+                ready = False
+            if ready:
+                break
+            time.sleep(0.02)
         assert ready, "MCP HTTP server did not become healthy"
         assert socket_path.stat().st_mode & 0o777 == 0o660
 
@@ -169,9 +166,19 @@ def test_streamable_http_unix_socket_background_round_trip(tmp_path: Path) -> No
             current_binding=request.workspace_binding,
         )
     finally:
-        process.terminate()
-        process.wait(timeout=5)
-        socket_path.unlink(missing_ok=True)
+        try:
+            if process.poll() is None:
+                process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
+        finally:
+            for stream in (process.stdout, process.stderr):
+                if stream is not None:
+                    stream.close()
+            socket_path.unlink(missing_ok=True)
 
     assert response.request_id == request.request_id
     assert response.candidate_only is True

@@ -74,6 +74,7 @@ surfaces:
         expected_behavior:
           - System > scout monitor renders Scout hardware status, power, memory, disks, CPU/load, temperatures, fan RPM, uptime, trend, alerts, and status-change events in Traditional Chinese.
           - The browser uses same-origin relative GET requests; the Dashboard backend proxies the fixed Scout hardware-monitor API and preserves a stale HTTP 503 envelope.
+          - Native Mac backends read each request over a new bounded SSH stdio channel to Scout loopback 9151 without a Mac 9151 listener; failed requests are not cached, and the next 60-second poll or manual GET reconnects.
           - A stale response is visibly labelled 資料已過期 even when its retained data.status is ok; null values remain 未知 and an empty events list remains empty.
           - Hardware telemetry remains read-only, candidate-only presentation and does not add hardware control or runtime-safety authority.
           - Network, Bluetooth, USB, PCIe, I2C, GPIO, and serial inventory comes only from data.inventory.sections; section ok means 已讀取, not device health.
@@ -86,7 +87,7 @@ surfaces:
           - The Dashboard monitor must not display local macOS metrics or request the removed Mac snapshot/health endpoints.
           - A fan reading of 0 RPM must not alone produce a hardware-fault state, and missing history points must not be fabricated.
           - Inventory strings must never be interpreted as HTML, and I2C/GPIO/serial enumeration must not imply active scanning, sampled voltage, or external connectivity.
-        required_tests: [hardware_monitor_proxy_same_origin, hardware_monitor_stale_503, hardware_monitor_browser_smoke, hardware_inventory_states_and_text_safety, hardware_inventory_expansion_persistence, hardware_power_independent_sources]
+        required_tests: [hardware_monitor_proxy_same_origin, hardware_monitor_stale_503, hardware_monitor_browser_smoke, hardware_inventory_states_and_text_safety, hardware_inventory_expansion_persistence, hardware_power_independent_sources, hardware_monitor_ssh_reconnect]
         required_evidence: [ui, network, server_state, trace]
         authority_boundary: {source: server, runtime_authority: false}
   - id: all-dashboard-live-browser

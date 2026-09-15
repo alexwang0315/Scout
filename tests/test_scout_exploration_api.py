@@ -3,14 +3,18 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
+import threading
 import time
 from pathlib import Path
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+import scout_exploration_jobs as exploration_jobs
 from scout_exploration_api import create_exploration_router
 from scout_exploration_jobs import ExplorationJobManager, _release
 from scout_exploration_workspace import prepare_exploration_workspace
@@ -126,7 +130,24 @@ def test_trh_post_only_saves_bound_requests_and_does_not_dispatch(tmp_path):
     assert not list(Path(receipt["project_root"]).rglob("*.gpx"))
 
 
-def test_real_one_shot_worker_survives_a_new_http_client_and_finishes(tmp_path):
+def test_real_one_shot_worker_survives_a_new_http_client_and_finishes(tmp_path, monkeypatch):
+    pids, exit_codes = [], []
+    reaped = threading.Event()
+    original_popen = subprocess.Popen
+
+    class ObservedPopen(original_popen):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            pids.append(self.pid)
+
+        def wait(self, *args, **kwargs):
+            code = super().wait(*args, **kwargs)
+            exit_codes.append(code)
+            reaped.set()
+            return code
+
+    # Record only primitive values; a test-held Popen would hide lost ownership.
+    monkeypatch.setattr(exploration_jobs.subprocess, "Popen", ObservedPopen)
     client=_client(tmp_path,real=True)
     receipt,path=_create(client)
     started=client.post(path+"/prepare",json=_command(receipt,fetch_map=False))
@@ -143,6 +164,11 @@ def test_real_one_shot_worker_survives_a_new_http_client_and_finishes(tmp_path):
     assert state["attempt"]==1 and state["worker_live"] is False
     assert state["report"]["map"]["status"]=="not_requested"
     assert state["report"]["primary_gpx"] is None and state["report"]["reference_gpxs"]==[]
+    assert reaped.wait(max(0, deadline - time.monotonic())), "Worker exited but parent did not reap it"
+    assert exit_codes == [0] and len(pids) == 1
+    with pytest.raises(ChildProcessError):
+        os.waitpid(pids[0], os.WNOHANG)
+    client.close()
 
 
 def test_exploration_ui_create_prepare_restore_and_candidate_scope(tmp_path):

@@ -6,6 +6,7 @@ import hashlib
 import os
 import sqlite3
 from collections import Counter
+from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal, Mapping, Protocol
@@ -178,7 +179,7 @@ class SQLiteBackgroundIntelligenceTelemetryReader:
                 configured=True,
             )
         try:
-            with self._connect() as connection:
+            with closing(self._connect()) as connection, connection:
                 self._validate_schema(connection)
                 available_count = int(
                     connection.execute(
@@ -240,8 +241,12 @@ class SQLiteBackgroundIntelligenceTelemetryReader:
             uri=True,
             timeout=1,
         )
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA query_only=ON")
+        try:
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA query_only=ON")
+        except BaseException:
+            connection.close()
+            raise
         return connection
 
     @staticmethod

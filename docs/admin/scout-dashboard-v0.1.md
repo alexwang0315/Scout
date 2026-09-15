@@ -46,6 +46,56 @@ Each entry should include:
 
 ## Implementation Record
 
+### 2026-09-14 - Reconnect Scout monitor without a Mac 9151 listener
+
+User request: improve automatic connection while keeping Mac 9151 closed.
+Status: **PARTIAL / deployed with remaining validation failures**, not official qualification.
+
+- Root cause at the real 9099 entry: the Mac backend only retried local HTTP,
+  but its temporary SSH forward was absent. Ordinary SSH and the Scout API
+  were reachable. HTTP refresh could not recreate that separate process.
+- `tools/hardware_monitor_proxy.py` now chooses per-request SSH on native Mac;
+  `tools/hardware_monitor_ssh.py` owns a bounded stdio exchange to the fixed
+  `scout` alias and `127.0.0.1:9151`. No local listener, remote shell command,
+  persistent tunnel, control operation or authentication relaxation is added.
+  Scout/Linux native backends keep fixed loopback HTTP; container localhost
+  must still be configured according to its deployment, not presumed Scout.
+- Fixed GET allowlist/query bounds, no redirects, strict SSH host verification,
+  no inherited local forwards/control socket, bounded response/stderr/deadline,
+  and child cleanup. HTTP 503 JSON is preserved, and failures are not cached.
+  The next regular poll/manual read opens a new SSH connection.
+- Same-origin routes and existing Dashboard auth remain unchanged. All three
+  status/history/events endpoints and both embedded/full-page consumers are
+  in scope; no Navigation/GIS behavior or workspace selection is changed.
+- Monitor text explains automatic retries; typed failures distinguish SSH from
+  a refused Scout API. Existing DASH-050 is extended with transport evidence
+  and disconnection/recovery notices, without adding a Diagnostic ID or
+  changing the unresolved regular-count expectation. The inline block remains
+  an exact mirror of `docs/admin/scout-monitor-power-diagnostic.js`.
+- Tests: proxy/stdio first pass 35/35; real concurrent reads all HTTP 200 in
+  0.661 s, status fresh/warning, history 60 and events 50. Mac 9151 remained
+  closed. Expanded verification and immutable failure notes are recorded in
+  `artifacts/scout-monitor-reconnect-20260914/verification.md`.
+- The user approved restarting the existing 9099 process to load this change.
+  It now serves SSH-backed status/history/events with Mac 9151 closed. A second
+  issue was reproduced: cached iframe HTML kept old retry notices, and real
+  DASH-050 failed 22/26. Monitor HTML now sends no-store; a scoped document
+  revision query on the System iframe and DASH-050 probe invalidates already
+  cached copies. Root Dashboard route and API paths remain unchanged.
+  After actual document reload, the same DASH-050 passed 26/26 at 10:51:38
+  Asia/Taipei (current API data, 3231 ms); it does not certify UPS health.
+  The gateway includes unrelated dirty Navigation/GIS files;
+  a mixed snapshot must not be submitted without explicit user permission.
+- Final real-browser smoke passed on 9099: all three same-origin API routes,
+  seven inventory lists/details, keyboard refresh with expansion retained,
+  desktop and 390px/320px mobile layouts; no console/page errors. Final targeted
+  tests were 61 PASS / 2 FAIL (30s Node/JSDOM subprocess timeouts), with earlier
+  synthetic replay failures preserved. The 48-versus-50 Diagnostic count
+  conflict is unchanged. These failures prevent full acceptance; the earlier
+  63/63 run and live DASH-050 pass do not supersede the final failure evidence.
+- This is not a repair of UPS I²C communication or a hardware-health verdict.
+  `docs/admin/scout-monitor-power-guide.md` and its PDF describe the new path.
+
 ### 2026-09-13 - Separate UPS battery readability from host supply observations
 
 User request: investigate unreadable battery/power, then apply the proposed

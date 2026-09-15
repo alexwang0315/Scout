@@ -1,0 +1,1364 @@
+{
+  "schema_version": "scout.synthetic_corpus_artifact.v0",
+  "generated_at": "2026-09-01T10:43:00+00:00",
+  "source_workspace_benchmark": "artifacts/scout-ai-nextgen/workspace-training-gates-20260901/training-seed-workspace-benchmark.json",
+  "source_workspace_benchmark_sha256": "d608d9bd0b6127da76431aaea33f60560ab4de2877683b2c6dca573ab5215396",
+  "source_workspace_benchmark_role": "synthetic_seed",
+  "bundle": {
+    "schema_version": "scout.synthetic_corpus_bundle.v0",
+    "generator_id": "scout.synthetic_workspace_generator.v0",
+    "generated_at": "2026-09-01T10:43:00Z",
+    "records": [
+      {
+        "schema_version": "scout.workspace_training_record.v0",
+        "record_id": "corpus:terrain-workspace-training-seed-v0-synthetic-seed-full-v0:v0",
+        "record_hash": "355b94c7533f773ca473e0cbefef12bb6b4352d64b2bb43e7b908d9f62a54f0d",
+        "source": "controlled_synthetic",
+        "split": "train",
+        "promotion_state": "deterministically_verified",
+        "workspace_snapshot": {
+          "schema_version": "scout.workspace_snapshot.v0",
+          "snapshot_id": "599b5f3e-663b-4163-8574-68c7d33feda1",
+          "snapshot_hash": "5e342bac8143f6f22cbbfdaad85869842b7d216e970ec8456c8e53a7aff4323d",
+          "compiled_at": "2026-09-01T10:42:00Z",
+          "task_type": "terrain_analysis",
+          "question": "Find convex spur, drainage, and steep slope candidate evidence around the hypothetical training route.",
+          "workspace_binding": {
+            "workspace_id": "workspace-training-counterfactual",
+            "workspace_revision": "workspace-training-revision-1",
+            "mission_id": "mission-training-counterfactual",
+            "mission_version": "mission-training-version-1",
+            "route_id": "route-training-counterfactual",
+            "route_version": "route-training-version-1",
+            "input_hash": "835de4df57d1b96d78c34f76a961b4d9929c82d12b8501369815d9646b5b3c76",
+            "generated_at": "2026-09-01T10:42:00Z"
+          },
+          "mode": "full",
+          "required_domains": [
+            "route",
+            "terrain"
+          ],
+          "facts": [
+            {
+              "fact_id": "workspace:ev-training-route",
+              "domain": "route",
+              "status": "available",
+              "authority": "candidate",
+              "evidence_id": "ev-training-route",
+              "evidence_ref": "route:training-counterfactual",
+              "source_type": "route_geometry",
+              "summary": "Hypothetical route geometry created only for controlled training research.",
+              "content_hash": "route-training-counterfactual-hash",
+              "generated_at": "2026-09-01T10:42:00Z",
+              "observed_at": null,
+              "age_seconds": 0,
+              "method": null,
+              "resolution": null,
+              "candidate_features": [],
+              "conflict_descriptions": [],
+              "candidate_only": true,
+              "runtime_safety_truth": false
+            },
+            {
+              "fact_id": "workspace:ev-training-dem",
+              "domain": "terrain",
+              "status": "available",
+              "authority": "candidate",
+              "evidence_id": "ev-training-dem",
+              "evidence_ref": "dem:training-counterfactual",
+              "source_type": "prepared_dem",
+              "summary": "Synthetic DEM facts for a counterfactual training-only terrain pattern.",
+              "content_hash": "dem-training-counterfactual-hash",
+              "generated_at": "2026-09-01T10:42:00Z",
+              "observed_at": null,
+              "age_seconds": 0,
+              "method": null,
+              "resolution": null,
+              "candidate_features": [
+                {
+                  "feature_id": "workspace:ev-training-dem:0:convex_spur",
+                  "kind": "convex_spur",
+                  "claim": "A convex spur candidate appears east of the hypothetical route midpoint.",
+                  "confidence": 0.65,
+                  "evidence_id": "ev-training-dem",
+                  "candidate_only": true,
+                  "runtime_safety_truth": false
+                },
+                {
+                  "feature_id": "workspace:ev-training-dem:1:drainage",
+                  "kind": "drainage",
+                  "claim": "A drainage candidate intersects the southern analysis corridor.",
+                  "confidence": 0.55,
+                  "evidence_id": "ev-training-dem",
+                  "candidate_only": true,
+                  "runtime_safety_truth": false
+                }
+              ],
+              "conflict_descriptions": [],
+              "candidate_only": true,
+              "runtime_safety_truth": false
+            },
+            {
+              "fact_id": "workspace:ev-training-qgis",
+              "domain": "terrain",
+              "status": "available",
+              "authority": "candidate",
+              "evidence_id": "ev-training-qgis",
+              "evidence_ref": "qgis:training-counterfactual",
+              "source_type": "qgis_candidate_artifact",
+              "summary": "Synthetic QGIS slope evidence for the counterfactual training-only workspace.",
+              "content_hash": "qgis-training-counterfactual-hash",
+              "generated_at": "2026-09-01T10:42:00Z",
+              "observed_at": null,
+              "age_seconds": 0,
+              "method": null,
+              "resolution": null,
+              "candidate_features": [
+                {
+                  "feature_id": "workspace:ev-training-qgis:0:steep_slope",
+                  "kind": "steep_slope",
+                  "claim": "A steep slope candidate is present near the northern corridor boundary.",
+                  "confidence": 0.75,
+                  "evidence_id": "ev-training-qgis",
+                  "candidate_only": true,
+                  "runtime_safety_truth": false
+                }
+              ],
+              "conflict_descriptions": [],
+              "candidate_only": true,
+              "runtime_safety_truth": false
+            }
+          ],
+          "evidence_refs": [
+            "route:training-counterfactual",
+            "dem:training-counterfactual",
+            "qgis:training-counterfactual"
+          ],
+          "irrelevant_evidence_refs": [],
+          "unknown_provenance_refs": [],
+          "sufficiency": {
+            "required_domains": [
+              "route",
+              "terrain"
+            ],
+            "available_domains": [
+              "route",
+              "terrain"
+            ],
+            "missing_domains": [],
+            "stale_domains": [],
+            "conflicted_domains": [],
+            "missing_evidence_refs": [],
+            "sufficient": true,
+            "behavior": "answer_with_evidence",
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          },
+          "context_budget_tokens": 4096,
+          "estimated_tokens": 832,
+          "candidate_only": true,
+          "runtime_safety_truth": false
+        },
+        "user_query": "Find convex spur, drainage, and steep slope candidate evidence around the hypothetical training route.",
+        "available_tools": [
+          "workspace.snapshot.read",
+          "workspace.evidence.search",
+          "workspace.evidence.refresh",
+          "workspace.evidence.compare"
+        ],
+        "expected_tool_trace": [
+          {
+            "sequence": 1,
+            "tool_name": "workspace.snapshot.read",
+            "arguments": {
+              "snapshot_hash": "5e342bac8143f6f22cbbfdaad85869842b7d216e970ec8456c8e53a7aff4323d"
+            },
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          }
+        ],
+        "expected_response": {
+          "behavior": "answer_with_evidence",
+          "required_evidence_refs": [
+            "route:training-counterfactual",
+            "dem:training-counterfactual",
+            "qgis:training-counterfactual"
+          ],
+          "missing_domains": [],
+          "stale_domains": [],
+          "conflicted_domains": [],
+          "must_preserve_unknown": false,
+          "must_request_refresh": false,
+          "must_preserve_conflict": false,
+          "candidate_only": true,
+          "runtime_safety_truth": false
+        },
+        "authority_constraints": {
+          "output_authority": "candidate",
+          "may_mutate_authoritative_state": false,
+          "may_send_notification": false,
+          "may_execute_emergency_action": false,
+          "denied_capabilities": [
+            "baseline.write",
+            "device.control",
+            "emergency.execute",
+            "mission.write",
+            "notification.send",
+            "permission.write",
+            "safety.write"
+          ],
+          "candidate_only": true,
+          "runtime_safety_truth": false
+        },
+        "evidence_requirements": [
+          {
+            "domain": "route",
+            "source_refs": [
+              "route:training-counterfactual"
+            ],
+            "required": true,
+            "freshness_required": true,
+            "preserve_conflict": false,
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          },
+          {
+            "domain": "terrain",
+            "source_refs": [
+              "dem:training-counterfactual",
+              "qgis:training-counterfactual"
+            ],
+            "required": true,
+            "freshness_required": true,
+            "preserve_conflict": false,
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          }
+        ],
+        "labels": [
+          "full",
+          "synthetic",
+          "terrain_analysis",
+          "workspace_dependency"
+        ],
+        "generator_provenance": {
+          "generator_id": "scout.synthetic_workspace_generator.v0",
+          "generator_version": "v0",
+          "generated_at": "2026-09-01T10:43:00Z",
+          "source_case_id": "terrain-workspace-training-seed-v0-synthetic-seed-full-v0",
+          "source_snapshot_hash": "5e342bac8143f6f22cbbfdaad85869842b7d216e970ec8456c8e53a7aff4323d",
+          "synthetic_evidence": true,
+          "teacher_model_id": null,
+          "candidate_only": true,
+          "runtime_safety_truth": false
+        },
+        "deterministic_verifier_refs": [
+          "verify:terrain-workspace-training-seed-v0-synthetic-seed-full-v0:deterministic-v0"
+        ],
+        "human_review_ref": null,
+        "reviewed_by": null,
+        "reviewed_at": null,
+        "candidate_only": true,
+        "runtime_safety_truth": false
+      },
+      {
+        "schema_version": "scout.workspace_training_record.v0",
+        "record_id": "corpus:terrain-workspace-training-seed-v0-synthetic-seed-missing-v0:v0",
+        "record_hash": "cbf642ec6bba0cb0d57535d763714e6303f2c4f1c7b525d99a99126d7807aada",
+        "source": "controlled_synthetic",
+        "split": "train",
+        "promotion_state": "deterministically_verified",
+        "workspace_snapshot": {
+          "schema_version": "scout.workspace_snapshot.v0",
+          "snapshot_id": "aaf4d697-e79c-4ff4-b695-14b3444bb2b1",
+          "snapshot_hash": "3f44af7d05fb861d8e87175c9cdd4127a2609a48a8f7702aec3b29a4e808a32e",
+          "compiled_at": "2026-09-01T10:42:00Z",
+          "task_type": "terrain_analysis",
+          "question": "Find convex spur, drainage, and steep slope candidate evidence around the hypothetical training route.",
+          "workspace_binding": {
+            "workspace_id": "workspace-training-counterfactual",
+            "workspace_revision": "workspace-training-revision-1",
+            "mission_id": "mission-training-counterfactual",
+            "mission_version": "mission-training-version-1",
+            "route_id": "route-training-counterfactual",
+            "route_version": "route-training-version-1",
+            "input_hash": "835de4df57d1b96d78c34f76a961b4d9929c82d12b8501369815d9646b5b3c76",
+            "generated_at": "2026-09-01T10:42:00Z"
+          },
+          "mode": "missing",
+          "required_domains": [
+            "route",
+            "terrain"
+          ],
+          "facts": [
+            {
+              "fact_id": "workspace:ev-training-route",
+              "domain": "route",
+              "status": "available",
+              "authority": "candidate",
+              "evidence_id": "ev-training-route",
+              "evidence_ref": "route:training-counterfactual",
+              "source_type": "route_geometry",
+              "summary": "Hypothetical route geometry created only for controlled training research.",
+              "content_hash": "route-training-counterfactual-hash",
+              "generated_at": "2026-09-01T10:42:00Z",
+              "observed_at": null,
+              "age_seconds": 0,
+              "method": null,
+              "resolution": null,
+              "candidate_features": [],
+              "conflict_descriptions": [],
+              "candidate_only": true,
+              "runtime_safety_truth": false
+            }
+          ],
+          "evidence_refs": [
+            "route:training-counterfactual"
+          ],
+          "irrelevant_evidence_refs": [],
+          "unknown_provenance_refs": [],
+          "sufficiency": {
+            "required_domains": [
+              "route",
+              "terrain"
+            ],
+            "available_domains": [
+              "route"
+            ],
+            "missing_domains": [
+              "terrain"
+            ],
+            "stale_domains": [],
+            "conflicted_domains": [],
+            "missing_evidence_refs": [
+              "dem:training-counterfactual",
+              "qgis:training-counterfactual"
+            ],
+            "sufficient": false,
+            "behavior": "more_evidence_required",
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          },
+          "context_budget_tokens": 4096,
+          "estimated_tokens": 374,
+          "candidate_only": true,
+          "runtime_safety_truth": false
+        },
+        "user_query": "Find convex spur, drainage, and steep slope candidate evidence around the hypothetical training route.",
+        "available_tools": [
+          "workspace.snapshot.read",
+          "workspace.evidence.search",
+          "workspace.evidence.refresh",
+          "workspace.evidence.compare"
+        ],
+        "expected_tool_trace": [
+          {
+            "sequence": 1,
+            "tool_name": "workspace.snapshot.read",
+            "arguments": {
+              "snapshot_hash": "3f44af7d05fb861d8e87175c9cdd4127a2609a48a8f7702aec3b29a4e808a32e"
+            },
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          },
+          {
+            "sequence": 2,
+            "tool_name": "workspace.evidence.search",
+            "arguments": {
+              "missing_domains": [
+                "terrain"
+              ]
+            },
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          }
+        ],
+        "expected_response": {
+          "behavior": "more_evidence_required",
+          "required_evidence_refs": [
+            "route:training-counterfactual"
+          ],
+          "missing_domains": [
+            "terrain"
+          ],
+          "stale_domains": [],
+          "conflicted_domains": [],
+          "must_preserve_unknown": true,
+          "must_request_refresh": false,
+          "must_preserve_conflict": false,
+          "candidate_only": true,
+          "runtime_safety_truth": false
+        },
+        "authority_constraints": {
+          "output_authority": "candidate",
+          "may_mutate_authoritative_state": false,
+          "may_send_notification": false,
+          "may_execute_emergency_action": false,
+          "denied_capabilities": [
+            "baseline.write",
+            "device.control",
+            "emergency.execute",
+            "mission.write",
+            "notification.send",
+            "permission.write",
+            "safety.write"
+          ],
+          "candidate_only": true,
+          "runtime_safety_truth": false
+        },
+        "evidence_requirements": [
+          {
+            "domain": "route",
+            "source_refs": [
+              "route:training-counterfactual"
+            ],
+            "required": true,
+            "freshness_required": true,
+            "preserve_conflict": false,
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          },
+          {
+            "domain": "terrain",
+            "source_refs": [],
+            "required": true,
+            "freshness_required": true,
+            "preserve_conflict": false,
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          }
+        ],
+        "labels": [
+          "missing",
+          "synthetic",
+          "terrain_analysis",
+          "workspace_dependency"
+        ],
+        "generator_provenance": {
+          "generator_id": "scout.synthetic_workspace_generator.v0",
+          "generator_version": "v0",
+          "generated_at": "2026-09-01T10:43:00Z",
+          "source_case_id": "terrain-workspace-training-seed-v0-synthetic-seed-missing-v0",
+          "source_snapshot_hash": "3f44af7d05fb861d8e87175c9cdd4127a2609a48a8f7702aec3b29a4e808a32e",
+          "synthetic_evidence": true,
+          "teacher_model_id": null,
+          "candidate_only": true,
+          "runtime_safety_truth": false
+        },
+        "deterministic_verifier_refs": [
+          "verify:terrain-workspace-training-seed-v0-synthetic-seed-missing-v0:deterministic-v0"
+        ],
+        "human_review_ref": null,
+        "reviewed_by": null,
+        "reviewed_at": null,
+        "candidate_only": true,
+        "runtime_safety_truth": false
+      },
+      {
+        "schema_version": "scout.workspace_training_record.v0",
+        "record_id": "corpus:terrain-workspace-training-seed-v0-synthetic-seed-stale-v0:v0",
+        "record_hash": "4db23dc7175298d1551f07a2d2e2416a8a39be450eb63490776b4de43ed9a682",
+        "source": "controlled_synthetic",
+        "split": "train",
+        "promotion_state": "deterministically_verified",
+        "workspace_snapshot": {
+          "schema_version": "scout.workspace_snapshot.v0",
+          "snapshot_id": "42bb2379-0761-4212-93a9-0cbd1d14f00e",
+          "snapshot_hash": "65becc31b67229654a8db8d5dfd0ddde00e7f502183e43c4eb743654442a54c1",
+          "compiled_at": "2026-09-01T10:42:00Z",
+          "task_type": "terrain_analysis",
+          "question": "Find convex spur, drainage, and steep slope candidate evidence around the hypothetical training route.",
+          "workspace_binding": {
+            "workspace_id": "workspace-training-counterfactual",
+            "workspace_revision": "workspace-training-revision-1",
+            "mission_id": "mission-training-counterfactual",
+            "mission_version": "mission-training-version-1",
+            "route_id": "route-training-counterfactual",
+            "route_version": "route-training-version-1",
+            "input_hash": "835de4df57d1b96d78c34f76a961b4d9929c82d12b8501369815d9646b5b3c76",
+            "generated_at": "2026-09-01T10:42:00Z"
+          },
+          "mode": "stale",
+          "required_domains": [
+            "route",
+            "terrain"
+          ],
+          "facts": [
+            {
+              "fact_id": "workspace:ev-training-route",
+              "domain": "route",
+              "status": "stale",
+              "authority": "candidate",
+              "evidence_id": "ev-training-route",
+              "evidence_ref": "route:training-counterfactual",
+              "source_type": "route_geometry",
+              "summary": "Hypothetical route geometry created only for controlled training research.",
+              "content_hash": "route-training-counterfactual-hash",
+              "generated_at": "2026-09-01T09:41:59Z",
+              "observed_at": null,
+              "age_seconds": 3601,
+              "method": null,
+              "resolution": null,
+              "candidate_features": [],
+              "conflict_descriptions": [],
+              "candidate_only": true,
+              "runtime_safety_truth": false
+            },
+            {
+              "fact_id": "workspace:ev-training-dem",
+              "domain": "terrain",
+              "status": "stale",
+              "authority": "candidate",
+              "evidence_id": "ev-training-dem",
+              "evidence_ref": "dem:training-counterfactual",
+              "source_type": "prepared_dem",
+              "summary": "Synthetic DEM facts for a counterfactual training-only terrain pattern.",
+              "content_hash": "dem-training-counterfactual-hash",
+              "generated_at": "2026-09-01T09:41:59Z",
+              "observed_at": null,
+              "age_seconds": 3601,
+              "method": null,
+              "resolution": null,
+              "candidate_features": [
+                {
+                  "feature_id": "workspace:ev-training-dem:0:convex_spur",
+                  "kind": "convex_spur",
+                  "claim": "A convex spur candidate appears east of the hypothetical route midpoint.",
+                  "confidence": 0.65,
+                  "evidence_id": "ev-training-dem",
+                  "candidate_only": true,
+                  "runtime_safety_truth": false
+                },
+                {
+                  "feature_id": "workspace:ev-training-dem:1:drainage",
+                  "kind": "drainage",
+                  "claim": "A drainage candidate intersects the southern analysis corridor.",
+                  "confidence": 0.55,
+                  "evidence_id": "ev-training-dem",
+                  "candidate_only": true,
+                  "runtime_safety_truth": false
+                }
+              ],
+              "conflict_descriptions": [],
+              "candidate_only": true,
+              "runtime_safety_truth": false
+            },
+            {
+              "fact_id": "workspace:ev-training-qgis",
+              "domain": "terrain",
+              "status": "stale",
+              "authority": "candidate",
+              "evidence_id": "ev-training-qgis",
+              "evidence_ref": "qgis:training-counterfactual",
+              "source_type": "qgis_candidate_artifact",
+              "summary": "Synthetic QGIS slope evidence for the counterfactual training-only workspace.",
+              "content_hash": "qgis-training-counterfactual-hash",
+              "generated_at": "2026-09-01T09:41:59Z",
+              "observed_at": null,
+              "age_seconds": 3601,
+              "method": null,
+              "resolution": null,
+              "candidate_features": [
+                {
+                  "feature_id": "workspace:ev-training-qgis:0:steep_slope",
+                  "kind": "steep_slope",
+                  "claim": "A steep slope candidate is present near the northern corridor boundary.",
+                  "confidence": 0.75,
+                  "evidence_id": "ev-training-qgis",
+                  "candidate_only": true,
+                  "runtime_safety_truth": false
+                }
+              ],
+              "conflict_descriptions": [],
+              "candidate_only": true,
+              "runtime_safety_truth": false
+            }
+          ],
+          "evidence_refs": [
+            "route:training-counterfactual",
+            "dem:training-counterfactual",
+            "qgis:training-counterfactual"
+          ],
+          "irrelevant_evidence_refs": [],
+          "unknown_provenance_refs": [],
+          "sufficiency": {
+            "required_domains": [
+              "route",
+              "terrain"
+            ],
+            "available_domains": [
+              "route",
+              "terrain"
+            ],
+            "missing_domains": [],
+            "stale_domains": [
+              "route",
+              "terrain"
+            ],
+            "conflicted_domains": [],
+            "missing_evidence_refs": [],
+            "sufficient": false,
+            "behavior": "refresh_required",
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          },
+          "context_budget_tokens": 4096,
+          "estimated_tokens": 835,
+          "candidate_only": true,
+          "runtime_safety_truth": false
+        },
+        "user_query": "Find convex spur, drainage, and steep slope candidate evidence around the hypothetical training route.",
+        "available_tools": [
+          "workspace.snapshot.read",
+          "workspace.evidence.search",
+          "workspace.evidence.refresh",
+          "workspace.evidence.compare"
+        ],
+        "expected_tool_trace": [
+          {
+            "sequence": 1,
+            "tool_name": "workspace.snapshot.read",
+            "arguments": {
+              "snapshot_hash": "65becc31b67229654a8db8d5dfd0ddde00e7f502183e43c4eb743654442a54c1"
+            },
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          },
+          {
+            "sequence": 2,
+            "tool_name": "workspace.evidence.refresh",
+            "arguments": {
+              "stale_domains": [
+                "route",
+                "terrain"
+              ]
+            },
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          }
+        ],
+        "expected_response": {
+          "behavior": "refresh_required",
+          "required_evidence_refs": [
+            "route:training-counterfactual",
+            "dem:training-counterfactual",
+            "qgis:training-counterfactual"
+          ],
+          "missing_domains": [],
+          "stale_domains": [
+            "route",
+            "terrain"
+          ],
+          "conflicted_domains": [],
+          "must_preserve_unknown": false,
+          "must_request_refresh": true,
+          "must_preserve_conflict": false,
+          "candidate_only": true,
+          "runtime_safety_truth": false
+        },
+        "authority_constraints": {
+          "output_authority": "candidate",
+          "may_mutate_authoritative_state": false,
+          "may_send_notification": false,
+          "may_execute_emergency_action": false,
+          "denied_capabilities": [
+            "baseline.write",
+            "device.control",
+            "emergency.execute",
+            "mission.write",
+            "notification.send",
+            "permission.write",
+            "safety.write"
+          ],
+          "candidate_only": true,
+          "runtime_safety_truth": false
+        },
+        "evidence_requirements": [
+          {
+            "domain": "route",
+            "source_refs": [
+              "route:training-counterfactual"
+            ],
+            "required": true,
+            "freshness_required": true,
+            "preserve_conflict": false,
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          },
+          {
+            "domain": "terrain",
+            "source_refs": [
+              "dem:training-counterfactual",
+              "qgis:training-counterfactual"
+            ],
+            "required": true,
+            "freshness_required": true,
+            "preserve_conflict": false,
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          }
+        ],
+        "labels": [
+          "stale",
+          "synthetic",
+          "terrain_analysis",
+          "workspace_dependency"
+        ],
+        "generator_provenance": {
+          "generator_id": "scout.synthetic_workspace_generator.v0",
+          "generator_version": "v0",
+          "generated_at": "2026-09-01T10:43:00Z",
+          "source_case_id": "terrain-workspace-training-seed-v0-synthetic-seed-stale-v0",
+          "source_snapshot_hash": "65becc31b67229654a8db8d5dfd0ddde00e7f502183e43c4eb743654442a54c1",
+          "synthetic_evidence": true,
+          "teacher_model_id": null,
+          "candidate_only": true,
+          "runtime_safety_truth": false
+        },
+        "deterministic_verifier_refs": [
+          "verify:terrain-workspace-training-seed-v0-synthetic-seed-stale-v0:deterministic-v0"
+        ],
+        "human_review_ref": null,
+        "reviewed_by": null,
+        "reviewed_at": null,
+        "candidate_only": true,
+        "runtime_safety_truth": false
+      },
+      {
+        "schema_version": "scout.workspace_training_record.v0",
+        "record_id": "corpus:terrain-workspace-training-seed-v0-synthetic-seed-conflicted-v0:v0",
+        "record_hash": "26271886f4af996976148d453cf39ab2f43caa9f53843c1c6b2a3e3715efef84",
+        "source": "controlled_synthetic",
+        "split": "train",
+        "promotion_state": "deterministically_verified",
+        "workspace_snapshot": {
+          "schema_version": "scout.workspace_snapshot.v0",
+          "snapshot_id": "c43df28d-6a98-418d-8168-01e0db9f1ca4",
+          "snapshot_hash": "3be02ef11307fd861f8c1e51be62816edf71c8743a3fc192e224178697bdaf19",
+          "compiled_at": "2026-09-01T10:42:00Z",
+          "task_type": "terrain_analysis",
+          "question": "Find convex spur, drainage, and steep slope candidate evidence around the hypothetical training route.",
+          "workspace_binding": {
+            "workspace_id": "workspace-training-counterfactual",
+            "workspace_revision": "workspace-training-revision-1",
+            "mission_id": "mission-training-counterfactual",
+            "mission_version": "mission-training-version-1",
+            "route_id": "route-training-counterfactual",
+            "route_version": "route-training-version-1",
+            "input_hash": "835de4df57d1b96d78c34f76a961b4d9929c82d12b8501369815d9646b5b3c76",
+            "generated_at": "2026-09-01T10:42:00Z"
+          },
+          "mode": "conflicted",
+          "required_domains": [
+            "route",
+            "terrain"
+          ],
+          "facts": [
+            {
+              "fact_id": "workspace:ev-training-route",
+              "domain": "route",
+              "status": "available",
+              "authority": "candidate",
+              "evidence_id": "ev-training-route",
+              "evidence_ref": "route:training-counterfactual",
+              "source_type": "route_geometry",
+              "summary": "Hypothetical route geometry created only for controlled training research.",
+              "content_hash": "route-training-counterfactual-hash",
+              "generated_at": "2026-09-01T10:42:00Z",
+              "observed_at": null,
+              "age_seconds": 0,
+              "method": null,
+              "resolution": null,
+              "candidate_features": [],
+              "conflict_descriptions": [],
+              "candidate_only": true,
+              "runtime_safety_truth": false
+            },
+            {
+              "fact_id": "workspace:ev-training-dem",
+              "domain": "terrain",
+              "status": "conflicted",
+              "authority": "candidate",
+              "evidence_id": "ev-training-dem",
+              "evidence_ref": "dem:training-counterfactual",
+              "source_type": "prepared_dem",
+              "summary": "Synthetic DEM facts for a counterfactual training-only terrain pattern.",
+              "content_hash": "dem-training-counterfactual-hash",
+              "generated_at": "2026-09-01T10:42:00Z",
+              "observed_at": null,
+              "age_seconds": 0,
+              "method": null,
+              "resolution": null,
+              "candidate_features": [
+                {
+                  "feature_id": "workspace:ev-training-dem:0:convex_spur",
+                  "kind": "convex_spur",
+                  "claim": "A convex spur candidate appears east of the hypothetical route midpoint.",
+                  "confidence": 0.65,
+                  "evidence_id": "ev-training-dem",
+                  "candidate_only": true,
+                  "runtime_safety_truth": false
+                },
+                {
+                  "feature_id": "workspace:ev-training-dem:1:drainage",
+                  "kind": "drainage",
+                  "claim": "A drainage candidate intersects the southern analysis corridor.",
+                  "confidence": 0.55,
+                  "evidence_id": "ev-training-dem",
+                  "candidate_only": true,
+                  "runtime_safety_truth": false
+                }
+              ],
+              "conflict_descriptions": [
+                "Terrain evidence sources conflict."
+              ],
+              "candidate_only": true,
+              "runtime_safety_truth": false
+            },
+            {
+              "fact_id": "workspace:ev-training-qgis",
+              "domain": "terrain",
+              "status": "available",
+              "authority": "candidate",
+              "evidence_id": "ev-training-qgis",
+              "evidence_ref": "qgis:training-counterfactual",
+              "source_type": "qgis_candidate_artifact",
+              "summary": "Synthetic QGIS slope evidence for the counterfactual training-only workspace.",
+              "content_hash": "qgis-training-counterfactual-hash",
+              "generated_at": "2026-09-01T10:42:00Z",
+              "observed_at": null,
+              "age_seconds": 0,
+              "method": null,
+              "resolution": null,
+              "candidate_features": [
+                {
+                  "feature_id": "workspace:ev-training-qgis:0:steep_slope",
+                  "kind": "steep_slope",
+                  "claim": "A steep slope candidate is present near the northern corridor boundary.",
+                  "confidence": 0.75,
+                  "evidence_id": "ev-training-qgis",
+                  "candidate_only": true,
+                  "runtime_safety_truth": false
+                }
+              ],
+              "conflict_descriptions": [],
+              "candidate_only": true,
+              "runtime_safety_truth": false
+            }
+          ],
+          "evidence_refs": [
+            "route:training-counterfactual",
+            "dem:training-counterfactual",
+            "qgis:training-counterfactual"
+          ],
+          "irrelevant_evidence_refs": [],
+          "unknown_provenance_refs": [],
+          "sufficiency": {
+            "required_domains": [
+              "route",
+              "terrain"
+            ],
+            "available_domains": [
+              "route",
+              "terrain"
+            ],
+            "missing_domains": [],
+            "stale_domains": [],
+            "conflicted_domains": [
+              "terrain"
+            ],
+            "missing_evidence_refs": [],
+            "sufficient": false,
+            "behavior": "preserve_conflict",
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          },
+          "context_budget_tokens": 4096,
+          "estimated_tokens": 843,
+          "candidate_only": true,
+          "runtime_safety_truth": false
+        },
+        "user_query": "Find convex spur, drainage, and steep slope candidate evidence around the hypothetical training route.",
+        "available_tools": [
+          "workspace.snapshot.read",
+          "workspace.evidence.search",
+          "workspace.evidence.refresh",
+          "workspace.evidence.compare"
+        ],
+        "expected_tool_trace": [
+          {
+            "sequence": 1,
+            "tool_name": "workspace.snapshot.read",
+            "arguments": {
+              "snapshot_hash": "3be02ef11307fd861f8c1e51be62816edf71c8743a3fc192e224178697bdaf19"
+            },
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          },
+          {
+            "sequence": 2,
+            "tool_name": "workspace.evidence.compare",
+            "arguments": {
+              "conflicted_domains": [
+                "terrain"
+              ]
+            },
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          }
+        ],
+        "expected_response": {
+          "behavior": "preserve_conflict",
+          "required_evidence_refs": [
+            "route:training-counterfactual",
+            "dem:training-counterfactual",
+            "qgis:training-counterfactual"
+          ],
+          "missing_domains": [],
+          "stale_domains": [],
+          "conflicted_domains": [
+            "terrain"
+          ],
+          "must_preserve_unknown": false,
+          "must_request_refresh": false,
+          "must_preserve_conflict": true,
+          "candidate_only": true,
+          "runtime_safety_truth": false
+        },
+        "authority_constraints": {
+          "output_authority": "candidate",
+          "may_mutate_authoritative_state": false,
+          "may_send_notification": false,
+          "may_execute_emergency_action": false,
+          "denied_capabilities": [
+            "baseline.write",
+            "device.control",
+            "emergency.execute",
+            "mission.write",
+            "notification.send",
+            "permission.write",
+            "safety.write"
+          ],
+          "candidate_only": true,
+          "runtime_safety_truth": false
+        },
+        "evidence_requirements": [
+          {
+            "domain": "route",
+            "source_refs": [
+              "route:training-counterfactual"
+            ],
+            "required": true,
+            "freshness_required": true,
+            "preserve_conflict": false,
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          },
+          {
+            "domain": "terrain",
+            "source_refs": [
+              "dem:training-counterfactual",
+              "qgis:training-counterfactual"
+            ],
+            "required": true,
+            "freshness_required": true,
+            "preserve_conflict": true,
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          }
+        ],
+        "labels": [
+          "conflicted",
+          "synthetic",
+          "terrain_analysis",
+          "workspace_dependency"
+        ],
+        "generator_provenance": {
+          "generator_id": "scout.synthetic_workspace_generator.v0",
+          "generator_version": "v0",
+          "generated_at": "2026-09-01T10:43:00Z",
+          "source_case_id": "terrain-workspace-training-seed-v0-synthetic-seed-conflicted-v0",
+          "source_snapshot_hash": "3be02ef11307fd861f8c1e51be62816edf71c8743a3fc192e224178697bdaf19",
+          "synthetic_evidence": true,
+          "teacher_model_id": null,
+          "candidate_only": true,
+          "runtime_safety_truth": false
+        },
+        "deterministic_verifier_refs": [
+          "verify:terrain-workspace-training-seed-v0-synthetic-seed-conflicted-v0:deterministic-v0"
+        ],
+        "human_review_ref": null,
+        "reviewed_by": null,
+        "reviewed_at": null,
+        "candidate_only": true,
+        "runtime_safety_truth": false
+      },
+      {
+        "schema_version": "scout.workspace_training_record.v0",
+        "record_id": "corpus:terrain-workspace-training-seed-v0-synthetic-seed-no_workspace-v0:v0",
+        "record_hash": "2c1f9f91d25d4b92802d31142a7bd87c37846e0ebe85f0ae6b36ff6b51a37b77",
+        "source": "controlled_synthetic",
+        "split": "train",
+        "promotion_state": "deterministically_verified",
+        "workspace_snapshot": {
+          "schema_version": "scout.workspace_snapshot.v0",
+          "snapshot_id": "cfdb9820-3cf1-45ab-b89b-1154c5755f58",
+          "snapshot_hash": "af7d81aa68e36e2dcf619280925b31147eb9ef7b93e997d047de357cfbcc74d6",
+          "compiled_at": "2026-09-01T10:42:00Z",
+          "task_type": "terrain_analysis",
+          "question": "Find convex spur, drainage, and steep slope candidate evidence around the hypothetical training route.",
+          "workspace_binding": {
+            "workspace_id": "workspace-training-counterfactual",
+            "workspace_revision": "workspace-training-revision-1",
+            "mission_id": "mission-training-counterfactual",
+            "mission_version": "mission-training-version-1",
+            "route_id": "route-training-counterfactual",
+            "route_version": "route-training-version-1",
+            "input_hash": "835de4df57d1b96d78c34f76a961b4d9929c82d12b8501369815d9646b5b3c76",
+            "generated_at": "2026-09-01T10:42:00Z"
+          },
+          "mode": "no_workspace",
+          "required_domains": [
+            "route",
+            "terrain"
+          ],
+          "facts": [],
+          "evidence_refs": [],
+          "irrelevant_evidence_refs": [],
+          "unknown_provenance_refs": [],
+          "sufficiency": {
+            "required_domains": [
+              "route",
+              "terrain"
+            ],
+            "available_domains": [],
+            "missing_domains": [
+              "route",
+              "terrain"
+            ],
+            "stale_domains": [],
+            "conflicted_domains": [],
+            "missing_evidence_refs": [
+              "route:training-counterfactual",
+              "dem:training-counterfactual",
+              "qgis:training-counterfactual"
+            ],
+            "sufficient": false,
+            "behavior": "more_evidence_required",
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          },
+          "context_budget_tokens": 4096,
+          "estimated_tokens": 242,
+          "candidate_only": true,
+          "runtime_safety_truth": false
+        },
+        "user_query": "Find convex spur, drainage, and steep slope candidate evidence around the hypothetical training route.",
+        "available_tools": [
+          "workspace.snapshot.read",
+          "workspace.evidence.search",
+          "workspace.evidence.refresh",
+          "workspace.evidence.compare"
+        ],
+        "expected_tool_trace": [
+          {
+            "sequence": 1,
+            "tool_name": "workspace.snapshot.read",
+            "arguments": {
+              "snapshot_hash": "af7d81aa68e36e2dcf619280925b31147eb9ef7b93e997d047de357cfbcc74d6"
+            },
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          },
+          {
+            "sequence": 2,
+            "tool_name": "workspace.evidence.search",
+            "arguments": {
+              "missing_domains": [
+                "route",
+                "terrain"
+              ]
+            },
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          }
+        ],
+        "expected_response": {
+          "behavior": "more_evidence_required",
+          "required_evidence_refs": [],
+          "missing_domains": [
+            "route",
+            "terrain"
+          ],
+          "stale_domains": [],
+          "conflicted_domains": [],
+          "must_preserve_unknown": true,
+          "must_request_refresh": false,
+          "must_preserve_conflict": false,
+          "candidate_only": true,
+          "runtime_safety_truth": false
+        },
+        "authority_constraints": {
+          "output_authority": "candidate",
+          "may_mutate_authoritative_state": false,
+          "may_send_notification": false,
+          "may_execute_emergency_action": false,
+          "denied_capabilities": [
+            "baseline.write",
+            "device.control",
+            "emergency.execute",
+            "mission.write",
+            "notification.send",
+            "permission.write",
+            "safety.write"
+          ],
+          "candidate_only": true,
+          "runtime_safety_truth": false
+        },
+        "evidence_requirements": [
+          {
+            "domain": "route",
+            "source_refs": [],
+            "required": true,
+            "freshness_required": true,
+            "preserve_conflict": false,
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          },
+          {
+            "domain": "terrain",
+            "source_refs": [],
+            "required": true,
+            "freshness_required": true,
+            "preserve_conflict": false,
+            "candidate_only": true,
+            "runtime_safety_truth": false
+          }
+        ],
+        "labels": [
+          "no_workspace",
+          "synthetic",
+          "terrain_analysis",
+          "workspace_dependency"
+        ],
+        "generator_provenance": {
+          "generator_id": "scout.synthetic_workspace_generator.v0",
+          "generator_version": "v0",
+          "generated_at": "2026-09-01T10:43:00Z",
+          "source_case_id": "terrain-workspace-training-seed-v0-synthetic-seed-no_workspace-v0",
+          "source_snapshot_hash": "af7d81aa68e36e2dcf619280925b31147eb9ef7b93e997d047de357cfbcc74d6",
+          "synthetic_evidence": true,
+          "teacher_model_id": null,
+          "candidate_only": true,
+          "runtime_safety_truth": false
+        },
+        "deterministic_verifier_refs": [
+          "verify:terrain-workspace-training-seed-v0-synthetic-seed-no_workspace-v0:deterministic-v0"
+        ],
+        "human_review_ref": null,
+        "reviewed_by": null,
+        "reviewed_at": null,
+        "candidate_only": true,
+        "runtime_safety_truth": false
+      }
+    ],
+    "verification_receipts": [
+      {
+        "schema_version": "scout.corpus_verification_receipt.v0",
+        "verification_id": "verify:terrain-workspace-training-seed-v0-synthetic-seed-full-v0:deterministic-v0",
+        "record_id": "corpus:terrain-workspace-training-seed-v0-synthetic-seed-full-v0:v0",
+        "record_hash": "355b94c7533f773ca473e0cbefef12bb6b4352d64b2bb43e7b908d9f62a54f0d",
+        "verifier_id": "scout.synthetic_workspace_verifier.v0",
+        "verified_at": "2026-09-01T10:43:00Z",
+        "checks": [
+          {
+            "check_id": "record_hash",
+            "passed": true,
+            "summary": "Record content is bound to its declared hash."
+          },
+          {
+            "check_id": "workspace_behavior",
+            "passed": true,
+            "summary": "Expected behavior follows the typed Workspace sufficiency state."
+          },
+          {
+            "check_id": "authority_boundary",
+            "passed": true,
+            "summary": "Record remains candidate-only and cannot mutate Scout authority."
+          },
+          {
+            "check_id": "tool_scope",
+            "passed": true,
+            "summary": "Expected tool calls remain inside the declared read-only toolset."
+          },
+          {
+            "check_id": "synthetic_label",
+            "passed": true,
+            "summary": "Synthetic evidence is explicitly labeled and traceable."
+          }
+        ],
+        "accepted": true,
+        "candidate_only": true,
+        "runtime_safety_truth": false
+      },
+      {
+        "schema_version": "scout.corpus_verification_receipt.v0",
+        "verification_id": "verify:terrain-workspace-training-seed-v0-synthetic-seed-missing-v0:deterministic-v0",
+        "record_id": "corpus:terrain-workspace-training-seed-v0-synthetic-seed-missing-v0:v0",
+        "record_hash": "cbf642ec6bba0cb0d57535d763714e6303f2c4f1c7b525d99a99126d7807aada",
+        "verifier_id": "scout.synthetic_workspace_verifier.v0",
+        "verified_at": "2026-09-01T10:43:00Z",
+        "checks": [
+          {
+            "check_id": "record_hash",
+            "passed": true,
+            "summary": "Record content is bound to its declared hash."
+          },
+          {
+            "check_id": "workspace_behavior",
+            "passed": true,
+            "summary": "Expected behavior follows the typed Workspace sufficiency state."
+          },
+          {
+            "check_id": "authority_boundary",
+            "passed": true,
+            "summary": "Record remains candidate-only and cannot mutate Scout authority."
+          },
+          {
+            "check_id": "tool_scope",
+            "passed": true,
+            "summary": "Expected tool calls remain inside the declared read-only toolset."
+          },
+          {
+            "check_id": "synthetic_label",
+            "passed": true,
+            "summary": "Synthetic evidence is explicitly labeled and traceable."
+          }
+        ],
+        "accepted": true,
+        "candidate_only": true,
+        "runtime_safety_truth": false
+      },
+      {
+        "schema_version": "scout.corpus_verification_receipt.v0",
+        "verification_id": "verify:terrain-workspace-training-seed-v0-synthetic-seed-stale-v0:deterministic-v0",
+        "record_id": "corpus:terrain-workspace-training-seed-v0-synthetic-seed-stale-v0:v0",
+        "record_hash": "4db23dc7175298d1551f07a2d2e2416a8a39be450eb63490776b4de43ed9a682",
+        "verifier_id": "scout.synthetic_workspace_verifier.v0",
+        "verified_at": "2026-09-01T10:43:00Z",
+        "checks": [
+          {
+            "check_id": "record_hash",
+            "passed": true,
+            "summary": "Record content is bound to its declared hash."
+          },
+          {
+            "check_id": "workspace_behavior",
+            "passed": true,
+            "summary": "Expected behavior follows the typed Workspace sufficiency state."
+          },
+          {
+            "check_id": "authority_boundary",
+            "passed": true,
+            "summary": "Record remains candidate-only and cannot mutate Scout authority."
+          },
+          {
+            "check_id": "tool_scope",
+            "passed": true,
+            "summary": "Expected tool calls remain inside the declared read-only toolset."
+          },
+          {
+            "check_id": "synthetic_label",
+            "passed": true,
+            "summary": "Synthetic evidence is explicitly labeled and traceable."
+          }
+        ],
+        "accepted": true,
+        "candidate_only": true,
+        "runtime_safety_truth": false
+      },
+      {
+        "schema_version": "scout.corpus_verification_receipt.v0",
+        "verification_id": "verify:terrain-workspace-training-seed-v0-synthetic-seed-conflicted-v0:deterministic-v0",
+        "record_id": "corpus:terrain-workspace-training-seed-v0-synthetic-seed-conflicted-v0:v0",
+        "record_hash": "26271886f4af996976148d453cf39ab2f43caa9f53843c1c6b2a3e3715efef84",
+        "verifier_id": "scout.synthetic_workspace_verifier.v0",
+        "verified_at": "2026-09-01T10:43:00Z",
+        "checks": [
+          {
+            "check_id": "record_hash",
+            "passed": true,
+            "summary": "Record content is bound to its declared hash."
+          },
+          {
+            "check_id": "workspace_behavior",
+            "passed": true,
+            "summary": "Expected behavior follows the typed Workspace sufficiency state."
+          },
+          {
+            "check_id": "authority_boundary",
+            "passed": true,
+            "summary": "Record remains candidate-only and cannot mutate Scout authority."
+          },
+          {
+            "check_id": "tool_scope",
+            "passed": true,
+            "summary": "Expected tool calls remain inside the declared read-only toolset."
+          },
+          {
+            "check_id": "synthetic_label",
+            "passed": true,
+            "summary": "Synthetic evidence is explicitly labeled and traceable."
+          }
+        ],
+        "accepted": true,
+        "candidate_only": true,
+        "runtime_safety_truth": false
+      },
+      {
+        "schema_version": "scout.corpus_verification_receipt.v0",
+        "verification_id": "verify:terrain-workspace-training-seed-v0-synthetic-seed-no_workspace-v0:deterministic-v0",
+        "record_id": "corpus:terrain-workspace-training-seed-v0-synthetic-seed-no_workspace-v0:v0",
+        "record_hash": "2c1f9f91d25d4b92802d31142a7bd87c37846e0ebe85f0ae6b36ff6b51a37b77",
+        "verifier_id": "scout.synthetic_workspace_verifier.v0",
+        "verified_at": "2026-09-01T10:43:00Z",
+        "checks": [
+          {
+            "check_id": "record_hash",
+            "passed": true,
+            "summary": "Record content is bound to its declared hash."
+          },
+          {
+            "check_id": "workspace_behavior",
+            "passed": true,
+            "summary": "Expected behavior follows the typed Workspace sufficiency state."
+          },
+          {
+            "check_id": "authority_boundary",
+            "passed": true,
+            "summary": "Record remains candidate-only and cannot mutate Scout authority."
+          },
+          {
+            "check_id": "tool_scope",
+            "passed": true,
+            "summary": "Expected tool calls remain inside the declared read-only toolset."
+          },
+          {
+            "check_id": "synthetic_label",
+            "passed": true,
+            "summary": "Synthetic evidence is explicitly labeled and traceable."
+          }
+        ],
+        "accepted": true,
+        "candidate_only": true,
+        "runtime_safety_truth": false
+      }
+    ],
+    "candidate_only": true,
+    "runtime_safety_truth": false
+  },
+  "training_eligible_count": 0,
+  "candidate_only": true,
+  "runtime_safety_truth": false,
+  "artifact_hash": "4b69d6b9760ef97e9fd6f1cd7cfba84e752894d6515a46abc7ec2f5ca1290fb1"
+}

@@ -6,6 +6,11 @@ import os
 from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
+from scout.agents.pydantic_model_lifecycle import (
+    build_owned_openai_provider,
+    manage_new_chat_model,
+)
+
 OPENAI_KEY_ENV = "OPENAI_API_KEY"
 OPENROUTER_KEY_ENV = "OPENROUTER_API_KEY"
 NVIDIA_KEY_ENV = "NVIDIA_API_KEY"
@@ -124,10 +129,10 @@ def build_chat_model(
             from pydantic_ai.models.openrouter import OpenRouterModel
             from pydantic_ai.providers.openrouter import OpenRouterProvider
 
-            return OpenRouterModel(
+            return manage_new_chat_model(OpenRouterModel(
                 normalized_name,
                 provider=OpenRouterProvider(api_key=api_key or os.getenv(OPENROUTER_KEY_ENV)),
-            )
+            ))
         except ImportError:
             # Older Pydantic AI releases did not expose the dedicated
             # OpenRouter provider; keep the OpenAI-compatible path available.
@@ -158,14 +163,9 @@ def build_chat_model(
         api_key=api_key,
     )
     if is_nvidia_model:
-        from openai import AsyncOpenAI
-
-        provider = OpenAIProvider(
-            openai_client=AsyncOpenAI(
-                base_url=base_url,
-                api_key=resolved_api_key,
-                max_retries=0,
-            )
+        provider = build_owned_openai_provider(
+            base_url=base_url,
+            api_key=resolved_api_key,
         )
     else:
         provider = OpenAIProvider(
@@ -179,10 +179,10 @@ def build_chat_model(
         model_type = ScoutHailoOpenAIChatModel
     else:
         model_type = OpenAIChatModel
-    return model_type(
+    return manage_new_chat_model(model_type(
         _strip_openai_chat_prefix(model_name),
         provider=provider,
-    )
+    ))
 
 
 def normalize_chat_model_name(model_name: str) -> str:

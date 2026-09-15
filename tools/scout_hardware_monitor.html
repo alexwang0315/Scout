@@ -280,7 +280,7 @@
             <div>
               <p class="panel-kicker">SCOUT 主機 / 硬體觀測</p>
               <h1 id="hardwareMonitorTitle" class="panel-title">硬體監控</h1>
-              <p class="panel-note">Scout 主機的最新採樣，每 60 秒更新。</p>
+              <p class="panel-note">Scout 主機的最新採樣，每 60 秒讀取；斷線後自動重試。</p>
             </div>
             <div class="hardware-source-badge"><span aria-hidden="true">◉</span><span>Scout 主機 · 唯讀</span></div>
           </div>
@@ -899,6 +899,7 @@
         if (stateName === "stale") message = `資料已過期：${summary}`;
         else if (stateName === "unavailable") message = `與 Scout 硬體 API 斷線：${summary}${hardwareDataAge() > 150 ? " 上次資料已過期。" : ""}`;
         if (nextStep && stateName !== "ok") message += ` 下一步：${nextStep}`;
+        if (stateName === "unavailable") message += " 每 60 秒自動重試，也可按重新讀取立即重試。";
         setText("hardwareNoticeText", message);
       }
 

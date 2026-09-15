@@ -18,6 +18,10 @@ from pydantic_ai import Agent  # noqa: E402
 
 from assistant_models import AssistantSurface, ScoutAssistantQuery  # noqa: E402
 from assistant_pydantic_provider import _serialize_pydantic_result_usage  # noqa: E402
+from scout.agents.pydantic_model_lifecycle import (
+    manage_new_chat_model,
+    pydantic_model_session,
+)
 from pydantic_ai_runtime_compat import (  # noqa: E402
     build_chat_model,
     pydantic_agent_runtime_kwargs,
@@ -90,14 +94,19 @@ class NvidiaCloudGroundedRunner:
         os.environ.setdefault("OPENAI_MAX_RETRIES", "0")
         self.model_name = model_name
         self.max_tokens = max_tokens
+        self._owned_model = build_chat_model(model_name=model_name, api_key=api_key)
         self.agent = Agent(
-            build_chat_model(model_name=model_name, api_key=api_key),
+            self._owned_model,
             system_prompt=CLOUD_GROUNDED_SYSTEM_PROMPT,
             capabilities=pydantic_native_research_capabilities_for_model(model_name),
             **pydantic_agent_runtime_kwargs(),
         )
 
+    @pydantic_model_session()
     def run(self, prompt: str, *, timeout_seconds: int) -> tuple[str, dict[str, int]]:
+        # This runner constructs and owns its model. Re-entering its public
+        # context reopens a previously closed owned client for a new session.
+        manage_new_chat_model(self._owned_model)
         model_settings: dict[str, object] = {"temperature": 0}
         if self.max_tokens is not None:
             model_settings["max_tokens"] = self.max_tokens
@@ -113,6 +122,7 @@ class NvidiaCloudGroundedRunner:
         )
 
 
+@pydantic_model_session()
 def run_eval(args: argparse.Namespace) -> dict[str, Any]:
     workspace_root = args.workspace_root.expanduser().resolve()
     project_root = workspace_root / args.project_id
