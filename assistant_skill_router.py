@@ -1466,8 +1466,10 @@ def _resolve_pretrip_cp_count(
         return None
 
     summary = _pretrip_context_summary(sources)
-    cp_count = summary.get("cp_count") or summary.get("checkpoint_candidate_count")
-    if not isinstance(cp_count, int):
+    cp_count = summary.get("cp_count")
+    if cp_count is None:
+        cp_count = summary.get("checkpoint_candidate_count")
+    if isinstance(cp_count, bool) or not isinstance(cp_count, int) or cp_count < 0:
         return None
 
     source_id = "assistant_context.pretrip"
@@ -1546,20 +1548,45 @@ def _resolve_pretrip_place_to_cp(
 
 def _looks_like_place_to_cp_question(question: str) -> bool:
     normalized = question.lower().replace(" ", "")
-    cp_terms = ("cp", "checkpoint", "檢查點")
     place_terms = ("附近", "靠近", "第幾", "哪個", "接近")
-    return any(term in normalized for term in cp_terms) and any(
-        term in normalized for term in place_terms
+    unsupported_fields = re.search(
+        r"半徑|radius|座標|坐標|coordinate|可信|信心|confidence|"
+        r"精度|accuracy|時間|多久|duration|里程|mileage|gpx",
+        normalized,
+    ) is not None
+    return (
+        _mentions_checkpoint(question)
+        and not _has_compound_shortcut_request(question)
+        and not unsupported_fields
+        and any(term in normalized for term in place_terms)
     )
 
 
 def _looks_like_cp_count_question(question: str) -> bool:
-    normalized = question.lower().replace(" ", "")
-    cp_terms = ("cp", "checkpoint", "檢查點")
-    count_terms = ("多少", "幾個", "幾個", "總數", "count", "number")
+    lowered = question.casefold()
+    normalized = re.sub(r"\s+", "", lowered)
+    cp_mentioned = _mentions_checkpoint(question)
+    other_entity = re.search(
+        r"(?<![a-z0-9_])(?:mcps?|boss|segments?|gpx|tracks?)(?![a-z0-9_])", lowered
+    ) is not None
+    # This shortcut can answer only one CP cardinality, not a comparison,
+    # a field lookup, or another entity whose spelling contains 'cp'.
+    additional_fields = any(
+        term in normalized
+        for term in (
+            "距離", "里程", "時間", "海拔", "名稱", "名字", "第一", "最後",
+            "座標", "坐標", "軌跡", "半徑", "coordinate", "radius",
+            "列出", "分別", "路段", "與", "以及", "比較", "各",
+            "distance", "length", "name", "first", "last", "list",
+        )
+    ) or re.search(r"\band\b", lowered) is not None
+    count_terms = ("多少", "幾個", "總數", "count", "number", "howmany")
     place_to_cp_terms = ("第幾", "附近", "靠近", "哪個", "接近")
     return (
-        any(term in normalized for term in cp_terms)
+        cp_mentioned
+        and not other_entity
+        and not additional_fields
+        and not _has_compound_shortcut_request(question)
         and any(term in normalized for term in count_terms)
         and not any(term in normalized for term in place_to_cp_terms)
     )
@@ -1595,9 +1622,8 @@ def _match_place_link(
             if name and name in question:
                 candidates.append((len(name), link))
                 break
-    if not candidates:
+    if len(candidates) != 1:
         return None
-    candidates.sort(key=lambda item: item[0], reverse=True)
     return candidates[0][1]
 
 
@@ -1639,3 +1665,24 @@ def _skill_sources(
         },
     )
     return [skill_source, *sources]
+
+
+def _mentions_checkpoint(question: str) -> bool:
+    return "檢查點" in question or re.search(
+        r"(?<![a-z0-9_])(?:cps?|checkpoints?)(?![a-z0-9_])",
+        question,
+        re.IGNORECASE,
+    ) is not None
+
+
+def _has_compound_shortcut_request(question: str) -> bool:
+    # A one-field shortcut must not consume a second request or comparison.
+    clauses = [part.strip() for part in re.split(r"[?？;；。!！\n]", question)]
+    if sum(bool(part) for part in clauses) > 1:
+        return True
+    return re.search(
+        r"和|與|以及|同時|另外|並且|比較|對比|差別|差異|各|"
+        r"\b(?:and|also|versus|vs\.?|compare|comparison|difference)\b",
+        question,
+        re.IGNORECASE,
+    ) is not None

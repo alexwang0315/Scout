@@ -4,6 +4,7 @@ import hashlib
 import json
 import re
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 from typing import Any, Literal
 
@@ -153,7 +154,8 @@ def write_local_evidence_sqlite_index(
         temporary.unlink()
 
     try:
-        with sqlite3.connect(temporary) as conn:
+        # The transaction context does not close SQLite's file handle.
+        with closing(sqlite3.connect(temporary)) as conn, conn:
             _initialize_sqlite_index(conn)
             _write_sqlite_metadata(conn, index)
             _write_sqlite_records(conn, index)
@@ -229,7 +231,7 @@ def query_local_evidence_sqlite_index(
         limit = 0
 
     path = Path(index_path)
-    with sqlite3.connect(path) as conn:
+    with closing(sqlite3.connect(path)) as conn, conn:
         conn.row_factory = sqlite3.Row
         metadata = _read_sqlite_metadata(conn)
         project_id = _required_metadata(metadata, "project_id")

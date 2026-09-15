@@ -129,12 +129,6 @@ def search_project_terrain_scores(
     highest_metric_segment = _highest_metric_segment(compact_results)
     dtm_coverage_summary = _load_dtm_coverage_summary(root, project)
     missing_fields = [] if compact_results else ["terrain_score_results"]
-    answerability = (
-        "terrain_score_decision_available"
-        if compact_results
-        else "terrain_score_missing_evidence"
-    )
-    decision = _terrain_decision(compact_results)
     query_field_answer, query_source_refs = _terrain_query_field_answer(
         root=root,
         project=project,
@@ -142,6 +136,19 @@ def search_project_terrain_scores(
         results=compact_results,
         highest_metric_segment=highest_metric_segment,
     )
+    decision_applicable = not _terrain_query_is_factual(
+        query, has_field_answer=bool(query_field_answer)
+    )
+    answerability = (
+        (
+            "terrain_score_decision_available"
+            if decision_applicable
+            else "terrain_score_evidence_available"
+        )
+        if compact_results
+        else "terrain_score_missing_evidence"
+    )
+    decision = _terrain_decision(compact_results) if decision_applicable else None
     field_answer = query_field_answer or _field_answer(
         query=query,
         decision=decision,
@@ -184,7 +191,7 @@ def search_project_terrain_scores(
         field_answer=field_answer,
         metric=resolved_metric,
         missing_fields=missing_fields,
-    )
+    ) if decision is not None else {}
 
     return {
         "tool_id": TERRAIN_SCORE_TOOL_ID,
@@ -193,10 +200,13 @@ def search_project_terrain_scores(
         "query": query,
         "source_status": "candidate_only",
         "answerability": answerability,
+        "decision_applicable": decision_applicable,
         "decision": decision,
         "decision_output": decision_output,
         "field_answer": field_answer,
-        "field_answer_priority": 100 if query_field_answer else _field_answer_priority(query),
+        "field_answer_priority": (
+            100 if query_field_answer else _field_answer_priority(query)
+        ) if field_answer else 10,
         "field_answer_source_ref": field_answer_source_ref,
         "field_answer_source_refs": query_source_refs,
         "source_ref": field_answer_source_ref,
@@ -205,13 +215,17 @@ def search_project_terrain_scores(
         "highest_metric_segment": highest_metric_segment,
         "dtm_coverage_summary": dtm_coverage_summary,
         "terrain_decision": {
-            "role": "Terrain / Slope Hazard Decision",
+            "role": (
+                "Terrain / Slope Hazard Decision"
+                if decision_applicable
+                else "Terrain / Slope Evidence"
+            ),
             "candidate_only": True,
             "runtime_safety_truth": False,
             "decision": decision,
             "decision_output": decision_output,
             "highest_terrain_result": compact_results[0] if compact_results else None,
-            "next_action": decision_output["nextAction"],
+            "next_action": decision_output.get("nextAction"),
         },
         "metric": resolved_metric,
         "filters": {
@@ -756,7 +770,7 @@ def _terrain_decision(results: list[dict[str, Any]]) -> str:
 def _field_answer(
     *,
     query: str,
-    decision: str,
+    decision: str | None,
     results: list[dict[str, Any]],
     answerability: str,
     metric: str,
@@ -787,6 +801,8 @@ def _field_answer(
             f"{', '.join(incomplete_ids)}；"
             "此結果只是 tile metadata，不代表 raster pixel 已完整覆蓋。"
         )
+    if decision is None:
+        return ""
     if (
         re.search(r"segment|路段", query, flags=re.IGNORECASE)
         and re.search(r"teii(?:_20m)?|最高|highest", query, flags=re.IGNORECASE)
@@ -1611,3 +1627,55 @@ def _closed_boundary() -> dict[str, bool]:
         "hardware_control_allowed": False,
         "raw_payloads_embedded": False,
     }
+
+
+def _terrain_query_requests_decision(query: str) -> bool:
+    # Quoted labels and explicit exclusions are not requests for permission.
+    text = re.sub(r'`[^`]*`|"[^"]*"|「[^」]*」|“[^”]*”', "", query)
+    for clause in re.split(r"[,，。;；?？!！\n]", text):
+        if re.search(
+            r"(?:不要|請勿|不必|不用)\s*(?:判斷|評估|決定|建議|回答)|"
+            r"\b(?:do\s+not|don't)\s+(?:decide|assess|judge|evaluate|advise|recommend|tell)\b|"
+            r"\bnot\s+asking\b",
+            clause,
+            re.IGNORECASE,
+        ):
+            continue
+        if re.search(
+            r"(?:能否|可否|能不能|可不可以|是否(?:可以|能|要|應該)|可以|"
+            r"該不該|應不應該|應該|是否需要|要不要).{0,24}"
+            r"(?:繼續|通過|走|前進|進入|停止|停下|停|撤退|折返)|"
+            r"(?:是否|是不是|夠不夠)安全|安全嗎|"
+            r"\b(?:(?:can|may|could|should|must)\s+(?:i|we|the\s+team)|"
+            r"(?:i|we|the\s+team)\s+(?:can|may|could|should|must))\b"
+            r".{0,60}\b(?:proceed|continue|cross|pass|enter|stop|retreat|turn\s+back)\b|"
+            r"\b(?:is|are)\s+(?:(?:this|that|the|these|those)\s+)?"
+            r"(?:terrain|routes?|segments?|slopes?|it|this|that)\s+(?:really\s+)?safe\b|"
+            r"\bgo\s*/\s*no[- ]?go\s+(?:decision|assessment)\b",
+            clause,
+            re.IGNORECASE,
+        ):
+            return True
+    return False
+
+
+
+def _terrain_query_is_factual(query: str, *, has_field_answer: bool) -> bool:
+    if _terrain_query_requests_decision(query):
+        return False
+    return has_field_answer or _has_any_text(
+        query,
+        (
+            "欄位", "來源", "檔案", "目錄", "筆數", "記錄數", "紀錄數",
+            "總數", "幾筆", "幾個", "多少", "數量", "統計", "分類", "類別", "種類",
+            "里程", "累積距離", "座標", "坐標", "半徑", "單位", "可信度",
+            "比較", "差別", "對照", "覆蓋", "支援距離",
+        ),
+    ) or re.search(
+        r"\b(?:metadata|schema|catalog|columns?|fields?|crs|source_refs?|sources?|"
+        r"provenance|units?|confidence|categories|category|counts?|mileage|gpx|"
+        r"coordinates?|radius|compare|comparison|difference|coverage)\b|"
+        r"\b(?:how\s+many|number\s+of|group\s+by)\b",
+        query,
+        re.IGNORECASE,
+    ) is not None
