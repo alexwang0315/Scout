@@ -139,6 +139,8 @@ def build_reference_segment_timing(
     source_index_ref: str = DEFAULT_SOURCE_INDEX_REF,
     route_guide_timing_ref: str = DEFAULT_ROUTE_GUIDE_TIMING_REF,
     target_segments: tuple[ReferenceSegmentSpec, ...] | None = None,
+    timing_nodes: list[ReferenceTimingNode] | None = None,
+    allow_external_sources: bool = True,
 ) -> dict[str, Any]:
     project_root = Path(project_root)
     project_path = project_root / "project.json"
@@ -154,10 +156,13 @@ def build_reference_segment_timing(
     guide_candidates = _load_json(guide_path) if guide_path.exists() else []
     guide_graph = _guide_graph(guide_candidates if isinstance(guide_candidates, list) else [])
 
-    existing_sources = [
-        source for source in source_records if Path(str(source.get("original_path") or "")).exists()
-    ]
-    workspace_nodes = (
+    from pretrip_gpx_source_resolution import resolve_gpx_sources
+
+    existing_sources, source_resolution = resolve_gpx_sources(
+        project_root, source_records,
+        allow_external_original_paths=allow_external_sources,
+    )
+    workspace_nodes = timing_nodes if timing_nodes is not None else (
         _workspace_route_timing_nodes(project_root, project)
         if target_segments is None
         else []
@@ -276,6 +281,10 @@ def build_reference_segment_timing(
         "evidence_type": "pretrip_reference_segment_timing",
         "counts": {
             "source_file_count": len(source_records),
+            "unique_content_source_count": len(existing_sources),
+            "duplicate_content_source_count": sum(
+                item["status"] == "duplicate_content" for item in source_resolution
+            ),
             "existing_source_file_count": len(existing_sources),
             "timed_source_file_count": timed_source_count,
             "time_quality_rejected_source_file_count": (
@@ -315,6 +324,7 @@ def build_reference_segment_timing(
         },
         "checkpoint_match_quality": checkpoint_quality,
         "source_time_quality": source_time_quality,
+        "source_resolution": source_resolution,
         "segments": segment_summaries,
         "data_quality": {
             "source_file_count": len(source_records),

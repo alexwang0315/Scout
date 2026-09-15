@@ -1338,6 +1338,22 @@ class BaselineProposalSummary(WorkbenchModel):
     source_route_days_planning_authority: bool = False
 
 
+class BaselineDayFineTune(WorkbenchModel):
+    """Human planning inputs; historical quantiles and runtime policy stay separate."""
+
+    departure_at: datetime | None = None
+    duration_minutes: float | None = Field(default=None, gt=0, le=5760, allow_inf_nan=False)
+    extra_stop_minutes: float = Field(default=0, ge=0, le=1440, allow_inf_nan=False)
+    note: str = Field(default="", max_length=2000)
+
+    @field_validator("departure_at")
+    @classmethod
+    def require_departure_timezone(cls, value: datetime | None) -> datetime | None:
+        if value is not None and value.utcoffset() is None:
+            raise ValueError("Planning departure must include its timezone")
+        return value
+
+
 class BaselineDayDraft(WorkbenchModel):
     mission_day_id: str
     source_text: str
@@ -1360,6 +1376,7 @@ class BaselineDayDraft(WorkbenchModel):
     )
     uncertainty_ids: list[str] = Field(default_factory=list)
     review_summary: str | None = None
+    fine_tune: BaselineDayFineTune | None = None
 
 
 class MissionBaselineDraft(WorkbenchModel):
@@ -1520,6 +1537,7 @@ class BaselineReviewAcceptRequest(WorkbenchModel):
     reviewed_day_ids: list[str] = Field(default_factory=list)
     acknowledged_uncertainty_ids: list[str] = Field(default_factory=list)
     safety_handoff_acknowledged: bool = False
+    expected_reviewed_baseline_sha256: str | None = Field(default=None, exclude=True)
 
     @field_validator("reviewed_day_ids", "acknowledged_uncertainty_ids")
     @classmethod
@@ -8293,6 +8311,33 @@ class ContextualPermissionWorkbench:
         )
 
     def accept_reviewed_baseline(
+        self, request: BaselineReviewAcceptRequest
+    ) -> BaselineReviewAcceptReceipt:
+        if not request.explicit_confirmation:
+            raise ContextualPermissionConflict("explicit_confirmation_required", "Accept Reviewed Baseline requires explicit confirmation.")
+        # Every acceptance entrypoint shares this lock. A stale panel cannot
+        # replace a newer selected plan; exact retries retain the existing receipt.
+        lock_path = self._resolve_project_write_path("reviews", ".mission-baseline-accept.lock")
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with lock_path.open("a+b") as handle:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            try:
+                review_id = f"review.{_fixed_hash(request.idempotency_key)[:16]}"
+                receipt = self._resolve_project_ref(
+                    f"reviews/mission_baseline_accept_receipts/{review_id}.json"
+                )
+                if request.expected_reviewed_baseline_sha256 is not None and not receipt.is_file():
+                    project = json.loads(self._resolve_project_ref("project.json").read_text())
+                    selected = str(project.get("reviewed_mission_baseline_sha256") or "")
+                    if selected != request.expected_reviewed_baseline_sha256:
+                        raise ContextualPermissionConflict(
+                            "planning_version_conflict", "Permission 已有較新的計畫，請先載入並比較；未覆寫。"
+                        )
+                return self._accept_reviewed_baseline(request)
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+    def _accept_reviewed_baseline(
         self, request: BaselineReviewAcceptRequest
     ) -> BaselineReviewAcceptReceipt:
         if not request.explicit_confirmation:

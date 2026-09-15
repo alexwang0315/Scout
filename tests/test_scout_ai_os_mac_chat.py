@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 
 from scout.mac_chat import create_mac_chat_app
 from scout.mac_chat.client import ScoutServerClient, normalize_server_url
+from scout.mac_chat.local_fallback import _api_key_for_model, _requires_openai_key
 
 
 class _FakeResponse:
@@ -56,6 +57,22 @@ class _FakeLocalFallback:
                 "runtime_safety_truth": False,
             },
         }
+
+
+def test_mac_fallback_selects_openai_key_for_gpt6_responses() -> None:
+    environ = {
+        "OPENAI_API_KEY": "openai-test-token",
+        "OPENROUTER_API_KEY": "openrouter-test-token",
+        "NVIDIA_API_KEY": "nvidia-test-token",
+    }
+
+    for model_name in (
+        "gpt-6-astra",
+        "openai:gpt-6-astra",
+        "openai-responses:gpt-6-astra",
+    ):
+        assert _requires_openai_key(model_name) is True
+        assert _api_key_for_model(model_name, environ) == "openai-test-token"
 
 
 def test_mac_chat_serves_static_interface() -> None:

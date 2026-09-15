@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Permission 計畫的 Planning Fine-tune Panel：選用微調、Accept 與可追蹤的計畫版本。">
+  <link rel="icon" href="data:">
+  <link rel="stylesheet" href="./style.css">
+  <title>Planning Fine-tune Panel</title>
+  <script type="module" src="./planning.js"></script>
+</head>
+<body>
+  <a class="skip" href="#content">跳至手冊內容</a>
+  <header>
+    <div class="heading"><div><span class="eyebrow">SCOUT · 行程手冊</span><h1 id="route-name">讀取所選路線</h1></div><a id="dashboard-link" target="_top" href="/admin/dashboard">回 Dashboard</a></div>
+    <p class="boundary">行前候選與本機紀錄 · 未接即時隊伍 · 不代表通行或出發許可</p>
+    <div class="toolbar"><span id="connection" class="chip">檢查連線</span><span id="save-status" role="status" aria-live="polite">尚未修改</span><button id="save" disabled>保存草稿</button><button id="offline" disabled>保存離線手冊</button><a id="standalone" target="_blank" rel="noopener">另開手冊／離線入口</a></div>
+    <div id="notice" role="status" aria-live="polite"></div>
+    <nav aria-label="手冊功能"><button data-tab="plan" aria-current="page">每日時程</button><button data-tab="points">地點與 CP</button><button data-tab="record">下山紀錄</button><button data-tab="sources">資料與版本</button></nav>
+  </header>
+  <main id="content" tabindex="-1"><p class="loading">正在讀取路線、來源與歷史分段時間。第一次載入可能需要數秒。</p></main>
+  <footer>草稿僅存在目前瀏覽器。清除網站資料可能移除草稿，請另存備份。恢復網路不會自動同步。</footer>
+</body>
+</html>

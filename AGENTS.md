@@ -28,6 +28,55 @@ that would otherwise require all of the following on every change:
 
 The hard safety boundaries in this file never relax.
 
+## Navigation Freeze: Temporarily Suspended
+
+**User-directed suspension, 2026-09-04:** The user temporarily cancelled the
+Navigation freeze approval blocker. Until the user explicitly reinstates it,
+the freeze-specific restrictions below are inactive. Continue scoped local
+Dashboard work under Construction Mode without another Navigation approval
+prompt. Run the guard before and after work in its default report-only mode;
+`NAVIGATION_FREEZE_SUSPENDED` reports drift without blocking it. Preserve the
+original baseline and unrelated work. Hard safety and external-action boundaries
+remain active. `--enforce` provides a read-only strict comparison, not policy
+reinstatement. The original freeze rules are retained below for later restoration.
+
+**Effective 2026-09-04, Dashboard Navigation is frozen at the current worktree
+baseline, including its existing uncommitted changes.** This rule overrides
+Construction Mode autonomy for Navigation-related work. It is not permission to
+revert that work, refactor Navigation, or promote it to production.
+
+- Do not change Navigation behavior, layout, 2D/3D/Rudy+TW maps, A/B TRH R1-R3,
+  corridors, R4/Gn review, highlights, Diagnostic Navigation checks, DEM
+  preparation, workspace/provenance contracts or QGIS/GRASS worker behavior
+  without the user's explicit approval for that particular change.
+- Shared Dashboard HTML/CSS/JavaScript, MapLibre, API entrypoints, dependencies,
+  map layer contracts and worker launchers are part of this boundary. Another
+  page's task does not authorize modifying these shared files. Keep that work
+  isolated; if Navigation impact cannot be ruled out, stop and ask first.
+- Read-only investigation and non-mutating tests are allowed. Test failures do
+  not authorize automatic repairs, workspace regeneration or worker restarts.
+- A specific user request to change Navigation approves only that scope.
+  Generic "continue", "commit", or unrelated-page work is not approval. State
+  the affected files and behavior before editing; approval is not a blanket unlock.
+- Run `rtk proxy ./venv/bin/python tools/verify_navigation_freeze.py` before and
+  after Dashboard/shared-GIS work. A failed check requires review, not a revert
+  or automatic baseline update. The guard never grants approval.
+- The baseline, guard, protected-path inventory and this policy also require
+  approval to change. Never bypass them or relax candidate-only safety contracts
+  to make a check pass.
+
+**Standing local-venv authorization, 2026-09-04:** The user explicitly authorized
+future local virtual-environment upgrades and their compatibility tests without
+another Navigation approval prompt. A local venv upgrade alone is not a
+Navigation page change. Record installed versions, preserve unrelated packages,
+and run focused checks. This authorization does not permit Navigation source or
+GIS contract changes, worker/server restarts, hardware deployment, or changes to
+the freeze baseline/guard. Source-controlled dependency edits remain scoped to
+the requested upgrade; it is not a blanket unlock for shared Navigation files.
+
+Details and approved-change procedure:
+`qualification/policies/navigation-freeze.md`.
+
 ## V1 Capability-First Cost Doctrine
 
 The first working version of a complex AI system is expected to be the most
@@ -416,8 +465,54 @@ Productization Mode reports every required gate as `PASS`, `FAIL`, or
 `NOT APPLICABLE` with evidence. Do not claim production completion while a
 required productization gate fails.
 
-Do not commit, push, merge, publish, or open a PR unless the user explicitly
-requests it.
+After every completed change, create a corresponding Git commit so that it can
+be tracked and rolled back later.
+Do not push, merge, publish, or open a PR unless the user explicitly requests
+it.
+
+## Scout-to-Mac SSH Access
+
+When an agent running on Scout must connect to the Mac checkout, the Mac login
+account is `alexwang0315`. Use the dedicated Scout-to-Mac key; do not rely on a
+default SSH identity:
+
+```bash
+ssh -i /home/alexwang0315/.ssh/scout-to-mac \
+  -o IdentitiesOnly=yes \
+  -o StrictHostKeyChecking=yes \
+  -o UserKnownHostsFile=/home/alexwang0315/.ssh/known_hosts \
+  -o ConnectTimeout=10 \
+  alexwang0315@Lamb780722de-MacBook-Pro.local
+```
+
+If mDNS resolution fails, use `alexwang0315@192.168.8.155`. The private key
+must never be printed, copied into prompts, or committed. The verified Mac host
+key fingerprint is `SHA256:cFmaGA0olTmjLeQ1laeURtl0oBscHsfA4H0l/s+9i8g`, and
+the Scout-to-Mac public key fingerprint is
+`SHA256:pLCijCRBUa1mpJOtvVTiaqgJE9ZedaO4I+MJuUJN/vM`.
+
+## Mac Browser Handoff — User Preference
+
+**User-directed preference, 2026-09-10:** When a task produces or updates a
+website that can be opened, provide its Mac-accessible URL and a copyable command
+to open it in Google Chrome on the Mac:
+
+```bash
+open -a "Google Chrome" '<mac-accessible-url>'
+```
+
+When the existing Scout-to-Mac SSH connection is available, proactively execute
+the open command on the Mac for the current task's website; do not stop at
+providing the command or ask for confirmation again just to open that page.
+Verify reachability from the Mac first. Scout's `localhost` is not the Mac's
+`localhost`: reuse an existing tunnel or establish a temporary SSH forward bound
+to Mac loopback for an authorized local demo. Preserve unrelated listeners and
+production runtimes; this preference does not authorize public deployment.
+
+Report the actual outcome: confirmed Chrome tab when observable, otherwise the
+successful open request or exact blocker. If automatic opening is unavailable,
+still provide the Mac command and any required connection step. Never claim that
+a page opened solely because it is reachable from Scout.
 
 ## Graphify
 

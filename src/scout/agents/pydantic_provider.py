@@ -83,7 +83,9 @@ class PydanticScoutAgentProvider:
 
     def _agent_model(self, request: ScoutAgentRequest) -> Any:
         if isinstance(self._model, str):
-            return build_chat_model(model_name=self._model)
+            return build_chat_model(
+                model_name=self._model_policy.model_for_agent or self._model
+            )
         return self._model or self._local_function_model(request)
 
     def _local_function_model(self, request: ScoutAgentRequest) -> FunctionModel:

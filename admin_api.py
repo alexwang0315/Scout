@@ -7658,6 +7658,9 @@ def create_admin_router(
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="Admin case not found") from exc
 
+    from scout_trip_notebook_api import create_trip_notebook_router
+
+    router.include_router(create_trip_notebook_router(pretrip_workspace_root))
     return router
 
 

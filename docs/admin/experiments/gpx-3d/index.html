@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="在本機檢視 Scout Workspace 的 GPX、地形與來源節點。實驗性視覺展示。">
+  <title>Scout · GPX × God's Eye View</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <script type="module" src="/assets/app.mjs"></script>
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m3 19 7-14 4 8 3-5 4 11H3Z"/></svg><strong>SCOUT</strong><span class="divider"></span><h1>GPX × God’s Eye View</h1></div>
+    <span class="chip">實驗展示 · 唯讀</span>
+  </header>
+  <main class="workbench">
+    <aside class="sidebar" aria-label="資料與節點">
+      <section class="source-section">
+        <p class="eyebrow">WORKSPACE / SOURCE</p>
+        <h2 id="project-name">正在確認 Workspace</h2>
+        <p id="catalog-status" class="muted" role="status">正在讀取本機來源…</p>
+        <label for="source-picker">既有 GPX</label>
+        <select id="source-picker"><option value="">選擇 GPX…</option></select>
+        <div class="file-row"><label class="file-button" for="file-picker">開啟本機 GPX</label><input id="file-picker" type="file" accept=".gpx,application/gpx+xml,application/xml,text/xml"></div>
+        <p class="caption">本機選檔僅在瀏覽器讀取，不上傳、不匯入 Workspace。</p>
+        <p id="source-error" class="error" role="alert" hidden></p>
+        <label for="source-type">來源類型</label>
+        <select id="source-type" disabled>
+          <option value="unknown">unknown · 尚未確認</option>
+          <option value="planned_route">規劃路線（由我聲明）</option>
+          <option value="historical_gps">歷史 GPS 記錄（由我聲明）</option>
+        </select>
+        <p id="type-basis" class="caption">檔名、時間戳與 GPX 格式本身無法證明來源類型。</p>
+      </section>
+      <section class="selection-section">
+        <div class="section-heading"><h2>來源節點</h2><span id="node-count" class="caption">0</span></div>
+        <p class="caption">起終點為軌跡標記；其餘僅列原有 waypoint／已確認來源關聯的 CP。</p>
+        <p id="cp-status" class="caption"></p>
+        <label class="sr-only" for="node-filter">搜尋節點名稱</label>
+        <input id="node-filter" type="search" placeholder="搜尋節點名稱" disabled>
+        <div id="nodes" class="node-list" role="group" aria-label="來源節點清單"><p class="muted">尚未選擇 GPX。</p></div>
+        <article id="node-detail" class="node-detail" aria-live="polite"><h2>選取節點</h2><p class="muted">點選地圖或清單，查看相同的來源記錄。</p></article>
+      </section>
+      <details class="provenance" open>
+        <summary>來源與展示限制</summary>
+        <dl id="source-detail"><dt>GPX</dt><dd>尚未選擇</dd></dl>
+        <ul id="warnings"></ul>
+        <p class="caption">真實 GPX 不保證步道目前存在、合法或可通行。回放不提供真實速度或預測 ETA。</p>
+        <p class="caption">此頁僅使用本機資產與已準備地形，未啟用外部底圖。若未來啟用供應商底圖，瓦片請求可能透露瀏覽區域。</p>
+        <p class="caption">visualization_only · candidate_only<br>runtime_safety_truth = false</p>
+        <p class="caption">Selection module: <a href="https://github.com/bilawalsidhu/gods-eye-view/tree/759652207fd1279ece97f0f19af566feb9a82146" target="_blank" rel="noreferrer">God’s Eye View · 7596522</a><br>© 2026 Bilawal Sidhu · <a href="/assets/vendor/gods-eye-view/LICENSE" target="_blank">MIT License</a></p>
+      </details>
+    </aside>
+    <section class="scene" aria-label="軌跡展示">
+      <div class="scene-title"><div><p class="eyebrow">ROUTE EXPLORER</p><h2 id="route-name">從一份 GPX 開始</h2></div><span id="render-status" class="chip">等待來源</span></div>
+      <div id="terrain-status" class="terrain-status" role="status">地形尚未載入 · 沒有外部底圖</div>
+      <div class="map-shell">
+        <div id="map" role="region" aria-label="可旋轉縮放的 GPX 地圖"></div>
+        <div id="empty-state" class="empty-state"><svg viewBox="0 0 80 64" aria-hidden="true"><path d="m6 50 24-38 13 24 9-14 22 28H6Z"/><path d="m20 50 12-19 15 19"/></svg><h2>你的軌跡，保留原貌</h2><p>選擇指定 Workspace 的 GPX，或開啟本機檔案。<br>此處不會自動載入示範路線。</p></div>
+        <div class="map-controls" role="group" aria-label="視角控制">
+          <button id="fit" disabled>全程定位</button>
+          <button id="zoom-in" aria-label="放大" disabled>＋</button><button id="zoom-out" aria-label="縮小" disabled>−</button>
+          <button id="rotate-left" aria-label="向左旋轉 30 度" disabled>↶</button><button id="rotate-right" aria-label="向右旋轉 30 度" disabled>↷</button>
+          <button id="tilt" disabled>俯視</button>
+        </div>
+        <div class="map-key"><span><i class="start-key"></i>起點</span><span><i class="end-key"></i>終點</span><span><i class="node-key"></i>來源節點</span><span class="cursor-key">◇ 回放游標</span></div>
+      </div>
+      <div id="elevation-legend" class="elevation-legend" role="group" aria-labelledby="elevation-title" hidden>
+        <div><strong id="elevation-title">地形高程設色</strong><p id="elevation-datum" class="caption"></p></div>
+        <div class="elevation-scale">
+          <div id="elevation-ramp" class="elevation-ramp" aria-hidden="true"></div>
+          <div class="elevation-labels mono"><span id="elevation-low"></span><span id="elevation-middle"></span><span id="elevation-high"></span></div>
+        </div>
+        <p class="caption">依目前 DEM 範圍連續設色；陰影影響明暗。<br>未覆蓋區域不分色。</p>
+        <details class="elevation-distribution">
+          <summary>色帶與高度分布</summary>
+          <p class="caption">每 20% 高程範圍設定一個色彩轉折，轉折間連續漸變；百分比不代表面積比例。<br>配色近似參考圖；高度採目前 DEM，不套用參考圖的 313–1,843 m。</p>
+          <ul id="elevation-stops" class="elevation-stops" aria-label="色彩轉折對應的 DEM 高程"></ul>
+        </details>
+      </div>
+      <div class="scene-footer"><span>拖曳旋轉 · 滾輪縮放 · 右鍵平移 · 手機單指旋轉、雙指縮放 / 平移</span><span id="camera-readout">—</span></div>
+      <section class="playback" aria-label="軌跡回放">
+        <div class="playback-heading"><div><strong id="playback-mode">等待軌跡</strong><p id="playback-reason" class="caption">回放游標與手動節點選取各自獨立。</p></div><span id="progress-label" class="mono">0.0%</span></div>
+        <label class="sr-only" for="progress">回放進度</label><input id="progress" type="range" min="0" max="10000" step="1" value="0" disabled>
+        <div class="playback-actions"><button id="play" class="primary" disabled>播放</button><button id="restart" disabled>回到起點</button><label for="speed" id="speed-label">示意全程時間</label><select id="speed" disabled><option value="60">60 秒</option></select><output id="playback-time" class="caption">沒有時間資料</output></div>
+        <div id="route-stats" class="route-stats"><span>尚無軌跡資料</span></div>
+      </section>
+    </section>
+  </main>
+</body>
+</html>

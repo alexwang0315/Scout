@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Scout Dashboard 3D 成本量測結果</title><link rel="stylesheet" href="results.css"><script src="results.js" defer></script></head>
+<body><main>
+  <p class="eyebrow">SCOUT · LOCAL MAC MEASUREMENT</p><h1>Dashboard 3D 的成本在哪裡？</h1>
+  <p id="status" role="status">載入量測紀錄…</p><p id="machine"></p><p class="caution" id="measurement-limit"></p>
+  <section aria-labelledby="metric-heading"><div class="chart-heading"><h2 id="metric-heading">六組對照</h2><label>比較指標 <select id="metric"><option value="rotationFps">旋轉更新率 · FPS</option><option value="panFps">平移更新率 · FPS</option><option value="rotationP95Ms">旋轉幀間隔 p95 · ms</option><option value="firstReadySeconds">首次就緒 · 秒</option><option value="peakRssMiB">Chrome 峰值 RSS · MiB</option></select></label></div><p id="metric-note"></p><div id="chart"></div></section>
+  <section><h2>如何解讀</h2><ul id="findings"></ul><p>每組三輪，圖表呈現中位數及最小／最大值。FPS 是 MapLibre render 事件的更新率，尚未量測 compositor 確認的實體掉幀。RSS 包含共享記憶體頁，並非 GPU VRAM。</p></section>
+  <section><h2>相同資料與條件</h2><p id="conditions"></p><p>使用既有 Workspace 投影回放；目前唯讀介面回報 not_prepared。Rudy 使用本機完整快取，上限 Z14；缺漏的高倍率原生瓦片沒有下載。所有組別保留 Dashboard DOM 及候選資料準備，因此圖層差值主要反映提交至地圖的額外內容。</p><p>visualization_only · candidate_only · runtime_safety_truth = false。原始 GPX、CP、Dashboard 與正式 runtime 未變更。這是成本量測，不是路線可通行或安全證明。</p></section>
+  <section><h2>開啟實驗場景</h2><p>量測場景固定為桌面尺寸。瀏覽結果頁不會啟動新的效能量測。</p><div id="scenes" class="links"></div></section>
+  <footer><span id="capture"></span><br><a href="result-data.json">檢視分析 JSON</a></footer>
+</main></body></html>

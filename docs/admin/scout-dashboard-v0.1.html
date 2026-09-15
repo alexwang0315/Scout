@@ -201,6 +201,15 @@
       white-space: nowrap;
     }
 
+    .nav-item[data-route="trip-notebook"] {
+      min-width: 0;
+    }
+
+    .nav-item[data-route="trip-notebook"] span:last-child {
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+
     .nav-item.is-active {
       border-color: rgba(98, 181, 196, .42);
       background: rgba(98, 181, 196, .13);
@@ -1129,6 +1138,20 @@
 
     .surface-frame[hidden] {
       display: none;
+    }
+
+    .trip-notebook-panel {
+      min-width: 0;
+      height: calc(100dvh - 128px);
+      min-height: 560px;
+    }
+
+    .trip-notebook-frame {
+      display: block;
+      width: 100%;
+      height: 100%;
+      min-width: 0;
+      border: 1px solid var(--line);
     }
 
     .surface-frame-action-status {
@@ -10617,6 +10640,7 @@
               </div>
             </details>
             <button class="nav-item" type="button" data-six-force-route="true" data-route="outdoor-permission" data-route-truth="partial"><span class="mark"></span><span>Permission</span></button>
+            <button class="nav-item" type="button" data-route="trip-notebook" data-route-truth="partial"><span class="mark"></span><span>Planning Fine-tune Panel</span></button>
             <button class="nav-item" type="button" data-six-force-route="true" data-route="outdoor-architecture" data-route-truth="partial"><span class="mark"></span><span>Architecture</span></button>
             <button class="nav-item" type="button" data-six-force-route="true" data-route="outdoor-weather" data-route-truth="partial"><span class="mark"></span><span>Weather</span></button>
             <button class="nav-item" type="button" data-six-force-route="true" data-route="outdoor-navigation" data-route-truth="preview"><span class="mark"></span><span>Navigation</span></button>
@@ -10776,6 +10800,7 @@
     });
     const EVIDENCE_PAGE_SIZE = 100;
     const ROUTE_TRUTH = Object.freeze({
+      "trip-notebook": Object.freeze({maturity: "partial", surface: "Planning Fine-tune Panel", data: "Permission 計畫版本", action: "選用微調／Accept 更新計畫", verification: "候選計畫", provenance: "Permission 採用回執與工作區來源", mode: "計畫採用／現地執行另依既有規則"}),
       "home": Object.freeze({maturity: "live", surface: "Operational", data: "Mixed project evidence", action: "Read-only navigation", verification: "Route shell verified", provenance: "Workspace + runtime projections", mode: "Operational"}),
       "living": Object.freeze({maturity: "partial", surface: "Sandbox observer", data: "Synthetic replay not loaded", action: "Local sandbox controls only", verification: "Awaiting closed-loop projection", provenance: "Synthetic replay · candidate-only", mode: "Technical Prototype"}),
       "features-workspace": Object.freeze({maturity: "partial", surface: "Operational", data: "Workspace projection", action: "Intent-only · no mutation", verification: "Intent capture verified", provenance: "Local workspace metadata", mode: "Operational"}),
@@ -11301,6 +11326,7 @@
     ];
 
     const COLLAPSIBLE_EVIDENCE_ROUTES = Object.freeze(new Set([
+      "trip-notebook",
       "outdoor-permission",
       "outdoor-architecture",
       "outdoor-weather",
@@ -11606,6 +11632,7 @@
     };
 
     const routeMeta = {
+      "trip-notebook": ["Planning Fine-tune Panel", "Permission 安排 → 選用微調 → Accept → 更新計畫"],
       home: ["Home", "Scout Dashboard v0.1 alpha overview"],
       living: ["Living", "Scout Emergency Mobile Closed-Loop Sandbox v0 live projection"],
       "features-lbs": ["Features / LBS", "location-based route projection and map evidence"],
@@ -13159,6 +13186,7 @@
     }
 
     function routeUsesWideFrame(route) {
+      if (route === "trip-notebook") return true;
       if (route === "outdoor-architecture") return true;
       if (route === "outdoor-navigation") return true;
       if (route === "outdoor-permission") return true;
@@ -13555,6 +13583,10 @@
 
     function setRoute(route, {loadRouteData = false} = {}) {
       state.route = route;
+      if (route === "trip-notebook" || route === "outdoor-permission") {
+        document.getElementById("dashboardRouteStatus").textContent = projectId();
+        document.querySelector(".sidebar-footer strong").textContent = window.location.origin;
+      }
       document.querySelectorAll("[data-route]").forEach((button) => {
         const active = button.dataset.route === route;
         button.classList.toggle("is-active", active);
@@ -13598,6 +13630,7 @@
       dashboardShell?.classList.toggle("is-frame-full", frameFull);
       dashboardShell?.classList.toggle("is-page-header-hidden", pageHeaderHidden);
       document.body.classList.toggle("is-frame-full", frameFull);
+      let preservedPlanningFrame = false;
       if (route === "map") {
         workspace.hidden = true;
         workspace.setAttribute("aria-hidden", "true");
@@ -13622,7 +13655,15 @@
         dashboardAgent.setAttribute("aria-hidden", "true");
         workspace.hidden = false;
         workspace.setAttribute("aria-hidden", "false");
-        workspace.innerHTML = renderOutdoorPage(route);
+        const planningFrame = document.getElementById("permissionPlanningFrame");
+        const permissionBody = document.getElementById("permissionWorkbenchBody");
+        const expectedPlanningSrc = new URL(surfaceSrc('/admin/trip-notebook/?view=permission'), window.location.href).href;
+        if (route === "outdoor-permission" && planningFrame?.src === expectedPlanningSrc && permissionBody) {
+          permissionBody.innerHTML = renderPermissionPage(SIX_FORCES.find(item => item.route === route));
+          preservedPlanningFrame = true;
+        } else {
+          workspace.innerHTML = renderOutdoorPage(route);
+        }
       } else {
         dashboardMap.hidden = true;
         dashboardMap.setAttribute("aria-hidden", "true");
@@ -13630,7 +13671,12 @@
         dashboardAgent.setAttribute("aria-hidden", "true");
         workspace.hidden = false;
         workspace.setAttribute("aria-hidden", "false");
-        workspace.innerHTML = renderStandardPage(route);
+        const planningFrame = document.getElementById("tripNotebookFrame");
+        if (route === "trip-notebook" && planningFrame?.src === new URL(surfaceSrc('/admin/trip-notebook/'), window.location.href).href) {
+          preservedPlanningFrame = true;
+        } else {
+          workspace.innerHTML = renderStandardPage(route);
+        }
       }
       evidence.innerHTML = renderEvidenceDrawer(route);
       bindRenderedControls();
@@ -13641,7 +13687,7 @@
         dashboardMap.focus?.({ preventScroll: true });
       } else if (route === "agent") {
         dashboardAgent.focus?.({ preventScroll: true });
-      } else {
+      } else if (!preservedPlanningFrame) {
         workspace.focus({ preventScroll: true });
       }
       const pendingTabFocus = state.pendingTabFocus;
@@ -13657,6 +13703,7 @@
     }
 
     function renderStandardPage(route) {
+      if (route === "trip-notebook") return `<section class="trip-notebook-panel"><iframe class="trip-notebook-frame" id="tripNotebookFrame" title="Planning Fine-tune Panel：Permission 計畫微調" src="${escapeHtml(surfaceSrc('/admin/trip-notebook/'))}"></iframe></section>`;
       if (route === "map") return renderPretripMapFrame();
       if (route === "timeline") return renderTimelinePanel();
       if (route === "features-lbs") return renderLbsPage();
@@ -18636,7 +18683,7 @@
     function renderOutdoorPage(route) {
       const force = SIX_FORCES.find((item) => item.route === route) || SIX_FORCES[0];
       if (route === "outdoor-pace-fit-body-index") return renderPaceFitBodyIndexPage();
-      if (route === "outdoor-permission") return renderPermissionPage(force);
+      if (route === "outdoor-permission") return `<section class="trip-notebook-panel"><iframe class="trip-notebook-frame" id="permissionPlanningFrame" title="Permission 目前計畫與 Accept" src="${escapeHtml(surfaceSrc('/admin/trip-notebook/?view=permission'))}"></iframe></section><div id="permissionWorkbenchBody">${renderPermissionPage(force)}</div>`;
       if (route === "outdoor-weather") return renderWeatherPage(force);
       if (route === "outdoor-navigation") return renderNavigationPage(force);
       if (route === "outdoor-architecture") return renderArchitecturePage(force);
@@ -25715,6 +25762,7 @@
                   ].map(([label, value]) => `<div class="pace-cp-fact"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("")}
                 </div>
                 <p class="pace-cp-meaning">這個位置來自目前 workspace 的 checkpoint candidate，作用是把 CP 編號、路線位置與來源證據綁在一起；它不代表隊伍目前位於此處，也不是安全或通行判定。</p>
+                <a class="chip info" href="${escapeHtml(surfaceSrc('/admin/trip-notebook/') + '&cpId=' + encodeURIComponent(context.id || '') + '&tab=points')}" target="_blank" rel="noopener">查看此 CP 的時間、資源與本機紀錄</a>
                 <div class="pace-primary-advisory">
                   <span>Pace runtime</span>
                   <strong>尚未接上即時隊伍速度；此頁目前只提供可查證的空間上下文。</strong>
