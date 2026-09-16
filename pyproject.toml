@@ -25,7 +25,7 @@ pydantic-ai-smoke = [
 ]
 nextgen-intelligence = [
     "httpx>=0.28,<1",
-    "praisonaiagents==1.7.5",
+    "praisonaiagents==1.7.6",
 ]
 pretrip-osm = [
     "osmium==4.3.1",
