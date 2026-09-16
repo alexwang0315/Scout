@@ -5,6 +5,8 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
+from fastapi_route_inventory import registered_route_methods, registered_route_paths
+
 
 class ServerRuntimeStreamStatusMountTests(unittest.TestCase):
     def _reload_server(self):
@@ -25,7 +27,7 @@ class ServerRuntimeStreamStatusMountTests(unittest.TestCase):
             server = self._reload_server()
             self.addCleanup(self._reload_server)
 
-        route_paths = {route.path for route in server.app.routes}
+        route_paths = registered_route_paths(server.app)
         self.assertNotIn("/runtime/streams/status-read-only", route_paths)
 
     def test_runtime_stream_read_only_status_mount_is_get_only_and_no_transport(self):
@@ -43,11 +45,7 @@ class ServerRuntimeStreamStatusMountTests(unittest.TestCase):
             self.addCleanup(self._reload_server)
             client = TestClient(server.app)
 
-            route_methods = {
-                route.path: sorted(route.methods or [])
-                for route in server.app.routes
-                if route.path.startswith("/runtime/streams")
-            }
+            route_methods = registered_route_methods(server.app, prefix="/runtime/streams")
             response = client.get("/runtime/streams/status-read-only")
             blocked_post = client.post("/runtime/streams/status-read-only", json={})
 
@@ -82,7 +80,7 @@ class ServerRuntimeStreamStatusMountTests(unittest.TestCase):
             self.addCleanup(self._reload_server)
             client = TestClient(server.app)
 
-            route_paths = {route.path for route in server.app.routes}
+            route_paths = registered_route_paths(server.app)
             response = client.get("/runtime/streams/status-read-only")
 
         self.assertIsNotNone(server.safety_observation_admission_config_error)
@@ -109,7 +107,7 @@ class ServerRuntimeStreamStatusMountTests(unittest.TestCase):
             self.addCleanup(self._reload_server)
             client = TestClient(server.app)
 
-            route_paths = {route.path for route in server.app.routes}
+            route_paths = registered_route_paths(server.app)
             response = client.get("/runtime/streams/status-read-only")
 
         self.assertIn("/runtime/streams/http-push/observations", route_paths)

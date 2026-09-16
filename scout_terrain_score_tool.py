@@ -746,6 +746,57 @@ def _terrain_summaries(items: list[dict[str, Any]]) -> dict[str, Any]:
     return summaries
 
 
+def _terrain_query_requests_decision(query: str) -> bool:
+    # Quoted labels and explicit exclusions are not requests for permission.
+    text = re.sub(r'`[^`]*`|"[^"]*"|「[^」]*」|“[^”]*”', "", query)
+    for clause in re.split(r"[,，。;；?？!！\n]", text):
+        if re.search(
+            r"(?:不要|請勿|不必|不用)\s*(?:判斷|評估|決定|建議|回答)|"
+            r"\b(?:do\s+not|don't)\s+(?:decide|assess|judge|evaluate|advise|recommend|tell)\b|"
+            r"\bnot\s+asking\b",
+            clause,
+            re.IGNORECASE,
+        ):
+            continue
+        if re.search(
+            r"(?:能否|可否|能不能|可不可以|是否(?:可以|能|要|應該)|可以|"
+            r"該不該|應不應該|應該|是否需要|要不要).{0,24}"
+            r"(?:繼續|通過|走|前進|進入|停止|停下|停|撤退|折返)|"
+            r"(?:是否|是不是|夠不夠)安全|安全嗎|"
+            r"\b(?:(?:can|may|could|should|must)\s+(?:i|we|the\s+team)|"
+            r"(?:i|we|the\s+team)\s+(?:can|may|could|should|must))\b"
+            r".{0,60}\b(?:proceed|continue|cross|pass|enter|stop|retreat|turn\s+back)\b|"
+            r"\b(?:is|are)\s+(?:(?:this|that|the|these|those)\s+)?"
+            r"(?:terrain|routes?|segments?|slopes?|it|this|that)\s+(?:really\s+)?safe\b|"
+            r"\bgo\s*/\s*no[- ]?go\s+(?:decision|assessment)\b",
+            clause,
+            re.IGNORECASE,
+        ):
+            return True
+    return False
+
+
+def _terrain_query_is_factual(query: str, *, has_field_answer: bool) -> bool:
+    if _terrain_query_requests_decision(query):
+        return False
+    return has_field_answer or _has_any_text(
+        query,
+        (
+            "欄位", "來源", "檔案", "目錄", "筆數", "記錄數", "紀錄數",
+            "總數", "幾筆", "幾個", "多少", "數量", "統計", "分類", "類別", "種類",
+            "里程", "累積距離", "座標", "坐標", "半徑", "單位", "可信度",
+            "比較", "差別", "對照", "覆蓋", "支援距離",
+        ),
+    ) or re.search(
+        r"\b(?:metadata|schema|catalog|columns?|fields?|crs|source_refs?|sources?|"
+        r"provenance|units?|confidence|categories|category|counts?|mileage|gpx|"
+        r"coordinates?|radius|compare|comparison|difference|coverage)\b|"
+        r"\b(?:how\s+many|number\s+of|group\s+by)\b",
+        query,
+        re.IGNORECASE,
+    ) is not None
+
+
 def _terrain_decision(results: list[dict[str, Any]]) -> str:
     if not results:
         return "DELAY"
@@ -1627,55 +1678,3 @@ def _closed_boundary() -> dict[str, bool]:
         "hardware_control_allowed": False,
         "raw_payloads_embedded": False,
     }
-
-
-def _terrain_query_requests_decision(query: str) -> bool:
-    # Quoted labels and explicit exclusions are not requests for permission.
-    text = re.sub(r'`[^`]*`|"[^"]*"|「[^」]*」|“[^”]*”', "", query)
-    for clause in re.split(r"[,，。;；?？!！\n]", text):
-        if re.search(
-            r"(?:不要|請勿|不必|不用)\s*(?:判斷|評估|決定|建議|回答)|"
-            r"\b(?:do\s+not|don't)\s+(?:decide|assess|judge|evaluate|advise|recommend|tell)\b|"
-            r"\bnot\s+asking\b",
-            clause,
-            re.IGNORECASE,
-        ):
-            continue
-        if re.search(
-            r"(?:能否|可否|能不能|可不可以|是否(?:可以|能|要|應該)|可以|"
-            r"該不該|應不應該|應該|是否需要|要不要).{0,24}"
-            r"(?:繼續|通過|走|前進|進入|停止|停下|停|撤退|折返)|"
-            r"(?:是否|是不是|夠不夠)安全|安全嗎|"
-            r"\b(?:(?:can|may|could|should|must)\s+(?:i|we|the\s+team)|"
-            r"(?:i|we|the\s+team)\s+(?:can|may|could|should|must))\b"
-            r".{0,60}\b(?:proceed|continue|cross|pass|enter|stop|retreat|turn\s+back)\b|"
-            r"\b(?:is|are)\s+(?:(?:this|that|the|these|those)\s+)?"
-            r"(?:terrain|routes?|segments?|slopes?|it|this|that)\s+(?:really\s+)?safe\b|"
-            r"\bgo\s*/\s*no[- ]?go\s+(?:decision|assessment)\b",
-            clause,
-            re.IGNORECASE,
-        ):
-            return True
-    return False
-
-
-
-def _terrain_query_is_factual(query: str, *, has_field_answer: bool) -> bool:
-    if _terrain_query_requests_decision(query):
-        return False
-    return has_field_answer or _has_any_text(
-        query,
-        (
-            "欄位", "來源", "檔案", "目錄", "筆數", "記錄數", "紀錄數",
-            "總數", "幾筆", "幾個", "多少", "數量", "統計", "分類", "類別", "種類",
-            "里程", "累積距離", "座標", "坐標", "半徑", "單位", "可信度",
-            "比較", "差別", "對照", "覆蓋", "支援距離",
-        ),
-    ) or re.search(
-        r"\b(?:metadata|schema|catalog|columns?|fields?|crs|source_refs?|sources?|"
-        r"provenance|units?|confidence|categories|category|counts?|mileage|gpx|"
-        r"coordinates?|radius|compare|comparison|difference|coverage)\b|"
-        r"\b(?:how\s+many|number\s+of|group\s+by)\b",
-        query,
-        re.IGNORECASE,
-    ) is not None

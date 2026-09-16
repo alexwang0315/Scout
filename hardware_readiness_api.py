@@ -31,6 +31,7 @@ def create_hardware_readiness_router(
     fixture_path: Path | str = DEFAULT_HARDWARE_READINESS_FIXTURE,
     page_path: Path | str = DEFAULT_HARDWARE_READINESS_PAGE,
     assistant_ui_script_path: Path | str = DEFAULT_ASSISTANT_UI_SCRIPT,
+    include_assistant_ui_script: bool = True,
 ) -> APIRouter:
     router = APIRouter(prefix="/admin", tags=["hardware-readiness"])
     resolved_fixture_path = Path(fixture_path)
@@ -53,13 +54,14 @@ def create_hardware_readiness_router(
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail="Hardware readiness fixture not found") from exc
 
-    @router.get("/scout-assistant-ui.js")
-    def assistant_ui_script() -> Response:
-        if not resolved_assistant_ui_script_path.exists():
-            raise HTTPException(status_code=404, detail="Assistant UI script not found")
-        return Response(
-            resolved_assistant_ui_script_path.read_text(encoding="utf-8"),
-            media_type="application/javascript",
-        )
+    if include_assistant_ui_script:
+        @router.get("/scout-assistant-ui.js")
+        def assistant_ui_script() -> Response:
+            if not resolved_assistant_ui_script_path.exists():
+                raise HTTPException(status_code=404, detail="Assistant UI script not found")
+            return Response(
+                resolved_assistant_ui_script_path.read_text(encoding="utf-8"),
+                media_type="application/javascript",
+            )
 
     return router

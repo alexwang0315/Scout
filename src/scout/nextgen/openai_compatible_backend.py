@@ -9,7 +9,7 @@ import json
 import os
 import re
 import threading
-from collections.abc import Awaitable, Iterator, Mapping
+from collections.abc import Awaitable, Callable, Iterator, Mapping
 from contextlib import contextmanager
 from enum import StrEnum
 from pathlib import Path
@@ -229,72 +229,78 @@ class OpenAICompatiblePydanticBackend:
         environ: Mapping[str, str] | None = None,
         http_client: httpx.AsyncClient | None = None,
     ) -> None:
-        from openai import AsyncOpenAI
-        from pydantic_ai.models.openai import OpenAIChatModel
-        from pydantic_ai.profiles.openai import OpenAIModelProfile
-        from pydantic_ai.providers.openai import OpenAIProvider
+        self._closed = False
 
-        self.config = config
-        self.runtime_id = config.runtime_id
-        self.model_id = config.model_id
-        api_key = _resolve_api_key(config, environ if environ is not None else os.environ)
-        needs_compatibility_transport = (
-            config.response_created_timestamp_mode == "auto_to_seconds"
-            or config.request_message_control_mode
-            == "replace_controls_with_spaces"
-        )
-        if needs_compatibility_transport:
-            if http_client is not None:
-                raise OpenAICompatibleConfigurationError("custom transport cannot bypass Hailo compatibility")
-            http_client = httpx.AsyncClient(
-                transport=_HailoCompatibilityTransport(
-                    normalize_created_timestamp=(
-                        config.response_created_timestamp_mode == "auto_to_seconds"
-                    ),
-                    normalize_message_controls=(
-                        config.request_message_control_mode
-                        == "replace_controls_with_spaces"
-                    ),
-                ),
-                trust_env=False,
+        def create_model() -> Any:
+            nonlocal http_client
+            from openai import AsyncOpenAI
+            from pydantic_ai.models.openai import OpenAIChatModel
+            from pydantic_ai.profiles.openai import OpenAIModelProfile
+            from pydantic_ai.providers.openai import OpenAIProvider
+
+            self.config = config
+            self.runtime_id = config.runtime_id
+            self.model_id = config.model_id
+            api_key = _resolve_api_key(config, environ if environ is not None else os.environ)
+            needs_compatibility_transport = (
+                config.response_created_timestamp_mode == "auto_to_seconds"
+                or config.request_message_control_mode
+                == "replace_controls_with_spaces"
             )
-        self._client = AsyncOpenAI(
-            base_url=config.normalized_base_url,
-            api_key=api_key,
-            max_retries=0,
-            http_client=http_client,
-        )
-        provider = OpenAIProvider(openai_client=self._client)
-        provider_model = OpenAIChatModel(
-            config.model_id,
-            provider=provider,
-            profile=OpenAIModelProfile(
-                supports_tools=True,
-                supports_json_schema_output=(
-                    config.structured_output_mode == "native"
+            if needs_compatibility_transport:
+                if http_client is not None:
+                    raise OpenAICompatibleConfigurationError("custom transport cannot bypass Hailo compatibility")
+                http_client = httpx.AsyncClient(
+                    transport=_HailoCompatibilityTransport(
+                        normalize_created_timestamp=(
+                            config.response_created_timestamp_mode == "auto_to_seconds"
+                        ),
+                        normalize_message_controls=(
+                            config.request_message_control_mode
+                            == "replace_controls_with_spaces"
+                        ),
+                    ),
+                    trust_env=False,
+                )
+            self._client = AsyncOpenAI(
+                base_url=config.normalized_base_url,
+                api_key=api_key,
+                max_retries=0,
+                http_client=http_client,
+            )
+            provider = OpenAIProvider(openai_client=self._client)
+            provider_model = OpenAIChatModel(
+                config.model_id,
+                provider=provider,
+                profile=OpenAIModelProfile(
+                    supports_tools=True,
+                    supports_json_schema_output=(
+                        config.structured_output_mode == "native"
+                    ),
+                    default_structured_output_mode=config.structured_output_mode,
+                    supports_thinking=config.supports_reasoning_control,
+                    openai_supports_reasoning=config.supports_reasoning_control,
+                    openai_supports_reasoning_effort_none=(
+                        config.supports_reasoning_control
+                    ),
+                    openai_chat_supports_max_completion_tokens=(
+                        config.uses_max_completion_tokens
+                    ),
                 ),
-                default_structured_output_mode=config.structured_output_mode,
-                supports_thinking=config.supports_reasoning_control,
-                openai_supports_reasoning=config.supports_reasoning_control,
-                openai_supports_reasoning_effort_none=(
-                    config.supports_reasoning_control
-                ),
-                openai_chat_supports_max_completion_tokens=(
-                    config.uses_max_completion_tokens
-                ),
-            ),
-        )
-        counted_model = _RequestCountingModel(
-            provider_model, native_retry_context_mode=config.native_retry_context_mode,
-        )
+            )
+            counted_model = _RequestCountingModel(
+                provider_model, native_retry_context_mode=config.native_retry_context_mode,
+            )
+            return counted_model
+
         self._delegate = PydanticAIStructuredBackend(
             runtime_id=config.runtime_id,
             model_id=config.model_id,
-            model=counted_model,
+            model_factory=create_model,
+            close_model=self._close_client,
             default_model_settings=config.model_settings(),
         )
-        self.resident_model = counted_model
-        self._closed = False
+        self.resident_model = self._delegate.resident_model
 
     def infer(
         self,
@@ -312,12 +318,19 @@ class OpenAICompatiblePydanticBackend:
                 cancellation_event=cancellation_event,
             )
 
+    def run_on_model_loop(self, operation: Callable[[], Awaitable[Any]]) -> Any:
+        return self._delegate.run_on_model_loop(operation)
+
+    async def _close_client(self) -> None:
+        client = getattr(self, "_client", None)
+        if client is not None and not client.is_closed():
+            await client.close()
+
     def close(self) -> None:
         if self._closed:
             return
+        self._delegate.close()
         self._closed = True
-        if not self._client.is_closed():
-            asyncio.run(self._client.close())
 
 
 def build_praison_openai_compatible_runtime(

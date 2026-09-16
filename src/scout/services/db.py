@@ -87,9 +87,13 @@ def connect_database(path: str | Path) -> sqlite3.Connection:
         Path(database_path).parent.mkdir(parents=True, exist_ok=True)
 
     connection = sqlite3.connect(database_path, check_same_thread=False)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA foreign_keys = ON")
-    connection.execute("PRAGMA journal_mode = WAL")
+    try:
+        connection.row_factory = sqlite3.Row
+        connection.execute("PRAGMA foreign_keys = ON")
+        connection.execute("PRAGMA journal_mode = WAL")
+    except BaseException:
+        connection.close()
+        raise
     return connection
 
 
@@ -153,7 +157,11 @@ def open_database(path: str | Path) -> sqlite3.Connection:
     """Open and initialize a Scout AI OS SQLite database."""
 
     connection = connect_database(path)
-    initialize_database(connection)
+    try:
+        initialize_database(connection)
+    except BaseException:
+        connection.close()
+        raise
     return connection
 
 

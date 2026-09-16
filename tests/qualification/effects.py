@@ -15,6 +15,8 @@ from typing import Sequence
 from collections.abc import Callable
 from unittest.mock import patch
 
+from tests.qualification.sqlite_fixtures import ReadOnlySqliteFixture, match_readonly_fixture, connect_readonly_fixture
+
 from tests.qualification.contracts import (
     EffectAttempt,
     EffectCallsiteSpec,
@@ -297,6 +299,7 @@ class EffectAudit:
         transition_id: str,
         roots: Sequence[tuple[str, Path]],
         block_outside: bool = True,
+        readonly_sqlite_fixtures: tuple[ReadOnlySqliteFixture, ...] = (),
     ) -> None:
         self.transition_id = transition_id
         self._roots = tuple(
@@ -307,6 +310,9 @@ class EffectAudit:
         self._stack = ExitStack()
         self._block_outside = block_outside
         self._active_canary_id: str | None = None
+        if len({fixture.path for fixture in readonly_sqlite_fixtures}) != len(readonly_sqlite_fixtures):
+            raise ValueError("duplicate SQLite fixture capabilities")
+        self._readonly_sqlite_fixtures = readonly_sqlite_fixtures
 
     @property
     def attempts(self) -> tuple[EffectAttempt, ...]:
@@ -622,6 +628,16 @@ class EffectAudit:
         original_sqlite_connect = sqlite3.connect
 
         def database_connect(*args: object, **kwargs: object) -> object:
+            fixture = None
+            if self._readonly_sqlite_fixtures and self._active_canary_id is None:
+                try:
+                    fixture = match_readonly_fixture(args, kwargs, self._readonly_sqlite_fixtures)
+                except (OSError, ValueError, PermissionError):
+                    fixture = None
+            if fixture is not None:
+                return connect_readonly_fixture(
+                    original_sqlite_connect, args, kwargs, fixture=fixture, audit=self
+                )
             self._block_external(
                 operation="database.connect",
                 effect_class="external_store_database",
@@ -661,7 +677,7 @@ class EffectAudit:
                         self.transition_id,
                         "ipc.local_socket",
                         "harness_ipc",
-                        "workspace",
+                        self._roots[0][0] if self._roots else "outside",
                         "in-process-testclient",
                     )
                 )

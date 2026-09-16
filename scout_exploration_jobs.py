@@ -7,6 +7,8 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from queue import SimpleQueue
+from threading import Thread
 from typing import Callable
 
 from pydantic import Field
@@ -44,6 +46,12 @@ def _release(fd: int | None) -> None:
     if fd is not None and fd >= 0:
         fcntl.flock(fd, fcntl.LOCK_UN)
         os.close(fd)
+
+
+def _reap_worker(processes: SimpleQueue) -> None:
+    process = processes.get()
+    if process is not None:
+        process.wait()
 
 
 class ExplorationJobManager:
@@ -133,10 +141,20 @@ class ExplorationJobManager:
                 if self.launch is not None:
                     self.launch(lambda: self._run(key, fd))
                 else:
-                    with _path(self.root, f"{self.prefix}/worker.log").open("ab") as log:
-                        subprocess.Popen([sys.executable, "-B", "-m", "scout_exploration_jobs", "--worker", str(self.root), key, str(fd)],
-                            cwd=Path(__file__).resolve().parent, stdin=subprocess.DEVNULL,
-                            stdout=log, stderr=subprocess.STDOUT, pass_fds=(fd,), start_new_session=True)
+                    # Retain and reap the detached child independently of this HTTP
+                    # manager. Start the waiter first so thread-start failure cannot
+                    # leave an unowned subprocess, and unblock it if spawning fails.
+                    processes = SimpleQueue()
+                    Thread(target=_reap_worker, args=(processes,), daemon=True,
+                           name=f"scout-exploration-reaper-{key[:12]}").start()
+                    process = None
+                    try:
+                        with _path(self.root, f"{self.prefix}/worker.log").open("ab") as log:
+                            process = subprocess.Popen([sys.executable, "-B", "-m", "scout_exploration_jobs", "--worker", str(self.root), key, str(fd)],
+                                cwd=Path(__file__).resolve().parent, stdin=subprocess.DEVNULL,
+                                stdout=log, stderr=subprocess.STDOUT, pass_fds=(fd,), start_new_session=True)
+                    finally:
+                        processes.put(process)
                     os.close(fd)  # The child keeps the same locked open-file description.
             except BaseException:
                 _release(fd)

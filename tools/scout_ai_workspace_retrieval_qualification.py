@@ -13,10 +13,10 @@ import time
 from pathlib import Path
 from uuid import uuid4
 
-import httpx
 
 from scout.nextgen.intelligence_gateway import CapabilityBroker, IntelligenceRequest, IntelligenceTaskType, stable_payload_hash
-from scout.nextgen.intelligence_mcp_http import IntelligenceMcpHttpClient, IntelligenceMcpHttpClientConfig
+from scout.nextgen.intelligence_mcp import IntelligenceMcpUnavailable
+from scout.nextgen.intelligence_mcp_http import IntelligenceMcpHttpClient, IntelligenceMcpHttpClientConfig, probe_intelligence_mcp_http_health
 from scout.nextgen.openai_compatible_backend import OpenAICompatibleBackendConfig
 from scout.nextgen.workspace_retrieval import (
     ArtifactReadGrant, CAPABILITIES, WorkspaceRetrievalScope, file_hash, normalize_native_query, require_external_audit_dir, source_path, write_new,
@@ -247,18 +247,18 @@ def main() -> int:
             ], env=env, stdout=log, stderr=subprocess.STDOUT)
             scores = []
             try:
-                with httpx.Client(transport=httpx.HTTPTransport(uds=str(socket)), timeout=2) as health:
-                    for _ in range(240):
-                        if process.poll() is not None:
-                            raise RuntimeError("experimental MCP service exited during startup; inspect service.log")
-                        try:
-                            if health.get("http://localhost/health").status_code == 200:
-                                break
-                        except httpx.TransportError:
-                            pass
-                        time.sleep(0.25)
-                    else:
-                        raise RuntimeError("experimental MCP startup unavailable")
+                for _ in range(240):
+                    if process.poll() is not None:
+                        raise RuntimeError("experimental MCP service exited during startup; inspect service.log")
+                    try:
+                        status, _ = probe_intelligence_mcp_http_health(socket, timeout_seconds=2)
+                        if status == 200:
+                            break
+                    except IntelligenceMcpUnavailable:
+                        pass
+                    time.sleep(0.25)
+                else:
+                    raise RuntimeError("experimental MCP startup unavailable")
                 client = IntelligenceMcpHttpClient(IntelligenceMcpHttpClientConfig(unix_socket=socket, timeout_seconds=60))
                 for case in cases:
                     scores.append(run_case(client, case, scope, config, output))

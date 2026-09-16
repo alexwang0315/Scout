@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from post_analysis_capability import build_capability_artifacts, summarize_capability_artifacts
+from post_analysis_projection_validation import load_validated_active_projection
 from post_analysis_scout_reaction_simulation import (
     build_scout_reaction_simulation_from_gpx,
 )
@@ -68,6 +69,7 @@ def list_completed_trip_scenarios(
         "source_dir": _relpath_or_abs(scenario_dir, root),
         "scenarios": scenarios,
         "active_scenario": active.get("scenario") if active else None,
+        "active_projection_validation": active.get("projection_validation") if active else None,
         "boundary": _boundary(),
     }
 
@@ -164,28 +166,20 @@ def load_active_completed_trip_scenario_projection(
     data_root: Path,
     root: Path = ROOT,
 ) -> dict[str, Any] | None:
-    active_path = (
-        data_root
-        / SCENARIO_RELATIVE_DIR
-        / "active"
-        / "active_completed_trip_scenario.json"
+    storage_root = Path(data_root).expanduser().resolve()
+    return load_validated_active_projection(
+        active_path=(
+            storage_root / SCENARIO_RELATIVE_DIR / "active" / "active_completed_trip_scenario.json"
+        ),
+        case_id=CASE_ID,
+        project_id=None,
+        selection_key="scenario",
+        outputs_parent=storage_root / SCENARIO_RELATIVE_DIR,
+        outputs_leaf="outputs",
+        active_track_path=storage_root / "post_analysis/inbox/latest_completed_trip.gpx",
+        route_family=ROUTE_FAMILY,
+        root=root,
     )
-    if not active_path.exists():
-        return None
-    active = _load_json(active_path)
-    outputs_dir = Path(active.get("outputs_dir", ""))
-    timeline_path = outputs_dir / "capability_timeline.json"
-    capsule_path = outputs_dir / "capability_capsule.json"
-    if timeline_path.exists() and capsule_path.exists():
-        active["capability_timeline"] = summarize_capability_artifacts(
-            timeline_path=timeline_path,
-            capsule_path=capsule_path,
-            root=root,
-        )
-    simulation_path = outputs_dir / "scout_reaction_simulation.json"
-    if simulation_path.exists():
-        active["scout_reaction_simulation"] = _load_json(simulation_path)
-    return active
 
 
 def _resolve_scenario_dir(*, data_root: Path, root: Path) -> Path:

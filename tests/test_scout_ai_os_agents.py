@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.scout_database_fixtures import owned_test_databases  # noqa: F401
+
 from pathlib import Path
 from typing import Any
 
@@ -52,8 +54,12 @@ from scout.services.sandbox_runner import SandboxRunner
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def make_deps(tmp_path: Path) -> ScoutDeps:
-    connection = open_database(tmp_path / "agents.sqlite")
+pytestmark = pytest.mark.usefixtures("owned_test_databases")
+
+
+def make_deps(tmp_path: Path, *, connection=None) -> ScoutDeps:
+    if connection is None:
+        connection = open_database(tmp_path / "agents.sqlite")
     workflow_store = WorkflowStore(connection)
     memory_store = MemoryStore(connection)
     capability_registry = CapabilityRegistry(connection)

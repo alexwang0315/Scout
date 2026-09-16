@@ -25,7 +25,7 @@ from assistant_context import (
 )
 from assistant_models import AssistantSourceRef, AssistantSurface, ScoutAssistantQuery, ScoutAssistantResponse
 from assistant_skill_router import augment_pretrip_sources_with_local_evidence_search
-from debug_api import create_debug_page_router, create_debug_router
+from debug_api import create_debug_router
 from hardware_readiness_api import create_hardware_readiness_router
 from ingress_observer_supervisor import IngressObserverSupervisor
 from pretrip_assistant_context import build_pretrip_assistant_context
@@ -124,9 +124,10 @@ def create_phase4_admin_runtime_app(
         create_admin_router(
             incident_store_path=incident_store,
             pretrip_workspace_root=workspace_root,
+            include_debug_page=debug_enabled,
         )
     )
-    hardware_router_kwargs: dict[str, Any] = {}
+    hardware_router_kwargs: dict[str, Any] = {"include_assistant_ui_script": False}
     if hardware_readiness_fixture_path:
         hardware_router_kwargs["fixture_path"] = hardware_readiness_fixture_path
     app.include_router(create_hardware_readiness_router(**hardware_router_kwargs))
@@ -141,7 +142,6 @@ def create_phase4_admin_runtime_app(
                 spatial_imprint_trigger_report_path=spatial_imprint_trigger_report_path,
             )
         )
-        app.include_router(create_debug_page_router())
 
     @app.get("/health")
     def health() -> dict[str, Any]:

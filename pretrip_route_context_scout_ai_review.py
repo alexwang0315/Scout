@@ -16,6 +16,7 @@ from urllib.parse import urlparse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from assistant_model_config import load_assistant_model_config
+from scout.agents.pydantic_model_lifecycle import pydantic_model_session
 from pydantic_ai_runtime_compat import (
     build_chat_model,
     pydantic_agent_runtime_kwargs,
@@ -487,6 +488,7 @@ def build_review_packet(project_root: Path | str) -> dict[str, Any]:
     }
 
 
+@pydantic_model_session()
 def _call_live_model(
     *,
     prompt: str,

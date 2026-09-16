@@ -9,7 +9,10 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_debug_split_diagnostic_operates_handlers_and_keeps_failures():
     dashboard = (ROOT / 'docs/admin/scout-dashboard-v0.1.html').read_text()
     debug = (ROOT / 'docs/admin/phase-3-5-runtime-debug.html').read_text()
-    names = ['mapLayerRank', 'splitEnvironmentBackgrounds', 'orderMapLayerGroups', 'updateLayers', 'layerInputChecked']
+    names = [
+        'mapLayerRank', 'splitEnvironmentBackgrounds', 'orderMapLayerGroups',
+        'withDebugMapDomUpdate', 'updateLayers', 'updateLayersDom', 'layerInputChecked',
+    ]
     functions = '\n'.join(re.search(rf'(?ms)^    function {name}\(.*?^    }}', debug).group() for name in names)
     probe = re.search(r'(?ms)^    async function diagnosticProbeDebugSplitControls\(.*?^    }', dashboard).group()
     script = r'''
@@ -17,6 +20,7 @@ const assert=require('node:assert/strict'),{JSDOM}=require('jsdom');
 const dom=new JSDOM('<body><svg id="runtimeMap"></svg></body>');
 global.window=dom.window;global.document=dom.window.document;
 const runtimeMap=document.querySelector('svg');
+const debugPageState={};
 const ids=['soil-moisture','antecedent-rain','cwa-qpf','cwa-weather'];
 const MAP_LAYER_RANKS={route:44,segments:50,...Object.fromEntries(ids.map((id,i)=>[id,57+i]))};
 const svgEl=(tag,attrs)=>{const n=document.createElementNS(runtimeMap.namespaceURI,tag);for(const [k,v] of Object.entries(attrs))n.setAttribute(k,v);return n;};

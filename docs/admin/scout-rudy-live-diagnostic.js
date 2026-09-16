@@ -11,6 +11,7 @@
   const requireValue = (condition, message) => { if (!condition) throw new Error(message); };
   let lastReport = null;
   let requestSequence = 0;
+  let cohortSequence = 0;
 
   function errorEvidence(error, seen = new Set()) {
     if (error == null) return null;
@@ -130,6 +131,27 @@
     const tileGroup = () => root.querySelector('[data-dashboard-rudy-tile-layer="true"], [data-layer-group="rudy-twmap"]');
     const activeImages = () => [...(tileGroup()?.querySelectorAll("image[data-dashboard-rudy-tile], image[data-raster-tile]") || [])]
       .filter(node => !node.closest('[data-tile-generation="pending"], [data-dashboard-rudy-tile-generation="pending"]'));
+    const cameraMotion = () => {
+      const unknown = errorName => ({observedAt: Date.now(), basis: "maplibre-public-api",
+        available: false, moving: null, easing: null, errorName});
+      try {
+        if (typeof config.cameraMotion === "function") {
+          const receipt = config.cameraMotion();
+          return receipt?.basis === "maplibre-public-api" && receipt.available === true
+            && typeof receipt.moving === "boolean" && (receipt.easing == null || typeof receipt.easing === "boolean")
+            ? {...receipt, easing: receipt.easing ?? null} : {...unknown("UnverifiedCameraMotion"), ...(receipt || {}), available: false, moving: null, easing: null};
+        }
+        if (typeof config.map?.isMoving !== "function") {
+          return unknown("MissingCameraMotionAPI");
+        }
+        // MapLibre 6.2 Map.isMoving covers Camera and input handlers. isEasing
+        // belongs to its internal Camera, so absent public easing stays unknown.
+        const moving = config.map.isMoving(), easing = typeof config.map.isEasing === "function" ? config.map.isEasing() : null;
+        return typeof moving === "boolean" && (easing === null || typeof easing === "boolean")
+          ? {observedAt: Date.now(), basis: "maplibre-public-api", available: true, moving, easing}
+          : unknown("InvalidCameraMotionResult");
+      } catch (error) { return unknown(error.name || "Error"); }
+    };
     const viewLimits = () => {
       const supplied = config.viewLimits?.() || {};
       let nativeCamera = supplied.nativeCamera || null;
@@ -224,7 +246,8 @@
         rendererReason: shell?.dataset.mapRendererReason || root.dataset.navigationMaplibreReason || null,
         otherRasterState: renderer === "maplibre" ? data.maplibreRasterState || "unknown" : undefined,
         generation: group?.dataset.activeTileGenerationKey || group?.dataset.dashboardRudyTileKey || tiles.map(tile => tile.key).join("|"),
-        tiles: renderer === "svg" ? tiles : undefined};
+        tiles: renderer === "svg" ? tiles : undefined,
+        cameraMotion: renderer === "maplibre" ? cameraMotion() : undefined};
     };
     const tileView = () => {
       const supplied = config.tileView?.();
@@ -270,7 +293,7 @@
       button.click();
     };
     const directionTo = tile => {
-      if (!config.map?.project) return tile.direction;
+      if (!config.map?.project) return cacheMissDirection(tileView(), tile);
       const native = tileView().tiles?.filter(item => item.z === tile.z) || [];
       requireValue(native.length > 0, "Navigation has no current native cohort to guide the cache-miss pan.");
       const point = item => config.map.project([(item.x + .5) / (2 ** item.z) * 360 - 180,
@@ -281,7 +304,7 @@
       requireValue(Number.isFinite(dx) && Number.isFinite(dy), "Native cache-miss screen projection is unavailable.");
       return Math.abs(dx) >= Math.abs(dy) ? dx >= 0 ? "right" : "left" : dy >= 0 ? "down" : "up";
     };
-    return {...config, snapshot, tileView, act, directionTo};
+    return {...config, snapshot, tileView, act, directionTo, cameraMotion};
   }
 
   function tileUrl(value, base, projectId, mode = null) {
@@ -340,27 +363,57 @@
     return urls;
   }
 
-  async function readTile(value, descriptor, projectId, {allowMissing = false, decode = true, mode = "cache", onReceipt = null} = {}) {
+  async function readTile(value, descriptor, projectId, {allowMissing = false, decode = true, mode = "cache", onReceipt = null,
+    cohortSignal = null, cohortId = null, onFailure = null} = {}) {
     const tile = tileUrl(value.href || value, descriptor.doc.location.href, projectId, mode);
     const controller = new AbortController();
-    const receipt = {requestId: ++requestSequence, purpose: "diagnostic-tile-verification", ...tile,
+    const receipt = {requestId: ++requestSequence, cohortId, purpose: "diagnostic-tile-verification", ...tile,
       mode, method: "GET", fetchCache: "no-store", allowMissing, decodeRequested: decode,
       startedAt: Date.now(), deadlineMs: 15000, phase: "fetch", outcome: "pending", httpStatus: null,
       headers: null, blobBytes: null, bitmapWidth: null, bitmapHeight: null, decoded: false,
-      deadlineTriggered: false, abort: {aborted: false, reason: null, trigger: null}, events: [], error: null};
+      bodySettlement: {status: "not-received", cancelAttempted: false, startedAt: null, completedAt: null, error: null},
+      deadlineTriggered: false, cohortCancelled: false, abort: {aborted: false, reason: null, trigger: null}, events: [], error: null};
     const copyReceipt = () => ({...receipt, headers: receipt.headers ? {...receipt.headers} : null,
-      abort: {...receipt.abort}, events: receipt.events.map(event => ({...event}))});
+      abort: {...receipt.abort}, bodySettlement: {...receipt.bodySettlement}, events: receipt.events.map(event => ({...event}))});
     const publish = event => {
       const observedAt = Date.now();
       receipt.elapsedMs = Math.max(0, observedAt - receipt.startedAt);
       receipt.observedAt = observedAt;
       receipt.abort = {aborted: controller.signal.aborted, reason: errorEvidence(controller.signal.reason),
-        trigger: receipt.deadlineTriggered ? "diagnostic-readTile-deadline" : controller.signal.aborted ? "unknown" : null};
+        trigger: receipt.deadlineTriggered ? "diagnostic-readTile-deadline"
+          : receipt.cohortCancelled ? "diagnostic-cohort-cancelled" : controller.signal.aborted ? "unknown" : null};
       receipt.events.push({event, phase: receipt.phase, observedAt, elapsedMs: receipt.elapsedMs});
       onReceipt?.(copyReceipt());
     };
     const phase = name => { receipt.phase = name; publish("phase"); };
     const complete = outcome => { receipt.outcome = outcome; receipt.completedAt = Date.now(); phase("complete"); };
+    const cancelFromCohort = () => {
+      if (controller.signal.aborted) return;
+      receipt.cohortCancelled = true;
+      controller.abort(cohortSignal.reason);
+      publish("abort");
+    };
+    let response = null, bodyConsumed = false, bodyCancelAttempted = false;
+    const cancelUnusedBody = async ({preservePhase = false} = {}) => {
+      if (!response || bodyConsumed || bodyCancelAttempted) return;
+      const body = response.body;
+      if (!body) { receipt.bodySettlement.status = "absent"; return; }
+      if (response.bodyUsed) return;
+      bodyCancelAttempted = true;
+      Object.assign(receipt.bodySettlement, {status: "cancelling", cancelAttempted: true, startedAt: Date.now()});
+      if (!preservePhase) receipt.phase = "body-cancel";
+      publish("body-cancel-start");
+      try {
+        await body.cancel("Scout diagnostic no longer needs this response body.");
+        Object.assign(receipt.bodySettlement, {status: "cancelled", completedAt: Date.now()});
+        publish("body-cancel-settled");
+      } catch (error) {
+        Object.assign(receipt.bodySettlement, {status: "cancel-failed", completedAt: Date.now(), error: errorEvidence(error)});
+        publish("body-cancel-error");
+        throw Object.assign(new Error("Unused response body cancellation failed: " + error.message, {cause: error}),
+          {name: error.name || "Error"});
+      }
+    };
     const timer = global.setTimeout(() => {
       receipt.deadlineTriggered = true;
       receipt.deadlineTriggeredAt = Date.now();
@@ -369,12 +422,18 @@
     }, 15000);
     try {
       publish("start");
-      const response = await global.fetch(tile.href, {method: "GET", credentials: "same-origin", redirect: "error", cache: "no-store", signal: controller.signal});
+      cohortSignal?.addEventListener("abort", cancelFromCohort, {once: true});
+      if (cohortSignal?.aborted) cancelFromCohort();
+      response = await global.fetch(tile.href, {method: "GET", credentials: "same-origin", redirect: "error", cache: "no-store", signal: controller.signal});
+      receipt.bodySettlement.status = response.body ? "unconsumed" : "absent";
+      controller.signal.throwIfAborted();
       receipt.httpStatus = response.status;
       receipt.headers = Object.fromEntries(["X-Scout-Tile-Exact", "X-Scout-Tile-Zoom", "X-Scout-Imagery-Source-Id",
         "X-Scout-Tile-Source", "Content-Type", "Content-Length"].map(name => [name, response.headers?.get?.(name) ?? null]));
       phase("headers");
       if (allowMissing && response.status === 404) {
+        await cancelUnusedBody();
+        controller.signal.throwIfAborted();
         complete("missing");
         return {...tile, status: 404, decoded: false, requestReceipt: copyReceipt()};
       }
@@ -387,26 +446,84 @@
         && source && !/fallback|parent|transparent|placeholder|upsampl/i.test(source), `${tile.key}: native provenance is not verified.`);
       if (mode === "cache") requireValue(["local_source_cache", "local_cache"].includes(source), `${tile.key}: cache-only GET fetched remote bytes.`);
       if (decode) {
+        Object.assign(receipt.bodySettlement, {status: "consuming", startedAt: Date.now()});
         phase("blob");
         const blob = await response.blob();
+        bodyConsumed = true;
+        Object.assign(receipt.bodySettlement, {status: "consumed", completedAt: Date.now()});
         receipt.blobBytes = number(blob.size);
         phase("decode");
         const bitmap = await global.createImageBitmap(blob);
         receipt.bitmapWidth = number(bitmap.width); receipt.bitmapHeight = number(bitmap.height);
         try {
+          // Bitmap decoding cannot itself be cancelled. Await it, then close
+          // the bitmap even when another request has already failed the batch.
+          controller.signal.throwIfAborted();
           phase("dimensions");
           requireValue(bitmap.width >= 256 && bitmap.height >= 256, `${tile.key}: tile has no native 256 px detail.`);
           receipt.decoded = true;
         }
         finally { bitmap.close(); }
+      } else {
+        await cancelUnusedBody();
+        controller.signal.throwIfAborted();
       }
       complete("verified");
       return {...tile, status: response.status, source, decoded: decode, requestReceipt: copyReceipt()};
     } catch (error) {
-      receipt.outcome = "failed"; receipt.completedAt = Date.now(); receipt.error = errorEvidence(error);
+      const cancelledByEarlierFailure = receipt.cohortCancelled;
+      let bodyCleanupError = null;
+      // Notify the cohort before awaiting cleanup, so a held unused body cannot
+      // postpone cancellation of sibling requests. This request is still pending.
+      onFailure?.(error, copyReceipt());
+      try { await cancelUnusedBody({preservePhase: true}); }
+      catch (cleanupError) { bodyCleanupError = cleanupError; }
+      receipt.outcome = cancelledByEarlierFailure ? "cancelled" : "failed";
+      receipt.completedAt = Date.now(); receipt.error = errorEvidence(error);
+      if (bodyCleanupError) receipt.bodyCleanupError = errorEvidence(bodyCleanupError);
       publish("error");
-      throw Object.assign(new Error(error.message, {cause: error}), {name: error.name || "Error", requestReceipt: copyReceipt()});
-    } finally { global.clearTimeout(timer); }
+      const message = bodyCleanupError ? error.message + "; " + bodyCleanupError.message : error.message;
+      throw Object.assign(new Error(message, {cause: error}), {name: error.name || "Error", requestReceipt: copyReceipt()});
+    } finally {
+      global.clearTimeout(timer);
+      cohortSignal?.removeEventListener("abort", cancelFromCohort);
+    }
+  }
+
+  async function readTileCohort(values, descriptor, projectId, options = {}) {
+    const controller = new AbortController(), cohortId = ++cohortSequence, startedAt = Date.now();
+    const requests = new Map();
+    let firstError = null, firstFailure = null;
+    const observeFailure = (error, receipt) => {
+      if (firstError) return;
+      firstError = error;
+      firstFailure = {observedAt: Date.now(), requestId: receipt?.requestId ?? null,
+        error: errorEvidence(error), inFlightCount: [...requests.values()].filter(item =>
+          item.outcome === "pending" && item.requestId !== receipt?.requestId).length};
+      controller.abort(error);
+    };
+    const pending = values.map(value => readTile(value, descriptor, projectId, {...options, cohortId,
+      cohortSignal: controller.signal, onReceipt: receipt => {
+        requests.set(receipt.requestId, receipt);
+        options.onReceipt?.(receipt);
+      }, onFailure: (error, receipt) => {
+        observeFailure(error, receipt);
+        options.onFailure?.(error, receipt);
+      }}).catch(error => {
+      observeFailure(error, error.requestReceipt);
+      // Replace the early notification with that same request's final receipt,
+      // including a secondary body-cleanup failure without losing the first cause.
+      if (error.requestReceipt?.requestId === firstFailure.requestId) firstError = error;
+      throw error;
+    }));
+    const settled = await Promise.allSettled(pending);
+    if (firstError) {
+      throw Object.assign(firstError, {cohortReceipt: {cohortId, startedAt, completedAt: Date.now(),
+        requestedCount: values.length, settledCount: settled.length, firstFailure,
+        inFlightCount: [...requests.values()].filter(receipt => receipt.outcome === "pending").length,
+        requests: [...requests.values()]}});
+    }
+    return settled.map(result => result.value);
   }
 
   async function waitFor(read, timeoutMs = 60000, progress = null) {
@@ -471,7 +588,7 @@
       });
       const urls = urlsFor(descriptor, snapshot, projectId);
       if (descriptor.renderer === "svg") {
-        await Promise.all(urls.map(url => readTile(url, descriptor, projectId, {onReceipt: onRequestReceipt})));
+        await readTileCohort(urls, descriptor, projectId, {onReceipt: onRequestReceipt});
         const current = descriptor.snapshot();
         requireValue(current.view === snapshot.view && current.generation === snapshot.generation
           && current.activeRenderer === descriptor.renderer && nativeComplete(current, expected), "SVG active generation changed during HTTP/decode verification.");
@@ -479,32 +596,109 @@
       return {...snapshot, requestCount: urls.length};
     } catch (error) {
       throw Object.assign(new Error(`${error.message} Actual Z${last?.matrix ?? "?"}; ${last?.success ?? "?"}/${last?.required ?? "?"}; state=${last?.status || "unknown"}.`, {cause: error}),
-        {requestReceipt: error.requestReceipt || null, waitEvidence: error.waitEvidence || null,
+        {requestReceipt: error.requestReceipt || null, cohortReceipt: error.cohortReceipt || null, waitEvidence: error.waitEvidence || null,
           initializationEvidence: {observations: initializationObservations, latestReceipt: last?.initializationReceipt || null}});
     }
   }
 
-  async function act(descriptor, action) {
+  async function act(descriptor, action, {onMotion = null} = {}) {
+    const startedAt = Date.now();
     await descriptor.act(action);
     await sleep(240);
+    if (descriptor.renderer !== "maplibre") return null;
+    const evidence = {action, startedAt, status: "waiting", observations: []};
+    try {
+      // KeyboardHandler's camera animation can outlive the dispatch delay.
+      // A missing tile must be recorded at a stopped camera, otherwise the
+      // same-view recovery predicate compares two points on one animation.
+      await waitFor(() => {
+        const motion = descriptor.cameraMotion?.() || {observedAt: Date.now(),
+          basis: "maplibre-public-api", available: false, moving: null, easing: null, errorName: "MissingCameraMotionAPI"};
+        evidence.observations.push(motion);
+        onMotion?.(motion);
+        requireValue(motion.basis === "maplibre-public-api" && motion.available === true
+          && typeof motion.moving === "boolean" && (motion.easing == null || typeof motion.easing === "boolean"),
+        "MapLibre camera motion is unverified; a stationary view cannot be established.");
+        return motion.moving === false && motion.easing !== true ? motion : null;
+      });
+      return {...evidence, status: "stopped", completedAt: Date.now()};
+    } catch (error) {
+      throw Object.assign(new Error(`Camera did not settle after ${action}: ${error.message}`, {cause: error}),
+        {cameraMotionEvidence: {...evidence, status: "warning", completedAt: Date.now()}, waitEvidence: error.waitEvidence || null});
+    }
   }
 
-  async function findCacheMiss(descriptor, snapshot, projectId, {onReceipt = null} = {}) {
-    const view = descriptor.tileView(), z = snapshot.matrix;
+  function cacheMissRange(view, z) {
     const native = view.tiles?.filter(tile => tile.z === z);
-    const range = native?.length ? {xMin: Math.min(...native.map(tile => tile.x)), xMax: Math.max(...native.map(tile => tile.x)),
+    return native?.length ? {xMin: Math.min(...native.map(tile => tile.x)), xMax: Math.max(...native.map(tile => tile.x)),
       yMin: Math.min(...native.map(tile => tile.y)), yMax: Math.max(...native.map(tile => tile.y))} : tileRange(view, z);
+  }
+
+  function cacheMissDirection(view, tile) {
+    const range = cacheMissRange(view, tile.z);
+    if (tile.x > range.xMax) return "right";
+    if (tile.x < range.xMin) return "left";
+    if (tile.y > range.yMax) return "down";
+    if (tile.y < range.yMin) return "up";
+    return tile.direction;
+  }
+
+  function cacheMissCandidates(view, z) {
+    const range = cacheMissRange(view, z), n = 2 ** z;
+    requireValue(Object.values(range).every(Number.isInteger) && range.xMin <= range.xMax && range.yMin <= range.yMax,
+      "Native viewport range is unavailable for a genuine cache-miss search.");
+    const limits = Array.isArray(view.sourceBounds) && view.sourceBounds.length === 4
+      ? tileRange({bounds: {west: view.sourceBounds[0], south: view.sourceBounds[1],
+        east: view.sourceBounds[2], north: view.sourceBounds[3]}}, z)
+      : {xMin: 0, xMax: n - 1, yMin: 0, yMax: n - 1};
     const midX = Math.floor((range.xMin + range.xMax) / 2), midY = Math.floor((range.yMin + range.yMax) / 2);
-    for (const offset of [1, 2, 4, 8, 16, 32]) {
-      for (const [direction, x, y] of [["right", range.xMax + offset, midY], ["left", range.xMin - offset, midY],
-        ["down", midX, range.yMax + offset], ["up", midX, range.yMin - offset]]) {
-        if (x < 0 || y < 0 || x >= 2 ** z || y >= 2 ** z) continue;
-        const href = view.tileTemplate.replaceAll("{z}", z).replaceAll("{x}", x).replaceAll("{y}", y);
-        const result = await readTile(href, descriptor, projectId, {allowMissing: true, decode: false, onReceipt});
-        if (result.status === 404) return {...result, direction};
-      }
+    const candidates = [], seen = new Set(), radius = 32;
+    const add = (x, y, offset) => {
+      const key = [z, x, y].join("/");
+      if (seen.has(key) || x < limits.xMin || x > limits.xMax || y < limits.yMin || y > limits.yMax) return;
+      seen.add(key); candidates.push({z, x, y, key, offset, direction: cacheMissDirection(view, {z, x, y})});
+    };
+    // Cover every tile in the existing 32-tile neighborhood, including gaps
+    // between the old six offsets. Do not infer missing data from 24 cache hits.
+    for (let offset = 1; offset <= radius; offset += 1) {
+      const left = range.xMin - offset, right = range.xMax + offset;
+      const top = range.yMin - offset, bottom = range.yMax + offset;
+      add(right, midY, offset); add(left, midY, offset); add(midX, bottom, offset); add(midX, top, offset);
+      for (let y = top; y <= bottom; y += 1) { add(right, y, offset); add(left, y, offset); }
+      for (let x = left + 1; x < right; x += 1) { add(x, bottom, offset); add(x, top, offset); }
     }
-    throw new Error("No genuine cache miss found in the bounded adjacent views; caches were not deleted. Miss/recovery remain unverified.");
+    return {range, limits, radius, candidates};
+  }
+
+  async function findCacheMiss(descriptor, snapshot, projectId, {onReceipt = null, searchState = null, caseKey = null} = {}) {
+    const view = descriptor.tileView(), z = snapshot.matrix, plan = cacheMissCandidates(view, z);
+    const state = searchState || {knownHits: new Map()};
+    requireValue(state.knownHits instanceof Map, "Invalid cache-miss search state.");
+    const evidence = {caseKey, startedAt: Date.now(), basis: "same-origin-workspace-cache-only-get",
+      range: plan.range, limits: plan.limits, radius: plan.radius, eligibleCount: plan.candidates.length,
+      examined: [], priorHits: [], selected: null, status: "searching"};
+    try {
+      for (const candidate of plan.candidates) {
+        const href = tileUrl(view.tileTemplate.replaceAll("{z}", z).replaceAll("{x}", candidate.x).replaceAll("{y}", candidate.y),
+          descriptor.doc.location.href, projectId, "cache").href;
+        if (state.knownHits.has(href)) {
+          evidence.priorHits.push({key: candidate.key, href, ...state.knownHits.get(href)}); continue;
+        }
+        const result = await readTile(href, descriptor, projectId, {allowMissing: true, decode: false, onReceipt});
+        const receipt = {key: candidate.key, href, requestId: result.requestReceipt.requestId,
+          observedAt: result.requestReceipt.completedAt, httpStatus: result.status, source: result.source || null};
+        evidence.examined.push(receipt);
+        if (result.status === 404) {
+          evidence.selected = receipt; evidence.status = "found"; evidence.completedAt = Date.now();
+          return {...result, direction: candidate.direction, cacheMissSearchEvidence: evidence};
+        }
+        state.knownHits.set(href, {...receipt, caseKey});
+      }
+      throw new Error("No genuine cache miss found in the bounded adjacent views; caches were not deleted. Miss/recovery remain unverified.");
+    } catch (error) {
+      evidence.status = "unverified"; evidence.completedAt = Date.now();
+      throw Object.assign(error, {cacheMissSearchEvidence: evidence});
+    }
   }
 
   function containsTile(view, tile) {
@@ -522,13 +716,16 @@
   }
 
   async function runCase(testCase, options) {
-    const result = {...testCase, stages: [], activeStage: "initial", cleanup: []};
+    const result = {...testCase, stages: [], activeStage: "initial", cleanup: [], actionEvidence: []};
+    const cacheMissSearchState = options.cacheMissSearchState || {knownHits: new Map()};
     let probe, descriptor, stage = "initial";
     let lastPublishedAt = -Infinity, lastObserved = "";
     let requests = new Map(), finalized = false;
     const publish = key => {
       if (key !== lastObserved && Date.now() - lastPublishedAt >= 500) {
-        lastObserved = key; lastPublishedAt = Date.now(); options.onProgress?.(result);
+        lastObserved = key;
+        try { options.onProgress?.(result); }
+        finally { lastPublishedAt = Date.now(); }
       }
     };
     const start = name => {
@@ -560,6 +757,18 @@
     };
     const settle = settings => ready(descriptor, options.projectId,
       {...settings, onSnapshot: observe, onRequestReceipt: requestObserver()});
+    const performAction = async action => {
+      try {
+        const evidence = await act(descriptor, action, {onMotion: motion => {
+          result.liveCameraMotion = motion;
+          publish(JSON.stringify([stage, "camera-motion", action, motion.available, motion.moving, motion.easing]));
+        }});
+        if (evidence) result.actionEvidence.push({stage, ...evidence});
+      } catch (error) {
+        if (error.cameraMotionEvidence) result.actionEvidence.push({stage, ...error.cameraMotionEvidence});
+        throw error;
+      }
+    };
     const addCleanup = receipt => {
       const complete = receipt?.disposed === true && receipt.activeMaps === 0 && receipt.pendingInitializations === 0
         && Array.isArray(receipt.errors) && receipt.errors.length === 0;
@@ -599,16 +808,16 @@
       probe = await options.open(testCase); descriptor = probe.descriptor;
       verifyDomains();
       record(stage, await settle());
-      start("fit"); await act(descriptor, "fit");
+      start("fit"); await performAction("fit");
       const fit = await settle(); record(stage, fit);
-      start("first-plus"); await act(descriptor, "plus");
+      start("first-plus"); await performAction("plus");
       const first = await settle({previousView: fit.view});
       requireValue(first.matrix > fit.matrix, `First + kept native Z${fit.matrix}; repeated + is not a substitute.`);
       record(stage, first);
       start("native-z20");
       let current = first;
       for (let clicks = 0; current.matrix < 20 && !atViewMaximum(current.viewLimits) && clicks < 48; clicks += 1) {
-        await act(descriptor, "plus"); current = descriptor.snapshot();
+        await performAction("plus"); current = descriptor.snapshot();
       }
       const high = await settle({expected: 20}); record(stage, high);
       start("actual-maximum");
@@ -616,25 +825,28 @@
       for (let clicks = 0; !atViewMaximum(current.viewLimits) && clicks < 64; clicks += 1) {
         requireValue(Number.isFinite(current.viewLimits?.viewZoom) && Number.isFinite(current.viewLimits?.maxViewZoom),
           "Actual zoom/current maximum receipt is unavailable; a disabled + button is not proof.");
-        await act(descriptor, "plus"); current = await settle({expected: 20});
+        await performAction("plus"); current = await settle({expected: 20});
       }
       const maximum = await settle({expected: 20});
       requireValue(maximumComplete(maximum), `Actual maximum is not native-pixel verified: zoom ${maximum.viewLimits?.viewZoom ?? "?"}/${maximum.viewLimits?.maxViewZoom ?? "?"}; pixel ratio ${maximum.viewLimits?.nativePixelRatio ?? "?"}; unbounded native selection ${maximum.viewLimits?.nativeCamera?.requestedAboveNativeMax ?? "unknown"}.`);
       record(stage, maximum);
       start("pan-z20");
-      for (let index = 0; index < 6; index += 1) await act(descriptor, "right");
+      for (let index = 0; index < 6; index += 1) await performAction("right");
       const pan = await settle({expected: 20, previousView: maximum.view,
         previousGeneration: descriptor.renderer === "svg" ? maximum.generation : null});
       record(stage, pan);
       start("cache-hit");
-      await act(descriptor, "stop-updates");
+      await performAction("stop-updates");
       const cached = await settle({expected: 20});
-      const hits = await Promise.all(urlsFor(descriptor, cached, options.projectId).map(url => readRequest(url)));
+      const hits = await readTileCohort(urlsFor(descriptor, cached, options.projectId), descriptor, options.projectId,
+        {onReceipt: requestObserver()});
       record(stage, {...cached, cacheHits: hits.length, cachedSource: [...new Set(hits.map(hit => hit.source))]});
       start("cache-miss");
-      const missing = await findCacheMiss(descriptor, cached, options.projectId, {onReceipt: requestObserver()});
+      const missing = await findCacheMiss(descriptor, cached, options.projectId,
+        {onReceipt: requestObserver(), searchState: cacheMissSearchState, caseKey: testCase.key});
+      result.cacheMissSearchEvidence = missing.cacheMissSearchEvidence;
       for (let steps = 0; !containsTile(descriptor.tileView(), missing) && steps < 256; steps += 1) {
-        await act(descriptor, descriptor.directionTo?.(missing) || missing.direction);
+        await performAction(descriptor.directionTo?.(missing) || missing.direction);
       }
       requireValue(containsTile(descriptor.tileView(), missing), "The genuine missing tile did not enter the actual viewport.");
       const unavailable = await waitFor(() => {
@@ -648,18 +860,23 @@
         "Missing tile was filled while updates were stopped; cache-only behavior failed.");
       record(stage, {...unavailable, genuineCacheMiss: missing.key, cacheHttpStatus: 404, failureDetected: true});
       start("recovery");
-      await act(descriptor, "start-updates");
+      await performAction("start-updates");
       const recovered = await settle({expected: 20});
       requireValue(recovered.view === unavailable.view && containsTile(descriptor.tileView(), missing), "Recovery reset the camera or left the missing tile outside the viewport.");
       const recoveryTile = await readRequest(missing);
+      cacheMissSearchState.knownHits.set(recoveryTile.href, {key: recoveryTile.key, href: recoveryTile.href,
+        requestId: recoveryTile.requestReceipt.requestId, observedAt: recoveryTile.requestReceipt.completedAt,
+        httpStatus: recoveryTile.status, source: recoveryTile.source, caseKey: testCase.key});
       record(stage, {...recovered, recoveredTile: recoveryTile.key, recoveryHttpStatus: recoveryTile.status});
     } catch (error) {
       if (error.cleanupReceipt) addCleanup(error.cleanupReceipt);
+      if (error.cacheMissSearchEvidence) result.cacheMissSearchEvidence = error.cacheMissSearchEvidence;
       let snapshot = result.liveSnapshot || null, snapshotError = null;
       try { if (descriptor) snapshot = descriptor.snapshot(); } catch (failure) { snapshotError = failure.message; }
       result.stages.push({stage, status: "warning", detail: error.message, snapshot, snapshotError,
         snapshotSource: descriptor ? "current-renderer" : snapshot ? "last-observed-before-initialization" : "unavailable",
-        error: errorEvidence(error), requestReceipt: error.requestReceipt || null, requestEvidence: requestEvidence(),
+        error: errorEvidence(error), requestReceipt: error.requestReceipt || null, cohortReceipt: error.cohortReceipt || null,
+        requestEvidence: requestEvidence(), cameraMotionEvidence: error.cameraMotionEvidence || null,
         waitEvidence: error.waitEvidence || null, initializationEvidence: error.initializationEvidence || null});
     } finally {
       finalized = true;
@@ -677,7 +894,7 @@
   async function run(options) {
     requireValue(/^[A-Za-z0-9_.-]+$/.test(options.projectId), "Invalid diagnostic workspace.");
     const cases = casesFor(options.registry, options.dailyIds || []);
-    const results = [];
+    const results = [], cacheMissSearchState = {knownHits: new Map()};
     lastReport = {schemaVersion: 1, projectId: options.projectId, scope: "isolated-existing-entry-renderers",
       approval: "2026-09-12 user arbitration A/B and all Rudy coverage", candidateOnly: true, runtimeSafetyTruth: false,
       cacheDeletion: false, forcedRefresh: false, otherWrites: false, dailyEvidence: options.dailyEvidence || null,
@@ -688,7 +905,7 @@
     for (const testCase of cases) {
       requireValue(options.currentProjectId() === options.projectId, "Workspace changed; diagnostic cannot reuse another project's result.");
       lastReport.activeCase = testCase.key;
-      results.push(await runCase(testCase, {...options, inventoryCases: cases, onProgress: result => {
+      results.push(await runCase(testCase, {...options, cacheMissSearchState, inventoryCases: cases, onProgress: result => {
         lastReport.activeResult = result;
         const observed = results.some(item => item.key === result.key) ? results : [...results, result];
         const summary = summarize(observed);
@@ -705,8 +922,8 @@
     return lastReport;
   }
 
-  const api = Object.freeze({STAGES, casesFor, validateNavigationCoverage, validateArchitectureCoverage, nativeComplete, maximumComplete, descriptorFor, tileUrl, tileRange, urlsFor, readTile,
-    findCacheMiss, containsTile, summarize, runCase, run, snapshot: () => lastReport});
+  const api = Object.freeze({STAGES, casesFor, validateNavigationCoverage, validateArchitectureCoverage, nativeComplete, maximumComplete, descriptorFor, tileUrl, tileRange, urlsFor, readTile, readTileCohort, act,
+    cacheMissDirection, cacheMissCandidates, findCacheMiss, containsTile, summarize, runCase, run, snapshot: () => lastReport});
   global.ScoutRudyLiveDiagnostic = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof window !== "undefined" ? window : globalThis);

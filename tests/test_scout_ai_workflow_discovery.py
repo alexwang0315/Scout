@@ -1,6 +1,16 @@
 import json
 from pathlib import Path
 
+from weather_workflow_fixtures import (
+    CWA_ENVIRONMENT_TOOL_ID,
+    GEE_ENVIRONMENT_TOOL_ID,
+    REFERENCE_TIME,
+    WEATHER_TOOLS,
+    assert_exact_weather_execution,
+    weather_tool_calls,
+    write_missing_weather_project,
+)
+
 from scout_agent_builtin_tools import run_builtin_tool
 from scout_agent_tools import load_tool_manifest
 from scout_ai_tool_planner import WEATHER_WINDOW_TOOL_ID
@@ -23,7 +33,7 @@ MANIFEST_PATH = (
 )
 
 
-def test_workflow_discovery_plans_weather_ready_tool_without_execution() -> None:
+def test_workflow_discovery_plans_weather_ready_tool_without_execution(weather_tool_calls) -> None:
     result = build_scout_ai_workflow_discovery_plan(
         "明天午後雷雨是否要紮營?",
         project_root=PROJECT_ROOT,
@@ -36,8 +46,9 @@ def test_workflow_discovery_plans_weather_ready_tool_without_execution() -> None
     assert result.project_id == "chilai_nanhua_day1"
     assert result.context_registry["artifact_kind"] == "scout_ai_context_registry"
     assert result.tool_registry_summary["artifact_kind"] == "scout_ai_tool_registry"
-    assert WEATHER_WINDOW_TOOL_ID in result.selected_tool_ids
-    assert result.ready_to_execute_tool_ids == [WEATHER_WINDOW_TOOL_ID]
+    assert result.selected_tool_ids == list(WEATHER_TOOLS)
+    assert result.selected_tool_count == len(WEATHER_TOOLS)
+    assert result.ready_to_execute_tool_ids == list(WEATHER_TOOLS)
     assert result.contract_gap_tool_ids == []
     assert result.execution_policy.ready_tools_executed is False
     assert result.execution_policy.model_synthesis_performed is False
@@ -50,6 +61,14 @@ def test_workflow_discovery_plans_weather_ready_tool_without_execution() -> None
     assert selected_weather["request"] is not None
     assert selected_weather["missing_fields"] == []
     assert "tool_result" not in selected_weather
+    selected_cwa = _plan_item(result.tool_plan, CWA_ENVIRONMENT_TOOL_ID)
+    assert selected_cwa["status"] == "ready_to_execute"
+    assert selected_cwa["request"] is not None
+    assert selected_cwa["missing_fields"] == []
+    assert "tool_result" not in selected_cwa
+    assert weather_tool_calls == []
+
+
 
 
 def test_workflow_discovery_plans_ready_risk_and_terrain_without_running_tools() -> None:

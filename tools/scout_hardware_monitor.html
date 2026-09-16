@@ -141,7 +141,7 @@
       .hardware-panel .hardware-notice, .hardware-panel .panel-note,
       .hardware-panel .hardware-empty, .hardware-panel .hardware-events-panel .panel-note,
       .hardware-panel .hardware-alert-row span, .hardware-panel .hardware-event-row span,
-      .hardware-panel .hardware-thresholds summary, .hardware-panel .hardware-threshold-list dt,
+      .hardware-panel .hardware-thresholds summary, .hardware-panel .hailo-history summary, .hardware-panel .hardware-threshold-list dt,
       .hardware-panel .hardware-threshold-list dd, .hardware-panel .hardware-chart-meta { font-size: 0.75rem; }
       .hardware-panel .legend-dot.memory { background: var(--blue); }
       .hardware-panel [data-severity="warning"] { color: var(--amber); }
@@ -169,8 +169,8 @@
       .hardware-alert-row[data-severity="critical"] .hardware-severity-icon { color: var(--coral); }
       .hardware-alert-row strong, .hardware-event-row strong { display: block; color: var(--ink); font-size: 0.67rem; font-weight: 600; }
       .hardware-alert-row span, .hardware-event-row span { display: block; margin-top: 3px; color: var(--muted); font-size: 0.62rem; line-height: 1.55; overflow-wrap: anywhere; }
-      .hardware-thresholds { margin-top: 19px; padding-top: 15px; border-top: 1px solid var(--line); }
-      .hardware-thresholds summary { color: var(--muted); cursor: pointer; font-size: 0.62rem; }
+      .hardware-thresholds, .hailo-history { margin-top: 19px; padding-top: 15px; border-top: 1px solid var(--line); }
+      .hardware-thresholds summary, .hailo-history summary { color: var(--muted); cursor: pointer; font-size: 0.62rem; }
       .hardware-threshold-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; margin: 13px 0 0; }
       .hardware-threshold-list div { min-width: 0; }
       .hardware-threshold-list dt { color: var(--faint); font-size: 0.57rem; }
@@ -216,6 +216,23 @@
       #hardwareInventoryMeta { max-width: none; margin: 0 0 16px; text-align: left; }
       #hardwareInventoryPanel[data-state="stale"], #hardwareInventoryPanel[data-state="unavailable"] { border-color: var(--amber); }
       #hardwareInventoryPanel[data-state="stale"] #hardwareInventoryMeta, #hardwareInventoryPanel[data-state="unavailable"] #hardwareInventoryMeta { color: var(--amber); }
+
+      #hardwareHailoPanel { min-width: 0; }
+      #hardwareHailoMeta, #hardwareHailoHistoryMeta { max-width: none; text-align: left; overflow-wrap: anywhere; }
+      #hardwareHailoPanel[data-state="stale"], #hardwareHailoPanel[data-state="unavailable"] { border-color: var(--amber); }
+      #hardwareHailoPanel[data-state="stale"] #hardwareHailoMeta, #hardwareHailoPanel[data-state="unavailable"] #hardwareHailoMeta { color: var(--amber); }
+      .hailo-grid { margin-top: 16px; }
+      .hailo-grid .inventory-section-name { min-width: 0; overflow-wrap: anywhere; }
+      .hailo-chart { min-width: 0; margin: 18px 0; }
+      .hailo-chart figcaption { color: var(--blue); font-size: 0.75rem; }
+      .hailo-chart svg { display: block; width: 100%; height: auto; }
+      .hailo-chart .chart-axis-label { font-size: 12px; }
+      .hailo-chart-range { color: var(--faint); font-size: 0.75rem; overflow-wrap: anywhere; }
+      .hailo-samples { margin-top: 16px; }
+      .hailo-samples > summary { padding: 9px 0; color: var(--blue); font-size: 0.75rem; cursor: pointer; }
+      .hailo-samples .table-wrap { max-height: 300px; margin-top: 10px; }
+      .hailo-samples table { min-width: 540px; }
+      .hailo-samples th, .hailo-samples td { font-size: 0.75rem; overflow-wrap: anywhere; }
 
       .panel { padding: 24px; }
       .panel-head { display: flex; align-items: start; justify-content: space-between; gap: 18px; margin-bottom: 24px; }
@@ -266,6 +283,7 @@
         .panel-head { flex-direction: column; }
         .inventory-fields { grid-template-columns: 1fr; }
         .inventory-body { padding: 0 12px 14px; }
+        .hailo-chart .chart-axis-label { font-size: 16px; }
       }
       @media (prefers-reduced-motion: reduce) {
         *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
@@ -280,7 +298,7 @@
             <div>
               <p class="panel-kicker">SCOUT 主機 / 硬體觀測</p>
               <h1 id="hardwareMonitorTitle" class="panel-title">硬體監控</h1>
-              <p class="panel-note">Scout 主機的最新採樣，每 60 秒更新。</p>
+              <p class="panel-note">Scout 主機的最新採樣，每 60 秒讀取；斷線後自動重試。</p>
             </div>
             <div class="hardware-source-badge"><span aria-hidden="true">◉</span><span>Scout 主機 · 唯讀</span></div>
           </div>
@@ -368,6 +386,28 @@
               <p id="hardwareThermalNote" class="hardware-card-note">風扇 0 RPM 不單獨判定故障</p>
             </article>
           </div>
+
+          <section id="hardwareHailoPanel" class="hardware-subpanel" aria-labelledby="hardwareHailoTitle" data-state="loading">
+            <div class="panel-head">
+              <div>
+                <p class="panel-kicker">05 / AI 加速器 · 唯讀觀測</p><h2 id="hardwareHailoTitle" class="panel-title">AI HAT／Hailo</h2>
+                <span id="hardwareHailoStatus" class="inventory-section-status" data-state="loading">· 載入中</span>
+              </div>
+              <p class="panel-note">每 60 秒採樣約 1 秒，不是連續推論或功能健康證明。NNC 0% 不代表故障；晶片電壓不等於功耗。</p>
+            </div>
+            <p id="hardwareHailoMeta" class="panel-note" role="status" aria-live="polite">正在讀取 Hailo 採樣…</p>
+            <p class="hardware-chart-meta">Hailo 資料年齡：<strong id="hardwareHailoAge">未知</strong>（依 Hailo 採樣時間計算）</p>
+            <div id="hardwareHailoDevices" class="inventory-grid hailo-grid" aria-busy="true"></div>
+            <details id="hardwareHailoErrors" class="inventory-notes">
+              <summary>Hailo 採樣錯誤</summary>
+              <ul id="hardwareHailoErrorList" class="inventory-errors"><li>未知</li></ul>
+            </details>
+            <details id="hardwareHailoHistory" class="hailo-history">
+              <summary>Hailo 最近採樣趨勢（NNC／晶片溫度）</summary>
+              <p id="hardwareHailoHistoryMeta" class="hardware-chart-meta">尚未讀取歷史資料</p>
+              <div id="hardwareHailoTrends" class="inventory-grid hailo-grid"></div>
+            </details>
+          </section>
 
           <section class="hardware-subpanel" aria-labelledby="hardwareDisksTitle">
             <div class="panel-head">
@@ -803,6 +843,284 @@
         if (focusedKey) Array.from(grid.querySelectorAll("[data-focus-key]")).find((node) => node.dataset.focusKey === focusedKey)?.focus({ preventScroll: true });
       }
 
+      const hailoExpansion = new Map();
+
+      function hailoTimestamp(value) {
+        // A timezone is part of the API contract; never interpret a naive date
+        // using the Mac's local timezone.
+        return typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/i.test(value) ? Date.parse(value) : NaN;
+      }
+
+      function hailoDataAge(hailo) {
+        const time = hailoTimestamp(hailo?.captured_at);
+        if (!Number.isFinite(time)) return null;
+        const envelope = hardwareState.lastEnvelope;
+        const freshness = hardwareObject(envelope?.freshness);
+        const anchorTime = hailoTimestamp(freshness?.captured_at);
+        const reportedAge = hardwareNumber(freshness?.age_seconds);
+        const receivedAt = hardwareNumber(hardwareState.receivedAt);
+        const elapsed = receivedAt === null ? null : Math.max(0, (Date.now() - receivedAt) / 1000);
+        const serverTime = hailoTimestamp(envelope?.server_time);
+        let age;
+        if (reportedAge !== null && reportedAge >= 0 && Number.isFinite(anchorTime) && elapsed !== null) {
+          // Both capture timestamps belong to Scout. Only elapsed time uses the
+          // Mac clock, so a static Mac/Scout clock offset cancels out.
+          age = reportedAge + (anchorTime - time) / 1000 + elapsed;
+        } else if (Number.isFinite(serverTime) && elapsed !== null) {
+          age = (serverTime - time) / 1000 + elapsed;
+        } else age = (Date.now() - time) / 1000;
+        // Permit at most one second of timestamp/age rounding. A clearly future
+        // observation is unknown, not a fresh zero-age reading.
+        return Number.isFinite(age) && age >= -1 ? Math.max(0, age) : null;
+      }
+
+      function hailoSnapshotState(hailo, overallState) {
+        if (!hailo || hailoValidity(overallState)) return overallState;
+        const age = hailoDataAge(hailo);
+        return age === null ? "unknown" : age > 150 ? "stale" : overallState;
+      }
+
+      function hailoValidity(overallState) {
+        return {
+          stale: "◷ 資料已過期 · 保留最後採樣，無法確認目前 Hailo 狀態。",
+          unavailable: "? 與 Scout API 斷線 · 以下為上次採樣，無法確認目前 Hailo 狀態。",
+          unknown: "? 資料有效性未知 · 以下僅為採樣紀錄。",
+          loading: "· 最新資料載入中，尚無有效狀態。",
+        }[overallState] || "";
+      }
+
+      function hailoReadBadge(status, overallState) {
+        const invalid = Boolean(hailoValidity(overallState));
+        const label = inventoryLabel(INVENTORY_SECTION_STATES, status, "? 未知");
+        const validity = { stale: "◷ 資料已過期", unavailable: "? API 斷線", unknown: "? 有效性未知", loading: "· 載入中" }[overallState];
+        const badge = inventoryTextNode("span", "inventory-section-status", `${invalid ? `${validity} · 上次採樣：` : ""}${label}`);
+        badge.dataset.state = invalid ? overallState : status || "unknown";
+        return badge;
+      }
+
+      function hailoDetails(key, className, label) {
+        const details = inventoryTextNode("details", className);
+        details.dataset.hailoKey = key;
+        details.open = hailoExpansion.get(key) === true;
+        const summary = inventoryTextNode("summary", "", label);
+        summary.dataset.hailoFocus = key;
+        details.append(summary);
+        return details;
+      }
+
+      function replaceHailoContent(root, render) {
+        // Status and history arrive independently; keys survive either refresh,
+        // transient absence, device reordering, and keyboard interaction.
+        const focusKey = root.contains(document.activeElement) ? document.activeElement.dataset.hailoFocus : null;
+        const scrollPositions = new Map();
+        root.querySelectorAll("details[data-hailo-key]").forEach((node) => hailoExpansion.set(node.dataset.hailoKey, node.open));
+        root.querySelectorAll(".table-wrap").forEach((node) => scrollPositions.set(node.dataset.hailoFocus, [node.scrollLeft, node.scrollTop]));
+        root.replaceChildren();
+        render();
+        root.querySelectorAll(".table-wrap").forEach((node) => {
+          const position = scrollPositions.get(node.dataset.hailoFocus);
+          if (position) { node.scrollLeft = position[0]; node.scrollTop = position[1]; }
+        });
+        if (focusKey) Array.from(root.querySelectorAll("[data-hailo-focus]")).find((node) => node.dataset.hailoFocus === focusKey)?.focus({ preventScroll: true });
+      }
+
+      function hailoErrors(values) {
+        const list = inventoryTextNode("ul", "inventory-errors");
+        const errors = Array.isArray(values) ? values : null;
+        (errors?.length ? errors : [errors ? "沒有回報讀取錯誤" : HARDWARE_UNKNOWN]).forEach((value) => {
+          list.append(inventoryTextNode("li", "", inventoryValue("", value)));
+        });
+        return list;
+      }
+
+      function renderHardwareHailo(data, overallState) {
+        const hailo = hardwareObject(data && data.hailo);
+        const grid = $("#hardwareHailoDevices");
+        const sampleState = hailoSnapshotState(hailo, overallState);
+        const validity = hailoValidity(sampleState);
+        $("#hardwareHailoPanel").dataset.state = validity ? sampleState : hailo?.status || "unknown";
+        $("#hardwareHailoPanel").dataset.validity = sampleState;
+        grid.setAttribute("aria-busy", "false");
+        const label = inventoryLabel(INVENTORY_SECTION_STATES, hailo?.status, "? 未知");
+        setText("hardwareHailoStatus", hailoReadBadge(hailo?.status, sampleState).textContent);
+        $("#hardwareHailoStatus").dataset.state = validity ? sampleState : hailo?.status || "unknown";
+        setText("hardwareHailoAge", formatHardwareAge(hailoDataAge(hailo)));
+        const windowMs = hardwareNumber(hailo?.sample_window_ms);
+        setText("hardwareHailoMeta", hailo
+          ? `${validity} ${validity ? "上次採樣：" : ""}${label} · 採樣 ${Number.isFinite(hailoTimestamp(hailo.captured_at)) ? formatHardwareDate(hailo.captured_at) : HARDWARE_UNKNOWN}（台北） · 來源 ${inventoryValue("", hailo.source)} · 採樣視窗 ${windowMs === null ? HARDWARE_UNKNOWN : `${windowMs / 1000} 秒`} · 唯讀旗標 ${inventoryValue("", hailo.read_only)}。已讀取不代表設備功能正常。`.trim()
+          : `${validity} ${data ? "這筆採樣沒有 Hailo 資料，等待更新。" : "尚無 Hailo 採樣，等待更新。"}`.trim());
+        const errorList = $("#hardwareHailoErrorList");
+        errorList.replaceChildren(...hailoErrors(hailo?.errors).childNodes);
+        replaceHailoContent(grid, () => {
+          if (!hailo) return;
+          const devices = Array.isArray(hailo.devices) ? hailo.devices.filter(hardwareObject) : null;
+          if (!devices?.length) {
+            const message = !devices ? "Hailo 裝置清單未知。"
+              : hailo.status === "ok" ? "此筆採樣未列出 Hailo 裝置。"
+              : "Hailo 裝置清單無法確認：本次讀取未完成，不能判定是否存在裝置。";
+            grid.append(inventoryTextNode("p", "hardware-empty", message));
+            return;
+          }
+          devices.forEach((device, index) => {
+            const key = JSON.stringify(["hailo-device", device.device_id ?? index]);
+            const details = hailoDetails(key, "inventory-section");
+            details.dataset.hailoDevice = device.device_id ?? "";
+            const heading = inventoryTextNode("span", "inventory-section-heading");
+            heading.append(inventoryTextNode("strong", "inventory-section-name", inventoryValue("", device.device_id)), hailoReadBadge(device.status, sampleState));
+            details.firstElementChild.append(heading,
+              inventoryTextNode("span", "inventory-section-summary", `${inventoryValue("", device.architecture)} · NNC ${formatHardwarePercent(device.nnc_utilization_percent)} · ${formatHardwareTemperature(device.temperature_c)}`));
+            const body = inventoryTextNode("div", "inventory-body");
+            if (validity) body.append(inventoryTextNode("p", "inventory-caution", validity));
+            const fields = inventoryTextNode("dl", "inventory-fields");
+            const voltage = hardwareNumber(device.voltage_mv);
+            [
+              ["nnc_utilization_percent", "NNC 使用率", formatHardwarePercent(device.nnc_utilization_percent)],
+              ["cpu_utilization_percent", "Hailo 內部 CPU 使用率", formatHardwarePercent(device.cpu_utilization_percent)],
+              ["ram_utilization_percent", "專用記憶體使用率", formatHardwarePercent(device.ram_utilization_percent)],
+              ["ram_used_bytes", "專用記憶體已用", formatHardwareGiB(device.ram_used_bytes)],
+              ["ram_total_bytes", "專用記憶體總量", formatHardwareGiB(device.ram_total_bytes)],
+              ["temperature_c", "晶片溫度", formatHardwareTemperature(device.temperature_c)],
+              ["voltage_mv", "晶片電壓（非功耗）", voltage === null ? HARDWARE_UNKNOWN : `${voltage} mV`],
+              ["source", "觀測來源", inventoryValue("", hailo.source)],
+              ["captured_at", "Hailo 採樣時間 · 台北", Number.isFinite(hailoTimestamp(hailo.captured_at)) ? formatHardwareDate(hailo.captured_at) : HARDWARE_UNKNOWN],
+            ].forEach(([metric, name, value]) => {
+              const field = inventoryTextNode("div", "");
+              const reading = inventoryTextNode("dd", "", value);
+              reading.dataset.hailoMetric = metric;
+              field.append(inventoryTextNode("dt", "", name), reading);
+              fields.append(field);
+            });
+            body.append(fields);
+            const errors = hailoDetails(`${key}:errors`, "inventory-notes", "裝置讀取錯誤");
+            errors.append(hailoErrors(device.errors));
+            body.append(errors);
+            details.append(body);
+            grid.append(details);
+          });
+        });
+        renderHardwareHailoHistory();
+      }
+
+      function updateHardwareHailoAge() {
+        const hailo = hardwareObject(hardwareState.lastData?.hailo);
+        setText("hardwareHailoAge", formatHardwareAge(hailoDataAge(hailo)));
+        if (hailoSnapshotState(hailo, hardwareState.effectiveState) !== $("#hardwareHailoPanel").dataset.validity) {
+          renderHardwareHailo(hardwareState.lastData, hardwareState.effectiveState);
+        }
+      }
+
+      function hailoHistorySamples(items, deviceId) {
+        // Never filter out a missing sample: its position breaks the line.
+        return items.map((item) => {
+          const hailo = hardwareObject(item?.hailo);
+          const device = Array.isArray(hailo?.devices) ? hailo.devices.find((row) => row?.device_id === deviceId) : null;
+          const capturedAt = hailo?.captured_at;
+          return { snapshotAt: item?.captured_at, capturedAt,
+            time: hailoTimestamp(capturedAt),
+            nnc_utilization_percent: hardwareNumber(device?.nnc_utilization_percent),
+            temperature_c: hardwareNumber(device?.temperature_c) };
+        });
+      }
+
+      function hailoTrendChart(samples, deviceId, metric, label, formatter) {
+        const figure = inventoryTextNode("figure", "hailo-chart");
+        figure.append(inventoryTextNode("figcaption", "", label));
+        const measured = samples.filter((sample) => Number.isFinite(sample.time) && sample[metric] !== null);
+        if (!measured.length) {
+          figure.append(inventoryTextNode("p", "hardware-empty", "沒有可繪製的讀值或採樣時間；缺失值維持未知。"));
+          return figure;
+        }
+        const times = samples.map((sample) => sample.time).filter(Number.isFinite);
+        const first = Math.min(...times), last = Math.max(...times);
+        const values = measured.map((sample) => sample[metric]);
+        let min = metric === "nnc_utilization_percent" ? Math.min(0, ...values) : Math.floor(Math.min(...values));
+        let max = metric === "nnc_utilization_percent" ? Math.max(100, ...values) : Math.ceil(Math.max(...values));
+        if (max === min) { min -= 1; max += 1; }
+        const svgNode = (tag, attributes, text) => {
+          const node = document.createElementNS("http://www.w3.org/2000/svg", tag);
+          Object.entries(attributes).forEach(([name, value]) => node.setAttribute(name, String(value)));
+          if (text !== undefined) node.textContent = text;
+          return node;
+        };
+        const svg = svgNode("svg", { viewBox: "0 0 320 180", role: "img", "aria-label": `${deviceId} · ${label}` });
+        svg.dataset.hailoSeries = metric;
+        const color = metric === "nnc_utilization_percent" ? "var(--mint)" : "var(--blue)";
+        [max, (min + max) / 2, min].forEach((value, index) => {
+          const y = 20 + index * 65;
+          svg.append(svgNode("line", { class: "chart-gridline", x1: 48, y1: y, x2: 304, y2: y }),
+            svgNode("text", { class: "chart-axis-label", x: 0, y: y + 4 }, Number(value.toFixed(1))));
+        });
+        const timeLabel = (time) => new Date(time).toLocaleTimeString("zh-TW", { timeZone: "Asia/Taipei", hour12: false });
+        svg.append(svgNode("text", { class: "chart-axis-label", x: 48, y: 173 }, timeLabel(first)),
+          svgNode("text", { class: "chart-axis-label", x: 304, y: 173, "text-anchor": "end" }, timeLabel(last)));
+        const commands = [], markers = svgNode("g", {});
+        let previous = null;
+        samples.forEach((sample) => {
+          const value = sample[metric], time = sample.time;
+          if (value === null || !Number.isFinite(time)) { previous = null; return; }
+          const x = first === last ? 176 : 48 + (time - first) / (last - first) * 256;
+          const y = 150 - (value - min) / (max - min) * 130;
+          const connect = previous !== null && time > previous && time - previous <= 150000;
+          commands.push(`${connect ? "L" : "M"}${x.toFixed(2)} ${y.toFixed(2)}`);
+          previous = time;
+          const marker = svgNode("circle", { cx: x, cy: y, r: 2.5, fill: color, "data-captured-at": sample.capturedAt, "data-value": value });
+          marker.append(svgNode("title", {}, `${formatHardwareDate(sample.capturedAt)} · ${formatter(value)}`));
+          markers.append(marker);
+        });
+        svg.append(svgNode("path", { class: "hardware-chart-path", stroke: color, d: commands.join(" ") }), markers);
+        figure.append(svg, inventoryTextNode("p", "hailo-chart-range", `${formatHardwareDate(first)} — ${formatHardwareDate(last)}（台北）`));
+        return figure;
+      }
+
+      function renderHardwareHailoHistory() {
+        const items = hardwareState.historyItems;
+        const readable = ["ok", "partial"].includes(hardwareState.historyStatus);
+        const historyLabel = readable ? `歷史紀錄 ${items.length} 筆${hardwareState.historyStatus === "partial" ? " · 部分資料" : ""}`
+          : items.length ? "歷史 API 無法讀取 · 保留上次歷史資料" : "歷史資料尚未取得";
+        setText("hardwareHailoHistoryMeta", `${hailoValidity(hardwareState.effectiveState)} ${historyLabel}。依 Hailo 實際採樣時間繪圖；NNC（%）與溫度（°C）各用獨立縱軸。未知值、缺少裝置、舊版採樣及超過 150 秒的缺口不連線。`.trim());
+        const devices = new Map();
+        items.forEach((item) => {
+          if (Array.isArray(item?.hailo?.devices)) item.hailo.devices.forEach((device) => {
+            if (typeof device?.device_id === "string" && device.device_id) devices.set(device.device_id, device.architecture);
+          });
+        });
+        const grid = $("#hardwareHailoTrends");
+        replaceHailoContent(grid, () => {
+          if (!devices.size) grid.append(inventoryTextNode("p", "hardware-empty", "此批歷史紀錄沒有 Hailo 裝置採樣。"));
+          devices.forEach((architecture, deviceId) => {
+            const key = JSON.stringify(["hailo-trend", deviceId]);
+            const details = hailoDetails(key, "inventory-section");
+            details.dataset.hailoTrendDevice = deviceId;
+            details.firstElementChild.append(inventoryTextNode("strong", "inventory-section-name", deviceId),
+              inventoryTextNode("span", "inventory-section-summary", `${inventoryValue("", architecture)} · 歷史採樣（非目前狀態）`));
+            const samples = hailoHistorySamples(items, deviceId);
+            const body = inventoryTextNode("div", "inventory-body");
+            body.append(hailoTrendChart(samples, deviceId, "nnc_utilization_percent", "NNC 使用率（%）", formatHardwarePercent),
+              hailoTrendChart(samples, deviceId, "temperature_c", "晶片溫度（°C）", formatHardwareTemperature));
+            const records = hailoDetails(`${key}:samples`, "hailo-samples", "採樣讀值與時間（台北）");
+            const wrapper = inventoryTextNode("div", "table-wrap");
+            wrapper.tabIndex = 0;
+            wrapper.dataset.hailoFocus = `${key}:table`;
+            wrapper.setAttribute("role", "region");
+            wrapper.setAttribute("aria-label", `${deviceId} 歷史讀值，可水平與垂直捲動`);
+            const table = inventoryTextNode("table", "");
+            const thead = inventoryTextNode("thead", ""), header = inventoryTextNode("tr", "");
+            ["快照時間", "Hailo 採樣時間", "NNC（%）", "晶片溫度（°C）"].forEach((name) => {
+              const th = inventoryTextNode("th", "", name); th.scope = "col"; header.append(th);
+            });
+            thead.append(header);
+            const tbody = inventoryTextNode("tbody", "");
+            samples.forEach((sample) => {
+              const row = inventoryTextNode("tr", "");
+              [formatHardwareDate(sample.snapshotAt), Number.isFinite(sample.time) ? formatHardwareDate(sample.capturedAt) : HARDWARE_UNKNOWN, formatHardwarePercent(sample.nnc_utilization_percent), formatHardwareTemperature(sample.temperature_c)].forEach((value) => cell(row, value));
+              tbody.append(row);
+            });
+            table.append(thead, tbody); wrapper.append(table); records.append(wrapper);
+            body.append(records); details.append(body); grid.append(details);
+          });
+        });
+      }
+
       function hardwareStatusLabel(stateName) {
         return HARDWARE_STATUS_LABELS[stateName] || HARDWARE_STATUS_LABELS.unavailable;
       }
@@ -899,6 +1217,7 @@
         if (stateName === "stale") message = `資料已過期：${summary}`;
         else if (stateName === "unavailable") message = `與 Scout 硬體 API 斷線：${summary}${hardwareDataAge() > 150 ? " 上次資料已過期。" : ""}`;
         if (nextStep && stateName !== "ok") message += ` 下一步：${nextStep}`;
+        if (stateName === "unavailable") message += " 每 60 秒自動重試，也可按重新讀取立即重試。";
         setText("hardwareNoticeText", message);
       }
 
@@ -1146,6 +1465,7 @@
         const skipped = meta && hardwareNumber(meta.skipped_invalid_records) !== null ? meta.skipped_invalid_records : 0;
         const historyStatus = hardwareState.historyStatus === "ok" || hardwareState.historyStatus === "partial";
         setText("hardwareTrendMeta", historyStatus ? `歷史紀錄 ${count} 筆${hardwareState.historyStatus === "partial" ? " · 部分資料" : ""}${skipped ? ` · 略過 ${skipped} 筆無效資料` : ""} · 台北時間；缺失採樣不連線` : items.length ? `歷史 API 暫時無法讀取 · 保留 ${items.length} 筆上次資料` : "歷史資料無法取得");
+        renderHardwareHailoHistory();
       }
 
       function renderHardwareAlerts(data, overallState) {
@@ -1313,12 +1633,14 @@
         renderHardwareSourceErrors(data);
         renderHardwareNotice(effectiveState, payload);
         renderHardwareInventory(data, effectiveState);
+        renderHardwareHailo(data, effectiveState);
       }
 
       function updateHardwareAge() {
         if (!hardwareState.active || !hardwareState.lastResult) return;
         setText("hardwareDataAge", formatHardwareAge(hardwareDataAge()));
         if (hardwareStateFromResponse(hardwareState.lastResult) !== hardwareState.effectiveState) renderHardwareStatus();
+        updateHardwareHailoAge();
       }
 
       function applyHardwareHistoryResult(result) {

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.scout_database_fixtures import owned_test_databases  # noqa: F401
+
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -43,6 +45,9 @@ PAYLOAD_HASH = notification_payload_hash(
     body="Runtime and GNSS status are available.",
     priority="normal",
 )
+
+
+pytestmark = pytest.mark.usefixtures("owned_test_databases")
 
 
 def make_grant(*, expires_at: datetime | None = None, max_send_count: int = 10) -> OutboundStandingGrant:

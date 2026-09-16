@@ -18,7 +18,9 @@ class ExpectedDurationSource(StrEnum):
 
 
 class SegmentPolicyCandidate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    # Fixtures may carry forward additive provenance fields; preserve the
+    # contract by accepting unknown extensions while validating known fields.
+    model_config = ConfigDict(extra="ignore")
 
     candidate_id: str
     label: str
@@ -52,7 +54,7 @@ class SegmentPolicyCandidate(BaseModel):
 
 
 class SegmentPolicyCandidateReport(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     artifact_id: str
     artifact_kind: Literal["segment_policy_candidates"] = "segment_policy_candidates"

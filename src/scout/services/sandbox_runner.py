@@ -125,13 +125,17 @@ class SandboxRunner:
 
         with tempfile.TemporaryDirectory(prefix="scout-sandbox-") as temp_dir:
             sandbox_path = Path(temp_dir)
-            _write_package_files(sandbox_path, package.files)
-            _write_package_files(sandbox_path, package.tests)
-            _write_network_blocker(sandbox_path)
+            # Pytest probes the collected directory's parent; keep it inside the sandbox.
+            package_path = sandbox_path / "package"
+            package_path.mkdir()
+            _write_package_files(package_path, package.files)
+            _write_package_files(package_path, package.tests)
+            _write_network_blocker(package_path)
 
             isolated_command = _isolated_pytest_command(
                 sandbox_path,
                 python_executable=self.python_executable,
+                pytest_root=package_path,
             )
             if isolated_command is None:
                 return SandboxResult(
@@ -150,9 +154,10 @@ class SandboxRunner:
             command, isolation_backend = isolated_command
 
             completed = _run_pytest(
-                sandbox_path,
+                package_path,
                 timeout_seconds=self.timeout_seconds,
                 command=command,
+                python_executable=self.python_executable,
             )
 
         if isinstance(completed, subprocess.TimeoutExpired):
@@ -387,11 +392,12 @@ def _run_pytest(
     *,
     timeout_seconds: float,
     command: list[str],
+    python_executable: str,
 ) -> subprocess.CompletedProcess[str] | subprocess.TimeoutExpired:
     process = subprocess.Popen(
         command,
         cwd=sandbox_path,
-        env=_sandbox_env(sandbox_path),
+        env=_sandbox_env(sandbox_path, python_executable=python_executable),
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
@@ -420,14 +426,23 @@ def _isolated_pytest_command(
     sandbox_path: Path,
     *,
     python_executable: str,
+    pytest_root: Path | None = None,
 ) -> tuple[list[str], str] | None:
-    resolved_python = str(Path(python_executable).expanduser().resolve())
+    pytest_root = pytest_root if pytest_root is not None else sandbox_path
+    # Resolving a venv symlink would select the base interpreter and its packages.
+    selected_python = str(Path(python_executable).expanduser().absolute())
     pytest_command = [
-        resolved_python,
+        selected_python,
         "-m",
         "pytest",
         "-q",
-        str(sandbox_path),
+        "-c",
+        os.devnull,
+        "--rootdir",
+        str(pytest_root),
+        "--confcutdir",
+        str(pytest_root),
+        str(pytest_root),
     ]
     sandbox_exec = Path("/usr/bin/sandbox-exec")
     if sys.platform == "darwin" and sandbox_exec.exists():
@@ -437,6 +452,11 @@ def _isolated_pytest_command(
         )
         if profile is None:
             return None
+        framework_python = _macos_framework_python(python_executable)
+        if framework_python is not None:
+            # The framework launcher resolves host ancestors before Python starts.
+            # Its direct interpreter honors the venv identity set in _sandbox_env.
+            pytest_command[0] = framework_python
         return (
             [str(sandbox_exec), "-p", profile, *pytest_command],
             "macos-seatbelt",
@@ -450,10 +470,23 @@ def _isolated_pytest_command(
                 sandbox_path,
                 pytest_command=pytest_command,
                 python_executable=python_executable,
+                working_directory=pytest_root,
             ),
             "linux-bubblewrap",
         )
     return None
+
+
+def _macos_framework_python(python_executable: str) -> str | None:
+    if sys.platform != "darwin":
+        return None
+    executable = Path(python_executable).expanduser().resolve()
+    if executable != Path(sys.executable).resolve():
+        return None
+    framework_python = (
+        Path(sys.base_prefix) / "Resources/Python.app/Contents/MacOS/Python"
+    )
+    return str(framework_python) if framework_python.is_file() else None
 
 
 def _macos_sandbox_profile(
@@ -526,6 +559,7 @@ def _linux_bubblewrap_command(
     *,
     pytest_command: list[str],
     python_executable: str,
+    working_directory: Path | None = None,
 ) -> list[str]:
     command = [
         bubblewrap,
@@ -557,14 +591,16 @@ def _linux_bubblewrap_command(
             str(sandbox_path),
             str(sandbox_path),
             "--chdir",
-            str(sandbox_path),
+            str(working_directory if working_directory is not None else sandbox_path),
             *pytest_command,
         ]
     )
     return command
 
 
-def _sandbox_env(sandbox_path: Path) -> dict[str, str]:
+def _sandbox_env(
+    sandbox_path: Path, *, python_executable: str | None = None
+) -> dict[str, str]:
     home = Path.home().resolve()
     safe_python_paths = [str(sandbox_path)]
     for raw_path in sys.path:
@@ -585,6 +621,11 @@ def _sandbox_env(sandbox_path: Path) -> dict[str, str]:
         "PYTHONPATH": os.pathsep.join(dict.fromkeys(safe_python_paths)),
         "TMPDIR": str(sandbox_path / "tmp"),
     }
+    selected_python = python_executable or sys.executable
+    if _macos_framework_python(selected_python) is not None:
+        env["__PYVENV_LAUNCHER__"] = str(
+            Path(selected_python).expanduser().absolute()
+        )
     (sandbox_path / "home").mkdir(exist_ok=True)
     (sandbox_path / "tmp").mkdir(exist_ok=True)
     return env

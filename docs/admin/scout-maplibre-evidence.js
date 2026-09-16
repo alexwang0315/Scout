@@ -1288,7 +1288,31 @@
 
   function waitForMapLoad(map, timeoutMs = 15000, container = null, signal = null) {
     const startedAt = Date.now();
-    const receipt = {version: 1, phase: "waiting", elapsedMs: 0, eventCount: 0,
+    const timeoutBudgetMs = Math.max(1000, Number(timeoutMs) || 15000);
+    const visibilityDocument = container?.ownerDocument || global.document;
+    const documentVisibility = () => ["visible", "hidden", "prerender"]
+      .includes(visibilityDocument?.visibilityState) ? visibilityDocument.visibilityState : "unknown";
+    const visibilityAware = documentVisibility() !== "unknown"
+      && typeof visibilityDocument?.addEventListener === "function"
+      && typeof visibilityDocument?.removeEventListener === "function";
+    const isHidden = () => visibilityAware && ["hidden", "prerender"].includes(documentVisibility());
+    let budgetWasHidden = isHidden();
+    let accountedAt = startedAt;
+    let visibleElapsedMs = 0;
+    let hiddenElapsedMs = 0;
+    let removedAt = null;
+    const accountWait = () => {
+      const now = Date.now();
+      const elapsed = Math.max(0, now - accountedAt);
+      if (removedAt === null) {
+        if (budgetWasHidden) hiddenElapsedMs += elapsed;
+        else visibleElapsedMs += elapsed;
+      }
+      accountedAt = now;
+    };
+    const receipt = {version: 1, phase: budgetWasHidden ? "waiting_hidden" : "waiting", elapsedMs: 0, eventCount: 0,
+      deadlineBasis: visibilityAware ? "visible-time" : "wall-clock", timeoutMs: timeoutBudgetMs,
+      visibleElapsedMs: 0, hiddenElapsedMs: 0, visibilityTransitionCount: 0,
       droppedEvents: 0, styleLoadEventSeen: false, firstRenderElapsedMs: null, events: []};
     const publicBoolean = method => {
       try { return typeof map?.[method] === "function" ? map[method]() === true : null; }
@@ -1310,13 +1334,17 @@
         waitingSourceIds, unknownSourceIds};
     };
     const record = (type, event = {}, terminal = false) => {
+      accountWait();
       if (type === "style.load") receipt.styleLoadEventSeen = true;
       receipt.elapsedMs = Math.max(0, Date.now() - startedAt);
+      receipt.visibleElapsedMs = visibleElapsedMs;
+      receipt.hiddenElapsedMs = hiddenElapsedMs;
+      receipt.removedWaitElapsedMs = removedAt === null ? 0 : Math.max(0, Date.now() - removedAt);
+      receipt.remainingVisibleMs = Math.max(0, timeoutBudgetMs - visibleElapsedMs);
       receipt.styleReady = publicBoolean("isStyleLoaded");
       receipt.allTilesLoaded = publicBoolean("areTilesLoaded");
       receipt.mapLoaded = publicBoolean("loaded");
-      receipt.documentVisibility = ["visible", "hidden", "prerender"]
-        .includes(global.document?.visibilityState) ? global.document.visibilityState : "unknown";
+      receipt.documentVisibility = documentVisibility();
       try {
         const bounds = container?.getBoundingClientRect?.();
         const canvas = map.getCanvas?.();
@@ -1328,7 +1356,8 @@
       if (type === "render" && receipt.firstRenderElapsedMs === null) receipt.firstRenderElapsedMs = receipt.elapsedMs;
       const item = {type, elapsedMs: receipt.elapsedMs, styleReady: receipt.styleReady,
         allTilesLoaded: receipt.allTilesLoaded, mapLoaded: receipt.mapLoaded,
-        documentVisibility: receipt.documentVisibility};
+        documentVisibility: receipt.documentVisibility,
+        visibleElapsedMs, hiddenElapsedMs, remainingVisibleMs: receipt.remainingVisibleMs};
       let sources = {};
       try { sources = map.getStyle?.()?.sources || {}; } catch (_error) { /* Removed style. */ }
       if (Object.prototype.hasOwnProperty.call(sources, event.sourceId)) {
@@ -1360,7 +1389,10 @@
     return new Promise((resolve, reject) => {
       let settled = false;
       let timer = null;
+      let timerGeneration = 0;
       let abortListener = null;
+      let visibilityListener = null;
+      let mapRemoved = false;
       const listeners = new Map();
       const listen = (type, callback) => {
         listeners.set(type, callback);
@@ -1375,6 +1407,7 @@
         settled = true;
         global.clearTimeout(timer);
         if (abortListener) signal?.removeEventListener("abort", abortListener);
+        if (visibilityListener) visibilityDocument.removeEventListener("visibilitychange", visibilityListener);
         removeListeners();
         callback(value);
       };
@@ -1394,9 +1427,22 @@
       });
       ["style.load", "sourcedata", "dataloading", "error", "remove"].forEach(type => {
         listen(type, event => {
+          if (type === "remove") {
+            accountWait();
+            removedAt = Date.now();
+            mapRemoved = true;
+            receipt.phase = "removed_waiting_timeout";
+            receipt.deadlineBasis = "removed-renderer-wall-clock";
+          }
           record(type, event, type === "remove");
-          // Observe teardown without changing the existing timeout outcome.
-          if (type === "remove") removeListeners();
+          if (type === "remove") {
+            removeListeners();
+            if (visibilityListener) visibilityDocument.removeEventListener("visibilitychange", visibilityListener);
+            visibilityListener = null;
+            // A removed map cannot progress after returning to the foreground.
+            // Keep the original timeout error and wall deadline, including while hidden.
+            armTimer();
+          }
         });
       });
       listen("load", event => {
@@ -1404,14 +1450,41 @@
         record("load", event, true);
         complete(event);
       });
-      timer = global.setTimeout(
-        () => {
+      // Inline MapLibre styles wait for requestAnimationFrame before loading.
+      // Background tabs may suspend that frame; only visible time consumes the deadline.
+      function armTimer() {
+        const generation = ++timerGeneration;
+        global.clearTimeout(timer);
+        timer = null;
+        accountWait();
+        if (budgetWasHidden && !mapRemoved) return;
+        timer = global.setTimeout(() => {
+          if (settled || generation !== timerGeneration) return;
+          global.clearTimeout(timer);
+          timer = null;
+          if (!mapRemoved && isHidden()) { visibilityListener(); return; }
+          accountWait();
+          if (!mapRemoved && visibilityAware && visibleElapsedMs < timeoutBudgetMs) { armTimer(); return; }
           receipt.phase = "timeout";
           record("timeout", {}, true);
           fail(new Error("maplibre_initialization_timeout"));
-        },
-        Math.max(1000, Number(timeoutMs) || 15000),
-      );
+        }, mapRemoved ? Math.max(0, timeoutBudgetMs - (Date.now() - startedAt))
+          : visibilityAware ? Math.max(0, timeoutBudgetMs - visibleElapsedMs) : timeoutBudgetMs);
+      }
+      if (visibilityAware && !mapRemoved) {
+        visibilityListener = () => {
+          if (settled) return;
+          accountWait();
+          const hidden = isHidden();
+          if (hidden !== budgetWasHidden) receipt.visibilityTransitionCount += 1;
+          budgetWasHidden = hidden;
+          receipt.phase = hidden ? "waiting_hidden" : "waiting";
+          record(hidden ? "visibility_hidden" : "visibility_visible");
+          armTimer();
+        };
+        visibilityDocument.addEventListener("visibilitychange", visibilityListener);
+      }
+      armTimer();
     });
   }
 
@@ -1528,18 +1601,89 @@
         })};
   }
 
-  function rasterNativeCameraPolicy(layers = [], defaultMaxZoom = 22) {
+  function rasterNativeDemand(map, layer, receiver = map) {
+    const source = map.getSource?.(layer.map_source_id);
+    const requested = map.coveringTiles.call(receiver, {
+      tileSize: source?.tileSize ?? layer.tile_size,
+      minzoom: source?.minzoom ?? layer.minzoom, maxzoom: 24,
+      roundZoom: source?.roundZoom ?? true,
+      reparseOverscaled: source?.reparseOverscaled ?? false, terrain: map.terrain,
+      calculateTileZoom: source?.calculateTileZoom,
+    });
+    const inBounds = requested.filter(tile => typeof source?.hasTile !== "function" || source.hasTile(tile));
+    return [...new Set(inBounds.map(tile => tile.canonical?.z).filter(Number.isInteger))].sort((a, b) => a - b);
+  }
+
+  function pitchedNativeCameraCap(map, maplibregl, layer, maximum) {
+    const evidence = {status: "unverified", basis: "maplibre-6.2.0-cloned-camera-unclamped-cohort",
+      vendorVersion: null, evaluations: 0};
+    try {
+      // This is the only pinned-vendor private bridge. MapLibre 6.2.0's
+      // public coveringTiles() reads this._camera.transform. Evaluate its
+      // unchanged algorithm on a clone, never by moving the visible camera.
+      evidence.vendorVersion = maplibregl?.getVersion?.() || null;
+      if (evidence.vendorVersion !== MAPLIBRE_VERSION
+        || map.coveringTiles !== maplibregl?.Map?.prototype?.coveringTiles) {
+        throw new Error("native_camera_projection_vendor_unverified");
+      }
+      const original = map._camera?.transform;
+      const transform = original?.clone?.();
+      if (!transform || transform === original || transform._helper === original?._helper
+        || typeof transform.setZoom !== "function" || typeof transform.setMaxZoom !== "function"
+        || !(transform.width > 0 && transform.height > 0)) {
+        throw new Error("native_camera_projection_clone_unavailable");
+      }
+      transform.setMaxZoom(maximum);
+      const receiver = {_camera: {transform}};
+      const evaluate = zoom => {
+        transform.setZoom(zoom);
+        if (Math.abs(transform.zoom - zoom) > .000001) throw new Error("native_camera_projection_zoom_constrained");
+        const demand = rasterNativeDemand(map, layer, receiver);
+        evidence.evaluations += 1;
+        if (!demand.length) throw new Error("native_camera_projection_cohort_unavailable");
+        return {zoom, demand, withinNative: demand.every(value => value <= layer.maxzoom)};
+      };
+      let upper = maximum, lower = maximum, result = evaluate(maximum);
+      evidence.requestedNativeZoomsAtBaseMaximum = result.demand;
+      const minimum = Math.max(0, Number(original.minZoom) || 0);
+      while (!result.withinNative && lower > minimum) {
+        lower = Math.max(minimum, lower - 1);
+        result = evaluate(lower);
+      }
+      if (!result.withinNative) throw new Error("native_camera_projection_no_native_view");
+      while (upper - lower > .001) {
+        const middle = (upper + lower) / 2;
+        const trial = evaluate(middle);
+        if (trial.withinNative) { lower = middle; result = trial; } else upper = middle;
+      }
+      const maxCameraZoom = Math.floor(lower * 1000) / 1000;
+      result = evaluate(maxCameraZoom);
+      if (!result.withinNative) throw new Error("native_camera_projection_final_cohort_unverified");
+      return {maxCameraZoom, evidence: {...evidence, status: "verified", maxCameraZoom,
+        requestedNativeZoomsAtMaximum: result.demand}};
+    } catch (error) {
+      return {maxCameraZoom: maximum, evidence: {...evidence, reason: error.message}};
+    }
+  }
+
+  function rasterNativeCameraPolicy(layers = [], defaultMaxZoom = 22, context = null) {
     const rudy = layers.find(layer => layer.layer_id === "rudy-twmap"
       && layer.source_type === "raster" && layer.visible !== false);
     const nativeTileSize = rudy?.tile_size || null;
     const nativeMaxZoom = rudy?.maxzoom ?? null;
-    return {
+    const policy = {
       active: Boolean(rudy), layerId: rudy?.layer_id || null,
       maxCameraZoom: rudy ? Math.min(defaultMaxZoom,
         nativeMaxZoom - Math.log2(MAPLIBRE_WORLD_TILE_SIZE / nativeTileSize)) : defaultMaxZoom,
       providerNativeMaxZoom: nativeMaxZoom, nativeTileSize,
       worldTileSize: MAPLIBRE_WORLD_TILE_SIZE,
     };
+    if (rudy && Number(context?.map?.getPitch?.()) !== 0 && context?.map) {
+      const projected = pitchedNativeCameraCap(context.map, context.maplibregl, rudy, policy.maxCameraZoom);
+      policy.maxCameraZoom = projected.maxCameraZoom;
+      policy.nativeDemandCap = projected.evidence;
+    }
+    return policy;
   }
 
   function rasterNativeCameraReceipt(map, layer, policy = rasterNativeCameraPolicy(layer ? [layer] : [])) {
@@ -1553,13 +1697,7 @@
       requestedNativeZooms: [], requestedAboveNativeMax: null};
     if (policy.active && layer && typeof map?.coveringTiles === "function") {
       try {
-        const source = map.getSource?.(layer.map_source_id);
-        const requested = map.coveringTiles({tileSize: source?.tileSize ?? layer.tile_size,
-          minzoom: source?.minzoom ?? layer.minzoom, maxzoom: 24, roundZoom: source?.roundZoom ?? true,
-          reparseOverscaled: source?.reparseOverscaled ?? false, terrain: map.terrain,
-          calculateTileZoom: source?.calculateTileZoom});
-        const inBounds = requested.filter(tile => typeof source?.hasTile !== "function" || source.hasTile(tile));
-        receipt.requestedNativeZooms = [...new Set(inBounds.map(tile => tile.canonical?.z).filter(Number.isInteger))].sort((a, b) => a - b);
+        receipt.requestedNativeZooms = rasterNativeDemand(map, layer);
         receipt.requestedAboveNativeMax = receipt.requestedNativeZooms.length
           ? receipt.requestedNativeZooms.some(zoom => zoom > policy.providerNativeMaxZoom) : null;
       } catch (_error) { /* Unavailable selection remains explicitly unknown. */ }
@@ -1743,6 +1881,7 @@
       onRasterStatus = null,
       onViewState = null,
       rasterLayers = [],
+      scrollZoom = true,
       timeoutMs = 15000,
     } = {}) {
       if (typeof maplibregl?.Map !== "function") throw new Error("maplibre_map_unavailable");
@@ -1769,6 +1908,7 @@
         }),
       ]));
       this.timeoutMs = timeoutMs;
+      this.scrollZoom = scrollZoom;
       this.map = null;
       this.destroyed = false;
       this.initializationAbortController = new AbortController();
@@ -1940,7 +2080,7 @@
     syncRasterCameraLimits() {
       const layers = this.rasterLayers.map(layer => ({...layer,
         visible: this.rasterLayerStates.get(layer.layer_id)?.visible ?? layer.visible}));
-      this.nativeCameraPolicy = rasterNativeCameraPolicy(layers);
+      this.nativeCameraPolicy = rasterNativeCameraPolicy(layers, 22, {map: this.map, maplibregl: this.maplibregl});
       if (this.map && this.map.getMaxZoom?.() !== this.nativeCameraPolicy.maxCameraZoom) {
         this.map.setMaxZoom?.(this.nativeCameraPolicy.maxCameraZoom);
       }
@@ -1982,16 +2122,29 @@
       this.rasterLayers.forEach(layer => {
         style.sources[layer.map_source_id] = this.rasterTransport.sourceDefinition(layer);
       });
+      // Resolve IDs exactly as fitAll/fitFeatureIds do, including duplicate IDs
+      // and legacy features that only have a properties.feature_id identifier.
+      const initialFeatures = this.featureCollection.features
+        .map(feature => this.index.feature(String(feature.id))).filter(Boolean);
+      const bounds = featureCollectionBounds(createEvidenceFeatureCollection(initialFeatures));
+      const maxCameraZoom = rasterNativeCameraPolicy(this.rasterLayers).maxCameraZoom;
+      const pointBounds = bounds && bounds[0] === bounds[2] && bounds[1] === bounds[3];
+      // MapLibre applies constructor bounds before loading the style. Start the
+      // first source cohort at the evidence extent, not a disposable world view.
+      const initialCamera = !bounds ? {center: [0, 0], zoom: 1}
+        : pointBounds ? {center: [bounds[0], bounds[1]], zoom: Math.min(16, maxCameraZoom)}
+          : {bounds: [[bounds[0], bounds[1]], [bounds[2], bounds[3]]],
+            fitBoundsOptions: {padding: 72, maxZoom: 16, duration: 0}};
       this.map = new this.maplibregl.Map({
         container: this.container,
         style,
-        center: [0, 0],
-        zoom: 1,
-        maxZoom: rasterNativeCameraPolicy(this.rasterLayers).maxCameraZoom,
+        ...initialCamera,
+        maxZoom: maxCameraZoom,
         attributionControl: true,
         dragRotate: false,
         pitchWithRotate: false,
         boxZoom: false,
+        scrollZoom: this.scrollZoom,
       });
       this.syncRasterCameraLimits();
       this.bindRasterStatus();
@@ -2004,8 +2157,8 @@
       this.bindRectangleZoomInteractions();
       this.bindViewState();
       this.setInteractionMode(this.interactionMode);
-      this.setFeatureCollection(this.featureCollection);
-      this.fitAll({duration: 0});
+      // The style already owns the complete collection and initial viewport.
+      // Resending it here invalidates the load we just awaited before "ready".
       this.container.dataset.maplibreFeatureCount = String(this.featureCollection.features.length);
       this.emitStatus("ready", "evidence_rendered");
       return this;
@@ -2325,6 +2478,9 @@
 
     setLayerVisibility(layerId, visible) {
       const requestedLayerId = String(layerId);
+      const wasVisible = !this.hiddenLayerIds.has(requestedLayerId);
+      const evidenceVisibilityChanged = wasVisible !== Boolean(visible)
+        && this.featureCollection.features.some(feature => feature.properties?.layer_id === requestedLayerId);
       const nextHiddenLayerIds = new Set(this.hiddenLayerIds);
       if (visible) nextHiddenLayerIds.delete(requestedLayerId);
       else nextHiddenLayerIds.add(requestedLayerId);
@@ -2358,7 +2514,11 @@
         this.rasterTransport.setVisibility(rasterLayer.layer_id, visible);
       });
       const source = this.map?.getSource(EVIDENCE_SOURCE_ID);
-      if (typeof source?.setData === "function") source.setData(this.visibleFeatureCollection());
+      // Reapplying the same checkbox state must not restart the GeoJSON worker.
+      // Actual visibility changes still send every feature with its new flag.
+      if (evidenceVisibilityChanged && typeof source?.setData === "function") {
+        source.setData(this.visibleFeatureCollection());
+      }
       this.container.dataset.maplibreHiddenLayers = [...this.hiddenLayerIds].sort().join(",");
       this.syncRasterCameraLimits();
       return !this.hiddenLayerIds.has(requestedLayerId);

@@ -249,6 +249,7 @@ def test_build_route_weather_package_outputs_segment_risk_and_wx_alert(
     weather_point = {
         "source": CWA_36H_FORECAST,
         "source_run_id": "cwa.run.fixture",
+        "issued_at": "2099-06-07T08:00:00Z",
         "validFrom": "2099-06-08T04:00:00+08:00",
         "validTo": "2099-06-08T07:00:00+08:00",
         "areaName": "仁愛鄉",
@@ -305,7 +306,10 @@ def test_build_route_weather_package_outputs_segment_risk_and_wx_alert(
         package,
     )
 
-    assessed = assess_scout_weather_window(project_root, query="下雨後哪段風險高?")
+    assessed = assess_scout_weather_window(
+        project_root, query="下雨後哪段風險高?",
+        reference_time="2099-06-07T08:00:00Z",
+    )
     assert assessed["answerability"] == "route_weather_risk_available"
     assert assessed["missing_fields"] == []
     assert assessed["result_count"] == 1

@@ -1,0 +1,231 @@
+{
+  "reference_time": "2026-06-24T06:00:00Z",
+  "profiles": {
+    "thunderstorm": {
+      "artifact_kind": "route_weather_package",
+      "status": "candidate_only",
+      "routeId": "fixture-route",
+      "generatedAt": "2026-06-24T05:00:00Z",
+      "issued_at": "2026-06-24T05:00:00Z",
+      "valid_from": "2026-06-24T05:00:00Z",
+      "valid_to": "2026-06-27T05:00:00Z",
+      "validUntil": "2026-06-27T05:00:00Z",
+      "ttl_s": 259200,
+      "provider": "fixture_cwa_server_side_ingestor",
+      "authoritative_weather_computed": true,
+      "external_api_calls_made": false,
+      "human_review_required": false,
+      "weather_window": {
+        "summary": "午後雷雨風險偏高",
+        "valid_from": "2026-06-24T05:00:00Z",
+        "valid_to": "2026-06-27T05:00:00Z",
+        "source_status": "server_side_fixture"
+      },
+      "segments": [
+        {
+          "segmentId": "ridge.exposure",
+          "etaFrom": "2026-06-25T04:30:00Z",
+          "etaTo": "2026-06-25T05:10:00Z",
+          "terrainRisk": 0.74,
+          "weatherRisk": 0.68,
+          "finalRisk": 0.79,
+          "riskLevel": "HIGH",
+          "factors": [
+            "午後雷雨",
+            "稜線暴露",
+            "低能見度可能"
+          ],
+          "message": "此路段有雷雨、低能見度與稜線暴露疊加。"
+        }
+      ],
+      "runtime_safety_truth": false,
+      "candidate_only": true,
+      "fixture_provenance": {
+        "scenario_id": "thunderstorm",
+        "source": "synthetic reviewed fixture for ARBITRATION-D-WEATHER-1/3",
+        "network_requests_made": false,
+        "reference_time": "2026-06-24T06:00:00Z"
+      }
+    },
+    "heat": {
+      "artifact_kind": "route_weather_package",
+      "status": "candidate_only",
+      "routeId": "fixture-route",
+      "generatedAt": "2026-06-24T05:00:00Z",
+      "issued_at": "2026-06-24T05:00:00Z",
+      "valid_from": "2026-06-24T05:00:00Z",
+      "valid_to": "2026-06-27T05:00:00Z",
+      "validUntil": "2026-06-27T05:00:00Z",
+      "ttl_s": 259200,
+      "provider": "fixture_cwa_server_side_ingestor",
+      "authoritative_weather_computed": true,
+      "external_api_calls_made": false,
+      "human_review_required": false,
+      "weather_window": {
+        "summary": "午後高溫曝曬，水量與遮蔽需要重新規劃",
+        "valid_from": "2026-06-24T05:00:00Z",
+        "valid_to": "2026-06-27T05:00:00Z",
+        "source_status": "server_side_fixture"
+      },
+      "segments": [
+        {
+          "segmentId": "heat.exposed.1",
+          "etaFrom": "2026-06-25T04:30:00Z",
+          "etaTo": "2026-06-25T05:20:00Z",
+          "temperatureC": 33.5,
+          "heatIndexC": 36.0,
+          "shadeStatus": "limited",
+          "waterMarginLiters": 0.4,
+          "terrainRisk": 0.35,
+          "weatherRisk": 0.62,
+          "finalRisk": 0.62,
+          "riskLevel": "MODERATE",
+          "factors": [
+            "高溫曝曬",
+            "水量偏低",
+            "無遮蔽",
+            "午後炎熱時段"
+          ],
+          "message": "午後高溫與曝曬會放大中暑、補水與遮蔽需求。"
+        }
+      ],
+      "runtime_safety_truth": false,
+      "candidate_only": true,
+      "fixture_provenance": {
+        "scenario_id": "heat",
+        "source": "synthetic reviewed fixture for ARBITRATION-D-WEATHER-1/3",
+        "network_requests_made": false,
+        "reference_time": "2026-06-24T06:00:00Z"
+      }
+    },
+    "disagreement": {
+      "artifact_kind": "route_weather_package",
+      "status": "candidate_only",
+      "routeId": "fixture-route",
+      "generatedAt": "2026-06-24T05:00:00Z",
+      "issued_at": "2026-06-24T05:00:00Z",
+      "valid_from": "2026-06-24T05:00:00Z",
+      "valid_to": "2026-06-27T05:00:00Z",
+      "validUntil": "2026-06-27T05:00:00Z",
+      "ttl_s": 259200,
+      "provider": "fixture_multi_source_weather",
+      "authoritative_weather_computed": true,
+      "external_api_calls_made": false,
+      "human_review_required": false,
+      "weather_window": {
+        "summary": "預報來源不一致：官方預報較保守，第三方模式較樂觀",
+        "valid_from": "2026-06-24T05:00:00Z",
+        "valid_to": "2026-06-27T05:00:00Z",
+        "source_status": "server_side_fixture",
+        "source_consistency": "forecast_source_disagreement",
+        "forecast_sources": [
+          {
+            "provider": "CWA",
+            "risk": "rain_after_noon"
+          },
+          {
+            "provider": "mountain_forecast_partner",
+            "risk": "dry"
+          }
+        ]
+      },
+      "segments": [
+        {
+          "segmentId": "forecast.conflict.1",
+          "etaFrom": "2026-06-25T04:30:00Z",
+          "etaTo": "2026-06-25T05:20:00Z",
+          "terrainRisk": 0.3,
+          "weatherRisk": 0.3,
+          "finalRisk": 0.36,
+          "riskLevel": "LOW",
+          "factors": [
+            "預報來源不一致",
+            "稜線通過時段",
+            "人工審核前保守"
+          ],
+          "message": "同一時段來源不一致，不能採用較樂觀預報直接通過。",
+          "source": {
+            "provider": "CWA",
+            "source_consistency": "forecast_source_disagreement"
+          }
+        }
+      ],
+      "runtime_safety_truth": false,
+      "candidate_only": true,
+      "fixture_provenance": {
+        "scenario_id": "disagreement",
+        "source": "synthetic reviewed fixture for ARBITRATION-D-WEATHER-1/3",
+        "network_requests_made": false,
+        "reference_time": "2026-06-24T06:00:00Z"
+      }
+    },
+    "recent_rain": {
+      "artifact_kind": "route_weather_package",
+      "status": "candidate_only",
+      "routeId": "fixture-route",
+      "generatedAt": "2026-06-24T05:00:00Z",
+      "issued_at": "2026-06-24T05:00:00Z",
+      "valid_from": "2026-06-24T05:00:00Z",
+      "valid_to": "2026-06-27T05:00:00Z",
+      "validUntil": "2026-06-27T05:00:00Z",
+      "ttl_s": 259200,
+      "provider": "fixture_cwa_server_side_ingestor",
+      "authoritative_weather_computed": true,
+      "external_api_calls_made": false,
+      "human_review_required": false,
+      "weather_window": {
+        "summary": "前 24 小時明顯降雨，溪流水位需重新確認",
+        "valid_from": "2026-06-24T05:00:00Z",
+        "valid_to": "2026-06-27T05:00:00Z",
+        "source_status": "server_side_fixture"
+      },
+      "segments": [
+        {
+          "segmentId": "creek.crossing.1",
+          "etaFrom": "2026-06-25T03:30:00Z",
+          "etaTo": "2026-06-25T03:50:00Z",
+          "terrainRisk": 0.48,
+          "weatherRisk": 0.44,
+          "finalRisk": 0.56,
+          "riskLevel": "MODERATE",
+          "factors": [
+            "前 24 小時明顯降雨",
+            "渡溪點",
+            "隊伍沒有渡溪經驗"
+          ],
+          "message": "前 24 小時降雨後需重新確認溪流水位。"
+        },
+        {
+          "segmentId": "creek.crossing.2",
+          "etaFrom": "2026-06-25T05:20:00Z",
+          "etaTo": "2026-06-25T05:40:00Z",
+          "terrainRisk": 0.5,
+          "weatherRisk": 0.42,
+          "finalRisk": 0.55,
+          "riskLevel": "MODERATE",
+          "factors": [
+            "前 24 小時明顯降雨",
+            "渡溪點",
+            "無渡溪經驗"
+          ],
+          "message": "第二處渡溪點受前 24 小時降雨影響。"
+        }
+      ],
+      "runtime_safety_truth": false,
+      "candidate_only": true,
+      "fixture_provenance": {
+        "scenario_id": "recent_rain",
+        "source": "synthetic reviewed fixture for ARBITRATION-D-WEATHER-1/3",
+        "network_requests_made": false,
+        "reference_time": "2026-06-24T06:00:00Z"
+      }
+    }
+  },
+  "fixture_provenance": {
+    "kind": "synthetic_qualification_scenario",
+    "live_provider_request": false,
+    "reference_time": "2026-06-24T06:00:00Z",
+    "historical_shared_fixture_mutated": false,
+    "purpose": "User-approved Weather D missing/reviewed/temporal replay; not runtime or user-trip evidence"
+  }
+}

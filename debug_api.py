@@ -263,6 +263,7 @@ def create_debug_page_router(
     *,
     debug_page_path: Path | str = DEFAULT_DEBUG_PAGE,
     assistant_ui_script_path: Path | str = DEFAULT_ASSISTANT_UI_SCRIPT,
+    include_assistant_ui_script: bool = True,
 ) -> APIRouter:
     router = APIRouter(prefix="/admin", tags=["debug"])
     resolved_debug_page_path = Path(debug_page_path)
@@ -276,12 +277,13 @@ def create_debug_page_router(
             headers={"Cache-Control": "no-store"},
         )
 
-    @router.get("/scout-assistant-ui.js")
-    def assistant_ui_script() -> Response:
-        return Response(
-            resolved_assistant_ui_script_path.read_text(encoding="utf-8"),
-            media_type="application/javascript",
-        )
+    if include_assistant_ui_script:
+        @router.get("/scout-assistant-ui.js")
+        def assistant_ui_script() -> Response:
+            return Response(
+                resolved_assistant_ui_script_path.read_text(encoding="utf-8"),
+                media_type="application/javascript",
+            )
 
     return router
 

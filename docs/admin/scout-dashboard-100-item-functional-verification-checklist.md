@@ -7,7 +7,7 @@
 空狀態、跨頁一致性，以及操作後不應發生的副作用。
 
 - 目標：100 個可執行、可判定、可留證據的主檢查項目。
-- 目前版本：49 / 100。
+- 目前版本：50 / 100。
 - 維護狀態：持續記錄中。
 - 起始日期：2026-07-28。
 - 維護方式：本對話串中新增或修改的檢查項目，持續追加到本文件。
@@ -50,7 +50,7 @@
 ## Dashboard Diagnostic UI
 
 Dashboard 已在 `System → Diagnostic`（位於 Settings 之後）放入目前的
-`DASH-001～DASH-049`。
+`DASH-001～DASH-050`。
 
 - 尚未測試：灰燈。
 - 測試中：黃燈與 `測試中`。
@@ -58,7 +58,7 @@ Dashboard 已在 `System → Diagnostic`（位於 Settings 之後）放入目前
 - 測試提醒：黃燈，缺少人工 review、執行證據或 unresolved evidence 保留 UNKNOWN。
 - 測試失敗：紅燈與 `測試失敗`，並顯示失敗原因。
 - 每題都有獨立的 `重新測試`。
-- 頁首 `Diag all` 依序執行 49 題，避免大型 project projection API
+- 頁首 `Diag all` 依序執行 50 題，避免大型 project projection API
   同時被大量呼叫。
 - `Navigation 體檢` 獨立執行 `DASH-025`、`DASH-038～DASH-043` 七題，不重跑其他分類。
   結果綁定目前 project、TRH selection 與 corridor band；切換後重測，並防止批次／單題重測
@@ -82,14 +82,14 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 | Map & Evidence | DASH-004～DASH-006、DASH-016、DASH-017、DASH-026～DASH-030、DASH-037、DASH-044、DASH-049 |
 | Navigation | DASH-025、DASH-038～DASH-043 |
 | Exploring for Six Axis | DASH-008、DASH-018～DASH-024、DASH-031～DASH-036 |
-| Assistant、System 與 Safety / Emergency | DASH-009、DASH-010、DASH-015 |
+| Assistant、System 與 Safety / Emergency | DASH-009、DASH-010、DASH-015、DASH-050 |
 
 本版刻意不收錄未接線的 preview、placeholder 或未來規劃。已實作的
 candidate/shadow prototype 可收錄，但必須把 no-authority 邊界當成必要
 通過條件；只有具備可操作 UI、API／artifact 與明確 PASS／FAIL 證據的功能
 才會成為正式檢查項目。
 
-## 目前已登錄的 49 項功能
+## 目前已登錄的 50 項功能
 
 ### DASH-001 Dashboard 啟動、入口與必要 API 可用
 
@@ -1535,7 +1535,7 @@ standard 161 項通過，checker 修正後的 Diagnostic／camera 六項再測�
 
 ## 後續項目收錄門檻
 
-下一個可用編號為 `DASH-050`。新項目只有在功能已實作，且具備可操作 UI、
+下一個可用編號為 `DASH-051`。新項目只有在功能已實作，且具備可操作 UI、
 API／artifact、測試資料與明確 PASS／FAIL 條件時才加入。未完成、未接線、
 preview placeholder 或只存在於未來規劃的能力不列入正式項目。
 
@@ -1704,3 +1704,20 @@ warning保留真實IndexedDB persistence／reopen、server sync／expiry rejecti
 `tests/test_diagnostic_offline_expiry.py` 以 temporary workspace 與注入時間執行正式同步服務，驗證 fresh、exact expiry、expired、unknown freshness、generation/hash mismatch 六種情境；拒絕只能有 audit、無有效 receipt，重送維持冪等。15 項相關測試通過。瀏覽器不執行後端同步，因此 serverExpiryRejection 保留 warning；不可將 fixture 結果當成 live 驗證。未新增 local TTL 或刪除歷史 intent。
 
 證據：`artifacts/diagnostic-persistence-expiry-20260907/report.md`、`final-first-page.txt`、`final-reopened-page.txt`、`pytest.txt`。範圍為 WORKING PROTOTYPE；OS crash、儲存逐出及瀏覽器程序重啟不在本次證明範圍。
+
+### DASH-050 scout monitor 電池／主機供電分離
+
+- 頁面／範圍：System → scout monitor；Diagnostic 獨立重測及 Diag all。
+- 執行：同源 GET 讀取目前採樣，使用隔離的實際 monitor renderer 重播 UPS 通訊失敗、主機有效 5V 保留、未知、503 過期、斷線與恢復。
+- 通過條件：資料契約、目前新鮮採樣與所有呈現重播皆通過，且 probe 已清除；UPS 不可讀時電池為未知，主機供電和旗標獨立保留。
+- 缺資料、過期或無法確認的新鮮度仍回報 warning；錯誤呈現或清理失敗仍回報 failed。
+- 邊界：不操作硬體；檢查通過不能證明 UPS 通訊恢復，也不是正式硬體資格驗證。
+- 結果：未執行；需記錄當前 9099 版本、workspace、完整收據及畫面。
+
+#### 登錄同步裁決紀錄（2026-09-14）
+
+- 原衝突：既有 `DASH-050` 已有實作與測試，但 Dashboard 摘要及兩個登錄測試仍限 `001～049`；分別出現 `50 == 49` 與 `diagnosticCheck050 is not defined`。後者是測試 stub 未涵蓋 050，不是實際頁面缺少 handler。
+- 本次授權：使用者看過登錄衝突報告後，最新明確指示自行處理這些失敗；依該指示採原報告建議，保留全部 50 項，將摘要、完整 ID 集合、stub 與本文件同步為 50。此段記錄指示內容，不將既有一般放權視為其他新衝突的批准。
+- 選擇理由：D050 的供電／UPS 分離檢測已存在；刪除或停用它會減少回歸覆蓋。此次僅同步登錄，保留完整數量、唯一 ID、未知 ID 拒絕及每項正確可呼叫 handler 的檢查。
+- 範圍邊界：不變更 D050 的新鮮度、電池未知、主機有效供電、warning／failed 條件或硬體權限；也不變更 D037、地圖、Debug 或 Permission 的驗收語意。登錄一致不代表 50 題實際執行均通過。
+- 原始報告：Scout `conversation-recovery-20260911/d050-registry-review/report.md`；原候選及本次兩項原版失敗重播、修正後測試、來源 SHA 與可套用 patch 保存在 `recovery-20260914/d050-fix/`。路徑均相對於 `/home/alexwang0315/work/scout-pretrip-all-seven-20260910/`。

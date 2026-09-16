@@ -14,7 +14,7 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from dataclasses import asdict, dataclass, replace
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 from urllib.parse import urlsplit
 
 from assistant_model_config import (
@@ -54,6 +54,7 @@ from scout.agents.hailo_native_research import (
     research_tool_return_trace,
 )
 from scout.agents.model_policy import resolve_model_policy
+from scout.agents.pydantic_model_lifecycle import run_in_model_worker
 from scout.agents.web_research_quality import (
     ResearchQuestionSpec,
     build_web_evidence_bundle,
@@ -3998,9 +3999,10 @@ def _risk_score_answer_prefix(question: str) -> str:
         term in normalized for term in ("出事", "事故", "最容易", "最高風險", "高風險")
     ):
         return "最高候選風險點"
-    if any(
-        term in normalized
-        for term in ("checkpoint", "cp", "檢查點", "設checkpoint", "設cp", "漏設")
+    if _looks_like_checkpoint_design_question(normalized) or re.search(
+        r"(?:設|新增)\s*(?:checkpoint|cp|檢查點)"
+        r"|\b(?:add|create|place|new)\s+(?:a\s+)?(?:checkpoint|cp)\b",
+        normalized,
     ):
         return "優先考慮設 checkpoint 的候選風險點"
     if any(term in normalized for term in ("拍照", "拍攝", "停留", "景觀點")):
@@ -5646,6 +5648,60 @@ def _model_output_contradicts_grounding(
     return False
 
 
+def _model_output_inverts_explicit_negation(output: str, grounded: str) -> bool:
+    """Reject a positive claim when verified evidence explicitly negates it."""
+
+    output = re.sub(r"\s+", "", str(output or "").casefold())
+    grounded = re.sub(r"\s+", "", str(grounded or "").casefold())
+    polarity_pairs = (
+        ("不等於證明", "等於證明"),
+        ("不等于证明", "等于证明"),
+        ("不能推論為", "可以推論為"),
+        ("不能推论为", "可以推论为"),
+        ("不代表", "代表"),
+        ("doesnotprove", "proves"),
+        ("cannotinfer", "caninfer"),
+    )
+    for negative, positive in polarity_pairs:
+        for match in re.finditer(
+            rf"{re.escape(negative)}([^。；，,或]{{2,40}})",
+            grounded,
+        ):
+            claim = match.group(1)
+            if f"{negative}{claim}" in output:
+                continue
+            if f"{positive}{claim}" in output:
+                return True
+    return False
+
+
+def _model_output_overstates_undefined_variation(output: str, grounded: str) -> bool:
+    """Reject categorical variation labels when evidence defines no threshold."""
+
+    output = re.sub(r"\s+", "", str(output or "").casefold())
+    grounded = re.sub(r"\s+", "", str(grounded or "").casefold())
+    threshold_is_undefined = (
+        any(marker in grounded for marker in ("未定義", "没有定义", "沒有定義"))
+        and any(marker in grounded for marker in ("閾值", "阈值"))
+    )
+    if not threshold_is_undefined:
+        return False
+    if any(
+        marker in output
+        for marker in (
+            "未定義",
+            "沒有定義",
+            "没有定义",
+            "無法判定",
+            "无法判定",
+            "不能客觀標成",
+            "不能客观标成",
+        )
+    ):
+        return False
+    return re.search(r"變異(?:很|不)?(?:大|小)|变异(?:很|不)?(?:大|小)", output) is not None
+
+
 def _model_output_introduces_unsupported_evidence_tokens(
     model_output: str,
     grounded_answer: str,
@@ -5773,11 +5829,29 @@ def _build_terrain_score_tool_fallback_response(
     if not isinstance(latest, dict) or latest.get("status") != "completed":
         return None
     results = latest.get("results")
-    if not isinstance(results, list) or not results:
+    if not isinstance(results, list):
         return None
-    top = _first_dict(results)
-    concise_answer = _format_terrain_score_concise_answer(query, top)
-    evidence_lines = _format_terrain_score_evidence_lines(results)
+    if results:
+        top = _first_dict(results)
+        concise_answer = _format_terrain_score_concise_answer(query, top)
+        evidence_lines = _format_terrain_score_evidence_lines(results)
+    else:
+        # Empty samples can still carry a completed, bounded evidence-gap decision.
+        concise_answer = _format_decision_tool_fallback_answer(
+            query=query,
+            tool_id=TERRAIN_SCORE_TOOL_ID,
+            label="terrain score",
+            latest=latest,
+        )
+        if concise_answer is None:
+            field_answer = latest.get("field_answer")
+            concise_answer = field_answer.strip() if isinstance(field_answer, str) else ""
+        if not concise_answer:
+            return None
+        missing_fields = _extract_missing_fields(latest)
+        if missing_fields:
+            concise_answer += " 缺少證據欄位：" + "、".join(missing_fields) + "。"
+        evidence_lines = []
     other_candidates = ""
     if (
         _question_requests_multiple_candidates(query.question)
@@ -8010,6 +8084,14 @@ class PydanticAIEnvRunner:
             timeout_seconds=timeout_seconds,
         )
 
+    @staticmethod
+    def _run_worker_with_event_loop(
+        call: Callable[..., str], *args: object
+    ) -> str:
+        # This callback runs only in a new executor worker. Keep all initial,
+        # synthesis and recovery stages on one loop, then close it on exit.
+        return run_in_model_worker(call, *args)
+
     def run(self, prompt: str, *, timeout_seconds: int | None) -> str:
         local_slot_acquired = self._acquire_local_inference_slot()
         try:
@@ -8028,7 +8110,12 @@ class PydanticAIEnvRunner:
             self.last_raw_model_outputs = []
             self._reset_hailo_request_state()
             executor = ThreadPoolExecutor(max_workers=1)
-            future = executor.submit(self._run_model, prompt, timeout_seconds)
+            future = executor.submit(
+                self._run_worker_with_event_loop,
+                self._run_model,
+                prompt,
+                timeout_seconds,
+            )
             try:
                 return (
                     future.result()
@@ -8077,6 +8164,7 @@ class PydanticAIEnvRunner:
             if not self.workspace_tools_enabled:
                 run_args = (*run_args, False)
             future = executor.submit(
+                self._run_worker_with_event_loop,
                 self._run_model_with_workspace_tools,
                 *run_args,
             )
@@ -18011,6 +18099,19 @@ def _hailo_bounded_semantic_sentence_target(prompt: str) -> int:
     return max(1, min(3, target))
 
 
+def _hailo_bounded_prompt_payload(prompt: str) -> dict[str, Any] | None:
+    """Decode the leading bounded JSON while allowing appended MSER context."""
+
+    _, separator, raw_payload = prompt.partition("\n")
+    if not separator:
+        return None
+    try:
+        payload, _ = json.JSONDecoder().raw_decode(raw_payload.lstrip())
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
 def _hailo_bounded_semantic_completion_allowed(prompt: str) -> bool:
     """Use sentence completion only for simple, single-clause exact answers."""
 
@@ -18025,6 +18126,19 @@ def _hailo_bounded_semantic_completion_allowed(prompt: str) -> bool:
             payload.get("evidence_cards") or payload.get("evidence_delta")
         )
     return len(exact_answers) == 1 and not re.search(r"[；;\n]", exact_answers[0])
+
+
+def _hailo_research_action_complete(output: str) -> bool:
+    """A validated complete action, unlike punctuation, is a semantic boundary."""
+
+    text = output.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
+    try:
+        value = json.loads(text)
+    except json.JSONDecodeError:
+        return False
+    return isinstance(value, dict) and parse_hailo_research_action(text) is not None
 
 
 def _hailo_bounded_exact_answers_covered(prompt: str, output: str) -> bool:
@@ -18174,6 +18288,50 @@ def _priority_exact_evidence_cards(
         if priority >= 100 and str(card.key_values.get("field_answer") or "").strip():
             exact_cards.append(card)
     return exact_cards or evidence_cards
+
+
+def _verify_hailo_bounded_synthesis(
+    bounded_runtime: BoundedAgentRuntime,
+    output: str,
+    *,
+    evidence_cards: list[EvidenceCard],
+) -> GroundingVerification:
+    """Apply citation checks plus semantic polarity checks to Hailo output."""
+
+    verification = bounded_runtime.verify_synthesis(
+        output,
+        evidence_cards=evidence_cards,
+    )
+    exact_answers = [
+        str(card.key_values.get("field_answer") or "").strip()
+        for card in evidence_cards
+        if _hailo_verified_field_answer_priority(card.key_values) >= 100
+        and str(card.key_values.get("field_answer") or "").strip()
+    ]
+    exact_grounding = " ".join(exact_answers)
+    semantic_conflict = _model_output_inverts_explicit_negation(
+        output,
+        exact_grounding,
+    ) or _model_output_overstates_undefined_variation(output, exact_grounding)
+    if not exact_answers or not semantic_conflict:
+        return verification
+    return verification.model_copy(
+        update={
+            "passed": False,
+            "output_disposition": "needs_repair",
+            "rejected_draft_claims": list(
+                dict.fromkeys([*verification.rejected_draft_claims, output])
+            ),
+            "repair_items": list(
+                dict.fromkeys(
+                    [
+                        *verification.repair_items,
+                        "contradicts_priority_exact_field_answer",
+                    ]
+                )
+            ),
+        }
+    )
 
 
 def _hailo_completed_sentence_count(value: str) -> int:
@@ -19663,131 +19821,3 @@ def _connect_runner(
         "Scout assistant connectivity check. Reply with OK.",
         timeout_seconds=timeout_seconds,
     )
-
-
-def _hailo_bounded_prompt_payload(prompt: str) -> dict[str, Any] | None:
-    """Decode the leading bounded JSON while allowing appended MSER context."""
-
-    _, separator, raw_payload = prompt.partition("\n")
-    if not separator:
-        return None
-    try:
-        payload, _ = json.JSONDecoder().raw_decode(raw_payload.lstrip())
-    except json.JSONDecodeError:
-        return None
-    return payload if isinstance(payload, dict) else None
-
-
-
-def _model_output_inverts_explicit_negation(output: str, grounded: str) -> bool:
-    """Reject a positive claim when verified evidence explicitly negates it."""
-
-    output = re.sub(r"\s+", "", str(output or "").casefold())
-    grounded = re.sub(r"\s+", "", str(grounded or "").casefold())
-    polarity_pairs = (
-        ("不等於證明", "等於證明"),
-        ("不等于证明", "等于证明"),
-        ("不能推論為", "可以推論為"),
-        ("不能推论为", "可以推论为"),
-        ("不代表", "代表"),
-        ("doesnotprove", "proves"),
-        ("cannotinfer", "caninfer"),
-    )
-    for negative, positive in polarity_pairs:
-        for match in re.finditer(
-            rf"{re.escape(negative)}([^。；，,或]{{2,40}})",
-            grounded,
-        ):
-            claim = match.group(1)
-            if f"{negative}{claim}" in output:
-                continue
-            if f"{positive}{claim}" in output:
-                return True
-    return False
-
-
-
-def _model_output_overstates_undefined_variation(output: str, grounded: str) -> bool:
-    """Reject categorical variation labels when evidence defines no threshold."""
-
-    output = re.sub(r"\s+", "", str(output or "").casefold())
-    grounded = re.sub(r"\s+", "", str(grounded or "").casefold())
-    threshold_is_undefined = (
-        any(marker in grounded for marker in ("未定義", "没有定义", "沒有定義"))
-        and any(marker in grounded for marker in ("閾值", "阈值"))
-    )
-    if not threshold_is_undefined:
-        return False
-    if any(
-        marker in output
-        for marker in (
-            "未定義",
-            "沒有定義",
-            "没有定义",
-            "無法判定",
-            "无法判定",
-            "不能客觀標成",
-            "不能客观标成",
-        )
-    ):
-        return False
-    return re.search(r"變異(?:很|不)?(?:大|小)|变异(?:很|不)?(?:大|小)", output) is not None
-
-
-
-def _verify_hailo_bounded_synthesis(
-    bounded_runtime: BoundedAgentRuntime,
-    output: str,
-    *,
-    evidence_cards: list[EvidenceCard],
-) -> GroundingVerification:
-    """Apply citation checks plus semantic polarity checks to Hailo output."""
-
-    verification = bounded_runtime.verify_synthesis(
-        output,
-        evidence_cards=evidence_cards,
-    )
-    exact_answers = [
-        str(card.key_values.get("field_answer") or "").strip()
-        for card in evidence_cards
-        if _hailo_verified_field_answer_priority(card.key_values) >= 100
-        and str(card.key_values.get("field_answer") or "").strip()
-    ]
-    exact_grounding = " ".join(exact_answers)
-    semantic_conflict = _model_output_inverts_explicit_negation(
-        output,
-        exact_grounding,
-    ) or _model_output_overstates_undefined_variation(output, exact_grounding)
-    if not exact_answers or not semantic_conflict:
-        return verification
-    return verification.model_copy(
-        update={
-            "passed": False,
-            "output_disposition": "needs_repair",
-            "rejected_draft_claims": list(
-                dict.fromkeys([*verification.rejected_draft_claims, output])
-            ),
-            "repair_items": list(
-                dict.fromkeys(
-                    [
-                        *verification.repair_items,
-                        "contradicts_priority_exact_field_answer",
-                    ]
-                )
-            ),
-        }
-    )
-
-
-
-def _hailo_research_action_complete(output: str) -> bool:
-    """A validated complete action, unlike punctuation, is a semantic boundary."""
-
-    text = output.strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
-    try:
-        value = json.loads(text)
-    except json.JSONDecodeError:
-        return False
-    return isinstance(value, dict) and parse_hailo_research_action(text) is not None

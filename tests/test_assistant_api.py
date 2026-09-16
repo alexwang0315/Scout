@@ -1580,8 +1580,12 @@ class AssistantApiTests(unittest.TestCase):
         self.assertIn("model answer unavailable", payload["answer"])
         self.assertNotIn("map perception tool fallback", payload["answer"])
         self.assertIn("map perception tool fallback", payload["evidence_backed_answer"])
-        self.assertEqual(payload["sources"][0]["source_id"], MAP_PERCEPTION_TOOL_ID)
-        latest = payload["sources"][0]["context_summary"]["latest"]
+        map_sources = [
+            source for source in payload["sources"]
+            if source.get("source_id") == MAP_PERCEPTION_TOOL_ID
+        ]
+        self.assertEqual(len(map_sources), 1, "Map Perception source must be unique")
+        latest = map_sources[0]["context_summary"]["latest"]
         self.assertEqual(latest["status"], "completed")
         self.assertGreater(latest["result_count"], 0)
         self.assertEqual(latest["results"][0]["evidence_type"], "ocr_label")
@@ -1763,7 +1767,13 @@ class AssistantApiTests(unittest.TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
-        context_summary = response.json()["sources"][0]["context_summary"]
+        pretrip_sources = [
+            source
+            for source in response.json()["sources"]
+            if source["source_id"] == "assistant_context.pretrip"
+        ]
+        self.assertEqual(len(pretrip_sources), 1)
+        context_summary = pretrip_sources[0]["context_summary"]
         self.assertEqual(context_summary["selected_evidence"]["source_id"], "candidate.cp2")
         self.assertEqual(context_summary["selected_evidence"]["priority"], "high")
         self.assertEqual(context_summary["selected_evidence"]["review_focus"], ["timing", "water"])

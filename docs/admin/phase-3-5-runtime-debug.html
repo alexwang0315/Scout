@@ -4161,8 +4161,21 @@
       }
       return activateDebugMapLibreRenderer(loaded.maplibregl, projection);
     }
+    function debugCameraMotion() {
+      const map = debugPageState.mapLibreRenderer?.map;
+      const unknown = {observedAt: Date.now(), basis: "maplibre-public-api", available: false, moving: null, easing: null};
+      if (typeof map?.isMoving !== "function") return unknown;
+      try {
+        // Map.isMoving is public in 6.2 and includes camera and handler motion.
+        // Camera.isEasing is not exposed by Map; do not fabricate an easing value.
+        const moving = map.isMoving(), easing = typeof map.isEasing === "function" ? map.isEasing() : null;
+        return typeof moving === "boolean" && (easing === null || typeof easing === "boolean")
+          ? {...unknown, available: true, moving, easing} : unknown;
+      } catch (error) { return {...unknown, errorName: error?.name || "Error"}; }
+    }
     window.scoutDebugMapRendererBridge = Object.freeze({
       dispose: disposeDebugMapRenderer,
+      getCameraMotion: debugCameraMotion,
       getViewLimits() {
         const renderer = debugPageState.mapLibreRenderer;
         return renderer ? {viewZoom: renderer.map?.getZoom?.(), maxViewZoom: renderer.map?.getMaxZoom?.(),
@@ -4431,7 +4444,33 @@
       return {minX, minY, width, height};
     }
 
+    function withDebugMapDomUpdate(update) {
+      debugPageState.mapDomUpdateDepth = (debugPageState.mapDomUpdateDepth || 0) + 1;
+      let completed = false;
+      try {
+        const result = update();
+        completed = true;
+        return result;
+      } finally {
+        if (!completed) debugPageState.deferredRudyStages = null;
+        debugPageState.mapDomUpdateDepth -= 1;
+        if (debugPageState.mapDomUpdateDepth === 0) {
+          const pending = debugPageState.deferredRudyStages;
+          debugPageState.deferredRudyStages = null;
+          if (completed && !debugPageState.mapLibreDisposed) {
+            for (const request of pending?.values() || []) {
+              if (runtimeMap.contains(request.group)) {
+                stageDebugRudyTiles(request.group, request.projection, request.bounds);
+              }
+            }
+          }
+        }
+      }
+    }
     function applyMapViewport() {
+      return withDebugMapDomUpdate(applyMapViewportDom);
+    }
+    function applyMapViewportDom() {
       debugPageState.zoom = clamp(debugPageState.zoom, MAP_MIN_ZOOM, debugMapInteractionMaxZoom());
       runtimeMap.setAttribute("viewBox", mapViewBox());
       syncRasterBasemapLayers();
@@ -4793,6 +4832,9 @@
     }
 
     function updateLayers() {
+      return withDebugMapDomUpdate(updateLayersDom);
+    }
+    function updateLayersDom() {
       const layerInputs = [...document.querySelectorAll("[data-layer]")];
       if (debugMapLibreActive()) {
         layerInputs.forEach(input => {
@@ -4865,6 +4907,12 @@
     }
     function stageDebugRudyTiles(group, projection, bounds) {
       if (debugPageState.mapLibreDisposed) return;
+      // Vector and label DOM work must finish before the native tile load budget starts.
+      if (debugPageState.mapDomUpdateDepth > 0) {
+        debugPageState.deferredRudyStages ||= new Map();
+        debugPageState.deferredRudyStages.set(group, {group, projection, bounds});
+        return;
+      }
       const coverageBounds = debugRudyViewportBounds(projection);
       const tiles = rasterTileCoverage(projection, coverageBounds, null, "rudy-twmap");
       const zoom = tiles[0]?.z ?? chooseRasterZoom(projection, coverageBounds, "rudy-twmap");
@@ -5169,6 +5217,9 @@
     }
 
     function renderDebugEvidenceMap(projection, {forceSvg = false} = {}) {
+      return withDebugMapDomUpdate(() => renderDebugEvidenceMapDom(projection, {forceSvg}));
+    }
+    function renderDebugEvidenceMapDom(projection, {forceSvg = false} = {}) {
       if (!forceSvg && debugMapLibreActive()) {
         return syncDebugMapLibreProjection(projection);
       }
@@ -7837,7 +7888,7 @@
       if (debugMapLibreActive()) syncDebugMapLibreProjection();
     }
 
-    async function loadOsmPbfVectorLayer() {
+    async function loadOsmPbfVectorLayer({redraw = true} = {}) {
       const url = localOsmPbfVectorUrl(debugPageState.projection);
       if (!url) {
         debugPageState.osmPbfVector = null;
@@ -7850,7 +7901,7 @@
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         debugPageState.osmPbfVector = await response.json();
         debugPageState.osmPbfVectorStatus = "ready";
-        if (debugPageState.projection) renderDebugEvidenceMap(debugPageState.projection);
+        if (redraw && debugPageState.projection) renderDebugEvidenceMap(debugPageState.projection);
       } catch (error) {
         debugPageState.osmPbfVector = null;
         debugPageState.osmPbfVectorStatus = `failed: ${error.message}`;
@@ -7918,13 +7969,15 @@
         ]);
         const eventPayload = eventResult.payload || {};
         debugPageState.projection = eventResult.projection || null;
-        await loadCwaWeatherImagery(PRETRIP_PROJECT_ID);
+        const cwaWeatherImageryPromise = loadCwaWeatherImagery(PRETRIP_PROJECT_ID);
         debugPageState.hardwareReadiness = hardwareReadiness || null;
         debugPageState.mobileWearableIngress = mobileWearableIngress || null;
         debugPageState.monitoringCenter = monitoringCenter || null;
-        if (debugPageState.projection) renderDebugEvidenceMap(debugPageState.projection);
-        await osmCartoPalettePromise;
-        loadOsmPbfVectorLayer();
+        await Promise.all([
+          cwaWeatherImageryPromise,
+          osmCartoPalettePromise,
+          loadOsmPbfVectorLayer({redraw: false})
+        ]);
         const resolvedState = stateWithProjectedEvents(state || {}, eventPayload);
         renderEndpointPayloads(eventPayload || {}, resolvedState || {}, messagePayload || {});
         renderState(resolvedState || {});
@@ -8082,9 +8135,10 @@
       (async () => {
         try {
           debugPageState.projection = await fetchJson(PRETRIP_DEBUG_PROJECTION_PATH);
-          await loadCwaWeatherImagery(PRETRIP_PROJECT_ID);
-          await loadOsmPbfVectorLayer();
-          renderDebugEvidenceMap(debugPageState.projection);
+          await Promise.all([
+            loadCwaWeatherImagery(PRETRIP_PROJECT_ID),
+            loadOsmPbfVectorLayer({redraw: false})
+          ]);
           await initializeDebugMapRenderer(debugPageState.projection);
         } catch (error) {
           activateDebugSvgFallback("diagnostic_projection_unavailable", String(error.message));

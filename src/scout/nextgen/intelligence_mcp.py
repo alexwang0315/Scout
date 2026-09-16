@@ -295,7 +295,6 @@ class IntelligenceMcpStdioClient:
     def close(self) -> None:
         with self._lock:
             process = self._process
-            self._process = None
             self._initialized = False
             if process is None:
                 return
@@ -305,16 +304,37 @@ class IntelligenceMcpStdioClient:
                 except OSError:
                     pass
             if process.poll() is None:
-                process.terminate()
+                try:
+                    process.terminate()
+                except ProcessLookupError:
+                    pass
                 try:
                     process.wait(timeout=2)
                 except subprocess.TimeoutExpired:
                     process.kill()
                     process.wait(timeout=2)
+            # Reap the readers before replacing their response queue or dropping
+            # the Popen streams. Thread exit owns closing stdout and stderr.
+            readers = (self._reader, self._stderr_reader)
+            for reader in readers:
+                if reader is not None:
+                    reader.join(timeout=2)
+            if any(reader is not None and reader.is_alive() for reader in readers):
+                raise IntelligenceMcpUnavailable(
+                    "Intelligence MCP pipe readers did not stop after process exit"
+                )
+            for stream in (process.stdout, process.stderr):
+                if stream is not None:
+                    stream.close()
+            self._reader = None
+            self._stderr_reader = None
+            self._process = None
 
     def _start(self) -> None:
-        if self._process is not None and self._process.poll() is None:
-            return
+        if self._process is not None:
+            if self._process.poll() is None:
+                return
+            self.close()
         executable = self.config.command[0]
         resolved = executable if Path(executable).is_absolute() else shutil.which(executable)
         if not resolved:
@@ -470,6 +490,7 @@ class IntelligenceMcpStdioClient:
                 if isinstance(value, dict) and value.get("id") is not None:
                     self._responses.put(value)
         finally:
+            process.stdout.close()
             if self._process is process:
                 code = process.poll()
                 self._responses.put(
@@ -481,10 +502,13 @@ class IntelligenceMcpStdioClient:
     def _read_stderr(self, process: subprocess.Popen[str]) -> None:
         if process.stderr is None:
             return
-        for line in process.stderr:
-            value = " ".join(line.strip().split())
-            if value:
-                self._stderr.append(value[:500])
+        try:
+            for line in process.stderr:
+                value = " ".join(line.strip().split())
+                if value:
+                    self._stderr.append(value[:500])
+        finally:
+            process.stderr.close()
 
 
 class McpIntelligenceGateway:

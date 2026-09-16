@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Scout · 硬體監控</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/monitor/style.css">
+  <script src="/monitor/app.js" defer></script>
+</head>
+<body>
+  <a class="skip" href="#main">跳到監控內容</a>
+  <header class="topbar"><a class="brand" href="/monitor">SCOUT <span>硬體監控</span></a><a href="/docs">API 文件 ↗</a></header>
+  <main id="main">
+    <div class="heading"><div><p class="eyebrow">裝置總覽</p><h1>硬體與連線</h1><p class="muted">每分鐘更新電源、系統資源與裝置狀態。</p></div><button id="refresh" type="button">重新讀取</button></div>
+    <div class="statusbar"><strong id="status" class="badge" role="status" aria-live="polite">正在讀取</strong><span id="updated">等待第一份採樣</span><span id="uptime"></span></div>
+    <p id="notice" class="notice" hidden></p>
+    <section id="metrics" class="metrics" aria-label="核心資源" aria-busy="true"><p class="muted">正在取得監控結果…</p></section>
+    <section id="hailo-panel" aria-labelledby="hailo-title" aria-busy="true">
+      <div class="section-title"><h2 id="hailo-title">AI HAT／Hailo</h2><span id="hailo-state" class="badge" role="status" aria-live="polite">正在讀取</span></div>
+      <p class="muted">Hailo 專用資源，與主機 CPU／記憶體分開。每 60 秒採樣，觀測窗口約 1 秒；重新讀取不會啟動推論或加速採樣。</p>
+      <p id="hailo-freshness" class="notice" role="status" hidden></p>
+      <p id="hailo-meta" class="muted">等待 Hailo 採樣</p>
+      <p id="hailo-age" class="muted">Hailo 資料年齡：未知</p>
+      <div id="hailo-errors"></div>
+      <div id="hailo-devices"><p class="panel muted">正在取得 Hailo 監測資料…</p></div>
+      <p class="notes">「已讀取」只代表遙測可讀，不代表設備功能正常。NNC 0% 不單獨代表故障；晶片電壓 mV 不是功耗 W。</p>
+      <details id="hailo-history-details" class="device-group">
+        <summary><h3>Hailo 最近採樣趨勢</h3></summary>
+        <div class="group-body"><p id="hailo-history-state" class="muted" role="status">正在讀取歷史…</p><p class="notes">依 Hailo 實際採樣時間繪製；缺值、缺少裝置或間隔超過 150 秒時中斷，不補值。</p><div id="hailo-trends" class="history-grid"></div></div>
+      </details>
+    </section>
+    <details class="device-group"><summary><h2>電池、磁碟與散熱詳情</h2></summary><div id="resources" class="group-body muted">等待採樣</div></details>
+    <section aria-labelledby="alerts-title"><div class="section-title"><h2 id="alerts-title">目前告警</h2><span id="alert-count" class="muted"></span></div><div id="alerts" class="panel muted">等待採樣</div></section>
+    <section aria-labelledby="inventory-title"><div class="section-title"><h2 id="inventory-title">連線與硬體</h2><span class="muted">展開查看裝置與線路詳情</span></div><div id="inventory"><p class="muted">等待裝置資訊</p></div></section>
+    <section aria-labelledby="history-title"><div class="section-title"><h2 id="history-title">最近採樣趨勢</h2><span id="history-range" class="muted"></span></div><div id="history" class="history-grid"><p class="muted">正在讀取歷史…</p></div></section>
+    <section aria-labelledby="events-title"><div class="section-title"><h2 id="events-title">狀態變更紀錄</h2></div><div id="events" class="panel muted" tabindex="0" role="region" aria-labelledby="events-title">正在讀取事件…</div></section>
+    <footer>裝置已枚舉不等於功能測試通過。I²C 未掃描位址；GPIO 僅顯示方向與使用者，電位未採樣。</footer>
+  </main>
+</body>
+</html>

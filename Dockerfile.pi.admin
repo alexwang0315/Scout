@@ -273,6 +273,53 @@ COPY \
     voice_cue_models.py \
     ./
 
+# Preparation, planned/recorded and QGIS dependencies used by the admin runtime.
+COPY \
+    dashboard_preparation_jobs.py \
+    dashboard_workspace_clone.py \
+    dashboard_workspace_preparation.py \
+    post_analysis_projection_validation.py \
+    qgis_runtime_control.py \
+    qgis_spatial_backend.py \
+    qgis_spatial_contracts.py \
+    qgis_worker_contracts.py \
+    scout_analysis_subject.py \
+    scout_contextual_permission_initialization.py \
+    scout_exploration_api.py \
+    scout_exploration_jobs.py \
+    scout_exploration_models.py \
+    scout_exploration_workspace.py \
+    scout_mapsforge_source.py \
+    scout_planned_analysis.py \
+    scout_planned_analysis_evidence.py \
+    scout_planned_analysis_inputs.py \
+    scout_planned_analysis_producers.py \
+    scout_planned_analysis_remote.py \
+    scout_planned_intent.py \
+    scout_planned_map_api.py \
+    scout_planned_map_materialization.py \
+    scout_planned_preparation.py \
+    scout_planned_pretrip_report.py \
+    scout_planned_review_context.py \
+    scout_planned_route.py \
+    scout_planned_route_api.py \
+    scout_planned_route_artifacts.py \
+    scout_planned_route_models.py \
+    scout_planned_route_sources.py \
+    scout_planned_timing.py \
+    scout_recorded_analysis.py \
+    scout_recorded_api.py \
+    scout_recorded_jobs.py \
+    scout_reference_gpx_reconstruction.py \
+    terrain_route_consistency.py \
+    terrain_route_guidance.py \
+    terrain_route_guidance_map_review.py \
+    terrain_route_guidance_workspace.py \
+    terrain_route_hypothesis_artifacts.py \
+    terrain_route_hypothesis_models.py \
+    workspace_terrain_dem.py \
+    ./
+
 COPY scout_ai_*.py scout_*_tool.py ./
 COPY navigation_*.py ./
 COPY pretrip_*.py ./

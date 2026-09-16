@@ -486,6 +486,7 @@ def _source_report(
                 "raw_response_hash": _raw_hash(payload),
                 "stale_risk": _stale_risk(payload),
                 "request_timestamp": _request_timestamp(payload),
+                "acquisition_timestamps": _acquisition_timestamps(payload),
                 "normalized_artifact_ref": payload.get("normalized_artifact_ref"),
             }
         )
@@ -1091,6 +1092,10 @@ def _artifact_stale_status(
         else None
     )
     explicit = _stale_risk(payload)
+    if _future_acquisition(payload, reference_time) or (
+        parsed is not None and parsed > reference_time
+    ):
+        return "future", age_hours
     if age_hours is not None and age_hours > stale_after_hours:
         return "stale", age_hours
     if explicit:
@@ -1211,6 +1216,28 @@ def _request_timestamp(payload: dict[str, Any]) -> str | None:
     return None
 
 
+def _acquisition_timestamps(payload: dict[str, Any]) -> dict[str, str]:
+    # Preserve each acquisition/package clock so one alias cannot mask another.
+    clocks: dict[str, str] = {}
+    preserved = payload.get("acquisition_timestamps")
+    for key in ("request_timestamp", "requested_at", "generated_at", "updated_at"):
+        value = preserved.get(key) if isinstance(preserved, dict) else None
+        if isinstance(value, str) and value.strip():
+            clocks[key] = value.strip()
+        value = payload.get(key)
+        if isinstance(value, str) and value.strip():
+            clocks[key] = value.strip()
+    return clocks
+
+
+def _future_acquisition(payload: dict[str, Any], reference_time: datetime) -> str | None:
+    for key, value in _acquisition_timestamps(payload).items():
+        parsed = _parse_datetime(value)
+        if parsed is not None and parsed > reference_time:
+            return f"{key}={value} is after reference_time={reference_time.isoformat()}"
+    return None
+
+
 def _missing_fields(source_report: list[dict[str, Any]]) -> list[str]:
     return [
         str(item["source_kind"])
@@ -1233,6 +1260,9 @@ def _stale_risks(
             "none",
         }:
             risks.append(f"{item['source_kind']} stale_risk={item['stale_risk']}")
+        future = _future_acquisition(item, reference_time)
+        if future:
+            risks.append(f"{item['source_kind']} {future}")
         timestamp = item.get("request_timestamp")
         if not isinstance(timestamp, str):
             continue
@@ -1285,12 +1315,7 @@ def _warnings(
     return _dedupe_text(warnings)
 
 
-def _decision_output(
-    *,
-    summary: dict[str, Any],
-    missing_fields: list[str],
-    warnings: list[str],
-) -> dict[str, Any]:
+def _has_review_pressure(summary: dict[str, Any]) -> bool:
     qpf = summary.get("qpf_corridor_summary")
     qpf_max = _float_or_none(qpf.get("max_mm")) if isinstance(qpf, dict) else None
     heavy_events = (
@@ -1299,11 +1324,21 @@ def _decision_output(
         else 0
     )
     active_warning = summary.get("warning_count", 0) > 0
+    return bool(active_warning or heavy_events or (qpf_max is not None and qpf_max >= 30))
+
+
+def _decision_output(
+    *,
+    summary: dict[str, Any],
+    missing_fields: list[str],
+    warnings: list[str],
+) -> dict[str, Any]:
+    review_pressure = _has_review_pressure(summary)
     if missing_fields:
         decision = "DELAY"
         reason = "CWA environment evidence is incomplete."
         next_step = "重新產生或補齊 CWA environment artifacts 後再做 go/no-go review。"
-    elif active_warning or heavy_events or (qpf_max is not None and qpf_max >= 30):
+    elif review_pressure:
         decision = "CHANGE_PLAN"
         reason = "CWA warning/QPF evidence indicates elevated weather review pressure."
         next_step = "把 QPF、警特報、terrain/geology/recent-rain compound evidence 交給人工複核。"

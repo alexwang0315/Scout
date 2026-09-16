@@ -10,7 +10,6 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
-from agent import sos_agent
 from admin_api import create_admin_router
 from assistant_api import (
     create_assistant_provider_from_env,
@@ -240,7 +239,7 @@ def _include_debug_router(app: FastAPI) -> None:
             spatial_imprint_trigger_report_path=SCOUT_SPATIAL_IMPRINT_TRIGGER_REPORT_PATH,
         )
     )
-    app.include_router(create_debug_page_router())
+    app.include_router(create_debug_page_router(include_assistant_ui_script=False))
     logger.info(
         "Phase 3.5 debug API enabled%s%s%s%s",
         f": {SCOUT_DEBUG_LOG_PATH}" if SCOUT_DEBUG_LOG_PATH else "",
@@ -514,6 +513,9 @@ async def ai_decision_worker() -> None:
                     target_point.setdefault("signals", signals)
                     target_point.setdefault("decision", None)
 
+            # Build the Wi-Fi model only when an actual decision needs it.
+            from agent import sos_agent
+
             result = await sos_agent.run(
                 "請根據最新的 PDR 座標和 Wi-Fi 訊號快照，給出明確且簡短的下一步移動指令。",
                 deps=world,
@@ -535,6 +537,7 @@ app.include_router(create_emergency_mobile_ui_router())
 app.include_router(
     create_admin_router(
         incident_store_path=SCOUT_SAFETY_INCIDENT_STORE,
+        include_debug_page=False,
         pretrip_workspace_root=(
             Path(SCOUT_PRETRIP_WORKSPACE_ROOT).expanduser()
             if SCOUT_PRETRIP_WORKSPACE_ROOT
@@ -542,7 +545,7 @@ app.include_router(
         ),
     )
 )
-app.include_router(create_hardware_readiness_router())
+app.include_router(create_hardware_readiness_router(include_assistant_ui_script=False))
 app.include_router(
     create_safety_router(
         SafetyApiSnapshot(safety_state=SafetyState()),
@@ -675,6 +678,9 @@ async def get_navigation() -> Dict[str, Any]:
                 snapshot = await loop.run_in_executor(executor, world.get_full_snapshot)
                 pose = _latest_pose()
                 world.trajectory.append({"x": pose["x"], "y": pose["y"], "signals": snapshot})
+
+        # Build the Wi-Fi model only when an actual decision needs it.
+        from agent import sos_agent
 
         result = await sos_agent.run(
             "請根據最新的 PDR 座標和訊號快照，分析目前最強信號位置，並給出明確的移動指令。",

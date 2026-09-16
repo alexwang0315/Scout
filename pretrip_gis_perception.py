@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
 import re
 from collections import Counter
+from contextvars import copy_context
 from concurrent.futures import ThreadPoolExecutor, TimeoutError
 from pathlib import Path
 from typing import Any, Literal, Protocol, Sequence
@@ -542,7 +544,20 @@ class PydanticAITestGisPerceptionProvider:
             output_type=_CloudRouteNoteJudgementBatch,
             system_prompt=_GIS_PERCEPTION_SYSTEM_PROMPT,
         )
-        result = agent.run_sync("fixture-backed route note judgement")
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            pass
+        else:
+            raise RuntimeError("This event loop is already running")
+
+        def run_test_agent():
+            with asyncio.Runner():
+                return agent.run_sync("fixture-backed route note judgement")
+
+        # Keep caller loops intact and retain the SDK's callback context guards.
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            result = executor.submit(copy_context().run, run_test_agent).result()
         output = getattr(result, "output", getattr(result, "data", result))
         return _CloudRouteNoteJudgementBatch.model_validate(output)
 
@@ -678,16 +693,16 @@ class PydanticAICloudGisPerceptionProvider:
             ),
             output_type=_CloudRouteNoteJudgementBatch,
             system_prompt=_GIS_PERCEPTION_SYSTEM_PROMPT,
-            retries={"output": 2},
             capabilities=pydantic_native_research_capabilities_for_model(
                 self.model_name
             ),
             **pydantic_agent_runtime_kwargs(),
         )
-        result = agent.run_sync(
-            json.dumps(prompt_payload, ensure_ascii=False, sort_keys=True),
-            model_settings={"max_tokens": 5000, "temperature": 0},
-        )
+        with asyncio.Runner():
+            result = agent.run_sync(
+                json.dumps(prompt_payload, ensure_ascii=False, sort_keys=True),
+                model_settings={"max_tokens": 5000, "temperature": 0},
+            )
         output = pydantic_result_output(result)
         return _CloudRouteNoteJudgementBatch.model_validate(output)
 

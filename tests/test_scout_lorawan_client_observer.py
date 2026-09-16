@@ -90,6 +90,9 @@ def test_observer_reports_stale_join_state_with_visual_dry_run(tmp_path: Path) -
             oled_dry_run=True,
             led_status=True,
             led_dry_run=True,
+            key_sync_jsonl=tmp_path / "missing-key_sync_jsonl.jsonl",
+            profile_provision_jsonl=tmp_path / "missing-profile_provision_jsonl.jsonl",
+            wio_at_jsonl=tmp_path / "missing-wio_at_jsonl.jsonl",
         )
     )
 
@@ -130,6 +133,12 @@ def test_observer_prioritizes_uplink_over_failed_join_state(tmp_path: Path) -> N
             uplink_jsonl=uplink_jsonl,
             rf_trial_jsonl=rf_jsonl,
             join_state_diagnostic_jsonl=join_state_jsonl,
+            key_sync_jsonl=tmp_path / "missing-key_sync_jsonl.jsonl",
+            profile_provision_jsonl=tmp_path / "missing-profile_provision_jsonl.jsonl",
+            trial_plan_jsonl=tmp_path / "missing-trial_plan_jsonl.jsonl",
+            join_audit_jsonl=tmp_path / "missing-join_audit_jsonl.jsonl",
+            tail_status_jsonl=tmp_path / "missing-tail_status_jsonl.jsonl",
+            wio_at_jsonl=tmp_path / "missing-wio_at_jsonl.jsonl",
         )
     )
 
@@ -157,7 +166,15 @@ def test_observer_reports_join_confirmed_waiting_for_uplink(tmp_path: Path) -> N
         ],
     )
     observer = LorawanClientObserver(
-        LorawanClientObserverConfig(evidence_dir=tmp_path / "observer", trial_plan_jsonl=plan_jsonl, rf_trial_jsonl=rf_jsonl)
+        LorawanClientObserverConfig(evidence_dir=tmp_path / "observer", trial_plan_jsonl=plan_jsonl, rf_trial_jsonl=rf_jsonl,
+            key_sync_jsonl=tmp_path / "missing-key_sync_jsonl.jsonl",
+            profile_provision_jsonl=tmp_path / "missing-profile_provision_jsonl.jsonl",
+            join_audit_jsonl=tmp_path / "missing-join_audit_jsonl.jsonl",
+            join_state_diagnostic_jsonl=tmp_path / "missing-join_state_diagnostic_jsonl.jsonl",
+            uplink_jsonl=tmp_path / "missing-uplink_jsonl.jsonl",
+            tail_status_jsonl=tmp_path / "missing-tail_status_jsonl.jsonl",
+            wio_at_jsonl=tmp_path / "missing-wio_at_jsonl.jsonl",
+        )
     )
 
     status = observer.refresh()
@@ -202,6 +219,14 @@ def test_cli_once_writes_status_without_hardware(tmp_path: Path) -> None:
             "--oled-dry-run",
             "--led-status",
             "--led-dry-run",
+            "--key-sync-jsonl", str(tmp_path / "missing-key_sync_jsonl.jsonl"),
+            "--profile-provision-jsonl", str(tmp_path / "missing-profile_provision_jsonl.jsonl"),
+            "--trial-plan-jsonl", str(tmp_path / "missing-trial_plan_jsonl.jsonl"),
+            "--join-audit-jsonl", str(tmp_path / "missing-join_audit_jsonl.jsonl"),
+            "--join-state-diagnostic-jsonl", str(tmp_path / "missing-join_state_diagnostic_jsonl.jsonl"),
+            "--uplink-jsonl", str(tmp_path / "missing-uplink_jsonl.jsonl"),
+            "--tail-status-jsonl", str(tmp_path / "missing-tail_status_jsonl.jsonl"),
+            "--wio-at-jsonl", str(tmp_path / "missing-wio_at_jsonl.jsonl"),
         ],
         cwd=ROOT,
         text=True,

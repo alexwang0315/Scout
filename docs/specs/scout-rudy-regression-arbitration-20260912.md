@@ -319,3 +319,41 @@ projection／DEM fingerprint 的一致性檢查，以及共用 Navigation scope 
 `/home/alexwang0315/work/scout-pretrip-all-seven-20260910/main-rudy-zoom-20260912/`。
 子目錄：`regression-history/`、`all-map-surfaces/`、`diagnostic-arbitration/`、`guide-refresh/`。
 候選 `diagnostic-arbitration/proposed-dashboard.html` 不得直接提供為正式 Dashboard。
+
+
+## 2026-09-13 D037 完整結果與檢測自干擾調查（未完成）
+
+本輪 9099／`dongqing_batongguan_historic_trail_newImport` Chrome 原始完整報告
+已取回：45 組、450 項，74 PASS、43 已執行 WARNING、333 因前置失敗而
+not_checked。只有 Main MapLibre 與 Main SVG 各走完十階段。原 cache-only
+probe 54/54 解碼；CWA probe 仍因控制項未就緒而未通過。不能把測試結束當成通過。
+
+收據顯示 headers→provenance→blob 的無 await 同步區間耗時數十秒。當時每次
+進度都 structuredClone 累積報告，再 outerHTML 重畫並 JSON.stringify 全部收據；
+最後報告為 9,527,667 bytes。Scout Node/JSDOM 使用同一真實報告三次重播：
+舊版每次約 2.3 秒，新版同階段文字更新約 8.5 ms（初次／階段清單更新另計）。
+此為觀察者效能機制的重播證據，不等於 Chrome 全矩陣通過。新呈現保留原始
+收據、逐階段結果與 workspace 隔離，完整 JSON 於結束／終止後顯示，避免
+整理報告阻塞正在計時的 map fetch/decode。
+
+另確認 Promise.all 首個失敗退出時，兄弟驗磚請求未收束便封存案例；512 筆
+pending 是終態證據缺口，不能推論取得報告時仍有同量 in-flight。修正以同批
+取消與 allSettled 保留首因及全部終態，原 15 秒請求 deadline 與驗收標準不變。
+13 次 SVG 中止當下皆已有 HTTP 200/exact 原生來源頭，不能稱為上游缺細節圖。
+
+5 個 Navigation 3D 未截斷近景需求含 Z21，仍按既有原生上限要求保留 WARNING；
+2 個 2D recovery 中心偏移約 0.8–1.1 m，仍保留精確鏡頭要求。實際 bundled
+KeyboardHandler 的平移動畫 300 ms，Diagnostic 原操作僅等待 240 ms；正補
+public isMoving/isEasing 收據與操作完成邊界，未知不當作停止。3D 上限與
+所有相關地圖、完整 Diagnostic、38 頁當前教學截圖／PDF 均仍待整合重驗。
+
+本輪資料：Scout `main-rudy-zoom-20260913/d037-complete-report-0.json`、
+`d037-complete-analysis/`、`d037-lifecycle-audit/`、`d037-progress-audit/`。
+前述舊輪證據與原裁決保留；不以本節作任何驗收期待的變更。
+
+版本引入追查：`cfdb337b`（9/12 12:19 的保存點）已有全報告 clone／JSON／DOM
+重畫，`63b5d4dd`（9/13 15:32 的保存點）新增 liveRequestReceipts 與逐請求
+進度通知。這些是版本保存時間，不冒稱每行的實際編寫時間。新增高頻觀測沿用
+全量呈現，是此次自干擾的觸發改動；不能歸咎為早期地圖碼或上游缺資料。
+`version-introduction-receipt.json` 記錄四個保存點的函式 SHA，可分開核對其後
+Permission 恢復與 D050 新增的影響。

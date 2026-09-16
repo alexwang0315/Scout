@@ -8,7 +8,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_split_preserves_identity_labels_toggle_and_background_detection():
     page = (ROOT / 'docs/admin/phase-3-5-runtime-debug.html').read_text()
-    names = ['mapLayerRank', 'splitEnvironmentBackgrounds', 'orderMapLayerGroups', 'updateLayers', 'layerInputChecked']
+    names = [
+        'mapLayerRank', 'splitEnvironmentBackgrounds', 'orderMapLayerGroups',
+        'withDebugMapDomUpdate', 'updateLayers', 'updateLayersDom', 'layerInputChecked',
+    ]
     functions = '\n'.join(re.search(rf'(?ms)^    function {name}\(.*?^    }}', page).group() for name in names)
     source = r'''
 const assert=require('node:assert/strict'),{JSDOM}=require('jsdom');
@@ -16,6 +19,7 @@ const dom=new JSDOM('<body><svg id="runtimeMap"></svg></body>');
 global.window=dom.window;global.document=dom.window.document;
 require('./docs/admin/scout-maplibre-evidence.js');
 const runtimeMap=document.querySelector('svg');
+const debugPageState={};
 const ids=['soil-moisture','antecedent-rain','cwa-qpf','cwa-weather'];
 const MAP_LAYER_RANKS={terrain:20,route:44,segments:50,...Object.fromEntries(ids.map((id,i)=>[id,57+i]))};
 const svgEl=(tag,attrs)=>{const n=document.createElementNS(runtimeMap.namespaceURI,tag);for(const [k,v] of Object.entries(attrs))n.setAttribute(k,v);return n;};

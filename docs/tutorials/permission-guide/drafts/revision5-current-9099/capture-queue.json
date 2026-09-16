@@ -1,0 +1,1945 @@
+{
+  "status": "REVISION5_SOURCE_ALIGNED_CAPTURE_PENDING",
+  "created_at": "2026-09-13T07:57:42.158801+00:00",
+  "dashboard": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport",
+  "source_inventory": {
+    "docs/admin/scout-dashboard-v0.1.html": {
+      "sha256": "fb17b74399b3677eeb1089b053079afd82032ebb386be091b0e71b1c03864e21",
+      "bytes": 2145417
+    },
+    "docs/admin/phase4-pretrip-planning.html": {
+      "sha256": "71c139d35a482c80f9f3b29de4a5cfd5dc019fc39fe9b51ffd9f2b26a6d3deab",
+      "bytes": 466657
+    },
+    "docs/admin/scout-maplibre-evidence.js": {
+      "sha256": "4ac81717ad681de65e5c72bded952c89e942c83fd81b293fb96ab64be704a26a",
+      "bytes": 116442
+    },
+    "docs/admin/scout-planned-route.js": {
+      "sha256": "4819595b4b033d005fd2f27db880a9078f1b77c2428ab89adf886d9eedf76485",
+      "bytes": 107578
+    },
+    "docs/admin/scout-planned-review-ui.js": {
+      "sha256": "e0712d8da141c1db9c81ccddf13b8b8b14caaacf6f482bc9ac0d5571e917e578",
+      "bytes": 43020
+    },
+    "docs/admin/scout-planned-map-review.js": {
+      "sha256": "49a7e777593c21694cf22f6cb98c336bb1a6648754bc2dbe8be71240ee28708f",
+      "bytes": 18377
+    },
+    "docs/admin/scout-exploration-workflow.js": {
+      "sha256": "6b6f418f5faa21d27d3aa65c9d92397b865a30a7c3ede1fbcc6c610d026cb547",
+      "bytes": 17504
+    },
+    "docs/admin/scout-recorded-workflow.js": {
+      "sha256": "5f44e8730fca1cb1f426c7570f0dde697207118bdf08fcb27db34095123f79e0",
+      "bytes": 12220
+    }
+  },
+  "root_exclusive_chrome": true,
+  "pages": [
+    {
+      "page": 1,
+      "id": "start",
+      "title": "Permission 使用指南",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "SOURCE_VERIFIED_CAPTURE_PENDING",
+      "capture_group": "BASELINE_FORM",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "frame_selector": null,
+      "prepare": [
+        "確認 URL 的 projectId 與實際 workspace 一致。",
+        "在 Permission 找 Baseline Authoring Workbench，讓兩個模式按鈕及 Saved 選單同窗可見。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "Human Design",
+          "body": "行程有變化時，開啟 Planned 編排。",
+          "locator": "[data-permission-baseline-mode=\"human_text\"]",
+          "ui_label": "Human Design"
+        },
+        {
+          "step": 2,
+          "title": "Generate from Ref. GPX",
+          "body": "查看 Golden 參考基準的路線與節奏。",
+          "locator": "[data-permission-baseline-mode=\"reference_gpx\"]",
+          "ui_label": "Generate from Ref. GPX"
+        },
+        {
+          "step": 3,
+          "title": "Saved candidate versions",
+          "body": "已有保存候選時，選版本後繼續按 Restore。",
+          "locator": "[data-permission-saved-candidate]",
+          "ui_label": "Saved candidate versions"
+        }
+      ],
+      "required_data": [
+        "workspace_read"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。"
+    },
+    {
+      "page": 2,
+      "id": "golden-new",
+      "title": "從參考紀錄產生基準草稿",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "SOURCE_VERIFIED_CAPTURE_PENDING",
+      "capture_group": "REFERENCE_FORM",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "frame_selector": null,
+      "prepare": [
+        "選 Generate from Ref. GPX；只拍參考來源與操作入口可先不 Generate。",
+        "若要示範產生結果，另保存實際 preview receipt；不要為截圖重新 import／prepare。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "Reference trip",
+          "body": "此處引用 workspace 已準備的 reviewed route axis；需核對實際 Golden 來源。",
+          "locator": "[data-permission-baseline-ref]",
+          "ui_label": "Reference trip"
+        },
+        {
+          "step": 2,
+          "title": "Preview source",
+          "body": "先看參考路線、分日與原始記錄資訊。",
+          "locator": "[data-permission-baseline-preview]",
+          "ui_label": "Preview source"
+        },
+        {
+          "step": 3,
+          "title": "Generate typed draft",
+          "body": "需要新草稿時才產生，再逐日核對；已有 Saved 版本可直接 Restore。",
+          "locator": "[data-permission-baseline-generate]",
+          "ui_label": "Generate typed draft"
+        }
+      ],
+      "required_data": [
+        "workspace_read",
+        "golden_prepared"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。"
+    },
+    {
+      "page": 3,
+      "id": "saved-select",
+      "title": "選好 Saved candidate，接著按 Restore",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "SOURCE_VERIFIED_CAPTURE_PENDING",
+      "capture_group": "SAVED_BASELINE_SELECTION",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "frame_selector": null,
+      "prepare": [
+        "按 Refresh saved versions，先核對清單。",
+        "選 version.15f1d78018a8af8e（僅目前清單仍存在時），拍 Restore enabled 的選擇狀態，尚未按 Restore。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "Refresh saved versions",
+          "body": "重新讀取東清 workspace 的保存清單。",
+          "locator": "[data-permission-candidates-refresh]",
+          "ui_label": "Refresh saved versions"
+        },
+        {
+          "step": 2,
+          "title": "Saved candidate versions",
+          "body": "選要查看的版本，記下完整版本編號。",
+          "locator": "[data-permission-saved-candidate]",
+          "ui_label": "Saved candidate versions"
+        },
+        {
+          "step": 3,
+          "title": "Restore saved candidate",
+          "body": "載入選定版本後，接著核對 SHA 與 Review readiness。",
+          "locator": "[data-permission-candidate-restore]",
+          "ui_label": "Restore saved candidate"
+        }
+      ],
+      "required_data": [
+        "saved_baseline"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。",
+      "historical_capture_not_current": "/home/alexwang0315/work/scout-pretrip-all-seven-20260910/main-rudy-zoom-20260913/guide-current-captures/scout-guide-saved-select-20260913-0712.json",
+      "historical_capture_reason": "2026-09-13T07:11:28.091Z 的 Dashboard SHA 為舊版；僅證明當時選中15f且Restore enabled，未按Restore。revision5必须重拍。"
+    },
+    {
+      "page": 4,
+      "id": "saved-identity",
+      "title": "先核對版本，再決定能否審查",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "SOURCE_VERIFIED_CAPTURE_PENDING",
+      "capture_group": "SAVED_BASELINE_RESTORED",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "frame_selector": null,
+      "prepare": [
+        "由第3頁所選版本按 Restore，等待完整結果。",
+        "捲到 immutable candidate / readiness，記完整 ID、SHA 與所有 gap/rebuild 提示。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "Current immutable candidate",
+          "body": "版本 ID 與 SHA 必須對應剛還原的版本；來源變更須重新核對。",
+          "locator": "[data-permission-baseline-patch-panel] .permission-detail-row:nth-child(1)",
+          "ui_label": "Current immutable candidate"
+        },
+        {
+          "step": 2,
+          "title": "Review readiness",
+          "body": "只有 ready for explicit review 才具備審查條件；not ready 或 rebuild_required 要保留並處理原因。",
+          "locator": "[data-permission-baseline-patch-panel] .permission-detail-row:nth-child(2)",
+          "ui_label": "Review readiness"
+        }
+      ],
+      "required_data": [
+        "saved_baseline",
+        "restore_receipt"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。"
+    },
+    {
+      "page": 5,
+      "id": "saved-days",
+      "title": "還原後，逐日檢查路線與時間",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "SOURCE_VERIFIED_CAPTURE_PENDING",
+      "capture_group": "SAVED_BASELINE_DAY",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "frame_selector": null,
+      "prepare": [
+        "延續第4頁相同版本。",
+        "展開 D1，讓日標題、獨立地圖控制、圖磚狀態及證據 summary 可見。",
+        "依完整地圖驗收核對 D1 操作不會移動 D2 鏡頭；其他日仍須逐一檢查。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "當日標題",
+          "body": "核對日序、起終點與里程。",
+          "locator": "[data-permission-proposal-day=\"D1\"] .permission-day-card-head",
+          "ui_label": "動態 D1 日標題、起終點與里程"
+        },
+        {
+          "step": 2,
+          "title": "＋／−、Fit、Pan",
+          "body": "縮放或拖曳平移；Fit 回到這一天的全程。",
+          "locator": "[data-permission-day-map=\"D1\"] [data-dashboard-map-controls]",
+          "ui_label": "+ / − / Fit / Pan / ▣"
+        },
+        {
+          "step": 3,
+          "title": "圖磚狀態與更新",
+          "body": "讀取此日的載入／缺圖提示；按可見的更新或重試操作後再核對。",
+          "locator": "[data-permission-day-map=\"D1\"] [data-dashboard-rudy-controls]",
+          "ui_label": "停止更新 或 更新圖磚；重試圖磚；實際 Rudy 圖磚狀態"
+        },
+        {
+          "step": 4,
+          "title": "Day route, ETA & evidence",
+          "body": "展開當日證據；未觀測時段不能自行視為休息或紮營。",
+          "locator": "[data-permission-proposal-day=\"D1\"] .permission-day-details summary",
+          "ui_label": "Day route, ETA & evidence"
+        }
+      ],
+      "required_data": [
+        "saved_baseline",
+        "daily_geometry",
+        "daily_map_receipts"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。"
+    },
+    {
+      "page": 6,
+      "id": "golden-review",
+      "title": "Quick review：逐項核對本人要採用的內容",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "SOURCE_VERIFIED_CAPTURE_PENDING",
+      "capture_group": "SAVED_BASELINE_REVIEW_FORM",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "frame_selector": null,
+      "prepare": [
+        "延續同版；展開 Quick review，不替使用者勾選。",
+        "依實際 required uncertainty/handoff 決定條件欄位是否存在；缺 target 必須留下版本與 requirements 證據，不能假造 checkbox。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "每日起終點、路線與時間窗",
+          "body": "確認畫面所列的確切候選版本與每日內容。",
+          "locator": "label:has([data-permission-review-check=\"dayEnds\"])",
+          "ui_label": "I adopt the reference trip’s recorded daily starts, endpoints, route and time windows shown in this immutable candidate."
+        },
+        {
+          "step": 2,
+          "title": "記錄缺口與不確定性",
+          "body": "確認每筆列出的缺口；未觀測移動及缺少時間仍為未知。",
+          "locator": "label:has([data-permission-review-check=\"timingUncertainty\"])",
+          "condition": "僅候選列出 uncertainty IDs 時顯示",
+          "ui_label": "I acknowledge every disclosed recording gap and uncertainty. Stationary clusters are inferred stops; missing CP clocks and unrecorded movement remain unknown."
+        },
+        {
+          "step": 3,
+          "title": "Safety / Emergency 待審項目",
+          "body": "承認這些項目仍需另行審查；這個勾選不會核准它們。",
+          "locator": "label:has([data-permission-review-check=\"safetyHandoff\"])",
+          "condition": "僅候選要求 handoff 時顯示",
+          "ui_label": "I acknowledge that the listed retreat, emergency-bivy and route-reversal items remain pending separate Safety / Emergency review. This does not approve them."
+        }
+      ],
+      "required_data": [
+        "saved_baseline",
+        "review_readiness"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。"
+    },
+    {
+      "page": 7,
+      "id": "golden-accept",
+      "title": "保存新候選，或採用已審查版本",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "SOURCE_VERIFIED_CAPTURE_PENDING",
+      "capture_group": "SAVED_BASELINE_ACTIONS",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "frame_selector": null,
+      "prepare": [
+        "延續同版保存與採用按鈕；disabled 可如實拍攝。",
+        "只在已有針對本版的本人審查與確認時操作 Accept；不能為教學先採用。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "Save candidate version",
+          "body": "新草稿先保存為不可變版本。",
+          "locator": "[data-permission-baseline-save]",
+          "ui_label": "Save candidate version"
+        },
+        {
+          "step": 2,
+          "title": "Accept reviewed baseline",
+          "body": "本人完成 Quick review 後，核對確認視窗與版本再採用。",
+          "locator": "[data-permission-baseline-accept]",
+          "ui_label": "Accept reviewed baseline"
+        }
+      ],
+      "required_data": [
+        "saved_baseline",
+        "explicit_human_review_for_accept"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。"
+    },
+    {
+      "page": 8,
+      "id": "planned-input",
+      "title": "把四日行程與 Golden 的差異寫清楚",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "SOURCE_VERIFIED_CAPTURE_PENDING",
+      "capture_group": "PLANNED_INPUT_FORM",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "frame_selector": null,
+      "prepare": [
+        "選 Human Design，等待 catalog 的真實狀態。",
+        "可貼下方已授權四日原文；日期、腳程、休息分鐘未提供就保留未填。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "人工行程",
+          "body": "貼入 D1–D4 原文，逐日保留主線、支線往返與營地名稱。",
+          "locator": "[data-planned-human-text]",
+          "ui_label": "人工行程"
+        },
+        {
+          "step": 2,
+          "title": "計畫啟程",
+          "body": "依本次實際安排填日期時間，核對時區；尚未決定就不要杜撰。",
+          "locator": "[data-planned-field=\"departure\"]",
+          "ui_label": "計畫啟程"
+        },
+        {
+          "step": 3,
+          "title": "腳程估計",
+          "body": "選可用來源節奏優先或固定腳程，清楚標示依據。",
+          "locator": "[data-planned-field=\"paceMode\"]",
+          "ui_label": "腳程估計"
+        }
+      ],
+      "required_data": [
+        "source_catalog",
+        "user_four_day_text"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。"
+    },
+    {
+      "page": 9,
+      "id": "planned-parse",
+      "title": "解析後，逐句處理待定位事項",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "RESTORED_MODULE_INTEGRATED_CAPTURE_PENDING",
+      "capture_group": "PLANNED_INTENT_RESULT",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "frame_selector": null,
+      "prepare": [
+        "展開原文解析與逐句釐清；保留模型開關原狀，拍前記是否啟用。",
+        "使用實際四日原文執行一般解析，等待結果，保留 unresolved 句子與原文 SHA。",
+        "若解析失敗，保留錯誤與資料缺口，不拿舊結果補上。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "使用已設定模型協助產生可核對草稿",
+          "body": "有模型設定及需要時再啟用；一般解析不必為拍攝開啟模型。",
+          "locator": "label:has([data-planned-intent-model])",
+          "ui_label": "使用已設定模型協助產生可核對草稿"
+        },
+        {
+          "step": 2,
+          "title": "解析人工行程",
+          "body": "取得逐句狀態；不確定地名不能直接當成已定位路段。",
+          "locator": "[data-planned-intent-action=\"parse\"]",
+          "ui_label": "解析人工行程"
+        },
+        {
+          "step": 3,
+          "title": "逐句解析結果",
+          "body": "核對原句、修訂句、候選錨點與未解原因；修訂後重新解析。",
+          "locator": "[data-planned-intent-result]",
+          "condition": "解析回應後才顯示",
+          "ui_label": "動態解析狀態／原文 SHA；原句／修訂句"
+        }
+      ],
+      "required_data": [
+        "source_catalog",
+        "user_four_day_text",
+        "intent_response"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。"
+    },
+    {
+      "page": 10,
+      "id": "planned-stop",
+      "title": "設定停留或紮營的時間",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "SOURCE_VERIFIED_CAPTURE_PENDING",
+      "capture_group": "PLANNED_OPERATION_FORM",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "frame_selector": null,
+      "prepare": [
+        "展開明確行程差異與來源選段，選 stop 或 camp 以顯示 duration。",
+        "用真正錨點與已提供時程；原文沒給分鐘時只拍未填欄位，標資料待補。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "操作：固定停留／紮營",
+          "body": "依目的選固定停留或紮營／離營，對應欄位會改變。",
+          "locator": "[data-planned-editor=\"kind\"]",
+          "ui_label": "操作；選項 固定停留 或 紮營／離營"
+        },
+        {
+          "step": 2,
+          "title": "位置／起點",
+          "body": "選有來源的錨點；重複經過時須確認第幾次。",
+          "locator": "[data-planned-editor=\"at\"]",
+          "ui_label": "位置／起點"
+        },
+        {
+          "step": 3,
+          "title": "停留／紮營分鐘",
+          "body": "輸入實際規劃時長。四日原文沒有分鐘數時先保留待補。",
+          "locator": "[data-planned-editor=\"duration\"]",
+          "condition": "kind=stop 或 camp",
+          "ui_label": "停留／紮營分鐘"
+        }
+      ],
+      "required_data": [
+        "source_catalog",
+        "resolved_anchor",
+        "actual_stop_or_camp_duration"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。"
+    },
+    {
+      "page": 11,
+      "id": "planned-branch",
+      "title": "用來源選段描述主線與支線",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "SOURCE_VERIFIED_CAPTURE_PENDING",
+      "capture_group": "PLANNED_BRANCH_FORM",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "frame_selector": null,
+      "prepare": [
+        "kind 選支線往返（branch）或取代主線路段（replace）；展開來源選段。",
+        "選實際來源及 trkseg 後才會有 sourceFrom / sourceTo 選項。",
+        "阿桑來戛與異祿閣未定位／來源不完整時保持缺口；R4仍待審。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "來源",
+          "body": "選對應 Ref. GPX 或已核對向量來源。",
+          "locator": "[data-planned-editor=\"sourceId\"]",
+          "ui_label": "來源"
+        },
+        {
+          "step": 2,
+          "title": "不跨缺口的來源段",
+          "body": "選 trkseg；來源缺口不得用直線補成路徑。",
+          "locator": "[data-planned-editor=\"partIndex\"]",
+          "ui_label": "不跨缺口的來源段"
+        },
+        {
+          "step": 3,
+          "title": "來源起點",
+          "body": "核對點編號、方向與本次切入位置。",
+          "locator": "[data-planned-editor=\"sourceFrom\"]",
+          "ui_label": "來源起點"
+        },
+        {
+          "step": 4,
+          "title": "來源終點",
+          "body": "核對切出點；往返時另核對「從終點沿同一來源段返回」。",
+          "locator": "[data-planned-editor=\"sourceTo\"]",
+          "ui_label": "來源終點"
+        }
+      ],
+      "required_data": [
+        "source_catalog",
+        "source_segment",
+        "resolved_branch_endpoints"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。"
+    },
+    {
+      "page": 12,
+      "id": "map-sources",
+      "title": "讀取地圖來源與 Rudy 向量山徑",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "RESTORED_MODULE_INTEGRATED_CAPTURE_PENDING",
+      "capture_group": "MAP_SOURCE_FORM",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "frame_selector": null,
+      "prepare": [
+        "在 Permission 上方找到地圖來源與候選描線。",
+        "先按重新讀取地圖來源，記 PBF 與 Mapsforge 是否 available、來源版本與 SHA。",
+        "其餘兩個按鈕 enabled 由來源決定；不為拍照重建來源。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "重新讀取地圖來源",
+          "body": "讀取來源清單、版本、可用狀態與 SHA。",
+          "locator": "[data-planned-map-action=\"refresh\"]",
+          "ui_label": "重新讀取地圖來源"
+        },
+        {
+          "step": 2,
+          "title": "由已登錄 PBF 重建新來源版本",
+          "body": "僅已有可用 PBF 時可建立新來源版本；它會改變來源，不是刷新畫面。",
+          "locator": "[data-planned-map-action=\"rebuild\"]",
+          "ui_label": "由已登錄 PBF 重建新來源版本"
+        },
+        {
+          "step": 3,
+          "title": "讀取已登錄 Rudy 向量山徑",
+          "body": "僅已有可用 Mapsforge 來源時可讀取；底圖圖磚與向量路段需分別核對。",
+          "locator": "[data-planned-map-action=\"mapsforge\"]",
+          "ui_label": "讀取已登錄 Rudy 向量山徑"
+        }
+      ],
+      "required_data": [
+        "registered_map_sources",
+        "pbf_for_rebuild",
+        "mapsforge_for_vector_read"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。"
+    },
+    {
+      "page": 13,
+      "id": "planned-timing",
+      "title": "加入地形、隊伍與分日估時假設",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "RESTORED_MODULE_INTEGRATED_CAPTURE_PENDING",
+      "capture_group": "PLANNED_TIMING_FORM",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "frame_selector": null,
+      "prepare": [
+        "展開地形、隊伍與分日估時。",
+        "只填已授權的真實假設；其他欄位維持未知，展開必要進階欄位核對。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "啟用此版的地形與隊伍估時",
+          "body": "展開「地形、隊伍與分日估時」後，依實際計畫決定是否啟用。",
+          "locator": "label:has([data-planned-timing-enabled])",
+          "ui_label": "啟用此版的地形與隊伍估時"
+        },
+        {
+          "step": 2,
+          "title": "假設平地腳程 km/h",
+          "body": "填有依據的腳程；未知項目保留未知。",
+          "locator": "[data-planned-timing-field=\"assumed_flat_speed_kmh\"]",
+          "ui_label": "假設平地腳程 km/h"
+        },
+        {
+          "step": 3,
+          "title": "每日總耗時上限（分）",
+          "body": "同時核對移動、休息、過夜、隔日啟程與日照限制。",
+          "locator": "[data-planned-timing-field=\"max_daily_elapsed_minutes\"]",
+          "ui_label": "每日總耗時上限（分）"
+        }
+      ],
+      "required_data": [
+        "actual_timing_assumptions"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。"
+    },
+    {
+      "page": 14,
+      "id": "planned-preview",
+      "title": "先預覽，再保存確切 Planned 版本",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "SOURCE_VERIFIED_CAPTURE_PENDING",
+      "capture_group": "PLANNED_PREVIEW_AND_SAVE",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "frame_selector": null,
+      "prepare": [
+        "在真實來源及已核對操作上建立 no-save preview。",
+        "只有 Save 條件成立且版本內容經確認才保存；照片可以保留 disabled，但不能代表保存成功。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "加入行程差異",
+          "body": "把目前已核對的操作加入草稿。",
+          "locator": "[data-planned-action=\"add-operation\"]",
+          "ui_label": "加入行程差異"
+        },
+        {
+          "step": 2,
+          "title": "預覽 Planned 幾何與節奏",
+          "body": "讀取目前草稿的路線、時間與未解項，不把部分片段稱為完整四日計畫。",
+          "locator": "[data-planned-action=\"preview\"]",
+          "ui_label": "預覽 Planned 幾何與節奏"
+        },
+        {
+          "step": 3,
+          "title": "Save Planned Version",
+          "body": "只有本次預覽符合保存條件時才保存，保留新版本與 manifest。",
+          "locator": "[data-planned-action=\"save\"]",
+          "ui_label": "Save Planned Version"
+        }
+      ],
+      "required_data": [
+        "source_catalog",
+        "resolved_operations",
+        "current_preview",
+        "save_eligibility"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。"
+    },
+    {
+      "page": 15,
+      "id": "planned-map",
+      "title": "預覽結果：核對來源片段與缺口",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "SOURCE_VERIFIED_CAPTURE_PENDING",
+      "capture_group": "PLANNED_PREVIEW_GEOMETRY",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "frame_selector": null,
+      "prepare": [
+        "先完成第14頁的實際 preview。",
+        "確認只有主 preview（非比較版）targets；如同時顯示比較版，需將 query 限定當前預覽。",
+        "如僅 D4.3 來源片段，標示部分片段，四日主線與支線仍未完成。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "預覽狀態與 SHA",
+          "body": "確認結果對應目前輸入；needs_review 與未知項仍需處理。",
+          "locator": "[data-planned-preview]:has([data-planned-map=\"preview\"]) > p:first-of-type",
+          "ui_label": "動態 preview status · SHA · 距離"
+        },
+        {
+          "step": 2,
+          "title": "Golden / Planned 比較圖",
+          "body": "切換 Golden／Planned、縮放與拖曳，核對方向、往返與來源缺口。",
+          "locator": "[data-planned-map=\"preview\"]",
+          "ui_label": "Golden / Planned；+ / − / Fit；拖曳平移 · 點選錨點查核"
+        }
+      ],
+      "required_data": [
+        "current_preview",
+        "preview_geometry"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。"
+    },
+    {
+      "page": 16,
+      "id": "planned-timeline",
+      "title": "核對分日表、移動與停留時間軸",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "SOURCE_VERIFIED_CAPTURE_PENDING",
+      "capture_group": "PLANNED_PREVIEW_TIMELINE",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "frame_selector": null,
+      "prepare": [
+        "同版 preview 有 itinerary 與 events 後拍。",
+        "如果沒有 events，保留尚無資料畫面；時間軸教學仍列待補，不替換成示例。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "分日、移動與停留",
+          "body": "逐日核對啟程、到達、移動、停留與營地。",
+          "locator": "[data-planned-preview]:has([data-planned-map=\"preview\"]) [data-planned-itinerary] > .planned-table-scroll",
+          "ui_label": "Planned 分日、移動與停留；日／啟程 → 到達／移動／停留／營地／距離／限制"
+        },
+        {
+          "step": 2,
+          "title": "時間軸：移動、固定停留、離營與未知",
+          "body": "展開完整原始時間軸，檢查來源方法與未知轉換。",
+          "locator": "[data-planned-preview]:has([data-planned-map=\"preview\"]) [data-planned-itinerary] > details:has([data-planned-raw-timeline]) > summary",
+          "condition": "預覽有 events 時顯示",
+          "ui_label": "時間軸：移動、固定停留、離營與未知 · N 原始紀錄"
+        }
+      ],
+      "required_data": [
+        "current_preview",
+        "itinerary_events"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。"
+    },
+    {
+      "page": 17,
+      "id": "planned-review",
+      "title": "審查此 Planned 版本",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "SOURCE_VERIFIED_CAPTURE_PENDING",
+      "capture_group": "PLANNED_SAVED_REVIEW_FORM",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "frame_selector": null,
+      "prepare": [
+        "讀取真實 Saved Planned，核對 manifest 與來源 current。",
+        "不代勾四個人工 review checkbox；dirty 或來源改變的 disabled 狀態如實保留。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "已檢視 來源與選段範圍",
+          "body": "逐段核對來源及切段範圍。",
+          "locator": "label:has([data-planned-review-check=\"sources\"])",
+          "ui_label": "已檢視 來源與選段範圍"
+        },
+        {
+          "step": 2,
+          "title": "已檢視 幾何順序、往返與缺口",
+          "body": "確認主線與支線方向，保留未連通缺口。",
+          "locator": "label:has([data-planned-review-check=\"geometry\"])",
+          "ui_label": "已檢視 幾何順序、往返與缺口"
+        },
+        {
+          "step": 3,
+          "title": "已檢視 分日、腳程與固定停留",
+          "body": "確認自己的時程及仍未知的項目。",
+          "locator": "label:has([data-planned-review-check=\"timing\"])",
+          "ui_label": "已檢視 分日、腳程與固定停留"
+        },
+        {
+          "step": 4,
+          "title": "已檢視 不確定性與候選來源限制",
+          "body": "由本人讀完限制後確認，不能為產生綠燈代勾。",
+          "locator": "label:has([data-planned-review-check=\"uncertainty\"])",
+          "ui_label": "已檢視 不確定性與候選來源限制"
+        }
+      ],
+      "required_data": [
+        "saved_planned",
+        "manifest_binding"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。"
+    },
+    {
+      "page": 18,
+      "id": "planned-adopt",
+      "title": "記錄審查，再選 Planned 作為分析主體",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "SOURCE_VERIFIED_CAPTURE_PENDING",
+      "capture_group": "PLANNED_REVIEW_AND_SELECT",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "frame_selector": null,
+      "prepare": [
+        "延續同版 Saved Planned，讀完整限制。",
+        "有 actual human review 才記錄／選用，若零 issues，第1步須根據實際沒有限制的證據調整講稿及編號。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "版本限制逐項確認",
+          "body": "逐筆核對；全選只代表已讀完整清單，不能省略實際審查。",
+          "locator": "label:has([data-planned-review-all-issues])",
+          "condition": "此版本有 review issues 時顯示",
+          "ui_label": "我已檢視以上完整 N 筆限制，將全部綁定此版本確認"
+        },
+        {
+          "step": 2,
+          "title": "記錄此版本審查",
+          "body": "確認審查綁定目前 manifest；草稿或來源改變時不可沿用。",
+          "locator": "[data-planned-action=\"review\"]",
+          "ui_label": "記錄此版本審查"
+        },
+        {
+          "step": 3,
+          "title": "以此 Planned 分析六力",
+          "body": "選擇已審查的保存版本；接著補件與重新運算。",
+          "locator": "[data-planned-action=\"select\"]",
+          "ui_label": "以此 Planned 分析六力"
+        }
+      ],
+      "required_data": [
+        "saved_planned",
+        "explicit_human_planned_review"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。"
+    },
+    {
+      "page": 19,
+      "id": "planned-context",
+      "title": "填寫此版本的補件與審查資料",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "RESTORED_MODULE_INTEGRATED_CAPTURE_PENDING",
+      "capture_group": "PLANNED_CONTEXT_FORM",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "frame_selector": null,
+      "prepare": [
+        "先還原真實 Saved Planned，補件表只有 version_id 存在才 render。",
+        "先讀已保存補件；若未有真實聲明者與隊伍資料，拍空表並列缺項。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "實際聲明者代號",
+          "body": "填真正提供本次資料的人，不使用教學假代號。",
+          "locator": "[data-planned-context-field=\"declaredBy\"]",
+          "ui_label": "實際聲明者代號"
+        },
+        {
+          "step": 2,
+          "title": "聲明時間（ISO 與時區）",
+          "body": "填實際聲明時間與時區。",
+          "locator": "[data-planned-context-field=\"declaredAt\"]",
+          "ui_label": "聲明時間（ISO 與時區）"
+        },
+        {
+          "step": 3,
+          "title": "隊伍人數",
+          "body": "依實際隊伍填寫，繼續核對地圖使用者與八項 Navigation 人工確認。",
+          "locator": "[data-planned-context-field=\"teamSize\"]",
+          "ui_label": "隊伍人數"
+        }
+      ],
+      "required_data": [
+        "saved_planned",
+        "actual_declarer_and_team"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。"
+    },
+    {
+      "page": 20,
+      "id": "planned-context-save",
+      "title": "保存此版補件，保留未知與來源",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "RESTORED_MODULE_INTEGRATED_CAPTURE_PENDING",
+      "capture_group": "PLANNED_CONTEXT_SAVE",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "frame_selector": null,
+      "prepare": [
+        "讀完所有補件；pending 保持 pending。",
+        "本人完整聲明才勾確認並保存，讀回 context SHA；拍攝空表或 disabled 不能當成補件保存通過。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "確認完整人工聲明",
+          "body": "本人核對已填資訊、未填未知及每份來源後再確認。",
+          "locator": "label:has([data-planned-context-confirm])",
+          "ui_label": "我確認以上是此版本的完整人工聲明，未填項目維持未知"
+        },
+        {
+          "step": 2,
+          "title": "保存此版補件",
+          "body": "保存版本綁定聲明；讀回 context SHA，再重新運算依賴這份補件的結果。",
+          "locator": "[data-planned-context-action=\"save\"]",
+          "ui_label": "保存此版補件"
+        }
+      ],
+      "required_data": [
+        "saved_planned",
+        "actual_context_and_evidence",
+        "explicit_context_confirmation"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。"
+    },
+    {
+      "page": 21,
+      "id": "planned-jobs",
+      "title": "追加準備並重算此版六力",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "SOURCE_VERIFIED_CAPTURE_PENDING",
+      "capture_group": "PLANNED_ANALYSIS_START",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "frame_selector": null,
+      "prepare": [
+        "同版 review/context ready 後先讀作業列表，避免重複 start。",
+        "啟動只限已授權真實工作，不用 fake plan 清空 gate；或可拍既有作業的入口與讀取。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "追加準備並重算六力",
+          "body": "只對已審查且補件符合要求的保存版本啟動。",
+          "locator": "[data-planned-run-action=\"start\"]",
+          "ui_label": "追加準備並重算六力"
+        },
+        {
+          "step": 2,
+          "title": "此版本保存的作業",
+          "body": "選同版 run ID，避免把另一版或舊作業當成本版。",
+          "locator": "[data-planned-analysis-run-select]",
+          "ui_label": "此版本保存的作業"
+        },
+        {
+          "step": 3,
+          "title": "讀取作業狀態",
+          "body": "讀取準備、六力與產物 receipt；只有完成標籤還不夠。",
+          "locator": "[data-planned-run-action=\"read\"]",
+          "ui_label": "讀取作業狀態"
+        }
+      ],
+      "required_data": [
+        "reviewed_planned",
+        "current_context",
+        "same_version_run"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。"
+    },
+    {
+      "page": 22,
+      "id": "planned-results",
+      "title": "逐一讀取準備與六力結果",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "SOURCE_VERIFIED_CAPTURE_PENDING",
+      "capture_group": "PLANNED_ANALYSIS_RESULT",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "frame_selector": null,
+      "prepare": [
+        "選同版 run 並按讀取作業狀態。",
+        "等待真正 preparation/projections receipt；逐六力記錄 pass/warn/fail/unknown，不把 completed 當全通過。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "版本、作業與 attempt",
+          "body": "核對目前 version ID、run ID、attempt 及執行位置。",
+          "locator": "[data-planned-analysis-run] > p:first-of-type",
+          "ui_label": "動態 version ID · run ID · status · 階段 · attempt · 執行位置"
+        },
+        {
+          "step": 2,
+          "title": "準備結果",
+          "body": "結果尚未讀取時先按讀取作業狀態，保留失敗原因。",
+          "locator": "[data-planned-analysis-run] > p",
+          "text_prefix": "準備：",
+          "ui_label": "準備：實際狀態／原因"
+        },
+        {
+          "step": 3,
+          "title": "六力結果與待補資料",
+          "body": "逐一確認六力狀態、摘要與缺項，不把作業結束視為全部通過。",
+          "locator": "[data-planned-analysis-run] > .planned-table-scroll:nth-of-type(2)",
+          "ui_label": "六力／此作業結果／摘要／待補資料"
+        }
+      ],
+      "required_data": [
+        "same_version_run",
+        "preparation_and_six_force_receipts"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。"
+    },
+    {
+      "page": 23,
+      "id": "planned-report",
+      "title": "閱讀同版行前綜合報告",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "RESTORED_MODULE_INTEGRATED_CAPTURE_PENDING",
+      "capture_group": "PLANNED_REPORT_RESULT",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "frame_selector": null,
+      "prepare": [
+        "同版作業必須已有 pretrip_report 且 geometry/timing/context 綁定匹配。",
+        "若只有 pending 報告提示，拍真實阻擋作補充證據，正向報告頁仍待補。",
+        "風險可能為空；標題後的實際 p/ul 要一同入鏡。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "候選規劃建議與完整度",
+          "body": "先讀 decision 與 status；這是候選評估，不是出發許可。",
+          "locator": "[data-planned-report-decision]",
+          "ui_label": "候選規劃建議：decision · 完整度 status"
+        },
+        {
+          "step": 2,
+          "title": "版本、run 與補件",
+          "body": "確認報告對應本版與本次補件 SHA。",
+          "locator": "[data-planned-pretrip-report] > p:nth-of-type(2)",
+          "ui_label": "動態 version ID · run ID · 補件 context SHA"
+        },
+        {
+          "step": 3,
+          "title": "前三大風險來源",
+          "body": "讀標題下的實際風險清單；若顯示尚無資料，維持缺項。",
+          "locator": "[data-planned-pretrip-report] > h4",
+          "text_exact": "前三大風險來源",
+          "ui_label": "前三大風險來源"
+        }
+      ],
+      "required_data": [
+        "same_version_run",
+        "current_context",
+        "matching_pretrip_report"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。"
+    },
+    {
+      "page": 24,
+      "id": "planned-download",
+      "title": "核對來源並下載完整行前報告",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "RESTORED_MODULE_INTEGRATED_CAPTURE_PENDING",
+      "capture_group": "PLANNED_REPORT_DOWNLOAD",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "frame_selector": null,
+      "prepare": [
+        "延續第23頁匹配的報告。",
+        "拍 artifact SHA 與下載前後狀態；下載檔放 Scout，核對實際 bytes/SHA 才記完成。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "報告產物與 SHA-256",
+          "body": "記下這份報告的 artifact ref 與完整 SHA。",
+          "locator": "[data-planned-pretrip-report] > p:has(> code)",
+          "ui_label": "動態 artifact ref；SHA-256：完整雜湊"
+        },
+        {
+          "step": 2,
+          "title": "核對並下載完整行前報告",
+          "body": "讀取保存產物並核對內容。",
+          "locator": "[data-planned-report-download]",
+          "ui_label": "核對並下載完整行前報告"
+        },
+        {
+          "step": 3,
+          "title": "下載狀態",
+          "body": "尚未下載、核對中或錯誤都不能當成已取得完整報告。",
+          "locator": "[data-planned-report-download-status]",
+          "ui_label": "尚未下載 或 實際下載核對結果"
+        }
+      ],
+      "required_data": [
+        "matching_pretrip_report",
+        "download_receipt"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。"
+    },
+    {
+      "page": 25,
+      "id": "planned-export",
+      "title": "匯出保存版本，保留完整依據",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "SOURCE_VERIFIED_CAPTURE_PENDING",
+      "capture_group": "PLANNED_EXPORT",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "frame_selector": null,
+      "prepare": [
+        "真實 Saved Planned manifest 已還原，三匯出控制可見。",
+        "實际 GPX/manifest/bundle 下載後核對內容與 SHA，沒下載只表示入口已拍。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "匯出 Planned GPX",
+          "body": "取得這個版本的候選幾何。",
+          "locator": "[data-planned-export=\"gpx\"]",
+          "ui_label": "匯出 Planned GPX"
+        },
+        {
+          "step": 2,
+          "title": "匯出 行程 Manifest",
+          "body": "保存版本、來源與時間依據。",
+          "locator": "[data-planned-export=\"manifest\"]",
+          "ui_label": "匯出 行程 Manifest"
+        },
+        {
+          "step": 3,
+          "title": "匯出 完整 Bundle",
+          "body": "保存可回查的完整版本包；核對下載位元組、檔名與 SHA。",
+          "locator": "[data-planned-export=\"bundle\"]",
+          "ui_label": "匯出 完整 Bundle"
+        }
+      ],
+      "required_data": [
+        "saved_planned",
+        "export_receipts"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。"
+    },
+    {
+      "page": 26,
+      "id": "planned-restore",
+      "title": "還原 Planned 版本，或切回 Golden",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "SOURCE_VERIFIED_CAPTURE_PENDING",
+      "capture_group": "PLANNED_VERSION_RESTORE",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "frame_selector": null,
+      "prepare": [
+        "先重新讀取來源與版本，列真實 version ID。",
+        "選版本後按 Restore，核對 SHA。Golden 按鈕只在確定要切主體時操作。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "Planned 版本",
+          "body": "選要檢查的保存版本。",
+          "locator": "[data-planned-version]",
+          "ui_label": "Planned 版本"
+        },
+        {
+          "step": 2,
+          "title": "Restore Planned Version",
+          "body": "讀回該版 manifest、預覽與審查狀態，核對完整 SHA。",
+          "locator": "[data-planned-action=\"restore\"]",
+          "ui_label": "Restore Planned Version"
+        },
+        {
+          "step": 3,
+          "title": "切回 Golden 分析",
+          "body": "需要時才切換分析主體；原保存 Planned 版本保留。",
+          "locator": "[data-planned-action=\"golden\"]",
+          "ui_label": "切回 Golden 分析"
+        }
+      ],
+      "required_data": [
+        "saved_planned",
+        "restore_receipt"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。"
+    },
+    {
+      "page": 27,
+      "id": "planned-resume",
+      "title": "重新找回作業，符合條件才 Resume",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "SOURCE_VERIFIED_CAPTURE_PENDING",
+      "capture_group": "PLANNED_RUN_RESUME",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "frame_selector": null,
+      "prepare": [
+        "選本版 run 並刷新狀態，核對 can_resume/current context。",
+        "沒有真實可恢復作業時只能拍 disabled，恢復成功段落繼續待補；不可故意製造 live 故障。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "重新讀取作業列表",
+          "body": "讀取目前版本保存的 run ID。",
+          "locator": "[data-planned-run-action=\"list\"]",
+          "ui_label": "重新讀取作業列表"
+        },
+        {
+          "step": 2,
+          "title": "讀取作業狀態",
+          "body": "確認本版與補件綁定、stage、attempt、錯誤及 can_resume。",
+          "locator": "[data-planned-run-action=\"read\"]",
+          "ui_label": "讀取作業狀態"
+        },
+        {
+          "step": 3,
+          "title": "Resume 此作業",
+          "body": "只有可恢復且非執行中、非 stale 的同版作業才可恢復。",
+          "locator": "[data-planned-run-action=\"resume\"]",
+          "ui_label": "Resume 此作業"
+        }
+      ],
+      "required_data": [
+        "same_version_run",
+        "resumable_run_for_resume"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。"
+    },
+    {
+      "page": 28,
+      "id": "exploration",
+      "title": "無 Ref. GPX：從分析區域開始",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "RESTORED_MODULE_INTEGRATED_CAPTURE_PENDING",
+      "capture_group": "EXPLORATION_FORM",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "frame_selector": null,
+      "prepare": [
+        "Permission 上方找到無 Ref. GPX：從分析區域開始。",
+        "未提供實際探索名稱與 AOI 時只拍表單，不建立或切換專案。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "探索 workspace 名稱",
+          "body": "使用實際要建立或讀取的探索專案名稱，勿覆用東清而覆寫資料。",
+          "locator": "[data-exploration-field=\"projectId\"]",
+          "ui_label": "探索 workspace 名稱"
+        },
+        {
+          "step": 2,
+          "title": "探索目的",
+          "body": "記錄這次探索的真實目的。",
+          "locator": "[data-exploration-field=\"intent\"]",
+          "ui_label": "探索目的"
+        },
+        {
+          "step": 3,
+          "title": "座標系統",
+          "body": "依實際資料選 WGS84 或 TWD97；不可混用經緯度和公尺。",
+          "locator": "[data-exploration-field=\"crs\"]",
+          "ui_label": "座標系統"
+        }
+      ],
+      "required_data": [
+        "actual_exploration_name_and_intent"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。"
+    },
+    {
+      "page": 29,
+      "id": "exploration-aoi",
+      "title": "定義 AOI 邊界，先核對座標系統",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "RESTORED_MODULE_INTEGRATED_CAPTURE_PENDING",
+      "capture_group": "EXPLORATION_AOI_FORM",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "frame_selector": null,
+      "prepare": [
+        "沿用探索表單，核對 CRS 選值。",
+        "待實際 AOI 四界提供後填寫；四日行程只有 C1 一組座標，不能據此捏造完整 AOI。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "AOI 最小 X／西界",
+          "body": "輸入已核對西界。",
+          "locator": "[data-exploration-field=\"west\"]",
+          "ui_label": "AOI 最小 X／西界"
+        },
+        {
+          "step": 2,
+          "title": "AOI 最小 Y／南界",
+          "body": "輸入已核對南界。",
+          "locator": "[data-exploration-field=\"south\"]",
+          "ui_label": "AOI 最小 Y／南界"
+        },
+        {
+          "step": 3,
+          "title": "AOI 最大 X／東界",
+          "body": "核對大於西界。",
+          "locator": "[data-exploration-field=\"east\"]",
+          "ui_label": "AOI 最大 X／東界"
+        },
+        {
+          "step": 4,
+          "title": "AOI 最大 Y／北界",
+          "body": "核對大於南界；A/B 起終點另按實際資料填寫。",
+          "locator": "[data-exploration-field=\"north\"]",
+          "ui_label": "AOI 最大 Y／北界"
+        }
+      ],
+      "required_data": [
+        "actual_aoi_and_crs"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。"
+    },
+    {
+      "page": 30,
+      "id": "exploration-prepare",
+      "title": "建立探索資料，再準備 DEM 與 A/B 請求",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "RESTORED_MODULE_INTEGRATED_CAPTURE_PENDING",
+      "capture_group": "EXPLORATION_PREPARATION",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "frame_selector": null,
+      "prepare": [
+        "只能在已授權探索 workspace 及真實 AOI/DEM receipt 上示範。",
+        "prepare needs can_prepare，trh needs trh_request_available；建立 A/B 請求不代表已算出 R1–R3。",
+        "Root若測真正探索 workspace，將實際 projectId 明示為探索案例；不得把另一專案截圖標為東清。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "建立探索 workspace",
+          "body": "確認名稱、目的、AOI 與來源後才建立。",
+          "locator": "[data-exploration-action=\"create\"]",
+          "ui_label": "建立探索 workspace"
+        },
+        {
+          "step": 2,
+          "title": "準備區域地圖與 DEM",
+          "body": "已有可準備 receipt 時啟動，保存 attempt 與結果。",
+          "locator": "[data-exploration-action=\"prepare\"]",
+          "ui_label": "準備區域地圖與 DEM"
+        },
+        {
+          "step": 3,
+          "title": "建立 A/B 地形候選請求",
+          "body": "這一步只建立請求；仍要在 Navigation 完成 R1–R3 計算與核對。",
+          "locator": "[data-exploration-action=\"trh\"]",
+          "ui_label": "建立 A/B 地形候選請求"
+        }
+      ],
+      "required_data": [
+        "exploration_receipt",
+        "dem_preparation",
+        "actual_a_b",
+        "trh_request_receipt"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。"
+    },
+    {
+      "page": 31,
+      "id": "recorded",
+      "title": "歸來後復盤：先說明 GPX 是什麼記錄",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "RESTORED_MODULE_INTEGRATED_CAPTURE_PENDING",
+      "capture_group": "RECORDED_FORM",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "frame_selector": null,
+      "prepare": [
+        "展開歸來後復盤 · Recorded / Golden / Planned。",
+        "先核對資料性質選項，不用 Golden 文件冒充本次歸來記錄。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "主要隊員",
+          "body": "填此記錄的真實隊員代號。",
+          "locator": "[data-recorded-field=\"member\"]",
+          "ui_label": "主要隊員"
+        },
+        {
+          "step": 2,
+          "title": "記錄裝置",
+          "body": "填實際產生 GPX 的裝置代號。",
+          "locator": "[data-recorded-field=\"device\"]",
+          "ui_label": "記錄裝置"
+        },
+        {
+          "step": 3,
+          "title": "資料來源",
+          "body": "據實選本次實際活動、歷史參考或測試重放。",
+          "locator": "[data-recorded-field=\"origin\"]",
+          "ui_label": "資料來源"
+        }
+      ],
+      "required_data": [
+        "actual_recording_metadata"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。"
+    },
+    {
+      "page": 32,
+      "id": "recorded-upload",
+      "title": "匯入原始 GPX，再選比較的計畫",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "RESTORED_MODULE_INTEGRATED_CAPTURE_PENDING",
+      "capture_group": "RECORDED_UPLOAD",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "frame_selector": null,
+      "prepare": [
+        "需要實際授權 GPX 檔案及 observation kind。",
+        "尚未提供本次 GPX 時拍空表即可，upload 後及比較結果仍列待補。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "GPX 檔案",
+          "body": "選已授權使用的真實檔案，多檔時核對成員、裝置與 primary／backup。",
+          "locator": "[data-recorded-files]",
+          "ui_label": "GPX 檔案"
+        },
+        {
+          "step": 2,
+          "title": "匯入原始 GPX",
+          "body": "讀取上傳結果與來源，不修改原始記錄去消除缺口。",
+          "locator": "[data-recorded-action=\"upload\"]",
+          "ui_label": "匯入原始 GPX"
+        },
+        {
+          "step": 3,
+          "title": "比較的 Planned 版本",
+          "body": "選正確保存版；只有 Golden 時保留僅比較 Golden。",
+          "locator": "[data-recorded-field=\"plan\"]",
+          "ui_label": "比較的 Planned 版本"
+        }
+      ],
+      "required_data": [
+        "authorized_recorded_gpx",
+        "observation_kind",
+        "planned_comparison_if_any"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。"
+    },
+    {
+      "page": 33,
+      "id": "recorded-restore",
+      "title": "保存 Recorded，再找回同一版本",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "RESTORED_MODULE_INTEGRATED_CAPTURE_PENDING",
+      "capture_group": "RECORDED_SAVED_VERSION",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "frame_selector": null,
+      "prepare": [
+        "只有真實已上傳檔案才能 Save Recorded；先讀既有版本是否存在。",
+        "從已存復盤版本下拉選 ID 再還原；原文沒有個人 Recorded 資料，存在性需實際讀取。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "建立不可覆寫的 Recorded 版本",
+          "body": "檔案與來源核對後才保存。",
+          "locator": "[data-recorded-action=\"save\"]",
+          "ui_label": "建立不可覆寫的 Recorded 版本"
+        },
+        {
+          "step": 2,
+          "title": "讀取已存版本與作業",
+          "body": "重新載入後找回原本的版本與 run。",
+          "locator": "[data-recorded-action=\"reload\"]",
+          "ui_label": "讀取已存版本與作業"
+        },
+        {
+          "step": 3,
+          "title": "還原版本",
+          "body": "先在已存復盤版本選定 ID，再載入 manifest、observations 與比較資料。",
+          "locator": "[data-recorded-action=\"restore\"]",
+          "ui_label": "還原版本"
+        }
+      ],
+      "required_data": [
+        "saved_recorded",
+        "recorded_manifest"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。"
+    },
+    {
+      "page": 34,
+      "id": "recorded-analyse",
+      "title": "以 Recorded 重算六力與恢復作業",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "RESTORED_MODULE_INTEGRATED_CAPTURE_PENDING",
+      "capture_group": "RECORDED_ANALYSIS",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-permission",
+      "frame_selector": null,
+      "prepare": [
+        "還原真實 Recorded 後才選分析主體／重算。",
+        "run.can_resume=true 才操作恢復，無資料不造 fake run。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "將此 Recorded 作為六力分析主體",
+          "body": "選已還原的同版 Recorded；歷史資料仍顯示為歷史。",
+          "locator": "[data-recorded-action=\"select\"]",
+          "ui_label": "將此 Recorded 作為六力分析主體"
+        },
+        {
+          "step": 2,
+          "title": "準備此記錄並重算六力",
+          "body": "讀取同版準備與六力結果，保留未觀測區間。",
+          "locator": "[data-recorded-action=\"analyse\"]",
+          "ui_label": "準備此記錄並重算六力"
+        },
+        {
+          "step": 3,
+          "title": "恢復此作業",
+          "body": "僅 can_resume=true 時操作；先用讀取作業結果核對失敗位置。",
+          "locator": "[data-recorded-action=\"resume\"]",
+          "ui_label": "恢復此作業"
+        }
+      ],
+      "required_data": [
+        "saved_recorded",
+        "recorded_analysis_run",
+        "resumable_recorded_run"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。"
+    },
+    {
+      "page": 35,
+      "id": "main-map-native-zoom",
+      "title": "主地圖：放大並核對原生細節",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "SOURCE_VERIFIED_CAPTURE_PENDING",
+      "capture_group": "MAIN_MAP_READY",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#map",
+      "frame_selector": "#pretripMapFrame",
+      "prepare": [
+        "在 #map 使用 #pretripMapFrame 內的 canonical map，不換入口或 workspace。",
+        "Fit 後放大、平移到實際視野，記 native zoom、圖磚清單及向量；ready 才拍正向範例。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "＋ 放大",
+          "body": "先 Fit，再放大與平移，核對當前所需層級。",
+          "locator": "#zoomIn",
+          "ui_label": "+"
+        },
+        {
+          "step": 2,
+          "title": "實際圖磚層級",
+          "body": "讀取需求／顯示層級與載入狀態；舊圖被放大不代表細節已到齊。",
+          "locator": "#zoomLevel",
+          "ui_label": "動態 zoom level／native tile 載入資訊"
+        },
+        {
+          "step": 3,
+          "title": "當前地圖細節",
+          "body": "核對等高線及路線向量，記錄實際 renderer 與完整圖磚證據。",
+          "locator": "#mapRendererShell",
+          "ui_label": "實際 MapLibre 或 SVG 圖面，無固定文字標籤"
+        }
+      ],
+      "required_data": [
+        "main_map_actual_native_tile_receipts"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。"
+    },
+    {
+      "page": 36,
+      "id": "main-map-tile-refresh",
+      "title": "主地圖：缺圖時查看原因並恢復",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "SOURCE_VERIFIED_CAPTURE_PENDING",
+      "capture_group": "MAIN_MAP_FAILURE_RECOVERY",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#map",
+      "frame_selector": "#pretripMapFrame",
+      "prepare": [
+        "沿同一 Main frame 保留真實 loading/missing/error 證據。",
+        "若現在全部 ready，不修改 DOM 造 missing；使用真實已記錄可重放故障，或保持此頁待拍。",
+        "恢復過程前後拍獨立 receipts；不清使用者快取來湊情境。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "需求與顯示層級",
+          "body": "先核對目前需要的細節與已到齊的層級。",
+          "locator": "#zoomLevel",
+          "ui_label": "動態 zoom level／native tile 載入資訊"
+        },
+        {
+          "step": 2,
+          "title": "實際缺圖／載入訊息",
+          "body": "僅在此提示可見時拍攝；不要把成功狀態隱藏的欄位當作標記。",
+          "locator": "#mapRendererStatus",
+          "condition": "真實 loading / missing / error 提示可見；ready 時可能隱藏",
+          "ui_label": "動態實際 renderer/loading/missing/error 訊息"
+        },
+        {
+          "step": 3,
+          "title": "更新圖磚／停止更新",
+          "body": "按目前可見的更新圖磚取得此視野資料，再核對結果；停止更新後會只讀快取。",
+          "locator": "#refreshMapTiles",
+          "ui_label": "更新圖磚 或 停止更新"
+        }
+      ],
+      "required_data": [
+        "main_map_actual_failure_receipt",
+        "main_map_actual_recovery_receipt"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。"
+    },
+    {
+      "page": 37,
+      "id": "weather-map-update",
+      "title": "Weather：核對放大後的底圖細節",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "SOURCE_VERIFIED_CAPTURE_PENDING",
+      "capture_group": "WEATHER_MAP_READY",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-weather",
+      "frame_selector": "iframe[data-weather-cwa-map-frame]",
+      "prepare": [
+        "切 #outdoor-weather，在 iframe[data-weather-cwa-map-frame] 中操作。",
+        "同 Main 標準核對當前所需原生圖磚、向量及 renderer；另一頁成功不替代本頁。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "＋ 放大",
+          "body": "先 Fit，再按 ＋ 並平移，保留本頁實際結果。",
+          "locator": "#zoomIn",
+          "ui_label": "+"
+        },
+        {
+          "step": 2,
+          "title": "實際圖磚層級",
+          "body": "核對需求／顯示層級及本頁的載入完成證據。",
+          "locator": "#zoomLevel",
+          "ui_label": "動態 zoom level／native tile 載入資訊"
+        },
+        {
+          "step": 3,
+          "title": "當前地圖細節",
+          "body": "核對本頁等高線與完整向量，記錄 renderer。",
+          "locator": "#mapRendererShell",
+          "ui_label": "實際 MapLibre 或 SVG 圖面，無固定文字標籤"
+        }
+      ],
+      "required_data": [
+        "weather_map_actual_native_tile_receipts"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。"
+    },
+    {
+      "page": 38,
+      "id": "weather-map-status",
+      "title": "Weather：缺圖時查看原因並恢復",
+      "capture_status": "PENDING_CURRENT_UI_CAPTURE",
+      "workflow_result_status": "NOT_VERIFIED_BY_THIS_DRAFT",
+      "source_status": "SOURCE_VERIFIED_CAPTURE_PENDING",
+      "capture_group": "WEATHER_MAP_FAILURE_RECOVERY",
+      "dashboard_url": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#outdoor-weather",
+      "frame_selector": "iframe[data-weather-cwa-map-frame]",
+      "prepare": [
+        "在 Weather canonical frame 保留實際失敗和恢復 receipt。",
+        "ready 時隱藏的 #mapRendererStatus 不能作有效 target；若無故障畫面本頁待拍，不能冒充目前失敗。"
+      ],
+      "targets": [
+        {
+          "step": 1,
+          "title": "目前圖磚層級",
+          "body": "核對此視野的需要、顯示與快取狀態。",
+          "locator": "#zoomLevel",
+          "ui_label": "動態 zoom level／native tile 載入資訊"
+        },
+        {
+          "step": 2,
+          "title": "實際缺圖／載入訊息",
+          "body": "讀取這個 frame 的真實原因；隱藏狀態不可硬加標記。",
+          "locator": "#mapRendererStatus",
+          "condition": "真實 loading / missing / error 提示可見；ready 時可能隱藏",
+          "ui_label": "動態實際 renderer/loading/missing/error 訊息"
+        },
+        {
+          "step": 3,
+          "title": "更新圖磚／停止更新",
+          "body": "用更新控制恢復，再核對目前視野的細節與載入狀態。",
+          "locator": "#refreshMapTiles",
+          "ui_label": "更新圖磚 或 停止更新"
+        }
+      ],
+      "required_data": [
+        "weather_map_actual_failure_receipt",
+        "weather_map_actual_recovery_receipt"
+      ],
+      "data_presence": "NOT_RECHECKED_BY_GUIDE_AGENT_ROOT_TO_READ_REAL_UI",
+      "capture_rule": "每個 target 必須唯一、可見且完整在視窗內；步驟數字由本次 DOM CSS coordinates × DPR 得出。disabled 要記錄，不宣称可操作通過。",
+      "if_unavailable": "保留實際資料缺項、disabled／錯誤與 receipt；正向教學仍待補，不能套用歷史畫面或列為通過。",
+      "mutations": "操作說明不是代填／保存／審查／採用授權。只在現有授權與真實條件已滿足時操作；不為截圖製造資料。"
+    }
+  ],
+  "page_count": 38,
+  "restored_chapters_preserved": [
+    9,
+    12,
+    13,
+    19,
+    20,
+    23,
+    24,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34
+  ],
+  "next_sequence": [
+    3,
+    4,
+    5,
+    6,
+    7,
+    1,
+    2,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    26,
+    17,
+    18,
+    19,
+    20,
+    21,
+    22,
+    23,
+    24,
+    25,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38
+  ],
+  "sequence_note": "按資料依賴排序；資料不齊的正向頁保持待補，但可先拍真實空表／阻擋狀態。不是順序自動點擊腳本。",
+  "user_four_day_text": "D1：中平林道18K - 沛源石礦岔路 - 石礦鞍部 - 森林鞍西北側迷你鞍C1\n(273689/2589087)\nD2：C1 - 崩坡絕壁 - 三岔峰營地 - 玉里山 - 清八岔 - 單攻往阿桑來戛探一小段 - H1648營C2\nD3：C2 - 巨石獵營 - 1148鞍 - 單攻異祿閣 - 1148鞍旁平地C3\nD4：C3 - 腰繞至Nas-maya - 卓溪山岔 - 卓溪山 - 卓溪山產道",
+  "all_current_capture_count": 0,
+  "required_receipt_fields": [
+    "captured_at exact UTC",
+    "top_url and frame_url",
+    "project_id from actual DOM or returned binding",
+    "source SHA inventory",
+    "image filename and image SHA256",
+    "viewport CSS width/height and DPR",
+    "scroll x/y",
+    "target label/selector/count/text/disabled/rect CSS/full_visibility",
+    "version ID and full manifest/source/context SHA where applicable",
+    "run ID/attempt/status/can_resume and receipt refs where applicable",
+    "actual map renderer/required native zoom/completed requested tile refs/failure and recovery evidence"
+  ],
+  "pending_work": [
+    "實際 Chrome 38頁重拍、各步驟 DOM 標記、逐頁目視驗證",
+    "Saved Planned 的真實版本／來源與審查、補件、作業、報告／下載證據",
+    "四日完整主線與支線仍須對齊來源；未定位、未給日期腳程與停留不得杜撰",
+    "真實探索 AOI／A-B／準備 receipt 與真實 Recorded GPX／版本／作業資料",
+    "Main／Weather 及所有受影響圖面的正式 Diagnostic 與失敗恢復證據",
+    "完成全部適用驗收後，重建 HTML/PDF 並驗證所交付來源與截圖同版；目前不發布"
+  ],
+  "guardrails": [
+    "SOURCE_PRESENT 不是操作成功",
+    "WARN/FAIL/SKIP/未驗證不算PASS",
+    "不調整Diagnostic期待；新衝突交使用者仲裁",
+    "既有Saved選擇→Restore→SHA→Review readiness不能省略",
+    "R4待審，R1–R3優先",
+    "不把歷史／測試資料說成本次Observed",
+    "Permission每日圖維持互動，Planned地圖向量比較；不能以用途之別漏測共用圖面"
+  ],
+  "prior_source_inventory": {
+    "docs/admin/scout-dashboard-v0.1.html": {
+      "sha256": "de690e749e8a1c8c4fbb67c9edefafb20b6ff74c6e42552a108c0a05d9e110bc",
+      "bytes": 2124777
+    },
+    "docs/admin/scout-planned-route.js": {
+      "sha256": "4819595b4b033d005fd2f27db880a9078f1b77c2428ab89adf886d9eedf76485",
+      "bytes": 107578
+    },
+    "docs/admin/scout-planned-review-ui.js": {
+      "sha256": "e0712d8da141c1db9c81ccddf13b8b8b14caaacf6f482bc9ac0d5571e917e578",
+      "bytes": 43020
+    },
+    "docs/admin/scout-planned-map-review.js": {
+      "sha256": "49a7e777593c21694cf22f6cb98c336bb1a6648754bc2dbe8be71240ee28708f",
+      "bytes": 18377
+    },
+    "docs/admin/scout-exploration-workflow.js": {
+      "sha256": "6b6f418f5faa21d27d3aa65c9d92397b865a30a7c3ede1fbcc6c610d026cb547",
+      "bytes": 17504
+    },
+    "docs/admin/scout-recorded-workflow.js": {
+      "sha256": "5f44e8730fca1cb1f426c7570f0dde697207118bdf08fcb27db34095123f79e0",
+      "bytes": 12220
+    },
+    "docs/admin/phase4-pretrip-planning.html": {
+      "sha256": "59169c3a3fb16c3749bc4f38cb15f68b2ac8c03e5a9b58dd772a56110be182d6",
+      "bytes": 465805
+    }
+  },
+  "source_inventory_context": {
+    "checkout_root": "/Users/alexwang0315/scout-fusion",
+    "observed_at": "2026-09-14T01:54:43.372935+00:00",
+    "status": "SOURCE_FILE_INVENTORY_ONLY_NOT_CAPTURE_OR_UI_QUALIFICATION"
+  },
+  "required_current_ui_source_paths": [
+    "docs/admin/phase4-pretrip-planning.html",
+    "docs/admin/scout-dashboard-v0.1.html",
+    "docs/admin/scout-exploration-workflow.js",
+    "docs/admin/scout-maplibre-evidence.js",
+    "docs/admin/scout-planned-map-review.js",
+    "docs/admin/scout-planned-review-ui.js",
+    "docs/admin/scout-planned-route.js",
+    "docs/admin/scout-recorded-workflow.js"
+  ],
+  "source_inventory_policy": "All eight files must be read again from the actual current checkout at capture/final verification. File hashes are inventory only; do not copy this inventory into capture receipts without real UI inspection and current captures."
+}

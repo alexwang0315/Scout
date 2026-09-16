@@ -2,7 +2,25 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+import ingress_observer_supervisor as supervisor_module
+
 from ingress_observer_supervisor import IngressObserverSupervisor
+
+
+@pytest.fixture(autouse=True)
+def isolated_observer_defaults(tmp_path: Path, monkeypatch):
+    # Exercise automatic source discovery against this test's own files.
+    # Host /data/scout recordings must never create additional observers.
+    root = tmp_path / "observer-defaults"
+    for name, value in vars(supervisor_module).copy().items():
+        if name.startswith("DEFAULT_") and isinstance(value, Path):
+            monkeypatch.setattr(supervisor_module, name, root / name.lower())
+    monkeypatch.setattr(
+        supervisor_module,
+        "DEFAULT_SX1303_GATEWAY_CONFIG_PATHS",
+        str(root / "missing-gateway.toml"),
+    )
 
 
 class FakeProcess:

@@ -1978,6 +1978,43 @@ def _route_structure_field_answer(
     return None, None
 
 
+def _requested_segment_distance_extrema(query: str) -> list[str]:
+    # Resolve positive requests clause by clause; a negated alternative is not a target.
+    requested: list[str] = []
+    for clause in re.split(r"[,，。;；?？!！\n]|而是|而要|\bbut\b", query, flags=re.IGNORECASE):
+        for match in re.finditer(
+            r"最短|最長|shortest|longest|(?:min(?:imum)?|max(?:imum)?)\s*(?:segment\s*)?distance",
+            clause,
+            re.IGNORECASE,
+        ):
+            if re.search(
+                r"時間|耗時|歷時|分鐘|小時|坡度|爬升|下降|海拔|"
+                r"\b(?:duration|time|minutes?|hours?|elevation|ascent|descent|slope|p\d{2})\b",
+                clause,
+                re.IGNORECASE,
+            ) and not re.search(
+                r"距離|公里|公尺|\b(?:distance|kilometers?|metres?|meters?|km)\b",
+                clause,
+                re.IGNORECASE,
+            ):
+                continue
+            if re.search(
+                r"不要|不必|不是|別|而非|忽略|排除|\b(?:not|never|ignore|exclude)\b|"
+                r"\bdon['’]t\b|\binstead\s+of\b|\brather\s+than\b",
+                clause[:match.start()],
+                re.IGNORECASE,
+            ):
+                continue
+            name = (
+                "shortest_segment"
+                if re.match(r"最短|shortest|min", match.group(), re.IGNORECASE)
+                else "longest_segment"
+            )
+            if name not in requested:
+                requested.append(name)
+    return requested
+
+
 def _rest_area_display_id(value: Any) -> str:
     text = str(value or "unknown")
     if text.startswith("rest_area.") and len(text) > 24:
@@ -2033,6 +2070,166 @@ def _checkpoint_quality_summary(
         "checkpoint_duplicate_label_group_count": len(duplicate_groups),
         "checkpoint_duplicate_label_groups": duplicate_groups,
     }
+
+
+def _checkpoint_chain_continuity(
+    checkpoints: list[Any],
+    segments: list[Any],
+) -> dict[str, Any]:
+    """Verify one directed ID chain, not source completeness or GPX geometry.
+
+    Order comes from segment endpoints, never array positions or CP labels.
+    No checkpoint evidence is unknown; one identified CP without edges is a
+    valid trivial graph. Malformed records are unknown, not silently dropped.
+    """
+    result: dict[str, Any] = {
+        "status": "unknown",
+        "is_single_chain": None,
+        "scope": "provided_checkpoint_and_segment_identifier_graph",
+        "source_completeness": "not_assessed",
+        "physical_gpx_geometry_continuity": None,
+        "reason_codes": [],
+        "malformed_collections": [],
+        "malformed_records": [],
+        "duplicate_checkpoint_ids": [],
+        "duplicate_segment_ids": [],
+        "unknown_endpoint_ids": [],
+        "branching_checkpoint_ids": [],
+        "merging_checkpoint_ids": [],
+        "component_count": None,
+        "has_cycle": None,
+        "start_checkpoint_id": None,
+        "end_checkpoint_id": None,
+        "checkpoint_order": None,
+        "segment_order": None,
+    }
+    collections = (("checkpoints", checkpoints), ("segments", segments))
+    result["malformed_collections"] = [
+        name for name, rows in collections if not isinstance(rows, list)
+    ]
+    if result["malformed_collections"]:
+        result["reason_codes"].append("malformed_collections")
+        return result
+    if not checkpoints:
+        result["reason_codes"].append("no_checkpoint_records")
+        return result
+
+    for name, rows in collections:
+        fields = ("candidate_id",) if name == "checkpoints" else (
+            "candidate_id", "from_candidate_id", "to_candidate_id",
+        )
+        for index, row in enumerate(rows):
+            if not isinstance(row, dict):
+                result["malformed_records"].append(
+                    {"collection": name, "index": index, "field": "$record"}
+                )
+                continue
+            for field in fields:
+                value = row.get(field)
+                if not isinstance(value, str) or not value or value.strip() != value:
+                    result["malformed_records"].append(
+                        {"collection": name, "index": index, "field": field}
+                    )
+    if result["malformed_records"]:
+        result["reason_codes"].append("malformed_records")
+        return result
+
+    checkpoint_ids = Counter(row["candidate_id"] for row in checkpoints)
+    segment_ids = Counter(row["candidate_id"] for row in segments)
+    result["duplicate_checkpoint_ids"] = sorted(
+        value for value, count in checkpoint_ids.items() if count > 1
+    )
+    result["duplicate_segment_ids"] = sorted(
+        value for value, count in segment_ids.items() if count > 1
+    )
+    result["unknown_endpoint_ids"] = sorted({
+        row[field]
+        for row in segments
+        for field in ("from_candidate_id", "to_candidate_id")
+        if row[field] not in checkpoint_ids
+    })
+    for key in ("duplicate_checkpoint_ids", "duplicate_segment_ids"):
+        if result[key]:
+            result["reason_codes"].append(key)
+    if result["unknown_endpoint_ids"]:
+        result["reason_codes"].append("unknown_endpoints")
+    if result["reason_codes"]:
+        result.update(status="invalid", is_single_chain=False)
+        return result
+
+    outgoing: dict[str, list[tuple[str, str]]] = {value: [] for value in checkpoint_ids}
+    incoming = dict.fromkeys(checkpoint_ids, 0)
+    neighbors: dict[str, set[str]] = {value: set() for value in checkpoint_ids}
+    for row in segments:
+        start, end = row["from_candidate_id"], row["to_candidate_id"]
+        outgoing[start].append((end, row["candidate_id"]))
+        incoming[end] += 1
+        neighbors[start].add(end)
+        neighbors[end].add(start)
+
+    starts = sorted(value for value in checkpoint_ids if incoming[value] == 0)
+    ends = sorted(value for value in checkpoint_ids if not outgoing[value])
+    result["branching_checkpoint_ids"] = sorted(
+        value for value in checkpoint_ids if len(outgoing[value]) > 1
+    )
+    result["merging_checkpoint_ids"] = sorted(
+        value for value in checkpoint_ids if incoming[value] > 1
+    )
+
+    # Check all components and cycles, including ones outside a start's path.
+    remaining = set(checkpoint_ids)
+    component_count = 0
+    while remaining:
+        component_count += 1
+        pending = [remaining.pop()]
+        while pending:
+            unseen = neighbors[pending.pop()] & remaining
+            remaining.difference_update(unseen)
+            pending.extend(unseen)
+    result["component_count"] = component_count
+    pending = list(starts)
+    indegrees = incoming.copy()
+    removed_count = 0
+    while pending:
+        value = pending.pop()
+        removed_count += 1
+        for end, _ in outgoing[value]:
+            indegrees[end] -= 1
+            if indegrees[end] == 0:
+                pending.append(end)
+    result["has_cycle"] = removed_count != len(checkpoint_ids)
+
+    if component_count != 1:
+        result["reason_codes"].append("disconnected")
+    if result["has_cycle"]:
+        result["reason_codes"].append("cycle")
+    if result["branching_checkpoint_ids"]:
+        result["reason_codes"].append("branching")
+    if result["merging_checkpoint_ids"]:
+        result["reason_codes"].append("merging")
+    if len(segments) != len(checkpoint_ids) - 1:
+        result["reason_codes"].append("segment_count_mismatch")
+    if len(starts) != 1 or len(ends) != 1:
+        result["reason_codes"].append("non_unique_endpoints")
+    if result["reason_codes"]:
+        result.update(status="invalid", is_single_chain=False)
+        return result
+
+    checkpoint_order = [starts[0]]
+    segment_order = []
+    while outgoing[checkpoint_order[-1]]:
+        end, segment_id = outgoing[checkpoint_order[-1]][0]
+        checkpoint_order.append(end)
+        segment_order.append(segment_id)
+    result.update(
+        status="valid",
+        is_single_chain=True,
+        start_checkpoint_id=starts[0],
+        end_checkpoint_id=ends[0],
+        checkpoint_order=checkpoint_order,
+        segment_order=segment_order,
+    )
+    return result
 
 
 def search_project_major_points(
@@ -3307,6 +3504,19 @@ def _optional_int(value: Any) -> int | None:
         return None
 
 
+def _display_number(value: Any) -> str:
+    number = _optional_float(value)
+    if number is None:
+        return "unknown"
+    if number.is_integer():
+        return str(int(number))
+    return f"{number:.6f}".rstrip("0").rstrip(".")
+
+
+def _compact_lookup_text(value: Any) -> str:
+    return re.sub(r"[^0-9a-z\u4e00-\u9fff]+", "", str(value or "").casefold())
+
+
 def _km(value: Any) -> float | None:
     number = _optional_float(value)
     if number is None:
@@ -3332,216 +3542,3 @@ def _closed_boundary() -> dict[str, bool]:
         "hardware_control_allowed": False,
         "raw_payloads_embedded": False,
     }
-
-
-def _requested_segment_distance_extrema(query: str) -> list[str]:
-    # Resolve positive requests clause by clause; a negated alternative is not a target.
-    requested: list[str] = []
-    for clause in re.split(r"[,，。;；?？!！\n]|而是|而要|\bbut\b", query, flags=re.IGNORECASE):
-        for match in re.finditer(
-            r"最短|最長|shortest|longest|(?:min(?:imum)?|max(?:imum)?)\s*(?:segment\s*)?distance",
-            clause,
-            re.IGNORECASE,
-        ):
-            if re.search(
-                r"時間|耗時|歷時|分鐘|小時|坡度|爬升|下降|海拔|"
-                r"\b(?:duration|time|minutes?|hours?|elevation|ascent|descent|slope|p\d{2})\b",
-                clause,
-                re.IGNORECASE,
-            ) and not re.search(
-                r"距離|公里|公尺|\b(?:distance|kilometers?|metres?|meters?|km)\b",
-                clause,
-                re.IGNORECASE,
-            ):
-                continue
-            if re.search(
-                r"不要|不必|不是|別|而非|忽略|排除|\b(?:not|never|ignore|exclude)\b|"
-                r"\bdon['’]t\b|\binstead\s+of\b|\brather\s+than\b",
-                clause[:match.start()],
-                re.IGNORECASE,
-            ):
-                continue
-            name = (
-                "shortest_segment"
-                if re.match(r"最短|shortest|min", match.group(), re.IGNORECASE)
-                else "longest_segment"
-            )
-            if name not in requested:
-                requested.append(name)
-    return requested
-
-
-
-def _checkpoint_chain_continuity(
-    checkpoints: list[Any],
-    segments: list[Any],
-) -> dict[str, Any]:
-    """Verify one directed ID chain, not source completeness or GPX geometry.
-
-    Order comes from segment endpoints, never array positions or CP labels.
-    No checkpoint evidence is unknown; one identified CP without edges is a
-    valid trivial graph. Malformed records are unknown, not silently dropped.
-    """
-    result: dict[str, Any] = {
-        "status": "unknown",
-        "is_single_chain": None,
-        "scope": "provided_checkpoint_and_segment_identifier_graph",
-        "source_completeness": "not_assessed",
-        "physical_gpx_geometry_continuity": None,
-        "reason_codes": [],
-        "malformed_collections": [],
-        "malformed_records": [],
-        "duplicate_checkpoint_ids": [],
-        "duplicate_segment_ids": [],
-        "unknown_endpoint_ids": [],
-        "branching_checkpoint_ids": [],
-        "merging_checkpoint_ids": [],
-        "component_count": None,
-        "has_cycle": None,
-        "start_checkpoint_id": None,
-        "end_checkpoint_id": None,
-        "checkpoint_order": None,
-        "segment_order": None,
-    }
-    collections = (("checkpoints", checkpoints), ("segments", segments))
-    result["malformed_collections"] = [
-        name for name, rows in collections if not isinstance(rows, list)
-    ]
-    if result["malformed_collections"]:
-        result["reason_codes"].append("malformed_collections")
-        return result
-    if not checkpoints:
-        result["reason_codes"].append("no_checkpoint_records")
-        return result
-
-    for name, rows in collections:
-        fields = ("candidate_id",) if name == "checkpoints" else (
-            "candidate_id", "from_candidate_id", "to_candidate_id",
-        )
-        for index, row in enumerate(rows):
-            if not isinstance(row, dict):
-                result["malformed_records"].append(
-                    {"collection": name, "index": index, "field": "$record"}
-                )
-                continue
-            for field in fields:
-                value = row.get(field)
-                if not isinstance(value, str) or not value or value.strip() != value:
-                    result["malformed_records"].append(
-                        {"collection": name, "index": index, "field": field}
-                    )
-    if result["malformed_records"]:
-        result["reason_codes"].append("malformed_records")
-        return result
-
-    checkpoint_ids = Counter(row["candidate_id"] for row in checkpoints)
-    segment_ids = Counter(row["candidate_id"] for row in segments)
-    result["duplicate_checkpoint_ids"] = sorted(
-        value for value, count in checkpoint_ids.items() if count > 1
-    )
-    result["duplicate_segment_ids"] = sorted(
-        value for value, count in segment_ids.items() if count > 1
-    )
-    result["unknown_endpoint_ids"] = sorted({
-        row[field]
-        for row in segments
-        for field in ("from_candidate_id", "to_candidate_id")
-        if row[field] not in checkpoint_ids
-    })
-    for key in ("duplicate_checkpoint_ids", "duplicate_segment_ids"):
-        if result[key]:
-            result["reason_codes"].append(key)
-    if result["unknown_endpoint_ids"]:
-        result["reason_codes"].append("unknown_endpoints")
-    if result["reason_codes"]:
-        result.update(status="invalid", is_single_chain=False)
-        return result
-
-    outgoing: dict[str, list[tuple[str, str]]] = {value: [] for value in checkpoint_ids}
-    incoming = dict.fromkeys(checkpoint_ids, 0)
-    neighbors: dict[str, set[str]] = {value: set() for value in checkpoint_ids}
-    for row in segments:
-        start, end = row["from_candidate_id"], row["to_candidate_id"]
-        outgoing[start].append((end, row["candidate_id"]))
-        incoming[end] += 1
-        neighbors[start].add(end)
-        neighbors[end].add(start)
-
-    starts = sorted(value for value in checkpoint_ids if incoming[value] == 0)
-    ends = sorted(value for value in checkpoint_ids if not outgoing[value])
-    result["branching_checkpoint_ids"] = sorted(
-        value for value in checkpoint_ids if len(outgoing[value]) > 1
-    )
-    result["merging_checkpoint_ids"] = sorted(
-        value for value in checkpoint_ids if incoming[value] > 1
-    )
-
-    # Check all components and cycles, including ones outside a start's path.
-    remaining = set(checkpoint_ids)
-    component_count = 0
-    while remaining:
-        component_count += 1
-        pending = [remaining.pop()]
-        while pending:
-            unseen = neighbors[pending.pop()] & remaining
-            remaining.difference_update(unseen)
-            pending.extend(unseen)
-    result["component_count"] = component_count
-    pending = list(starts)
-    indegrees = incoming.copy()
-    removed_count = 0
-    while pending:
-        value = pending.pop()
-        removed_count += 1
-        for end, _ in outgoing[value]:
-            indegrees[end] -= 1
-            if indegrees[end] == 0:
-                pending.append(end)
-    result["has_cycle"] = removed_count != len(checkpoint_ids)
-
-    if component_count != 1:
-        result["reason_codes"].append("disconnected")
-    if result["has_cycle"]:
-        result["reason_codes"].append("cycle")
-    if result["branching_checkpoint_ids"]:
-        result["reason_codes"].append("branching")
-    if result["merging_checkpoint_ids"]:
-        result["reason_codes"].append("merging")
-    if len(segments) != len(checkpoint_ids) - 1:
-        result["reason_codes"].append("segment_count_mismatch")
-    if len(starts) != 1 or len(ends) != 1:
-        result["reason_codes"].append("non_unique_endpoints")
-    if result["reason_codes"]:
-        result.update(status="invalid", is_single_chain=False)
-        return result
-
-    checkpoint_order = [starts[0]]
-    segment_order = []
-    while outgoing[checkpoint_order[-1]]:
-        end, segment_id = outgoing[checkpoint_order[-1]][0]
-        checkpoint_order.append(end)
-        segment_order.append(segment_id)
-    result.update(
-        status="valid",
-        is_single_chain=True,
-        start_checkpoint_id=starts[0],
-        end_checkpoint_id=ends[0],
-        checkpoint_order=checkpoint_order,
-        segment_order=segment_order,
-    )
-    return result
-
-
-
-def _display_number(value: Any) -> str:
-    number = _optional_float(value)
-    if number is None:
-        return "unknown"
-    if number.is_integer():
-        return str(int(number))
-    return f"{number:.6f}".rstrip("0").rstrip(".")
-
-
-
-def _compact_lookup_text(value: Any) -> str:
-    return re.sub(r"[^0-9a-z\u4e00-\u9fff]+", "", str(value or "").casefold())

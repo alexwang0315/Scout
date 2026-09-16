@@ -18,6 +18,7 @@ def test_weather_window_tool_reads_reviewed_fixture_route_weather_package() -> N
     result = assess_scout_weather_window(
         PROJECT_ROOT,
         query="明天午後雷雨是否要紮營?",
+        reference_time="2099-10-08T03:00:00+08:00",
         limit=3,
     )
 
@@ -54,6 +55,7 @@ def test_weather_window_tool_delays_daylight_buffer_without_current_time() -> No
     result = assess_scout_weather_window(
         PROJECT_ROOT,
         query="日照 buffer 是否下降？",
+        reference_time="2099-10-08T03:00:00+08:00",
         limit=3,
     )
 
@@ -85,6 +87,7 @@ def test_weather_window_tool_computes_reviewed_daylight_buffer(
         project_root,
         query="日照 buffer 是否下降？",
         current_time="2099-06-07T15:10:00+08:00",
+        reference_time="2099-06-07T08:00:00Z",
         limit=3,
     )
 
@@ -112,6 +115,7 @@ def test_weather_window_tool_uses_query_reported_recent_rain_conservatively() ->
     result = assess_scout_weather_window(
         PROJECT_ROOT,
         query="前 24 小時明顯降雨，溪水和崩塌風險是否升高？今天還能走嗎？",
+        reference_time="2099-10-08T03:00:00+08:00",
         limit=3,
     )
 
@@ -208,6 +212,7 @@ def test_weather_window_tool_reads_route_weather_package_and_emits_wx_alerts(
     result = assess_scout_weather_window(
         project_root,
         query="哪些路段下雨後風險變高?",
+        reference_time="2099-06-07T08:00:00Z",
         limit=2,
     )
 
@@ -256,6 +261,7 @@ def test_weather_window_tool_no_go_for_critical_weather_route_interaction(
     result = assess_scout_weather_window(
         project_root,
         query="前方午後雷雨還能照原路線走嗎?",
+        reference_time="2099-06-07T08:00:00Z",
         limit=2,
     )
 
@@ -283,6 +289,7 @@ def test_weather_window_tool_delays_recent_rain_creek_crossing_without_experienc
     result = assess_scout_weather_window(
         project_root,
         query="前 24 小時有降雨，這條路有兩處渡溪點且隊伍沒有渡溪經驗，可以照原計畫出發嗎？",
+        reference_time="2099-06-07T08:00:00Z",
         limit=3,
     )
 
@@ -313,6 +320,7 @@ def test_weather_window_tool_changes_plan_for_heat_exposure_water_margin(
     result = assess_scout_weather_window(
         project_root,
         query="高溫曝曬，水量偏低，午後原路線還能走嗎？",
+        reference_time="2099-06-07T08:00:00Z",
         limit=3,
     )
 
@@ -350,6 +358,7 @@ def test_weather_window_tool_delays_forecast_source_disagreement(
     result = assess_scout_weather_window(
         project_root,
         query="預報來源不一致，這個天氣窗可以照原計畫走嗎？",
+        reference_time="2099-06-07T08:00:00Z",
         limit=3,
     )
 

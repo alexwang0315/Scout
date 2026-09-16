@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from tests.scout_database_fixtures import owned_test_databases  # noqa: F401
+
+import pytest
+
 import asyncio
 import json
 from datetime import UTC, datetime, timedelta
@@ -44,6 +48,9 @@ from scout.ui_action_plan import build_scout_ui_action_plan
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+pytestmark = pytest.mark.usefixtures("owned_test_databases")
 
 
 class _FakeTelegramResponse:

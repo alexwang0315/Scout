@@ -1,0 +1,40 @@
+{
+  "id": "completed-gpx-rejection-recovery",
+  "status": "DRAFT_PENDING_CURRENT_CAPTURE",
+  "buildable": false,
+  "title": "Completed GPX：來源遭拒收時，先核對再重建",
+  "practice_workspace": "dongqing_batongguan_historic_trail_newImport",
+  "action_href": "http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport#timeline",
+  "image": null,
+  "markers": [],
+  "capture_context": "PENDING_REVISION5_CURRENT_CAPTURE",
+  "steps": [
+    {
+      "step": 1,
+      "title": "Completed GPX",
+      "body": "開啟 Timeline Evidence，再選 Completed GPX 分頁；核對網址中的 workspace。",
+      "locator": "[data-evidence-tab=\"completed\"]"
+    },
+    {
+      "step": 2,
+      "title": "Check recordings",
+      "body": "按 Check recordings 重新讀取目前 workspace 的紀錄，等候 Checking 完成。",
+      "locator": "[data-completed-gpx-action=\"refresh\"]"
+    },
+    {
+      "step": 3,
+      "title": "完成軌跡狀態",
+      "body": "若顯示已拒收，讀取中文原因；來源變動、路徑或行程不符都不算啟用。資料尚未恢復時不會繼續顯示舊紀錄為 Active，合法參考資料仍保留。",
+      "locator": ".completed-gpx-lifecycle [role=\"status\"]"
+    },
+    {
+      "step": 4,
+      "title": "Build evidence",
+      "body": "確認正確 workspace 與本人要使用的 GPX 後，按該紀錄的 Build evidence。等來源核對完成，確認狀態顯示已更新且同一紀錄為 Active；失敗時先保留原因，再重新檢查。",
+      "locator": "[data-completed-gpx-recording-id]"
+    }
+  ],
+  "source_file": "docs/admin/scout-dashboard-v0.1.html",
+  "candidate_source_sha256": "8e6f6cc75cb4cf492533af2740f57b11d63ad19a0927182ddeb7ae7227b6226f",
+  "note": "這是 Timeline Evidence 的 Completed GPX lifecycle，與 Permission 的 Saved Recorded 版本表單是不同入口。不得使用第31–34頁 Permission 表單的歷史圖片代替本段。保留實際拒收／重新建立成功的分別擷取；若沒有授權的真實失敗情境，錯誤畫面仍待拍，不改 live 資料或 DOM 造失敗。Build evidence 只建立後分析候選，不等於路線安全或出發核准。"
+}

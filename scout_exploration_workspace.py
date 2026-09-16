@@ -287,61 +287,63 @@ def prepare_native_aoi_dem(project_root: Path, request: ExplorationWorkspaceRequ
     if len(resolutions) != 1:
         raise ExplorationWorkspaceError("AOI sources have mixed native resolutions; explicit source choice is required")
     resolution = resolutions.pop()
-    datasets = []
-    for path, _, declared_crs, header_bound in sources:
-        if declared_crs.upper() not in {"3826", "EPSG:3826"}:
-            raise ExplorationWorkspaceError("AOI DEM source CRS must be explicitly EPSG:3826")
-        dataset = gdal.Open(path, gdal.GA_ReadOnly)
+    # Keep the existing None/return-code checks local to this native operation.
+    with gdal.ExceptionMgr(useExceptions=False), ogr.ExceptionMgr(useExceptions=False), osr.ExceptionMgr(useExceptions=False):
+        datasets = []
+        for path, _, declared_crs, header_bound in sources:
+            if declared_crs.upper() not in {"3826", "EPSG:3826"}:
+                raise ExplorationWorkspaceError("AOI DEM source CRS must be explicitly EPSG:3826")
+            dataset = gdal.Open(path, gdal.GA_ReadOnly)
+            if dataset is None:
+                raise ExplorationWorkspaceError("Raw DEM is unreadable by GDAL")
+            crs = dataset.GetSpatialRef()
+            if crs is None and not header_bound:
+                raise ExplorationWorkspaceError("Raw GeoTIFF has no native CRS metadata")
+            if crs is not None and crs.GetAuthorityCode(None) != "3826":
+                raise ExplorationWorkspaceError("Raw raster CRS disagrees with the declared TWD97 CRS")
+            transform = dataset.GetGeoTransform()
+            if transform[2] or transform[4] or not all(math.isclose(abs(transform[i]), resolution, rel_tol=1e-8) for i in (1, 5)):
+                raise ExplorationWorkspaceError("Raw raster resolution disagrees with its source declaration")
+            datasets.append(dataset)
+        bounds = raw["aoi_bbox_twd97"]
+        # Expand at most one native cell per edge, then retain an explicit AOI mask.
+        extent = [math.floor(bounds["min_x"] / resolution) * resolution,
+                  math.floor(bounds["min_y"] / resolution) * resolution,
+                  math.ceil(bounds["max_x"] / resolution) * resolution,
+                  math.ceil(bounds["max_y"] / resolution) * resolution]
+        path = output / "dem_route_bbox.tif"
+        if path.exists():
+            raise ExplorationWorkspaceError("An AOI DEM attempt cannot overwrite an earlier artifact")
+        dataset = gdal.Warp(str(path), datasets, format="GTiff", srcSRS="EPSG:3826", dstSRS="EPSG:3826",
+            outputBounds=extent, xRes=resolution, yRes=resolution, resampleAlg="near", dstNodata=-9999,
+            creationOptions=["COMPRESS=DEFLATE", "TILED=YES"], multithread=False)
         if dataset is None:
-            raise ExplorationWorkspaceError("Raw DEM is unreadable by GDAL")
-        crs = dataset.GetSpatialRef()
-        if crs is None and not header_bound:
-            raise ExplorationWorkspaceError("Raw GeoTIFF has no native CRS metadata")
-        if crs is not None and crs.GetAuthorityCode(None) != "3826":
-            raise ExplorationWorkspaceError("Raw raster CRS disagrees with the declared TWD97 CRS")
-        transform = dataset.GetGeoTransform()
-        if transform[2] or transform[4] or not all(math.isclose(abs(transform[i]), resolution, rel_tol=1e-8) for i in (1, 5)):
-            raise ExplorationWorkspaceError("Raw raster resolution disagrees with its source declaration")
-        datasets.append(dataset)
-    bounds = raw["aoi_bbox_twd97"]
-    # Expand at most one native cell per edge, then retain an explicit AOI mask.
-    extent = [math.floor(bounds["min_x"] / resolution) * resolution,
-              math.floor(bounds["min_y"] / resolution) * resolution,
-              math.ceil(bounds["max_x"] / resolution) * resolution,
-              math.ceil(bounds["max_y"] / resolution) * resolution]
-    path = output / "dem_route_bbox.tif"
-    if path.exists():
-        raise ExplorationWorkspaceError("An AOI DEM attempt cannot overwrite an earlier artifact")
-    dataset = gdal.Warp(str(path), datasets, format="GTiff", srcSRS="EPSG:3826", dstSRS="EPSG:3826",
-        outputBounds=extent, xRes=resolution, yRes=resolution, resampleAlg="near", dstNodata=-9999,
-        creationOptions=["COMPRESS=DEFLATE", "TILED=YES"], multithread=False)
-    if dataset is None:
-        raise ExplorationWorkspaceError("Native GDAL AOI crop failed")
-    mask = gdal.GetDriverByName("MEM").Create("", dataset.RasterXSize, dataset.RasterYSize, 1, gdal.GDT_Byte)
-    mask.SetGeoTransform(dataset.GetGeoTransform())
-    mask.SetProjection(dataset.GetProjection())
-    vector = ogr.GetDriverByName("Memory").CreateDataSource("")
-    srs = osr.SpatialReference()
-    srs.ImportFromEPSG(3826)
-    layer = vector.CreateLayer("aoi", srs=srs, geom_type=ogr.wkbPolygon)
-    geometry = ogr.CreateGeometryFromJson(json.dumps({"type": "Polygon", "coordinates": [raw["aoi_polygon_twd97"]]}))
-    feature = ogr.Feature(layer.GetLayerDefn())
-    feature.SetGeometry(geometry)
-    layer.CreateFeature(feature)
-    if gdal.RasterizeLayer(mask, [1], layer, burn_values=[1]) != 0:
-        raise ExplorationWorkspaceError("AOI mask could not be rasterized")
-    inside = mask.ReadAsArray().astype(bool)
-    values = dataset.GetRasterBand(1).ReadAsArray()
-    values[~inside] = -9999
-    dataset.GetRasterBand(1).WriteArray(values)
-    dataset.FlushCache()
-    finite = np.isfinite(values) & (values != -9999) & inside
-    finite_count, area_count = int(finite.sum()), int(inside.sum())
-    rows, columns = dataset.RasterYSize, dataset.RasterXSize
-    dataset = None
-    datasets.clear()
-    if not area_count:
-        raise ExplorationWorkspaceError("AOI is smaller than a resolvable native DEM cell")
+            raise ExplorationWorkspaceError("Native GDAL AOI crop failed")
+        mask = gdal.GetDriverByName("MEM").Create("", dataset.RasterXSize, dataset.RasterYSize, 1, gdal.GDT_Byte)
+        mask.SetGeoTransform(dataset.GetGeoTransform())
+        mask.SetProjection(dataset.GetProjection())
+        vector = ogr.GetDriverByName("Memory").CreateDataSource("")
+        srs = osr.SpatialReference()
+        srs.ImportFromEPSG(3826)
+        layer = vector.CreateLayer("aoi", srs=srs, geom_type=ogr.wkbPolygon)
+        geometry = ogr.CreateGeometryFromJson(json.dumps({"type": "Polygon", "coordinates": [raw["aoi_polygon_twd97"]]}))
+        feature = ogr.Feature(layer.GetLayerDefn())
+        feature.SetGeometry(geometry)
+        layer.CreateFeature(feature)
+        if gdal.RasterizeLayer(mask, [1], layer, burn_values=[1]) != 0:
+            raise ExplorationWorkspaceError("AOI mask could not be rasterized")
+        inside = mask.ReadAsArray().astype(bool)
+        values = dataset.GetRasterBand(1).ReadAsArray()
+        values[~inside] = -9999
+        dataset.GetRasterBand(1).WriteArray(values)
+        dataset.FlushCache()
+        finite = np.isfinite(values) & (values != -9999) & inside
+        finite_count, area_count = int(finite.sum()), int(inside.sum())
+        rows, columns = dataset.RasterYSize, dataset.RasterXSize
+        dataset = None
+        datasets.clear()
+        if not area_count:
+            raise ExplorationWorkspaceError("AOI is smaller than a resolvable native DEM cell")
     dem_sha = _sha(path)
     source_hashes = {entry["path"]: entry["sha256"] for entry in raw["external_source_bindings"]}
     for ref, sha in source_hashes.items():

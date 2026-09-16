@@ -31,6 +31,7 @@ window.__child=href=>{
 const names=['diagnosticMapCleanupComplete','diagnosticMapCleanupResult','diagnosticWithMapCleanup',
   'diagnosticDisposeEmbeddedMapFrame','diagnosticDisposeNavigationMaps','diagnosticDisposeRudyProbe','diagnosticMapInteractionFrameContext',
   'diagnosticProbeEmbeddedMapOrder','diagnosticProbeNavigationMapOrder',
+  'navigationTerrainWorkspaceSelection','navigationTerrainPressureSamples',
   'diagnosticWeatherLiveFrames','diagnosticWeatherLiveTiles','destroyNavigationTerrainMapLibre'];
 const source=names.map(name=>{const match=html.match(new RegExp('^    (?:async )?function '+name+'\\([\\s\\S]*?^    }','m'));assert.ok(match,name);return match[0]}).join('\n');
 window.eval(source+String.raw`

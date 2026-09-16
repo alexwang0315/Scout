@@ -46,6 +46,7 @@ const registry = html.match(/^    const DASHBOARD_MAP_SURFACES = Object.freeze\(
 const names = ['diagnosticMapInteractionSurfaceCases','diagnosticMapInteractionFrameContext',
   'diagnosticMapInteractionNodeVisible','diagnosticMapInteractionSvgVectorCount','diagnosticMapInteractionNavigationState',
   'diagnosticPretripMapInteractionAdapter','diagnosticNavigationMapInteractionAdapter',
+  'navigationTerrainWorkspaceSelection','navigationTerrainPressureSamples',
   'diagnosticPrepareMapInteractionSurface','discardDashboardPendingRudyTileGeneration'];
 window.eval(registry+'\n'+names.map(source).join('\n')+String.raw`
 const DIAGNOSTIC_MAP_PROBE = true;
@@ -331,7 +332,11 @@ for(const entry of selected) {
   api.calls.length=0;
   const ready=await api.prepare(entry,{projectId:api.projectId()});
   assert.ok(ready.adapter,entry.key+': '+ready.detail);
-  assert.equal(ready.adapter.viewport.id,entry.renderer==='maplibre'?'mapLibreEvidenceMap':'map');
+  if(entry.renderer==='maplibre') {
+    assert.equal(ready.adapter.viewport.tagName,'CANVAS');
+    assert.equal(ready.adapter.host.id,'mapLibreEvidenceMap');
+    assert.equal(ready.adapter.viewport.parentElement,ready.adapter.host);
+  } else assert.equal(ready.adapter.viewport.id,'map');
   assert.equal(Boolean(ready.adapter.viewport.closest('[hidden]')),false);
   const frame=window.document.querySelector('iframe'),url=new URL(frame.src);
   assert.equal(url.pathname,'/admin/pretrip');assert.equal(url.searchParams.get('projectId'),api.projectId());

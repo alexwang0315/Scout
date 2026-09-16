@@ -7,6 +7,8 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
+from fastapi_route_inventory import registered_route_paths
+
 from runtime_debug_log import FileRuntimeDebugEventLog
 from runtime_debug_models import RuntimeDebugEvent
 
@@ -27,7 +29,7 @@ class DebugApiMountTests(unittest.TestCase):
 
             self.assertEqual(client.get("/debug/state").status_code, 404)
             self.assertEqual(client.get("/admin/debug").status_code, 404)
-            routes = {route.path for route in server.app.routes}
+            routes = registered_route_paths(server.app)
             self.assertNotIn("/debug/state", routes)
             self.assertNotIn("/admin/debug", routes)
 
@@ -44,8 +46,8 @@ class DebugApiMountTests(unittest.TestCase):
             self.assertTrue(state.json()["debug_boundary"]["read_only"])
             self.assertEqual(page.status_code, 200)
             self.assertIn("Scout Phase 3.5 Runtime Debug", page.text)
-            self.assertIn("/debug/state", {route.path for route in server.app.routes})
-            self.assertIn("/admin/debug", {route.path for route in server.app.routes})
+            self.assertIn("/debug/state", registered_route_paths(server.app))
+            self.assertIn("/admin/debug", registered_route_paths(server.app))
             self.assertEqual(client.post("/debug/events", json={}).status_code, 405)
 
     def test_debug_api_reads_file_backed_log_when_path_is_configured(self):
@@ -95,7 +97,7 @@ class DebugApiMountTests(unittest.TestCase):
             server = self._reload_server()
             self.addCleanup(self._reload_server)
 
-            routes = {route.path for route in server.app.routes}
+            routes = registered_route_paths(server.app)
 
             self.assertIn("/admin", routes)
             self.assertIn("/safety/state", routes)

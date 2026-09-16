@@ -1,3 +1,4 @@
+import hashlib
 import inspect
 import http.client
 import json
@@ -995,6 +996,111 @@ def test_layer_preparation_can_build_overpass_compatible_evidence_from_local_osm
     assert layers_by_id["osm"]["output_refs"]["local_osm_feature_index_ref"] == (
         "outputs/layers/normalized/osm_pbf_feature_index.json"
     )
+
+
+
+@pytest.mark.parametrize("source_kind", ["local_pbf", "overpass"])
+@pytest.mark.parametrize("raw_format", ["utf8_compact", "ascii_crlf"])
+def test_prepared_map_raw_bytes_remain_bound_for_planned_reader(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    source_kind: str,
+    raw_format: str,
+) -> None:
+    from scout_planned_route_sources import find_trail_path, load_map_route_sources
+
+    project_root = _copy_fixture_project(tmp_path)
+    project_path = project_root / "project.json"
+    project = _load(project_path)
+    project.pop("overpass_evidence_ref", None)
+    project_path.write_text(json.dumps(project), encoding="utf-8")
+    main_points = [
+        {"lat": 23.8701, "lon": 121.1701},
+        {"lat": 23.8702, "lon": 121.1702},
+        {"lat": 23.8703, "lon": 121.1703},
+    ]
+    branch_end = {"lat": 23.8712, "lon": 121.1702}
+    raw_payload = {"elements": [
+        {"type": "way", "id": 100, "nodes": [1, 2, 3],
+         "tags": {"highway": "path", "name": "測試主線"},
+         "geometry": main_points},
+        {"type": "way", "id": 101, "nodes": [2, 4],
+         "tags": {"highway": "path", "name": "測試支線"},
+         "geometry": [main_points[1], branch_end]},
+    ]}
+    if raw_format == "utf8_compact":
+        raw_bytes = json.dumps(
+            raw_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        ).encode("utf-8")
+    else:
+        raw_bytes = (json.dumps(raw_payload, ensure_ascii=True, indent=4)
+                     .replace("\n", "\r\n") + "\r\n").encode("utf-8")
+    expected_sha256 = hashlib.sha256(raw_bytes).hexdigest()
+    pbf_path = None
+    if source_kind == "local_pbf":
+        pbf_path = project_root / "sources" / "taiwan.osm.pbf"
+        pbf_path.write_bytes(b"fixture-pbf")
+
+        def fake_extract(**kwargs):
+            extracted = kwargs["raw_payload_path"].with_name("osm_pbf_route_bbox.osm.pbf")
+            extracted.parent.mkdir(parents=True, exist_ok=True)
+            extracted.write_bytes(b"fixture-route-bbox-pbf")
+            return raw_bytes, {
+                "pbf_path": kwargs["pbf_path"].as_posix(),
+                "bbox_wgs84": kwargs["bbox"],
+                "extracted_pbf_path": extracted.as_posix(),
+                "commands": [["osmium", "extract"]],
+                "external_network_calls_made": False,
+            }
+
+        monkeypatch.setattr(pretrip_layer_preparation, "_extract_osm_pbf_raw_payload", fake_extract)
+    else:
+        monkeypatch.setattr(
+            pretrip_layer_preparation, "_fetch_overpass_raw_payload", lambda _request: (raw_bytes, 200)
+        )
+
+    run_layer_preparation(LayerPreparationRequest(
+        project_id="chilai_nanhua_day1",
+        project_root=project_root,
+        layers=("overpass",),
+        network_mode="no-network" if pbf_path else "explicit-fetch",
+        allow_network_fetch=pbf_path is None,
+        osm_pbf_path=pbf_path,
+        osmium_bin="missing-osmium-for-test",
+        prepared_at="2026-06-25T00:00:00+00:00",
+    ))
+    project = _load(project_path)
+    raw_path = project_root / project["overpass_raw_payload_ref"]
+    evidence = _load(project_root / project["overpass_evidence_ref"])
+    normalized = _load(project_root / project["overpass_map_context_ref"])
+    assert evidence["request"]["raw_response_sha256"] == expected_sha256
+    assert all(feature["properties"]["raw_response_sha256"] == expected_sha256
+               for feature in normalized["features"])
+    assert raw_path.read_bytes() == raw_bytes
+    assert hashlib.sha256(raw_path.read_bytes()).hexdigest() == expected_sha256
+
+    catalog = load_map_route_sources(project_root, project)
+    sources = [source for source in catalog["sources"] if source["kind"] == "overpass"]
+    assert len(sources) == 2
+    assert not any(issue["code"].startswith("OVERPASS_") for issue in catalog["issues"])
+    for source in sources:
+        assert source["provenance"]["raw_sha256"] == expected_sha256
+        assert source["provenance"]["source_hashes"][project["overpass_raw_payload_ref"]] == expected_sha256
+        assert source["provenance"]["topology_status"] == "osm_node_ids"
+        assert source["provenance"]["candidate_only"] is True
+        assert source["provenance"]["runtime_safety_truth"] is False
+    route = find_trail_path(sources, main_points[0], main_points[-1], [branch_end])
+    assert route["status"] == "ready"
+    assert [point["osm_node_id"] for point in route["parts"][0]] == [1, 2, 4, 2, 3]
+    assert all(point["time"] is None for point in route["parts"][0])
+    assert route["candidate_only"] is True and route["operational"] is False
+
+    # Even equivalent JSON with changed bytes must not silently rebind provenance.
+    raw_path.write_bytes(raw_bytes + b" ")
+    rejected = load_map_route_sources(project_root, project)
+    assert not any(source["kind"] == "overpass" for source in rejected["sources"])
+    assert any(issue["code"] == "OVERPASS_SOURCE_UNAVAILABLE"
+               and "source hash changed" in issue["message"] for issue in rejected["issues"])
 
 
 def test_local_osm_pbf_cache_metadata_marks_stale_after_ttl(tmp_path: Path) -> None:

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import threading
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -25,6 +26,7 @@ from scout.nextgen.model_runtime import (
     ModelRuntimeTier,
     ScoutModelRuntimeRouter,
 )
+from scout.nextgen.model_loop import OwnedModelLoop, await_model_operation
 from scout.nextgen.model_scheduler import (
     BoundedInferenceScheduler,
     InferenceSchedulerBackpressure,
@@ -236,21 +238,76 @@ class PydanticAIStructuredBackend:
         *,
         runtime_id: str,
         model_id: str,
-        model: Any,
+        model: Any = None,
         default_model_settings: Mapping[str, Any] | None = None,
+        model_factory: Callable[[], Any] | None = None,
+        close_model: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
         from pydantic_ai import Agent, UsageLimits
 
+        if model is not None and model_factory is not None:
+            raise ValueError("provide a resident model or its factory, not both")
         self.runtime_id = runtime_id
         self.model_id = model_id
-        self.resident_model = model
         self._default_model_settings = dict(default_model_settings or {})
         self._agent_type = Agent
         self._usage_limits_type = UsageLimits
         self._agents: dict[type[BaseModel], Any] = {}
         self._agent_lock = threading.Lock()
+        self._close_model = close_model
+        self._model_loop = OwnedModelLoop(
+            name=f"scout-model-owner-{runtime_id}", close_resources=self._close_owned_resources,
+        )
+
+        async def initialize() -> Any:
+            return model_factory() if model_factory is not None else model
+
+        try:
+            self.resident_model = self._model_loop.run(initialize)
+        except BaseException:
+            self._model_loop.close()
+            raise
+
+    async def _close_owned_resources(self) -> None:
+        if self._close_model is not None:
+            await self._close_model()
+        self._agents.clear()
+
+    def close(self) -> None:
+        self._model_loop.close()
+
+    def run_on_model_loop(self, operation: Callable[[], Awaitable[Any]]) -> Any:
+        from pydantic_ai._utils import check_no_nested_sync_run
+
+        check_no_nested_sync_run()
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            pass
+        else:
+            raise RuntimeError("synchronous model execution cannot run inside an active event loop")
+        return self._model_loop.run(operation)
 
     def infer(
+        self,
+        *,
+        request: ModelInferenceRequest,
+        output_type: type[BaseModel],
+        model_request_limit: int,
+        cancellation_event: threading.Event,
+    ) -> BackendInferenceResult:
+        if cancellation_event.is_set():
+            raise BackendInferenceCancelled(
+                "model inference was cancelled before execution", model_request_count=0,
+            )
+        return self.run_on_model_loop(
+            lambda: self._infer_async(
+                request=request, output_type=output_type,
+                model_request_limit=model_request_limit, cancellation_event=cancellation_event,
+            )
+        )
+
+    async def _infer_async(
         self,
         *,
         request: ModelInferenceRequest,
@@ -276,18 +333,28 @@ class PydanticAIStructuredBackend:
                 model_settings["temperature"] = request.temperature
             if request.thinking is not None:
                 model_settings["thinking"] = request.thinking
-            result = agent.run_sync(
-                request.prompt,
-                model_settings=model_settings or None,
-                usage_limits=self._usage_limits_type(
-                    request_limit=model_request_limit,
-                    tool_calls_limit=10,
+            result = await await_model_operation(
+                agent.run(
+                    request.prompt,
+                    model_settings=model_settings or None,
+                    usage_limits=self._usage_limits_type(
+                        request_limit=model_request_limit,
+                        tool_calls_limit=10,
+                    ),
+                    retries=10,
                 ),
-                retries=10,
+                cancellation_event,
             )
             if cancellation_event.is_set():
                 raise RuntimeError("model inference was cancelled during execution")
             output = output_type.model_validate(pydantic_result_output(result))
+        except asyncio.CancelledError as exc:
+            raise BackendInferenceCancelled(
+                "model inference was cancelled during execution",
+                model_request_count=_finish_model_request_scope(
+                    self.resident_model, request_scope, requests_before,
+                ),
+            ) from exc
         except ValidationError:
             _finish_model_request_scope(
                 self.resident_model,
@@ -398,12 +465,23 @@ class ScoutModelGateway:
         self.close()
 
     def close(self) -> None:
-        self._local_scheduler.close()
-        self._cloud_scheduler.close()
+        errors: list[BaseException] = []
+        for scheduler in (self._local_scheduler, self._cloud_scheduler):
+            try:
+                scheduler.close()
+            except BaseException as exc:
+                errors.append(exc)
         for backend in self._backends.values():
             close_backend = getattr(backend, "close", None)
             if callable(close_backend):
-                close_backend()
+                try:
+                    close_backend()
+                except BaseException as exc:
+                    errors.append(exc)
+        if len(errors) == 1:
+            raise errors[0]
+        if errors:
+            raise BaseExceptionGroup("model gateway cleanup failed", errors)
 
     def open_session(
         self,

@@ -1562,6 +1562,27 @@ def _looks_like_place_to_cp_question(question: str) -> bool:
     )
 
 
+def _mentions_checkpoint(question: str) -> bool:
+    return "檢查點" in question or re.search(
+        r"(?<![a-z0-9_])(?:cps?|checkpoints?)(?![a-z0-9_])",
+        question,
+        re.IGNORECASE,
+    ) is not None
+
+
+def _has_compound_shortcut_request(question: str) -> bool:
+    # A one-field shortcut must not consume a second request or comparison.
+    clauses = [part.strip() for part in re.split(r"[?？;；。!！\n]", question)]
+    if sum(bool(part) for part in clauses) > 1:
+        return True
+    return re.search(
+        r"和|與|以及|同時|另外|並且|比較|對比|差別|差異|各|"
+        r"\b(?:and|also|versus|vs\.?|compare|comparison|difference)\b",
+        question,
+        re.IGNORECASE,
+    ) is not None
+
+
 def _looks_like_cp_count_question(question: str) -> bool:
     lowered = question.casefold()
     normalized = re.sub(r"\s+", "", lowered)
@@ -1665,24 +1686,3 @@ def _skill_sources(
         },
     )
     return [skill_source, *sources]
-
-
-def _mentions_checkpoint(question: str) -> bool:
-    return "檢查點" in question or re.search(
-        r"(?<![a-z0-9_])(?:cps?|checkpoints?)(?![a-z0-9_])",
-        question,
-        re.IGNORECASE,
-    ) is not None
-
-
-def _has_compound_shortcut_request(question: str) -> bool:
-    # A one-field shortcut must not consume a second request or comparison.
-    clauses = [part.strip() for part in re.split(r"[?？;；。!！\n]", question)]
-    if sum(bool(part) for part in clauses) > 1:
-        return True
-    return re.search(
-        r"和|與|以及|同時|另外|並且|比較|對比|差別|差異|各|"
-        r"\b(?:and|also|versus|vs\.?|compare|comparison|difference)\b",
-        question,
-        re.IGNORECASE,
-    ) is not None

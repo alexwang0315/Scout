@@ -1087,7 +1087,7 @@ def _maybe_prepare_local_osm_pbf_evidence(request: LayerPreparationRequest) -> N
         pbf_cache_metadata=pbf_cache,
         extraction_plan=extraction_plan,
     )
-    _write_json(project_root / raw_ref, raw_payload)
+    _write_bytes(project_root / raw_ref, raw_bytes)
     _write_json(project_root / normalized_ref, evidence["normalized_geojson"])
     _write_json(project_root / evidence_ref, evidence)
     _write_json(project_root / feature_index_ref, feature_index)

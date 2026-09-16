@@ -1,14 +1,14 @@
 """Read-only Dashboard proxy for the Scout hardware monitor API.
 
-The browser is intentionally kept on the Dashboard origin.  This adapter is
-the only place in the Dashboard process that knows the temporary local Scout
-upstream at 127.0.0.1:9151; it forwards JSON responses, including a stale 503,
-without turning telemetry into a control surface.
+The browser stays on the Dashboard origin. Native Mac backends open a fresh
+SSH stdio channel per GET; they do not require a local 9151 listener. Scout
+backends use their own loopback HTTP API. Neither transport controls hardware.
 """
 
 from __future__ import annotations
 
 import json
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Mapping
@@ -18,6 +18,8 @@ from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_ope
 
 from fastapi import APIRouter, Query
 from fastapi.responses import FileResponse, JSONResponse
+
+from tools.hardware_monitor_ssh import HardwareMonitorSSHError, read_scout_http
 
 HARDWARE_MONITOR_UPSTREAM = "http://127.0.0.1:9151"
 HARDWARE_MONITOR_PROXY_PREFIX = "/admin/dashboard/scout-monitor"
@@ -32,6 +34,38 @@ _ENDPOINTS = frozenset(
 
 class HardwareMonitorUpstreamError(RuntimeError):
     """A typed, non-secret error while reading the fixed Scout upstream."""
+
+    def __init__(self, message: str, *, code: str = "upstream_unavailable"):
+        super().__init__(message)
+        self.code = code
+
+
+def _request_target(endpoint: str, params: Mapping[str, str]) -> str:
+    if endpoint not in _ENDPOINTS:
+        raise HardwareMonitorUpstreamError("hardware monitor endpoint refused")
+    maximum = 1440 if endpoint.endswith("/history") else 200
+    if params:
+        limit = params.get("limit", "")
+        if (endpoint.endswith("/status") or set(params) != {"limit"}
+                or not isinstance(limit, str) or len(limit) > 4 or not limit.isascii()
+                or not limit.isdigit() or not 1 <= int(limit) <= maximum):
+            raise HardwareMonitorUpstreamError("hardware monitor query refused")
+    query = urlencode(dict(params))
+    return endpoint + (f"?{query}" if query else "")
+
+
+def fetch_hardware_monitor_via_ssh(
+    endpoint: str, params: Mapping[str, str],
+) -> tuple[int, Any]:
+    target = _request_target(endpoint, params)
+    try:
+        # History can contain 60 complete inventories; match the UI's larger
+        # history deadline while keeping status/events responsive.
+        timeout = 25.0 if endpoint.endswith("/history") else HARDWARE_MONITOR_TIMEOUT_SECONDS
+        status, body = read_scout_http(target, timeout=timeout)
+        return status, _decode_json(body)
+    except HardwareMonitorSSHError as exc:
+        raise HardwareMonitorUpstreamError("hardware monitor SSH read failed", code=exc.code) from exc
 
 
 class _NoRedirects(HTTPRedirectHandler):
@@ -70,12 +104,7 @@ def fetch_hardware_monitor_json(
 ) -> tuple[int, Any]:
     """GET one allow-listed hardware-monitor endpoint and decode its JSON."""
 
-    if endpoint not in _ENDPOINTS:
-        raise HardwareMonitorUpstreamError("hardware monitor endpoint refused")
-    url = f"{upstream_base_url.rstrip('/')}{endpoint}"
-    query = urlencode(dict(params))
-    if query:
-        url = f"{url}?{query}"
+    url = f"{upstream_base_url.rstrip('/')}{_request_target(endpoint, params)}"
     request = Request(
         url,
         headers={"Accept": "application/json"},
@@ -107,7 +136,10 @@ def _server_time() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def _unavailable_payload(*, kind: str, limit: int | None = None) -> dict[str, Any]:
+def _unavailable_payload(
+    *, kind: str, limit: int | None = None, transport: str = "http",
+    error_code: str = "upstream_unavailable",
+) -> dict[str, Any]:
     meta: dict[str, Any] | None = None
     if limit is not None:
         meta = {
@@ -124,6 +156,12 @@ def _unavailable_payload(*, kind: str, limit: int | None = None) -> dict[str, An
         "status": "unavailable",
         "summary": "無法連線至 Scout 硬體監控 API",
         "read_only": True,
+        "connection": {
+            "transport": transport,
+            "error_code": error_code,
+            "retry_interval_seconds": 60,
+            "local_forward_required": False,
+        },
     }
     if kind == "status":
         payload.update(
@@ -136,7 +174,13 @@ def _unavailable_payload(*, kind: str, limit: int | None = None) -> dict[str, An
                     "stale_after_seconds": 150,
                 },
                 "data": None,
-                "next_steps": ["確認 Scout API 與本機 SSH 轉接是否仍在執行"],
+                "next_steps": [
+                    ("SSH 已連通，但 Scout 的 9151 API 無法連線；請確認 Scout 上的 API 服務。"
+                     if error_code == "scout_api_unavailable" else
+                     "請確認 Mac 可使用既有 scout SSH 設定連線；不需要開啟 Mac 9151。")
+                    if transport == "ssh" else "請確認此後端所在主機可連到 Scout 的 9151 API。",
+                    "頁面每 60 秒自動重試；也可按重新讀取立即重試。只讀取既有採樣，不控制硬體。",
+                ],
             }
         )
     else:
@@ -152,15 +196,16 @@ def create_hardware_monitor_proxy_router(
 ) -> APIRouter:
     """Create fixed GET-only proxy routes under the Dashboard monitor page."""
 
+    transport = "ssh" if sys.platform == "darwin" else "http"
     resolved_fetcher = fetcher
     if resolved_fetcher is None:
-
-        def resolved_fetcher(endpoint: str, params: Mapping[str, str]) -> tuple[int, Any]:
-            return fetch_hardware_monitor_json(
-                endpoint,
-                params,
-                upstream_base_url=upstream_base_url,
-            )
+        if transport == "ssh":
+            if upstream_base_url.rstrip("/") != HARDWARE_MONITOR_UPSTREAM:
+                raise ValueError("Mac hardware monitor SSH destination is fixed")
+            resolved_fetcher = fetch_hardware_monitor_via_ssh
+        else:
+            def resolved_fetcher(endpoint: str, params: Mapping[str, str]) -> tuple[int, Any]:
+                return fetch_hardware_monitor_json(endpoint, params, upstream_base_url=upstream_base_url)
 
     router = APIRouter(prefix=prefix, tags=["hardware-monitor-proxy"])
 
@@ -169,22 +214,25 @@ def create_hardware_monitor_proxy_router(
         return FileResponse(
             Path(__file__).with_name("scout_hardware_monitor.html"),
             media_type="text/html",
+            # A Last-Modified-only response can keep yesterday's monitor UI
+            # cached across backend upgrades, including old retry behaviour.
+            headers={"Cache-Control": "no-store"},
         )
 
     def proxy(endpoint: str, *, kind: str, limit: int | None = None) -> JSONResponse:
         params = {} if limit is None else {"limit": str(limit)}
         try:
             upstream_status, payload = resolved_fetcher(endpoint, params)
-        except HardwareMonitorUpstreamError:
+        except HardwareMonitorUpstreamError as exc:
             return JSONResponse(
                 status_code=503,
-                content=_unavailable_payload(kind=kind, limit=limit),
-                headers={"Cache-Control": "no-store"},
+                content=_unavailable_payload(kind=kind, limit=limit, transport=transport, error_code=exc.code),
+                headers={"Cache-Control": "no-store", "X-Scout-Monitor-Transport": transport},
             )
         return JSONResponse(
             status_code=upstream_status,
             content=payload,
-            headers={"Cache-Control": "no-store"},
+            headers={"Cache-Control": "no-store", "X-Scout-Monitor-Transport": transport},
         )
 
     @router.get("/api/v1/hardware-monitor/status")
@@ -218,4 +266,5 @@ __all__ = [
     "HardwareMonitorUpstreamError",
     "create_hardware_monitor_proxy_router",
     "fetch_hardware_monitor_json",
+    "fetch_hardware_monitor_via_ssh",
 ]

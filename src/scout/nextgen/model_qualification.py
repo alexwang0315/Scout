@@ -535,6 +535,14 @@ def _run_basic_chat_probe(
     config: OpenAICompatibleBackendConfig,
     case: ModelRuntimeQualificationCase,
 ) -> ModelQualificationCheck:
+    return backend.run_on_model_loop(lambda: _run_basic_chat_probe_async(backend, config, case))
+
+
+async def _run_basic_chat_probe_async(
+    backend: OpenAICompatiblePydanticBackend,
+    config: OpenAICompatibleBackendConfig,
+    case: ModelRuntimeQualificationCase,
+) -> ModelQualificationCheck:
     from pydantic_ai import Agent, UsageLimits
 
     started_at = datetime.now(UTC)
@@ -552,7 +560,7 @@ def _run_basic_chat_probe(
             ),
             retries=10,
         )
-        result = agent.run_sync(
+        result = await agent.run(
             f"Return exactly this marker: {_BASIC_CHAT_MARKER}",
             model_settings=config.model_settings(
                 timeout_seconds=case.timeout_seconds,
@@ -715,6 +723,14 @@ def _run_tool_calling_probe(
     config: OpenAICompatibleBackendConfig,
     case: ModelRuntimeQualificationCase,
 ) -> ModelQualificationCheck:
+    return backend.run_on_model_loop(lambda: _run_tool_calling_probe_async(backend, config, case))
+
+
+async def _run_tool_calling_probe_async(
+    backend: OpenAICompatiblePydanticBackend,
+    config: OpenAICompatibleBackendConfig,
+    case: ModelRuntimeQualificationCase,
+) -> ModelQualificationCheck:
     """Prove one model-selected read tool call independently of PraisonAI."""
 
     from pydantic_ai import Agent, UsageLimits
@@ -771,7 +787,7 @@ def _run_tool_calling_probe(
         )
 
     try:
-        result = agent.run_sync(
+        result = await agent.run(
             (
                 "Use the required Scout read tool before returning the fixed "
                 f"marker {TOOL_CALLING_OUTPUT_MARKER}."

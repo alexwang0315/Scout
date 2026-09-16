@@ -7,6 +7,8 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
+from fastapi_route_inventory import registered_route_paths
+
 
 class ServerSafetyObservationAdmissionConfigTests(unittest.TestCase):
     def _reload_server(self):
@@ -83,7 +85,7 @@ class ServerSafetyObservationAdmissionConfigTests(unittest.TestCase):
             client = TestClient(server.app)
 
             self.assertIsNotNone(server.safety_observation_admission_config)
-            route_paths = {route.path for route in server.app.routes}
+            route_paths = registered_route_paths(server.app)
             self.assertIn("/safety/observations", route_paths)
             self.assertNotIn("/runtime/streams/http-push/observations", route_paths)
             self.assertNotIn("/runtime/streams/websocket/observations", route_paths)
@@ -111,7 +113,7 @@ class ServerSafetyObservationAdmissionConfigTests(unittest.TestCase):
             self.addCleanup(self._reload_server)
 
         self.assertIsNotNone(server.safety_observation_admission_config)
-        route_paths = {route.path for route in server.app.routes}
+        route_paths = registered_route_paths(server.app)
         self.assertIn("/runtime/streams/http-push/observations", route_paths)
         self.assertIn("/runtime/streams/websocket/observations", route_paths)
 
@@ -132,7 +134,7 @@ class ServerSafetyObservationAdmissionConfigTests(unittest.TestCase):
         self.assertIsNone(server.safety_observation_admission_config)
         self.assertIsNotNone(server.safety_observation_admission_config_error)
         self.assertIsNone(server.safety_runtime_session)
-        route_paths = {route.path for route in server.app.routes}
+        route_paths = registered_route_paths(server.app)
         self.assertNotIn("/safety/observations", route_paths)
         self.assertNotIn("/runtime/streams/http-push/observations", route_paths)
         self.assertNotIn("/runtime/streams/websocket/observations", route_paths)

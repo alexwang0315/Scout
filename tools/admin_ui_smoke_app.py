@@ -14,7 +14,7 @@ if str(ROOT) not in sys.path:
 from admin_api import create_admin_router
 from assistant_api import create_assistant_router
 from assistant_context import create_assistant_context_resolver
-from debug_api import create_debug_page_router, create_debug_router
+from debug_api import create_debug_router
 from debug_event_provenance import DebugEventIngestionChannel
 from hardware_readiness_api import create_hardware_readiness_router
 from mock_outbound_transport import MockOutboundTransport
@@ -46,8 +46,7 @@ def create_smoke_app() -> FastAPI:
             message_source=transport,
         )
     )
-    app.include_router(create_debug_page_router())
-    app.include_router(create_hardware_readiness_router())
+    app.include_router(create_hardware_readiness_router(include_assistant_ui_script=False))
     app.include_router(
         create_assistant_router(
             context_resolver=create_assistant_context_resolver(debug_event_log=debug_log),

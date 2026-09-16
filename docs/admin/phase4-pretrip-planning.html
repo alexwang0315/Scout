@@ -2757,6 +2757,7 @@
             state.mapLibrePendingRenderers.add(renderer);
           },
           timeoutMs: 20000,
+          scrollZoom: MAP_WHEEL_ZOOM_ENABLED,
           rasterLayers: pretripMapLibreRasterLayers(state.view),
           onFeatureSelect: selectPretripMapLibreFeature,
           onFeatureHover: hoverPretripMapLibreFeature,
@@ -2869,8 +2870,21 @@
       }
       return activatePretripMapLibreRenderer(loaded.maplibregl, state.view);
     }
+    function pretripCameraMotion() {
+      const map = state.mapLibreRenderer?.map;
+      const unknown = {observedAt: Date.now(), basis: "maplibre-public-api", available: false, moving: null, easing: null};
+      if (typeof map?.isMoving !== "function") return unknown;
+      try {
+        // Map.isMoving is public in 6.2 and includes camera and handler motion.
+        // Camera.isEasing is not exposed by Map; do not fabricate an easing value.
+        const moving = map.isMoving(), easing = typeof map.isEasing === "function" ? map.isEasing() : null;
+        return typeof moving === "boolean" && (easing === null || typeof easing === "boolean")
+          ? {...unknown, available: true, moving, easing} : unknown;
+      } catch (error) { return {...unknown, errorName: error?.name || "Error"}; }
+    }
     window.scoutPretripMapRendererBridge = Object.freeze({
       dispose: disposePretripMapRenderer,
+      getCameraMotion: pretripCameraMotion,
       getViewLimits() {
         const renderer = state.mapLibreRenderer;
         return renderer ? {viewZoom: renderer.map?.getZoom?.(), maxViewZoom: renderer.map?.getMaxZoom?.(),
@@ -5293,7 +5307,7 @@
       const mapHasFocus = document.activeElement === svg
         || svg.contains(document.activeElement)
         || mapLibreHost?.contains(document.activeElement);
-      if (!state.mapKeyboardActive && !mapHasFocus) return;
+      if (!mapHasFocus) return;
       if (delta) panActiveMap(delta[0], delta[1]);
       else if (event.key === "+" || event.key === "=") zoomActiveMap(1);
       else if (event.key === "-") zoomActiveMap(-1);
@@ -5640,7 +5654,10 @@
       svg.querySelectorAll(".map-highlight").forEach(node => node.classList.remove("map-highlight"));
       const targets = mapTargetsFor(item);
       targets.forEach(node => node.classList.add("map-highlight"));
-      targets.slice(0, 4).forEach(node => node.parentNode && node.parentNode.appendChild(node));
+      targets.slice(0, 4).forEach(node => {
+        // Reparenting focused SVG evidence blurs it during its own focus handler.
+        if (node.parentNode && !node.contains(document.activeElement)) node.parentNode.appendChild(node);
+      });
     }
     function mapTargetsFor(item) {
       const ids = new Set(evidenceIdsForFocus(item));

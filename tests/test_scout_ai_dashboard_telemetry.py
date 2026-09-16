@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import closing
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
@@ -179,7 +180,7 @@ def test_completed_job_projects_bounded_candidate_only_telemetry(
     store_path = tmp_path / "jobs.sqlite3"
     request, response, job_id = _persist_completed_job(store_path)
     before = store_path.stat()
-    with sqlite3.connect(store_path) as connection:
+    with closing(sqlite3.connect(store_path)) as connection, connection:
         before_schema = tuple(
             connection.execute(
                 "SELECT type, name, sql FROM sqlite_master ORDER BY type, name"
@@ -234,7 +235,7 @@ def test_completed_job_projects_bounded_candidate_only_telemetry(
     assert job.question_hash in serialized
     assert before.st_size == after.st_size
     assert before.st_mtime_ns == after.st_mtime_ns
-    with sqlite3.connect(store_path) as connection:
+    with closing(sqlite3.connect(store_path)) as connection, connection:
         after_schema = tuple(
             connection.execute(
                 "SELECT type, name, sql FROM sqlite_master ORDER BY type, name"
@@ -255,7 +256,7 @@ def test_completed_job_projects_bounded_candidate_only_telemetry(
 def test_corrupt_job_fails_closed_without_partial_projection(tmp_path: Path) -> None:
     store_path = tmp_path / "corrupt.sqlite3"
     _persist_completed_job(store_path)
-    with sqlite3.connect(store_path) as connection:
+    with closing(sqlite3.connect(store_path)) as connection, connection:
         connection.execute(
             "UPDATE background_intelligence_jobs SET response_json = ?",
             (json.dumps({"runtime_safety_truth": True}),),
@@ -276,7 +277,7 @@ def test_cross_bound_response_is_degraded_and_never_silently_reused(
 ) -> None:
     store_path = tmp_path / "stale.sqlite3"
     _persist_completed_job(store_path)
-    with sqlite3.connect(store_path) as connection:
+    with closing(sqlite3.connect(store_path)) as connection, connection:
         response_json = json.loads(
             connection.execute(
                 "SELECT response_json FROM background_intelligence_jobs"

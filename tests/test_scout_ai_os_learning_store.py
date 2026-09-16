@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.scout_database_fixtures import owned_test_databases  # noqa: F401
+
 import json
 from pathlib import Path
 
@@ -13,6 +15,9 @@ from scout.services import (
     initialize_database,
     open_database,
 )
+
+
+pytestmark = pytest.mark.usefixtures("owned_test_databases")
 
 
 def make_learning_store(tmp_path: Path) -> LearningStore:

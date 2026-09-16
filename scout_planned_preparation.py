@@ -350,22 +350,23 @@ def _sample_dem(path: Path, points: list[dict]) -> dict:
         import rasterio
     except ImportError:
         from osgeo import gdal, osr
-        dataset = gdal.Open(str(path), gdal.GA_ReadOnly)
-        if dataset is None:
-            raise PlannedPreparationError("Prepared DEM is unreadable")
-        crs = osr.SpatialReference(wkt=dataset.GetProjection())
-        if crs.GetAuthorityCode(None) != "3826":
-            raise PlannedPreparationError("Prepared DEM CRS is not verified EPSG:3826")
-        transform = dataset.GetGeoTransform()
-        if transform[2] or transform[4] or transform[1] <= 0 or transform[5] >= 0:
-            raise PlannedPreparationError("Prepared DEM uses an unsupported native grid")
-        band, values = dataset.GetRasterBand(1), []
-        nodata = band.GetNoDataValue()
-        for x, y in projected:
-            column, row = math.floor((x-transform[0])/transform[1]), math.floor((y-transform[3])/transform[5])
-            value = float(band.ReadAsArray(column, row, 1, 1)[0, 0]) if 0 <= column < dataset.RasterXSize and 0 <= row < dataset.RasterYSize else math.nan
-            values.append(value if math.isfinite(value) and value != nodata else None)
-        resolution = [abs(transform[1]), abs(transform[5])]
+        with gdal.ExceptionMgr(useExceptions=False), osr.ExceptionMgr(useExceptions=False):
+            dataset = gdal.Open(str(path), gdal.GA_ReadOnly)
+            if dataset is None:
+                raise PlannedPreparationError("Prepared DEM is unreadable")
+            crs = osr.SpatialReference(wkt=dataset.GetProjection())
+            if crs.GetAuthorityCode(None) != "3826":
+                raise PlannedPreparationError("Prepared DEM CRS is not verified EPSG:3826")
+            transform = dataset.GetGeoTransform()
+            if transform[2] or transform[4] or transform[1] <= 0 or transform[5] >= 0:
+                raise PlannedPreparationError("Prepared DEM uses an unsupported native grid")
+            band, values = dataset.GetRasterBand(1), []
+            nodata = band.GetNoDataValue()
+            for x, y in projected:
+                column, row = math.floor((x-transform[0])/transform[1]), math.floor((y-transform[3])/transform[5])
+                value = float(band.ReadAsArray(column, row, 1, 1)[0, 0]) if 0 <= column < dataset.RasterXSize and 0 <= row < dataset.RasterYSize else math.nan
+                values.append(value if math.isfinite(value) and value != nodata else None)
+            resolution = [abs(transform[1]), abs(transform[5])]
     else:
         import numpy as np
         with rasterio.open(path) as dataset:

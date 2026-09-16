@@ -5,6 +5,8 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
+from fastapi_route_inventory import registered_route_methods
+
 from incident_store import IncidentStore
 from route_matching import load_gpx_route
 from safety_models import IncidentPackage, SafetyEvent, SafetyEventType, SafetyLevel
@@ -161,11 +163,7 @@ class ScoutPiRuntimeTests(unittest.TestCase):
             )
             client = TestClient(app)
 
-            route_methods = {
-                route.path: sorted(route.methods or [])
-                for route in app.routes
-                if route.path.startswith("/runtime/streams")
-            }
+            route_methods = registered_route_methods(app, prefix="/runtime/streams")
             response = client.get("/runtime/streams/status-read-only")
             blocked_post = client.post("/runtime/streams/status-read-only", json={})
 

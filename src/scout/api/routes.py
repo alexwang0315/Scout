@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 from contextlib import asynccontextmanager
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -84,6 +85,7 @@ class CapabilityBuildInput(BaseModel):
 
 @dataclass
 class ScoutApiServices:
+    _database_connection: sqlite3.Connection = field(repr=False)
     workflow_store: WorkflowStore
     capability_registry: CapabilityRegistry
     memory_store: MemoryStore
@@ -99,6 +101,14 @@ class ScoutApiServices:
     execution_planner: ExecutionPlannerAgent
     code_builder: CodeBuilderAgent
     learner: LearningAgent
+
+    async def aclose(self) -> None:
+        """Stop scheduled work before releasing the shared store connection."""
+        try:
+            if self.background_scheduler is not None:
+                await self.background_scheduler.stop()
+        finally:
+            self._database_connection.close()
 
     def deps(self, user_id: str, active_context: dict[str, Any] | None = None) -> ScoutDeps:
         return ScoutDeps(
@@ -125,55 +135,60 @@ def create_services(
 ) -> ScoutApiServices:
     project_root = root or Path.cwd()
     connection = open_database(database_path)
-    workflow_store = WorkflowStore(connection)
-    capability_registry = CapabilityRegistry(connection)
-    builtins_path = project_root / "src/scout/capabilities/builtins"
-    if builtins_path.exists():
-        capability_registry.load_builtins(builtins_path)
-    memory_store = MemoryStore(connection)
-    learning_store = LearningStore(
-        connection,
-        memory_store,
-        eval_jsonl_path=eval_jsonl_path,
-    )
-    permission_gate = PermissionGate()
-    notification_gateway = NotificationGateway(workflow_store)
-    sandbox = SandboxRunner()
-    docs_search = DocsSearch(project_root / "docs")
-    action_executor = ActionExecutor(notification_gateway, capability_registry)
-    runtime_executor = RuntimeExecutor(
-        workflow_store,
-        permission_gate,
-        action_executor,
-    )
-    scheduler = Scheduler(runtime_executor)
-    background_scheduler = (
-        BackgroundScheduler(
-            scheduler,
-            interval_seconds=background_scheduler_interval_seconds,
+    try:
+        workflow_store = WorkflowStore(connection)
+        capability_registry = CapabilityRegistry(connection)
+        builtins_path = project_root / "src/scout/capabilities/builtins"
+        if builtins_path.exists():
+            capability_registry.load_builtins(builtins_path)
+        memory_store = MemoryStore(connection)
+        learning_store = LearningStore(
+            connection,
+            memory_store,
+            eval_jsonl_path=eval_jsonl_path,
         )
-        if enable_background_scheduler
-        else None
-    )
-    application_router = ApplicationRouter(permission_gate)
-    agent_provider = provider or DeterministicScoutAgentProvider()
-    return ScoutApiServices(
-        workflow_store=workflow_store,
-        capability_registry=capability_registry,
-        memory_store=memory_store,
-        learning_store=learning_store,
-        permission_gate=permission_gate,
-        notification_gateway=notification_gateway,
-        sandbox=sandbox,
-        docs_search=docs_search,
-        scheduler=scheduler,
-        background_scheduler=background_scheduler,
-        application_router=application_router,
-        workflow_compiler=WorkflowCompilerAgent(agent_provider),
-        execution_planner=ExecutionPlannerAgent(agent_provider),
-        code_builder=CodeBuilderAgent(agent_provider),
-        learner=LearningAgent(agent_provider),
-    )
+        permission_gate = PermissionGate()
+        notification_gateway = NotificationGateway(workflow_store)
+        sandbox = SandboxRunner()
+        docs_search = DocsSearch(project_root / "docs")
+        action_executor = ActionExecutor(notification_gateway, capability_registry)
+        runtime_executor = RuntimeExecutor(
+            workflow_store,
+            permission_gate,
+            action_executor,
+        )
+        scheduler = Scheduler(runtime_executor)
+        background_scheduler = (
+            BackgroundScheduler(
+                scheduler,
+                interval_seconds=background_scheduler_interval_seconds,
+            )
+            if enable_background_scheduler
+            else None
+        )
+        application_router = ApplicationRouter(permission_gate)
+        agent_provider = provider or DeterministicScoutAgentProvider()
+        return ScoutApiServices(
+            _database_connection=connection,
+            workflow_store=workflow_store,
+            capability_registry=capability_registry,
+            memory_store=memory_store,
+            learning_store=learning_store,
+            permission_gate=permission_gate,
+            notification_gateway=notification_gateway,
+            sandbox=sandbox,
+            docs_search=docs_search,
+            scheduler=scheduler,
+            background_scheduler=background_scheduler,
+            application_router=application_router,
+            workflow_compiler=WorkflowCompilerAgent(agent_provider),
+            execution_planner=ExecutionPlannerAgent(agent_provider),
+            code_builder=CodeBuilderAgent(agent_provider),
+            learner=LearningAgent(agent_provider),
+        )
+    except BaseException:
+        connection.close()
+        raise
 
 
 def create_router(services: ScoutApiServices) -> APIRouter:
@@ -533,18 +548,21 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
-        if services.background_scheduler is not None:
-            await services.background_scheduler.start()
         try:
+            if services.background_scheduler is not None:
+                await services.background_scheduler.start()
             yield
         finally:
-            if services.background_scheduler is not None:
-                await services.background_scheduler.stop()
+            await services.aclose()
 
-    app = FastAPI(title="Scout AI OS", version="0.1.0", lifespan=lifespan)
-    app.state.scout_services = services
-    app.include_router(create_router(services))
-    return app
+    try:
+        app = FastAPI(title="Scout AI OS", version="0.1.0", lifespan=lifespan)
+        app.state.scout_services = services
+        app.include_router(create_router(services))
+        return app
+    except BaseException:
+        services._database_connection.close()
+        raise
 
 
 def _env_flag(name: str) -> bool:

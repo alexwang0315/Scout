@@ -1,5 +1,8 @@
 from importlib.metadata import version
 
+import pytest
+from scout.agents.pydantic_model_lifecycle import pydantic_model_session
+
 from pydantic_ai_runtime_compat import (
     build_chat_model,
     normalize_chat_model_name,
@@ -29,6 +32,16 @@ from scout.agents.pydantic_ai_compat import (
     pydantic_usage_limits_from_budget as packaged_usage_limits_from_budget,
 )
 from scout.schemas.agent_runtime import AgentRunBudget
+
+
+
+
+@pytest.fixture(autouse=True)
+def owned_model_session():
+    # These tests directly call the synchronous SDK-facing internals.
+    # Supply and close the same owned session used by the public worker.
+    with pydantic_model_session():
+        yield
 
 
 def test_pydantic_ai_runtime_version_supports_slim_install() -> None:
