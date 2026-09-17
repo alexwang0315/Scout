@@ -282,7 +282,7 @@ def test_pipeline_accepts_hash_bound_scout_ai_cloud_review(
                 ],
                 "reviewer": "scout-ai-cloud",
                 "provider": "openrouter",
-                "model": "deepseek/deepseek-v3.2",
+                "model": "deepseek/deepseek-v4-flash-0731",
                 "verdict": "PASS",
                 "summary": "內容可供隊伍依序閱讀，未把候選資料寫成安全真值。",
                 "findings": [],
@@ -305,7 +305,7 @@ def test_pipeline_accepts_hash_bound_scout_ai_cloud_review(
     assert completed["status"] == "completed"
     assert semantic["reviewer"] == "scout-ai-cloud"
     assert semantic["provider"] == "openrouter"
-    assert semantic["model"] == "deepseek/deepseek-v3.2"
+    assert semantic["model"] == "deepseek/deepseek-v4-flash-0731"
 
 
 def test_scout_ai_skill_sequence_reviews_exact_packet_and_resumes_pipeline(
@@ -332,7 +332,7 @@ def test_scout_ai_skill_sequence_reviews_exact_packet_and_resumes_pipeline(
                 "active_profile": "cloud",
                 "cloud_model": {
                     "profile": "cloud",
-                    "model_name": "deepseek/deepseek-v3.2",
+                    "model_name": "deepseek/deepseek-v4-flash-0731",
                     "base_url": "https://openrouter.ai/api/v1",
                     "backend": "openai_compatible",
                     "token_env_var": "OPENROUTER_API_KEY",
@@ -370,6 +370,7 @@ def test_scout_ai_skill_sequence_reviews_exact_packet_and_resumes_pipeline(
         "content_review"
     ]["review_packet_sha256"]
     assert semantic["reviewer"] == "scout-ai-cloud"
+    assert semantic["native_research"] == {}
 
 
 def test_pipeline_detects_previous_route_contamination_before_semantic_review(

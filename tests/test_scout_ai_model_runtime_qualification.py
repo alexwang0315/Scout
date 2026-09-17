@@ -26,6 +26,7 @@ from scout.nextgen.intelligence_mcp import (
 from scout.nextgen.model_qualification import (
     ModelQualificationDisposition,
     ModelQualificationStatus,
+    ModelRuntimeQualificationCase,
     ModelRuntimeQualificationReport,
     TOOL_CALLING_EVIDENCE_REF,
     TOOL_CALLING_OUTPUT_MARKER,
@@ -35,12 +36,14 @@ from scout.nextgen.model_qualification import (
     qualification_report_hash,
     run_openai_compatible_qualification,
 )
+from scout.nextgen.model_qualification import _build_intelligence_request
 from scout.nextgen.model_runtime import (
     ModelCapabilityAttestation,
     ModelRuntimeCapability,
 )
 from scout.nextgen.openai_compatible_backend import OpenAICompatibleBackendConfig
 from scout.nextgen.praison_service import (
+    EvidenceCatalog,
     SPECIALIST_INPUT_MARKER,
     SpecialistModelInput,
     replay_specialist_report,
@@ -51,8 +54,38 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 FIXTURES = Path(__file__).parent / "fixtures" / "nextgen"
 CASE_PATH = FIXTURES / "model_runtime_qualification_case.json"
+CLOUD_CASE_PATH = FIXTURES / "model_runtime_qualification_case.cloud.json"
 EVIDENCE_PATH = FIXTURES / "model_runtime_qualification_evidence.json"
 PRAISON_AVAILABLE = importlib.util.find_spec("praisonaiagents") is not None
+CLI_PROCESS_TIMEOUT_SECONDS = 90
+
+
+def test_cloud_qualification_propagates_explicit_privacy_and_escalation() -> None:
+    case = ModelRuntimeQualificationCase.from_json_file(CLOUD_CASE_PATH)
+    catalog = EvidenceCatalog.from_json_file(EVIDENCE_PATH)
+
+    request = _build_intelligence_request(
+        case,
+        catalog,
+        allow_cloud_escalation=True,
+    )
+
+    assert request.privacy_sensitive is False
+    assert request.allow_cloud_escalation is True
+
+
+def test_intelligence_qualification_defaults_to_private_local_execution() -> None:
+    case = ModelRuntimeQualificationCase.from_json_file(CASE_PATH)
+    catalog = EvidenceCatalog.from_json_file(EVIDENCE_PATH)
+
+    request = _build_intelligence_request(
+        case,
+        catalog,
+        allow_cloud_escalation=False,
+    )
+
+    assert request.privacy_sensitive is True
+    assert request.allow_cloud_escalation is False
 
 
 class _ServerState:
@@ -314,6 +347,11 @@ def test_independent_tool_calling_qualification_executes_one_read_only_tool(
     assert tool_check.model_request_count == 2
     assert checks["praison_mcp"].status is ModelQualificationStatus.NOT_RUN
     assert len(state.requests) == 4
+    typed_prompt = state.requests[1]["messages"][-1]["content"]
+    assert (
+        '{"marker":"SCOUT_TYPED_OUTPUT_OK","candidate_only":true,'
+        '"runtime_safety_truth":false}'
+    ) in typed_prompt
     assert TOOL_CALLING_PROBE_NAME in {
         tool["function"]["name"]
         for tool in state.requests[2]["tools"]
@@ -398,7 +436,7 @@ def test_qualification_cli_can_stop_after_independent_tool_calling(
             check=False,
             capture_output=True,
             text=True,
-            timeout=30,
+                timeout=CLI_PROCESS_TIMEOUT_SECONDS,
         )
 
     assert completed.returncode == 5
@@ -443,6 +481,33 @@ def test_independent_tool_calling_qualification_rejects_marker_without_tool(
 
 
 @pytest.mark.skipif(not PRAISON_AVAILABLE, reason="optional PraisonAI is unavailable")
+def test_diagnostic_can_run_praison_after_tool_calling_failure(
+    tmp_path: Path,
+) -> None:
+    with _qualification_server(tool_calling_supported=False) as (base_url, state):
+        report = run_openai_compatible_qualification(
+            runtime_config_path=_runtime_config(tmp_path, base_url),
+            case_path=CASE_PATH,
+            evidence_catalog_path=EVIDENCE_PATH,
+            python_executable=sys.executable,
+            pythonpath=str(SRC),
+            continue_after_tool_failure=True,
+        )
+
+    checks = _checks(report)
+    assert report.disposition is ModelQualificationDisposition.FAILED
+    assert checks["tool_calling"].status is ModelQualificationStatus.FAILED
+    assert checks["praison_mcp"].status is ModelQualificationStatus.PASSED
+    assert checks["authority_boundary"].status is ModelQualificationStatus.PASSED
+    assert report.intelligence_execution is not None
+    assert report.intelligence_execution.response.candidate_only is True
+    assert report.intelligence_execution.response.runtime_safety_truth is False
+    assert len(state.requests) == 4
+    with pytest.raises(ValueError, match="not independently qualified"):
+        build_model_capability_attestation(report)
+
+
+@pytest.mark.skipif(not PRAISON_AVAILABLE, reason="optional PraisonAI is unavailable")
 def test_live_qualification_runs_basic_typed_and_praison_mcp_checks(
     tmp_path: Path,
 ) -> None:
@@ -461,6 +526,12 @@ def test_live_qualification_runs_basic_typed_and_praison_mcp_checks(
     assert checks["typed_output"].status is ModelQualificationStatus.PASSED
     assert checks["tool_calling"].status is ModelQualificationStatus.PASSED
     assert checks["praison_mcp"].status is ModelQualificationStatus.PASSED
+    assert checks["praison_mcp"].tool_call_count == 3
+    assert set(checks["praison_mcp"].tools_called) == {
+        "route.read",
+        "dem.read",
+        "qgis.processing.slope",
+    }
     assert checks["authority_boundary"].status is ModelQualificationStatus.PASSED
     assert len(state.requests) == 5
     assert state.requests[0].get("tools") is None
@@ -617,7 +688,7 @@ def test_qualification_cli_writes_unavailable_report(tmp_path: Path) -> None:
         check=False,
         capture_output=True,
         text=True,
-        timeout=20,
+        timeout=CLI_PROCESS_TIMEOUT_SECONDS,
     )
 
     assert completed.returncode == 3

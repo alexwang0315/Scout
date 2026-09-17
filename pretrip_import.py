@@ -31,6 +31,7 @@ from pretrip_gpx_corpus import (
     build_reference_track_display_geometry,
     build_reference_track_summary,
     build_segment_display_geometry,
+    gpx_provenance_role,
     write_json,
 )
 from pretrip_gpx_filter import (
@@ -56,6 +57,7 @@ from pretrip_mcp_synthesis import (
 from pretrip_models import (
     CandidateReviewState,
     DtmCoverageSummary,
+    DtmRasterSource,
     PreTripArtifactKind,
     PreTripCheckpointCandidate,
     PreTripPackage,
@@ -361,12 +363,28 @@ class PretripImportRequest:
     material_root: Path | None = None
     dtm_dirs: tuple[Path, ...] = ()
     mcp_named_point_evidence: Path | None = None
+    dtm_raster_sources: tuple[DtmRasterSource, ...] = ()
+    resolve_default_material_root: bool = True
     checkpoint_naming_source_root: Path | None = None
     trusted_checkpoint_name_sha256s: tuple[str, ...] = ()
 
 
+class PretripPreparationInputError(ValueError):
+    """A declared raw preparation source cannot be replayed as requested."""
+
+    def __init__(self, *, field: str, path: Path | str, code: str = "PREPARATION_SOURCE_MISSING") -> None:
+        self.code = code
+        self.field = field
+        self.path = str(path)
+        super().__init__(f"{code}: {field}: {path}")
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"code": self.code, "field": self.field, "path": self.path}
+
+
 def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
     _validate_request(request)
+    preparation_inputs = _preparation_source_inputs(request)
     project_root = request.workspace_root.expanduser() / request.project_id
     previous_checkpoints, previous_reviews = load_previous_naming(
         request.checkpoint_naming_source_root or request.template_project_root or project_root
@@ -385,6 +403,7 @@ def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
         project_id=request.project_id,
         primary_gpx=primary_gpx,
         reference_paths=reference_paths,
+        preparation_inputs=preparation_inputs,
     )
     primary_artifact_id = f"artifact.gpx.{request.project_id}"
     package_id = f"pretrip.{request.project_id}.v0"
@@ -477,6 +496,7 @@ def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
             method="pretrip_import.run_pretrip_import",
             metadata={
                 "role": _golden_route_role(request),
+                "gpx_provenance_role": _gpx_planning_role(primary_gpx),
                 "imported_at": import_timestamp,
                 "import_stage": request.import_stage,
                 "actual_user_track_available": request.import_stage == "post_analysis",
@@ -498,7 +518,9 @@ def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
                 media_type="application/gpx+xml",
                 method="pretrip_import.run_pretrip_import",
                 metadata={
-                    "role": "reference_track",
+                    "role": "planned_gpx_reference" if _gpx_planning_role(reference_path) == "planned" else "reference_track",
+                    "gpx_provenance_role": _gpx_planning_role(reference_path),
+                    "actual_user_track_available": False,
                     "imported_at": import_timestamp,
                     "gpx_speed_filter": _gpx_filter_source_summary(
                         gpx_filter_report["references"][index - 1],
@@ -590,6 +612,22 @@ def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
         project_root=project_root,
         package=package,
     )
+    checkpoint_naming_metadata = _checkpoint_naming_metadata(
+        checkpoint_naming,
+        report_ref=CHECKPOINT_NAMING_REPORT_REF,
+    )
+    checkpoint_naming_validation = _validate_checkpoint_naming_preparation(
+        checkpoint_candidates=checkpoint_candidates,
+        segment_candidates=segment_candidates,
+        checkpoint_naming=checkpoint_naming,
+        segment_dtm_coverage=segment_dtm_coverage,
+    )
+    source_inbox_manifest["checkpoint_naming"] = checkpoint_naming_metadata
+    source_inbox_manifest["checkpoint_naming_validation"] = checkpoint_naming_validation
+    source_inbox_manifest.setdefault("preparation_inputs", {})[
+        "checkpoint_naming"
+    ] = checkpoint_naming_metadata
+    write_json(project_root / "inbox" / "source_manifest.json", source_inbox_manifest)
     retreat_routes = _build_default_retreat_routes(
         request=request,
         route_summary=route_summary.model_dump(mode="json"),
@@ -736,6 +774,8 @@ def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
         source_inbox_manifest=source_inbox_manifest,
         historical_gpx_source_index=historical_gpx_source_index,
         gpx_speed_filter=gpx_filter_report,
+        checkpoint_naming_metadata=checkpoint_naming_metadata,
+        checkpoint_naming_validation=checkpoint_naming_validation,
     )
     _attach_mcp_import_manifest(manifest, mcp_import_summary)
     admin_projection = _build_admin_projection(
@@ -916,6 +956,8 @@ def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
             else None
         ),
         mcp_import_summary=mcp_import_summary,
+        checkpoint_naming_metadata=checkpoint_naming_metadata,
+        checkpoint_naming_validation=checkpoint_naming_validation,
     )
     write_json(project_root / "project.json", project_payload)
     brain_seed = _rebuild_brain_seed_if_possible(
@@ -1084,12 +1126,14 @@ def _validate_request(request: PretripImportRequest) -> None:
     primary = request.primary_gpx.expanduser()
     if not primary.exists():
         raise FileNotFoundError(f"golden route GPX not found: {primary}")
+    if request.import_stage == "post_analysis" and _gpx_planning_role(primary) == "planned":
+        raise ValueError("planned_gpx_is_not_recorded: import this GPX as a planning candidate, not a completed activity")
     if request.reference_dir is not None and not request.reference_dir.expanduser().exists():
         raise FileNotFoundError(f"reference directory not found: {request.reference_dir}")
     if request.template_project_root is not None and not request.template_project_root.expanduser().exists():
         raise FileNotFoundError(f"template project root not found: {request.template_project_root}")
-    if request.material_root is not None and not request.material_root.expanduser().exists():
-        raise FileNotFoundError(f"material root not found: {request.material_root}")
+    if request.material_root is not None and not request.material_root.expanduser().is_dir():
+        raise PretripPreparationInputError(field="material_root", path=request.material_root)
     if (
         request.mcp_named_point_evidence is not None
         and not request.mcp_named_point_evidence.expanduser().exists()
@@ -1098,8 +1142,8 @@ def _validate_request(request: PretripImportRequest) -> None:
             f"MCP named-point evidence not found: {request.mcp_named_point_evidence}"
         )
     for dtm_dir in request.dtm_dirs:
-        if not dtm_dir.expanduser().exists():
-            raise FileNotFoundError(f"DTM directory not found: {dtm_dir}")
+        if not dtm_dir.expanduser().is_dir():
+            raise PretripPreparationInputError(field="dtm_dirs", path=dtm_dir)
 
 
 def _prepare_project_root(
@@ -1138,6 +1182,7 @@ def _stage_source_inbox(
     project_id: str,
     primary_gpx: Path,
     reference_paths: list[Path],
+    preparation_inputs: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     inbox_root = project_root / "inbox"
     gpx_root = inbox_root / "gpx"
@@ -1154,9 +1199,11 @@ def _stage_source_inbox(
         if path.resolve() != destination.resolve():
             shutil.copy2(path, destination)
         stat = destination.stat()
+        source_provenance = _gpx_planning_role(path)
         sources.append(
             {
-                "role": role,
+                "role": "planned_gpx_reference" if source_provenance == "planned" else role,
+                "gpx_provenance_role": source_provenance,
                 "original_path": path.resolve().as_posix(),
                 "workspace_ref": destination.relative_to(project_root).as_posix(),
                 "sha256": sha256_file(destination),
@@ -1174,6 +1221,7 @@ def _stage_source_inbox(
         "source_file_count": len(sources),
         "raw_payloads_embedded": False,
         "sources": sources,
+        "preparation_inputs": preparation_inputs or {},
         "boundary": {
             "pretrip_candidate_evidence_only": True,
             "runtime_safety_truth": False,
@@ -1207,6 +1255,7 @@ def _build_historical_gpx_source_index(
                 "source_id": source_id,
                 "route_role": route_role,
                 "role": role,
+                "gpx_provenance_role": source.get("gpx_provenance_role", "reference_observation"),
                 "original_path": original_path,
                 "original_filename": Path(original_path).name,
                 "workspace_ref": source["workspace_ref"],
@@ -1288,6 +1337,11 @@ def _prepare_speed_filtered_gpx(
 def _gpx_filter_manifest_payload(gpx_filter: dict[str, Any]) -> dict[str, Any]:
     primary = gpx_filter["primary"]["report"].to_dict()
     references = [item["report"].to_dict() for item in gpx_filter["references"]]
+    for source, report in zip([gpx_filter["primary"], *gpx_filter["references"]], [primary, *references]):
+        report["gpx_provenance_role"] = _gpx_planning_role(source["original_path"])
+        report["filtered_gpx_provenance_role"] = _gpx_planning_role(source["filtered_path"])
+        if report["gpx_provenance_role"] != report["filtered_gpx_provenance_role"]:
+            raise ValueError("gpx_filter_provenance_changed: filtering must preserve Planned source metadata")
     source_reports = [primary, *references]
     return {
         "artifact_kind": "pretrip_gpx_speed_filter_report",
@@ -1330,12 +1384,22 @@ def _safe_file_stem(path: Path) -> str:
             allowed.append(character)
         else:
             allowed.append("_")
-    return "".join(allowed).strip("_") or "route"
+    stem = "".join(allowed).strip("_") or "route"
+    # Both inbox and normalized names use this stem. Reserve the longest
+    # generated wrapper so the complete filename fits a 255-byte filesystem.
+    max_bytes = 255 - len("reference_000.") - len(".speed_filtered.gpx")
+    encoded = stem.encode("utf-8")
+    if len(encoded) <= max_bytes:
+        return stem
+    digest = hashlib.sha256(path.stem.encode("utf-8")).hexdigest()[:16]
+    suffix = f"_{digest}"
+    shortened = encoded[: max_bytes - len(suffix)].decode("utf-8", errors="ignore")
+    return f"{shortened.rstrip('_')}{suffix}"
 
 
 def _safe_file_name(name: str) -> str:
     path = Path(name)
-    suffix = "".join(path.suffixes) or ".gpx"
+    suffix = path.suffix or ".gpx"
     stem = _safe_file_stem(path)
     return f"{stem}{suffix}"
 
@@ -1968,6 +2032,101 @@ def _build_import_segment_dtm_coverage(
     )
 
 
+def _checkpoint_naming_metadata(
+    checkpoint_naming: dict[str, Any],
+    *,
+    report_ref: str,
+) -> dict[str, Any]:
+    """Bind the display-name report to the immutable candidate/preparation inputs."""
+    report_text = json.dumps(
+        checkpoint_naming,
+        ensure_ascii=False,
+        indent=2,
+        sort_keys=True,
+    ) + "\n"
+    return {
+        "policy_version": str(checkpoint_naming.get("schema_version") or "unknown"),
+        "report_ref": report_ref,
+        "report_sha256": hashlib.sha256(report_text.encode("utf-8")).hexdigest(),
+        "checkpoint_count": int(checkpoint_naming.get("checkpoint_count") or 0),
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "labels_are_display_only": True,
+    }
+
+
+def _validate_checkpoint_naming_preparation(
+    *,
+    checkpoint_candidates: list[PreTripCheckpointCandidate],
+    segment_candidates: list[Any],
+    checkpoint_naming: dict[str, Any],
+    segment_dtm_coverage: Any | None,
+) -> dict[str, Any]:
+    """Verify names are keyed to candidates while DTM remains keyed to IDs/geometry."""
+    checkpoint_ids = {candidate.candidate_id for candidate in checkpoint_candidates}
+    decision_ids = {
+        str(item.get("candidate_id"))
+        for item in checkpoint_naming.get("decisions", [])
+        if isinstance(item, dict) and item.get("candidate_id")
+    }
+    endpoint_ids = {
+        endpoint
+        for segment in segment_candidates
+        for endpoint in (
+            getattr(segment, "from_candidate_id", None),
+            getattr(segment, "to_candidate_id", None),
+        )
+        if endpoint
+    }
+    missing_decisions = sorted(checkpoint_ids - decision_ids)
+    unknown_decisions = sorted(decision_ids - checkpoint_ids)
+    missing_segment_endpoints = sorted(endpoint_ids - checkpoint_ids)
+    dtm_items = (
+        list(getattr(segment_dtm_coverage, "segment_metadata", ()) or ())
+        if segment_dtm_coverage is not None
+        else []
+    )
+    dtm_segment_ids = {
+        str(getattr(item, "segment_candidate_id", ""))
+        for item in dtm_items
+        if getattr(item, "segment_candidate_id", None)
+    }
+    segment_ids = {getattr(segment, "candidate_id", "") for segment in segment_candidates}
+    unknown_dtm_segment_ids = sorted(dtm_segment_ids - segment_ids)
+    naming_count_mismatch = int(checkpoint_naming.get("checkpoint_count") or 0) != len(checkpoint_ids)
+    status = "validated" if not (
+        missing_decisions
+        or unknown_decisions
+        or missing_segment_endpoints
+        or unknown_dtm_segment_ids
+        or naming_count_mismatch
+    ) else "invalid"
+    if status == "invalid":
+        raise ValueError(
+            "checkpoint naming preparation validation failed: "
+            f"missing_decisions={missing_decisions}, unknown_decisions={unknown_decisions}, "
+            f"missing_segment_endpoints={missing_segment_endpoints}, "
+            f"unknown_dtm_segment_ids={unknown_dtm_segment_ids}, "
+            f"naming_count_mismatch={naming_count_mismatch}"
+        )
+    return {
+        "status": status,
+        "policy_version": str(checkpoint_naming.get("schema_version") or "unknown"),
+        "checkpoint_candidate_count": len(checkpoint_ids),
+        "naming_decision_count": len(decision_ids),
+        "segment_candidate_count": len(segment_ids),
+        "segment_endpoint_id_count": len(endpoint_ids),
+        "dtm_status": "validated" if segment_dtm_coverage is not None else "not_available",
+        "dtm_segment_count": len(dtm_items),
+        "dtm_unlinked_segment_count": len(segment_ids - dtm_segment_ids),
+        "unknown_dtm_segment_count": len(unknown_dtm_segment_ids),
+        "dtm_mapping_basis": "segment_candidate_id_and_checkpoint_candidate_id",
+        "labels_are_display_only": True,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+
+
 def _build_dtm_coverage_from_material(
     *,
     request: PretripImportRequest,
@@ -1975,18 +2134,27 @@ def _build_dtm_coverage_from_material(
     primary_artifact_id: str,
 ) -> DtmCoverageSummary | None:
     dtm_dirs = _dtm_source_dirs(request)
-    if not dtm_dirs:
+    raster_sources = _dtm_raster_sources(request)
+    if not dtm_dirs and not raster_sources:
         return None
-    return scan_dtm_coverage(
+    coverage = scan_dtm_coverage(
         route_summary=route_summary,
         source_dirs=dtm_dirs,
         summary_id=f"dtm_coverage.{request.project_id}.material_root",
-    ).model_copy(update={"route_artifact_id": primary_artifact_id})
+    )
+    return coverage.model_copy(
+        update={
+            "route_artifact_id": primary_artifact_id,
+            "raster_sources": raster_sources,
+        }
+    )
 
 
 def _material_root_for_request(request: PretripImportRequest) -> Path | None:
     if request.material_root is not None:
         return request.material_root.expanduser()
+    if not request.resolve_default_material_root:
+        return None
     env_value = os.environ.get("SCOUT_PRETRIP_MATERIAL_ROOT")
     if env_value:
         return Path(env_value).expanduser()
@@ -2006,25 +2174,118 @@ def _material_manifest(request: PretripImportRequest) -> dict[str, Any]:
 
 def _dtm_source_dirs(request: PretripImportRequest) -> list[Path]:
     manifest = _material_manifest(request)
-    manifest_dirs = [
-        Path(value).expanduser()
-        for value in manifest.get("sources", {}).get("dtm_dirs", [])
-        if Path(value).expanduser().exists()
-    ]
-    explicit_dirs = [
-        path.expanduser()
-        for path in request.dtm_dirs
-        if path.expanduser().exists()
-    ]
+    declared_dirs = manifest.get("sources", {}).get("dtm_dirs", [])
+    if not isinstance(declared_dirs, list):
+        raise ValueError("material manifest sources.dtm_dirs must be a list")
+    manifest_dirs: list[Path] = []
+    for value in declared_dirs:
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError("material manifest DTM directory must be a path")
+        manifest_dirs.append(Path(value).expanduser())
+    explicit_dirs = [path.expanduser() for path in request.dtm_dirs]
     deduped: list[Path] = []
     seen: set[str] = set()
     for path in [*manifest_dirs, *explicit_dirs]:
+        if not path.is_dir():
+            raise PretripPreparationInputError(field="dtm_dirs", path=path)
         key = path.resolve().as_posix()
         if key in seen:
             continue
         seen.add(key)
         deduped.append(path)
     return deduped
+
+
+def _preparation_source_inputs(request: PretripImportRequest) -> dict[str, Any]:
+    """Retain raw source declarations, including explicit dirs without a material root."""
+    material_root = _material_root_for_request(request)
+    if material_root is not None:
+        material_root = material_root.resolve()
+        if not material_root.is_dir():
+            raise PretripPreparationInputError(field="material_root", path=material_root)
+    material_manifest_path = (
+        material_root / "material_manifest.json" if material_root is not None else None
+    )
+    return {
+        "schema_version": "scout.workspace.preparation_inputs.v1",
+        "material_root": str(material_root) if material_root is not None else None,
+        "material_manifest_path": (
+            str(material_manifest_path)
+            if material_manifest_path is not None and material_manifest_path.is_file()
+            else None
+        ),
+        "material_manifest_sha256": (
+            sha256_file(material_manifest_path)
+            if material_manifest_path is not None and material_manifest_path.is_file()
+            else None
+        ),
+        "dtm_dirs": [str(path.resolve()) for path in _dtm_source_dirs(request)],
+        "explicit_dtm_dirs": [str(path.expanduser().resolve()) for path in request.dtm_dirs],
+        "dtm_rasters": [source.model_dump(mode="json") for source in _dtm_raster_sources(request)],
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "derived_terrain_copied": False,
+    }
+
+
+def _dtm_raster_sources(request: PretripImportRequest) -> list[DtmRasterSource]:
+    manifest = _material_manifest(request)
+    raw_sources = manifest.get("sources", {}).get("dtm_rasters", [])
+    if not isinstance(raw_sources, list):
+        raise ValueError("material manifest sources.dtm_rasters must be a list")
+    raw_sources = [
+        *raw_sources,
+        *(source.model_dump(mode="json") for source in request.dtm_raster_sources),
+    ]
+    sources: list[DtmRasterSource] = []
+    seen: dict[str, int] = {}
+    for raw_source in raw_sources:
+        source = validate_dtm_raster_source(raw_source)
+        key = source.path
+        if key in seen:
+            previous = sources[seen[key]]
+            if source.crs_evidence_sha256 is not None:
+                if previous.crs_evidence_sha256 not in {None, source.crs_evidence_sha256}:
+                    raise PretripPreparationInputError(
+                        field="crs_evidence_sha256", path=source.crs_evidence or key,
+                        code="PREPARATION_SOURCE_CONFLICT",
+                    )
+                # Keep a declared metadata integrity binding when the material
+                # manifest's duplicate source predates that optional field.
+                sources[seen[key]] = source
+            continue
+        seen[key] = len(sources)
+        sources.append(source)
+    return sources
+
+
+def validate_dtm_raster_source(raw_source: dict[str, Any] | DtmRasterSource) -> DtmRasterSource:
+    """Validate the original raster and any declared CRS metadata checksum."""
+    source = DtmRasterSource.model_validate(raw_source)
+    path = Path(source.path).expanduser().resolve()
+    if path.suffix.lower() not in {".tif", ".tiff"}:
+        raise ValueError("material manifest DTM raster source must be GeoTIFF")
+    if not path.is_file():
+        raise PretripPreparationInputError(field="dtm_rasters", path=path)
+    if sha256_file(path) != source.sha256:
+        raise PretripPreparationInputError(
+            field="dtm_rasters.sha256", path=path, code="PREPARATION_SOURCE_CHANGED"
+        )
+    changes: dict[str, Any] = {"path": str(path)}
+    if source.crs_evidence_sha256 is not None:
+        if not source.crs_evidence:
+            raise PretripPreparationInputError(
+                field="crs_evidence", path="<undeclared>", code="PREPARATION_SOURCE_MISSING"
+            )
+        metadata_path = Path(source.crs_evidence).expanduser().resolve()
+        if not metadata_path.is_file():
+            raise PretripPreparationInputError(field="crs_evidence", path=metadata_path)
+        if sha256_file(metadata_path) != source.crs_evidence_sha256:
+            raise PretripPreparationInputError(
+                field="crs_evidence_sha256", path=metadata_path, code="PREPARATION_SOURCE_CHANGED"
+            )
+        changes["crs_evidence"] = str(metadata_path)
+    return source.model_copy(update=changes)
 
 
 def _resolve_mcp_named_point_evidence(request: PretripImportRequest) -> Path | None:
@@ -2564,6 +2825,8 @@ def _build_import_manifest(
     source_inbox_manifest: dict[str, Any],
     historical_gpx_source_index: dict[str, Any],
     gpx_speed_filter: dict[str, Any],
+    checkpoint_naming_metadata: dict[str, Any],
+    checkpoint_naming_validation: dict[str, Any],
 ) -> dict[str, Any]:
     filter_summary = _gpx_filter_summary(gpx_speed_filter, output_refs=output_refs)
     imagery_scope = _build_imagery_acquisition_scope(route_summary)
@@ -2582,6 +2845,7 @@ def _build_import_manifest(
             "notes": "pi-offline（Pi 離線模式）and mac-workstation import local files only in this slice.",
         },
         "inputs": {
+            "preparation_inputs": source_inbox_manifest.get("preparation_inputs", {}),
             "source_inbox": {
                 "manifest_ref": output_refs["source_inbox_manifest_ref"],
                 "source_file_count": source_inbox_manifest["source_file_count"],
@@ -2602,6 +2866,8 @@ def _build_import_manifest(
             ],
         },
         "outputs": output_refs,
+        "checkpoint_naming": checkpoint_naming_metadata,
+        "checkpoint_naming_validation": checkpoint_naming_validation,
         "gpx_speed_filter": filter_summary,
         "imagery_acquisition_scope": imagery_scope,
         "counts": {
@@ -2624,6 +2890,7 @@ def _build_import_manifest(
             "rest_area_candidate_count": rest_area_report["rest_area_candidate_count"],
             "rest_area_checkpoint_count": rest_area_report["rest_area_checkpoint_count"],
             "checkpoint_candidate_count": checkpoint_count,
+            "checkpoint_naming_count": checkpoint_naming_metadata["checkpoint_count"],
             "segment_candidate_count": segment_count,
             "route_note_candidate_count": route_note_candidates["counts"]["note_candidate_count"],
             "route_note_potential_ln_signal_count": route_note_candidates["counts"][
@@ -2746,10 +3013,14 @@ def _build_route_evidence_bundle(
             "source_path": primary_gpx.resolve().as_posix(),
             "sha256": sha256_file(primary_gpx),
             "role": _golden_route_role(request),
+            "gpx_provenance_role": _gpx_planning_role(primary_gpx),
             "geometry_ref": output_refs["map_context_ref"],
             "filtered_geometry_ref": _project_ref(
                 project_root,
                 Path(gpx_speed_filter["primary"]["output_path"]),
+            ),
+            "filtered_geometry_sha256": sha256_file(
+                Path(gpx_speed_filter["primary"]["output_path"])
             ),
             "route_summary_ref": output_refs["route_summary_ref"],
             "route_bbox_wgs84": route_bbox,
@@ -2758,7 +3029,8 @@ def _build_route_evidence_bundle(
         "reference_tracks": [
             {
                 "source_id": f"{primary_artifact_id}.reference.{index:03d}",
-                "role": "reference_track",
+                "role": "planned_gpx_reference" if _gpx_planning_role(path) == "planned" else "reference_track",
+                "gpx_provenance_role": _gpx_planning_role(path),
                 "source_path": path.resolve().as_posix(),
                 "sha256": sha256_file(path),
                 "geometry_ref": output_refs["reference_track_display_geometry_ref"],
@@ -2767,7 +3039,8 @@ def _build_route_evidence_bundle(
                     Path(gpx_speed_filter["references"][index - 1]["output_path"]),
                 ),
                 "freshness": {
-                    "track_time_available": True,
+                    "track_time_available": _gpx_planning_role(path) != "planned",
+                    "time_role": "planned_estimate" if _gpx_planning_role(path) == "planned" else "source_observation",
                     "old_route_note_flag": False,
                 },
             }
@@ -3634,8 +3907,10 @@ def _projection_boundary() -> dict[str, bool]:
 
 def _source_record(path: Path, *, role: str) -> dict[str, Any]:
     stat = path.stat()
+    source_provenance = _gpx_planning_role(path)
     return {
-        "role": role,
+        "role": "planned_gpx_reference" if source_provenance == "planned" else role,
+        "gpx_provenance_role": source_provenance,
         "uri": path.resolve().as_posix(),
         "sha256": sha256_file(path),
         "size_bytes": stat.st_size,
@@ -3643,19 +3918,29 @@ def _source_record(path: Path, *, role: str) -> dict[str, Any]:
 
 
 def _golden_route_role(request: PretripImportRequest) -> str:
+    if _gpx_planning_role(request.primary_gpx.expanduser()) == "planned":
+        return "planned_gpx_reference"
     if request.import_stage == "post_analysis":
         return "actual_track_replacing_pretrip_golden_route"
     return "golden_route_reference"
 
 
+def _gpx_planning_role(path: Path) -> str:
+    """Preserve exported plan provenance; a planning file cannot become Recorded."""
+    return gpx_provenance_role(path)
+
+
 def _planning_semantics(request: PretripImportRequest) -> dict[str, Any]:
+    provenance = _gpx_planning_role(request.primary_gpx)
     return {
         "golden_route": {
             "meaning": (
-                "selected similar reference route before departure"
+                "unwalked Planned route geometry and estimated timetable"
+                if provenance == "planned" else "selected similar reference route before departure"
                 if request.import_stage == "pretrip"
                 else "actual walked route replacing the pretrip golden route"
             ),
+            "gpx_provenance_role": provenance,
             "actual_user_track": request.import_stage == "post_analysis",
             "runtime_safety_truth": False,
         },
@@ -3757,6 +4042,8 @@ def _project_payload(
     segment_dtm_coverage: dict[str, Any] | None,
     dtm_coverage_summary: dict[str, Any] | None,
     mcp_import_summary: dict[str, Any] | None,
+    checkpoint_naming_metadata: dict[str, Any],
+    checkpoint_naming_validation: dict[str, Any],
 ) -> dict[str, Any]:
     project_path = project_root / "project.json"
     payload: dict[str, Any] = {}
@@ -3766,13 +4053,16 @@ def _project_payload(
     imagery_source_id = str(
         payload.get("imagery_source_id") or imagery_scope["imagery_source_id"]
     )
+    primary_source = next(iter(source_inbox_manifest.get("sources", [])), {})
+    primary_provenance = primary_source.get("gpx_provenance_role", "reference_observation")
     payload.update(
         {
             "project_id": project_id,
             "route_name": route_summary["route_name"],
             "import_profile": "standalone_pretrip_importer",
             "import_stage": import_stage,
-            "route_role": "golden_route",
+            "route_role": "planned_gpx_reference" if primary_provenance == "planned" else "golden_route",
+            "gpx_provenance_role": primary_provenance,
             "route_days": _route_days_for_import(project_id),
             "route_kind": _route_kind_for_import(project_id),
             "actual_user_track_available": import_stage == "post_analysis",
@@ -3781,6 +4071,12 @@ def _project_payload(
             "source_inbox_file_count": source_inbox_manifest["source_file_count"],
             "source_artifact_count": 1 + reference_track_count,
             "checkpoint_candidate_count": checkpoint_count,
+            "checkpoint_naming_policy_version": checkpoint_naming_metadata["policy_version"],
+            "checkpoint_naming_report_sha256": checkpoint_naming_metadata["report_sha256"],
+            "checkpoint_naming_checkpoint_count": checkpoint_naming_metadata["checkpoint_count"],
+            "checkpoint_naming_candidate_only": True,
+            "checkpoint_naming_runtime_safety_truth": False,
+            "checkpoint_naming_validation": checkpoint_naming_validation,
             "segment_candidate_count": segment_count,
             "resume_segment_count": resume_segment_count,
             "rest_area_candidate_count": rest_area_candidate_count,

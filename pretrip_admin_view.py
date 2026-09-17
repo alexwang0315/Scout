@@ -507,6 +507,47 @@ def _default_pretrip_artifact(
     return _missing_artifact_status(artifact_key)
 
 
+def load_pretrip_weather_projection(
+    project_id: str,
+    *,
+    root: Path = ROOT,
+    project_root: Path | None = None,
+) -> dict[str, Any]:
+    """Read the weather overlay's inputs without rebuilding unrelated map evidence."""
+    # Keep the full resolver's project identity and artifact path containment checks.
+    # This projection has no cache: edited, removed, or newly created weather inputs
+    # are observed on the next request, including the existing missing-source ref.
+    artifacts = resolve_pretrip_project_artifacts(
+        project_id,
+        root=root,
+        project_root=project_root,
+    )
+    project = _load_json(artifacts["project"])
+    route_summary = _load_json(artifacts["route_summary"])
+    weather_daylight = _load_optional_json(
+        artifacts.get("weather_daylight")
+    ) or _default_pretrip_artifact(
+        "weather_daylight",
+        project_id=project_id,
+        project=project,
+        route_summary=route_summary,
+    )
+    weather = _weather_summary(
+        weather_daylight,
+        _relpath(
+            artifacts["weather_daylight"],
+            root if project_root is None else project_root,
+        ),
+    )
+    _ensure_admin_summary_metadata(weather)
+    return {
+        "weather": weather,
+        # Match the full view's route bounds, not its expanded reference/display
+        # bounds: this is the coordinate source used by the Open-Meteo request.
+        "route": {"bounds": route_summary["bbox_wgs84"]},
+    }
+
+
 def build_pretrip_admin_view(
     project_id: str,
     *,
@@ -940,16 +981,7 @@ def build_pretrip_admin_view(
             include_keys=("status", "findings"),
         ),
         "eta": {
-            "source_id": eta["plan_id"],
-            "source_path": source_refs["eta"],
-            "evidence_type": "pretrip_eta_plan",
-            "planned_start_time": eta["assumption"].get("planned_start_time"),
-            "target_eta": eta["assumption"].get("target_eta"),
-            "turn_back_checkpoint_eta": eta["assumption"].get(
-                "turn_back_checkpoint_eta"
-            ),
-            "estimate_count": len(eta.get("estimates", [])),
-            "estimates": eta.get("estimates", []),
+            **_planned_eta_summary(eta, source_refs["eta"]),
             "energy_reserve_projection": _energy_projection_summary(
                 energy_projection,
                 source_refs.get("energy_projection", ""),
@@ -1527,6 +1559,40 @@ def build_pretrip_admin_view(
         "energy_reserve_monitor"
     ]
     return view
+
+
+def _planned_eta_summary(eta: dict[str, Any], source_path: str) -> dict[str, Any]:
+    """Project the active ETA collection without reviving retired assumptions."""
+    day_bound = (
+        eta.get("authoritative_collection") == "mission_day_estimates"
+        or "mission_day_estimates" in eta
+    )
+    days = eta.get("mission_day_estimates", []) if day_bound else []
+    if not isinstance(days, list) or any(not isinstance(day, dict) for day in days):
+        raise ValueError("planned ETA mission_day_estimates must be a list of day objects")
+    # A Rebuild's per-day replay records historical clocks and elapsed time.
+    # They do not set new departure/arrival dates or restore the former plan.
+    assumption = {} if day_bound else (eta.get("assumption") or {})
+    estimates = [] if day_bound else (eta.get("estimates") or [])
+    return {
+        "source_id": eta["plan_id"],
+        "source_path": source_path,
+        "evidence_type": "pretrip_eta_plan",
+        "status": eta.get("status"),
+        "authoritative_collection": "mission_day_estimates" if day_bound else "estimates",
+        "planned_start_time": assumption.get("planned_start_time"),
+        "target_eta": assumption.get("target_eta"),
+        "turn_back_checkpoint_eta": assumption.get("turn_back_checkpoint_eta"),
+        "estimate_count": len(days) if day_bound else len(estimates),
+        "estimates": estimates,
+        "mission_day_estimates": days,
+        "reviewed_baseline_ref": eta.get("reviewed_baseline_ref"),
+        "reviewed_baseline_sha256": eta.get("reviewed_baseline_sha256"),
+        "legacy_timing_status": "superseded" if day_bound else "active",
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "departure_approval_granted": False,
+    }
 
 
 def resolve_pretrip_project_artifacts(
@@ -5743,6 +5809,7 @@ def _project_summary(
     return {
         "project_id": project["project_id"],
         **_project_osm_pbf_cache_projection(project),
+        **_project_workspace_cache_projection(project),
         "source_id": project["project_id"],
         "source_path": source_refs["project"],
         "evidence_type": "pretrip_project",
@@ -5768,6 +5835,38 @@ def _project_osm_pbf_cache_projection(project: dict[str, Any]) -> dict[str, Any]
             "osm_pbf_cache_expires_at",
             "osm_pbf_refresh_required",
             "osm_pbf_feature_index_feature_count",
+        )
+        if key in project
+    }
+
+
+def _project_workspace_cache_projection(project: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: project[key]
+        for key in (
+            "imagery_tile_cache_root",
+            "imagery_tile_cache_policy",
+            "imagery_tile_cache_manifest_ref",
+            "imagery_tile_cache_plan_ref",
+            "imagery_tile_cache_seed_status",
+            "imagery_tile_cache_seed_tiles_seen",
+            "imagery_tile_cache_seed_tiles_written",
+            "imagery_tile_cache_seed_tiles_skipped_existing",
+            "imagery_tile_cache_seed_tiles_copied_from_fallback_cache",
+            "imagery_tile_cache_seed_tiles_failed",
+            "imagery_tile_cache_ttl_days",
+            "workspace_raster_tile_cache_bundle_ref",
+            "workspace_raster_tile_cache_root",
+            "workspace_raster_tile_cache_layer_count",
+            "workspace_raster_tile_cache_delivery_policy",
+            "raster_layer_manifest_refs",
+            "raster_layer_source_ids",
+            "raster_label_tile_cache_plan_ref",
+            "raster_label_tile_cache_manifest_ref",
+            "raster_label_tile_cache_source_id",
+            "raster_label_ocr_cache_ref",
+            "raster_label_ocr_output_ref",
+            "raster_label_ocr_status",
         )
         if key in project
     }
@@ -15291,9 +15390,10 @@ def _map_layers_with_local_raster_metadata(
     raster_tile_source_path: str,
 ) -> list[dict[str, Any]]:
     del local_raster_manifest, raster_tile_manifest
-    del raster_layer_manifests, local_raster_source_path, raster_tile_source_path
+    del local_raster_source_path, raster_tile_source_path
     project_payload = project or {}
     imagery_bbox = _normalize_bbox_wgs84(project_payload.get("imagery_bbox_wgs84"))
+    raster_manifests = raster_layer_manifests or {}
     wmts_layer_ids = {
         "imagery",
         "rudy",
@@ -15350,6 +15450,10 @@ def _map_layers_with_local_raster_metadata(
             enriched_layers.append(_map_layer_metadata(layer))
             continue
         enriched = dict(layer)
+        layer_id = str(layer["layer_id"])
+        raster_manifest = raster_manifests.get(layer_id, {})
+        if raster_manifest:
+            enriched.update(raster_manifest)
         if imagery_bbox and layer.get("layer_id") == "imagery":
             enriched["imagery_bbox_wgs84"] = imagery_bbox
             enriched["imagery_bbox_policy"] = project_payload.get(
@@ -15360,14 +15464,27 @@ def _map_layers_with_local_raster_metadata(
                 "imagery_bbox_scale_factor",
                 1.15,
             )
-        enriched["raster_tile_delivery"] = "direct_wmts_runtime"
-        enriched["raster_coverage_policy"] = "render_visible_wmts_tiles_only"
+        enriched["raster_tile_delivery"] = (
+            "workspace_cache_first"
+            if raster_manifest
+            else "workspace_cache_missing"
+        )
+        enriched["raster_coverage_policy"] = (
+            "workspace_cache_bounds"
+            if raster_manifest.get("raster_bbox_wgs84")
+            else "workspace_cache_only_visible_tiles"
+        )
+        enriched["remote_fetch_requires_explicit_enable"] = True
+        enriched["raster_remote_refresh_supported"] = True
+        enriched["raster_remote_refresh_default_enabled"] = False
         for key in (
             "imagery_source_id",
             "imagery_source_registry_id",
         ):
             if layer.get("layer_id") == "imagery" and project_payload.get(key):
                 enriched[key] = project_payload[key]
+        if layer_id == "imagery":
+            enriched["raster_layer_manifests"] = raster_manifests
         enriched_layers.append(_map_layer_metadata(enriched))
     return enriched_layers
 
@@ -15376,8 +15493,39 @@ def _raster_layer_manifest_summaries(
     project_root: Path,
     project: dict[str, Any],
 ) -> dict[str, dict[str, Any]]:
-    refs = project.get("raster_layer_manifest_refs")
-    if not isinstance(refs, dict):
+    raw_refs = project.get("raster_layer_manifest_refs")
+    refs = dict(raw_refs) if isinstance(raw_refs, dict) else {}
+    compatibility_cache_layer_ids: dict[str, str] = {}
+    legacy_ref = project.get("imagery_tile_cache_manifest_ref")
+    if isinstance(legacy_ref, str) and legacy_ref:
+        legacy_manifest = _load_optional_json(
+            _project_ref_value_path(project_root, legacy_ref)
+        )
+        legacy_plan = (
+            legacy_manifest.get("plan")
+            if isinstance(legacy_manifest, dict)
+            else None
+        )
+        if not isinstance(legacy_plan, dict):
+            legacy_plan = legacy_manifest if isinstance(legacy_manifest, dict) else {}
+        legacy_source_id = str(
+            legacy_plan.get("source_id")
+            or (
+                legacy_manifest.get("imagery_source_id")
+                if isinstance(legacy_manifest, dict)
+                else ""
+            )
+            or ""
+        )
+        exposed_layer_id = (
+            "rudy-twmap"
+            if legacy_source_id == "happyman_rudy_twmap"
+            else "imagery"
+        )
+        if exposed_layer_id not in refs:
+            refs[exposed_layer_id] = legacy_ref
+            compatibility_cache_layer_ids[exposed_layer_id] = "imagery"
+    if not refs:
         return {}
     summaries: dict[str, dict[str, Any]] = {}
     for layer_id, ref in refs.items():
@@ -15387,14 +15535,46 @@ def _raster_layer_manifest_summaries(
         manifest = _load_optional_json(manifest_path)
         if not isinstance(manifest, dict):
             continue
+        plan = manifest.get("plan")
+        if not isinstance(plan, dict):
+            plan = manifest
+        seed_summary = manifest.get("seed_summary")
+        if not isinstance(seed_summary, dict):
+            seed_summary = {}
+        source_id = str(
+            plan.get("source_id")
+            or manifest.get("imagery_source_id")
+            or ""
+        )
+        template = str(
+            plan.get("runtime_tile_url_template")
+            or "/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png"
+        )
+        cache_layer_id = compatibility_cache_layer_ids.get(layer_id, layer_id)
+        template = template.replace(
+            "{project_id}", str(project.get("project_id") or project_root.name)
+        ).replace("{layer_id}", cache_layer_id)
+        if source_id:
+            separator = "&" if "?" in template else "?"
+            template = f"{template}{separator}source_id={source_id}&cache_only=1"
+        cached_tile_count = sum(
+            int(seed_summary.get(key) or 0)
+            for key in (
+                "tiles_written",
+                "tiles_skipped_existing",
+                "tiles_copied_from_fallback_cache",
+            )
+        )
         summary: dict[str, Any] = {
             "layer_id": layer_id,
             "raster_tile_manifest_ref": ref,
-            "local_raster_tile_url_template": (
-                manifest.get("runtime_tile_url_template")
-                or "/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png"
-            ),
+            "local_raster_tile_url_template": template,
+            "raster_tile_cached_count": cached_tile_count,
+            "raster_tile_cache_seed_status": seed_summary.get("status"),
+            "raster_tile_cache_layer_id": cache_layer_id,
         }
+        if layer_id in compatibility_cache_layer_ids:
+            summary["raster_cache_compatibility"] = "legacy_imagery_namespace"
         for source_key, target_key in (
             ("bbox_wgs84", "raster_bbox_wgs84"),
             ("zoom_range", "raster_tile_zoom_range"),
@@ -15405,8 +15585,8 @@ def _raster_layer_manifest_summaries(
             ("source_id", "imagery_source_id"),
             ("source_kind", "imagery_source_kind"),
         ):
-            if source_key in manifest:
-                summary[target_key] = manifest[source_key]
+            if source_key in plan:
+                summary[target_key] = plan[source_key]
         summaries[layer_id] = summary
     return summaries
 

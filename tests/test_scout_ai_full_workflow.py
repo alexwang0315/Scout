@@ -1,6 +1,17 @@
 import json
 from pathlib import Path
 
+from weather_workflow_fixtures import (
+    CWA_ENVIRONMENT_TOOL_ID,
+    GEE_ENVIRONMENT_TOOL_ID,
+    REFERENCE_TIME,
+    assert_exact_weather_execution,
+    weather_tool_calls,
+    write_missing_weather_project,
+    write_reviewed_weather_project,
+    write_reviewed_route_context_project,
+)
+
 from scout_agent_builtin_tools import run_builtin_tool
 from scout_agent_tools import load_tool_manifest
 from scout_ai_full_workflow import (
@@ -135,21 +146,27 @@ def test_full_workflow_uses_risk_sentinel_for_forward_high_risk_segment() -> Non
     assert "runtime safety truth" in result.answer
 
 
-def test_full_workflow_runs_weather_tool_and_reports_missing_fresh_evidence() -> None:
+def test_full_workflow_runs_weather_tool_and_reports_missing_fresh_evidence(tmp_path: Path, weather_tool_calls) -> None:
     result = run_scout_ai_full_workflow(
         "明天午後雷雨是否要紮營?",
-        project_root=PROJECT_ROOT,
+        project_root=write_missing_weather_project(tmp_path, PROJECT_ROOT),
         project_id="chilai_nanhua_day1",
+        reference_time=REFERENCE_TIME,
         limit=3,
     )
 
+    assert_exact_weather_execution(result, (
+        WEATHER_WINDOW_TOOL_ID,
+        CWA_ENVIRONMENT_TOOL_ID,
+    ), weather_tool_calls)
+
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.selected_tool_count >= 1
-    assert result.executed_tool_count >= 1
-    assert result.completed_tool_count >= 1
+    assert result.selected_tool_count == 2
+    assert result.executed_tool_count == 2
+    assert result.completed_tool_count == 2
     assert result.contract_gap_count == 0
     assert result.failed_tool_count == 0
-    assert result.missing_evidence_count >= 1
+    assert result.missing_evidence_count == 2
     assert result.workflow_policy.deterministic_tools_executed is True
     assert result.workflow_policy.model_provider_used is False
     assert result.workflow_policy.model_synthesis_performed is False
@@ -169,15 +186,28 @@ def test_full_workflow_runs_weather_tool_and_reports_missing_fresh_evidence() ->
     assert "runtime safety truth" in result.answer
 
 
-def test_full_workflow_surfaces_standard_six_power_coverage_overview() -> None:
+def test_full_workflow_surfaces_standard_six_power_coverage_overview(weather_tool_calls) -> None:
     result = run_scout_ai_full_workflow(
         "請檢視 Scout 對六力的實作狀態：探索力、自信力、勇氣力、路線力、天氣力、地圖力。",
         project_root=PROJECT_ROOT,
         project_id="chilai_nanhua_day1",
+        reference_time=REFERENCE_TIME,
         limit=8,
     )
 
     source_ids = {source["tool_id"] for source in result.sources}
+    assert_exact_weather_execution(result, (
+        ROUTE_CONTEXT_TOOL_ID,
+        PACE_GUARDIAN_TOOL_ID,
+        ROUTE_READINESS_TOOL_ID,
+        CONTEXTUAL_PERMISSION_TOOL_ID,
+        ROUTE_ARCHITECTURE_TOOL_ID,
+        WEATHER_WINDOW_TOOL_ID,
+        CWA_ENVIRONMENT_TOOL_ID,
+        GEE_ENVIRONMENT_TOOL_ID,
+        NAVIGATION_TERRAIN_TOOL_ID,
+    ), weather_tool_calls)
+
     assert {
         ROUTE_CONTEXT_TOOL_ID,
         PACE_GUARDIAN_TOOL_ID,
@@ -187,8 +217,8 @@ def test_full_workflow_surfaces_standard_six_power_coverage_overview() -> None:
         WEATHER_WINDOW_TOOL_ID,
         NAVIGATION_TERRAIN_TOOL_ID,
     }.issubset(source_ids)
-    assert result.selected_tool_count == 7
-    assert result.completed_tool_count == 7
+    assert result.selected_tool_count == 9
+    assert result.completed_tool_count == 9
     assert result.decision_output["answerSourceToolId"] == (
         "scout.ai.standard_six_power_overview.v0"
     )
@@ -311,16 +341,29 @@ def test_full_workflow_answers_standard_glossary_without_route_risk_detour() -> 
     assert result.boundary.runtime_safety_truth is False
 
 
-def test_full_workflow_routes_scout_ai_meta_power_to_six_capability_tools() -> None:
+def test_full_workflow_routes_scout_ai_meta_power_to_six_capability_tools(weather_tool_calls) -> None:
     result = run_scout_ai_full_workflow(
         "Scout AI 力如何把六力轉成動態決策，而不是靜態分數表？",
         project_root=PROJECT_ROOT,
         project_id="chilai_nanhua_day1",
+        reference_time=REFERENCE_TIME,
         limit=8,
     )
 
-    assert result.selected_tool_count == 7
-    assert result.completed_tool_count == 7
+    assert_exact_weather_execution(result, (
+        ROUTE_CONTEXT_TOOL_ID,
+        PACE_GUARDIAN_TOOL_ID,
+        ROUTE_READINESS_TOOL_ID,
+        CONTEXTUAL_PERMISSION_TOOL_ID,
+        ROUTE_ARCHITECTURE_TOOL_ID,
+        WEATHER_WINDOW_TOOL_ID,
+        CWA_ENVIRONMENT_TOOL_ID,
+        GEE_ENVIRONMENT_TOOL_ID,
+        NAVIGATION_TERRAIN_TOOL_ID,
+    ), weather_tool_calls)
+
+    assert result.selected_tool_count == 9
+    assert result.completed_tool_count == 9
     assert result.decision_output["answerSourceToolId"] == (
         "scout.ai.standard_six_power_overview.v0"
     )
@@ -355,17 +398,23 @@ def test_full_workflow_uses_review_gap_for_provenance_promotion_question() -> No
     assert result.boundary.runtime_safety_truth is False
 
 
-def test_full_workflow_uses_daylight_buffer_weather_decision() -> None:
+def test_full_workflow_uses_daylight_buffer_weather_decision(tmp_path: Path, weather_tool_calls) -> None:
     result = run_scout_ai_full_workflow(
         "日照 buffer 是否下降？",
-        project_root=PROJECT_ROOT,
+        project_root=write_missing_weather_project(tmp_path, PROJECT_ROOT),
         project_id="chilai_nanhua_day1",
+        reference_time=REFERENCE_TIME,
         limit=3,
     )
 
+    assert_exact_weather_execution(result, (
+        WEATHER_WINDOW_TOOL_ID,
+        CWA_ENVIRONMENT_TOOL_ID,
+    ), weather_tool_calls)
+
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.selected_tool_count == 1
-    assert result.completed_tool_count == 1
+    assert result.selected_tool_count == 2
+    assert result.completed_tool_count == 2
     weather = _workflow_source(result, WEATHER_WINDOW_TOOL_ID)
     assert weather["top_result_summary"]["decision"] == "DELAY"
     status = weather["top_result_summary"]["daylight_buffer_status"]
@@ -382,13 +431,21 @@ def test_full_workflow_uses_daylight_buffer_weather_decision() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
-def test_full_workflow_uses_query_reported_recent_rain_weather_decision() -> None:
+def test_full_workflow_uses_query_reported_recent_rain_weather_decision(tmp_path: Path, weather_tool_calls) -> None:
     result = run_scout_ai_full_workflow(
         "前 24 小時明顯降雨，溪水和崩塌風險是否升高？今天還能走嗎？",
-        project_root=PROJECT_ROOT,
+        project_root=write_missing_weather_project(tmp_path, PROJECT_ROOT),
         project_id="chilai_nanhua_day1",
+        reference_time=REFERENCE_TIME,
         limit=5,
     )
+
+    assert_exact_weather_execution(result, (
+        RISK_SCORE_TOOL_ID,
+        WEATHER_WINDOW_TOOL_ID,
+        CWA_ENVIRONMENT_TOOL_ID,
+        GEE_ENVIRONMENT_TOOL_ID,
+    ), weather_tool_calls)
 
     assert result.answerability == "partial_evidence_with_missing_context"
     assert result.failed_tool_count == 0
@@ -436,20 +493,26 @@ def test_full_workflow_preserves_energy_vitals_decision_output() -> None:
     assert answer_step.summary["decision_output_source_tool"] == ENERGY_VITALS_TOOL_ID
 
 
-def test_full_workflow_runs_weather_to_decision_question(tmp_path: Path) -> None:
-    project_root = _write_route_weather_project(tmp_path)
+def test_full_workflow_runs_weather_to_decision_question(tmp_path: Path, weather_tool_calls) -> None:
+    project_root = write_reviewed_weather_project(tmp_path, profile="thunderstorm")
 
     result = run_scout_ai_full_workflow(
         "午後雷雨是否要改變計畫?",
         project_root=project_root,
         project_id="weather_decision_project",
+        reference_time=REFERENCE_TIME,
         limit=3,
     )
 
+    assert_exact_weather_execution(result, (
+        WEATHER_WINDOW_TOOL_ID,
+        CWA_ENVIRONMENT_TOOL_ID,
+    ), weather_tool_calls)
+
     assert result.answerability == "evidence_available"
-    assert result.selected_tool_count >= 1
-    assert result.executed_tool_count >= 1
-    assert result.completed_tool_count >= 1
+    assert result.selected_tool_count == 2
+    assert result.executed_tool_count == 2
+    assert result.completed_tool_count == 2
     assert result.missing_evidence_count == 0
     assert result.sources[0]["tool_id"] == WEATHER_WINDOW_TOOL_ID
     assert result.sources[0]["top_result_summary"]["decision"] == "CHANGE_PLAN"
@@ -517,21 +580,26 @@ def test_full_workflow_delays_recent_rain_creek_crossing_without_experience(
 
 
 def test_full_workflow_changes_plan_for_heat_exposure_weather(
-    tmp_path: Path,
-) -> None:
-    project_root = _write_heat_exposure_project(tmp_path)
+    tmp_path: Path, weather_tool_calls) -> None:
+    project_root = write_reviewed_weather_project(tmp_path, profile="heat")
 
     result = run_scout_ai_full_workflow(
         "高溫曝曬，天氣決策怎麼看？",
         project_root=project_root,
         project_id="heat_exposure_project",
+        reference_time=REFERENCE_TIME,
         limit=3,
     )
 
+    assert_exact_weather_execution(result, (
+        WEATHER_WINDOW_TOOL_ID,
+        CWA_ENVIRONMENT_TOOL_ID,
+    ), weather_tool_calls)
+
     assert result.answerability == "evidence_available"
-    assert result.selected_tool_count == 1
-    assert result.executed_tool_count == 1
-    assert result.completed_tool_count == 1
+    assert result.selected_tool_count == 2
+    assert result.executed_tool_count == 2
+    assert result.completed_tool_count == 2
     assert result.missing_evidence_count == 0
     weather = _workflow_source(result, WEATHER_WINDOW_TOOL_ID)
     assert weather["top_result_summary"]["decision"] == "CHANGE_PLAN"
@@ -548,21 +616,26 @@ def test_full_workflow_changes_plan_for_heat_exposure_weather(
 
 
 def test_full_workflow_delays_forecast_source_disagreement_weather(
-    tmp_path: Path,
-) -> None:
-    project_root = _write_source_disagreement_project(tmp_path)
+    tmp_path: Path, weather_tool_calls) -> None:
+    project_root = write_reviewed_weather_project(tmp_path, profile="disagreement")
 
     result = run_scout_ai_full_workflow(
         "預報來源不一致，天氣決策怎麼看？",
         project_root=project_root,
         project_id="source_disagreement_project",
+        reference_time=REFERENCE_TIME,
         limit=3,
     )
 
+    assert_exact_weather_execution(result, (
+        WEATHER_WINDOW_TOOL_ID,
+        CWA_ENVIRONMENT_TOOL_ID,
+    ), weather_tool_calls)
+
     assert result.answerability == "evidence_available"
-    assert result.selected_tool_count == 1
-    assert result.executed_tool_count == 1
-    assert result.completed_tool_count == 1
+    assert result.selected_tool_count == 2
+    assert result.executed_tool_count == 2
+    assert result.completed_tool_count == 2
     assert result.missing_evidence_count == 0
     weather = _workflow_source(result, WEATHER_WINDOW_TOOL_ID)
     assert weather["top_result_summary"]["decision"] == "DELAY"
@@ -876,19 +949,30 @@ def test_full_workflow_routes_abstract_buffer_cost_to_contextual_permission() ->
     assert result.boundary.runtime_safety_truth is False
 
 
-def test_full_workflow_treats_fog_photo_as_wait_permission() -> None:
+def test_full_workflow_treats_fog_photo_as_wait_permission(tmp_path: Path, weather_tool_calls) -> None:
     result = run_scout_ai_full_workflow(
         "可以等霧散再拍照嗎？",
-        project_root=PROJECT_ROOT,
+        project_root=write_missing_weather_project(tmp_path, PROJECT_ROOT),
         project_id="chilai_nanhua_day1",
+        reference_time=REFERENCE_TIME,
         limit=6,
     )
 
+    assert_exact_weather_execution(result, (
+        CONTEXTUAL_PERMISSION_TOOL_ID,
+        LIVE_NAVIGATION_STATE_TOOL_ID,
+        ROUTE_ARCHITECTURE_TOOL_ID,
+        WEATHER_WINDOW_TOOL_ID,
+        PACE_GUARDIAN_TOOL_ID,
+        RISK_SCORE_TOOL_ID,
+        CWA_ENVIRONMENT_TOOL_ID,
+    ), weather_tool_calls)
+
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.selected_tool_count == 6
-    assert result.executed_tool_count == 6
-    assert result.completed_tool_count == 6
-    assert result.missing_evidence_count == 4
+    assert result.selected_tool_count == 7
+    assert result.executed_tool_count == 7
+    assert result.completed_tool_count == 7
+    assert result.missing_evidence_count == 5
     _assert_on_route_micro_decision_support_sources(result)
     weather = _workflow_source(result, WEATHER_WINDOW_TOOL_ID)
     contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
@@ -905,19 +989,30 @@ def test_full_workflow_treats_fog_photo_as_wait_permission() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
-def test_full_workflow_prioritizes_weather_delay_over_generic_continue() -> None:
+def test_full_workflow_prioritizes_weather_delay_over_generic_continue(tmp_path: Path, weather_tool_calls) -> None:
     result = run_scout_ai_full_workflow(
         "日落快到了，還能繼續推進嗎？",
-        project_root=PROJECT_ROOT,
+        project_root=write_missing_weather_project(tmp_path, PROJECT_ROOT),
         project_id="chilai_nanhua_day1",
+        reference_time=REFERENCE_TIME,
         limit=4,
     )
 
+    assert_exact_weather_execution(result, (
+        CONTEXTUAL_PERMISSION_TOOL_ID,
+        LIVE_NAVIGATION_STATE_TOOL_ID,
+        ROUTE_ARCHITECTURE_TOOL_ID,
+        WEATHER_WINDOW_TOOL_ID,
+        PACE_GUARDIAN_TOOL_ID,
+        RISK_SCORE_TOOL_ID,
+        CWA_ENVIRONMENT_TOOL_ID,
+    ), weather_tool_calls)
+
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.selected_tool_count == 6
-    assert result.executed_tool_count == 6
-    assert result.completed_tool_count == 6
-    assert result.missing_evidence_count == 3
+    assert result.selected_tool_count == 7
+    assert result.executed_tool_count == 7
+    assert result.completed_tool_count == 7
+    assert result.missing_evidence_count == 4
     _assert_on_route_micro_decision_support_sources(result)
     assert result.failed_tool_count == 0
     weather = _workflow_source(result, WEATHER_WINDOW_TOOL_ID)
@@ -963,19 +1058,30 @@ def test_full_workflow_allows_bounded_teammate_wait() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
-def test_full_workflow_blocks_wind_exposed_lunch() -> None:
+def test_full_workflow_blocks_wind_exposed_lunch(tmp_path: Path, weather_tool_calls) -> None:
     result = run_scout_ai_full_workflow(
         "這裡是風口，我們可以在這裡吃午餐嗎？",
-        project_root=PROJECT_ROOT,
+        project_root=write_missing_weather_project(tmp_path, PROJECT_ROOT),
         project_id="chilai_nanhua_day1",
+        reference_time=REFERENCE_TIME,
         limit=6,
     )
 
+    assert_exact_weather_execution(result, (
+        CONTEXTUAL_PERMISSION_TOOL_ID,
+        LIVE_NAVIGATION_STATE_TOOL_ID,
+        ROUTE_ARCHITECTURE_TOOL_ID,
+        WEATHER_WINDOW_TOOL_ID,
+        PACE_GUARDIAN_TOOL_ID,
+        RISK_SCORE_TOOL_ID,
+        CWA_ENVIRONMENT_TOOL_ID,
+    ), weather_tool_calls)
+
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.selected_tool_count == 6
-    assert result.executed_tool_count == 6
-    assert result.completed_tool_count == 6
-    assert result.missing_evidence_count == 4
+    assert result.selected_tool_count == 7
+    assert result.executed_tool_count == 7
+    assert result.completed_tool_count == 7
+    assert result.missing_evidence_count == 5
     _assert_on_route_micro_decision_support_sources(result)
     weather = _workflow_source(result, WEATHER_WINDOW_TOOL_ID)
     contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
@@ -1015,19 +1121,31 @@ def test_full_workflow_surfaces_lunch_alternate_cp_and_minutes() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
-def test_full_workflow_escalates_stream_surge_crossing() -> None:
+def test_full_workflow_escalates_stream_surge_crossing(tmp_path: Path, weather_tool_calls) -> None:
     result = run_scout_ai_full_workflow(
         "前方溪水暴漲，還能過溪嗎？",
-        project_root=PROJECT_ROOT,
+        project_root=write_missing_weather_project(tmp_path, PROJECT_ROOT),
         project_id="chilai_nanhua_day1",
+        reference_time=REFERENCE_TIME,
         limit=6,
     )
 
+    assert_exact_weather_execution(result, (
+        CONTEXTUAL_PERMISSION_TOOL_ID,
+        LIVE_NAVIGATION_STATE_TOOL_ID,
+        ROUTE_ARCHITECTURE_TOOL_ID,
+        WEATHER_WINDOW_TOOL_ID,
+        PACE_GUARDIAN_TOOL_ID,
+        RISK_SCORE_TOOL_ID,
+        CWA_ENVIRONMENT_TOOL_ID,
+        GEE_ENVIRONMENT_TOOL_ID,
+    ), weather_tool_calls)
+
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.selected_tool_count == 6
-    assert result.executed_tool_count == 6
-    assert result.completed_tool_count == 6
-    assert result.missing_evidence_count == 4
+    assert result.selected_tool_count == 8
+    assert result.executed_tool_count == 8
+    assert result.completed_tool_count == 8
+    assert result.missing_evidence_count == 6
     _assert_on_route_micro_decision_support_sources(result)
     weather = _workflow_source(result, WEATHER_WINDOW_TOOL_ID)
     contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
@@ -1105,19 +1223,32 @@ def test_full_workflow_blocks_split_team_summit_question() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
-def test_full_workflow_uses_rain_gear_micro_decision() -> None:
+def test_full_workflow_uses_rain_gear_micro_decision(tmp_path: Path, weather_tool_calls) -> None:
     result = run_scout_ai_full_workflow(
         "前面下雨了，要不要穿雨衣？",
-        project_root=PROJECT_ROOT,
+        project_root=write_missing_weather_project(tmp_path, PROJECT_ROOT),
         project_id="chilai_nanhua_day1",
+        reference_time=REFERENCE_TIME,
         limit=4,
     )
 
+    assert_exact_weather_execution(result, (
+        CONTEXTUAL_PERMISSION_TOOL_ID,
+        LIVE_NAVIGATION_STATE_TOOL_ID,
+        ROUTE_ARCHITECTURE_TOOL_ID,
+        WEATHER_WINDOW_TOOL_ID,
+        PACE_GUARDIAN_TOOL_ID,
+        RISK_SCORE_TOOL_ID,
+        EQUIPMENT_RESOURCE_TOOL_ID,
+        CWA_ENVIRONMENT_TOOL_ID,
+        GEE_ENVIRONMENT_TOOL_ID,
+    ), weather_tool_calls)
+
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.selected_tool_count == 7
-    assert result.executed_tool_count == 7
-    assert result.completed_tool_count == 7
-    assert result.missing_evidence_count == 4
+    assert result.selected_tool_count == 9
+    assert result.executed_tool_count == 9
+    assert result.completed_tool_count == 9
+    assert result.missing_evidence_count == 6
     _assert_on_route_micro_decision_support_sources(result)
     contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     summary = contextual["top_result_summary"]
@@ -1275,19 +1406,31 @@ def test_full_workflow_uses_direct_retreat_micro_decision() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
-def test_full_workflow_uses_micro_decision_for_weather_fatigue_retreat() -> None:
+def test_full_workflow_uses_micro_decision_for_weather_fatigue_retreat(tmp_path: Path, weather_tool_calls) -> None:
     result = run_scout_ai_full_workflow(
         "天氣變差且隊友疲勞，是否需要撤退？",
-        project_root=PROJECT_ROOT,
+        project_root=write_missing_weather_project(tmp_path, PROJECT_ROOT),
         project_id="chilai_nanhua_day1",
+        reference_time=REFERENCE_TIME,
         limit=5,
     )
 
+    assert_exact_weather_execution(result, (
+        CONTEXTUAL_PERMISSION_TOOL_ID,
+        LIVE_NAVIGATION_STATE_TOOL_ID,
+        ROUTE_ARCHITECTURE_TOOL_ID,
+        WEATHER_WINDOW_TOOL_ID,
+        PACE_GUARDIAN_TOOL_ID,
+        RISK_SCORE_TOOL_ID,
+        ENERGY_VITALS_TOOL_ID,
+        CWA_ENVIRONMENT_TOOL_ID,
+    ), weather_tool_calls)
+
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.selected_tool_count == 7
-    assert result.executed_tool_count == 7
-    assert result.completed_tool_count == 7
-    assert result.missing_evidence_count == 4
+    assert result.selected_tool_count == 8
+    assert result.executed_tool_count == 8
+    assert result.completed_tool_count == 8
+    assert result.missing_evidence_count == 5
     _assert_on_route_micro_decision_support_sources(result)
     contextual = _workflow_source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     summary = contextual["top_result_summary"]
@@ -1681,19 +1824,31 @@ def test_full_workflow_routes_time_to_summit_to_micro_decision() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
-def test_full_workflow_blocks_daylight_summit_pressure() -> None:
+def test_full_workflow_blocks_daylight_summit_pressure(tmp_path: Path, weather_tool_calls) -> None:
     result = run_scout_ai_full_workflow(
         "我們快摸黑了，但山頂只差一點，可以趕一下攻頂嗎？",
-        project_root=PROJECT_ROOT,
+        project_root=write_missing_weather_project(tmp_path, PROJECT_ROOT),
         project_id="chilai_nanhua_day1",
+        reference_time=REFERENCE_TIME,
         limit=6,
     )
 
+    assert_exact_weather_execution(result, (
+        CONTEXTUAL_PERMISSION_TOOL_ID,
+        LIVE_NAVIGATION_STATE_TOOL_ID,
+        ROUTE_ARCHITECTURE_TOOL_ID,
+        WEATHER_WINDOW_TOOL_ID,
+        PACE_GUARDIAN_TOOL_ID,
+        RISK_SCORE_TOOL_ID,
+        MEDIA_LITERACY_TOOL_ID,
+        CWA_ENVIRONMENT_TOOL_ID,
+    ), weather_tool_calls)
+
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.selected_tool_count == 7
-    assert result.executed_tool_count == 7
-    assert result.completed_tool_count == 7
-    assert result.missing_evidence_count == 5
+    assert result.selected_tool_count == 8
+    assert result.executed_tool_count == 8
+    assert result.completed_tool_count == 8
+    assert result.missing_evidence_count == 6
     _assert_on_route_micro_decision_support_sources(result)
     assert result.failed_tool_count == 0
     weather = _workflow_source(result, WEATHER_WINDOW_TOOL_ID)
@@ -2463,18 +2618,30 @@ def test_full_workflow_blocks_natural_risk_layer_literacy_gap() -> None:
     assert result.boundary.runtime_safety_truth is False
 
 
-def test_full_workflow_runs_route_readiness_question() -> None:
+def test_full_workflow_runs_route_readiness_question(weather_tool_calls) -> None:
     result = run_scout_ai_full_workflow(
         "出發前 Go/No-Go 可以出發嗎？",
         project_root=PROJECT_ROOT,
         project_id="chilai_nanhua_day1",
+        reference_time=REFERENCE_TIME,
         limit=3,
     )
 
+    assert_exact_weather_execution(result, (
+        ROUTE_READINESS_TOOL_ID,
+        ROUTE_ARCHITECTURE_TOOL_ID,
+        NAVIGATION_TERRAIN_TOOL_ID,
+        WEATHER_WINDOW_TOOL_ID,
+        CWA_ENVIRONMENT_TOOL_ID,
+        GEE_ENVIRONMENT_TOOL_ID,
+        PACE_GUARDIAN_TOOL_ID,
+        EQUIPMENT_RESOURCE_TOOL_ID,
+    ), weather_tool_calls)
+
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.selected_tool_count == 6
-    assert result.executed_tool_count == 6
-    assert result.completed_tool_count == 6
+    assert result.selected_tool_count == 8
+    assert result.executed_tool_count == 8
+    assert result.completed_tool_count == 8
     assert result.contract_gap_count == 0
     assert result.failed_tool_count == 0
     assert result.missing_evidence_count == 4

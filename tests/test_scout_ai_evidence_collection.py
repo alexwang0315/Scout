@@ -1,6 +1,17 @@
 import json
 from pathlib import Path
 
+from weather_workflow_fixtures import (
+    CWA_ENVIRONMENT_TOOL_ID,
+    GEE_ENVIRONMENT_TOOL_ID,
+    REFERENCE_TIME,
+    assert_exact_weather_execution,
+    weather_tool_calls,
+    write_missing_weather_project,
+    write_reviewed_weather_project,
+    write_reviewed_route_context_project,
+)
+
 from scout_agent_builtin_tools import run_builtin_tool
 from scout_agent_tools import load_tool_manifest
 from scout_ai_evidence_collection import (
@@ -478,17 +489,30 @@ def test_evidence_collection_keeps_split_team_micro_decision() -> None:
     assert contextual.boundary.runtime_safety_truth is False
 
 
-def test_evidence_collection_keeps_rain_gear_micro_decision() -> None:
+def test_evidence_collection_keeps_rain_gear_micro_decision(tmp_path: Path, weather_tool_calls) -> None:
     result = collect_scout_ai_evidence(
         "前面下雨了，要不要穿雨衣？",
-        project_root=PROJECT_ROOT,
+        project_root=write_reviewed_route_context_project(tmp_path, PROJECT_ROOT),
         project_id="chilai_nanhua_day1",
+        reference_time=REFERENCE_TIME,
         limit=4,
     )
 
-    assert result.selected_tool_count == 7
-    assert result.executed_tool_count == 7
-    assert result.completed_tool_count == 7
+    assert_exact_weather_execution(result, (
+        CONTEXTUAL_PERMISSION_TOOL_ID,
+        LIVE_NAVIGATION_STATE_TOOL_ID,
+        ROUTE_ARCHITECTURE_TOOL_ID,
+        WEATHER_WINDOW_TOOL_ID,
+        PACE_GUARDIAN_TOOL_ID,
+        RISK_SCORE_TOOL_ID,
+        EQUIPMENT_RESOURCE_TOOL_ID,
+        CWA_ENVIRONMENT_TOOL_ID,
+        GEE_ENVIRONMENT_TOOL_ID,
+    ), weather_tool_calls)
+
+    assert result.selected_tool_count == 9
+    assert result.executed_tool_count == 9
+    assert result.completed_tool_count == 9
     assert result.missing_input_count == 0
     _assert_on_route_micro_decision_support_records(result)
 
@@ -871,17 +895,29 @@ def test_evidence_collection_keeps_equipment_resource_payload() -> None:
     assert equipment.boundary.runtime_safety_truth is False
 
 
-def test_evidence_collection_keeps_route_readiness_payload() -> None:
+def test_evidence_collection_keeps_route_readiness_payload(tmp_path: Path, weather_tool_calls) -> None:
     result = collect_scout_ai_evidence(
         "出發前 Go/No-Go 可以出發嗎？",
-        project_root=PROJECT_ROOT,
+        project_root=write_reviewed_route_context_project(tmp_path, PROJECT_ROOT),
         project_id="chilai_nanhua_day1",
+        reference_time=REFERENCE_TIME,
         limit=3,
     )
 
-    assert result.selected_tool_count == 6
-    assert result.executed_tool_count == 6
-    assert result.completed_tool_count == 6
+    assert_exact_weather_execution(result, (
+        ROUTE_READINESS_TOOL_ID,
+        ROUTE_ARCHITECTURE_TOOL_ID,
+        NAVIGATION_TERRAIN_TOOL_ID,
+        WEATHER_WINDOW_TOOL_ID,
+        CWA_ENVIRONMENT_TOOL_ID,
+        GEE_ENVIRONMENT_TOOL_ID,
+        PACE_GUARDIAN_TOOL_ID,
+        EQUIPMENT_RESOURCE_TOOL_ID,
+    ), weather_tool_calls)
+
+    assert result.selected_tool_count == 8
+    assert result.executed_tool_count == 8
+    assert result.completed_tool_count == 8
     assert result.missing_input_count == 0
     tool_ids = {record.tool_id for record in result.evidence_records}
     assert {

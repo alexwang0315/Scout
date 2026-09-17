@@ -15,9 +15,14 @@ from scout.schemas.base import SchemaModel
 from scout.schemas.mser import (
     CompactDimension,
     CompactSignal,
+    DecisionCriticality,
     DecisionType,
+    DimensionRequirement,
     EnvironmentalRepresentation,
+    MSERAnswerMode,
     MSERDecisionPacket,
+    MSERGapEvidenceReceipt,
+    MSERTaskContract,
     SignalAvailability,
 )
 from scout.services.mser_answer_verifier import (
@@ -29,8 +34,9 @@ from scout.services.mser_answer_verifier import (
     MSERAnswerVerifier,
     MSERClaimViolation,
     MSERReasoningEnvelope,
+    ReasoningDisposition,
 )
-from scout.services.mser_engine import MSEREngine
+from scout.services.mser_engine import DECISION_PROFILES, MSEREngine
 from scout.services.mser_projectors import (
     project_scenario_context,
     project_total_info,
@@ -67,7 +73,7 @@ def mser_enforcement_errors(
     if state is None:
         return ("mser_state_unavailable",)
     disposition = state.reasoning.disposition.value
-    if disposition != "ready_to_reason":
+    if disposition not in {"ready_to_reason", "ready_to_explain_gap"}:
         return (f"mser_reasoning_blocked:{disposition}",)
     if verification is None:
         return ("mser_answer_verification_missing",)
@@ -100,6 +106,7 @@ class MSERPipelineState(SchemaModel):
     reasoning: MSERReasoningEnvelope
     state_snapshot_id: str
     tool_signal_bindings: dict[str, tuple[str, ...]] = Field(default_factory=dict)
+    gap_evidence_receipts: tuple[MSERGapEvidenceReceipt, ...] = ()
 
 
 class MSERPipelineTrace(SchemaModel):
@@ -139,6 +146,156 @@ def decision_hint_for_force(force_code: str | None) -> DecisionType | None:
     """Return a broad eval-family hint without overriding question modifiers."""
 
     return _FORCE_DECISION_HINTS.get(str(force_code or "").strip().upper())
+
+
+def _task_requirement(
+    dimension: CompactDimension,
+    reason: str,
+    *,
+    confidence: float,
+    max_age_seconds: int,
+) -> DimensionRequirement:
+    return DimensionRequirement(
+        dimension=dimension,
+        reason=reason,
+        minimum_confidence=confidence,
+        max_age_seconds=max_age_seconds,
+    )
+
+
+def task_contract_for_question(
+    question: str,
+    *,
+    decision_hint: DecisionType | None = None,
+    answer_mode_hint: str | None = None,
+    safety_relevant_hint: bool = False,
+) -> MSERTaskContract:
+    """Compile a deterministic task scope; model text cannot select this mode."""
+
+    text = " ".join(question.casefold().split())
+    hint = str(answer_mode_hint or "").strip().casefold()
+    asks_for_gap = any(
+        term in text
+        for term in (
+            "哪一項天氣資料缺失",
+            "哪項天氣資料缺失",
+            "缺少哪",
+            "缺失哪",
+            "什麼證據不足",
+            "哪些證據不足",
+            "what evidence is missing",
+            "which evidence is missing",
+        )
+    )
+    if asks_for_gap:
+        decision_type = decision_hint or DecisionType.GENERAL
+        return MSERTaskContract(
+            task_id=f"evidence-gap.{decision_type.value}.v0",
+            answer_mode=MSERAnswerMode.EVIDENCE_GAP_EXPLANATION,
+            requirements=DECISION_PROFILES[decision_type].requirements,
+        )
+    if any(
+        term in text
+        for term in (
+            "現在在路線的哪一個位置",
+            "目前在路線的哪一個位置",
+            "where am i on the route",
+            "current route position",
+        )
+    ):
+        return MSERTaskContract(
+            task_id="factual.current-position.v0",
+            answer_mode=MSERAnswerMode.FACTUAL_LOOKUP,
+            requirements=(
+                _task_requirement(
+                    CompactDimension.CURRENT_POSITION,
+                    "A current-position answer needs the route-bound position fact.",
+                    confidence=0.65,
+                    max_age_seconds=300,
+                ),
+                _task_requirement(
+                    CompactDimension.GPS_CONFIDENCE,
+                    "Position facts must retain current GNSS uncertainty.",
+                    confidence=0.65,
+                    max_age_seconds=300,
+                ),
+            ),
+        )
+    if any(
+        term in text
+        for term in (
+            "速度比預估慢多少",
+            "速度比預計慢多少",
+            "配速比預估慢多少",
+            "pace variance",
+            "pace delta",
+        )
+    ):
+        return MSERTaskContract(
+            task_id="factual.pace-variance.v0",
+            answer_mode=MSERAnswerMode.FACTUAL_LOOKUP,
+            requirements=(
+                _task_requirement(
+                    CompactDimension.PACE_VARIANCE,
+                    "A pace comparison needs the measured plan-versus-actual delta.",
+                    confidence=0.55,
+                    max_age_seconds=900,
+                ),
+            ),
+        )
+    next_checkpoint_mentioned = any(
+        term in text
+        for term in (
+            "下一個 cp",
+            "下一個檢查點",
+            "next checkpoint",
+        )
+    )
+    asks_for_checkpoint_fact = any(
+        term in text
+        for term in (
+            "是什麼",
+            "是哪一個",
+            "在哪",
+            "距離",
+            "多遠",
+            "還要多久",
+            "which checkpoint",
+            "where is",
+            "how far",
+        )
+    )
+    if next_checkpoint_mentioned and asks_for_checkpoint_fact:
+        return MSERTaskContract(
+            task_id="factual.next-checkpoint.v0",
+            answer_mode=MSERAnswerMode.FACTUAL_LOOKUP,
+            requirements=(
+                _task_requirement(
+                    CompactDimension.NEXT_CHECKPOINT,
+                    "The answer needs a sourced next-checkpoint identity and distance.",
+                    confidence=0.6,
+                    max_age_seconds=300,
+                ),
+                _task_requirement(
+                    CompactDimension.ROUTE_PROGRESS,
+                    "Checkpoint ordering must be bound to current route progress.",
+                    confidence=0.6,
+                    max_age_seconds=300,
+                ),
+            ),
+        )
+    if hint == "decision" or (hint == "compound" and safety_relevant_hint):
+        return MSERTaskContract(
+            task_id=f"safety-decision.{(decision_hint or DecisionType.GENERAL).value}.v0",
+            answer_mode=MSERAnswerMode.SAFETY_DECISION,
+            safety_relevant=True,
+        )
+    return MSERTaskContract(
+        task_id=(
+            f"candidate-analysis.{(decision_hint or DecisionType.GENERAL).value}.v0"
+        ),
+        answer_mode=MSERAnswerMode.CANDIDATE_ANALYSIS,
+    )
 
 
 def merge_environment_representations(
@@ -199,6 +356,7 @@ class MSERPipeline:
         scenario: object | None = None,
         total_info: object | None = None,
         decision_hint: DecisionType | None = None,
+        task_contract: MSERTaskContract | None = None,
         now: datetime | None = None,
     ) -> MSERPipelineState:
         reference_time = _as_utc(now or datetime.now(UTC))
@@ -225,10 +383,24 @@ class MSERPipeline:
             environment=environment,
             capabilities=self.runtime_adapter.capabilities,
             decision_hint=decision_hint,
+            task_contract=task_contract,
             now=reference_time,
         )
+        if (
+            task_contract is not None
+            and packet.intent.criticality == DecisionCriticality.CRITICAL
+            and task_contract.answer_mode != MSERAnswerMode.SAFETY_DECISION
+        ):
+            raise ValueError(
+                "critical decisions cannot use a non-safety MSER answer mode"
+            )
         reasoning = self.answer_verifier.prepare_reasoning(
             context=packet.compact_context,
+            answer_mode=(
+                task_contract.answer_mode
+                if task_contract is not None
+                else MSERAnswerMode.SAFETY_DECISION
+            ),
             now=reference_time,
         )
         return MSERPipelineState(
@@ -249,6 +421,7 @@ class MSERPipeline:
         payloads: list[BoundedReprojectionPayload] = []
         projected_signals: list[CompactSignal] = []
         bindings: dict[str, tuple[str, ...]] = {}
+        gap_evidence_receipts: list[MSERGapEvidenceReceipt] = []
         for result in tool_results:
             tool_id = str(result.get("tool_id") or "").strip()
             if not tool_id:
@@ -256,6 +429,10 @@ class MSERPipeline:
             payload = self.runtime_adapter.to_reprojection_payload(
                 dict(result),
                 tool_id=tool_id,
+            )
+            payload = _bind_server_context_source(
+                payload=payload,
+                environment=previous.environment,
             )
             payloads.append(payload)
             capability = self.runtime_adapter.capability_for(tool_id)
@@ -272,6 +449,13 @@ class MSERPipeline:
             bindings[capability.tool_id] = tuple(
                 signal.signal_id for signal in tool_signals
             )
+            gap_receipt = _gap_evidence_receipt(
+                payload=payload,
+                signals=tool_signals,
+                now=reference_time,
+            )
+            if gap_receipt is not None:
+                gap_evidence_receipts.append(gap_receipt)
 
         tool_environment = EnvironmentalRepresentation(
             representation_id=_tool_environment_id(payloads),
@@ -298,10 +482,17 @@ class MSERPipeline:
             environment=environment,
             capabilities=self.runtime_adapter.capabilities,
             decision_hint=previous.packet.intent.primary_type,
+            task_contract=previous.packet.task_contract,
             now=reference_time,
         )
         reasoning = self.answer_verifier.prepare_reasoning(
             context=packet.compact_context,
+            answer_mode=(
+                packet.task_contract.answer_mode
+                if packet.task_contract is not None
+                else MSERAnswerMode.SAFETY_DECISION
+            ),
+            gap_evidence_receipts=tuple(gap_evidence_receipts),
             now=reference_time,
         )
         return (
@@ -311,6 +502,7 @@ class MSERPipeline:
                 reasoning=reasoning,
                 state_snapshot_id=snapshot.snapshot_id,
                 tool_signal_bindings=bindings,
+                gap_evidence_receipts=tuple(gap_evidence_receipts),
             ),
             tuple(payloads),
         )
@@ -338,6 +530,11 @@ class MSERPipeline:
             if str(item).strip()
         )
         signal_ids: list[str] = []
+        gap_mode = (
+            state.reasoning.disposition
+            == ReasoningDisposition.READY_TO_EXPLAIN_GAP
+        )
+        gap_receipt_ids: list[str] = []
         for ref in cited_refs:
             signal_ids.extend(state.tool_signal_bindings.get(ref, ()))
             signal_ids.extend(
@@ -345,23 +542,51 @@ class MSERPipeline:
                 for signal in selected_by_id.values()
                 if ref in signal.source_refs
             )
+            if gap_mode:
+                gap_receipt_ids.extend(
+                    receipt.receipt_id
+                    for receipt in state.gap_evidence_receipts
+                    if ref
+                    in {
+                        receipt.receipt_id,
+                        receipt.tool_id,
+                        *receipt.source_refs,
+                    }
+                )
         selected_signal_ids = tuple(
             signal_id
             for signal_id in dict.fromkeys(signal_ids)
             if signal_id in selected_by_id
         )
-        if not selected_signal_ids:
+        selected_gap_receipt_ids = tuple(dict.fromkeys(gap_receipt_ids))
+        if not selected_signal_ids and not selected_gap_receipt_ids:
             return _failed_answer_verification(
                 ClaimViolationCode.UNKNOWN_SIGNAL_ID,
-                "No cited model source resolves to a selected MSER signal.",
+                (
+                    "No cited model source resolves to a selected MSER signal "
+                    "or typed gap evidence receipt."
+                ),
                 source_refs=state.packet.compact_context.certificate.source_refs,
             )
+        receipt_by_id = {
+            receipt.receipt_id: receipt for receipt in state.gap_evidence_receipts
+        }
         resolved_source_refs = tuple(
             dict.fromkeys(
-                ref
-                for signal_id in selected_signal_ids
-                for ref in selected_by_id[signal_id].source_refs
-                if ref in state.packet.compact_context.certificate.source_refs
+                (
+                    *(
+                        ref
+                        for signal_id in selected_signal_ids
+                        for ref in selected_by_id[signal_id].source_refs
+                        if ref
+                        in state.packet.compact_context.certificate.source_refs
+                    ),
+                    *(
+                        ref
+                        for receipt_id in selected_gap_receipt_ids
+                        for ref in receipt_by_id[receipt_id].source_refs
+                    ),
+                )
             )
         )
         if not resolved_source_refs:
@@ -371,13 +596,30 @@ class MSERPipeline:
                 source_refs=state.packet.compact_context.certificate.source_refs,
             )
         answer = str(output["answer"]).strip()
+        answer_mode = (
+            state.packet.task_contract.answer_mode
+            if state.packet.task_contract is not None
+            else MSERAnswerMode.SAFETY_DECISION
+        )
         draft = MSERAnswerDraft(
             answer_text=answer,
+            answer_mode=answer_mode,
+            decision=(
+                str(output.get("decision")).strip()
+                if output.get("decision") is not None
+                else None
+            ),
+            evidence_gaps=tuple(
+                str(item).strip()
+                for item in output.get("evidence_gaps") or ()
+                if str(item).strip()
+            ),
             claims=(
                 MSERAnswerClaim(
                     claim_id="model-answer",
                     statement=answer,
                     signal_ids=selected_signal_ids,
+                    gap_receipt_ids=selected_gap_receipt_ids,
                     source_refs=resolved_source_refs,
                 ),
             ),
@@ -385,6 +627,8 @@ class MSERPipeline:
         return self.answer_verifier.verify(
             context=state.packet.compact_context,
             draft=draft,
+            answer_mode=answer_mode,
+            gap_evidence_receipts=state.gap_evidence_receipts,
             now=_as_utc(now or datetime.now(UTC)),
         )
 
@@ -400,6 +644,23 @@ def compact_pipeline_context(state: MSERPipelineState) -> dict[str, Any]:
             "modifiers": [item.value for item in state.packet.intent.alternative_types],
             "confidence": state.packet.intent.confidence,
             "criticality": state.packet.intent.criticality.value,
+        },
+        "task": {
+            "task_id": (
+                state.packet.task_contract.task_id
+                if state.packet.task_contract is not None
+                else "legacy-full-profile"
+            ),
+            "answer_mode": (
+                state.packet.task_contract.answer_mode.value
+                if state.packet.task_contract is not None
+                else MSERAnswerMode.SAFETY_DECISION.value
+            ),
+            "safety_relevant": (
+                state.packet.task_contract.safety_relevant
+                if state.packet.task_contract is not None
+                else True
+            ),
         },
         "sufficiency": {
             "status": context.certificate.status.value,
@@ -423,6 +684,10 @@ def compact_pipeline_context(state: MSERPipelineState) -> dict[str, Any]:
             ],
             "source_refs": list(context.certificate.source_refs),
         },
+        "gap_evidence_receipts": [
+            receipt.model_dump(mode="json")
+            for receipt in state.gap_evidence_receipts
+        ],
         "signals": [
             {
                 "signal_id": signal.signal_id,
@@ -453,9 +718,100 @@ def compact_pipeline_context(state: MSERPipelineState) -> dict[str, Any]:
             "max_tool_calls": state.packet.tool_plan.max_tool_calls,
         },
         "reasoning_disposition": state.reasoning.disposition.value,
+        "reasoning_allowed_decisions": (
+            list(state.reasoning.gap_payload.allowed_decisions)
+            if state.reasoning.gap_payload is not None
+            else []
+        ),
         "candidate_only": True,
         "runtime_safety_truth": False,
     }
+
+
+def _bind_server_context_source(
+    *,
+    payload: BoundedReprojectionPayload,
+    environment: EnvironmentalRepresentation,
+) -> BoundedReprojectionPayload:
+    """Bind a deterministic decision to an already-certified scenario input."""
+
+    if payload.source_refs:
+        return payload
+    decision = str(payload.key_values.get("decision") or "").strip().upper()
+    scenario = payload.key_values.get("scenario_context")
+    if not decision or not isinstance(scenario, Mapping):
+        return payload
+    scenario_id = str(scenario.get("scenario_id") or "").strip()
+    if not scenario_id:
+        return payload
+    source_ref = f"scenario://{scenario_id}"
+    if source_ref not in environment.source_refs:
+        return payload
+    invalid_quality = payload.quality.casefold() in {
+        "invalid",
+        "withheld",
+        "unavailable",
+    }
+    return payload.model_copy(
+        update={
+            "source_refs": (source_ref,),
+            "missing_fields": tuple(
+                field for field in payload.missing_fields if field != "source_refs"
+            ),
+            "reprojection_ready": not invalid_quality,
+        }
+    )
+
+
+def _gap_evidence_receipt(
+    *,
+    payload: BoundedReprojectionPayload,
+    signals: tuple[CompactSignal, ...],
+    now: datetime,
+) -> MSERGapEvidenceReceipt | None:
+    gap_signals = tuple(
+        signal
+        for signal in signals
+        if signal.availability != SignalAvailability.AVAILABLE
+    )
+    if not gap_signals or not payload.source_refs:
+        return None
+    availabilities = {signal.availability for signal in gap_signals}
+    availability = (
+        next(iter(availabilities))
+        if len(availabilities) == 1
+        else SignalAvailability.INVALID
+    )
+    observed_at = max(
+        (signal.observed_at for signal in gap_signals if signal.observed_at),
+        default=now,
+    )
+    identity = json.dumps(
+        {
+            "tool_id": payload.tool_id,
+            "signal_ids": [signal.signal_id for signal in gap_signals],
+            "availability": availability.value,
+            "missing_fields": payload.missing_fields,
+            "source_refs": payload.source_refs,
+        },
+        ensure_ascii=True,
+        sort_keys=True,
+    )
+    return MSERGapEvidenceReceipt(
+        receipt_id=(
+            "mser.gap."
+            f"{hashlib.sha256(identity.encode('utf-8')).hexdigest()[:16]}"
+        ),
+        tool_id=payload.tool_id,
+        dimensions=tuple(signal.dimension for signal in gap_signals),
+        signal_ids=tuple(signal.signal_id for signal in gap_signals),
+        availability=availability,
+        missing_fields=payload.missing_fields,
+        freshness=payload.freshness,
+        quality=payload.quality,
+        observed_at=observed_at,
+        source_refs=payload.source_refs,
+    )
 
 
 def _tool_signal(
@@ -468,7 +824,17 @@ def _tool_signal(
     answerability = str(payload.key_values.get("answerability") or "").casefold()
     status = str(payload.key_values.get("status") or "").casefold()
     freshness = payload.freshness.casefold()
-    missing_answer = bool(payload.missing_fields) and "missing" in answerability
+    missing_answer = bool(payload.missing_fields) or any(
+        marker in answerability
+        for marker in (
+            "missing",
+            "no_match",
+            "no_matching",
+            "not_available",
+            "unavailable",
+            "unknown",
+        )
+    )
     if not payload.reprojection_ready or status not in {"completed", "available", "ok"}:
         availability = SignalAvailability.INVALID
     elif missing_answer:
@@ -496,6 +862,17 @@ def _tool_signal(
             "freshness": payload.freshness,
             "result_count": payload.result_count,
         }
+        decision = str(payload.key_values.get("decision") or "").strip().upper()
+        if decision in {
+            "GO",
+            "CONDITIONAL_GO",
+            "CHANGE_PLAN",
+            "DELAY",
+            "NO_GO",
+            "ESCALATE",
+            "GUIDED_ONLY",
+        }:
+            value["decision"] = decision
     risk_upper_bound = (
         _risk_upper_bound(payload.key_values) if dimension in _RISK_DIMENSIONS else None
     )
@@ -628,4 +1005,5 @@ __all__ = [
     "decision_hint_for_force",
     "merge_environment_representations",
     "mser_enforcement_errors",
+    "task_contract_for_question",
 ]

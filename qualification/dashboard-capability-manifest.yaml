@@ -45,6 +45,51 @@ surfaces:
         required_tests: [dashboard_open_no_write, diag_all_no_write, zero_post_requests]
         required_evidence: [ui, network, server_state, trace]
         authority_boundary: {source: server, runtime_authority: false}
+  - id: intelligence-telemetry
+    route: /admin/dashboard#surface-intelligence
+    capabilities:
+      - id: dashboard.intelligence.read_only_job_projection
+        criticality: P1
+        status: candidate
+        qualification_state: outside_boundary
+        owner: scout-ai-nextgen
+        expected_behavior:
+          - Persisted background intelligence jobs are projected through a typed SQLite read-only connection with request, mission, workspace, route, capability, agent, tool, model, evidence, validation, and output-hash bindings.
+          - Missing, unreadable, malformed, authority-escalating, or stale-bound telemetry renders an explicit unavailable or degraded state with no partial candidate projection.
+          - The Dashboard exposes no question text, submit, cancel, retry, promotion, permission, safety, notification, emergency, route-write, or hardware control.
+        forbidden_behavior:
+          - Opening or refreshing telemetry must not insert, update, or delete SQLite schema, job, or event records, or mutate Workspace, mission, route, permission, safety, notification, emergency, or hardware state.
+          - Candidate intelligence, model confidence, or a successful validation label must not be presented as runtime safety truth or promoted authority.
+        required_tests: [typed_read_only_projection, malformed_store_fail_closed, get_only_api, desktop_mobile_telemetry_smoke]
+        required_evidence: [ui, network, server_state, trace]
+        authority_boundary: {source: server, runtime_authority: false}
+  - id: scout-hardware-monitor
+    route: /admin/dashboard#scout-monitor
+    capabilities:
+      - id: dashboard.system.hardware_monitor_read_only
+        criticality: P1
+        status: partial
+        qualification_state: outside_boundary
+        owner: dashboard
+        expected_behavior:
+          - System > scout monitor renders Scout hardware status, power, memory, disks, CPU/load, temperatures, fan RPM, uptime, trend, alerts, and status-change events in Traditional Chinese.
+          - The browser uses same-origin relative GET requests; the Dashboard backend proxies the fixed Scout hardware-monitor API and preserves a stale HTTP 503 envelope.
+          - Native Mac backends read each request over a new bounded SSH stdio channel to Scout loopback 9151 without a Mac 9151 listener; failed requests are not cached, and the next 60-second poll or manual GET reconnects.
+          - A stale response is visibly labelled 資料已過期 even when its retained data.status is ok; null values remain 未知 and an empty events list remains empty.
+          - Hardware telemetry remains read-only, candidate-only presentation and does not add hardware control or runtime-safety authority.
+          - Network, Bluetooth, USB, PCIe, I2C, GPIO, and serial inventory comes only from data.inventory.sections; section ok means 已讀取, not device health.
+          - Expandable properties, notes, errors, and GPIO lines preserve their open state across refresh; GPIO null values remain 未採樣, and an older snapshot without inventory waits for an update.
+          - Stale or disconnected inventory is marked as retained observation; USB root hubs and external devices are counted separately, while device and PCIe counts follow the API.
+          - UPS communication failure leaves battery values unknown while independently validated host 5V and throttle flags remain visible; the cause is shown as UPS 通訊失敗 and the overall backend warning is preserved.
+          - Host supply failures do not hide valid UPS battery values or backend battery alerts; older snapshots without component statuses retain finite supply observations without implying health, and retained values are never labelled current after stale or disconnection.
+        forbidden_behavior:
+          - The browser must not call 127.0.0.1:9151 directly or issue POST, PUT, PATCH, or DELETE requests for hardware monitoring.
+          - The Dashboard monitor must not display local macOS metrics or request the removed Mac snapshot/health endpoints.
+          - A fan reading of 0 RPM must not alone produce a hardware-fault state, and missing history points must not be fabricated.
+          - Inventory strings must never be interpreted as HTML, and I2C/GPIO/serial enumeration must not imply active scanning, sampled voltage, or external connectivity.
+        required_tests: [hardware_monitor_proxy_same_origin, hardware_monitor_stale_503, hardware_monitor_browser_smoke, hardware_inventory_states_and_text_safety, hardware_inventory_expansion_persistence, hardware_power_independent_sources, hardware_monitor_ssh_reconnect]
+        required_evidence: [ui, network, server_state, trace]
+        authority_boundary: {source: server, runtime_authority: false}
   - id: all-dashboard-live-browser
     route: /admin/dashboard#*
     capabilities:

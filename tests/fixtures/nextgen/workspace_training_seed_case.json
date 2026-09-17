@@ -1,0 +1,38 @@
+{
+  "case_id": "terrain-workspace-training-seed-v0",
+  "workspace_id": "workspace-training-counterfactual",
+  "workspace_revision": "workspace-training-revision-1",
+  "mission_id": "mission-training-counterfactual",
+  "mission_version": "mission-training-version-1",
+  "route_id": "route-training-counterfactual",
+  "route_version": "route-training-version-1",
+  "question": "Find convex spur, drainage, and steep slope candidate evidence around the hypothetical training route.",
+  "geographic_scope": {
+    "route_id": "route-training-counterfactual",
+    "corridor_meters": 180,
+    "crs": "EPSG:4326"
+  },
+  "evidence_refs": [
+    "route:training-counterfactual",
+    "dem:training-counterfactual",
+    "qgis:training-counterfactual"
+  ],
+  "allowed_capabilities": [
+    "route.read",
+    "dem.read",
+    "qgis.processing.slope",
+    "workspace.evidence.read"
+  ],
+  "expected_min_findings": 3,
+  "expected_tool_calls": [
+    "route.read",
+    "dem.read",
+    "qgis.processing.slope"
+  ],
+  "max_runtime_seconds": 30,
+  "max_model_requests": 10,
+  "timeout_seconds": 10,
+  "privacy_sensitive": true,
+  "candidate_only": true,
+  "runtime_safety_truth": false
+}

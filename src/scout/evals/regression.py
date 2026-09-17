@@ -11,6 +11,8 @@ from typing import Any
 from fastapi.testclient import TestClient
 from pydantic_evals import Dataset
 
+from scout.agents.pydantic_model_lifecycle import pydantic_model_session
+from scout.agents.model_gateway import _redact_model_error
 from scout.api.routes import create_app
 
 
@@ -48,6 +50,7 @@ def load_regression_dataset(path: Path | str = DEFAULT_DATASET_PATH) -> Dataset:
     )
 
 
+@pydantic_model_session()
 def run_regression_dataset(
     *,
     dataset_path: Path | str = DEFAULT_DATASET_PATH,
@@ -81,10 +84,25 @@ def run_regression_dataset(
         if mismatches:
             failures.append(result)
 
+    for case in report.failures:
+        result = {
+            "name": case.name,
+            "ok": False,
+            "output": None,
+            "expected": dict(case.expected_output or {}),
+            "mismatches": [],
+            "error": {
+                "kind": "task_execution_error",
+                "message": _redact_model_error(case.error_message),
+            },
+        }
+        results.append(result)
+        failures.append(result)
+
     return {
         "ok": not failures,
         "dataset": dataset.name,
-        "case_count": len(report.cases),
+        "case_count": len(results),
         "failure_count": len(failures),
         "failures": failures,
         "results": results,
@@ -99,11 +117,11 @@ def _run_case(inputs: dict[str, Any], *, project_root: Path) -> dict[str, Any]:
             root=project_root,
             eval_jsonl_path=tmp_path / "evals" / "workflow_compiler.jsonl",
         )
-        client = TestClient(app)
-        kind = str(inputs.get("kind") or "request")
-        if kind == "capability_build":
-            return _run_capability_build_case(client, inputs)
-        return _run_request_case(client, inputs)
+        with TestClient(app) as client:
+            kind = str(inputs.get("kind") or "request")
+            if kind == "capability_build":
+                return _run_capability_build_case(client, inputs)
+            return _run_request_case(client, inputs)
 
 
 def _run_request_case(client: TestClient, inputs: dict[str, Any]) -> dict[str, Any]:

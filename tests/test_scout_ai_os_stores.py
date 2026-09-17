@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.scout_database_fixtures import owned_test_databases  # noqa: F401
+
 import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -33,6 +35,9 @@ from scout.services import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+pytestmark = pytest.mark.usefixtures("owned_test_databases")
 
 
 def make_workflow(name: str = "Manual reminder") -> WorkflowSpec:

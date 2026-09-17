@@ -14,6 +14,8 @@ SCOUT_MODEL_ENV = "SCOUT_AI_OS_MODEL"
 OPENROUTER_KEY_ENV = "OPENROUTER_API_KEY"
 OPENAI_KEY_ENV = "OPENAI_API_KEY"
 NVIDIA_KEY_ENV = "NVIDIA_API_KEY"
+OPENAI_RESPONSES_PREFIX = "openai-responses:"
+GPT6_ASTRA_MODEL_ID = "gpt-6-astra"
 MODEL_TIMEOUT_ENV = "SCOUT_AI_OS_MODEL_TIMEOUT_SECONDS"
 MODEL_MAX_COST_ENV = "SCOUT_AI_OS_MODEL_MAX_COST_USD"
 MODEL_ESTIMATED_CALL_COST_ENV = "SCOUT_AI_OS_MODEL_ESTIMATED_CALL_COST_USD"
@@ -146,7 +148,7 @@ def resolve_model_policy(
     if provider is None:
         raise ValueError(
             f"unsupported Scout model provider for {requested!r}; "
-            "use openrouter:, nvidia:, or openai-chat:"
+            "use openrouter:, nvidia:, openai-chat:, hailo:, or openai-responses:"
         )
     provider_model_id = _provider_model_id(normalized_model)
     required_credential_env = _required_credential_env(normalized_model)
@@ -161,7 +163,7 @@ def resolve_model_policy(
         provider=provider,
         provider_model_id=provider_model_id,
         display_name=normalized_model,
-        requires_network=True,
+        requires_network=provider != "hailo_ollama",
         required_credential_env=required_credential_env,
         missing_credential_env=missing_credential_env,
         aggressive_construction_mode=aggressive_construction_mode,
@@ -173,7 +175,11 @@ def resolve_model_policy(
         estimated_call_cost_usd=(
             estimated_call_cost_usd
             if estimated_call_cost_usd is not None
-            else DEFAULT_EXTERNAL_MODEL_ESTIMATED_CALL_COST_USD
+            else (
+                0.0
+                if provider == "hailo_ollama"
+                else DEFAULT_EXTERNAL_MODEL_ESTIMATED_CALL_COST_USD
+            )
         ),
         fallback_model=fallback_model,
         **native_research,
@@ -195,6 +201,13 @@ def _is_local_model_alias(value: str) -> bool:
 def _normalize_external_model(value: str) -> str:
     normalized = value.strip()
     aliases = {
+        GPT6_ASTRA_MODEL_ID: f"{OPENAI_RESPONSES_PREFIX}{GPT6_ASTRA_MODEL_ID}",
+        f"openai:{GPT6_ASTRA_MODEL_ID}": (
+            f"{OPENAI_RESPONSES_PREFIX}{GPT6_ASTRA_MODEL_ID}"
+        ),
+        f"{OPENAI_RESPONSES_PREFIX}{GPT6_ASTRA_MODEL_ID}": (
+            f"{OPENAI_RESPONSES_PREFIX}{GPT6_ASTRA_MODEL_ID}"
+        ),
         "gpt-4o-mini": "openrouter:openai/gpt-4o-mini",
         "openai/gpt-4o-mini": "openrouter:openai/gpt-4o-mini",
         "openai:gpt-4o-mini": "openai-chat:gpt-4o-mini",
@@ -221,6 +234,8 @@ def _required_credential_env(model: str) -> list[str]:
         return [NVIDIA_KEY_ENV]
     if model.startswith("openai-chat:"):
         return [OPENAI_KEY_ENV]
+    if model.startswith(OPENAI_RESPONSES_PREFIX):
+        return [OPENAI_KEY_ENV]
     return []
 
 
@@ -231,6 +246,10 @@ def _provider_for_model(model: str) -> str | None:
         return "nvidia"
     if model.startswith("openai-chat:"):
         return "openai-chat"
+    if model.startswith("hailo:"):
+        return "hailo_ollama"
+    if model.startswith(OPENAI_RESPONSES_PREFIX):
+        return "openai-responses"
     return None
 
 
@@ -241,6 +260,10 @@ def _provider_model_id(model: str) -> str:
         return model.removeprefix("nvidia:")
     if model.startswith("openai-chat:"):
         return model.removeprefix("openai-chat:")
+    if model.startswith("hailo:"):
+        return model.removeprefix("hailo:")
+    if model.startswith(OPENAI_RESPONSES_PREFIX):
+        return model.removeprefix(OPENAI_RESPONSES_PREFIX)
     return model
 
 
@@ -350,6 +373,7 @@ def _csv_env(value: str | None) -> list[str]:
 __all__ = [
     "DEFAULT_LOCAL_MODEL_LABEL",
     "DEFAULT_MODEL_TIMEOUT_SECONDS",
+    "GPT6_ASTRA_MODEL_ID",
     "MODEL_FALLBACK_ENV",
     "MODEL_MAX_COST_ENV",
     "MODEL_TIMEOUT_ENV",
@@ -365,6 +389,7 @@ __all__ = [
     "ModelPolicySource",
     "NVIDIA_KEY_ENV",
     "OPENAI_KEY_ENV",
+    "OPENAI_RESPONSES_PREFIX",
     "OPENROUTER_KEY_ENV",
     "SCOUT_MODEL_ENV",
     "resolve_model_policy",

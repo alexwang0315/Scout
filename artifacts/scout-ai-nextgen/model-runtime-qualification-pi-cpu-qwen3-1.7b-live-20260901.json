@@ -1,0 +1,354 @@
+{
+  "schema_version": "scout.model_runtime_qualification.v1",
+  "experiment_id": "SCOUT-AI-EXP-MODEL-RUNTIME-QUAL-005",
+  "qualification_id": "378a60d1-af0d-4642-b469-17a9a9486ccd",
+  "generated_at": "2026-09-01T10:23:48.832609Z",
+  "disposition": "passed",
+  "runtime_id": "edge.pi.ollama.cpu.background",
+  "provider": "ollama",
+  "requested_model_id": "qwen3:1.7b",
+  "accepted_observed_model_ids": [
+    "qwen3:1.7b"
+  ],
+  "transport_scope": "loopback",
+  "locality": "edge",
+  "accelerator": "cpu",
+  "endpoint_sha256": "9b514b1a65f6ebfaa4da53a116ea003831b044dc32a989733eace74554ef5b0c",
+  "runtime_config_sha256": "4a6de46467077a22b8b8b05c24468fa9fadb67a14f379177b6dc7d80c9c97492",
+  "case_sha256": "3c206517124664ef3bd038f58e856b713e1fcc568a7cf22b1cea052c968e2f54",
+  "evidence_catalog_sha256": "846199ce7c8bb6567a0442659eebe39a532050a3d1c06bd2aebe816b07de7e32",
+  "case_id": "terrain-http-qualification-edge-cpu-v0",
+  "request_id": "ec8edb0e-c36d-4781-9b86-1c91ad2e40b3",
+  "workspace_binding": {
+    "workspace_id": "workspace-http-qualification",
+    "workspace_revision": "workspace-revision-1",
+    "mission_id": "mission-http-qualification",
+    "mission_version": "mission-version-1",
+    "route_id": "route-http-qualification",
+    "route_version": "route-version-1",
+    "input_hash": "4d9191f704d0eb73dd3bf61e2729b8a6a848ae0213f6619c4a4278a4f86d85fa",
+    "generated_at": "2026-09-01T10:21:35.459762Z"
+  },
+  "checks": [
+    {
+      "check_id": "configuration",
+      "status": "passed",
+      "summary": "Typed runtime configuration passed Scout validation.",
+      "started_at": "2026-09-01T10:21:35.459864Z",
+      "completed_at": "2026-09-01T10:21:35.459864Z",
+      "latency_ms": 0,
+      "model_request_count": 0,
+      "tool_call_count": 0,
+      "tools_called": [],
+      "input_tokens": null,
+      "output_tokens": null,
+      "requested_model_id": "qwen3:1.7b",
+      "observed_model_id": null,
+      "output_hash": null,
+      "error_type": null,
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "check_id": "basic_chat",
+      "status": "passed",
+      "summary": "Basic chat transport and observed model identity passed.",
+      "started_at": "2026-09-01T10:21:35.815278Z",
+      "completed_at": "2026-09-01T10:21:43.681111Z",
+      "latency_ms": 7865,
+      "model_request_count": 1,
+      "tool_call_count": 0,
+      "tools_called": [],
+      "input_tokens": 55,
+      "output_tokens": 6,
+      "requested_model_id": "qwen3:1.7b",
+      "observed_model_id": "qwen3:1.7b",
+      "output_hash": "8240a872c5eeb1419e19ce0b0e890a795deafa72a613b0ba4f51be28d2aa17d2",
+      "error_type": null,
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "check_id": "typed_output",
+      "status": "passed",
+      "summary": "Structured output, Pydantic validation, and typed authority flags passed.",
+      "started_at": "2026-09-01T10:21:43.700859Z",
+      "completed_at": "2026-09-01T10:21:51.780463Z",
+      "latency_ms": 8079,
+      "model_request_count": 1,
+      "tool_call_count": 0,
+      "tools_called": [],
+      "input_tokens": 93,
+      "output_tokens": 22,
+      "requested_model_id": "qwen3:1.7b",
+      "observed_model_id": "qwen3:1.7b",
+      "output_hash": "d0337979d12a7a2680f3ccc948c99197abd5e6f9d058fc3714581ed2f70f1a5b",
+      "error_type": null,
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "check_id": "tool_calling",
+      "status": "passed",
+      "summary": "The model selected one bounded read tool and consumed its result.",
+      "started_at": "2026-09-01T10:21:51.782727Z",
+      "completed_at": "2026-09-01T10:22:18.475036Z",
+      "latency_ms": 26692,
+      "model_request_count": 2,
+      "tool_call_count": 1,
+      "tools_called": [
+        "read_terrain_qualification_evidence"
+      ],
+      "input_tokens": 620,
+      "output_tokens": 40,
+      "requested_model_id": "qwen3:1.7b",
+      "observed_model_id": "qwen3:1.7b",
+      "output_hash": "e0e8a29bc26ff36ddb586d9df44f0e2e620ec6b6f462a252d780dd0d3917eef7",
+      "error_type": null,
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "check_id": "praison_mcp",
+      "status": "passed",
+      "summary": "PraisonAI specialists completed through isolated MCP and the shared model gateway.",
+      "started_at": "2026-09-01T10:22:18.475765Z",
+      "completed_at": "2026-09-01T10:23:48.832448Z",
+      "latency_ms": 90356,
+      "model_request_count": 1,
+      "tool_call_count": 3,
+      "tools_called": [
+        "dem.read",
+        "qgis.processing.slope",
+        "route.read"
+      ],
+      "input_tokens": 733,
+      "output_tokens": 226,
+      "requested_model_id": "qwen3:1.7b",
+      "observed_model_id": "qwen3:1.7b",
+      "output_hash": "f8de3e048d750ce7480f6ddaf1d47404867ce8d7b238d6fbf74315fae332f393",
+      "error_type": null,
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "check_id": "authority_boundary",
+      "status": "passed",
+      "summary": "Pydantic Contract Gateway preserved the candidate-only authority boundary.",
+      "started_at": "2026-09-01T10:23:48.832522Z",
+      "completed_at": "2026-09-01T10:23:48.832584Z",
+      "latency_ms": 0,
+      "model_request_count": 0,
+      "tool_call_count": 0,
+      "tools_called": [],
+      "input_tokens": null,
+      "output_tokens": null,
+      "requested_model_id": null,
+      "observed_model_id": null,
+      "output_hash": "f8de3e048d750ce7480f6ddaf1d47404867ce8d7b238d6fbf74315fae332f393",
+      "error_type": null,
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    }
+  ],
+  "resources": {
+    "wall_latency_ms": 133373,
+    "parent_peak_rss_bytes_before": 141557760,
+    "parent_peak_rss_bytes_after": 159416320,
+    "memory_scope": "qualification_parent_ru_maxrss"
+  },
+  "intelligence_execution": {
+    "status": "ok",
+    "response": {
+      "request_id": "ec8edb0e-c36d-4781-9b86-1c91ad2e40b3",
+      "findings": [
+        {
+          "finding_id": "terrain:ev-qualification-dem:0:ridge",
+          "claim": "A ridge candidate is present near CP2.",
+          "confidence": 0.7,
+          "evidence_ids": [
+            "ev-qualification-dem"
+          ],
+          "limitations": [
+            "server-normalized candidate feature; not route or safety truth"
+          ],
+          "candidate_only": true,
+          "runtime_safety_truth": false
+        },
+        {
+          "finding_id": "terrain:ev-qualification-dem:1:saddle",
+          "claim": "A saddle candidate is present near CP3.",
+          "confidence": 0.6,
+          "evidence_ids": [
+            "ev-qualification-dem"
+          ],
+          "limitations": [
+            "server-normalized candidate feature; not route or safety truth"
+          ],
+          "candidate_only": true,
+          "runtime_safety_truth": false
+        },
+        {
+          "finding_id": "qgis:ev-qualification-qgis:0:steep_terrain",
+          "claim": "Steep terrain is a candidate feature in the route corridor.",
+          "confidence": 0.8,
+          "evidence_ids": [
+            "ev-qualification-qgis"
+          ],
+          "limitations": [
+            "server-normalized candidate feature; not route or safety truth"
+          ],
+          "candidate_only": true,
+          "runtime_safety_truth": false
+        }
+      ],
+      "evidence": [
+        {
+          "evidence_id": "ev-qualification-route",
+          "source_type": "route_geometry",
+          "source_ref": "route:http-qualification",
+          "generated_at": "2026-09-01T10:22:19.040151Z",
+          "observed_at": null,
+          "method": null,
+          "resolution": null,
+          "content_hash": "route-http-qualification-hash",
+          "summary": "Reviewed route geometry used as read-only qualification input.",
+          "web": null,
+          "candidate_only": true,
+          "runtime_safety_truth": false
+        },
+        {
+          "evidence_id": "ev-qualification-dem",
+          "source_type": "prepared_dem",
+          "source_ref": "dem:http-qualification",
+          "generated_at": "2026-09-01T10:22:19.040175Z",
+          "observed_at": null,
+          "method": null,
+          "resolution": null,
+          "content_hash": "dem-http-qualification-hash",
+          "summary": "Prepared DEM candidate artifact for qualification.",
+          "web": null,
+          "candidate_only": true,
+          "runtime_safety_truth": false
+        },
+        {
+          "evidence_id": "ev-qualification-qgis",
+          "source_type": "qgis_candidate_artifact",
+          "source_ref": "qgis:http-qualification",
+          "generated_at": "2026-09-01T10:22:19.040180Z",
+          "observed_at": null,
+          "method": null,
+          "resolution": null,
+          "content_hash": "qgis-http-qualification-hash",
+          "summary": "QGIS slope candidate artifact for qualification.",
+          "web": null,
+          "candidate_only": true,
+          "runtime_safety_truth": false
+        }
+      ],
+      "uncertainties": [
+        {
+          "uncertainty_id": "terrain:model_finding:0:not_normalized_candidate",
+          "description": "A model finding was discarded because typed candidate features already define the bounded finding set.",
+          "missing_evidence": [
+            "reviewed_interpretation_contract"
+          ],
+          "impact": "the additional model interpretation was omitted",
+          "recommended_next_evidence": [
+            "review_specialist_interpretation"
+          ]
+        },
+        {
+          "uncertainty_id": "terrain:model_finding:1:not_normalized_candidate",
+          "description": "A model finding was discarded because typed candidate features already define the bounded finding set.",
+          "missing_evidence": [
+            "reviewed_interpretation_contract"
+          ],
+          "impact": "the additional model interpretation was omitted",
+          "recommended_next_evidence": [
+            "review_specialist_interpretation"
+          ]
+        }
+      ],
+      "conflicts": [],
+      "provenance": {
+        "request_id": "ec8edb0e-c36d-4781-9b86-1c91ad2e40b3",
+        "service_name": "scout.praison_intelligence_service",
+        "service_version": "0.1",
+        "agent_path": [
+          "praisonai.orchestrator",
+          "praisonai.router.deterministic.v1",
+          "terrain",
+          "qgis.deterministic"
+        ],
+        "tools_called": [
+          "route.read",
+          "dem.read",
+          "qgis.processing.slope"
+        ],
+        "model_runtimes": [
+          "edge.pi.ollama.cpu.background"
+        ],
+        "model_execution_records": [
+          {
+            "execution_id": "bb1ed2ab-9cc6-4950-ae80-48dcd2eeabb4",
+            "parent_request_id": "ec8edb0e-c36d-4781-9b86-1c91ad2e40b3",
+            "inference_id": "f88626ab-2fc4-46f6-adb6-d70030d4a427",
+            "runtime_id": "edge.pi.ollama.cpu.background",
+            "provider": "ollama",
+            "model_id": "qwen3:1.7b",
+            "observed_model_id": "qwen3:1.7b",
+            "locality": "edge",
+            "started_at": "2026-09-01T10:22:21.795552Z",
+            "completed_at": "2026-09-01T10:23:48.822610Z",
+            "latency_ms": 87027,
+            "model_request_count": 1,
+            "input_tokens": 733,
+            "output_tokens": 226,
+            "status": "completed",
+            "selection_reason": "selected edge.pi.ollama.cpu.background by local-first typed runtime routing; tier=local_reasoning, locality=edge",
+            "error_type": null,
+            "fallback_used": false
+          }
+        ],
+        "capability_grant_id": "b6694770-b344-4dfa-a330-6680c205ed73",
+        "workspace_binding": {
+          "workspace_id": "workspace-http-qualification",
+          "workspace_revision": "workspace-revision-1",
+          "mission_id": "mission-http-qualification",
+          "mission_version": "mission-version-1",
+          "route_id": "route-http-qualification",
+          "route_version": "route-version-1",
+          "input_hash": "4d9191f704d0eb73dd3bf61e2729b8a6a848ae0213f6619c4a4278a4f86d85fa",
+          "generated_at": "2026-09-01T10:21:35.459762Z"
+        },
+        "output_hash": "f8de3e048d750ce7480f6ddaf1d47404867ce8d7b238d6fbf74315fae332f393",
+        "generated_at": "2026-09-01T10:23:48.823697Z",
+        "candidate_only": true,
+        "runtime_safety_truth": false
+      },
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    "service_reached": true,
+    "degraded": false,
+    "failure_reason": null,
+    "remote_validation": {
+      "disposition": "accepted_candidate",
+      "request_id": "ec8edb0e-c36d-4781-9b86-1c91ad2e40b3",
+      "accepted": true,
+      "reasons": [
+        "response accepted as candidate evidence only"
+      ],
+      "output_hash": "f8de3e048d750ce7480f6ddaf1d47404867ce8d7b238d6fbf74315fae332f393",
+      "validated_at": "2026-09-01T10:23:48.824882Z",
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    "candidate_only": true,
+    "runtime_safety_truth": false
+  },
+  "report_hash": "62caca6504eb26981d73f8dd84cf80863ae378ac2a4eadd473bfa9d1790bcd8e",
+  "candidate_only": true,
+  "runtime_safety_truth": false
+}

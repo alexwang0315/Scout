@@ -5,6 +5,12 @@
 **Language:** Traditional Chinese, with English system terms for implementation clarity
 **Core thesis:** Scout is not an outdoor content app. Scout is the AI decision layer for outdoor activity.
 
+**2026-09-08 產品定位補充：** 本文件保留原始 Outdoor AI 決策願景；目前六力工作台
+專注於「已有軌跡／計畫之後的分析」，涵蓋行前路線研究、計畫比較與本人行後復盤。
+六力的交付範圍以 §5.2 為準；三種使用動機、GPX 角色與規劃流程見 §18.4–§18.7，
+歸來後的重分析見 §20.3。原有即時授權與行進中決策條文屬於獨立 runtime 能力，
+不得直接套用為六力分析工作台的完成條件。新增規劃需求不代表相關功能已完成實作。
+
 ---
 
 ## 0. Product North Star
@@ -159,6 +165,9 @@ Scout 必須判斷：
 
 ### 5.1 Scout AI 力：六力之上的元能力
 
+本節描述原始的整體 AI 與現場決策願景；目前六力工作台如何承接這份願景，
+依下節的後分析定位執行。
+
 六力描述的是人類在戶外活動中需要具備的素養；但在 Scout 產品中，真正讓六力可被交付、可被計算、可被現場使用的，是 **Scout AI 力**。
 Scout AI 力是六力之上的元能力。它不是第七個平行指標，而是讓六力從教育語言變成產品能力的底層引擎。
 
@@ -182,6 +191,34 @@ Scout AI 力是六力之上的元能力。它不是第七個平行指標，而�
 > 一個由即時環境感知、CP 紀律、風險預算、撤退窗口與保守決策政策共同支撐的情境授權能力。
 
 產品上，Scout 不是賣「勇敢」。Scout 賣的是讓使用者敢停、敢走、敢退、敢不攻頂的外部判斷系統。
+
+### 5.2 六力工作台的當前定位：軌跡後分析與計畫比較
+
+「後分析」指先有可分析的軌跡或計畫，再從六個面向解析此行；不限定為使用者
+本人已經爬完。因此，使用他人的 Ref. GPX 與選定 Golden GPX 做行前研究，也是
+此範疇；歸來後用自己的 Recorded GPX 重跑，則是其中的「本人行後復盤」模式。
+修改路線或節奏後，Planned GPX 與其行程計畫也可成為新的分析主體。
+
+路線生成、剪接與行程編排是六力分析的上游規劃流程。Navigation 可提供地形候選，
+Pace Fit 可提供時間估計，分析結果也可回饋下一版計畫；六力仍須共同回答同一份
+軌跡／計畫的問題，不能各自選用不同版本卻呈現成同一次分析。
+
+| 六力面向 | 後分析主要問題 | 結果與證據限制 |
+|---|---|---|
+| Route Context | 此行經過哪些歷史、文化、自然與地景節點？哪些值得安排停留？ | 路段脈絡、來源與觀察／停留候選；文字記載不等於當次現場觀察。 |
+| Readiness & Pace Fit | Golden／Planned 的行走、休息與分日節奏如何？與 Ref. 或本人實錄差多少？ | 移動／停留／總耗時、腳程假設及差異；他人 GPX 不得直接成為個人體能證據。 |
+| Contextual Permissioning | 在指定歷史情境或計畫假設下，停留、繞路、加速與攻頂如何影響後續時間餘裕？ | 情境比較與行為代價；分析用的「可否」不授予當下行動權限。 |
+| Route Architecture | 路程、高差、難點、支線、分日、營地與退出選項的配置是否合理？ | 同一分析路線上的結構與壓力分布；新路段需重建路段對應。 |
+| Weather-to-Decision | 當次天候或明示的規劃天候情境如何影響各路段與時間窗？ | 歷史實況、預報、假設分開；不得拿今日預報冒充歷史天氣。 |
+| Navigation & Terrain | 軌跡與地圖／地形是否吻合？偏離、斷點與待探索路段在哪裡？ | 路線比對、來源差異與 R1–R4 候選；候選不等於可通行路線。 |
+
+每次分析應綁定 workspace、分析主體與版本、比較用 Ref.／Golden／Planned／Recorded、
+共用 CP／segment 對應、時間基準及證據缺口。路線改版時，舊報告保留其原版本，
+受影響的六力輸出須標示待重算，不能沿用舊的「已完成」狀態。
+
+GPX 單獨不能證明天氣、疲勞、停留動機或當時是否安全；沒有時間戳時可分析幾何，
+但觀測腳程與停留時間必須保持未知。六力分析產物維持 advisory／candidate-only，
+`runtime_safety_truth=false`；採用計畫、即時安全判斷與模型學習各走既有審查流程。
 
 ---
 
@@ -609,8 +646,9 @@ UI 應以一張可左右平移、維持原始尺度的 `Route Fingerprint` 作�
 | Terrain Demand | 坡度與上升／下降機械功率 proxy | 不是人體代謝功率。 |
 | Mobility Demand | 歷史速度 envelope、黏滯與持續移動時間 | 是 ref-GPX 相對通過需求，不是個人成功率。 |
 | Risk Passage | route risk source value 與 passage pattern | provider/candidate value，不是 runtime safety truth。 |
-| Reversibility | 撤退依賴、回頭成本與替代路線 | 缺 reviewed topology 時顯示 unknown。 |
-| Time Window | ETA、日照、交通與固定截止條件 | 與 Weather/Darkness gate 分工，不在此頁自行下 safety state。 |
+| Reversibility | 各 CP 原路反向回程耗時加總，與歷史每日有效行進時數 P50 比較；超過登山口單日容量後改到最近已經過的歷史營地 | 優先反向觀測，缺樣本時只以其他區段相同反向有號坡度級距的配速推估並標示；不能套去程時間。缺方向或坡度基礎仍 unknown，不要求 reviewed graph 才能呈現歷史統計。 |
+| Next CP · Avg | 此 CP 到下一個原始 CP 的順向平均移動時間，與固定 500m Passage 分開 | 各順向區段平均配速按重疊距離加總；推估明示。插入營地 anchor 不得縮短原始 CP-to-CP 區間。 |
+| Time dependencies | 保留 ETA、日照、交通與固定截止條件資料，不當作 Next CP 的時間來源 | 原 Time Window 定義；與 Weather/Darkness gate 分工，不在此頁自行下 safety state。 |
 | Confidence | track count、traversal count、data quality、缺失來源 | 缺資料必須可見，不得以平滑圖形掩蓋。 |
 
 頁面提供四個閱讀模式：`Structure`、`Demand`、`Reversibility`、
@@ -944,6 +982,409 @@ Scout 應直接輸出：
 
 > 不建議自主前往。可參加有嚮導活動，或先完成離線地圖與地形判讀訓練。
 
+### 11.4 地圖尋徑力（Map-based Terrain Wayfinding Intelligence）
+
+Scout 的地圖力還必須包含「地圖尋徑力」：
+
+> 以已知 Golden GPX 作為接入錨點，在完整矩形 DEM 地形域中辨識山脊、
+> 谷線與水系等地形骨架，保留從已知路線向外延伸的完整幾何，形成可與影像、
+> 歷史地圖、實測軌跡及現地觀察交叉比對的尋徑候選。
+
+這項能力的目的，是協助 Scout 在路徑不清、植被遮蔽或既有路跡湮沒的山區，
+辨識「哪些地形延伸值得再查」。它不是沿 GPX 再畫一條分析帶，也不是從 DEM
+直接宣稱已找到獸徑、舊路、撤退路線或可通行路徑。
+
+Golden GPX 在此扮演已知踏勘／選定路線的**接入錨點**，不是 GIS 演算法要重新
+推論或取代的候選路線。即使 Golden GPX 來自實際踏勘，它也不自動證明當下仍可
+通行、安全或合法進入。
+
+以上及 §11.7 的 Golden 檢查適用於「已有 Golden 的接入分析」。§18.5 情境三沒有
+Ref.／Golden 時，目標流程以探索區域、DEM 與明示 A/B／途經點啟動，使用
+§11.11–§11.12 的候選契約；不能為了通過既有 import 而虛構一條 Golden GPX。
+
+### 11.5 Scout GIS Evidence Stack
+
+地圖尋徑力必須沿用以下責任分工，不得把視覺化、分析與安全判斷混成單一結果：
+
+| 元件 | Scout 中的角色 | 不得宣稱 |
+|---|---|---|
+| Rudy/TW 或其他底圖 | 提供地名、道路、既有圖徵與定位脈絡。 | 底圖上的線必然存在或目前可通行。 |
+| DEM／數值地形 | 提供高程格網與來源解析度。 | 插值、著色或放大產生了新的地形證據。 |
+| Scout-owned QGIS worker | 以 allowlist 呼叫 QGIS Processing、GRASS 與 GDAL，封裝工作流程、狀態、artifact 與 provenance。 | MCP 或 Processing 成功等於地理結論正確。 |
+| GRASS/GDAL | 從矩形 DEM 產生坡度、陰影、等高線及地形骨架候選。 | 山脊／谷線／水系候選就是道路、獸徑或安全路線。 |
+| MapLibre | 疊合 Golden Route、底圖、raster 與候選向量，提供切換、縮放、選取和比較。 | 畫面看起來合理就等於已驗證。 |
+| Scout evidence/authority gate | 保存來源、演算法、解析度、限制與 review 狀態。 | 未經其他證據即可升級成 operational 或 runtime safety truth。 |
+
+因此 Scout GIS 分析的最小組合為：
+
+```text
+底圖脈絡 + 數值地形來源 + QGIS Processing/GRASS/GDAL 分析
+  -> candidate evidence artifacts
+  -> MapLibre 互動判讀
+  -> 後續交叉佐證
+```
+
+QGIS/GRASS 是 Scout 的 Spatial Evidence Engine，不是 Scout 的 Safety Authority。
+
+### 11.6 矩形分析域與路線接入規則
+
+地形骨架必須先在 prepared DEM 的**完整矩形分析域**產生。Golden Route corridor
+只用於決定 Dashboard 預設顯示哪些候選，不得反過來把上游 DEM 或 GRASS 分析
+裁成狹窄的沿線 ribbon。
+
+Scout 至少要提供三種互不混淆的範圍語意：
+
+| 範圍 | 定義 | 用途 |
+|---|---|---|
+| `RECTANGLE_ALL` | 顯示矩形 DEM 內全部山脊、谷線與水系候選。 | 檢視整體地形網絡與未接入 Golden Route 的可能延伸。 |
+| `ROUTE_CONNECTED` | 只顯示任一線段與 Golden Route corridor 接觸的候選部分；一旦接觸，保留該部分的完整外伸幾何。 | 預設尋徑視圖，在可讀性與向外探索間取得平衡。 |
+| `ROUTE_SAMPLE_DIAGNOSTIC` | 沿 Golden Route 的高程、坡度或形態取樣。 | 診斷既有路線，不得冒充向外尋徑候選，預設不得計入候選線總數。 |
+
+`ROUTE_CONNECTED` 的 v0.1 預設 corridor 為 10 公尺，值必須顯示在 UI 並寫入
+projection metadata。接觸判定必須符合：
+
+```text
+connected(candidate_part) =
+  minimum_segment_distance(candidate_part, Golden Route) <= corridor_distance
+```
+
+實作必須檢查候選線與 Golden Route 的所有線段，包括兩條線相交但雙方端點都
+落在 10 公尺外的情況。以下作法禁止使用：
+
+- 只檢查候選線起點是否在 10 公尺內。
+- 只檢查候選線頂點，漏掉線段中途穿越 corridor 的情況。
+- 候選線接入後，只保留 corridor 內的片段。
+- 因 Dashboard 預設採 `ROUTE_CONNECTED`，就刪除或不產生矩形全域 artifact。
+
+對 `MultiLineString`，每個 part 必須獨立判定；接觸的 part 保留完整座標，未接觸
+的 part 只在 `RECTANGLE_ALL` 顯示。這個 display projection 不得改寫原始 GRASS
+artifact。
+
+### 11.7 Standard GRASS Terrain Workflow
+
+`terrain_feature_stack.v1` 是目前地圖尋徑力的 bounded standard workflow。
+它必須由 Scout-owned worker 經 QGIS Processing allowlist 執行，不得把 arbitrary
+Python、PyQGIS、shell 或任意 MCP tool 轉交給 browser 或 agent。
+
+最小處理序列為：
+
+1. 驗證 Golden GPX、DEM、CRS、解析度、矩形 extent 與來源 hash。
+2. 以 GRASS `r.slope.aspect`、`r.relief`、`r.contour` 及 bounded GDAL 步驟產生坡度、陰影、等高線與透明顯示層。
+3. 以 GRASS `r.geomorphon` 的 5、10、20 cell 三尺度結果建立至少二尺度同意的 morphology mask。
+4. v0.1 只把 geomorphon class 3 標成山脊候選、class 9 標成谷線候選，再經 `r.thin` 與 `r.to.vect` 向量化。
+5. 以 `r.watershed` accumulation、固定 threshold、`r.thin` 與 `r.to.vect` 產生 flow-channel candidate；它不是實測河道。
+6. 匯出完整矩形 raster/vector artifacts、MapLibre GeoJSON projection、處理參數、warnings、hash 與 provenance。
+
+支稜、凹谷或其他多尺度地形形態若尚未有明確 GRASS class、參數與 provenance，
+UI 不得用名稱暗示已完成分類。未來新增這些類別時，必須保留原 class、尺度投票、
+最小長度與向量化參數，並以新 artifact/schema version 表達。
+
+`python_dtm_bitmap_fallback` 不得作為 active terrain processor，也不得被標示成
+與 GRASS 等價的分析結果。QGIS/GRASS 不可用時，工作流程必須 fail closed，回報
+`awaiting_qgis_grass_processor`、typed unavailable 或 processing failure；不得自動
+合成看似完整的地形圖層。任何視覺插值或 Terrain RGB packaging 都必須維持：
+
+```text
+adds_source_resolution=false
+```
+
+### 11.8 Candidate Authority Boundary
+
+所有地圖尋徑結果，不論 Processing 與 render 是否成功，都必須維持：
+
+```text
+candidate_only=true
+runtime_safety_truth=false
+operational=false
+```
+
+地形候選可以支持「值得往這個地形方向再查」；單靠候選線不得輸出：
+
+- 此處存在獸徑、舊路、湮沒路徑或可用撤退路線。
+- 此山脊、谷地或水系可以行走、適合通過或安全。
+- 地圖、等高線或 DEM 與現況完全一致。
+- 此處沒有河道、崩塌、斷崖、植被阻斷、土地權利或進入限制。
+- 任何 operational hazard、navigation command 或 safety recommendation。
+
+路徑存在性至少需要與航照／衛星影像、歷史地圖、其他 GPX、植被或地表線索、
+現地觀察等獨立 evidence 交叉比對。即使交叉比對成立，也只能進入 reviewed
+evidence；不得由 QGIS/GRASS candidate 自動升級為 runtime safety truth。
+
+以下狀態必須分開保存：
+
+```text
+processing_status
+render_status
+machine_review_status
+visual_review_status
+human_review_status
+```
+
+`processing_status=completed` 只證明指定工具曾完成執行；不證明地理或安全結論
+為真。使用者也不需要逐筆「修正等高線推論」才能使用 Dashboard；review 的目的
+是記錄是否已加入獨立佐證，不是要求登山者替 GIS 模型畫出正確答案。
+
+### 11.9 Dashboard Interaction Requirements
+
+Navigation/Terrain Intelligence 必須把地圖本身當作主要操作面，不得讓大量固定文字
+壓縮判讀空間。至少應滿足：
+
+- 2D 預設 fit 完整 Golden Route；3D 可使用 prepared DEM local detail，但兩者 camera state 必須獨立。
+- 使用者手動 pan/zoom、切換 2D/3D、圖層、lens 或 evidence 後，不得被非明示事件自動 reset 回 fit。
+- Golden Route 必須位於 candidate overlays 之上；選取 evidence 必須 zoom to 並 highlight 對應 feature，而不是只改右側文字。
+- 高程、陰影、等高線與坡度 overlay 必須可獨立切換，並保留足夠透明度讓底圖地名、道路與定位脈絡可讀。
+- 山脊、谷線、水系候選必須有可辨識的獨立樣式；關閉 candidate layer 時，地圖與圖例必須同步消失。
+- `ROUTE_CONNECTED` 與 `RECTANGLE_ALL` 必須是明示切換，不能靠隱藏的 filter 改變使用者看到的證據範圍。
+- 顯示的候選總數必須等於目前 scope 中實際可見的候選線數；route samples、slope coverage 與其他 diagnostic points 必須另計。
+- 完整矩形 artifact 不得被 UI 裁成 route-shaped raster；route corridor 只影響候選向量的預設可見性。
+
+### 11.10 Correction Cases and Acceptance Tests
+
+以下案例是地圖尋徑力的回歸門檻：
+
+| Case | 錯誤行為 | 必要行為 |
+|---|---|---|
+| `MAP-WAYFIND-001` | 沿 Golden GPX 合成 morphology ribbon，讓結果看起來只是既有路線的副本。 | 先在完整矩形 DEM 執行 GRASS，再把 GPX 當接入錨點。 |
+| `MAP-WAYFIND-002` | 候選起點距 GPX 超過 10 公尺就整條移除。 | 任一候選線段接觸 corridor 即保留該完整外伸 part。 |
+| `MAP-WAYFIND-003` | 候選線穿越 GPX，但因沒有頂點位於 corridor 內而漏掉。 | 使用 segment-to-segment distance 與 intersection 判定。 |
+| `MAP-WAYFIND-004` | 接觸後把候選裁成 10 公尺沿線片段。 | 10 公尺只決定接入資格，不是輸出裁切範圍。 |
+| `MAP-WAYFIND-005` | 將 route samples 與 raster coverage 加入「山脊／谷線總候選」。 | line candidates 與 diagnostic support items 分開計數。 |
+| `MAP-WAYFIND-006` | GRASS 不可用時改用 Python bitmap 並顯示為相同分析。 | fail closed，揭露 unavailable，不產生 synthetic terrain truth。 |
+| `MAP-WAYFIND-007` | 把山脊／谷線／水系候選叫做替代路線、獸徑或安全路線。 | 只稱 terrain morphology candidate，等待獨立 evidence。 |
+| `MAP-WAYFIND-008` | 切換圖層、移動 3D 或選取 evidence 導致 2D 自動回到 fit。 | 只有明示 Fit/Reset 或新的 zoom-to 操作可以改變該 view camera。 |
+| `MAP-WAYFIND-009` | 因溪谷坡度較低，單一 slope-only TRH 把 drainage 當成唯一答案。 | 同一 A/B 至少保留 drainage-averse、balanced、terrain-only baseline 三種模型假說，並揭露各自 drainage penalty。 |
+| `MAP-WAYFIND-010` | 把避開 drainage 的候選宣稱為較安全，或把 terrain-only baseline 的河谷重疊宣稱為河道可走。 | drainage 僅是 DEM-derived relative cost；所有替代線維持 candidate-only，水位、溪床、峽谷、橋梁與通行性保持 UNKNOWN。 |
+| `MAP-WAYFIND-011` | 直接把歷史行程文字交給 LLM 畫線，或把文字中的「獵徑／布條」promotion 成 observed/official trail。 | Scout AI 只輸出有 source span 的 typed constraints、conflicts 與 unknowns；GIS resolver 與人工 map-point review 分離，source_type 仍是 `historical_route`。 |
+| `MAP-WAYFIND-012` | 已 review 的文字指引繞過 DEM/GRASS，或任一 anchor segment 失敗時用直線補接。 | R4 必須逐段執行 allowlisted `r.walk` + `r.path`；任一段無成本、無路徑、超出 DEM、NoData 或 hash mismatch 時整個 guided hypothesis fail closed。 |
+| `MAP-WAYFIND-013` | 用既有 TRH path/corridor 自動選定敘事 anchor、從完整證據刪除無鄰近／零重疊候選，或把高 support 宣稱為路線確認。 | 只可使用 hash-bound R1-R3 path 與 source GeoTIFF evidence；完整候選集必須保留。地圖標記點必須位於目前所選 corridor 內；鞍部還須鄰近 R1-R3。不得因線段其他部分有重疊就顯示範圍外中心點，proximity/overlap 只協助人工 review。 |
+| `MAP-WAYFIND-014` | 把人工文字直接拼成 `r.mapcalc`、用零成本／硬 barrier 強迫 R4 通過，或讓 R4 修改 R1-R3。 | 每個 reviewed Point 只能編譯成 typed、有限正值、20-500 m 的局部 friction preference；expression 必須 allowlist 驗證，R1-R3 保持原 profile，任一 anchor/modifier/hash 不一致即 fail closed。 |
+
+目前 bounded implementation 對應 `terrain_feature_stack.v1`、Scout-owned QGIS
+worker、GRASS/GDAL artifacts 與 MapLibre projection。實際執行證據、硬體資源與版本
+紀錄放在 [Scout pretrip full preparation runbook](scout-pretrip-full-preparation-runbook.md)；
+該 run 的 feature 數量是 evidence snapshot，不是本 Standard 的固定正確答案。
+
+### 11.11 Terrain Route Hypothesis：任意 A/B 地形候選
+
+地圖力可以使用 `terrain_route_hypothesis.v1`，針對使用者指定的 A/B 端點，從
+DEM 與版本化 terrain-cost model 預設產生三條 minimum anisotropic model-cost
+trace，以及由 A、B 雙向累積成本形成的 symmetric macro-terrain corridor。三種
+profile 為 `R1 drainage_averse`、`R2 balanced`、`R3 terrain_only_baseline`；這項能力稱為
+**Terrain Route Hypothesis（TRH）**，不得稱為 Trail Generator。
+
+TRH 的規範問題是：
+
+> 在目前已知地形證據下，哪些區域較支持 A 到 B 的候選通行假說？支持程度如何，
+> 哪些資訊仍不知道？
+
+所有 TRH request、run、artifact、catalog、Navigation projection、HTTP 回應與 UI
+都必須維持：
+
+```text
+authority=candidate_only
+source_type=terrain_hypothesis
+runtime_safety_truth=false
+operational=false
+promotion_allowed=false
+safe_or_walkable=not_determined
+```
+
+每條 best-path trace 與 5/10/20 percentile corridor 是不同模型產品。不得把
+trace 稱為已存在步道，也不得把 corridor 稱為安全帶、通行範圍或信心區間；不得
+為了讓 trace 落入 corridor 而把 trace cell 強制 union 進 percentile mask。
+各 profile 使用不同 friction scale，`relative_cost` 只允許在該 profile 內解讀，
+不得跨 profile 排成 safety、passability 或 success ranking。若多個 profile 收斂到
+同一幾何，必須記錄重疊，不能為了湊足三條線而偽造空間差異。
+
+Drainage-aware cost 必須由 hash-bound DEM 經 allowlisted GRASS hydrology 計算，並
+依 DEM resolution 換算 contributing-area threshold。Drainage penalty 只能表示模型
+偏離集水線的程度；`R3 terrain_only_baseline` 明確保留零 drainage penalty，供人工
+比較可能沿谷／沿河的純地形解。任何一條線都不因此取得步道、通行、安全或合法性。
+
+Navigation Dashboard 必須遵守原子發布：新 TRH 在 queued/running 時鎖定 A/B 與
+重複送出控制，只更新進度而不週期性重建 MapLibre；舊的 completed candidate 若
+暫留，必須明示尚未切換。只有新 run completed 且 artifact hash 驗證成功後，才能
+切換 Navigation projection。失敗必須顯示 typed stage/detail，不能用閃爍、空白地圖
+或舊結果冒充成功。可選 corridor PNG 失敗時，底圖與 vector hypothesis 仍可供審核，
+但 corridor 必須標示 unavailable。
+
+20 m DEM 的 TRH 一律是 `macro_terrain_only`。植被、meter-scale microterrain、近期
+崩塌、當下水位、路面、合法進入，以及橋梁、繩索、階梯、隧道等 engineered-trail
+資訊都保持 `UNKNOWN`。解析度分類不是 safety confidence，也不得授權 Scout 依 TRH
+自動做前進、撤退、改線或 safety-truth mutation。
+
+完整 schema、cost model、GRASS chain、cache、provenance、Dashboard lifecycle、
+驗證證據與限制見 [Scout Terrain Route Hypothesis Engine](scout-terrain-route-hypothesis.md)。
+
+### 11.12 Scout AI 歷史敘事引導與 R4
+
+導航力可以把人工提供的歷史紀錄交給 Scout Pydantic AI，產生
+`TerrainNarrativeGuidancePlan`。Agent 只負責語意結構化：沿稜、轉稜、腰繞、相對
+溪溝位置、過溪、鞍部與順序等必須成為 typed constraint，原文片段、來源 hash、
+衝突與無法判定的 measurement semantics 必須保留。布條、獵徑、植被、泥濘與動物
+跡象只能當 historical context，不能由模型 promotion 成 current observation。
+
+執行鏈必須是：
+
+```text
+Dashboard narrative
+  -> Scout AI typed constraint preview
+  -> deterministic DEM/QGIS feature candidates
+  -> unresolved / multiple / conflict 顯示
+  -> human map-point annotation + review artifact
+  -> typed human-vs-AI map-selection decisions
+  -> hash-bound R4 execution plan + bounded local cost preferences
+  -> ordered r.walk + r.path segments
+  -> R4 historical_narrative_guided terrain hypothesis
+```
+
+人工 review 只確認「這段文字目前被綁到哪些地圖點」，不是 `human_verified trail`。
+R4 仍必須是 `source_type=terrain_hypothesis`、`authority=candidate_only`、
+`runtime_safety_truth=false`、`operational=false`。Raw narrative 不得送進 GIS worker
+臨場重解；worker 只接收經 review、含 plan/resolution/feature-index/review/DEM hash 的
+typed execution plan。任何 hash 漂移、未確認 required anchor、非 point selection、
+CRS/NoData/GRASS/連通失敗都必須拒絕執行。
+
+DEM feature resolution 必須另外綁定當前 A/B 與明示的分析 margin，只向 Dashboard
+投影局部裁切的 ridge/valley/drainage candidate zones。專案全域巨型 geometry 不得當成
+單一可選 anchor；DEM 線只能是地圖比對 context。R4 可執行 anchor 必須是人工在局部
+範圍內確認的 WGS84 `Point`，重新整理後仍須能回看 hash-bound 原始敘事與來源。
+Review artifact 必須保存畫面上可見的實際 reviewer alias；Dashboard 不得硬編碼或推定
+操作者是 `trip_leader`。Review decision 必須明示 Scout AI 沒有執行地圖選點，並逐項保存
+resolver 原候選、人工選定 Point、人工停用 constraint 與 selection source；不得事後把人工
+選擇包裝成 AI 自動確認。
+
+既有 TRH catalog option 必須投影 hash 驗證後的 `start` / `destination`，Dashboard 才能
+明示地套用該假說 A/B 作為 guidance search window。任何 A/B、margin、DEM 或 feature
+index 變更都必須清除舊 review binding 並令 `guided_execution_ready=false`。不得沿用舊
+review 執行不同的局部分析。
+
+DEM elevation adapter 可以為局部 candidate line 取樣高程，並把 ridge 上的局部低點建立
+為 `saddle` proxy，但必須標示為 DEM-derived candidate。Candidate ordering 僅可使用
+deterministic typed semantics，例如 landform、目標高程差、hash-bound candidate corridor
+overlap 與敘事 sequence 在 A/B 間的空間接近度；排序不得視為自動選點。若引用既有 TRH，
+resolver 必須驗證 catalog、hypothesis、cache key、A/B、parent manifest/DEM hash chain、
+corridor source TIFF hash 與 CRS。Mask 僅接受 `1=inside`、`255=NoData/outside`，不得取樣
+PNG 視覺圖。每條 DEM feature 採 bounded deterministic samples，且
+`candidate_corridor_overlap_is_review_rank_evidence_not_route_confirmation`；候選不得因 overlap 為 0 而被移除，
+也不得因 overlap 高而自動選成 anchor。Dashboard 可顯示前五名 rank marker 協助人工定位，
+但 R4 仍只接受操作者親自確認的 WGS84 Point。Sampling failure、NoData 或不完整回傳不得
+產生半套 saddle/elevation/corridor resolution；任一 catalog、hash、endpoint、sampler 或
+raster binding 錯誤都必須 fail closed。
+
+若同 A/B 的 hash-bound run 含 R1-R3，Dashboard 應優先傳入該 run selection。Backend 從
+同一 artifact 取出三條 path，驗證 run hash、cache、DEM parent、A/B 與 CRS，並對長 path
+做保留端點的 deterministic bounded sampling；active selection ID 還必須與 project 綁定
+cache key 前 12 字元一致。預設以 200 m path proximity 加上單一 corridor-profile overlap
+建立 `review_shortlist_feature_ids` 作為排序脈絡。完整 `candidate_feature_ids` 不得被覆寫。
+地圖另以唯讀 `map-review-scope` 比對每個標記點本身與目前 5%／10%／20% source corridor
+GeoTIFF；範圍外、NoData 或缺少 scope 證據的點不得出現在候選清單或地圖上。鞍部還須在
+R1-R3 路徑的一個 DEM cell 對角線距離內；沒有符合者顯示 UNKNOWN，不得平移或吸附遠處
+鞍部來製造吻合。必須顯示 scope/total，篩選後保留原始 `Gn #m` 編號。
+投影須綁定 hypothesis、band、raster hash、feature-index/resolution hashes、DEM parent 與
+來源／顯示兩組 A/B；舊版 unscoped resolution 也可唯讀比對。同 DEM 的來源 A/B 不同時，
+只能以 `endpoint_alignment=different_review_context`、兩組座標與差距明示作為視覺裁選，
+不得重新綁定原始 resolution／review、重寫人工 review 或刪除原始證據。投影一律
+`execution_eligible=false`、`routing_effect=none`；resolve、review 與 R4 execution 的 A/B
+一致性檢查不得因此放寬。
+這個範圍限制不是 AI 地圖選點、模型共識確認或 route truth，也不得解鎖 R4 execution。
+R4 review 應一次聚焦一個 `Gn`：該 constraint 的 scope 內候選須以清楚的編號 marker
+highlight，其他 `Gn` 的 marker 隱藏、line 淡化，並提供上一個、下一個與全部 Gn 控制。
+點選該 Gn 的 narrative、source、DEM summary 或候選 evidence 預覽區域即可切換 highlight；
+可聚焦的 evidence 區域亦支援 Enter／Space。上一筆／下一筆必須保留；錨點、選取、停用
+及其他互動控制不得連帶觸發 evidence 點選，焦點切換不得視為人工錨點確認。
+全部 Gn 仍限於所選 corridor 內；地圖中央不放置遮擋畫面的長假說名稱，candidate-only
+揭露保留在地圖外的 status/legend。
+切換 focus 或自動 fit MapLibre 僅能改變呈現狀態，不得寫入 selection、人工 anchor、review
+artifact 或 execution plan；仍須由操作者進入地圖錨點模式並親自點選 WGS84 Point。
+
+人工確認的每個 Point 必須同時編譯成 ordered gate 與 bounded local friction preference。
+目前 modifier 的 radius 只能在 20-500 m，最低 multiplier 只能在 `0.5-1.0`，且所有 raster
+值必須維持有限正數。Worker 只能接收 typed numeric modifier，由 deterministic builder
+產生並結構驗證 `r.mapcalc` expression；raw narrative 或任意 expression 不得進入 GRASS。
+R4 使用獨立的 balanced base raster，R1-R3 expression 不得因 guidance 改變。
+
+Scout AI 可以向使用者解釋 R4 是「依歷史描述與目前 DEM 地形模型形成的候選假說」，
+但必須同時保留：這不表示現地存在步道、仍可通行、安全或合法進入。Scout 不得依
+R4 自動修改 GPX、改寫 official trail truth，或取得前進／撤退 authority。Explanation
+可以用 `max(10 m, 2 DEM cells)` 比較 R4 candidate geometry 與 reviewed anchor，輸出
+`aligned`、`conflict` 或 `unavailable`；這只是 interpretation-to-map binding audit，不是
+現地驗證。
+
+`System → Diagnostic → Navigation 體檢` 必須分開檢查目前 Worker／TRH workflow 入口、
+既有 R1-R3 geometry 與 provenance、5%／10%／20% PNG 實際回應／SHA-256／解碼尺寸、
+R4 corridor scope 與原始 rank／saddle 距離、人工 review 就緒條件，以及綁定該 review 的
+既有 R4 execution evidence。Gn 點選、鍵盤與上一筆／下一筆以正式 renderer／binder 的
+隔離 DOM 驗證，不得更動 live map、選取、A/B 或 workspace review。
+這些檢查對應 `DASH-025`、`DASH-038～DASH-043`；僅使用 GET／既有 artifact，不自動
+執行 GRASS、生成 R4 或保存 review。Worker timeout 必須失敗；未確認錨點、來源 A/B 不同、
+尚無 R4 成果必須保留提醒／UNKNOWN，不得以 UI 可開或 review 就緒推論運算成功。
+體檢結果綁定 project／TRH selection／corridor band，變更後須重測，不得沿用舊的通過狀態。
+完整 browser／實際運算驗收仍依既有 Dashboard functional verification checklist 執行。
+
+### 11.13 導航力的 Mac / Scout 雙主機運算與重現性
+
+TRH 不得把「只能在 Scout 執行」或「只能在開發 Mac 執行」硬編碼進 domain model。
+兩台主機必須共用同一 typed request、cost config、QGIS worker 與 GRASS allowlist；
+主機差異只存在 adapter、runtime discovery 與 execution receipt。可攜式 CLI 必須保存
+實際 hostname、architecture、QGIS/GRASS version、來源 DEM hash、parent manifest
+hash、input-contract hash、module list、耗時與 artifact 數量。
+
+R4 的可攜式輸入只能是已人工審核的 `TerrainGuidanceExecutionPlan`。CLI 必須拒絕 raw
+narrative、DEM/hash/resolution/CRS mismatch、與 A/B 重複的 anchor，以及非 WGS84 Point。
+將 plan 搬到另一台主機不等於新增人工審核，也不得改變 candidate-only authority。
+
+跨主機驗證必須分開記錄：
+
+1. authoritative source DEM content hash；
+2. bounded analysis-raster byte hash；
+3. path geometry 與 terrain-model metrics；
+4. corridor cell/threshold variance；
+5. QGIS/GRASS engine version variance。
+
+來源 DEM hash 相同是輸入證據。分析 raster byte hash 可因 GDAL/GRASS metadata 或版本
+而不同，不能反過來冒充來源資料不同。若 input contract 或 candidate-only 欄位不同，
+比較必須 `unavailable`；若 path 或 corridor 超出明示容許值，必須 `diverged`，不可挑選
+較好看的結果。
+
+2026-09-01 的實機 receipt 已證明同一 20 m DEM/A/B/config 可在 Mac x86_64 與 Scout
+aarch64 隔離容器執行。R1/R2/R3 path 在 0.1 m tolerance 內一致；GRASS 8.5.0 與 8.4.1
+造成最高約 2.07% corridor-threshold variance，結果標示
+`passed_with_engine_variance`。這是模型重現性證據，不是 trail、passability、safety 或
+legal-access qualification。永久 Scout service 安裝與 exact engine-version parity 仍為
+`UNKNOWN`，證據見 `docs/evals/scout-terrain-route-host-parity-20260901.md`。
+
+### 11.14 Scout AI TRH 工具與 GPX Terrain Consistency
+
+導航力的 Scout AI tool registry 必須提供四個窄義工具，不得用單一 catch-all GIS tool
+取代：
+
+| Tool alias | Typed responsibility | Effect boundary |
+|---|---|---|
+| `generate_terrain_route_hypotheses` | 以明示 A/B、margin 與可選 reviewed R4 hash 提交 TRH workflow。 | 只可寫 local candidate workspace artifact；不得寫 route truth、official trail 或 safety truth。 |
+| `explain_route_hypothesis` | 回傳選定 hypothesis 的 relative terrain cost、positive/negative evidence、unknowns、provenance；R4 另含 reviewed anchor alignment/conflict。 | Read-only；alignment 不得解讀為現地存在、可通行、安全、合法或推薦。 |
+| `compare_route_hypotheses` | 並列 R1/R2/R3/R4 的模型假設與 metrics。 | Read-only；不得跨 profile 做 safety/passability/success ranking。 |
+| `inspect_route_terrain_consistency` | 比較 known GPX 與 hash-bound corridor、slope、drainage、TEII、model trace。 | Read-only；不得修改 GPX 或判定 GPX validity。 |
+
+GPX 檢查輸出只能是 `CONSISTENT`、`PARTIALLY_CONSISTENT`、
+`TERRAIN_ANOMALY` 或 `UNKNOWN`，assessment semantics 固定為
+`terrain_consistency_not_gpx_validity`。`source_type=known_gpx` 與
+`authority=candidate_only` 必須並存；known GPX 不因比對而變成 terrain hypothesis，
+terrain hypothesis 也不因重疊而變成 observed/official/human-verified trail。
+
+Dashboard 必須將下拉選取的 exact hypothesis `source_ref` 與 corridor band 一併送出，
+不能只送 `R1` 顯示名稱後改讀目前 project manifest 的另一個 artifact。主要 GPX 的
+source index、workspace ref 與 SHA-256 必須先驗證；預設最多取 400 個 deterministic
+樣本。GPX 內落在 hypothesis analysis bbox 外的有效 WGS84 點，記錄為離開 corridor
+與 extent anomaly，不可讓 GDAL 以無效投影使整批樣本失敗。缺少 drainage 或 TEII
+時，該維度保持 `UNKNOWN`，不能補零。
+
+可能 mismatch 原因至少保留 GPS drift、DEM error、engineered/official trail、rope、
+bridge、tunnel、old/historical route、landslide 與 data mismatch。Dashboard 可顯示
+bounded anomaly points，但圖例與 inspector 必須同時明示：這是 terrain consistency，
+不是 GPX validity，不代表步道存在、可通行、安全或合法進入，也不授權 Scout 做
+前進、撤退或自動改線決策。
+
 ---
 
 ## 12. Checkpoint Graph
@@ -1249,6 +1690,9 @@ All Scout agent responses should be traceable to this structure.
 
 出發前，Scout 必須完成以下判斷。
 
+§18.1–§18.3 保留出發審查願景；在此之前，使用者先依 §18.4–§18.7 建立
+路線、行程節奏與六力分析。完成分析或產生 Planned GPX 不等於已核准出發。
+
 ### 18.1 Required Inputs
 
 - 路線。
@@ -1290,6 +1734,201 @@ Scout Decision：CONDITIONAL_GO
 - 11:30 未抵達 CP4 即折返。
 - 山頂停留時間上限 8 分鐘。
 ```
+
+### 18.4 GPX 角色：參考、復刻基準、規劃與實錄
+
+產品用語統一採 **Planned GPX（規劃軌跡）**。檔案的來源與它在本次分析中的角色
+必須分開記錄；同一份 GPX 可被選為分析 Golden，但不得因此改寫來源身分。
+
+| 角色 | 定義 | 保留與比較原則 |
+|---|---|---|
+| Ref. GPX | 一組可供比較、取用路段或參考節奏的軌跡；可包含多條、多日、多人的紀錄。 | 保存原檔、來源、日期、方向與時間品質；來源不足時可為空集合。 |
+| Golden GPX | 本次選定的分析基準；行前從參考資料選擇「復刻哪一次」，行後可選本次 Recorded 作為新分析基準。 | 保存選定來源、幾何、分日、可用的出發／到達／停留紀錄；Golden 角色本身不代表最佳、安全或本人實走。 |
+| Planned GPX | 依本次意圖形成的新規劃幾何，搭配獨立的行程與節奏計畫。 | 有 Golden 時保留相對修改；各情境均保留路段來源。即使幾何相同而只改節奏，也建立新計畫版本。 |
+| Recorded GPX | 歸來後匯入的本次真實裝置紀錄，可由多日、多檔與多位參與者組成。 | 保留實際時間、裝置、參與者與記錄缺口；不得由 Ref.／Golden／Planned 冒充。 |
+
+相同入口可測試歷史記錄或 fixture，但必須保留 `observation_kind` 與時間角色；
+只有本次本人真實活動才能標記為個人完成紀錄。
+
+Golden 有效的歷史節奏應先完整重建，包括來源分日、CP 時間、休息、住宿端點與
+記錄缺口；重建不能擅自改成固定每日時數。歷史日曆日期／當地時刻是來源證據，
+採用到本次行程的日期與出發時刻則另存為計畫，不得改寫成當次觀測。
+
+### 18.5 三種使用動機與路線形成流程
+
+三種情境共用六力工作台，差別在可用來源、如何形成分析路線，以及節奏的證據強度。
+
+| 情境 | 使用者主要意圖 | 路線與節奏的起點 | 工作台要交付的內容 |
+|---|---|---|---|
+| 一：依循 Golden | 復刻某次既有登山行程。 | Ref. 集合中選定的 Golden 幾何與歷史節奏。 | 完整的參考行程重建、準備完成的 workspace、六力分析與採用差異。 |
+| 二：局部改線／改節奏 | 大部分沿用既有路線，加支線山頭、特殊停留、加速或改營地。 | Golden 加上人工輸入的行程差異。 | 有來源的 Planned GPX、新行程節奏，以及相對 Golden 的路線／時間差異。 |
+| 三：沒有 Ref. GPX | 新路探索、救難路線研判、考古或舊路研究。 | 探索區域、起訖／途經點、地圖、DEM 與可用文字紀錄。 | 待審核的路線候選、Planned GPX 草案、假設式行程與未解區段。 |
+
+#### 情境一：依循 Golden GPX 的節奏爬山
+
+1. 使用者提供一組 Ref. GPX，明確選擇預計復刻的一條／一次行程作為 Golden。
+   若一次行程分成多檔，須保留原檔與可核對的順序、分日及接續關係。
+2. 經 `import GPX + preparation map` 建立可用 workspace，載入 Scout Dashboard。
+   操作程序沿用 [完整 preparation runbook](scout-pretrip-full-preparation-runbook.md)。
+3. 先重建 Golden 的路線、每日起訖、CP 通過、行走、休息與過夜節奏，再進行六力
+   分析；其他 Ref. 提供比較，不得自動取代被選中的復刻對象。
+4. 使用者設定本次日期並檢視採用條件。未改線時可以直接引用 Golden 幾何，不必
+   製造不同路線；本次計畫的日期、節奏與歷史原紀錄仍須分開保存。
+
+此情境回答：「我若依循這次紀錄的路線與節奏，會經過哪些關鍵路段與停留點？」
+時間戳缺失的 Golden 只能提供路線基準，節奏不足的部分須標示未知或明示估計。
+
+#### 情境二：不完全依照 Golden 的節奏與路徑爬山
+
+使用者保留主要參考路線，透過人工行程描述新增意圖，例如「第三天由營地單攻旁支
+山頭再回營地」、「某處多停留兩小時」或「提早出發並縮短休息」。Scout 應先把
+原始文字轉為有順序的行程差異：支線起訖與返回點、必經點、停留目的／時長、
+預定營地、啟程／到達限制及指定腳程，未對位的地名保留待確認。
+
+路線生成應能組合以下來源；它們可以互補，不是每次都必須依序全部執行：
+
+- **Ref. GPX 剪接：** 修剪或串接不同軌跡的路段，保留來源範圍、方向與返回主線的
+  接點；支線往返必須包含去回兩段，不能只計去程。
+- **既有山徑查找：** 從 Overpass／PBF 或已登錄 Rudy Mapsforge 向量尋找路段。
+  PBF 可依真正 node IDs 尋徑；Mapsforge 保留圖上幾何與 tags，但沒有 node IDs
+  時只供明確選段／剪裁，不從交叉線猜測拓樸。Rudy+TWMap 圖磚仍須經辨識／
+  描繪、對位及人工審查；保存資料日期及來源，地圖有線不代表已確認可通行。
+- **TRH R1–R3：** 缺少可參考路段時，以明示 A/B 和 DEM 產生
+  `R1 drainage_averse`、`R2 balanced`、`R3 terrain_only_baseline`，供比較與選擇。
+- **敘事引導 R4：** 從登山日誌或歷史描述擷取路序／地形線索，經地圖對位、人工
+  確認錨點，再產生 `R4 historical_narrative_guided`；完整流程沿用 §11.12。
+
+輸出新的 Planned GPX，Golden 原檔與原計畫保持可比較。依新路線的長度、高差、
+路段性質、使用者腳程及固定停留，重新估計各段移動時間、啟程／到達、休息、
+紮營／離營與總天數；顯示哪些變化來自幾何、哪些來自腳程或停留假設。
+只有節奏改變時，Planned 幾何可以與 Golden 相同，但時間計畫仍須另立版本。
+
+歷史時間戳不能直接跨來源拼成新行程的「實際耗時」；反向路段與新增未知路段須
+另行估計。也不能把「希望加速」直接視為已證明能走出的速度。
+
+#### 情境三：完全沒有可參考的 Ref. GPX
+
+此情境接受 Ref. 集合為空、Golden 缺席。使用者提供探索目的、分析區域（AOI）、
+起訖點、已知途經點／地名、天數或時間限制；未知項保持可見。目標入口應能先從
+AOI 準備地圖與 DEM，建立探索 workspace，再進入候選分析，不依賴先有 GPX。
+尚未確認 A/B 時可做區域證據研究；產生具體 TRH 路徑前仍須指定有效 A/B。
+
+路線來源沿用情境二的 Overpass／Rudy+TWMap、TRH R1–R3 與敘事 R4；多段探索可
+按途經點分段分析。若有無法接續的區段，輸出候選段與缺口，不能用直線補成一條
+看似完整的 Planned GPX。即使某次未找到山徑或文字來源，workspace 也應能保存
+已取得證據與未知狀態。
+
+節奏先由使用者指定的固定腳程／區間、地形耗時假設及候選營地位置估計，再依
+每日行走時間、休息需求、日照與過夜安排反推起訖點及時間。必須顯示假設、支持
+範圍與未能估計的路段；未經校準的模型成本不能直接當成步行時數，也不能把
+有資料路段的小計當成全日 ETA。
+
+可能適合紮營的地形僅是位置候選，不能只因坡度平緩就認定有水、可容納隊伍、
+可合法使用或適合當晚過夜。規劃須保留這些待查條件；探索、救難與考古的用途
+不改變 R1–R4 的候選性質，也不授予即時前進、撤退或救援指揮權限。
+
+### 18.6 共同規劃產物與六力重分析
+
+新的規劃能力須同時交付「路線幾何」與「行程節奏」，GPX 不能單獨承載全部意圖。
+以下是共用產品契約；既有 W1–W7 要求與目前整合狀態見 §18.7 及交付計畫 §4.8：
+
+| 產物 | 最少需要保留的內容 |
+|---|---|
+| 路線版本與 Planned GPX | workspace、版本與父版本、可選 Golden、來源 Ref. 集合、分析範圍、各段來源與 hash、剪接／反向／支線操作、連通狀態及缺口。 |
+| 行程與節奏計畫 | 分日與 CP／路段順序、移動／休息／總耗時、出發／到達／離營時刻、候選營地、腳程與天候假設、每個估計的來源及未知項。 |
+| 比較與分析紀錄 | 分析主體、Golden／Planned／Recorded 的角色綁定、共用路段對應、各版幾何與時間差異、六力結果引用的證據版本。 |
+| 審查紀錄 | 使用者採用哪些段與假設、哪些仍待查、對應的候選版本；採用不抹除 terrain hypothesis 來源。 |
+
+剪接須驗證 CRS、端點距離、方向、路序、分日與裝置中斷，並保留來源點／路段對應。
+GPX 匯出遇到未解缺口應分段或停止完整路線匯出；如匯出預估時間，必須標為 planned，
+不得被後續解析器當成 observed。休息、紮營及估計依據仍以伴隨的行程資料為準。
+
+Planned GPX 可納入 R1–R4 作為待研判的候選段，但納入、人工選用或 GPX 匯出都不會
+把它升格為 verified trail／runtime route。TRH 仍遵守 §11.11–§11.12 的
+`authority=candidate_only`、`runtime_safety_truth=false`、`operational=false`、
+`promotion_allowed=false`，不能透過換檔名或路線拼接繞過此邊界。
+
+```mermaid
+flowchart TD
+    A[Ref. GPX 集合] --> B[選定 Golden 與重建歷史節奏]
+    B --> C[情境一：復刻基準]
+    B --> D[情境二：人工輸入行程差異]
+    E[情境三：無 Ref.，提供 AOI 與起訖點] --> F[地圖／DEM 準備與路段候選]
+    D --> F
+    F --> G[Planned GPX 與行程節奏草案]
+    C --> H[workspace 內的六力分析]
+    G --> H
+    H --> I[審查與版本化計畫]
+    I --> J[歸來後匯入 Recorded GPX]
+    J --> K[新分析：實錄與原 Golden／Planned 比較]
+```
+
+每次六力分析只使用一個明示的主路線軸。若分析 Planned，新增支線與營地必須納入
+軸與時間計畫；原 Golden 留作比較，不再用它截掉新路段。共用分析主體與版本專屬
+producer 須引用新輸出或明示缺資料，不能僅切換 UI 名稱而沿用舊輸出。
+
+### 18.7 與現有實作的銜接及完成條件
+
+下表保留初次文件整理時的基礎與整合方向；實際交付狀態以指定版本的驗收證據為準。
+
+**2026-09-13 現況：整合中／尚未全面驗收。** Scout 原有 W1–W7 正重新整合到
+唯一 Dashboard 入口 `9099`；本次指定 workspace 為
+`dongqing_batongguan_historic_trail_newImport`。以下歷史成績不代表目前版本已通過；
+Diagnostic 仍有未通過項，完整教學截圖、步驟定位與 PDF 也尚未全面同步。
+
+**2026-09-10 指定版本歷史回執：** 情境一已取得指定版本／路線的 G1–G6 SCOPED PASS，
+包含完整 Dashboard 操作與連續 3/3 核心恢復驗證。情境二已新增「人工行程與明確
+表單 → Ref. 剪接／向量山徑及 TRH 候選 → Planned GPX 與新節奏」並完成 P1–P9
+指定範圍驗收，為 WORKING PROTOTYPE。真實 Dashboard 與 fixture 證據分列於
+[Planned 驗收報告](scout-planned-gpx-p1-p9-qualification-20260910.md)；不是通用
+自然語言推論、所有六力 producer 重算或現場安全資格。未重算與 coverage 缺口
+仍明示。後續七項追加要求另納入 Mapsforge 向量、零 Ref 與 Recorded 共同閉環，
+不能由原 P1–P9 回執推定它們已在目前入口通過。具體階段、修改範圍、操作方式及驗收案例見
+[Golden 復刻驗證與 Planned GPX 交付計畫](scout-golden-planned-gpx-delivery-plan.md)。
+
+| 範圍 | 現有基礎 | 後續改善與驗證重點 |
+|---|---|---|
+| Golden 匯入與準備 | `pretrip_import.py` 的 `primary_gpx`／Golden 路徑，以及既有 preparation runbook。 | 情境一以明確選定的來源貫穿地圖、歷史節奏與六力分析。 |
+| 人工與 Ref. 行程入口 | [Permission workbench D-009](scout-dashboard-contextual-permission-workbench.md) 定義 `human_seeded`／`reference_gpx_seeded` 及共同 `MissionBaselineCandidate`。 | 沿用文字意圖與來源綁定；整合 Planned 路段剪接、行程變更及差異預覽，不再另建互不相容的 Baseline。 |
+| 路段候選 | Navigation 已有 §11.11–§11.12 的 A/B R1–R3、敘事審查 R4 契約。 | 補齊候選段到 Planned 草案的來源追蹤與六力重分析；保留現有候選權限。 |
+| 零 Ref. 入口 | TRH 核心輸入為準備好的 DEM 與 A/B；現有 GPX import 仍要求 Golden／primary GPX。 | 新增 AOI 起始的 workspace／map preparation 入口；六力可呈現部分結果，不能以假 Golden 補依賴。 |
+| 新節奏估計 | 既有歷史重建與 segment timing 可作來源。 | 新估計須另存方法／假設，保留 workbench 原有 non-imputing 歷史時間與未知值，避免冒充觀測或全日 ETA。 |
+| 行後復盤 | [Capability Timeline](post-analysis-capability-timeline.md) 已定義 completed recording set 與本人能力證據邊界。 | 串接實錄作為新分析 Golden 的角色、原計畫比較及六力重跑；不得將行前 GPX 當成個人完成紀錄。 |
+
+既有七項追加要求如下；本次補回契約與操作範圍，**全部仍待目前整合版全面驗收**：
+
+| 工作 | 整合要求 | 驗證與資料邊界 |
+|---|---|---|
+| W1 行前補件 | Permission 保存路線版本綁定的 context；六力讀取同版聲明與證據。 | 日期、隊伍、裝備與審查未提供時保持未知；新補件使舊 run 失去 current 資格。 |
+| W2 綜合報告 | 同版六力、CP graph、時程及 readiness assessor 組成 §18.2 報告。 | 下載與來源 hashes 可核對；待補項、折返／替代方案未知不得補成准許。 |
+| W3 節奏與營地 | 地形／固定腳程、最慢隊員假設、固定停留、分日及時間限制。 | 顯示方法、情境區間、已知小計與未解 ETA；營地位置不等於水源或過夜資格。 |
+| W4 多日文字 | 原文分句、相對日序、地名／來源對位、重訪及可選模型草稿。 | 歧義逐句待確認；不得跳過未解析句或由願望直接推定腳程。 |
+| W5 地圖與候選 | 不可覆寫的 PBF source rebuild、Mapsforge 向量及既有 TRH catalog。 | PBF 真實 node IDs 與 Mapsforge 幾何選段分開；R1–R3 與新路線須有同版準備／分析證據，R4 暫緩。 |
+| W6 零 Ref 入口 | AOI／DEM／A/B 起始的探索 workspace，再由候選保存 Planned。 | 不依賴假 Golden；AOI 證據與已選路線的 corridor 準備分開。 |
+| W7 行後復盤 | 多檔／隊員／裝置 Recorded 保存、與原 Golden／Planned 比較、獨立六力作業。 | 歷史／本人本次／fixture 身分分開；保留時間戳、來源缺口及版本，現時預報不冒充當時天候。 |
+
+使用者已指定 **R4 暫時待審，TRH 先以 R1–R3 為主**。不得代填人工錨點核可，
+或以 Rudy 向量冒充舊 raster 草稿／R4 已審查。Recorded 換作分析主體不覆寫原
+Golden 或 Planned；操作與版本契約見交付計畫 §4.8。
+
+建議重整順序：先統一 GPX 角色、分析版本與 CP／segment 對應，串通情境一；再做
+情境二的「一條支線＋一項停留變更」完整切片，證明 Planned 幾何與節奏都能重算；
+接著建立情境三的 AOI 入口，最後以 Recorded 重跑驗證三種情境共用的回饋閉環。
+
+各情境最小完成條件：
+
+1. **復刻：** 從 Ref. 集合選 Golden、import／preparation、歷史節奏到 Dashboard
+   六力輸出使用同一來源；來源分日與記錄缺口保持可回查。
+2. **修改：** 一段支線往返及一項固定停留形成新 Planned 版本；顯示幾何、CP、
+   啟程／休息／營地差異，保留 Golden；缺資料的時間不冒充完整估計。
+3. **零 Ref.：** 無 Ref. 與無 Golden 仍可從 AOI／DEM／A/B 建立 workspace 與候選；
+   不需偽造 GPX，未解路段及估計假設可見。
+4. **共同閉環：** 歸來後以真實 Recorded 建立新分析，能比較原 Golden、Planned 與
+   實走差異；不覆寫舊版本，也不將候選分析直接寫入 runtime safety truth。
+
+宣稱完成前，須依目前版本、指定入口與 workspace 實際跑完全部適用的 Diagnostic
+及相依回歸，取得 100% PASS，並同步教學／PDF。FAIL、WARN、SKIP、未驗證或不穩定
+仍屬未完成；Diagnostic 與既有需求衝突由使用者裁決，不自行改成 N/A 或通過。
 
 ---
 
@@ -1339,7 +1978,8 @@ Scout 必須能處理：
 
 ## 20. Post-Trip Workflow
 
-行後，Scout 必須把實際經驗回寫到使用者與路線模型。
+行後，Scout 應將實際經驗整理為可審查的學習候選，再依各模型既有審查流程採用。
+分析完成本身不會自動回寫個人模型或 runtime safety truth。
 
 ### 20.1 Data to Collect
 
@@ -1355,7 +1995,7 @@ Scout 必須能處理：
 
 ### 20.2 Model Updates
 
-Scout 應更新：
+Scout 應提出以下更新候選：
 
 - 使用者 Scout Pace Coefficient。
 - 隊伍腳程匹配模型。
@@ -1363,6 +2003,23 @@ Scout 應更新：
 - 停留點安全性。
 - 路況與風險圖層。
 - Route Context Intelligence 內容。
+
+### 20.3 三種情境共用的歸來後復盤
+
+歸來後可選擇本次真實 Recorded GPX／recording set，作為**新一次分析的 Golden**，
+重新解析此行的六力優劣。這是分析角色切換，不是把原 Golden 覆蓋，也不是把
+Planned 更名為實錄。保存原 Golden、每版 Planned、行程計畫及六力報告，新增分析
+紀錄，並保留 Recorded 的裝置、參與者、時間與觀測來源身分。
+
+比較以可對應的 CP／路段與當地時間軸為基礎，區分共同行經段、新增／略過路段、
+路徑偏離、啟程／到達、移動、休息、營地及總天數的差異。本人行後復盤需要
+Recorded；沒有實走資料時，仍可研究 Ref.／Golden／Planned，但不能產生本人的
+完成能力紀錄。情境三沒有原 Golden 時，直接比較 Planned 與 Recorded。
+
+天氣、路況、停留原因、體感與事件需要對應時段的觀測或使用者補充；不因 GPX
+留下某段停滯就直接判定疲勞、迷路或風險事件。可用結論形成下一次行程與腳程的
+修正候選，沿用 [Scout Closed-Loop Operating Cycle](scout-closed-loop-operating-cycle.md)
+與 [Post-Analysis Capability Timeline](post-analysis-capability-timeline.md) 的證據及採用邊界。
 
 ---
 
@@ -1721,6 +2378,11 @@ Examples:
 
 | Term | Definition |
 |---|---|
+| `Ref. GPX` | 供路線、路段與節奏比較的來源軌跡集合；可為空。 |
+| `Golden GPX` | 本次選定的復刻／分析基準角色；來源身分不因被選為 Golden 而改變。 |
+| `Planned GPX` | 本次規劃路線幾何，搭配版本化的行程與節奏資料；不是實走紀錄。 |
+| `Recorded GPX` | 本次完成行程的真實裝置軌跡，可組成多檔 recording set。 |
+| `後分析` | 先有軌跡／計畫，再做六力解析；包含行前研究與本人行後復盤。 |
 | `CP` | Checkpoint，路線中的決策節點。 |
 | `CP Graph` | 由多個 CP 與路段構成的行程決策圖。 |
 | `Buffer` | 安全餘裕，例如時間、日照、天氣、體力、撤退餘裕。 |

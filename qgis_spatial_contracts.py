@@ -6,12 +6,16 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from terrain_route_hypothesis_models import GeoPoint, TerrainRoutingCostConfig
+
 
 QGIS_SPATIAL_SCHEMA_VERSION = "scout_qgis_spatial.v0_1"
 TERRAIN_CONTEXT_PREVIEW_WORKFLOW_ID = "terrain_context_preview.v1"
 TERRAIN_CONTEXT_PREVIEW_WORKFLOW_VERSION = "0.1"
 TERRAIN_FEATURE_STACK_WORKFLOW_ID = "terrain_feature_stack.v1"
 TERRAIN_FEATURE_STACK_WORKFLOW_VERSION = "0.1"
+TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_ID = "terrain_route_hypothesis.v1"
+TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_VERSION = "0.1"
 
 
 def utc_now_iso() -> str:
@@ -70,9 +74,16 @@ class SpatialAnalysisErrorCode(str, Enum):
     BACKEND_NOT_CONFIGURED = "BACKEND_NOT_CONFIGURED"
     QGIS_UNAVAILABLE = "QGIS_UNAVAILABLE"
     MCP_UNAVAILABLE = "MCP_UNAVAILABLE"
+    GRASS_UNAVAILABLE = "GRASS_UNAVAILABLE"
     PROJECT_UNAVAILABLE = "PROJECT_UNAVAILABLE"
     INVALID_INPUT = "INVALID_INPUT"
     CRS_UNRESOLVED = "CRS_UNRESOLVED"
+    DEM_RESOLUTION_TOO_LOW = "DEM_RESOLUTION_TOO_LOW"
+    NODATA_PRESENT = "NODATA_PRESENT"
+    ENDPOINT_OUTSIDE_DEM = "ENDPOINT_OUTSIDE_DEM"
+    ENDPOINTS_COINCIDENT = "ENDPOINTS_COINCIDENT"
+    COST_SURFACE_INCOMPLETE = "COST_SURFACE_INCOMPLETE"
+    NO_CONNECTED_SOLUTION = "NO_CONNECTED_SOLUTION"
     SOURCE_UNAVAILABLE = "SOURCE_UNAVAILABLE"
     PROCESSING_FAILED = "PROCESSING_FAILED"
     RENDER_FAILED = "RENDER_FAILED"
@@ -177,6 +188,51 @@ class SpatialCapabilityCatalog(BaseModel):
     boundary: SpatialAuthorityBoundary = Field(default_factory=qgis_candidate_boundary)
 
 
+class TerrainRouteEndpointSelection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    start: GeoPoint
+    destination: GeoPoint
+    selection_source: Literal["api_request", "dashboard_map_selection"] = (
+        "api_request"
+    )
+    candidate_only: Literal[True] = True
+    runtime_safety_truth: Literal[False] = False
+    operational: Literal[False] = False
+    safe_or_walkable: Literal["not_determined"] = "not_determined"
+
+    @model_validator(mode="after")
+    def validate_wgs84_endpoints(self) -> "TerrainRouteEndpointSelection":
+        for name, point in (
+            ("start", self.start),
+            ("destination", self.destination),
+        ):
+            if point.crs != "EPSG:4326":
+                raise ValueError(
+                    f"terrain route {name} must use EPSG:4326 for the QGIS worker"
+                )
+            if not -180 <= point.x <= 180 or not -90 <= point.y <= 90:
+                raise ValueError(f"terrain route {name} is outside WGS84 bounds")
+        if (self.start.x, self.start.y) == (
+            self.destination.x,
+            self.destination.y,
+        ):
+            raise ValueError("terrain route start and destination must differ")
+        return self
+
+
+class TerrainRouteGuidanceSelection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    guidance_id: str = Field(min_length=1, max_length=160)
+    guided_hypothesis_id: Literal["R4"] = "R4"
+    review_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    candidate_only: Literal[True] = True
+    runtime_safety_truth: Literal[False] = False
+    operational: Literal[False] = False
+    safe_or_walkable: Literal["not_determined"] = "not_determined"
+
+
 class SpatialAnalysisRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -187,6 +243,15 @@ class SpatialAnalysisRequest(BaseModel):
     corridor_m: float = 250.0
     requested_by: str = "dashboard_operator"
     request_id: str | None = None
+    terrain_route_endpoints: TerrainRouteEndpointSelection | None = None
+    terrain_route_guidance: TerrainRouteGuidanceSelection | None = None
+    terrain_routing_cost_config: TerrainRoutingCostConfig = Field(
+        default_factory=TerrainRoutingCostConfig
+    )
+    candidate_only: Literal[True] = True
+    runtime_safety_truth: Literal[False] = False
+    operational: Literal[False] = False
+    safe_or_walkable: Literal["not_determined"] = "not_determined"
 
     @field_validator("corridor_m")
     @classmethod
@@ -203,6 +268,31 @@ class SpatialAnalysisRequest(BaseModel):
         if not workflow_id:
             raise ValueError("workflow_id is required")
         return workflow_id
+
+    @model_validator(mode="after")
+    def validate_terrain_route_endpoints_scope(self) -> "SpatialAnalysisRequest":
+        if (
+            self.terrain_route_endpoints is not None
+            and self.workflow_id != TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_ID
+        ):
+            raise ValueError(
+                "terrain_route_endpoints are only valid for terrain_route_hypothesis.v1"
+            )
+        if (
+            self.terrain_route_guidance is not None
+            and self.workflow_id != TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_ID
+        ):
+            raise ValueError(
+                "terrain_route_guidance is only valid for terrain_route_hypothesis.v1"
+            )
+        if (
+            self.terrain_route_guidance is not None
+            and self.terrain_route_endpoints is None
+        ):
+            raise ValueError(
+                "terrain_route_guidance requires explicit candidate-only A/B endpoints"
+            )
+        return self
 
 
 class SpatialEvidenceReviewRequest(BaseModel):

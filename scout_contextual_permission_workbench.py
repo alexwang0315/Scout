@@ -25,6 +25,7 @@ DEFAULT_CONTEXTUAL_PERMISSION_RULES_REF = Path(
 )
 CONTEXTUAL_PERMISSION_REDUCER_VERSION = "contextual-permission.reducer.v1"
 BASELINE_AUTO_PROPOSAL_VERSION = "reference-gpx-auto-proposal.v1"
+BASELINE_REFERENCE_RECONSTRUCTION_STRATEGY = "reference-gpx.historical-reconstruction"
 PROJECTION_REBUILD_ADMISSION_VERSION = (
     "contextual-permission.projection-rebuild-admission.v1"
 )
@@ -42,6 +43,18 @@ REQUIRED_NIGHT_GATE_IDS = (
     "gate.communication",
     "gate.runtime_lineage",
 )
+NightRuntimeAuthorityStatus = Literal[
+    "blocked_receipt_missing",
+    "blocked_receipt_hash_mismatch",
+    "blocked_decision_not_approval",
+    "blocked_packet_replaced",
+    "blocked_sequence_changed",
+    "blocked_freshness",
+    "blocked_gate_matrix",
+    "blocked_runtime_lineage",
+    "blocked_runtime_truth_boundary",
+    "eligible_for_runtime_consideration",
+]
 
 
 class ContextualPermissionConflict(ValueError):
@@ -559,6 +572,139 @@ class EmergencyReviewReceipt(WorkbenchModel):
     external_send_performed: bool = False
 
 
+class NightRuntimeAuthorityRequest(WorkbenchModel):
+    receipt_id: str
+    receipt_sha256: str
+    receipt_packet_sha256: str
+    packet_id: str
+    current_packet_sha256: str
+    mission_day_instance_id: str
+    review_generation: int = Field(ge=1)
+    current_sequence: int = Field(ge=0)
+    expected_aggregate_sha256: str
+    expected_gate_matrix_sha256: str
+    expected_reviewed_envelope_sha256: str
+    idempotency_key: str
+
+    @field_validator(
+        "receipt_sha256",
+        "receipt_packet_sha256",
+        "current_packet_sha256",
+        "expected_aggregate_sha256",
+        "expected_gate_matrix_sha256",
+        "expected_reviewed_envelope_sha256",
+    )
+    @classmethod
+    def validate_authority_sha256(cls, value: str) -> str:
+        if not _SHA256_PATTERN.fullmatch(value):
+            raise ValueError("runtime authority request hashes must be SHA-256 digests")
+        return value
+
+    @field_validator("receipt_id", "packet_id", "mission_day_instance_id", "idempotency_key")
+    @classmethod
+    def validate_authority_id(cls, value: str) -> str:
+        if not _SAFE_ID_PATTERN.fullmatch(value):
+            raise ValueError("invalid runtime authority request identifier")
+        return value
+
+
+class NightRuntimeAuthorityDecision(WorkbenchModel):
+    artifact_kind: Literal["scout_night_runtime_authority_decision"] = (
+        "scout_night_runtime_authority_decision"
+    )
+    schema_version: Literal["nightRuntimeAuthorityDecision.v0"] = (
+        "nightRuntimeAuthorityDecision.v0"
+    )
+    decision_id: str
+    decision_sha256: str
+    request_sha256: str
+    status: NightRuntimeAuthorityStatus
+    eligible_for_runtime_consideration: bool
+    reasons: list[str]
+    receipt_id: str
+    receipt_sha256: str
+    receipt_decision: EmergencyReviewDecision | None
+    packet_id: str
+    receipt_packet_sha256: str
+    current_packet_sha256: str
+    review_generation: int = Field(ge=0)
+    receipt_reviewed_sequence: int = Field(ge=0)
+    current_sequence: int = Field(ge=0)
+    current_aggregate_sha256: str
+    current_gate_matrix_sha256: str
+    reviewed_envelope_sha256: str
+    receipt_revalidation_passed: bool
+    sequence_revalidation_passed: bool
+    freshness_revalidation_passed: bool
+    gate_revalidation_passed: bool
+    hash_revalidation_passed: bool
+    current_freshness_state: Literal[
+        "fresh",
+        "expiring",
+        "refresh_due",
+        "expired",
+        "freshness_unknown",
+        "invalidated",
+        "unavailable",
+    ]
+    gate_states: list[EligibilityGate]
+    source_refs: list[str]
+    candidate_only: Literal[True] = True
+    runtime_safety_truth: Literal[False] = False
+    runtime_authorization_performed: Literal[False] = False
+    phase1_l0_l4_state_mutated: Literal[False] = False
+    safety_api_called: Literal[False] = False
+    outbound_action_performed: Literal[False] = False
+    outbound_transport_invoked: Literal[False] = False
+    external_send_performed: Literal[False] = False
+    hardware_control_performed: Literal[False] = False
+    authority: AuthorityBoundary = Field(default_factory=AuthorityBoundary)
+
+    @field_validator(
+        "decision_sha256",
+        "request_sha256",
+        "receipt_sha256",
+        "receipt_packet_sha256",
+        "current_packet_sha256",
+        "current_aggregate_sha256",
+        "current_gate_matrix_sha256",
+        "reviewed_envelope_sha256",
+    )
+    @classmethod
+    def validate_decision_sha256(cls, value: str) -> str:
+        if not _SHA256_PATTERN.fullmatch(value):
+            raise ValueError("runtime authority decision hashes must be SHA-256 digests")
+        return value
+
+    @model_validator(mode="after")
+    def validate_no_runtime_effect(self) -> "NightRuntimeAuthorityDecision":
+        if self.eligible_for_runtime_consideration and self.status != (
+            "eligible_for_runtime_consideration"
+        ):
+            raise ValueError("eligible authority decision must use the eligible status")
+        if self.status == "eligible_for_runtime_consideration" and not (
+            self.receipt_revalidation_passed
+            and self.sequence_revalidation_passed
+            and self.freshness_revalidation_passed
+            and self.gate_revalidation_passed
+            and self.hash_revalidation_passed
+        ):
+            raise ValueError("eligible authority decision requires every revalidation")
+        if (
+            self.runtime_authorization_performed
+            or self.phase1_l0_l4_state_mutated
+            or self.safety_api_called
+            or self.outbound_action_performed
+            or self.outbound_transport_invoked
+            or self.external_send_performed
+            or self.hardware_control_performed
+        ):
+            raise ValueError("night runtime authority v0 cannot perform runtime effects")
+        if self.authority.runtime_authorization_performed:
+            raise ValueError("night runtime authority v0 cannot authorize runtime")
+        return self
+
+
 class DailyEmergencyReviewSession(WorkbenchModel):
     session_id: str
     project_id: str
@@ -1061,6 +1207,7 @@ class BaselineAuthoringRequest(WorkbenchModel):
     mode: Literal["human_text", "reference_gpx"]
     human_text: str | None = Field(default=None, max_length=20_000)
     reference_route_ref: str | None = Field(default=None, max_length=500)
+    reference_strategy: Literal["historical_reconstruction"] | None = None
     day_end_inputs: list[BaselineDayEndInput] = Field(
         default_factory=list,
         max_length=50,
@@ -1074,6 +1221,10 @@ class BaselineAuthoringRequest(WorkbenchModel):
             raise ValueError("reference_route_ref is required for reference_gpx mode")
         if self.mode != "reference_gpx" and self.day_end_inputs:
             raise ValueError("explicit day-end inputs require reference_gpx mode")
+        if self.reference_strategy is not None and (
+            self.mode != "reference_gpx" or self.day_end_inputs
+        ):
+            raise ValueError("historical reconstruction copies reference day ends without new endpoint inputs")
         input_ids = [item.input_id for item in self.day_end_inputs]
         anchor_ids = [item.target_anchor_id for item in self.day_end_inputs]
         if len(input_ids) != len(set(input_ids)) or len(anchor_ids) != len(
@@ -1124,7 +1275,9 @@ class BaselineMapContextProjection(WorkbenchModel):
     anchors: list[BaselineMapAnchor] = Field(min_length=2, max_length=100)
     source_refs: list[str] = Field(min_length=2, max_length=4)
     source_hashes: dict[str, str]
-    sampling_policy: Literal["distance_order_sample.v1"] = "distance_order_sample.v1"
+    sampling_policy: Literal[
+        "distance_order_sample.v1", "reference_gpx_boundary_preserving_sample.v1"
+    ] = "distance_order_sample.v1"
     presentation_only: Literal[True] = True
     candidate_only: Literal[True] = True
     runtime_safety_truth: Literal[False] = False
@@ -1139,11 +1292,12 @@ class BaselineMapContextProjection(WorkbenchModel):
 
 
 class BaselineEtaProposal(WorkbenchModel):
-    state: Literal["complete_derived", "partial_derived", "unknown"]
+    state: Literal["complete_derived", "partial_derived", "unknown", "reference_replayed"]
     method: Literal[
         "sum_segment_quantiles",
         "sum_supported_segment_quantiles",
         "no_numeric_eta",
+        "reference_track_elapsed",
     ]
     method_version: Literal["1"] = "1"
     confidence: Literal["medium", "low", "unknown"]
@@ -1151,6 +1305,7 @@ class BaselineEtaProposal(WorkbenchModel):
     segment_p75_sum_minutes: float | None = Field(default=None, ge=0)
     supported_segment_p50_sum_minutes: float | None = Field(default=None, ge=0)
     supported_segment_p75_sum_minutes: float | None = Field(default=None, ge=0)
+    observed_elapsed_minutes: float | None = Field(default=None, ge=0)
     supporting_segment_ids: list[str] = Field(default_factory=list)
     unsupported_segment_ids: list[str] = Field(default_factory=list)
     gap_ids: list[str] = Field(default_factory=list)
@@ -1164,6 +1319,25 @@ class BaselineEtaProposal(WorkbenchModel):
     def validate_eta_state(self) -> "BaselineEtaProposal":
         if set(self.supporting_segment_ids).intersection(self.unsupported_segment_ids):
             raise ValueError("supported and unsupported timing segments must be disjoint")
+        if self.state == "reference_replayed":
+            if (
+                self.method != "reference_track_elapsed"
+                or self.confidence != "medium"
+                or self.observed_elapsed_minutes is None
+                or not self.supporting_segment_ids
+                or self.unsupported_segment_ids
+                or self.reason is not None
+                or any(value is not None for value in (
+                    self.segment_p50_sum_minutes,
+                    self.segment_p75_sum_minutes,
+                    self.supported_segment_p50_sum_minutes,
+                    self.supported_segment_p75_sum_minutes,
+                ))
+            ):
+                raise ValueError("reference elapsed time must remain separate from quantile estimates")
+            return self
+        if self.observed_elapsed_minutes is not None:
+            raise ValueError("only a reference replay may carry observed elapsed time")
         if self.state == "complete_derived":
             if (
                 self.method != "sum_segment_quantiles"
@@ -1230,12 +1404,14 @@ class BaselineTargetProposal(WorkbenchModel):
     rationale: str
     evidence: list[BaselineArtifactBinding] = Field(min_length=1)
     required_review_surface: Literal["permission", "safety_emergency"]
-    selection_origin: Literal["scout_proposal", "explicit_input"] = (
+    selection_origin: Literal["scout_proposal", "explicit_input", "reference_evidence"] = (
         "scout_proposal"
     )
     selection_actor: Literal["human_decision", "test_fixture_input"] | None = None
     selection_input_id: str | None = None
     selection_input_sha256: str | None = None
+    reference_day_id: str | None = None
+    reference_day_sha256: str | None = None
     candidate_only: bool = True
     runtime_safety_truth: bool = False
     departure_approval_granted: bool = False
@@ -1247,6 +1423,19 @@ class BaselineTargetProposal(WorkbenchModel):
             raise ValueError("target kind is routed to the wrong review surface")
         if self.kind != "day_end":
             return self
+        if self.selection_origin == "reference_evidence":
+            if (
+                not self.reference_day_id
+                or not self.reference_day_sha256
+                or not _SHA256_PATTERN.fullmatch(self.reference_day_sha256)
+                or any(value is not None for value in (
+                    self.selection_actor, self.selection_input_id, self.selection_input_sha256
+                ))
+            ):
+                raise ValueError("reference day ends must bind historical evidence, not human input")
+            return self
+        if self.reference_day_id is not None or self.reference_day_sha256 is not None:
+            raise ValueError("only reference selections may claim historical day provenance")
         if self.selection_origin == "explicit_input":
             if (
                 self.selection_actor is None
@@ -1333,9 +1522,29 @@ class BaselineProposalSummary(WorkbenchModel):
     permission_uncertainty_count: int = Field(ge=0)
     safety_pending_count: int = Field(ge=0)
     blocking_gap_count: int = Field(ge=0)
-    target_p75_minutes_per_day: int = Field(ge=1)
+    target_p75_minutes_per_day: int | None = Field(default=None, ge=1)
+    reconstructed_day_count: int = Field(default=0, ge=0)
+    historical_checkpoint_count: int = Field(default=0, ge=0)
+    historical_timed_checkpoint_count: int = Field(default=0, ge=0)
+    historical_rest_stop_count: int = Field(default=0, ge=0)
     source_route_days_metadata: int | None = Field(default=None, ge=0)
     source_route_days_planning_authority: bool = False
+
+
+class BaselineDayFineTune(WorkbenchModel):
+    """Human planning inputs; historical quantiles and runtime policy stay separate."""
+
+    departure_at: datetime | None = None
+    duration_minutes: float | None = Field(default=None, gt=0, le=5760, allow_inf_nan=False)
+    extra_stop_minutes: float = Field(default=0, ge=0, le=1440, allow_inf_nan=False)
+    note: str = Field(default="", max_length=2000)
+
+    @field_validator("departure_at")
+    @classmethod
+    def require_departure_timezone(cls, value: datetime | None) -> datetime | None:
+        if value is not None and value.utcoffset() is None:
+            raise ValueError("Planning departure must include its timezone")
+        return value
 
 
 class BaselineDayDraft(WorkbenchModel):
@@ -1360,6 +1569,8 @@ class BaselineDayDraft(WorkbenchModel):
     )
     uncertainty_ids: list[str] = Field(default_factory=list)
     review_summary: str | None = None
+    reference_replay: dict[str, object] | None = None
+    fine_tune: BaselineDayFineTune | None = None
 
 
 class MissionBaselineDraft(WorkbenchModel):
@@ -1403,6 +1614,7 @@ class MissionBaselineDraft(WorkbenchModel):
     uncertainties: list[BaselineUncertainty] = Field(default_factory=list)
     review_requirements: BaselineReviewRequirements | None = None
     safety_handoff_summary: str | None = None
+    reference_reconstruction: dict[str, object] | None = None
     writes_performed: bool = False
     candidate_only: bool = True
     runtime_safety_truth: bool = False
@@ -1440,6 +1652,40 @@ class BaselineCandidateSaveReceipt(WorkbenchModel):
     candidate_only: bool = True
     runtime_safety_truth: bool = False
     departure_approval_granted: bool = False
+
+
+class BaselineCandidateCatalogItem(WorkbenchModel):
+    version_ref: str
+    version_id: str
+    version_sha256: str
+    status: Literal["current", "stale", "invalid"]
+    reason: str
+    source_mode: Literal["human_text", "reference_gpx"]
+    accepted: bool | None = None
+    baseline_id: str
+    source_sha256: str
+    validation_state: Literal["valid", "needs_review", "blocked"]
+    review_ready: bool
+    candidate_only: bool = True
+    runtime_safety_truth: bool = False
+    departure_approval_granted: bool = False
+
+
+class BaselineCandidateCatalog(WorkbenchModel):
+    project_id: str
+    candidates: list[BaselineCandidateCatalogItem]
+    writes_performed: bool = False
+
+
+class BaselineCandidateDetail(WorkbenchModel):
+    project_id: str
+    candidate_ref: str
+    status: Literal["current", "stale", "invalid"]
+    reason: str
+    draft: MissionBaselineDraft
+    saved_candidate: BaselineCandidateSaveReceipt
+    source_issues: list[str] = Field(default_factory=list)
+    writes_performed: bool = False
 
 
 class BaselinePatchOperation(WorkbenchModel):
@@ -1520,6 +1766,7 @@ class BaselineReviewAcceptRequest(WorkbenchModel):
     reviewed_day_ids: list[str] = Field(default_factory=list)
     acknowledged_uncertainty_ids: list[str] = Field(default_factory=list)
     safety_handoff_acknowledged: bool = False
+    expected_reviewed_baseline_sha256: str | None = Field(default=None, exclude=True)
 
     @field_validator("reviewed_day_ids", "acknowledged_uncertainty_ids")
     @classmethod
@@ -2227,6 +2474,399 @@ def _packet_hash(packet: dict[str, object]) -> str:
             for key, value in packet.items()
             if key not in {"sha256", "server_now"}
         }
+    )
+
+
+_FALLBACK_NIGHT_PACKET_BUILT_AT = datetime(1970, 1, 1, tzinfo=timezone.utc)
+
+_NIGHT_GATE_LABELS = {
+    "gate.reviewed_alternative": "Reviewed alternative",
+    "gate.segment_policy": "Segment policy",
+    "gate.terrain_route": "Terrain / route",
+    "gate.lighting_power": "Lighting / power",
+    "gate.navigation_resources": "Navigation resources",
+    "gate.team": "Team",
+    "gate.weather_threat": "Weather / threat",
+    "gate.communication": "Communication",
+    "gate.runtime_lineage": "Runtime lineage",
+}
+
+
+def _coerce_sha256(value: str | None, *, label: str) -> str:
+    if value is not None and _SHA256_PATTERN.fullmatch(value):
+        return value
+    return _fixed_hash(label)
+
+
+def _dedupe_refs(values: list[str]) -> list[str]:
+    refs: list[str] = []
+    for value in values:
+        if value and value not in refs:
+            refs.append(value)
+    return refs
+
+
+def _gate_state_source_refs(gates: list[EligibilityGate]) -> list[str]:
+    return _dedupe_refs([gate.source_ref for gate in gates])
+
+
+def _night_gate(
+    gate_id: str,
+    *,
+    state: Literal["pass", "blocked", "missing", "unknown"],
+    reason: str,
+    source_ref: str,
+    source_sha256: str,
+) -> EligibilityGate:
+    return EligibilityGate(
+        gate_id=gate_id,
+        label=_NIGHT_GATE_LABELS.get(gate_id, gate_id),
+        state=state,
+        hard_gate=True,
+        reason=reason,
+        source_ref=source_ref,
+        source_sha256=source_sha256,
+    )
+
+
+def _night_gate_matrix_sha256(packet: NightAlternativePacket) -> str:
+    return _digest(
+        {
+            "packet_id": packet.packet_id,
+            "mission_day_instance_id": packet.mission_day_instance_id,
+            "review_generation": packet.review_generation,
+            "reviewed_sequence": packet.reviewed_sequence,
+            "freshness_state": packet.freshness_state,
+            "expires_at": packet.expires_at,
+            "gates": [
+                {
+                    "gate_id": gate.gate_id,
+                    "state": gate.state,
+                    "hard_gate": gate.hard_gate,
+                    "source_ref": gate.source_ref,
+                    "source_sha256": gate.source_sha256,
+                }
+                for gate in packet.gates
+            ],
+        }
+    )
+
+
+def reviewed_target_from_anchor(
+    anchor: BaselineRouteAnchor | None,
+    *,
+    fallback_ref: str,
+    fallback_sha256: str,
+    fallback_label: str,
+) -> ReviewedTargetRef:
+    if anchor is None:
+        return ReviewedTargetRef(
+            target_ref=fallback_ref,
+            target_sha256=fallback_sha256,
+            target_label=fallback_label,
+        )
+    return ReviewedTargetRef(
+        target_ref=anchor.artifact.ref,
+        target_sha256=anchor.artifact.sha256,
+        target_label=anchor.display_label,
+    )
+
+
+def reviewed_target_from_proposal(
+    proposal: BaselineTargetProposal | None,
+    *,
+    fallback_ref: str,
+    fallback_sha256: str,
+    fallback_label: str,
+) -> ReviewedTargetRef:
+    return reviewed_target_from_anchor(
+        proposal.target if proposal is not None else None,
+        fallback_ref=fallback_ref,
+        fallback_sha256=fallback_sha256,
+        fallback_label=fallback_label,
+    )
+
+
+def build_fail_closed_night_alternative_packet(
+    *,
+    project_id: str,
+    session_id: str,
+    mission_day_id: str,
+    mission_day_instance_id: str,
+    movement_group_id: str,
+    membership_revision: int,
+    membership_sha256: str | None,
+    review_generation: int,
+    reviewed_sequence: int,
+    from_target: ReviewedTargetRef,
+    to_target: ReviewedTargetRef,
+    retreat_candidates: list[ReviewedTargetRef],
+    emergency_bivy_candidates: list[ReviewedTargetRef],
+    route_scope_ref: str,
+    route_scope_sha256: str | None,
+    mission_day_plan_ref: str,
+    mission_day_plan_sha256: str,
+    reviewed_alternative_complete: bool,
+    aggregate: CanonicalGroupAggregate | None = None,
+    built_at: datetime | None = None,
+    maximum_night_duration_minutes: int | None = None,
+    requires_daylight: bool | None = None,
+    source_refs: list[str] | None = None,
+) -> NightAlternativePacket:
+    stable_key = _fixed_hash(
+        ":".join(
+            [
+                project_id,
+                session_id,
+                mission_day_instance_id,
+                movement_group_id,
+                mission_day_plan_sha256,
+                to_target.target_sha256,
+                "night-alternative",
+            ]
+        )
+    )[:16]
+    bounded_built_at = built_at or _FALLBACK_NIGHT_PACKET_BUILT_AT
+    route_scope_available = (
+        bool(route_scope_ref)
+        and route_scope_sha256 is not None
+        and route_scope_sha256 != "0" * 64
+        and _SHA256_PATTERN.fullmatch(route_scope_sha256) is not None
+    )
+    route_sha256 = (
+        route_scope_sha256
+        if route_scope_available and route_scope_sha256 is not None
+        else _fixed_hash(f"{project_id}:{mission_day_id}:route-scope-missing")
+    )
+    plan_sha256 = _coerce_sha256(
+        mission_day_plan_sha256,
+        label=f"{project_id}:{mission_day_id}:mission-day-plan",
+    )
+    runtime_ref = (
+        f"aggregate://{aggregate.group_id}/{aggregate.through_sequence}"
+        if aggregate is not None
+        else "aggregate://runtime-lineage/unmaterialized"
+    )
+    runtime_sha256 = (
+        aggregate.aggregate_sha256
+        if aggregate is not None
+        else _fixed_hash(f"{project_id}:{mission_day_instance_id}:runtime-lineage-missing")
+    )
+    freshness_inputs = [
+        FreshnessInput(
+            gate_id="gate.weather_threat",
+            evidence_ref=f"evidence://safety-emergency/{mission_day_instance_id}/weather-live-unavailable",
+            evidence_sha256=_fixed_hash(
+                f"{project_id}:{mission_day_instance_id}:weather-live-unavailable"
+            ),
+            valid_until=None,
+            required=True,
+        ),
+        FreshnessInput(
+            gate_id="gate.route_progress",
+            evidence_ref=f"evidence://safety-emergency/{mission_day_instance_id}/route-progress-unavailable",
+            evidence_sha256=_fixed_hash(
+                f"{project_id}:{mission_day_instance_id}:route-progress-unavailable"
+            ),
+            valid_until=None,
+            required=True,
+        ),
+        FreshnessInput(
+            gate_id="gate.team",
+            evidence_ref=f"evidence://safety-emergency/{mission_day_instance_id}/team-readiness-unavailable",
+            evidence_sha256=_fixed_hash(
+                f"{project_id}:{mission_day_instance_id}:team-readiness-unavailable"
+            ),
+            valid_until=None,
+            required=True,
+        ),
+        FreshnessInput(
+            gate_id="gate.communication",
+            evidence_ref=f"evidence://safety-emergency/{mission_day_instance_id}/communication-window-unavailable",
+            evidence_sha256=_fixed_hash(
+                f"{project_id}:{mission_day_instance_id}:communication-window-unavailable"
+            ),
+            valid_until=None,
+            required=True,
+        ),
+    ]
+    gates = [
+        _night_gate(
+            "gate.reviewed_alternative",
+            state="pass" if reviewed_alternative_complete else "missing",
+            reason=(
+                "Reviewed day-end, retreat, and emergency-bivy bindings are present."
+                if reviewed_alternative_complete
+                else "Reviewed day-end, retreat, and emergency-bivy bindings are incomplete."
+            ),
+            source_ref=mission_day_plan_ref,
+            source_sha256=plan_sha256,
+        ),
+        _night_gate(
+            "gate.segment_policy",
+            state="pass" if requires_daylight is False else "blocked",
+            reason=(
+                "Reviewed segment policy explicitly permits this night alternative."
+                if requires_daylight is False
+                else "Explicit reviewed requires_daylight=false is required."
+            ),
+            source_ref=mission_day_plan_ref,
+            source_sha256=plan_sha256,
+        ),
+        _night_gate(
+            "gate.terrain_route",
+            state="pass" if route_scope_available else "missing",
+            reason=(
+                "Reviewed route scope is bound to this packet."
+                if route_scope_available
+                else "Reviewed terrain and route scope are unavailable for this packet."
+            ),
+            source_ref=route_scope_ref or "missing://route-scope",
+            source_sha256=route_sha256,
+        ),
+        _night_gate(
+            "gate.lighting_power",
+            state="missing",
+            reason="Lighting and power reserves have not been freshly reviewed.",
+            source_ref=f"evidence://safety-emergency/{mission_day_instance_id}/lighting-power-unavailable",
+            source_sha256=_fixed_hash(
+                f"{project_id}:{mission_day_instance_id}:lighting-power-unavailable"
+            ),
+        ),
+        _night_gate(
+            "gate.navigation_resources",
+            state="missing",
+            reason="Navigation resource redundancy has not been freshly reviewed.",
+            source_ref=f"evidence://safety-emergency/{mission_day_instance_id}/navigation-resources-unavailable",
+            source_sha256=_fixed_hash(
+                f"{project_id}:{mission_day_instance_id}:navigation-resources-unavailable"
+            ),
+        ),
+        _night_gate(
+            "gate.team",
+            state="missing",
+            reason="Team readiness and individual constraints have not been freshly reviewed.",
+            source_ref=f"evidence://safety-emergency/{mission_day_instance_id}/team-readiness-unavailable",
+            source_sha256=_fixed_hash(
+                f"{project_id}:{mission_day_instance_id}:team-readiness-unavailable"
+            ),
+        ),
+        _night_gate(
+            "gate.weather_threat",
+            state="missing",
+            reason="Live weather and threat evidence has not been freshly reviewed.",
+            source_ref=f"evidence://safety-emergency/{mission_day_instance_id}/weather-live-unavailable",
+            source_sha256=_fixed_hash(
+                f"{project_id}:{mission_day_instance_id}:weather-live-unavailable"
+            ),
+        ),
+        _night_gate(
+            "gate.communication",
+            state="missing",
+            reason="Communication window and reachable contact path have not been freshly reviewed.",
+            source_ref=f"evidence://safety-emergency/{mission_day_instance_id}/communication-window-unavailable",
+            source_sha256=_fixed_hash(
+                f"{project_id}:{mission_day_instance_id}:communication-window-unavailable"
+            ),
+        ),
+        _night_gate(
+            "gate.runtime_lineage",
+            state="pass" if aggregate is not None else "missing",
+            reason=(
+                "Server rebuilt the current movement-group aggregate for this packet."
+                if aggregate is not None
+                else "Server runtime lineage has not been materialized yet."
+            ),
+            source_ref=runtime_ref,
+            source_sha256=runtime_sha256,
+        ),
+    ]
+    bounded_source_refs = _dedupe_refs(
+        [
+            mission_day_plan_ref,
+            route_scope_ref,
+            from_target.target_ref,
+            to_target.target_ref,
+            *[item.target_ref for item in retreat_candidates],
+            *[item.target_ref for item in emergency_bivy_candidates],
+            *(source_refs or []),
+        ]
+    )
+    reviewed_envelope_sha256 = _digest(
+        {
+            "project_id": project_id,
+            "session_id": session_id,
+            "mission_day_instance_id": mission_day_instance_id,
+            "mission_day_plan_sha256": plan_sha256,
+            "from_target": from_target.model_dump(mode="json"),
+            "to_target": to_target.model_dump(mode="json"),
+            "retreat_candidates": [
+                item.model_dump(mode="json") for item in retreat_candidates
+            ],
+            "emergency_bivy_candidates": [
+                item.model_dump(mode="json") for item in emergency_bivy_candidates
+            ],
+            "requires_daylight": requires_daylight,
+            "reviewed_alternative_complete": reviewed_alternative_complete,
+            "gates": [gate.model_dump(mode="json") for gate in gates],
+        }
+    )
+    payload = {
+        "packet_id": f"night.packet.{mission_day_id}.{stable_key}",
+        "sha256": "0" * 64,
+        "project_id": project_id,
+        "session_id": session_id,
+        "mission_day_id": mission_day_id,
+        "mission_day_instance_id": mission_day_instance_id,
+        "movement_group_id": movement_group_id,
+        "membership_revision": membership_revision,
+        "membership_sha256": membership_sha256,
+        "review_generation": review_generation,
+        "reviewed_sequence": reviewed_sequence,
+        "alternative_id": f"night.alternative.{mission_day_id}.{stable_key}",
+        "alternative_label": f"{mission_day_id} fail-closed night alternative review",
+        "from_target_ref": from_target.target_ref,
+        "from_target_sha256": from_target.target_sha256,
+        "from_target_label": from_target.target_label,
+        "to_target_ref": to_target.target_ref,
+        "to_target_sha256": to_target.target_sha256,
+        "to_target_label": to_target.target_label,
+        "direction": f"{from_target.target_label} -> {to_target.target_label}",
+        "maximum_night_duration_minutes": max(1, maximum_night_duration_minutes or 60),
+        "stop_objective": "Stop, hold, or choose a reviewed emergency bivy; no automatic night-travel authorization.",
+        "retreat_candidate_refs": [item.target_ref for item in retreat_candidates],
+        "emergency_bivy_candidate_refs": [
+            item.target_ref for item in emergency_bivy_candidates
+        ],
+        "retreat_candidates": [
+            item.model_dump(mode="json") for item in retreat_candidates
+        ],
+        "emergency_bivy_candidates": [
+            item.model_dump(mode="json") for item in emergency_bivy_candidates
+        ],
+        "requires_daylight": requires_daylight,
+        "reviewed_envelope_sha256": reviewed_envelope_sha256,
+        "eligibility": "not_assessed",
+        "approval_granted": False,
+        "safety_state": "review_required",
+        "server_now": bounded_built_at,
+        "built_at": bounded_built_at,
+        "expires_at": None,
+        "freshness_state": "freshness_unknown",
+        "expiry_driver": None,
+        "freshness_inputs": [
+            item.model_dump(mode="json") for item in freshness_inputs
+        ],
+        "invalidated_by": [],
+        "gates": [gate.model_dump(mode="json") for gate in gates],
+        "source_refs": bounded_source_refs,
+        "aggregate": aggregate.model_dump(mode="json") if aggregate else None,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+    packet = NightAlternativePacket.model_validate(payload)
+    return packet.model_copy(
+        update={"sha256": _packet_hash(packet.model_dump(mode="json"))}
     )
 
 
@@ -3025,6 +3665,47 @@ class ContextualPermissionWorkbench:
                     f"Required baseline input is missing: {ref}",
                 )
             source_hashes[ref_key] = _file_sha256(path)
+        bound_eta_sha256 = seed.baseline.source_hashes.get("planned_eta_ref")
+        if (
+            bound_eta_sha256
+            and bound_eta_sha256 != source_hashes["planned_eta_ref"]
+        ):
+            raise ContextualPermissionConflict(
+                "contextual_permission_projection_stale",
+                "The planned ETA changed after this projection was built; rebuild explicitly before using the remaining plan.",
+            )
+        # A selected rebuild receipt retains the original ETA binding even if
+        # someone rewrites both the ETA and the mutable seed afterwards.
+        rebuild_ref = project.get("contextual_permission_projection_rebuild_ref")
+        if rebuild_ref:
+            try:
+                rebuild_payload = json.loads(
+                    self._resolve_project_ref(str(rebuild_ref)).read_text(encoding="utf-8")
+                )
+                rebuild_receipt = ContextualPermissionProjectionRebuildReceipt.model_validate(
+                    rebuild_payload
+                )
+            except (OSError, ValueError) as exc:
+                raise ContextualPermissionConflict(
+                    "contextual_permission_projection_stale",
+                    "The selected projection rebuild receipt is unavailable or invalid.",
+                ) from exc
+            if (
+                rebuild_receipt.rebuild_sha256 != _digest({
+                    key: value for key, value in rebuild_payload.items()
+                    if key != "rebuild_sha256"
+                })
+                or rebuild_receipt.rebuild_sha256 != project.get(
+                    "contextual_permission_projection_rebuild_sha256"
+                )
+                or rebuild_receipt.reviewed_baseline_sha256 != seed.baseline.baseline_sha256
+                or rebuild_receipt.planned_eta_ref != project.get("planned_eta_ref")
+                or rebuild_receipt.planned_eta_sha256 != source_hashes["planned_eta_ref"]
+            ):
+                raise ContextualPermissionConflict(
+                    "contextual_permission_projection_stale",
+                    "The ETA and projection no longer match the selected immutable rebuild receipt.",
+                )
         selected_baseline_ref = str(
             project.get("reviewed_mission_baseline_ref") or ""
         )
@@ -4824,6 +5505,87 @@ class ContextualPermissionWorkbench:
                 trigger_hashes[f"event://{event.event_id}"] = event.event_sha256
         return trigger_hashes
 
+    def _materialize_fail_closed_night_alternatives(
+        self,
+        *,
+        seed: DailyEmergencyReviewSession,
+        group: MovementGroupProjection,
+        aggregate: CanonicalGroupAggregate,
+    ) -> list[NightAlternativePacket]:
+        current_ref = (
+            f"candidate://safety-emergency/{seed.mission_day_id}/"
+            "current-position-unresolved"
+        )
+        current_target = ReviewedTargetRef(
+            target_ref=current_ref,
+            target_sha256=_fixed_hash(
+                f"{self.project_id}:{seed.mission_day_instance_id}:current-position-unresolved"
+            ),
+            target_label=f"{group.group_label} current position unresolved",
+        )
+        effective_target = ReviewedTargetRef(
+            target_ref=group.day_end.effective_target_ref
+            or seed.effective_day_end_target_ref,
+            target_sha256=_coerce_sha256(
+                group.day_end.effective_target_sha256
+                or seed.effective_day_end_target_sha256,
+                label=f"{self.project_id}:{seed.mission_day_id}:effective-day-end",
+            ),
+            target_label=group.day_end.effective_target_label
+            or seed.planned_day_end_target_label,
+        )
+        retreat_target = ReviewedTargetRef(
+            target_ref=(
+                f"candidate://safety-emergency/{seed.mission_day_id}/"
+                "retreat-unresolved"
+            ),
+            target_sha256=_fixed_hash(
+                f"{self.project_id}:{seed.mission_day_instance_id}:retreat-unresolved"
+            ),
+            target_label="Retreat target unresolved",
+        )
+        bivy_target = ReviewedTargetRef(
+            target_ref=(
+                f"candidate://safety-emergency/{seed.mission_day_id}/"
+                "emergency-bivy-unresolved"
+            ),
+            target_sha256=_fixed_hash(
+                f"{self.project_id}:{seed.mission_day_instance_id}:bivy-unresolved"
+            ),
+            target_label="Emergency bivy target unresolved",
+        )
+        return [
+            build_fail_closed_night_alternative_packet(
+                project_id=self.project_id,
+                session_id=aggregate.session_id,
+                mission_day_id=aggregate.mission_day_id,
+                mission_day_instance_id=aggregate.mission_day_instance_id,
+                movement_group_id=aggregate.group_id,
+                membership_revision=aggregate.membership_revision,
+                membership_sha256=aggregate.membership_sha256,
+                review_generation=aggregate.review_generation,
+                reviewed_sequence=aggregate.through_sequence,
+                from_target=current_target,
+                to_target=effective_target,
+                retreat_candidates=[retreat_target],
+                emergency_bivy_candidates=[bivy_target],
+                route_scope_ref=group.communication.route_scope_ref,
+                route_scope_sha256=group.communication.route_scope_sha256,
+                mission_day_plan_ref=seed.mission_day_plan_ref,
+                mission_day_plan_sha256=aggregate.mission_day_plan_sha256,
+                reviewed_alternative_complete=False,
+                aggregate=aggregate,
+                built_at=_FALLBACK_NIGHT_PACKET_BUILT_AT,
+                maximum_night_duration_minutes=60,
+                requires_daylight=None,
+                source_refs=[
+                    seed.planned_day_end_target_ref,
+                    seed.effective_day_end_target_ref,
+                    group.formation_receipt_ref,
+                ],
+            )
+        ]
+
     def daily_emergency_review(
         self,
         mission_day_instance_id: str,
@@ -4847,10 +5609,17 @@ class ContextualPermissionWorkbench:
                 "Only a current movement-group mission-day instance can be reviewed.",
             )
         aggregate = self.canonical_aggregate(group.group_id)
+        seed_alternatives = list(seed.alternatives)
+        if not seed_alternatives:
+            seed_alternatives = self._materialize_fail_closed_night_alternatives(
+                seed=seed,
+                group=group,
+                aggregate=aggregate,
+            )
         packets: list[NightAlternativePacket] = []
         for packet in (
             item
-            for item in seed.alternatives
+            for item in seed_alternatives
             if item.movement_group_id == group.group_id
             and item.mission_day_id == group.mission_day_id
         ):
@@ -4966,6 +5735,11 @@ class ContextualPermissionWorkbench:
         if isinstance(aggregate, dict):
             gate_by_id["gate.runtime_lineage"].update(
                 {
+                    "state": "pass",
+                    "reason": (
+                        "Server rebuilt the current movement-group aggregate "
+                        "for this packet."
+                    ),
                     "source_ref": (
                         f"aggregate://{aggregate.get('group_id')}/"
                         f"{aggregate.get('through_sequence')}"
@@ -5163,6 +5937,349 @@ class ContextualPermissionWorkbench:
                 },
             )
             return self._receipt_from_event(event)
+
+    def build_night_runtime_authority_request(
+        self,
+        receipt: EmergencyReviewReceipt | dict[str, object],
+        *,
+        idempotency_key: str,
+    ) -> NightRuntimeAuthorityRequest:
+        receipt_model = (
+            receipt
+            if isinstance(receipt, EmergencyReviewReceipt)
+            else EmergencyReviewReceipt.model_validate(receipt)
+        )
+        packet = self._current_packet(
+            receipt_model.packet_id,
+            receipt_model.mission_day_instance_id,
+        )
+        aggregate_sha256 = (
+            packet.aggregate.aggregate_sha256 if packet.aggregate is not None else "0" * 64
+        )
+        return NightRuntimeAuthorityRequest(
+            receipt_id=receipt_model.receipt_id,
+            receipt_sha256=receipt_model.receipt_sha256,
+            receipt_packet_sha256=receipt_model.packet_sha256,
+            packet_id=packet.packet_id,
+            current_packet_sha256=packet.sha256,
+            mission_day_instance_id=packet.mission_day_instance_id,
+            review_generation=packet.review_generation,
+            current_sequence=packet.reviewed_sequence,
+            expected_aggregate_sha256=aggregate_sha256,
+            expected_gate_matrix_sha256=_night_gate_matrix_sha256(packet),
+            expected_reviewed_envelope_sha256=packet.reviewed_envelope_sha256,
+            idempotency_key=idempotency_key,
+        )
+
+    def evaluate_night_runtime_authority(
+        self,
+        request: NightRuntimeAuthorityRequest | dict[str, object],
+    ) -> NightRuntimeAuthorityDecision:
+        request_model = (
+            request
+            if isinstance(request, NightRuntimeAuthorityRequest)
+            else NightRuntimeAuthorityRequest.model_validate(request)
+        )
+        request_sha = _digest(request_model)
+        receipt = next(
+            (
+                item
+                for item in self._load_receipts()
+                if item.receipt_id == request_model.receipt_id
+            ),
+            None,
+        )
+        reasons: list[str] = []
+        receipt_decision: EmergencyReviewDecision | None = None
+        receipt_reviewed_sequence = 0
+        gate_states: list[EligibilityGate] = []
+        current_packet_sha256 = "0" * 64
+        current_aggregate_sha256 = "0" * 64
+        current_gate_matrix_sha256 = "0" * 64
+        reviewed_envelope_sha256 = request_model.expected_reviewed_envelope_sha256
+        review_generation = 0
+        current_sequence = 0
+        current_freshness_state: Literal[
+            "fresh",
+            "expiring",
+            "refresh_due",
+            "expired",
+            "freshness_unknown",
+            "invalidated",
+            "unavailable",
+        ] = "unavailable"
+        receipt_revalidation_passed = False
+        sequence_revalidation_passed = False
+        freshness_revalidation_passed = False
+        gate_revalidation_passed = False
+        hash_revalidation_passed = False
+        packet_hash_changed = False
+        aggregate_or_envelope_changed = False
+        gate_matrix_changed = False
+        packet_missing = False
+
+        if receipt is None:
+            reasons.append("approved Safety / Emergency review receipt is not current")
+            return self._night_runtime_authority_decision(
+                request_model=request_model,
+                request_sha=request_sha,
+                status="blocked_receipt_missing",
+                reasons=reasons,
+                receipt_decision=receipt_decision,
+                receipt_reviewed_sequence=receipt_reviewed_sequence,
+                review_generation=review_generation,
+                current_sequence=current_sequence,
+                current_packet_sha256=current_packet_sha256,
+                current_aggregate_sha256=current_aggregate_sha256,
+                current_gate_matrix_sha256=current_gate_matrix_sha256,
+                reviewed_envelope_sha256=reviewed_envelope_sha256,
+                current_freshness_state=current_freshness_state,
+                gate_states=gate_states,
+                receipt_revalidation_passed=receipt_revalidation_passed,
+                sequence_revalidation_passed=sequence_revalidation_passed,
+                freshness_revalidation_passed=freshness_revalidation_passed,
+                gate_revalidation_passed=gate_revalidation_passed,
+                hash_revalidation_passed=hash_revalidation_passed,
+                source_refs=[request_model.receipt_id, request_model.packet_id],
+            )
+
+        receipt_decision = receipt.decision
+        receipt_reviewed_sequence = receipt.reviewed_sequence
+        receipt_boundary_fields = [
+            receipt.production_approval_granted,
+            receipt.real_world_effect_performed,
+            receipt.runtime_authorization_performed,
+            receipt.phase1_l0_l4_state_mutated,
+            receipt.safety_api_called,
+            receipt.outbound_action_performed,
+            receipt.outbound_transport_invoked,
+            receipt.external_send_performed,
+        ]
+        receipt_matches = (
+            receipt.receipt_sha256 == request_model.receipt_sha256
+            and receipt.packet_id == request_model.packet_id
+            and receipt.packet_sha256 == request_model.receipt_packet_sha256
+            and receipt.mission_day_instance_id == request_model.mission_day_instance_id
+            and receipt.review_generation == request_model.review_generation
+            and receipt.reviewed_envelope_sha256
+            == request_model.expected_reviewed_envelope_sha256
+        )
+        if not receipt_matches:
+            reasons.append("review receipt identity, packet binding, or envelope hash changed")
+        if receipt.decision != EmergencyReviewDecision.APPROVE_FOR_RUNTIME_CONSIDERATION:
+            reasons.append("review receipt is not approve_for_runtime_consideration")
+        if any(receipt_boundary_fields):
+            reasons.append("review receipt already claims a forbidden runtime or outbound effect")
+        receipt_revalidation_passed = (
+            receipt_matches
+            and receipt.decision
+            == EmergencyReviewDecision.APPROVE_FOR_RUNTIME_CONSIDERATION
+            and not any(receipt_boundary_fields)
+        )
+
+        try:
+            packet = self._current_packet(
+                request_model.packet_id,
+                request_model.mission_day_instance_id,
+            )
+        except ContextualPermissionConflict as exc:
+            packet_missing = True
+            packet = None
+            reasons.append(exc.message)
+
+        if packet is not None:
+            gate_states = packet.gates
+            current_packet_sha256 = packet.sha256
+            current_aggregate_sha256 = (
+                packet.aggregate.aggregate_sha256 if packet.aggregate is not None else "0" * 64
+            )
+            current_gate_matrix_sha256 = _night_gate_matrix_sha256(packet)
+            reviewed_envelope_sha256 = packet.reviewed_envelope_sha256
+            review_generation = packet.review_generation
+            current_sequence = packet.reviewed_sequence
+            current_freshness_state = packet.freshness_state
+            group_events = self._load_group_events(packet.movement_group_id)
+            invalidated_after_receipt = any(
+                event.event_kind == "daily_review_invalidated"
+                and event.sequence > receipt.event_sequence
+                for event in group_events
+            )
+            sequence_revalidation_passed = (
+                packet.review_generation == request_model.review_generation
+                and packet.reviewed_sequence == request_model.current_sequence
+                and receipt.event_sequence <= packet.reviewed_sequence
+                and not invalidated_after_receipt
+            )
+            freshness_revalidation_passed = (
+                packet.freshness_state in {"fresh", "refresh_due"}
+                and packet.expires_at is not None
+                and self._now() < packet.expires_at
+                and not packet.invalidated_by
+            )
+            required_gate_ids = set(REQUIRED_NIGHT_GATE_IDS)
+            present_gate_ids = {gate.gate_id for gate in packet.gates}
+            gate_revalidation_passed = (
+                required_gate_ids.issubset(present_gate_ids)
+                and packet.eligibility == "eligible_for_human_review"
+                and all(gate.state == "pass" for gate in packet.gates if gate.hard_gate)
+            )
+            packet_hash_changed = packet.sha256 != request_model.current_packet_sha256
+            aggregate_or_envelope_changed = (
+                current_aggregate_sha256 != request_model.expected_aggregate_sha256
+                or packet.reviewed_envelope_sha256
+                != request_model.expected_reviewed_envelope_sha256
+            )
+            gate_matrix_changed = (
+                current_gate_matrix_sha256 != request_model.expected_gate_matrix_sha256
+            )
+            hash_revalidation_passed = (
+                not packet_hash_changed
+                and not aggregate_or_envelope_changed
+                and not gate_matrix_changed
+                and packet.packet_id == receipt.packet_id
+                and receipt.packet_sha256 == request_model.receipt_packet_sha256
+            )
+            if packet.review_generation != request_model.review_generation:
+                reasons.append("review generation changed before runtime authority use")
+            if packet.reviewed_sequence != request_model.current_sequence:
+                reasons.append("event sequence changed before runtime authority use")
+            if invalidated_after_receipt:
+                reasons.append("daily review was invalidated after the approval receipt")
+            if not freshness_revalidation_passed:
+                reasons.append("packet freshness is not valid at runtime authority use")
+            if not gate_revalidation_passed:
+                reasons.append("one or more required night gates are not pass")
+            if not hash_revalidation_passed:
+                reasons.append("current packet, aggregate, gate, or envelope hash changed")
+
+        status: NightRuntimeAuthorityStatus
+        if not receipt_matches:
+            status = "blocked_receipt_hash_mismatch"
+        elif receipt.decision != EmergencyReviewDecision.APPROVE_FOR_RUNTIME_CONSIDERATION:
+            status = "blocked_decision_not_approval"
+        elif any(receipt_boundary_fields):
+            status = "blocked_runtime_truth_boundary"
+        elif packet_missing or packet_hash_changed:
+            status = "blocked_packet_replaced"
+        elif aggregate_or_envelope_changed:
+            status = "blocked_runtime_lineage"
+        elif not sequence_revalidation_passed:
+            status = "blocked_sequence_changed"
+        elif not freshness_revalidation_passed:
+            status = "blocked_freshness"
+        elif gate_matrix_changed or not gate_revalidation_passed:
+            status = "blocked_gate_matrix"
+        elif not hash_revalidation_passed:
+            status = "blocked_runtime_lineage"
+        else:
+            status = "eligible_for_runtime_consideration"
+            reasons.append(
+                "approved receipt, current sequence, freshness, gates, and hashes revalidated"
+            )
+
+        return self._night_runtime_authority_decision(
+            request_model=request_model,
+            request_sha=request_sha,
+            status=status,
+            reasons=reasons,
+            receipt_decision=receipt_decision,
+            receipt_reviewed_sequence=receipt_reviewed_sequence,
+            review_generation=review_generation,
+            current_sequence=current_sequence,
+            current_packet_sha256=current_packet_sha256,
+            current_aggregate_sha256=current_aggregate_sha256,
+            current_gate_matrix_sha256=current_gate_matrix_sha256,
+            reviewed_envelope_sha256=reviewed_envelope_sha256,
+            current_freshness_state=current_freshness_state,
+            gate_states=gate_states,
+            receipt_revalidation_passed=receipt_revalidation_passed,
+            sequence_revalidation_passed=sequence_revalidation_passed,
+            freshness_revalidation_passed=freshness_revalidation_passed,
+            gate_revalidation_passed=gate_revalidation_passed,
+            hash_revalidation_passed=hash_revalidation_passed,
+            source_refs=[
+                receipt.receipt_id,
+                receipt.packet_id,
+                *_gate_state_source_refs(gate_states),
+            ],
+        )
+
+    def _night_runtime_authority_decision(
+        self,
+        *,
+        request_model: NightRuntimeAuthorityRequest,
+        request_sha: str,
+        status: NightRuntimeAuthorityStatus,
+        reasons: list[str],
+        receipt_decision: EmergencyReviewDecision | None,
+        receipt_reviewed_sequence: int,
+        review_generation: int,
+        current_sequence: int,
+        current_packet_sha256: str,
+        current_aggregate_sha256: str,
+        current_gate_matrix_sha256: str,
+        reviewed_envelope_sha256: str,
+        current_freshness_state: Literal[
+            "fresh",
+            "expiring",
+            "refresh_due",
+            "expired",
+            "freshness_unknown",
+            "invalidated",
+            "unavailable",
+        ],
+        gate_states: list[EligibilityGate],
+        receipt_revalidation_passed: bool,
+        sequence_revalidation_passed: bool,
+        freshness_revalidation_passed: bool,
+        gate_revalidation_passed: bool,
+        hash_revalidation_passed: bool,
+        source_refs: list[str],
+    ) -> NightRuntimeAuthorityDecision:
+        eligible = status == "eligible_for_runtime_consideration"
+        decision_id = f"night_runtime_authority.{request_model.idempotency_key}"
+        payload: dict[str, object] = {
+            "decision_id": decision_id,
+            "decision_sha256": "0" * 64,
+            "request_sha256": request_sha,
+            "status": status,
+            "eligible_for_runtime_consideration": eligible,
+            "reasons": reasons,
+            "receipt_id": request_model.receipt_id,
+            "receipt_sha256": request_model.receipt_sha256,
+            "receipt_decision": receipt_decision,
+            "packet_id": request_model.packet_id,
+            "receipt_packet_sha256": request_model.receipt_packet_sha256,
+            "current_packet_sha256": current_packet_sha256,
+            "review_generation": review_generation,
+            "receipt_reviewed_sequence": receipt_reviewed_sequence,
+            "current_sequence": current_sequence,
+            "current_aggregate_sha256": current_aggregate_sha256,
+            "current_gate_matrix_sha256": current_gate_matrix_sha256,
+            "reviewed_envelope_sha256": reviewed_envelope_sha256,
+            "receipt_revalidation_passed": receipt_revalidation_passed,
+            "sequence_revalidation_passed": sequence_revalidation_passed,
+            "freshness_revalidation_passed": freshness_revalidation_passed,
+            "gate_revalidation_passed": gate_revalidation_passed,
+            "hash_revalidation_passed": hash_revalidation_passed,
+            "current_freshness_state": current_freshness_state,
+            "gate_states": [gate.model_dump(mode="json") for gate in gate_states],
+            "source_refs": _dedupe_refs(source_refs),
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "runtime_authorization_performed": False,
+            "phase1_l0_l4_state_mutated": False,
+            "safety_api_called": False,
+            "outbound_action_performed": False,
+            "outbound_transport_invoked": False,
+            "external_send_performed": False,
+            "hardware_control_performed": False,
+            "authority": AuthorityBoundary().model_dump(mode="json"),
+        }
+        payload["decision_sha256"] = _digest(
+            {key: value for key, value in payload.items() if key != "decision_sha256"}
+        )
+        return NightRuntimeAuthorityDecision.model_validate(payload)
 
     def invalidate_daily_review(
         self, request: DailyReviewInvalidationRequest
@@ -7152,19 +8269,255 @@ class ContextualPermissionWorkbench:
             ),
         )
 
+    def _reference_gpx_reconstruction(
+        self, project: dict[str, object]
+    ) -> dict[str, object] | None:
+        if not project.get("reference_pace_energy_analysis_ref"):
+            return None
+        from scout_reference_gpx_reconstruction import build_reference_gpx_reconstruction
+
+        try:
+            return build_reference_gpx_reconstruction(self.project_root, project)
+        except (OSError, ValueError) as exc:
+            raise ContextualPermissionConflict(
+                "reference_itinerary_unavailable",
+                f"The reference itinerary cannot be reconstructed from its bound evidence: {exc}",
+            ) from exc
+
+    def _build_reference_gpx_reconstruction_draft(
+        self,
+        *,
+        project: dict[str, object],
+        route_ref: str,
+        route_sha: str,
+        reconstruction: dict[str, object],
+    ) -> MissionBaselineDraft:
+        expected_route_ref = str(
+            project.get("compiled_mission_graph_reviewed_ref")
+            or "outputs/compiled_mission_graph.reviewed.json"
+        )
+        if route_ref != expected_route_ref:
+            raise ContextualPermissionConflict(
+                "reference_route_selection_mismatch",
+                "Historical reconstruction must use this workspace's bound reviewed route axis.",
+            )
+        source_refs = list(dict.fromkeys([route_ref, *reconstruction["source_refs"]]))
+        source_hashes = {route_ref: route_sha, **reconstruction["source_hashes"]}
+        gpx_binding = BaselineArtifactBinding(
+            ref=str(reconstruction["source_ref"]),
+            sha256=str(reconstruction["source_sha256"]),
+        )
+        retreat_source = self._load_optional_baseline_source(project, "retreat_routes_ref")
+        handoff_ids: list[str] = []
+        if retreat_source is not None:
+            source_refs.append(retreat_source[0])
+            source_hashes[retreat_source[0]] = retreat_source[1]
+            if isinstance(retreat_source[2], list):
+                handoff_ids = list(dict.fromkeys(
+                    f"branch:{item['candidate_id']}"
+                    for item in retreat_source[2]
+                    if isinstance(item, dict) and item.get("candidate_id")
+                ))
+
+        def anchor(item: dict[str, object]) -> BaselineRouteAnchor:
+            return BaselineRouteAnchor(
+                anchor_id=str(item["anchor_id"]),
+                display_label=str(item["label"]),
+                route_order_m=float(item["route_order_m"]),
+                artifact=gpx_binding,
+            )
+
+        days: list[BaselineDayDraft] = []
+        uncertainties: list[BaselineUncertainty] = []
+        for row in reconstruction["days"]:
+            day_id = f"D{row['day_index']}"
+            start, end = anchor(row["start"]), anchor(row["end"])
+            historical_day_id = str(row["source_day_id"])
+            day_sha = _digest(row)
+            unknown_cp = [
+                str(cp["anchor_id"])
+                for cp in row["checkpoint_windows"]
+                if cp.get("arrival_clock") is None
+            ]
+            uncertainty_ids: list[str] = []
+            if unknown_cp or row["unknown_ranges"]:
+                uncertainty_id = f"uncertainty.reference.{day_sha[:20]}"
+                uncertainty_ids.append(uncertainty_id)
+                uncertainties.append(BaselineUncertainty(
+                    uncertainty_id=uncertainty_id,
+                    code="insufficient_evidence",
+                    affected_day_ids=[day_id],
+                    affected_segment_ids=unknown_cp,
+                    summary=(
+                        f"{day_id} preserves {len(unknown_cp)} CP clock gap(s) and "
+                        f"{len(row['unknown_ranges'])} recording gap(s) in the reference track. "
+                        "Historical departure-to-arrival elapsed time includes stops and recording gaps."
+                    ),
+                    disposition="acknowledgeable",
+                    required_review_surface="permission",
+                    evidence=[gpx_binding],
+                ))
+            days.append(BaselineDayDraft(
+                mission_day_id=day_id,
+                source_text=f"{start.display_label} -> {end.display_label}",
+                day_kind="on_trail",
+                ordered_place_mentions=[start.display_label, end.display_label],
+                resolved_targets=[end.display_label],
+                resolved_target_refs={end.display_label: gpx_binding.ref},
+                resolved_target_hashes={end.display_label: gpx_binding.sha256},
+                unresolved_names=[],
+                start_anchor=start,
+                primary_day_end_proposal=BaselineTargetProposal(
+                    proposal_id=f"proposal.reference.{day_sha[:20]}",
+                    kind="day_end",
+                    mission_day_id=day_id,
+                    target=end,
+                    confidence="medium",
+                    rationale="The historical day's final recorded point, retained from the same reference GPX.",
+                    evidence=[gpx_binding],
+                    required_review_surface="permission",
+                    selection_origin="reference_evidence",
+                    reference_day_id=historical_day_id,
+                    reference_day_sha256=day_sha,
+                ),
+                eta_proposal=BaselineEtaProposal(
+                    state="reference_replayed",
+                    method="reference_track_elapsed",
+                    confidence="medium",
+                    observed_elapsed_minutes=float(row["elapsed_minutes"]),
+                    supporting_segment_ids=[historical_day_id],
+                    gap_ids=uncertainty_ids,
+                ),
+                segment_ids=[historical_day_id],
+                uncertainty_ids=uncertainty_ids,
+                review_summary=(
+                    f"{row['departure_clock']}–{row['arrival_clock']} · "
+                    f"{len(row['checkpoint_windows'])} historical CP records"
+                ),
+                reference_replay=dict(row),
+            ))
+        if reconstruction["overnight_gaps"] or reconstruction["unassigned_checkpoint_windows"]:
+            uncertainties.append(BaselineUncertainty(
+                uncertainty_id=f"uncertainty.reference-gaps.{gpx_binding.sha256[:16]}",
+                code="insufficient_evidence",
+                affected_day_ids=[day.mission_day_id for day in days],
+                summary=(
+                    f"{len(reconstruction['overnight_gaps'])} overnight recording gap(s) "
+                    f"and {len(reconstruction['unassigned_checkpoint_windows'])} CP record(s) "
+                    "outside the timed daily intervals remain explicit; endpoints were not moved."
+                ),
+                disposition="acknowledgeable",
+                required_review_surface="permission",
+                evidence=[gpx_binding],
+            ))
+        uncertainty_ids = [item.uncertainty_id for item in uncertainties]
+        requirements = BaselineReviewRequirements(
+            required_reviewed_day_ids=[day.mission_day_id for day in days],
+            required_acknowledgment_uncertainty_ids=uncertainty_ids,
+            pending_safety_handoff_item_ids=handoff_ids,
+            safety_handoff_required=bool(handoff_ids),
+        )
+        all_cps = [cp for row in reconstruction["days"] for cp in row["checkpoint_windows"]]
+        all_cps.extend(reconstruction["unassigned_checkpoint_windows"])
+        source_text = json.dumps({
+            "strategy": BASELINE_REFERENCE_RECONSTRUCTION_STRATEGY,
+            "policy_version": reconstruction["policy_version"],
+            "source_hashes": source_hashes,
+            "reconstruction_sha256": _digest(reconstruction),
+        }, sort_keys=True, separators=(",", ":"))
+        source_sha = _fixed_hash(source_text)
+        pace_ref = str(project["reference_pace_energy_analysis_ref"])
+        return MissionBaselineDraft(
+            artifact_kind="mission_baseline_candidate",
+            schema_version="missionBaselineCandidate.v1",
+            draft_id=f"baseline-draft.{source_sha[:16]}",
+            source_mode="reference_gpx",
+            source_sha256=source_sha,
+            source_text=source_text,
+            source_refs=source_refs,
+            source_hashes=source_hashes,
+            route_axis_validation={
+                "track_order": "pass", "endpoint_continuity": "pass",
+                "resume_gaps": "pass", "route_direction": "pass",
+            },
+            days=days,
+            assumptions=[
+                "Daily destinations and clocks are reconstructed from one historical reference track; no new day-end choice or 480-minute repartition was applied.",
+                "Reference elapsed time includes stops and recording gaps. CP-to-CP speeds are historical interval averages, not pure moving speed or p75 estimates.",
+                "Stationary intervals are derived from the filtered reference track and remain inferred stops; historical overnight locations do not grant current camping or departure approval.",
+            ],
+            validation_state="valid",
+            unresolved_gaps=[],
+            proposal_profile="ref_gpx_proposal_v1",
+            capability_version="ref_gpx_proposal.v1",
+            migration_state="candidate",
+            migration_contract_version="contextual-permission.baseline-migration.v1",
+            proposal_strategy_id=BASELINE_REFERENCE_RECONSTRUCTION_STRATEGY,
+            proposal_strategy_version=str(reconstruction["policy_version"]),
+            timing_evidence=BaselineArtifactBinding(ref=pace_ref, sha256=source_hashes[pace_ref]),
+            proposal_summary=BaselineProposalSummary(
+                day_count=len(days),
+                route_length_m=float(reconstruction["route_length_m"]),
+                timing_segment_count=len(days),
+                observed_p75_segment_count=0,
+                missing_p75_segment_count=0,
+                permission_uncertainty_count=len(uncertainty_ids),
+                safety_pending_count=len(handoff_ids),
+                blocking_gap_count=0,
+                target_p75_minutes_per_day=None,
+                reconstructed_day_count=len(days),
+                historical_checkpoint_count=len(all_cps),
+                historical_timed_checkpoint_count=sum(cp.get("arrival_clock") is not None for cp in all_cps),
+                historical_rest_stop_count=sum(len(row["rest_stops"]) for row in reconstruction["days"]),
+                source_route_days_metadata=project.get("route_days"),
+            ),
+            uncertainties=uncertainties,
+            review_requirements=requirements,
+            safety_handoff_summary=(
+                f"{len(handoff_ids)} item(s) pending Safety / Emergency review."
+                if handoff_ids else "No separate Safety / Emergency alternative was copied."
+            ),
+            reference_reconstruction=reconstruction,
+        )
+
     def preview_baseline(self, request: BaselineAuthoringRequest) -> MissionBaselineDraft:
         if request.mode == "human_text":
-            source = (request.human_text or "").strip()
+            source = request.human_text or ""
             days: list[BaselineDayDraft] = []
             unresolved: list[str] = []
+            # Keep the submitted text as provenance; only parse a separate day
+            # view. A wrapped route or coordinate belongs to its preceding day,
+            # while an unrelated standalone line remains an explicit gap.
+            day_blocks: list[tuple[str, list[str]]] = []
+            active_lines: list[str] | None = None
+            separator = r"(?:[–—－>→]+|(?<![A-Za-z])-+|-+(?![A-Za-z]))"
+            coordinate_pattern = r"[（(](\d{5,7}/\d{6,8})[)）]"
             for line in source.splitlines():
                 match = re.match(r"^\s*(D\d+)\s*[:：]\s*(.+?)\s*$", line)
-                if not match:
-                    if line.strip():
-                        unresolved.append(f"unparsed_line:{line.strip()}")
+                if match:
+                    day_id, day_text = match.groups()
+                    active_lines = [day_text]
+                    day_blocks.append((day_id, active_lines))
                     continue
-                day_id, day_text = match.groups()
-                tokens = [token.strip() for token in re.split(r"\s*[-–—>]\s*", day_text)]
+                stripped = line.strip()
+                if not stripped:
+                    active_lines = None
+                    continue
+                if active_lines is not None and not re.match(r"D\d+\b", stripped) and (
+                    re.fullmatch(coordinate_pattern, stripped)
+                    or re.search(rf"{separator}\s*$", active_lines[-1])
+                    or re.match(rf"{separator}\s*", stripped)
+                ):
+                    active_lines.append(stripped)
+                else:
+                    unresolved.append(f"unparsed_line:{stripped}")
+                    active_lines = None
+            for day_id, day_lines in day_blocks:
+                day_text = "\n".join(day_lines)
+                tokens = [
+                    token.strip()
+                    for token in re.split(rf"\s*{separator}\s*", day_text)
+                ]
                 mentions: list[str] = []
                 aliases: list[str] = []
                 coordinate_hints: list[dict[str, object]] = []
@@ -7174,7 +8527,7 @@ class ContextualPermissionWorkbench:
                     aliases.extend(
                         re.findall(r"(?<![A-Za-z0-9])C\d+(?!\d)", token)
                     )
-                    for coordinate in re.findall(r"\((\d{5,7}/\d{6,8})\)", token):
+                    for coordinate in re.findall(coordinate_pattern, token):
                         coordinate_hints.append(
                             {
                                 "raw_text": coordinate,
@@ -7182,7 +8535,7 @@ class ContextualPermissionWorkbench:
                                 "reviewed": False,
                             }
                         )
-                    cleaned = re.sub(r"\(\d{5,7}/\d{6,8}\)", "", token)
+                    cleaned = re.sub(coordinate_pattern, "", token)
                     cleaned = re.sub(
                         r"(?<![A-Za-z0-9])C\d+(?!\d)", "", cleaned
                     ).strip()
@@ -7246,6 +8599,19 @@ class ContextualPermissionWorkbench:
                 self._resolve_project_ref("project.json").read_text(encoding="utf-8")
             )
             route_sha = _file_sha256(route_path)
+            reconstruction = (
+                self._reference_gpx_reconstruction(project) if not request.day_end_inputs else None
+            )
+            if request.reference_strategy == "historical_reconstruction" and reconstruction is None:
+                raise ContextualPermissionConflict(
+                    "reference_itinerary_unavailable",
+                    "Prepare a coherent historical reference GPX and its checkpoint evidence before reconstructing this itinerary.",
+                )
+            if reconstruction is not None:
+                return self._build_reference_gpx_reconstruction_draft(
+                    project=project, route_ref=ref, route_sha=route_sha,
+                    reconstruction=reconstruction,
+                )
             timing_source = self._load_optional_baseline_source(
                 project, "reference_segment_timing_ref"
             )
@@ -7378,6 +8744,31 @@ class ContextualPermissionWorkbench:
             raise ContextualPermissionConflict(
                 "invalid_project_manifest", f"project.json is invalid: {exc}"
             ) from exc
+        reconstruction = self._reference_gpx_reconstruction(project)
+        if reconstruction is not None:
+            anchors: dict[str, BaselineMapAnchor] = {}
+            for day in reconstruction["days"]:
+                for endpoint in (day["start"], day["end"]):
+                    anchor_id = str(endpoint["anchor_id"])
+                    anchors[anchor_id] = BaselineMapAnchor(
+                        anchor_id=anchor_id,
+                        display_label=str(endpoint["label"]),
+                        source_kind="historical_day_boundary",
+                        named_context=False,
+                        route_order_m=float(endpoint["route_order_m"]),
+                        lat=float(endpoint["lat"]), lon=float(endpoint["lon"]),
+                    )
+            return BaselineMapContextProjection(
+                artifact_kind="mission_baseline_map_context",
+                schema_version="missionBaselineMapContext.v1",
+                project_id=self.project_id,
+                route_length_m=float(reconstruction["route_length_m"]),
+                route_points=[BaselineMapPoint.model_validate(point) for point in reconstruction["route_points"]],
+                anchors=sorted(anchors.values(), key=lambda item: item.route_order_m),
+                source_refs=list(reconstruction["source_refs"]),
+                source_hashes=dict(reconstruction["source_hashes"]),
+                sampling_policy="reference_gpx_boundary_preserving_sample.v1",
+            )
         admin_ref = str(
             project.get("admin_projection_ref") or "outputs/admin_projection.json"
         )
@@ -7923,6 +9314,54 @@ class ContextualPermissionWorkbench:
         project = json.loads(
             self._resolve_project_ref("project.json").read_text(encoding="utf-8")
         )
+        if (
+            draft.proposal_strategy_id == BASELINE_REFERENCE_RECONSTRUCTION_STRATEGY
+            or draft.reference_reconstruction is not None
+            or any(
+                day.reference_replay is not None
+                or (
+                    day.primary_day_end_proposal is not None
+                    and day.primary_day_end_proposal.selection_origin == "reference_evidence"
+                )
+                for day in draft.days
+            )
+        ):
+            reconstruction = self._reference_gpx_reconstruction(project)
+            if reconstruction is None:
+                raise ContextualPermissionConflict(
+                    "reference_itinerary_unavailable",
+                    "A reconstructed itinerary requires this workspace's historical reference sources.",
+                )
+            route_ref = str(project.get("compiled_mission_graph_reviewed_ref") or "outputs/compiled_mission_graph.reviewed.json")
+            expected = self._build_reference_gpx_reconstruction_draft(
+                project=project,
+                route_ref=route_ref,
+                route_sha=_file_sha256(self._resolve_project_ref(route_ref)),
+                reconstruction=reconstruction,
+            )
+            # Rebuild from the actual source on both Save and Accept. A client digest,
+            # changed destination or copied human-actor flag cannot authorize history.
+            fields = (
+                "source_mode", "source_sha256", "source_text", "source_refs", "source_hashes",
+                "route_axis_validation", "days", "validation_state", "unresolved_gaps",
+                "proposal_profile", "capability_version", "migration_contract_version",
+                "day_end_input_contract_sha256", "day_end_inputs", "proposal_strategy_id",
+                "proposal_strategy_version", "timing_evidence", "proposal_summary",
+                "uncertainties", "review_requirements", "safety_handoff_summary",
+                "reference_reconstruction", "candidate_only", "runtime_safety_truth",
+                "departure_approval_granted", "writes_performed",
+            )
+            if any(getattr(draft, field) != getattr(expected, field) for field in fields):
+                raise ContextualPermissionConflict(
+                    "reference_reconstruction_mismatch",
+                    "The copied days, route, stops, CP timing or source bindings differ from the reference evidence. Regenerate the draft.",
+                )
+            if draft.review_requirements != self._recompute_baseline_review_requirements(draft):
+                raise ContextualPermissionConflict(
+                    "baseline_review_requirements_mismatch",
+                    "Historical review requirements must match the exact reconstructed candidate.",
+                )
+            return
         rich_reference_declared = bool(project.get("reference_segment_timing_ref"))
         proposal_fields_present = bool(
             draft.timing_evidence
@@ -8214,6 +9653,7 @@ class ContextualPermissionWorkbench:
                 else None
             ),
             "safety_handoff_summary": draft.safety_handoff_summary,
+            "reference_reconstruction": draft.reference_reconstruction,
             "promotion_gates": {
                 "route_critical_names_resolved": not draft.unresolved_gaps,
                 "route_axis_order_pass": draft.route_axis_validation.get("track_order")
@@ -8236,8 +9676,9 @@ class ContextualPermissionWorkbench:
                     "graph" in ref.casefold() for ref in draft.source_refs
                 ),
                 "deterministic_validation_pass": draft.validation_state == "valid",
-                "explicit_day_end_inputs_bound": (
+                "day_end_provenance_bound": (
                     draft.proposal_profile != "ref_gpx_proposal_v1"
+                    or draft.proposal_strategy_id == BASELINE_REFERENCE_RECONSTRUCTION_STRATEGY
                     or (
                         draft.day_end_input_contract_sha256 is not None
                         and bool(draft.day_end_inputs)
@@ -8292,7 +9733,267 @@ class ContextualPermissionWorkbench:
             review_ready=bool(payload["review_ready"]),
         )
 
+    def _candidate_source_issues(self, candidate: dict[str, object]) -> list[str]:
+        issues: list[str] = []
+        source_hashes = candidate.get("source_hashes")
+        if not isinstance(source_hashes, dict):
+            return ["source_hashes_missing"]
+        for ref, expected in source_hashes.items():
+            if not isinstance(ref, str) or not isinstance(expected, str):
+                issues.append("source_hash_invalid")
+                continue
+            if "://" in ref:
+                continue
+            try:
+                path = self._resolve_project_ref(ref)
+            except ContextualPermissionConflict:
+                issues.append(f"source_ref_unsafe:{ref}")
+                continue
+            if not path.is_file():
+                issues.append(f"source_missing:{ref}")
+                continue
+            if _file_sha256(path) != expected:
+                issues.append(f"source_stale:{ref}")
+        return issues
+
+    def _resolve_baseline_candidate_version_ref(self, candidate_ref: str) -> Path:
+        candidate_path = self._resolve_project_ref(candidate_ref)
+        root = self._resolve_project_write_path("candidates", "mission_baselines").resolve(
+            strict=False
+        )
+        try:
+            relative = candidate_path.relative_to(root)
+        except ValueError as exc:
+            raise ContextualPermissionConflict(
+                "unsafe_baseline_candidate_ref",
+                "Baseline candidate refs must stay under the candidate version store.",
+            ) from exc
+        parts = relative.parts
+        if (
+            len(parts) != 3
+            or parts[1] != "versions"
+            or not parts[2].endswith(".json")
+        ):
+            raise ContextualPermissionConflict(
+                "unsafe_baseline_candidate_ref",
+                "Baseline candidate refs must point to an immutable version JSON file.",
+            )
+        return candidate_path
+
+    def _candidate_acceptance_status(
+        self, *, candidate_ref: str, candidate_sha256: str
+    ) -> bool | None:
+        try:
+            project = json.loads(
+                self._resolve_project_ref("project.json").read_text(encoding="utf-8")
+            )
+        except (OSError, json.JSONDecodeError, ContextualPermissionConflict):
+            return None
+        reviewed_ref = str(project.get("reviewed_mission_baseline_ref") or "")
+        reviewed_sha256 = str(project.get("reviewed_mission_baseline_sha256") or "")
+        if not reviewed_ref or not _SHA256_PATTERN.fullmatch(reviewed_sha256):
+            return None
+        try:
+            reviewed_path = self._resolve_project_ref(reviewed_ref)
+            reviewed = json.loads(reviewed_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, ContextualPermissionConflict):
+            return None
+        if not isinstance(reviewed, dict):
+            return None
+        computed = _digest(
+            {
+                key: value
+                for key, value in reviewed.items()
+                if key != "reviewed_baseline_sha256"
+            }
+        )
+        if (
+            reviewed.get("artifact_kind") != "reviewed_mission_baseline"
+            or reviewed.get("schema_version") != "reviewedMissionBaseline.v1"
+            or reviewed.get("reviewed_baseline_sha256") != reviewed_sha256
+            or computed != reviewed_sha256
+        ):
+            return None
+        accepted_ref = str(reviewed.get("candidate_ref") or "")
+        accepted_sha256 = str(reviewed.get("candidate_sha256") or "")
+        return accepted_ref == candidate_ref and accepted_sha256 == candidate_sha256
+
+    def _is_initialization_authoring_seed_candidate(
+        self, candidate: dict[str, object]
+    ) -> bool:
+        draft = candidate.get("draft")
+        draft_id = str(draft.get("draft_id") or "") if isinstance(draft, dict) else ""
+        return (
+            str(candidate.get("baseline_id") or "").endswith(
+                ".permission-initialization"
+            )
+            and str(candidate.get("version_id") or "").startswith(
+                "version.reference-gpx.authoring-seed."
+            )
+            and str(candidate.get("idempotency_key") or "").startswith(
+                "permission-initialization-"
+            )
+            and draft_id == "baseline-draft.reference-gpx.permission-initialization.v1"
+            and candidate.get("validation_state") == "needs_review"
+            and candidate.get("review_ready") is False
+        )
+
+    def _candidate_save_receipt_from_payload(
+        self,
+        *,
+        candidate_ref: str,
+        candidate: dict[str, object],
+        source_issues: list[str],
+    ) -> BaselineCandidateSaveReceipt:
+        review_ready = bool(candidate.get("review_ready")) and not source_issues
+        return BaselineCandidateSaveReceipt(
+            baseline_id=str(candidate["baseline_id"]),
+            version_id=str(candidate["version_id"]),
+            version_ref=candidate_ref,
+            version_sha256=str(candidate["version_sha256"]),
+            source_sha256=str(candidate["source_sha256"]),
+            idempotency_key=str(candidate.get("idempotency_key") or "persisted-candidate"),
+            parent_version_id=(
+                str(candidate.get("parent_version_id"))
+                if candidate.get("parent_version_id")
+                else None
+            ),
+            validation_state=str(candidate["validation_state"]),
+            unresolved_gaps=list(candidate.get("unresolved_gaps") or []),
+            review_ready=review_ready,
+            writes_performed=False,
+            candidate_only=True,
+            runtime_safety_truth=False,
+            departure_approval_granted=False,
+        )
+
+    def list_baseline_candidates(self) -> BaselineCandidateCatalog:
+        root = self._resolve_project_write_path("candidates", "mission_baselines")
+        items: list[BaselineCandidateCatalogItem] = []
+        if root.is_dir():
+            for path in sorted(root.glob("*/versions/*.json")):
+                candidate_ref = path.relative_to(self.project_root).as_posix()
+                try:
+                    candidate_path = self._resolve_baseline_candidate_version_ref(
+                        candidate_ref
+                    )
+                    raw = json.loads(candidate_path.read_text(encoding="utf-8"))
+                    if not isinstance(raw, dict):
+                        raise ValueError("candidate payload must be an object")
+                    if self._is_initialization_authoring_seed_candidate(raw):
+                        continue
+                    expected = str(raw.get("version_sha256") or "")
+                    _, candidate = self._load_immutable_baseline_candidate(
+                        candidate_ref, expected
+                    )
+                    draft = MissionBaselineDraft.model_validate(candidate.get("draft"))
+                except (OSError, json.JSONDecodeError, ValueError, ContextualPermissionConflict):
+                    items.append(
+                        BaselineCandidateCatalogItem(
+                            version_ref=candidate_ref,
+                            version_id=path.stem,
+                            version_sha256="0" * 64,
+                            status="invalid",
+                            reason="invalid_baseline_candidate",
+                            source_mode="reference_gpx",
+                            accepted=None,
+                            baseline_id=path.parent.parent.name,
+                            source_sha256="0" * 64,
+                            validation_state="blocked",
+                            review_ready=False,
+                            candidate_only=True,
+                            runtime_safety_truth=False,
+                            departure_approval_granted=False,
+                        )
+                    )
+                    continue
+                source_issues = self._candidate_source_issues(candidate)
+                status: Literal["current", "stale", "invalid"] = (
+                    "stale" if source_issues else "current"
+                )
+                reason = ";".join(source_issues) if source_issues else "candidate_sources_current"
+                items.append(
+                    BaselineCandidateCatalogItem(
+                        version_ref=candidate_ref,
+                        version_id=str(candidate["version_id"]),
+                        version_sha256=str(candidate["version_sha256"]),
+                        status=status,
+                        reason=reason,
+                        source_mode=str(candidate["source_mode"]),
+                        accepted=self._candidate_acceptance_status(
+                            candidate_ref=candidate_ref,
+                            candidate_sha256=str(candidate["version_sha256"]),
+                        ),
+                        baseline_id=str(candidate["baseline_id"]),
+                        source_sha256=str(candidate["source_sha256"]),
+                        validation_state=str(candidate["validation_state"]),
+                        review_ready=bool(candidate.get("review_ready")) and not source_issues,
+                        candidate_only=True,
+                        runtime_safety_truth=False,
+                        departure_approval_granted=False,
+                    )
+                )
+        return BaselineCandidateCatalog(project_id=self.project_id, candidates=items)
+
+    def baseline_candidate_detail(self, candidate_ref: str) -> BaselineCandidateDetail:
+        candidate_path = self._resolve_baseline_candidate_version_ref(candidate_ref)
+        try:
+            raw = json.loads(candidate_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ContextualPermissionConflict(
+                "invalid_baseline_candidate", "The baseline candidate is not valid JSON."
+            ) from exc
+        expected = str(raw.get("version_sha256") or "") if isinstance(raw, dict) else ""
+        _, candidate = self._load_immutable_baseline_candidate(candidate_ref, expected)
+        draft = MissionBaselineDraft.model_validate(candidate.get("draft"))
+        source_issues = self._candidate_source_issues(candidate)
+        status: Literal["current", "stale", "invalid"] = (
+            "stale" if source_issues else "current"
+        )
+        reason = ";".join(source_issues) if source_issues else "candidate_sources_current"
+        return BaselineCandidateDetail(
+            project_id=self.project_id,
+            candidate_ref=candidate_ref,
+            status=status,
+            reason=reason,
+            draft=draft,
+            saved_candidate=self._candidate_save_receipt_from_payload(
+                candidate_ref=candidate_ref,
+                candidate=candidate,
+                source_issues=source_issues,
+            ),
+            source_issues=source_issues,
+            writes_performed=False,
+        )
+
     def accept_reviewed_baseline(
+        self, request: BaselineReviewAcceptRequest
+    ) -> BaselineReviewAcceptReceipt:
+        if not request.explicit_confirmation:
+            raise ContextualPermissionConflict("explicit_confirmation_required", "Accept Reviewed Baseline requires explicit confirmation.")
+        # Every acceptance entrypoint shares this lock. A stale panel cannot
+        # replace a newer selected plan; exact retries retain the existing receipt.
+        lock_path = self._resolve_project_write_path("reviews", ".mission-baseline-accept.lock")
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        with lock_path.open("a+b") as handle:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            try:
+                review_id = f"review.{_fixed_hash(request.idempotency_key)[:16]}"
+                receipt = self._resolve_project_ref(
+                    f"reviews/mission_baseline_accept_receipts/{review_id}.json"
+                )
+                if request.expected_reviewed_baseline_sha256 is not None and not receipt.is_file():
+                    project = json.loads(self._resolve_project_ref("project.json").read_text())
+                    selected = str(project.get("reviewed_mission_baseline_sha256") or "")
+                    if selected != request.expected_reviewed_baseline_sha256:
+                        raise ContextualPermissionConflict(
+                            "planning_version_conflict", "Permission 已有較新的計畫，請先載入並比較；未覆寫。"
+                        )
+                return self._accept_reviewed_baseline(request)
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+    def _accept_reviewed_baseline(
         self, request: BaselineReviewAcceptRequest
     ) -> BaselineReviewAcceptReceipt:
         if not request.explicit_confirmation:
@@ -8425,6 +10126,7 @@ class ContextualPermissionWorkbench:
             "timing_evidence": candidate.get("timing_evidence"),
             "proposal_summary": candidate.get("proposal_summary"),
             "uncertainties": candidate.get("uncertainties") or [],
+            "reference_reconstruction": candidate.get("reference_reconstruction"),
             "reviewed_day_ids": canonical_reviewed_day_ids,
             "review_scope": "permission_day_end_only",
             "reviewed_day_end_bindings": reviewed_day_end_bindings,
@@ -8929,6 +10631,13 @@ class ContextualPermissionWorkbench:
             ),
             "admission_version": PROJECTION_REBUILD_ADMISSION_VERSION,
         }
+        reconstruction = reviewed_payload.get("reference_reconstruction")
+        if isinstance(reconstruction, dict):
+            identities["reference_reconstruction_file_hashes"] = {
+                ref: bound_hash(ref)
+                for ref in reconstruction.get("source_refs", [])
+                if isinstance(ref, str)
+            }
         return _digest(identities)
 
     def _pending_projection_rebuild_transaction_paths(self) -> list[Path]:
@@ -9819,6 +11528,7 @@ class ContextualPermissionWorkbench:
                 "timing_evidence",
                 "proposal_summary",
                 "uncertainties",
+                "reference_reconstruction",
             )
             if candidate_draft.proposal_profile == "ref_gpx_proposal_v1"
             else ("source_mode", "source_sha256", "days", "proposal_profile")
@@ -10014,18 +11724,18 @@ class ContextualPermissionWorkbench:
             if proposal is None:  # pragma: no cover - guarded by caller
                 continue
             eta = day.eta_proposal
-            baseline_minutes = (
-                int(round(eta.segment_p75_sum_minutes))
-                if eta is not None
-                and eta.state == "complete_derived"
-                and eta.segment_p75_sum_minutes is not None
-                else 0
-            )
-            eta_gap = (
-                "Segment p50/p75 sums are complete; the adjustment policy still requires separate review."
-                if eta is not None and eta.state == "complete_derived"
-                else "Whole-day duration remains unknown; supported subtotals are never promoted to a full-day ETA."
-            )
+            if eta is not None and eta.state == "reference_replayed":
+                baseline_minutes = int(round(eta.observed_elapsed_minutes))
+                eta_gap = (
+                    "Historical departure-to-arrival elapsed time includes stops and "
+                    "recording gaps; the adjustment policy still requires separate review."
+                )
+            elif eta is not None and eta.state == "complete_derived":
+                baseline_minutes = int(round(eta.segment_p75_sum_minutes))
+                eta_gap = "Segment p50/p75 sums are complete; the adjustment policy still requires separate review."
+            else:
+                baseline_minutes = 0
+                eta_gap = "Whole-day duration remains unknown; supported subtotals are never promoted to a full-day ETA."
             definitions = (
                 (
                     f"node.route-axis.{day.mission_day_id}",
@@ -10050,6 +11760,14 @@ class ContextualPermissionWorkbench:
                     0,
                     True,
                     "Reserve size and retreat authority remain pending separate Permission and Safety / Emergency review.",
+                ),
+                (
+                    f"node.night-alternative.{day.mission_day_id}",
+                    "night_alternative",
+                    f"{day.mission_day_id} night alternative review",
+                    0,
+                    False,
+                    "Night travel can only become a reviewed human disposition after the Safety / Emergency gates are satisfied.",
                 ),
             )
             for node_id, kind, label, duration, protected, quality in definitions:
@@ -10127,10 +11845,21 @@ class ContextualPermissionWorkbench:
                         if day.primary_day_end_proposal is not None
                         else None
                     ),
+                    **({"reference_replay": day.reference_replay}
+                       if day.reference_replay is not None else {}),
                 }
             )
+        retired = {
+            key: existing[key]
+            for key in ("estimates", "assumption", "assumptions")
+            if key in existing
+        }
+        retained = {
+            key: value for key, value in existing.items()
+            if key not in {"estimates", "assumption", "assumptions"}
+        }
         return {
-            **existing,
+            **retained,
             "artifact_kind": "pretrip_planned_eta",
             "schema_version": "plannedEta.v1",
             "project_id": self.project_id,
@@ -10141,6 +11870,14 @@ class ContextualPermissionWorkbench:
             "reviewed_baseline_sha256": reviewed_sha256,
             "review_scope": reviewed.get("review_scope"),
             "mission_day_estimates": mission_day_estimates,
+            "authoritative_collection": "mission_day_estimates",
+            **({"retired_legacy_timing": {
+                "status": "superseded",
+                "former_plan_id": existing.get("plan_id"),
+                "former_artifact_sha256": _file_sha256(path),
+                "reason": "Rebuild derives the adopted schedule from the reviewed baseline; these earlier fields are not current estimates.",
+                "values": retired,
+            }} if retired else {}),
             "source_refs": source_refs,
             "source_hashes": source_hashes,
             "candidate_only": True,
@@ -10388,6 +12125,116 @@ class ContextualPermissionWorkbench:
             for source in self._seed.evidence
             if source.source_kind == "normalized_weather_fact"
         )
+        daily_session_id = (
+            f"daily-review.{first_day.mission_day_id}.{reviewed_sha256[:12]}"
+        )
+        from_target = reviewed_target_from_anchor(
+            first_day.start_anchor,
+            fallback_ref=(
+                f"candidate://safety-emergency/{first_day.mission_day_id}/"
+                "current-position-unresolved"
+            ),
+            fallback_sha256=_fixed_hash(
+                f"{reviewed_sha256}:{first_day.mission_day_id}:current-position-unresolved"
+            ),
+            fallback_label=f"{first_day.mission_day_id} current position unresolved",
+        )
+        retreat_candidates = [
+            reviewed_target_from_proposal(
+                proposal,
+                fallback_ref=(
+                    f"candidate://safety-emergency/{first_day.mission_day_id}/"
+                    "retreat-unresolved"
+                ),
+                fallback_sha256=_fixed_hash(
+                    f"{reviewed_sha256}:{first_day.mission_day_id}:retreat-unresolved"
+                ),
+                fallback_label="Retreat target unresolved",
+            )
+            for proposal in first_day.retreat_candidates
+        ] or [
+            ReviewedTargetRef(
+                target_ref=(
+                    f"candidate://safety-emergency/{first_day.mission_day_id}/"
+                    "retreat-unresolved"
+                ),
+                target_sha256=_fixed_hash(
+                    f"{reviewed_sha256}:{first_day.mission_day_id}:retreat-unresolved"
+                ),
+                target_label="Retreat target unresolved",
+            )
+        ]
+        emergency_bivy_candidates = [
+            reviewed_target_from_proposal(
+                proposal,
+                fallback_ref=(
+                    f"candidate://safety-emergency/{first_day.mission_day_id}/"
+                    "emergency-bivy-unresolved"
+                ),
+                fallback_sha256=_fixed_hash(
+                    f"{reviewed_sha256}:{first_day.mission_day_id}:bivy-unresolved"
+                ),
+                fallback_label="Emergency bivy target unresolved",
+            )
+            for proposal in first_day.emergency_bivy_candidates
+        ] or [
+            ReviewedTargetRef(
+                target_ref=(
+                    f"candidate://safety-emergency/{first_day.mission_day_id}/"
+                    "emergency-bivy-unresolved"
+                ),
+                target_sha256=_fixed_hash(
+                    f"{reviewed_sha256}:{first_day.mission_day_id}:bivy-unresolved"
+                ),
+                target_label="Emergency bivy target unresolved",
+            )
+        ]
+        eta = first_day.eta_proposal
+        maximum_night_duration_minutes = (
+            int(math.ceil(eta.segment_p75_sum_minutes))
+            if eta is not None
+            and eta.state == "complete_derived"
+            and eta.segment_p75_sum_minutes is not None
+            else 60
+        )
+        night_alternatives = [
+            build_fail_closed_night_alternative_packet(
+                project_id=self.project_id,
+                session_id=daily_session_id,
+                mission_day_id=first_day.mission_day_id,
+                mission_day_instance_id=day_instance_id,
+                movement_group_id=group.group_id,
+                membership_revision=group.membership_revision,
+                membership_sha256=group.membership_sha256,
+                review_generation=1,
+                reviewed_sequence=0,
+                from_target=from_target,
+                to_target=reviewed_target_from_proposal(
+                    first_proposal,
+                    fallback_ref=target.artifact.ref,
+                    fallback_sha256=target.artifact.sha256,
+                    fallback_label=target.display_label,
+                ),
+                retreat_candidates=retreat_candidates,
+                emergency_bivy_candidates=emergency_bivy_candidates,
+                route_scope_ref=graph_ref,
+                route_scope_sha256=graph_sha256,
+                mission_day_plan_ref=reviewed_ref,
+                mission_day_plan_sha256=reviewed_sha256,
+                reviewed_alternative_complete=bool(
+                    first_day.retreat_candidates
+                    and first_day.emergency_bivy_candidates
+                ),
+                built_at=self._now(),
+                maximum_night_duration_minutes=maximum_night_duration_minutes,
+                requires_daylight=None,
+                source_refs=[
+                    review_receipt_ref,
+                    planned_eta_ref,
+                    graph_ref,
+                ],
+            )
+        ]
         return ContextualPermissionWorkbenchSeed(
             artifact_kind="contextual_permission_workbench_seed",
             schema_version="contextualPermissionWorkbenchSeed.v1",
@@ -10422,7 +12269,7 @@ class ContextualPermissionWorkbench:
             action_events=[],
             remaining_plan=plan_nodes,
             daily_review=DailyEmergencyReviewSession(
-                session_id=f"daily-review.{first_day.mission_day_id}.{reviewed_sha256[:12]}",
+                session_id=daily_session_id,
                 project_id=self.project_id,
                 mission_day_id=first_day.mission_day_id,
                 mission_day_instance_id=day_instance_id,
@@ -10438,7 +12285,7 @@ class ContextualPermissionWorkbench:
                 effective_day_end_target_ref=target.artifact.ref,
                 effective_day_end_target_sha256=target.artifact.sha256,
                 day_end_state="day_end_at_risk",
-                alternatives=[],
+                alternatives=night_alternatives,
             ),
             movement_groups=[group],
             evidence=evidence,

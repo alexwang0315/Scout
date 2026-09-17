@@ -29,6 +29,101 @@ def _write_project(workspace_root: Path, project_id: str = "fixture-route") -> P
     return project_root
 
 
+def _write_weather_decision_inputs(
+    project_root: Path,
+    *,
+    timestamp: str,
+    risk_timestamp: str | None = None,
+) -> None:
+    project_id = project_root.name
+    risk_timestamp = risk_timestamp or timestamp
+    rainfall_pair_id = "cwa.rainfall.pair." + "a" * 64
+    rainfall_source_frames = {
+        "qpe_past_1h": "O-B0045-001.current",
+        "qpf_next_1h": "F-B0046-001.current",
+    }
+    imagery_pair_id = "cwa.imagery." + "b" * 24
+    imagery_source_frames = {
+        "radar": ["radar.current"],
+        "satellite": ["satellite.current"],
+    }
+    route_sha = "c" * 64
+    rainfall_manifest_ref = "outputs/environment/cwa/rainfall/rainfall_grid_manifest.json"
+    rainfall_trend_ref = "outputs/environment/cwa/rainfall/route_precipitation_trend.json"
+    imagery_manifest_ref = "outputs/environment/cwa/imagery/weather_imagery_manifest.json"
+    risk_ref = "outputs/route_weather_risk_package.json"
+    artifacts = {
+        rainfall_manifest_ref: {
+            "schemaVersion": "cwa_rainfall_grid_manifest.v1",
+            "artifactKind": "cwa_rainfall_grid_manifest",
+            "projectId": project_id,
+            "latestByKind": {
+                "qpe_past_1h": {
+                    "frameId": rainfall_source_frames["qpe_past_1h"],
+                    "gridKind": "qpe_past_1h",
+                    "datasetId": "O-B0045-001",
+                    "sourceTimestamp": timestamp,
+                    "fetchedAt": timestamp,
+                },
+                "qpf_next_1h": {
+                    "frameId": rainfall_source_frames["qpf_next_1h"],
+                    "gridKind": "qpf_next_1h",
+                    "datasetId": "F-B0046-001",
+                    "sourceTimestamp": timestamp,
+                    "fetchedAt": timestamp,
+                },
+            },
+            "pairId": rainfall_pair_id,
+            "sourceFrameIds": rainfall_source_frames,
+            "routeSha256": route_sha,
+        },
+        rainfall_trend_ref: {
+            "schemaVersion": "route_precipitation_trend.v1",
+            "artifactKind": "route_precipitation_trend",
+            "projectId": project_id,
+            "status": "ready",
+            "evaluatedAt": timestamp,
+            "pairId": rainfall_pair_id,
+            "sourceFrameIds": rainfall_source_frames,
+            "routeSha256": route_sha,
+        },
+        imagery_manifest_ref: {
+            "artifactKind": "weatherImageryTimelineManifest",
+            "schemaVersion": "weatherImageryTimelineManifest.v1",
+            "projectId": project_id,
+            "generatedAt": timestamp,
+            "pairId": imagery_pair_id,
+            "sourceFrameIds": imagery_source_frames,
+            "routeSha256": route_sha,
+        },
+        risk_ref: {
+            "artifact_kind": "route_weather_risk_package",
+            "artifactVersion": "route_weather_risk_package.v1",
+            "projectId": project_id,
+            "status": "candidate_only",
+            "generatedAt": risk_timestamp,
+            "pairId": imagery_pair_id,
+            "sourceFrameIds": imagery_source_frames,
+            "routeSha256": route_sha,
+        },
+    }
+    for ref, payload in artifacts.items():
+        path = project_root / ref
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload), encoding="utf-8")
+    project_path = project_root / "project.json"
+    project = json.loads(project_path.read_text(encoding="utf-8"))
+    project.update(
+        {
+            "cwa_rainfall_grid_manifest_ref": rainfall_manifest_ref,
+            "cwa_rainfall_route_trend_ref": rainfall_trend_ref,
+            "cwa_weather_imagery_manifest_ref": imagery_manifest_ref,
+            "route_weather_risk_package_ref": risk_ref,
+        }
+    )
+    project_path.write_text(json.dumps(project), encoding="utf-8")
+
+
 class _ImmediateThread:
     def __init__(self, *, target: Callable[[], None], **_: Any) -> None:
         self._target = target
@@ -101,6 +196,10 @@ def test_connected_preparation_uses_mac_explicit_fetch_and_redacts_credentials(
         project = json.loads(project_path.read_text(encoding="utf-8"))
         project["cwa_weather_evidence_ref"] = evidence_ref
         project_path.write_text(json.dumps(project), encoding="utf-8")
+        _write_weather_decision_inputs(
+            runner_root,
+            timestamp="2026-07-23T03:00:00+00:00",
+        )
         return {
             "network_policy": {"network_calls_made": True},
             "boundary": {"external_api_calls_made": True},
@@ -124,6 +223,7 @@ def test_connected_preparation_uses_mac_explicit_fetch_and_redacts_credentials(
     assert request.prepare_cwa_imagery is True
     assert request.run_post_layer_enrichments is False
     assert request.run_map_preparation_spec_artifacts is False
+    assert request.publish_preparation_outputs is False
     assert request.layers == CONNECTED_DASHBOARD_LAYERS
     assert set(request.layers) == {
         "overpass",
@@ -159,6 +259,396 @@ def test_connected_preparation_uses_mac_explicit_fetch_and_redacts_credentials(
     assert status["componentStatuses"]["cwaWeather"] == "ready"
     assert status["crossProcessLocking"] is True
     assert status["recoveryJournalStatus"] == "clear"
+    assert status["weatherDecisionInputs"]["status"] == "current_run"
+    assert set(status["currentArtifactRefs"]) == {
+        "cwa_rainfall_grid_manifest_ref",
+        "cwa_rainfall_route_trend_ref",
+        "cwa_weather_imagery_manifest_ref",
+        "route_weather_risk_package_ref",
+    }
+    risk_receipt = status["weatherDecisionInputs"]["requiredArtifacts"]["routeRisk"]
+    assert risk_receipt["currentRun"] is True
+    assert risk_receipt["timestampField"] == "generatedAt"
+    assert len(risk_receipt["sha256"]) == 64
+    assert status["weatherDecisionInputs"]["pairVerification"] == {
+        "rainfall": "verified",
+        "imageryRisk": "verified",
+    }
+
+
+def test_connected_preparation_requires_weather_decision_inputs_for_ready(
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    workspace_root = tmp_path / "workspaces"
+    _write_project(workspace_root)
+    manager = DashboardConnectedPreparationManager(
+        repo_root=repo_root,
+        workspace_root=workspace_root,
+        environ={"CWA_API_KEY": "present"},
+        runner=lambda _: {
+            "network_policy": {"network_calls_made": True},
+            "boundary": {"external_api_calls_made": True},
+        },
+        now_factory=lambda: datetime(2026, 7, 23, 3, 0, tzinfo=timezone.utc),
+    )
+
+    status = manager.run_once("fixture-route", reason="test-missing-inputs")
+
+    assert status["status"] == "partial"
+    assert status["externalApiCallsMade"] is True
+    assert status["weatherDecisionInputs"]["status"] == "incomplete"
+    assert status["currentArtifactRefs"] == {}
+    assert set(status["weatherDecisionInputs"]["incompleteReasons"]) >= {
+        "rainfallManifest:missing_ref",
+        "rainfallTrend:missing_ref",
+        "imageryManifest:missing_ref",
+        "routeRisk:missing_ref",
+    }
+
+
+def test_connected_preparation_marks_previous_generation_artifact_not_current(
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    workspace_root = tmp_path / "workspaces"
+    _write_project(workspace_root)
+
+    def fake_runner(request: Any) -> dict[str, Any]:
+        _write_weather_decision_inputs(
+            Path(request.project_root).resolve(),
+            timestamp="2026-07-23T03:00:00+00:00",
+            risk_timestamp="2026-07-23T02:59:59+00:00",
+        )
+        return {
+            "network_policy": {"network_calls_made": True},
+            "boundary": {"external_api_calls_made": True},
+        }
+
+    manager = DashboardConnectedPreparationManager(
+        repo_root=repo_root,
+        workspace_root=workspace_root,
+        environ={"CWA_API_KEY": "present"},
+        runner=fake_runner,
+        now_factory=lambda: datetime(2026, 7, 23, 3, 0, tzinfo=timezone.utc),
+    )
+
+    status = manager.run_once("fixture-route", reason="test-previous-generation")
+
+    assert status["status"] == "partial"
+    assert status["weatherDecisionInputs"]["status"] == "previous_generation"
+    route_risk = status["weatherDecisionInputs"]["requiredArtifacts"]["routeRisk"]
+    assert route_risk["status"] == "previous_generation"
+    assert route_risk["reason"] == "timestamp_outside_current_run"
+    assert "route_weather_risk_package_ref" not in status["currentArtifactRefs"]
+    assert status["artifactRefs"]["route_weather_risk_package_ref"] == (
+        "outputs/route_weather_risk_package.json"
+    )
+
+
+def test_connected_preparation_rejects_unsafe_weather_decision_input_refs(
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    workspace_root = tmp_path / "workspaces"
+    _write_project(workspace_root)
+
+    def fake_runner(request: Any) -> dict[str, Any]:
+        runner_root = Path(request.project_root).resolve()
+        _write_weather_decision_inputs(
+            runner_root,
+            timestamp="2026-07-23T03:00:00+00:00",
+        )
+        project_path = runner_root / "project.json"
+        project = json.loads(project_path.read_text(encoding="utf-8"))
+        project["route_weather_risk_package_ref"] = "../other/route_weather_risk_package.json"
+        project_path.write_text(json.dumps(project), encoding="utf-8")
+        return {
+            "network_policy": {"network_calls_made": True},
+            "boundary": {"external_api_calls_made": True},
+        }
+
+    manager = DashboardConnectedPreparationManager(
+        repo_root=repo_root,
+        workspace_root=workspace_root,
+        environ={"CWA_API_KEY": "present"},
+        runner=fake_runner,
+        now_factory=lambda: datetime(2026, 7, 23, 3, 0, tzinfo=timezone.utc),
+    )
+
+    status = manager.run_once("fixture-route", reason="test-unsafe-ref")
+
+    assert status["status"] == "partial"
+    route_risk = status["weatherDecisionInputs"]["requiredArtifacts"]["routeRisk"]
+    assert route_risk["status"] == "incomplete"
+    assert route_risk["reason"] == "unsafe_ref"
+    assert "route_weather_risk_package_ref" not in status["currentArtifactRefs"]
+
+
+def test_connected_preparation_rejects_absolute_weather_decision_input_ref(
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    workspace_root = tmp_path / "workspaces"
+    _write_project(workspace_root)
+
+    def fake_runner(request: Any) -> dict[str, Any]:
+        runner_root = Path(request.project_root).resolve()
+        _write_weather_decision_inputs(
+            runner_root,
+            timestamp="2026-07-23T03:00:00+00:00",
+        )
+        project_path = runner_root / "project.json"
+        project = json.loads(project_path.read_text(encoding="utf-8"))
+        project["route_weather_risk_package_ref"] = str(
+            runner_root / "outputs" / "route_weather_risk_package.json"
+        )
+        project_path.write_text(json.dumps(project), encoding="utf-8")
+        return {
+            "network_policy": {"network_calls_made": True},
+            "boundary": {"external_api_calls_made": True},
+        }
+
+    manager = DashboardConnectedPreparationManager(
+        repo_root=repo_root,
+        workspace_root=workspace_root,
+        environ={"CWA_API_KEY": "present"},
+        runner=fake_runner,
+        now_factory=lambda: datetime(2026, 7, 23, 3, 0, tzinfo=timezone.utc),
+    )
+
+    status = manager.run_once("fixture-route", reason="test-absolute-ref")
+
+    assert status["status"] == "partial"
+    route_risk = status["weatherDecisionInputs"]["requiredArtifacts"]["routeRisk"]
+    assert route_risk["reason"] == "unsafe_ref"
+    assert "route_weather_risk_package_ref" not in status["currentArtifactRefs"]
+
+
+def test_connected_preparation_marks_rainfall_manifest_missing_required_kind_incomplete(
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    workspace_root = tmp_path / "workspaces"
+    _write_project(workspace_root)
+
+    def fake_runner(request: Any) -> dict[str, Any]:
+        runner_root = Path(request.project_root).resolve()
+        _write_weather_decision_inputs(
+            runner_root,
+            timestamp="2026-07-23T03:00:00+00:00",
+        )
+        manifest_path = (
+            runner_root
+            / "outputs/environment/cwa/rainfall/rainfall_grid_manifest.json"
+        )
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["latestByKind"].pop("qpf_next_1h")
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        return {
+            "network_policy": {"network_calls_made": True},
+            "boundary": {"external_api_calls_made": True},
+        }
+
+    manager = DashboardConnectedPreparationManager(
+        repo_root=repo_root,
+        workspace_root=workspace_root,
+        environ={"CWA_API_KEY": "present"},
+        runner=fake_runner,
+        now_factory=lambda: datetime(2026, 7, 23, 3, 0, tzinfo=timezone.utc),
+    )
+
+    status = manager.run_once("fixture-route", reason="test-missing-rainfall-kind")
+
+    assert status["status"] == "partial"
+    manifest = status["weatherDecisionInputs"]["requiredArtifacts"]["rainfallManifest"]
+    assert manifest["status"] == "incomplete"
+    assert manifest["reason"] == "missing_or_invalid_timestamp"
+    assert "cwa_rainfall_grid_manifest_ref" not in status["currentArtifactRefs"]
+
+
+def test_connected_preparation_uses_oldest_rainfall_source_timestamp_for_current_run(
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    workspace_root = tmp_path / "workspaces"
+    _write_project(workspace_root)
+
+    def fake_runner(request: Any) -> dict[str, Any]:
+        runner_root = Path(request.project_root).resolve()
+        _write_weather_decision_inputs(
+            runner_root,
+            timestamp="2026-07-23T03:00:00+00:00",
+        )
+        manifest_path = (
+            runner_root
+            / "outputs/environment/cwa/rainfall/rainfall_grid_manifest.json"
+        )
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest["latestByKind"]["qpe_past_1h"]["fetchedAt"] = (
+            "2026-07-23T02:59:59+00:00"
+        )
+        manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+        return {
+            "network_policy": {"network_calls_made": True},
+            "boundary": {"external_api_calls_made": True},
+        }
+
+    manager = DashboardConnectedPreparationManager(
+        repo_root=repo_root,
+        workspace_root=workspace_root,
+        environ={"CWA_API_KEY": "present"},
+        runner=fake_runner,
+        now_factory=lambda: datetime(2026, 7, 23, 3, 0, tzinfo=timezone.utc),
+    )
+
+    status = manager.run_once("fixture-route", reason="test-mixed-rainfall-times")
+
+    assert status["status"] == "partial"
+    manifest = status["weatherDecisionInputs"]["requiredArtifacts"]["rainfallManifest"]
+    assert manifest["timestampField"] == "latestByKind.*.fetchedAt"
+    assert manifest["timestamp"] == "2026-07-23T02:59:59+00:00"
+    assert manifest["status"] == "previous_generation"
+    assert "cwa_rainfall_grid_manifest_ref" not in status["currentArtifactRefs"]
+
+
+def test_connected_preparation_treats_non_utf8_artifact_as_incomplete(
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    workspace_root = tmp_path / "workspaces"
+    _write_project(workspace_root)
+
+    def fake_runner(request: Any) -> dict[str, Any]:
+        runner_root = Path(request.project_root).resolve()
+        _write_weather_decision_inputs(
+            runner_root,
+            timestamp="2026-07-23T03:00:00+00:00",
+        )
+        (
+            runner_root
+            / "outputs/environment/cwa/rainfall/route_precipitation_trend.json"
+        ).write_bytes(b"\xff\xfe\x00")
+        return {
+            "network_policy": {"network_calls_made": True},
+            "boundary": {"external_api_calls_made": True},
+        }
+
+    manager = DashboardConnectedPreparationManager(
+        repo_root=repo_root,
+        workspace_root=workspace_root,
+        environ={"CWA_API_KEY": "present"},
+        runner=fake_runner,
+        now_factory=lambda: datetime(2026, 7, 23, 3, 0, tzinfo=timezone.utc),
+    )
+
+    status = manager.run_once("fixture-route", reason="test-non-utf8")
+
+    assert status["status"] == "partial"
+    trend = status["weatherDecisionInputs"]["requiredArtifacts"]["rainfallTrend"]
+    assert trend["exists"] is True
+    assert trend["jsonValid"] is False
+    assert trend["reason"] == "invalid_json"
+
+
+def test_connected_preparation_rejects_mismatched_weather_artifact_project_id(
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    workspace_root = tmp_path / "workspaces"
+    _write_project(workspace_root)
+
+    def fake_runner(request: Any) -> dict[str, Any]:
+        runner_root = Path(request.project_root).resolve()
+        _write_weather_decision_inputs(
+            runner_root,
+            timestamp="2026-07-23T03:00:00+00:00",
+        )
+        risk_path = runner_root / "outputs/route_weather_risk_package.json"
+        risk = json.loads(risk_path.read_text(encoding="utf-8"))
+        risk["projectId"] = "other-route"
+        risk_path.write_text(json.dumps(risk), encoding="utf-8")
+        return {
+            "network_policy": {"network_calls_made": True},
+            "boundary": {"external_api_calls_made": True},
+        }
+
+    manager = DashboardConnectedPreparationManager(
+        repo_root=repo_root,
+        workspace_root=workspace_root,
+        environ={"CWA_API_KEY": "present"},
+        runner=fake_runner,
+        now_factory=lambda: datetime(2026, 7, 23, 3, 0, tzinfo=timezone.utc),
+    )
+
+    status = manager.run_once("fixture-route", reason="test-project-mismatch")
+
+    assert status["status"] == "partial"
+    route_risk = status["weatherDecisionInputs"]["requiredArtifacts"]["routeRisk"]
+    assert route_risk["jsonValid"] is True
+    assert route_risk["reason"] == "project_id_mismatch"
+    assert "route_weather_risk_package_ref" not in status["currentArtifactRefs"]
+
+
+def test_connected_preparation_requires_route_and_frame_provenance_for_pair_verification(
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir()
+    workspace_root = tmp_path / "workspaces"
+    _write_project(workspace_root)
+
+    def fake_runner(request: Any) -> dict[str, Any]:
+        runner_root = Path(request.project_root).resolve()
+        _write_weather_decision_inputs(
+            runner_root,
+            timestamp="2026-07-23T03:00:00+00:00",
+        )
+        for relative in (
+            "outputs/environment/cwa/rainfall/rainfall_grid_manifest.json",
+            "outputs/environment/cwa/rainfall/route_precipitation_trend.json",
+        ):
+            path = runner_root / relative
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload.pop("sourceFrameIds", None)
+            path.write_text(json.dumps(payload), encoding="utf-8")
+        for relative in (
+            "outputs/environment/cwa/imagery/weather_imagery_manifest.json",
+            "outputs/route_weather_risk_package.json",
+        ):
+            path = runner_root / relative
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            payload.pop("routeSha256", None)
+            path.write_text(json.dumps(payload), encoding="utf-8")
+        return {
+            "network_policy": {"network_calls_made": True},
+            "boundary": {"external_api_calls_made": True},
+        }
+
+    manager = DashboardConnectedPreparationManager(
+        repo_root=repo_root,
+        workspace_root=workspace_root,
+        environ={"CWA_API_KEY": "present"},
+        runner=fake_runner,
+        now_factory=lambda: datetime(2026, 7, 23, 3, 0, tzinfo=timezone.utc),
+    )
+
+    status = manager.run_once("fixture-route", reason="test-missing-provenance")
+
+    assert status["status"] == "partial"
+    assert status["weatherDecisionInputs"]["status"] == "incomplete"
+    assert status["weatherDecisionInputs"]["pairVerification"] == {
+        "rainfall": "missing_source_frame_ids",
+        "imageryRisk": "missing_route_sha256",
+    }
 
 
 def test_connected_preparation_trigger_is_single_flight_and_schedules_refresh(
@@ -171,9 +661,13 @@ def test_connected_preparation_trigger_is_single_flight_and_schedules_refresh(
     _RecordedTimer.created.clear()
     call_count = 0
 
-    def fake_runner(_: Any) -> dict[str, Any]:
+    def fake_runner(request: Any) -> dict[str, Any]:
         nonlocal call_count
         call_count += 1
+        _write_weather_decision_inputs(
+            Path(request.project_root).resolve(),
+            timestamp="2026-07-23T03:00:00+00:00",
+        )
         return {
             "network_policy": {"network_calls_made": True},
             "boundary": {"external_api_calls_made": True},
@@ -213,9 +707,13 @@ def test_connected_preparation_can_schedule_without_immediate_provider_fetch(
     _RecordedTimer.created.clear()
     call_count = 0
 
-    def fake_runner(_: Any) -> dict[str, Any]:
+    def fake_runner(request: Any) -> dict[str, Any]:
         nonlocal call_count
         call_count += 1
+        _write_weather_decision_inputs(
+            Path(request.project_root).resolve(),
+            timestamp="2026-07-23T03:00:00+00:00",
+        )
         return {
             "network_policy": {"network_calls_made": True},
             "boundary": {"external_api_calls_made": True},
@@ -480,9 +978,13 @@ def test_connected_preparation_refresh_for_assistant_completes_before_return(
     _RecordedTimer.created.clear()
     call_count = 0
 
-    def fake_runner(_: Any) -> dict[str, Any]:
+    def fake_runner(request: Any) -> dict[str, Any]:
         nonlocal call_count
         call_count += 1
+        _write_weather_decision_inputs(
+            Path(request.project_root).resolve(),
+            timestamp="2026-07-23T03:00:00+00:00",
+        )
         return {
             "network_policy": {"network_calls_made": True},
             "boundary": {"external_api_calls_made": True},

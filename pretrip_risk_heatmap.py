@@ -8,7 +8,6 @@ from typing import Any, Sequence
 
 from pretrip_risk_attribution_diagnostic import (
     DEFAULT_WORKSPACE,
-    RISK_ATTRIBUTION_VERSION,
     RISK_DIMENSIONS,
     RouteRiskPoint,
     load_route_risk_points,
@@ -44,6 +43,13 @@ def build_calibrated_risk_heatmap(
     terms = tuple(formula.get("terms", []))
     if formula.get("status") != "candidate_only" or not terms:
         raise ValueError("risk attribution diagnostic has no candidate formula")
+    direct_qgis_candidate = (
+        formula.get("calibration_kind")
+        == "qgis_grass_direct_candidate_visualization"
+    )
+    semantic_calibration_applied = bool(
+        formula.get("semantic_calibration_applied", not direct_qgis_candidate)
+    )
 
     scored_points = [
         scored_route_point(point, terms=terms)
@@ -113,7 +119,13 @@ def build_calibrated_risk_heatmap(
                     "end_factor_values": end["factor_values"],
                     "candidate_only": True,
                     "runtime_safety_truth": False,
-                    "route_specific_calibration_candidate": True,
+                    "route_specific_calibration_candidate": (
+                        semantic_calibration_applied
+                    ),
+                    "qgis_grass_direct_candidate_visualization": (
+                        direct_qgis_candidate
+                    ),
+                    "semantic_calibration_applied": semantic_calibration_applied,
                 },
             }
         )
@@ -130,7 +142,11 @@ def build_calibrated_risk_heatmap(
         if warning_cp_proposals_path
         else None,
         "score_field": HEATMAP_SCORE_FIELD,
-        "score_surface_type": "route_aligned_calibrated_heatmap",
+        "score_surface_type": (
+            "route_aligned_qgis_grass_candidate_heatmap"
+            if direct_qgis_candidate
+            else "route_aligned_calibrated_heatmap"
+        ),
         "formula_candidate": formula,
         "score_stats": score_stats,
         "relative_heat_thresholds": thresholds,
@@ -148,9 +164,16 @@ def build_calibrated_risk_heatmap(
             "runtime_safety_truth": False,
             "interpolated_surface": False,
             "route_aligned_samples_only": True,
-            "route_specific_calibration_candidate": True,
+            "route_specific_calibration_candidate": semantic_calibration_applied,
+            "qgis_grass_direct_candidate_visualization": direct_qgis_candidate,
+            "semantic_calibration_applied": semantic_calibration_applied,
             "notes": [
-                "Heat map（熱區圖）使用本 workspace 的 factor analysis 公式候選重算，不覆寫正式 route risk。",
+                (
+                    "Heat map（熱區圖）直接呈現 QGIS/GRASS adapter 的 candidate-only "
+                    "pretrip_risk；本次未套用 semantic calibration。"
+                    if direct_qgis_candidate
+                    else "Heat map（熱區圖）使用本 workspace 的 factor analysis 公式候選重算，不覆寫正式 route risk。"
+                ),
                 "顏色為本路線相對分位數，用於凸顯本次資料中特別突出的區段。",
             ],
         },

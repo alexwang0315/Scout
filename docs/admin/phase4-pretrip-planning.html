@@ -247,6 +247,40 @@
       padding: 4px 6px;
       white-space: nowrap;
     }
+    .historical-map-control {
+      grid-column: 1 / -1;
+      display: grid;
+      grid-template-columns: minmax(116px, .65fr) minmax(0, 1.35fr);
+      gap: 6px;
+    }
+    .historical-map-control label {
+      min-width: 0;
+      white-space: normal;
+    }
+    .historical-map-control select {
+      flex: 1 1 auto;
+      width: auto;
+      min-width: 0;
+      border: 0;
+      background: transparent;
+      color: var(--ink);
+      font: inherit;
+    }
+    .historical-map-control label span {
+      flex: 0 0 auto;
+    }
+    .historical-map-theme-actions {
+      min-width: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 28px;
+      gap: 6px;
+    }
+    .historical-map-status {
+      grid-column: 1 / -1;
+      min-height: 18px;
+      color: var(--muted);
+      font-size: 10px;
+    }
     .tool-disclosure {
       border-top: 1px solid var(--line);
       padding-top: 4px;
@@ -321,7 +355,7 @@
     }
     .layer-menu-header {
       display: flex;
-      align-items: baseline;
+      align-items: center;
       justify-content: space-between;
       gap: 10px;
       margin-bottom: 6px;
@@ -337,6 +371,30 @@
     .layer-menu-header small {
       font-size: 11px;
       line-height: 1.25;
+    }
+    .layer-menu-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .layer-refresh-button {
+      width: 28px;
+      height: 28px;
+      display: inline-grid;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--ink);
+      padding: 0;
+      font-size: 17px;
+      line-height: 1;
+      cursor: pointer;
+    }
+    .layer-refresh-button[aria-pressed="true"] {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: var(--accent-soft);
     }
     .layer-preset-row {
       display: grid;
@@ -440,6 +498,22 @@
     #mapRendererShell[data-map-renderer-state="ready"]:not([data-map-raster-state="loading"]):not([data-map-raster-state="degraded"]) #mapRendererStatus {
       display: none;
     }
+    .pretrip-map-evidence-picker {
+      position: absolute;
+      left: 12px;
+      top: 12px;
+      z-index: 8;
+      display: flex;
+      gap: 4px;
+      max-width: calc(100% - 70px);
+      padding: 4px;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: rgba(255, 255, 255, .96);
+    }
+    .pretrip-map-evidence-picker[hidden] { display: none; }
+    .pretrip-map-evidence-picker select { max-width: min(240px, 45vw); }
+    .pretrip-map-evidence-picker button:focus-visible { outline: 2px solid #28666e; outline-offset: 2px; }
     #map {
       display: block;
       width: 100%;
@@ -1734,12 +1808,16 @@
               <button id="panMode" class="tool-button is-active" type="button" title="Mouse drag pan is active" aria-label="Mouse drag pan" aria-pressed="true">Pan</button>
               <button id="boxZoomMode" class="tool-button compact" type="button" title="Persistent box zoom: click or drag in any direction to zoom in; use minus to zoom out" aria-label="Rectangle drag zoom" aria-pressed="false">▣</button>
               <span id="zoomLevel" class="zoom-level" title="Map zoom">1.00x</span>
+              <button id="refreshMapTiles" class="tool-button" type="button" title="Update map tiles" aria-label="更新地圖圖磚" aria-pressed="false">更新圖磚</button>
               <details class="layer-menu">
                 <summary id="layerControl" title="Show layer controls" aria-label="Layer controls">Layers <strong id="layerEnabledCount">-</strong></summary>
                 <div class="layer-menu-panel" aria-label="Map layer controls">
                   <div class="layer-menu-header">
                     <span>Layers</span>
-                    <small>map evidence</small>
+                    <div class="layer-menu-header-actions">
+                      <small>map evidence</small>
+                      <button id="refreshRasterTiles" class="layer-refresh-button" type="button" title="Update checked raster layers from WMTS" aria-label="Update checked raster layers from WMTS" aria-pressed="false">↻</button>
+                    </div>
                   </div>
                   <div class="layer-preset-row" aria-label="Layer presets">
                     <button class="layer-preset-button" type="button" data-layer-preset="risk-review">Risk Review</button>
@@ -1758,6 +1836,14 @@
                     <label title="Taiwan geology 2016 layer"><input type="checkbox" data-layer="geology"> Geology</label>
                     <label title="Taiwan 1/5000 topographic layer"><input type="checkbox" data-layer="topo-5k"> Topo 5K</label>
                     <label title="Taiwan forest compartment boundary layer"><input type="checkbox" data-layer="forest"> Forest</label>
+                    <div class="historical-map-control" role="group" aria-label="Historical map theme">
+                      <label title="Historical map comparison layer"><input type="checkbox" data-layer="historical-map" data-layer-contract="auxiliary"> 古地圖</label>
+                      <div class="historical-map-theme-actions">
+                        <label title="Historical map theme"><span>主題</span><select data-historical-map-source aria-label="Historical map theme"></select></label>
+                        <button class="layer-refresh-button" type="button" data-historical-map-fetch title="Update selected historical map and cache it in this workspace" aria-label="Update selected historical map and cache it in this workspace" aria-pressed="false">↻</button>
+                      </div>
+                      <output class="historical-map-status" data-historical-map-status aria-live="polite">蕃地 1916 · cache only</output>
+                    </div>
                     <label title="OpenStreetMap layer"><input type="checkbox" data-layer="osm"> OSM</label>
                     <label title="Terrain layer"><input type="checkbox" data-layer="terrain" checked> Terrain</label>
                     <label title="Scout Risk Engine pretrip risk score point layer"><input type="checkbox" data-layer="risk-score"> Risk pts</label>
@@ -1942,11 +2028,11 @@
             <span>Prepare Layers</span>
             <small>workspace job</small>
           </div>
-          <p class="import-gpx-copy">LayerPreparationJob（圖層準備工作）checks local map, OSM, Overpass, DEM, weather, and reference evidence for this pre-trip workspace. Imagery tiles（影像圖磚）are displayed from WMTS at runtime and are not prepared here.</p>
+          <p class="import-gpx-copy">LayerPreparationJob（圖層準備工作）prepares map, OSM, DEM, weather, reference evidence, and the route raster cache in this workspace. Weather and geology can still be updated after preparation.</p>
           <form id="prepareLayersForm" class="import-gpx-form">
             <div class="import-gpx-field">
               <label for="prepareLayersList">Layer ids</label>
-              <input id="prepareLayersList" type="text" autocomplete="off" value="osm,overpass,terrain,weather,reference-tracks,route,segments,checkpoints">
+              <input id="prepareLayersList" type="text" autocomplete="off" value="imagery,osm,overpass,terrain,risk-score,risk-ribbon,risk-heatmap,risk-delta,cwa-qpf,soil-moisture,antecedent-rain,cwa-weather,weather,reference-tracks,route,segments,checkpoints,mcp,pois,hazards,corridors,retreat,route-notes">
               <small>Comma-separated ids; aliases dem/dtm map to terrain.</small>
             </div>
             <div class="import-gpx-grid">
@@ -2226,6 +2312,9 @@
       ? PROJECT_ID_PARAM
       : DEFAULT_PROJECT_ID;
     const DASHBOARD_MAP_ONLY = new URLSearchParams(window.location.search).get("mapOnly") === "1";
+    const DIAGNOSTIC_MAP_PROBE = new URLSearchParams(window.location.search).get("diagnosticMapProbe") === "1";
+    const DIAGNOSTIC_NATIVE_TILE_PROBE = DIAGNOSTIC_MAP_PROBE
+      && new URLSearchParams(window.location.search).get("diagnosticNativeTiles") === "1";
     document.body.classList.toggle("dashboard-map-only", DASHBOARD_MAP_ONLY);
     function requestedMapRendererPreference() {
       const requested = new URLSearchParams(window.location.search).get("mapRenderer")
@@ -2270,7 +2359,7 @@
     const TERRAIN_FALLBACK_CELL_GAP_PX = 1;
     const MAP_ZOOM_STEP_FACTOR = 1.25;
     const OSM_PUBLIC_TILE_URL_TEMPLATE = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
-    const OSM_LOCAL_TILE_URL_TEMPLATE = `${apiBase()}/admin/tiles/osm/{z}/{x}/{y}.png?fallback=offline`;
+    const OSM_LOCAL_TILE_URL_TEMPLATE = `${apiBase()}/admin/tiles/osm/{z}/{x}/{y}.png?fallback=transparent`;
     const OSM_TILE_URL_TEMPLATE = OSM_PUBLIC_TILE_URL_TEMPLATE;
     const OSM_TARGET_ZOOM = 17;
     const OSM_MAX_TILES = 64;
@@ -2279,7 +2368,8 @@
     const OSM_MIN_ZOOM = 8;
     const OSM_MAX_ZOOM = 20;
     const OSM_TILE_CACHE_BUST = "offline-fallback-v13";
-    const RASTER_TILE_CACHE_BUST = "wmts-runtime-v1";
+    const RASTER_TILE_CACHE_BUST = "workspace-cache-v2";
+    const RASTER_WORKSPACE_CACHE_QUERY = "cache_only=1";
     const RASTER_TILE_SWAP_TIMEOUT_MS = 12000;
     const OSM_ATTRIBUTION = "OpenStreetMap contributors";
     const HAPPYMAN_WMTS_ENDPOINT = "https://tile.happyman.idv.tw/mp/service";
@@ -2294,10 +2384,37 @@
       minZoom: 5,
       maxZoom: 20
     };
+    const HISTORICAL_MAP_LAYER_ID = "historical-map";
+    const DEFAULT_HISTORICAL_MAP_SOURCE_ID = "sinica_jm50k_1916";
+    const HISTORICAL_MAP_SOURCE_DEFINITIONS = Object.freeze([
+      {sourceId: "sinica_jm20k_1904", cacheLayerId: "historical-jm20k-1904", label: "Fortress 1904", labelZh: "堡圖 1904", minZoom: 5, maxZoom: 18, opacity: 0.9, attribution: "Academia Sinica Taiwan historical maps"},
+      {sourceId: "sinica_jm20k_1904_triangulation", cacheLayerId: "historical-triangulation-1904", label: "Triangulation 1904", labelZh: "三角點 1904", minZoom: 5, maxZoom: 16, opacity: 0.86, attribution: "Academia Sinica Taiwan historical maps"},
+      {sourceId: "sinica_jm50k_1916", cacheLayerId: "historical-fandi-1916", label: "Aboriginal Territory 1916", labelZh: "蕃地 1916", minZoom: 5, maxZoom: 17, opacity: 0.9, attribution: "Academia Sinica Taiwan historical maps"},
+      {sourceId: "sinica_jm20k_1921", cacheLayerId: "historical-jm20k-1921", label: "Fortress 1921", labelZh: "堡圖 1921", minZoom: 5, maxZoom: 18, opacity: 0.9, attribution: "Academia Sinica Taiwan historical maps"},
+      {sourceId: "sinica_jm50k_1924", cacheLayerId: "historical-jm50k-1924", label: "Land Survey 1924", labelZh: "陸測 1924", minZoom: 5, maxZoom: 17, opacity: 0.9, attribution: "Academia Sinica Taiwan historical maps"},
+      {sourceId: "sinica_jm50k_1924_new", cacheLayerId: "historical-jm50k-1924-new", label: "Land Survey 1924 new", labelZh: "陸測 1924 新", minZoom: 5, maxZoom: 17, opacity: 0.9, attribution: "Academia Sinica Taiwan historical maps"},
+      {sourceId: "sinica_ttfb3_0603", cacheLayerId: "historical-shinko-forest", label: "Shinko Forest", labelZh: "新港郡林野圖", minZoom: 5, maxZoom: 19, opacity: 0.88, attribution: "Academia Sinica Taiwan historical maps"},
+      {sourceId: "sinica_ttfb3_0602", cacheLayerId: "historical-kanzan-forest", label: "Kanzan Forest", labelZh: "關山郡林野圖", minZoom: 5, maxZoom: 19, opacity: 0.88, attribution: "Academia Sinica Taiwan historical maps"},
+      {sourceId: "sinica_ttfb3_0601", cacheLayerId: "historical-taito-forest", label: "Taito Forest", labelZh: "台東郡林野圖", minZoom: 5, maxZoom: 19, opacity: 0.88, attribution: "Academia Sinica Taiwan historical maps"},
+      {sourceId: "sinica_tm50k_1956", cacheLayerId: "historical-tm50k-1956", label: "Taiwan 1:50K 1956", labelZh: "老五萬 1956", minZoom: 5, maxZoom: 17, opacity: 0.9, attribution: "Academia Sinica Taiwan historical maps"},
+      {sourceId: "sinica_tm50k_1966", cacheLayerId: "historical-water-1966", label: "Water Resources 1966", labelZh: "水利 1966", minZoom: 5, maxZoom: 18, opacity: 0.88, attribution: "Academia Sinica Taiwan historical maps"},
+      {sourceId: "sinica_tm25k_1989", cacheLayerId: "historical-economic-1989", label: "Economic Map 1989", labelZh: "經建一版 1989", minZoom: 5, maxZoom: 15, opacity: 0.9, attribution: "Academia Sinica Taiwan historical maps"},
+      {sourceId: "happyman_tri1999", cacheLayerId: "historical-lin-1999", label: "Lin Mountains 1999", labelZh: "林崇雄百岳圖 1999", minZoom: 5, maxZoom: 15, opacity: 0.86, attribution: "Happyman / Lin Chung-Hsiung"},
+      {sourceId: "happyman_tw5k2000", cacheLayerId: "historical-tw5k-2000", label: "TW5K 2000", labelZh: "TW5K 2000", minZoom: 5, maxZoom: 20, opacity: 0.9, attribution: "Happyman WMTS"},
+      {sourceId: "happyman_tw25k2001", cacheLayerId: "historical-economic-2001", label: "Economic Map 2001", labelZh: "經建三版 2001", minZoom: 10, maxZoom: 17, opacity: 0.9, attribution: "Happyman / Academia Sinica"}
+    ].map(definition => Object.freeze({
+      layerId: HISTORICAL_MAP_LAYER_ID,
+      sourceKind: "scout_proxy_tile",
+      ...definition
+    })));
+    const HISTORICAL_MAP_SOURCE_BY_ID = Object.freeze(Object.fromEntries(
+      HISTORICAL_MAP_SOURCE_DEFINITIONS.map(definition => [definition.sourceId, definition])
+    ));
     const RASTER_SOURCE_LAYER_DEFINITIONS = [
       {layerId: "imagery", sourceId: "nlsc_photo2", label: "Imagery", sourceKind: "wmts_tile", urlTemplate: "https://wmts.nlsc.gov.tw/wmts/PHOTO2/default/EPSG:3857/{z}/{y}/{x}", tileOrder: "z_y_x", minZoom: 5, maxZoom: 19, opacity: 0.92},
+      {...HISTORICAL_MAP_SOURCE_BY_ID[DEFAULT_HISTORICAL_MAP_SOURCE_ID]},
       {layerId: "rudy", sourceId: "happyman_rudy", label: "Rudy", wmtsLayer: "rudy", opacity: 0.94, ...HAPPYMAN_WMTS_BASE},
-      {layerId: "rudy-twmap", sourceId: "happyman_rudy_twmap", label: "Rudy+TW", sourceKind: "scout_proxy_tile", cacheLayerId: "imagery", initialMaxZoom: 13, preparedMaxZoom: 14, minZoom: 5, maxZoom: 20, opacity: 0.9},
+      {layerId: "rudy-twmap", sourceId: "happyman_rudy_twmap", label: "Rudy+TW", sourceKind: "scout_proxy_tile", cacheLayerId: "rudy-twmap", initialMaxZoom: 13, preparedMaxZoom: 14, minZoom: 5, maxZoom: 20, opacity: 0.9},
       {layerId: "relief", sourceId: "happyman_colorrelief", label: "Relief", wmtsLayer: "colorrelief", opacity: 0.58, ...HAPPYMAN_WMTS_BASE},
       {layerId: "geology", sourceId: "happyman_geo2016", label: "Geology", wmtsLayer: "geo2016", opacity: 0.52, ...HAPPYMAN_WMTS_BASE},
       {layerId: "topo-5k", sourceId: "happyman_tw5k2000", label: "Topo 5K", wmtsLayer: "tw5k2000", opacity: 0.82, ...HAPPYMAN_WMTS_BASE},
@@ -2311,7 +2428,7 @@
       "mcp-review": ["imagery", "osm", "route", "checkpoints", "mcp", "boss-points", "route-notes", "pois", "hazards", "overpass"],
       "route-clean": ["imagery", "osm", "route", "reference-tracks", "retreat", "segments", "checkpoints"],
       "debug-replay": ["imagery", "osm", "route", "reference-tracks", "segments", "checkpoints", "events", "overpass", "cwa-qpf", "soil-moisture", "antecedent-rain", "cwa-weather", "mcp", "boss-points"],
-      "raster-check": ["imagery", "rudy", "rudy-twmap", "relief", "geology", "topo-5k", "forest", "osm", "route"]
+      "raster-check": ["imagery", "historical-map", "rudy", "rudy-twmap", "relief", "geology", "topo-5k", "forest", "osm", "route"]
     };
     const DETAIL_TAB_IDS = new Set(["pre_trip_planning", "post_analysis", "review_workspace", "import_gpx", "wearables", "agent_skills"]);
     const EVIDENCE_TREE_TABS = [
@@ -2353,7 +2470,12 @@
         reason: "renderer_not_initialized",
       }),
       mapLibreRenderer: null,
-      mapLibreLoadResult: null
+      mapLibreLoadResult: null,
+      historicalMapSourceId: initialHistoricalMapSourceId(),
+      // Interactive Rudy maps fill missing native tiles; diagnostic probes remain read-only.
+      rasterRemoteRefreshEnabled: !DIAGNOSTIC_MAP_PROBE || DIAGNOSTIC_NATIVE_TILE_PROBE,
+      rasterForceRemoteRefresh: false,
+      rasterRefreshNonce: 0
     };
     let pretripProjectBridgeSnapshot = Object.freeze({
       status: "idle",
@@ -2368,6 +2490,8 @@
         view: state.view,
         error: String(error || "")
       });
+      const shell = document.getElementById("mapRendererShell");
+      if (shell) shell.dataset.mapProjectLoadState = status;
       window.dispatchEvent(new CustomEvent("scout:pretrip-project-state", {
         detail: Object.freeze({status, projectId: PROJECT_ID, error: String(error || "")})
       }));
@@ -2387,10 +2511,13 @@
       shell.dataset.mapRendererActive = nextState.active || "svg";
       shell.dataset.mapRendererState = nextState.state || "degraded";
       shell.dataset.mapRendererReason = nextState.reason || "unknown";
-      if (status) status.textContent = nextState.detail || nextState.reason || "Map renderer unavailable.";
+      if (status && !(nextState.state === "ready" && shell.dataset.mapRasterState === "degraded")) {
+        status.textContent = nextState.detail || nextState.reason || "Map renderer unavailable.";
+      }
       return state.mapRenderer;
     }
     function activateSvgMapFallback(reason, detail = "") {
+      disposePretripMapEvidenceControls();
       const shell = document.getElementById("mapRendererShell");
       const mapLibreHost = document.getElementById("mapLibreEvidenceMap");
       if (shell) {
@@ -2435,18 +2562,174 @@
       const pointerEvent = event?.originalEvent || event;
       if (item && pointerEvent) showHint(pointerEvent, item);
     }
+    function disposePretripMapEvidenceControls() {
+      state.mapEvidenceControlsCleanup?.();
+      state.mapEvidenceControlsCleanup = null;
+      const host = document.getElementById("mapLibreEvidenceMap");
+      host?.querySelector(".pretrip-map-evidence-picker")?.remove();
+      if (host) host.dataset.mapKeyboardEvidenceCount = "0";
+      hideHint();
+    }
+    function configurePretripMapEvidenceControls(renderer) {
+      disposePretripMapEvidenceControls();
+      const map = renderer?.map;
+      if (!map) return;
+      const sync = () => syncPretripMapKeyboardEvidence(renderer);
+      map.on("idle", sync);
+      map.on("moveend", sync);
+      state.mapEvidenceControlsCleanup = () => {
+        map.off?.("idle", sync);
+        map.off?.("moveend", sync);
+      };
+      sync();
+    }
+    function syncPretripMapKeyboardEvidence(renderer = state.mapLibreRenderer) {
+      if (state.mapRenderer.active !== "maplibre" || renderer !== state.mapLibreRenderer) return;
+      const host = document.getElementById("mapLibreEvidenceMap");
+      if (!host || !renderer?.map) return;
+      let rendered;
+      try { rendered = renderer.map.queryRenderedFeatures(); }
+      catch (_error) { rendered = []; }
+      const features = new Map();
+      rendered.forEach(item => {
+        if (item.source !== window.ScoutMapLibreEvidence.sourceId) return;
+        const feature = renderer.index.feature(item.id ?? item.properties?.identity_key);
+        if (feature) features.set(String(feature.id), feature);
+      });
+      host.dataset.mapKeyboardEvidenceCount = String(features.size);
+      let picker = host.querySelector(".pretrip-map-evidence-picker");
+      if (!features.size) {
+        if (picker) {
+          picker.hidden = true;
+          const button = picker.querySelector("button");
+          button.disabled = true;
+          button.pretripMapLibreFeature = null;
+          hideHint();
+        }
+        return;
+      }
+      if (!picker) {
+        picker = document.createElement("div");
+        picker.className = "pretrip-map-evidence-picker";
+        picker.setAttribute("role", "group");
+        picker.setAttribute("aria-label", "目前地圖視野的證據");
+        const select = document.createElement("select");
+        select.setAttribute("aria-label", "選擇目前地圖視野的證據");
+        const button = document.createElement("button");
+        button.type = "button";
+        button.tabIndex = 0;
+        button.textContent = "檢視證據";
+        button.dataset.mapHover = "true";
+        const inspect = event => {
+          syncPretripMapKeyboardEvidence(renderer);
+          const feature = button.pretripMapLibreFeature;
+          if (button.disabled || !feature || picker.hidden) return;
+          const rect = button.getBoundingClientRect();
+          const item = pretripEvidenceForMapLibreFeature(feature) || feature.properties;
+          // Text nodes keep source labels readable without interpreting source text as HTML.
+          const title = document.createElement("strong"), summary = document.createElement("span");
+          title.textContent = hintTitle(item);
+          summary.textContent = hintSummary(item);
+          hoverHint.replaceChildren(title, summary);
+          moveHint(event?.type === "focus" ? {clientX: rect.left + rect.width / 2, clientY: rect.bottom} : event);
+          hoverHint.classList.remove("is-hidden");
+          if (event?.type === "focus") renderer.focus(feature.id, {fit: false});
+        };
+        button.addEventListener("mouseenter", inspect);
+        button.addEventListener("mousemove", moveHint);
+        button.addEventListener("mouseleave", hideHint);
+        button.addEventListener("focus", inspect);
+        button.addEventListener("blur", hideHint);
+        button.addEventListener("click", () => {
+          syncPretripMapKeyboardEvidence(renderer);
+          if (!button.disabled && button.pretripMapLibreFeature) selectPretripMapLibreFeature(button.pretripMapLibreFeature);
+        });
+        button.addEventListener("keydown", event => {
+          if (event.key === "Escape") { event.preventDefault(); hideHint(); }
+        });
+        select.addEventListener("change", () => { hideHint(); syncPretripMapKeyboardEvidence(renderer); });
+        picker.append(select, button);
+        host.appendChild(picker);
+      }
+      picker.hidden = false;
+      const select = picker.querySelector("select"), button = picker.querySelector("button");
+      const ordered = [...features].sort(([left], [right]) => left.localeCompare(right));
+      const selected = features.has(select.value) ? select.value : ordered[0][0];
+      const signature = JSON.stringify(ordered.map(([id, feature]) => [id, hintTitle(feature.properties)]));
+      if (picker.dataset.featureSignature !== signature) {
+        select.replaceChildren(...ordered.map(([id, feature]) => {
+          const option = document.createElement("option");
+          option.value = id;
+          option.textContent = hintTitle(feature.properties);
+          return option;
+        }));
+        picker.dataset.featureSignature = signature;
+      }
+      select.value = selected;
+      const feature = features.get(selected);
+      button.disabled = false;
+      button.pretripMapLibreFeature = feature;
+      button.dataset.featureId = String(feature.id);
+      button.dataset.mapRef = String(feature.properties?.source_id || feature.properties?.identity_key || feature.id);
+      button.dataset.evidenceType = String(feature.properties?.evidence_type || "pretrip_evidence");
+      button.dataset.mapFeatureKind = String(feature.geometry?.type || "feature").toLowerCase();
+      button.dataset.mapRendererEvidence = "maplibre";
+      button.setAttribute("aria-label", `檢視 ${hintTitle(feature.properties)}`);
+    }
     function syncPretripMapLibreEvidence(view) {
       if (!state.mapLibreRenderer || !view) return null;
       const featureCollection = pretripMapLibreFeatureCollection(view);
+      state.mapLibreRenderer.setRasterLayers(pretripMapLibreRasterLayers(view));
       state.mapLibreRenderer.setFeatureCollection(featureCollection);
       document.querySelectorAll("[data-layer]").forEach(input => {
         state.mapLibreRenderer.setLayerVisibility(input.dataset.layer, input.checked);
       });
       const host = document.getElementById("mapLibreEvidenceMap");
-      if (host) host.dataset.maplibreFeatureCount = String(featureCollection.features.length);
+      if (host) {
+        host.dataset.maplibreFeatureCount = String(featureCollection.features.length);
+        host.dataset.maplibreOsmPbfFeatureCount = String(
+          featureCollection.features.filter(feature => feature.properties?.layer_id === "osm").length
+        );
+      }
       return featureCollection;
     }
+    async function disposePretripMapRenderer() {
+      if (state.mapLibreDisposePromise) return state.mapLibreDisposePromise;
+      state.mapLibreDisposed = true;
+      state.mapLibreRendererGeneration = (state.mapLibreRendererGeneration || 0) + 1;
+      const renderers = new Set([state.mapLibreRenderer, ...(state.mapLibrePendingRenderers || [])].filter(Boolean));
+      state.mapLibreRenderer = null;
+      const errors = [];
+      try { disposePretripMapEvidenceControls(); }
+      catch (error) { errors.push({phase: "evidence_controls_destroy", errorName: error?.name === "TypeError" ? "TypeError" : "Error"}); }
+      for (const group of svg?.querySelectorAll?.("[data-layer-group]") || []) {
+        try {
+          const pending = [...group.querySelectorAll('[data-tile-generation="pending"]')];
+          if (pending.some(generation => typeof generation.cancelRasterGeneration !== "function")) {
+            errors.push({phase: "svg_tiles_destroy", errorName: "MissingCancellationHook"});
+          }
+          discardPendingRasterLayerGeneration(group);
+          if (group.dataset.pendingTileGenerationKey || group.querySelector('[data-tile-generation="pending"]')) {
+            errors.push({phase: "svg_tiles_destroy", errorName: "PendingGenerationRemains"});
+          }
+        } catch (error) { errors.push({phase: "svg_tiles_destroy", errorName: error?.name || "Error"}); }
+      }
+      for (const renderer of renderers) {
+        try { renderer.destroy(); }
+        catch (error) { errors.push({phase: "renderer_destroy", errorName: error?.name === "TypeError" ? "TypeError" : "Error"}); }
+      }
+      state.mapLibreDisposePromise = (async () => {
+        await Promise.allSettled([...(state.mapLibreInitializations || [])]);
+        const result = {disposed: errors.length === 0, activeMaps: errors.length ? null : 0,
+          pendingInitializations: errors.length ? null : 0, errors};
+        const host = document.getElementById("mapLibreEvidenceMap");
+        if (host) host.dataset.maplibreDisposeReceipt = JSON.stringify(result);
+        return result;
+      })();
+      return state.mapLibreDisposePromise;
+    }
     async function activatePretripMapLibreRenderer(maplibregl, view) {
+      if (state.mapLibreDisposed) return null;
       const adapter = window.ScoutMapLibreEvidence;
       const shell = document.getElementById("mapRendererShell");
       const host = document.getElementById("mapLibreEvidenceMap");
@@ -2456,39 +2739,76 @@
       const featureCollection = pretripMapLibreFeatureCollection(view);
       host.hidden = false;
       svg.hidden = true;
+      const generation = state.mapLibreRendererGeneration = (state.mapLibreRendererGeneration || 0) + 1;
+      state.mapLibrePendingRenderers ||= new Set();
+      state.mapLibreInitializations ||= new Set();
+      let creation = null;
+      let pendingRenderer = null;
       try {
+        disposePretripMapEvidenceControls();
+        for (const previous of state.mapLibrePendingRenderers) previous.destroy();
         state.mapLibreRenderer?.destroy();
-        state.mapLibreRenderer = await adapter.createRenderer({
+        state.mapLibreRenderer = null;
+        creation = adapter.createRenderer({
           maplibregl,
           container: host,
+          onCreated: renderer => {
+            pendingRenderer = renderer;
+            state.mapLibrePendingRenderers.add(renderer);
+          },
           timeoutMs: 20000,
+          scrollZoom: MAP_WHEEL_ZOOM_ENABLED,
           rasterLayers: pretripMapLibreRasterLayers(state.view),
           onFeatureSelect: selectPretripMapLibreFeature,
           onFeatureHover: hoverPretripMapLibreFeature,
           onFeatureLeave: hideHint,
+          onViewState: viewState => updateMapZoomIndicator("", viewState),
           onStatus: status => {
+            if (state.mapLibreDisposed || generation !== state.mapLibreRendererGeneration) return;
             shell.dataset.mapRendererState = status.state;
             shell.dataset.mapRendererReason = status.reason;
           },
           onRasterStatus: (_status, states) => {
+            if (state.mapLibreDisposed || generation !== state.mapLibreRendererGeneration) return;
             const aggregate = host.dataset.maplibreRasterState || "configured";
             shell.dataset.mapRasterState = aggregate;
+            updateMapZoomIndicator();
             const statusOutput = document.getElementById("mapRendererStatus");
             if (!statusOutput) return;
+            const rudy = states.find(item => item.layer_id === "rudy-twmap" && item.visible);
+            const nativeDetail = rudy?.native_zoom != null
+              ? `Z${rudy.native_zoom}：${rudy.success_count}/${rudy.required_count} 張原生圖磚已載入`
+              : "";
             if (aggregate === "degraded") {
               const degraded = states
                 .filter(item => item.state === "degraded")
                 .map(item => item.layer_id);
-              statusOutput.textContent = `Raster unavailable: ${degraded.join(", ")}. Vector evidence remains available.`;
+              const detail = nativeDetail ? `${nativeDetail}；缺少 ${rudy.error_count} 張。` : "";
+              statusOutput.textContent = `${detail}部分圖磚未載入：${degraded.join(", ")}。背景可能仍顯示較低層級影像；${state.rasterRemoteRefreshEnabled ? "可先停止更新，再按「更新圖磚」重試。" : "按「更新圖磚」或 Layers 內的 ↻ 載入細節。"}`;
             } else if (aggregate === "loading") {
-              statusOutput.textContent = "Loading prepared raster tiles.";
+              statusOutput.textContent = nativeDetail ? `${nativeDetail}；正在載入細節。` : "正在載入地圖圖磚。";
+            } else if (aggregate === "available") {
+              const detail = rudy?.verified_native_zoom != null ? `原生 Z${rudy.verified_native_zoom} 圖磚已完整載入` : "圖磚已載入";
+              statusOutput.textContent = state.rasterRemoteRefreshEnabled
+                ? `MapLibre 地圖 · ${detail}；可按「停止更新」回到快取模式。`
+                : `MapLibre 地圖 · ${detail}；使用工作區快取。`;
             }
           },
         }, featureCollection);
+        state.mapLibreInitializations.add(creation);
+        const renderer = await creation;
+        if (state.mapLibreDisposed || generation !== state.mapLibreRendererGeneration) {
+          renderer.destroy();
+          return null;
+        }
+        state.mapLibreRenderer = renderer;
         document.querySelectorAll("[data-layer]").forEach(input => {
           state.mapLibreRenderer.setLayerVisibility(input.dataset.layer, input.checked);
         });
         host.dataset.maplibreFeatureCount = String(featureCollection.features.length);
+        host.dataset.maplibreOsmPbfFeatureCount = String(
+          featureCollection.features.filter(feature => feature.properties?.layer_id === "osm").length
+        );
         shell.dataset.mapRendererActive = "maplibre";
         shell.dataset.mapRendererState = "ready";
         setPretripMapRendererState({
@@ -2506,14 +2826,20 @@
         } else {
           state.mapLibreRenderer.fitLayer("route", {duration: 0, maxZoom: 15});
         }
+        configurePretripMapEvidenceControls(state.mapLibreRenderer);
         return state.mapLibreRenderer;
       } catch (error) {
+        if (state.mapLibreDisposed || generation !== state.mapLibreRendererGeneration || error?.name === "AbortError") return null;
         state.mapLibreRenderer?.destroy();
         state.mapLibreRenderer = null;
         return activateSvgMapFallback("maplibre_render_failed", String(error?.message || error));
+      } finally {
+        state.mapLibrePendingRenderers.delete(pendingRenderer);
+        state.mapLibreInitializations.delete(creation);
       }
     }
     async function initializePretripMapRenderer() {
+      if (state.mapLibreDisposed) return null;
       const adapter = window.ScoutMapLibreEvidence;
       const shell = document.getElementById("mapRendererShell");
       if (!adapter || !shell) {
@@ -2544,7 +2870,62 @@
       }
       return activatePretripMapLibreRenderer(loaded.maplibregl, state.view);
     }
+    function pretripCameraMotion() {
+      const map = state.mapLibreRenderer?.map;
+      const unknown = {observedAt: Date.now(), basis: "maplibre-public-api", available: false, moving: null, easing: null};
+      if (typeof map?.isMoving !== "function") return unknown;
+      try {
+        // Map.isMoving is public in 6.2 and includes camera and handler motion.
+        // Camera.isEasing is not exposed by Map; do not fabricate an easing value.
+        const moving = map.isMoving(), easing = typeof map.isEasing === "function" ? map.isEasing() : null;
+        return typeof moving === "boolean" && (easing === null || typeof easing === "boolean")
+          ? {...unknown, available: true, moving, easing} : unknown;
+      } catch (error) { return {...unknown, errorName: error?.name || "Error"}; }
+    }
     window.scoutPretripMapRendererBridge = Object.freeze({
+      dispose: disposePretripMapRenderer,
+      getCameraMotion: pretripCameraMotion,
+      getViewLimits() {
+        const renderer = state.mapLibreRenderer;
+        return renderer ? {viewZoom: renderer.map?.getZoom?.(), maxViewZoom: renderer.map?.getMaxZoom?.(),
+          nativeCamera: renderer.publishCameraLimitReceipt()}
+          : {viewZoom: state.zoom, maxViewZoom: mapInteractionMaxZoom(), nativeCamera: null};
+      },
+      getRenderPolicySources() {
+        const renderer = state.mapLibreRenderer;
+        return {activeRenderer: state.mapRenderer.active,
+          ...window.ScoutMapLibreEvidence.inspectRasterRenderPolicySources(renderer?.map, renderer?.rasterTransport)};
+      },
+      getRudyTileView() {
+        const renderer = state.mapLibreRenderer;
+        const layer = renderer?.rasterLayers?.find(item => item.layer_id === "rudy-twmap");
+        const bounds = renderer?.map?.getBounds?.();
+        if (!layer || !bounds) return null;
+        const coverage = window.ScoutMapLibreEvidence.rasterTileCoverage(layer, renderer.map);
+        return {bounds: {west: bounds.getWest(), east: bounds.getEast(),
+          north: bounds.getNorth(), south: bounds.getSouth()},
+          tileTemplate: layer.tiles?.[0], minzoom: layer.minzoom,
+          maxzoom: layer.maxzoom, tileSize: layer.tile_size,
+          tiles: coverage?.tiles, coverageBasis: coverage?.coverage_basis,
+          nativeZooms: coverage?.native_zooms, viewZoom: renderer.map.getZoom(),
+          maxViewZoom: renderer.map.getMaxZoom(), nativeCamera: renderer.publishCameraLimitReceipt()};
+      },
+      inspectLayerOrder() {
+        const adapter = window.ScoutMapLibreEvidence;
+        const foreground = new Set(MAP_ROUTE_FOREGROUND_LAYER_IDS);
+        const expectedLayerOrder = [
+          ...Object.keys(MAP_LAYER_RANKS).filter(id => !foreground.has(id))
+            .sort((left, right) => MAP_LAYER_RANKS[left] - MAP_LAYER_RANKS[right]),
+          ...MAP_ROUTE_FOREGROUND_LAYER_IDS,
+        ];
+        const report = state.mapRenderer.active === "maplibre"
+          ? adapter.inspectMapLibreLayerOrder(state.mapLibreRenderer?.map)
+          : adapter.inspectSvgLayerOrder(svg, {
+              requiredLayerIds: Object.keys(MAP_LAYER_RANKS), expectedLayerOrder,
+            });
+        return {...report, projectId: PROJECT_ID, activeRenderer: state.mapRenderer.active,
+          rendererState: state.mapRenderer.state};
+      },
       getSnapshot() {
         return state.mapLibreRenderer?.snapshot() || state.mapRenderer;
       },
@@ -2566,10 +2947,19 @@
         return state.mapLibreRenderer?.screenPoint(reference) || null;
       },
     });
+    window.addEventListener("pagehide", () => { void disposePretripMapRenderer(); });
+    window.addEventListener("pageshow", event => {
+      if (event.persisted && state.mapLibreDisposed) {
+        state.mapLibreDisposed = false;
+        state.mapLibreDisposePromise = null;
+        void initializePretripMapRenderer();
+      }
+    });
     const hoverHint = document.getElementById("hoverHint");
     let treeClickFocusTimer = null;
     const MAP_LAYER_RANKS = {
       imagery: 0,
+      "historical-map": 2,
       "rudy": 4,
       "rudy-twmap": 4,
       relief: 4,
@@ -2589,6 +2979,7 @@
       "risk-delta": 56,
       "soil-moisture": 57,
       "antecedent-rain": 58,
+      "weather-api": 80,
       "cwa-qpf": 59,
       "risk-score": 60,
       checkpoints: 62,
@@ -2598,16 +2989,46 @@
       "cwa-weather": 67,
       mcp: 68,
       "boss-points": 70,
-      events: 72,
-      "weather-api": 80
+      events: 72
     };
+    const MAP_ROUTE_FOREGROUND_LAYER_IDS = Object.freeze([
+      "reference-tracks",
+      "retreat",
+      "route",
+      "segments",
+      "checkpoints",
+      "route-notes",
+      "mcp",
+      "boss-points",
+      "events",
+    ]);
 
     function apiBase() {
+      if (DIAGNOSTIC_MAP_PROBE) return "";
       const params = new URLSearchParams(location.search);
       const override = params.get("apiBase") || localStorage.getItem("scout.adminApiBase");
       if (override) return override.replace(/\/$/, "");
       if (location.protocol === "file:") return "http://scout.local:9100";
       return "";
+    }
+    function historicalMapStorageKey() {
+      return `scout.historicalMapSource.${PROJECT_ID}`;
+    }
+    function initialHistoricalMapSourceId() {
+      const params = new URLSearchParams(window.location.search);
+      const requested = params.get("historicalMap")
+        || localStorage.getItem(historicalMapStorageKey());
+      return HISTORICAL_MAP_SOURCE_BY_ID[requested]
+        ? requested
+        : DEFAULT_HISTORICAL_MAP_SOURCE_ID;
+    }
+    function selectedHistoricalMapDefinition(sourceId = state.historicalMapSourceId) {
+      return HISTORICAL_MAP_SOURCE_BY_ID[sourceId]
+        || HISTORICAL_MAP_SOURCE_BY_ID[DEFAULT_HISTORICAL_MAP_SOURCE_ID];
+    }
+    function rasterDefinitionForLayerId(layerId) {
+      if (layerId === HISTORICAL_MAP_LAYER_ID) return selectedHistoricalMapDefinition();
+      return RASTER_SOURCE_LAYER_BY_ID[layerId];
     }
     function applyOsmCartoPalette(payload) {
       const variables = payload?.css_variables || {};
@@ -2646,7 +3067,7 @@
     }
     function rasterLayerFor(view, layerId = "imagery") {
       const explicitLayer = mapLayerById(view, layerId);
-      const definition = RASTER_SOURCE_LAYER_BY_ID[layerId];
+      const definition = rasterDefinitionForLayerId(layerId);
       if (explicitLayer.layer_id) {
         return {
           ...explicitLayer,
@@ -2657,7 +3078,28 @@
       }
       if (!definition) return mapLayerById(view, "imagery");
       const imageryLayer = mapLayerById(view, "imagery");
-      const layerManifest = imageryLayer.raster_layer_manifests?.[layerId] || {};
+      const manifestLayerId = definition.cacheLayerId || layerId;
+      const layerManifest = imageryLayer.raster_layer_manifests?.[manifestLayerId] || {};
+      if (layerId === HISTORICAL_MAP_LAYER_ID) {
+        return {
+          ...layerManifest,
+          layer_id: HISTORICAL_MAP_LAYER_ID,
+          label: definition.labelZh || definition.label,
+          source_kind: layerManifest.imagery_source_kind || definition.sourceKind,
+          imagery_source_id: definition.sourceId,
+          raster_layer_opacity: definition.opacity,
+          raster_bbox_wgs84: layerManifest.raster_bbox_wgs84
+            || imageryLayer.raster_bbox_wgs84
+            || imageryLayer.imagery_bbox_wgs84,
+          raster_tile_min_zoom: layerManifest.raster_tile_min_zoom ?? definition.minZoom,
+          raster_tile_max_zoom: layerManifest.raster_tile_max_zoom ?? definition.maxZoom,
+          attribution: definition.attribution,
+          candidate_only: true,
+          runtime_safety_truth: false,
+          operational: false,
+          visualization_only: true
+        };
+      }
       return {
         ...imageryLayer,
         ...layerManifest,
@@ -2666,6 +3108,7 @@
         source_kind: layerManifest.imagery_source_kind || definition.sourceKind,
         imagery_source_id: layerManifest.imagery_source_id || definition.sourceId,
         raster_layer_opacity: definition.opacity,
+        attribution: layerManifest.attribution || definition.attribution || imageryLayer.attribution,
         candidate_only: true,
         runtime_safety_truth: false
       };
@@ -2678,14 +3121,41 @@
     }
     function rasterSourceDefinitionFor(layerId, layer = {}) {
       const sourceId = layer.imagery_source_id || layer.source_id;
-      return RASTER_SOURCE_LAYER_BY_ID[layerId]
+      return rasterDefinitionForLayerId(layerId)
         || RASTER_SOURCE_LAYER_DEFINITIONS.find(definition => definition.sourceId === sourceId)
         || RASTER_SOURCE_LAYER_BY_ID.imagery;
     }
     function rasterTileTemplate(view, layerId = "imagery") {
       const layer = rasterLayerFor(view, layerId);
       const definition = rasterSourceDefinitionFor(layerId, layer);
-      return definition.urlTemplate || "";
+      const configuredTemplate = layerId === HISTORICAL_MAP_LAYER_ID
+        ? `/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png`
+        : layer.local_raster_tile_url_template
+          || `/admin/tiles/imagery/{project_id}/{layer_id}/{z}/{x}/{y}.png`;
+      const cacheLayerId = definition.cacheLayerId || layerId;
+      const resolvedTemplate = apiUrlTemplate(configuredTemplate
+        .replaceAll("{project_id}", encodeURIComponent(PROJECT_ID))
+        .replaceAll("{layer_id}", encodeURIComponent(cacheLayerId)));
+      const queryIndex = resolvedTemplate.indexOf("?");
+      const path = queryIndex >= 0 ? resolvedTemplate.slice(0, queryIndex) : resolvedTemplate;
+      const query = queryIndex >= 0 ? resolvedTemplate.slice(queryIndex + 1) : RASTER_WORKSPACE_CACHE_QUERY;
+      const params = new URLSearchParams(query);
+      params.set("source_id", definition.sourceId);
+      if (definition.sourceId === "happyman_rudy_twmap") params.set("exact", "1");
+      const rudyBasemap = definition.sourceId === "happyman_rudy_twmap";
+      if (state.rasterRemoteRefreshEnabled && (rudyBasemap || state.rasterForceRemoteRefresh)) {
+        params.delete("cache_only");
+        params.set("native", "1");
+        if (state.rasterForceRemoteRefresh) params.set("refresh", "1");
+        else params.delete("refresh");
+        params.set("v", `${RASTER_TILE_CACHE_BUST}-${state.rasterRefreshNonce}`);
+      } else {
+        params.delete("native");
+        params.delete("refresh");
+        params.set("cache_only", "1");
+        params.set("v", RASTER_TILE_CACHE_BUST);
+      }
+      return `${path}?${params.toString()}`;
     }
     function normalizeRasterBounds(value) {
       if (!value) return null;
@@ -2703,6 +3173,8 @@
       return normalizeRasterBounds(layer.raster_bbox_wgs84 || layer.bbox_wgs84 || layer.georeference?.bbox_wgs84);
     }
     function isDirectRuntimeRasterLayer(layer) {
+      if (layer?.local_raster_tile_url_template
+        || String(layer?.raster_tile_delivery || "").startsWith("workspace_cache")) return false;
       const sourceKind = String(layer?.source_kind || layer?.imagery_source_kind || "");
       return layer?.raster_tile_delivery === "direct_wmts_runtime"
         || layer?.render_mode === "wmts_raster_tile"
@@ -2720,12 +3192,10 @@
       const layer = rasterLayerFor(view, layerId);
       const definition = rasterSourceDefinitionFor(layerId, layer);
       const parsed = parseZoomRange(layer.raster_tile_zoom_range || layer.zoom_range);
-      const forceDefinitionRange = layerId === "rudy-twmap";
-      const min = Number(forceDefinitionRange
-        ? definition?.minZoom
-        : layer.raster_tile_min_zoom ?? layer.min_zoom ?? parsed?.min ?? definition?.minZoom ?? OSM_MIN_ZOOM);
-      const max = Number(forceDefinitionRange
-        ? definition?.maxZoom
+      const min = Number(layer.raster_tile_min_zoom ?? layer.min_zoom ?? parsed?.min ?? definition?.minZoom ?? OSM_MIN_ZOOM);
+      // Preparation coverage is not the provider's native detail limit.
+      const max = Number(definition?.sourceId === "happyman_rudy_twmap"
+        ? definition.maxZoom
         : layer.raster_tile_max_zoom ?? layer.max_zoom ?? parsed?.max ?? definition?.maxZoom ?? OSM_TARGET_ZOOM);
       const safeMin = Number.isFinite(min) ? clamp(Math.round(min), OSM_MIN_ZOOM, OSM_MAX_ZOOM) : OSM_MIN_ZOOM;
       const safeMax = Number.isFinite(max) ? clamp(Math.round(max), safeMin, OSM_MAX_ZOOM) : OSM_TARGET_ZOOM;
@@ -2737,8 +3207,12 @@
     }
     function rasterTileCacheBustedUrl(url) {
       if (url.startsWith("http://") || url.startsWith("https://")) return url;
+      const additions = [];
+      if (!/[?&]fallback=/.test(url)) additions.push("fallback=transparent");
+      if (!/[?&]v=/.test(url)) additions.push(`v=${RASTER_TILE_CACHE_BUST}`);
+      if (!additions.length) return url;
       const separator = url.includes("?") ? "&" : "?";
-      return `${url}${separator}fallback=transparent&v=${RASTER_TILE_CACHE_BUST}`;
+      return `${url}${separator}${additions.join("&")}`;
     }
     function osmTileCacheBustedUrl(url) {
       if (url.startsWith("http://") || url.startsWith("https://")) return url;
@@ -3244,42 +3718,19 @@
         .replaceAll("{x}", String(x))
         .replaceAll("{y}", String(y));
     }
-    function wmtsTileUrl(definition, z, x, y) {
-      if (definition.sourceKind === "scout_proxy_tile") {
-        const tileBase = location.protocol === "file:" ? apiBase() : location.origin;
-        const path = [
-          tileBase,
-          "admin/tiles/imagery",
-          encodeURIComponent(PROJECT_ID),
-          encodeURIComponent(definition.cacheLayerId),
-          String(z),
-          String(x),
-          `${String(y)}.png`
-        ].join("/");
-        return `${path}?source_id=${encodeURIComponent(definition.sourceId)}&native=1`;
-      }
-      if (definition.sourceKind === "wmts_kvp_tile") {
-        const params = new URLSearchParams({
-          SERVICE: "WMTS",
-          REQUEST: "GetTile",
-          VERSION: definition.wmtsVersion || "1.0.0",
-          LAYER: definition.wmtsLayer,
-          STYLE: definition.wmtsStyle || "default",
-          TILEMATRIXSET: definition.wmtsTileMatrixSet,
-          TILEMATRIX: wmtsTileMatrixId(definition, z),
-          TILEROW: String(y),
-          TILECOL: String(x),
-          FORMAT: definition.wmtsFormat || "image/png"
-        });
-        return `${definition.wmtsEndpoint}?${params.toString()}`;
-      }
-      return replaceTilePlaceholders(definition.urlTemplate || rasterTileTemplate(null, definition.layerId), z, x, y);
+    function wmtsTileUrl(definition, z, x, y, view = state.view) {
+      return replaceTilePlaceholders(
+        rasterTileTemplate(view, definition.layerId),
+        z,
+        x,
+        y
+      );
     }
     function rasterTileUrl(view, requestedLayerId, z, x, y) {
       const layer = rasterLayerFor(view, requestedLayerId);
       const resolvedLayerId = layer.layer_id || "imagery";
       const definition = rasterSourceDefinitionFor(resolvedLayerId, layer);
-      return rasterTileCacheBustedUrl(wmtsTileUrl(definition, z, x, y));
+      return rasterTileCacheBustedUrl(wmtsTileUrl(definition, z, x, y, view));
     }
     function mapLibreRasterNetworkScope(template) {
       if (String(template || "").startsWith("/")) return "same_origin";
@@ -3332,15 +3783,51 @@
         }];
       });
     }
+    function pretripMapLibreCwaImageLayers() {
+      if (!layerInputChecked("cwa-weather")) return [];
+      const expectedAssetPrefix = `/admin/pretrip/projects/${encodeURIComponent(PROJECT_ID)}/weather-imagery/`;
+      return ["satellite", "radar"].flatMap(family => {
+        const frame = selectedCwaImageryFrame(family);
+        const imageCoordinates = mapLibreImageCoordinates(frame?.bboxWgs84);
+        if (!frame?.assetUrl
+          || !frame.assetUrl.startsWith(expectedAssetPrefix)
+          || !imageCoordinates
+          || frame.mapOverlaySupported === false) return [];
+        const imageUrl = frame.assetUrl;
+        return [{
+          layer_id: `cwa-weather-${family}`,
+          control_layer_id: "cwa-weather",
+          source_id: frame.frameId || frame.productId || `cwa-weather-${family}`,
+          source_type: "image",
+          image_url: imageUrl,
+          image_coordinates: imageCoordinates,
+          opacity: family === "radar" ? cwaImageryUi.radarOpacity : cwaImageryUi.satelliteOpacity,
+          visible: true,
+          render_position: "overlay",
+          network_scope: "same_origin",
+          candidate_only: true,
+          runtime_safety_truth: false,
+          operational: false,
+          visualization_only: true,
+          adds_source_resolution: false,
+          source_resolution: frame.sourceResolution || "unavailable",
+          sha256: frame.sha256 || frame.artifactHash || null,
+        }];
+      });
+    }
     function pretripMapLibreRasterLayers(view) {
-      const tiledLayers = ["rudy-twmap", "osm"].map(layerId => {
+      const rasterLayerIds = [
+        ...RASTER_SOURCE_LAYER_DEFINITIONS.map(definition => definition.layerId),
+        "osm"
+      ];
+      const tiledLayers = rasterLayerIds.map(layerId => {
         const layer = layerId === "osm" ? mapLayerById(view, "osm") : rasterLayerFor(view, layerId);
         const definition = layerId === "osm"
           ? null
           : rasterSourceDefinitionFor(layerId, layer);
         const template = layerId === "osm"
           ? osmTileTemplate()
-          : wmtsTileUrl(definition, "{z}", "{x}", "{y}");
+          : rasterTileTemplate(view, layerId);
         const range = layerId === "osm"
           ? {min: OSM_MIN_ZOOM, max: OSM_MAX_ZOOM}
           : rasterZoomRangeFor(view, layerId);
@@ -3363,7 +3850,11 @@
           adds_source_resolution: false,
         };
       });
-      return [...tiledLayers, ...pretripMapLibreTerrainImageLayers(view)];
+      return [
+        ...tiledLayers,
+        ...pretripMapLibreTerrainImageLayers(view),
+        ...pretripMapLibreCwaImageLayers(),
+      ];
     }
     function localOsmPbfVectorUrl(view) {
       const layer = mapLayerById(view, "osm");
@@ -3388,13 +3879,26 @@
       while (zoom > OSM_MIN_ZOOM && tileCountForZoom(bounds, zoom) > maxTiles) zoom -= 1;
       return zoom;
     }
+    function rasterMapWorldPixelScale(view, zoom = 1) {
+      if (!view?.route) return null;
+      const frame = mercatorFrameForBounds(boundsFor(view));
+      const rect = svg.getBoundingClientRect();
+      const width = Number(rect.width) > 0 ? Number(rect.width) : MAP_WIDTH;
+      const height = Number(rect.height) > 0 ? Number(rect.height) : MAP_HEIGHT;
+      // SVG uses xMidYMid meet; CSS pixels keep the 256 px tile scale consistent.
+      const cssScale = Math.min(width / MAP_WIDTH, height / MAP_HEIGHT);
+      const worldPixels = frame.scale * cssScale * Math.max(MAP_MIN_ZOOM, Number(zoom) || 1);
+      return Number.isFinite(worldPixels) && worldPixels > 0 ? worldPixels : null;
+    }
     function chooseRasterZoom(view, bounds, maxTiles = RASTER_MAX_TILES, layerId = "imagery") {
       const range = rasterZoomRangeFor(view, layerId);
       const effectiveMaxTiles = layerId === "rudy-twmap" ? RUDY_TWMAP_MAX_TILES : maxTiles;
-      const definition = rasterSourceDefinitionFor(layerId, rasterLayerFor(view, layerId));
-      let zoom = layerId === "rudy-twmap"
+      const worldPixelsAtFit = layerId === "rudy-twmap" ? rasterMapWorldPixelScale(view) : null;
+      // Keep Fit + first zoom advancing native detail; separate rounding can
+      // request at most one extra level versus the current CSS pixel scale.
+      let zoom = worldPixelsAtFit
         ? clamp(
-            definition.initialMaxZoom + Math.ceil(Math.log2(Math.max(1, state.zoom))),
+            Math.ceil(Math.log2(worldPixelsAtFit / 256)) + Math.ceil(Math.log2(Math.max(1, state.zoom))),
             range.min,
             range.max,
           )
@@ -3485,14 +3989,16 @@
           opacity: Number.isFinite(opacity) ? opacity.toFixed(2) : "0.92"
         });
         positionTileImage(image, bounds, tile);
-        attachTileFallback(
-          image,
-          bounds,
-          tile,
-          fallbackTile => rasterTileUrl(view, layerId, fallbackTile.z, fallbackTile.x, fallbackTile.y),
-          range.min,
-          "data-raster-tile"
-        );
+        if (layerId !== "rudy-twmap") {
+          attachTileFallback(
+            image,
+            bounds,
+            tile,
+            fallbackTile => rasterTileUrl(view, layerId, fallbackTile.z, fallbackTile.x, fallbackTile.y),
+            range.min,
+            "data-raster-tile"
+          );
+        }
         group.appendChild(image);
       });
     }
@@ -4554,8 +5060,32 @@
         "rudy-twmap",
       );
       group.dataset.nativeTileFailure = reason;
-      updateMapZoomIndicator(`native Z${failedTileZoom} unavailable · previous complete tiles retained at current view`);
+      group.dataset.requestedTileZoom = String(failedTileZoom);
+      if (state.mapRenderer?.active !== "maplibre") updateRudyTileStatus(group, true);
       state.lastFailedNativeMapZoom = failedZoom;
+    }
+    function updateRudyTileStatus(group, failed = false) {
+      const zooms = [...new Set([...group.querySelectorAll('image[data-raster-tile]')]
+        .map(image => Number(image.getAttribute("data-raster-tile").split("/")[0]))
+        .filter(Number.isFinite))].sort((a, b) => a - b);
+      const displayed = zooms.length ? (zooms.length === 1 ? `Z${zooms[0]}` : `Z${zooms[0]}–${zooms.at(-1)}`) : "無";
+      group.dataset.displayedTileZoom = zooms.join(",");
+      const requested = group.dataset.requestedTileZoom || zooms.at(-1) || "?";
+      const statusOutput = document.getElementById("mapRendererStatus");
+      const shell = document.getElementById("mapRendererShell");
+      if (shell) shell.dataset.mapRasterState = failed ? "degraded" : "available";
+      if (failed) {
+        updateMapZoomIndicator(`· 需要 Z${requested}／目前 ${displayed}`);
+        if (statusOutput) statusOutput.textContent = state.rasterRemoteRefreshEnabled
+          ? `Z${requested} 圖磚未能完整載入；保留 ${displayed} 圖磚與目前視角。可停止更新後重試。`
+          : `快取未能提供完整 Z${requested} 圖磚；目前放大 ${displayed} 圖磚。按「更新圖磚」或 Layers 內的 ↻ 載入細節。`;
+      } else {
+        delete group.dataset.nativeTileFailure;
+        delete state.lastFailedNativeMapZoom;
+        group.dataset.requestedTileZoom = String(zooms.at(-1) || "");
+        updateMapZoomIndicator(`· 圖磚 ${displayed}`);
+        if (statusOutput) statusOutput.textContent = `SVG 地圖 · 已載入 ${displayed} 圖磚；${state.rasterRemoteRefreshEnabled ? "圖磚更新已開啟，可按「停止更新」回到快取模式。" : "使用工作區快取。"}`;
+      }
     }
     function markRasterLayerGenerationActive(group) {
       group.dataset.activeTileGenerationKey = rasterLayerTileGenerationKey(group);
@@ -4567,6 +5097,7 @@
         group.querySelectorAll('[data-tile-generation="pending"]'),
       );
       pendingGenerations.forEach(pending => {
+        pending.cancelRasterGeneration?.();
         pending.querySelectorAll("image").forEach(image => image.removeAttribute("href"));
         pending.remove();
       });
@@ -4578,6 +5109,7 @@
       return discarded;
     }
     function replaceRasterLayerWhenReady(group, renderCandidate, onFailure = null) {
+      if (state.mapLibreDisposed) return false;
       const requestedViewState = mapViewStateSnapshot();
       const candidate = el("g", {
         "data-tile-generation": "pending",
@@ -4618,11 +5150,20 @@
       let loadedCount = 0;
       let settled = false;
       let timeoutId = null;
+      candidate.cancelRasterGeneration = () => {
+        settled = true;
+        if (timeoutId !== null) window.clearTimeout(timeoutId);
+        timeoutId = null;
+      };
       group.dataset.pendingTileGenerationKey = generationKey;
       group.dataset.tileGenerationState = "loading";
 
+      const isCurrentGeneration = () => (
+        group.dataset.pendingTileGenerationKey === generationKey
+        && candidate.parentNode === group
+      );
       const clearPendingState = () => {
-        if (group.dataset.pendingTileGenerationKey === generationKey) {
+        if (isCurrentGeneration()) {
           delete group.dataset.pendingTileGenerationKey;
         }
       };
@@ -4630,41 +5171,60 @@
         if (settled) return;
         settled = true;
         if (timeoutId !== null) window.clearTimeout(timeoutId);
+        timeoutId = null;
+        const wasCurrentGeneration = isCurrentGeneration();
+        clearPendingState();
         images.forEach(image => image.removeAttribute("href"));
         candidate.remove();
-        const isCurrentGeneration = group.dataset.pendingTileGenerationKey === generationKey;
-        clearPendingState();
-        if (isCurrentGeneration) {
+        if (wasCurrentGeneration) {
           group.dataset.tileGenerationState = "retained-previous";
           onFailure?.({group, generationKey, reason});
         }
       };
+      const resetIdleTimeout = () => {
+        if (settled || !isCurrentGeneration()) return;
+        if (timeoutId !== null) window.clearTimeout(timeoutId);
+        timeoutId = window.setTimeout(
+          () => discardCandidate("timeout"),
+          RASTER_TILE_SWAP_TIMEOUT_MS,
+        );
+      };
       const promoteCandidate = () => {
         if (settled) return;
-        if (group.dataset.pendingTileGenerationKey !== generationKey) {
+        if (!isCurrentGeneration()) {
           discardCandidate();
           return;
         }
         settled = true;
         if (timeoutId !== null) window.clearTimeout(timeoutId);
+        timeoutId = null;
         Array.from(group.children).forEach(child => {
           if (child !== candidate) child.remove();
         });
         candidate.setAttribute("data-tile-generation", "active");
         candidate.removeAttribute("opacity");
         candidate.removeAttribute("pointer-events");
+        candidate.removeAttribute("aria-hidden");
         group.dataset.activeTileGenerationKey = generationKey;
         group.dataset.tileGenerationState = "ready";
         rememberRudyMapView(group, requestedViewState);
         clearPendingState();
+        if (group.dataset.layerGroup === "rudy-twmap" && state.mapRenderer?.active !== "maplibre") {
+          updateRudyTileStatus(group);
+        }
         enforceMapRenderPolicy(svg);
       };
 
       images.forEach(image => {
         image.addEventListener("load", () => {
           if (settled || image.dataset.tileGenerationLoaded === "true") return;
+          if (!isCurrentGeneration()) {
+            discardCandidate("superseded");
+            return;
+          }
           image.dataset.tileGenerationLoaded = "true";
           loadedCount += 1;
+          resetIdleTimeout();
           if (loadedCount !== images.length) return;
           promoteCandidate();
         });
@@ -4673,11 +5233,8 @@
         }, {once: true});
       });
       group.appendChild(candidate);
+      resetIdleTimeout();
       images.forEach(image => image.setAttribute("href", initialHrefs.get(image)));
-      timeoutId = window.setTimeout(
-        () => discardCandidate("timeout"),
-        RASTER_TILE_SWAP_TIMEOUT_MS,
-      );
       return true;
     }
     function renderRasterBasemapLayers(view) {
@@ -4718,10 +5275,17 @@
     function mapLayerRank(node) {
       return MAP_LAYER_RANKS[node.dataset.layerGroup] ?? 50;
     }
+    function promoteRouteVisibilityLayerGroups() {
+      MAP_ROUTE_FOREGROUND_LAYER_IDS
+        .map(layerId => svg.querySelector(`:scope > [data-layer-group="${layerId}"]`))
+        .filter(Boolean)
+        .forEach(node => svg.appendChild(node));
+    }
     function orderMapLayerGroups() {
       [...svg.querySelectorAll(":scope > [data-layer-group]")]
         .sort((left, right) => mapLayerRank(left) - mapLayerRank(right))
         .forEach(node => svg.appendChild(node));
+      promoteRouteVisibilityLayerGroups();
     }
     function mapKeyboardPanDelta(event) {
       const step = event.shiftKey ? 140 : 70;
@@ -4743,7 +5307,7 @@
       const mapHasFocus = document.activeElement === svg
         || svg.contains(document.activeElement)
         || mapLibreHost?.contains(document.activeElement);
-      if (!state.mapKeyboardActive && !mapHasFocus) return;
+      if (!mapHasFocus) return;
       if (delta) panActiveMap(delta[0], delta[1]);
       else if (event.key === "+" || event.key === "=") zoomActiveMap(1);
       else if (event.key === "-") zoomActiveMap(-1);
@@ -4771,23 +5335,38 @@
         state.mapKeyboardActive = false;
       }
     }
-    function updateMapZoomIndicator(extraLabel = "") {
+    function updateMapZoomIndicator(extraLabel = "", viewState = null) {
       const zoomIn = document.getElementById("zoomIn");
       const zoomOut = document.getElementById("zoomOut");
-      if (zoomIn) zoomIn.disabled = state.zoom >= mapInteractionMaxZoom() - 0.001;
-      if (zoomOut) zoomOut.disabled = state.zoom <= MAP_MIN_ZOOM + 0.001;
+      const mapLibreHost = document.getElementById("mapLibreEvidenceMap");
+      const mapLibreZoom = viewState?.zoom ?? (state.mapRenderer.active === "maplibre"
+        ? mapLibreHost?.dataset.maplibreZoom
+        : null);
+      const hasMapLibreZoom = mapLibreZoom != null && mapLibreZoom !== "" && Number.isFinite(Number(mapLibreZoom));
+      if (zoomIn) zoomIn.disabled = hasMapLibreZoom
+        ? Number(mapLibreZoom) >= (viewState?.maxZoom ?? state.mapLibreRenderer?.map?.getMaxZoom?.() ?? 22) - 0.001
+        : state.zoom >= mapInteractionMaxZoom() - 0.001;
+      if (zoomOut) zoomOut.disabled = hasMapLibreZoom
+        ? Number(mapLibreZoom) <= (viewState?.minZoom ?? state.mapLibreRenderer?.map?.getMinZoom?.() ?? 0) + 0.001
+        : state.zoom <= MAP_MIN_ZOOM + 0.001;
       const node = document.getElementById("zoomLevel");
       if (!node) return;
-      const mapLibreZoom = state.mapRenderer.active === "maplibre"
-        ? state.mapLibreRenderer?.snapshot?.().zoom
-        : null;
-      const zoomText = Number.isFinite(Number(mapLibreZoom))
+      const zoomText = hasMapLibreZoom
         ? `z${Number(mapLibreZoom).toFixed(1)}`
         : `${state.zoom.toFixed(2)}x`;
-      node.textContent = extraLabel ? `${zoomText} ${extraLabel}` : zoomText;
-      node.title = state.mapInteractionMode === "box"
-        ? "Map zoom; point and rectangle zoom are active."
-        : "Map zoom; mouse drag pan is active.";
+      const raster = hasMapLibreZoom ? mapLibreHost?.dataset : null;
+      const nativeZoom = raster?.maplibreRasterNativeZoom;
+      const verifiedZoom = raster?.maplibreRasterVerifiedNativeZoom;
+      const tileLabel = nativeZoom != null && nativeZoom !== ""
+        ? verifiedZoom != null && verifiedZoom !== ""
+          ? `· 圖磚 Z${verifiedZoom}`
+          : Number(raster.maplibreRasterErrorCount) > 0 ? `· 缺 Z${nativeZoom}` : `· 載入 Z${nativeZoom}`
+        : extraLabel;
+      node.textContent = tileLabel ? `${zoomText} ${tileLabel}` : zoomText;
+      const interaction = state.mapInteractionMode === "box" ? "點選或框選放大" : "拖曳平移";
+      node.title = nativeZoom != null && nativeZoom !== ""
+        ? `視角 ${zoomText}；原生圖磚 Z${nativeZoom}：${raster.maplibreRasterSuccessCount || 0}/${raster.maplibreRasterRequiredCount || 0} 張已載入；${interaction}。`
+        : `地圖縮放；${interaction}。`;
     }
     function setMapInteractionMode(mode) {
       state.mapInteractionMode = mode === "box" ? "box" : "pan";
@@ -4885,10 +5464,10 @@
     }
     function mapInteractionMaxZoom() {
       if (!layerInputChecked("rudy-twmap")) return MAP_MAX_ZOOM;
-      const definition = RASTER_SOURCE_LAYER_BY_ID["rudy-twmap"];
-      const initialZoom = Number(definition?.initialMaxZoom) || 13;
-      const nativeMaxZoom = Number(definition?.maxZoom) || initialZoom;
-      return Math.max(1, 2 ** Math.max(0, nativeMaxZoom - initialZoom));
+      const worldPixelsAtFit = rasterMapWorldPixelScale(state.view);
+      if (!worldPixelsAtFit) return MAP_MAX_ZOOM;
+      const nativeMaxZoom = rasterZoomRangeFor(state.view, "rudy-twmap").max;
+      return Math.max(1, 256 * (2 ** nativeMaxZoom) / worldPixelsAtFit);
     }
     function panMap(dx, dy) {
       state.panX += dx / state.zoom;
@@ -5075,7 +5654,10 @@
       svg.querySelectorAll(".map-highlight").forEach(node => node.classList.remove("map-highlight"));
       const targets = mapTargetsFor(item);
       targets.forEach(node => node.classList.add("map-highlight"));
-      targets.slice(0, 4).forEach(node => node.parentNode && node.parentNode.appendChild(node));
+      targets.slice(0, 4).forEach(node => {
+        // Reparenting focused SVG evidence blurs it during its own focus handler.
+        if (node.parentNode && !node.contains(document.activeElement)) node.parentNode.appendChild(node);
+      });
     }
     function mapTargetsFor(item) {
       const ids = new Set(evidenceIdsForFocus(item));
@@ -6160,13 +6742,20 @@
         .split(",")
         .map(layer => layer.trim())
         .filter(Boolean);
+      const networkMode = importGpxInputValue("prepareLayersNetworkMode") || "no-network";
+      const allowNetworkFetch = document.getElementById("prepareAllowNetworkFetch").checked;
+      const seedWorkspaceRasterCache = networkMode === "explicit-fetch" && allowNetworkFetch;
       return {
         layers,
         workspace_root: optionalImportGpxInputValue("prepareLayersWorkspaceRoot"),
         profile: importGpxInputValue("prepareLayersProfile") || "pi-offline",
-        network_mode: importGpxInputValue("prepareLayersNetworkMode") || "no-network",
-        allow_network_fetch: document.getElementById("prepareAllowNetworkFetch").checked,
-        route_corridor_m: importGpxPositiveNumber("prepareRouteCorridorM")
+        network_mode: networkMode,
+        allow_network_fetch: allowNetworkFetch,
+        route_corridor_m: importGpxPositiveNumber("prepareRouteCorridorM"),
+        imagery_min_zoom: 5,
+        imagery_max_zoom: 14,
+        seed_imagery_cache: seedWorkspaceRasterCache,
+        imagery_provider_allows_offline_prefetch: seedWorkspaceRasterCache
       };
     }
     function prepareLayersValidationErrors(payload) {
@@ -6461,6 +7050,7 @@
       }
     }
     async function postJson(path, payload) {
+      if (DIAGNOSTIC_MAP_PROBE) throw new Error("Map order diagnostics are read-only.");
       return window.ScoutAssistantUI.postJson(path, payload, {apiBase});
     }
     async function fetchJson(path) {
@@ -7045,6 +7635,7 @@
       node.addEventListener("blur", hideHint);
       node.addEventListener("click", event => { selectEvidence(item, {timeline: true, expandEvidenceGroup: true}); focusMapFor(item); showHint(event, item); });
       node.addEventListener("keydown", event => {
+        if (event.key === "Escape") { event.preventDefault(); hideHint(); return; }
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           selectEvidence(item, {timeline: true, expandEvidenceGroup: true});
@@ -7132,11 +7723,78 @@
       }));
       return feature;
     }
+    function mapLibreGeometryBounds(geometry) {
+      let west = Infinity;
+      let south = Infinity;
+      let east = -Infinity;
+      let north = -Infinity;
+      const visit = value => {
+        if (!Array.isArray(value)) return;
+        if (
+          value.length >= 2
+          && Number.isFinite(Number(value[0]))
+          && Number.isFinite(Number(value[1]))
+        ) {
+          const lon = Number(value[0]);
+          const lat = Number(value[1]);
+          west = Math.min(west, lon);
+          south = Math.min(south, lat);
+          east = Math.max(east, lon);
+          north = Math.max(north, lat);
+          return;
+        }
+        value.forEach(visit);
+      };
+      visit(geometry?.coordinates);
+      if (![west, south, east, north].every(Number.isFinite)) return null;
+      return {west, south, east, north};
+    }
+    function mapLibreOsmFeatureLabel(feature, category) {
+      const label = String(osmPbfFeatureLabel(feature) || "").trim();
+      if (label && label !== "OSM feature" && !/^\d+$/.test(label)) return label;
+      return `Local OSM ${category || "feature"}`;
+    }
+    function appendPretripMapLibreOsmFeatures(append, view) {
+      const routeBounds = boundsFor(view);
+      let appended = 0;
+      (state.osmPbfVector?.features || []).forEach(feature => {
+        const geometry = feature?.geometry;
+        if (!geometry || ![
+          "Point",
+          "MultiPoint",
+          "LineString",
+          "MultiLineString",
+          "Polygon",
+          "MultiPolygon",
+        ].includes(geometry.type)) return;
+        const geometryBounds = mapLibreGeometryBounds(geometry);
+        if (!geometryBounds || !boundsIntersect(routeBounds, geometryBounds)) return;
+        const category = osmPbfStyleCategory(feature);
+        const item = osmPbfFeatureItem(feature, category);
+        const semanticLabel = mapLibreOsmFeatureLabel(feature, category);
+        if (
+          geometry.type === "Point"
+          && category === "default"
+          && semanticLabel === "Local OSM default"
+        ) return;
+        append(item, "osm", geometry, {
+          display_label: semanticLabel,
+          osm_style_category: category,
+          osm_source_kind: "local_osm_pbf_vector",
+          source_path: item.source_path,
+          render_position: "base",
+          visualization_only: true,
+        });
+        appended += 1;
+      });
+      return appended;
+    }
     function pretripMapLibreFeatureCollection(view) {
       const features = [];
       const append = (item, layerId, geometry, properties = {}) => (
         appendPretripMapLibreFeature(features, item, layerId, geometry, properties)
       );
+      appendPretripMapLibreOsmFeatures(append, view);
       const item = view.route;
       append(item, "route", mapLibreLineGeometryFromSegments(
         coordinateSegments(view.route.display_geometry, view.route.polyline || [])
@@ -7185,6 +7843,21 @@
       (view.risk_delta?.segments || []).forEach(segment => {
         append(segment, "risk-delta", mapLibreLineGeometry(segment.coordinates));
       });
+      (view.cwa_qpf?.grid_cells || [])
+        .filter(cell => (
+          cell.grid_kind === cwaImageryUi.rainfallProduct
+          && Number(cell.rainfall_mm || 0) > 0
+        ))
+        .forEach(cell => {
+          append({...cell, source_id: cell.cell_id}, "cwa-qpf", mapLibrePolygonGeometry(cell.coordinates), {
+            display_label: `${cell.grid_kind} · ${Number(cell.rainfall_mm || 0)} mm`,
+            render_position: "overlay",
+            render_color: cwaRainfallColor(cell.rainfall_mm),
+            render_opacity: cwaImageryUi.rainfallOpacity,
+            rainfall_mm: Number(cell.rainfall_mm || 0),
+            grid_kind: cell.grid_kind,
+          });
+        });
       (view.map_candidates?.poi_candidates || []).forEach(candidate => {
         append(candidate, "pois", mapLibrePointGeometry(candidate));
       });
@@ -7237,9 +7910,15 @@
 
       RASTER_OVERLAY_LAYER_DEFINITIONS.forEach(layer => {
         const rasterGroup = el("g", {"data-layer-group": layer.layerId});
-        if (layerInputChecked(layer.layerId)) renderRasterLayer(rasterGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT, layer.layerId, coverageBounds);
-        markRasterLayerGenerationActive(rasterGroup);
         svg.appendChild(rasterGroup);
+        if (layer.layerId === "rudy-twmap") {
+          replaceRasterLayerWhenReady(rasterGroup, candidate => {
+            if (layerInputChecked(layer.layerId)) renderRasterLayer(candidate, view, bounds, MAP_WIDTH, MAP_HEIGHT, layer.layerId, coverageBounds);
+          }, ({reason}) => retainRudyMapViewAfterTileFailure(rasterGroup, reason));
+        } else {
+          if (layerInputChecked(layer.layerId)) renderRasterLayer(rasterGroup, view, bounds, MAP_WIDTH, MAP_HEIGHT, layer.layerId, coverageBounds);
+          markRasterLayerGenerationActive(rasterGroup);
+        }
       });
 
       const osmGroup = el("g", {"data-layer-group": "osm"});
@@ -8248,6 +8927,90 @@
       highlightTreeNode(state.selected);
       syncLayerPresetButtons();
     }
+    function syncHistoricalMapControls() {
+      const definition = selectedHistoricalMapDefinition();
+      const select = document.querySelector("[data-historical-map-source]");
+      const status = document.querySelector("[data-historical-map-status]");
+      if (select) select.value = definition.sourceId;
+      if (status) {
+        status.dataset.sourceId = definition.sourceId;
+        status.dataset.cacheLayerId = definition.cacheLayerId;
+        status.textContent = `${definition.labelZh} · ${state.rasterRemoteRefreshEnabled && state.rasterForceRemoteRefresh ? "updating + caching" : "cache only"}`;
+      }
+    }
+    function handleHistoricalMapSourceChange(event) {
+      const requested = String(event.currentTarget.value || "");
+      if (!HISTORICAL_MAP_SOURCE_BY_ID[requested]) return;
+      state.historicalMapSourceId = requested;
+      state.rasterRefreshNonce += 1;
+      localStorage.setItem(historicalMapStorageKey(), requested);
+      const layerInput = document.querySelector(`[data-layer="${HISTORICAL_MAP_LAYER_ID}"]`);
+      if (layerInput) layerInput.checked = true;
+      syncHistoricalMapControls();
+      if (state.mapLibreRenderer && state.view) {
+        state.mapLibreRenderer.setRasterLayers(pretripMapLibreRasterLayers(state.view));
+      }
+      updateLayers();
+    }
+    function bindHistoricalMapControls() {
+      const select = document.querySelector("[data-historical-map-source]");
+      if (!select) return;
+      const options = HISTORICAL_MAP_SOURCE_DEFINITIONS.map(definition => {
+        const option = document.createElement("option");
+        option.value = definition.sourceId;
+        option.textContent = definition.labelZh;
+        return option;
+      });
+      select.replaceChildren(...options);
+      select.addEventListener("change", handleHistoricalMapSourceChange);
+      syncHistoricalMapControls();
+    }
+    function syncRasterRefreshButton() {
+      const buttons = [
+        document.getElementById("refreshRasterTiles"),
+        document.getElementById("refreshMapTiles"),
+        document.querySelector("[data-historical-map-fetch]"),
+      ].filter(Boolean);
+      buttons.forEach(button => {
+        const historicalOnly = button.hasAttribute("data-historical-map-fetch");
+        const enabled = state.rasterRemoteRefreshEnabled && (!historicalOnly || state.rasterForceRemoteRefresh);
+        button.setAttribute("aria-pressed", enabled ? "true" : "false");
+        button.title = enabled
+          ? "Stop map updates and use workspace cache only"
+          : historicalOnly
+            ? "Update selected historical map and cache it in this workspace"
+            : "Update checked raster layers from WMTS";
+        button.setAttribute("aria-label", button.title);
+        if (button.id === "refreshMapTiles") {
+          button.textContent = enabled ? "停止更新" : "更新圖磚";
+          button.setAttribute("aria-label", enabled ? "停止地圖圖磚更新" : "更新地圖圖磚");
+        }
+      });
+    }
+    function toggleRasterRemoteRefresh(event) {
+      const historicalOnly = event?.currentTarget?.hasAttribute("data-historical-map-fetch");
+      const enabled = historicalOnly
+        ? state.rasterRemoteRefreshEnabled && state.rasterForceRemoteRefresh
+        : state.rasterRemoteRefreshEnabled;
+      state.rasterRemoteRefreshEnabled = !enabled;
+      state.rasterForceRemoteRefresh = state.rasterRemoteRefreshEnabled && !DIAGNOSTIC_NATIVE_TILE_PROBE;
+      state.rasterRefreshNonce += 1;
+      syncRasterRefreshButton();
+      syncHistoricalMapControls();
+      if (state.mapLibreRenderer && state.view) {
+        state.mapLibreRenderer.setRasterLayers(pretripMapLibreRasterLayers(state.view));
+      } else if (state.view) {
+        const shell = document.getElementById("mapRendererShell");
+        if (shell) shell.dataset.mapRasterState = "loading";
+        renderRasterBasemapLayers(state.view);
+      }
+      const statusOutput = document.getElementById("mapRendererStatus");
+      if (statusOutput) {
+        statusOutput.textContent = state.rasterRemoteRefreshEnabled
+          ? "Updating checked raster layers from WMTS; refreshed tiles are saved to this workspace."
+          : "Workspace raster cache only; remote WMTS updates are off.";
+      }
+    }
     function checkedLayerIds() {
       return new Set([...document.querySelectorAll("[data-layer]:not(:disabled)")].filter(input => input.checked).map(input => input.dataset.layer));
     }
@@ -8310,10 +9073,15 @@
     function bindControls() {
       bindLayerMenuDismiss();
       bindAssistantControls();
+      bindHistoricalMapControls();
       document.querySelectorAll("[data-layer]").forEach(input => input.addEventListener("change", handleLayerChange));
       document.querySelectorAll("[data-layer-preset]").forEach(button => {
         button.addEventListener("click", () => applyLayerPreset(button.dataset.layerPreset));
       });
+      document.getElementById("refreshRasterTiles").addEventListener("click", toggleRasterRemoteRefresh);
+      document.getElementById("refreshMapTiles").addEventListener("click", toggleRasterRemoteRefresh);
+      document.querySelector("[data-historical-map-fetch]").addEventListener("click", toggleRasterRemoteRefresh);
+      syncRasterRefreshButton();
       document.querySelectorAll(".tab-button").forEach(button => button.addEventListener("click", () => setActiveTab(button.dataset.tab)));
       document.getElementById("zoomIn").addEventListener("click", () => zoomActiveMap(1));
       document.getElementById("zoomOut").addEventListener("click", () => zoomActiveMap(-1));
@@ -8728,19 +9496,19 @@
       cwaImageryUi.frameIndex = 0;
       syncCwaImageryControls();
     }
-    async function loadCwaWeatherImageryIfEnabled(projectId) {
+    async function loadCwaWeatherImageryIfEnabled(projectId, {redraw = true} = {}) {
       if (!cwaWeatherLayerInput()?.checked) {
         clearCwaWeatherImagery();
-        renderCurrentCwaImagerySurface();
+        if (redraw) renderCurrentCwaImagerySurface();
         return null;
       }
       const manifest = await loadCwaWeatherImagery(projectId);
       if (!cwaWeatherLayerInput()?.checked) {
         clearCwaWeatherImagery();
-        renderCurrentCwaImagerySurface();
+        if (redraw) renderCurrentCwaImagerySurface();
         return null;
       }
-      renderCurrentCwaImagerySurface();
+      if (redraw) renderCurrentCwaImagerySurface();
       return manifest;
     }
     async function loadCwaRainfallGridOverlay(view) {
@@ -8949,18 +9717,18 @@
       const rainfallPromise = loadCwaRainfallGridOverlay(view).then(nextView => {
         view = nextView;
         state.view = nextView;
-        renderMap(nextView);
-        publishPretripProjectBridge("base_ready");
         return nextView;
       });
-      const imageryPromise = loadCwaWeatherImageryIfEnabled(PROJECT_ID);
+      // The base map is already visible. Commit this enhancement batch once;
+      // rebuilding the complete SVG on each response blocks renderer startup
+      // and tile/decode callbacks on large real workspaces.
+      const imageryPromise = loadCwaWeatherImageryIfEnabled(PROJECT_ID, {redraw: false});
       const osmCartoPalettePromise = loadOsmCartoPalette();
-      const osmPbfVectorPromise = loadOsmPbfVectorLayer(view);
+      const osmPbfVectorPromise = loadOsmPbfVectorLayer(view, {redraw: false});
       const weatherOverlayPromise = fetch(`${apiBase()}/admin/pretrip/projects/${PROJECT_ID}/weather-overlay`)
         .then(async weatherOverlayResponse => {
           if (!weatherOverlayResponse.ok) throw new Error(`Weather overlay HTTP ${weatherOverlayResponse.status}`);
           state.weatherOverlay = await weatherOverlayResponse.json();
-          renderMap(state.view || view);
           return state.weatherOverlay;
         });
       const enhancementResults = await Promise.allSettled([
@@ -8979,7 +9747,7 @@
       }
       return state.view || view;
     }
-    async function loadOsmPbfVectorLayer(view) {
+    async function loadOsmPbfVectorLayer(view, {redraw = true} = {}) {
       const url = localOsmPbfVectorUrl(view);
       if (!url) {
         state.osmPbfVector = null;
@@ -8992,7 +9760,7 @@
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         state.osmPbfVector = await response.json();
         state.osmPbfVectorStatus = "ready";
-        renderMap(state.view || view);
+        if (redraw) renderMap(state.view || view);
       } catch (error) {
         state.osmPbfVector = null;
         state.osmPbfVectorStatus = `failed: ${error.message}`;

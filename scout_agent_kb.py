@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import sqlite3
+from contextlib import closing
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -60,8 +62,41 @@ class ScoutAgentKbQueryResult(ScoutAgentKbModel):
     retrieval_engine: str = "heuristic"
     result_count: int = Field(ge=0)
     results: list[dict[str, Any]]
+    index_record_count: int = Field(ge=0)
     searched_record_count: int = Field(ge=0)
+    index_snapshot_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     boundary: ScoutAgentKbBoundary = Field(default_factory=ScoutAgentKbBoundary)
+
+
+class ScoutAgentKbNegativeSearchReceipt(ScoutAgentKbModel):
+    """Content-bound proof that one scoped local search returned no match."""
+
+    artifact_kind: Literal["scout_negative_search_receipt"] = (
+        "scout_negative_search_receipt"
+    )
+    schema_version: Literal["scout.negative_search_receipt.v0"] = (
+        "scout.negative_search_receipt.v0"
+    )
+    receipt_id: str = Field(pattern=r"^negative-search\.[0-9a-f]{16}$")
+    source_ref: str = Field(pattern=r"^receipts/negative-search/[0-9a-f]{16}\.json$")
+    project_id: str = Field(min_length=1)
+    query: str = Field(min_length=1)
+    query_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    retrieval_engine: str = Field(min_length=1)
+    evidence_types: tuple[str, ...] = ()
+    requested_limit: int = Field(ge=1)
+    searched_record_count: int = Field(ge=1)
+    result_count: Literal[0] = 0
+    index_snapshot_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    proves_only: Literal["no_match_in_bound_local_index_scope"] = (
+        "no_match_in_bound_local_index_scope"
+    )
+    does_not_prove: Literal["fact_false_or_absent_in_world"] = (
+        "fact_false_or_absent_in_world"
+    )
+    read_only: Literal[True] = True
+    candidate_only: Literal[True] = True
+    runtime_safety_truth: Literal[False] = False
 
 
 def build_local_evidence_index(project_root: Path | str) -> ScoutAgentKbIndex:
@@ -119,7 +154,8 @@ def write_local_evidence_sqlite_index(
         temporary.unlink()
 
     try:
-        with sqlite3.connect(temporary) as conn:
+        # The transaction context does not close SQLite's file handle.
+        with closing(sqlite3.connect(temporary)) as conn, conn:
             _initialize_sqlite_index(conn)
             _write_sqlite_metadata(conn, index)
             _write_sqlite_records(conn, index)
@@ -143,10 +179,13 @@ def query_local_evidence_index(
     if not normalized_query:
         raise ValueError("kb query must not be blank")
     tokens = _tokens(normalized_query)
+    scoped_records = [
+        record
+        for record in index.records
+        if not evidence_types or record.evidence_type in evidence_types
+    ]
     scored = []
-    for record in index.records:
-        if evidence_types and record.evidence_type not in evidence_types:
-            continue
+    for record in scoped_records:
         score = _score_record(record, normalized_query, tokens)
         if score <= 0:
             continue
@@ -172,7 +211,9 @@ def query_local_evidence_index(
         retrieval_engine="heuristic",
         result_count=len(results),
         results=results,
-        searched_record_count=len(index.records),
+        index_record_count=len(index.records),
+        searched_record_count=len(scoped_records),
+        index_snapshot_sha256=_index_snapshot_sha256(index),
     )
 
 
@@ -190,11 +231,12 @@ def query_local_evidence_sqlite_index(
         limit = 0
 
     path = Path(index_path)
-    with sqlite3.connect(path) as conn:
+    with closing(sqlite3.connect(path)) as conn, conn:
         conn.row_factory = sqlite3.Row
         metadata = _read_sqlite_metadata(conn)
         project_id = _required_metadata(metadata, "project_id")
         record_count = int(_required_metadata(metadata, "record_count"))
+        searched_record_count = _sqlite_scoped_record_count(conn, evidence_types)
         boundary = ScoutAgentKbBoundary.model_validate_json(
             _required_metadata(metadata, "boundary_json")
         )
@@ -224,7 +266,9 @@ def query_local_evidence_sqlite_index(
         retrieval_engine="sqlite_fts5_bm25",
         result_count=len(results),
         results=results,
-        searched_record_count=record_count,
+        index_record_count=record_count,
+        searched_record_count=searched_record_count,
+        index_snapshot_sha256=hashlib.sha256(path.read_bytes()).hexdigest(),
         boundary=boundary,
     )
 
@@ -261,6 +305,10 @@ def query_project_local_evidence(
 
 def _default_sqlite_index_path(project_root: Path) -> Path:
     return project_root / "outputs" / "kb" / "local-evidence-index.sqlite3"
+
+
+def _index_snapshot_sha256(index: ScoutAgentKbIndex) -> str:
+    return hashlib.sha256(index.model_dump_json().encode("utf-8")).hexdigest()
 
 
 def _initialize_sqlite_index(conn: sqlite3.Connection) -> None:
@@ -358,6 +406,22 @@ def _read_sqlite_metadata(conn: sqlite3.Connection) -> dict[str, str]:
         str(row["key"]): str(row["value"])
         for row in conn.execute("SELECT key, value FROM metadata")
     }
+
+
+def _sqlite_scoped_record_count(
+    conn: sqlite3.Connection,
+    evidence_types: set[str] | None,
+) -> int:
+    if not evidence_types:
+        row = conn.execute("SELECT COUNT(*) AS record_count FROM records").fetchone()
+    else:
+        placeholders = ", ".join("?" for _ in evidence_types)
+        row = conn.execute(
+            f"SELECT COUNT(*) AS record_count FROM records "
+            f"WHERE evidence_type IN ({placeholders})",
+            sorted(evidence_types),
+        ).fetchone()
+    return int(row[0]) if row is not None else 0
 
 
 def _required_metadata(metadata: dict[str, str], key: str) -> str:

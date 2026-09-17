@@ -1,5 +1,47 @@
 # Scout Pretrip Full Preparation Runbook
 
+## 2026-09-10 Planned P8 追加準備與六力重算（SCOPED PASS）
+
+- 本輪來源：`golden_g1_chilai_repeat8_20260909_r14` 的
+  `plan.0a660d68411af4df633339d2`；manifest
+  `fd1e71ba8f297dbc26346061cc1cf19f84ffb7fc74cea7c25dfdbd424c9457aa`。
+  起跑前已重新驗證 32 個保存版來源 hashes 為 current。
+- 使用者明確指定使用 Scout 空間。大型準備、DEM、QGIS 產物、作業
+  scratch 與測試證據放在
+  `/home/alexwang0315/work/scout-planned-p8-reanalysis-20260910/`；
+  Mac 不建立完整 workspace copy 或大型壓縮包，不刪除既有資料。
+- 必須建立版本綁定的獨立輸入 snapshot／run。原 Golden project、
+  accepted baseline 與 immutable Planned bundle 保持不變。
+- 分析主體保留 9,775 點、10 CP、5 geometry parts；點 117 前
+  1,179.089 m 的缺口及其他 source joins 不得用直線補齊。QGIS
+  單 LineString 工作按 continuous part 分開提交；衍生 CP-edge graph
+  需保留 canonical point、CP 與 segment 對映。
+- 真實評估結果必須綁定 project、version、manifest、geometry、
+  itinerary、來源及 producer hashes。GET 僅觀測，POST 才啟動／恢復；
+  中斷後由 lease 與持久 checkpoint 判斷，不以 PID 存在當作成功。
+- P8 可明示實際缺資料造成的 partial／待重算，例如原始時間缺口、
+  未提供個人體能、行程日期超出預報有效期。已有 Ref. GPX、DEM 或
+  地圖素材時須實際計算其新路線投影，不能以固定待重算字樣代替 producer。
+- 指定 P2 已通過追加準備、六力實算、Resume 重現與六頁同版驗收。
+  這是 Construction Mode 的能力證據；六力各自保留 partial，詳見
+  [完整回執與限制](scout-planned-gpx-p8-reanalysis-qualification-20260910.md)。
+- 真實 Dashboard 已提交
+  `analysis.51645da345e5e32184ae12c472aada79`，attempt 1，HTTP 202。
+  執行位置為 Scout；五個地形分段已全部 completed，9,775 點原生 DEM
+  覆蓋 verified，其中 322 點超出舊 Golden DEM；六力實算皆 partial。
+  同 URL goto 沒有 Document request，已撤回其完整 reload 判定；專用
+  server 重啟後，新 Document／JS／GET 已找回同 run 與相同 report hash。
+  UI Resume 的 attempt 2 亦 completed_with_gaps，真實 Document 重載找回
+  同 run 與進度；兩次六力 status／summary／missing_inputs 全相同。
+  attempt 1 的 259 產物及原 774 檔全部保持不變。來源目錄另發現保留
+  Mac 絕對 filtered-GPX 路徑，需以同專案相對位置與 SHA 核對後讀取，
+  不修改舊 source report 或保存版以掩蓋搬移。
+- 最終六頁都綁 attempt 2 的 report
+  `3900df64666a975a6b6712fab7032f302d1d31588eaaec4ddda9ba5c8fd52107`。
+  新作業兩次共 523 檔／203,586,798 bytes 在 Scout；119 個整合測試與
+  33-layer contract 通過。GPX catalog 可攜已修復，但既有 map candidate
+  hash 不符仍拒絕，未把這項後續清理算作本 P8 已補完。
+
 ## Purpose
 
 This is the no-skip operator runbook for rebuilding a Scout pretrip workspace
@@ -10,13 +52,536 @@ Use this file when a rerun must include all of:
 - GPX import;
 - route-corridor map preparation;
 - Overpass vector fetch and segment alignment;
-- Rudy/Rudy+TW tile cache seeding with TTL behavior;
+- workspace-owned imagery, Rudy, Rudy+TW, relief, geology, Topo 5K, forest, and
+  default historical-map tile cache seeding with TTL behavior;
 - OCR and raster label adapter output;
 - route context, K anchors, mileage tag alignment;
 - terrain/risk/MCP/Boss synthesis;
 - Scout admin map layer gates and browser smoke checks.
 
 If any required step is skipped, report the run as partial.
+
+### 2026-09-09 Golden r11: successful Rebuild exposed a legacy ETA reader
+
+G1 Resume completed with current MCP, fresh OSM and real numeric/imagery weather
+outputs. Save, Accept and explicit Rebuild preserved the recorded one-day trip;
+the source/candidate/review/rebuild/ETA/CWA artifact auditor passed. The browser
+still received a misleading 404 from the compact project endpoint because
+`pretrip_admin_view.py` read `eta["assumption"]` after Rebuild intentionally moved
+legacy timing into `retired_legacy_timing`. The API's broad KeyError handler
+translated that contract mismatch into `Pre-trip project not found`.
+
+Read the adopted `mission_day_estimates` and its recorded-day evidence in the
+admin projection. Do not resurrect retired timing, fabricate eight-hour days,
+reinitialize Permission, or recreate the existing project to hide this error.
+Verify both full and compact views after a real source-bound Rebuild. Keep
+artifact-audit success separate from the failing browser result until both pass.
+
+The r12 view repair publishes the adopted day collection, its review binding and
+historical clocks. New departure/arrival fields stay unset; legacy estimates
+remain retired. Eighteen focused tests pass, including full and compact HTTP
+responses after the real fixture Save/Accept/Rebuild chain and strict CWA
+validation. A read-only replay of the actual G1 restores 35 checkpoints and
+ready imagery without changing the seven source/ETA/review/weather artifacts.
+Load this source only after current preparation jobs finish, then verify the
+actual browser maps and six-page convergence; the isolated result alone is not
+G6 acceptance.
+
+The actual r12 reload preserved all 56 recorded job/source/Permission hashes.
+G1 compact GET, Pace checkpoints and Architecture then loaded successfully.
+For the embedded Weather map, inspect an actual visible screenshot before
+classifying an empty iframe accessibility snapshot as a missing map: the real
+Rudy/route/CP/radar view rendered even when the outer snapshot omitted its DOM.
+Keep numeric rainfall no-coverage distinct from the available imagery overlay.
+Also inspect map footers against actual hypothesis availability: the unconditional
+`complete GPX + R1` label contradicted `TERRAIN HYPOTHESIS · UNAVAILABLE`; the
+scoped correction removes that false R1 claim without changing terrain output.
+
+The same attempt's primary QGIS/GRASS terrain workflow completed with 27 outputs.
+A separate Terrain Route Hypothesis workflow failed its strict DEM metadata
+guard; workspace DEM resolution metadata was unavailable and navigation tile
+coverage remained explicit. Do not pick the newest auxiliary workflow filename
+and misreport it as failure of the primary terrain workflow. Do not present the
+failed TRH candidate or unsupported terrain coverage as a safe, verified route.
+
+### 2026-09-09 Golden r9 live findings: final layer state and CWA route binding
+
+The new G1 completed real QGIS/GRASS and produced seven MCP candidates, but
+the final preparation manifest retained the initial MCP `missing_source` row.
+Updating project refs alone is insufficient: rebuild the layer's verified
+source refs, counts and lifecycle before publishing the final aggregates and
+map projection. Preserve collection/alignment failures and genuine warnings;
+do not remove the Overpass TTL warning together with the stale MCP warning.
+
+The same live run exposed `rainfall projection route identity mismatch` at the
+compact project endpoint. Rainfall products were created against the importer
+segment geometry before the later Overpass geometry became the active CWA
+route. Keep the route-identity validator strict. Bind route-dependent weather
+processing to the final geometry, or truly reproject the original source data;
+changing only artifact hashes is invalid. A successful 33-layer verifier does
+not replace the actual project API and six-page browser check.
+
+The r10 repair refreshes the MCP layer from the actual current collection and
+late-alignment outputs. Complete preparation defers numeric rainfall grids and
+weather imagery until that final alignment is durable; scalar weather remains
+early and connected refresh retains its immediate route jobs. Verify each
+published artifact and pair with the existing strict route validators. Publish
+child failures to the evidence, project status, environmental gaps and layer
+lifecycle together; never mark retained stale weather as current. The 22 focused
+tests passed on one frozen source, including late alignment, stale/mixed output
+rejection, fetch failures, MCP integration and connected-refresh compatibility.
+Real Dashboard qualification is a separate gate.
+
+The r10 real G1 confirms both fixes: MCP layer is current, the compact project
+endpoint returns 200 with the final aligned rainfall route, and the fresh PBF
+clears the genuine TTL warning. One new explicit gap remains: full Dashboard
+preparation does not supply the server-imagery capability attestation that the
+connected-refresh entrypoint supplies. Both r9 targets and r10 G1 fail before
+the imagery job lock/provider call, recording a RuntimeError with an empty
+safe-summary reason. Fix the trusted full-preparation entrypoint and expose a
+fixed guard error code; preserve the host, profile and network guards. Do not
+classify an empty RuntimeError as an upstream outage. Preserve the failed
+attempt and resume the same durable job after loading the repair.
+
+The trusted `prepare_imported_workspace` wrapper now supplies this declaration
+only after validating a mac-workstation request that explicitly requests imagery
+and permits explicit network fetch. Public preparation options cannot set the
+declaration. The lower-level CLI primitive, host/profile checks and cross-process
+job lock keep their existing behavior. Known imagery guard failures publish a
+fixed allowlisted error code, while arbitrary exception text remains excluded.
+The 31 focused capability, denial, diagnostic and final-route tests pass; actual
+Resume and final imagery outputs must still be checked in the target workspace.
+
+The older PBF is genuinely outside its 30-day TTL. Qualification acquired a
+new dated public snapshot with a verified upstream MD5 and local SHA256. Use
+a new material declaration and a new import identity; do not replace sources
+already bound by an existing job or manufacture a newer mtime for old data.
+Preserve the old job, receipts and source files for recovery evidence.
+
+While a large preparation is active, inspect its durable job and newest raw
+tile timestamps before declaring a stall. The r9 G2 remained in `prepare`
+while imagery tiles continued arriving. Do not start duplicate workers or
+interrupt useful work merely because the coarse stage has not changed.
+
+### 2026-09-09 Golden r9: raw MCP compilation and recovery provenance
+
+The old New Import path could create GPX/CP artifacts but had no producer for a
+real MCP evidence set. Preparation now compiles the original source-manifest
+GPX documents and the actual OSM snapshot, with optional fetched public text
+declared by `material_manifest.json` at
+`sources.mcp.supplemental_evidence_ref`. This is a raw input package; do not
+copy a previous workspace's candidates or reviews into a new import.
+
+The compiler publishes four refs under `outputs/mcp`: named-point evidence,
+MCP candidates, CP support reconciliation and the collection receipt. It runs
+before the final MCP alignment, OCR/context collection, Boss synthesis and
+mileage/timing/architecture stages. Keep the existing 11-document, 5-percent
+mention, 1000 m spacing and 250 m CP-support rules. GPX waypoints or OSM nodes
+are records within documents, not independent website pages. Same-activity
+diaries and GPX dependencies are deduplicated. Place-type gaps discovered on
+real data included named pools and saddles; classify only explicit names,
+without inventing coordinates or ambiguous aliases.
+
+The durable preparation job binds the package, readable text, raw HTML and
+acquisition receipts before starting. Resume verifies those inputs again
+before any writes. A package may be reused by a new QA ID/Clone only through
+an exact raw Golden SHA binding; its acquisition project remains provenance,
+and no Permission review is transferred.
+
+Each preparation manifest records its starting/current geometry and timing
+fingerprints, plus hashes of projections produced or revalidated in that run.
+Compare immutable inputs for drift; regenerated recorded-pace metadata alone
+must not be counted as changed raw input. Failed or retained projections are
+not marked current. The shared Dashboard analysis subject consumes these
+receipts and the immutable Permission Rebuild receipt.
+
+The default outer QGIS preparation wait now observes terminal completion
+without a Scout cumulative deadline; explicit deadlines remain supported for
+operator requests/fault tests. Health preflight defaults to 10 attempts.
+Underlying provider/worker limits remain independently observable. Reuse the
+task's existing authenticated QGIS worker; wait for a Dashboard listener before
+browser navigation, and never multiply servers when startup is slow.
+
+Real source-only trial: G1 32 accepted documents / 7 MCP; G2 14 / 47, both with
+no compiler gap. This does not certify the full import/preparation/UI chain.
+See [r9 qualification progress](scout-golden-gpx-g1-g6-qualification-20260909.md#r9-整合與重驗進度).
+
+### 2026-09-07 Route Context recovery for the exact legacy newImport workspace
+
+The reported workspace was `dongqing_batongguan_historic_trail_newImport`.
+Checking `chilai_nanhua_day1_scoutAI` or the older Dongqing `scoutAI` workspace
+does not verify this target. Always bind the Dashboard URL, status endpoint,
+project metadata and rendered HTML to the exact requested project id.
+
+Its 2026-08-25 collection retained 39 context points, but the pack, source
+manifest and evidence had `route_context_briefing_ref: null`; the briefing
+directory did not exist. This is the legacy omitted-HTML preparation defect
+described in the 2026-08-29 lessons below. It was not a rejected semantic
+review. The current preparation path already requests `write_briefing=True`;
+that change does not backfill older workspaces.
+
+Bounded recovery rendered the existing project-bound points, source manifest,
+media manifest, crawl seeds and route summary through the existing deterministic
+briefing renderer. Only the missing HTML and its refs in `project.json`, the
+pack, source manifest and evidence were written. Original metadata copies and
+input/output hashes are recorded in
+`artifacts/route-context-recovery-20260907-newImport/restoration-receipt.json`.
+The associated `restore.py` records this exact recovery and refuses to overwrite
+an existing briefing; it is not a general preparation or regeneration command.
+No GPX import, layer preparation, QGIS restart, cloud request or live source
+fetch was performed. Context points, media and crawl seeds retained their hashes.
+
+The recovered HTML renders seven eligible named points from the 39 stored
+candidates. At that first recovery the target had zero fetched web evidence
+items and zero photos; current status and itinerary evidence were missing. The
+renderer now shows missing official evidence when P0 count is zero instead of
+claiming historical support from absent sources. Recovery is artifact
+availability, not semantic-review approval or current route verification.
+
+The exact target's status endpoint returned `available`, its HTML returned 200
+and matched the local bytes, and `content_reviewed=false` remained truthful.
+The earlier Dashboard repair also starts briefing reads independently of
+workspace/variants loading and removes the extra 2 px in iframe sizing that
+otherwise creates a ResizeObserver growth loop. Do not add viewport padding
+to a measurement that already includes the iframe viewport height.
+
+Additional browser verification covered the canonical renderer's embedded
+chapter controls: use the Dashboard workspace scroller for viewport, current
+chapter and section jumps; the expanded iframe viewport otherwise appears to
+be permanently at its last chapter. Measure body content for height changes
+when switching data/briefing modes. Background project and variants completion
+must update the outer status without replacing a matching loaded iframe.
+The final mouse smoke advanced from the first chapter to the days-evidence
+section on the exact newImport workspace. Full data mode remains available,
+with missing official sources, photos and current status explicitly shown.
+
+#### 2026-09-07 Researched first edition after the reader rejected the empty briefing
+
+Restoring an HTML file does not complete a request for a useful briefing. The
+reader rejected the gap-only report. The established Codex skill and Scout
+`route-context-intelligence` manifest already require actual search, selected
+source fetches, attributed images, historical itinerary, logistics and six
+context layers. This legacy workspace lacked the typed regeneration input
+expected by the Dashboard's quality cycle.
+
+Use the existing skill's evidence-bound regeneration branch for this case.
+The exact-workspace handoff is recorded under
+`artifacts/route-context-first-edition-20260907/`: source research, live status
+query receipt, curated image references, assembly/collection scripts and
+`preparation-receipt.json`. It materialized 20 public pages (14 P0, 6 P1),
+16 image references and a nine-day historical itinerary. Original route
+summary, context points, mileage anchors and crawl seeds retained their hashes.
+The canonical briefing remains the responsibility of the existing Dashboard
+generation plus independent hash-bound semantic-review cycle.
+
+Specific failures and corrections:
+
+- A successful HTTP status can contain only an access challenge. Reject the
+  body as missing evidence; the first edition omitted the blocked public-bus
+  page and its detailed reservation claims from the collector-bound packet.
+- Archive image endpoints use `?name=...jpg&folder=...`. Check the explicit
+  filename against the existing image/chrome gate and retain name/folder in
+  deduplication. Dropping every query string incorrectly merged four different
+  historical images into one.
+- The Dashboard still passes the legacy bare DeepSeek model ID. Chat-model
+  construction accepted its configured OpenRouter endpoint, but native research
+  policy rejected the missing provider prefix before any search. Both the
+  editorial and review callers now resolve the OpenRouter research identity
+  from that endpoint without changing the selected model or credentials.
+- An answer-first document needs evidence-backed conclusions before unresolved
+  tasks. The evidence renderer now leads with route identity, historical
+  schedule, transport and application answers, includes attributed imagery and
+  draws the bound route/profile. It avoids asserting old MCP mileage labels as
+  the journey order and removes fixed route/year/category assumptions.
+- Browser inspection caught two additional rendering defects: fixed section
+  numbers disagreed with the model's reading order, and `object-fit: cover`
+  cropped map edges and portrait photos. Number sections from the accepted
+  editorial order, display gallery images in full, give maps a full-width row,
+  and link each original image. Keep the independent review bound to the final
+  HTML after these corrections.
+- Use the existing media `source_family=historical_map_reference` when choosing
+  the wide map layout; these two source captions do not contain the word
+  "map". Reject an editorial heading claiming official imagery when the
+  workspace has no P0 images, just as P2 imagery labels require P2 images.
+- Keep the virtual-environment executable path when reloading the local
+  Dashboard. Resolving its Python symlink to the base interpreter loses the
+  installed Scout package. Wait for the listener/status endpoint before browser
+  actions; importing the full local Dashboard stack can take around a minute.
+
+The route identity remains 清代八通關古道, with the northern-bank eastern
+alignment; the southern-bank Japanese-era itinerary is not a substitute.
+Current entry restrictions are based on the 2026-08-27 closure, 2026-08-28
+partial reopening, direct route-note reads and the 2026-09-07 status query.
+Historical photos and day counts are not a claim of current access.
+
+The first live Dashboard cycle returned an independent content `PASS` (4/5)
+after two editorial attempts. Its retained receipt records 2 web-search calls
+and 2 web-fetch calls; the independent reviewer performed an additional fetch.
+Browser operation confirmed the embedded historical-itinerary jump, 16 distinct
+loaded image URLs (17 image elements including the repeated hero), and the two
+bound-GPX figures. The pre-visual-correction copy and receipts are retained in
+`reviewed-before-visual-fix/`; the final promoted hash and current API review
+state belong in `final-qualification.json`, generated by
+`verify_first_edition.py` only after the last review passes.
+
+Final first edition: the Dashboard promoted SHA-256
+`c23ed6ed70700a16d8a7e7c04b4f2642290bd09530a9a8355625ff509c4250d8`
+after an independent `PASS` (4/5). `final-qualification.json` verifies the
+canonical, input, skill, review-packet and project review bindings;
+`browser-qualification.json` records the reloaded exact-workspace page, actual
+chapter click, 17 loaded image elements / 16 unique images, two full-width
+source maps, and the route/profile figures. Focused Python checks passed 28
+generation/review/media cases and 3 Dashboard cases; `pnpm lint`, `pnpm
+typecheck` and `pnpm test` also passed. The reviewer left only minor source-
+excerpt/checklist-link suggestions for a later edition.
+
+The live generation/review cycle can take several minutes per editorial
+attempt. Route Context now explicitly opts out of the browser's fixed request
+timer; other POST calls retain their timeouts. This avoids presenting a still-
+running quality cycle as failed solely because ten minutes elapsed. Model and
+provider failures continue to surface normally. No GPX import, map preparation,
+worker restart, hardware action or external publication was performed.
+
+### 2026-09-04 Architecture Historical Return Timing Repair
+
+An available candidate mission graph is not historical Reversibility analysis.
+The old fingerprint rendered graph/ETA status strings instead of CP-level costs.
+Keep the workspace-first fetch order and the collapsed supporting evidence panels.
+The historical definition now lives in
+`docs/specs/pretrip-reference-pace-energy-analysis.md`: reverse-direction return
+cost, historical moving-day P50, explicit prior camp anchors, and a separate
+forward `Next CP · Avg` lane. Reviewed topology does not gate these statistics.
+
+New root causes found during the real-workspace run:
+
+- A 20 m individual-step threshold mislabeled dense reverse samples as forward.
+  Direction now follows nonzero matched progress; spatial proximity leads route
+  matching, with continuity resolving coincident branches.
+- Short observations were extrapolated to complete bins but called observed.
+  Partial coverage is explicitly estimated; fragments in the same passage are
+  aggregated before averaging so file segmentation does not change mean pace.
+- Duplicate files and overlapping time intervals inflated daily sample weight.
+  Deduplicate file hashes and union eligible intervals within each GPX before
+  splitting at local midnight. The weather artifact's timezone may be an
+  importer default, not source-GPX timezone metadata.
+- Generic rests and camp water-access notes are not overnight anchors. Use only
+  explicit camp labels, reject off-route/adjacent points and keep provenance.
+- The last regularly spaced risk sample can precede the true filtered GPX finish
+  (about 7 m in Dongqing). Include the primary GPX's full cumulative distance in
+  the time axis; otherwise the final CP lies outside all timing bins.
+
+Bounded repair command (no GPX import, terrain worker or weather refresh):
+
+```bash
+rtk proxy ./venv/bin/python pretrip_architecture_preparation.py --project-root /path/to/workspace --force --json
+```
+
+This refreshes reference pace JSON/GeoJSON, Architecture manifest and their
+project refs. The input fingerprint includes timing-policy version, camp notes
+and timezone evidence. A running Python Dashboard needs the new projection code;
+use an isolated free port for verification when existing servers are in use.
+`tools/dashboard_architecture_return_smoke.js` exercises actual desktop/mobile
+controls, return/next-CP selection, decision/reset marks and the map lens using
+read-only browser requests. On this Mac it uses installed Chrome, because the
+Playwright-managed browser binary is absent.
+
+### 2026-09-04 Architecture Daily Time Window
+
+Time Window is now a separate forward resource account: local departure to the
+user's fixed 18:00 cutoff, less accumulated historical forward movement costs.
+The old next-CP average remains a distinct lane, and historical moving-day P50
+still belongs to return-cost comparison, not this daylight proxy.
+
+The Dongqing filtered primary GPX contains a coherent nine-day sequence. Its
+initial and post-overnight first records provide candidate departure clocks;
+neither `project.route_days=1`, all camp labels, nor local midnight provides this
+schedule. Original GPX timestamp reversals and multi-year contaminated rest
+durations must not create resets. Short spatial gaps between overnight endpoints
+remain unknown schedule spans. No current camp safety or actual sunset is proven.
+
+Use the bounded Architecture command above. The input fingerprint now also
+includes the daily-departure/countdown policy. This reuses existing local GPX and
+timezone evidence without importing GPX, rebuilding terrain, or fetching weather.
+The browser smoke additionally operates the Time Window mode/lens, daily reset
+anchors, desktop keyboard selection and mobile balance inspector, checking
+`A = T - consumed` and `arrival margin = A - forward-to-safe` against live data.
+
+The bounded Dongqing proof produced 9 daily resets, 250 available reverse-cost
+anchors and 257/258 available Time Window anchors. One original CP lies in an
+overnight recording gap and intentionally remains unknown. The 8 inferred
+overnight stops join 23 named camp candidates in both directional target sets,
+without being promoted to verified camps. Daily departures remain independent
+reset events. Distance conversion does not alter any duration or clock.
+
+Keep exact zero-width data cells at day ends separate from transparent minimum
+hit targets, so a 5 m unknown gap is not painted over by a 2 px data minimum.
+Keyboard traversal excludes null-distance anchors just as the visible lanes do.
+Desktop/mobile controls, countdown arithmetic and map colors were exercised on
+an isolated 9187 preview; existing Dashboard processes were not restarted. This
+is working-prototype evidence, not official full Dashboard qualification or a
+promoted safety/runtime baseline.
+
+### 2026-08-25 Workspace raster-cache preparation repair
+
+The blank-layer report on
+`dongqing_batongguan_historic_trail_newImport_v2` exposed a preparation and
+renderer contract mismatch:
+
+- Map preparation seeded only one cache namespace and used Rudy+TW as the
+  `imagery` source even when the project imagery source was NLSC PHOTO2. The
+  cache path therefore did not preserve layer/source identity.
+- MapLibre registered only `rudy-twmap` and `osm`; the controls for imagery,
+  Rudy, relief, geology, Topo 5K, and forest had no MapLibre raster source.
+- The normal page path silently used runtime WMTS URLs, while OSM's offline SVG
+  fallback was presented as a raster tile and could fail MapLibre decoding.
+
+Required behavior from this repair onward:
+
+1. A connected clone or map-preparation run seeds eight independent allowlisted
+   raster namespaces at zoom 5-14 under
+   `<project-root>/cache/raster-tiles/<project-id>/<layer-id>/...` and writes one
+   plan plus one seed manifest per layer to the project workspace.
+2. `project.json` records all eight refs in `raster_layer_manifest_refs` and a
+   bundle ref. NLSC/project imagery remains `imagery`; Rudy+TW remains the OCR
+   source in its own `rudy-twmap` namespace.
+3. Dashboard load is cache-only. It must create all eight MapLibre raster
+   sources through the same-origin Scout tile API and must not fetch WMTS merely
+   because a layer is checked.
+4. The Layers panel exposes an explicit raster-refresh control. Only that
+   operator action may add `native=1&refresh=1`; refreshed bytes replace the
+   workspace tile, while a failed refresh retains the last cached tile.
+5. Geology remains refreshable through this explicit control. Weather/CWA APIs
+   retain their connected refresh workflow and are not frozen by raster seeding.
+6. Public OpenStreetMap tiles are not bulk-prefetched. Use a local OSM extract
+   when available; otherwise the local OSM raster endpoint returns a valid
+   transparent PNG so OSM failure cannot blank or poison the other raster and
+   vector layers.
+7. Raster-label OCR cache misses run with a bounded worker pool (default at most
+   four workers and never more than the available tile count). OCR computation
+   may run concurrently, but cache JSON is serialized by the caller so two
+   workers cannot corrupt the same artifact. Set
+   `SCOUT_RASTER_LABEL_OCR_WORKERS` only for an explicit hardware-specific
+   override; hash cache hits remain the first path on every rerun.
+8. WMTS seeding retries each failed tile up to five times in the same
+   preparation request with bounded backoff. This limit was raised after the
+   2026-08-25 Dongqing run recovered three transient failures but still left
+   Relief `z5/26/13` missing after its third timeout. The seed manifest records
+   attempt, recovery, and final failure counts; the explicit post-load refresh
+   remains an operator update path, not a substitute for preparation seeding.
+
+This is the normal one-pass import/preparation contract. A `_v2` workspace is
+not a required second stage; suffixes remain useful only for a deliberate clean
+comparison or when preserving an already-created target.
+
+### 2026-08-24 Dashboard clean-clone preparation repair
+
+Before creating `dongqing_batongguan_historic_trail_newImport`, the Dashboard
+path had three preparation drifts that must not be repeated:
+
+- Workspace `Clone` only appended an intent receipt and performed no clone.
+  The repaired action must refuse an existing target, read the source inbox GPX
+  corpus, run a clean import under the new project id, and then run map
+  preparation. It must not copy stale project-bound artifacts or mutate the
+  source workspace.
+- The importer and Dashboard defaults exposed only 18 layers even though this
+  runbook requires the 23 preparation layers. The shared default must include
+  `imagery`, `pois`, `hazards`, `corridors`, `retreat`, and `route-notes` in
+  addition to the existing route, terrain, risk, environment, and MCP layers.
+- Connected CWA/GEE/Overpass refresh previously republished the six dynamic
+  layers as the canonical layer-preparation manifest. A connected refresh must
+  update provider-backed evidence without replacing the complete 23-layer
+  preparation manifest. Weather remains refreshable after import. Geology is a
+  runtime provider layer and must not be frozen into, or falsely represented as
+  produced by, GPX import or map preparation.
+- Source MCP named-point evidence is project-bound. Clone preparation must load
+  the typed evidence, verify the source identity, create an ephemeral copy with
+  only `project_id` rebound to the target, and record both hashes. Direct reuse
+  fails closed; broad text replacement is not an acceptable identity change.
+- The current local OSM PBF conversion path requires the Python `osmium`
+  package in the same interpreter that runs Dashboard preparation. The
+  `osmium` CLI alone is insufficient because the extracted PBF still passes
+  through the Python streaming/filter stage. A clean Dashboard clone with a
+  configured local PBF must fail before import when that package is unavailable;
+  Overpass is not a substitute for the missing workspace OSM render extract.
+- Dashboard clone execution runs in an API worker thread. Signal-based
+  post-process timers must be armed only on the main interpreter thread;
+  otherwise Boss/route-pressure and mileage alignment fail even though their
+  inputs are ready. Worker-thread preparation runs those bounded candidate
+  enrichments without a process signal timer.
+- Same-run risk refs must be persisted before Overpass route alignment reloads
+  `project.json`. Reference-segment timing must also be produced before route
+  architecture so the first Dashboard projection can consume every available
+  historical GPX timing measurement.
+- Overpass may terminate a large corridor response with `IncompleteRead` or a
+  transient connection reset. The explicit fetch path retries these transport
+  failures up to three total attempts with bounded backoff; malformed evidence
+  is never accepted from a partial response.
+- A clean Dashboard clone must prewarm all eight allowlisted route raster layers
+  at zoom 5-14 before raster-label OCR. Each target owns its cache under the
+  project workspace, never inside the repository. Rudy+TW is the OCR source but
+  does not replace project imagery. Geology updates remain available through
+  the explicit post-load refresh control. Tile count is route-bbox specific: do
+  not copy Chilai's count of 31 into a longer route as a fixed target.
+- `pytesseract` is an optional wrapper, not the OCR capability boundary. When
+  the allowlisted `tesseract` binary and requested language data are available,
+  preparation may consume its TSV output directly with a subprocess timeout and
+  no shell. If neither wrapper nor CLI is available, retain the typed
+  `blocked_dependency_missing` result; never fabricate labels.
+- OCR completion and raw label count do not prove semantic map-label quality.
+  The 2026-08-24 Dongqing v2 run processed all 402 cached tiles without timeout
+  and emitted 16 labels, but review found that most were low-zoom Rudy map
+  attribution fragments; the current Chilai labels have the same limitation.
+
+### 2026-08-26 OSM PBF Dashboard runtime binding repair
+
+`dongqing_batongguan_historic_trail_newImport` exposed a runtime dependency
+drift: `taiwan-260624.osm.pbf` was discovered and hashed, but clone recorded
+`local_pbf_skipped_parser_unavailable`, completed through Overpass, and left
+`osm_pbf_render_geojson_ref` absent. The live OSM toggle consequently had no
+source-backed vector layer.
+
+The parser was already installed in a legacy repository venv and in the
+separate `scout-osmium` micromamba environment. The live `9099` process used the
+system Python 3.12 interpreter, so neither installation was importable. PATH or
+an `osmium` executable alone cannot repair that interpreter mismatch.
+
+Use the project-owned runtime consistently:
+
+```bash
+tools/setup_dashboard_workspace_runtime.sh
+tools/run_dashboard_workspace.sh --port 9099 \
+  --workspace-root /Users/alexwang0315/workspace
+```
+
+The setup command is idempotent and installs the `pretrip-workstation` optional
+extra into `./venv`; it is not part of every launch. A stored `pyproject.toml`
+hash skips package installation entirely when the configured runtime is already
+complete and unchanged. Setup also creates persistent
+`~/.local/bin/scout-dashboard` and `~/.local/bin/osmium` shortcuts plus the
+project-local `./venv/bin/osmium` binding. It also owns the fixed
+`~/.local/share/scout-tools/micromamba/envs/scout-grass` environment and creates
+`~/.local/bin/grass` plus `./venv/bin/grass` bindings. The run command never
+installs packages, refuses an incomplete runtime, and puts `./venv/bin` first
+on its process PATH. Workspace clone now also refuses a configured PBF before
+creating the target when Python `osmium` is unavailable.
+
+When processing `taiwan-260624.osm.pbf`, retain its source hash and stale
+snapshot warning. The operator-approved existing snapshot remains usable, but
+must not be represented as a fresh Taiwan extract.
+  Keep them named `candidate labels`, require review, and do not promote them to
+  named points, K anchors, hazards, or safety truth without a later quality
+  filter or higher-resolution region OCR pass.
+- Clone import may add unique GPX files only from a `gpx_corpus` path explicitly
+  declared by the material manifest. Deduplicate additions by SHA-256 and retain
+  source provenance. A route with four declared reference tracks must remain
+  four rather than being inflated to match another workspace's count; KML map
+  sheets are not timed reference GPX tracks.
+
+For this clean-clone path, the source inbox GPX checksums and the material-root
+manifest are inputs. The new target receives its own project identity and clone
+receipt. GRASS/QGIS ridge, valley, and flow-channel artifacts remain separate,
+route-bound candidate evidence; never copy an older terrain feature stack into
+a new route scope merely to fill a Dashboard panel.
 
 ## Required Specs To Read First
 
@@ -564,12 +1129,129 @@ and `requestActivityState=in-progress`; the Dashboard renders this as
 `in progress`, not the misleading `false`. A completed run replaces them with
 observed booleans.
 
+#### 2026-09-04 Weather Refresh To Decision Reassessment
+
+`GET .../weather-dashboard` already rebuilds the candidate decision from the
+published rainfall and route-weather artifacts on every request. It never
+fetches CWA upstream. A separate Decision POST is not required. The explicit
+refresh path is:
+
+```text
+operator POST connected-preparation
+  -> server fetch / derive / atomic publication
+  -> browser observes completedAt
+  -> GET weather-dashboard (no-store)
+  -> Decision response evaluatedAt + consumed evidence pair IDs
+```
+
+The original UI could miss the completion when the operator left Weather,
+when another status read consumed the completion timestamp, or when a slower
+old response replaced the newer result. Concurrent status and decision reads
+also allowed a new completion status to be paired with an earlier decision.
+Track the completion consumed by `weatherData.decisionReview`, observe status
+before starting the decision read, and fence responses by project, API base,
+and request sequence. Continue polling through transient status failures;
+do not treat a failed status read as cancellation of the running job. Terminal
+completion reloads Weather data even while another Dashboard view is open.
+
+The coordinator now exposes `weatherDecisionInputs` and `currentArtifactRefs`.
+The four required inputs are rainfall manifest, rainfall trend, imagery
+manifest, and route-weather risk package. Inspect actual file contents, safe
+workspace refs, timestamps within the run window, and matching pair/source-
+frame/route identities. Missing, invalid, or previous-generation inputs keep
+the overall result `partial`, even if an external API call succeeded. Historical
+refs remain available in `artifactRefs`; they are not silently promoted into
+the current-run receipt. `weatherDecisionInputs.status=current_run` proves
+generation provenance, not provider freshness, rainfall coverage, or a safe
+route. Decision API freshness and candidate-only boundaries still apply.
+
+The Weather page separately reports preparation completion, Decision API
+reassessment time, input generation status, and evidence freshness. A completed
+reassessment can still return `DELAY` with `stale_data`. Expired imagery arrival
+estimates must not appear as a current countdown in either the top critical
+window or the decision evidence. A failed Decision read clears the candidate
+and explicitly reports reassessment failure.
+
+Focused replay:
+
+```bash
+./venv/bin/python -m pytest tests/test_dashboard_weather_refresh.py tests/test_dashboard_connected_preparation.py tests/test_admin_cwa_imagery_overlay.py -q
+SCOUT_BROWSER_EXECUTABLE='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' \
+  SCOUT_WEATHER_REFRESH_OUTPUT_DIR=artifacts/browser/dashboard-weather-refresh-20260904 \
+  node tools/dashboard_weather_refresh_browser_smoke.js
+```
+
+The browser replay operates the real refresh button with intercepted local API
+responses: current-run completion, partial/stale completion, and Decision API
+failure. Its receipt records `actualCwaRefreshPerformed=false`; desktop/mobile
+screenshots are in the same artifact directory. This does not prove a new live
+CWA fetch. The inspected 9099 process had `idle`, `runCount=0`, and no completion
+record; process-local status cannot establish whether an earlier process ran.
+HTML changes take effect on reload. New Python coordinator checks require a
+service restart. Do not stop the shared Dashboard launcher without accounting
+for its managed QGIS worker and active jobs.
+
 Current-position and target sampling is a separate user gesture in Weather.
 The user selects a prepared checkpoint and presses `授權目前位置並更新降雨趨勢`.
 Only then does the browser request geolocation, obtain a server-issued short-
 lived approval, and call `POST .../rainfall-trend`. The response is kept in UI
 state; the server persists only the sanitized approval audit with
 `rawCoordinatesPersisted=false`.
+
+#### 2026-09-04 Target Trend To Decision Reassessment
+
+The original `POST .../rainfall-trend` returned only point/corridor samples.
+Replacing `weatherData.routeTrend` did not re-evaluate the Decision candidate,
+and changing the checkpoint dropdown left the previous target result visible.
+The target gesture now returns both `decisionReview` and an ephemeral
+`weatherDashboard`, using the approved current position and selected target.
+The same deterministic reducer consumes their QPE/QPF values and coverage;
+`missing_cell`, `outside_grid`, or a missing value cannot become zero or `GO`.
+Why/Where identify the sampled target and amounts, and When includes the QPF
+validity window. No new arbitrary rainfall threshold is introduced.
+
+The server binds the sampled, hash-validated grid frames to the active rainfall
+manifest and checks the captured route identity. If publication changes the
+source frames during sampling, or cached Decision context fails, sampling
+still returns with `decisionReview.status=failed` and `weatherDashboard=null`.
+Freshness is recomputed from the consumed rainfall, imagery, and newly sampled
+trend, not the superseded cached trend's aggregate status. A stale old trend
+must not force a fresh target review back to DELAY; a stale consumed source
+still does.
+Only the sanitized approval audit is written. The new trend is not published
+as the stored route trend, and no LoRa alert is regenerated or sent.
+
+Checkpoint selection invalidates the previous target decision without reading
+location or making a request. The explicit location button obtains a new
+short-lived approval and samples the existing CWA cache. Project, API-base,
+request-sequence, and target checks prevent late results from replacing a
+newer selection. An older server without the new Decision fields displays
+`UNVERIFIED`, even if the rain samples succeeded. A later route-cache reload
+discards ephemeral target context and explicitly requires another approved
+sample; it never reuses or persists the coordinates.
+
+The UI distinguishes QPE past-hour measurements from QPF next-hour predictions,
+shows both source timestamps and validity windows, and explains UNKNOWN by
+point status. The LoRa line is labeled as the persisted whole-route unsent
+preview, not an alert produced for the newly selected checkpoint.
+
+Focused proof commands:
+
+```bash
+./venv/bin/python -m pytest tests/test_dashboard_weather_target.py tests/test_dashboard_weather_refresh.py tests/test_admin_cwa_precipitation_grid.py tests/test_admin_cwa_imagery_overlay.py tests/test_route_precipitation_sampler.py -q
+./venv/bin/python tools/dashboard_weather_target_fixture.py --fixture-harness --port 19107
+```
+
+The opt-in browser fixture serves the actual Weather UI with only its bootstrap
+replaced, and uses the real approval, sampling, and Decision API against tiny
+synthetic grids. CP 02 has numeric coverage; CP 103 has a QPF missing cell. It
+uses a synthetic geolocation provider, forbids other POSTs and external browser
+connections, and excludes the unrelated map panel. Select and recalculate both
+targets, verify that selection itself sends no request, and confirm CP 103's
+Decision Why/Where and UNKNOWN explanation change together. This is prototype
+evidence, not official Dashboard qualification or proof of today's live CWA
+weather. The 9099 service and QGIS worker are not restarted by the fixture;
+new Python handlers require a separately coordinated service restart.
 
 The 2026-07-23 operator approval covers the Dashboard service-lifetime recurring
 timer after an explicit refresh described above. It is intentionally not
@@ -697,18 +1379,18 @@ The raster tile cache default TTL is 30 days
 (`DEFAULT_IMAGERY_TILE_CACHE_TTL_DAYS = 30`). Do not delete the cache to force
 refresh.
 
-`SCOUT_PRETRIP_RASTER_TILE_CACHE_ROOT` must point at the shared raster tile
-root, for example `/Users/alexwang0315/workspace/scout-local-data/raster-tiles`
-or `/tmp/scout-local-data/raster-tiles`. Do not set it to
-`.../raster-tiles/<project-id>` because the cache writer already appends the
-project namespace and layer id. The wrapper normalizes this mistake, but manual
-commands must avoid it.
+`SCOUT_PRETRIP_RASTER_TILE_CACHE_ROOT` must point inside the selected project,
+for example `<project-root>/cache/raster-tiles`. Do not append the project id or
+layer id because the cache writer adds both namespaces. Dashboard clone supplies
+this path automatically. A normal preparation must not place the target's
+primary cache under a sibling shared-data directory.
 
-For `tryimport`, suffix-test, or from-zero comparison runs that must reuse
-unchanged Rudy/Rudy+TW raw tiles without replaying old workspace artifacts, set
+For `tryimport`, suffix-test, or from-zero comparison runs that may reuse
+unchanged source-correct raw tiles without replaying old workspace artifacts, set
 `SCOUT_PRETRIP_RASTER_TILE_CACHE_FALLBACK_PROJECT_IDS` to one or more stable
 raw tile cache namespaces, comma-separated. The seeding step copies only fresh
-raw PNG tiles according to TTL before remote fetch; it does not copy OCR,
+raw PNG tiles for the same layer id according to TTL before remote fetch; it
+does not copy OCR,
 Overpass, risk, mileage, or other derived workspace artifacts.
 
 Expected behavior when `--seed-imagery-cache` is used:
@@ -732,6 +1414,10 @@ from pathlib import Path
 root = Path(os.environ["PROJECT_ROOT"])
 project = json.loads((root / "project.json").read_text())
 for key in [
+    "workspace_raster_tile_cache_bundle_ref",
+    "workspace_raster_tile_cache_root",
+    "workspace_raster_tile_cache_layer_count",
+    "raster_layer_manifest_refs",
     "imagery_tile_cache_manifest_ref",
     "imagery_tile_cache_plan_ref",
     "imagery_tile_cache_seed_status",
@@ -743,6 +1429,10 @@ for key in [
     print(key, project.get(key))
 PY
 ```
+
+`workspace_raster_tile_cache_layer_count` must be `7`, and the manifest-ref
+mapping must contain `imagery`, `rudy`, `rudy-twmap`, `relief`, `geology`,
+`topo-5k`, and `forest` before the workspace is considered raster-prepared.
 
 `seed_status` must not be silently absent on a connected full-prep run unless
 imagery prefetch was intentionally not allowed and reported as
@@ -3266,6 +3956,171 @@ sparse review: return to the still-available authoring workbench, generate and
 accept a new proposal-first Ref. GPX baseline, then rebuild. Never infer missing
 day ends from that legacy artifact.
 
+### 2026-09-07: Dongqing newImport Permission bootstrap and Retry repair
+
+Target: `/Users/alexwang0315/workspace/dongqing_batongguan_historic_trail_newImport`.
+Always bind `?projectId=dongqing_batongguan_historic_trail_newImport` when
+checking this Dashboard; the unqualified URL initially selects the Chilai
+workspace and can produce an unrelated diagnosis.
+
+Both baseline and replay GETs returned HTTP 200 with `status=blocked` and
+`contextual_permission_seed_missing`. The workspace had its reviewed graph,
+reference timing, route summary and weather/daylight inputs, but lacked the
+Permission seed, model, rules and planned ETA. The source timing had 21 segments
+and 22 ordered anchors with matching labels; it did not have Chilai's timing
+alignment defect. GET and Retry deliberately do not initialize workspace files.
+
+The existing bootstrap passed `--dry-run`; one write attempt with no `--force`
+then created the six candidate/receipt artifacts and updated only Permission
+refs plus `planned_eta_ref` in `project.json`. The reviewed graph, reference
+timing, route summary and weather/daylight source hashes were unchanged. The
+bootstrap reported six missing p75 segment estimates and four unresolved gaps.
+No GPX import, map preparation, external API call or runtime activation ran.
+
+The Retry handler separately disabled its button and only rendered in `catch`.
+A successful HTTP response containing a blocked projection therefore left the
+old screen and disabled button in place. The handler now reenables the button
+and renders the settled state in `finally`, for both Permission and the shared
+Safety / Emergency refresh control. It does not render an unrelated page if
+the user navigates away while the request is pending.
+
+Live verification: Retry remained usable while the seed was missing, then
+opened the Baseline Authoring Workbench after initialization without a page
+reload. Baseline and replay now return `status=degraded`, `decision=ESCALATE`,
+`accepted_by_human=false`, `candidate_only=true`, and `runtime_safety_truth=false`.
+All adjustment policies remain `review_only`; missing ETA, daily endpoint and
+weather/daylight inputs remain visible for review.
+
+Browser `Preview source` and `Generate typed draft` both produced the six-day
+Ref. GPX proposal with `writes_performed=false`, 15 usable timing segments and
+six missing p75 estimates. Save became available; Accept remained disabled.
+No candidate was saved or accepted during this verification. The daily route
+geometries rendered, but the Rudy backgrounds used the explicit route-only
+fallback: the PNG endpoint returned `422 invalid_rudy_background` because this
+workspace's selected imagery cache source is not `happyman_rudy_twmap`. This
+separate imagery limitation was not bypassed by relabeling cache provenance.
+
+Checks: the new Retry regression failed before the fix and passed afterwards
+across nine result/route combinations; focused Permission/workbench/API tests
+passed 64 cases (142 deselected). `pnpm lint`, `pnpm typecheck` (1 test),
+`pnpm test` (19 tests), Dashboard inline JavaScript syntax and `git diff --check`
+passed. Navigation freeze checks before/after reported
+`NAVIGATION_FREEZE_SUSPENDED`. No layer/preparation contract changed, so full
+real-workspace GIS gates were not applicable. This repairs the candidate
+authoring workflow; itinerary acceptance and runtime promotion remain separate.
+
+### 2026-09-07: Restore dedicated Rudy cache and exercise the Ref. GPX proposal
+
+Follow-up for `dongqing_batongguan_historic_trail_newImport`: the prior Rudy
+`422 invalid_rudy_background` did not indicate missing tiles. The primary
+`imagery` cache is `nlsc_photo2`, while 402 prepared Rudy tiles already exist
+under `rudy-twmap`. The Permission renderer previously supported only the
+legacy Rudy-as-primary-imagery layout.
+
+Resolve `rudy-twmap` through `workspace_raster_tile_cache_bundle_ref`, its
+`layer_manifest_refs` and `layer_source_ids`, and the layer manifest's tile
+plan. Require consistent project, layer, cache root and
+`happyman_rudy_twmap` provenance. Use that layer for the single daily PNG;
+retain the explicitly declared Rudy `imagery` fallback for legacy workspaces.
+Do not relabel aerial tiles, change primary imagery, refetch tiles, or rerun
+preparation to fix this read path. Malformed or conflicting bindings remain
+unavailable. Update the owning local Dashboard process after checking that its
+preparation worker is idle; no QGIS worker restart is needed.
+
+Real browser verification covered Preview source, Generate typed draft, all
+six daily evidence disclosures, Cancel save, and Confirm save. Six Rudy PNG
+requests returned HTTP 200 with the expected source and
+`X-Scout-Writes-Performed: false`; all 402 cache file hashes were unchanged.
+The generated day intervals continuously cover 89.8271 km. Of 21 timing
+segments, 15 have usable p75 and six do not. D1, D2, D5 and D6 show supported
+subtotals; D3 and D4 show complete segment sums. There are five uncertainty
+acknowledgments (four partial days plus D3 exceeding the strategy target) and
+12 Safety handoffs (11 daily emergency-bivy candidates plus one route reversal).
+Never describe the partial subtotals as whole-day or whole-trip ETAs.
+
+The explicit browser save created
+`candidates/mission_baselines/baseline.e056777b35bf380f/versions/version.71cba88516894f70.json`.
+It remains candidate-only with no acceptance receipt or departure/runtime
+authority. The source cache bundle, seed, reference timing, reviewed graph and
+planned ETA hashes were unchanged. The whole `project.json` hash changed
+earlier during this session, before candidate save; that metadata change was
+not attributed by this run and was preserved.
+
+The existing automatic-proposal acceptance gap is now independently confirmed:
+`review_ready=false` because `explicit_day_end_inputs_bound=false`. The current
+Generate UI does not supply pre-candidate `day_end_inputs`; post-save Quick
+review and the `add_assumption` conversation patch cannot provide that missing
+provenance. Missing p75 is a disclosed uncertainty, not this acceptance gate.
+Do not fabricate human inputs or weaken the gate. A follow-up UI slice must
+collect explicit day-end choices before regenerating a candidate. Until then,
+report the real workflow as verified through candidate save, with acceptance
+and rebuild tested only in isolated fixtures.
+
+Focused results: 15 Rudy/API cases, 28 baseline/Ref-GPX/API workflow cases and
+one pre-candidate endpoint-provenance qualification case passed. The current
+33-layer contract verifier passed. Browser maps and source reads made no
+external fetches; only candidate save wrote workspace data in this follow-up.
+See `docs/admin/scout-permission-ref-gpx-guide.md` for the Chinese operator
+guide and `artifacts/permission-ref-gpx-20260907-newImport/` for local evidence.
+
+### 2026-09-07 correction: Ref. GPX means historical itinerary reconstruction
+
+The user clarified that `Generate from Ref. GPX` must copy the prior itinerary:
+daily endpoints, route, stops and CP passage timing. The preceding six-day
+480-minute proposal and recommendation to add a new day-end input step were
+the wrong interpretation of this mode. Keep their receipts as historical test
+evidence; do not present that candidate as the reconstructed reference journey.
+
+For the exact `dongqing_batongguan_historic_trail_newImport` workspace, existing
+`reference_pace_energy_analysis.historical_route_timing.daily_departures`
+already describes nine historical days. Bind and recompute those boundaries
+against the same speed-filtered primary GPX. Its 5,649 points include 5,506
+timestamps; the raw primary has non-monotonic cross-year observations and must
+not be substituted. The 219 checkpoint events match this filtered route:
+218 have exact observed passage clocks, and `cp.177` has no timestamp. Do not
+replace exact passage clocks with pooled multi-track 500 m checkpoint means.
+
+`scout_reference_gpx_reconstruction.py` is a read-only producer for these
+bindings. It preserves all nine day starts/ends, eight overnight recording
+gaps, missing-time ranges and CP-to-CP interval averages. The map preview
+samples the same route while retaining every exact daily boundary. Existing
+raw rest candidates contain durations spanning 2012 to 2020; copying them
+would invent multi-year rests. Instead, derive bounded stationary intervals
+from the coherent filtered track, split them at missing timestamps and long
+observation gaps, and label their semantics as inferred. This dataset yields
+32 such intervals. Daily elapsed time includes stops and recording gaps; it
+is not pure moving time, p75 or a present-day performance promise.
+
+The Dashboard explicitly requests `historical_reconstruction`. Missing or
+inconsistent declared evidence produces `reference_itinerary_unavailable`,
+never a silent 480-minute fallback. Day ends use `reference_evidence` with
+source/day hashes, without fabricated human input. Save and Accept recompute
+the entire bound reconstruction, including CP clocks, stops and elapsed time;
+`day_end_provenance_bound` accepts this verified historical provenance. Human
+review still names the exact days, disclosed uncertainties and pending Safety
+handoffs. Source changes invalidate the candidate or rebuild snapshot. New
+preview/generation clears the previously saved candidate and its review checks.
+
+Real screenshot inspection also found a confirmation-sheet layout defect:
+the page entrance animation leaves an identity transform on `.permission-shell`.
+That makes its fixed backdrop use the entire long itinerary as the containing
+block, placing Save/Accept below the visible viewport. Disable that animation
+and transform only while the Permission confirmation sheet is present. Verify
+the actual dialog and submit/cancel rectangles are within the viewport, not
+merely present in the accessibility tree. Other Dashboard page animations stay
+unchanged.
+
+The accepted baseline and rebuilt planned ETA retain the historical day data;
+Permission plan nodes carry observed elapsed duration while adjustment remains
+`review_only`. No baseline acceptance grants departure or runtime authority.
+The independent custom-endpoint/legacy fixture path remains available for its
+existing callers; the Dashboard's Ref. GPX mode is the explicit reconstruction
+path. No new GPX import, map preparation, QGIS restart or external fetch is
+required for this recovery. Updated operator guidance is in
+`docs/admin/scout-permission-ref-gpx-guide.md`, and source audits, test results
+and live UI evidence are under
+`artifacts/permission-ref-gpx-reconstruction-20260907/`.
+
 ## Run Log: 2026-07-28 Timeline Evidence Producer Repair
 
 Target workspace:
@@ -3607,7 +4462,10 @@ manually. A successful or safely rejected run removes its session directory.
 Crash recovery:
 
 - A `staging` journal with the original generation still published discards the
-  abandoned staged session.
+  abandoned staged session. If an external legacy writer changed only live
+  `project.json` while retaining that generation marker, recovery reports
+  `discarded-staging-after-live-update`; the unpublished staging session is
+  removed and the newer live workspace is left untouched.
 - A `prepared` journal with the original generation still published discards
   the unpublished staged generation.
 - A `prepared` or `exchanged` journal whose staged generation is live keeps the
@@ -3877,6 +4735,126 @@ Browser qualification on an isolated fresh-code runtime (`127.0.0.1:9101`):
 - Console errors/warnings: none. Terrain DEM tile responses: HTTP 200.
 - Focused Dashboard/MapLibre/DEM tests: 113 passed. Pre-trip API tests:
   101 passed. Ruff and diff checks: passed.
+
+## Run Log: 2026-08-24 Dongqing Navigation Preparation Repair
+
+Target workspace:
+
+```text
+/Users/alexwang0315/workspace/dongqing_batongguan_historic_trail_newImport_v2
+```
+
+Observed defect before repair:
+
+- `normalized/terrain/dtm_coverage_summary.json` catalogued 146 intersecting
+  20 m DTM candidate tiles, but
+  `outputs/navigation/terrain_rgb/manifest.json` was absent.
+- Navigation therefore reported Golden Route DEM coverage `0/240`, while the
+  vector-only projection still exposed ridge, valley, saddle, slope, and risk
+  candidates. The combined display looked prepared even though the elevation
+  sampling and 3D terrain path were unavailable.
+- The workspace also had accepted precomputed named-point evidence, but the
+  Navigation source ledger only projected the DTM and GPX refs. Historical
+  source pages and ordered route-position clues were omitted.
+- QGIS remained disabled and no QGIS/GRASS/GDAL runtime was available. This is
+  a separate explicit capability gap and must not be represented as prepared
+  GIS evidence.
+
+Root cause and preparation correction:
+
+1. Full layer preparation compiled the Navigation vector projection but did
+   not invoke `navigation_terrain_raster_dem.py`. It now runs Terrain RGB before
+   projection whenever `terrain` is requested.
+2. Terrain RGB preparation evaluates zoom 13, 14, and 15, measures displayed
+   Golden Route sample coverage for every ready candidate, and retains the
+   highest-coverage result. Coverage ties prefer the lower zoom. The selection
+   retains the no-nodata rule and continues to disclose the 20 m source-cell
+   resolution.
+3. If a dedicated historical-route ledger is absent, accepted HTTP pages from
+   the existing named-point evidence package are projected as bounded source
+   metadata. Named points ordered by route distance become fallback clues.
+   Fixture/precomputed and no-live-refresh limitations remain explicit.
+4. Clone removes reference GPX inputs whose content hash matches the Golden
+   Route or an earlier reference. It does not delete files from an existing
+   workspace or mutate the source workspace.
+5. Raster-label OCR now runs only when `imagery` is part of the preparation
+   request. Connected weather/geology refreshes and other partial layer updates
+   do not freeze or unnecessarily recompute Navigation evidence.
+
+Bounded recovery plan:
+
+- Repair the existing v2 workspace in place by generating only its Terrain RGB
+  artifact and recompiling its Navigation projection. Do not create v3, rerun
+  GPX import, or overwrite the source workspace.
+- Preserve CWA and geology as refreshable runtime evidence. This repair is
+  limited to static imported/prepared route evidence.
+- Keep QGIS state `DISABLED` / `NOT_STARTED` until an authorized, reachable
+  QGIS worker and reviewed GRASS/GDAL path exist; never fabricate those
+  artifacts to make the page look complete.
+
+Repair attempt 1:
+
+```text
+Zoom: 13
+Result: READY
+Complete Terrain RGB tiles: 20
+Golden Route displayed samples inside DEM bounds: 142/240 (59.2%)
+Source cell resolution: 20 m
+Unsupported cells encoded as terrain: false
+```
+
+The first supported zoom is valid but does not provide enough route coverage
+for this long east-west route. Before accepting the workspace, compare zoom 14
+and 15 with the same complete-tile/no-nodata rule and retain the result with the
+highest displayed Golden Route sample coverage. A lower zoom is not preferred
+when its selected complete rectangle leaves materially more of the route
+outside DEM bounds.
+
+Repair attempt 2:
+
+```text
+Zoom: 14
+Result: READY
+Complete Terrain RGB tiles: 110
+Golden Route displayed samples inside DEM bounds: 150/240 (62.5%)
+Source cell resolution: 20 m
+Unsupported cells encoded as terrain: false
+```
+
+Zoom 14 improves route coverage by only eight displayed samples. Continue with
+the bounded zoom-15 comparison before selecting the final artifact.
+
+Repair attempt 3 and selected result:
+
+```text
+Zoom: 15
+Result: READY and selected
+Complete Terrain RGB tiles: 506
+Complete candidate tiles before rectangular-block selection: 598
+Golden Route displayed samples inside DEM bounds: 168/240 (70.0%)
+Source cell resolution: 20 m
+Unsupported cells encoded as terrain: false
+```
+
+Live verification on a fresh-code Dashboard runtime at `127.0.0.1:9103`:
+
+- Navigation API: HTTP 200, `ready_with_terrain_hierarchy`, projection `ready`.
+- Source ledger: 15 sources (`P0=4`, `P1=7`, `P2=4`) and seven ordered
+  `named_point_route_positions` clues. The UI now labels these as route-distance
+  ordered named-place clues instead of incorrectly saying no chain exists.
+- 2D status: `DEM READY · 506 TILES · 20m`; displayed Golden Route coverage
+  `168/240 · 70%`.
+- 3D status: `MAPLIBRE 3D TERRAIN · DEM DECODED`; sampled Terrain RGB network
+  requests returned HTTP 200 and the canvas rendered nonblank.
+- Structure, slope pressure, risk terrain, retreat direction, and Shadow event
+  lenses all retained the same ready DEM while exposing distinct bounded data.
+- QGIS remained `DISABLED · NOT_STARTED` with zero QGIS artifacts. Its missing
+  latest-workflow request remains an expected HTTP 404 and is not a DEM failure.
+- Source GPX hashes before and after repair were identical. No v3 workspace was
+  created and the source workspace was not mutated.
+- The real-workspace 32-layer contract verifier passed all 32 layers with no
+  errors or warnings.
+- Final focused regressions: 25 passed. Ruff and scoped diff checks also passed.
 
 ## 2026-08-21 MapLibre and QGIS MCP evidence slice v0.1
 
@@ -4236,3 +5214,1712 @@ References:
 
 - GRASS `r.watershed`: https://grass.osgeo.org/grass-stable/manuals/r.watershed.html
 - GRASS `r.stream.extract`: https://grass.osgeo.org/grass-stable/manuals/r.stream.extract.html
+
+### Navigation MapLibre terrain refresh (2026-08-25)
+
+This section records the former presentation path. The Python bitmap terrain
+fallback described below was superseded by the 2026-08-26 QGIS/GRASS activation
+and must not be selected as an active terrain processor.
+
+Before changing the Navigation 2D/3D composition, inspect the read-only
+`navigation-terrain-intelligence` response and the Terrain RGB manifest
+separately. A stale projection does not mean the DEM is unavailable. The
+Dongqing runtime returned `persisted_projection_stale_or_invalid` after
+`mcp_named_point_evidence_ref` became part of the projection fingerprint, while
+the bounded Terrain RGB source remained ready.
+
+For this refresh:
+
+- rebuild `outputs/navigation/terrain_rgb/manifest.json` with the current
+  `bilinear_elevation` visual resampling contract;
+- preserve `adds_source_resolution=false` and never fill unsupported cells;
+- compile the Navigation projection only after all fingerprinted source refs
+  are stable;
+- verify the API reports a persisted ready projection and the same Terrain RGB
+  fingerprint before browser qualification;
+- retain 2D full-route fit and 3D local DEM fit as separate camera authorities.
+
+This refresh changes presentation evidence only. Elevation tint, hillshade,
+contours, ridge/valley candidates, and visual interpolation remain
+`candidate_only=true`, `runtime_safety_truth=false`, and do not establish route
+existence, walkability, safety, or an operational event.
+
+The former Python fallback painted local DTM cells into route-corridor bitmaps.
+It is retained only as historical diagnosis and is no longer an authorized
+terrain-analysis path. Standard terrain raster layers now require the bounded
+QGIS Processing + GRASS/GDAL workflow. When that worker is unavailable,
+preparation remains `awaiting_qgis_grass_processor` and emits no synthetic
+terrain raster. When the full DEM source itself is absent, preparation reports
+`source_unavailable`; it does not fall back to route-aligned or bitmap terrain
+inference.
+
+### QGIS/GRASS standard rectangle activation (2026-08-26)
+
+The Dongqing Golden Route was processed on the Raspberry Pi through the
+Scout-owned worker and fixed tool allowlists. The real successful worker run is:
+
+```text
+workflow run: qgis-worker-20260826T075524298258Z-9cbb89b355
+QGIS: 3.44.13
+GRASS: 8.4.1
+GDAL: 3.10.3
+QGIS Agent MCP plugin: 0.4.9
+input DEM SHA-256: 59e5e980000d6e3f5a7734c6af197934a1a5432482b6caa789a1ec90b624015d
+input DEM: EPSG:3826, 20 m
+```
+
+The output rectangle is TWD97 `241980..278320` by `2580580..2606540`, or
+WGS84 `120.9214363680,23.3275359875,121.2774205418,23.5621855416`.
+Elevation tint, hillshade, slope shading, and contours share that exact extent.
+The raster grid is `1817 x 1298` cells; contour display is `3634 x 2596` pixels
+without claiming additional source resolution.
+
+Actual allowlisted processors were `gdal:cliprasterbyextent`,
+`grass:r.slope.aspect`, `grass:r.relief`, `grass:r.contour`,
+`gdal:rasterize`, `gdal:colorrelief`, `native:extractbyexpression`, and
+`native:dissolve`. The run exported 27 artifacts. Processing and render status
+are completed; visual and human review remain pending. Every artifact remains
+`candidate_only=true`, `runtime_safety_truth=false`, and `operational=false`.
+Post-run Pi telemetry showed `48.8 C`, 6.2 GiB available memory, and 7 MiB swap
+in use. The isolated process RSS was about 624 MiB for QGIS, 151 MiB for the
+Scout worker, 59 MiB for Xvfb, and 28 MiB for the MCP bridge. The test container
+was removed after its worker receipt was copied; no public MCP listener remains.
+
+The active project terrain ref now points to this run. Navigation compilation
+takes about 1.5 seconds because it consumes the standard artifacts and marks
+the legacy local Python morphology comparator `not_run`; the prior comparator
+attempt was interrupted after more than 13 minutes. The Dashboard applies the
+fixed 10 m Golden Route start-distance filter per multipart line. In the browser
+this displays 7 ridge and 7 stream-network segments, 0 valley segments, and 128
+terrain samples from 14,754 raw candidate elements. These are display
+candidates, not accepted terrain truth.
+
+Mapbox Terrain RGB is regenerated from the same GRASS-bound source artifact and
+records `visualization_packaging_processor=scout_mapbox_terrain_rgb_encoder.v1`
+and `visualization_packaging_only=true`. This is encoding for MapLibre, not a
+second terrain-analysis engine. Its fail-closed complete-tile policy currently
+covers 117 of 240 displayed Golden Route samples (49%); therefore 3D remains
+explicitly local/partial while the four 2D GRASS raster overlays cover the full
+route rectangle.
+
+Evidence:
+
+```text
+API: http://127.0.0.1:9099/admin/pretrip/projects/dongqing_batongguan_historic_trail_scoutAI/navigation-terrain-intelligence
+Pi evidence: artifacts/qgis-grass-standard-20260826/remote-evidence/
+2D browser: artifacts/qgis-grass-standard-20260826/browser-navigation-grass-2d-final.png
+3D browser: artifacts/qgis-grass-standard-20260826/browser-navigation-grass-3d-final.png
+```
+
+### Historical map preparation and theme cache (2026-08-25)
+
+This dated single-theme baseline is superseded by
+`2026-08-28 full historical catalog and QGIS risk adapter` below. Keep it only
+as incident history; do not restore one-theme-only preparation.
+
+The Dashboard historical-map control is one presentation layer with an
+allowlisted theme selector, not 15 new canonical safety layers. Map preparation
+must pre-seed `sinica_jm50k_1916` into the distinct
+`historical-fandi-1916` workspace cache namespace. This is the default because
+the 1916 Aboriginal Territory map has mountain coverage along the Dongqing
+Batongguan route; the 1904 fortress map legitimately returns blank tiles across
+much of that corridor.
+
+Keep the control marked `data-layer-contract="auxiliary"`. The deterministic
+32-layer verifier otherwise treats its UI-only `historical-map` ID as an
+unknown canonical layer. Auxiliary marking preserves the existing layer IDs and
+order without weakening checks for unmarked unknown controls.
+
+Each alternate historical theme must use its own `historical-*` cache layer ID.
+Never reuse one cache directory while changing `source_id`, because a cache-only
+request could otherwise display a tile from the wrong year. The page remains
+cache-only on load. Persist the selected theme under a project-scoped browser
+key; a global preference can select an uncached alternate theme when a newly
+prepared workspace first opens. The existing explicit raster update button may
+fetch the currently selected allowlisted theme and persist those visible tiles
+into the workspace. Google, satellite, terrain, and other differently licensed
+or already represented current basemaps are not proxied as historical themes.
+
+The three Taitung national-forest themes use ArcGIS exploded tile paths with
+zero-padded zoom and eight-character hexadecimal row/column names. Historical
+tiles remain `candidate_only=true`, `runtime_safety_truth=false`,
+`operational=false`, and `visualization_only=true`; they provide comparison
+context and never prove route existence, access, navigability, or safety.
+
+The imagery source registry is imported when the Dashboard process starts.
+After adding or changing an allowlisted source, restart the actual user-facing
+`127.0.0.1:9099` process before browser qualification. Testing only a newly
+started alternate port can hide a stale-runtime `422 unknown imagery source_id`
+failure and leave every historical theme reporting `raster unavailable` in the
+Dashboard the user is actually running.
+
+## 2026-08-28 Import-Owned QGIS/GRASS Terrain Integration
+
+This entry supersedes any procedure that completes GPX import first and repairs
+terrain or Navigation after the workspace is opened. The discovered defect was
+an orchestration gap: the QGIS worker and its artifact contracts existed, but
+the normal `run_layer_preparation()` / Dashboard Clone transaction did not own
+the worker run. Terrain RGB and Navigation could therefore execute against
+missing or stale QGIS refs, making a second preparation pass or `_v2` workspace
+appear necessary.
+
+The canonical sequence is now:
+
+```text
+one clean GPX import
+  -> route_evidence_bundle.json with filtered Golden GPX ref + SHA-256
+  -> base map preparation and source refs
+  -> terrain_feature_stack.v1 through Scout-owned QGIS worker
+  -> typed/hash/processor/authority/extent/grid validation
+  -> project.json QGIS terrain activation
+  -> Terrain RGB visualization packaging only
+  -> final Navigation terrain projection
+  -> clone receipt and workspace exposure
+```
+
+Implementation ownership:
+
+- `pretrip_import.py` records the exact filtered Golden GPX SHA-256;
+- `pretrip_layer_preparation.py` dispatches, polls, times out/cancels, validates,
+  activates, and records the QGIS terrain stage before Terrain RGB/Navigation;
+- `qgis_spatial_backend.py` selects and verifies that exact Golden GPX, validates
+  full-rectangle grid alignment, and rejects a source-manifest fallback after an
+  authoritative filtered route has been declared;
+- `dashboard_workspace_clone.py` enables the same stage in the user's Clone
+  path and records it in the clone receipt;
+- `docs/admin/scout-dashboard-v0.1.html` exposes separate ridge, valley, and
+  flow-channel toggles plus `ROUTE_CONNECTED` / `RECTANGLE_ALL` counts.
+
+The persisted stage receipt is
+`outputs/spatial/qgis/map_preparation_status.json`. A successful activation must
+say `actual_processor=qgis_processing_grass`, `fallback_used=false`, and
+`python_dtm_processing_used=false`. The candidate authority remains
+`candidate_only=true`, `runtime_safety_truth=false`, `operational=false`, and
+`adds_source_resolution=false`.
+
+The fixed worker allowlist covers the current standard stack:
+
+```text
+gdal:buildvirtualraster
+gdal:assignprojection
+gdal:cliprasterbyextent
+gdal:rasterize
+gdal:colorrelief
+gdal:warpreproject
+grass:r.slope.aspect
+grass:r.relief
+grass:r.contour
+grass:r.geomorphon
+grass:r.watershed
+grass:r.mapcalc.simple
+grass:r.thin
+grass:r.to.vect
+native:extractbyexpression
+native:dissolve
+```
+
+There is no arbitrary Python, arbitrary PyQGIS, shell, browser-direct MCP, or
+generic MCP forwarding path. Python still parses GPX, orchestrates the job,
+validates schemas/hashes/provenance, and packages an accepted DEM as Mapbox
+Terrain RGB. The encoder is visualization packaging only and cannot produce
+slope, relief, contours, morphology, or hydrology evidence.
+
+All analysis begins from the prepared DEM rectangle, not a Golden Route ribbon.
+Every raster shares the declared CRS, extent, and aligned grid. Dashboard's 10 m
+route scope uses complete segment-to-segment distance/intersection: contact at
+any point retains the candidate's complete outward geometry and never rewrites
+the immutable rectangle artifact.
+
+Fail-closed states include disabled, not configured, unavailable, required
+algorithm missing, cancelled, timeout, worker failure, hash mismatch, extent
+misalignment, and artifact/authority validation failure. Fixture or synthetic
+worker output is recorded as `fixture_non_runtime` and is not activated. Terrain
+RGB remains `awaiting_qgis_grass_processor`; no Python bitmap or route-sample
+substitute is generated. Non-GIS Dashboard and importer outputs remain usable,
+and weather/CWA/GEE plus geology stay independently refreshable.
+Dashboard Clone records this case as `completed_with_degraded_terrain`, with the
+typed QGIS blocker retained in `stages.qgis_terrain_feature_stack`; it does not
+mislabel the terrain workspace as fully completed.
+
+Focused verification on 2026-08-28:
+
+```text
+252 passed, 1 warning
+tests: clone, importer, layer preparation, QGIS backend/worker,
+       Terrain RGB, Navigation projection, MapLibre adapter, Dashboard page
+browser console errors/warnings: 0
+```
+
+The live persisted Dongqing workspace rendered the prior real QGIS/GRASS run
+and exposed `ROUTE_CONNECTED=153` (`39` ridges, `28` valleys, `86` streams) and
+`RECTANGLE_ALL=14,625` (`2,828`, `3,036`, `8,761`). Removing the valley toggle
+removed valley features from the actual MapLibre GeoJSON source while preserving
+route and other morphology features. A 2D camera at zoom `12.504105962680786`
+survived a switch to the independent 3D camera and back without an automatic
+fit reset.
+
+New real single-pass GRASS execution was not available on this workstation.
+Local QGIS `3.44.13` and GDAL `3.12.3` were discoverable, but the QGIS Processing
+catalog exposed no `grass:*` provider, so the correct result is fail closed.
+The Scout Pi SSH endpoint also timed out, so there is no new Pi resource sample.
+The 2026-08-26 Pi run and its resource observations remain historical evidence;
+that run did not bind the current filtered Golden GPX SHA-256
+`8e8d47221f152e0f9787c62a4524d1f36bb5299c496a9ddf8b2a2f7bc00712ec`
+inside worker `source_hashes`, so it is not acceptance proof for this new
+single-pass integration. Do not mutate an existing imported workspace after the
+fact and present it as such proof; rerun the original Clone/import-preparation
+flow when a GRASS-capable worker is reachable.
+
+The deterministic layer-contract verifier still reports the pre-existing
+unrelated mismatch `pretrip:weather-api: MAP_LAYER_RANKS 58 != contract 80`.
+That contract-order defect is not evidence of a QGIS terrain failure and must be
+closed separately.
+
+### 2026-08-28 local GRASS workstation binding
+
+The Intel macOS workstation now keeps GRASS GIS 8.5.0 in the dedicated
+`scout-grass` micromamba environment. Homebrew core does not provide the GRASS
+formula on this host, so the supported persistent bindings are:
+
+```text
+runtime: ~/.local/share/scout-tools/micromamba/envs/scout-grass
+user command: ~/.local/bin/grass
+Dashboard command: ./venv/bin/grass
+```
+
+`tools/setup_dashboard_workspace_runtime.sh` creates the environment only when
+missing and refreshes both shortcuts. `tools/run_dashboard_workspace.sh`
+exports a macOS-supported UTF-8 locale and the bundled QGIS GDAL/PROJ data
+paths. The Scout MCP subprocess environment preserves only these named GIS
+runtime variables in addition to its existing narrow allowlist; unrelated
+environment values remain excluded.
+
+Installation is not accepted from `grass --version` alone. The local acceptance
+probe required QGIS 3.44.13 Processing to expose `grass:r.slope.aspect` and to
+execute it against a real EPSG:3826 raster. The resulting slope and aspect
+GeoTIFFs were 408 x 145 pixels at 20 m resolution, reported GRASS 8.5.0 with
+GDAL 3.12.3, and contained valid non-constant statistics. This proves the local
+QGIS/GRASS execution boundary; it does not yet prove the full one-import plus
+one-preparation transaction, terrain interpretation, route existence, or
+safety.
+
+### 2026-08-28 clean-Clone acceptance root causes (historical, superseded)
+
+The first real Dashboard acceptance target,
+`dongqing_batongguan_historic_trail_grassImport_20260828`, was intentionally
+preserved as failed-run evidence. It completed the clean GPX import, local OSM
+PBF route extraction, and 8-layer workspace raster cache (including
+`historical-fandi-1916`), but the browser aborted the still-running synchronous
+Clone request after the fixed 1,800 second limit. The server worker continued,
+so the message "Clone failed" was false and could encourage an unsafe duplicate
+retry. Dashboard now waits up to 7,200 seconds; a browser-side timeout says that
+the server may still be preparing the named workspace and disables an immediate
+retry instead of claiming the backend failed.
+
+The same run exposed a more important architecture violation before QGIS was
+called. Missing risk artifacts caused `_generate_scout_risk_outputs_from_workspace()`
+to import Scout Risk and execute Python `build_dem_from_dtm_coverage()` plus
+`compute_teii_from_dem()`. This was both the long-running stage and a forbidden
+formal Python DEM/TEII engine. The run was stopped without deleting or
+overwriting any workspace. The canonical path now fails closed with
+`awaiting_qgis_grass_processor`, `fallback_used=false`, and
+`python_dtm_processing_used=false`. After QGIS terrain succeeds, a missing
+QGIS-derived risk adapter becomes typed `unavailable` with
+`qgis_grass_risk_profile_adapter_not_available`; Python must never fill that
+gap. A fresh Dashboard Clone under a different unused workspace name is
+required for acceptance after this correction. Do not rename the partial run or
+repair it as `_v2` and present it as a clean import.
+
+The next fresh target,
+`dongqing_batongguan_historic_trail_qgisGrass_20260828`, proved that removing
+the Python DEM/TEII stage allowed the base preparation manifest to appear
+immediately after raster caching. It still ended as
+`completed_with_degraded_terrain`: a single QGIS worker preflight exceeded the
+Dashboard backend's 5 second HTTP timeout even though QGIS remained alive and
+the same bridge subsequently completed ten consecutive status checks in
+0.03-0.05 seconds. This target is also preserved as failed-run evidence and is
+not repaired after the fact.
+
+The canonical preparation now retries only typed retryable QGIS preflight
+failures, up to three attempts with a one-second interval, and records
+`preflight_attempt_count`. The persistent Dashboard launcher defaults
+`SCOUT_QGIS_TIMEOUT` to 30 seconds. Disabled, missing configuration, missing
+algorithms, non-retryable errors, and exhausted retries still fail closed with
+`fallback_used=false` and `python_dtm_processing_used=false`. Acceptance must
+therefore use another unused target name and repeat the original Dashboard
+Clone flow from `dongqing_batongguan_historic_trail_scoutAI`.
+
+### 2026-08-28 full historical catalog and QGIS risk adapter
+
+This section supersedes every earlier instruction that seeds only
+`historical-fandi-1916` or leaves the four risk layers unavailable after a
+successful QGIS run.
+
+Root causes:
+
+1. `WORKSPACE_RASTER_CACHE_SOURCE_IDS` listed one historical theme even though
+   the Dashboard selector and allowlisted registry exposed 15. The selected UI
+   theme was incorrectly treated as the preparation set.
+2. A successful `terrain_feature_stack.v1` ended in a hard-coded
+   `qgis_grass_risk_profile_adapter_not_available` state. This prevented
+   risk-score, risk-ribbon, risk-heatmap, risk-delta, and dependent boss-point
+   synthesis despite valid QGIS/GRASS route samples.
+3. The tile seeder counted blank white/transparent provider images as success
+   and retried permanent HTTP 404/410 no-coverage responses five times.
+
+Canonical correction:
+
+- Full import preparation creates 22 raster cache manifests: seven current
+  raster sources plus all 15 historical themes from
+  `HISTORICAL_MAP_CACHE_SOURCE_IDS`. Each historical theme has an independent
+  `historical-*` namespace and source id.
+- Blank/transparent tiles and HTTP 404/410 are typed no-coverage. Permanent
+  no-coverage is not retried; usable, blank, no-coverage, and failed counts stay
+  separate. A provider with no route coverage does not fail other themes and is
+  never marked cache-ready.
+- The QGIS worker samples elevation together with slope, aspect, multiscale
+  geomorphon, and flow accumulation and records
+  `actual_processor=qgis_processing_grass` in
+  `terrain_feature_route_samples`.
+- `scout_qgis_grass_risk_profile_adapter.v1` verifies the current workflow id,
+  receipt authority, artifact hash, fixture/synthetic flags, and required
+  slope values. It never reads a DEM or calls Python DEM/TEII processing.
+- The adapter applies the versioned candidate profile
+  `qgis_grass_terrain_candidate_score.v1`, repeats the nearest sparse QGIS
+  sample by reference-route progress onto the existing Overpass route base, and
+  records `adds_source_resolution=false`. This is contract/display packaging,
+  not new terrain resolution or operational risk truth.
+- Route-risk, point, ribbon, calibrated heatmap, and delta artifacts are
+  written before boss-point synthesis in the same preparation call. Successful
+  project state must contain `actual_processor=qgis_processing_grass`,
+  `fallback_used=false`, and `python_dtm_processing_used=false`.
+- Missing, malformed, hash-mismatched, fixture/synthetic, or failed adapter
+  input becomes typed `qgis_grass_risk_profile_adapter_failed` (or a more
+  specific input reason). Never restore the legacy Python terrain fallback.
+
+Focused regression commands:
+
+```bash
+./venv/bin/python -m pytest tests/test_pretrip_qgis_risk_adapter.py -q
+./venv/bin/python -m pytest tests/test_admin_local_raster_tiles.py -q
+./venv/bin/python -m pytest tests/test_admin_imagery_sources.py -q
+./venv/bin/python -m pytest tests/test_qgis_worker.py -q
+./venv/bin/python -m pytest tests/test_pretrip_layer_preparation.py -k 'qgis or risk or imagery_cache' -q
+```
+
+Real acceptance still uses the Dashboard Workspace flow. Preserve the source
+workspace, record source hashes, rerun importer plus preparation in the named
+target explicitly authorized by the operator, and verify the clone/import
+receipt, all historical theme statuses, current QGIS run/hash, four risk layer
+refs, boss-point refs, MapLibre toggles, and source hashes. Weather/CWA/GEE and
+geology remain runtime-refreshable after preparation.
+
+### 2026-08-28 Terrain Route Hypothesis Navigation integration
+
+The candidate-only terrain route stage now runs immediately after an immutable
+`terrain_feature_stack.v1` activation and before the persisted Navigation
+projection. It does not replace the Golden GPX, observed-passage evidence,
+official trail data, route truth, or any runtime safety authority.
+
+The fixed processing chain is:
+
+```text
+validated DEM rectangle
+  -> grass:r.slope.aspect
+  -> versioned nonlinear slope friction through grass:r.mapcalc.simple
+  -> anisotropic minimum model-cost trace with grass:r.walk.coords
+  -> one candidate LineString trace with grass:r.path
+  -> full-extent symmetric cost-from-A and cost-from-B with grass:r.cost
+  -> relative corridor C_A + C_B - C_AB
+  -> pure 5/10/20 finite-cell percentiles of symmetric macro-terrain detour cost
+  -> independent raw trace-in-band containment audit; no path union
+  -> hash-bound hypothesis, visualization, overlay, and processing manifests
+  -> persisted Navigation projection
+```
+
+Every persisted or HTTP projection carries `authority=candidate_only`,
+`source_type=terrain_hypothesis`, `runtime_safety_truth=false`,
+`operational=false`, `promotion_allowed=false`, and
+`safe_or_walkable=not_determined`. The Dashboard displays a permanent
+`CANDIDATE / TERRAIN HYPOTHESIS / NOT A VERIFIED TRAIL` strip, an independent
+minimum anisotropic model-cost trace source, independent 5/10/20 symmetric
+macro-terrain corridor image sources, evidence,
+unknowns, DEM resolution, model version, and provenance. Removing or
+invalidating either hash-bound route artifact yields an empty candidate source;
+the prior geometry is not retained.
+
+The route cache is content-addressed from DEM hash, extent, resolution,
+endpoints, algorithm/model versions, weights, and optional evidence hashes.
+Derived terrain, friction, cost raster, and final hypothesis cache keys remain
+separate. Activation occurs only after all worker artifacts match declared byte
+counts and SHA-256 hashes. The stage never writes an official-trail, route-truth,
+or safety-truth store.
+
+Two real QGIS 3.44.13 / GRASS 8.5.0 integration defects were found and fixed:
+
+1. `grass:r.cost` with `stop_coordinates` stopped after reaching the opposite
+   endpoint and left 666 of 2,500 synthetic cells as NoData. Corridor runs now
+   omit the stop coordinate and cover the complete analysis extent; `C_AB` is
+   still sampled at B.
+2. Current `grass:r.univar` emits a pipe table headed by
+   `non_null_cells|null_cells|...`. The bounded parser now accepts both this
+   observed format and the legacy key/value report while continuing to reject
+   missing, non-finite, fractional, or negative cell counts.
+3. GPT Pro review identified that the anisotropic trace and symmetric corridor
+   bands are separate model products, not one confidence surface. Schema v0.2,
+   cache keys, provenance, Navigation projection, and Dashboard wording now
+   preserve that distinction. Percentile masks no longer union trace cells.
+
+The local qualification evidence is under
+`artifacts/terrain-route-qualification-20260828/`. A deterministic 20 m
+two-peaks-plus-saddle DEM produced one 809.44 m candidate LineString, a complete
+2,500-cell relative-cost surface, monotonically expanding corridor bands of
+125, 249, and 499 cells. A raw pre-union audit found zero trace cells outside
+the 5th-percentile mask. Regenerated no-union TIFF and PNG artifacts are
+byte-identical to the prior fixture outputs, showing that union had not changed
+this fixture's pixels even though its semantics were incorrect.
+The persisted qualification manifest records hashes, versions, modules,
+parameters, findings, and confidence limits. This proves the local QGIS
+Processing/GRASS algorithm chain and Dashboard projection path. A live
+QGIS-agent-MCP plugin transport was not present, so the complete worker-over-MCP
+transaction remains `UNKNOWN` rather than inferred from CLI execution.
+
+At 20 m resolution the output is `macro_terrain_only`. Vegetation, trail
+surface, meter-scale cliffs and structures, recent landslides, water state,
+legal access, bridges, ropes, stairs, tunnels, and other engineered-trail facts
+remain unknown. None of those unknowns may be converted into safety,
+passability, legality, or route-existence claims.
+
+### 2026-08-29 one-pass risk and historical-map acceptance
+
+The `dongqing_batongguan_historic_trail_qgisGrass_clean_20260828` rerun exposed
+six additional one-pass defects after the adapter and historical catalog had
+already been added:
+
+1. Dashboard loaded `/workflows/latest` without a workflow filter. A later
+   failed auxiliary run hid the completed primary morphology artifacts.
+2. QGIS risk points were written after the original terrain-risk candidate
+   file, so Navigation compiled a valid but empty risk lens.
+3. the Dashboard restart script did not restore QGIS enablement, worker URL,
+   or token reference, so a restart silently changed preparation capability;
+4. the pretrip page kept `weather-api` rank 58.5 while the machine contract had
+   rank 80, causing the final 32-layer gate to fail.
+5. Clone did not persist source P0/P1 URL identity into the target before
+   preparation. Route-context collection could therefore reuse inherited
+   evidence without proving a live source refresh in the new workspace.
+6. raster/OCR route-context collection did not require a newly written HTML
+   briefing, so a prepared target could open without
+   `route_context_briefing_ref`.
+
+Canonical behavior now is:
+
+- query latest QGIS state with `workflow_id=terrain_feature_stack.v1`;
+- after every successful primary run, require the risk adapter receipt to have
+  the same run id, rebuild canonical risk candidates, then synthesize Boss
+  points and compile Navigation;
+- persist the loopback worker token in an owner-only file and start Dashboard
+  and QGIS worker through the repository launchers without logging its value;
+- keep `weather-api` at z/rank 80 and run both repository and real-workspace
+  layer-contract gates;
+- after import and before preparation, write the target-owned
+  `inputs/route_context_source_records.json` handoff from validated source P0/P1
+  records, then perform the explicit connected refresh in preparation;
+- write and project `outputs/briefings/route_context_briefing.html` during that
+  same preparation generation.
+
+The accepted primary run was
+`qgis-worker-20260828T161714108162Z-88505f2081`. It completed all 23 requested
+preparation layers, produced 3,182 QGIS/GRASS terrain-risk candidates and five
+Boss points, and recorded `actual_processor=qgis_processing_grass`,
+`fallback_used=false`, and `python_dtm_processing_used=false` for both terrain
+and risk. Dashboard showed 164 `ROUTE_CONNECTED` morphology candidates and
+14,237 `RECTANGLE_ALL` candidates, plus 30 of 50 bounded risk candidates.
+This later run used the live local QGIS-agent-MCP bridge and closes the earlier
+`UNKNOWN` transport status for the primary `terrain_feature_stack.v1` path.
+The same preparation consumed five target handoff records, recorded
+`live_network_refreshed` with four accepted web evidence items, generated 39
+route-context points, and wrote a 226,558-byte HTML briefing before the
+workspace was reopened.
+
+Raster preparation wrote manifests for seven current and 15 historical
+sources. Fourteen historical themes had usable route coverage and served local
+HTTP 200 tiles; `historical-taito-forest` returned no usable tile for all 402
+planned cells and remains typed `seed_no_coverage`. This is provider coverage,
+not a preparation error. Across all sources the final seed summaries recorded
+7,266 usable cached plan tiles, 1,570 no-coverage cells, and zero failed cells.
+
+One bridge timeout was observed before the accepted run. The failed receipt
+remained fail-closed with no synthetic fallback. Restarting QGIS plus the local
+worker and rerunning the same preparation produced the accepted receipt. The
+auxiliary `terrain_route_hypothesis.v1` failed independently at `dem_loaded`
+during this acceptance. It did not replace or invalidate the completed primary
+terrain stack. The bounded recovery and later successful candidate activation
+are recorded below.
+
+### 2026-08-29 Terrain Route Dashboard recovery
+
+The real `dongqing_batongguan_historic_trail_qgisGrass_clean_20260828`
+terrain-route run exposed three fail-closed integration defects after the
+primary terrain stack had completed:
+
+1. Selecting the active clipped GeoTIFF bypassed declared source-resolution
+   discovery. Terrain-route submission now requires the hash-bound parent
+   terrain-feature manifest to report square resolution, EPSG:3826, matching
+   analysis resolution, and the exact active DEM filename.
+2. The MCP validator still required `stop_coordinates` for `grass:r.cost`,
+   even though a symmetric corridor requires both cumulative surfaces to cover
+   the full analysis extent. The validator now rejects a stop coordinate for
+   this fixed recipe and continues to reject alternate start/allocation inputs.
+3. The planned 20 m rectangle was aligned to integer coordinates, while GDAL
+   retained the source DEM's half-cell grid and produced one additional row and
+   column. Completeness now binds to the inspected clipped DEM grid and its
+   zero-NoData cell inventory. Provenance preserves both the requested grid and
+   the actual source-aligned grid; a resolution or cell-count mismatch still
+   fails closed.
+
+Run `qgis-worker-20260828T233229646326Z-a7d0f0dd24` then completed the real
+MCP/GRASS path: slope, nonlinear friction, anisotropic `r.walk`/`r.path`, two
+full-extent `r.cost` surfaces, the relative corridor, and 5/10/20 percentile
+bands. The actual grid is 1,792 by 1,252 at 20 m, with 2,243,584 finite cells
+and zero NoData cells. The bands contain 112,180, 224,359, and 448,716 cells;
+each independently contains the minimum anisotropic model-cost trace without
+unioning path cells into the masks.
+
+Activation wrote only content-addressed candidate artifacts and then compiled
+the persisted Navigation projection. Dashboard browser verification showed the
+R1 hypothesis, all three corridor controls, a nonblank decoded 3D DEM canvas,
+and simultaneous nonblank 2D/3D split canvases. The hypothesis layer toggle
+removed and restored only candidate visualization. Narrow-screen verification
+kept the hypothesis, terrain-candidate, elevation, and map-control overlays
+non-overlapping. The route bundle, filtered GPX, and parent DEM retained their
+pre-run SHA-256 hashes. Human review remains pending; the result is not an
+observed, official, verified, safe, passable, legal, or recommended route.
+
+### 2026-09-01 Arbitrary A/B TRH Dashboard stabilization
+
+The Navigation Dashboard now accepts two explicit WGS84 map points and a bounded
+analysis margin, then submits `terrain_route_hypothesis.v1` through the existing
+spatial service boundary. A/B drafts persist per project, but no candidate is
+published until the QGIS worker reaches `completed` and the resulting
+content-addressed artifacts pass hash validation.
+
+The first arbitrary-point UI exposed three integration failures:
+
+1. the 2.5-second workflow poll rebuilt the complete Navigation map, causing
+   MapLibre to flicker and lose or stale its candidate projection;
+2. A/B and generate controls unlocked while a long run was still queued or
+   running, allowing duplicate submissions;
+3. path metrics issued as many as 240 sequential raster-identify calls and
+   could fail late at `hypothesis_validated`, while an empty MCP exception
+   message produced no useful UI detail.
+
+The bounded behavior is now:
+
+- active TRH polling updates only progress/status controls and performs one
+  Navigation reload after a terminal state;
+- all endpoint, margin, clear, generate, and competing workflow controls stay
+  locked for the full queued/running lifecycle;
+- a previous completed candidate may remain visible only with explicit wording
+  that the new evidence has not been published;
+- path metrics use at most 80 deterministic evenly spaced vertices while
+  preserving endpoints, and the manifest states that sampled maximum slope is
+  not a full-path-cell maximum;
+- typed MCP failure detail is always non-empty;
+- an unavailable optional corridor PNG does not blank the Rudy+TW base map or
+  the vector hypothesis.
+
+Real local run `qgis-worker-20260901T044232408212Z-11dc300da9` completed on
+QGIS 3.44.13 / GRASS 8.5.0 in about 116 seconds for a previously failing A/B
+area. The 20 m result contained an 89-vertex candidate trace, 80 deterministic
+metric samples, and nested 5/10/20 corridor bands of 1,720, 3,439, and 6,878
+cells. Each band independently contained the trace. Dashboard verification
+showed stable Rudy+TW context, candidate line, corridor, A/B markers, decoded
+3D DEM, reload persistence, and no browser-console errors.
+
+This remains `macro_terrain_only`, `candidate_only`, non-operational evidence.
+Portable macOS/Scout execution is exposed through
+`tools/run_terrain_route_hypothesis_worker.py`, which records the actual host in
+its receipt. A real execution receipt from the currently unreachable Scout host
+remains `UNKNOWN`. The normative subsystem description is maintained in
+[Scout Terrain Route Hypothesis Engine](scout-terrain-route-hypothesis.md).
+
+### 2026-09-01 TRH drainage bias and same-request alternatives
+
+Symptom: a slope-only TRH could prefer a valley or flow channel because lower
+slope reduced friction, while one A/B execution exposed only one R1 trace. A
+catalog of earlier runs did not solve this because those entries represented
+different executions rather than alternate assumptions for the same request.
+
+Root cause: live cost-model v0.1 explicitly rejected non-zero drainage weight,
+and the worker executed `r.walk` / `r.path` once. Flow accumulation existed in
+the broader terrain stack but was not bound into the route friction surface.
+
+Current bounded fix:
+
+```text
+hash-bound DEM
+  -> grass:r.slope.aspect -> nonlinear slope friction
+  -> grass:r.watershed -> flow accumulation
+  -> resolution-aware drainage pressure (1 / 5 / 25 ha contributing area)
+  -> R1 drainage_averse: pressure multiplier 4.0
+  -> R2 balanced: pressure multiplier 1.5
+  -> R3 terrain_only_baseline: pressure multiplier 0.0
+  -> three independent r.walk + r.path traces
+  -> one R1-bound symmetric 5/10/20 corridor in this thin slice
+```
+
+All three candidates are persisted in one typed run and displayed together in
+Navigation with separate colors and labels. Cross-profile costs are not ranked
+because each friction scale differs. If two profiles resolve to the same cells,
+the manifest records `distinct_geometry_count` and emits a warning; it never
+manufactures a detour. The zero-penalty R3 remains visible specifically so a
+valley/channel-following terrain-only solution is not hidden.
+
+Drainage pressure is not observed water, a hazard class, or an exclusion mask.
+Current water level, canyon form, vegetation, recent landslide, bridge, rope,
+engineered tread, passage, safety, and legal access remain UNKNOWN. A stronger
+drainage penalty must never be described as safer.
+
+### 2026-09-02 TRH route-cache contract mismatch recovery
+
+Symptom: an arbitrary A/B submission failed immediately at `input_validation`
+with `INVALID_INPUT` and `Terrain route cache keys do not match the submitted
+inputs.` The Dashboard API process had loaded the current route-cache contract,
+while the still-running QGIS worker had loaded an older contract revision.
+This was an internal process-version mismatch, not evidence that the selected
+A/B points or DEM were invalid.
+
+Keep the fail-closed key comparison. Restart the local QGIS worker through
+`tools/run_qgis_worker.sh`, confirm `WORKER READY`, and resubmit the unchanged
+A/B request. The public backend error now explains this recovery action without
+exposing internal hashes or automatically retrying a rejected request.
+
+After both processes loaded the same code, real run
+`qgis-worker-20260902T012929318608Z-047dd5793e` completed all 11 steps and
+published three same-request candidate traces: R1 drainage-averse, R2 balanced,
+and R3 terrain-only baseline. The run remained `candidate_only`,
+`runtime_safety_truth=false`, `operational=false`, and
+`safe_or_walkable=not_determined`.
+
+### 2026-09-09 Qualification restart must retain the Dashboard launcher
+
+The r14 qualification restart invoked `tools/dashboard_workspace_app.py`
+directly. Dashboard served saved pages, while the newly submitted Clone completed
+only 18 of 23 preparation layers. Both primary QGIS and auxiliary TRH reported
+`BACKEND_NOT_CONFIGURED`; a listening Worker and a live QGIS process did not
+enable the Dashboard adapter. Four risk layers and the aligned MCP publication
+remained blocked. GPX import and unaccepted Permission initialization succeeded
+independently; retain these separate outcomes.
+
+Use `tools/run_dashboard_workspace.sh` when restarting the real preparation
+runtime. It provides the existing token-file integration, `SCOUT_QGIS_ENABLED`,
+worker URL, GIS paths, locale and authenticated capabilities probe. With an
+already running task-owned Worker, use `SCOUT_DASHBOARD_AUTO_QGIS_WORKER=false`
+and `SCOUT_DASHBOARD_QGIS_WORKER_REQUIRED=true` to require successful reuse
+without creating a second Worker. Do not print credentials or restart QGIS.
+
+Before replacing the task-owned Dashboard, verify that preparation jobs are
+idle and hash the persisted job/source/Permission evidence. After restart,
+verify those hashes, the actual browser Worker readiness and a real preparation
+operation. Resume the same saved job to retain its completed import; a backend
+readiness label alone is not a completed preparation. Record the launcher and
+non-secret overrides alongside source hashes. An attestation copied from a
+previous HTML-only reload must not retain contradictory Python restart flags.
+
+The r14b recovery preserved 333 files and the same 16 code hashes, reused Worker
+11290/QGIS 5214 and launched Dashboard 32770. Same-job Resume then completed
+23/23 preparation layers with no warnings while retaining the only import.1
+receipt and all raw GPX bytes. A fresh New Import also completed on its first
+attempt with the same launcher. Both completed actual Save/Accept/Rebuild,
+reload, six-page and cross-workspace return observations. Auxiliary TRH still
+reported missing parent DEM metadata, separately from primary QGIS success.
+Final G1–G6 qualification still requires the three independent repeat cycles.
+See the
+[qualification checkpoint](scout-golden-gpx-g1-g6-qualification-20260909.md#r14b-啟動設定修復與同作業-resume).
+
+### 2026-09-09 Browser reload and delayed navigation evidence
+
+Browser qualification must prove a full document reload. Navigating to the same
+URL with a fragment may leave the existing document and saved selection intact.
+Use the supported browser `Page.reload` operation and verify a changed loader ID
+and a main Document request, then wait for the exact workspace and persisted
+candidate. A same-document navigation is not reload evidence.
+
+During repeat2, return from the nine-day workspace encountered CDP dispatch
+deadlines and a navigation wait timeout. A fresh browser tab recovered the saved
+candidate; the old tab later completed its pending navigation. No persistent
+Save, Accept or Rebuild was repeated. The root cause remains unconfirmed: do not
+infer that a control timeout proves either an application failure or tool-only
+failure. Preserve action attempts and delayed outcomes, re-observe state before
+retrying, and retain this browser flow as FLAKY. Recovery does not count as a
+clean consecutive qualification repeat; restart the required success streak.
+
+The repeat5 reload exposed a different observer error: preparation job cards
+became available before the source workspace catalog and compact project data.
+The `New workspace name` input was still disabled. A premature `fill` threw an
+actionability deadline; filling it later after the same document became ready
+is an actual action retry and remains FLAKY. Wait for the exact source project
+data and enabled form before invoking an action. A visible job card alone does
+not prove that every independent UI dependency has loaded.
+
+Keep observer predicate failures distinct from action retries. Repeat4 expected
+the literal `35/35`, while the same captured DOM already showed `35 / 35 CP
+clocks`, the original endpoint times, and a successful no-write Restore. Preserve
+the failed predicate; independently verify the completed action from that same
+capture instead of repeating it or rewriting the outcome.
+
+Later repeat5 map observations lost part of the CDP event history. Preserve
+`truncated=true` and never infer missing responses. Use a fresh task-owned tab
+for each independent cycle, collect events before and after screenshots/actions
+and during readiness waits, and bind cursor ranges to that tab. Initial events
+before instrumentation are not full-navigation evidence. New Document requests
+and changed loader IDs prove subsequent reloads; screenshots and immutable
+artifact hashes corroborate visible state but do not recreate a missing trace.
+These are observer repairs, not a source/runtime version change. Recollect the
+required consecutive successful cycles after a failed action.
+
+When reusing browser helpers across Node REPL cells, keep one shared mutable
+state object. Update its tab, CDP handle, cursor, request map, pending events and
+cycle with `Object.assign`; do not rebind the state variable to a new object.
+Existing helper closures may still hold the earlier binding. Repeat7's setup
+read the new tab while its helper opened Workspace on the preceding tab. Both
+readiness guards blocked the dependent fill/Clone, so no new preparation had
+started. Preserve the wrong-tab capture and failed guards, then prove the exact
+source and enabled form before the first Clone. This is not evidence of an
+error-free automation setup or a reason to erase an actual workflow retry.
+
+A new browser tab must first navigate to the observed HTTP(S) source page before
+enabling raw CDP. Repeat8's attempt on `about:blank` was rejected by the browser
+security check; normal navigation followed by supported CDP attachment resolved
+the prerequisite without bypassing it. Exclude pre-instrumentation events from
+reload proof. During Clone submission, match the exact target's new job card and
+its HTTP 202 response: the text field containing the target plus an older
+`prep.` card does not prove creation. Repeat8's initial Submitting capture is
+retained separately from its later verified new-job response. Do not repeat a
+submission just to repair an incomplete observation.
+
+### 2026-09-09 Scout storage for Golden qualification evidence
+
+When the Mac ran out of space, the user asked to use Scout storage. A strict,
+key-authenticated SSH preflight confirmed approximately 721 GiB free under
+`alexwang0315@scout.local:/home/alexwang0315/work`. The Mac independently recovered
+approximately 7.6 GiB before this task removed any files; no removal occurred.
+Re-measure live capacity instead of treating an older disk-full report as current.
+
+The task streamed a sealed inventory of 3,882 regular files (973,198,792 bytes)
+directly to this new, private Scout directory, without a local archive file:
+
+```text
+/home/alexwang0315/work/scout-golden-gpx-qualification/20260909/sealed-snapshot-20260909T112754Z-85d029df
+```
+
+`payload/` retains relative paths; `manifest.json` binds file hashes, sizes and
+metadata, and `verification.json` records full remote read-back. Every selected
+file was stable and rehashed while streaming, then fully rehashed on Scout;
+file modes/mtimes, directory modes and the exact relative-path inventory matched.
+A separate SSH connection verified the manifest and verification receipt hashes.
+The manifest SHA-256 is
+`f770a96eba4ec3950d81003aa8506da5da94dd644a8c9168247330a338f95640`.
+
+The selected roots were existing qualification browser/receipts/reports and two
+completed pytest fixture directories. Symlinks were not followed; 21 symlinks
+and an environment-named receipt were explicitly excluded. This is a per-file
+snapshot, not an atomic whole-tree snapshot. Later log/checkpoint appends and
+new browser evidence require a later snapshot. Ownership, ACLs, extended
+attributes and hard-link identity were not preserved. See the
+[storage receipt](../../artifacts/golden-gpx-repair-20260909/storage/scout-storage-summary.md)
+for exact selections, exclusions, scripts and measurements.
+
+Copying to Scout does not reclaim Mac space. Do not remove originals, replace
+active workspaces with symlinks, change credentials, or mount a remote filesystem
+as an implicit part of backup. Exact-target deletion still needs the user's
+explicit approval. The restored Mac capacity was sufficient to resume the three
+fresh Golden repeat cycles on the same r14 code and GIS environment; remote
+storage success does not itself pass G1–G6 or establish ARM64 execution parity.
+
+Before recovery, Dashboard/Worker listeners and their old process handles were
+absent, the prepared Scout QGIS connection referred to an exited process, and
+all preparation jobs were terminal. Starting the existing Scout QGIS profile,
+`tools/run_qgis_worker.sh`, then the documented Dashboard launcher with
+`SCOUT_DASHBOARD_AUTO_QGIS_WORKER=false` and
+`SCOUT_DASHBOARD_QGIS_WORKER_REQUIRED=true` restored authenticated readiness.
+All 387 persisted evidence files, 16 tested source hashes, launcher and served
+HTML remained unchanged. Preserve this recovery evidence separately from the
+new repeat-cycle qualification results.
+
+### 2026-09-02 Dashboard-managed local QGIS worker
+
+`tools/run_dashboard_workspace.sh` now manages the local QGIS worker by
+default. One command is sufficient when the persistent runtime, worker token,
+and Scout QGIS profile are already prepared:
+
+```bash
+tools/run_dashboard_workspace.sh --host 127.0.0.1 --port 9099
+```
+
+The launcher first probes the authenticated worker capabilities endpoint. It
+reuses an already-running compatible worker; otherwise it starts
+`tools/run_qgis_worker.sh`, waits for the worker API to respond, and records its
+output in `~/.scout-fusion/qgis-desktop/runtime/qgis-worker.log`. When the
+Dashboard exits, it stops only the worker process that it started. A separately
+started worker is never terminated.
+
+Autostart is local-only and does not launch or control QGIS Desktop. The Scout
+QGIS profile and plugin bridge must still be available for GIS execution. If
+the worker cannot start, the Dashboard remains usable while QGIS/TRH stays
+typed `unavailable`; no terrain result is guessed. Set
+`SCOUT_DASHBOARD_QGIS_WORKER_REQUIRED=true` to make worker startup failure also
+stop Dashboard startup, or `SCOUT_DASHBOARD_AUTO_QGIS_WORKER=false` to retain
+manual worker lifecycle management.
+
+### 2026-09-03 TRH button disabled after selecting A/B
+
+The observed runtime had no listening Worker and an MCP connection file for an
+exited QGIS process. Saved candidate geometries remained viewable, but they did
+not prove live calculation readiness. Restarting the prepared Scout QGIS profile
+and the Dashboard-managed Worker restored the real handshake; A/B drafts were
+not changed. QGIS expects the parent of the `profiles` directory here:
+
+```bash
+open -a /Applications/QGIS-LTR.app --args \
+  --profiles-path "$HOME/.scout-fusion/qgis-desktop" \
+  --profile scout --nologo --noversioncheck
+tools/run_dashboard_workspace.sh --host 127.0.0.1 --port 9099
+```
+
+Use this QGIS command only when that Scout application instance is not already
+running. Do not stop an existing QGIS session with unsaved work or an active GIS
+job. The `--profiles-path` argument must not end with `/profiles`, because QGIS
+appends that directory itself; otherwise it loads a different profile without
+the prepared bridge. Do not change credentials or install another plugin.
+
+Navigation now exposes **重新檢查 Worker** beside A/B. It re-reads live status
+and capabilities/control metadata without resetting the map, endpoints, current candidate, or
+R4 review. Initial rendering and in-place updates share the same gate: a missing
+Worker/bridge remains unavailable, and stale/fixture readiness never unlocks a
+live TRH request. Starting QGIS and Worker does not execute TRH automatically.
+
+### 2026-09-03 Explicit Navigation Worker startup
+
+In Navigation, **啟動 Worker** now starts a missing local Worker and, on macOS,
+can open the already-prepared Scout QGIS profile. **重新檢查 Worker** remains
+read-only. Merely opening Navigation or running Diagnostic does not start any
+service. The button is disabled while checking/starting, during a GIS job, when
+already READY, or when this Dashboard cannot manage the configured runtime.
+
+The local workspace Dashboard owns the fixed launcher/profile configuration.
+The general admin API does not gain process-launch authority. Startup accepts
+only same-origin loopback JSON requests; browser-supplied commands, host URLs,
+credentials and authority fields are rejected. Token/profile/runtime setup must
+already exist. Remote Scout startup and Linux container lifecycle are not
+implemented here; a configured existing Linux bridge can still be reused.
+
+An occupied unrecognized Worker port, missing setup, unresponsive existing QGIS
+session, or timeout stays typed unavailable. Never close somebody's QGIS session
+to make this check green. After fixing that underlying condition, use the
+read-only recheck. A READY startup receipt alone does not enable TRH: the UI
+repeats the real Worker/QGIS/bridge/capability handshake. R4 retains its separate
+human-review gate, and no route job is submitted by either Worker button.
+
+Receipts are appended to `~/.scout-fusion/qgis-desktop/runtime/qgis-runtime-control.jsonl`
+and the action's Worker log is `qgis-worker-navigation.log` in that directory
+(or beside the configured token file). They contain no credentials. The action
+is start-only: a Worker it starts remains running for later Dashboard reuse.
+
+Live local proof used an isolated Dashboard on port 9101 with Worker autostart
+disabled and an initially empty port 9878. Clicking **啟動 Worker** produced
+`existing_qgis_preserved`, `worker_started`, then a real `READY` handshake.
+The A/B generation button unlocked; endpoints, narrative, G6 focus and the map
+were preserved, while unreviewed R4 stayed disabled. No TRH/R4 job was generated.
+The existing QGIS application and normal Worker on port 9876 were not interrupted.
+Cold QGIS GUI launch was covered by adapter tests, not repeated against the
+operator's open QGIS session; remote Scout qualification remains UNKNOWN.
+
+### 2026-09-04 Arbitrary A/B TRH stops at DEM inspection
+
+The Dongqing run `qgis-worker-20260904T005941165938Z-c59eeb94a5` failed with
+`NODATA_PRESENT` before routing. Its 1,000 m A/B margin extended 680 m east
+and 520 m south of the existing prepared DEM; GDAL padded the clip with 13,994
+NoData cells (62,088 total). The original registered Taiwan 20 m DEM was still
+available and bound to the terrain-feature manifest.
+
+Do not reduce the margin, fill unknown elevations, or bypass the finite-grid
+gate to make this green. Explicit A/B now uses that original full raster only
+after verifying the parent-bound source/coverage hashes, CRS and resolution.
+It remains a bounded GRASS calculation at native resolution. An unavailable or
+changed original source stays `SOURCE_UNAVAILABLE`; genuine clipped NoData
+still stays `NODATA_PRESENT`.
+
+The blank-map symptom had two independent lifecycle causes: submitting TRH
+removed the published candidate references before success, and Navigation
+replaced completed terrain vectors/GPX geometry with the new job's empty
+artifacts. New attempts now retain the published candidate until a validated
+replacement exists; errors identify it as the previous result, not the failed
+A/B solution. Completed terrain-stack evidence is loaded separately on page
+entry and survives TRH progress/failure. Import/preparation invalidation and
+all human-review/candidate-only boundaries remain unchanged.
+
+Retain the prepared DEM hash as a separate parent-source binding even when the
+full raster supplies the new A/B pixels. R4 review uses that chain to compare
+corridors against the existing terrain feature index. It is also included in
+cache identity; missing parent bindings must not be waved through or repaired
+by auto-selecting review anchors. Transient map-refresh failures display the
+last loaded evidence with an explicit stale/previous-result notice, while a
+typed source-unavailable projection still fails closed.
+
+Recovery receipt: `qgis-worker-20260904T012958960072Z-8d6d01ab12` completed
+R1/R2/R3 for the original failed endpoints and unchanged margin. The bounded
+20 m grid contained 62,088 finite cells and zero NoData. Its full-raster cache
+`82a9f7b4511226e028261759c6a04f002a59aca177dcf5d30152d5ab89f869c9`
+also passed the existing R4 parent/corridor/path checks in a read-only replay;
+no human anchors or review decisions were written.
+
+Check the operator's actual Dashboard port before declaring a runtime repair
+complete. In this incident, Chrome was connected to an old process on 9100 while
+9099 had already been updated. A later 9100 submission repeated the old
+candidate-deactivation behavior. Wait for an active worker job to complete,
+then update the owning Dashboard process, preserving a shared worker/QGIS
+session. The newer successful operator result (`be8797bfcd83` cache prefix) was
+retained; the earlier recovery was not republished over it. Both local ports
+served the updated page afterward.
+
+The affected combined Python run had 442 passes and one worker-poll timing
+failure; the failing test passed on an unchanged standalone rerun. Frontend
+checks, the real-workspace 32-layer contract, and focused 2D/3D browser checks
+passed. This is local recovery evidence, not remote Scout qualification or
+production/safety promotion.
+
+### 2026-09-04 Store buffered analysis DEM in the workspace
+
+The operator correctly reported that both failed A/B points were inside the
+route scope. Verified EPSG:3826 points were approximately
+`A=(277780.49,2581296.74)` and `B=(273584.44,2583237.12)`, inside the route bbox
+`242479.596,2581030.537,277868.065,2606119.118`. The old prepared DEM only added
+250 m, whereas TRH added 1,000 m around the A/B bbox. Do not describe this as
+the operator selecting endpoints outside the route.
+
+Preparation now materializes a separate workspace-owned regional DEM after the
+terrain-feature parent, before TRH. Default storage margin is 5,000 m plus two
+native grid cells, covering the current maximum analysis margin for endpoints
+within the route bbox. Feature-stack extent, semantic corridor, known GPX,
+candidate route refs and R4 review remain unchanged. The normal layer
+preparation receipt includes `workspace_terrain_dem`; unavailable preparation
+must remain explicit, not be counted as successful coverage.
+
+Use `./venv/bin/python -m workspace_terrain_dem --project-root <project-root>`
+for a bounded backfill without rebuilding the rest of the workspace. The new
+project refs point to `outputs/terrain/dem/<identity>/dem.tif` and its manifest.
+TRH validates the local file and its current parent/source bindings, checks the
+buffered request fits, then submits that workspace-owned source to the worker.
+Only legacy workspaces without these refs retain direct original-raster use.
+
+Attempt 1 stopped with a typed CRS error: the original GeoTIFF had custom
+WGS84/TM121 WKT without an EPSG ID, despite its registered Metadata.xml declaring
+EPSG:3826. The fixed adapter requires both provider reference-system metadata
+and matching complete TM121 projection parameters. It normalizes only the
+derived clip's CRS tag, records original WKT and exact commands, and keeps a
+hash-bound provider XML copy inside the workspace. Any recognized conflicting
+CRS, unsupported axis/unit or different projection remains unavailable.
+
+The successful local receipt is
+`outputs/terrain/dem/e8a985456305ac9d09939754d7937dc547c8b845e1f15ea15019fb2c88a82dd4/manifest.json`:
+20 m native resolution, 2,274 x 1,759 cells, 3,999,966 finite cells, zero NoData,
+and an 11,796,504-byte GeoTIFF. Full-grid counts come from actual GDAL cell
+export, not rounded statistics. Active R1-R3 and R4 review hashes were not
+replaced. Original source data, safety authority and GPX geometry were untouched.
+
+Validation used the same failed A/B and 1,000 m margin against the new local
+raster: 312 x 199 cells, 62,088 finite and zero NoData. The backend selected
+`workspace_prepared_dem`; repeated preparation reused the same manifest/hash.
+Related tests passed 159 cases, with 47 cases passing in the final focused rerun;
+the real-workspace 32-layer contract passed. Both Dashboard ports were updated.
+Startup took longer than the initial readiness poll, so the existing startup
+process was allowed to finish instead of launching a duplicate on that port.
+
+After restarting, the Navigation API reported `persisted_projection_stale_or_invalid`
+even though the active route artifacts were intact. The prior projection's
+fingerprint no longer matched current inputs; the specific earlier input change
+was not established. Recompile only the existing Navigation display projection,
+then verify its fingerprint, candidates and R4 scope. Do not respond to this
+state by deleting route results or rebuilding human review.
+
+### 2026-09-08 Exact-workspace terrain backfill without replacing `newImport`
+
+The authorized target is
+`/Users/alexwang0315/workspace/dongqing_batongguan_historic_trail_newImport`.
+`dongqing_batongguan_historic_trail_qgisGrass_clean_20260828` is a read-only
+capability reference, not a directory to rename, copy over the target, or delete.
+Verify both `project.json` IDs before interpreting similar route names. Preserve
+the original file/hash inventory and the target's newer Route Context,
+semantic review, Permission, and dynamic evidence before regeneration.
+
+This target had two independent input gaps:
+
+1. `golden_route.filtered_geometry_ref` existed, but
+   `golden_route.filtered_geometry_sha256` was absent. The QGIS backend correctly
+   refused to use an unbound filtered GPX. Hash the target's existing filtered
+   file and add only that missing binding; do not replace its reference tracks.
+   The verified filtered GPX hash is
+   `8e8d47221f152e0f9787c62a4524d1f36bb5299c496a9ddf8b2a2f7bc00712ec`.
+2. The coverage summary listed 146 county DTM entries but no `raster_sources`.
+   QGIS's county-source fallback considers only the first 32 candidate entries.
+   Register the independently available 2025 full-Taiwan 20m DEM, using its
+   actual SHA and provider XML CRS evidence, instead of replaying the reference
+   workspace's prepared DEM or manifests. The source TIFF SHA is
+   `59e5e980000d6e3f5a7734c6af197934a1a5432482b6caa789a1ec90b624015d`;
+   XML SHA is
+   `58f354e1e4258c1e8a47f49fc7e4c03b3b1d3871af6666b734361afa462f9495`.
+   `crs_evidence` is the XML path string, not a nested object. Preserve county
+   entries and use the existing strict provider-XML/TM121 CRS normalization.
+
+The existing Route Context evidence packet binds the previous route-bundle
+hash. Preserve those exact previous bytes plus a receipt identifying the single
+added field and old/new SHA. Do not rewrite a historical evidence packet or
+rerun its human review merely to make its snapshot look current.
+
+For a user request that prohibits directory replacement and cache deletion,
+the connected-preparation coordinator's staged directory exchange and retired
+generation cleanup are not appropriate. Use the existing bounded producers on
+the exact target, in this order: terrain feature stack, workspace DEM, QGIS risk
+adapter, terrain route hypothesis, Terrain RGB, and Navigation projection.
+The task-local reproducible driver and initial snapshots are under
+`artifacts/workspace-terrain-parity-20260908-newImport/`. It calls the existing
+preparation helpers; it does not rerun import, overwrite Route Context, install a
+permanent workflow, or grant review/operational authority. Keep project writers
+sequential. Raster downloads may use disjoint cache paths with project-field
+publication deferred, then merge only the producer's own fields into the latest
+project snapshot.
+
+The target's completed primary run is
+`qgis-worker-20260908T015858039770Z-0043021dd2`, with 27 hash-verified artifacts.
+The 5,649 filtered GPX vertices match its route anchor exactly. Its parent
+manifest SHA is
+`c41ce050a8dde585036b4b8a3a7da5f5542857eeab562991c7bcd46def420ee5`.
+The QGIS risk adapter produced 4,292 route samples, 3,182 points, and 2,884 ribbon
+segments. These are candidate scores, not reviewed spatial-risk input.
+`qgis_spatial_risk_input_status=not_available` is correct while reviewed QGIS
+evidence is missing; both workspaces shared that state before this backfill.
+
+The first TRH run, `qgis-worker-20260908T021923945035Z-19201abe39`, failed during
+endpoint preparation. Its workspace receipt had a generic processing error;
+the worker's retained `worker_run.json` identified
+`QGIS bridge request timed out: bridge.hello`. Preserve both records. A fresh
+availability check succeeded, and the second run
+`qgis-worker-20260908T022504845168Z-b0378c38d4` completed R1/R2/R3 with 23 published
+artifacts. No QGIS restart, fabricated success, or synthetic terrain fallback
+was needed for this retry. All hypotheses remain candidate-only, with
+`runtime_safety_truth=false` and `safe_or_walkable=not_determined`.
+
+Two producer defects were exposed by inspecting actual payloads:
+
+- Fresh raster cache files previously bypassed blank/transparent validation.
+  The target's forest manifest counted 402 reusable images, although 18 were
+  fully transparent legacy files and only 384 had visible data. Validate fresh
+  cache payloads using the same blank test as remote/fallback payloads, retain
+  their bytes and mtimes, and report no coverage instead of useful cache hits.
+  Across the 22 layer plans there are 8,836 slots and 7,266 useful images. Valid
+  provider JPEGs can have the historical `.png` cache suffix; decode the content
+  rather than classifying solely by the extension. `historical-taito-forest`
+  has no coverage for all 402 planned cells, including in the reference.
+- Terrain RGB previously read only county `.grd` files, even after preparation
+  had produced a complete, hash-bound workspace DEM. This yielded 506 tiles but
+  only 3,015/4,291 supported route samples (70.26%). Prefer the active prepared
+  DEM after validating its manifest SHA, exact project, current parent/coverage
+  bindings, raster SHA, dimensions, and finite/NoData inventory. Include both
+  the DEM and manifest hashes in the output fingerprint. A declared invalid
+  prepared DEM must fail closed instead of silently falling back to the old
+  county mosaic. This change only decodes and packages the native 20m elevation
+  grid for display; it does not add terrain resolution or safety authority.
+
+Scoped test isolation also needs both Scout's env loader and
+`python-dotenv`'s `DotEnv.parse` mocked. Importing `admin_api` can reach FastMCP
+Settings through Pydantic AI during collection, before a Scout-loader-only mock
+can prevent a real `.env` read. The retained test guard blocked that read before
+content was accessed. On macOS, a deletion guard must resolve `dir_fd` when
+checking temporary fixture cleanup; otherwise it can falsely reject an
+expected NoData test during teardown. Keep these harness failures and their
+successful reruns distinct from product test failures.
+
+The native workspace DEM reconstruction completed with 2,274 × 1,759 cells,
+3,999,966 finite cells and zero NoData, at the original 20m resolution. Terrain
+RGB replay selected `workspace_prepared_dem` and generated 54 complete tiles at
+z13, covering 4,291/4,291 route samples. Higher display zoom replays also reached
+100% (266 tiles at z14; 1,200 at z15); the existing selection policy chose the
+lowest complete zoom. Tile count alone is not a coverage comparison. The
+Dashboard independently reported 240/240 displayed samples and decoded a real
+3D center elevation of 1,848.8m, with `adds_source_resolution=false`.
+
+After the raster producer fix, publish only its delta into the latest target
+project. Final coverage is 7,266 useful images out of 8,836 planned cells across
+22 layers. The 1,570 unavailable cells consist of 18 retained transparent forest
+tiles, 492 blank provider responses that were not written, and 1,060 provider
+no-coverage responses. The final replay had zero failed fetches. Source coverage
+varies by historical theme: Shinko has 10/402 useful cells, Kanzan 3/402, and
+Taito 0/402. A successfully loaded transparent fallback is not map coverage.
+
+For dynamic evidence, call the official environment preparation helper once on
+the target. This run used the explicitly enabled Mac server imagery path
+(`SCOUT_CWA_SERVER_IMAGERY_CAPABLE=1`) and a task-local cache wrapper that
+suppressed four prune calls. It retained prior environment files and imagery
+cache snapshots; no existing imagery file was deleted. CWA fetch time advanced
+from `2026-09-07T04:46:06.296724+00:00` to
+`2026-09-08T02:36:16.749156+00:00`. Forecast, warning, rainfall observations,
+QPE and QPF datasets were all ready; rainfall grids and imagery were ready.
+The radar frame was 10:20 and satellite frame 10:10 Asia/Taipei. GEE remained
+`missing_credentials`; do not replace it with old reference-workspace data.
+Weather UI still reported route `no_coverage`/unresolved impacts. Provider fetch
+success is not proof of route impact coverage, current frame validity, or a
+safety decision. Historical Route Context/review/Permission bytes remained
+unchanged (41 protected project fields and 43 referenced artifacts); later
+terrain replay uses the separately recorded, authorized dynamic-refresh
+checkpoint of 118 fields and 119 hashes.
+
+The final audit also exposed a risk provenance ordering defect. The official
+risk finalizer first generated child point/ribbon metadata and then stamped
+candidate provenance into the parent route GeoJSON, changing its raw SHA.
+Consequently `source_route_risk_sha256` in the children referred to the parent's
+pre-stamp bytes. Rebind only children whose original parent ref and SHA match
+the parent being stamped, then stamp the children so their source refs and
+model-output hashes include the final parent/metadata bytes. A mismatched or
+unrelated parent must not be silently blessed. Repeated stamping must be byte
+stable and must preserve geometry, scores, and candidate-only boundaries.
+Replaying an already completed QGIS workflow normally returns
+`risk_outputs_already_match_qgis_workflow`; use the explicit, validated
+`force_refresh` replay entrypoint after this producer repair instead of making
+the project falsely appear pending or manually editing the workspace hashes.
+
+The real same-workflow risk replay completed at
+`2026-09-08T03:25:42.866181+00:00`, retaining 4,292 route samples, 3,182 points
+and 2,884 ribbon segments. Its final route raw SHA is
+`ae42ec78fea33bcf79d851583730f660077a4e5e4533c1e2e5a2cebe924433df`;
+both derived metadata files and their embedded metadata bind that final SHA.
+The pre-repair outputs were copied to a task evidence snapshot before replay.
+The task-local wrapper also retained the adapter's new empty temporary directory.
+Recompile Navigation projection after replay; do not rerun terrain analysis or
+human review just to refresh display provenance.
+
+On the final local service restart, the Dashboard launcher's default 15-second
+worker startup deadline expired while the worker was still starting; the log
+was empty and the launcher terminated that not-yet-ready managed child. Use the
+existing `SCOUT_DASHBOARD_QGIS_WORKER_START_TIMEOUT` environment override for a
+bounded startup retry (180 seconds in this run). Preserve the QGIS desktop
+instances and do not start a duplicate worker while an earlier child is alive.
+Wait for the actual loopback listeners before reloading the browser. This is a
+local startup parameter, not a production policy or a hardware authorization.
+
+The first post-start status request also exceeded its 30-second timeout; retain
+that unavailable receipt and retry after startup rather than treating a TCP
+listener as a successful QGIS handshake. The fresh status attempt succeeded at
+`2026-09-08T03:42:10.611021Z`: QGIS `3.44.13-Solothurn`, plugin `0.4.9`, bridge
+and application available, with no errors. The original QGIS desktop instance
+and the task's Scout-profile instance both remained running throughout service
+restarts. A fresh browser reload then showed the exact target project,
+MapLibre ready, 54 prepared DEM tiles, the three morphology layers, R1/R2/R3,
+and `CANDIDATE · TERRAIN HYPOTHESIS · NOT A VERIFIED TRAIL`.
+
+Final evidence is in
+`artifacts/workspace-terrain-parity-20260908-newImport/REPORT.md` and
+`provenance/final-provenance-after-risk-replay.json` beneath that directory.
+The independent audit passed 24/24 checks, including all 10,358 risk feature
+model-output hashes, unchanged risk geometry/scores, current Navigation input
+fingerprint, and whole-workspace preservation. The final scoped JUnit set has
+125 unique passing cases and no unresolved failures; earlier harness/fixture
+failures remain recorded. The real-workspace layer verifier passed all 33
+contract entries. The Navigation freeze guard remained report-only and its
+baseline was not changed. All original 5,724 target files remain; the reference
+workspace's 13,535 files retain identical bytes, mtimes and root inode. Core
+terrain/raster parity does not replace the reference's two historical scenario
+entries, G1-G11 guidance or 18 historical TRH runs; preserve that reference
+until a separate evidence-retention decision and explicit deletion approval.
+
+## 2026-09-08 — Golden G1–G6 qualification: import timeout and authoring gap
+
+The real Dashboard qualification uses the existing local service at
+`http://127.0.0.1:9099`, PID `47541`, and separate targets
+`golden_g1_chilai_20260908`, `golden_g1_chilai_clone_20260908`, and
+`golden_g2_dongqing_clone_20260908`. This is qualification evidence, not a
+declaration that the Golden workflow is usable. The detailed matrix and
+screenshots are linked from
+[the G1–G6 report](scout-golden-gpx-g1-g6-qualification-20260908.md).
+
+Observed root causes and bounded recovery:
+
+1. New Import's Taiwan defaults point to `/data/scout/materials/country/tw`
+   and its `dtm` directory, which do not exist on this Mac. Emptying the form
+   fields re-applies the country defaults. A source-valid read-only Preview
+   succeeded only after explicit UI selection of existing raw material paths.
+   Do not treat the default text as evidence that the material pool is installed.
+2. The old material manifest's
+   `/Users/alexwang0315/scout-fusion/catographydata/DTM` entries are also stale.
+   The original Nantou/Hualien DEM directories still exist under
+   `/Users/alexwang0315/scout-fusion-legacy-20260823/catographydata/DTM` and were
+   selected through the form. The DTM control is a single-line input: use commas
+   between directories. A newline becomes concatenated path text; that attempt
+   was a test-input error, not a DEM or provider failure.
+3. The actual New Import POST timed out in the browser after 180 seconds.
+   The server subsequently completed the target import. Reload cleared the
+   intake fields and did not restore a job/progress view. After catalog reload,
+   selecting and opening the completed target recovered access without another
+   import. Do not overwrite an existing target just because the browser timed out.
+4. The resulting workspace has no layer preparation manifest and no
+   `outputs/contextual_permission/workbench_seed.json`. Permission's Retry
+   bounded projection repeats the seed-missing block. Manual JSON/bootstrap
+   repair was not used to manufacture a Dashboard qualification PASS. The
+   product flow needs preparation plus lawful candidate-only authoring
+   initialization; it must not manufacture human review.
+5. A same-name Clone request against the already-created **test target** returned
+   HTTP 409 while the original Clone continued. Isolated preparation-failure
+   tests preserve `imported_preparation_failed` but reject a same-name retry;
+   this proves collision protection, not stage-level preparation resume.
+
+The single-day source was selected from raw timestamps, not the existing
+`chilai_nanhua_day1_scoutAI` name (that Golden spans two local days). The chosen
+`GoLife_Run_gpx_2016-11-12.gpx` has 9,302 raw points and one Taipei calendar day;
+all 35 imported CP source-index/time checks match. The original Dongqing
+workspace's no-write UI Generate independently matches nine source days, all
+219 CP clock/unknown entries, 143 missing-time points, eight overnight gaps and
+32 inferred stops. These supporting checks do not replace the new-workspace
+Save/Accept/Rebuild chain or the three consecutive successful repetitions.
+
+Keep the original source/review records intact, retain the failed attempts,
+and report unprepared, stale, unknown and blocked states separately from PASS.
+
+Both Clone requests subsequently reached terminal receipts:
+
+- `golden_g1_chilai_clone_20260908` completed at
+  `2026-09-08T04:34:23.712470Z` as `completed_with_degraded_terrain`.
+  The actual blocker is `MCP_UNAVAILABLE`: QGIS worker status timed out after
+  three preflight attempts. Do not replace that observation with a DEM diagnosis.
+- `golden_g2_dongqing_clone_20260908` completed at
+  `2026-09-08T04:26:48.231279Z` with the same degraded status. Its QGIS processor
+  was reachable, but `terrain_feature_stack.v1` returned `SOURCE_UNAVAILABLE`:
+  no bounded DEM source was available. TRH, workspace DEM and Terrain RGB
+  consequently remained unavailable/not run/awaiting the terrain processor.
+- Both receipts have `material_root=null` and a blocked map preparation stage;
+  both final workspaces still lack the Permission workbench seed. The single-day
+  source was a newly imported, unprepared workspace. Verify source configuration
+  handoff and server preflight separately from worker reachability; do not infer
+  identical causes from the common degraded status.
+
+Use the Clone receipt's `completed_at` for terminal completion. The layer
+manifest's earlier core-stage `finished_at` does not prove all later enrichments
+have finished. HTTP 201 does not mean complete map preparation or Permission
+authoring readiness. The final layer verifier reports 33 contract entries and
+11 errors on each Clone, compared with 13 errors on the unprepared New Import.
+The observed multi-day Navigation view also retained its loading message across
+two captures despite having only the orientation basemap and no QGIS artifact;
+it did not establish a usable terrain state.
+
+Raw receipts, stage reasons and hashes are in
+`artifacts/golden-gpx-qualification-20260908/receipts/final-clone-outcomes.json`.
+No seed repair, worker restart or source-manifest edit was used in this test.
+The 56 isolated passing cases remain supporting evidence; the new-workspace
+full chain has zero successful runs, so the three-success repetition gate has
+not started.
+
+### 2026-09-08 Recover a completed TRH worker run whose Dashboard wrapper is missing
+
+The Navigation page retained worker ID
+`qgis-worker-20260908T043838322181Z-c8cf4549d4`, but polling the project-scoped
+Dashboard endpoint returned HTTP 404. This was not a stalled GRASS job. The
+worker's durable receipt records execution from `2026-09-08T04:38:38Z` through
+`04:56:08Z`, terminal state `completed`, no typed error, and complete R1-R3,
+corridor and processing-manifest artifacts. The project-local
+`outputs/spatial/qgis/<run-id>/workflow_run.json` wrapper did not exist. The
+exact request-lifecycle event that prevented that wrapper from being persisted
+is UNKNOWN because no corresponding Dashboard request log was retained; do not
+describe the run as deleted, failed or still computing.
+
+Direct workflow reads may now recover only a worker-generated ID from the
+configured authenticated worker. Recovery requires matching run/request/project
+and workflow identities, a valid current `project.json`, complete hash bindings
+for every source ref, and deterministic route cache keys for TRH. The worker's
+request receipt remains behind worker bearer authentication and is never read
+directly by the browser. A recovered terminal run still passes the normal
+artifact download, SHA, terrain-hypothesis, processing-manifest, cache and
+Navigation projection validation. Any mismatch stays typed unavailable/error;
+it is not adopted as workspace evidence.
+
+The real recovery returned HTTP 200 for the same ID, materialized 23 artifacts,
+made that run the latest `terrain_route_hypothesis.v1`, and compiled a ready
+Navigation projection with zero missing artifacts. Browser inspection showed
+R1 drainage-averse, R2 balanced and R3 terrain-only candidates, the corridor,
+Rudy+TW basemap and the unchanged candidate-only authority strip. This did not
+rerun GRASS, promote a route, modify GPX, or grant passability, safety, legal or
+operational authority.
+
+Two timeout states must remain distinct. Dashboard submit and terminal
+materialization reads use a dedicated 180-second workflow HTTP timeout because
+project preflight and hash verification can exceed the ordinary 45-second
+status timeout. Separately, a prior runtime `START_TIMEOUT` can become stale
+when QGIS finishes loading or becomes responsive after a long worker job. A
+read-only runtime snapshot now probes an existing timed-out receipt and reports
+READY when the full application/plugin/capability handshake is live; it does
+not start or restart a process. In this incident the refreshed service reported
+QGIS `3.44.13-Solothurn`, plugin `0.4.9`, Worker READY and no active job before
+recovery.
+
+## 2026-09-09 — Golden preparation and Permission recovery repair
+
+This repair is explicitly authorized by the user's request to repair preparation,
+job recovery and Permission initialization before rerunning G1–G6. Preserve the
+2026-09-08 failed round. Current executable evidence is under
+`artifacts/golden-gpx-repair-20260909`; a successful isolated test does not qualify
+the Dashboard workflow.
+
+The Dashboard now submits New Import through `import-and-prepare` and Clone
+through `clone-jobs`. Both return a persistent preparation job. The Workspace
+and Trip Intake views expose import, preparation and Permission initialization
+stages, the job ID, failure reasons and an explicit Resume action. Reloading the
+page reads the same job; it does not submit another import. Never use an overwrite
+to recover a timeout. A target without a completed import checkpoint remains
+protected as `import_outcome_unverified`.
+
+Preparation reads original material paths from persisted `preparation_inputs`.
+Legacy sources may use original DTM declarations from the coverage summary;
+derived workspace terrain and PBF route extracts are not raw inputs. An explicitly
+blank material root does not reintroduce a machine-specific ambient default.
+The shared helper enables the full enrichment and map specification stages.
+Job completion requires a completed terrain processor when terrain was requested,
+and an authoring-ready Permission initialization; otherwise it retains gaps.
+
+The initial real run exposed additional recovery defects:
+
+- G2's legacy raster declaration contains `crs_evidence_sha256`. Rejecting that
+  field as an extra input prevents Clone before target creation. Preserve and
+  verify this CRS provenance rather than silently discarding it.
+- Failed-job status lookup rehashed the full original DEM on every GET, causing
+  repeated 20-second browser aborts. Status reads need inexpensive structural
+  checks; actual Resume must still verify content before any stage writes.
+- G1's explicit raw PBF was absent from the first job's content bindings and was
+  lost by Clone when no material manifest was selected. New job envelopes must
+  bind explicit PBF inputs as well as material/project raw-source declarations.
+  Do not retrospectively label a legacy unbound input verified; keep its receipt
+  and require a new source-bound job with a new target when proof is unavailable.
+- G1's QGIS `terrain_feature_stack.v1` failed at `dem_loaded` while merging
+  multiple DEM tiles. The private worker receipt identifies a missing parent
+  directory for `buildvrtInputFiles.txt`, used by `gdal:buildvirtualraster`.
+  This observation is not evidence of a missing DEM source. Keep the bounded
+  Processing detail and repair the run's temporary directory handling.
+- Permission initialization succeeded without hand-edited files. The real
+  G1 Preview/Generate reproduced one recorded day, 08:40:19–16:47:41 and all 35 CP
+  clocks. Save wrote an immutable candidate, but reloading the page lost its UI
+  selection and provided no server-backed restore path. Recovery must read the
+  saved version and validate its identity; it must not restore review checkmarks
+  or automatically accept it.
+
+Initialization creates an unreviewed, candidate-only authoring seed, source
+bindings and a transaction journal. It does not create departure approval or
+runtime authority. A repeated initialization must preserve accepted baselines
+and must not treat a stale bootstrap as current evidence. The G1 first attempt
+ended `completed_with_gaps`; G2 ended `import_failed`. Neither is a qualification
+PASS. Record the repaired-version rerun separately, including the actual UI
+Save/Accept/Rebuild/reload chain and the required consecutive repetitions.
+
+The source-bound rerun on 2026-09-09 exposed two further recovery conditions:
+
+- QGIS Processing runs inside the existing desktop plugin. Setting the MCP
+  subprocess temporary directory alone does not repair that process. The bounded
+  worker now falls back to the installed `gdalbuildvrt` only for the specific
+  missing `buildvrtInputFiles.txt` failure. Inputs and output remain within the
+  approved raw-source/run roots; subsequent clipping and terrain processing stay
+  in QGIS. The real run `qgis-worker-20260909T001055428989Z-e0f2b5ea90` completed
+  with 10 DEM sources and published `actual_processor=native_gdalbuildvrt`,
+  `fallback_used=true`, and `python_dtm_processing_used=false`. This is a
+  processing result; visual review and complete Golden qualification are separate.
+- Accept and Rebuild can finish after the browser's former 20-second POST
+  timeout. In the real G1 test, both operations persisted valid receipts while
+  the page incorrectly said the write was not recorded. Treat transport loss as
+  an unknown outcome. Read the saved candidate catalog and bounded projection
+  again, verify the exact candidate/baseline, and reuse the same command key when
+  retrying. A failed read cannot prove a failed write; closing a confirmation
+  after submission cannot cancel the server operation.
+- After QGIS-dependent enrichments complete, recompute the aggregate layer
+  validation/counts from the final evidence. The first source-bound G1 receipt
+  retained four earlier `python_dem_terrain_analysis_disabled` blockers even
+  though the corresponding layer entries had been updated. Preserve genuine
+  missing-source gaps: the same workspace's 33-layer verifier still reported
+  missing MCP candidate refs/counts. Do not clear those to make preparation green.
+
+Detailed evidence for this repair is under
+`artifacts/golden-gpx-repair-20260909/`; the current acceptance status remains
+`NOT QUALIFIED` until the final G1–G6 rerun and repeated core flows are recorded.
+
+The r4 controlled-reload experiment distinguished job recovery from processor
+availability:
+
+- Three UI Resume commands reused their original `import.1` receipts and
+  checkpoints: all 108 workspace raw/filtered GPX bindings, 54 request-bound
+  source GPX hashes, 12 import-identity JSON files and 10 earlier receipts matched
+  the before-reload snapshot. G1 Resume returned 202 in 19.377 seconds; the two
+  Clone browser requests aborted at about 20 seconds but rediscovery showed the
+  same jobs queued/running. A lost response is not permission to reimport.
+- G1 attempt 2 reached `completed_with_gaps`; final aggregate validation now has
+  zero old blockers, 22 ready preparation records and one missing MCP record.
+  The complete 33-layer verifier still fails the MCP reference/count checks.
+- The new QGIS run failed before DEM processing: TCP reached the registered
+  desktop plugin, but `bridge.hello` did not respond. A live worker port or a
+  freshly created runtime controller's `idle` status does not prove desktop
+  bridge readiness. The earlier native GDAL success must not replace this
+  failed attempt's status. Preserve the previous artifact and its provenance.
+- A short desktop process sample showed the QGIS main thread waiting in
+  AppKit/input-source/pasteboard calls. Bringing that same PID to the foreground
+  returned successfully but a single subsequent hello probe still timed out.
+  Do not assume that closing a desktop QGIS process is safe when its unsaved
+  project state cannot be inspected. Keep the failure and exact recovery need
+  visible; repeated worker-only reloads do not repair a blocked desktop event loop.
+- Permission baseline/map-context GETs also exposed a separate read bottleneck:
+  historical GPX reconstruction re-derived stationary intervals on each read.
+  The observed G1 calls took roughly 50–55 seconds, exceeding the UI timeout.
+  This is not missing route geometry. Preserve source/CP/time validation when
+  repairing that algorithm; compare full outputs, including unknowns and
+  inferred stops, against the original implementation.
+
+See [r4 Resume proof](../../artifacts/golden-gpx-repair-20260909/reports/r4-resume-checkpoint-proof.md),
+[QGIS desktop diagnosis](../../artifacts/golden-gpx-repair-20260909/reports/r4-qgis-desktop-sample-analysis.md),
+and [Permission read diagnosis](../../reports/r4-permission-read-latency.md).
+
+The read-path repair preserves the exact stationary-interval semantics. It
+precomputes continuous observed-time runs and skips starts that cannot reach
+the existing minimum point count/duration or whose necessary duration point
+already exceeds the radius. Remaining starts use the original complete scan.
+Compare full old/new reconstruction payloads on the single-day and nine-day
+sources, not just the displayed number of days. Timing measurements are
+telemetry; browser completion still needs a separate observation.
+
+After a completed preparation updates a bound source, restoring an earlier
+candidate can legitimately return `stale`. Keep it available for inspection,
+but disable Quick review controls and its change handler unless
+`review_ready` is explicitly true. The observed pre-fix UI kept Accept disabled
+but incorrectly displayed "Review complete" after checkbox changes. A matching
+candidate hash and `validation_state=valid` do not establish current sources.
+
+### QGIS qualification profile recovery after the 2026-09-09 host reboot
+
+The host reboot ended both Dashboard processes and all QGIS processes; disk job
+states and immutable stage receipts survived. Check current listeners and target
+leases before interpreting a persisted `running` state. Use the Dashboard's
+explicit Resume for an interrupted preparation; do not edit its state JSON or
+reimport an already completed source checkpoint.
+
+The first rescue-profile launch also had a concrete path error. QGIS appends
+`profiles/<profile-name>` to `--profiles-path`. Passing a directory already ending
+in `profiles` created `profiles/profiles/<profile-name>` while the copied plugin
+sat elsewhere. This macOS installation writes profile settings to
+`qgis.org/QGIS3.ini`; the initially supplied `QGIS/QGIS3.ini` was not the active
+settings file. The live directory tree established both mismatches.
+
+For a new isolated qualification profile, use a new temporary base directory,
+copy only the existing `qgis_agent_mcp` plugin to
+`<base>/profiles/<name>/python/plugins/qgis_agent_mcp`, and pass **the base** to
+`--profiles-path`. Set `PythonPlugins/qgis_agent_mcp=true` in the active
+`qgis.org/QGIS3.ini`. Set `auth/use_password_helper=false` only in that empty
+temporary profile to avoid creating a new Keychain master password during
+startup. This does not alter the user's profile, credentials, or bridge token
+authentication. The setting and startup condition are defined by
+[QGIS 3.44.13 auth manager](https://github.com/qgis/QGIS/blob/final-3_44_13/src/core/auth/qgsauthmanager.cpp#L3228-L3233)
+and [QGIS startup](https://github.com/qgis/QGIS/blob/final-3_44_13/src/app/qgisapp.cpp#L15519-L15530).
+
+Give that QGIS process and its worker the same temporary
+`QGIS_MCP_CONNECTION_FILE` and matching `SCOUT_QGIS_MCP_PYTHONPATH`. Before
+launching preparation, verify the registration PID is live and `bridge.hello`
+returns authenticated. Save redacted PID/version/timing evidence, never the
+token. In r6b the isolated QGIS 3.44.13 bridge replied in 0.030 seconds and the
+global registration SHA remained unchanged; see
+[launch receipt](../../artifacts/golden-gpx-repair-20260909/receipts/runtime-r6b-qgis-launch.json)
+and [hello receipt](../../artifacts/golden-gpx-repair-20260909/receipts/runtime-r6b-qgis-hello.json).
+This proves bridge recovery, not completed terrain processing or G1–G6.
+
+### Preparation job catalog latency after restart
+
+In r6, a direct five-job catalog read took 73.75 seconds and the browser's
+20-second GET timed out. Profiling found 16 repeated envelope validations and
+2.08 million function calls, mostly converting already decoded JSON through the
+generic model/Path conversion routine. No raw DEM/PBF content read caused this
+particular delay. Observe the final job state once, validate its envelope once,
+and encode decoded JSON directly with the same canonical settings. r7 produced
+the same five statuses in 9.02 seconds under the continuing heavy host load;
+all five existing requests retained identical canonical bytes. Request tamper
+detection and Resume's leased raw-source/import validation remain mandatory.
+
+Do not substitute this direct-call timing for a successful browser Resume, or
+turn a timeout into a second import. Keep the original job ID and discover its
+current outcome after reconnecting. See the
+[before profile](../../artifacts/golden-gpx-repair-20260909/reports/r6-job-catalog-profile.txt)
+and [after profile](../../artifacts/golden-gpx-repair-20260909/reports/r7-job-catalog-profile.txt).
+
+### Distinguish a long preparation stage from a stopped runner
+
+The r7 G2 Resume retained import.1 and began prepare.3 at 02:42:46 UTC.
+Before the layer manifest is published, `run_layer_preparation` finishes local
+OSM extraction, optional Overpass fetch, and all workspace raster cache seeds.
+The outer job can remain `running / prepare` with the same stage timestamp
+throughout this work. That label alone proves neither progress nor a deadlock.
+Corroborate it with the exact target's output mtimes, worker processes, and
+stage receipts. On macOS use `/usr/bin/sample`; a same-named Python executable
+on PATH is not the operating-system process sampler.
+
+In this run, the OSM feature index was written at 02:53:56 UTC, followed by
+22 raster seed manifests at 03:09:45 UTC: 4,191 newly written tiles, 3,075
+existing tiles reused, and zero failed downloads. Seven source layers had
+partial no-coverage and one had no coverage along the route. Those are explicit
+provider/blank-tile outcomes, not proof of a failed download or completed QGIS
+processing. Preserve the immutable request's zoom range, source identity and
+coverage policy while waiting; do not skip seeds to manufacture completion.
+The cache manifests are currently written after all seed futures complete,
+so intermediate file mtimes are corroboration only. Per-substage progress
+receipts remain observability debt.
+
+[G2 raster stage evidence](../../artifacts/golden-gpx-repair-20260909/reports/r7-g2-raster-terminal.json).
+
+### OCR deadline under construction load
+
+After seeding, the same G2 run entered Tesseract OCR. A read-only probe of one
+of its real Rudy+TWMap tiles completed in 22.348 seconds with the actual
+pytesseract runner, exceeding the former 10-second default. The result had no
+nonempty text; record that outcome rather than inventing a named point.
+The construction default is now unlimited waiting. Pytesseract represents that
+as timeout `0`; `subprocess.run` requires `None`, since its `0` means an immediate
+deadline. `SCOUT_TESSERACT_TIMEOUT_S` still accepts an explicit positive timeout.
+Timeouts/errors retain their typed skipped-tile records and never become labels.
+Do not stop useful OCR work solely because of the former construction deadline,
+and do not skip tile coverage to reduce elapsed time. Record runtime resource
+measurements separately from source sufficiency and final preparation status.
+
+The r7 job retained its previously imported code through completion: all 402
+tiles timed out, with zero labels and zero OCR cache writes. The outer loop's
+`completed` status does not indicate OCR success. With r8's default and no
+environment override, the same real tile completed in 19.777 seconds with an
+identical result hash. This proves the waiting fix, not usable named points.
+The fresh r8 Dashboard still needs a new preparation attempt before it can
+supply full preparation evidence. The 16 focused OCR/adapter checks passed,
+but are not browser G1–G6.
+[Read-only timing](../../artifacts/golden-gpx-repair-20260909/receipts/r7-ocr-probe-result.json),
+[new default probe](../../artifacts/golden-gpx-repair-20260909/receipts/r8-ocr-default-probe-result.json),
+[focused checks](../../artifacts/golden-gpx-repair-20260909/tests/run-20260909T034055039110Z/results.json).
+
+### Distinguish worker reachability from QGIS readiness
+
+On r7 G2 attempt 3, all three preflights timed out before any QGIS processing
+started. `/capabilities` returned authenticated HTTP 200, while `/status` and
+the application's direct `bridge.hello` probe timed out. Port listening and an
+earlier successful hello were insufficient evidence of current readiness.
+Waking the existing window did not restore the bridge. Only the task-owned
+temporary QGIS instance was stopped with SIGTERM after checking its profile
+identity, absence of open project files and absence of active workflows; its
+profile and failed receipts were preserved. The new instance's worker status
+returned `available` after 18.038 seconds. This does not retroactively execute
+the already-failed terrain stage or prove repeated stability. A future Resume
+must produce a fresh terrain workflow receipt.
+
+[Failure and recovery record](scout-golden-gpx-g1-g6-qualification-20260909.md#中斷恢復的實際證據).
+
+### Keep initialization and accepted Golden reconstruction distinct
+
+The resumed G2 attempt terminated as `completed_with_gaps` at 03:46:22 UTC,
+retaining its only import receipt and valid hashes for all three stages.
+Permission initialization produced an unreviewed authoring seed, with no
+departure approval or runtime safety authority. When `project.route_days` is
+absent, the bootstrap `D1` is unresolved scaffolding; it is not evidence of a
+one-day reconstruction or an accepted itinerary. On the same new workspace,
+read-only Generate-from-Ref reconstruction preserved nine days, 32 inferred
+stays, eight overnight gaps and ten unknown ranges, with all source hashes
+matching. A browser review/Accept/Rebuild chain is still required to prove its
+use in Permission and the six analyses.
+
+Before restarting the Dashboard after terminal jobs, snapshot the job ledgers,
+stage receipts, initialized outputs and candidate/review versions. Check them
+again after the new process is listening. The r8 reload preserved all 53 files;
+this is service persistence evidence, not browser reload evidence.
+
+[G2 terminal receipt](../../artifacts/golden-gpx-repair-20260909/reports/r7-g2-terminal.json),
+[new G2 reconstruction](../../artifacts/golden-gpx-repair-20260909/reports/r7-g2-real-reconstruction-after-preparation.json),
+[reload persistence](../../artifacts/golden-gpx-repair-20260909/receipts/r8-after-ready-persistence.json).
+
+### Repeated Clone GPX filenames must remain bounded
+
+The first r13 independent Clone of the already cloned Golden workspace failed
+during raw inbox staging. The target and failed import receipt were preserved;
+Resume correctly refused to overwrite an import without a verified completion
+checkpoint. An isolated OS filename probe of the unchanged naming function
+returned `ENAMETOOLONG` for a 371-character / 451-byte name. Disk space was low,
+but this probe establishes a distinct filename defect, not an `ENOSPC` finding.
+
+`Path.stem` already includes earlier dot-separated components. Appending every
+`Path.suffixes` component repeats those components and amplifies each Clone.
+Keep only the final GPX suffix, bound the common stem in UTF-8 bytes with room
+for the reference prefix and `.speed_filtered.gpx`, and retain a deterministic
+hash when truncating. Preserve the original path/name and raw content checksum
+in the source manifest. Cover repeated stage-to-stage copies and filtered names
+with small real-file tests; do not copy a large workspace merely to test names.
+
+After fixing the producer, preserve the failed target and submit a fresh name.
+Recheck raw hashes, Golden choice, CP/time reconstruction and fresh Permission
+initialization through the actual Dashboard. Repeated-core acceptance starts
+again under the fixed source version.
+
+[Failure evidence](../../artifacts/golden-gpx-repair-20260909/reports/r13-repeat1-filename-failure.json).
+
+## 2026-09-10 — Planned GPX preparation and recovery
+
+Planned authoring uses a prepared Golden/Ref workspace. Open Permission → Human
+Design, load the source catalog, then preview the itinerary differences. A
+preview is read-only. Save publishes a new bundle under `reviews/planned_routes`
+and does not replace Golden inputs, its reviewed baseline or existing reports.
+The independent analysis selection sidecar chooses the reviewed Planned version.
+
+Use the existing formal Dashboard launcher and verified QGIS Worker. A separate
+test Dashboard may use port 9100 without replacing the existing 9099 process.
+Record the project ID, server/source identity and source hashes before testing.
+Loading a full Ref catalog or preview may take longer than a short browser wait;
+inspect its request and response before deciding whether another action is needed.
+
+The first real 9,290-point Planned preview returned HTTP 200 but subsequent DOM
+capture timed out. Preserve the failed action and Network evidence. Do not repeat
+a Save after an uncertain response until the versions endpoint and immutable
+bundle establish whether it completed. Raw timeline data remain part of the
+bundle even when the UI aggregates or pages its display.
+
+Imported Planned GPX must retain its planning provenance through normalization
+and output manifests. `post_analysis` rejects such a file as a completed personal
+recording. Re-import is not a way to promote planned times into observations.
+New geometry outside the original preparation scope remains `coverage_needed`;
+do not copy the old layer-ready label onto new route segments.
+
+[Planned verification and recovery evidence](scout-planned-gpx-p1-p9-qualification-20260910.md).
+
+The P7 local re-import replay runs the actual compiler export through
+`run_pretrip_import`, including inbox staging, speed filtering, reference
+summaries and output projections. Planned provenance must survive each stage;
+detect it from the GPX XML extension even when the file is renamed or the
+extension appears after the track. Non-GPX material evidence keeps its original
+source role. A `post_analysis` rejection must happen before any workspace write.
+
+Optional Planned timestamps are estimates: checkpoint events expose them as
+`planned_at`, with no `observed_at`. Historical segment timing excludes Planned
+sources with `planned_time_is_not_historical_observation`; historical daily
+departures returns `unavailable` / `planned_gpx_is_not_historical_recording`.
+The source XML must still enforce this boundary when an index incorrectly labels
+the same file as Golden. Keep ordinary Golden/reference observations unchanged.
+
+The isolated replay checked 35 imported JSON outputs and exercised both timed
+and untimed Planned files, with zero network attempts and zero real `.env`
+reads. The 53 focused tests and 33-layer contract check passed. These receipts
+prove local re-import provenance and time isolation; they do not substitute for
+connected map/DEM/weather preparation or browser re-import acceptance.
+[P7 local qualification](../../artifacts/planned-gpx-reimport-20260910/qualification-result.json),
+[estimated-time producer replay](../../artifacts/planned-gpx-reimport-20260910/planned-estimates-evidence.json).
+
+The completed real Dashboard replay saved two immutable Planned versions,
+restored one after a server restart and the branch version after A→B→A workspace
+switching, then exported GPX, manifest and bundle through visible buttons. All
+observed response bytes match the stored version and the bundle's ten files.
+Do not infer a native Downloads write from a successful attachment link: the
+Planned buttons now fetch and validate the response before triggering a download,
+and show file identity, byte count and hash separately from disk confirmation.
+
+For already accepted Golden versions, this replay's repeated Accept returned
+`baseline_activation_write_in_doubt` and the UI recovered and verified the
+existing review. Preserve that 409 and distinguish recovery from a new Accept or
+Rebuild. P1–P9 scope, failures and final receipts are in the linked qualification
+report; no new import or connected preparation run is implied by this regression.

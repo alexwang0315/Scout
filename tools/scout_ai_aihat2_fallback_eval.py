@@ -24,6 +24,7 @@ if str(ROOT) not in sys.path:
 
 from assistant_models import AssistantSurface, ScoutAssistantQuery  # noqa: E402
 from assistant_workspace_total_info import build_workspace_total_info_source_ref  # noqa: E402
+from scout.agents.pydantic_model_lifecycle import pydantic_model_session
 from pydantic_ai_runtime_compat import (  # noqa: E402
     pydantic_native_research_capabilities_for_model,
 )
@@ -998,6 +999,13 @@ def _compact_tool_result(result: dict[str, Any]) -> dict[str, Any]:
         "field_answer_priority": payload.get("field_answer_priority"),
         "field_answer_source_ref": payload.get("field_answer_source_ref"),
         "field_answer_source_refs": payload.get("field_answer_source_refs") or [],
+        "source_refs": payload.get("source_refs") or [],
+        "quality": payload.get("quality"),
+        "freshness": payload.get("freshness"),
+        "result_count": payload.get("result_count"),
+        "searched_record_count": payload.get("searched_record_count"),
+        "index_snapshot_sha256": payload.get("index_snapshot_sha256"),
+        "negative_search_receipt": payload.get("negative_search_receipt"),
         "resource_state": payload.get("resource_state"),
         "provided_fields": payload.get("provided_fields"),
         "source_report": source_report,
@@ -1036,6 +1044,7 @@ def _compact_records_for_fallback(records: Any) -> Any:
         "daylight_buffer_status",
         "status",
         "source_path",
+        "negative_search_receipt",
         "candidate_only",
         "runtime_safety_truth",
     )
@@ -1070,6 +1079,7 @@ def _top_level_record_for_fallback(payload: dict[str, Any]) -> dict[str, Any]:
         "risk_summary",
         "daylight_buffer_status",
         "weather_to_decision",
+        "negative_search_receipt",
         "candidate_only",
         "runtime_safety_truth",
     )
@@ -2168,6 +2178,7 @@ def call_hailo_model(
     return answer, metadata
 
 
+@pydantic_model_session()
 def call_hailo_model_via_pydantic_ai(
     *,
     endpoint: str,
@@ -2217,7 +2228,7 @@ def call_hailo_model_via_pydantic_ai(
     try:
         result = Agent(
             FunctionModel(hailo_adapter, model_name=f"hailo-ollama:{model}"),
-            capabilities=pydantic_native_research_capabilities_for_model(model),
+            capabilities=pydantic_native_research_capabilities_for_model(f"hailo:{model}"),
         ).run_sync(prompt)
         output = str(getattr(result, "output", getattr(result, "data", "")))
         usage_value = getattr(result, "usage", None)

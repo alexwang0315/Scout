@@ -1,0 +1,10 @@
+[Unit]
+Description=Scout Hailo Ollama container-only bridge socket
+
+[Socket]
+ListenStream=172.25.0.1:18000
+Accept=no
+NoDelay=true
+
+[Install]
+WantedBy=sockets.target

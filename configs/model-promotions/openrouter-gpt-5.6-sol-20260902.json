@@ -1,0 +1,47 @@
+{
+  "schema_version": "scout.assistant_model_promotion.v0",
+  "promotion_id": "SCOUT-AI-ASSISTANT-GPT56SOL-PROMOTION-20260902",
+  "generated_at": "2026-09-02T02:17:52Z",
+  "scope": "read_only_workspace_assistant",
+  "promoted_model_name": "openrouter:openai/gpt-5.6-sol",
+  "observed_model_id": "openai/gpt-5.6-sol",
+  "rollback_model_name": "deepseek/deepseek-v4-flash-0731",
+  "local_fallback_model_name": "hailo:qwen3:1.7b",
+  "evidence": [
+    {
+      "evidence_type": "model_runtime_qualification",
+      "path": "artifacts/scout-ai-nextgen/workspace-production-promotion-20260902/model-runtime-qualification-openrouter-gpt-5.6-sol-qualified.json",
+      "file_sha256": "e533b7c6bccf9240ece16f07737485de90bb85b3d380ff1c471a555f574e695b",
+      "report_hash": "ab93ddf1c48f6515cda003088b22830193d8eb46814d4529b071aa167eb0491d"
+    },
+    {
+      "evidence_type": "workspace_five_mode_benchmark",
+      "path": "artifacts/scout-ai-nextgen/workspace-training-gates-20260902/workspace-model-benchmark-openrouter-gpt-5.6-sol-qualified.json",
+      "file_sha256": "de111919d28c605f096cbebc1e37540435d0cea6d0dddee5ec53be051637aa91",
+      "report_hash": "fe74bb1413aa2adcc0e0124f948800b966b82fce399c850a545152b1d56a0f35"
+    },
+    {
+      "evidence_type": "assistant_route_smoke",
+      "path": "artifacts/scout-ai-nextgen/workspace-production-promotion-20260902/assistant-route-smoke-openrouter-gpt-5.6-sol-qualified.jsonl",
+      "file_sha256": "2ee947eaef482f4790716b5a4073e8a258747eef4de3d17090fe28f3494b7d20",
+      "report_hash": null
+    },
+    {
+      "evidence_type": "assistant_workspace_api_smoke",
+      "path": "artifacts/scout-ai-nextgen/workspace-production-promotion-20260902/assistant-workspace-api-smoke-openrouter-gpt-5.6-sol-qualified.json",
+      "file_sha256": "808f7763808f8d094f53eb51c1dabeb483b3815d97e84fdb369333bb8c64e676",
+      "report_hash": "3be2ad19c3659e0bf12c9db1c6e487772d7e85f2e48d9c8a494f7896026a276d"
+    }
+  ],
+  "model_runtime_qualification_passed": true,
+  "workspace_five_mode_benchmark_passed": true,
+  "assistant_route_smoke_passed": true,
+  "assistant_workspace_api_smoke_passed": true,
+  "authority_boundary_passed": true,
+  "local_fallback_preserved": true,
+  "behavior_probe_promoted": false,
+  "production_promotion_allowed": true,
+  "candidate_only": true,
+  "runtime_safety_truth": false,
+  "manifest_hash": "634fb2fac9eb745d40cafd6dd2d48c51516468158f115169cde8a8c72d0e8196"
+}

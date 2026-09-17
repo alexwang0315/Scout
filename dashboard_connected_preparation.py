@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -555,6 +556,7 @@ class DashboardConnectedPreparationManager:
             prepare_cwa_imagery=True,
             run_post_layer_enrichments=False,
             run_map_preparation_spec_artifacts=False,
+            publish_preparation_outputs=False,
             route_corridor_m=500.0,
             reference_track_corridor_m=300.0,
             ai_mode="fixture-or-precomputed",
@@ -611,7 +613,18 @@ class DashboardConnectedPreparationManager:
             if isinstance(value, str)
             and any(marker in value for marker in ("failed", "blocked", "not_available"))
         ]
-        status = "ready" if external_calls and not failed_components else "partial"
+        decision_inputs = self._weather_decision_inputs_receipt(
+            project,
+            started_at=started_at,
+            completed_at=completed_at,
+        )
+        status = (
+            "ready"
+            if external_calls
+            and not failed_components
+            and decision_inputs["status"] == "current_run"
+            else "partial"
+        )
         artifact_refs = {
             key: project[key]
             for key in (
@@ -674,6 +687,8 @@ class DashboardConnectedPreparationManager:
             },
             "failedComponents": failed_components,
             "artifactRefs": artifact_refs,
+            "currentArtifactRefs": decision_inputs["currentArtifactRefs"],
+            "weatherDecisionInputs": decision_inputs,
             **dict(publication),
             "publicationStatus": "published",
         }
@@ -781,6 +796,202 @@ class DashboardConnectedPreparationManager:
         status = payload.get("status") if isinstance(payload, Mapping) else None
         return str(status) if status is not None else None
 
+    def _weather_decision_inputs_receipt(
+        self,
+        project: Mapping[str, Any],
+        *,
+        started_at: datetime,
+        completed_at: datetime,
+    ) -> dict[str, Any]:
+        specs = (
+            (
+                "rainfallManifest",
+                "cwa_rainfall_grid_manifest_ref",
+                ("generatedAt", "evaluatedAt", "fetchedAt", "latestByKind.*.fetchedAt"),
+            ),
+            (
+                "rainfallTrend",
+                "cwa_rainfall_route_trend_ref",
+                ("evaluatedAt", "generatedAt"),
+            ),
+            (
+                "imageryManifest",
+                "cwa_weather_imagery_manifest_ref",
+                ("generatedAt", "evaluatedAt"),
+            ),
+            (
+                "routeRisk",
+                "route_weather_risk_package_ref",
+                ("generatedAt", "evaluatedAt"),
+            ),
+        )
+        artifacts = {
+            name: self._weather_decision_artifact_receipt(
+                project,
+                ref_key=ref_key,
+                timestamp_fields=timestamp_fields,
+                started_at=started_at,
+                completed_at=completed_at,
+            )
+            for name, ref_key, timestamp_fields in specs
+        }
+        pair_verification = {
+            "rainfall": _weather_decision_pair_verification(
+                artifacts["rainfallManifest"],
+                artifacts["rainfallTrend"],
+            ),
+            "imageryRisk": _weather_decision_pair_verification(
+                artifacts["imageryManifest"],
+                artifacts["routeRisk"],
+            ),
+        }
+        incomplete_reasons: list[str] = []
+        current_refs: dict[str, str] = {}
+        for name, artifact in artifacts.items():
+            reason = artifact.get("reason")
+            if reason:
+                incomplete_reasons.append(f"{name}:{reason}")
+            if artifact.get("status") == "current_run" and isinstance(
+                artifact.get("ref"), str
+            ):
+                current_refs[str(artifact["refKey"])] = str(artifact["ref"])
+        for name, value in pair_verification.items():
+            if value != "verified":
+                incomplete_reasons.append(f"{name}:pair_{value}")
+        if len(current_refs) != len(specs):
+            status = (
+                "previous_generation"
+                if any(
+                    artifact.get("status") == "previous_generation"
+                    for artifact in artifacts.values()
+                )
+                else "incomplete"
+            )
+        elif any(value != "verified" for value in pair_verification.values()):
+            status = "incomplete"
+        else:
+            status = "current_run"
+        return {
+            "schemaVersion": "dashboardWeatherDecisionInputs.v1",
+            "status": status,
+            "runWindow": {
+                "startedAt": started_at.isoformat(),
+                "completedAt": completed_at.isoformat(),
+            },
+            "requiredArtifacts": artifacts,
+            "pairVerification": pair_verification,
+            "currentArtifactRefs": current_refs,
+            "incompleteReasons": incomplete_reasons,
+            "boundary": {
+                "candidateOnly": True,
+                "runtimeSafetyTruth": False,
+                "rawPayloadIncluded": False,
+                "rawCoordinatesIncluded": False,
+                "credentialValuesExposed": False,
+            },
+        }
+
+    def _weather_decision_artifact_receipt(
+        self,
+        project: Mapping[str, Any],
+        *,
+        ref_key: str,
+        timestamp_fields: tuple[str, ...],
+        started_at: datetime,
+        completed_at: datetime,
+    ) -> dict[str, Any]:
+        base: dict[str, Any] = {
+            "refKey": ref_key,
+            "ref": None,
+            "status": "incomplete",
+            "reason": "missing_ref",
+            "exists": False,
+            "jsonValid": False,
+            "sha256": None,
+            "timestampField": None,
+            "timestamp": None,
+            "currentRun": False,
+            "pairId": None,
+            "sourceFrameIds": None,
+            "routeSha256": None,
+        }
+        ref = project.get(ref_key)
+        project_id = project.get("project_id")
+        if not isinstance(ref, str) or not ref or not isinstance(project_id, str):
+            return base
+        base["ref"] = ref
+        try:
+            project_root = (self.workspace_root / project_id).resolve()
+            ref_path = Path(ref)
+            if ref_path.is_absolute() or any(part in {".", ".."} for part in ref_path.parts):
+                raise ValueError("unsafe ref")
+            artifact_path = (project_root / ref).resolve()
+            artifact_path.relative_to(project_root)
+        except ValueError:
+            return {
+                **base,
+                "status": "incomplete",
+                "reason": "unsafe_ref",
+            }
+        try:
+            raw = artifact_path.read_bytes()
+        except OSError:
+            return {
+                **base,
+                "status": "incomplete",
+                "reason": "missing_file",
+            }
+        base["exists"] = True
+        base["sha256"] = hashlib.sha256(raw).hexdigest()
+        try:
+            payload = json.loads(raw)
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            return {
+                **base,
+                "status": "incomplete",
+                "reason": "invalid_json",
+            }
+        if not isinstance(payload, Mapping):
+            return {
+                **base,
+                "jsonValid": True,
+                "status": "incomplete",
+                "reason": "invalid_contract",
+            }
+        artifact_project_id = payload.get("projectId", payload.get("project_id"))
+        if artifact_project_id is not None and str(artifact_project_id) != project_id:
+            return {
+                **base,
+                "jsonValid": True,
+                "status": "incomplete",
+                "reason": "project_id_mismatch",
+            }
+        timestamp_field, timestamp_value = _weather_decision_artifact_timestamp(
+            payload,
+            timestamp_fields,
+        )
+        timestamp = _parse_weather_decision_timestamp(timestamp_value)
+        current_run = (
+            timestamp is not None and started_at <= timestamp <= completed_at
+        )
+        status = "current_run" if current_run else "previous_generation"
+        reason = None if current_run else "timestamp_outside_current_run"
+        if timestamp is None:
+            status = "incomplete"
+            reason = "missing_or_invalid_timestamp"
+        return {
+            **base,
+            "jsonValid": True,
+            "timestampField": timestamp_field,
+            "timestamp": timestamp_value,
+            "currentRun": current_run,
+            "status": status,
+            "reason": reason,
+            "pairId": _optional_public_text(payload.get("pairId")),
+            "sourceFrameIds": _public_source_frame_ids(payload.get("sourceFrameIds")),
+            "routeSha256": _optional_sha256(payload.get("routeSha256")),
+        }
+
     def _validated_project_root(self, project_id: str) -> Path:
         if not PROJECT_ID_PATTERN.fullmatch(str(project_id or "")):
             raise ValueError("invalid project id")
@@ -817,6 +1028,106 @@ def _trigger_kind(reason: str) -> str:
     if reason == "scout-ai-weather-decision":
         return "assistant"
     return "internal"
+
+
+def _weather_decision_artifact_timestamp(
+    payload: Mapping[str, Any],
+    fields: tuple[str, ...],
+) -> tuple[str | None, str | None]:
+    for field in fields:
+        if field == "latestByKind.*.fetchedAt":
+            latest = payload.get("latestByKind")
+            if not isinstance(latest, Mapping):
+                continue
+            values: list[tuple[datetime, str]] = []
+            for kind in ("qpe_past_1h", "qpf_next_1h"):
+                frame = latest.get(kind)
+                if not isinstance(frame, Mapping):
+                    return field, None
+                value = str(frame.get("fetchedAt") or "").strip()
+                parsed = _parse_weather_decision_timestamp(value)
+                if parsed is None:
+                    return field, value or None
+                values.append((parsed, value))
+            if values:
+                return field, min(values, key=lambda item: item[0])[1]
+            continue
+        value = payload.get(field)
+        if isinstance(value, str) and value.strip():
+            return field, value.strip()
+    return None, None
+
+
+def _parse_weather_decision_timestamp(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        return None
+    return parsed.astimezone(timezone.utc)
+
+
+def _optional_public_text(value: Any) -> str | None:
+    text = str(value or "").strip()
+    return text[:240] if text else None
+
+
+def _optional_sha256(value: Any) -> str | None:
+    text = str(value or "").strip().lower()
+    if len(text) != 64 or any(character not in "0123456789abcdef" for character in text):
+        return None
+    return text
+
+
+def _public_source_frame_ids(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, Mapping):
+        return None
+    result: dict[str, Any] = {}
+    for key, item in sorted(value.items()):
+        normalized_key = str(key or "").strip()[:80]
+        if not normalized_key:
+            continue
+        if isinstance(item, list):
+            result[normalized_key] = [
+                str(entry or "").strip()[:240]
+                for entry in item[:12]
+                if str(entry or "").strip()
+            ]
+        else:
+            text = str(item or "").strip()
+            if text:
+                result[normalized_key] = text[:240]
+    return result or None
+
+
+def _weather_decision_pair_verification(
+    first: Mapping[str, Any],
+    second: Mapping[str, Any],
+) -> str:
+    if first.get("status") != "current_run" or second.get("status") != "current_run":
+        return "not_current_run"
+    first_pair = first.get("pairId")
+    second_pair = second.get("pairId")
+    if not first_pair or not second_pair:
+        return "missing_pair_id"
+    if first_pair != second_pair:
+        return "mismatch"
+    first_frames = first.get("sourceFrameIds")
+    second_frames = second.get("sourceFrameIds")
+    if not first_frames or not second_frames:
+        return "missing_source_frame_ids"
+    if first_frames != second_frames:
+        return "mismatch"
+    first_route = first.get("routeSha256")
+    second_route = second.get("routeSha256")
+    if not first_route or not second_route:
+        return "missing_route_sha256"
+    if first_route != second_route:
+        return "mismatch"
+    return "verified"
 
 
 def main(argv: list[str] | None = None) -> int:

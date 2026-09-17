@@ -141,7 +141,7 @@ Deliverables:
 Qualification refresh (2026-08-25): specialist facades now receive only their
 declared read-only tools, the raw dependency container is absent from model
 requests, unsupported model providers fail closed, sensitive learning content
-is rejected, and the Pydantic AI 2.33.0 path is verified without deterministic
+is rejected, and the Pydantic AI 2.35.0 path is verified without deterministic
 fallback.
 
 ## Phase 6: Sandbox

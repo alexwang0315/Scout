@@ -4,6 +4,87 @@ Date: 2026-07-17
 
 Status: experimental V0 capability proof
 
+## Historical Return Cost And Next CP Timing
+
+`historical_route_timing` (directional timing v1) is independent of reviewed
+mission topology. The historical fallback path is the original route in reverse,
+not an invented alternative retreat trail. It never changes runtime safety truth.
+
+- Prefer observations in the requested direction in the same 250 m route bin.
+  Deduplicate identical source GPX SHA-256 before the new timing statistics.
+- Missing direction samples use other bins in the same signed-grade band.
+  Negate the canonical grade for return travel. The five existing bands are
+  steep descent, descent, near level, climb, and steep climb, bounded at
+  -15%, -5%, 5%, and 15%. Mark every such result `estimated`, including sample
+  counts, source IDs, signed grade and method. Never reuse the same bin's
+  outbound duration as its return cost; missing terrain is not flat terrain.
+- Average seconds per route metre across accepted traversals, then multiply by
+  distance. Combine fragments within the same source/track segment/bout/bin/
+  direction before averaging; partial coverage extrapolation is `estimated`,
+  not a fully observed bin. Integrate each intersected bin proportionally for CP-to-CP and return
+  costs. Any unavailable span makes the full cost unavailable, not a partial sum.
+- Historical daily capacity is the median of local-day movement durations across
+  unique source GPX files. Use the existing strict `1 < speed < 10 km/h` pair
+  eligibility across each complete source, excluding pauses, gaps and invalid
+  timestamps. Union overlapping eligible intervals within each GPX before
+  splitting at local midnight. Export aggregate minute
+  samples, never original dates or precise timestamps. Declare timezone source;
+  the weather artifact's timezone can be an importer default, not GPX metadata.
+- Compare reverse return cost with a full historical moving day, not a live
+  remaining-day deadline. Do not subtract outbound time or infer available light.
+  The first CP exceeding the entry budget is an entry decision boundary. After
+  that, the latest explicit preceding historical camp becomes the return target.
+  Colors deepen with cost/budget and reset on target changes. Without a camp,
+  retain the trailhead target and display exceeded. Missing evidence never proves
+  the trailhead unreachable.
+- Camp labels are historical candidates, not verified overnight assignments or
+  current usable shelters. Reject water-access/adjacent labels, generic rests and
+  off-route notes. Preserve provenance and deduplicate co-located anchors.
+- Extra camp anchors provide precise visual resets but do not redefine the next
+  original CP. `Next CP · Avg` is separate from the centered 500 m Passage window
+  and from the original ETA/daylight/transport `time_dependencies` contract.
+- Architecture normalizes distances onto its golden route axis but leaves all
+  measured/estimated minutes unchanged. Historic return costs remain visible
+  even when candidate mission topology is still awaiting review.
+
+## Historical Time Window Countdown
+
+The Architecture `historical_time_windows.v1` projection is a separate resource
+account from reverse return cost and `Next CP · Avg`:
+
+```text
+T = 18:00 - historical local departure clock
+A(CP) = T - sum(forward CP movement costs since this day's departure)
+arrival margin = A(CP) - forward cost to the next safe-point candidate
+```
+
+- The cutoff is the user's fixed 18:00 assumption, not astronomical sunset or
+  verified usable daylight. Additional stops are not deducted by this moving-time
+  model. Preserve negative budgets/balances without wrapping to the next day.
+- Infer one coherent daily schedule from the filtered primary GPX, never pooled
+  departure clocks from different expeditions. Export local clock-of-day and day
+  ordinal, source hash/ref and distance boundaries, not calendar dates/raw GPX.
+- Initial/overnight first-record time is an estimated departure proxy, not proof
+  that camp packing finished then. Reset only at evidence-backed daily departure
+  boundaries, not every camp label or midnight during continuous walking.
+- Overnight candidates require a local-date change, a 6-36 hour recording gap
+  and endpoints within 150 m. These are explicit provisional inference limits,
+  not verified camps. Corrupt time order/large jumps and uncovered route spans
+  stay unavailable; never fabricate departure clocks.
+- Integrate forward costs using the same directional timing bins as next-CP
+  costs; reverse costs never debit the forward resource account. Missing intervals
+  propagate unknown balances until the next valid daily reset. Distance projection
+  onto the golden route axis must not scale clocks or minutes.
+- The next safe-point target is strictly ahead, from historical camp labels,
+  overnight-stop candidates or an explicit route finish. It is not a new verified
+  shelter or safe-route determination. The same overnight candidates join prior
+  camp markers in Reversibility; neither direction promotes them to runtime
+  safety truth. No future day's budget is borrowed.
+- The dedicated Time Window lane and map lens encode `A/T` from green through
+  amber to red. Zero/negative balances stay red; unknown stays gray. Estimated
+  values have explicit status and hatching. Daily start/end anchors supplement CPs
+  without redefining original next-CP intervals.
+
 ## Objective
 
 Use every historical/reference GPX in a Scout pretrip workspace to estimate

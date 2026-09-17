@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+from scout.nextgen.assistant_promotion import load_promotion_manifest
 
 DEFAULT_ASSISTANT_TIMEOUT_SECONDS: int | None = None
 DEFAULT_ASSISTANT_MAX_CONTEXT_CHARS: int | None = None
@@ -75,6 +78,11 @@ class AssistantModelConfig(BaseModel):
     connect_on_startup: bool = True
     fallback_to_local_on_error: bool = True
     local_fallback_fixed_schema: bool = False
+    production_promotion_manifest_path: str | None = None
+    production_promotion_manifest_sha256: str | None = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+    )
 
     @model_validator(mode="after")
     def validate_profile_roles(self) -> "AssistantModelConfig":
@@ -82,6 +90,13 @@ class AssistantModelConfig(BaseModel):
             raise ValueError("cloud_model.profile must be cloud")
         if self.local_model.profile != "local":
             raise ValueError("local_model.profile must be local")
+        if bool(self.production_promotion_manifest_path) != bool(
+            self.production_promotion_manifest_sha256
+        ):
+            raise ValueError(
+                "production promotion manifest path and sha256 must be configured "
+                "together"
+            )
         return self
 
     def effective_timeout_seconds(self) -> int | None:
@@ -94,4 +109,35 @@ class AssistantModelConfig(BaseModel):
 def load_assistant_model_config(path: Path | str) -> AssistantModelConfig:
     config_path = Path(path).expanduser()
     payload = json.loads(config_path.read_text(encoding="utf-8"))
-    return AssistantModelConfig.model_validate(payload)
+    config = AssistantModelConfig.model_validate(payload)
+    _validate_bound_promotion_manifest(config_path, config)
+    return config
+
+
+def _validate_bound_promotion_manifest(
+    config_path: Path,
+    config: AssistantModelConfig,
+) -> None:
+    relative_value = config.production_promotion_manifest_path
+    if not relative_value:
+        return
+    relative_path = Path(relative_value)
+    if relative_path.is_absolute() or ".." in relative_path.parts:
+        raise ValueError("production promotion manifest path must stay under configs")
+    config_root = config_path.resolve().parent
+    manifest_path = (config_root / relative_path).resolve()
+    try:
+        manifest_path.relative_to(config_root)
+    except ValueError as exc:
+        raise ValueError(
+            "production promotion manifest path must stay under configs"
+        ) from exc
+    manifest_bytes = manifest_path.read_bytes()
+    actual_sha256 = hashlib.sha256(manifest_bytes).hexdigest()
+    if actual_sha256 != config.production_promotion_manifest_sha256:
+        raise ValueError("production promotion manifest file hash mismatch")
+    manifest = load_promotion_manifest(manifest_path)
+    if manifest.promoted_model_name != config.cloud_model.model_name:
+        raise ValueError("production promotion manifest model binding mismatch")
+    if manifest.local_fallback_model_name != config.local_model.model_name:
+        raise ValueError("production promotion manifest fallback binding mismatch")

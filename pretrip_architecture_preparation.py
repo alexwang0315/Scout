@@ -80,6 +80,8 @@ def architecture_input_snapshot(
             project.get("mcp_named_point_evidence_ref")
             or DEFAULT_MCP_NAMED_POINTS_REF
         ),
+        "historical_camp_notes": str(project.get("route_note_candidates_ref") or "candidates/route_note_candidates.json"),
+        "historical_local_timezone": str(project.get("weather_daylight_evidence_ref") or "outputs/weather_daylight_evidence.json"),
     }
     source_paths: dict[str, Path] = {
         key: _resolve_ref(root, ref)
@@ -124,6 +126,9 @@ def architecture_input_snapshot(
             "primary_speed_filtered_gpx_then_scope_reference_gpx"
         ),
         "enrichment_policy": "risk_and_route_pressure_are_optional_enrichments",
+        "historical_timing_policy": "directional_signed_grade_return_and_local_moving_day_v1",
+        "time_window_policy": "primary_overnight_departure_to_fixed_1800_forward_countdown_v1",
+        "project_timezone": project.get("timezone"),
     }
     fingerprint_payload = {
         "project_id": str(project.get("project_id") or project.get("id") or root.name),

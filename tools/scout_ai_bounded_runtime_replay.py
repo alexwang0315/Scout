@@ -39,7 +39,10 @@ from tools.scout_ai_live_tool_selection_eval import (  # noqa: E402
 )
 
 DEFAULT_CASES_FILE = (
-    ROOT / "outputs" / "evals" / "scout_ai_workspace_grounded_100_questions_20260713_glm52_cases.json"
+    ROOT
+    / "tests"
+    / "fixtures"
+    / "scout_ai_workspace_grounded_100_questions_20260713_glm52_cases.json"
 )
 DEFAULT_BEFORE_REPORT = (
     ROOT
@@ -69,7 +72,9 @@ class DeterministicProgressiveReplayRunner:
     def __init__(self) -> None:
         self._argument_generator = TestModel(seed=0)
         self._runner = PydanticAIEnvRunner(
-            model_name=self.model_name,
+            # The offline name labels the replay; construction uses the existing
+            # deterministic policy. FunctionModel below retains the replay label.
+            model_name="local",
             profile_name="local",
             workspace_tools_enabled=True,
             workspace_model_max_tokens=None,
@@ -382,7 +387,7 @@ def run_workspace_15k_join_replay(project_root: Path) -> dict[str, Any]:
 
     distance_m = _required_float(nearest_checkpoint, "distance_m")
     answer = (
-        f"本次路徑 15K 位於 {lat:.9f}, {lon:.9f} "
+        f"里程錨點 15K 座標為 {lat:.9f}, {lon:.9f} "
         "[candidates/route_mileage_k_anchors.json]。"
         f"最近的 CP 是 {checkpoint_id}，距離約 {distance_m:.2f} 公尺 "
         "[candidates/checkpoints.json]。"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from contextlib import closing
 from threading import Event
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from scout.agents import (
     WorkflowCompilerAgent,
     resolve_model_policy,
 )
+from scout.services import open_database
 from tests.test_scout_ai_os_agents import make_deps
 
 
@@ -210,15 +212,17 @@ def test_pydantic_provider_uses_sla_fallback_before_external_budget_call(
         model_policy=policy,
     )
 
-    workflow = WorkflowCompilerAgent(provider).compile(
-        "Remind me in 10 minutes.",
-        make_deps(tmp_path),
-    )
+    with closing(open_database(tmp_path / "agents.sqlite")) as connection:
+        workflow = WorkflowCompilerAgent(provider).compile(
+            "Remind me in 10 minutes.",
+            make_deps(tmp_path, connection=connection),
+        )
 
-    assert workflow.name == "Remind me in 10 minutes"
-    assert provider.last_sla_result is not None
-    assert provider.last_sla_result.status == "budget_fallback"
-    assert policy.mode is ModelPolicyMode.EXTERNAL_PYDANTIC_AI
+        assert workflow.name == "Remind me in 10 minutes"
+        assert provider.last_sla_result is not None
+        assert provider.last_sla_result.status == "budget_fallback"
+        assert policy.mode is ModelPolicyMode.EXTERNAL_PYDANTIC_AI
+
 
 
 def test_model_sla_gateway_treats_cost_and_timeout_as_telemetry_in_construction() -> None:

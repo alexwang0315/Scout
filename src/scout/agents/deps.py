@@ -154,7 +154,23 @@ class DeterministicScoutAgentProvider:
             return self._build_package(request)
         if request.agent_name == "LearningAgent":
             return self._propose_learning(request)
+        if request.agent_name == "TerrainNarrativeGuidanceAgent":
+            return self._interpret_terrain_narrative_guidance(request)
         raise ValueError(f"unknown agent: {request.agent_name}")
+
+    @staticmethod
+    def _interpret_terrain_narrative_guidance(request: ScoutAgentRequest) -> Any:
+        from terrain_route_guidance import interpret_terrain_route_narrative
+
+        return interpret_terrain_route_narrative(
+            str(request.context.get("narrative") or ""),
+            source_id=str(request.context.get("source_id") or ""),
+            source_date=(
+                str(request.context["source_date"])
+                if request.context.get("source_date") is not None
+                else None
+            ),
+        )
 
     def _compile_workflow(self, request: ScoutAgentRequest) -> Any:
         from scout.schemas.permissions import PermissionSpec

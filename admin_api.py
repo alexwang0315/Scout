@@ -63,12 +63,35 @@ from dashboard_workspace_operations import (
     append_workspace_operation_request,
     load_workspace_operation_requests,
 )
+from dashboard_workspace_clone import (
+    WorkspaceCloneRequest,
+    WorkspaceClonePreparationError,
+    clone_pretrip_workspace_from_inputs,
+)
+from dashboard_preparation_jobs import (
+    DashboardPreparationJobConflict,
+    DashboardPreparationJobManager,
+)
 from dashboard_workspace_publication import dashboard_project_id_from_read_path
 from navigation_terrain_projection import (
     NavigationTerrainProjectionError,
 )
 from navigation_terrain_projection_store import (
     inspect_navigation_terrain_projection,
+)
+from terrain_route_hypothesis_models import TerrainRouteHypothesisCatalog
+from scout_terrain_route_hypothesis_tool import (
+    GdalLocationInfoSampler,
+    TerrainRouteToolUnavailable,
+    compare_scout_terrain_route_hypotheses,
+    explain_scout_terrain_route_hypothesis,
+    inspect_scout_route_terrain_consistency,
+)
+from terrain_route_guidance_workspace import (
+    TerrainGuidanceInterpretRequest,
+    TerrainGuidanceResolveRequest,
+    TerrainGuidanceReviewRequest,
+    TerrainRouteGuidanceWorkspaceService,
 )
 from navigation_terrain_raster_dem import (
     TerrainDemPreparationError,
@@ -81,9 +104,16 @@ from qgis_spatial_backend import (
     QgisSpatialNotFound,
 )
 from qgis_spatial_contracts import SpatialAnalysisRequest, SpatialEvidenceReviewRequest
+from qgis_runtime_control import (
+    QgisRuntimeControlCode,
+    QgisRuntimeControlRequest,
+    QgisRuntimeControlResult,
+    QgisRuntimeController,
+)
 from scout_gee_integration import build_gee_runtime_status
 from pretrip_admin_view import (
     build_pretrip_admin_view,
+    load_pretrip_weather_projection,
     list_pretrip_admin_projects,
     load_pretrip_admin_surface_projection,
     load_pretrip_debug_projection_view,
@@ -184,6 +214,9 @@ from scout_runtime_physiologic_pipeline import build_health_auto_export_physio_a
 from scout_env import load_scout_env_files
 from runtime_audit_api import create_runtime_audit_ledger, install_runtime_audit
 from runtime_audit_ledger import FileRuntimeAuditLedger
+from scout.nextgen.dashboard_telemetry_api import (
+    create_intelligence_telemetry_router,
+)
 from scout_emergency_mobile_closed_loop_api import (
     create_emergency_mobile_closed_loop_router,
     create_emergency_mobile_ui_router,
@@ -224,6 +257,7 @@ from scout_wearable_validator import validate_wearable_activity_summary_contract
 
 
 DEFAULT_ADMIN_PAGE = ROOT / "docs" / "admin" / "phase1-after-action.html"
+_AUTO_TERRAIN_GUIDANCE_ELEVATION_SAMPLER = object()
 DEFAULT_PRETRIP_ADMIN_PAGE = ROOT / "docs" / "admin" / "phase4-pretrip-planning.html"
 DEFAULT_DEBUG_ADMIN_PAGE = ROOT / "docs" / "admin" / "phase-3-5-runtime-debug.html"
 DEFAULT_SCOUT_DASHBOARD_PAGE = ROOT / "docs" / "admin" / "scout-dashboard-v0.1.html"
@@ -237,6 +271,9 @@ DEFAULT_ASSISTANT_UI_SCRIPT = ROOT / "docs" / "admin" / "scout-assistant-ui.js"
 DEFAULT_MAPLIBRE_EVIDENCE_SCRIPT = (
     ROOT / "docs" / "admin" / "scout-maplibre-evidence.js"
 )
+DEFAULT_PLANNED_ROUTE_SCRIPT = ROOT / "docs" / "admin" / "scout-planned-route.js"
+DEFAULT_RUDY_LIVE_DIAGNOSTIC_SCRIPT = ROOT / "docs" / "admin" / "scout-rudy-live-diagnostic.js"
+DEFAULT_MAP_PURPOSE_DIAGNOSTIC_SCRIPT = ROOT / "docs" / "admin" / "scout-map-purpose-diagnostic.js"
 DEFAULT_MAPLIBRE_DISTRIBUTION_ROOT = (
     ROOT / "docs" / "admin" / "vendor" / "maplibre-gl" / "6.2.0"
 )
@@ -254,7 +291,7 @@ DEFAULT_ROUTE_CONTEXT_BRIEFING_REF = "outputs/briefings/route_context_briefing.h
 DEFAULT_ROUTE_CONTEXT_BRIEFING_REGENERATION_REF = (
     "outputs/scout_ai/route_context_briefing_regeneration.json"
 )
-DEFAULT_ROUTE_CONTEXT_BRIEFING_QUALITY_MODEL = "deepseek/deepseek-v3.2"
+DEFAULT_ROUTE_CONTEXT_BRIEFING_QUALITY_MODEL = "deepseek/deepseek-v4-flash-0731"
 DEFAULT_ROUTE_CONTEXT_BRIEFING_CONTENT_REVIEW_REF = (
     "outputs/route_context_pipeline/scout_ai_semantic_review_result.json"
 )
@@ -1523,6 +1560,10 @@ class PreTripImportGpxRequest(BaseModel):
         default=DEFAULT_MAX_REASONABLE_SPEED_KMH,
         gt=0,
     )
+    max_previous_gpx_speed_ratio: float = Field(default=8.0, gt=0)
+    material_root: str | None = Field(default=None, min_length=1)
+    dtm_dirs: list[str] = Field(default_factory=list)
+    mcp_named_point_evidence: str | None = Field(default=None, min_length=1)
     import_timestamp: str | None = None
     import_stage: Literal["pretrip"] = "pretrip"
     overwrite: bool = False
@@ -1536,6 +1577,15 @@ class PreTripImportGpxRequest(BaseModel):
             if self.template_project_root
             else None
         )
+        self.material_root = (
+            self.material_root.strip() or None if self.material_root else None
+        )
+        self.mcp_named_point_evidence = (
+            self.mcp_named_point_evidence.strip() or None
+            if self.mcp_named_point_evidence
+            else None
+        )
+        self.dtm_dirs = [path.strip() for path in self.dtm_dirs if path.strip()]
         combined = [
             path.strip()
             for path in [*self.reference_gpx_paths, *self.reference_gpx]
@@ -1578,6 +1628,59 @@ class DashboardWorkspaceOperationRequest(BaseModel):
         return normalized or None
 
 
+class TerrainRouteConsistencyApiRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    gpx_path: str | None = Field(default=None, max_length=1024)
+    candidate_id: str | None = Field(default=None, max_length=200)
+    hypothesis_path: str | None = Field(default=None, max_length=1024)
+    corridor_band_name: Literal[
+        "top_5_percent_corridor",
+        "top_10_percent_corridor",
+        "top_20_percent_corridor",
+    ] = "top_10_percent_corridor"
+    max_samples: int = Field(default=400, ge=2, le=2000)
+    endpoint_tolerance_m: float = Field(default=1000.0, gt=0, le=100_000)
+    teii_raster_path: str | None = Field(default=None, max_length=1024)
+
+    @field_validator(
+        "gpx_path",
+        "candidate_id",
+        "hypothesis_path",
+        "teii_raster_path",
+    )
+    @classmethod
+    def normalize_optional_reference(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip()
+        return normalized or None
+
+
+class DashboardWorkspaceCloneRunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    target_project_id: str = Field(
+        min_length=1,
+        max_length=120,
+        pattern=r"^[A-Za-z0-9_.-]+$",
+    )
+    confirm_clone: bool = False
+    requested_by: str = Field(
+        default="dashboard_operator",
+        min_length=1,
+        max_length=80,
+    )
+
+    @field_validator("target_project_id", "requested_by")
+    @classmethod
+    def normalize_clone_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("clone text fields must not be blank")
+        return normalized
+
+
 class PreTripPrepareLayersRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -1590,18 +1693,72 @@ class PreTripPrepareLayersRequest(BaseModel):
     allow_network_fetch: bool = False
     prepare_cwa_imagery: bool = False
     route_corridor_m: float = Field(default=500.0, gt=0)
+    reference_track_corridor_m: float = Field(default=300.0, gt=0)
     bbox: dict[str, Any] | None = None
+    route_evidence_bundle: str | None = Field(default=None, min_length=1)
+    ai_mode: Literal["fixture-or-precomputed", "pydantic-cloud-explicit"] = (
+        "fixture-or-precomputed"
+    )
+    ai_output_policy: str = Field(default="hash-and-summary", min_length=1)
+    imagery_min_zoom: int = Field(default=12, ge=0, le=24)
+    imagery_max_zoom: int = Field(default=17, ge=0, le=24)
+    seed_imagery_cache: bool = False
+    imagery_provider_allows_offline_prefetch: bool = False
+    imagery_seed_max_tiles: int | None = Field(default=None, gt=0)
+    imagery_cache_fallback_project_ids: list[str] = Field(default_factory=list)
+    osm_pbf_path: str | None = Field(default=None, min_length=1)
+    osm_pbf_source_url: str | None = Field(default=None, min_length=1)
+    osm_pbf_cache_ttl_days: int = Field(default=30, gt=0)
+    osmium_bin: str = Field(default="osmium", min_length=1)
     prepared_at: str | None = None
 
     @model_validator(mode="after")
     def normalize_layers_and_workspace(self) -> "PreTripPrepareLayersRequest":
         self.layers = [layer.strip() for layer in self.layers if layer.strip()]
         self.workspace_root = self.workspace_root.strip() or None if self.workspace_root else None
+        self.route_evidence_bundle = (
+            self.route_evidence_bundle.strip() or None
+            if self.route_evidence_bundle
+            else None
+        )
+        self.osm_pbf_path = (
+            self.osm_pbf_path.strip() or None if self.osm_pbf_path else None
+        )
+        self.osm_pbf_source_url = (
+            self.osm_pbf_source_url.strip() or None
+            if self.osm_pbf_source_url
+            else None
+        )
+        self.osmium_bin = self.osmium_bin.strip()
+        self.ai_output_policy = self.ai_output_policy.strip()
+        self.imagery_cache_fallback_project_ids = [
+            project_id.strip()
+            for project_id in self.imagery_cache_fallback_project_ids
+            if project_id.strip()
+        ]
+        if self.imagery_min_zoom > self.imagery_max_zoom:
+            raise ValueError("imagery_min_zoom must not exceed imagery_max_zoom")
         return self
 
 
 class PreTripPrepareLayersRunRequest(PreTripPrepareLayersRequest):
     confirm_prepare: bool = False
+
+
+class DashboardImportPreparationRequest(PreTripImportGpxRunRequest):
+    confirm_prepare: bool = False
+    idempotency_key: str = Field(min_length=1, max_length=160)
+    requested_by: str = Field(default="dashboard_operator", min_length=1, max_length=80)
+    preparation: PreTripPrepareLayersRequest | None = None
+
+
+class DashboardClonePreparationRequest(DashboardWorkspaceCloneRunRequest):
+    idempotency_key: str = Field(min_length=1, max_length=160)
+
+
+class DashboardPreparationResumeRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    confirm_resume: bool = False
 
 
 class PreTripRainfallCurrentPosition(BaseModel):
@@ -2212,8 +2369,12 @@ def create_admin_app(
     ) = None,
     now_factory: Callable[[], datetime] | None = None,
     connected_preparation_manager: Any | None = None,
+    qgis_runtime_controller: QgisRuntimeController | None = None,
     runtime_audit_root: Path | None = None,
     runtime_audit_ledger: FileRuntimeAuditLedger | None = None,
+    terrain_guidance_elevation_sampler: Any = (
+        _AUTO_TERRAIN_GUIDANCE_ELEVATION_SAMPLER
+    ),
 ) -> FastAPI:
     resolved_alpha_sandbox_enabled = (
         alpha_sandbox_enabled
@@ -2278,9 +2439,12 @@ def create_admin_app(
             ),
             now_factory=now_factory,
             connected_preparation_manager=resolved_connected_preparation_manager,
+            qgis_runtime_controller=qgis_runtime_controller,
             runtime_audit=resolved_runtime_audit,
+            terrain_guidance_elevation_sampler=terrain_guidance_elevation_sampler,
         )
     )
+    app.include_router(create_intelligence_telemetry_router())
     app.include_router(create_emergency_mobile_ui_router())
     if resolved_alpha_sandbox_enabled:
         app.include_router(create_alpha_simulation_ui_router())
@@ -2314,6 +2478,8 @@ def create_dashboard_app(
     assistant_environ: Mapping[str, str] | None = None,
     runtime_audit_root: Path | None = None,
     runtime_audit_ledger: FileRuntimeAuditLedger | None = None,
+    hardware_monitor_fetcher: Callable[[str, Mapping[str, str]], tuple[int, Any]]
+    | None = None,
 ) -> FastAPI:
     """Create the Mac/dashboard server with the real Scout Assistant API mounted."""
 
@@ -2339,6 +2505,14 @@ def create_dashboard_app(
         connected_preparation_manager=connected_preparation_manager,
         runtime_audit_root=runtime_audit_root,
         runtime_audit_ledger=runtime_audit_ledger,
+    )
+    from tools.hardware_monitor_proxy import create_hardware_monitor_proxy_router
+
+    app.include_router(
+        create_hardware_monitor_proxy_router(
+            prefix="/admin/dashboard/scout-monitor",
+            fetcher=hardware_monitor_fetcher,
+        )
     )
     resolved_assistant_enabled = (
         assistant_enabled
@@ -2606,10 +2780,20 @@ def create_admin_router(
     ) = None,
     now_factory: Callable[[], datetime] | None = None,
     connected_preparation_manager: Any | None = None,
+    qgis_runtime_controller: QgisRuntimeController | None = None,
     runtime_audit: FileRuntimeAuditLedger | None = None,
+    include_debug_page: bool = True,
+    terrain_guidance_elevation_sampler: Any = (
+        _AUTO_TERRAIN_GUIDANCE_ELEVATION_SAMPLER
+    ),
 ) -> APIRouter:
     load_scout_env_files(repo_root=ROOT)
     router = APIRouter(prefix="/admin", tags=["admin"])
+    preparation_jobs = (
+        DashboardPreparationJobManager(Path(pretrip_workspace_root))
+        if pretrip_workspace_root is not None
+        else None
+    )
     pretrip_view_cache_lock = threading.Lock()
     pretrip_view_cache: dict[str, tuple[str, dict[str, Any]]] = {}
     router.include_router(
@@ -2653,6 +2837,28 @@ def create_admin_router(
         runtime_audit=runtime_audit,
         now_factory=resolved_now_factory,
     )
+    automatic_terrain_guidance_sampler = (
+        terrain_guidance_elevation_sampler is _AUTO_TERRAIN_GUIDANCE_ELEVATION_SAMPLER
+    )
+    terrain_route_guidance_service = TerrainRouteGuidanceWorkspaceService(
+        now_factory=resolved_now_factory,
+        elevation_sampler=(
+            None if automatic_terrain_guidance_sampler else terrain_guidance_elevation_sampler
+        ),
+    )
+
+    def terrain_route_guidance_sampling_service() -> TerrainRouteGuidanceWorkspaceService:
+        # Router registration and non-sampling reads must not probe host GIS tools.
+        if not automatic_terrain_guidance_sampler:
+            return terrain_route_guidance_service
+        try:
+            sampler = GdalLocationInfoSampler.discover()
+        except TerrainRouteToolUnavailable:
+            sampler = None
+        return TerrainRouteGuidanceWorkspaceService(
+            now_factory=resolved_now_factory,
+            elevation_sampler=sampler,
+        )
 
     @router.get("", response_class=HTMLResponse)
     def admin_page() -> Response:
@@ -2674,15 +2880,16 @@ def create_admin_router(
             headers={"Cache-Control": "no-store"},
         )
 
-    @router.get("/debug", response_class=HTMLResponse)
-    def debug_admin_page() -> Response:
-        if not DEFAULT_DEBUG_ADMIN_PAGE.exists():
-            raise HTTPException(status_code=404, detail="Debug admin page not found")
-        return Response(
-            DEFAULT_DEBUG_ADMIN_PAGE.read_text(encoding="utf-8"),
-            media_type="text/html",
-            headers={"Cache-Control": "no-store"},
-        )
+    if include_debug_page:
+        @router.get("/debug", response_class=HTMLResponse)
+        def debug_admin_page() -> Response:
+            if not DEFAULT_DEBUG_ADMIN_PAGE.exists():
+                raise HTTPException(status_code=404, detail="Debug admin page not found")
+            return Response(
+                DEFAULT_DEBUG_ADMIN_PAGE.read_text(encoding="utf-8"),
+                media_type="text/html",
+                headers={"Cache-Control": "no-store"},
+            )
 
     @router.get("/dashboard", response_class=HTMLResponse)
     def scout_dashboard_page() -> Response:
@@ -2757,6 +2964,7 @@ def create_admin_router(
             "capabilities": {
                 "switch": True,
                 "read": True,
+                "clone_from_import_inputs": workspace_backed,
                 "record_operation_request": workspace_backed,
                 "import_preview": True,
                 "connected_preparation_refresh": workspace_backed,
@@ -2887,6 +3095,141 @@ def create_admin_router(
             "source_ref": str(WORKSPACE_OPERATION_REQUESTS_REF),
         }
 
+    def require_preparation_jobs() -> DashboardPreparationJobManager:
+        if preparation_jobs is None:
+            raise HTTPException(status_code=503, detail="A workspace root is required for preparation jobs")
+        return preparation_jobs
+
+    def preparation_job_response(payload: dict[str, Any], *, status_code: int = 200) -> JSONResponse:
+        return JSONResponse(
+            status_code=status_code,
+            content=payload,
+            headers={"Cache-Control": "no-store", "X-Scout-Candidate-Only": "true", "X-Scout-Runtime-Safety-Truth": "false"},
+        )
+
+    @router.get("/dashboard/preparation-jobs")
+    def dashboard_preparation_job_list(project_id: str | None = None) -> JSONResponse:
+        try:
+            payload = require_preparation_jobs().list(project_id=project_id)
+            return preparation_job_response(payload if isinstance(payload, dict) else {"jobs": payload})
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.get("/dashboard/preparation-jobs/{job_id}")
+    def dashboard_preparation_job_get(job_id: str) -> JSONResponse:
+        try:
+            return preparation_job_response(require_preparation_jobs().get(job_id))
+        except (KeyError, FileNotFoundError) as exc:
+            raise HTTPException(status_code=404, detail="Preparation job not found") from exc
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/dashboard/preparation-jobs/{job_id}/resume", status_code=202)
+    def dashboard_preparation_job_resume(job_id: str, request: DashboardPreparationResumeRequest) -> JSONResponse:
+        if not request.confirm_resume:
+            raise HTTPException(status_code=400, detail="confirm_resume=true is required")
+        try:
+            return preparation_job_response(require_preparation_jobs().resume(job_id), status_code=202)
+        except DashboardPreparationJobConflict as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except (KeyError, FileNotFoundError) as exc:
+            raise HTTPException(status_code=404, detail="Preparation job not found") from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post("/dashboard/workspaces/{project_id}/clone-jobs", status_code=202)
+    def dashboard_workspace_clone_job(project_id: str, request: DashboardClonePreparationRequest) -> JSONResponse:
+        if not request.confirm_clone:
+            raise HTTPException(status_code=400, detail="confirm_clone=true is required")
+        context = dashboard_workspace_context(project_id)
+        if not context["workspace_backed"] or pretrip_workspace_root is None:
+            raise HTTPException(status_code=409, detail="clone requires a workspace-backed source project")
+        try:
+            result = require_preparation_jobs().submit_clone(
+                WorkspaceCloneRequest(
+                    source_project_id=context["project_id"],
+                    target_project_id=request.target_project_id,
+                    source_project_root=Path(context["resolved_project_root"]),
+                    workspace_root=Path(pretrip_workspace_root),
+                    requested_by=request.requested_by,
+                ),
+                idempotency_key=request.idempotency_key,
+            )
+            return preparation_job_response(result, status_code=202)
+        except (DashboardPreparationJobConflict, FileExistsError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, OSError, ValidationError, ParseError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @router.post(
+        "/dashboard/workspaces/{project_id}/clone",
+        status_code=201,
+    )
+    def scout_dashboard_workspace_clone(
+        project_id: str,
+        request: DashboardWorkspaceCloneRunRequest,
+    ) -> dict[str, Any]:
+        if not request.confirm_clone:
+            raise HTTPException(
+                status_code=400,
+                detail="confirm_clone=true is required",
+            )
+        context = dashboard_workspace_context(project_id)
+        if not context["workspace_backed"] or pretrip_workspace_root is None:
+            raise HTTPException(
+                status_code=409,
+                detail="clone requires a workspace-backed source project",
+            )
+        try:
+            result = clone_pretrip_workspace_from_inputs(
+                WorkspaceCloneRequest(
+                    source_project_id=context["project_id"],
+                    target_project_id=request.target_project_id,
+                    source_project_root=Path(context["resolved_project_root"]),
+                    workspace_root=Path(pretrip_workspace_root),
+                    requested_by=request.requested_by,
+                )
+            )
+        except FileExistsError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (
+            ValueError,
+            OSError,
+            ValidationError,
+            ParseError,
+            WorkspaceClonePreparationError,
+        ) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        if runtime_audit is not None:
+            runtime_audit.record_workspace_io(
+                operation="clone-import-and-prepare",
+                workspace_id=request.target_project_id,
+                artifact_kind="dashboard_workspace_clone_receipt",
+                artifact_ref="outputs/workspace_clone_receipt.json",
+                record_count=1,
+                byte_count=None,
+                module="admin-api",
+                feature="workspace-clone",
+                summary="Workspace cloned by clean GPX import and map preparation",
+            )
+        return {
+            **result,
+            "persisted": True,
+            "executed": True,
+            "mutation": {
+                "source_workspace_mutated": False,
+                "target_workspace_created": True,
+                "target_workspace_overwritten": False,
+                "runtime_mutated": False,
+                "phase1_runtime_mutated": False,
+            },
+        }
+
     @router.post("/dashboard/body-index/import")
     def scout_dashboard_body_index_import(
         request: DashboardBodyIndexImportRequest,
@@ -2977,6 +3320,28 @@ def create_admin_router(
             media_type="application/javascript",
         )
 
+    @router.get("/scout-planned-map-review.js")
+    @router.get("/scout-planned-review-ui.js")
+    @router.get("/scout-exploration-workflow.js")
+    @router.get("/scout-recorded-workflow.js")
+    def pretrip_workflow_script(request: Request) -> Response:
+        name = request.url.path.rsplit("/", 1)[-1]
+        allowed = {"scout-planned-map-review.js", "scout-planned-review-ui.js", "scout-exploration-workflow.js", "scout-recorded-workflow.js"}
+        if name not in allowed or not (ROOT / "docs/admin" / name).is_file():
+            raise HTTPException(status_code=404, detail="Pre-trip workflow script not found")
+        return Response((ROOT / "docs/admin" / name).read_text(encoding="utf-8"),
+            media_type="application/javascript", headers={"Cache-Control": "no-store"})
+
+    @router.get("/scout-planned-route.js")
+    def planned_route_script() -> Response:
+        if not DEFAULT_PLANNED_ROUTE_SCRIPT.exists():
+            raise HTTPException(status_code=404, detail="Planned route UI not found")
+        return Response(
+            DEFAULT_PLANNED_ROUTE_SCRIPT.read_text(encoding="utf-8"),
+            media_type="application/javascript",
+            headers={"Cache-Control": "no-store"},
+        )
+
     @router.get("/scout-maplibre-evidence.js")
     def maplibre_evidence_script() -> Response:
         if not DEFAULT_MAPLIBRE_EVIDENCE_SCRIPT.exists():
@@ -2986,6 +3351,26 @@ def create_admin_router(
             )
         return Response(
             DEFAULT_MAPLIBRE_EVIDENCE_SCRIPT.read_text(encoding="utf-8"),
+            media_type="application/javascript",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @router.get("/scout-rudy-live-diagnostic.js")
+    def rudy_live_diagnostic_script() -> Response:
+        if not DEFAULT_RUDY_LIVE_DIAGNOSTIC_SCRIPT.exists():
+            raise HTTPException(status_code=404, detail="Rudy live diagnostic not found")
+        return Response(
+            DEFAULT_RUDY_LIVE_DIAGNOSTIC_SCRIPT.read_text(encoding="utf-8"),
+            media_type="application/javascript",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @router.get("/scout-map-purpose-diagnostic.js")
+    def map_purpose_diagnostic_script() -> Response:
+        if not DEFAULT_MAP_PURPOSE_DIAGNOSTIC_SCRIPT.exists():
+            raise HTTPException(status_code=404, detail="Map purpose diagnostic not found")
+        return Response(
+            DEFAULT_MAP_PURPOSE_DIAGNOSTIC_SCRIPT.read_text(encoding="utf-8"),
             media_type="application/javascript",
             headers={"Cache-Control": "no-store"},
         )
@@ -4918,6 +5303,294 @@ def create_admin_router(
                 detail="Navigation terrain projection could not be prepared",
             ) from exc
 
+    @router.get("/pretrip/projects/{project_id}/terrain-route-guidance")
+    def pretrip_project_terrain_route_guidance(
+        project_id: str,
+    ) -> JSONResponse:
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        try:
+            payload = terrain_route_guidance_service.inspect(
+                project_root,
+                project_id=project_id,
+            )
+        except (OSError, ValueError, ValidationError) as exc:
+            raise HTTPException(
+                status_code=409,
+                detail=f"terrain route guidance unavailable: {exc}",
+            ) from exc
+        return _terrain_route_guidance_response(payload)
+
+    @router.get("/pretrip/projects/{project_id}/terrain-route-guidance/map-review-scope")
+    def pretrip_project_terrain_route_guidance_map_review_scope(
+        project_id: str,
+        reference_hypothesis_id: str = Query(
+            pattern=r"^[a-z0-9][a-z0-9._-]{0,79}$",
+        ),
+        corridor_band_name: str = Query(
+            pattern=r"^top_(5|10|20)_percent_corridor$",
+        ),
+        expected_feature_index_sha256: str | None = Query(
+            default=None, pattern=r"^[a-f0-9]{64}$",
+        ),
+        expected_resolution_sha256: str | None = Query(
+            default=None, pattern=r"^[a-f0-9]{64}$",
+        ),
+    ) -> JSONResponse:
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        try:
+            payload = terrain_route_guidance_sampling_service().map_review_scope(
+                project_root,
+                project_id=project_id,
+                reference_hypothesis_id=reference_hypothesis_id,
+                corridor_band_name=corridor_band_name,
+                expected_feature_index_sha256=expected_feature_index_sha256,
+                expected_resolution_sha256=expected_resolution_sha256,
+            )
+        except (OSError, ValueError, ValidationError, TerrainRouteToolUnavailable) as exc:
+            return _terrain_route_guidance_response({
+                "artifact_kind": "terrain_guidance_map_review_scope",
+                "status": "unavailable",
+                "project_id": project_id,
+                "reference_hypothesis_id": reference_hypothesis_id,
+                "band_name": corridor_band_name,
+                "reason": str(exc),
+                "constraints": [],
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "operational": False,
+            }, status_code=409)
+        return _terrain_route_guidance_response(payload)
+
+    @router.get(
+        "/pretrip/projects/{project_id}/terrain-route-hypotheses/explain"
+    )
+    def pretrip_project_explain_terrain_route_hypothesis(
+        project_id: str,
+        candidate_id: str | None = Query(default=None, max_length=200),
+        hypothesis_path: str | None = Query(default=None, max_length=1024),
+    ) -> JSONResponse:
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        payload = explain_scout_terrain_route_hypothesis(
+            project_root,
+            candidate_id=candidate_id,
+            hypothesis_path=hypothesis_path,
+        )
+        return _terrain_route_tool_response(payload)
+
+    @router.get(
+        "/pretrip/projects/{project_id}/terrain-route-hypotheses/compare"
+    )
+    def pretrip_project_compare_terrain_route_hypotheses(
+        project_id: str,
+        candidate_id: list[str] | None = Query(default=None),
+        hypothesis_path: str | None = Query(default=None, max_length=1024),
+    ) -> JSONResponse:
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        payload = compare_scout_terrain_route_hypotheses(
+            project_root,
+            candidate_ids=candidate_id,
+            hypothesis_path=hypothesis_path,
+        )
+        return _terrain_route_tool_response(payload)
+
+    @router.post(
+        "/pretrip/projects/{project_id}/terrain-route-consistency"
+    )
+    def pretrip_project_route_terrain_consistency(
+        project_id: str,
+        request: TerrainRouteConsistencyApiRequest,
+    ) -> JSONResponse:
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        default_source_selected = request.gpx_path is None
+        try:
+            project = _load_pretrip_project_manifest(project_root)
+            gpx_path = request.gpx_path or _default_historical_gpx_ref(
+                project_root,
+                project,
+            )
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            return _terrain_route_tool_response(
+                _terrain_route_api_unavailable(
+                    "known_gpx_source_unavailable",
+                    str(exc),
+                )
+            )
+        payload = inspect_scout_route_terrain_consistency(
+            project_root,
+            gpx_path=gpx_path,
+            candidate_id=request.candidate_id,
+            hypothesis_path=request.hypothesis_path,
+            corridor_band_name=request.corridor_band_name,
+            max_samples=request.max_samples,
+            endpoint_tolerance_m=request.endpoint_tolerance_m,
+            teii_raster_path=request.teii_raster_path,
+        )
+        payload = {
+            **payload,
+            "default_gpx_source_selected": default_source_selected,
+        }
+        return _terrain_route_tool_response(payload)
+
+    @router.post("/pretrip/projects/{project_id}/terrain-route-guidance/interpret")
+    def pretrip_project_interpret_terrain_route_guidance(
+        project_id: str,
+        request: TerrainGuidanceInterpretRequest,
+    ) -> JSONResponse:
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        if _pretrip_project_root_is_repo_fixture(project_root):
+            raise HTTPException(
+                status_code=409,
+                detail="terrain route guidance writes only workspace projects",
+            )
+        try:
+            payload = terrain_route_guidance_service.interpret(
+                project_root,
+                project_id=project_id,
+                request=request,
+            )
+        except (OSError, ValueError, ValidationError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        return _terrain_route_guidance_response(payload, status_code=201)
+
+    @router.post("/pretrip/projects/{project_id}/terrain-route-guidance/resolve")
+    def pretrip_project_resolve_terrain_route_guidance(
+        project_id: str,
+        request: TerrainGuidanceResolveRequest,
+    ) -> JSONResponse:
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        if _pretrip_project_root_is_repo_fixture(project_root):
+            raise HTTPException(
+                status_code=409,
+                detail="terrain route guidance writes only workspace projects",
+            )
+        try:
+            payload = terrain_route_guidance_sampling_service().resolve(
+                project_root,
+                project_id=project_id,
+                request=request,
+            )
+        except (OSError, ValueError, ValidationError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return _terrain_route_guidance_response(payload)
+
+    @router.post("/pretrip/projects/{project_id}/terrain-route-guidance/review")
+    def pretrip_project_review_terrain_route_guidance(
+        project_id: str,
+        request: TerrainGuidanceReviewRequest,
+    ) -> JSONResponse:
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        if _pretrip_project_root_is_repo_fixture(project_root):
+            raise HTTPException(
+                status_code=409,
+                detail="terrain route guidance writes only workspace projects",
+            )
+        try:
+            payload = terrain_route_guidance_service.review(
+                project_root,
+                project_id=project_id,
+                request=request,
+            )
+        except (OSError, ValueError, ValidationError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        return _terrain_route_guidance_response(payload)
+
+    def qgis_runtime_project(project_id: str) -> None:
+        try:
+            _validate_pretrip_import_project_id(project_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+        project_root = _pretrip_workspace_project_root(pretrip_workspace_root, project_id=project_id)
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        if _pretrip_project_root_is_repo_fixture(project_root):
+            raise HTTPException(status_code=409, detail="Worker startup requires a workspace-backed project")
+
+    def qgis_runtime_local_request(request: Request) -> bool:
+        try:
+            return (
+                request.client is not None
+                and ipaddress.ip_address(request.client.host).is_loopback
+                and request.url.hostname in {"127.0.0.1", "localhost", "::1"}
+            )
+        except ValueError:
+            return False
+
+    def qgis_runtime_response(result: QgisRuntimeControlResult) -> JSONResponse:
+        return JSONResponse(content=result.model_dump(mode="json"), headers={
+            "Cache-Control": "no-store", "X-Scout-Candidate-Only": "true",
+            "X-Scout-Runtime-Safety-Truth": "false",
+        })
+
+    @router.get("/pretrip/projects/{project_id}/spatial/qgis/runtime")
+    def pretrip_project_qgis_runtime(project_id: str, request: Request) -> JSONResponse:
+        qgis_runtime_project(project_id)
+        if qgis_runtime_controller is None or not qgis_runtime_local_request(request):
+            result = QgisRuntimeControlResult(
+                project_id=project_id, status="unavailable", code=QgisRuntimeControlCode.NOT_MANAGED,
+            )
+        else:
+            result = qgis_runtime_controller.snapshot(project_id=project_id)
+        return qgis_runtime_response(result)
+
+    @router.post("/pretrip/projects/{project_id}/spatial/qgis/runtime/ensure-ready")
+    def pretrip_project_qgis_runtime_ensure_ready(
+        project_id: str, request: Request, body: QgisRuntimeControlRequest,
+    ) -> JSONResponse:
+        origin = request.headers.get("origin")
+        if (not qgis_runtime_local_request(request)
+                or origin != f"{request.url.scheme}://{request.url.netloc}"
+                or request.headers.get("sec-fetch-site", "same-origin") != "same-origin"
+                or request.headers.get("content-type", "").split(";", 1)[0].strip() != "application/json"):
+            raise HTTPException(status_code=403, detail="Worker startup requires the same-origin local Dashboard")
+        qgis_runtime_project(project_id)
+        if qgis_runtime_controller is None:
+            result = QgisRuntimeControlResult(
+                project_id=project_id, status="unavailable", code=QgisRuntimeControlCode.NOT_MANAGED,
+            )
+        else:
+            result = qgis_runtime_controller.ensure_ready(project_id=project_id)
+        return qgis_runtime_response(result)
+
     @router.get("/pretrip/projects/{project_id}/spatial/qgis/status")
     def pretrip_project_qgis_spatial_status(project_id: str) -> JSONResponse:
         try:
@@ -5060,6 +5733,7 @@ def create_admin_router(
             run = qgis_spatial_backend.get_run(
                 project_root=project_root,
                 workflow_run_id=workflow_run_id,
+                project_id=project_id,
             )
         except QgisSpatialNotFound as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -5378,6 +6052,218 @@ def create_admin_router(
             },
         )
 
+    @router.get(
+        "/pretrip/projects/{project_id}/terrain-route-overlays/{mode}.png"
+    )
+    def pretrip_project_terrain_route_overlay(
+        project_id: str,
+        mode: str,
+        hypothesis_id: str | None = Query(
+            default=None,
+            min_length=1,
+            max_length=80,
+            pattern=r"^[a-z0-9][a-z0-9._-]{0,79}$",
+        ),
+    ) -> Response:
+        allowed_modes = {
+            "top_5_percent_corridor",
+            "top_10_percent_corridor",
+            "top_20_percent_corridor",
+        }
+        if mode not in allowed_modes:
+            raise HTTPException(
+                status_code=422,
+                detail="unsupported terrain route corridor mode",
+            )
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found")
+        try:
+            project = json.loads(
+                (project_root / "project.json").read_text(encoding="utf-8")
+            )
+        except (json.JSONDecodeError, OSError) as exc:
+            raise HTTPException(
+                status_code=422, detail="invalid pre-trip project"
+            ) from exc
+        if (
+            not isinstance(project, dict)
+            or project.get("terrain_route_hypothesis_candidate_only") is not True
+            or project.get("terrain_route_hypothesis_runtime_safety_truth") is not False
+        ):
+            raise HTTPException(
+                status_code=404,
+                detail="terrain route hypothesis not prepared",
+            )
+        if hypothesis_id is None and (
+            project.get("terrain_route_hypothesis_authority")
+            != "candidate_only"
+            or project.get("terrain_route_hypothesis_status") != "completed"
+        ):
+            raise HTTPException(
+                status_code=404,
+                detail="active terrain route hypothesis not prepared",
+            )
+        visualization_ref = project.get(
+            "terrain_route_hypothesis_visualization_ref"
+        )
+        visualization_sha = project.get(
+            "terrain_route_hypothesis_visualization_sha256"
+        )
+        if hypothesis_id is not None:
+            catalog_path = _safe_pretrip_project_ref_path(
+                project_root,
+                project.get("terrain_route_hypothesis_catalog_ref"),
+            )
+            if catalog_path is None or not catalog_path.is_file():
+                raise HTTPException(
+                    status_code=404,
+                    detail="terrain route hypothesis catalog not prepared",
+                )
+            catalog_bytes = catalog_path.read_bytes()
+            if hashlib.sha256(catalog_bytes).hexdigest() != project.get(
+                "terrain_route_hypothesis_catalog_sha256"
+            ):
+                raise HTTPException(
+                    status_code=422,
+                    detail="terrain route hypothesis catalog hash mismatch",
+                )
+            try:
+                catalog = TerrainRouteHypothesisCatalog.model_validate_json(
+                    catalog_bytes
+                )
+            except ValidationError as exc:
+                raise HTTPException(
+                    status_code=422,
+                    detail="invalid terrain route hypothesis catalog",
+                ) from exc
+            if catalog.project_id != project_id:
+                raise HTTPException(
+                    status_code=422,
+                    detail="terrain route hypothesis catalog project mismatch",
+                )
+            entry = next(
+                (item for item in catalog.entries if item.id == hypothesis_id),
+                None,
+            )
+            if entry is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail="terrain route hypothesis selection not found",
+                )
+            hypothesis_path = _safe_pretrip_project_ref_path(
+                project_root,
+                entry.hypothesis_ref,
+            )
+            if hypothesis_path is None or not hypothesis_path.is_file():
+                raise HTTPException(
+                    status_code=404,
+                    detail="terrain route hypothesis artifact missing",
+                )
+            if hashlib.sha256(hypothesis_path.read_bytes()).hexdigest() != (
+                entry.hypothesis_sha256
+            ):
+                raise HTTPException(
+                    status_code=422,
+                    detail="terrain route hypothesis hash mismatch",
+                )
+            visualization_ref = entry.visualization_ref
+            visualization_sha = entry.visualization_sha256
+
+        visualization_path = _safe_pretrip_project_ref_path(
+            project_root,
+            visualization_ref,
+        )
+        if visualization_path is None or not visualization_path.is_file():
+            raise HTTPException(
+                status_code=404,
+                detail="terrain route visualization artifact missing",
+            )
+        visualization_bytes = visualization_path.read_bytes()
+        if hashlib.sha256(visualization_bytes).hexdigest() != visualization_sha:
+            raise HTTPException(
+                status_code=422,
+                detail="terrain route visualization hash mismatch",
+            )
+        try:
+            visualization = json.loads(visualization_bytes.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise HTTPException(
+                status_code=422,
+                detail="invalid terrain route visualization",
+            ) from exc
+        boundary = visualization.get("boundary")
+        if (
+            visualization.get("artifact_kind")
+            != "terrain_route_hypothesis_visualization"
+            or visualization.get("authority") != "candidate_only"
+            or visualization.get("source_type") != "terrain_hypothesis"
+            or visualization.get("candidate_only") is not True
+            or visualization.get("runtime_safety_truth") is not False
+            or visualization.get("operational") is not False
+            or not isinstance(boundary, dict)
+            or boundary.get("promotion_allowed") is not False
+        ):
+            raise HTTPException(
+                status_code=422,
+                detail="terrain route visualization authority is invalid",
+            )
+        overlay = next(
+            (
+                item
+                for item in visualization.get("raster_overlays", [])
+                if isinstance(item, dict) and item.get("mode") == mode
+            ),
+            None,
+        )
+        if (
+            not isinstance(overlay, dict)
+            or overlay.get("candidate_only") is not True
+            or overlay.get("runtime_safety_truth") is not False
+            or overlay.get("operational") is not False
+            or overlay.get("contains_best_path") is not True
+        ):
+            raise HTTPException(
+                status_code=404,
+                detail="terrain route corridor overlay not available",
+            )
+        overlay_path = _safe_pretrip_project_ref_path(
+            project_root,
+            overlay.get("source_path"),
+        )
+        if overlay_path is None or not overlay_path.is_file():
+            raise HTTPException(
+                status_code=404,
+                detail="terrain route corridor overlay file missing",
+            )
+        overlay_bytes = overlay_path.read_bytes()
+        actual_hash = hashlib.sha256(overlay_bytes).hexdigest()
+        if actual_hash != overlay.get("sha256"):
+            raise HTTPException(
+                status_code=422,
+                detail="terrain route corridor overlay hash mismatch",
+            )
+        headers = {
+            "Cache-Control": "no-cache, max-age=0, must-revalidate",
+            "X-Scout-Terrain-Route-Corridor": mode,
+            "X-Scout-Terrain-Route-Overlay-Hash": actual_hash,
+            "X-Scout-Authority": "candidate_only",
+            "X-Scout-Source-Type": "terrain_hypothesis",
+            "X-Scout-Candidate-Only": "true",
+            "X-Scout-Runtime-Safety-Truth": "false",
+            "X-Scout-Operational": "false",
+        }
+        if hypothesis_id is not None:
+            headers["X-Scout-Terrain-Route-Hypothesis"] = hypothesis_id
+        return Response(
+            overlay_bytes,
+            media_type="image/png",
+            headers=headers,
+        )
+
     @router.get("/pretrip/projects/{project_id}/osm-pbf-vector.geojson")
     def pretrip_project_osm_pbf_vector(project_id: str) -> Response:
         project_root = _pretrip_workspace_project_root(
@@ -5418,7 +6304,7 @@ def create_admin_router(
                 pretrip_workspace_root,
                 project_id=project_id,
             )
-            view = build_pretrip_admin_view(project_id, project_root=project_root)
+            view = load_pretrip_weather_projection(project_id, project_root=project_root)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="Pre-trip project not found") from exc
 
@@ -6267,8 +7153,51 @@ def create_admin_router(
                 event_type="access_completed",
                 verification=approval_verification,
             )
+            decision_review = {
+                "status": "failed",
+                "trigger": "target-rainfall-trend",
+                "projectId": project_id,
+                "targetId": package["target"]["id"],
+                "evaluatedAt": package["evaluatedAt"],
+                "evidenceStatus": "unavailable",
+                "rainfallPairId": None,
+                "imageryPairId": None,
+            }
+            dashboard = None
+            try:
+                from weather_grid_store import _compact_frame
+
+                source_frame_ids = {
+                    grid.grid_kind: _compact_frame(grid, str(path))["frameId"]
+                    for grid, path in ((qpe_grid, qpe_path), (qpf_grid, qpf_path))
+                }
+                dashboard = _build_weather_target_dashboard(
+                    cached=pretrip_project_weather_dashboard(project_id),
+                    trend=package,
+                    source_frame_ids=source_frame_ids,
+                    source_project=project,
+                )
+                decision_review = {
+                    **decision_review,
+                    "status": "reevaluated",
+                    "evaluatedAt": dashboard["evaluatedAt"],
+                    "evidenceStatus": dashboard["status"],
+                    "rainfallPairId": dashboard["rainfall"].get("pairId"),
+                    "imageryPairId": dashboard["imagery"].get("pairId"),
+                    "sourceFrameIds": source_frame_ids,
+                }
+            except (HTTPException, OSError, ValueError, KeyError, TypeError):
+                # Successful, approved sampling remains useful if risk context
+                # changes concurrently or cannot be verified for this review.
+                decision_review = {
+                    **decision_review,
+                    "errorCode": "weather_decision_context_unavailable",
+                }
+                dashboard = None
             return {
                 **package,
+                "decisionReview": decision_review,
+                "weatherDashboard": dashboard,
                 "locationApproval": {
                     "reference": request.location_approval_reference,
                     "approvedAt": request.location_approved_at.isoformat(),
@@ -6384,6 +7313,56 @@ def create_admin_router(
         except (ValueError, OSError, ParseError) as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    @router.post("/pretrip/projects/{project_id}/import-and-prepare", status_code=202)
+    def dashboard_import_and_prepare(project_id: str, request: DashboardImportPreparationRequest) -> JSONResponse:
+        if not request.confirm_import or not request.confirm_prepare:
+            raise HTTPException(status_code=400, detail="confirm_import=true and confirm_prepare=true are required")
+        if request.overwrite:
+            raise HTTPException(status_code=409, detail="Preparation jobs do not overwrite an existing workspace; resume its job instead")
+        if request.workspace_root is not None:
+            raise HTTPException(status_code=422, detail="Import workspace root is resolved by the server")
+        if request.preparation is not None and request.preparation.workspace_root is not None:
+            raise HTTPException(status_code=422, detail="Preparation workspace root is resolved by the server")
+        try:
+            manager = require_preparation_jobs()
+            workspace_root = _pretrip_import_workspace_root(pretrip_workspace_root, request=request)
+            domain_request = PretripImportRequest(
+                project_id=project_id,
+                primary_gpx=_path_from_admin_request(request.golden_route_gpx),
+                reference_dir=_optional_path_from_admin_request(request.reference_dir),
+                reference_gpx_paths=tuple(_path_from_admin_request(path) for path in request.reference_gpx_paths),
+                workspace_root=workspace_root,
+                profile=request.profile,
+                template_project_root=_optional_path_from_admin_request(request.template_project_root),
+                checkpoint_spacing_m=request.checkpoint_spacing_m,
+                max_reference_display_points=request.max_reference_display_points,
+                max_reasonable_gpx_speed_kmh=request.max_reasonable_gpx_speed_kmh,
+                max_previous_gpx_speed_ratio=request.max_previous_gpx_speed_ratio,
+                material_root=_optional_path_from_admin_request(request.material_root),
+                dtm_dirs=tuple(_path_from_admin_request(path) for path in request.dtm_dirs),
+                mcp_named_point_evidence=_optional_path_from_admin_request(request.mcp_named_point_evidence),
+                overwrite=False,
+                import_timestamp=request.import_timestamp,
+                import_stage="pretrip",
+                resolve_default_material_root=False,
+            )
+            result = manager.submit_import(
+                domain_request,
+                idempotency_key=request.idempotency_key,
+                requested_by=request.requested_by,
+                preparation_options=(
+                    request.preparation.model_dump(mode="json", exclude={"workspace_root"}, exclude_unset=True)
+                    if request.preparation is not None else None
+                ),
+            )
+            return preparation_job_response(result, status_code=202)
+        except (DashboardPreparationJobConflict, FileExistsError) as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except FileNotFoundError as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, OSError, ValidationError, ParseError) as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
     @router.post("/pretrip/projects/{project_id}/import-gpx")
     def pretrip_import_gpx(
         project_id: str,
@@ -6422,6 +7401,17 @@ def create_admin_router(
                     checkpoint_spacing_m=request.checkpoint_spacing_m,
                     max_reference_display_points=request.max_reference_display_points,
                     max_reasonable_gpx_speed_kmh=request.max_reasonable_gpx_speed_kmh,
+                    max_previous_gpx_speed_ratio=request.max_previous_gpx_speed_ratio,
+                    material_root=_optional_path_from_admin_request(
+                        request.material_root
+                    ),
+                    dtm_dirs=tuple(
+                        _path_from_admin_request(path)
+                        for path in request.dtm_dirs
+                    ),
+                    mcp_named_point_evidence=_optional_path_from_admin_request(
+                        request.mcp_named_point_evidence
+                    ),
                     overwrite=request.overwrite,
                     import_timestamp=request.import_timestamp,
                     import_stage="pretrip",
@@ -6829,10 +7819,17 @@ def create_admin_router(
         y: int,
         source_id: str | None = None,
         native: bool = False,
+        refresh: bool = False,
+        cache_only: bool = False,
+        exact: bool = False,
     ) -> Response:
         try:
             if native and not source_id:
                 raise ValueError("native tile fetch requires source_id")
+            if refresh and not native:
+                raise ValueError("refresh tile fetch requires native=true")
+            if cache_only and native:
+                raise ValueError("cache_only and native cannot both be enabled")
             project = _pretrip_project_payload_for_tiles(
                 pretrip_workspace_root,
                 project_id=project_id,
@@ -6856,9 +7853,15 @@ def create_admin_router(
                 fallback_enabled=_raster_tile_fallback_enabled_from_env(),
                 imagery_source=imagery_source,
                 allow_remote_fetch=(
-                    native or _imagery_remote_fetch_enabled_from_env()
+                    native
+                    or (
+                        not cache_only
+                        and _imagery_remote_fetch_enabled_from_env()
+                    )
                 ),
                 prefer_native_zoom=native,
+                force_remote_refresh=refresh,
+                require_exact_zoom=exact,
                 remote_fetch_timeout_seconds=(
                     min(_imagery_remote_fetch_timeout_from_env(), 3.0)
                     if native
@@ -6870,10 +7873,14 @@ def create_admin_router(
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
 
+        headers = payload.headers()
+        if exact:
+            headers["X-Scout-Tile-Exact"] = "true"
+            headers["X-Scout-Tile-Zoom"] = str(z)
         return Response(
             payload.body,
             media_type=payload.media_type,
-            headers=payload.headers(),
+            headers=headers,
         )
 
     @router.post("/pretrip/projects/{project_id}/workspace")
@@ -7658,6 +8665,9 @@ def create_admin_router(
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="Admin case not found") from exc
 
+    from scout_trip_notebook_api import create_trip_notebook_router
+
+    router.include_router(create_trip_notebook_router(pretrip_workspace_root))
     return router
 
 
@@ -7758,6 +8768,24 @@ def _build_pretrip_import_gpx_preview(
     if template_root is not None and not template_root.is_dir():
         raise ValueError(f"template project root is not a directory: {template_root}")
 
+    material_root = _optional_path_from_admin_request(request.material_root)
+    if material_root is not None and not material_root.is_dir():
+        raise FileNotFoundError(f"material root not found: {material_root}")
+    dtm_dirs = tuple(_path_from_admin_request(path) for path in request.dtm_dirs)
+    for dtm_dir in dtm_dirs:
+        if not dtm_dir.is_dir():
+            raise FileNotFoundError(f"DTM directory not found: {dtm_dir}")
+    mcp_named_point_evidence = _optional_path_from_admin_request(
+        request.mcp_named_point_evidence
+    )
+    if (
+        mcp_named_point_evidence is not None
+        and not mcp_named_point_evidence.is_file()
+    ):
+        raise FileNotFoundError(
+            f"MCP named-point evidence not found: {mcp_named_point_evidence}"
+        )
+
     reference_paths = _pretrip_import_reference_paths(
         request,
         golden_route=golden_route,
@@ -7804,6 +8832,7 @@ def _build_pretrip_import_gpx_preview(
             "checkpoint_spacing_m": request.checkpoint_spacing_m,
             "max_reference_display_points": request.max_reference_display_points,
             "max_reasonable_gpx_speed_kmh": request.max_reasonable_gpx_speed_kmh,
+            "max_previous_gpx_speed_ratio": request.max_previous_gpx_speed_ratio,
             "golden_route_count": 1,
             "reference_track_count": len(reference_paths),
             "source_file_count": 1 + len(reference_paths),
@@ -7813,6 +8842,13 @@ def _build_pretrip_import_gpx_preview(
             "golden_route_gpx": golden_source_record,
             "reference_tracks": reference_source_records,
             "template_project_root": str(template_root) if template_root else None,
+            "material_root": str(material_root) if material_root else None,
+            "dtm_dirs": [str(path) for path in dtm_dirs],
+            "mcp_named_point_evidence": (
+                str(mcp_named_point_evidence)
+                if mcp_named_point_evidence is not None
+                else None
+            ),
         },
         "provenance": {
             "golden_route_gpx": {
@@ -7832,6 +8868,7 @@ def _build_pretrip_import_gpx_preview(
             "checkpoint_spacing_m": request.checkpoint_spacing_m,
             "max_reference_display_points": request.max_reference_display_points,
             "max_reasonable_gpx_speed_kmh": request.max_reasonable_gpx_speed_kmh,
+            "max_previous_gpx_speed_ratio": request.max_previous_gpx_speed_ratio,
         },
         "gpx_speed_filter": {
             "enabled": True,
@@ -7919,7 +8956,27 @@ def _pretrip_prepare_layers_request(
         allow_network_fetch=request.allow_network_fetch,
         prepare_cwa_imagery=request.prepare_cwa_imagery,
         bbox=request.bbox,
+        route_evidence_bundle=_optional_path_from_admin_request(
+            request.route_evidence_bundle
+        ),
         route_corridor_m=request.route_corridor_m,
+        reference_track_corridor_m=request.reference_track_corridor_m,
+        ai_mode=request.ai_mode,
+        ai_output_policy=request.ai_output_policy,
+        imagery_min_zoom=request.imagery_min_zoom,
+        imagery_max_zoom=request.imagery_max_zoom,
+        seed_imagery_cache=request.seed_imagery_cache,
+        imagery_provider_allows_offline_prefetch=(
+            request.imagery_provider_allows_offline_prefetch
+        ),
+        imagery_seed_max_tiles=request.imagery_seed_max_tiles,
+        imagery_cache_fallback_project_ids=tuple(
+            request.imagery_cache_fallback_project_ids
+        ),
+        osm_pbf_path=_optional_path_from_admin_request(request.osm_pbf_path),
+        osm_pbf_source_url=request.osm_pbf_source_url,
+        osm_pbf_cache_ttl_days=request.osm_pbf_cache_ttl_days,
+        osmium_bin=request.osmium_bin,
         prepared_at=request.prepared_at,
     )
 
@@ -8045,6 +9102,9 @@ def _attach_completed_trip_scenario_projection(
     active = load_active_completed_trip_scenario_projection(data_root=data_root, root=ROOT)
     if not active:
         return
+    view["completed_trip_scenario_projection_validation"] = active.get("projection_validation")
+    if active.get("status") == "rejected":
+        return
     view["active_completed_trip_scenario"] = active.get("scenario")
     if active.get("scout_reaction_simulation"):
         view["scout_reaction_simulation"] = active.get("scout_reaction_simulation")
@@ -8075,6 +9135,9 @@ def _attach_completed_trip_recording_projection(
         project_root=project_root,
     )
     if not active:
+        return
+    view["completed_trip_recording_projection_validation"] = active.get("projection_validation")
+    if active.get("status") == "rejected":
         return
     view["active_completed_trip_recording"] = active.get("recording")
     if active.get("completed_trip_track"):
@@ -10244,6 +11307,20 @@ def _navigation_terrain_dem_public_manifest(
         "visual_interpolation": manifest.get("visual_interpolation"),
         "interpolation_domain": manifest.get("interpolation_domain"),
         "adds_source_resolution": manifest.get("adds_source_resolution"),
+        "source_analysis_processor": manifest.get("source_analysis_processor"),
+        "source_standard_processor_completed": manifest.get(
+            "source_standard_processor_completed"
+        ),
+        "source_fallback_used": manifest.get("source_fallback_used"),
+        "source_python_dtm_processing_used": manifest.get(
+            "source_python_dtm_processing_used"
+        ),
+        "visualization_packaging_processor": manifest.get(
+            "visualization_packaging_processor"
+        ),
+        "visualization_packaging_only": manifest.get(
+            "visualization_packaging_only"
+        ),
         "tile_size": manifest.get("tile_size"),
         "minzoom": manifest.get("minzoom"),
         "maxzoom": manifest.get("maxzoom"),
@@ -10289,6 +11366,116 @@ def _pretrip_workspace_project_root(
         if candidate.exists():
             return candidate.parent
     return None
+
+
+def _terrain_route_guidance_response(
+    payload: dict[str, Any],
+    *,
+    status_code: int = 200,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status_code,
+        content=payload,
+        headers={
+            "Cache-Control": "no-store",
+            "X-Scout-Candidate-Only": "true",
+            "X-Scout-Runtime-Safety-Truth": "false",
+            "X-Scout-Terrain-Guidance": "candidate-only",
+        },
+    )
+
+
+def _terrain_route_tool_response(payload: dict[str, Any]) -> JSONResponse:
+    return JSONResponse(
+        status_code=200,
+        content=payload,
+        headers={
+            "Cache-Control": "no-store",
+            "X-Scout-Candidate-Only": "true",
+            "X-Scout-Runtime-Safety-Truth": "false",
+            "X-Scout-GPX-Assessment": "terrain-consistency-not-validity",
+        },
+    )
+
+
+def _terrain_route_api_unavailable(
+    failure_code: str,
+    detail: str,
+) -> dict[str, Any]:
+    return {
+        "artifact_kind": "scout_ai_gpx_terrain_consistency",
+        "status": "unavailable",
+        "failure_code": failure_code,
+        "terrain_consistency": "unknown",
+        "assessment_semantics": "terrain_consistency_not_gpx_validity",
+        "summary": "GPX terrain consistency is UNKNOWN; no inference was made.",
+        "detail": detail,
+        "unknowns": ["known_gpx_source_unavailable"],
+        "known_gpx_mutated": False,
+        "authority": "candidate_only",
+        "source_type": "known_gpx",
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "operational": False,
+        "safe_or_walkable": "not_determined",
+        "promotion_allowed": False,
+        "writes_to_official_trail_db": False,
+        "writes_to_safety_truth": False,
+        "writes_performed": [],
+    }
+
+
+def _load_pretrip_project_manifest(project_root: Path) -> dict[str, Any]:
+    payload = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("pre-trip project manifest must be an object")
+    return payload
+
+
+def _default_historical_gpx_ref(
+    project_root: Path,
+    project: Mapping[str, Any],
+) -> str:
+    index_path = _safe_pretrip_project_ref_path(
+        project_root,
+        project.get("historical_gpx_source_index_ref"),
+    )
+    if index_path is None or not index_path.is_file():
+        raise ValueError("historical GPX source index is unavailable")
+    index = json.loads(index_path.read_text(encoding="utf-8"))
+    if not isinstance(index, dict):
+        raise ValueError("historical GPX source index must be an object")
+    boundary = index.get("boundary")
+    if (
+        not isinstance(boundary, dict)
+        or boundary.get("pretrip_candidate_evidence_only") is not True
+        or boundary.get("runtime_safety_truth") is not False
+    ):
+        raise ValueError("historical GPX source index authority is invalid")
+    sources = index.get("sources")
+    if not isinstance(sources, list):
+        raise ValueError("historical GPX source index has no source records")
+    eligible = [
+        item
+        for item in sources
+        if isinstance(item, dict)
+        and item.get("candidate_only") is True
+        and item.get("runtime_safety_truth") is False
+        and item.get("role") == "golden_route_reference"
+        and isinstance(item.get("workspace_ref"), str)
+        and isinstance(item.get("sha256"), str)
+    ]
+    if len(eligible) != 1:
+        raise ValueError("exactly one candidate-only golden-route GPX is required")
+    selected = eligible[0]
+    ref = str(selected["workspace_ref"])
+    path = _safe_pretrip_project_ref_path(project_root, ref)
+    if path is None or not path.is_file():
+        raise ValueError("golden-route GPX workspace artifact is unavailable")
+    actual_sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
+    if actual_sha256 != selected["sha256"]:
+        raise ValueError("golden-route GPX hash does not match source provenance")
+    return ref
 
 
 def _pretrip_project_root_for_read(
@@ -11388,6 +12575,29 @@ def _build_weather_dashboard_decision(
             f"{item['ruleCode']} intersects explicit terrain evidence."
             for item in interactions
         )
+    point_gaps: list[str] = []
+    for key, default_label in (("currentPosition", "Current position"), ("target", "Target")):
+        point = route_trend.get(key) or {}
+        point_status = point.get("status", "not_provided")
+        if point_status == "not_provided" and not point.get("id"):
+            continue
+        label = str(point.get("id") or default_label)
+        past = _weather_dashboard_number(point.get("past1hMm"), minimum=0)
+        future = _weather_dashboard_number(point.get("next1hMm"), minimum=0)
+        past_text = f"{past:g} mm" if past is not None else "UNKNOWN"
+        future_text = f"{future:g} mm" if future is not None else "UNKNOWN"
+        why.append(f"{label}: past-hour QPE {past_text}; next-hour QPF {future_text}.")
+        where.append(label)
+        if point_status != "ready" or past is None or future is None:
+            point_gaps.append(f"{label}: {point_status}; missing or invalid QPE/QPF coverage")
+    if point_gaps:
+        confidence = 0.0
+    elif (route_trend.get("target") or {}).get("id"):
+        trend_confidence = _weather_dashboard_number(
+            route_trend.get("confidence"), minimum=0, maximum=1,
+        )
+        if trend_confidence is not None:
+            confidence = min(confidence, float(trend_confidence))
     arrival = features.get("estimatedRainArrivalMinutes")
     when = (
         f"Estimated rain arrival is {arrival} minutes."
@@ -11398,6 +12608,10 @@ def _build_weather_dashboard_decision(
         decision = "DELAY"
         summary = "Weather evidence is missing or stale; do not infer a safe route window."
         action = "Refresh the server-side CWA preparation before departure review."
+    elif point_gaps:
+        decision = "DELAY"
+        summary = "Current-position or target rainfall coverage is incomplete."
+        action = "Resolve the missing target/current-position QPE or QPF coverage before reviewing the route window; UNKNOWN is not zero rainfall."
     elif positive_signals or interactions:
         decision = "CHANGE_PLAN"
         summary = "Weather is on, near, or moving toward the planned route."
@@ -11427,6 +12641,10 @@ def _build_weather_dashboard_decision(
             + ", ".join(missing_classifications)
             + "."
         )
+    uncertainty.extend(point_gaps)
+    qpf_window = (route_trend.get("validWindows") or {}).get("next1hQpf")
+    if isinstance(qpf_window, list) and len(qpf_window) == 2:
+        when += f" Target QPF window: {qpf_window[0]} to {qpf_window[1]}."
     if route_trend.get("status") in {
         "not_prepared",
         "awaiting_position_and_target",
@@ -11447,6 +12665,80 @@ def _build_weather_dashboard_decision(
         "humanReviewRequired": True,
         "candidateOnly": True,
         "runtimeSafetyTruth": False,
+    }
+
+
+def _build_weather_target_dashboard(
+    *,
+    cached: dict[str, Any],
+    trend: dict[str, Any],
+    source_frame_ids: dict[str, str],
+    source_project: dict[str, Any],
+) -> dict[str, Any]:
+    rainfall = cached["rainfall"]
+    active_frames = {
+        product["gridKind"]: product["frameId"]
+        for product in rainfall.get("products", [])
+    }
+    if any(active_frames.get(kind) != frame_id for kind, frame_id in source_frame_ids.items()):
+        raise ValueError("Sampled CWA frames no longer match the active rainfall pair")
+    if cached["projectId"] != source_project.get("project_id"):
+        raise ValueError("Sampled weather project changed during review")
+    for project_key, artifact_key in (
+        ("cwa_rainfall_route_ref", "routeRef"),
+        ("cwa_rainfall_route_sha256", "routeSha256"),
+        ("cwa_rainfall_route_basis", "routeBasis"),
+    ):
+        expected = source_project.get(project_key)
+        if expected is not None and rainfall.get(artifact_key) != expected:
+            raise ValueError("Sampled weather route changed during review")
+    compact_trend = _compact_weather_dashboard_trend(trend)
+    route_risk = cached["routeRisk"]
+    status = _weather_dashboard_status(
+        rainfall=rainfall,
+        imagery=cached["imagery"],
+        trend=trend,
+        risk=route_risk if route_risk.get("status") != "not_prepared" else None,
+    )
+    source_statuses = (
+        rainfall.get("status", ""),
+        cached["imagery"].get("status", ""), trend.get("status", ""),
+    )
+    if any("stale" in value for value in source_statuses):
+        status = "stale_data"
+    elif status == "ready" and trend.get("status") in {"missing_data", "no_coverage", "partial"}:
+        status = "partial"
+    return {
+        **cached,
+        "status": status,
+        "routeTrend": compact_trend,
+        "decision": _build_weather_dashboard_decision(
+            status=status, route_risk=route_risk, route_trend=compact_trend,
+        ),
+        "trendContext": {
+            "scope": "request_only",
+            "targetId": compact_trend["target"]["id"],
+            "rawCoordinatesPersisted": False,
+        },
+        "pairVerification": {
+            **cached["pairVerification"],
+            "targetRainfallTrend": "verified_source_frames",
+        },
+        "sourceRefs": {
+            key: value for key, value in cached["sourceRefs"].items()
+            if key != "rainfallTrend"
+        },
+        "loraAlert": {
+            **cached["loraAlert"],
+            "basis": "persisted_route_risk",
+            "targetSpecific": False,
+        },
+        "processingBoundary": {
+            **cached["processingBoundary"],
+            "positionEvaluationOnRead": True,
+            "positionAccessRequiresApproval": True,
+            "rawCoordinatesPersisted": False,
+        },
     }
 
 

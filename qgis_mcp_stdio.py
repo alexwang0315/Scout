@@ -12,6 +12,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from terrain_route_hypothesis_artifacts import (
+    TERRAIN_ROUTE_CORRIDOR_EXPRESSION_KIND,
+    TERRAIN_ROUTE_DRAINAGE_PRESSURE_EXPRESSION_KIND,
+    TERRAIN_ROUTE_PATH_OUTSIDE_BAND_EXPRESSION_KIND,
+    TERRAIN_ROUTE_PROFILE_FRICTION_EXPRESSION_KIND,
+    TERRAIN_ROUTE_SLOPE_FRICTION_EXPRESSION_KIND,
+    TERRAIN_ROUTE_THRESHOLD_EXPRESSION_KIND,
+    validate_terrain_route_mapcalc_expression,
+)
+
 
 QGIS_MCP_PROTOCOL_VERSION = "2025-11-25"
 QGIS_MCP_ALLOWED_TOOLS = frozenset(
@@ -40,16 +50,29 @@ QGIS_MCP_ALLOWED_ALGORITHMS = frozenset(
     {
         "gdal:buildvirtualraster",
         "gdal:assignprojection",
+        "gdal:cliprasterbyextent",
+        "gdal:colorrelief",
+        "gdal:rasterize",
         "gdal:slope",
         "gdal:warpreproject",
+        "native:dissolve",
+        "native:extractbyexpression",
+        "grass:r.contour",
+        "grass:r.cost",
         "grass:r.geomorphon",
         "grass:r.mapcalc.simple",
+        "grass:r.path",
+        "grass:r.quantile",
+        "grass:r.relief",
         "grass:r.slope.aspect",
         "grass:r.thin",
         "grass:r.to.vect",
+        "grass:r.univar",
+        "grass:r.walk.coords",
         "grass:r.watershed",
     }
 )
+QGIS_MCP_TERRAIN_LINE_MIN_LENGTH_EXPRESSION = "$length >= 160"
 QGIS_MCP_GEOMORPHON_RIDGE_CONSENSUS_EXPRESSION = (
     "if(((A == 3) + (B == 3) + (C == 3)) >= 2, 1, null())"
 )
@@ -87,6 +110,49 @@ _PROCESSING_PARAMETER_KEYS = {
             "OUTPUT",
         }
     ),
+    "gdal:cliprasterbyextent": frozenset(
+        {
+            "INPUT",
+            "PROJWIN",
+            "OVERCRS",
+            "NODATA",
+            "CREATION_OPTIONS",
+            "DATA_TYPE",
+            "EXTRA",
+            "OUTPUT",
+        }
+    ),
+    "gdal:colorrelief": frozenset(
+        {
+            "INPUT",
+            "BAND",
+            "COMPUTE_EDGES",
+            "COLOR_TABLE",
+            "MATCH_MODE",
+            "CREATION_OPTIONS",
+            "EXTRA",
+            "OUTPUT",
+        }
+    ),
+    "gdal:rasterize": frozenset(
+        {
+            "INPUT",
+            "FIELD",
+            "BURN",
+            "USE_Z",
+            "UNITS",
+            "WIDTH",
+            "HEIGHT",
+            "EXTENT",
+            "NODATA",
+            "CREATION_OPTIONS",
+            "DATA_TYPE",
+            "INIT",
+            "INVERT",
+            "EXTRA",
+            "OUTPUT",
+        }
+    ),
     "gdal:slope": frozenset(
         {
             "INPUT",
@@ -115,6 +181,12 @@ _PROCESSING_PARAMETER_KEYS = {
             "OUTPUT",
         }
     ),
+    "native:extractbyexpression": frozenset(
+        {"INPUT", "EXPRESSION", "OUTPUT", "FAIL_OUTPUT"}
+    ),
+    "native:dissolve": frozenset(
+        {"INPUT", "FIELD", "SEPARATE_DISJOINT", "OUTPUT"}
+    ),
     "grass:r.slope.aspect": frozenset(
         {
             "elevation",
@@ -131,6 +203,38 @@ _PROCESSING_PARAMETER_KEYS = {
             "GRASS_REGION_CELLSIZE_PARAMETER",
             "GRASS_RASTER_FORMAT_OPT",
             "GRASS_RASTER_FORMAT_META",
+        }
+    ),
+    "grass:r.relief": frozenset(
+        {
+            "input",
+            "altitude",
+            "azimuth",
+            "zscale",
+            "scale",
+            "units",
+            "output",
+            "GRASS_REGION_PARAMETER",
+            "GRASS_REGION_CELLSIZE_PARAMETER",
+            "GRASS_RASTER_FORMAT_OPT",
+            "GRASS_RASTER_FORMAT_META",
+        }
+    ),
+    "grass:r.contour": frozenset(
+        {
+            "input",
+            "step",
+            "levels",
+            "minlevel",
+            "maxlevel",
+            "cut",
+            "output",
+            "GRASS_REGION_PARAMETER",
+            "GRASS_REGION_CELLSIZE_PARAMETER",
+            "GRASS_OUTPUT_TYPE_PARAMETER",
+            "GRASS_VECTOR_DSCO",
+            "GRASS_VECTOR_LCO",
+            "GRASS_VECTOR_EXPORT_NOCAT",
         }
     ),
     "grass:r.geomorphon": frozenset(
@@ -160,6 +264,99 @@ _PROCESSING_PARAMETER_KEYS = {
             "GRASS_REGION_CELLSIZE_PARAMETER",
             "GRASS_RASTER_FORMAT_OPT",
             "GRASS_RASTER_FORMAT_META",
+        }
+    ),
+    "grass:r.walk.coords": frozenset(
+        {
+            "elevation",
+            "friction",
+            "start_coordinates",
+            "stop_coordinates",
+            "walk_coeff",
+            "lambda",
+            "slope_factor",
+            "max_cost",
+            "null_cost",
+            "memory",
+            "-k",
+            "-n",
+            "output",
+            "outdir",
+            "GRASS_REGION_PARAMETER",
+            "GRASS_REGION_CELLSIZE_PARAMETER",
+            "GRASS_RASTER_FORMAT_OPT",
+            "GRASS_RASTER_FORMAT_META",
+        }
+    ),
+    "grass:r.cost": frozenset(
+        {
+            "input",
+            "start_coordinates",
+            "stop_coordinates",
+            "-k",
+            "-n",
+            "start_points",
+            "stop_points",
+            "start_raster",
+            "max_cost",
+            "null_cost",
+            "memory",
+            "output",
+            "nearest",
+            "outdir",
+            "GRASS_REGION_PARAMETER",
+            "GRASS_REGION_CELLSIZE_PARAMETER",
+            "GRASS_RASTER_FORMAT_OPT",
+            "GRASS_RASTER_FORMAT_META",
+            "GRASS_SNAP_TOLERANCE_PARAMETER",
+            "GRASS_MIN_AREA_PARAMETER",
+        }
+    ),
+    "grass:r.path": frozenset(
+        {
+            "input",
+            "format",
+            "values",
+            "raster_path",
+            "vector_path",
+            "start_points",
+            "-c",
+            "-a",
+            "-n",
+            "GRASS_REGION_PARAMETER",
+            "GRASS_REGION_CELLSIZE_PARAMETER",
+            "GRASS_RASTER_FORMAT_OPT",
+            "GRASS_RASTER_FORMAT_META",
+            "GRASS_SNAP_TOLERANCE_PARAMETER",
+            "GRASS_MIN_AREA_PARAMETER",
+            "GRASS_OUTPUT_TYPE_PARAMETER",
+            "GRASS_VECTOR_DSCO",
+            "GRASS_VECTOR_LCO",
+            "GRASS_VECTOR_EXPORT_NOCAT",
+        }
+    ),
+    "grass:r.quantile": frozenset(
+        {
+            "input",
+            "quantiles",
+            "percentiles",
+            "bins",
+            "-r",
+            "file",
+            "GRASS_REGION_PARAMETER",
+            "GRASS_REGION_CELLSIZE_PARAMETER",
+        }
+    ),
+    "grass:r.univar": frozenset(
+        {
+            "map",
+            "zones",
+            "percentile",
+            "separator",
+            "-e",
+            "output",
+            "GRASS_REGION_PARAMETER",
+            "GRASS_REGION_CELLSIZE_PARAMETER",
         }
     ),
     "grass:r.thin": frozenset(
@@ -211,11 +408,23 @@ _PROCESSING_PARAMETER_KEYS = {
 _PROCESSING_INPUT_KEYS = {
     "gdal:assignprojection": ("INPUT",),
     "gdal:buildvirtualraster": ("INPUT",),
+    "gdal:cliprasterbyextent": ("INPUT",),
+    "gdal:colorrelief": ("INPUT", "COLOR_TABLE"),
+    "gdal:rasterize": ("INPUT",),
     "gdal:slope": ("INPUT",),
     "gdal:warpreproject": ("INPUT",),
+    "native:extractbyexpression": ("INPUT",),
+    "native:dissolve": ("INPUT",),
+    "grass:r.contour": ("input",),
     "grass:r.slope.aspect": ("elevation",),
+    "grass:r.relief": ("input",),
     "grass:r.geomorphon": ("elevation",),
     "grass:r.mapcalc.simple": ("a",),
+    "grass:r.walk.coords": ("elevation", "friction"),
+    "grass:r.cost": ("input",),
+    "grass:r.path": ("input", "start_points"),
+    "grass:r.quantile": ("input",),
+    "grass:r.univar": ("map",),
     "grass:r.thin": ("input",),
     "grass:r.to.vect": ("input",),
     "grass:r.watershed": ("elevation",),
@@ -223,11 +432,23 @@ _PROCESSING_INPUT_KEYS = {
 _PROCESSING_OUTPUT_KEYS = {
     "gdal:assignprojection": (),
     "gdal:buildvirtualraster": ("OUTPUT",),
+    "gdal:cliprasterbyextent": ("OUTPUT",),
+    "gdal:colorrelief": ("OUTPUT",),
+    "gdal:rasterize": ("OUTPUT",),
     "gdal:slope": ("OUTPUT",),
     "gdal:warpreproject": ("OUTPUT",),
+    "native:extractbyexpression": ("OUTPUT",),
+    "native:dissolve": ("OUTPUT",),
+    "grass:r.contour": ("output",),
     "grass:r.slope.aspect": ("slope", "aspect"),
+    "grass:r.relief": ("output",),
     "grass:r.geomorphon": ("forms",),
     "grass:r.mapcalc.simple": ("output",),
+    "grass:r.walk.coords": ("output", "outdir"),
+    "grass:r.cost": ("output", "outdir"),
+    "grass:r.path": ("raster_path", "vector_path"),
+    "grass:r.quantile": ("file",),
+    "grass:r.univar": ("output",),
     "grass:r.thin": ("output",),
     "grass:r.to.vect": ("output",),
     "grass:r.watershed": ("accumulation",),
@@ -241,6 +462,49 @@ _CORE_OR_DISCOVERY_TOOLS = frozenset(
         "qgis_visual_review",
     }
 )
+
+
+def _bounded_processing_extent(value: Any) -> tuple[float, float, float, float]:
+    if not isinstance(value, str):
+        raise QgisMcpToolRejected("QGIS Processing extent must be a bounded string")
+    parts = value.split(",")
+    if len(parts) != 4:
+        raise QgisMcpToolRejected("QGIS Processing extent must contain four values")
+    try:
+        xmin, xmax, ymin, ymax = (float(part) for part in parts)
+    except ValueError as exc:
+        raise QgisMcpToolRejected("QGIS Processing extent is invalid") from exc
+    if (
+        not all(math.isfinite(item) for item in (xmin, xmax, ymin, ymax))
+        or xmin >= xmax
+        or ymin >= ymax
+        or xmax - xmin > 100_000
+        or ymax - ymin > 100_000
+        or max(abs(xmin), abs(xmax), abs(ymin), abs(ymax)) < 10_000
+    ):
+        raise QgisMcpToolRejected("QGIS Processing extent is outside the bounded route scope")
+    return xmin, xmax, ymin, ymax
+
+
+def _bounded_projected_coordinate(value: Any) -> tuple[float, float]:
+    if not isinstance(value, str) or value.count(",") != 1:
+        raise QgisMcpToolRejected(
+            "GRASS route coordinate must contain one projected E,N pair"
+        )
+    try:
+        east, north = (float(part) for part in value.split(","))
+    except ValueError as exc:
+        raise QgisMcpToolRejected("GRASS route coordinate is invalid") from exc
+    if (
+        not math.isfinite(east)
+        or not math.isfinite(north)
+        or not 0 <= east <= 1_000_000
+        or not 2_000_000 <= north <= 3_000_000
+    ):
+        raise QgisMcpToolRejected(
+            "GRASS route coordinate is outside the bounded EPSG:3826 domain"
+        )
+    return east, north
 _ALLOWED_PROJECT_ACTIONS = frozenset(
     {"save", "add_vector", "add_raster", "remove_layer", "zoom_layer", "refresh"}
 )
@@ -298,6 +562,9 @@ class QgisMcpClientConfig:
             raise ValueError("Inline code execution is forbidden for QGIS MCP transport")
         if not 0.25 <= float(self.timeout_s) <= 300:
             raise ValueError("QGIS MCP timeout must be between 0.25 and 300 seconds")
+
+    def processing_temp_root(self) -> Path:
+        return self.run_root.expanduser().resolve(strict=False) / ".processing-tmp"
 
 
 class QgisMcpStdioClient:
@@ -815,7 +1082,132 @@ class QgisMcpStdioClient:
         algorithm: str,
         parameters: dict[str, Any],
     ) -> None:
-        if algorithm == "grass:r.slope.aspect":
+        if algorithm == "native:dissolve":
+            if set(parameters) != _PROCESSING_PARAMETER_KEYS[algorithm]:
+                raise QgisMcpToolRejected(
+                    "QGIS terrain line dissolve requires the complete bounded parameter set"
+                )
+            if parameters.get("FIELD") != []:
+                raise QgisMcpToolRejected(
+                    "QGIS terrain line dissolve may not group by arbitrary fields"
+                )
+            if parameters.get("SEPARATE_DISJOINT") is not False:
+                raise QgisMcpToolRejected(
+                    "QGIS terrain line dissolve must produce one bounded multipart feature"
+                )
+            if Path(str(parameters.get("OUTPUT", ""))).suffix.casefold() != ".gpkg":
+                raise QgisMcpToolRejected(
+                    "QGIS terrain line dissolve output must be GeoPackage"
+                )
+        elif algorithm == "native:extractbyexpression":
+            if set(parameters) != _PROCESSING_PARAMETER_KEYS[algorithm]:
+                raise QgisMcpToolRejected(
+                    "QGIS terrain line filtering requires the complete bounded parameter set"
+                )
+            if parameters.get("EXPRESSION") != QGIS_MCP_TERRAIN_LINE_MIN_LENGTH_EXPRESSION:
+                raise QgisMcpToolRejected(
+                    "QGIS terrain line filtering is limited to the fixed 160 metre threshold"
+                )
+            if parameters.get("FAIL_OUTPUT") is not None:
+                raise QgisMcpToolRejected(
+                    "QGIS terrain line filtering may not retain rejected fragments"
+                )
+            if Path(str(parameters.get("OUTPUT", ""))).suffix.casefold() != ".gpkg":
+                raise QgisMcpToolRejected(
+                    "QGIS terrain line filtering output must be GeoPackage"
+                )
+        elif algorithm == "gdal:cliprasterbyextent":
+            if set(parameters) != _PROCESSING_PARAMETER_KEYS[algorithm]:
+                raise QgisMcpToolRejected(
+                    "QGIS DEM clipping requires the complete bounded parameter set"
+                )
+            _bounded_processing_extent(parameters.get("PROJWIN"))
+            if parameters.get("OVERCRS") is not False:
+                raise QgisMcpToolRejected("QGIS DEM clipping may not override source CRS")
+            if parameters.get("NODATA") is not None:
+                raise QgisMcpToolRejected("QGIS DEM clipping may not invent NoData")
+            if parameters.get("CREATION_OPTIONS") != "" or parameters.get("EXTRA") != "":
+                raise QgisMcpToolRejected("QGIS DEM clipping does not allow GDAL extras")
+            if int(parameters.get("DATA_TYPE", -1)) != 0:
+                raise QgisMcpToolRejected("QGIS DEM clipping must preserve source type")
+            if Path(str(parameters.get("OUTPUT", ""))).suffix.casefold() != ".tif":
+                raise QgisMcpToolRejected("QGIS DEM clipping output must be GeoTIFF")
+        elif algorithm == "gdal:colorrelief":
+            if set(parameters) != _PROCESSING_PARAMETER_KEYS[algorithm]:
+                raise QgisMcpToolRejected(
+                    "QGIS terrain color relief requires the complete bounded parameter set"
+                )
+            if int(parameters.get("BAND", 0)) != 1:
+                raise QgisMcpToolRejected("QGIS terrain color relief is limited to band 1")
+            if parameters.get("COMPUTE_EDGES") is not False:
+                raise QgisMcpToolRejected("QGIS terrain color relief edge synthesis is disabled")
+            if int(parameters.get("MATCH_MODE", -1)) != 2:
+                raise QgisMcpToolRejected("QGIS terrain color relief must use fixed interpolation")
+            if parameters.get("CREATION_OPTIONS") != "":
+                raise QgisMcpToolRejected(
+                    "QGIS terrain color relief creation options are disabled"
+                )
+            if parameters.get("EXTRA") != "-alpha":
+                raise QgisMcpToolRejected(
+                    "QGIS terrain color relief allows only the fixed GDAL -alpha option"
+                )
+            if Path(str(parameters.get("OUTPUT", ""))).suffix.casefold() != ".png":
+                raise QgisMcpToolRejected("QGIS terrain color relief output must be PNG")
+        elif algorithm == "gdal:rasterize":
+            if set(parameters) != _PROCESSING_PARAMETER_KEYS[algorithm]:
+                raise QgisMcpToolRejected(
+                    "QGIS contour rasterization requires the complete bounded parameter set"
+                )
+            _bounded_processing_extent(parameters.get("EXTENT"))
+            if parameters.get("FIELD") is not None or float(parameters.get("BURN", 0)) != 255:
+                raise QgisMcpToolRejected("QGIS contour rasterization burn contract is fixed")
+            if parameters.get("USE_Z") is not False or int(parameters.get("UNITS", -1)) != 1:
+                raise QgisMcpToolRejected("QGIS contour rasterization units are fixed")
+            for key in ("WIDTH", "HEIGHT"):
+                resolution = float(parameters.get(key, 0))
+                if not math.isfinite(resolution) or not 5 <= resolution <= 100:
+                    raise QgisMcpToolRejected(
+                        "QGIS contour rasterization resolution is outside the bounded range"
+                    )
+            if float(parameters.get("NODATA", -1)) != 0 or float(parameters.get("INIT", -1)) != 0:
+                raise QgisMcpToolRejected("QGIS contour rasterization background must remain zero")
+            if int(parameters.get("DATA_TYPE", -1)) != 0:
+                raise QgisMcpToolRejected("QGIS contour rasterization output must be Byte")
+            if parameters.get("INVERT") is not False:
+                raise QgisMcpToolRejected("QGIS contour rasterization inversion is disabled")
+            if parameters.get("CREATION_OPTIONS") != "" or parameters.get("EXTRA") != "":
+                raise QgisMcpToolRejected("QGIS contour rasterization does not allow GDAL extras")
+            if Path(str(parameters.get("OUTPUT", ""))).suffix.casefold() != ".tif":
+                raise QgisMcpToolRejected("QGIS contour raster output must be GeoTIFF")
+        elif algorithm == "grass:r.relief":
+            if (
+                float(parameters.get("altitude", 0)) != 45
+                or float(parameters.get("azimuth", 0)) != 315
+                or float(parameters.get("zscale", 0)) != 1
+                or float(parameters.get("scale", 0)) != 1
+                or int(parameters.get("units", -1)) != 0
+            ):
+                raise QgisMcpToolRejected("GRASS relief parameters are outside the fixed Scout style")
+            if Path(str(parameters.get("output", ""))).suffix.casefold() != ".tif":
+                raise QgisMcpToolRejected("GRASS relief output must be GeoTIFF")
+        elif algorithm == "grass:r.contour":
+            if float(parameters.get("step", 0)) != 100:
+                raise QgisMcpToolRejected("GRASS contour interval must remain 100 metres")
+            if parameters.get("levels") not in {None, ""}:
+                raise QgisMcpToolRejected("GRASS contour explicit levels are disabled")
+            if parameters.get("minlevel") is not None or parameters.get("maxlevel") is not None:
+                raise QgisMcpToolRejected("GRASS contour level overrides are disabled")
+            if int(parameters.get("cut", -1)) != 2:
+                raise QgisMcpToolRejected(
+                    "GRASS contour minimum point filtering must use the standard two-point cutoff"
+                )
+            if int(parameters.get("GRASS_OUTPUT_TYPE_PARAMETER", -1)) != 2:
+                raise QgisMcpToolRejected("GRASS contour output must be line geometry")
+            if parameters.get("GRASS_VECTOR_EXPORT_NOCAT") is not False:
+                raise QgisMcpToolRejected("GRASS contour unlabeled export is disabled")
+            if Path(str(parameters.get("output", ""))).suffix.casefold() != ".gpkg":
+                raise QgisMcpToolRejected("GRASS contour output must be GeoPackage")
+        elif algorithm == "grass:r.slope.aspect":
             if int(parameters.get("format", 0)) not in {0, 1}:
                 raise QgisMcpToolRejected("GRASS slope format is outside the bounded set")
             if int(parameters.get("precision", 0)) not in {0, 1, 2}:
@@ -833,11 +1225,18 @@ class QgisMcpStdioClient:
                 raise QgisMcpToolRejected("GRASS geomorphon flatness is outside the bounded range")
         elif algorithm == "grass:r.mapcalc.simple":
             expression = parameters.get("expression")
-            if expression not in _ALLOWED_GEOMORPHON_CONSENSUS_EXPRESSIONS:
-                raise QgisMcpToolRejected(
-                    "GRASS mapcalc is limited to fixed Scout terrain masks"
-                )
-            if expression != QGIS_MCP_FLOW_CHANNEL_CANDIDATE_EXPRESSION:
+            if expression in _ALLOWED_GEOMORPHON_CONSENSUS_EXPRESSIONS:
+                expression_kind = "existing_terrain_mask"
+            else:
+                try:
+                    expression_kind = validate_terrain_route_mapcalc_expression(
+                        str(expression)
+                    )
+                except ValueError as exc:
+                    raise QgisMcpToolRejected(
+                        "GRASS mapcalc is limited to compiled Scout terrain expressions"
+                    ) from exc
+            if expression_kind == "existing_terrain_mask" and expression != QGIS_MCP_FLOW_CHANNEL_CANDIDATE_EXPRESSION:
                 if any(
                     not isinstance(parameters.get(key), str)
                     or not self._path_allowed(str(parameters[key]))
@@ -846,14 +1245,143 @@ class QgisMcpStdioClient:
                     raise QgisMcpToolRejected(
                         "GRASS geomorphon consensus requires bounded B and C rasters"
                     )
-            elif set(parameters).intersection({"b", "c"}):
+            elif expression_kind == "existing_terrain_mask" and set(parameters).intersection({"b", "c"}):
                 raise QgisMcpToolRejected(
                     "GRASS flow-channel mask may only use accumulation raster A"
                 )
+            elif expression_kind == TERRAIN_ROUTE_CORRIDOR_EXPRESSION_KIND:
+                if (
+                    not isinstance(parameters.get("b"), str)
+                    or not self._path_allowed(str(parameters["b"]))
+                    or "c" in parameters
+                ):
+                    raise QgisMcpToolRejected(
+                        "GRASS terrain corridor requires bounded A and B rasters only"
+                    )
+            elif expression_kind == TERRAIN_ROUTE_THRESHOLD_EXPRESSION_KIND:
+                if set(parameters).intersection({"b", "c"}):
+                    raise QgisMcpToolRejected(
+                        "GRASS terrain percentile thresholds may only use corridor raster A"
+                    )
+            elif expression_kind == TERRAIN_ROUTE_PATH_OUTSIDE_BAND_EXPRESSION_KIND:
+                if (
+                    not isinstance(parameters.get("b"), str)
+                    or not self._path_allowed(str(parameters["b"]))
+                    or "c" in parameters
+                ):
+                    raise QgisMcpToolRejected(
+                        "GRASS trace-containment audit requires bounded trace A and band B rasters"
+                    )
+            elif expression_kind == TERRAIN_ROUTE_DRAINAGE_PRESSURE_EXPRESSION_KIND:
+                if set(parameters).intersection({"b", "c"}):
+                    raise QgisMcpToolRejected(
+                        "GRASS drainage pressure may only use accumulation raster A"
+                    )
+            elif expression_kind == TERRAIN_ROUTE_PROFILE_FRICTION_EXPRESSION_KIND:
+                if (
+                    not isinstance(parameters.get("b"), str)
+                    or not self._path_allowed(str(parameters["b"]))
+                    or "c" in parameters
+                ):
+                    raise QgisMcpToolRejected(
+                        "GRASS route-profile friction requires bounded slope friction A and drainage pressure B"
+                    )
+            elif expression_kind == TERRAIN_ROUTE_SLOPE_FRICTION_EXPRESSION_KIND and set(parameters).intersection({"b", "c"}):
+                raise QgisMcpToolRejected(
+                    "GRASS terrain friction expressions may only use raster A"
+                )
             if Path(str(parameters.get("output", ""))).suffix.casefold() != ".tif":
                 raise QgisMcpToolRejected(
-                    "GRASS geomorphon consensus output must be a GeoTIFF"
+                    "GRASS Scout terrain expression output must be a GeoTIFF"
                 )
+        elif algorithm == "grass:r.walk.coords":
+            _bounded_projected_coordinate(parameters.get("start_coordinates"))
+            _bounded_projected_coordinate(parameters.get("stop_coordinates"))
+            if parameters.get("walk_coeff", "0.72,6.0,1.9998,-1.9998") != "0.72,6.0,1.9998,-1.9998":
+                raise QgisMcpToolRejected("GRASS walk coefficients must use the versioned Scout baseline")
+            if (
+                float(parameters.get("lambda", 1.0)) != 1.0
+                or float(parameters.get("slope_factor", -0.2125)) != -0.2125
+                or float(parameters.get("max_cost", 0.0)) != 0.0
+                or parameters.get("null_cost") is not None
+                or not 64 <= int(parameters.get("memory", 300)) <= 512
+                or parameters.get("-k") is not True
+                or parameters.get("-n") is not False
+            ):
+                raise QgisMcpToolRejected("GRASS walk parameters are outside the terrain-route baseline")
+            if any(
+                Path(str(parameters.get(key, ""))).suffix.casefold() != ".tif"
+                for key in ("output", "outdir")
+            ):
+                raise QgisMcpToolRejected("GRASS walk outputs must be GeoTIFF")
+        elif algorithm == "grass:r.cost":
+            _bounded_projected_coordinate(parameters.get("start_coordinates"))
+            if parameters.get("stop_coordinates") is not None:
+                raise QgisMcpToolRejected(
+                    "GRASS terrain corridor cost must cover the complete analysis extent"
+                )
+            if any(parameters.get(key) is not None for key in ("start_points", "stop_points", "start_raster", "nearest", "null_cost")):
+                raise QgisMcpToolRejected("GRASS terrain corridor cost may not use alternate start or allocation inputs")
+            if (
+                float(parameters.get("max_cost", 0.0)) != 0.0
+                or not 64 <= int(parameters.get("memory", 300)) <= 512
+                or parameters.get("-k") is not True
+                or parameters.get("-n") is not True
+            ):
+                raise QgisMcpToolRejected("GRASS terrain corridor cost parameters are outside the bounded baseline")
+            if any(
+                Path(str(parameters.get(key, ""))).suffix.casefold() != ".tif"
+                for key in ("output", "outdir")
+            ):
+                raise QgisMcpToolRejected("GRASS terrain corridor cost outputs must be GeoTIFF")
+        elif algorithm == "grass:r.path":
+            if (
+                int(parameters.get("format", -1)) != 0
+                or parameters.get("values") is not None
+                or parameters.get("-c") is not False
+                or parameters.get("-a") is not False
+                or parameters.get("-n") is not False
+                or float(parameters.get("GRASS_SNAP_TOLERANCE_PARAMETER", -1)) != -1
+                or float(parameters.get("GRASS_MIN_AREA_PARAMETER", 0.0001)) != 0.0001
+                or int(parameters.get("GRASS_OUTPUT_TYPE_PARAMETER", -1)) != 2
+                or parameters.get("GRASS_VECTOR_EXPORT_NOCAT") is not False
+            ):
+                raise QgisMcpToolRejected("GRASS path parameters are outside the terrain-route baseline")
+            if Path(str(parameters.get("start_points", ""))).suffix.casefold() != ".gpkg":
+                raise QgisMcpToolRejected("GRASS path destination points must be a GeoPackage")
+            if Path(str(parameters.get("raster_path", ""))).suffix.casefold() != ".tif":
+                raise QgisMcpToolRejected("GRASS path raster output must be GeoTIFF")
+            if Path(str(parameters.get("vector_path", ""))).suffix.casefold() != ".gpkg":
+                raise QgisMcpToolRejected("GRASS path vector output must be GeoPackage")
+        elif algorithm == "grass:r.quantile":
+            percentiles = str(parameters.get("percentiles", ""))
+            try:
+                values = [float(item) for item in percentiles.split(",")]
+            except ValueError as exc:
+                raise QgisMcpToolRejected("GRASS corridor percentiles are invalid") from exc
+            if (
+                not values
+                or values != sorted(set(values))
+                or any(not 0 < value <= 100 for value in values)
+                or len(values) > 12
+                or int(parameters.get("quantiles", 4)) != 4
+                or not 1_000 <= int(parameters.get("bins", 1_000_000)) <= 2_000_000
+                or parameters.get("-r") is not False
+                or Path(str(parameters.get("file", ""))).suffix.casefold() not in {".html", ".txt"}
+            ):
+                raise QgisMcpToolRejected("GRASS corridor quantile parameters are outside bounds")
+        elif algorithm == "grass:r.univar":
+            maps = parameters.get("map")
+            map_values = maps if isinstance(maps, list) else [maps]
+            if (
+                not 1 <= len(map_values) <= 8
+                or parameters.get("zones") is not None
+                or str(parameters.get("percentile", "")) not in {"", "None"}
+                or parameters.get("separator", "pipe") != "pipe"
+                or parameters.get("-e") is not False
+                or Path(str(parameters.get("output", ""))).suffix.casefold() not in {".html", ".txt"}
+            ):
+                raise QgisMcpToolRejected("GRASS univariate audit parameters are outside bounds")
         elif algorithm == "grass:r.thin":
             iterations = int(parameters.get("iterations", 200))
             if not 1 <= iterations <= 512:
@@ -1008,7 +1536,19 @@ class QgisMcpStdioClient:
         self._stderr_reader.start()
 
     def _subprocess_env(self) -> dict[str, str]:
-        allowed_names = {"HOME", "PATH", "TMPDIR", "LANG", "LC_ALL", "QGIS_MCP_CONNECTION_FILE"}
+        allowed_names = {
+            "HOME",
+            "PATH",
+            "TMPDIR",
+            "TMP",
+            "TEMP",
+            "LANG",
+            "LC_ALL",
+            "GDAL_DATA",
+            "GISBASE",
+            "PROJ_LIB",
+            "QGIS_MCP_CONNECTION_FILE",
+        }
         env = {key: value for key, value in os.environ.items() if key in allowed_names}
         env.update(
             {
@@ -1018,6 +1558,13 @@ class QgisMcpStdioClient:
             }
         )
         env.setdefault("PATH", os.defpath)
+        processing_temp_root = self.config.processing_temp_root()
+        processing_temp_root.mkdir(parents=True, exist_ok=True, mode=0o700)
+        processing_temp = str(processing_temp_root)
+        env["TMPDIR"] = processing_temp
+        env["TMP"] = processing_temp
+        env["TEMP"] = processing_temp
+        env["QGIS_PROCESSING_TEMP_FOLDER"] = processing_temp
         if self.config.pythonpath:
             env["PYTHONPATH"] = self.config.pythonpath
         return env

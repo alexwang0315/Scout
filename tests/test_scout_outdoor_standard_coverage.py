@@ -26,6 +26,7 @@ PROJECT_ROOT = (
 POST_ANALYSIS_ROOT = (
     ROOT / "tests" / "fixtures" / "post_analysis" / "chilai_nanhua_day1_post_analysis"
 )
+EXPECTED_READY_TOOL_COUNT = 34
 
 STANDARD_DECISIONS = {
     "GO",
@@ -216,16 +217,19 @@ def test_standard_completion_audit_covers_all_sections_and_primary_surfaces() ->
     assert missing_sections == []
 
     registry = tool_registry_output(include_not_implemented=True)
-    assert registry.tool_count == 26
-    assert registry.ready_current_tool_count == 26
+    assert registry.tool_count == EXPECTED_READY_TOOL_COUNT
+    assert registry.ready_current_tool_count == EXPECTED_READY_TOOL_COUNT
     assert registry.contract_only_tool_count == 0
-    assert registry.implementation_status_counts == {"ready_current_tool": 26}
+    assert registry.implementation_status_counts == {
+        "ready_current_tool": EXPECTED_READY_TOOL_COUNT
+    }
 
     result = run_scout_ai_full_workflow(
         "請以 SCOUT_OUTDOOR_AI_AGENT_STANDARD 為基準，檢視目前 Scout 體系還缺哪些東西，六力是否都有實作？",
         project_root=PROJECT_ROOT,
         project_id="chilai_nanhua_day1",
         limit=8,
+        reference_time="2026-06-24T06:00:00Z",
     )
     decision_output = result.decision_output
 
@@ -336,6 +340,200 @@ def test_section_7_documents_multigate_physiologic_gate_boundary() -> None:
     assert "Generic SafetyGateEvent" in reducer_spec
     assert "runtime_safety_gate_event_from_physiologic()" in reducer_spec
     assert "scout_runtime_safety_gate_adapters.py" in reducer_spec
+    assert "Live connector health executor invocation guard v0" in reducer_spec
+    assert "evaluate_live_connector_health_executor_invocation_guard()" in reducer_spec
+    assert "Live connector health executor harness v0" in reducer_spec
+    assert "execute_live_connector_health_check_with_client()" in reducer_spec
+    assert "Live provider connector health receipt intake v0" in reducer_spec
+    assert "build_live_provider_connector_manifest_from_health_receipt()" in reducer_spec
+    assert "Live provider response receipt intake v0" in reducer_spec
+    assert "build_live_observation_from_provider_response_receipt()" in reducer_spec
+    assert "Live field/device validation receipt intake v0" in reducer_spec
+    assert "build_live_field_device_validation_intake()" in reducer_spec
+    assert "Live field/device validator invocation guard v0" in reducer_spec
+    assert "evaluate_live_field_device_validator_invocation_guard()" in reducer_spec
+    assert "Live field/device validator executor harness v0" in reducer_spec
+    assert "execute_live_field_device_validation_with_client()" in reducer_spec
+    assert "Live freshness attestor invocation guard v0" in reducer_spec
+    assert "evaluate_live_freshness_attestor_invocation_guard()" in reducer_spec
+    assert "Live freshness attestor executor harness v0" in reducer_spec
+    assert "execute_live_freshness_attestation_check_with_client()" in reducer_spec
+    assert "Live freshness attestation receipt intake v0" in reducer_spec
+    assert "build_live_freshness_attestation_intake()" in reducer_spec
+    assert "Live provider executor effect-boundary readiness v0" in reducer_spec
+    assert "evaluate_live_provider_executor_effect_boundary_readiness()" in reducer_spec
+    assert "Live provider executor invocation guard v0" in reducer_spec
+    assert "evaluate_live_provider_executor_invocation_guard()" in reducer_spec
+    assert "Live provider executor harness v0" in reducer_spec
+    assert "execute_live_provider_request_with_client()" in reducer_spec
+    assert "Live provider effect receipt intake v0" in reducer_spec
+    assert "build_provider_response_receipt_from_provider_effect_receipt()" in reducer_spec
+    assert "Production transport executor effect-boundary readiness v0" in reducer_spec
+    assert (
+        "evaluate_production_transport_executor_effect_boundary_readiness()"
+        in reducer_spec
+    )
+    assert "Production transport executor harness v0" in reducer_spec
+    assert "execute_production_transport_with_client()" in reducer_spec
+    assert "Production cutover qualification audit v0" in reducer_spec
+    assert "evaluate_production_safety_cutover_readiness()" in reducer_spec
+    assert "Production cutover qualification artifact writer v0" in reducer_spec
+    assert "write_production_safety_cutover_readiness_audit()" in reducer_spec
+    assert "run_production_safety_cutover_readiness_audit()" in reducer_spec
+    assert "Area-specific qualification bundle admission v0" in reducer_spec
+    assert "PRODUCTION_SAFETY_QUALIFICATION_REQUIRED_CLAIMS" in reducer_spec
+    assert "evaluate_production_safety_qualification_bundle()" in reducer_spec
+    assert "Qualification bundle admission CLI bridge v0" in reducer_spec
+    assert "run_production_safety_qualification_bundle_admission()" in reducer_spec
+    assert "write_production_safety_qualification_receipt()" in reducer_spec
+    assert "Qualification claim freshness/stale-binding gate v0" in reducer_spec
+    assert "blocked_stale_required_claims" in reducer_spec
+    assert "evidence_observed_at" in reducer_spec
+    assert "Qualification evidence source-integrity verifier v0" in reducer_spec
+    assert "verify_production_safety_qualification_source_integrity()" in reducer_spec
+    assert "source_integrity_verified" in reducer_spec
+    assert "Source-integrity-bound qualification admission v0" in reducer_spec
+    assert "blocked_source_integrity_unverified" in reducer_spec
+    assert "--source-package" in reducer_spec
+    assert "Production qualification dossier validator v0" in reducer_spec
+    assert "run_production_safety_qualification_dossier()" in reducer_spec
+    assert "dossier_ready_for_production_cutover" in reducer_spec
+    assert "Qualification threat-coverage audit v0" in reducer_spec
+    assert (
+        "evaluate_production_safety_qualification_threat_coverage()"
+        in reducer_spec
+    )
+    assert "blocked_missing_qualification_coverage" in reducer_spec
+    assert "--threat-coverage" in reducer_spec
+    assert "Threat-coverage evidence source-integrity v0" in reducer_spec
+    assert (
+        "verify_production_safety_qualification_threat_coverage_source_integrity()"
+        in reducer_spec
+    )
+    assert "blocked_source_integrity_unverified" in reducer_spec
+    assert "--threat-coverage-source-package" in reducer_spec
+    assert "Production qualification gap plan v0" in reducer_spec
+    assert "evaluate_production_safety_qualification_gap_plan()" in reducer_spec
+    assert "blocked_production_qualification_gaps_open" in reducer_spec
+    assert "--gap-plan" in reducer_spec
+    assert "Production qualification evidence request pack v0" in reducer_spec
+    assert (
+        "build_production_safety_qualification_evidence_request_pack()"
+        in reducer_spec
+    )
+    assert "evidence_request_pack_ready" in reducer_spec
+    assert "--evidence-request-pack" in reducer_spec
+    assert (
+        "Production qualification evidence request fulfillment intake v0"
+        in reducer_spec
+    )
+    assert (
+        "evaluate_production_safety_qualification_evidence_fulfillment()"
+        in reducer_spec
+    )
+    assert "blocked_missing_requested_evidence" in reducer_spec
+    assert "--evidence-fulfillment-manifest" in reducer_spec
+    assert (
+        "Production qualification fulfillment source-integrity v0"
+        in reducer_spec
+    )
+    assert (
+        "verify_production_safety_qualification_evidence_fulfillment_source_integrity()"
+        in reducer_spec
+    )
+    assert "blocked_fulfillment_source_integrity_unverified" in reducer_spec
+    assert "--evidence-fulfillment-source-package" in reducer_spec
+    assert "Production qualification remediation readiness v0" in reducer_spec
+    assert (
+        "evaluate_production_safety_qualification_remediation_readiness()"
+        in reducer_spec
+    )
+    assert "ready_for_dossier_rerun" in reducer_spec
+    assert "--remediation-gap-plan" in reducer_spec
+    assert "Production qualification external action packet v0" in reducer_spec
+    assert (
+        "build_production_safety_qualification_external_action_packet()"
+        in reducer_spec
+    )
+    assert "external_actions_ready_for_operator_authorization" in reducer_spec
+    assert "--external-action-remediation" in reducer_spec
+    assert (
+        "Production qualification external authorization intake v0"
+        in reducer_spec
+    )
+    assert (
+        "evaluate_production_safety_qualification_external_authorization()"
+        in reducer_spec
+    )
+    assert "external_authorization_recorded" in reducer_spec
+    assert "--external-authorization-packet" in reducer_spec
+    assert "Production qualification external invocation guard v0" in reducer_spec
+    assert (
+        "evaluate_production_safety_qualification_external_invocation()"
+        in reducer_spec
+    )
+    assert "external_invocation_handoff_recorded" in reducer_spec
+    assert "--external-invocation-authorization-report" in reducer_spec
+    assert (
+        "Production qualification external result receipt intake v0"
+        in reducer_spec
+    )
+    assert (
+        "evaluate_production_safety_qualification_external_result_intake()"
+        in reducer_spec
+    )
+    assert "external_results_recorded" in reducer_spec
+    assert "--external-result-invocation-report" in reducer_spec
+    assert (
+        "Production qualification external result evidence bridge v0"
+        in reducer_spec
+    )
+    assert (
+        "build_production_safety_qualification_evidence_fulfillment_manifest_from_external_results()"
+        in reducer_spec
+    )
+    assert "external_result_bridge_ready" in reducer_spec
+    assert "--external-result-bridge-request-pack" in reducer_spec
+    assert "--external-result-bridge-fulfillment-output" in reducer_spec
+    assert "must still pass the Slice 79 fulfillment" in reducer_spec
+    assert (
+        "Production qualification external result remediation closure v0"
+        in reducer_spec
+    )
+    assert (
+        "evaluate_production_safety_qualification_external_result_remediation_closure()"
+        in reducer_spec
+    )
+    assert "external_result_remediation_ready_for_dossier_rerun" in reducer_spec
+    assert "--external-result-closure-gap-plan" in reducer_spec
+    assert "--external-result-closure-source-package" in reducer_spec
+    assert "Production qualification dossier rerun intake v0" in reducer_spec
+    assert (
+        "evaluate_production_safety_qualification_dossier_rerun_intake()"
+        in reducer_spec
+    )
+    assert "dossier_rerun_ready_for_cutover_review" in reducer_spec
+    assert "--dossier-rerun-closure-report" in reducer_spec
+    assert "--dossier-rerun-manifest" in reducer_spec
+    assert "Production qualification cutover authorization intake v0" in reducer_spec
+    assert (
+        "evaluate_production_safety_qualification_cutover_authorization()"
+        in reducer_spec
+    )
+    assert "cutover_authorization_recorded" in reducer_spec
+    assert "--cutover-authorization-dossier-rerun-report" in reducer_spec
+    assert "--cutover-authorization-manifest" in reducer_spec
+    assert "AUTHORIZE SCOUT PRODUCTION CUTOVER REVIEW" in reducer_spec
+    assert "Production qualification cutover release handoff guard v0" in reducer_spec
+    assert (
+        "evaluate_production_safety_qualification_cutover_release_handoff()"
+        in reducer_spec
+    )
+    assert "cutover_release_handoff_recorded" in reducer_spec
+    assert "--cutover-release-authorization-report" in reducer_spec
+    assert "--cutover-release-handoff-manifest" in reducer_spec
+    assert "REQUEST SCOUT PRODUCTION CUTOVER HANDOFF" in reducer_spec
+    assert "does not replace those external qualifications or execute production cutover" in reducer_spec
     assert "scout_runtime_safety_reducer_dry_run" in reducer_spec
     assert "scout_runtime_safety_phase1_adapter_result" in reducer_spec
     assert "scout_runtime_route_gate_feeds.py" in reducer_spec
@@ -446,6 +644,23 @@ def test_section_7_documents_multigate_physiologic_gate_boundary() -> None:
     assert "pending_approval" in physiologic_spec
     assert "icon-first production path status" in reducer_spec
     assert "Emergency Call Out" in reducer_spec
+    assert "Production transport release and delivery closure v0" in reducer_spec
+    assert "Weather/environment live-evidence contract audit v0" in reducer_spec
+    assert "build_production_live_evidence_contract_audit()" in reducer_spec
+    assert "Weather/environment live-observation bridge v0" in reducer_spec
+    assert "build_runtime_safety_gate_events_from_live_observations()" in reducer_spec
+    assert "Phase 1 runtime promotion readiness gate v0" in reducer_spec
+    assert "evaluate_phase1_runtime_promotion_readiness()" in reducer_spec
+    assert "Phase 1 writer invocation guard v0" in reducer_spec
+    assert "invoke_phase1_runtime_promotion_writer()" in reducer_spec
+    assert "Production transport invocation guard v0" in reducer_spec
+    assert "evaluate_production_transport_invocation_guard()" in reducer_spec
+    assert "Live provider connector request contract v0" in reducer_spec
+    assert "evaluate_production_live_provider_request_contract()" in reducer_spec
+    assert "Production transport effect receipt intake v0" in reducer_spec
+    assert "build_delivery_evidence_from_transport_effect_receipt()" in reducer_spec
+    assert "Phase 1 writer production deployment readiness v0" in reducer_spec
+    assert "evaluate_phase1_writer_production_deployment_readiness()" in reducer_spec
     assert "Cached Rudy+TW tile layer" in reducer_spec
     assert "Cached imagery tile layer" in reducer_spec
     assert "CP/MCP layer" in reducer_spec
@@ -468,7 +683,9 @@ def test_tool_registry_marks_all_six_force_tools_ready_current() -> None:
     registry = tool_registry_output(include_not_implemented=True)
     by_id = {tool.tool_id: tool for tool in registry.tools}
 
-    assert registry.implementation_status_counts == {"ready_current_tool": 26}
+    assert registry.implementation_status_counts == {
+        "ready_current_tool": EXPECTED_READY_TOOL_COUNT
+    }
     for scenario in SIX_FORCE_SCENARIOS:
         _, system_language, tool_id, alias, _, _, _ = scenario.values
         contract = by_id[tool_id]

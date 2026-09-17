@@ -7,7 +7,10 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from scout.nextgen.training_corpus import SyntheticScenarioGenerator
-from scout.nextgen.workspace_snapshot import WorkspaceBenchmarkCase
+from scout.nextgen.workspace_snapshot import (
+    WorkspaceBenchmarkArtifactRole,
+    WorkspaceBenchmarkCase,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -40,6 +43,7 @@ def main() -> int:
         "source_workspace_benchmark_sha256": hashlib.sha256(
             source_bytes
         ).hexdigest(),
+        "source_workspace_benchmark_role": source["artifact_role"],
         "bundle": bundle.model_dump(mode="json"),
         "training_eligible_count": sum(
             record.promotion_state.value == "training_eligible"
@@ -74,6 +78,11 @@ def main() -> int:
 def _validate_source_artifact(source: dict[str, object]) -> None:
     if source.get("schema_version") != "scout.workspace_snapshot_benchmark.v0":
         raise ValueError("unsupported Workspace benchmark schema")
+    if (
+        source.get("artifact_role")
+        != WorkspaceBenchmarkArtifactRole.SYNTHETIC_SEED.value
+    ):
+        raise ValueError("Workspace benchmark is not an approved synthetic seed")
     if source.get("candidate_only") is not True:
         raise ValueError("Workspace benchmark must remain candidate-only")
     if source.get("runtime_safety_truth") is not False:

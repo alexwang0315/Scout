@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from tests.scout_database_fixtures import owned_test_databases  # noqa: F401
+
 from pathlib import Path
 from typing import Any
 
@@ -52,8 +54,12 @@ from scout.services.sandbox_runner import SandboxRunner
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def make_deps(tmp_path: Path) -> ScoutDeps:
-    connection = open_database(tmp_path / "agents.sqlite")
+pytestmark = pytest.mark.usefixtures("owned_test_databases")
+
+
+def make_deps(tmp_path: Path, *, connection=None) -> ScoutDeps:
+    if connection is None:
+        connection = open_database(tmp_path / "agents.sqlite")
     workflow_store = WorkflowStore(connection)
     memory_store = MemoryStore(connection)
     capability_registry = CapabilityRegistry(connection)
@@ -221,6 +227,29 @@ def test_model_policy_keeps_openai_chat_contract_on_pydantic_ai_v2() -> None:
     assert "sk-test-secret" not in str(with_key.model_dump(mode="json"))
 
 
+def test_model_policy_routes_gpt6_astra_through_openai_responses() -> None:
+    for configured_name in (
+        "gpt-6-astra",
+        "openai:gpt-6-astra",
+        "openai-responses:gpt-6-astra",
+    ):
+        policy = resolve_model_policy(configured_name, env={})
+
+        assert policy.mode is ModelPolicyMode.EXTERNAL_PYDANTIC_AI
+        assert policy.model_for_agent == "openai-responses:gpt-6-astra"
+        assert policy.provider == "openai-responses"
+        assert policy.provider_model_id == "gpt-6-astra"
+        assert policy.required_credential_env == ["OPENAI_API_KEY"]
+        assert policy.missing_credential_env == ["OPENAI_API_KEY"]
+
+    with_key = resolve_model_policy(
+        "gpt-6-astra",
+        env={"OPENAI_API_KEY": "sk-test-secret"},
+    )
+    assert with_key.missing_credential_env == []
+    assert "sk-test-secret" not in str(with_key.model_dump(mode="json"))
+
+
 def test_model_policy_supports_nvidia_api_key_models() -> None:
     policy = resolve_model_policy("nemotron-super", env={})
 
@@ -236,6 +265,19 @@ def test_model_policy_supports_nvidia_api_key_models() -> None:
     assert with_key.model_for_agent == "nvidia:nvidia/llama-3.3-nemotron-super-49b-v1.5"
     assert with_key.missing_credential_env == []
     assert "nvapi-test-secret" not in str(with_key.model_dump(mode="json"))
+
+
+def test_model_policy_supports_local_hailo_ollama_without_credentials() -> None:
+    policy = resolve_model_policy("hailo:qwen3:1.7b", env={})
+
+    assert policy.mode is ModelPolicyMode.EXTERNAL_PYDANTIC_AI
+    assert policy.model_for_agent == "hailo:qwen3:1.7b"
+    assert policy.provider == "hailo_ollama"
+    assert policy.provider_model_id == "qwen3:1.7b"
+    assert policy.requires_network is False
+    assert policy.required_credential_env == []
+    assert policy.missing_credential_env == []
+    assert policy.estimated_call_cost_usd == 0.0
 
 
 def test_model_policy_records_but_does_not_enforce_resource_limits_in_construction() -> None:

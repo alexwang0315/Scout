@@ -23,9 +23,10 @@ assets, `docker-compose.pi.ai.yml` and `tools/pi_ollama_stress.py`, while
 keeping them under the `ai-experimental` manual hardware prototype profile and
 not part of the assistant readiness gate.
 
-2026-08-22 update: Scout AI is the full-capability user entrypoint. Pydantic AI
-provider compatibility targets v2.33.0. The assistant and Mac-local fallback
-paths use `end_strategy="early"`, normalize
+2026-09-10 update: Scout AI is the full-capability user entrypoint. Pydantic AI
+provider compatibility targets v2.42.0. This update qualifies the Mac runtime
+and deployment manifests; it does not claim a new Pi deployment. The assistant
+and Mac-local fallback paths use `end_strategy="early"`, normalize
 `openai:<model>` to `openai-chat:<model>`, and using the dedicated OpenRouter
 provider for `openrouter:<vendor/model>`. Trusted WebSearch and WebFetch are
 always enabled for every Scout AI Pydantic Agent path, including cloud,
@@ -43,7 +44,10 @@ remains enabled, and any reviewed LAN hostname must be added through
 they become callable. OpenRouter native-search citations are preserved in
 `provider_details["annotations"]` when supplied, Instrumentation v6 tool-role
 traces require an explicit consumer opt-in, and blocking sync-tool timeouts are
-covered by the compatibility smoke.
+covered by the compatibility smoke. Stable `InstructionPart.id` values identify
+replay-sensitive instructions, explicitly named durable operations remain
+behind Scout effect gates, and MCP smoke must expose streamed tool-call and
+tool-result events before the final agent result.
 
 The AI HAT+2 `hailo_ollama` path uses a Pydantic AI FunctionModel research
 planner instead of bypassing capabilities. The local model selects the Search
@@ -298,7 +302,7 @@ Provider support should be staged:
 
 Current Pydantic AI provider policy:
 
-- supported runtime family: Pydantic AI v2.33.0;
+- supported runtime family: Pydantic AI v2.42.0;
 - default model path: local `FunctionModel`;
 - external NVIDIA GLM path: `SCOUT_AI_OS_MODEL=z-ai/glm-5.2` with
   `NVIDIA_API_KEY`; Scout sends `z-ai/glm-5.2` as the provider model id;

@@ -6,6 +6,7 @@ import io
 import json
 import math
 import time
+import urllib.error
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -384,6 +385,8 @@ def seed_imagery_tile_cache(
     tile_ttl_days: float | None = DEFAULT_IMAGERY_TILE_CACHE_TTL_DAYS,
     fallback_cache_project_ids: Sequence[str] | None = None,
     fetch_tile: ImageryTileFetch | None = None,
+    max_fetch_attempts: int = 5,
+    retry_backoff_seconds: float = 0.25,
 ) -> dict[str, Any]:
     if plan.get("artifact_kind") != "admin_imagery_tile_cache_plan":
         raise ValueError("plan must be an admin_imagery_tile_cache_plan")
@@ -391,6 +394,10 @@ def seed_imagery_tile_cache(
         raise ValueError("imagery tile cache plan exceeds capacity limit")
     if not provider_allows_offline_prefetch:
         raise ValueError("provider_allows_offline_prefetch must be true before seeding")
+    if max_fetch_attempts < 1:
+        raise ValueError("max_fetch_attempts must be at least 1")
+    if retry_backoff_seconds < 0:
+        raise ValueError("retry_backoff_seconds must be non-negative")
 
     fetcher = fetch_tile or _default_imagery_tile_fetch
     cache_root = Path(str(plan["cache_root"])).expanduser()
@@ -401,6 +408,10 @@ def seed_imagery_tile_cache(
     tiles_skipped_existing = 0
     tiles_copied_from_fallback_cache = 0
     tiles_failed = 0
+    tiles_blank_or_transparent = 0
+    tiles_provider_no_coverage = 0
+    tile_fetch_attempts = 0
+    tiles_recovered_after_retry = 0
     tile_error_samples: list[dict[str, Any]] = []
     bytes_written = 0
     now = time.time()
@@ -419,6 +430,9 @@ def seed_imagery_tile_cache(
         )
         if path.exists():
             if _cached_tile_is_fresh(path, tile_ttl_days=tile_ttl_days, now=now):
+                if _tile_is_blank_or_transparent(path.read_bytes()):
+                    tiles_blank_or_transparent += 1
+                    continue
                 tiles_skipped_existing += 1
                 continue
             stale_existing = True
@@ -438,21 +452,43 @@ def seed_imagery_tile_cache(
             now=now,
         )
         if fallback_path is not None:
+            fallback_body = fallback_path.read_bytes()
+            if _tile_is_blank_or_transparent(fallback_body):
+                tiles_blank_or_transparent += 1
+                continue
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(fallback_path.read_bytes())
+            path.write_bytes(fallback_body)
             tiles_copied_from_fallback_cache += 1
             if stale_existing:
                 tiles_refreshed += 1
             bytes_written += path.stat().st_size
             continue
-        try:
-            remote_tile = fetcher(
-                imagery_source,
-                int(tile["z"]),
-                int(tile["x"]),
-                int(tile["y"]),
-            )
-        except Exception as exc:
+        remote_tile = None
+        fetch_error: Exception | None = None
+        attempts = 0
+        for attempt in range(1, max_fetch_attempts + 1):
+            attempts = attempt
+            tile_fetch_attempts += 1
+            try:
+                remote_tile = fetcher(
+                    imagery_source,
+                    int(tile["z"]),
+                    int(tile["x"]),
+                    int(tile["y"]),
+                )
+                break
+            except Exception as exc:
+                fetch_error = exc
+                if _tile_fetch_error_is_provider_no_coverage(exc):
+                    break
+                if attempt < max_fetch_attempts and retry_backoff_seconds:
+                    time.sleep(retry_backoff_seconds * attempt)
+        if remote_tile is None:
+            if fetch_error is not None and _tile_fetch_error_is_provider_no_coverage(
+                fetch_error
+            ):
+                tiles_provider_no_coverage += 1
+                continue
             tiles_failed += 1
             if len(tile_error_samples) < 20:
                 tile_error_samples.append(
@@ -460,10 +496,16 @@ def seed_imagery_tile_cache(
                         "z": int(tile["z"]),
                         "x": int(tile["x"]),
                         "y": int(tile["y"]),
-                        "error_type": type(exc).__name__,
-                        "error": str(exc)[:240],
+                        "attempts": attempts,
+                        "error_type": type(fetch_error).__name__,
+                        "error": str(fetch_error)[:240],
                     }
                 )
+            continue
+        if attempts > 1:
+            tiles_recovered_after_retry += 1
+        if _tile_is_blank_or_transparent(remote_tile.body):
+            tiles_blank_or_transparent += 1
             continue
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(remote_tile.body)
@@ -474,7 +516,21 @@ def seed_imagery_tile_cache(
 
     status = "dry_run_ready"
     if not dry_run:
-        status = "seed_completed_with_errors" if tiles_failed else "seed_complete"
+        usable_tile_count = (
+            tiles_written
+            + tiles_skipped_existing
+            + tiles_copied_from_fallback_cache
+        )
+        if tiles_failed:
+            status = "seed_completed_with_errors"
+        elif (
+            tiles_blank_or_transparent or tiles_provider_no_coverage
+        ) and not usable_tile_count:
+            status = "seed_no_coverage"
+        elif tiles_blank_or_transparent or tiles_provider_no_coverage:
+            status = "seed_complete_with_no_coverage_tiles"
+        else:
+            status = "seed_complete"
     return _imagery_seed_summary(
         status,
         plan=plan,
@@ -484,6 +540,11 @@ def seed_imagery_tile_cache(
         tiles_refreshed=tiles_refreshed,
         tiles_skipped_existing=tiles_skipped_existing,
         tiles_failed=tiles_failed,
+        tiles_blank_or_transparent=tiles_blank_or_transparent,
+        tiles_provider_no_coverage=tiles_provider_no_coverage,
+        tile_fetch_attempts=tile_fetch_attempts,
+        tiles_recovered_after_retry=tiles_recovered_after_retry,
+        max_fetch_attempts=max_fetch_attempts,
         tiles_copied_from_fallback_cache=tiles_copied_from_fallback_cache,
         tile_error_samples=tile_error_samples,
         tile_ttl_days=tile_ttl_days,
@@ -578,6 +639,60 @@ def raster_tile_cache_path(
     )
 
 
+def imagery_source_raster_tile_cache_path(
+    project_id: str,
+    layer_id: str,
+    imagery_source: Mapping[str, Any],
+    z: int | str,
+    x: int | str,
+    y: int | str,
+    *,
+    cache_root: Path | str = DEFAULT_RASTER_TILE_CACHE_ROOT,
+) -> Path:
+    safe_project = _safe_identifier(project_id, "project_id")
+    safe_layer = _safe_identifier(layer_id, "layer_id")
+    safe_source = _safe_identifier(imagery_source.get("source_id"), "source_id")
+    tile = validate_osm_tile_coords(z, x, y)
+    identity_fields = (
+        "source_id",
+        "source_kind",
+        "url_template",
+        "tile_order",
+        "wmts_endpoint",
+        "wmts_layer",
+        "wmts_style",
+        "wmts_tile_matrix_set",
+        "wmts_tile_matrix_id_style",
+        "wmts_format",
+        "min_zoom",
+        "max_zoom",
+    )
+    source_identity = {
+        key: imagery_source.get(key)
+        for key in identity_fields
+        if imagery_source.get(key) is not None
+    }
+    source_revision = hashlib.sha256(
+        json.dumps(
+            source_identity,
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()[:16]
+    return (
+        Path(cache_root).expanduser()
+        / safe_project
+        / safe_layer
+        / "_sources"
+        / safe_source
+        / source_revision
+        / str(tile["z"])
+        / str(tile["x"])
+        / f"{tile['y']}.png"
+    )
+
+
 def load_or_build_raster_tile_payload(
     project_id: str,
     layer_id: str,
@@ -590,32 +705,95 @@ def load_or_build_raster_tile_payload(
     imagery_source: Mapping[str, Any] | None = None,
     allow_remote_fetch: bool = False,
     prefer_native_zoom: bool = False,
+    force_remote_refresh: bool = False,
+    require_exact_zoom: bool = False,
     remote_fetch_timeout_seconds: float = 10.0,
     remote_fetcher: Any = fetch_remote_imagery_tile,
 ) -> AdminRasterTilePayload:
-    cache_path = raster_tile_cache_path(
-        project_id,
-        layer_id,
-        z,
-        x,
-        y,
-        cache_root=cache_root,
+    source_scoped_cache = bool(
+        imagery_source is not None
+        and (prefer_native_zoom or force_remote_refresh or require_exact_zoom)
     )
-    if cache_path.exists():
-        body = cache_path.read_bytes()
+    cache_path = (
+        imagery_source_raster_tile_cache_path(
+            project_id,
+            layer_id,
+            imagery_source,
+            z,
+            x,
+            y,
+            cache_root=cache_root,
+        )
+        if source_scoped_cache and imagery_source is not None
+        else raster_tile_cache_path(
+            project_id,
+            layer_id,
+            z,
+            x,
+            y,
+            cache_root=cache_root,
+        )
+    )
+    cache_candidates: list[tuple[Path, bool]] = []
+    if imagery_source is not None:
+        source_layers = [layer_id]
+        # Older Rudy+TW native tiles used the imagery namespace. Only reuse
+        # the same registered source revision, never a bare imagery tile.
+        if (
+            imagery_source.get("source_id") == "happyman_rudy_twmap"
+            and layer_id in {"rudy-twmap", "imagery"}
+        ):
+            source_layers.append("imagery" if layer_id == "rudy-twmap" else "rudy-twmap")
+        for source_layer in source_layers:
+            cache_candidates.append(
+                (
+                    imagery_source_raster_tile_cache_path(
+                        project_id, source_layer, imagery_source, z, x, y,
+                        cache_root=cache_root,
+                    ),
+                    True,
+                )
+            )
+    allow_legacy_cache = not (prefer_native_zoom or force_remote_refresh) and (
+        not require_exact_zoom
+        or imagery_source is None
+        or (
+            layer_id == "rudy-twmap"
+            and imagery_source.get("source_id") == "happyman_rudy_twmap"
+        )
+    )
+    if allow_legacy_cache:
+        cache_candidates.append((
+            raster_tile_cache_path(project_id, layer_id, z, x, y, cache_root=cache_root),
+            False,
+        ))
+    cached_body = None
+    cached_path = cache_path
+    cached_source_scoped = source_scoped_cache
+    for candidate_path, candidate_source_scoped in cache_candidates:
+        if not candidate_path.is_file():
+            continue
+        candidate_body = candidate_path.read_bytes()
+        if require_exact_zoom and _is_placeholder_tile(candidate_body):
+            continue
+        cached_body = candidate_body
+        cached_path = candidate_path
+        cached_source_scoped = candidate_source_scoped
+        break
+    if cached_body is not None and not force_remote_refresh:
         return AdminRasterTilePayload(
-            body=body,
-            media_type=_tile_media_type(body, default="image/png"),
-            source="local_cache",
-            cache_path=cache_path,
-            body_sha256=hashlib.sha256(body).hexdigest(),
+            body=cached_body,
+            media_type=_tile_media_type(cached_body, default="image/png"),
+            source="local_source_cache" if cached_source_scoped else "local_cache",
+            cache_path=cached_path,
+            body_sha256=hashlib.sha256(cached_body).hexdigest(),
             imagery_source_id=(
                 str(imagery_source.get("source_id"))
                 if isinstance(imagery_source, Mapping) and imagery_source.get("source_id")
                 else None
             ),
         )
-    def fetch_native_payload() -> AdminRasterTilePayload:
+    def fetch_native_payload(*, source: str = "remote_fetch_cache_fill") -> AdminRasterTilePayload:
         remote_tile = remote_fetcher(
             imagery_source,
             int(z),
@@ -623,6 +801,8 @@ def load_or_build_raster_tile_payload(
             int(y),
             timeout_seconds=remote_fetch_timeout_seconds,
         )
+        if require_exact_zoom and _is_placeholder_tile(remote_tile.body):
+            raise FileNotFoundError("Requested imagery tile has no native detail")
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         cache_path.write_bytes(remote_tile.body)
         return AdminRasterTilePayload(
@@ -631,7 +811,7 @@ def load_or_build_raster_tile_payload(
                 remote_tile.body,
                 default=remote_tile.media_type,
             ),
-            source="remote_fetch_cache_fill",
+            source=source,
             cache_path=cache_path,
             body_sha256=remote_tile.body_sha256,
             imagery_source_id=remote_tile.source_id,
@@ -640,28 +820,64 @@ def load_or_build_raster_tile_payload(
             ).hexdigest(),
         )
 
-    if prefer_native_zoom and allow_remote_fetch and imagery_source is not None:
-        return fetch_native_payload()
+    remote_refresh_failed = False
+    if force_remote_refresh:
+        if not allow_remote_fetch or imagery_source is None:
+            raise ValueError("force_remote_refresh requires an enabled imagery source")
+        try:
+            return fetch_native_payload(source="remote_refresh_cache_replace")
+        except Exception:
+            if cached_body is not None:
+                return AdminRasterTilePayload(
+                    body=cached_body,
+                    media_type=_tile_media_type(cached_body, default="image/png"),
+                    source="stale_cache_after_remote_error",
+                    cache_path=cached_path,
+                    body_sha256=hashlib.sha256(cached_body).hexdigest(),
+                    imagery_source_id=str(imagery_source.get("source_id") or "") or None,
+                )
+            if not fallback_enabled and not require_exact_zoom:
+                raise
+            remote_refresh_failed = True
 
-    parent_payload = _parent_raster_cache_tile_payload(
-        project_id,
-        layer_id,
-        z,
-        x,
-        y,
-        cache_root=cache_root,
-        requested_cache_path=cache_path,
-        imagery_source=imagery_source,
-    )
+    if (
+        not remote_refresh_failed
+        and prefer_native_zoom
+        and allow_remote_fetch
+        and imagery_source is not None
+    ):
+        try:
+            return fetch_native_payload()
+        except Exception as exc:
+            if require_exact_zoom:
+                raise FileNotFoundError("Requested imagery tile is unavailable") from exc
+            raise
+
+    parent_payload = None
+    if not source_scoped_cache and not require_exact_zoom:
+        parent_payload = _parent_raster_cache_tile_payload(
+            project_id,
+            layer_id,
+            z,
+            x,
+            y,
+            cache_root=cache_root,
+            requested_cache_path=cache_path,
+            imagery_source=imagery_source,
+        )
     if parent_payload is not None:
         return parent_payload
-    if allow_remote_fetch and imagery_source is not None:
+    if (
+        not remote_refresh_failed
+        and allow_remote_fetch
+        and imagery_source is not None
+    ):
         try:
             return fetch_native_payload()
         except Exception:
-            if not fallback_enabled:
+            if not fallback_enabled and not require_exact_zoom:
                 raise
-    if not fallback_enabled:
+    if require_exact_zoom or not fallback_enabled:
         raise FileNotFoundError(str(cache_path))
 
     validate_osm_tile_coords(z, x, y)
@@ -682,6 +898,17 @@ def load_or_build_raster_tile_payload(
             else None
         ),
     )
+
+
+def _is_placeholder_tile(body: bytes) -> bool:
+    if body == TRANSPARENT_PNG_TILE:
+        return True
+    if body.startswith(b"\x89PNG\r\n\x1a\n") and len(body) >= 24:
+        return (
+            int.from_bytes(body[16:20], "big") <= 1
+            or int.from_bytes(body[20:24], "big") <= 1
+        )
+    return False
 
 
 def _parent_raster_cache_tile_payload(
@@ -921,6 +1148,11 @@ def _imagery_seed_summary(
     tiles_refreshed: int,
     tiles_skipped_existing: int,
     tiles_failed: int,
+    tiles_blank_or_transparent: int,
+    tiles_provider_no_coverage: int,
+    tile_fetch_attempts: int,
+    tiles_recovered_after_retry: int,
+    max_fetch_attempts: int,
     tiles_copied_from_fallback_cache: int,
     tile_error_samples: list[dict[str, Any]] | None,
     tile_ttl_days: float | None,
@@ -942,6 +1174,14 @@ def _imagery_seed_summary(
         "tiles_skipped_existing": tiles_skipped_existing,
         "tiles_copied_from_fallback_cache": tiles_copied_from_fallback_cache,
         "tiles_failed": tiles_failed,
+        "tiles_blank_or_transparent": tiles_blank_or_transparent,
+        "tiles_provider_no_coverage": tiles_provider_no_coverage,
+        "tiles_no_coverage_total": (
+            tiles_blank_or_transparent + tiles_provider_no_coverage
+        ),
+        "tile_fetch_attempts": tile_fetch_attempts,
+        "tiles_recovered_after_retry": tiles_recovered_after_retry,
+        "max_fetch_attempts": max_fetch_attempts,
         "tile_error_samples": tile_error_samples or [],
         "tile_ttl_days": tile_ttl_days,
         "bytes_written": bytes_written,
@@ -950,6 +1190,34 @@ def _imagery_seed_summary(
         "network_mode_required": "explicit-fetch",
         "downloads_tiles_into_repo": False,
     }
+
+
+def _tile_is_blank_or_transparent(body: bytes) -> bool:
+    if body == TRANSPARENT_PNG_TILE:
+        return True
+    try:
+        from PIL import Image
+
+        with Image.open(io.BytesIO(body)) as image:
+            rgba = image.convert("RGBA")
+            red, green, blue, alpha = rgba.getextrema()
+    except Exception:
+        # Some focused tests use signature-only fixture bytes. Remote fetch
+        # validation owns malformed response rejection; unknown fixture content
+        # is retained here for backward-compatible deterministic tests.
+        return False
+    if alpha[1] == 0:
+        return True
+    return bool(
+        alpha[0] >= 250
+        and red[0] >= 248
+        and green[0] >= 248
+        and blue[0] >= 248
+    )
+
+
+def _tile_fetch_error_is_provider_no_coverage(exc: Exception) -> bool:
+    return isinstance(exc, urllib.error.HTTPError) and exc.code in {404, 410}
 
 
 def _cached_tile_is_fresh(

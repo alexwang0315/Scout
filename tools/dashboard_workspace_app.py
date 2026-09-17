@@ -27,12 +27,16 @@ from assistant_api import (  # noqa: E402
     create_assistant_router,
 )
 from assistant_context import create_assistant_context_resolver  # noqa: E402
-from debug_api import create_debug_page_router, create_debug_router  # noqa: E402
+from debug_api import create_debug_router  # noqa: E402
 from debug_event_provenance import DebugEventIngestionChannel  # noqa: E402
 from hardware_readiness_api import create_hardware_readiness_router  # noqa: E402
 from mock_outbound_transport import MockOutboundTransport  # noqa: E402
+from qgis_local_runtime import create_local_qgis_runtime_controller  # noqa: E402
 from runtime_debug_log import MemoryRuntimeDebugEventLog  # noqa: E402
 from tools.admin_ui_smoke_app import _debug_events  # noqa: E402
+from tools.hardware_monitor_proxy import (  # noqa: E402
+    create_hardware_monitor_proxy_router,
+)
 
 
 def load_repo_env(root: Path = ROOT) -> ScoutEnvLoadResult:
@@ -76,10 +80,18 @@ def create_dashboard_workspace_app(*, workspace_root: Path) -> FastAPI:
         initial_env_load_result=env_load_result,
     )
     app.state.connected_preparation_manager = connected_preparation_manager
+    qgis_runtime_controller = create_local_qgis_runtime_controller(repo_root=ROOT)
+    app.state.qgis_runtime_controller = qgis_runtime_controller
     app.include_router(
         create_admin_router(
             pretrip_workspace_root=workspace_root,
             connected_preparation_manager=connected_preparation_manager,
+            qgis_runtime_controller=qgis_runtime_controller,
+        )
+    )
+    app.include_router(
+        create_hardware_monitor_proxy_router(
+            prefix="/admin/dashboard/scout-monitor"
         )
     )
     app.router.on_shutdown.append(connected_preparation_manager.stop)
@@ -98,8 +110,7 @@ def create_dashboard_workspace_app(*, workspace_root: Path) -> FastAPI:
             message_source=transport,
         )
     )
-    app.include_router(create_debug_page_router())
-    app.include_router(create_hardware_readiness_router())
+    app.include_router(create_hardware_readiness_router(include_assistant_ui_script=False))
 
     assistant_provider = create_assistant_provider_from_env(os.environ)
     app.include_router(

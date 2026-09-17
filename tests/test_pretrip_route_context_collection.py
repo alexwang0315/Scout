@@ -17,12 +17,15 @@ from pretrip_route_context_collection import (
     SOURCE_TIER_CATALOG,
     ROUTE_CONTEXT_SOURCE_MANIFEST_REF,
     collect_pretrip_route_context,
+    _briefing_route_context_intelligence_panel,
     _briefing_profile_points,
     _briefing_schedule_phases,
     _briefing_source_brief_points,
     _briefing_source_health_panel,
     _briefing_source_summary,
     _briefing_source_tier_card,
+    _is_briefing_content_image,
+    _media_dedupe_key,
     _stop_advisory_text,
 )
 from scout_agent_cli import run_scout_agent_cli
@@ -37,6 +40,32 @@ FIXTURE_PROJECT = (
 MANIFEST_DIR = REPO_ROOT / "tools" / "scout_agent_tool_manifests"
 
 
+def test_briefing_accepts_named_archive_photos_but_rejects_chrome() -> None:
+    for filename, accepted in (
+        ("historic-trail-2.jpg", True),
+        ("route-overview.jpeg", True),
+        ("logo.jpg", False),
+        ("tracking-pixel.png", False),
+        ("map.svg", False),
+        ("article.html", False),
+    ):
+        assert _is_briefing_content_image(
+            url=f"https://archive.example/?option=com_fileman&view=file&name={filename}",
+            caption="清代古道石階", alt="清代古道石階", title="古道歷史照片",
+            page_url="https://archive.example/detail?id=11763",
+        ) is accepted
+
+
+def test_media_deduplication_keeps_distinct_named_archive_photos() -> None:
+    base = "https://archive.example/?option=com_fileman&folder=historic&name="
+    first = _media_dedupe_key(base + "route-1.jpg&width=800")
+    assert first != _media_dedupe_key(base + "route-2.jpg&width=800")
+    assert first == _media_dedupe_key(base + "route-1.jpg&width=1200#photo")
+    assert _media_dedupe_key("https://archive.example/photo.jpg?w=800") == _media_dedupe_key(
+        "https://archive.example/photo.jpg?w=1200"
+    )
+
+
 def _visible_html_text(document: str) -> str:
     without_code = re.sub(
         r"<(script|style)\b[^>]*>.*?</\1>",
@@ -45,6 +74,24 @@ def _visible_html_text(document: str) -> str:
         flags=re.IGNORECASE | re.DOTALL,
     )
     return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", without_code)).strip()
+
+
+def test_briefing_official_context_requires_loaded_official_sources() -> None:
+    for status, expected in (
+        ("empty", "目前沒有已載入的官方來源"),
+        ("loaded", "官方資料僅支撐來源實際記載的路線脈絡"),
+    ):
+        panel = _briefing_route_context_intelligence_panel(
+            source_manifest={
+                "source_report": [{"status": status, "source_tier": "P0"}]
+            },
+            counts={},
+            boundary={},
+        )
+        assert expected in _visible_html_text(panel)
+        assert "清代與日治道路" not in panel
+        if status == "empty":
+            assert '<article class="trust-card warn source-brief-card">' in panel
 
 
 def test_route_source_brief_points_drop_image_caption_noise() -> None:
@@ -916,8 +963,9 @@ def test_route_context_collection_writes_workspace_layout_outputs(
     assert "activeCounts.forEach" in briefing
     assert "mobilePresenterDock" in briefing
     assert "activeNavThreshold" in briefing
-    assert "const threshold = activeNavThreshold()" in briefing
-    assert "const nearBottom = window.innerHeight + window.scrollY" in briefing
+    assert "const threshold = viewport.top + activeNavThreshold()" in briefing
+    assert "const nearBottom = viewport.height + viewport.top + window.scrollY" in briefing
+    assert "hostScroller?.addEventListener('scroll', scheduleActiveNav" in briefing
     assert "setActiveLink(visible[visible.length - 1], visible)" in briefing
     assert "goToRelativeSection" in briefing
     assert "presenterLockUntil" in briefing
@@ -944,7 +992,7 @@ def test_route_context_collection_writes_workspace_layout_outputs(
     assert "link.addEventListener('click', (event) =>" in briefing
     assert "event.preventDefault()" in briefing
     assert "previousScrollBehavior" in briefing
-    assert "window.scrollTo(0, targetTop)" in briefing
+    assert "scrollToSection(section)" in briefing
     assert "window.history.pushState" in briefing
     assert "setActiveLink(link, visible)" in briefing
     assert "setActiveLink(active, visible)" in briefing

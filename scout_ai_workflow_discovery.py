@@ -65,6 +65,7 @@ def build_scout_ai_workflow_discovery_plan(
     limit: int = 6,
     include_missing_context_sources: bool = True,
     include_not_implemented_tools: bool = True,
+    reference_time: str | None = None,
 ) -> ScoutAiWorkflowDiscoveryOutput:
     root = Path(project_root)
     resolved_project_id = project_id or _project_id_from_root(root)
@@ -83,7 +84,12 @@ def build_scout_ai_workflow_discovery_plan(
     tool_registry = tool_registry_output(
         include_not_implemented=include_not_implemented_tools,
     )
-    tool_plan = plan_scout_ai_tools(query, project_root=root, limit=limit)
+    tool_plan = plan_scout_ai_tools(
+        query,
+        project_root=root,
+        limit=limit,
+        reference_time=reference_time,
+    )
     selected_tool_ids = [item.tool_id for item in tool_plan.selected_tools]
 
     return ScoutAiWorkflowDiscoveryOutput(

@@ -16,11 +16,12 @@ import math
 import re
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence
+from typing import TYPE_CHECKING, Any, Iterable, Mapping, Sequence
+
+if TYPE_CHECKING:
+    from workspace_terrain_dem import WorkspaceDemManifest
 
 from admin_local_raster_tiles import tile_bounds_wgs84
-
-
 DEFAULT_TERRAIN_DEM_MANIFEST_REF = "outputs/navigation/terrain_rgb/manifest.json"
 DEFAULT_TERRAIN_DEM_ZOOM = 13
 DEFAULT_TERRAIN_DEM_TILE_SIZE = 256
@@ -141,6 +142,14 @@ def prepare_navigation_terrain_dem_tiles(
     coverage_path = _project_path(root, coverage_ref)
     terrain = _read_json_object(terrain_path, "terrain visualization")
     coverage = _read_json_object(coverage_path, "DTM coverage")
+    visualization_spec = terrain.get("visualization_spec")
+    if not isinstance(visualization_spec, Mapping):
+        visualization_spec = {}
+    source_analysis_processor = visualization_spec.get("actual_processor")
+    if not isinstance(source_analysis_processor, str) or not source_analysis_processor.strip():
+        source_analysis_processor = None
+    else:
+        source_analysis_processor = source_analysis_processor.strip()
     dtm_grid = terrain.get("dtm_grid")
     if not isinstance(dtm_grid, Mapping):
         raise TerrainDemPreparationError("terrain visualization has no dtm_grid")
@@ -167,17 +176,50 @@ def prepare_navigation_terrain_dem_tiles(
         1,
         int(round((bbox_twd97["max_y"] - bbox_twd97["min_y"]) / resolution_m)),
     )
-    elevations, source_tile_ids, source_fingerprint = _load_dtm_grid_image(
-        coverage,
-        bbox_twd97=bbox_twd97,
-        resolution_m=resolution_m,
-        width=width,
-        height=height,
-        terrain_sha256=_sha256_file(terrain_path),
-        coverage_sha256=_sha256_file(coverage_path),
-        zoom=zoom,
-        tile_size=tile_size,
-    )
+    source_refs = [terrain_ref, coverage_ref]
+    source_hashes = {ref: _sha256_file(_project_path(root, ref)) for ref in source_refs}
+    prepared_dem = _load_workspace_dem_grid(root, project)
+    if prepared_dem is None:
+        source_grid_kind = "county_dtm_xyz"
+        elevations, source_tile_ids, source_fingerprint = _load_dtm_grid_image(
+            coverage,
+            bbox_twd97=bbox_twd97,
+            resolution_m=resolution_m,
+            width=width,
+            height=height,
+            terrain_sha256=source_hashes[terrain_ref],
+            coverage_sha256=source_hashes[coverage_ref],
+            zoom=zoom,
+            tile_size=tile_size,
+        )
+    else:
+        from navigation_terrain_coordinates import twd97_to_wgs84
+
+        elevations, dem = prepared_dem
+        source_grid_kind = "workspace_prepared_dem"
+        bbox_twd97 = dem.bounds
+        corners = [
+            twd97_to_wgs84(x, y)
+            for x in (bbox_twd97["min_x"], bbox_twd97["max_x"])
+            for y in (bbox_twd97["min_y"], bbox_twd97["max_y"])
+        ]
+        bbox_wgs84 = {
+            "west": min(point[1] for point in corners),
+            "south": min(point[0] for point in corners),
+            "east": max(point[1] for point in corners),
+            "north": max(point[0] for point in corners),
+        }
+        width, height, resolution_m = dem.width, dem.height, dem.resolution_m
+        source_tile_ids = [dem.dem_ref]
+        source_refs.extend([dem.manifest_ref, dem.dem_ref])
+        source_hashes.update({
+            dem.manifest_ref: _sha256_file(_project_path(root, dem.manifest_ref)),
+            dem.dem_ref: dem.dem_sha256,
+        })
+        source_fingerprint = hashlib.sha256(json.dumps(
+            [source_hashes, zoom, tile_size, TERRAIN_DEM_RESAMPLING, source_grid_kind],
+            sort_keys=True,
+        ).encode("utf-8")).hexdigest()
     source_manifest = {
         "artifact_kind": "admin_local_raster_source_manifest",
         "source_kind": "local_geotiff",
@@ -248,6 +290,18 @@ def prepare_navigation_terrain_dem_tiles(
         "visual_interpolation": "bilinear",
         "interpolation_domain": "elevation_m_before_terrain_rgb_encoding",
         "adds_source_resolution": False,
+        "source_analysis_processor": source_analysis_processor,
+        "source_standard_processor_completed": (
+            visualization_spec.get("standard_processor_completed") is True
+        ),
+        "source_fallback_used": visualization_spec.get("fallback_used"),
+        "source_python_dtm_processing_used": visualization_spec.get(
+            "python_dtm_processing_used"
+        ),
+        "visualization_packaging_processor": (
+            "scout_mapbox_terrain_rgb_encoder.v1"
+        ),
+        "visualization_packaging_only": True,
         "tile_size": tile_size,
         "minzoom": zoom,
         "maxzoom": zoom,
@@ -268,7 +322,9 @@ def prepare_navigation_terrain_dem_tiles(
             "{z}/{x}/{y}.png"
         ),
         "manifest_ref": manifest_ref,
-        "source_refs": [terrain_ref, coverage_ref],
+        "source_refs": source_refs,
+        "source_hashes": source_hashes,
+        "source_grid_kind": source_grid_kind,
         "source_fingerprint": source_fingerprint,
         "coverage_strategy": "largest_complete_slippy_tile_block",
         "nodata_policy": "exclude_incomplete_tiles",
@@ -387,6 +443,57 @@ def navigation_terrain_dem_tile(
     if not expected_sha or actual_sha != expected_sha:
         raise TerrainDemPreparationError("terrain DEM tile hash mismatch")
     return manifest, path, actual_sha
+
+
+def _load_workspace_dem_grid(
+    root: Path, project: Mapping[str, Any],
+) -> tuple[Any, WorkspaceDemManifest] | None:
+    """Decode the hash-validated native grid for visualization, without analysis.
+
+    A declared prepared DEM must validate; never hide a broken parent binding
+    by falling back to an older, potentially incomplete county tile mosaic.
+    """
+    ref = project.get("terrain_workspace_dem_manifest_ref")
+    if not ref:
+        if project.get("terrain_workspace_dem_status") == "ready":
+            raise TerrainDemPreparationError("Ready workspace DEM has no manifest")
+        return None
+    from workspace_terrain_dem import WorkspaceDemManifest, load_workspace_dem
+
+    try:
+        import numpy as np
+        from PIL import Image
+
+        path = _project_path(root, ref)
+        if _sha256_file(path) != project.get("terrain_workspace_dem_manifest_sha256"):
+            raise TerrainDemPreparationError("Workspace DEM manifest hash mismatch")
+        declared = WorkspaceDemManifest.model_validate_json(path.read_bytes())
+        if (
+            project.get("terrain_workspace_dem_status") != "ready"
+            or declared.parent_ref != project.get("terrain_feature_manifest_ref")
+            or declared.parent_dem_ref != project.get("terrain_dem_route_bbox_raster_ref")
+            or declared.coverage_ref != project.get("dtm_coverage_summary_ref")
+            or declared.dem_ref != project.get("terrain_workspace_dem_raster_ref")
+        ):
+            raise TerrainDemPreparationError("Workspace DEM active source binding changed")
+        dem = load_workspace_dem(
+            root, manifest_ref=ref, expected_hashes=declared.source_hashes,
+            project_id=str(project.get("project_id")),
+        )
+        with Image.open(_project_path(root, dem.dem_ref)) as image:
+            if image.size != (dem.width, dem.height):
+                raise TerrainDemPreparationError("Workspace DEM dimensions mismatch")
+            nodata = image.tag_v2.get(42113)
+            elevations = np.asarray(image, dtype=np.float32)
+        if elevations.shape != (dem.height, dem.width) or not np.isfinite(elevations).all():
+            raise TerrainDemPreparationError("Workspace DEM contains unsupported cells")
+        if nodata is not None and np.any(elevations == float(nodata)):
+            raise TerrainDemPreparationError("Workspace DEM contains NoData cells")
+        return elevations, dem
+    except TerrainDemPreparationError:
+        raise
+    except (OSError, ValueError, TypeError) as exc:
+        raise TerrainDemPreparationError("Workspace DEM validation or decoding failed") from exc
 
 
 def _load_dtm_grid_image(

@@ -1,0 +1,23 @@
+name: Navigation Freeze
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  navigation-freeze:
+    name: Navigation Source Freeze
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Reject unreviewed Navigation source drift
+        run: python tools/verify_navigation_freeze.py

@@ -1,0 +1,1421 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="dark" />
+    <title>Scout Monitor · 硬體監控</title>
+    <style>
+      :root {
+        --ink: #e9f0e7;
+        --muted: #8e9b91;
+        --faint: #5f6e64;
+        --canvas: #111715;
+        --surface: #18201c;
+        --surface-2: #1d2822;
+        --line: rgba(194, 225, 202, 0.14);
+        --line-strong: rgba(194, 225, 202, 0.25);
+        --mint: #9ce8b7;
+        --mint-deep: #3ca56a;
+        --amber: #f4bd6a;
+        --coral: #f0806b;
+        --blue: #83c5e8;
+        --display: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+        --mono: "SFMono-Regular", "Cascadia Code", "IBM Plex Mono", Menlo, monospace;
+        --shadow: 0 28px 80px rgba(0, 0, 0, 0.25);
+      }
+
+      * { box-sizing: border-box; }
+
+      html { background: var(--canvas); }
+
+      body {
+        margin: 0;
+        min-width: 0;
+        color: var(--ink);
+        background:
+          radial-gradient(circle at 75% 0%, rgba(72, 130, 88, 0.14), transparent 30rem),
+          radial-gradient(circle at 0% 35%, rgba(244, 189, 106, 0.07), transparent 24rem),
+          var(--canvas);
+        font-family: var(--mono);
+        line-height: 1.5;
+      }
+
+      body::before {
+        position: fixed;
+        inset: 0;
+        z-index: -1;
+        pointer-events: none;
+        content: "";
+        opacity: 0.24;
+        background-image:
+          linear-gradient(rgba(181, 220, 193, 0.05) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(181, 220, 193, 0.05) 1px, transparent 1px);
+        background-size: 48px 48px;
+        mask-image: linear-gradient(to bottom, black, transparent 86%);
+      }
+
+      button, select { font: inherit; }
+
+      button:focus-visible, summary:focus-visible, [tabindex]:focus-visible {
+        outline: 2px solid var(--amber);
+        outline-offset: 3px;
+      }
+
+      button { cursor: pointer; }
+
+      .shell {
+        width: min(1440px, 100%);
+        margin: 0 auto;
+        padding: 26px clamp(18px, 4vw, 62px) 48px;
+      }
+
+      .control {
+        padding: 9px 12px;
+        border: 1px solid var(--line-strong);
+        border-radius: 0;
+        color: var(--ink);
+        background: rgba(24, 32, 28, 0.84);
+        font-size: 0.65rem;
+      }
+
+      .control:hover { border-color: var(--mint); }
+
+      .panel {
+        border: 1px solid var(--line);
+        background: linear-gradient(145deg, rgba(255, 255, 255, 0.025), transparent 70%), var(--surface);
+      }
+
+      .panel-kicker, .metric-kicker { margin: 0; color: var(--amber); font-size: 0.62rem; font-weight: 700; letter-spacing: 0.16em; }
+
+      .hardware-panel { --faint: #a1b3a7; margin-top: 12px; background: linear-gradient(145deg, rgba(131, 197, 232, 0.06), transparent 46%), var(--surface); }
+      .hardware-source-badge { display: flex; align-items: center; gap: 8px; color: var(--blue); font-size: 0.61rem; }
+      .hardware-source-badge span:first-child { font-size: 0.8rem; }
+      .hardware-statusbar { display: grid; grid-template-columns: repeat(3, minmax(130px, 1fr)) auto; gap: 10px; align-items: stretch; margin-bottom: 12px; }
+      .hardware-status-cell { display: flex; align-items: center; gap: 10px; min-height: 64px; padding: 12px 14px; border: 1px solid var(--line); background: rgba(17, 23, 21, 0.42); }
+      .hardware-status-cell > div { min-width: 0; }
+      .hardware-status-cell > div > span { display: block; color: var(--faint); font-size: 0.75rem; letter-spacing: 0.04em; }
+      .hardware-status-cell strong { display: block; margin-top: 4px; color: var(--ink); font-size: 0.76rem; font-weight: 600; }
+      .hardware-status-cell[data-state="ok"] strong { color: var(--mint); }
+      .hardware-status-cell[data-state="warning"] strong, .hardware-status-cell[data-state="stale"] strong { color: var(--amber); }
+      .hardware-status-cell[data-state="critical"] strong, .hardware-status-cell[data-state="unavailable"] strong { color: var(--coral); }
+      .hardware-state-icon { display: grid; place-items: center; width: 26px; height: 26px; flex: 0 0 auto; border: 1px solid currentColor; border-radius: 50%; color: var(--blue); font-size: 0.7rem; font-weight: 700; }
+      .hardware-status-cell[data-state="ok"] .hardware-state-icon { color: var(--mint); }
+      .hardware-status-cell[data-state="warning"] .hardware-state-icon, .hardware-status-cell[data-state="stale"] .hardware-state-icon { color: var(--amber); }
+      .hardware-status-cell[data-state="critical"] .hardware-state-icon, .hardware-status-cell[data-state="unavailable"] .hardware-state-icon { color: var(--coral); }
+      .hardware-statusbar > .control { min-height: 64px; white-space: nowrap; }
+      .hardware-notice { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 16px; padding: 12px 14px; border-left: 3px solid var(--blue); color: var(--muted); background: rgba(131, 197, 232, 0.07); font-size: 0.67rem; line-height: 1.65; }
+      .hardware-notice[data-state="ok"] { border-color: var(--mint); background: rgba(156, 232, 183, 0.06); }
+      .hardware-notice[data-state="warning"], .hardware-notice[data-state="stale"] { border-color: var(--amber); background: rgba(244, 189, 106, 0.07); }
+      .hardware-notice[data-state="critical"], .hardware-notice[data-state="unavailable"] { border-color: var(--coral); background: rgba(240, 128, 107, 0.07); }
+      .hardware-notice-icon { color: var(--blue); font-weight: 700; }
+      .hardware-notice[data-state="ok"] .hardware-notice-icon { color: var(--mint); }
+      .hardware-notice[data-state="warning"] .hardware-notice-icon, .hardware-notice[data-state="stale"] .hardware-notice-icon { color: var(--amber); }
+      .hardware-notice[data-state="critical"] .hardware-notice-icon, .hardware-notice[data-state="unavailable"] .hardware-notice-icon { color: var(--coral); }
+      .hardware-source-errors { margin: -4px 0 14px; color: var(--coral); font-size: 0.63rem; }
+      .hardware-metrics-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+      .hardware-card { min-height: 250px; padding: 18px; border: 1px solid var(--line); background: rgba(17, 23, 21, 0.32); }
+      .hardware-card[data-state="warning"], .hardware-card[data-state="stale"] { border-color: rgba(244, 189, 106, 0.55); }
+      .hardware-card[data-state="critical"] { border-color: rgba(240, 128, 107, 0.65); }
+      .hardware-card[data-state="unavailable"] { opacity: 0.76; }
+      .hardware-card[data-state="unknown"] { border-style: dashed; }
+      .hardware-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+      .hardware-card-title { margin: 6px 0 0; color: var(--ink); font-family: var(--display); font-size: 1.35rem; font-weight: 400; letter-spacing: -0.04em; }
+      .hardware-card-icon { display: grid; place-items: center; width: 27px; height: 27px; border: 1px solid var(--line-strong); color: var(--blue); font-size: 0.7rem; }
+      .hardware-card-icon[data-state="ok"] { border-color: rgba(156, 232, 183, 0.5); color: var(--mint); }
+      .hardware-card-icon[data-state="warning"], .hardware-card-icon[data-state="stale"] { border-color: rgba(244, 189, 106, 0.6); color: var(--amber); }
+      .hardware-card-icon[data-state="critical"], .hardware-card-icon[data-state="unavailable"] { border-color: rgba(240, 128, 107, 0.6); color: var(--coral); }
+      .hardware-primary { display: flex; align-items: baseline; gap: 9px; margin-top: 24px; }
+      .hardware-primary strong { color: var(--ink); font-family: var(--display); font-size: 2.25rem; font-weight: 400; letter-spacing: -0.07em; line-height: 1; }
+      .hardware-primary span { color: var(--muted); font-size: 0.64rem; }
+      .hardware-stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 11px 15px; margin-top: 22px; }
+      .hardware-stat-grid span { display: block; color: var(--faint); font-size: 0.75rem; }
+      .hardware-stat-grid strong { display: block; margin-top: 4px; color: var(--ink); font-size: 0.8rem; font-weight: 500; overflow-wrap: anywhere; }
+      .hardware-card-note { min-height: 32px; margin: 17px 0 0; color: var(--muted); font-size: 0.75rem; line-height: 1.6; }
+      .hardware-sensor-list { display: grid; gap: 6px; margin-top: 20px; }
+      .hardware-sensor-row { display: grid; grid-template-columns: minmax(72px, 0.6fr) minmax(0, 1fr); gap: 10px; align-items: baseline; padding-top: 7px; border-top: 1px solid var(--line); }
+      .hardware-sensor-row strong { color: var(--ink); font-size: 0.8rem; font-weight: 500; }
+      .hardware-sensor-row span { color: var(--muted); font-size: 0.75rem; overflow-wrap: anywhere; }
+      .hardware-sensor-value { display: block; padding-bottom: 6px; }
+      .hardware-sensor-value small { display: block; margin-top: 3px; overflow-wrap: anywhere; }
+      .hardware-panel .hardware-notice, .hardware-panel .panel-note,
+      .hardware-panel .hardware-empty, .hardware-panel .hardware-events-panel .panel-note,
+      .hardware-panel .hardware-alert-row span, .hardware-panel .hardware-event-row span,
+      .hardware-panel .hardware-thresholds summary, .hardware-panel .hardware-threshold-list dt,
+      .hardware-panel .hardware-threshold-list dd, .hardware-panel .hardware-chart-meta { font-size: 0.75rem; }
+      .hardware-panel .legend-dot.memory { background: var(--blue); }
+      .hardware-panel [data-severity="warning"] { color: var(--amber); }
+      .hardware-panel [data-severity="critical"] { color: var(--coral); }
+      .hardware-subpanel { margin-top: 12px; padding: 21px; border: 1px solid var(--line); background: rgba(17, 23, 21, 0.28); }
+      .hardware-subpanel .panel-head { margin-bottom: 16px; }
+      .hardware-table { min-width: 690px; }
+      .hardware-table th { padding-bottom: 10px; }
+      .hardware-table td { padding: 12px 10px; }
+      .hardware-table td:first-child { color: var(--ink); }
+      .hardware-readonly { color: var(--amber) !important; }
+      .hardware-writable { color: var(--mint) !important; }
+      .hardware-empty { padding: 22px 14px; border: 1px dashed var(--line-strong); color: var(--faint); font-size: 0.66rem; text-align: center; }
+      .hardware-dual-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(290px, 0.7fr); gap: 12px; margin-top: 12px; }
+      .hardware-chart-box { position: relative; height: 190px; margin: 10px -8px 0; }
+      .hardware-chart-box svg { width: 100%; height: 100%; overflow: visible; }
+      .hardware-chart-path { fill: none; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2.4; }
+      .hardware-chart-path.cpu { stroke: var(--mint); filter: drop-shadow(0 0 5px rgba(156, 232, 183, 0.38)); }
+      .hardware-chart-path.memory { stroke: var(--blue); filter: drop-shadow(0 0 5px rgba(131, 197, 232, 0.32)); }
+      .hardware-chart-meta { margin: 12px 0 0; color: var(--faint); font-size: 0.59rem; }
+      .hardware-alert-list, .hardware-event-list { display: grid; gap: 9px; margin: 0; padding: 0; list-style: none; }
+      .hardware-alert-row, .hardware-event-row { display: grid; grid-template-columns: 28px minmax(0, 1fr); gap: 10px; align-items: start; padding: 10px 0; border-top: 1px solid var(--line); }
+      .hardware-alert-row:first-child, .hardware-event-row:first-child { border-top: 0; }
+      .hardware-severity-icon { display: grid; place-items: center; width: 24px; height: 24px; border: 1px solid currentColor; color: var(--amber); font-size: 0.65rem; font-weight: 700; }
+      .hardware-alert-row[data-severity="critical"] .hardware-severity-icon { color: var(--coral); }
+      .hardware-alert-row strong, .hardware-event-row strong { display: block; color: var(--ink); font-size: 0.67rem; font-weight: 600; }
+      .hardware-alert-row span, .hardware-event-row span { display: block; margin-top: 3px; color: var(--muted); font-size: 0.62rem; line-height: 1.55; overflow-wrap: anywhere; }
+      .hardware-thresholds { margin-top: 19px; padding-top: 15px; border-top: 1px solid var(--line); }
+      .hardware-thresholds summary { color: var(--muted); cursor: pointer; font-size: 0.62rem; }
+      .hardware-threshold-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; margin: 13px 0 0; }
+      .hardware-threshold-list div { min-width: 0; }
+      .hardware-threshold-list dt { color: var(--faint); font-size: 0.57rem; }
+      .hardware-threshold-list dd { margin: 3px 0 0; color: var(--ink); font-size: 0.61rem; }
+      .hardware-events-panel { margin-top: 12px; }
+      .hardware-events-panel .panel-note { max-width: 420px; }
+      .hardware-event-row { grid-template-columns: minmax(112px, 0.27fr) minmax(0, 1fr); }
+      .hardware-event-row strong { color: var(--blue); font-weight: 500; }
+
+      .inventory-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
+      .inventory-grid[hidden] { display: none; }
+      .inventory-section { min-width: 0; border: 1px solid var(--line-strong); background: rgba(17, 23, 21, 0.32); }
+      .inventory-section > summary { position: relative; padding: 18px 34px 18px 18px; cursor: pointer; list-style: none; }
+      .inventory-section > summary::-webkit-details-marker { display: none; }
+      .inventory-section > summary::after { position: absolute; top: 17px; right: 15px; content: "+"; color: var(--blue); }
+      .inventory-section[open] > summary::after { content: "−"; }
+      .inventory-section > summary:hover { background: rgba(156, 232, 183, 0.035); }
+      .inventory-section-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; }
+      .inventory-section-name { color: var(--ink); font-size: 0.95rem; }
+      .inventory-section-status, .inventory-item-state { padding: 3px 7px; border: 1px solid var(--line-strong); color: var(--blue); font-size: 0.72rem; }
+      .inventory-section-status[data-state="partial"], .inventory-section-status[data-state="stale"], .inventory-item-state[data-state="blocked"] { color: var(--amber); }
+      .inventory-section-status[data-state="unavailable"] { color: var(--coral); }
+      .inventory-section-summary, .inventory-counts { display: block; margin-top: 9px; color: var(--muted); font-size: 0.75rem; overflow-wrap: anywhere; }
+      .inventory-counts { color: var(--blue); }
+      .inventory-body { padding: 0 18px 18px; }
+      .inventory-caution { margin: 0 0 15px; padding-left: 10px; border-left: 2px solid var(--blue); color: var(--faint); font-size: 0.75rem; line-height: 1.7; overflow-wrap: anywhere; }
+      .inventory-device { min-width: 0; padding: 18px 0; border-top: 1px solid var(--line); }
+      .inventory-device-head { display: flex; align-items: start; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+      .inventory-device-head h4 { min-width: 0; margin: 0; color: var(--ink); font-size: 0.85rem; font-weight: 500; overflow-wrap: anywhere; }
+      .inventory-kind { margin: 5px 0 0; color: var(--blue); font-size: 0.72rem; }
+      .inventory-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 18px; margin: 15px 0 0; }
+      .inventory-fields > div { min-width: 0; }
+      .inventory-fields dt { color: var(--faint); font-size: 0.72rem; }
+      .inventory-fields dd { margin: 4px 0 0; color: var(--ink); font-size: 0.78rem; overflow-wrap: anywhere; white-space: pre-wrap; }
+      .inventory-properties, .inventory-lines, .inventory-notes { margin-top: 16px; }
+      .inventory-properties > summary, .inventory-lines > summary, .inventory-notes > summary { padding: 9px 0; color: var(--blue); font-size: 0.75rem; cursor: pointer; overflow-wrap: anywhere; }
+      .inventory-lines .table-wrap { max-height: 340px; margin-top: 10px; }
+      .inventory-lines table { min-width: 660px; }
+      .inventory-lines th { position: sticky; top: 0; padding: 10px; background: var(--surface); font-size: 0.72rem; }
+      .inventory-lines td { max-width: 220px; padding: 10px; font-size: 0.75rem; overflow-wrap: anywhere; }
+      .inventory-notes ul { margin: 8px 0; padding-left: 20px; color: var(--faint); font-size: 0.75rem; overflow-wrap: anywhere; }
+      .inventory-notes .inventory-errors { color: var(--coral); }
+      #hardwareInventoryMeta { max-width: none; margin: 0 0 16px; text-align: left; }
+      #hardwareInventoryPanel[data-state="stale"], #hardwareInventoryPanel[data-state="unavailable"] { border-color: var(--amber); }
+      #hardwareInventoryPanel[data-state="stale"] #hardwareInventoryMeta, #hardwareInventoryPanel[data-state="unavailable"] #hardwareInventoryMeta { color: var(--amber); }
+
+      .panel { padding: 24px; }
+      .panel-head { display: flex; align-items: start; justify-content: space-between; gap: 18px; margin-bottom: 24px; }
+      .panel-title { margin: 6px 0 0; font-family: var(--display); font-size: 1.65rem; font-weight: 400; letter-spacing: -0.05em; }
+      .panel-note { max-width: 290px; margin: 5px 0 0; color: var(--muted); font-size: 0.63rem; line-height: 1.7; text-align: right; }
+
+      .chart-panel { min-height: 310px; }
+      .chart-legend { display: flex; gap: 18px; color: var(--muted); font-size: 0.61rem; }
+      .legend-item { display: flex; align-items: center; gap: 7px; }
+      .legend-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--mint); }
+      .legend-dot.memory { background: var(--amber); }
+      .chart-box { position: relative; height: 183px; margin: 10px -8px 0; }
+      .chart-box svg { width: 100%; height: 100%; overflow: visible; }
+      .chart-gridline { stroke: rgba(194, 225, 202, 0.1); stroke-dasharray: 2 7; }
+      .chart-axis-label { fill: var(--faint); font-family: var(--mono); font-size: 9px; }
+      .chart-path { fill: none; stroke-linecap: round; stroke-linejoin: round; stroke-width: 2.5; }
+      .chart-path.cpu { stroke: var(--mint); filter: drop-shadow(0 0 5px rgba(156, 232, 183, 0.38)); }
+      .chart-path.memory { stroke: var(--amber); filter: drop-shadow(0 0 5px rgba(244, 189, 106, 0.3)); }
+      .chart-empty { position: absolute; inset: 0; display: grid; place-items: center; color: var(--faint); font-size: 0.68rem; }
+
+      .attention-count { min-width: 30px; padding: 6px 8px; border: 1px solid rgba(244, 189, 106, 0.35); color: var(--amber); font-size: 0.65rem; text-align: center; }
+      .table-wrap { overflow-x: auto; }
+      table { width: 100%; border-collapse: collapse; min-width: 610px; }
+      th { padding: 0 12px 12px; color: var(--faint); font-size: 0.57rem; font-weight: 500; letter-spacing: 0.12em; text-align: left; text-transform: uppercase; }
+      td { padding: 13px 12px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.67rem; }
+      td:first-child, td:nth-child(2) { color: var(--ink); }
+      td:first-child { font-weight: 600; }
+      td.numeric { text-align: right; }
+      tr:hover td { background: rgba(156, 232, 183, 0.035); }
+      .empty-row td { padding: 26px 12px; color: var(--faint); text-align: center; }
+
+      @media (max-width: 1080px) {
+        .hardware-metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      }
+      @media (max-width: 780px) {
+        .shell { padding-top: 18px; }
+        .panel-note { text-align: left; }
+        .hardware-statusbar, .hardware-dual-grid { grid-template-columns: 1fr; }
+        .hardware-statusbar > .control { width: 100%; }
+        .hardware-source-badge { align-self: flex-start; }
+        .inventory-grid { grid-template-columns: 1fr; }
+      }
+      @media (max-width: 510px) {
+        .shell { padding-right: 8px; padding-left: 8px; }
+        .hardware-metrics-grid { grid-template-columns: 1fr; }
+        .hardware-card { min-height: 0; }
+        .panel, .hardware-subpanel { padding: 12px; }
+        .panel-head { flex-direction: column; }
+        .inventory-fields { grid-template-columns: 1fr; }
+        .inventory-body { padding: 0 12px 14px; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <main>
+        <section id="hardwareMonitorPanel" class="panel hardware-panel" aria-labelledby="hardwareMonitorTitle">
+          <div class="panel-head">
+            <div>
+              <p class="panel-kicker">SCOUT 主機 / 硬體觀測</p>
+              <h1 id="hardwareMonitorTitle" class="panel-title">硬體監控</h1>
+              <p class="panel-note">Scout 主機的最新採樣，每 60 秒讀取；斷線後自動重試。</p>
+            </div>
+            <div class="hardware-source-badge"><span aria-hidden="true">◉</span><span>Scout 主機 · 唯讀</span></div>
+          </div>
+
+          <div id="hardwareStatusBar" class="hardware-statusbar" data-state="loading" aria-label="硬體監控狀態">
+            <div id="hardwareOverallCell" class="hardware-status-cell" data-state="loading">
+              <span id="hardwareOverallIcon" class="hardware-state-icon" aria-hidden="true">·</span>
+              <div><span>整體狀態</span><strong id="hardwareOverallStatus">載入中</strong></div>
+            </div>
+            <div class="hardware-status-cell">
+              <span class="hardware-state-icon" aria-hidden="true">⌁</span>
+              <div><span>最後採樣 · 台北</span><strong id="hardwareLastSampleAt">未知</strong></div>
+            </div>
+            <div class="hardware-status-cell">
+              <span class="hardware-state-icon" aria-hidden="true">◷</span>
+              <div><span>資料年齡</span><strong id="hardwareDataAge">未知</strong></div>
+            </div>
+            <button id="hardwareRefreshButton" class="control" type="button"><span aria-hidden="true">↻</span> 重新讀取</button>
+          </div>
+
+          <div id="hardwareNotice" class="hardware-notice" data-state="loading" role="status" aria-live="polite">
+            <span id="hardwareNoticeIcon" class="hardware-notice-icon" aria-hidden="true">·</span>
+            <span id="hardwareNoticeText">正在讀取 Scout 硬體資料…</span>
+          </div>
+          <p id="hardwareSourceErrors" class="hardware-source-errors" hidden></p>
+
+          <div class="hardware-metrics-grid" aria-label="硬體即時指標">
+            <article id="hardwareBatteryCard" class="hardware-card" data-state="unavailable">
+              <div class="hardware-card-head">
+                <div><p class="metric-kicker">01 / 電源</p><h3 class="hardware-card-title">電池與供電</h3></div>
+                <span id="hardwareBatteryIcon" class="hardware-card-icon" data-state="loading" aria-hidden="true">?</span>
+              </div>
+              <div class="hardware-primary"><strong id="hardwareBatteryPercent">未知</strong><span>電池電量</span></div>
+              <div class="hardware-stat-grid">
+                <div><span>充放電</span><strong id="hardwareBatteryFlow">未知</strong></div>
+                <div><span>功率</span><strong id="hardwareBatteryPower">未知</strong></div>
+                <div><span>電壓</span><strong id="hardwareBatteryVoltage">未知</strong></div>
+                <div><span>供電狀態</span><strong id="hardwareSupplyStatus">未知</strong></div>
+              </div>
+              <p id="hardwareBatteryNote" class="hardware-card-note">等待電源資料</p>
+              <p id="hardwarePowerNotice" class="hardware-card-note" role="status" aria-live="polite" hidden></p>
+            </article>
+
+            <article id="hardwareMemoryCard" class="hardware-card" data-state="unavailable">
+              <div class="hardware-card-head">
+                <div><p class="metric-kicker">02 / 記憶體</p><h3 class="hardware-card-title">記憶體</h3></div>
+                <span id="hardwareMemoryIcon" class="hardware-card-icon" data-state="loading" aria-hidden="true">?</span>
+              </div>
+              <div class="hardware-primary"><strong id="hardwareMemoryPercent">未知</strong><span>使用率</span></div>
+              <div class="hardware-stat-grid">
+                <div><span>已用</span><strong id="hardwareMemoryUsed">未知</strong></div>
+                <div><span>總量</span><strong id="hardwareMemoryTotal">未知</strong></div>
+                <div><span>可用</span><strong id="hardwareMemoryAvailable">未知</strong></div>
+                <div><span>Swap</span><strong id="hardwareSwap">未知</strong></div>
+              </div>
+              <p id="hardwareMemoryNote" class="hardware-card-note">GiB = bytes / 1024³</p>
+            </article>
+
+            <article id="hardwareCpuCard" class="hardware-card" data-state="unavailable">
+              <div class="hardware-card-head">
+                <div><p class="metric-kicker">03 / 處理器</p><h3 class="hardware-card-title">CPU 與負載</h3></div>
+                <span id="hardwareCpuIcon" class="hardware-card-icon" data-state="loading" aria-hidden="true">?</span>
+              </div>
+              <div class="hardware-primary"><strong id="hardwareCpuPercent">未知</strong><span>使用率</span></div>
+              <div class="hardware-stat-grid">
+                <div><span>1 分鐘負載</span><strong id="hardwareLoad1">未知</strong></div>
+                <div><span>5 分鐘負載</span><strong id="hardwareLoad5">未知</strong></div>
+                <div><span>15 分鐘負載</span><strong id="hardwareLoad15">未知</strong></div>
+                <div><span>CPU 核心</span><strong id="hardwareCpuCount">未知</strong></div>
+              </div>
+              <p id="hardwareCpuNote" class="hardware-card-note">等待 CPU 資料</p>
+            </article>
+
+            <article id="hardwareThermalCard" class="hardware-card" data-state="unavailable">
+              <div class="hardware-card-head">
+                <div><p class="metric-kicker">04 / 散熱</p><h3 class="hardware-card-title">溫度、風扇與開機</h3></div>
+                <span id="hardwareThermalIcon" class="hardware-card-icon" data-state="loading" aria-hidden="true">?</span>
+              </div>
+              <div class="hardware-sensor-list" id="hardwareThermalReadouts">
+                <div class="hardware-sensor-row"><strong>CPU 溫度</strong><span id="hardwareCpuTemperature">未知</span></div>
+                <div class="hardware-sensor-row"><strong>NVMe 溫度</strong><span id="hardwareNvmeTemperatures">未知</span></div>
+                <div class="hardware-sensor-row"><strong>風扇轉速</strong><span id="hardwareFanSpeeds">未知</span></div>
+                <div class="hardware-sensor-row"><strong>開機時間</strong><span id="hardwareUptime">未知</span></div>
+              </div>
+              <p id="hardwareThermalNote" class="hardware-card-note">風扇 0 RPM 不單獨判定故障</p>
+            </article>
+          </div>
+
+          <section class="hardware-subpanel" aria-labelledby="hardwareDisksTitle">
+            <div class="panel-head">
+              <div><p class="panel-kicker">儲存空間 / 掛載點</p><h3 id="hardwareDisksTitle" class="panel-title">磁碟狀態</h3></div>
+              <p class="panel-note">使用率、剩餘容量、inode 使用率與唯讀狀態；缺失值維持未知。</p>
+            </div>
+            <div class="table-wrap" tabindex="0" role="region" aria-label="磁碟狀態，可左右捲動">
+              <table class="hardware-table">
+                <thead><tr><th>掛載點</th><th>裝置</th><th>使用率</th><th>剩餘容量</th><th>inode</th><th>狀態</th></tr></thead>
+                <tbody id="hardwareDiskTable"><tr class="empty-row"><td colspan="6">等待磁碟資料</td></tr></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section id="hardwareInventoryPanel" class="hardware-subpanel" aria-labelledby="hardwareInventoryTitle" data-state="loading">
+            <div class="panel-head">
+              <div><p class="panel-kicker">設備 / 被動觀測</p><h2 id="hardwareInventoryTitle" class="panel-title">連線與設備清單</h2></div>
+              <p class="panel-note">展開分類查看裝置、屬性與觀測來源。<br />已讀取 ≠ 設備功能正常。</p>
+            </div>
+            <p id="hardwareInventoryMeta" class="panel-note" role="status">正在讀取設備清單…</p>
+            <div id="hardwareInventoryGrid" class="inventory-grid" aria-busy="true"></div>
+          </section>
+
+          <div class="hardware-dual-grid">
+            <section class="hardware-subpanel" aria-labelledby="hardwareTrendTitle">
+              <div class="panel-head">
+                <div><p class="panel-kicker">歷史 / 最近 60 筆</p><h3 id="hardwareTrendTitle" class="panel-title">最近採樣趨勢</h3></div>
+                <div class="chart-legend" aria-label="趨勢圖例"><span class="legend-item"><i class="legend-dot"></i>CPU 使用率</span><span class="legend-item"><i class="legend-dot memory"></i>記憶體使用率</span></div>
+              </div>
+              <div class="hardware-chart-box">
+                <svg id="hardwareTrendChart" viewBox="0 0 760 180" role="img" aria-label="CPU 與記憶體最近採樣趨勢圖">
+                  <line class="chart-gridline" x1="30" y1="20" x2="750" y2="20"></line>
+                  <line class="chart-gridline" x1="30" y1="85" x2="750" y2="85"></line>
+                  <line class="chart-gridline" x1="30" y1="150" x2="750" y2="150"></line>
+                  <text class="chart-axis-label" x="0" y="24">100</text>
+                  <text class="chart-axis-label" x="8" y="89">50</text>
+                  <text class="chart-axis-label" x="14" y="154">0</text>
+                  <text id="hardwareTrendStart" class="chart-axis-label" x="32" y="173"></text>
+                  <text id="hardwareTrendEnd" class="chart-axis-label" x="748" y="173" text-anchor="end"></text>
+                  <path id="hardwareCpuPath" class="hardware-chart-path cpu" d=""></path>
+                  <path id="hardwareMemoryPath" class="hardware-chart-path memory" d=""></path>
+                </svg>
+                <div id="hardwareTrendEmpty" class="chart-empty">等待歷史採樣資料</div>
+              </div>
+              <p id="hardwareTrendMeta" class="hardware-chart-meta">尚未讀取歷史資料</p>
+            </section>
+
+            <section class="hardware-subpanel" aria-labelledby="hardwareAlertsTitle">
+              <div class="panel-head">
+                <div><p class="panel-kicker">告警 / 最新採樣</p><h3 id="hardwareAlertsTitle" class="panel-title">目前告警</h3></div>
+                <span id="hardwareAlertCount" class="attention-count">未知</span>
+              </div>
+              <ul id="hardwareAlertList" class="hardware-alert-list"><li class="hardware-empty">等待告警資料</li></ul>
+              <details class="hardware-thresholds">
+                <summary>查看告警門檻</summary>
+                <dl id="hardwareThresholdList" class="hardware-threshold-list"><div><dt>尚未讀取</dt><dd>未知</dd></div></dl>
+              </details>
+            </section>
+          </div>
+
+          <section class="hardware-subpanel hardware-events-panel" aria-labelledby="hardwareEventsTitle">
+            <div class="panel-head">
+              <div><p class="panel-kicker">事件 / 狀態變更</p><h3 id="hardwareEventsTitle" class="panel-title">狀態變更事件</h3></div>
+              <p id="hardwareEventsMeta" class="panel-note">最近 50 筆事件紀錄</p>
+            </div>
+            <ul id="hardwareEventList" class="hardware-event-list"><li class="hardware-empty">等待事件資料</li></ul>
+          </section>
+        </section>
+
+      </main>
+    </div>
+    <script>
+      const $ = (selector) => document.querySelector(selector);
+      const HARDWARE_REFRESH_INTERVAL_MS = 60 * 1000;
+      const HARDWARE_REQUEST_TIMEOUT_MS = 12 * 1000;
+      // History now includes inventory for each sample; allow bounded transfer time
+      // through the temporary SSH forward without delaying the latest status.
+      const HARDWARE_HISTORY_TIMEOUT_MS = 30 * 1000;
+      const HARDWARE_UNKNOWN = "未知";
+      const hardwareState = {
+        active: true,
+        timer: null,
+        ageTimer: null,
+        requestInFlight: false,
+        controller: null,
+        lastData: null,
+        lastEnvelope: null,
+        lastResult: null,
+        receivedAt: null,
+        effectiveState: "loading",
+        historyItems: [],
+        historyMeta: null,
+        historyStatus: "unavailable",
+        eventItems: [],
+        eventsMeta: null,
+        eventsStatus: "unavailable",
+      };
+      const HARDWARE_STATUS_LABELS = {
+        loading: "載入中",
+        ok: "正常",
+        warning: "警告",
+        critical: "嚴重告警",
+        stale: "資料已過期",
+        unavailable: "無法連線",
+        unknown: "未知",
+      };
+      const HARDWARE_KEY_LABELS = {
+        battery_percent: "電池百分比",
+        memory_used_percent: "記憶體使用率",
+        disk_used_percent: "磁碟使用率",
+        inode_used_percent: "inode 使用率",
+        cpu_temperature_c: "CPU 溫度",
+        nvme_temperature_c: "NVMe 溫度",
+        ups_stale_seconds: "UPS 資料年齡",
+      };
+
+      function setText(id, value) {
+        const node = document.getElementById(id);
+        if (node) node.textContent = value;
+      }
+
+      function finiteNumber(value) {
+        return typeof value === "number" && Number.isFinite(value) ? value : null;
+      }
+
+      function formatHardwareDate(value) {
+        if (!value) return HARDWARE_UNKNOWN;
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return HARDWARE_UNKNOWN;
+        return date.toLocaleString("zh-TW", {
+          timeZone: "Asia/Taipei",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false,
+        });
+      }
+
+      function hardwareNumber(value) {
+        return finiteNumber(value);
+      }
+
+      function formatHardwarePercent(value) {
+        const number = hardwareNumber(value);
+        return number === null ? HARDWARE_UNKNOWN : `${number.toFixed(1)}%`;
+      }
+
+      function formatHardwareGiB(value) {
+        const number = hardwareNumber(value);
+        if (number === null) return HARDWARE_UNKNOWN;
+        return `${(number / (1024 ** 3)).toFixed(2)} GiB`;
+      }
+
+      function formatHardwareWatts(value) {
+        const number = hardwareNumber(value);
+        if (number === null) return HARDWARE_UNKNOWN;
+        return `${number > 0 ? "+" : ""}${number.toFixed(2)} W`;
+      }
+
+      function formatHardwareTemperature(value) {
+        const number = hardwareNumber(value);
+        return number === null ? HARDWARE_UNKNOWN : `${number.toFixed(1)} °C`;
+      }
+
+      function formatHardwareVoltage(value) {
+        const number = hardwareNumber(value);
+        return number === null ? HARDWARE_UNKNOWN : `${(number / 1000).toFixed(2)} V`;
+      }
+
+      function formatHardwareDuration(value) {
+        const seconds = hardwareNumber(value);
+        if (seconds === null) return HARDWARE_UNKNOWN;
+        const wholeSeconds = Math.max(0, Math.floor(seconds));
+        const days = Math.floor(wholeSeconds / 86400);
+        const hours = Math.floor((wholeSeconds % 86400) / 3600);
+        const minutes = Math.floor((wholeSeconds % 3600) / 60);
+        const parts = [];
+        if (days) parts.push(`${days} 天`);
+        if (hours || days) parts.push(`${hours} 小時`);
+        parts.push(`${minutes} 分鐘`);
+        return parts.join(" ");
+      }
+
+      function formatHardwareAge(value) {
+        const seconds = hardwareNumber(value);
+        if (seconds === null) return HARDWARE_UNKNOWN;
+        const age = Math.max(0, Math.round(seconds));
+        if (age < 60) return `${age} 秒`;
+        if (age < 3600) return `${Math.floor(age / 60)} 分 ${age % 60} 秒`;
+        return `${Math.floor(age / 3600)} 小時 ${Math.floor((age % 3600) / 60)} 分`;
+      }
+
+      function hardwareObject(value) {
+        return value && typeof value === "object" && !Array.isArray(value) ? value : null;
+      }
+
+      const INVENTORY_SECTIONS = [
+        ["network", "Wi-Fi／Ethernet", "只顯示實體介面與目前連線；不掃描周邊 Wi-Fi。"],
+        ["bluetooth", "藍牙", "電源、配對與探索旗標僅供觀測；此頁不發起配對或探索。"],
+        ["usb", "USB", "根集線器與外接裝置分開計數；裝置存在不等於功能測試通過。"],
+        ["pcie", "PCIe", "裝置與橋接器依 API 清單呈現；鏈路資訊不代表功能測試結果。"],
+        ["i2c", "I²C", "未執行主動位址掃描；未列出不代表沒有接上。UPS 0x2d 的觀測來自既有有效電源紀錄。"],
+        ["gpio", "GPIO", "方向表示輸入／輸出，不是電位；未讀寫電位或要求線路。"],
+        ["serial", "UART／序列埠", "只表示系統存在該節點，不代表已連上外部設備或正在傳輸資料。"],
+      ];
+      const INVENTORY_STATES = {
+        present: "◇ 裝置存在", connected: "● 已連線", disconnected: "○ 未連線",
+        blocked: "△ 已停用", powered_on: "◉ 電源開啟", powered_off: "○ 電源關閉",
+        observed: "◈ 已有觀測", unknown: "? 未知",
+      };
+      const INVENTORY_SECTION_STATES = { ok: "✓ 已讀取", partial: "△ 部分讀取", unavailable: "? 無法讀取" };
+      const INVENTORY_KINDS = {
+        wifi: "Wi-Fi 實體介面", ethernet: "Ethernet 實體介面", controller: "藍牙控制器",
+        connected_device: "目前連線裝置", adapter: "I²C 匯流排轉接器",
+        registered_device: "系統已登錄裝置", telemetry_device: "既有紀錄觀測裝置",
+      };
+      const INVENTORY_PROPERTY_LABELS = {
+        id: "識別碼", driver: "驅動", kind: "類型", operstate: "介面連線狀態", connected: "連線",
+        ipv4: "IPv4", ipv6: "IPv6", ssid: "SSID", signal_dbm: "訊號", frequency_mhz: "頻率",
+        tx_bitrate_mbps: "傳送速率", soft_blocked: "軟體無線停用", hard_blocked: "硬體無線停用",
+        address: "位址", powered: "控制器電源", discoverable: "允許被發現", pairable: "允許配對",
+        discovering: "正在探索", idVendor: "廠商 ID", idProduct: "產品 ID", manufacturer: "製造商",
+        speed: "USB 速率", root_hub: "根集線器", interface_drivers: "介面驅動", authorized: "系統授權旗標",
+        vendor: "廠商 ID", device: "裝置 ID", class: "分類代碼", device_class: "裝置分類",
+        vendor_name: "廠商", current_link_speed: "目前鏈路速率", current_link_width: "目前鏈路寬度",
+        bus: "匯流排", evidence: "觀測來源", captured_at: "觀測時間 · 台北",
+        device_node: "裝置節點", line_count: "線路數",
+      };
+      const inventoryExpansion = new Map();
+
+      function inventoryLabel(labels, key, fallback = HARDWARE_UNKNOWN) {
+        return Object.hasOwn(labels, key) ? labels[key] : fallback;
+      }
+
+      function inventoryTextNode(tag, className, text) {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined) node.textContent = text;
+        return node;
+      }
+
+      function inventoryValue(key, value) {
+        if (value === null || value === undefined || value === "") return HARDWARE_UNKNOWN;
+        if (Array.isArray(value)) return value.length ? value.map((part) => inventoryValue("", part)).join("\n") : "—";
+        if (typeof value === "boolean") {
+          if (["soft_blocked", "hard_blocked"].includes(key)) return value ? "已停用" : "未停用";
+          if (key === "powered") return value ? "開啟" : "關閉";
+          return value ? "是" : "否";
+        }
+        if (typeof value !== "string" && typeof value !== "number") return HARDWARE_UNKNOWN;
+        if (typeof value === "number" && !Number.isFinite(value)) return HARDWARE_UNKNOWN;
+        if (key === "kind") return inventoryLabel(INVENTORY_KINDS, value, String(value));
+        if (key === "operstate") return inventoryLabel({ up: "已啟用 (up)", down: "未啟用 (down)", dormant: "待命 (dormant)", unknown: "未知" }, value, String(value));
+        if (key === "captured_at") return formatHardwareDate(value);
+        if (key === "evidence" && value === "existing_ups_telemetry") return "既有有效電源紀錄 (existing_ups_telemetry)";
+        if (key === "current_link_width") return `×${value}`;
+        const unit = inventoryLabel({ signal_dbm: " dBm", frequency_mhz: " MHz", tx_bitrate_mbps: " Mbps", speed: " Mbps", line_count: " 條" }, key, "");
+        return `${value}${unit}`;
+      }
+
+      function inventoryFields(entries, rawKeys = false) {
+        const list = inventoryTextNode("dl", "inventory-fields");
+        entries.forEach(([key, value]) => {
+          const field = document.createElement("div");
+          field.dataset.property = key;
+          const label = inventoryLabel(INVENTORY_PROPERTY_LABELS, key, key);
+          field.append(
+            inventoryTextNode("dt", "", rawKeys && label !== key ? `${label} · ${key}` : label),
+            inventoryTextNode("dd", "", inventoryValue(key, value)),
+          );
+          list.append(field);
+        });
+        return list;
+      }
+
+      function inventoryDetails(key, className, label) {
+        const details = inventoryTextNode("details", className);
+        details.dataset.detailKey = key;
+        details.open = inventoryExpansion.get(key) === true;
+        const summary = inventoryTextNode("summary", "", label);
+        summary.dataset.focusKey = key;
+        details.append(summary);
+        return details;
+      }
+
+      function inventoryCounts(key, items) {
+        if (!items) return "裝置數量未知";
+        const countKind = (kind) => items.filter((item) => item.properties?.kind === kind).length;
+        if (key === "usb") {
+          const roots = items.filter((item) => item.properties?.root_hub === true).length;
+          const external = items.filter((item) => item.properties?.root_hub === false).length;
+          const unknown = items.length - roots - external;
+          return `根集線器 ${roots} · 外接裝置 ${external}${unknown ? ` · 類型未知 ${unknown}` : ""}`;
+        }
+        if (key === "bluetooth") return `控制器 ${countKind("controller")} · 連線裝置 ${countKind("connected_device")}`;
+        if (key === "i2c") return `轉接器 ${countKind("adapter")} · 已登錄 ${countKind("registered_device")} · 紀錄觀測 ${countKind("telemetry_device")}`;
+        if (key === "gpio") {
+          const counts = items.map((item) => hardwareNumber(item.properties?.line_count));
+          return `控制器 ${items.length} · 線路 ${counts.some((count) => count === null) ? HARDWARE_UNKNOWN : counts.reduce((sum, count) => sum + count, 0)}`;
+        }
+        if (key === "network") return `實體介面 ${items.length} · 已連線 ${items.filter((item) => item.state === "connected").length}`;
+        return `${items.length} ${key === "serial" ? "個裝置節點" : "個裝置／橋接器"}`;
+      }
+
+      function inventoryDevice(sectionKey, item, itemIndex) {
+        const properties = hardwareObject(item.properties) || {};
+        const key = JSON.stringify([sectionKey, item.id ?? itemIndex]);
+        const article = inventoryTextNode("article", "inventory-device");
+        article.dataset.deviceId = item.id ?? "";
+        const header = inventoryTextNode("div", "inventory-device-head");
+        const heading = inventoryTextNode("div", "");
+        heading.append(inventoryTextNode("h4", "", inventoryValue("", item.name)));
+        let kind = properties.kind;
+        if (sectionKey === "usb") kind = properties.root_hub === true ? "根集線器" : properties.root_hub === false ? "外接裝置" : "類型未知";
+        if (kind !== undefined) heading.append(inventoryTextNode("p", "inventory-kind", inventoryValue("kind", kind)));
+        const state = Object.hasOwn(INVENTORY_STATES, item.state) ? item.state : "unknown";
+        const badge = inventoryTextNode("span", "inventory-item-state", INVENTORY_STATES[state]);
+        badge.dataset.state = state;
+        header.append(heading, badge);
+        article.append(header);
+        const keys = {
+          network: ["kind", "operstate", "ipv4", "ipv6", ...(properties.kind === "wifi" ? ["ssid", "signal_dbm", "frequency_mhz", "tx_bitrate_mbps", "soft_blocked", "hard_blocked"] : [])],
+          bluetooth: properties.kind === "controller" ? ["address", "powered", "soft_blocked", "hard_blocked", "discoverable", "pairable", "discovering"] : ["kind", "address"],
+          usb: ["idVendor", "idProduct", "manufacturer", "speed", "root_hub", "interface_drivers"],
+          pcie: ["vendor_name", "vendor", "device", "device_class", "class", "current_link_speed", "current_link_width"],
+          i2c: properties.kind === "adapter" ? ["bus", "device_node"] : ["kind", "bus", "address", "evidence", "captured_at"],
+          gpio: ["device_node", "line_count"],
+          serial: ["device_node"],
+        }[sectionKey];
+        const entries = [["id", item.id], ["driver", item.driver], ...keys.map((field) => [field,
+          sectionKey === "i2c" && properties.kind === "adapter" && field === "bus" ? properties.bus ?? item.id : properties[field],
+        ])];
+        article.append(inventoryFields(entries));
+        const full = inventoryDetails(`${key}:properties`, "inventory-properties", "完整屬性");
+        const propertyEntries = Object.entries(properties);
+        full.append(propertyEntries.length ? inventoryFields(propertyEntries, true) : inventoryTextNode("p", "inventory-caution", "沒有提供詳細屬性"));
+        article.append(full);
+        if (sectionKey === "gpio") {
+          const lines = Array.isArray(item.lines) ? item.lines.filter(hardwareObject) : null;
+          const detail = inventoryDetails(`${key}:lines`, "inventory-lines", `線路明細（${lines ? lines.length : HARDWARE_UNKNOWN}）`);
+          if (lines?.length) {
+            const wrapper = inventoryTextNode("div", "table-wrap");
+            wrapper.tabIndex = 0;
+            wrapper.setAttribute("role", "region");
+            wrapper.setAttribute("aria-label", `${inventoryValue("", item.name)} 線路明細，可水平與垂直捲動`);
+            wrapper.dataset.focusKey = `${key}:line-table`;
+            const table = document.createElement("table");
+            const thead = document.createElement("thead");
+            const tr = document.createElement("tr");
+            ["偏移 offset", "名稱 name", "方向 direction", "使用者 consumer", "低態有效 active_low", "電位 value"].forEach((label) => {
+              const th = inventoryTextNode("th", "", label);
+              th.scope = "col";
+              tr.append(th);
+            });
+            thead.append(tr);
+            const tbody = document.createElement("tbody");
+            lines.forEach((line) => {
+              const row = document.createElement("tr");
+              cell(row, inventoryValue("", line.offset));
+              cell(row, inventoryValue("", line.name));
+              cell(row, inventoryLabel({ input: "輸入", output: "輸出", unknown: HARDWARE_UNKNOWN }, line.direction));
+              cell(row, inventoryValue("", line.consumer));
+              cell(row, inventoryValue("", line.active_low));
+              cell(row, line.value === null || line.value === undefined ? "未採樣" : inventoryValue("", line.value));
+              tbody.append(row);
+            });
+            table.append(thead, tbody);
+            wrapper.append(table);
+            detail.append(wrapper);
+          } else detail.append(inventoryTextNode("p", "inventory-caution", lines ? "沒有回傳線路明細" : "線路明細未知"));
+          article.append(detail);
+        }
+        return article;
+      }
+
+      function renderHardwareInventory(data, overallState) {
+        const grid = $("#hardwareInventoryGrid");
+        const focusedKey = grid.contains(document.activeElement) ? document.activeElement.dataset.focusKey : null;
+        const scrollPositions = new Map();
+        grid.querySelectorAll("details[data-detail-key]").forEach((details) => inventoryExpansion.set(details.dataset.detailKey, details.open));
+        grid.querySelectorAll(".table-wrap").forEach((table) => scrollPositions.set(table.dataset.focusKey, [table.scrollLeft, table.scrollTop]));
+        grid.replaceChildren();
+        grid.setAttribute("aria-busy", "false");
+        const inventory = hardwareObject(data && data.inventory);
+        const sections = hardwareObject(inventory && inventory.sections);
+        const invalid = ["stale", "unavailable", "unknown"].includes(overallState);
+        $("#hardwareInventoryPanel").dataset.state = overallState;
+        grid.hidden = !inventory;
+        const validity = { stale: "資料已過期 · 保留最後設備清單，無法確認目前狀態。", unavailable: "無法連線 · 保留上次設備清單，無法確認目前狀態。", unknown: "資料有效性未知，以下僅供參考。" }[overallState] || "";
+        if (!inventory) {
+          setText("hardwareInventoryMeta", `${validity} ${data ? "這筆採樣沒有設備清單，等待更新。" : "尚無設備資料，等待更新。"}`.trim());
+          return;
+        }
+        const status = inventoryLabel(INVENTORY_SECTION_STATES, inventory.status, "? 未知");
+        setText("hardwareInventoryMeta", `${validity} ${status} · 設備觀測 ${formatHardwareDate(inventory.captured_at)} · 讀取狀態不代表功能測試結果。`.trim());
+        INVENTORY_SECTIONS.forEach(([key, name, caution]) => {
+          const section = hardwareObject(sections && sections[key]);
+          const items = section && Array.isArray(section.items) ? section.items.filter(hardwareObject) : null;
+          const details = inventoryDetails(key, "inventory-section");
+          details.dataset.section = key;
+          const summary = details.firstElementChild;
+          const heading = inventoryTextNode("span", "inventory-section-heading");
+          const label = inventoryTextNode("strong", "inventory-section-name", name);
+          const readStatus = inventoryLabel(INVENTORY_SECTION_STATES, section?.status, "? 未知");
+          const badge = inventoryTextNode("span", "inventory-section-status", `${readStatus}${invalid ? " · 上次採樣" : ""}`);
+          badge.dataset.state = invalid ? overallState : section?.status || "unknown";
+          heading.append(label, badge);
+          summary.append(heading, inventoryTextNode("span", "inventory-section-summary", section ? inventoryValue("", section.summary) : "尚未提供此分類，等待更新。"));
+          summary.append(inventoryTextNode("span", "inventory-counts", inventoryCounts(key, items)));
+          const body = inventoryTextNode("div", "inventory-body");
+          body.append(inventoryTextNode("p", "inventory-caution", caution));
+          if (items?.length) items.forEach((item, index) => body.append(inventoryDevice(key, item, index)));
+          else body.append(inventoryTextNode("p", "hardware-empty", items ? "此採樣未列出裝置" : "裝置清單未知，等待更新。"));
+          const notes = inventoryDetails(`${key}:notes`, "inventory-notes", "觀測備註與錯誤");
+          ["notes", "errors"].forEach((field) => {
+            notes.append(inventoryTextNode("p", "inventory-kind", field === "notes" ? "備註" : "讀取錯誤"));
+            const list = inventoryTextNode("ul", field === "errors" ? "inventory-errors" : "");
+            const values = section && Array.isArray(section[field]) ? section[field] : null;
+            (values?.length ? values : [values ? "沒有回報" : HARDWARE_UNKNOWN]).forEach((value) => list.append(inventoryTextNode("li", "", inventoryValue("", value))));
+            notes.append(list);
+          });
+          body.append(notes);
+          details.append(body);
+          grid.append(details);
+        });
+        grid.querySelectorAll(".table-wrap").forEach((table) => {
+          const position = scrollPositions.get(table.dataset.focusKey);
+          if (position) { table.scrollLeft = position[0]; table.scrollTop = position[1]; }
+        });
+        if (focusedKey) Array.from(grid.querySelectorAll("[data-focus-key]")).find((node) => node.dataset.focusKey === focusedKey)?.focus({ preventScroll: true });
+      }
+
+      function hardwareStatusLabel(stateName) {
+        return HARDWARE_STATUS_LABELS[stateName] || HARDWARE_STATUS_LABELS.unavailable;
+      }
+
+      function hardwareStatusIcon(stateName) {
+        return { loading: "·", ok: "✓", warning: "△", critical: "!", stale: "◷", unavailable: "?", unknown: "?" }[stateName] || "?";
+      }
+
+      function hardwareDataAge() {
+        const freshness = hardwareObject(hardwareState.lastEnvelope && hardwareState.lastEnvelope.freshness);
+        const reportedAge = hardwareNumber(freshness && freshness.age_seconds);
+        if (reportedAge !== null && hardwareState.receivedAt !== null) {
+          return Math.max(0, reportedAge + (Date.now() - hardwareState.receivedAt) / 1000);
+        }
+        const capturedAt = freshness && freshness.captured_at || hardwareState.lastData && hardwareState.lastData.captured_at;
+        const timestamp = capturedAt ? Date.parse(capturedAt) : NaN;
+        return Number.isFinite(timestamp) ? Math.max(0, (Date.now() - timestamp) / 1000) : null;
+      }
+
+      function hardwareStateFromResponse(result, age = hardwareDataAge()) {
+        const payload = hardwareObject(result && result.payload);
+        if (!result || !result.response) return "unavailable";
+        const freshness = hardwareObject(payload && payload.freshness);
+        if (payload && payload.status === "stale" || freshness && freshness.state === "stale") return "stale";
+        if (!result.response.ok || !payload) return "unavailable";
+        if (payload.status === "unavailable") return "unavailable";
+        const data = hardwareObject(payload.data);
+        if (!data || !freshness || freshness.state !== "fresh" || age === null) return "unknown";
+        const staleAfter = hardwareNumber(freshness.stale_after_seconds) ?? 150;
+        if (age > staleAfter) return "stale";
+        if (data.status === "critical" || payload.status === "critical") return "critical";
+        if (data.status === "warning" || payload.status === "warning") return "warning";
+        if (["critical", "warning", "ok"].includes(payload.status)) return payload.status;
+        return "unknown";
+      }
+
+      function hardwareThresholdState(value, thresholds, key) {
+        const number = hardwareNumber(value);
+        const threshold = hardwareObject(thresholds && thresholds[key]);
+        if (number === null || !threshold) return "unknown";
+        const exceeded = (bound) => hardwareNumber(bound) !== null && (key === "battery_percent" ? number <= bound : number >= bound);
+        if (exceeded(threshold.critical)) return "critical";
+        if (exceeded(threshold.warning)) return "warning";
+        return hardwareNumber(threshold.warning) !== null && hardwareNumber(threshold.critical) !== null ? "ok" : "unknown";
+      }
+
+      function hardwareWorstState(states) {
+        return ["critical", "warning", "unknown", "ok"].find((stateName) => states.includes(stateName)) || "unknown";
+      }
+
+      function hardwareAlertState(alerts, keys, fallback = "ok") {
+        const alertObject = hardwareObject(alerts);
+        if (!alertObject) return fallback;
+        let stateName = fallback;
+        keys.forEach((key) => {
+          const alert = hardwareObject(alertObject[key]);
+          if (!alert) return;
+          if (alert.severity === "critical") stateName = "critical";
+          else if (alert.severity === "warning" && stateName !== "critical") stateName = "warning";
+        });
+        return stateName;
+      }
+
+      function setHardwareStatusVisual(stateName, data, payload) {
+        const resolvedState = HARDWARE_STATUS_LABELS[stateName] ? stateName : "unavailable";
+        const overallCell = $("#hardwareOverallCell");
+        const statusBar = $("#hardwareStatusBar");
+        const notice = $("#hardwareNotice");
+        if (statusBar) statusBar.dataset.state = resolvedState;
+        if (overallCell) overallCell.dataset.state = resolvedState;
+        setText("hardwareOverallIcon", hardwareStatusIcon(resolvedState));
+        setText("hardwareOverallStatus", hardwareStatusLabel(resolvedState));
+
+        const freshness = hardwareObject(payload && payload.freshness);
+        const capturedAt = data && data.captured_at || freshness && freshness.captured_at;
+        setText("hardwareLastSampleAt", formatHardwareDate(capturedAt));
+        setText("hardwareDataAge", formatHardwareAge(hardwareDataAge()));
+        if (notice) notice.dataset.state = resolvedState;
+        setText("hardwareNoticeIcon", hardwareStatusIcon(resolvedState));
+      }
+
+      function renderHardwareNotice(stateName, payload, messageOverride = "") {
+        const payloadObject = hardwareObject(payload);
+        const summary = messageOverride || {
+          ok: "已讀取最新採樣。",
+          warning: "最新採樣有警告，請查看下方告警內容。",
+          critical: "最新採樣有嚴重告警，請查看下方告警內容。",
+          stale: "保留最後採樣值，目前硬體狀態無法確認。",
+          unavailable: hardwareState.lastData ? "保留上次讀取值，目前硬體狀態無法確認。" : "目前沒有可用的 Scout 硬體資料。",
+          unknown: "尚無有效採樣，硬體狀態未知。",
+        }[stateName] || "正在讀取 Scout 硬體資料…";
+        const nextStep = payloadObject && Array.isArray(payloadObject.next_steps) && payloadObject.next_steps[0];
+        let message = summary;
+        if (stateName === "stale") message = `資料已過期：${summary}`;
+        else if (stateName === "unavailable") message = `與 Scout 硬體 API 斷線：${summary}${hardwareDataAge() > 150 ? " 上次資料已過期。" : ""}`;
+        if (nextStep && stateName !== "ok") message += ` 下一步：${nextStep}`;
+        if (stateName === "unavailable") message += " 每 60 秒自動重試，也可按重新讀取立即重試。";
+        setText("hardwareNoticeText", message);
+      }
+
+      function renderHardwareSourceErrors(data) {
+        const errors = hardwareObject(data && data.errors);
+        const entries = errors ? Object.entries(errors).filter(([, value]) => value !== null && value !== undefined) : [];
+        const node = $("#hardwareSourceErrors");
+        if (!node) return;
+        node.hidden = !entries.length;
+        node.textContent = entries.length ? `資料來源訊息：${entries.map(([key, value]) => `${key}：${String(value)}`).join("；")}` : "";
+      }
+
+      function renderHardwareCards(data, overallState) {
+        const snapshot = hardwareObject(data);
+        const power = hardwareObject(snapshot && snapshot.power);
+        const memory = hardwareObject(snapshot && snapshot.memory);
+        const alerts = snapshot && snapshot.alerts;
+        const thresholds = hardwareObject(snapshot && snapshot.thresholds);
+        const sensors = snapshot && Array.isArray(snapshot.sensors) ? snapshot.sensors.filter(hardwareObject) : [];
+        const cpuSensors = sensors.filter((sensor) => /cpu/i.test(sensor.name || ""));
+        const nvmeSensors = sensors.filter((sensor) => /nvme/i.test(sensor.name || ""));
+        const fanSensors = sensors.filter((sensor) => /fan/i.test(`${sensor.name} ${sensor.source}`) || hardwareNumber(sensor.rpm) !== null);
+        const hasData = Boolean(snapshot);
+        const connectionState = ["stale", "unavailable", "unknown"].includes(overallState);
+        const cardState = (keys, measuredState) => !hasData || connectionState ? overallState : hardwareAlertState(alerts, keys, measuredState);
+        const powerAge = hardwareNumber(power && power.age_seconds);
+        const powerStaleAfter = hardwareNumber(thresholds && thresholds.ups_stale_seconds);
+        const powerStale = powerAge !== null && powerStaleAfter !== null && powerAge > powerStaleAfter;
+        const upsReadable = power && (power.ups_status || power.status) === "ok";
+        // Numeric presence in a typed API record is observation, not a health verdict.
+        const supplyKnown = Boolean(power);
+        const batteryState = !upsReadable || powerStale ? "unknown" : hardwareThresholdState(power.battery_percent, thresholds, "battery_percent");
+        const thermalStates = [
+          ...cpuSensors.map((sensor) => hardwareThresholdState(sensor.temperature_c, thresholds, "cpu_temperature_c")),
+          ...nvmeSensors.map((sensor) => hardwareThresholdState(sensor.temperature_c, thresholds, "nvme_temperature_c")),
+        ];
+        [
+          ["hardwareBatteryCard", "hardwareBatteryIcon", cardState(["battery", "battery_percent", "battery_cell", "power_telemetry", "power_throttling", "supply_voltage"], batteryState)],
+          ["hardwareMemoryCard", "hardwareMemoryIcon", cardState(["memory_used_percent"], hardwareThresholdState(memory && memory.used_percent, thresholds, "memory_used_percent"))],
+          ["hardwareCpuCard", "hardwareCpuIcon", cardState([], hardwareNumber(snapshot && snapshot.cpu_used_percent) === null ? "unknown" : "ok")],
+          ["hardwareThermalCard", "hardwareThermalIcon", cardState(["cpu_temperature_c", "nvme_temperature_c"], hardwareWorstState(thermalStates))],
+        ].forEach(([cardId, iconId, stateName]) => {
+          setCardState(cardId, stateName);
+          const icon = document.getElementById(iconId);
+          if (icon) {
+            icon.dataset.state = stateName;
+            icon.textContent = hardwareStatusIcon(stateName);
+            icon.removeAttribute("aria-hidden");
+            icon.setAttribute("role", "img");
+            icon.setAttribute("aria-label", hardwareStatusLabel(stateName));
+            icon.title = hardwareStatusLabel(stateName);
+          }
+        });
+
+        const batteryPercent = upsReadable ? power.battery_percent : null;
+        setText("hardwareBatteryPercent", formatHardwarePercent(batteryPercent));
+        const batteryPower = upsReadable ? power.battery_power_w : null;
+        const powerNumber = hardwareNumber(batteryPower);
+        const powerLabel = powerNumber === null ? HARDWARE_UNKNOWN : powerNumber > 0 ? "充電" : powerNumber < 0 ? "放電" : "待機";
+        setText("hardwareBatteryPower", powerNumber === null ? HARDWARE_UNKNOWN : `${powerLabel} ${formatHardwareWatts(powerNumber)}`);
+        const flow = upsReadable ? power.flow : null;
+        const flowLabel = powerNumber !== null ? powerNumber > 0 ? "充電中" : powerNumber < 0 ? "放電中" : "待機" : flow === "charging" ? "充電中" : flow === "discharging" ? "放電中" : flow === "idle" ? "待機" : HARDWARE_UNKNOWN;
+        setText("hardwareBatteryFlow", flowLabel);
+        setText("hardwareBatteryVoltage", formatHardwareVoltage(upsReadable ? power.battery_voltage_mv : null));
+        const supplyParts = [];
+        const upsPower = hardwareNumber(upsReadable ? power.ups_vbus_power_mw : null);
+        const ext5v = hardwareNumber(supplyKnown ? power.ext5v_v : null);
+        if (upsPower !== null) supplyParts.push(`UPS ${(upsPower / 1000).toFixed(2)} W`);
+        if (ext5v !== null) supplyParts.push(`5V ${ext5v.toFixed(2)} V`);
+        const throttleBits = hardwareNumber(supplyKnown ? power.active_throttle_bits : null);
+        if (throttleBits !== null) supplyParts.push(throttleBits === 0 ? "未見供電／效能限制" : `供電／效能限制旗標 ${throttleBits}`);
+        const powerReading = supplyParts.length ? supplyParts.join(" · ") : HARDWARE_UNKNOWN;
+        setText("hardwareSupplyStatus", `${connectionState || powerStale ? "上次採樣 · " : ""}${powerReading}`);
+        setText("hardwareBatteryNote", power && power.captured_at ? `${powerStale ? "電源資料已過期 · " : ""}電源採樣 ${formatHardwareDate(power.captured_at)}` : "電源採樣時間未知");
+        const powerMessages = [];
+        if (power && !upsReadable) powerMessages.push(power.ups_error_code === "communication_error" ? "UPS 通訊失敗（I²C），電池讀值未知" : "UPS 電池資料未知或不可讀");
+        if (power && power.supply_status === "unavailable") powerMessages.push("主機供電資料部分不可讀；缺失讀值維持未知");
+        if (power && !upsReadable && ext5v !== null) powerMessages.push("主機 5V 供電仍有讀值，不代表 UPS 通訊已恢復");
+        const powerNotice = document.getElementById("hardwarePowerNotice");
+        if (powerNotice) {
+          powerNotice.hidden = powerMessages.length === 0;
+          powerNotice.textContent = powerMessages.length ? `${connectionState || powerStale ? "上次採樣 · " : ""}△ ${powerMessages.join("；")}` : "";
+        }
+
+        setText("hardwareMemoryPercent", formatHardwarePercent(memory && memory.used_percent));
+        setText("hardwareMemoryUsed", formatHardwareGiB(memory && memory.used_bytes));
+        setText("hardwareMemoryTotal", formatHardwareGiB(memory && memory.total_bytes));
+        setText("hardwareMemoryAvailable", formatHardwareGiB(memory && memory.available_bytes));
+        const swapUsed = formatHardwareGiB(memory && memory.swap_used_bytes);
+        const swapTotal = formatHardwareGiB(memory && memory.swap_total_bytes);
+        setText("hardwareSwap", memory ? `${swapUsed} / ${swapTotal}` : HARDWARE_UNKNOWN);
+        setText("hardwareMemoryNote", memory ? "容量以 GiB 顯示（1 GiB = 1024³ bytes）" : "記憶體資料未知");
+
+        setText("hardwareCpuPercent", formatHardwarePercent(snapshot && snapshot.cpu_used_percent));
+        const load = snapshot && Array.isArray(snapshot.load_average) ? snapshot.load_average : [];
+        setText("hardwareLoad1", hardwareNumber(load[0]) === null ? HARDWARE_UNKNOWN : load[0].toFixed(2));
+        setText("hardwareLoad5", hardwareNumber(load[1]) === null ? HARDWARE_UNKNOWN : load[1].toFixed(2));
+        setText("hardwareLoad15", hardwareNumber(load[2]) === null ? HARDWARE_UNKNOWN : load[2].toFixed(2));
+        setText("hardwareCpuCount", hardwareNumber(snapshot && snapshot.cpu_count) === null ? HARDWARE_UNKNOWN : String(snapshot.cpu_count));
+        setText("hardwareCpuNote", snapshot ? `主機 ${snapshot.host || HARDWARE_UNKNOWN} · 1 / 5 / 15 分鐘平均負載` : "等待 CPU 資料");
+
+        renderHardwareSensors("hardwareCpuTemperature", cpuSensors, (sensor) => formatHardwareTemperature(sensor.temperature_c));
+        renderHardwareSensors("hardwareNvmeTemperatures", nvmeSensors, (sensor) => formatHardwareTemperature(sensor.temperature_c));
+        renderHardwareSensors("hardwareFanSpeeds", fanSensors, (sensor) => hardwareNumber(sensor.rpm) === null ? HARDWARE_UNKNOWN : `${sensor.rpm} RPM`);
+        setText("hardwareUptime", formatHardwareDuration(snapshot && snapshot.uptime_seconds));
+        setText("hardwareThermalNote", snapshot ? "感測器依來源分列；風扇 0 RPM 可能為正常停轉" : "等待溫度與風扇資料");
+      }
+
+      function renderHardwareSensors(id, sensors, formatter) {
+        const container = document.getElementById(id);
+        container.replaceChildren();
+        if (!sensors.length) container.textContent = HARDWARE_UNKNOWN;
+        sensors.forEach((sensor) => {
+          const row = document.createElement("span");
+          row.className = "hardware-sensor-value";
+          row.textContent = `${formatter(sensor)} · ${sensor.name || HARDWARE_UNKNOWN}`;
+          const source = document.createElement("small");
+          source.textContent = sensor.source || HARDWARE_UNKNOWN;
+          row.append(source);
+          container.append(row);
+        });
+      }
+
+      function renderHardwareDisks(data, overallState) {
+        const table = $("#hardwareDiskTable");
+        if (!table) return;
+        table.replaceChildren();
+        const disks = data && Array.isArray(data.disks) ? data.disks : null;
+        if (!disks) {
+          const row = document.createElement("tr");
+          row.className = "empty-row";
+          const empty = document.createElement("td");
+          empty.colSpan = 6;
+          empty.textContent = "磁碟資料未知";
+          row.append(empty);
+          table.append(row);
+          return;
+        }
+        if (!disks.length) {
+          const row = document.createElement("tr");
+          row.className = "empty-row";
+          const empty = document.createElement("td");
+          empty.colSpan = 6;
+          empty.textContent = "目前沒有磁碟紀錄";
+          row.append(empty);
+          table.append(row);
+          return;
+        }
+        disks.forEach((disk) => {
+          const row = document.createElement("tr");
+          cell(row, disk && disk.mount || HARDWARE_UNKNOWN);
+          cell(row, disk && disk.device || HARDWARE_UNKNOWN);
+          const percentageCell = (value, key) => {
+            const thresholdState = hardwareThresholdState(value, data && data.thresholds, key);
+            const stateName = ["stale", "unavailable", "unknown"].includes(overallState) ? overallState : thresholdState;
+            const node = document.createElement("td");
+            node.className = "numeric";
+            node.dataset.severity = stateName;
+            node.textContent = `${["warning", "critical", "stale"].includes(stateName) ? `${hardwareStatusIcon(stateName)} ${hardwareStatusLabel(stateName)} · ` : ""}${formatHardwarePercent(value)}`;
+            row.append(node);
+          };
+          percentageCell(disk && disk.used_percent, "disk_used_percent");
+          cell(row, formatHardwareGiB(disk && disk.available_bytes), "numeric");
+          percentageCell(disk && disk.inode_used_percent, "inode_used_percent");
+          const readonly = document.createElement("td");
+          const retained = ["stale", "unavailable"].includes(overallState);
+          if (disk && disk.read_only === true) {
+            readonly.className = "hardware-readonly";
+            readonly.textContent = `${retained ? "上次採樣 · " : ""}唯讀`;
+          } else if (disk && disk.read_only === false) {
+            readonly.className = retained ? "" : "hardware-writable";
+            readonly.textContent = `${retained ? "上次採樣 · " : ""}可寫入`;
+          } else {
+            readonly.textContent = HARDWARE_UNKNOWN;
+          }
+          row.append(readonly);
+          table.append(row);
+        });
+      }
+
+      function renderHardwarePath(id, points, firstTime, lastTime, sampleInterval) {
+        const path = document.getElementById(id);
+        if (!path) return;
+        const left = 32;
+        const right = 748;
+        const top = 20;
+        const bottom = 150;
+        const commands = [];
+        let previousTime = null;
+        const svgNamespace = "http://www.w3.org/2000/svg";
+        let markers = document.getElementById(`${id}Points`);
+        if (!markers) {
+          markers = document.createElementNS(svgNamespace, "g");
+          markers.id = `${id}Points`;
+          path.after(markers);
+        }
+        markers.replaceChildren();
+        points.forEach(({ time, value }) => {
+          const number = hardwareNumber(value);
+          if (number === null || !Number.isFinite(time)) {
+            previousTime = null;
+            return;
+          }
+          const x = left + (time - firstTime) / Math.max(1, lastTime - firstTime) * (right - left);
+          const y = bottom - (Math.max(0, Math.min(100, number)) / 100) * (bottom - top);
+          const connected = previousTime !== null && time > previousTime && time - previousTime <= sampleInterval * 1500;
+          commands.push(`${connected ? "L" : "M"}${x.toFixed(2)} ${y.toFixed(2)}`);
+          previousTime = time;
+          const marker = document.createElementNS(svgNamespace, "circle");
+          marker.setAttribute("cx", x.toFixed(2));
+          marker.setAttribute("cy", y.toFixed(2));
+          marker.setAttribute("r", "2");
+          marker.setAttribute("fill", id === "hardwareCpuPath" ? "var(--mint)" : "var(--blue)");
+          const title = document.createElementNS(svgNamespace, "title");
+          title.textContent = `${formatHardwareDate(time)} · ${formatHardwarePercent(number)}`;
+          marker.append(title);
+          markers.append(marker);
+        });
+        path.setAttribute("d", commands.join(" "));
+        return markers.childElementCount;
+      }
+
+      function renderHardwareHistory() {
+        const items = Array.isArray(hardwareState.historyItems) ? hardwareState.historyItems : [];
+        const times = items.map((item) => item && item.captured_at ? Date.parse(item.captured_at) : NaN);
+        const validTimes = times.filter(Number.isFinite);
+        const firstTime = Math.min(...validTimes);
+        const lastTime = Math.max(...validTimes);
+        const freshness = hardwareState.lastEnvelope && hardwareState.lastEnvelope.freshness;
+        const sampleInterval = hardwareNumber(freshness && freshness.sample_interval_seconds) || 60;
+        const cpuPoints = items.map((item, index) => ({ time: times[index], value: item && item.cpu_used_percent }));
+        const memoryPoints = items.map((item, index) => ({ time: times[index], value: item && item.memory && item.memory.used_percent }));
+        const validCount = renderHardwarePath("hardwareCpuPath", cpuPoints, firstTime, lastTime, sampleInterval)
+          + renderHardwarePath("hardwareMemoryPath", memoryPoints, firstTime, lastTime, sampleInterval);
+        const timeLabel = (time) => Number.isFinite(time) ? new Date(time).toLocaleTimeString("zh-TW", { timeZone: "Asia/Taipei", hour12: false }) : "";
+        setText("hardwareTrendStart", timeLabel(firstTime));
+        setText("hardwareTrendEnd", timeLabel(lastTime));
+        const chartEmpty = $("#hardwareTrendEmpty");
+        if (chartEmpty) {
+          chartEmpty.style.display = validCount ? "none" : "grid";
+          chartEmpty.textContent = !items.length ? "沒有可用的歷史採樣" : "歷史採樣值或時間未知";
+        }
+        const meta = hardwareState.historyMeta;
+        const count = meta && hardwareNumber(meta.count) !== null ? meta.count : items.length;
+        const skipped = meta && hardwareNumber(meta.skipped_invalid_records) !== null ? meta.skipped_invalid_records : 0;
+        const historyStatus = hardwareState.historyStatus === "ok" || hardwareState.historyStatus === "partial";
+        setText("hardwareTrendMeta", historyStatus ? `歷史紀錄 ${count} 筆${hardwareState.historyStatus === "partial" ? " · 部分資料" : ""}${skipped ? ` · 略過 ${skipped} 筆無效資料` : ""} · 台北時間；缺失採樣不連線` : items.length ? `歷史 API 暫時無法讀取 · 保留 ${items.length} 筆上次資料` : "歷史資料無法取得");
+      }
+
+      function renderHardwareAlerts(data, overallState) {
+        const list = $("#hardwareAlertList");
+        const countNode = $("#hardwareAlertCount");
+        const dataObject = hardwareObject(data);
+        const alerts = hardwareObject(dataObject && dataObject.alerts);
+        const entries = alerts ? Object.entries(alerts) : [];
+        const retained = ["stale", "unavailable"].includes(overallState);
+        if (countNode) countNode.textContent = alerts ? `${entries.length}${retained ? "（上次）" : ""}` : HARDWARE_UNKNOWN;
+        if (list) {
+          list.replaceChildren();
+          if (!alerts) {
+            const empty = document.createElement("li");
+            empty.className = "hardware-empty";
+            empty.textContent = "告警資料未知";
+            list.append(empty);
+          } else if (!entries.length) {
+            const empty = document.createElement("li");
+            empty.className = "hardware-empty";
+            empty.textContent = retained ? "上次採樣沒有告警；目前狀態未知" : "目前沒有告警";
+            list.append(empty);
+          } else {
+            entries.forEach(([key, value]) => {
+              const alert = hardwareObject(value) || {};
+              const severity = alert.severity === "critical" ? "critical" : alert.severity === "warning" ? "warning" : "unknown";
+              const row = document.createElement("li");
+              row.className = "hardware-alert-row";
+              row.dataset.severity = severity;
+              const icon = document.createElement("span");
+              icon.className = "hardware-severity-icon";
+              icon.setAttribute("aria-hidden", "true");
+              icon.textContent = severity === "critical" ? "!" : severity === "warning" ? "△" : "?";
+              const body = document.createElement("div");
+              const heading = document.createElement("strong");
+              heading.textContent = `${retained ? "上次採樣 · " : ""}${severity === "critical" ? "嚴重告警" : severity === "warning" ? "警告" : "未知告警"} · ${HARDWARE_KEY_LABELS[key] || key}`;
+              const message = document.createElement("span");
+              message.textContent = alert.message || HARDWARE_UNKNOWN;
+              body.append(heading, message);
+              row.append(icon, body);
+              list.append(row);
+            });
+          }
+        }
+
+        const thresholdList = $("#hardwareThresholdList");
+        const thresholds = hardwareObject(dataObject && dataObject.thresholds);
+        if (!thresholdList) return;
+        thresholdList.replaceChildren();
+        const thresholdEntries = thresholds ? Object.entries(thresholds) : [];
+        if (!thresholdEntries.length) {
+          const wrapper = document.createElement("div");
+          const term = document.createElement("dt");
+          term.textContent = "告警門檻";
+          const description = document.createElement("dd");
+          description.textContent = dataObject ? "沒有提供" : HARDWARE_UNKNOWN;
+          wrapper.append(term, description);
+          thresholdList.append(wrapper);
+          return;
+        }
+        thresholdEntries.forEach(([key, value]) => {
+          const threshold = document.createElement("div");
+          const term = document.createElement("dt");
+          term.textContent = HARDWARE_KEY_LABELS[key] || key;
+          const description = document.createElement("dd");
+          const pair = hardwareObject(value);
+          const comparison = key === "battery_percent" ? "≤" : "≥";
+          const unit = key.endsWith("percent") ? "%" : key.endsWith("_c") ? " °C" : key.endsWith("seconds") ? " 秒" : "";
+          description.textContent = pair ? `警告 ${comparison} ${pair.warning ?? HARDWARE_UNKNOWN}${unit} · 嚴重 ${comparison} ${pair.critical ?? HARDWARE_UNKNOWN}${unit}` : hardwareNumber(value) === null ? HARDWARE_UNKNOWN : `${value}${unit}`;
+          threshold.append(term, description);
+          thresholdList.append(threshold);
+        });
+      }
+
+      function renderHardwareEvents() {
+        const list = $("#hardwareEventList");
+        if (!list) return;
+        list.replaceChildren();
+        const items = Array.isArray(hardwareState.eventItems) ? hardwareState.eventItems : [];
+        const available = ["ok", "partial"].includes(hardwareState.eventsStatus);
+        setText("hardwareEventsMeta", available ? `事件紀錄 ${items.length} 筆${hardwareState.eventsStatus === "partial" ? " · 部分資料" : ""}` : items.length ? "事件 API 無法讀取 · 顯示上次資料" : "事件資料無法取得");
+        if (!items.length) {
+          const empty = document.createElement("li");
+          empty.className = "hardware-empty";
+          empty.textContent = available ? "目前沒有狀態變更事件" : "事件資料無法取得";
+          list.append(empty);
+          return;
+        }
+        let rendered = 0;
+        items.forEach((item) => {
+          const eventTime = formatHardwareDate(item && item.captured_at);
+          const messages = item && Array.isArray(item.events) ? item.events : [];
+          messages.forEach((eventMessage) => {
+            const row = document.createElement("li");
+            row.className = "hardware-event-row";
+            const time = document.createElement("strong");
+            time.textContent = eventTime;
+            const message = document.createElement("span");
+            message.textContent = String(eventMessage);
+            row.append(time, message);
+            list.append(row);
+            rendered += 1;
+          });
+        });
+        if (!rendered) {
+          const empty = document.createElement("li");
+          empty.className = "hardware-empty";
+          empty.textContent = "事件紀錄沒有可顯示的訊息";
+          list.append(empty);
+        }
+      }
+
+      function hardwareApiPath(endpoint, params = {}) {
+        const query = new URLSearchParams(params).toString();
+        const path = `/admin/dashboard/scout-monitor/api/v1/hardware-monitor/${endpoint}`;
+        return query ? `${path}?${query}` : path;
+      }
+
+      async function fetchHardwareEndpoint(endpoint, params, signal) {
+        const controller = new AbortController();
+        const abort = () => controller.abort();
+        signal.addEventListener("abort", abort, { once: true });
+        if (signal.aborted) controller.abort();
+        const timeout = window.setTimeout(abort, endpoint === "history" ? HARDWARE_HISTORY_TIMEOUT_MS : HARDWARE_REQUEST_TIMEOUT_MS);
+        try {
+          const response = await fetch(hardwareApiPath(endpoint, params), {
+            method: "GET",
+            headers: { Accept: "application/json" },
+            cache: "no-store",
+            signal: controller.signal,
+          });
+          let payload = null;
+          try { payload = await response.json(); } catch (error) { payload = null; }
+          return { response, payload };
+        } catch (error) {
+          if (signal.aborted) throw error;
+          return { response: null, payload: null, error };
+        } finally {
+          window.clearTimeout(timeout);
+          signal.removeEventListener("abort", abort);
+        }
+      }
+
+      function applyHardwareStatusResult(result) {
+        const payload = hardwareObject(result && result.payload);
+        hardwareState.lastResult = result;
+        // Keep the last sample and its original age when the connection fails.
+        if (payload && (hardwareObject(payload.data) || result.response && result.response.ok || payload.status === "stale")) {
+          hardwareState.lastEnvelope = payload;
+          hardwareState.lastData = hardwareObject(payload.data);
+          hardwareState.receivedAt = Date.now();
+        }
+        renderHardwareStatus();
+      }
+
+      function renderHardwareStatus() {
+        const effectiveState = hardwareStateFromResponse(hardwareState.lastResult);
+        const data = hardwareState.lastData;
+        const payload = hardwareState.lastResult && hardwareState.lastResult.payload;
+        hardwareState.effectiveState = effectiveState;
+        setHardwareStatusVisual(effectiveState, data, hardwareState.lastEnvelope);
+        renderHardwareCards(data, effectiveState);
+        renderHardwareDisks(data, effectiveState);
+        renderHardwareAlerts(data, effectiveState);
+        renderHardwareSourceErrors(data);
+        renderHardwareNotice(effectiveState, payload);
+        renderHardwareInventory(data, effectiveState);
+      }
+
+      function updateHardwareAge() {
+        if (!hardwareState.active || !hardwareState.lastResult) return;
+        setText("hardwareDataAge", formatHardwareAge(hardwareDataAge()));
+        if (hardwareStateFromResponse(hardwareState.lastResult) !== hardwareState.effectiveState) renderHardwareStatus();
+      }
+
+      function applyHardwareHistoryResult(result) {
+        const payload = hardwareObject(result && result.payload);
+        hardwareState.historyStatus = "unavailable";
+        if (result && result.response && result.response.ok && payload && ["ok", "partial"].includes(payload.status) && Array.isArray(payload.items)) {
+          hardwareState.historyItems = payload.items;
+          hardwareState.historyMeta = hardwareObject(payload.meta);
+          hardwareState.historyStatus = payload.status || "unavailable";
+        }
+        renderHardwareHistory();
+      }
+
+      function applyHardwareEventsResult(result) {
+        const payload = hardwareObject(result && result.payload);
+        hardwareState.eventsStatus = "unavailable";
+        if (result && result.response && result.response.ok && payload && ["ok", "partial"].includes(payload.status) && Array.isArray(payload.items)) {
+          hardwareState.eventItems = payload.items;
+          hardwareState.eventsMeta = hardwareObject(payload.meta);
+          hardwareState.eventsStatus = payload.status || "unavailable";
+        }
+        renderHardwareEvents();
+      }
+
+      async function refreshHardwareMonitor() {
+        if (hardwareState.requestInFlight || !hardwareState.active) return;
+        if (hardwareState.timer) window.clearTimeout(hardwareState.timer);
+        const startedAt = Date.now();
+        hardwareState.requestInFlight = true;
+        const controller = new AbortController();
+        hardwareState.controller = controller;
+        $("#hardwareRefreshButton").disabled = true;
+        $("#hardwareRefreshButton").setAttribute("aria-busy", "true");
+        if (!hardwareState.lastResult) {
+          setHardwareStatusVisual("loading", null, null);
+          renderHardwareNotice("loading", null, "正在讀取 Scout 硬體資料…");
+        }
+        try {
+          await Promise.all([
+            fetchHardwareEndpoint("status", {}, controller.signal).then((result) => {
+              if (!controller.signal.aborted && hardwareState.active) applyHardwareStatusResult(result);
+            }),
+            fetchHardwareEndpoint("history", { limit: 60 }, controller.signal).then((result) => {
+              if (!controller.signal.aborted && hardwareState.active) applyHardwareHistoryResult(result);
+            }),
+            fetchHardwareEndpoint("events", { limit: 50 }, controller.signal).then((result) => {
+              if (!controller.signal.aborted && hardwareState.active) applyHardwareEventsResult(result);
+            }),
+          ]);
+        } catch (error) {
+          if (!error || error.name !== "AbortError") applyHardwareStatusResult({ response: null, payload: null, error });
+        } finally {
+          if (hardwareState.controller === controller) {
+            hardwareState.controller = null;
+            hardwareState.requestInFlight = false;
+            $("#hardwareRefreshButton").disabled = false;
+            $("#hardwareRefreshButton").removeAttribute("aria-busy");
+            if (hardwareState.active) scheduleHardwarePolling(Math.max(0, HARDWARE_REFRESH_INTERVAL_MS - (Date.now() - startedAt)));
+          }
+        }
+      }
+
+      function scheduleHardwarePolling(delay = HARDWARE_REFRESH_INTERVAL_MS) {
+        if (hardwareState.timer) window.clearTimeout(hardwareState.timer);
+        if (hardwareState.active) hardwareState.timer = window.setTimeout(refreshHardwareMonitor, delay);
+      }
+
+      function setCardState(cardId, stateName) {
+        const node = document.getElementById(cardId);
+        if (node) node.dataset.state = stateName;
+      }
+
+      function cell(row, value, className = "") {
+        const node = document.createElement("td");
+        node.className = className;
+        node.textContent = value;
+        row.append(node);
+      }
+
+      $("#hardwareRefreshButton").addEventListener("click", refreshHardwareMonitor);
+      function stopHardwarePolling() {
+        hardwareState.active = false;
+        if (hardwareState.timer) window.clearTimeout(hardwareState.timer);
+        if (hardwareState.ageTimer) window.clearInterval(hardwareState.ageTimer);
+        if (hardwareState.controller) hardwareState.controller.abort();
+        hardwareState.controller = null;
+        hardwareState.requestInFlight = false;
+      }
+      function startHardwarePolling() {
+        hardwareState.active = true;
+        hardwareState.ageTimer = window.setInterval(updateHardwareAge, 1000);
+        refreshHardwareMonitor();
+      }
+      window.addEventListener("pagehide", stopHardwarePolling);
+      window.addEventListener("pageshow", () => { if (!hardwareState.active) startHardwarePolling(); });
+      startHardwarePolling();
+    </script>
+  </body>
+</html>

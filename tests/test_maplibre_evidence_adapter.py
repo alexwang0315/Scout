@@ -72,8 +72,21 @@ const terrainImageLayer = adapter.normalizeRasterLayer({
   candidate_only: true,
   runtime_safety_truth: false
 });
+const cwaImageLayer = adapter.normalizeRasterLayer({
+  layer_id: "cwa-weather-radar",
+  control_layer_id: "cwa-weather",
+  source_id: "radar.integrated.taiwan.transparent.fixture",
+  source_type: "image",
+  image_url: "/admin/pretrip/projects/demo/weather-imagery/radar.fixture",
+  image_coordinates: [[120, 25.5], [122, 25.5], [122, 21.5], [120, 21.5]],
+  opacity: 0.62,
+  visible: true,
+  render_position: "overlay",
+  candidate_only: true,
+  runtime_safety_truth: false
+});
 const rasterStyle = adapter.createEvidenceStyle(featureCollection, {
-  rasterLayers: [rasterLayer, terrainImageLayer]
+  rasterLayers: [rasterLayer, terrainImageLayer, cwaImageLayer]
 });
 const result = {
   normalized: [
@@ -106,17 +119,21 @@ const result = {
   },
   rasterLayer,
   terrainImageLayer,
+  cwaImageLayer,
   rasterStateTransitions: {
     hiddenLoaded: adapter.rasterLayerEventPatch({visible: false, error_count: 0}, "source_loaded"),
     visibleLoaded: adapter.rasterLayerEventPatch({visible: true, error_count: 0}, "source_loaded"),
     hiddenError: adapter.rasterLayerEventPatch({visible: false, error_count: 2}, "tile_error"),
-    visibleError: adapter.rasterLayerEventPatch({visible: true, error_count: 2}, "tile_error")
+    visibleError: adapter.rasterLayerEventPatch({visible: true, error_count: 2}, "tile_error"),
+    settledAfterError: adapter.rasterLayerEventPatch({visible: true, error_count: 1}, "source_loaded")
   },
   rasterStyle: {
     source: rasterStyle.sources[rasterLayer.map_source_id],
     layer: rasterStyle.layers.find(layer => layer.id === rasterLayer.map_layer_id),
     terrainSource: rasterStyle.sources[terrainImageLayer.map_source_id],
     terrainLayer: rasterStyle.layers.find(layer => layer.id === terrainImageLayer.map_layer_id),
+    cwaSource: rasterStyle.sources[cwaImageLayer.map_source_id],
+    cwaLayer: rasterStyle.layers.find(layer => layer.id === cwaImageLayer.map_layer_id),
     layerIds: rasterStyle.layers.map(layer => layer.id)
   },
   collectionBounds: adapter.featureCollectionBounds(featureCollection)
@@ -159,6 +176,16 @@ try {
   result.rasterInvariantError = null;
 } catch (error) {
   result.rasterInvariantError = error.message;
+}
+try {
+  adapter.normalizeRasterLayer({
+    layer_id: "invalid-position",
+    tiles: ["/admin/tiles/{z}/{x}/{y}.png"],
+    render_position: "floating"
+  });
+  result.rasterPositionError = null;
+} catch (error) {
+  result.rasterPositionError = error.message;
 }
 process.stdout.write(JSON.stringify(result));
 """
@@ -250,9 +277,14 @@ def test_geojson_adapter_builds_bounded_sources_and_layers() -> None:
     assert result["style"]["sourceFeatureCount"] == 1
     assert result["style"]["layerIds"] == [
         "scout-evidence-background",
+        "scout-evidence-osm-fill",
+        "scout-evidence-osm-line-casing",
+        "scout-evidence-osm-line",
+        "scout-evidence-osm-point",
         "scout-evidence-fill",
         "scout-evidence-line",
         "scout-evidence-point",
+        "scout-evidence-overlay-fill",
     ]
     assert result["style"]["evidenceColors"] | {
         "qgis-route": "#e00067",
@@ -279,6 +311,7 @@ def test_raster_adapter_is_bounded_candidate_only_and_renderer_ordered() -> None
     assert raster["adds_source_resolution"] is False
     assert result["rasterUrlError"] == "unsupported_raster_tile_url"
     assert result["rasterInvariantError"] == "candidate_runtime_truth_conflict"
+    assert result["rasterPositionError"] == "invalid_raster_render_position"
 
     terrain = result["terrainImageLayer"]
     assert terrain["layer_id"] == "terrain-slope-shading"
@@ -294,6 +327,12 @@ def test_raster_adapter_is_bounded_candidate_only_and_renderer_ordered() -> None
     assert terrain["candidate_only"] is True
     assert terrain["runtime_safety_truth"] is False
 
+    cwa = result["cwaImageLayer"]
+    assert cwa["control_layer_id"] == "cwa-weather"
+    assert cwa["render_position"] == "overlay"
+    assert cwa["candidate_only"] is True
+    assert cwa["runtime_safety_truth"] is False
+
     source = result["rasterStyle"]["source"]
     assert source["type"] == "raster"
     assert source["tileSize"] == 256
@@ -308,12 +347,26 @@ def test_raster_adapter_is_bounded_candidate_only_and_renderer_ordered() -> None
     terrain_layer = result["rasterStyle"]["terrainLayer"]
     assert terrain_layer["metadata"]["scout:control_layer_id"] == "terrain"
     assert terrain_layer["paint"]["raster-resampling"] == "nearest"
+    cwa_source = result["rasterStyle"]["cwaSource"]
+    assert cwa_source["type"] == "image"
+    cwa_layer = result["rasterStyle"]["cwaLayer"]
+    assert cwa_layer["metadata"]["scout:render_position"] == "overlay"
     layer_ids = result["rasterStyle"]["layerIds"]
     assert layer_ids.index(raster["map_layer_id"]) < layer_ids.index(
         "scout-evidence-fill"
     )
+    assert layer_ids.index("scout-evidence-fill") < layer_ids.index(
+        cwa["map_layer_id"]
+    )
+    assert layer_ids.index(cwa["map_layer_id"]) < layer_ids.index(
+        "scout-evidence-line"
+    )
+    assert layer_ids.index(cwa["map_layer_id"]) < layer_ids.index(
+        "scout-evidence-point"
+    )
     assert result["rasterStateTransitions"] == {
         "hiddenLoaded": None,
+        "settledAfterError": None,
         "visibleLoaded": {"state": "available", "reason": "source_loaded"},
         "hiddenError": None,
         "visibleError": {
@@ -327,6 +380,14 @@ def test_raster_adapter_is_bounded_candidate_only_and_renderer_ordered() -> None
 def test_renderer_contract_includes_hover_labels_grouped_layers_and_box_zoom() -> None:
     source = SCRIPT.read_text(encoding="utf-8")
 
+    assert 'osmFill: "scout-evidence-osm-fill"' in source
+    assert 'osmLineCasing: "scout-evidence-osm-line-casing"' in source
+    assert 'osmLine: "scout-evidence-osm-line"' in source
+    assert 'osmPoint: "scout-evidence-osm-point"' in source
+    assert "function osmFillColorExpression()" in source
+    assert "function osmLineCoreColorExpression()" in source
+    assert '["==", ["get", "layer_id"], "osm"]' in source
+    assert '["!=", ["get", "layer_id"], "osm"]' in source
     assert 'className = "scout-maplibre-selection-label"' in source
     assert "onFeatureHover = null" in source
     assert "onFeatureLeave = null" in source
@@ -337,3 +398,6 @@ def test_renderer_contract_includes_hover_labels_grouped_layers_and_box_zoom() -
     assert "finishRectangleZoom(event)" in source
     assert 'this.map.fitBounds([[west, south], [east, north]]' in source
     assert "layer.control_layer_id === requestedLayerId" in source
+    assert "setRasterLayers(definitions = [])" in source
+    assert 'overlayFill: "scout-evidence-overlay-fill"' in source
+    assert "EVIDENCE_LAYER_IDS.overlayFill" in source

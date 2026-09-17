@@ -2,7 +2,10 @@ import hashlib
 import json
 from pathlib import Path
 
+import pytest
+
 from pretrip_reference_segment_timing import (
+    ReferenceTimingNode,
     build_reference_segment_timing,
     write_reference_segment_timing,
 )
@@ -154,6 +157,32 @@ def test_reference_segment_timing_builder_uses_aggregate_only_contract(tmp_path:
     assert project["reference_segment_timing_ref"] == "outputs/reference_segment_timing.json"
     assert project["reference_segment_timing_segment_count"] == 8
     assert project["reference_segment_timing_measurement_count"] == 8
+
+
+def test_reference_segment_timing_rejects_ambiguous_route_axes(tmp_path: Path) -> None:
+    node = ReferenceTimingNode(
+        key="start",
+        label="Start",
+        lat=23.0,
+        lon=121.0,
+        route_distance_m=0.0,
+        source_kind="checkpoint",
+        source_id="cp.start",
+        priority=3,
+    )
+    with pytest.raises(ValueError, match="ambiguous"):
+        build_reference_segment_timing(
+            tmp_path,
+            target_segments=(),
+            timing_nodes=[node, node],
+        )
+    with pytest.raises(ValueError, match="at least two"):
+        build_reference_segment_timing(tmp_path, timing_nodes=[node])
+    with pytest.raises(ValueError, match="explicit target segments"):
+        build_reference_segment_timing(
+            tmp_path,
+            target_checkpoint_coordinates={"start": (23.0, 121.0)},
+        )
 
 
 def test_chilai_reference_segment_timing_fixture_contract() -> None:

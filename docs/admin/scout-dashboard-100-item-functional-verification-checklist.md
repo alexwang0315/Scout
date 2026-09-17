@@ -7,7 +7,7 @@
 空狀態、跨頁一致性，以及操作後不應發生的副作用。
 
 - 目標：100 個可執行、可判定、可留證據的主檢查項目。
-- 目前版本：38 / 100。
+- 目前版本：50 / 100。
 - 維護狀態：持續記錄中。
 - 起始日期：2026-07-28。
 - 維護方式：本對話串中新增或修改的檢查項目，持續追加到本文件。
@@ -50,15 +50,19 @@
 ## Dashboard Diagnostic UI
 
 Dashboard 已在 `System → Diagnostic`（位於 Settings 之後）放入目前的
-`DASH-001～DASH-038`。
+`DASH-001～DASH-050`。
 
 - 尚未測試：灰燈。
 - 測試中：黃燈與 `測試中`。
 - 測試通過：綠燈與 `測試通過`。
+- 測試提醒：黃燈，缺少人工 review、執行證據或 unresolved evidence 保留 UNKNOWN。
 - 測試失敗：紅燈與 `測試失敗`，並顯示失敗原因。
 - 每題都有獨立的 `重新測試`。
-- 頁首 `Diag all` 依序執行 38 題，避免大型 project projection API
+- 頁首 `Diag all` 依序執行 50 題，避免大型 project projection API
   同時被大量呼叫。
+- `Navigation 體檢` 獨立執行 `DASH-025`、`DASH-038～DASH-043` 七題，不重跑其他分類。
+  結果綁定目前 project、TRH selection 與 corridor band；切換後重測，並防止批次／單題重測
+  互相重疊。這個唯讀體檢不生成新 TRH/R4，也不保存 review。
 
 Diagnostic UI 是即時、read-only 的快速診斷層。它只使用 UI contract、
 same-origin GET API 與既有 artifacts，不會自動執行 connected preparation、
@@ -75,16 +79,17 @@ MQTT publish、Emergency send 或硬體控制。需要合成資料、私資料�
 |---|---|
 | 全域與 Overview | DASH-001、DASH-002、DASH-011 |
 | Plan Trip 與 Workspace | DASH-003、DASH-007、DASH-012～DASH-014 |
-| Map & Evidence | DASH-004～DASH-006、DASH-016、DASH-017、DASH-026～DASH-030、DASH-037～DASH-038 |
-| Exploring for Six Axis | DASH-008、DASH-018～DASH-025、DASH-031～DASH-036 |
-| Assistant、System 與 Safety / Emergency | DASH-009、DASH-010、DASH-015 |
+| Map & Evidence | DASH-004～DASH-006、DASH-016、DASH-017、DASH-026～DASH-030、DASH-037、DASH-044、DASH-049 |
+| Navigation | DASH-025、DASH-038～DASH-043 |
+| Exploring for Six Axis | DASH-008、DASH-018～DASH-024、DASH-031～DASH-036 |
+| Assistant、System 與 Safety / Emergency | DASH-009、DASH-010、DASH-015、DASH-050 |
 
 本版刻意不收錄未接線的 preview、placeholder 或未來規劃。已實作的
 candidate/shadow prototype 可收錄，但必須把 no-authority 邊界當成必要
 通過條件；只有具備可操作 UI、API／artifact 與明確 PASS／FAIL 證據的功能
 才會成為正式檢查項目。
 
-## 目前可驗收的 38 項功能
+## 目前已登錄的 50 項功能
 
 ### DASH-001 Dashboard 啟動、入口與必要 API 可用
 
@@ -178,13 +183,13 @@ candidate/shadow prototype 可收錄，但必須把 no-authority 邊界當成必
 - 缺陷編號：
 - 備註：
 
-### DASH-004 32 層圖層契約、來源與幾何內容
+### DASH-004 33 層契約與各頁面圖層控制
 
 - 頁面／範圍：Map、Weather、Debug Surface。
 - 優先級：P0。
 - 契約基準：`scout_layer_contract.py`。
 
-系統 canonical layer contract 共 32 層：
+系統 canonical layer contract 共 33 層：
 
 1. `imagery`
 2. `rudy`
@@ -218,13 +223,14 @@ candidate/shadow prototype 可收錄，但必須把 no-authority 邊界當成必
 30. `boss-points`
 31. `events`
 32. `weather-api`
+33. `historical-map`（僅行前；此清單編號非繪製 rank）
 
 檢查步驟：
 
 1. 先執行 deterministic layer-contract verifier，確認 ID、順序、surface 與
    render group 契約。
-2. Dashboard／Pre-trip／Debug 應檢查 31 層；`completed-track` 只能出現在
-   After-action，因此在這三個 surface 不得當成 pre-trip 路線真值。
+2. Pre-trip 檢查 32 層、Debug 31 層、After-action 32 層；`historical-map`
+   僅在 Pre-trip 提供，`completed-track` 只能出現在 After-action。
 3. 逐層檢查控制入口、來源狀態、artifact/source ref、資料筆數或 tile 請求。
 4. 逐層開關，確認實際 render group、圖磚或約定的點／線／面幾何同步顯示與隱藏。
 5. 檢查 z-order：底圖在下、terrain/context 居中、route/risk/checkpoint 等
@@ -235,7 +241,7 @@ candidate/shadow prototype 可收錄，但必須把 no-authority 邊界當成必
 
 通過條件：
 
-- 契約驗證為 PASS，32 個 canonical ID 無缺少、重複或錯序。
+- 契約驗證為 PASS，33 個 canonical ID 無缺少、重複或錯序。
 - 各 surface 的圖層數與擁有權正確；Dashboard／Pre-trip 不誤用
   `completed-track`。
 - 每層都能指出真實來源與約定的圖磚／點／線／面內容；空 layer group
@@ -713,7 +719,7 @@ candidate/shadow prototype 可收錄，但必須把 no-authority 邊界當成必
 - 缺陷編號：
 - 備註：
 
-### DASH-020 Pace Dashboard 資訊與 read-only 控制
+### DASH-020 Pace CP 上下文、地圖與來源邊界
 
 - 頁面／範圍：Exploring for Six Axis → Pace Fit → Pace Dashboard。
 - 頁面分類：Exploring for Six Axis。
@@ -721,9 +727,9 @@ candidate/shadow prototype 可收錄，但必須把 no-authority 邊界當成必
 
 檢查步驟：
 
-1. 核對 route、current CP、leave-by、team pace 與 boundary status。
-2. 檢查 Pace Controls、Current CP Status、Next Segment Risk、
-   Risk Budget Calculator、CP Timeline 與 Pace Output。
+1. 核對選定 workspace、current CP、來源、路線位置與 candidate boundary。
+2. 檢查 CP inspector、CP Timeline 與 synchronized map；沒有即時隊伍速度或
+   已評估風險時必須明確標示，不能要求舊版 Next Segment Risk 區塊。
 3. 核對 Pace Evidence、Artifact Metadata、Residual Risk、
    Pace Object Preview 與 synchronized map。
 4. 操作現有 pace parameters，確認標示為 read-only parameter，而非假按鈕。
@@ -846,13 +852,13 @@ candidate/shadow prototype 可收錄，但必須把 no-authority 邊界當成必
 檢查步驟：
 
 1. 核對 Route Fingerprint 七條 lane、共同里程軸與目前資料 coverage。
-2. 切換 Structure、Demand、Reversibility、Evidence reading mode。
-3. 切換 terrain、slow passage、risk passage、reversibility、evidence map lens。
+2. 切換 Structure、Demand、Reversibility、Time Window、Evidence 五個 reading mode。
+3. 切換 structure、terrain、slow passage、risk passage、reversibility、Time Window、evidence 七個 map lens。
 4. 選取一個 Segment，核對 fingerprint、map、legend 與 Segment Microscope。
 5. 檢查 retreat-dependency view、candidate graph 與 missing architecture 狀態。
 6. 在行動寬度測試 Spine／Map／Segment 切換與 sticky inspector。
 7. 在 390×844 從 mode bar 初始位置以觸控、滑鼠與鍵盤操作局部水平捲動，
-   確認四個 reading modes 均可到達且不造成頁面級水平溢出。
+   確認五個 reading modes 均可到達且不造成頁面級水平溢出。
 
 通過條件：
 
@@ -862,8 +868,8 @@ candidate/shadow prototype 可收錄，但必須把 no-authority 邊界當成必
   不捏造 branch、alternative 或 reversibility。
 - Retreat view 只顯示有來源的 candidate edges。
 - 頁面只使用 aggregate candidate evidence，不暴露 raw GPX、私人健康資料或精確時間。
-- Architecture mode bar 允許元件內 `overflow-x: auto`；不要求四個 mode 在行動版
-  首屏同時完整顯示，但 Structure、Demand、Reversibility、Evidence 必須可透過
+- Architecture mode bar 允許元件內 `overflow-x: auto`；不要求五個 mode 在行動版
+  首屏同時完整顯示，但 Structure、Demand、Reversibility、Time Window、Evidence 必須可透過
   觸控／滑鼠水平捲動與鍵盤焦點到達。此例外不得形成 body／頁面級水平溢出。
 
 證據／結果：
@@ -876,7 +882,7 @@ candidate/shadow prototype 可收錄，但必須把 no-authority 邊界當成必
 ### DASH-025 Navigation Terrain Intelligence 與 Rudy+TW map
 
 - 頁面／範圍：Exploring for Six Axis → Navigation。
-- 頁面分類：Exploring for Six Axis。
+- 頁面分類：Navigation。
 - 優先級：P0。
 
 檢查步驟：
@@ -910,6 +916,21 @@ candidate/shadow prototype 可收錄，但必須把 no-authority 邊界當成必
 - 備註：
 
 ### DASH-026 所有 Dashboard 地圖 evidence hover hint 一致性
+
+**2026-09-12 現行範圍修訂（026–029 共用）：** 使用者要求補齊漏測，原九類入口
+須展開為 40 個實際 renderer／domain／lens 分支，另加 Debug 的 SVG／MapLibre 及目前
+Ref. GPX 候選的每個 on-trail 每日圖。不得只檢查 registry 名稱或隱藏 SVG，便
+宣稱 MapLibre 已通過。每個分支須操作真正顯示的 evidence／控制，核對目前
+workspace、最終 iframe document／URL／bridge，並確認清理後沒有殘留地圖或
+初始化工作。每日資料缺失、未知／重複分支、缺控制、無法採證或清理失敗均不算通過。
+互動檢查維持 cache-only；Rudy 未命中後的 native 補載由核准的 D037 驗證。
+這個分母不包含九個 Planned 比較圖實例及 Legacy Emergency 示意原型；使用者
+2026-09-13 已裁決分別驗向量比較與示意用途，另以用途矩陣逐例驗證，不當成 Rudy
+native 圖磚案例。完整盤點見 `docs/specs/scout-dashboard-map-coverage-inventory-20260912.md`。
+
+下列 2026-08-03 的 9/9 PASS 為歷史紀錄，不能代替上述擴充範圍的現行驗證。
+D027 的使用者仲裁（2026-09-13）：任意方向框選放大，減號縮小。以下步驟依
+此決定更新；舊 9/9 PASS 保留為歷史，不能充作新版本跨頁操作已一致的證據。
 
 - 頁面／範圍：Overview、LBS、Permission、Map、Weather、Navigation、
   Safety / Emergency、Architecture、Pace Fit 的全部 9 個 Dashboard 地圖實例。
@@ -953,14 +974,14 @@ candidate/shadow prototype 可收錄，但必須把 no-authority 邊界當成必
 
 1. 在每張圖啟用 Box／矩形縮放模式。
 2. 由左上往右下拖曳一個矩形，確認局部放大且選取框在拖曳時可見。
-3. 由右下往左上拖曳矩形，確認支援局部縮小。
+3. 由右下往左上及另外兩個方向拖曳矩形，皆確認局部放大；按減號確認縮小。
 4. 聚焦地圖後依序按方向鍵，確認四個方向均能平移。
 5. 使用 `B`、`P` 與 Escape 切換或取消操作，確認不影響頁面捲動與表單。
 6. 在每張圖上轉動滑鼠滾輪，確認地圖 zoom 不變且頁面可正常捲動。
 
 通過條件：
 
-- Registry 內全部 9 張圖都能完成矩形放大與反向矩形縮小。
+- 現行矩陣每個適用地圖都能任意方向矩形放大，以減號縮小。
 - 四個方向鍵都會改變地圖位置，且只有地圖取得操作焦點時攔截按鍵。
 - 取消後不留下選取框、拖曳狀態或錯誤游標。
 - 全部地圖使用一致的快捷鍵與操作語意。
@@ -976,6 +997,12 @@ candidate/shadow prototype 可收錄，但必須把 no-authority 邊界當成必
 - 備註：選取後均以 Fit 還原並切回 Pan。
 
 ### DASH-028 所有 Dashboard 地圖圖磚、向量與單圖例外政策
+
+2026-09-13 仲裁：ready 必須具有完整、可見且非裝飾的向量證據；loading／preparing
+可以尚無向量，但必須以真實狀態與可見文字如實標示，不能冒稱 ready。failed、
+unavailable、缺資料或假 ready 不得透過 loading 例外通過。Navigation ready 的
+terrain／prior 保留原本不載入 Rudy 的來源界線；observed 與三個 domain 的 loading
+按實際 renderer 逐例驗證。底下 2026-08-03 的 9/9 為歷史證據，不代替擴充矩陣。
 
 - 頁面／範圍：Overview、LBS、Permission、Map、Weather、Navigation、
   Safety / Emergency、Architecture、Pace Fit 的全部 9 個 Dashboard 地圖實例。
@@ -1274,7 +1301,38 @@ candidate/shadow prototype 可收錄，但必須把 no-authority 邊界當成必
   network 攔截結果為 0 POST。
 - 缺陷編號：
 
-### DASH-037 Navigation、Architecture、Weather 動態圖磚倍率切換
+### DASH-037 所有 Rudy 地圖原生圖磚、缺圖與恢復
+
+**2026-09-12 使用者核准修訂（現行）：** D037-A 改驗實際原生圖磚與可見範圍，
+移除綁定旧倍率公式字串的斷言；D037-B 保留離線快取測試，新增同源、同 workspace
+的 `native=1&exact=1` Rudy GET，允許未命中時補快取，不使用 forced refresh。
+CWA 仍 cache-only，禁止觸發準備／重建、候選批准或行程寫入。
+
+現行 Rudy 矩陣包含 36 組固定入口／renderer／domain／lens，加上每個既有
+on-trail day；本次指定 workspace 有九日，因此為 45 組、450 個階段。每日資料
+缺失不可當零項適用。Architecture 包含七個 lens；Navigation 三個 domain 的
+loading 分別列測，ready 則僅 observed 使用 Rudy，terrain／prior 的純向量互動
+由 026–029 驗證。來源、DOM 或實際按鈕多出未列分支時，不可直接回報全量通過。
+每組依序驗首次載入、重載、Fit、第一次 `+`、原生 Z20、實際最大倍率、Z20 平移、
+快取命中、真實快取未命中、同一視角恢復。首次 `+` 必須提升原生層級；每張所需
+图磚的 URL、HTTP、來源、解碼尺寸及 renderer generation 須一致，且全部成功。
+最大倍率須實測，不能停在第一次取得 Z20；來源像素不得被額外放大而仍報成功。
+Navigation 3D 必須核對 renderer 未截斷的實際混合層級 cohort。
+
+停止更新後須觀測真正 404，保留上一組完整圖磚並明示未完成；恢復更新後須證明
+同視角、同缺失 tile path 成功，不能先預填快取再宣稱恢復。每組的 cleanup 收據
+同樣必須通過。任何 FAIL／WARN／SKIP／未執行／無法確認均不能算入成功分子。
+本節現行狀態為 **未完成**；隔離的既有 renderer 矩陣與真實 Chrome 操作分別留證，
+局部 replay、source assertions 或一個功能頁面的成功不能代替全矩陣。
+
+以下保留舊政策與實驗的日期、結果，僅供追溯；不再作為現行一般 Rudy 載入政策。
+
+**2026-09-07 核准修訂（歷史）：** 以下舊版實際倍率實驗保留為歷史紀錄，當時 Weather 的
+現行政策優先適用：預設 `cache_only=1`，不含 `native`／`refresh`；只有明確
+Refresh 才以 `native=1&refresh=1` 請求遠端，且移除 `cache_only`。Diagnostic
+僅檢查程式契約及倍率計算，不按 Refresh、不把契約 PASS 當作下載成功。
+隔離測試執行真正的 `rasterTileTemplate` 以核對兩種模式，無網路請求。
+
 
 - 頁面／範圍：Exploring for Six Axis → Navigation、Architecture、Weather。
 - 頁面分類：Map & Evidence。
@@ -1328,8 +1386,13 @@ candidate/shadow prototype 可收錄，但必須把 no-authority 邊界當成必
 
 ### DASH-038 Navigation MapLibre 2D/3D 鏡頭持久化
 
+- 2026-09-13 補漏狀態：原 deterministic camera helper 回放不能代替以下實際頁面
+  控制操作。已加入指定 workspace 的 26 階段隔離頁面 probe，涵蓋實際 2D／3D／Split、
+  evidence domain、lens、候選與垂直誇張造成的重建，以及 Fit／Reset 的獨立性。
+  必須保存每階段 renderer、source、camera 與清理收據；未就緒或缺少可測資料
+  保留未驗證，不能沿用下方 2026-08-24 的 PASS 當成本輪結果。
 - 頁面／範圍：Exploring for Six Axis → Navigation。
-- 頁面分類：Map & Evidence。
+- 頁面分類：Navigation。
 - 優先級：P1。
 - 對應 fail case：`DASH-MAP-REG-003`。
 
@@ -1338,39 +1401,141 @@ candidate/shadow prototype 可收錄，但必須把 no-authority 邊界當成必
 1. 開啟 Split，對 2D 與 3D 分別按 `Fit`／`Reset`，記錄兩邊 center、zoom、
    pitch 與 bearing。
 2. 2D、3D 各按一次 `+`，確認兩邊倍率各自增加，另一張圖的 zoom 不變。
-3. 拖曳或以方向鍵移動 3D；確認 2D/3D center 同步，但 2D 與 3D zoom 都維持
-   操作前數值。
-4. 依序觸發候選點、lens、Evidence、垂直誇張或 2D／3D／Split 切換所造成的
+3. 拖曳或以方向鍵移動 3D；確認 2D 的 center 與 zoom 都維持操作前數值。
+4. 依序觸發 lens、Evidence、垂直誇張或 2D／3D／Split 切換所造成的
    Dashboard rerender，等待新 MapLibre instances ready。
-5. 比較重建前後 camera；center 必須一致，2D 與 3D 的 zoom、pitch、bearing
-   必須各自恢復，不得回到 Fit。
-6. 在 3D-only 移動後切到 2D-only；確認 2D 採用最新共享 center，同時保留
-   先前的 2D zoom。
+5. 比較重建前後 camera；2D 與 3D 的 center、zoom、pitch、bearing 必須各自
+   恢復，不得回到 Fit。
+6. 在 3D-only 移動後切到 2D-only；確認 2D 保留先前的 center 與 zoom。
 7. 明確按 2D `Fit`，確認只重設 2D；再按 3D `Reset`，確認只重設 3D。
 8. 以不同 route projection fingerprint 執行 deterministic probe；舊 camera
    必須失效並回傳未命中，不能跨路線沿用。
+9. 明確點選候選，核對地圖定位至該候選；2D／3D 目標倍率分別至少 15／16，
+   但不得超出原生来源上限，也不降低已較高的有效倍率。pitch／bearing 保留。
+   以定位後鏡頭為新基準再切 lens，驗證此例外不擴及一般重绘。
 
 通過條件：
 
-- 契約維持「中心同步、尺度獨立」；3D 移動不會把 2D zoom 拉回 Fit。
-- 候選點與所有 Navigation 顯示切換造成的 rerender 都不會遺失有效 camera。
-- 只有明確 Fit／Reset 可重設對應 map，且不連帶重設另一個 mode 的 zoom。
+- 契約維持「中心、尺度、俯角與方位各自獨立」；3D 移動不會改寫 2D camera。
+- 一般 Navigation 顯示切換造成的 rerender 不會遺失有效 camera。
+- 明確點選候選的定位是使用者 2026-09-13 核准的鏡頭移動例外，必須核對目標
+  候選與可用原生倍率；不能用此例外放過其他非預期移動。
+- 明確 Fit／Reset 只重設對應 map，不連帶重設另一個 mode 的 camera。
 - route／DEM scope 改變時 fail closed，不沿用舊 camera。
 - Diagnostic probe 不發送 POST、不寫 workspace，也不建立 terrain 或 safety truth。
 
 證據／結果：
 
 - 結果：`PASS`（2026-08-24，Chromium，真實 Dashboard runtime）。
-- Deterministic 證據：2D Z13.75 與 3D Z17 各自保存；3D 最新 center 同步到
-  2D；變更 projection fingerprint 後 stored camera 未命中。
-- 瀏覽器證據：Split 內 2D `11.745→12.745`、3D `16→17`；3D 移動、候選點、
-  lens、Evidence、垂直誇張與 view rerender 後倍率未回 Fit。3D-only 平移後切回
-  2D，center 相同且 2D 保留 Z12.745；console error、失敗 response 與 POST 都是 0。
+- Deterministic 證據：2D 與 3D 的 center、zoom、pitch、bearing 各自保存；
+  變更 projection fingerprint 後 stored camera 未命中。
+- 瀏覽器證據：2D 與 3D 各自縮放後，切換 view 與移動 3D 不改寫已保存的 2D
+  camera；console error、失敗 response 與 POST 都是 0。
 - 缺陷編號：`DASH-MAP-REG-003`（已修正，保留永久回歸門檻）。
+
+### DASH-039 Navigation TRH Worker 運算環境
+
+- 頁面分類：Navigation。優先級：P1。
+- Diagnostic：GET 目前 QGIS status／capabilities，確認非 fixture、Worker 可連線、
+  QGIS application／plugin bridge 就緒，且 allowlist 有 `terrain_route_hypothesis.v1`。
+- 通過僅證明握手與入口可用，不代表本輪實際執行 GRASS；timeout／unavailable 必須紅燈。
+- 完整執行驗收另以明確選定的 fixture A/B 產生候選，保存 Worker receipt、DEM hash、
+  manifest 與完成狀態，且不得修改 GPX 或 route truth。
+- 結果：依目前環境回報；舊成果存在不得代替 Worker 就緒證據。
+
+### DASH-040 Navigation TRH 成果、corridor 圖層與 provenance
+
+- 頁面分類：Navigation。優先級：P1。
+- Diagnostic：核對目前 selection 的 candidate-only LineString、DEM／cost／cache binding、
+  slope／walk／path／cost manifest，並逐一 GET 三個 corridor PNG、核對 SHA-256 與解碼尺寸。
+- 缺 R1-R3 為提醒；無路線、404、hash／尺寸錯誤或 authority 不符為失敗。
+- 完整 browser 驗收：R1-R3 與 5%／10%／20% corridor 均可切換且實際可見；檢查 console／
+  failed requests，不把存在 PNG 或通過 metadata 當成全部 2D／3D 像素渲染已驗收。
+- 結果：以本次選定專案與 artifact 證據為準，不宣稱新運算成功。
+
+### DASH-041 Navigation R4 evidence 範圍與來源
+
+- 頁面分類：Navigation。優先級：P1。
+- Diagnostic：核對 plan／resolution／feature index／scope、source DEM 與 parent manifest
+  hash、所選 TRH／band、完整 R1-R3 path references、候選原始 rank 與 inside-corridor 標示。
+  saddle 必須在 DEM cell 對角線距離內靠近完整參考路徑。
+- 範圍缺漏／NoData／hash 不符為失敗；UNKNOWN Gn 或不同來源 A/B 為提醒。
+- 完整 browser 驗收：切換 band／TRH 後舊結果失效，scope 外點不出現；G6 只保留範圍內
+  原始 #m，不重新編號、不自動移動 G1 或修改來源 evidence。
+- 結果：scope 通過只代表 review 投影可用，`execution_eligible=false`／`routing_effect=none`。
+
+### DASH-042 Navigation R4 review 與執行證據
+
+- 頁面分類：Navigation。優先級：P1。
+- Diagnostic：分開核對已保存 human Point anchors／required Gn／review hash binding／A/B，
+  與既有 R4 explanation 的 run hash、guidance review hash、anchor alignment 和 no-promotion。
+- 尚無 review 或既有 R4 時為提醒／UNKNOWN，不得把 `guided_execution_ready=true` 當作已執行。
+- stale／conflicting evidence 為失敗；不得自動保存 review、挑 anchor 或重算 R4 來製造綠燈。
+- 完整驗收另於明確 fixture review 執行 R4，確認 reviewed gates 的結果、provenance 與失敗狀態。
+- 結果：新 GRASS execution 不在 read-only Diagnostic 的成功宣告範圍。
+
+### DASH-043 Navigation Gn evidence 操作與 highlight
+
+- 頁面分類：Navigation。優先級：P1。
+- Diagnostic：使用目前 guidance 的正式 renderer 與 binder，在隔離 DOM 點選 evidence、
+  操作鍵盤／上一筆／下一筆，核對 focused candidate 投影；重複綁定不得重複觸發。
+- 完整 browser 驗收：點選不同 Gn 的 narrative、source、DEM summary、candidate preview，
+  地圖 marker 與 aria-pressed 同步；Enter／Space 可用，上一筆／下一筆循環切換。
+- 錨點、停用、select 等控制只執行自身操作，不誤觸 evidence focus；切換 highlight 不得
+  更動 selected anchors、review、原始 rank、A/B 或 safety truth。
+- Diagnostic 不移動 live map、不發出 POST；完整 browser 驗收另需實際地圖可見證據。
+
+### 2026-09-03 Navigation 局部體檢紀錄
+
+- 環境：本機 Dashboard `http://127.0.0.1:9100/admin/dashboard`，目前未提交工作樹；
+  `projectId=dongqing_batongguan_historic_trail_qgisGrass_clean_20260828`。
+- 範圍：`active-81a61259e9a4`、`top_10_percent_corridor`，13:42-13:43 Asia/Taipei。
+- 真實瀏覽器按 `Navigation 體檢`，七題結束為 4 passed／2 warnings／1 failed；
+  其他 36 題未被批次執行。按鈕解鎖後，DASH-040 單題重測仍通過。
+
+| Diagnostic | 即時結果 | 證據／缺口 |
+|---|---|---|
+| DASH-025 | passed | 240 route points、MapLibre 2D 與 Rudy+TW contract |
+| DASH-038 | passed | 中心／zoom／pitch／bearing 獨立保存及同 mode 同步 |
+| DASH-039 | failed | Worker `MCP_UNAVAILABLE`，status 約 30 秒逾時 |
+| DASH-040 | passed | R1/R2/R3；三種 corridor PNG bytes SHA-256 與解碼尺寸一致 |
+| DASH-041 | warning | 14 個候選、3 個 Gn UNKNOWN；來源 A/B 不同，僅可視覺比對 |
+| DASH-042 | warning | 尚無人工 review，R4 執行仍 UNKNOWN |
+| DASH-043 | passed | 11 個 Gn 的隔離 evidence／前後筆／highlight 操作 |
+
+實際 Navigation 操作另確認：G2 六個候選；G6 僅 #2、#5；G1 零個並標 UNKNOWN；
+evidence 點選、Enter／Space、上一筆／下一筆與 preview 點選均切換焦點，未新增錨點或停用項。
+切換至 20% corridor 後，Navigation 七題均回到待測，已通過的 DASH-002 保留；恢復 10%
+再執行 Navigation 體檢，13:50 結果仍為 4 passed／2 warnings／1 failed。
+修正的 Diagnostic contract 差異：DASH-038 不再要求跨 mode 共用中心；DASH-040 沿用
+server 給出的 active／catalog overlay URL，不將 active ID 錯當 catalog ID。
+Focused regression：新增 108 項測試以 warnings-as-errors 通過；既有 Dashboard／Outdoor
+standard 161 項通過，checker 修正後的 Diagnostic／camera 六項再測通過。
+`pnpm run lint`、`pnpm run typecheck`、`pnpm run test` 與 scoped Ruff 皆通過。
+這是 scoped working prototype 的現況紀錄，不是完整 43 項驗收，也不是新 GRASS／R4
+計算成功證據。未連線 Worker 與尚未完成的人工 review 不得列成通過。
+
+### DASH-044 全 Dashboard 地圖圖層順序
+
+- 頁面／範圍：Diagnostic → Map & Evidence；Overview、LBS、Permission、Emergency、Map、Weather、Navigation、Architecture、Pace Fit、Debug Surface 與 Permission 每日路線小圖。
+- 執行 `重新測試` 或 `Diag all`。獨立的暫時 Dashboard 使用目前 project 的既有 GET 資料與原本 renderer；完成或例外時移除 iframe，不觸發 preparation、草案生成、離線意圖同步或寫入。
+- Map／Weather／Debug 同時檢查 SVG 與 MapLibre 的預設狀態，以及透過真實 checkbox 開啟圖層後的順序；Weather 預設必須保留 Rudy+TW、CWA、route、segments、checkpoints。
+- Navigation 包括 observed／terrain／prior 的 MapLibre 2D/3D、SVG 各 lens、DEM 2.5D 與清楚標示的 training fixture；Architecture 包括六個 lens。Fixture 僅證明該示意圖的順序，不能作為真實路線證據。
+- 通過條件：實際 SVG DOM／MapLibre style 中，底圖與覆蓋影像位於路徑下方，checkpoint 位於對應路徑上方；canonical group 不得缺漏、重複或逆序。Inspector 不得自行排序後才回報通過。
+- 缺少地圖、route geometry、草案、必要圖層內容、renderer 或載入證據時顯示黃燈；順序違反規則顯示紅燈。逐入口保留 renderer、狀態、圖層序列與失敗原因；切換 project 後舊結果失效。
+- 可重跑的瀏覽器入口：`SCOUT_DIAGNOSTIC_MAP_ORDER_ONLY=1 node tools/dashboard_diagnostic_browser_smoke.js`；用 `SCOUT_DASHBOARD_DIAGNOSTIC_URL` 指定既有 runtime 與 project，`SCOUT_DIAGNOSTIC_OUTPUT_DIR` 指定證據目錄。
+- 回歸：`tests/test_map_layer_order_diagnostics.py` 包含影像遮路、隱藏圖層重開、缺少／重複 group、空圖層與正常順序。瀏覽器煙霧測試核對全部入口、Diagnostic 按鈕、桌面／手機畫面、零 POST 與暫時 iframe 清理。
+- 此檢查證明呈現順序，不等於 CWA 新鮮度、路線可通行性或完整 Dashboard qualification。
+
+2026-09-04 scoped runtime 證據：`dongqing_batongguan_historic_trail_newImport` 的 11 個入口、39 種狀態耗時 263.4 秒；21 通過、16 未完整驗證、2 順序錯誤。零 POST、暫時 iframe 已清除、390px 手機沒有水平溢出；桌面與手機截圖及 JSON 位於 `artifacts/browser/dashboard-map-layer-order-20260904-verified/`。
+
+`DASH-MAP-ORDER-001`：Debug SVG 在預設及全圖層狀態中，risk-heatmap、risk-delta、soil-moisture、antecedent-rain、cwa-qpf、cwa-weather 仍位於 route／segments 上方。巡檢如實回報紅燈，browser smoke 因此退出 1；本次新增診斷機制未修正這個既有 Debug 排序。相同錯誤依圖層合併並保留元素數量。
+
+黃燈來自 Weather 全開 SVG 的空 terrain、Navigation 缺少路徑／地形幾何、DEM 2.5D 不可用與 Permission 無每日草案；QGIS latest workflow 的 404 與 mission-baseline/map-context 的 409 亦保留於證據。不得宣稱這些狀態通過。不同來源或不同 API 路徑的設定另會標黃，避免拿同名本機 project 替代設定中的來源。
 
 ## 後續項目收錄門檻
 
-下一個可用編號為 `DASH-039`。新項目只有在功能已實作，且具備可操作 UI、
+下一個可用編號為 `DASH-051`。新項目只有在功能已實作，且具備可操作 UI、
 API／artifact、測試資料與明確 PASS／FAIL 條件時才加入。未完成、未接線、
 preview placeholder 或只存在於未來規劃的能力不列入正式項目。
 
@@ -1378,6 +1543,8 @@ preview placeholder 或只存在於未來規劃的能力不列入正式項目。
 
 | 日期 | 變更 |
 |---|---|
+| 2026-09-04 | 新增 DASH-044 全 Dashboard 地圖順序診斷、逐入口結果、SVG／MapLibre 與嵌入地圖 probe；缺口不視為通過，重測綁定目前 project。 |
+| 2026-09-03 | 新增 Navigation 獨立七題體檢與 DASH-039～043，區分 Worker／既有 TRH 圖層／R4 scope／review readiness／執行證據；加入 Gn evidence 點選與鍵盤、上一筆／下一筆，禁止只憑 UI 可開或 review 就緒宣告完整運算成功。 |
 | 2026-08-24 | 新增 DASH-038 與 DASH-MAP-REG-003，驗證 Navigation MapLibre 在 3D 移動、候選／lens／Evidence／垂直誇張及 2D／3D／Split rerender 後維持中心同步、尺度獨立，且只有明確 Fit／Reset 可重設對應 camera。 |
 | 2026-08-14 | Q0038 規格決策：Architecture mode bar 明確允許元件內水平捲動；所有 mode 仍須可達且不得造成頁面級溢出。 |
 | 2026-08-07 | Q0017：DASH-030 將具合理 typed reason 的真實零值改列黃燈；只有無法解釋或 `fixture_or_projection_omission` 的零值列紅燈，且禁止捏造正數。 |
@@ -1392,3 +1559,165 @@ preview placeholder 或只存在於未來規劃的能力不列入正式項目。
 | 2026-07-28 | 將 DASH-001～025 接入 System → Diagnostic；加入三色狀態、單題重測與 Diag all。 |
 | 2026-07-28 | 依頁面功能建立分類索引；只採用現有可驗收能力，擴充至 DASH-025。 |
 | 2026-07-28 | 建立文件；新增第一批 DASH-001 ～ DASH-010 必要功能檢查。 |
+
+
+## 2026-09-07 已核准對齊修訂
+
+使用者選擇：004納入歷史地圖；020採CP上下文；024採目前模式；031–035統一
+Dashboard共用專案解析；037採快取優先；燈號分離介面與資料；補覆蓋。
+DASH-044只補證據，未核准修改renderer或其排序判定。
+
+- `resolvedPretripProjectId()` 統一綁定selected workspace；缺少資源不可切換至
+  硬編碼demo或先前project。回傳錯誤project與請求期間換專案皆拒絕套用。
+- 每題結果增加`structureStatus`與`dataStatus`；未檢測不等於可用。
+- Weather stale、Navigation未準備、Worker不可用是資料／依賴提醒；錯project、
+  schema、hash或authority違規仍是失敗。
+- 空Route Context artifact／variants僅代表目前缺資料，不代表功能未實作。
+- 所有檢测结果都绑定API origin与selected workspace，换专案后失效。
+
+### DASH-045 Logs 記錄、完整性與唯讀來源
+
+讀取 `/admin/runtime-audit?limit=20`，核對list schema、telemetry/privacy boundary、
+完整性與writer health；空資料／API不可用為提醒，integrity failure為失敗。
+不修改Ledger，不以hash chain冒充source簽章或全站操作覆蓋。
+
+### DASH-046 Living sandbox 與模擬收據邊界
+
+讀取 `/admin/dashboard/living`；核對synthetic/local/candidate boundary以及已有
+receipt的simulated provenance。禁止將模擬收據標為production delivery。
+沒有執行收據為提醒；Diagnostic不Run、不Approve、不送資料。
+
+### DASH-047 Intelligence 內嵌頁面與工作紀錄
+
+GET `/admin/intelligence`與`/admin/intelligence/telemetry`，核對iframe、page wiring、
+job schema與candidate-only。store／job缺資料為提醒；authority越界為失敗。
+不觸發模型、排程、安裝或promotion。
+
+### DASH-048 Emergency packet、Field 與離線就緒狀態
+
+唯讀replay projection及night-review，核對project／mission-day、packet hash欄位、
+field groups、freshness與瀏覽器offline API能力。缺前置資料為提醒。
+未執行offline write／sync、批准、真實傳送或安全判斷；完整離線流程仍未驗證。
+
+### DASH-049 Planned 向量比較與 Legacy 示意圖用途
+
+2026-09-13 依使用者仲裁新增。共十列：Permission preview、Permission compare、
+Route Context／Permission／Weather／Navigation／Architecture／Pace Fit／Body Index
+七張 analysis 比較圖，以及 Legacy Emergency 示意圖。此項補用途驗收，不冒充
+Rudy 原生圖磚驗收；後者仍由 DASH-037 負責。
+
+1. 從目前 workspace 唯讀取得 Saved Planned、analysis selection、immutable preview
+   與 analysis subject；逐一核对 project、version、manifest／preview／geometry SHA。
+2. 在正式 renderer／binder 產生的實際 UI 節點核對 Golden 與 Planned 兩條來源幾何、
+   圖層、來源錨點、縮放／Fit 控制、重載，以及 candidate-only 邊界。
+   Analysis 的 Golden 必須來自同一已選版本的 preview，不可借用另一版本補綠燈。
+3. Legacy 沿真實入口載入，核對明示 illustrative-only、圖層控制及重載；不得宣稱
+   固定示意線和 CSS 背景是離線 Rudy 圖磚或實際導航幾何。
+4. 每列保存各階段與清理結果；缺少 selected Planned 時仍驗 Legacy，九張比較圖
+   明確失敗，不跳過、不代選、不生成候選。讀取失敗、錯誤 SHA、缺幾何、控制無效
+   或清理失敗皆不能通過。
+
+登錄不等於真實驗收通過。東清 workspace 目前沒有 Saved Planned；使用者提供的
+四日主線與支線行程正在核對來源，尚未保存、review 或切換 analysis subject。
+2026-09-07 以下的 48 題敘述保留為當時紀錄，不代表目前登錄數。
+
+## 2026-09-07 優先補強檢測：003／037／044
+
+本輪依建議先補強三項既有檢測，總數維持 48，不用新題號重複計數。
+
+- DASH-003：除了 server catalog／alternate context，直接取目前 production
+  project resolver、fetchFirstPretripJson 與 Diagnostic scope 函式，在隔離環境重播
+  A pending→B完成→A遲到拒絕、錯專案拒絕、404不alias fallback、專案／API切換舊結果失效。
+  不變更使用者專案或 storage；畫面明示「隔離重播，非實際 UI 切換」。
+- DASH-037：保留 Navigation／Architecture／Weather 倍率計算契約；另建同源、
+  cache-only Weather SVG iframe，操作 zoom，核對 active generation、DOM tile matrix
+  與 URL，再 GET 快取圖磚解碼。缺快取或 higher generation 未就緒為提醒；
+  錯專案、錯 matrix 或違反 cache-only 政策仍失敗。CWA產品／影格切換尚未覆蓋。
+- DASH-044：Debug SVG 增加四組背景拆層的 off/on 八個狀態；核對原開關、
+  canonical evidence／background visibility、相對 route／segments 排序，以及
+  既有點位、標籤與背景數量保留；finally 還原 iframe 原狀態。
+  CWA無raster與影格更新後重新拆層未驗證明列gap，不以黃色當完整通過。
+
+### 後續一般唯讀操作檢測（尚未實作）
+
+| 建議 | 接續位置 | 驗收重點 |
+|---|---|---|
+| Pace CP 聯動 | 擴充020 | CP選取→地圖高亮／inspector／timeline一致 |
+| Architecture模式與lens | 擴充024 | 5 modes／7 lenses實際切換、Time Window、Microscope選取 |
+| Observer資料更新 | 擴充010或獨立049以後 | 新資料、過期與斷線狀態；零MQTT publish |
+| CWA產品／影格更新 | 擴充037／044 | 既有快取產品／影格切換與重繪後拆層；缺影格提醒 |
+
+### 進階檢測（尚未實作，不併入 Diag all）
+
+| 建議 | 執行條件／邊界 |
+|---|---|
+| Emergency離線保存與讀回 | 隔離測試資料／storage，核對讀回、過期拒用與project隔離；不送出真實事件 |
+| Settings保存／重載 | 隔離browser context，保存原設定並還原；不改使用者目前專案 |
+| Assistant完整問答 | 明確觸發單次模型流程，核對取證與引用、錯誤、取消；記錄用量 |
+| Living／Intelligence執行 | 明確選定sandbox／工作流程，核對結果與receipt／telemetry；不可自動批准或傳送 |
+
+上述清單是後續驗收範圍，不是新增的可執行檢測，也不是已完成能力。
+
+## 2026-09-07 剩餘覆蓋實作（取代前節尚未實作清單）
+
+一般檢測仍為48題；另加入5個手動進階隔離重播，不併入 Diag all 或一般統計。
+
+| 建議 | 實作位置 | 檢測範圍與限制 |
+|---|---|---|
+| Pace CP聯動 | 020 | 正式binder／renderer隔離DOM點選timeline及map；核對CP、inspector、timeline、高亮同步。非live camera或runtime pace。 |
+| Architecture操作 | 024 | 正式控制器切5 modes／7 lenses、bin、Microscope與Time Window。缺歷史時間資料提醒；fixture驗證正常路徑。 |
+| Observer更新 | 010 | 明確揭露目前為靜態說明頁，沒有即時feed／斷線／過期狀態控制，不能將該流程判綠；沒有新增不存在的即時功能。 |
+| CWA快取影格 | 037／044 | 同源專案cache manifest、產品／影格／opacity DOM事件、frameId／href／decode核對；044在cached rerender後再查拆層及visibility。缺產品／多影格提醒，不Refresh。 |
+| Offline | 進階「離線加密儲存與專案隔離」 | 正式AES-GCM與存取函式，memory IDB adapter，驗證加密讀回、不可匯出key、竄改與intent binding拒絕、跨project overlay。不是browser IndexedDB持久化證明。 |
+| Settings | 進階「Settings保存與重新讀取」 | 正式save函式搭配隔離storage／DOM，讀回、reload按鈕狀態、invalid input、部分寫入rollback；不reload使用者頁面。 |
+| Assistant | 進階「Assistant問答與錯誤流程」 | 正式submit／formatter的synthetic回應重播，payload、busy、來源保存、成功／失敗清理；沒有取消UI所以warning。不呼叫模型、不證明引用正確性。 |
+| Living | 進階「Living模擬收據流程」 | 正式handler的run→approve→simulation，mock POST驗證packet／attempt SHA與receipt；不觸發server reducer或外部傳輸。 |
+| Intelligence | 進階「Intelligence執行覆蓋」 | 現行僅GET telemetry／選取既有工作，無enqueue/cancel UI，因此明確warning；047仍檢查唯讀資料，不捏造工作執行。 |
+
+### 新發現，尚未改Dashboard行為
+
+`DIAG-OFFLINE-ISOLATION-001`：`refreshEmergencyOfflineIntentCount()` 在疊合field pending records時未按目前project過濾。隔離重播用A專案record及B專案相同group ID，觀察到B的overlay帶入A資料，故advanced offline回報failed。
+
+舊pending intent仍顯示為pending；因未建立本地expiry contract，僅列限制，不自行訂定TTL。加密讀回通過不代表project隔離通過。修正資料行為或新增expiry規格須另行決定，不藉放寬檢測消除紅燈。
+
+進階模組原始碼 `docs/admin/scout-diagnostic-advanced.js` 同步內嵌於Dashboard唯一inline script，parity測試避免兩份內容漂移；無須新增server路由或重啟服務。
+
+## 2026-09-07 DIAG-OFFLINE-ISOLATION-001 修正
+
+使用者「下一步」授權修正跨project offline overlay。`refreshEmergencyOfflineIntentCount`
+現在只計數／投影操作開始時selected project的records，切scope立即清除舊overlay，
+sequence及project檢查拒絕晚到成功／錯誤覆蓋更新結果。render也檢查overlay project標記，
+不把尚未刷新完成的其他project overlay或count顯示在目前頁面。
+
+儲存的project在非同步DB／key操作前固定，metadata不能覆蓋；field completion／conflict
+儲存完成後若已換project，不把舊intent直接疊入新畫面。沒有刪除或改寫既有離線紀錄，
+沒有變更server sync與expiry政策。
+
+advanced Offline現為warning：projectOverlayIsolation及加密讀回／竄改拒絕均passed；
+warning保留真實IndexedDB persistence／reopen、server sync／expiry rejection尚未驗證。
+本地pending intent TTL仍未定義，不能由這次修正自行推定過期拒用已完成。
+
+### 2026-09-07 — 真實 IndexedDB 與離線過期拒用補驗證
+
+進階離線重播新增專用 synthetic IndexedDB，沿用正式開啟、交易、加密與解密函式，隔離儲存後的 UI refresh。首次執行驗證關閉重開；新頁面再次手動執行可驗證前一頁資料與不可匯出金鑰的持久化。測試資料保留，不操作正式離線紀錄。
+
+`tests/test_diagnostic_offline_expiry.py` 以 temporary workspace 與注入時間執行正式同步服務，驗證 fresh、exact expiry、expired、unknown freshness、generation/hash mismatch 六種情境；拒絕只能有 audit、無有效 receipt，重送維持冪等。15 項相關測試通過。瀏覽器不執行後端同步，因此 serverExpiryRejection 保留 warning；不可將 fixture 結果當成 live 驗證。未新增 local TTL 或刪除歷史 intent。
+
+證據：`artifacts/diagnostic-persistence-expiry-20260907/report.md`、`final-first-page.txt`、`final-reopened-page.txt`、`pytest.txt`。範圍為 WORKING PROTOTYPE；OS crash、儲存逐出及瀏覽器程序重啟不在本次證明範圍。
+
+### DASH-050 scout monitor 電池／主機供電分離
+
+- 頁面／範圍：System → scout monitor；Diagnostic 獨立重測及 Diag all。
+- 執行：同源 GET 讀取目前採樣，使用隔離的實際 monitor renderer 重播 UPS 通訊失敗、主機有效 5V 保留、未知、503 過期、斷線與恢復。
+- 通過條件：資料契約、目前新鮮採樣與所有呈現重播皆通過，且 probe 已清除；UPS 不可讀時電池為未知，主機供電和旗標獨立保留。
+- 缺資料、過期或無法確認的新鮮度仍回報 warning；錯誤呈現或清理失敗仍回報 failed。
+- 邊界：不操作硬體；檢查通過不能證明 UPS 通訊恢復，也不是正式硬體資格驗證。
+- 結果：未執行；需記錄當前 9099 版本、workspace、完整收據及畫面。
+
+#### 登錄同步裁決紀錄（2026-09-14）
+
+- 原衝突：既有 `DASH-050` 已有實作與測試，但 Dashboard 摘要及兩個登錄測試仍限 `001～049`；分別出現 `50 == 49` 與 `diagnosticCheck050 is not defined`。後者是測試 stub 未涵蓋 050，不是實際頁面缺少 handler。
+- 本次授權：使用者看過登錄衝突報告後，最新明確指示自行處理這些失敗；依該指示採原報告建議，保留全部 50 項，將摘要、完整 ID 集合、stub 與本文件同步為 50。此段記錄指示內容，不將既有一般放權視為其他新衝突的批准。
+- 選擇理由：D050 的供電／UPS 分離檢測已存在；刪除或停用它會減少回歸覆蓋。此次僅同步登錄，保留完整數量、唯一 ID、未知 ID 拒絕及每項正確可呼叫 handler 的檢查。
+- 範圍邊界：不變更 D050 的新鮮度、電池未知、主機有效供電、warning／failed 條件或硬體權限；也不變更 D037、地圖、Debug 或 Permission 的驗收語意。登錄一致不代表 50 題實際執行均通過。
+- 原始報告：Scout `conversation-recovery-20260911/d050-registry-review/report.md`；原候選及本次兩項原版失敗重播、修正後測試、來源 SHA 與可套用 patch 保存在 `recovery-20260914/d050-fix/`。路徑均相對於 `/home/alexwang0315/work/scout-pretrip-all-seven-20260910/`。

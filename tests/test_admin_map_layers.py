@@ -72,6 +72,7 @@ def test_pretrip_map_layers_order_imagery_bottom_and_api_top():
 
     assert map_layer_ids(layers) == [
         "imagery",
+        "historical-map",
         "rudy",
         "rudy-twmap",
         "relief",
@@ -214,6 +215,8 @@ def test_admin_pages_expose_the_same_alpha_workspace_layer_controls():
             if not layer.startswith("${")
         ]
         expected_controls = list(EXPECTED_ALPHA_WORKSPACE_LAYER_CONTROLS)
+        if page.name == "phase4-pretrip-planning.html":
+            expected_controls.insert(expected_controls.index("osm"), "historical-map")
         if page.name == "phase1-after-action.html":
             expected_controls.insert(
                 expected_controls.index("reference-tracks"),

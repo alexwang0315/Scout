@@ -4,6 +4,9 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+from scout.agents.pydantic_model_lifecycle import pydantic_model_session
+
 from pydantic_ai.messages import ModelResponse, TextPart, ToolCallPart
 from pydantic_ai.models.function import AgentInfo, FunctionModel
 from pydantic_ai.models.test import TestModel
@@ -50,6 +53,16 @@ WEATHER_WINDOW_TOOL_NAME = provider_module.REGISTERED_WORKSPACE_TOOL_NAMES[
 CWA_ENVIRONMENT_TOOL_NAME = provider_module.REGISTERED_WORKSPACE_TOOL_NAMES[
     provider_module.CWA_ENVIRONMENT_TOOL_ID
 ]
+
+
+
+
+@pytest.fixture(autouse=True)
+def owned_model_session():
+    # These tests directly call the synchronous SDK-facing internals.
+    # Supply and close the same owned session used by the public worker.
+    with pydantic_model_session():
+        yield
 
 
 def _checkpoint_count_response(
@@ -148,7 +161,7 @@ def test_pydantic_agent_progressively_discloses_and_then_removes_tools(
     )
     tool_context = ScoutWorkspaceToolContext.from_query_and_env(query, sources=[])
     runner = PydanticAIEnvRunner(
-        model_name="test:model",
+        model_name="openrouter:test/model",
         profile_name="local",
         workspace_tools_enabled=True,
     )
@@ -182,7 +195,8 @@ def test_pydantic_agent_progressively_discloses_and_then_removes_tools(
     assert ledger["requests"][2]["tool_schema_count"] == 0
     assert ledger["tool_schema_chars"] < 20_000
     assert ledger["tool_result_chars"] > 0
-    assert ledger["tool_result_chars"] < 20_000
+    assert ledger["budget"]["enforce_resource_limits"] is False
+    assert ledger["budget"]["max_tool_result_tokens"] is None
     assert ledger["budget_stop_reason"] is None
     selected_context_ids = [
         item["context_id"] for item in runner.last_context_handles
@@ -244,7 +258,7 @@ def test_pydantic_agent_returns_weather_tool_evidence_without_spurious_count(
     )
     tool_context = ScoutWorkspaceToolContext.from_query_and_env(query, sources=[])
     runner = PydanticAIEnvRunner(
-        model_name="test:model",
+        model_name="openrouter:test/model",
         profile_name="cloud",
         workspace_tools_enabled=True,
     )
@@ -335,10 +349,11 @@ def test_pydantic_agent_fails_closed_when_selected_tool_is_not_executed(
     )
     tool_context = ScoutWorkspaceToolContext.from_query_and_env(query, sources=[])
     runner = PydanticAIEnvRunner(
-        model_name="test:model",
+        model_name="openrouter:test/model",
         profile_name="local",
         workspace_tools_enabled=True,
     )
+    monkeypatch.setattr(runner, "_native_capabilities", lambda: [])
 
     output = runner._run_model_with_workspace_tools(
         build_bounded_assistant_prompt(query, sources=[], max_context_chars=2_000),
@@ -361,6 +376,96 @@ def test_pydantic_agent_fails_closed_when_selected_tool_is_not_executed(
     )
 
 
+def test_pydantic_agent_deterministically_completes_typed_read_only_plan(
+    monkeypatch,
+) -> None:
+    monkeypatch.setenv("SCOUT_PRETRIP_WORKSPACE_ROOT", str(PROJECT_ROOT.parent))
+    selected_ids = [ROUTE_STRUCTURE_TOOL_ID, RISK_SCORE_TOOL_ID]
+    selected_names = [
+        provider_module.REGISTERED_WORKSPACE_TOOL_NAMES[tool_id]
+        for tool_id in selected_ids
+    ]
+    selected_items = [
+        SimpleNamespace(
+            tool_id=tool_id,
+            request={"arguments": {"query": "route terrain risk", "limit": 6}},
+        )
+        for tool_id in selected_ids
+    ]
+    monkeypatch.setattr(
+        provider_module,
+        "_progressive_tool_runtime",
+        lambda _tool_context: (
+            BoundedAgentRuntime(),
+            selected_ids,
+            selected_names,
+            selected_items,
+            SimpleNamespace(expected_operations=[]),
+        ),
+    )
+    request_count = 0
+
+    def model_function(_messages: list[object], info: AgentInfo) -> ModelResponse:
+        nonlocal request_count
+        request_count += 1
+        tool_names = [tool.name for tool in info.function_tools]
+        workspace_tool_names = [name for name in tool_names if name in selected_names]
+        if request_count == 1:
+            assert workspace_tool_names == selected_names
+            return ModelResponse(
+                parts=[
+                    ToolCallPart(
+                        tool_name=selected_names[0],
+                        args={"query": "route terrain risk"},
+                    )
+                ]
+            )
+        if request_count == 2:
+            assert workspace_tool_names == [selected_names[1]]
+            return ModelResponse(parts=[TextPart("Premature ungrounded answer.")])
+        assert workspace_tool_names == []
+        return ModelResponse(parts=[TextPart("Route evidence is available.")])
+
+    monkeypatch.setattr(
+        provider_module,
+        "build_chat_model",
+        lambda **_kwargs: FunctionModel(model_function),
+    )
+    query = ScoutAssistantQuery(
+        surface="pretrip",
+        question="哪些 CP 的地形風險最高？",
+        context_ref=PROJECT_ROOT.name,
+        project_id=PROJECT_ROOT.name,
+    )
+    tool_context = ScoutWorkspaceToolContext.from_query_and_env(query, sources=[])
+    runner = PydanticAIEnvRunner(
+        model_name="openrouter:test/model",
+        profile_name="cloud",
+        workspace_tools_enabled=True,
+    )
+    monkeypatch.setattr(runner, "_native_capabilities", lambda: [])
+
+    output = runner._run_model_with_workspace_tools(
+        build_bounded_assistant_prompt(query, sources=[], max_context_chars=2_000),
+        tool_context,
+        request_timeout_seconds=10,
+    )
+
+    assert "Premature ungrounded answer" not in output
+    assert "所選 Scout 工具的證據" not in output
+    assert request_count == 3
+    assert runner.last_agent_run_ledger["request_count"] == 3
+    assert runner.last_agent_run_ledger["executed_tool_ids"] == selected_ids
+    assert runner.last_agent_run_ledger["tool_call_count"] == 2
+    assert runner.last_agent_run_ledger["budget_stop_reason"] is None
+    assert runner.last_model_response_metadata[
+        "deterministic_tool_completion_count"
+    ] == "1"
+    assert [
+        item["tool_id"] for item in runner.last_workspace_tool_invocations
+    ] == selected_ids
+
+
 def test_pydantic_agent_direct_answer_uses_one_request_and_no_tool_schema(
     monkeypatch,
 ) -> None:
@@ -372,7 +477,7 @@ def test_pydantic_agent_direct_answer_uses_one_request_and_no_tool_schema(
     query = ScoutAssistantQuery(surface="pretrip", question="嗨")
     tool_context = ScoutWorkspaceToolContext.from_query_and_env(query, sources=[])
     runner = PydanticAIEnvRunner(
-        model_name="test:model",
+        model_name="openrouter:test/model",
         profile_name="local",
         workspace_tools_enabled=True,
     )
@@ -415,7 +520,7 @@ def test_pydantic_agent_fails_closed_when_substantive_question_has_no_evidence(
     )
     tool_context = ScoutWorkspaceToolContext.from_query_and_env(query, sources=[])
     runner = PydanticAIEnvRunner(
-        model_name="test:model",
+        model_name="openrouter:test/model",
         profile_name="local",
         workspace_tools_enabled=True,
     )
@@ -451,7 +556,7 @@ def test_pydantic_agent_does_not_discard_answer_for_token_telemetry(
     query = ScoutAssistantQuery(surface="pretrip", question="嗨")
     tool_context = ScoutWorkspaceToolContext.from_query_and_env(query, sources=[])
     runner = PydanticAIEnvRunner(
-        model_name="test:model",
+        model_name="openrouter:test/model",
         profile_name="local",
         workspace_tools_enabled=True,
     )
@@ -485,7 +590,7 @@ def test_bounded_plain_model_does_not_discard_answer_for_token_telemetry(
         },
     )
     runner = PydanticAIEnvRunner(
-        model_name="test:model",
+        model_name="openrouter:test/model",
         profile_name="local",
         workspace_tools_enabled=False,
     )
@@ -509,7 +614,7 @@ def test_workspace_external_limit_checkpoints_and_continues_with_fresh_budget(
         ),
     )
     runner = PydanticAIEnvRunner(
-        model_name="test:model",
+        model_name="openrouter:test/model",
         profile_name="local",
         workspace_tools_enabled=True,
     )
@@ -664,7 +769,7 @@ def test_workspace_artifact_context_is_read_through_progressive_tools(
     )
     tool_context = ScoutWorkspaceToolContext.from_query_and_env(query, sources=[])
     runner = PydanticAIEnvRunner(
-        model_name="test:model",
+        model_name="openrouter:test/model",
         profile_name="local",
         workspace_tools_enabled=True,
     )
@@ -828,7 +933,7 @@ def test_ten_x_workspace_growth_keeps_user_turn_tokens_within_ten_percent(
 
     def run_with_sources(sources: list[AssistantSourceRef]) -> dict[str, object]:
         runner = PydanticAIEnvRunner(
-            model_name="test:model",
+            model_name="openrouter:test/model",
             profile_name="local",
             workspace_tools_enabled=True,
         )
@@ -890,7 +995,7 @@ def test_pydantic_agent_runs_one_no_tool_grounding_repair(monkeypatch) -> None:
     )
     tool_context = ScoutWorkspaceToolContext.from_query_and_env(query, sources=[])
     runner = PydanticAIEnvRunner(
-        model_name="test:model",
+        model_name="openrouter:test/model",
         profile_name="local",
         workspace_tools_enabled=True,
     )
@@ -1017,7 +1122,7 @@ def test_pydantic_agent_allows_one_schema_retry_before_bounded_synthesis(
     )
     tool_context = ScoutWorkspaceToolContext.from_query_and_env(query, sources=[])
     runner = PydanticAIEnvRunner(
-        model_name="test:model",
+        model_name="openrouter:test/model",
         profile_name="local",
         workspace_tools_enabled=True,
     )
@@ -1060,7 +1165,7 @@ def test_pydantic_agent_fails_closed_after_one_bad_repair(monkeypatch) -> None:
     )
     tool_context = ScoutWorkspaceToolContext.from_query_and_env(query, sources=[])
     runner = PydanticAIEnvRunner(
-        model_name="test:model",
+        model_name="openrouter:test/model",
         profile_name="local",
         workspace_tools_enabled=True,
     )

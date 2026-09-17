@@ -2,6 +2,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from admin_api import _build_weather_dashboard_decision, create_admin_app
@@ -483,6 +484,28 @@ def test_admin_weather_dashboard_combines_cached_route_decision_evidence(
     assert '"lat"' not in serialized
     assert '"lon"' not in serialized
 
+    updated_risk = json.loads(risk_path.read_text(encoding="utf-8"))
+    updated_risk["generatedAt"] = "2026-07-11T03:29:00Z"
+    updated_risk["imageryFeatures"] = {
+        "currentRainOnRoute": False,
+        "nearbyStrongEcho": False,
+        "rainBandApproaching": False,
+        "estimatedRainArrivalMinutes": None,
+        "convectiveCellScore": 0.1,
+        "satelliteConvectiveCloudScore": 0.1,
+        "cloudMotionTowardRoute": False,
+        "dataDelayMinutes": 1,
+        "confidence": 0.9,
+    }
+    updated_risk["weatherTerrainInteractions"] = []
+    risk_path.write_text(json.dumps(updated_risk), encoding="utf-8")
+
+    reread = client.get("/admin/pretrip/projects/fixture-route/weather-dashboard").json()
+    assert reread["routeRisk"]["generatedAt"] == "2026-07-11T03:29:00Z"
+    assert reread["routeRisk"]["imageryFeatures"]["currentRainOnRoute"] is False
+    assert reread["decision"]["candidateDecision"] == "DELAY"
+    assert reread["decision"]["why"] != payload["decision"]["why"]
+
 
 def test_admin_weather_dashboard_fails_closed_when_cache_is_not_prepared(
     tmp_path: Path,
@@ -539,3 +562,100 @@ def test_weather_dashboard_does_not_emit_go_with_unknown_hazard_classification()
 
     assert decision["candidateDecision"] == "DELAY"
     assert "classification" in " ".join(decision["uncertaintyNotes"]).lower()
+
+
+@pytest.mark.parametrize("point_key,point_status", [
+    ("target", "missing_cell"), ("target", "outside_grid"),
+    ("currentPosition", "missing_cell"),
+])
+def test_weather_dashboard_target_missing_qpf_prevents_go_and_explains_unknown(
+    point_key: str, point_status: str,
+) -> None:
+    points = {
+        "currentPosition": {"status": "ready", "past1hMm": 10.0, "next1hMm": 37.6},
+        "target": {"id": "CP-103", "status": "ready", "past1hMm": 0.0, "next1hMm": 0.0},
+    }
+    points[point_key] = {**points[point_key], "status": point_status, "next1hMm": None}
+    decision = _build_weather_dashboard_decision(
+        status="ready",
+        route_risk={
+            "imageryFeatures": {
+                "currentRainOnRoute": False, "nearbyStrongEcho": False,
+                "rainBandApproaching": False, "estimatedRainArrivalMinutes": None,
+                "convectiveCellScore": 0.1, "satelliteConvectiveCloudScore": 0.1,
+                "cloudMotionTowardRoute": False, "dataDelayMinutes": 5, "confidence": 0.9,
+            },
+            "weatherTerrainInteractions": [],
+        },
+        route_trend={
+            "status": "missing_data",
+            **points,
+        },
+    )
+    assert decision["candidateDecision"] == "DELAY"
+    assert "CP-103" in decision["where"]
+    assert "UNKNOWN" in " ".join(decision["why"])
+    assert point_status in " ".join(decision["uncertaintyNotes"])
+    assert decision["confidence"] == 0
+
+
+def test_weather_dashboard_target_zero_qpf_is_not_a_coverage_gap() -> None:
+    decision = _build_weather_dashboard_decision(
+        status="ready",
+        route_risk={
+            "imageryFeatures": {
+                "currentRainOnRoute": False, "nearbyStrongEcho": False,
+                "rainBandApproaching": False, "estimatedRainArrivalMinutes": None,
+                "convectiveCellScore": 0.1, "satelliteConvectiveCloudScore": 0.1,
+                "cloudMotionTowardRoute": False, "dataDelayMinutes": 5, "confidence": 0.9,
+            },
+            "weatherTerrainInteractions": [],
+        },
+        route_trend={
+            "status": "ready", "confidence": 0.8,
+            "target": {"id": "CP-103", "status": "ready", "past1hMm": 0.0, "next1hMm": 0.0},
+            "validWindows": {"next1hQpf": ["2026-09-04T09:40:00+08:00", "2026-09-04T10:40:00+08:00"]},
+        },
+    )
+    assert decision["candidateDecision"] == "GO"
+    assert decision["confidence"] == 0.8
+    assert "CP-103: past-hour QPE 0 mm; next-hour QPF 0 mm." in decision["why"]
+    assert "UNKNOWN" not in " ".join(decision["why"])
+    assert "2026-09-04T10:40:00+08:00" in decision["when"]
+    assert decision["runtimeSafetyTruth"] is False
+
+
+@pytest.mark.parametrize("stale_source", [None, "rainfall", "imagery", "trend"])
+def test_target_review_replaces_old_trend_freshness_but_checks_consumed_sources(stale_source) -> None:
+    from admin_api import _build_weather_decision_dashboard, _build_weather_target_dashboard
+
+    frames = {"qpe_past_1h": "qpe.fixture", "qpf_next_1h": "qpf.fixture"}
+    cached = _build_weather_decision_dashboard(
+        project_id="fixture-route", evaluated_at="2026-09-04T01:45:00Z",
+        rainfall={"status": "ready", "products": [
+            {"gridKind": kind, "frameId": frame_id} for kind, frame_id in frames.items()
+        ]},
+        imagery={"status": "ready", "childOverlays": {"radar": {"frames": [{"frameId": "radar.fixture"}]}}},
+        trend={"status": "stale_data"},
+        risk={"status": "candidate_only", "imageryFeatures": {
+            "currentRainOnRoute": False, "nearbyStrongEcho": False,
+            "rainBandApproaching": False, "cloudMotionTowardRoute": False,
+            "convectiveCellScore": 0.1, "satelliteConvectiveCloudScore": 0.1,
+            "dataDelayMinutes": 5, "confidence": 0.9,
+        }},
+        alert=None, pair_verification={}, source_refs={},
+    )
+    assert cached["status"] == "stale_data"
+    fresh_trend = {
+        "status": "stale_data" if stale_source == "trend" else "ready",
+        "confidence": 0.8,
+        "target": {"id": "CP-103", "status": "ready", "past1hMm": 4.0, "next1hMm": 4.0},
+    }
+    if stale_source in {"rainfall", "imagery"}:
+        cached = {**cached, stale_source: {**cached[stale_source], "status": "partially_stale"}}
+    reviewed = _build_weather_target_dashboard(
+        cached=cached, trend=fresh_trend, source_frame_ids=frames,
+        source_project={"project_id": "fixture-route"},
+    )
+    assert reviewed["status"] == ("stale_data" if stale_source else "ready")
+    assert reviewed["decision"]["candidateDecision"] == ("DELAY" if stale_source else "GO")

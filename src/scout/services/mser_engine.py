@@ -22,6 +22,7 @@ from scout.schemas.mser import (
     InformationNeed,
     KnowledgeCandidate,
     MSERDecisionPacket,
+    MSERTaskContract,
     MSERStage,
     MemoryEvent,
     MinimalSufficientContext,
@@ -171,6 +172,11 @@ DECISION_PROFILES: dict[DecisionType, DecisionCompactProfile] = {
             confidence=0.6,
             max_age_seconds=_LIVE,
         ),
+        _requirement(
+            CompactDimension.MISSION_MARGIN,
+            "A discretionary stop must fit the remaining operational margin.",
+            max_age_seconds=_NEAR_LIVE,
+        ),
     ),
     DecisionType.REST: _profile(
         DecisionType.REST,
@@ -210,6 +216,11 @@ DECISION_PROFILES: dict[DecisionType, DecisionCompactProfile] = {
             CompactDimension.ESCAPE_COST,
             "Rest cannot consume the margin needed to exit a costly segment.",
             max_age_seconds=_PRETRIP,
+        ),
+        _requirement(
+            CompactDimension.MISSION_MARGIN,
+            "Rest duration must fit the remaining operational margin.",
+            max_age_seconds=_NEAR_LIVE,
         ),
     ),
     DecisionType.SUMMIT: _profile(
@@ -639,6 +650,36 @@ _MODIFIER_REQUIREMENTS: dict[DecisionType, tuple[DimensionRequirement, ...]] = {
             max_age_seconds=_LIVE,
         ),
     ),
+    DecisionType.READINESS_PACE: (
+        _requirement(
+            CompactDimension.FATIGUE_INDEX,
+            "A readiness modifier preserves current fatigue.",
+            max_age_seconds=_LIVE,
+        ),
+        _requirement(
+            CompactDimension.ENERGY_RESERVE,
+            "A readiness modifier preserves remaining energy reserve.",
+            max_age_seconds=_NEAR_LIVE,
+        ),
+    ),
+    DecisionType.ROUTE_PLANNING: (
+        _requirement(
+            CompactDimension.ROUTE_FEASIBILITY,
+            "A route modifier preserves comparative route feasibility.",
+            max_age_seconds=_PRETRIP,
+        ),
+        _requirement(
+            CompactDimension.REMAINING_DAYLIGHT,
+            "A route modifier preserves the remaining usable time window.",
+            confidence=0.6,
+            max_age_seconds=_LIVE,
+        ),
+        _requirement(
+            CompactDimension.MISSION_MARGIN,
+            "A route modifier preserves the remaining operational buffer.",
+            max_age_seconds=_NEAR_LIVE,
+        ),
+    ),
 }
 
 
@@ -773,6 +814,10 @@ class DecisionTypeClassifier:
             (
                 "腳程",
                 "配速",
+                "體能",
+                "體力",
+                "疲勞",
+                "能量",
                 "上坡速度",
                 "下坡速度",
                 "負重",
@@ -786,6 +831,7 @@ class DecisionTypeClassifier:
             (
                 "危險",
                 "風險",
+                "地形",
                 "崩壁",
                 "落石",
                 "碎石坡",
@@ -823,6 +869,7 @@ class DecisionTypeClassifier:
                 "岔路",
                 "方向",
                 "定位",
+                "位置",
                 "gps",
                 "導航",
                 "route alignment",
@@ -855,6 +902,9 @@ class DecisionTypeClassifier:
                 "no go",
                 "no_go",
                 "延後出發",
+                "buffer",
+                "時間餘裕",
+                "時間緩衝",
                 "route plan",
                 "itinerary",
             ),
@@ -908,8 +958,24 @@ class DecisionProfileRegistry:
     def get(self, decision_type: DecisionType) -> DecisionCompactProfile:
         return DECISION_PROFILES[decision_type]
 
-    def compose(self, intent: DecisionIntent) -> DecisionCompactProfile:
+    def compose(
+        self,
+        intent: DecisionIntent,
+        *,
+        task_contract: MSERTaskContract | None = None,
+    ) -> DecisionCompactProfile:
         base = self.get(intent.primary_type)
+        if task_contract is not None and task_contract.requirements:
+            return base.model_copy(
+                update={
+                    "profile_id": (
+                        f"{base.profile_id}.task.{task_contract.task_id}."
+                        f"{task_contract.answer_mode.value}"
+                    ),
+                    "requirements": task_contract.requirements,
+                    "minimum_coverage_ratio": 1.0,
+                }
+            )
         requirements = list(base.requirements)
         known_dimensions = {requirement.dimension for requirement in base.requirements}
         for alternative in intent.alternative_types:
@@ -941,9 +1007,10 @@ class ContextReductionEngine:
         *,
         intent: DecisionIntent,
         environment: EnvironmentalRepresentation,
+        task_contract: MSERTaskContract | None = None,
         now: datetime | None = None,
     ) -> MinimalSufficientContext:
-        profile = self._profiles.compose(intent)
+        profile = self._profiles.compose(intent, task_contract=task_contract)
         reference_time = _as_utc(now or datetime.now(UTC))
         by_dimension: dict[CompactDimension, list[CompactSignal]] = defaultdict(list)
         for signal in environment.all_signals():
@@ -1408,6 +1475,7 @@ class MSEREngine:
         environment: EnvironmentalRepresentation,
         capabilities: Iterable[ToolCapability] = (),
         decision_hint: DecisionType | None = None,
+        task_contract: MSERTaskContract | None = None,
         now: datetime | None = None,
     ) -> MSERDecisionPacket:
         intent = self._classifier.classify(
@@ -1417,6 +1485,7 @@ class MSEREngine:
         context = self._reducer.reduce(
             intent=intent,
             environment=environment,
+            task_contract=task_contract,
             now=now,
         )
         tool_plan = self._planner.plan(
@@ -1436,6 +1505,7 @@ class MSEREngine:
             next_stage = MSERStage.INSUFFICIENT_EVIDENCE
         return MSERDecisionPacket(
             intent=intent,
+            task_contract=task_contract,
             compact_context=context,
             tool_plan=tool_plan,
             next_stage=next_stage,

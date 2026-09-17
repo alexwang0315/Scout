@@ -1,0 +1,38 @@
+{
+  "case_id": "terrain-http-qualification-cloud-synthetic-v0",
+  "workspace_id": "workspace-http-qualification-synthetic",
+  "workspace_revision": "workspace-revision-synthetic-1",
+  "mission_id": "mission-http-qualification-synthetic",
+  "mission_version": "mission-version-synthetic-1",
+  "route_id": "route-http-qualification-synthetic",
+  "route_version": "route-version-synthetic-1",
+  "question": "Find ridge, saddle, and steep terrain candidate evidence in this synthetic qualification route.",
+  "geographic_scope": {
+    "route_id": "route-http-qualification-synthetic",
+    "corridor_meters": 250,
+    "crs": "EPSG:4326"
+  },
+  "evidence_refs": [
+    "route:http-qualification",
+    "dem:http-qualification",
+    "qgis:http-qualification"
+  ],
+  "allowed_capabilities": [
+    "route.read",
+    "dem.read",
+    "qgis.processing.slope",
+    "workspace.evidence.read"
+  ],
+  "expected_min_findings": 3,
+  "expected_tool_calls": [
+    "route.read",
+    "dem.read",
+    "qgis.processing.slope"
+  ],
+  "max_runtime_seconds": 120,
+  "max_model_requests": 10,
+  "timeout_seconds": 60,
+  "privacy_sensitive": false,
+  "candidate_only": true,
+  "runtime_safety_truth": false
+}

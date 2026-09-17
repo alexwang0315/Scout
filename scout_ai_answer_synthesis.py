@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from scout_weather_window_tool import WEATHER_WINDOW_OUTPUT_KIND
+from scout_cwa_environment_tool import CWA_ENVIRONMENT_OUTPUT_KIND, _has_review_pressure as _cwa_has_review_pressure
+from scout_gee_environment_tool import GEE_ENVIRONMENT_OUTPUT_KIND, _has_review_pressure as _gee_has_review_pressure
+
 from pathlib import Path
 from typing import Any, Literal
 
@@ -312,6 +316,7 @@ def collect_and_synthesize_scout_ai_answer(
     include_missing_context_sources: bool = True,
     include_not_implemented_tools: bool = True,
     max_result_items_per_tool: int = 6,
+    reference_time: str | None = None,
 ) -> ScoutAiAnswerSynthesisOutput:
     evidence_collection = collect_scout_ai_evidence(
         question,
@@ -322,6 +327,7 @@ def collect_and_synthesize_scout_ai_answer(
         include_missing_context_sources=include_missing_context_sources,
         include_not_implemented_tools=include_not_implemented_tools,
         max_result_items_per_tool=max_result_items_per_tool,
+        reference_time=reference_time,
     )
     return synthesize_scout_ai_answer_from_evidence(evidence_collection)
 
@@ -1114,6 +1120,21 @@ def _answer_decision_output(
         completed_sources,
         key=lambda source: _decision_source_priority(source, question=question),
     )
+    decision_sources = _prefer_equal_route_weather_decision(decision_sources, question)
+    recent_rain = _reported_recent_rain_missing_support_decision(
+        decision_sources, question=question
+    )
+    if recent_rain is not None:
+        return _with_data_confidence(
+            {
+                **recent_rain,
+                "answerability": answerability,
+                "standardAlignment": _decision_output_standard_alignment(),
+            },
+            sources=sources,
+            missing_evidence=missing_evidence,
+            answerability=answerability,
+        )
     for source in decision_sources:
         native = source.top_result_summary.get("decision_output")
         if isinstance(native, dict) and native:
@@ -1191,6 +1212,189 @@ def _answer_decision_output(
         missing_evidence=missing_evidence,
         answerability=answerability,
     )
+
+
+def _prefer_equal_route_weather_decision(
+    sources: list[ScoutAiAnswerSource], question: str,
+) -> list[ScoutAiAnswerSource]:
+    """Resolve only an equal native decision tie within the weather family."""
+    native_sources = [
+        source for source in sources
+        if isinstance(source.top_result_summary.get("decision_output"), dict)
+        and source.top_result_summary["decision_output"]
+    ]
+    if not native_sources:
+        return sources
+    primary = native_sources[0]
+    environment_ids = {CWA_ENVIRONMENT_TOOL_ID, GEE_ENVIRONMENT_TOOL_ID}
+    weather = next((source for source in native_sources if source.tool_id == WEATHER_WINDOW_TOOL_ID), None)
+    if primary.tool_id not in environment_ids or weather is None:
+        return sources
+
+    from scout_cwa_environment_tool import _is_exact_cwa_query
+    from scout_gee_environment_tool import _gee_query_kind
+    from scout_weather_window_tool import _looks_like_daylight_buffer_question
+
+    # The CWA astronomy reader also recognizes route daylight questions. A
+    # continue/retreat/buffer decision belongs to Weather; an astronomy fact does not.
+    daylight_decision = _looks_like_daylight_buffer_question(question) and any(
+        token in question.casefold()
+        for token in ("繼續", "撤退", "下降", "能不能走", "還能走", "buffer", "continue", "retreat")
+    )
+    if _gee_query_kind(question) or (_is_exact_cwa_query(question) and not daylight_decision):
+        return sources
+    weather_rank = _decision_source_priority(weather, question=question)[0]
+    if _decision_source_priority(primary, question=question)[0] != weather_rank:
+        return sources
+    native = weather.top_result_summary["decision_output"]
+    decision = str(native.get("decision") or "").upper()
+    if decision not in {"DELAY", "CHANGE_PLAN", "NO_GO", "ESCALATE"}:
+        return sources
+    for source in native_sources:
+        if source.tool_id not in environment_ids:
+            continue
+        if _decision_source_priority(source, question=question)[0] <= weather_rank:
+            other = source.top_result_summary["decision_output"]
+            if str(other.get("decision") or "").upper() != decision or other.get("allowed") != native.get("allowed"):
+                return sources
+    reordered = list(sources)
+    reordered.remove(weather)
+    reordered.insert(reordered.index(primary), weather)
+    return reordered
+
+
+def _reported_recent_rain_missing_support_decision(
+    decision_sources: list[ScoutAiAnswerSource], *, question: str
+) -> dict[str, Any] | None:
+    """Project the approved recent-rain candidate; never alter native evidence."""
+    weather_sources = [s for s in decision_sources if s.tool_id == WEATHER_WINDOW_TOOL_ID]
+    cwa_sources = [s for s in decision_sources if s.tool_id == CWA_ENVIRONMENT_TOOL_ID]
+    gee_sources = [s for s in decision_sources if s.tool_id == GEE_ENVIRONMENT_TOOL_ID]
+    if any(len(group) != 1 for group in (weather_sources, cwa_sources, gee_sources)):
+        return None
+    weather = weather_sources[0]
+    if (
+        weather.collection_status != "completed"
+        or weather.output_artifact_kind != WEATHER_WINDOW_OUTPUT_KIND
+    ):
+        return None
+    first = next(
+        (s for s in decision_sources if isinstance(s.top_result_summary.get("decision_output"), dict)
+         and s.top_result_summary["decision_output"]),
+        None,
+    )
+    if first is None or first.tool_id not in {CWA_ENVIRONMENT_TOOL_ID, GEE_ENVIRONMENT_TOOL_ID}:
+        return None
+    if _decision_source_priority(first, question=question)[0] != _decision_source_priority(
+        weather, question=question
+    )[0]:
+        return None
+    top = weather.top_result_summary
+    assessment = top.get("weather_to_decision")
+    native = top.get("decision_output")
+    if not isinstance(assessment, dict) or not isinstance(native, dict):
+        return None
+    rule = assessment.get("route_sensitive_weather_rule")
+    if not isinstance(rule, dict) or (
+        rule.get("rule") != "query_reported_previous_24h_rain_route_reassessment"
+        or rule.get("query_reported") is not True
+        or rule.get("decision") != "CHANGE_PLAN"
+        or assessment.get("decision") != "CHANGE_PLAN"
+        or native.get("decision") != "CHANGE_PLAN"
+        or native.get("allowed") is not False
+        or native.get("runtimeSafetyTruth") is not False
+        or assessment.get("candidate_only") is not True
+        or assessment.get("runtime_safety_truth") is not False
+        or weather.runtime_safety_truth is not False
+    ):
+        return None
+    first_layer = native.get("firstLayer")
+    second_layer = native.get("secondLayer")
+    if not isinstance(first_layer, dict) or not isinstance(second_layer, dict):
+        return None
+    if not isinstance(first_layer.get("limit"), str) or not first_layer["limit"]:
+        return None
+    supports = []
+    for source, family, output_kind, has_pressure in (
+        (cwa_sources[0], "cwa", CWA_ENVIRONMENT_OUTPUT_KIND, _cwa_has_review_pressure),
+        (gee_sources[0], "gee", GEE_ENVIRONMENT_OUTPUT_KIND, _gee_has_review_pressure),
+    ):
+        summary = source.top_result_summary
+        decision = summary.get("decision_output")
+        environment = summary.get(f"{family}_environment")
+        provenance = summary.get("provenance_summary")
+        measurements = summary.get(f"{family}_summary")
+        if not all(isinstance(value, dict) for value in (decision, environment, provenance, measurements)):
+            return None
+        missing = source.missing_fields
+        missing_sources = provenance.get("missing_or_error_sources")
+        if (
+            source.collection_status != "completed"
+            or _decision_source_priority(source, question=question)[0]
+            != _decision_source_priority(weather, question=question)[0]
+            or source.output_artifact_kind != output_kind
+            or source.runtime_safety_truth is not False
+            or decision.get("answerSourceToolId") != source.tool_id
+            or decision.get("action") != f"review_{family}_environment_evidence"
+            or decision.get("decision") != "DELAY"
+            or decision.get("allowed") is not False
+            or decision.get("runtimeSafetyTruth") is not False
+            or environment.get("candidate_only") is not True
+            or environment.get("runtime_safety_truth") is not False
+            or environment.get("human_review_required") is not True
+            or provenance.get("candidate_only") is not True
+            or provenance.get("runtime_safety_truth") is not False
+            or provenance.get("human_review_required") is not True
+            or environment.get("summary") != measurements
+            or environment.get("decision_output") != decision
+            or not missing
+            or not isinstance(missing_sources, list)
+            or not all(isinstance(value, str) for value in missing_sources)
+            or not set(missing).issubset(missing_sources)
+        ):
+            return None
+        # Missing/stale/future freshness gaps are not source-file missing/error IDs.
+        # The native reader's missing-first branch can coexist with real pressure.
+        # Read the original measurements through the SAME pure predicate.
+        required_keys = (
+            {"warning_count", "qpf_corridor_summary"} if family == "cwa"
+            else {"smap_l4_corridor_summary", "gpm_imerg_corridor_summary"}
+        )
+        if not required_keys.issubset(measurements):
+            return None
+        try:
+            if has_pressure(measurements):
+                return None
+        except (TypeError, ValueError):
+            return None
+        supports.append({
+            "toolId": source.tool_id,
+            "decision": decision["decision"],
+            "allowed": decision["allowed"],
+            "missingFields": list(missing),
+            "firstLayer": dict(decision.get("firstLayer") or {}),
+        })
+    support_limit = "CWA / GEE 支援資料未齊；補齊缺口並人工複核前，不得授權出發。"
+    required = list(second_layer.get("requiredConditions") or [])
+    for support in supports:
+        required.extend(f"補齊 {support['toolId']}：{gap}。" for gap in support["missingFields"])
+    projection = {
+        **native,
+        "answerSourceToolId": weather.tool_id,
+        "aggregationRule": "query_reported_recent_rain_missing_support.v1",
+        "supportingDecisions": supports,
+        "requiredConditions": required,
+        "candidateOnly": True,
+        "humanReviewRequired": True,
+        "runtimeSafetyTruth": False,
+        "firstLayer": {**first_layer, "limit": first_layer["limit"] + " " + support_limit},
+        "secondLayer": {**second_layer, "requiredConditions": required},
+    }
+    if "locationConstraint" in native:
+        projection["locationConstraint"] = projection["firstLayer"]["limit"]
+    # Native text is a cached rendering; rebuild only the new aggregate projection.
+    projection["text"] = _decision_output_text({**projection, "text": None})
+    return projection
 
 
 def _decision_source_priority(

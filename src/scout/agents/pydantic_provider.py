@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 from typing import Any
 
@@ -18,6 +19,7 @@ from scout.agents.deps import (
 )
 from scout.agents.model_gateway import ModelSlaCallResult, ModelSlaGateway
 from scout.agents.model_policy import ModelPolicy, resolve_model_policy
+from scout.agents.pydantic_model_lifecycle import pydantic_model_resources
 from scout.agents.pydantic_ai_compat import (
     build_chat_model,
     pydantic_agent_runtime_kwargs,
@@ -52,16 +54,20 @@ class PydanticScoutAgentProvider:
         """Run a typed Scout request via ``pydantic_ai.Agent``."""
 
         def provider_call() -> BaseModel:
-            agent = Agent(
-                self._agent_model(request),
-                output_type=request.output_type,
-                instructions=_typed_output_instructions(request),
-                name=request.agent_name,
-                tools=_read_only_tools(request),
-                capabilities=pydantic_native_research_capabilities(self._model_policy),
-                **pydantic_agent_runtime_kwargs(),
-            )
-            result = agent.run_sync(request.prompt)
+            # ModelSlaGateway owns this worker; close its factory-created
+            # model clients before closing the same loop used by every request.
+            with asyncio.Runner() as runner:
+                with pydantic_model_resources(runner.get_loop()):
+                    agent = Agent(
+                        self._agent_model(request),
+                        output_type=request.output_type,
+                        instructions=_typed_output_instructions(request),
+                        name=request.agent_name,
+                        tools=_read_only_tools(request),
+                        capabilities=pydantic_native_research_capabilities(self._model_policy),
+                        **pydantic_agent_runtime_kwargs(),
+                    )
+                    result = agent.run_sync(request.prompt)
             return validate_provider_output(
                 pydantic_result_output(result),
                 request.output_type,
@@ -83,7 +89,9 @@ class PydanticScoutAgentProvider:
 
     def _agent_model(self, request: ScoutAgentRequest) -> Any:
         if isinstance(self._model, str):
-            return build_chat_model(model_name=self._model)
+            return build_chat_model(
+                model_name=self._model_policy.model_for_agent or self._model
+            )
         return self._model or self._local_function_model(request)
 
     def _local_function_model(self, request: ScoutAgentRequest) -> FunctionModel:

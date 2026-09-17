@@ -1097,6 +1097,41 @@
     #runtimeMapRendererShell[data-map-renderer-state="ready"]:not([data-map-raster-state="loading"]):not([data-map-raster-state="degraded"]) #runtimeMapRendererStatus {
       display: none;
     }
+    #debugRudyTileStatus {
+      position: absolute;
+      left: 10px;
+      top: 10px;
+      z-index: 45;
+      max-width: calc(100% - 20px);
+      border: 1px solid rgba(15, 23, 42, .24);
+      border-radius: 6px;
+      padding: 6px 8px;
+      color: #17212b;
+      background: rgba(255, 255, 255, .94);
+      font-size: 11px;
+      line-height: 1.35;
+      pointer-events: none;
+    }
+    #runtimeMapRendererShell[data-debug-rudy-state="degraded"] #debugRudyTileStatus {
+      color: #9a3412;
+      border-color: #ea580c;
+    }
+    .debug-map-evidence-picker {
+      position: absolute;
+      left: 10px;
+      bottom: 38px;
+      z-index: 8;
+      display: flex;
+      gap: 4px;
+      max-width: calc(100% - 20px);
+      padding: 4px;
+      border: 1px solid #94a3b8;
+      border-radius: 5px;
+      background: rgba(255, 255, 255, .95);
+    }
+    .debug-map-evidence-picker[hidden] { display: none; }
+    .debug-map-evidence-picker select { max-width: min(230px, 50vw); }
+    [data-map-hover="true"]:focus-visible { outline: 2px solid #2563eb; outline-offset: 3px; }
     #runtimeMap[data-map-interaction-mode="box"],
     #runtimeMap.is-selecting { cursor: crosshair; }
     #runtimeMap.is-panning { cursor: grabbing; }
@@ -2306,8 +2341,9 @@
                 <button id="zoomIn" class="tool-button compact" type="button" title="Zoom in" aria-label="Zoom in">+</button>
                 <button id="zoomOut" class="tool-button compact" type="button" title="Zoom out" aria-label="Zoom out">-</button>
                 <button id="fitRoute" class="tool-button" type="button" title="Reset map view" aria-label="Reset map view">Fit</button>
+                <button id="refreshMapTiles" class="tool-button" type="button" aria-pressed="true">停止更新</button>
                 <button id="panMode" class="tool-button is-active" type="button" title="Mouse drag pan is active" aria-label="Mouse drag pan" aria-pressed="true">Pan</button>
-                <button id="boxZoomMode" class="tool-button compact" type="button" title="Point or rectangle zoom: click to zoom in, drag down-right to zoom in, up-left to zoom out" aria-label="Rectangle drag zoom" aria-pressed="false">▣</button>
+                <button id="boxZoomMode" class="tool-button compact" type="button" title="Point or rectangle zoom: click or drag in any direction to zoom in; use minus to zoom out" aria-label="Rectangle zoom in in any direction" aria-pressed="false">▣</button>
                 <span id="zoomLevel" class="zoom-level" title="Map zoom">1.00x</span>
                 <details class="layer-menu">
                   <summary id="layerControl" title="Show layer controls" aria-label="Layer controls">Layers <strong id="layerEnabledCount">-</strong></summary>
@@ -2392,6 +2428,7 @@
               <svg id="runtimeMap" viewBox="0 0 1000 720" role="img" aria-label="chilai_nanhua_day1 debug evidence map">
               </svg>
               <output id="runtimeMapRendererStatus" role="status" aria-live="polite">Selecting debug map renderer.</output>
+              <output id="debugRudyTileStatus" role="status" aria-live="polite">Rudy+TW 圖磚尚未載入。</output>
             </div>
             <p class="summary" id="selectedEventSummary">Select a timeline node to highlight the related runtime map element.</p>
             <div class="map-legend" aria-label="Runtime map legend">
@@ -2524,6 +2561,10 @@
   <script src="/admin/scout-assistant-ui.js"></script>
   <script src="/admin/scout-maplibre-evidence.js"></script>
   <script>
+    const DIAGNOSTIC_MAP_PROBE = new URLSearchParams(location.search).get("diagnosticMapProbe") === "1";
+    const DIAGNOSTIC_NATIVE_TILE_PROBE = DIAGNOSTIC_MAP_PROBE
+      && new URLSearchParams(location.search).get("diagnosticNativeTiles") === "1";
+    const MAP_WHEEL_ZOOM_ENABLED = new URLSearchParams(location.search).get("wheelZoom") !== "0";
     const DEFAULT_PRETRIP_PROJECT_ID = "chilai_nanhua_day1";
     const PRETRIP_PROJECT_ID_PARAM = new URLSearchParams(window.location.search).get("projectId") || "";
     const PRETRIP_PROJECT_ID = /^[A-Za-z0-9_.-]+$/.test(PRETRIP_PROJECT_ID_PARAM)
@@ -2558,6 +2599,8 @@
     const OSM_TARGET_ZOOM = 17;
     const OSM_MAX_TILES = 64;
     const RASTER_MAX_TILES = 64;
+    const RUDY_TWMAP_MAX_TILES = 160;
+    const RUDY_TILE_SWAP_TIMEOUT_MS = 12000;
     const OSM_MIN_ZOOM = 8;
     const OSM_MAX_ZOOM = 20;
     const OSM_TILE_CACHE_BUST = "transparent-fallback-v12";
@@ -2578,7 +2621,7 @@
     const RASTER_SOURCE_LAYER_DEFINITIONS = [
       {layerId: "imagery", sourceId: "nlsc_photo2", label: "Imagery", sourceKind: "wmts_tile", urlTemplate: "https://wmts.nlsc.gov.tw/wmts/PHOTO2/default/EPSG:3857/{z}/{y}/{x}", tileOrder: "z_y_x", minZoom: 5, maxZoom: 19, opacity: 0.92},
       {layerId: "rudy", sourceId: "happyman_rudy", label: "Rudy", wmtsLayer: "rudy", opacity: 0.94, ...HAPPYMAN_WMTS_BASE},
-      {layerId: "rudy-twmap", sourceId: "happyman_rudy_twmap", label: "Rudy+TW", wmtsLayer: "rudy_twmap", opacity: 0.9, ...HAPPYMAN_WMTS_BASE},
+      {layerId: "rudy-twmap", sourceId: "happyman_rudy_twmap", label: "Rudy+TW", sourceKind: "scout_proxy_tile", cacheLayerId: "rudy-twmap", minZoom: 5, maxZoom: 20, opacity: 0.9},
       {layerId: "relief", sourceId: "happyman_colorrelief", label: "Relief", wmtsLayer: "colorrelief", opacity: 0.58, ...HAPPYMAN_WMTS_BASE},
       {layerId: "geology", sourceId: "happyman_geo2016", label: "Geology", wmtsLayer: "geo2016", opacity: 0.52, ...HAPPYMAN_WMTS_BASE},
       {layerId: "topo-5k", sourceId: "happyman_tw5k2000", label: "Topo 5K", wmtsLayer: "tw5k2000", opacity: 0.82, ...HAPPYMAN_WMTS_BASE},
@@ -2626,6 +2669,10 @@
       osmCartoPaletteStatus: "not_loaded",
       mapLibreRenderer: null,
       mapLibreLoadResult: null,
+      rudyTileStatus: null,
+      rudyRemoteRefreshEnabled: !DIAGNOSTIC_MAP_PROBE || DIAGNOSTIC_NATIVE_TILE_PROBE,
+      rudyForceRefresh: false,
+      rudyRefreshNonce: 0,
       mapRenderer: Object.freeze({
         requested: DEBUG_MAP_RENDERER_PREFERENCE,
         active: "pending",
@@ -2759,6 +2806,7 @@
     }
 
     async function postJson(path, payload) {
+      if (DIAGNOSTIC_MAP_PROBE) throw new Error("Map order diagnostics are read-only.");
       return window.ScoutAssistantUI.postJson(path, payload);
     }
 
@@ -2868,6 +2916,7 @@
     }
 
     function apiBase() {
+      if (DIAGNOSTIC_MAP_PROBE) return "";
       const params = new URLSearchParams(location.search);
       const override = params.get("apiBase") || localStorage.getItem("scout.adminApiBase");
       if (override) return override.replace(/\/$/, "");
@@ -2966,7 +3015,15 @@
     function rasterTileTemplate(projection, layerId = "imagery") {
       const layer = rasterLayerFor(projection, layerId);
       const definition = rasterSourceDefinitionFor(layerId, layer);
+      if (definition.sourceId === "happyman_rudy_twmap") return debugRudyTileTemplate();
       return definition.urlTemplate || "";
+    }
+    function debugRudyTileTemplate() {
+      const tileBase = (location.protocol === "file:" ? apiBase() : location.origin).replace(/\/$/, "");
+      const query = debugPageState.rudyRemoteRefreshEnabled ? "native=1&exact=1" : "cache_only=1&exact=1";
+      const refresh = !DIAGNOSTIC_MAP_PROBE && debugPageState.rudyForceRefresh && debugPageState.rudyRemoteRefreshEnabled ? "&refresh=1" : "";
+      const revision = debugPageState.rudyRefreshNonce ? `&v=debug-rudy-${debugPageState.rudyRefreshNonce}` : "";
+      return `${tileBase}/admin/tiles/imagery/${encodeURIComponent(PRETRIP_PROJECT_ID)}/rudy-twmap/{z}/{x}/{y}.png?source_id=happyman_rudy_twmap&${query}${refresh}${revision}`;
     }
     function normalizeRasterBounds(value) {
       if (!value) return null;
@@ -2979,6 +3036,7 @@
       return {west, south, east, north};
     }
     function rasterBoundsFor(projection, layerId = "imagery") {
+      if (layerId === "rudy-twmap") return null;
       const layer = rasterLayerFor(projection, layerId);
       if (isDirectRuntimeRasterLayer(layer)) return null;
       return normalizeRasterBounds(layer.raster_bbox_wgs84 || layer.bbox_wgs84 || layer.georeference?.bbox_wgs84);
@@ -3001,9 +3059,10 @@
       const layer = rasterLayerFor(projection, layerId);
       const definition = rasterSourceDefinitionFor(layerId, layer);
       const parsed = parseZoomRange(layer.raster_tile_zoom_range || layer.zoom_range);
-      const min = Number(layer.raster_tile_min_zoom ?? layer.min_zoom ?? parsed?.min ?? definition?.minZoom ?? OSM_MIN_ZOOM);
-      const max = Number(layer.raster_tile_max_zoom ?? layer.max_zoom ?? parsed?.max ?? definition?.maxZoom ?? OSM_TARGET_ZOOM);
-      const safeMin = Number.isFinite(min) ? clamp(Math.round(min), OSM_MIN_ZOOM, OSM_MAX_ZOOM) : OSM_MIN_ZOOM;
+      const isRudy = definition?.sourceId === "happyman_rudy_twmap";
+      const min = Number(isRudy ? definition.minZoom : layer.raster_tile_min_zoom ?? layer.min_zoom ?? parsed?.min ?? definition?.minZoom ?? OSM_MIN_ZOOM);
+      const max = Number(isRudy ? definition.maxZoom : layer.raster_tile_max_zoom ?? layer.max_zoom ?? parsed?.max ?? definition?.maxZoom ?? OSM_TARGET_ZOOM);
+      const safeMin = Number.isFinite(min) ? clamp(Math.round(min), isRudy ? 5 : OSM_MIN_ZOOM, OSM_MAX_ZOOM) : OSM_MIN_ZOOM;
       const safeMax = Number.isFinite(max) ? clamp(Math.round(max), safeMin, OSM_MAX_ZOOM) : OSM_TARGET_ZOOM;
       return {min: safeMin, max: safeMax};
     }
@@ -3612,6 +3671,7 @@
         .replaceAll("{y}", String(y));
     }
     function wmtsTileUrl(definition, z, x, y) {
+      if (definition.sourceId === "happyman_rudy_twmap") return replaceTilePlaceholders(debugRudyTileTemplate(), z, x, y);
       if (definition.sourceKind === "wmts_kvp_tile") {
         const params = new URLSearchParams({
           SERVICE: "WMTS",
@@ -3688,9 +3748,8 @@
       });
     }
     function debugMapLibreRasterLayers(projection) {
-      const tileBase = (location.protocol === "file:" ? apiBase() : location.origin).replace(/\/$/, "");
       const apiTileBase = apiBase().replace(/\/$/, "");
-      const rudyTemplate = `${tileBase}/admin/tiles/imagery/${encodeURIComponent(PRETRIP_PROJECT_ID)}/imagery/{z}/{x}/{y}.png?source_id=happyman_rudy_twmap&native=1`;
+      const rudyTemplate = debugRudyTileTemplate();
       const osmTemplate = `${apiTileBase}/admin/tiles/osm/{z}/{x}/{y}.png?fallback=transparent`;
       const tiledLayers = [
         {
@@ -3741,7 +3800,42 @@
     function debugMapLibreActive() {
       return debugPageState.mapRenderer?.active === "maplibre" && Boolean(debugPageState.mapLibreRenderer);
     }
+    function updateDebugRudyTileStatus(status) {
+      if (!status) return;
+      const required = Math.max(0, Number(status.required_count ?? status.required_tile_count) || 0);
+      const success = Math.max(0, Number(status.success_count) || 0);
+      const errors = Math.max(0, Number(status.error_count) || 0);
+      const pending = Math.max(0, Number(status.pending_count) || 0);
+      const unverified = Math.max(0, Number(status.unverified_count) || 0);
+      const zoom = status.native_zoom == null ? null : Number(status.native_zoom);
+      const verified = status.visible !== false && status.state === "available" && required > 0 && success >= required
+        && errors === 0 && pending === 0 && unverified === 0 && Number.isFinite(zoom);
+      const state = status.visible === false ? "hidden"
+        : verified ? "available" : status.state === "available" ? "degraded" : status.state || "loading";
+      debugPageState.rudyTileStatus = {...status, state, native_zoom: zoom, verified_native_zoom: verified ? zoom : null,
+        required_count: required, success_count: success, error_count: errors, pending_count: pending};
+      Object.assign(runtimeMapRendererShell.dataset, {
+        debugRudyState: state,
+        debugRudyRequestedZoom: Number.isFinite(zoom) ? String(zoom) : "",
+        debugRudyVerifiedZoom: verified ? String(zoom) : "",
+        debugRudyRetainedZoom: status.retained_native_zoom == null ? "" : String(status.retained_native_zoom),
+        debugRudyRequiredCount: String(required), debugRudySuccessCount: String(success),
+        debugRudyErrorCount: String(errors), debugRudyPendingCount: String(pending),
+        debugRudyUnverifiedCount: String(unverified), debugRudyReason: status.reason || "",
+      });
+      const output = document.getElementById("debugRudyTileStatus");
+      if (output) {
+        output.hidden = state === "hidden";
+        const target = Number.isFinite(zoom) ? `Z${zoom}` : "目前視野";
+        const retained = status.retained_native_zoom == null ? "" : `；保留先前 Z${status.retained_native_zoom} 圖磚`;
+        output.textContent = verified ? `Rudy+TW 原生 ${target}：${success}/${required} 張已載入。`
+          : state === "degraded" ? `Rudy+TW ${target} 細節未完整載入（${success}/${required}，失敗 ${errors}）${retained}；視角保持不變。`
+          : `Rudy+TW 正在載入原生 ${target}（${success}/${required}）${retained}。`;
+      }
+      updateMapZoomIndicator();
+    }
     function activateDebugSvgFallback(reason, detail = "") {
+      disposeDebugMapEvidenceControls();
       debugPageState.mapLibreRenderer?.destroy();
       debugPageState.mapLibreRenderer = null;
       runtimeMapLibre.hidden = true;
@@ -3826,6 +3920,97 @@
       const pointerEvent = event?.originalEvent || event;
       if (pointerEvent) showMapHoverTooltip(target, pointerEvent);
     }
+    function disposeDebugMapEvidenceControls() {
+      debugPageState.mapEvidenceControlsCleanup?.();
+      debugPageState.mapEvidenceControlsCleanup = null;
+      runtimeMapLibre.querySelector(".debug-map-evidence-picker")?.remove();
+      runtimeMapLibre.dataset.debugKeyboardEvidenceCount = "0";
+      hideMapHoverTooltip();
+    }
+    function configureDebugMapLibreControls(renderer) {
+      disposeDebugMapEvidenceControls();
+      const map = renderer?.map;
+      if (!map) return;
+      if (MAP_WHEEL_ZOOM_ENABLED) map.scrollZoom?.enable?.();
+      else map.scrollZoom?.disable?.();
+      // The Debug host owns its documented arrow, +/- and B/P keyboard controls.
+      map.keyboard?.disable?.();
+      map.getCanvas?.()?.setAttribute("tabindex", "0");
+      const sync = () => syncDebugMapLibreKeyboardEvidence(renderer);
+      map.on("idle", sync);
+      map.on("moveend", sync);
+      debugPageState.mapEvidenceControlsCleanup = () => {
+        map.off?.("idle", sync);
+        map.off?.("moveend", sync);
+      };
+      sync();
+    }
+    function syncDebugMapLibreKeyboardEvidence(renderer = debugPageState.mapLibreRenderer) {
+      if (!debugMapLibreActive() || renderer !== debugPageState.mapLibreRenderer) return;
+      let rendered;
+      try { rendered = renderer.map.queryRenderedFeatures(); }
+      catch (_error) { rendered = []; }
+      const features = new Map();
+      rendered.forEach(item => {
+        const feature = renderer.index.feature(item.id ?? item.properties?.identity_key);
+        if (feature) features.set(String(feature.id), feature);
+      });
+      runtimeMapLibre.dataset.debugKeyboardEvidenceCount = String(features.size);
+      let picker = runtimeMapLibre.querySelector(".debug-map-evidence-picker");
+      if (!features.size) {
+        if (picker) {
+          picker.hidden = true;
+          if (picker.contains(document.activeElement)) hideMapHoverTooltip();
+          const button = picker.querySelector("button");
+          button.disabled = true;
+          button.debugMapLibreFeature = null;
+        }
+        return;
+      }
+      if (!picker) {
+        picker = document.createElement("div");
+        picker.className = "debug-map-evidence-picker";
+        picker.setAttribute("role", "group");
+        picker.setAttribute("aria-label", "目前地圖視野的證據");
+        const select = document.createElement("select");
+        select.setAttribute("aria-label", "選擇目前地圖視野的證據");
+        const button = document.createElement("button");
+        button.id = "debugMapLibreEvidenceTarget";
+        button.type = "button";
+        button.textContent = "檢視證據";
+        button.addEventListener("click", () => {
+          if (button.debugMapLibreFeature) selectDebugMapLibreFeature(button.debugMapLibreFeature);
+        });
+        select.addEventListener("change", () => syncDebugMapLibreKeyboardEvidence(renderer));
+        picker.append(select, button);
+        runtimeMapLibre.appendChild(picker);
+      }
+      picker.hidden = false;
+      const select = picker.querySelector("select");
+      const button = picker.querySelector("button");
+      button.disabled = false;
+      const ordered = [...features].sort(([left], [right]) => left.localeCompare(right));
+      const signature = JSON.stringify(ordered.map(([id, feature]) => [id, mapFeatureTitle(feature.properties)]));
+      const selected = features.has(select.value) ? select.value : ordered[0][0];
+      if (picker.dataset.featureSignature !== signature) {
+        select.replaceChildren(...ordered.map(([id, feature]) => {
+          const option = document.createElement("option");
+          option.value = id;
+          option.textContent = mapFeatureTitle(feature.properties);
+          return option;
+        }));
+        picker.dataset.featureSignature = signature;
+      }
+      select.value = selected;
+      const feature = features.get(selected);
+      button.debugMapLibreFeature = feature;
+      button.removeAttribute("data-source-id");
+      attachMapEvidence(button, feature.properties, feature.properties?.identity_key || String(feature.id));
+      button.dataset.featureId = String(feature.id);
+      button.dataset.mapRendererEvidence = "maplibre";
+      button.dataset.mapFeatureKind = String(feature.geometry?.type || "feature").toLowerCase();
+      button.setAttribute("aria-label", mapFeatureAriaLabel(button));
+    }
     function syncDebugMapLibreProjection(projection = debugPageState.projection) {
       if (!debugMapLibreActive() || !projection) return null;
       const featureCollection = debugMapLibreFeatureCollection(projection);
@@ -3836,7 +4021,42 @@
       });
       return featureCollection;
     }
+    async function disposeDebugMapRenderer() {
+      if (debugPageState.mapLibreDisposePromise) return debugPageState.mapLibreDisposePromise;
+      debugPageState.mapLibreDisposed = true;
+      debugPageState.mapLibreRendererGeneration = (debugPageState.mapLibreRendererGeneration || 0) + 1;
+      const renderers = new Set([debugPageState.mapLibreRenderer, ...(debugPageState.mapLibrePendingRenderers || [])].filter(Boolean));
+      debugPageState.mapLibreRenderer = null;
+      const errors = [];
+      try { disposeDebugMapEvidenceControls(); }
+      catch (error) { errors.push({phase: "evidence_controls", errorName: error?.name === "TypeError" ? "TypeError" : "Error"}); }
+      for (const group of runtimeMap?.querySelectorAll?.('[data-layer-group="rudy-twmap"]') || []) {
+        try {
+          const pending = group.debugRudyPending || group.querySelector('[data-tile-generation="pending"]');
+          if (pending && typeof group.debugRudyCancel !== "function") {
+            errors.push({phase: "svg_tiles_destroy", errorName: "MissingCancellationHook"});
+          }
+          group.debugRudyCancel?.();
+          if (group.debugRudyPending || group.querySelector('[data-tile-generation="pending"]')) {
+            errors.push({phase: "svg_tiles_destroy", errorName: "PendingGenerationRemains"});
+          }
+        } catch (error) { errors.push({phase: "svg_tiles_destroy", errorName: error?.name || "Error"}); }
+      }
+      for (const renderer of renderers) {
+        try { renderer.destroy(); }
+        catch (error) { errors.push({phase: "renderer_destroy", errorName: error?.name === "TypeError" ? "TypeError" : "Error"}); }
+      }
+      debugPageState.mapLibreDisposePromise = (async () => {
+        await Promise.allSettled([...(debugPageState.mapLibreInitializations || [])]);
+        const result = {disposed: errors.length === 0, activeMaps: errors.length ? null : 0,
+          pendingInitializations: errors.length ? null : 0, errors};
+        if (runtimeMapLibre) runtimeMapLibre.dataset.maplibreDisposeReceipt = JSON.stringify(result);
+        return result;
+      })();
+      return debugPageState.mapLibreDisposePromise;
+    }
     async function activateDebugMapLibreRenderer(maplibregl, projection) {
+      if (debugPageState.mapLibreDisposed) return null;
       const adapter = window.ScoutMapLibreEvidence;
       const featureCollection = debugMapLibreFeatureCollection(projection);
       if (!adapter || !runtimeMapRendererShell || !runtimeMapLibre || !featureCollection?.features?.length) {
@@ -3844,23 +4064,41 @@
       }
       runtimeMapLibre.hidden = false;
       runtimeMap.hidden = true;
+      runtimeMap.querySelector('[data-layer-group="rudy-twmap"]')?.debugRudyCancel?.();
+      const generation = debugPageState.mapLibreRendererGeneration = (debugPageState.mapLibreRendererGeneration || 0) + 1;
+      debugPageState.mapLibrePendingRenderers ||= new Set();
+      debugPageState.mapLibreInitializations ||= new Set();
+      let creation = null;
+      let pendingRenderer = null;
       try {
+        for (const previous of debugPageState.mapLibrePendingRenderers) previous.destroy();
+        disposeDebugMapEvidenceControls();
         debugPageState.mapLibreRenderer?.destroy();
-        debugPageState.mapLibreRenderer = await adapter.createRenderer({
+        debugPageState.mapLibreRenderer = null;
+        creation = adapter.createRenderer({
           maplibregl,
           container: runtimeMapLibre,
+          onCreated: renderer => {
+            pendingRenderer = renderer;
+            debugPageState.mapLibrePendingRenderers.add(renderer);
+          },
           rasterLayers: debugMapLibreRasterLayers(projection),
           timeoutMs: 20000,
           onFeatureSelect: selectDebugMapLibreFeature,
           onFeatureHover: hoverDebugMapLibreFeature,
           onFeatureLeave: hideMapHoverTooltip,
+          onViewState: () => updateMapZoomIndicator(),
           onStatus: status => {
+            if (debugPageState.mapLibreDisposed || generation !== debugPageState.mapLibreRendererGeneration) return;
             runtimeMapRendererShell.dataset.mapRendererState = status.state;
             runtimeMapRendererShell.dataset.mapRendererReason = status.reason;
           },
           onRasterStatus: (_status, states) => {
+            if (debugPageState.mapLibreDisposed || generation !== debugPageState.mapLibreRendererGeneration) return;
             const aggregate = runtimeMapLibre.dataset.maplibreRasterState || "configured";
             runtimeMapRendererShell.dataset.mapRasterState = aggregate;
+            const rudy = states.find(item => item.layer_id === "rudy-twmap");
+            if (rudy) updateDebugRudyTileStatus(rudy);
             const output = document.getElementById("runtimeMapRendererStatus");
             if (!output) return;
             if (aggregate === "degraded") {
@@ -3871,6 +4109,14 @@
             }
           },
         }, featureCollection);
+        debugPageState.mapLibreInitializations.add(creation);
+        const renderer = await creation;
+        if (debugPageState.mapLibreDisposed || generation !== debugPageState.mapLibreRendererGeneration) {
+          renderer.destroy();
+          return null;
+        }
+        debugPageState.mapLibreRenderer = renderer;
+        debugPageState.mapLibreRenderer.syncRasterCameraLimits();
         document.querySelectorAll("[data-layer]").forEach(input => {
           debugPageState.mapLibreRenderer.setLayerVisibility(input.dataset.layer, input.checked);
         });
@@ -3886,12 +4132,18 @@
         if (!focusDebugMapLibreForEvent(selectedMapEvent(), {preserveZoom: false})) {
           debugPageState.mapLibreRenderer.fitLayer("route", {duration: 0, maxZoom: 15});
         }
+        configureDebugMapLibreControls(debugPageState.mapLibreRenderer);
         return debugPageState.mapLibreRenderer;
       } catch (error) {
+        if (debugPageState.mapLibreDisposed || generation !== debugPageState.mapLibreRendererGeneration || error?.name === "AbortError") return null;
         return activateDebugSvgFallback("maplibre_render_failed", String(error?.message || error));
+      } finally {
+        debugPageState.mapLibrePendingRenderers.delete(pendingRenderer);
+        debugPageState.mapLibreInitializations.delete(creation);
       }
     }
     async function initializeDebugMapRenderer(projection = debugPageState.projection) {
+      if (debugPageState.mapLibreDisposed) return null;
       const adapter = window.ScoutMapLibreEvidence;
       if (!adapter || !runtimeMapRendererShell || !projection) {
         return activateDebugSvgFallback("adapter_or_projection_unavailable");
@@ -3909,12 +4161,72 @@
       }
       return activateDebugMapLibreRenderer(loaded.maplibregl, projection);
     }
+    function debugCameraMotion() {
+      const map = debugPageState.mapLibreRenderer?.map;
+      const unknown = {observedAt: Date.now(), basis: "maplibre-public-api", available: false, moving: null, easing: null};
+      if (typeof map?.isMoving !== "function") return unknown;
+      try {
+        // Map.isMoving is public in 6.2 and includes camera and handler motion.
+        // Camera.isEasing is not exposed by Map; do not fabricate an easing value.
+        const moving = map.isMoving(), easing = typeof map.isEasing === "function" ? map.isEasing() : null;
+        return typeof moving === "boolean" && (easing === null || typeof easing === "boolean")
+          ? {...unknown, available: true, moving, easing} : unknown;
+      } catch (error) { return {...unknown, errorName: error?.name || "Error"}; }
+    }
     window.scoutDebugMapRendererBridge = Object.freeze({
+      dispose: disposeDebugMapRenderer,
+      getCameraMotion: debugCameraMotion,
+      getViewLimits() {
+        const renderer = debugPageState.mapLibreRenderer;
+        return renderer ? {viewZoom: renderer.map?.getZoom?.(), maxViewZoom: renderer.map?.getMaxZoom?.(),
+          nativeCamera: renderer.publishCameraLimitReceipt()}
+          : {viewZoom: debugPageState.zoom, maxViewZoom: debugMapInteractionMaxZoom(), nativeCamera: null};
+      },
+      getRenderPolicySources() {
+        const renderer = debugPageState.mapLibreRenderer;
+        return {activeRenderer: debugPageState.mapRenderer.active,
+          ...window.ScoutMapLibreEvidence.inspectRasterRenderPolicySources(renderer?.map, renderer?.rasterTransport)};
+      },
+      inspectLayerOrder() {
+        const adapter = window.ScoutMapLibreEvidence;
+        const report = debugMapLibreActive()
+          ? adapter.inspectMapLibreLayerOrder(debugPageState.mapLibreRenderer.map)
+          : adapter.inspectSvgLayerOrder(runtimeMap, {
+              requiredLayerIds: Object.keys(MAP_LAYER_RANKS),
+              expectedLayerOrder: Object.keys(MAP_LAYER_RANKS).sort((left, right) => MAP_LAYER_RANKS[left] - MAP_LAYER_RANKS[right]),
+            });
+        return {...report, projectId: PRETRIP_PROJECT_ID, activeRenderer: debugPageState.mapRenderer.active,
+          rendererState: debugPageState.mapRenderer.state};
+      },
       getSnapshot: () => debugPageState.mapLibreRenderer?.snapshot?.() || debugPageState.mapRenderer,
+      getRudyTileView: () => {
+        const renderer = debugPageState.mapLibreRenderer;
+        const mapBounds = debugMapLibreActive() ? renderer.map?.getBounds?.() : null;
+        const bounds = mapBounds ? {west: mapBounds.getWest(), east: mapBounds.getEast(),
+          south: mapBounds.getSouth(), north: mapBounds.getNorth()}
+          : debugPageState.projection ? debugRudyViewportBounds(debugPageState.projection) : null;
+        const rudy = debugMapLibreActive() ? renderer.rasterLayers?.find(layer => layer.layer_id === "rudy-twmap") : null;
+        const coverage = rudy ? window.ScoutMapLibreEvidence.rasterTileCoverage(rudy, renderer.map) : null;
+        return {bounds, tileTemplate: rudy?.tiles?.[0] || debugRudyTileTemplate(),
+          minzoom: rudy?.minzoom ?? 5, maxzoom: rudy?.maxzoom ?? 20, tileSize: rudy?.tile_size ?? 256,
+          sourceBounds: rudy?.bounds || null, tiles: coverage?.tiles,
+          coverageBasis: coverage?.coverage_basis, nativeZooms: coverage?.native_zooms,
+          viewZoom: renderer?.map?.getZoom?.() ?? debugPageState.zoom,
+          maxViewZoom: renderer?.map?.getMaxZoom?.() ?? debugMapInteractionMaxZoom(),
+          nativeCamera: renderer?.publishCameraLimitReceipt?.() || null};
+      },
       focusEvent: eventId => {
         const event = debugPageState.events.find(candidate => candidate.event_id === eventId);
         return focusDebugMapLibreForEvent(event, {preserveZoom: false});
       },
+    });
+    window.addEventListener("pagehide", () => { void disposeDebugMapRenderer(); });
+    window.addEventListener("pageshow", event => {
+      if (event.persisted && debugPageState.mapLibreDisposed) {
+        debugPageState.mapLibreDisposed = false;
+        debugPageState.mapLibreDisposePromise = null;
+        void initializeDebugMapRenderer();
+      }
     });
 
     function tileRangeForZoom(bounds, zoom) {
@@ -3940,9 +4252,38 @@
 
     function chooseRasterZoom(projection, bounds, layerId = "imagery") {
       const range = rasterZoomRangeFor(projection, layerId);
-      let zoom = range.max;
-      while (zoom > range.min && tileCountForZoom(bounds, zoom) > RASTER_MAX_TILES) zoom -= 1;
+      const worldPixelsAtFit = layerId === "rudy-twmap" ? debugRudyWorldPixelScale(projection) : null;
+      let zoom = worldPixelsAtFit
+        ? clamp(Math.ceil(Math.log2(worldPixelsAtFit / 256)) + Math.ceil(Math.log2(Math.max(1, debugPageState.zoom))), range.min, range.max)
+        : range.max;
+      const maxTiles = layerId === "rudy-twmap" ? RUDY_TWMAP_MAX_TILES : RASTER_MAX_TILES;
+      while (zoom > range.min && tileCountForZoom(bounds, zoom) > maxTiles) zoom -= 1;
       return zoom;
+    }
+    function debugRudyWorldPixelScale(projection = debugPageState.projection) {
+      if (!projection?.route?.bounds) return null;
+      const bounds = boundsForProjection(projection);
+      const mercatorY = lat => (1 - Math.asinh(Math.tan(clamp(lat, -85.05112878, 85.05112878) * Math.PI / 180)) / Math.PI) / 2;
+      const xSpan = Math.max((bounds.east - bounds.west) / 360, 1e-9);
+      const ySpan = Math.max(mercatorY(bounds.south) - mercatorY(bounds.north), 1e-9);
+      const rect = runtimeMap.getBoundingClientRect();
+      const cssScale = Math.min((rect.width || MAP_WIDTH) / MAP_WIDTH, (rect.height || MAP_HEIGHT) / MAP_HEIGHT);
+      // The existing SVG projection scales each axis independently; sample the denser axis.
+      return Math.max((MAP_WIDTH - 2 * MAP_VISUAL_PADDING) / xSpan,
+        (MAP_HEIGHT - 2 * MAP_VISUAL_PADDING) / ySpan) * cssScale;
+    }
+    function debugMapInteractionMaxZoom() {
+      if (!layerInputChecked("rudy-twmap")) return MAP_MAX_ZOOM;
+      const worldPixelsAtFit = debugRudyWorldPixelScale();
+      return worldPixelsAtFit ? Math.max(1, 256 * (2 ** 20) / worldPixelsAtFit) : MAP_MAX_ZOOM;
+    }
+    function debugRudyViewportBounds(projection) {
+      const bounds = boundsForProjection(projection);
+      const box = mapViewportBox();
+      const lonAt = x => bounds.west + (x - MAP_VISUAL_PADDING) / (MAP_WIDTH - 2 * MAP_VISUAL_PADDING) * (bounds.east - bounds.west);
+      const latAt = y => bounds.north - (y - MAP_VISUAL_PADDING) / (MAP_HEIGHT - 2 * MAP_VISUAL_PADDING) * (bounds.north - bounds.south);
+      return {west: clamp(lonAt(box.minX), -180, 180), east: clamp(lonAt(box.minX + box.width), -180, 180),
+        north: clamp(latAt(box.minY), -85.05112878, 85.05112878), south: clamp(latAt(box.minY + box.height), -85.05112878, 85.05112878)};
     }
 
     function tileCoverage(bounds, zoom = null) {
@@ -3975,13 +4316,13 @@
         south: tileYToLat(y + 1, z)
       };
     }
-    function positionTileImage(image, bounds, tile) {
+    function positionTileImage(image, bounds, tile, precision = 2) {
       const [x1, y1] = projectPoint(bounds, tile.north, tile.west);
       const [x2, y2] = projectPoint(bounds, tile.south, tile.east);
-      image.setAttribute("x", Math.min(x1, x2).toFixed(2));
-      image.setAttribute("y", Math.min(y1, y2).toFixed(2));
-      image.setAttribute("width", Math.abs(x2 - x1).toFixed(2));
-      image.setAttribute("height", Math.abs(y2 - y1).toFixed(2));
+      image.setAttribute("x", Math.min(x1, x2).toFixed(precision));
+      image.setAttribute("y", Math.min(y1, y2).toFixed(precision));
+      image.setAttribute("width", Math.abs(x2 - x1).toFixed(precision));
+      image.setAttribute("height", Math.abs(y2 - y1).toFixed(precision));
     }
     function attachTileFallback(image, bounds, tile, hrefForTile, minZoom, dataAttribute) {
       let fallbackTile = parentTileFor(tile, minZoom);
@@ -4020,6 +4361,8 @@
       node.setAttribute("data-map-hover-title", mapFeatureTitle(item));
       node.setAttribute("data-map-hover-summary", mapFeatureSummary(item));
       node.setAttribute("aria-label", mapFeatureAriaLabel(node));
+      node.setAttribute("tabindex", "0");
+      node.setAttribute("role", "button");
     }
 
     function mapFeatureKind(node, item = {}) {
@@ -4101,7 +4444,34 @@
       return {minX, minY, width, height};
     }
 
+    function withDebugMapDomUpdate(update) {
+      debugPageState.mapDomUpdateDepth = (debugPageState.mapDomUpdateDepth || 0) + 1;
+      let completed = false;
+      try {
+        const result = update();
+        completed = true;
+        return result;
+      } finally {
+        if (!completed) debugPageState.deferredRudyStages = null;
+        debugPageState.mapDomUpdateDepth -= 1;
+        if (debugPageState.mapDomUpdateDepth === 0) {
+          const pending = debugPageState.deferredRudyStages;
+          debugPageState.deferredRudyStages = null;
+          if (completed && !debugPageState.mapLibreDisposed) {
+            for (const request of pending?.values() || []) {
+              if (runtimeMap.contains(request.group)) {
+                stageDebugRudyTiles(request.group, request.projection, request.bounds);
+              }
+            }
+          }
+        }
+      }
+    }
     function applyMapViewport() {
+      return withDebugMapDomUpdate(applyMapViewportDom);
+    }
+    function applyMapViewportDom() {
+      debugPageState.zoom = clamp(debugPageState.zoom, MAP_MIN_ZOOM, debugMapInteractionMaxZoom());
       runtimeMap.setAttribute("viewBox", mapViewBox());
       syncRasterBasemapLayers();
       syncMapMarkerScale();
@@ -4110,10 +4480,33 @@
       updateScaleBar();
     }
     function mapLayerRank(node) {
+      if (node.dataset.layerBackground) return 30;
       return MAP_LAYER_RANKS[node.dataset.layerGroup] ?? 50;
     }
+    function splitEnvironmentBackgrounds() {
+      ["soil-moisture", "antecedent-rain", "cwa-qpf", "cwa-weather"].forEach(layerId => {
+        const group = runtimeMap.querySelector(`[data-layer-group="${layerId}"]`);
+        if (!group) return;
+        group.querySelectorAll("text").forEach(label => {
+          label.dataset.mapOrderRole = "evidence";
+        });
+        const paints = [...group.querySelectorAll("image, .environment-extent")];
+        if (!paints.length) return;
+        let background = runtimeMap.querySelector(`[data-layer-background="${layerId}"]`);
+        if (!background) {
+          background = svgEl("g", {"data-layer-background": layerId});
+          runtimeMap.appendChild(background);
+        }
+        background.dataset.layerHidden = layerInputChecked(layerId) ? "false" : "true";
+        paints.forEach(node => {
+          node.dataset.mapOrderRole = "thematic-background";
+          background.appendChild(node);
+        });
+      });
+    }
     function orderMapLayerGroups() {
-      [...runtimeMap.querySelectorAll(":scope > [data-layer-group]")]
+      splitEnvironmentBackgrounds();
+      [...runtimeMap.querySelectorAll(":scope > [data-layer-group], :scope > [data-layer-background]")]
         .sort((left, right) => mapLayerRank(left) - mapLayerRank(right))
         .forEach(node => runtimeMap.appendChild(node));
     }
@@ -4135,7 +4528,7 @@
       if (event.altKey || event.ctrlKey || event.metaKey || isEditableKeyboardTarget(event.target)) return;
       const activeMapNode = debugMapLibreActive() ? runtimeMapLibre : runtimeMap;
       const mapHasFocus = document.activeElement === activeMapNode || activeMapNode.contains(document.activeElement);
-      if (!debugPageState.mapKeyboardActive && !mapHasFocus) return;
+      if (!mapHasFocus) return;
       if (delta) panMap(delta[0], delta[1]);
       else if (event.key === "+" || event.key === "=") zoomMap(1);
       else if (event.key === "-") zoomMap(-1);
@@ -4143,14 +4536,16 @@
       else if (event.key.toLowerCase() === "p") setMapInteractionMode("pan");
       else if (event.key.toLowerCase() === "b") setMapInteractionMode("box");
       else if (event.key === "Escape") {
+        hideMapHoverTooltip();
         cancelMapRectangleZoom();
         cancelMapPointerPan();
         debugPageState.mapLibreRenderer?.cancelRectangleZoom?.();
       } else return;
       event.preventDefault();
     }
-    function activateMapKeyboardPan() {
+    function activateMapKeyboardPan(event) {
       debugPageState.mapKeyboardActive = true;
+      if (event?.target?.closest?.("button, select, input, textarea, a")) return;
       (debugMapLibreActive() ? runtimeMapLibre : runtimeMap).focus({preventScroll: true});
     }
     function deactivateMapKeyboardPanOutside(event) {
@@ -4167,10 +4562,18 @@
       const zoomText = debugMapLibreActive() && Number.isFinite(Number(mapLibreZoom))
         ? `z${Number(mapLibreZoom).toFixed(1)}`
         : `${debugPageState.zoom.toFixed(2)}x`;
-      node.textContent = extraLabel ? `${zoomText} ${extraLabel}` : zoomText;
+      const raster = debugPageState.rudyTileStatus;
+      const tileLabel = raster?.visible === false || raster?.native_zoom == null ? ""
+        : raster.verified_native_zoom != null ? `原生 Z${raster.verified_native_zoom}`
+          : `${raster.state === "degraded" ? "缺" : "載入"} Z${raster.native_zoom}`;
+      node.textContent = [zoomText, tileLabel, extraLabel].filter(Boolean).join(" · ");
       node.title = debugPageState.mapInteractionMode === "box"
         ? "Map zoom; point and rectangle zoom are active."
         : "Map zoom; mouse drag pan is active.";
+      const maximum = debugMapLibreActive() ? 20 : debugMapInteractionMaxZoom();
+      const current = debugMapLibreActive() ? Number(mapLibreZoom) : debugPageState.zoom;
+      const zoomIn = document.getElementById("zoomIn");
+      if (zoomIn) zoomIn.disabled = current >= maximum - 1e-6;
     }
     function setMapInteractionMode(mode) {
       debugPageState.mapInteractionMode = mode === "box" ? "box" : "pan";
@@ -4429,6 +4832,9 @@
     }
 
     function updateLayers() {
+      return withDebugMapDomUpdate(updateLayersDom);
+    }
+    function updateLayersDom() {
       const layerInputs = [...document.querySelectorAll("[data-layer]")];
       if (debugMapLibreActive()) {
         layerInputs.forEach(input => {
@@ -4440,6 +4846,8 @@
         const group = runtimeMap.querySelector(`[data-layer-group="${input.dataset.layer}"]`);
         if (group && !input.checked && RASTER_BASEMAP_LAYER_IDS.has(input.dataset.layer)) group.replaceChildren();
         if (group) group.dataset.layerHidden = input.checked ? "false" : "true";
+        const background = runtimeMap.querySelector(`[data-layer-background="${input.dataset.layer}"]`);
+        if (background) background.dataset.layerHidden = input.checked ? "false" : "true";
       });
       const summary = document.getElementById("layerEnabledCount");
       if (summary) {
@@ -4458,16 +4866,134 @@
     }
 
     function syncRasterBasemapLayers(projection = debugPageState.projection) {
-      if (!projection?.route?.bounds) return;
+      if (debugMapLibreActive() || !projection?.route?.bounds) return;
       const bounds = boundsForProjection(projection);
       const coverageBounds = visibleBoundsForProjection(projection) || bounds;
       RASTER_BASEMAP_LAYER_IDS.forEach(layerId => {
         const group = runtimeMap.querySelector(`[data-layer-group="${selectorValue(layerId)}"]`);
         if (!group) return;
+        if (layerId === "rudy-twmap") {
+          if (!layerInputChecked(layerId)) {
+            group.debugRudyCancel?.();
+            group.replaceChildren();
+            group.debugRudyActive = null;
+            updateDebugRudyTileStatus({state: "hidden", visible: false});
+          } else stageDebugRudyTiles(group, projection, bounds);
+          return;
+        }
         group.replaceChildren();
         if (!layerInputChecked(layerId)) return;
         appendRasterLayer(group, projection, bounds, layerId, coverageBounds);
         if (layerId === "osm") renderOsmPbfVector(group, projection, bounds);
+      });
+    }
+    function syncDebugRudyRefreshButton() {
+      const button = document.getElementById("refreshMapTiles");
+      if (!button) return;
+      button.textContent = debugPageState.rudyRemoteRefreshEnabled ? "停止更新" : "更新圖磚";
+      button.setAttribute("aria-pressed", String(debugPageState.rudyRemoteRefreshEnabled));
+      button.setAttribute("aria-label", debugPageState.rudyRemoteRefreshEnabled ? "停止地圖圖磚更新" : "更新地圖圖磚");
+      button.title = debugPageState.rudyRemoteRefreshEnabled ? "停止遠端補載，使用工作區快取" : "重試 Rudy+TW 原生圖磚並更新工作區快取";
+      runtimeMapRendererShell.dataset.debugRudyRemoteEnabled = String(debugPageState.rudyRemoteRefreshEnabled);
+    }
+    function toggleDebugRudyRefresh() {
+      debugPageState.rudyRemoteRefreshEnabled = !debugPageState.rudyRemoteRefreshEnabled;
+      debugPageState.rudyForceRefresh = debugPageState.rudyRemoteRefreshEnabled;
+      debugPageState.rudyRefreshNonce += 1;
+      syncDebugRudyRefreshButton();
+      if (debugMapLibreActive()) {
+        debugPageState.mapLibreRenderer.setRasterLayers(debugMapLibreRasterLayers(debugPageState.projection));
+      } else syncRasterBasemapLayers();
+    }
+    function stageDebugRudyTiles(group, projection, bounds) {
+      if (debugPageState.mapLibreDisposed) return;
+      // Vector and label DOM work must finish before the native tile load budget starts.
+      if (debugPageState.mapDomUpdateDepth > 0) {
+        debugPageState.deferredRudyStages ||= new Map();
+        debugPageState.deferredRudyStages.set(group, {group, projection, bounds});
+        return;
+      }
+      const coverageBounds = debugRudyViewportBounds(projection);
+      const tiles = rasterTileCoverage(projection, coverageBounds, null, "rudy-twmap");
+      const zoom = tiles[0]?.z ?? chooseRasterZoom(projection, coverageBounds, "rudy-twmap");
+      const key = JSON.stringify([bounds, tiles.map(tile => tile.href)]);
+      const active = group.debugRudyActive;
+      if (group.debugRudyPending?.key === key) return;
+      group.debugRudyCancel?.();
+      if (active?.key === key) {
+        group.dataset.tileGenerationState = "ready";
+        updateDebugRudyTileStatus({state: "available", visible: true, native_zoom: zoom,
+          required_count: tiles.length, success_count: tiles.length, reason: "native_tiles_loaded"});
+        return;
+      }
+      const generation = svgEl("g", {"data-tile-generation": "pending", "data-native-zoom": zoom,
+        opacity: "0", "pointer-events": "none"});
+      const pending = {key, closed: false, success: 0, errors: 0};
+      group.debugRudyPending = pending;
+      group.dataset.tileGenerationState = "loading";
+      let timer = null;
+      const current = () => !pending.closed && group.debugRudyPending === pending && runtimeMap.contains(group);
+      const publish = (state, reason) => updateDebugRudyTileStatus({state, reason, visible: true, native_zoom: zoom,
+        required_count: tiles.length, success_count: pending.success, error_count: pending.errors,
+        pending_count: state === "loading" ? tiles.length - pending.success - pending.errors : 0,
+        unverified_count: state === "degraded" ? Math.max(0, tiles.length - pending.success - pending.errors) : 0,
+        retained_native_zoom: state === "available" ? null : active?.zoom ?? null});
+      const cancel = () => {
+        pending.closed = true;
+        if (timer !== null) clearTimeout(timer);
+        generation.querySelectorAll("image").forEach(image => image.removeAttribute("href"));
+        generation.remove();
+        if (group.debugRudyPending === pending) group.debugRudyPending = null;
+      };
+      group.debugRudyCancel = cancel;
+      const fail = reason => {
+        if (!current()) return;
+        publish("degraded", reason);
+        group.dataset.tileGenerationState = active ? "retained-previous" : "failed";
+        cancel();
+      };
+      group.appendChild(generation);
+      publish("loading", "tiles_loading");
+      if (!tiles.length) {
+        fail("native_tiles_unavailable");
+        return;
+      }
+      timer = setTimeout(() => fail("native_tiles_timeout"), RUDY_TILE_SWAP_TIMEOUT_MS);
+      const opacity = Number(rasterLayerFor(projection, "rudy-twmap").raster_layer_opacity ?? 0.9);
+      tiles.forEach(tile => {
+        const image = svgEl("image", {class: "raster-tile", preserveAspectRatio: "none",
+          "data-map-ref": "rudy-twmap", "data-source-id": "happyman_rudy_twmap",
+          "data-source-kind": "scout_proxy_tile", "data-raster-tile": `${tile.z}/${tile.x}/${tile.y}`,
+          opacity: Number.isFinite(opacity) ? opacity.toFixed(2) : "0.90"});
+        positionTileImage(image, bounds, tile, 6);
+        let settled = false;
+        image.addEventListener("load", () => {
+          if (settled || !current()) return;
+          settled = true;
+          pending.success += 1;
+          if (pending.success < tiles.length) {
+            publish("loading", "tiles_loading");
+            return;
+          }
+          pending.closed = true;
+          clearTimeout(timer);
+          group.debugRudyPending = null;
+          group.debugRudyCancel = null;
+          generation.removeAttribute("opacity");
+          generation.setAttribute("data-tile-generation", "active");
+          group.replaceChildren(generation);
+          group.debugRudyActive = {key, zoom};
+          group.dataset.tileGenerationState = "ready";
+          publish("available", "native_tiles_loaded");
+        });
+        image.addEventListener("error", () => {
+          if (settled || !current()) return;
+          settled = true;
+          pending.errors += 1;
+          fail("native_tile_http_or_decode_error");
+        });
+        generation.appendChild(image);
+        image.setAttribute("href", tile.href);
       });
     }
 
@@ -4508,6 +5034,10 @@
 
     function appendRasterLayer(group, projection, bounds, kind, coverageBounds = bounds) {
       if (!layerInputChecked(kind)) return;
+      if (kind === "rudy-twmap") {
+        stageDebugRudyTiles(group, projection, bounds);
+        return;
+      }
       const isOsm = kind === "osm";
       const localOsmVectorAvailable = isOsm && isLocalOsmTileMode() && Boolean(localOsmPbfVectorUrl(projection));
       if (localOsmVectorAvailable) {
@@ -4687,6 +5217,9 @@
     }
 
     function renderDebugEvidenceMap(projection, {forceSvg = false} = {}) {
+      return withDebugMapDomUpdate(() => renderDebugEvidenceMapDom(projection, {forceSvg}));
+    }
+    function renderDebugEvidenceMapDom(projection, {forceSvg = false} = {}) {
       if (!forceSvg && debugMapLibreActive()) {
         return syncDebugMapLibreProjection(projection);
       }
@@ -4694,6 +5227,7 @@
       const bounds = boundsForProjection(projection);
       hideMapHoverTooltip();
       applyMapViewport();
+      runtimeMap.querySelector('[data-layer-group="rudy-twmap"]')?.debugRudyCancel?.();
       runtimeMap.replaceChildren();
 
       const imageryGroup = svgEl("g", {"data-layer-group": "imagery"});
@@ -6737,11 +7271,35 @@
         return;
       }
       const target = event.target?.closest?.('[data-map-hover="true"]');
-      if (!target || !runtimeMap.contains(target)) {
-        hideMapHoverTooltip();
+      const activeMap = debugMapLibreActive() ? runtimeMapLibre : runtimeMap;
+      if (!target || !activeMap.contains(target)) {
+        if (!debugMapLibreActive()) hideMapHoverTooltip();
         return;
       }
       showMapHoverTooltip(target, event);
+    }
+    function handleMapEvidenceFocus(event) {
+      const target = event.target?.closest?.('[data-map-hover="true"]');
+      const activeMap = debugMapLibreActive() ? runtimeMapLibre : runtimeMap;
+      if (!target || !activeMap.contains(target) || target.closest('[hidden], [data-layer-hidden="true"]')) return;
+      if (debugMapLibreActive() && target.debugMapLibreFeature) {
+        debugPageState.mapLibreRenderer.focus(target.debugMapLibreFeature.id, {fit: false});
+      }
+      const rect = target.getBoundingClientRect();
+      showMapHoverTooltip(target, {clientX: rect.left + rect.width / 2, clientY: rect.top + rect.height / 2});
+    }
+    function handleMapEvidenceKeyboard(event) {
+      const target = event.target?.closest?.('[data-map-hover="true"]');
+      const activeMap = debugMapLibreActive() ? runtimeMapLibre : runtimeMap;
+      if (!target || !activeMap.contains(target) || target.closest('[hidden], [data-layer-hidden="true"]')) return;
+      if (event.key === "Escape") {
+        hideMapHoverTooltip();
+        event.preventDefault();
+      } else if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        if (debugMapLibreActive() && target.debugMapLibreFeature) target.click();
+        else selectTimelineForMapTarget(target);
+      }
     }
 
     function appendPointLabel(group, x, y, item, layer) {
@@ -7006,7 +7564,7 @@
     }
 
     function handleMapWheelZoom(event) {
-      if (event.ctrlKey || event.metaKey) return;
+      if (!MAP_WHEEL_ZOOM_ENABLED || event.ctrlKey || event.metaKey) return;
       event.preventDefault();
       zoomMap(event.deltaY < 0 ? 1 : -1);
     }
@@ -7052,8 +7610,7 @@
       clearZoomSelectionOverlay();
       if (selection?.moved) {
         const box = boxFromPoints(selection.start, selection.current);
-        if (isZoomOutDrag(selection)) zoomMapOutFromBox(box, selectionZoomFactor(selection));
-        else zoomMapToBox(box);
+        zoomMapToBox(box);
       } else if (selection?.clickTarget) {
         zoomMap(1);
         selectTimelineForMapTarget(selection.clickTarget);
@@ -7331,7 +7888,7 @@
       if (debugMapLibreActive()) syncDebugMapLibreProjection();
     }
 
-    async function loadOsmPbfVectorLayer() {
+    async function loadOsmPbfVectorLayer({redraw = true} = {}) {
       const url = localOsmPbfVectorUrl(debugPageState.projection);
       if (!url) {
         debugPageState.osmPbfVector = null;
@@ -7344,7 +7901,7 @@
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         debugPageState.osmPbfVector = await response.json();
         debugPageState.osmPbfVectorStatus = "ready";
-        if (debugPageState.projection) renderDebugEvidenceMap(debugPageState.projection);
+        if (redraw && debugPageState.projection) renderDebugEvidenceMap(debugPageState.projection);
       } catch (error) {
         debugPageState.osmPbfVector = null;
         debugPageState.osmPbfVectorStatus = `failed: ${error.message}`;
@@ -7412,13 +7969,15 @@
         ]);
         const eventPayload = eventResult.payload || {};
         debugPageState.projection = eventResult.projection || null;
-        await loadCwaWeatherImagery(PRETRIP_PROJECT_ID);
+        const cwaWeatherImageryPromise = loadCwaWeatherImagery(PRETRIP_PROJECT_ID);
         debugPageState.hardwareReadiness = hardwareReadiness || null;
         debugPageState.mobileWearableIngress = mobileWearableIngress || null;
         debugPageState.monitoringCenter = monitoringCenter || null;
-        if (debugPageState.projection) renderDebugEvidenceMap(debugPageState.projection);
-        await osmCartoPalettePromise;
-        loadOsmPbfVectorLayer();
+        await Promise.all([
+          cwaWeatherImageryPromise,
+          osmCartoPalettePromise,
+          loadOsmPbfVectorLayer({redraw: false})
+        ]);
         const resolvedState = stateWithProjectedEvents(state || {}, eventPayload);
         renderEndpointPayloads(eventPayload || {}, resolvedState || {}, messagePayload || {});
         renderState(resolvedState || {});
@@ -7490,6 +8049,8 @@
       document.getElementById("zoomIn").addEventListener("click", () => zoomMap(1));
       document.getElementById("zoomOut").addEventListener("click", () => zoomMap(-1));
       document.getElementById("fitRoute").addEventListener("click", resetMapView);
+      document.getElementById("refreshMapTiles").addEventListener("click", toggleDebugRudyRefresh);
+      syncDebugRudyRefreshButton();
       document.getElementById("panMode").addEventListener("click", () => setMapInteractionMode("pan"));
       document.getElementById("boxZoomMode").addEventListener("click", () => setMapInteractionMode("box"));
       document.getElementById("panUp").addEventListener("click", () => panMap(0, -70));
@@ -7500,6 +8061,13 @@
       runtimeMapLibre.setAttribute("tabindex", "0");
       runtimeMapLibre.addEventListener("pointerdown", activateMapKeyboardPan);
       runtimeMapLibre.addEventListener("keydown", handleMapKeyboardPan);
+      [runtimeMap, runtimeMapLibre].forEach(map => {
+        map.addEventListener("focusin", handleMapEvidenceFocus);
+        map.addEventListener("focusout", hideMapHoverTooltip);
+        map.addEventListener("keydown", handleMapEvidenceKeyboard);
+      });
+      runtimeMapLibre.addEventListener("pointermove", handleMapHoverPointerMove);
+      runtimeMapLibre.addEventListener("pointerleave", hideMapHoverTooltip);
       runtimeMap.addEventListener("pointerdown", activateMapKeyboardPan);
       runtimeMap.addEventListener("keydown", handleMapKeyboardPan);
       document.addEventListener("keydown", handleMapKeyboardPan);
@@ -7515,7 +8083,7 @@
       runtimeMap.addEventListener("pointermove", updateMapPointerPan);
       runtimeMap.addEventListener("pointerup", finishMapPointerPan);
       runtimeMap.addEventListener("pointercancel", cancelMapPointerPan);
-      runtimeMap.addEventListener("wheel", handleMapWheelZoom, {passive: false});
+      if (MAP_WHEEL_ZOOM_ENABLED) runtimeMap.addEventListener("wheel", handleMapWheelZoom, {passive: false});
       setMapInteractionMode("pan");
     }
 
@@ -7563,9 +8131,24 @@
     bindCwaWeatherImageryControls();
     bindDebugTabs();
     switchDebugTab(document.querySelector(`[data-tab-target="${debugPageState.selectedTabId}"]`), { syncUrl: false });
-    loadAssistantStatus();
-    loadDebugSurface();
-    startDebugEventStream();
+    if (DIAGNOSTIC_MAP_PROBE) {
+      (async () => {
+        try {
+          debugPageState.projection = await fetchJson(PRETRIP_DEBUG_PROJECTION_PATH);
+          await Promise.all([
+            loadCwaWeatherImagery(PRETRIP_PROJECT_ID),
+            loadOsmPbfVectorLayer({redraw: false})
+          ]);
+          await initializeDebugMapRenderer(debugPageState.projection);
+        } catch (error) {
+          activateDebugSvgFallback("diagnostic_projection_unavailable", String(error.message));
+        }
+      })();
+    } else {
+      loadAssistantStatus();
+      loadDebugSurface();
+      startDebugEventStream();
+    }
   </script>
 </body>
 </html>

@@ -9,7 +9,7 @@ stated otherwise. None of these layers may mutate Phase 1 runtime safety truth.
 
 ## Contract Vs Preparation Boundary
 
-The 32 layers in this document are the admin map UI contract
+The 33 layers in this document are the admin map UI contract
 （管理介面地圖圖層契約）. They are not the same thing as the
 `pretrip_layer_preparation.py --layers` input list.
 
@@ -23,9 +23,9 @@ reference-tracks, route, segments, checkpoints, mcp, pois, hazards, corridors,
 retreat, route-notes
 ```
 
-Do not pass the full 32-layer contract list to `--layers`. Runtime-only WMTS
+Do not pass the full 33-layer contract list to `--layers`. Runtime-only WMTS
 or UI layers such as `rudy`, `rudy-twmap`, `relief`, `geology`, `topo-5k`,
-`forest`, `completed-track`, `boss-points`, `events`, and `weather-api` are
+`forest`, `historical-map`, `completed-track`, `boss-points`, `events`, and `weather-api` are
 validated through the layer contract and browser smoke gates instead.
 `boss-points` are synthesized as a preparation post-process when risk and
 route-pressure inputs exist; `weather-api` is an overlay/status layer whose
@@ -33,7 +33,7 @@ preparation alias is `weather`.
 
 This distinction is intentional:
 
-- 32-layer contract gate: verifies controls, ordering, `data-layer-group`
+- 33-layer contract gate: verifies controls, ordering, `data-layer-group`
   presence, surface-specific availability, and source/provenance contracts.
 - 23-layer preparation run: refreshes workspace artifacts, refs, summaries,
   environment evidence placeholders, terrain outputs, OCR/mileage, route
@@ -43,7 +43,52 @@ This distinction is intentional:
 - `completed-track` is after-action/admin only; it must be absent from
   `/admin/pretrip` and `/admin/debug` controls but present on `/admin`.
 
+The canonical union has 33 layers: pretrip/Navigation has 32, Debug has 31,
+and after-action has 32. `historical-map` is pretrip-only at rank 2, between
+imagery and Rudy; `completed-track` remains after-action-only. Historical themes
+share one unchecked comparison control, with separate per-theme workspace caches
+and explicit remote refresh. Control presence does not prove cached coverage.
+Historical map evidence is candidate-only and never a verified trail or safety truth.
+
+The 2026-09-13 user decision adds `data-layer-contract="auxiliary"` to the
+historical comparison control and keeps the remaining contract unchanged. This
+UI purpose label does not remove `historical-map` from the 33-layer registry,
+the pretrip control census, its rank, or its cache and authority requirements.
+The verifier must continue checking every required registry layer even when a
+control carries the auxiliary label; unrelated auxiliary controls stay separate.
+
 ## Tile Provider And Cache Policy
+
+All interactive Dashboard Rudy+TW surfaces (Main, Weather, Overview, LBS,
+Permission context and daily maps, Architecture, Pace Fit, Emergency review,
+Navigation 2D/3D and SVG fallback, and Debug MapLibre/SVG) share the same source
+revision, workspace cache namespace and exact native delivery policy. They automatically fill a
+missing native tile while reusing an existing exact tile (`native=1&exact=1`,
+without forced refresh). The shared map toolbar can stop updates and return to
+`cache_only=1&exact=1`; starting updates explicitly may refresh the checked
+raster layers. Read-only diagnostic probes always begin in cache-only mode;
+the 2026-09-12 D037-B user decision additionally authorizes explicit native
+Rudy GET probes and their tile cache writes, without forced refresh. Offline
+probes remain separate and CWA remains cache-only.
+Automatic Rudy detail loading does not enable historical-map, CWA product
+refresh, route preparation or other analysis jobs.
+
+A renderer reporting that its source has settled is not evidence of native
+detail coverage. Missing requested tiles, including HTTP 404, must remain
+visible as degraded detail even when the renderer retains and enlarges a
+lower-resolution parent tile. Verification must include the default load,
+successive zooms, a new viewport, real cache misses, recovery and cache reuse
+on every applicable surface and renderer. The D037-A user decision replaces
+literal old-formula checks with these observable outcomes. Permission daily
+maps are interactive under the same decision; static composite images cannot
+substitute for their interaction and native tile checks.
+
+For pitched/rotated MapLibre views, native coverage follows the renderer's
+public tile-coverage API, including mixed native zoom levels; camera zoom or
+a rectangular geographic envelope alone is not full visible-tile evidence.
+SVG generations become complete only after every required image loads. A
+failed generation retains the previous complete background at the current
+view, leaves verified zoom empty, and reports missing detail visibly.
 
 The admin map supports many basemap providers, but only one rendered-map source
 is currently allowed to enter route-bbox cache preparation:
@@ -190,7 +235,7 @@ basemaps for local route-condition review.
 The Forestry and Nature Conservation Agency dataset
 `data.gov.tw/dataset/106640`（林業及自然保育署山區手機可通訊點標示） is an
 official point-evidence source, not a tile provider. It must not create a new
-Scout layer id or bypass the 32-layer contract. Normalized records should render
+Scout layer id or bypass the 33-layer contract. Normalized records should render
 through:
 
 - `pois` for communication-point POI markers;
@@ -225,7 +270,7 @@ Provenance requirements:
 ### CWA Weather Temporal Child Overlays
 
 Radar and satellite imagery render inside `data-layer-group="cwa-weather"` at
-the existing z-index 67. The 32-layer contract does not expand. Each admin
+the existing z-index 67. The 33-layer contract does not expand. Each admin
 surface must expose the prepared-product selector, radar and satellite opacity,
 3/6/9/12-hour timeline, frame slider, play/pause control, source timestamp, and
 data delay. Browser reads are cache-only: manifest or asset misses must never
@@ -249,7 +294,7 @@ the browser.
 
 Past-one-hour QPE (`O-B0045-001`) and next-one-hour QPF (`F-B0046-001`) render
 inside the existing `data-layer-group="cwa-qpf"` at z-index 59. They do not add
-a 33rd top-level layer. The layer exposes a QPE/QPF selector, millimetre color
+an additional top-level layer. The layer exposes a QPE/QPF selector, millimetre color
 legend, opacity, source timestamp, validity window, and delay. The legacy
 `cwa_qpf_grid_ref` remains available for public-API compatibility; new numeric
 contracts use `cwa_rainfall_grid_manifest_ref`,
@@ -275,7 +320,7 @@ The following mistakes are easy to repeat and are considered contract
 regressions:
 
 - Treating a preparation manifest with 23 ready layers as incomplete because
-  the UI contract contains 32 layers. The missing nine are runtime-only or
+  the UI contract contains 33 layers. The missing ten are runtime-only or
   post-process/UI contract layers, not preparation inputs.
 - Treating `rudy` or `rudy-twmap` as failed just because they do not appear in
   `pretrip_layer_preparation.py --layers`. Their UI controls are runtime layer
@@ -290,7 +335,7 @@ regressions:
 - Hiding `UAV*` under a generic topo/aerial bucket. UAS orthophoto is a
   high-value route revalidation provider and must remain discoverable as its
   own provider family with coverage/year metadata.
-- Adding the official mountain communication-point dataset as a 33rd layer.
+- Adding the official mountain communication-point dataset as an additional layer.
   It must be normalized into the existing `pois` and optional checkpoint/timeline
   evidence groups while preserving source provenance and stale-risk metadata.
 - Treating four terrain overlay PNGs as the total terrain source count. The
@@ -308,6 +353,7 @@ regressions:
 | Scout layer | Required behavior | Files/components responsible | Ordering/dependency constraints | States and edge cases | Verification |
 |-------------|-------------------|------------------------------|---------------------------------|-----------------------|--------------|
 | `imagery` | Runtime WMTS imagery basemap, bottom-most visual layer. | `admin_map_layers.py`, `admin_imagery_sources.py`, three `docs/admin/*.html` pages. | z-index 0; below OSM and all evidence. | Uses runtime WMTS/XYZ delivery by default; failed tiles must not blank vector evidence. Do not create preparation raster cache except legacy explicit local raster handoff. | Contract verifier plus browser layer toggle/group check. |
+| `historical-map` | Historical comparison using one allowlisted theme selector. | `admin_map_layers.py`, pretrip and Dashboard Navigation pages. | z-index 2; pretrip-only; unchecked by default. | Cache-first with per-theme namespaces and explicit remote refresh; candidate-only, no verified trail or safety truth; no coverage does not remove the control. | Surface-specific control/rank/dynamic raster group and cache-policy checks. |
 | `rudy` | Optional Rudy hiking basemap overlay, runtime display only by default. | `admin_map_layers.py`, `admin_imagery_sources.py`, three admin pages. | Raster overlay rank 4; below OSM/evidence. | Off by default; network/cache failure isolated from evidence layers. Not an approved OCR/cache source unless later promoted. | Source id, control, rank, group, browser toggle. |
 | `rudy-twmap` | Optional Rudy+TW basemap and current approved preparation cache/OCR source for hiking rendered-map evidence. | `admin_map_layers.py`, `admin_imagery_sources.py`, `pretrip_raster_label_ocr.py`. | Raster overlay rank 4; OCR output must pass through raster label adapter. | Can be visually off while still used as preparation/OCR source. It is the only current route-bbox map cache source for mileage K, stable POI, rendered labels, and icons. | Source id, OCR plan/source checks, control/rank/group/toggle. |
 | `relief` | Optional runtime color relief raster reference. | `admin_map_layers.py`, `admin_imagery_sources.py`, admin pages. | Raster overlay rank 4; not Scout terrain visualization. | Off by default; no workspace artifact or preparation cache required. | Control/rank/source/group/toggle. |
@@ -328,7 +374,7 @@ regressions:
 | `risk-delta` | Difference between baseline and calibrated risk. | `pretrip_risk_heatmap.py`, `pretrip_layer_preparation.py`, `admin_map_layers.py`, admin pages. | z-index 56; depends on baseline and calibrated risk. | Off by default; unavailable if either input absent. | Delta source or paired-source ref, group/rank/toggle. |
 | `soil-moisture` | GEE/SMAP soil moisture context. | `scout_gee_integration.py`, `admin_map_layers.py`, admin pages. | z-index 57; environmental candidate evidence. | Unavailable when GEE/data absent; no safety truth mutation. | Source availability, group/rank/toggle. |
 | `antecedent-rain` | GEE/GPM antecedent rain context. | `scout_gee_integration.py`, `admin_map_layers.py`, admin pages. | z-index 58; environmental candidate evidence. | Unavailable when data absent; no safety truth mutation. | Source availability, group/rank/toggle. |
-| `cwa-qpf` | CWA past-1h QPE plus next-1h QPF numeric rainfall grid/context; legacy forecast-derived points remain compatible. | `cwa_precipitation_grid.py`, `cwa_precipitation_grid_ingestor.py`, `weather_grid_store.py`, `route_precipitation_sampler.py`, `admin_map_layers.py`, admin pages. | z-index 59; route-clipped cells below risk points; QPE/QPF selector and opacity. | Unavailable without explicit server preparation; full grids are never processed by Pi/mobile; no runtime safety truth mutation. | Source timestamp/delay/validity, mm legend, compact cells only, 32-layer group/rank/toggle. |
+| `cwa-qpf` | CWA past-1h QPE plus next-1h QPF numeric rainfall grid/context; legacy forecast-derived points remain compatible. | `cwa_precipitation_grid.py`, `cwa_precipitation_grid_ingestor.py`, `weather_grid_store.py`, `route_precipitation_sampler.py`, `admin_map_layers.py`, admin pages. | z-index 59; route-clipped cells below risk points; QPE/QPF selector and opacity. | Unavailable without explicit server preparation; full grids are never processed by Pi/mobile; no runtime safety truth mutation. | Source timestamp/delay/validity, mm legend, compact cells only, 33-layer group/rank/toggle. |
 | `risk-score` | Point risk-score evidence. | `pretrip_risk_heatmap.py`, `pretrip_layer_preparation.py`, `admin_map_layers.py`, admin pages. | z-index 60; above risk raster/ribbon layers. | Off by default; candidate evidence only. | Risk point artifact/source/count, group/rank/toggle. |
 | `checkpoints` | CP candidates/reviewed checkpoints. | `pretrip_import.py`, `pretrip_overpass_route_alignment.py`, `pretrip_layer_preparation.py`, admin pages. | z-index 62; above risk layers. | Marker radius stays screen-sized; focus uses expected viewport policy. | CP count/source/alignment, group/rank/toggle/focus smoke. |
 | `pois` | Named POI/context candidates, including official communication-point markers from the Forestry and Nature Conservation Agency mountain communication dataset. | `pretrip_route_context_collection.py`, `admin_map_layers.py`, admin pages. | z-index 64; above checkpoints, below hazards. | Avoid raw variable-name labels; unavailable if no POI source. Communication points are candidate evidence only and must preserve stale-risk/provenance metadata. | Label/source/group/rank/toggle. |

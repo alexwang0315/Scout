@@ -390,6 +390,117 @@ def test_source_ledger_projects_traceable_p1_route_narratives(
     )
 
 
+def test_source_ledger_uses_named_point_pages_and_route_positions(
+    tmp_path: Path,
+) -> None:
+    project_root, project = _workspace(tmp_path)
+    named_point_ref = "outputs/mcp/named_point_evidence.json"
+    _write_json(
+        project_root / named_point_ref,
+        {
+            "artifact_kind": "pretrip_named_point_evidence_set",
+            "artifact_version": "named_point_evidence.v1",
+            "project_id": project_root.name,
+            "search_profile": {
+                "fixture_backed": True,
+                "live_network_performed": False,
+            },
+            "evidence_pages": [
+                {
+                    "accepted": True,
+                    "page_id": "page.official.history",
+                    "title": "Official ancient trail survey",
+                    "url": "https://example.gov.tw/ancient-trail",
+                    "canonical_url": "https://example.gov.tw/ancient-trail",
+                    "retrieved_at": "2026-07-29T00:00:00Z",
+                    "route_relevance": "high",
+                    "source_family": "public_web",
+                    "stale_risk": "low",
+                    "snippet_hash": "sha256:" + "a" * 64,
+                    "full_payload_embedded": False,
+                },
+                {
+                    "accepted": True,
+                    "page_id": "page.community.report",
+                    "title": "Completed route report",
+                    "url": "https://example.org/route-report",
+                    "canonical_url": "https://example.org/route-report",
+                    "retrieved_at": "2026-07-28T00:00:00Z",
+                    "route_relevance": "medium",
+                    "source_family": "hiking_biji",
+                    "stale_risk": "medium",
+                    "snippet_hash": "sha256:" + "b" * 64,
+                    "full_payload_embedded": False,
+                },
+                {
+                    "accepted": True,
+                    "page_id": "page.local.file",
+                    "title": "Local GPX",
+                    "url": "file:///private/route.gpx",
+                    "retrieved_at": "2026-07-28T00:00:00Z",
+                    "route_relevance": "high",
+                    "source_family": "reference_gpx",
+                    "stale_risk": "medium",
+                    "snippet_hash": "sha256:" + "c" * 64,
+                    "full_payload_embedded": False,
+                },
+            ],
+            "named_points": [
+                {
+                    "named_point_id": "np.second",
+                    "canonical_name": "Second point",
+                    "point_class": ["water_source"],
+                    "mention_page_ids": ["page.community.report"],
+                    "route_position": {
+                        "distance_m": 2_000.0,
+                        "lat": 23.5,
+                        "lon": 121.0,
+                    },
+                },
+                {
+                    "named_point_id": "np.first",
+                    "canonical_name": "First point",
+                    "point_class": ["camp_hut_structure"],
+                    "mention_page_ids": ["page.official.history"],
+                    "route_position": {
+                        "distance_m": 500.0,
+                        "lat": 23.4,
+                        "lon": 120.9,
+                    },
+                },
+            ],
+            "boundary": {
+                "candidate_only": True,
+                "phase1_runtime_safety_truth": False,
+                "runtime_mutation_allowed": False,
+                "full_copyrighted_payload_embedded": False,
+            },
+        },
+    )
+    project["mcp_named_point_evidence_ref"] = named_point_ref
+
+    result = build_workspace_source_ledger(project_root, project)
+
+    assert result["status"] == "ready"
+    assert result["source_tier_counts"] == {"P0": 2, "P1": 1, "P2": 0}
+    assert [clue["label"] for clue in result["ordered_clues"]] == [
+        "First point",
+        "Second point",
+    ]
+    assert result["ordered_clue_chain_kind"] == "named_point_route_positions"
+    assert not any(
+        "No archival or historical prose source" in gap
+        for gap in result["evidence_gaps"]
+    )
+    assert not any(
+        "No bounded ordered waypoint clue chain" in gap
+        for gap in result["evidence_gaps"]
+    )
+    rendered = json.dumps(result)
+    assert "file:///private/route.gpx" not in rendered
+    assert str(tmp_path) not in rendered
+
+
 def test_route_topology_uses_reusable_observed_edges_without_inventing_detours(
     tmp_path: Path,
 ) -> None:

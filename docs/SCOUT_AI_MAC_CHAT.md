@@ -17,12 +17,19 @@ permission detail, action-plan detail, and raw JSON.
 
 ## Start The Scout Hardware Server
 
-On the Scout hardware:
+On the Scout hardware, prefer the healthy source checkout for development:
 
 ```bash
-cd /home/alexwang0315/scout-ai-os-hardware-current
-venv/bin/python -m uvicorn scout.main:app --host 0.0.0.0 --port 9120
+cd /home/alexwang0315/work/scout-fusion
+PYTHONPATH=src:. .venv-scout-dev/bin/python -m scout.cli.dev_server \
+  --check --host 0.0.0.0 --port 9120
+PYTHONPATH=src:. .venv-scout-dev/bin/python -m scout.cli.dev_server \
+  --host 0.0.0.0 --port 9120
 ```
+
+See `docs/admin/mac-to-scout-development-handoff.md` for initial environment
+setup, guarded Git sync, and the distinction between development and deployment
+directories.
 
 The Mac UI expects the Scout hardware API to expose:
 
@@ -68,7 +75,10 @@ cd /Users/alexwang0315/scout-fusion
 The CLI loads `.env` by default before constructing the fallback provider. It
 does not print token values. For NVIDIA-backed models, `.env` or the shell must
 provide `NVIDIA_API_KEY`; for OpenRouter-backed models, provide
-`OPENROUTER_API_KEY`.
+`OPENROUTER_API_KEY`. GPT-6 Astra can be selected with
+`--fallback-model openai-responses:gpt-6-astra` after the account has model
+access and `OPENAI_API_KEY` is available. This uses the Responses API and does
+not change the Codex Desktop model selector.
 
 Fallback behavior:
 

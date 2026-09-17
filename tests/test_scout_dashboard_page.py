@@ -6,6 +6,8 @@ import re
 import subprocess
 import time
 import zipfile
+
+import pytest
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -243,6 +245,14 @@ def test_navigation_terrain_dem_manifest_and_tile_are_read_only_allowlisted(
                 "prepared_at": "2026-08-07T07:00:00Z",
                 "encoding": "mapbox",
                 "resampling": "nearest",
+                "source_analysis_processor": "qgis_processing_grass",
+                "source_standard_processor_completed": True,
+                "source_fallback_used": False,
+                "source_python_dtm_processing_used": False,
+                "visualization_packaging_processor": (
+                    "scout_mapbox_terrain_rgb_encoder.v1"
+                ),
+                "visualization_packaging_only": True,
                 "tile_size": 256,
                 "minzoom": 13,
                 "maxzoom": 13,
@@ -315,6 +325,11 @@ def test_navigation_terrain_dem_manifest_and_tile_are_read_only_allowlisted(
     assert manifest_response.json()["status"] == "ready"
     assert manifest_response.json()["tile_count"] == 1
     assert manifest_response.json()["resampling"] == "nearest"
+    assert manifest_response.json()["source_analysis_processor"] == (
+        "qgis_processing_grass"
+    )
+    assert manifest_response.json()["source_python_dtm_processing_used"] is False
+    assert manifest_response.json()["visualization_packaging_only"] is True
     assert manifest_response.json()["boundary"]["candidate_only"] is True
     assert manifest_response.json()["boundary"]["workspace_file_mutation_allowed"] is False
     assert tile_response.status_code == 200
@@ -920,7 +935,7 @@ def test_scout_dashboard_data_fetches_have_timeout_fallback() -> None:
     assert "const ASSISTANT_QUERY_TIMEOUT_MS = 240000;" in html
     assert "const PRETRIP_PROJECT_FETCH_TIMEOUT_MS = 180000;" in html
     assert "new AbortController()" in html
-    assert "const timeoutMs = Number(options.timeoutMs) || FETCH_TIMEOUT_MS;" in html
+    assert "Number(options.timeoutMs) || FETCH_TIMEOUT_MS" in html
     assert "signal: controller.signal" in html
     assert "window.clearTimeout(timer)" in html
     assert "{ timeoutMs: PRETRIP_PROJECT_FETCH_TIMEOUT_MS }" in html
@@ -1089,7 +1104,7 @@ def test_scout_dashboard_workspace_tab_summarizes_project_stats() -> None:
     assert "workspaceEvidenceRefCount(project)" in html
     assert "project.import_manifest?.imported_at" in html
     assert "project.layer_preparation?.prepared_at" in html
-    assert "state.pretripDataProjectId || projectId()" in html
+    assert "resolvedPretripProjectId()" in html
 
 
 def test_scout_dashboard_workspace_tab_exposes_structure_cache_and_operations() -> None:
@@ -1143,9 +1158,12 @@ def test_scout_dashboard_workspace_tab_exposes_structure_cache_and_operations() 
     ):
         assert label in html
 
-    for action in ("clone", "transfer", "pack", "restore", "delete"):
+    for action in ("transfer", "pack", "restore", "delete"):
         assert f'data-workspace-action="{action}"' in html
 
+    assert 'id="workspaceCloneTargetInput"' in html
+    assert 'id="workspaceCloneProject"' in html
+    assert 'data-workspace-clone="true"' in html
     assert 'data-workspace-structure="true"' in html
     assert 'data-workspace-cache="true"' in html
     assert 'data-workspace-operations="true"' in html
@@ -1153,8 +1171,17 @@ def test_scout_dashboard_workspace_tab_exposes_structure_cache_and_operations() 
     assert 'id="workspaceRedirectProjectInput"' in html
     assert 'id="workspaceSwitchProject"' in html
     assert 'id="workspaceRefreshExternalEvidence"' in html
-    assert "operator intent only" in html
-    assert "Only an append-only request record is written by this dashboard." in html
+    assert "operator-triggered" in html
+    assert "Clone starts a saved preparation job" in html
+    assert "Existing targets are never overwritten" in html
+    assert "/clone-jobs`" in html
+    assert "confirm_clone: true" in html
+    assert "WORKSPACE_CLONE_TIMEOUT_MS" not in html
+    assert 'data-preparation-job-action="resume"' in html
+    assert "job.can_resume" in html
+    assert "idempotency_key: idempotencyKey" in html
+    assert 'job.status === "completed_with_gaps"' in html
+    assert "Opening the workspace does not mean Golden qualification passed" in html
     assert "Delete requires an explicit destructive approval outside this dashboard." in html
     assert 'fetchJson("/admin/dashboard/workspaces")' in html
     assert "/operation-requests" in html
@@ -1171,7 +1198,14 @@ def test_scout_dashboard_workspace_tab_exposes_structure_cache_and_operations() 
         "The current published snapshot stays readable while refresh is running;"
         in html
     )
-    assert "“Refresh evidence” may use CWA, GEE and Overpass" in html
+    assert "CWA, GEE and Overpass stay refreshable" in html
+    assert "geology stays a runtime provider" in html
+    assert "summaryCache.imagery_tile_cache_seed_tiles_seen" in html
+    assert "summaryCounts.raster_label_ocr_label_count" in html
+    assert "planned / ${formatInteger(imageryReady)} ready" in html
+    assert "candidate labels / ${formatInteger(ocrHits)} cached" in html
+    assert "summaryCache.imagery_tile_cache_manifest_ref" in html
+    assert "summaryCache.raster_label_ocr_cache_ref" in html
     assert "state.connectedPreparation?.nextRunAt" in html
     assert "preparation.publicationStatus" in html
     assert "preparation.recoveryJournalStatus" in html
@@ -1289,7 +1323,6 @@ def test_scout_dashboard_import_new_trip_tab_contract() -> None:
         "importMaxReferenceDisplayPoints",
         "importMaxReasonableGpxSpeedKmh",
         "importMaxPreviousGpxSpeedRatio",
-        "importOverwriteWorkspace",
         "prepareLayersList",
         "prepareBBox",
         "prepareRouteEvidenceBundle",
@@ -1356,8 +1389,17 @@ def test_scout_dashboard_import_new_trip_tab_contract() -> None:
     assert "referenceGpxSources: fieldValue(\"importReferenceGpxSources\")" in html
     assert "targetName: targetNameValue()" in html
     assert "/import-gpx-preview" in html
-    assert "/import-gpx`" in html
+    assert "/import-and-prepare`" in html
     assert "confirm_import: true" in html
+    assert "confirm_prepare: true" in html
+    assert 'id="importOverwriteWorkspace"' not in html
+    assert 'scout.dashboardImportDraft.v1' in html
+    assert "max_previous_gpx_speed_ratio: maxPreviousSpeedRatio" in html
+    assert "importPayload.material_root = materialRoot" in html
+    assert "importPayload.dtm_dirs = dtmDirs" in html
+    assert "importPayload.mcp_named_point_evidence = mcpNamedPointEvidence" in html
+    assert "imagery,osm,overpass,terrain" in html
+    assert "mcp,pois,hazards,corridors,retreat,route-notes" in html
     assert "validateWorkspaceSelection(nextProjectId)" in html
     assert 'id="importWorkspaceRoot"' in html
     assert 'placeholder="Load the server workspace catalog" readonly' in html
@@ -1483,10 +1525,271 @@ def test_scout_dashboard_country_material_pool_contract() -> None:
     assert "It does not fetch, mutate workspace files, load runtime packages, or change safety truth." not in html
 
 
+
+@pytest.mark.parametrize("scenario", [
+    "render_rejection", "refresh_rejection", "refresh_rejection_base_failure",
+    "activation_rejection", "activation_fresh", "refresh_error_cached",
+    "activation_changed_selection", "switched_workspace", "concurrent_refresh",
+    "retry_restores_valid", "empty_catalog", "foreign_catalog",
+    "projection_rejected_after_catalog", "reference_preserved_on_failure",
+    "catalog_missing_validation", "activation_failed_post",
+])
+def test_completed_gpx_lifecycle_rejects_stale_evidence_and_recovers(scenario: str) -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    functions = "function renderCompletedGpxLifecycle" + html.split(
+        "function renderCompletedGpxLifecycle", 1
+    )[1].split("function renderPretripEvidencePanel", 1)[0]
+    program = r"""
+const assert = require("node:assert/strict");
+const {JSDOM} = require("jsdom");
+const state = {
+  completedTripCatalog: null, completedTripCatalogStatus: {},
+  completedTripActivationBusy: false, project: null,
+};
+let selectedProject = "audit_project_a";
+const resolvedPretripProjectId = () => selectedProject;
+const apiBase = () => "";
+const completedTripRecordingsPath = () => "/recordings?projectId=" + selectedProject;
+const completedTripRecordingSelectPath = id => "/select/" + id + "?projectId=" + selectedProject;
+const PRETRIP_PROJECT_FETCH_TIMEOUT_MS = 30000;
+const asArray = value => Array.isArray(value) ? value : [];
+const escapeHtml = value => String(value).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
+const formatInteger = value => String(value || 0);
+const formatDistanceKm = value => String(value || 0) + "m";
+const recording = {recording_id:"track.abcd", display_name:"My recording", point_count:3, distance_m:2000, loadable:true};
+const reference = {case_id:"audit_project_a_post_analysis", edges:[{edge_id:"ref", moving_time_s:10}]};
+const cached = {case_id:"audit_project_a.track.abcd", edges:[{edge_id:"cached", moving_time_s:100}], completed_trip_recording:recording};
+const fresh = {...cached, edges:[{edge_id:"fresh", moving_time_s:321}]};
+const goodCatalog = {
+  project_id:selectedProject, case_id:selectedProject, recording_count:1,
+  active_recording:recording, recordings:[recording],
+  active_projection_validation:{status:"validated", project_id:selectedProject, case_id:selectedProject, selection_id:recording.recording_id, issues:[]},
+};
+const reason = "GPX 已變動或由其他紀錄取代，後分析結果已過期；請重新選取紀錄。";
+const rejectedCatalog = {
+  ...goodCatalog, active_recording:null,
+  active_projection_validation:{...goodCatalog.active_projection_validation, status:"rejected", issues:[{code:"source_track_hash_mismatch", message:reason}]},
+};
+let catalogReply = goodCatalog;
+let projectReply = {
+  project_id:selectedProject, completed_trip_recordings:goodCatalog,
+  capability_timeline_import:reference, capability_timeline:fresh,
+  completed_trip_track:{recording_id:recording.recording_id},
+  active_completed_trip_recording:recording,
+};
+let fetchFailure = "";
+let projectFailure = false;
+let postReply = {project_id:selectedProject, recording, capability_timeline:cached, completed_trip_track:{recording_id:recording.recording_id}};
+let fetchHook = null, postHook = null;
+const calls = [], frames = [];
+const defer = () => {let resolve; const promise = new Promise(r => {resolve=r;}); return {promise, resolve};};
+async function fetchJson(path) {
+  calls.push(path);
+  if (fetchHook) return fetchHook(path);
+  if (fetchFailure) throw new Error(fetchFailure);
+  if (path.includes("/admin/pretrip/projects/")) {
+    if (projectFailure) throw new Error("workspace refresh failed");
+    return projectReply;
+  }
+  return catalogReply;
+}
+async function postJson(path) {calls.push(path); return postHook ? postHook(path) : postReply;}
+function inspect() {
+  const dom = new JSDOM(renderCompletedGpxLifecycle());
+  try {
+    const lane = dom.window.document.querySelector('[role="status"]');
+    const buttons = [...dom.window.document.querySelectorAll('[data-completed-gpx-recording-id]')];
+    return {
+      status:state.completedTripCatalogStatus.status,
+      text:lane.textContent, bad:lane.classList.contains("bad"),
+      active:buttons.some(b => b.textContent.trim() === "Active"),
+      controls:buttons.map(b => ({text:b.textContent.trim(),disabled:b.disabled})),
+      capability:state.project?.capability_timeline_import?.edges?.[0]?.edge_id || null,
+    };
+  } finally {dom.window.close();}
+}
+function render() {frames.push(inspect());}
+function installCached() {
+  state.completedTripCatalog = goodCatalog;
+  state.completedTripCatalogStatus = {status:"ready", text:"previous success"};
+  state.project = {
+    project_id:selectedProject, capability_timeline_import:cached,
+    capability_timeline:cached, completed_trip_track:{recording_id:recording.recording_id},
+    active_completed_trip_recording:recording,
+    reference_tracks:{sentinel:"preserve"}, unrelated:{sentinel:"unchanged"},
+  };
+}
+function installRejected() {
+  catalogReply = rejectedCatalog;
+  projectReply = {project_id:selectedProject, completed_trip_recordings:rejectedCatalog,
+    capability_timeline_import:reference};
+}
+function assertRejected() {
+  const ui = inspect();
+  assert.equal(ui.status,"error");
+  assert.equal(ui.bad,true);
+  assert.equal(ui.active,false);
+  assert.ok(ui.text.includes(reason),ui.text);
+  assert.ok(!ui.text.includes("已從 post-analysis 結果更新"));
+}
+""" + "\nconst scenario = " + json.dumps(scenario) + ";\n" + functions + r"""
+(async () => {
+  if (scenario === "render_rejection") {
+    installCached();
+    state.completedTripCatalog = {...rejectedCatalog, active_recording:recording};
+    const ui=inspect();
+    assert.equal(ui.active,false);
+    assert.equal(ui.bad,true);
+    assert.ok(ui.text.includes(reason));
+  } else if (scenario === "refresh_rejection") {
+    installCached(); installRejected();
+    await loadCompletedTripRecordings();
+    assertRejected();
+    assert.deepEqual(state.project.capability_timeline_import,reference);
+    assert.equal(state.project.completed_trip_track,null);
+    assert.deepEqual(state.project.reference_tracks,{sentinel:"preserve"});
+    assert.deepEqual(state.project.unrelated,{sentinel:"unchanged"});
+  } else if (scenario === "refresh_rejection_base_failure") {
+    installCached(); installRejected(); projectFailure=true;
+    await loadCompletedTripRecordings();
+    assertRejected();
+    assert.equal(state.project.capability_timeline_import,null);
+    assert.equal(state.project.completed_trip_track,null);
+    assert.deepEqual(state.project.reference_tracks,{sentinel:"preserve"});
+    assert.ok(inspect().text.includes("workspace refresh failed"));
+  } else if (scenario === "activation_rejection") {
+    state.project={project_id:selectedProject,capability_timeline_import:reference,reference_tracks:{sentinel:"preserve"}};
+    installRejected();
+    await activateCompletedTripRecording(recording.recording_id);
+    assertRejected();
+    assert.deepEqual(state.project.capability_timeline_import,reference);
+    assert.ok(frames.every(f => f.capability !== "cached"),JSON.stringify(frames));
+    assert.equal(state.completedTripActivationBusy,false);
+  } else if (scenario === "activation_fresh") {
+    state.project={project_id:selectedProject,capability_timeline_import:reference,reference_tracks:{sentinel:"preserve"}};
+    await activateCompletedTripRecording(recording.recording_id);
+    assert.equal(inspect().status,"ready");
+    assert.equal(inspect().active,true);
+    assert.deepEqual(state.project.capability_timeline_import,fresh);
+    assert.ok(frames.every(f => f.capability !== "cached"));
+    assert.equal(state.completedTripActivationBusy,false);
+  } else if (scenario === "refresh_error_cached") {
+    installCached(); fetchFailure="catalog offline";
+    await loadCompletedTripRecordings();
+    assert.equal(inspect().status,"error");
+    assert.equal(inspect().active,false);
+    assert.ok(inspect().text.includes("catalog offline"));
+    assert.ok(frames.every(f => !f.active));
+    assert.equal(state.project.capability_timeline_import,null);
+  } else if (scenario === "activation_changed_selection") {
+    state.project={project_id:selectedProject,capability_timeline_import:reference};
+    const other={...recording,recording_id:"other.5678"};
+    catalogReply={...goodCatalog,active_recording:other,
+      active_projection_validation:{...goodCatalog.active_projection_validation,selection_id:other.recording_id}};
+    projectReply={...projectReply,completed_trip_recordings:catalogReply};
+    await activateCompletedTripRecording(recording.recording_id);
+    assert.equal(inspect().status,"error");
+    assert.equal(inspect().active,false);
+    assert.ok(inspect().text.includes("選取"));
+    assert.ok(!inspect().text.includes("已從 post-analysis 結果更新"));
+    assert.ok(frames.every(f => f.capability !== "cached"));
+  } else if (scenario === "switched_workspace") {
+    state.project={project_id:selectedProject,capability_timeline_import:reference};
+    const pending=defer(); postHook=()=>pending.promise;
+    const task=activateCompletedTripRecording(recording.recording_id);
+    selectedProject="audit_project_b";
+    state.project={project_id:selectedProject,reference_tracks:{sentinel:"B"}};
+    pending.resolve(postReply); await task;
+    assert.deepEqual(state.project,{project_id:"audit_project_b",reference_tracks:{sentinel:"B"}});
+    assert.equal(calls.length,1);
+  } else if (scenario === "concurrent_refresh") {
+    installCached();
+    const old=defer(); let n=0;
+    fetchHook=path => {
+      if(path.includes("/admin/pretrip/projects/")) return projectReply;
+      n+=1; return n===1?old.promise:Promise.resolve(goodCatalog);
+    };
+    const first=loadCompletedTripRecordings();
+    const second=loadCompletedTripRecordings();
+    await second; old.resolve(rejectedCatalog); await first;
+    assert.equal(inspect().status,"ready");
+    assert.equal(inspect().active,true);
+    assert.deepEqual(state.project.capability_timeline_import,fresh);
+  } else if (scenario === "retry_restores_valid") {
+    installCached(); installRejected();
+    await loadCompletedTripRecordings(); assertRejected();
+    catalogReply=goodCatalog;
+    projectReply={project_id:selectedProject,completed_trip_recordings:goodCatalog,capability_timeline_import:reference,capability_timeline:fresh,completed_trip_track:{recording_id:recording.recording_id},active_completed_trip_recording:recording};
+    await activateCompletedTripRecording(recording.recording_id);
+    assert.equal(inspect().status,"ready");
+    assert.equal(inspect().active,true);
+    assert.deepEqual(state.project.capability_timeline_import,fresh);
+    assert.equal(state.completedTripActivationBusy,false);
+    assert.ok(frames.filter(f => f.status === "loading").every(f => f.text.includes("正在")));
+  } else if (scenario === "empty_catalog") {
+    catalogReply={...goodCatalog,active_recording:null,recordings:[],recording_count:0,active_projection_validation:null};
+    projectReply={project_id:selectedProject,completed_trip_recordings:catalogReply,capability_timeline_import:reference};
+    await loadCompletedTripRecordings();
+    assert.equal(inspect().status,"ready");
+    assert.equal(inspect().active,false);
+    assert.ok(inspect().text.includes("尚未找到"));
+    assert.deepEqual(state.project.capability_timeline_import,reference);
+  } else if (scenario === "foreign_catalog") {
+    installCached();
+    catalogReply={...goodCatalog,project_id:"audit_project_b",case_id:"audit_project_b"};
+    await loadCompletedTripRecordings();
+    assert.equal(inspect().status,"error");
+    assert.equal(inspect().active,false);
+    assert.ok(inspect().text.includes("workspace"));
+    assert.deepEqual(state.project.reference_tracks,{sentinel:"preserve"});
+  } else if (scenario === "projection_rejected_after_catalog") {
+    installCached();
+    projectReply={...projectReply,completed_trip_recording_projection_validation:rejectedCatalog.active_projection_validation};
+    await loadCompletedTripRecordings();
+    assertRejected();
+    assert.deepEqual(state.project.capability_timeline_import,reference);
+    assert.equal(state.project.completed_trip_track,null);
+  } else if (scenario === "reference_preserved_on_failure") {
+    installCached(); state.project.capability_timeline_import=reference; fetchFailure="catalog offline";
+    await loadCompletedTripRecordings();
+    assert.equal(inspect().status,"error");
+    assert.equal(inspect().active,false);
+    assert.deepEqual(state.project.capability_timeline_import,reference);
+    assert.deepEqual(state.project.reference_tracks,{sentinel:"preserve"});
+  } else if (scenario === "catalog_missing_validation") {
+    installCached();
+    catalogReply={...goodCatalog,active_projection_validation:null};
+    projectReply={...projectReply,completed_trip_recordings:catalogReply};
+    await loadCompletedTripRecordings();
+    assert.equal(inspect().status,"error");
+    assert.equal(inspect().active,false);
+    assert.ok(inspect().text.includes("核對"));
+    assert.equal(state.project.capability_timeline_import,null);
+  } else if (scenario === "activation_failed_post") {
+    installCached();
+    postHook=()=>{throw new Error("selected GPX unavailable");};
+    await activateCompletedTripRecording(recording.recording_id);
+    assert.equal(inspect().status,"error");
+    assert.equal(inspect().active,false);
+    assert.ok(inspect().text.includes("selected GPX unavailable"));
+    assert.equal(state.project.capability_timeline_import,null);
+    assert.equal(state.completedTripActivationBusy,false);
+    assert.equal(calls.length,1);
+  } else {throw new Error("unknown scenario");}
+  process.stdout.write(JSON.stringify({scenario,calls,final:inspect(),frames}));
+})().catch(error => {console.error(error); process.exitCode=1;});
+"""
+    result = subprocess.run(
+        ["node", "-e", program], capture_output=True, text=True, check=False, timeout=30
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["scenario"] == scenario
+
+
 def test_scout_dashboard_timeline_evidence_uses_pretrip_tree_categories() -> None:
     html = PAGE.read_text(encoding="utf-8")
 
-    assert 'const PRETRIP_DATA_PROJECT_ID = "chilai_nanhua_day1";' in html
+    assert 'const PRETRIP_DATA_PROJECT_ID' not in html
     assert "function pretripDataProjectIds()" in html
     assert "fetchFirstPretripJson" in html
     assert "renderPretripEvidencePanel" in html
@@ -1503,7 +1806,7 @@ def test_scout_dashboard_timeline_evidence_uses_pretrip_tree_categories() -> Non
     assert 'zeroState: view.capability_timeline_import ? "no completed edges" : "not imported"' in html
     assert 'const COMPLETED_TRIP_RECORDINGS_PATH = "/admin/post-analysis/completed-trip-recordings";' in html
     assert "function completedTripRecordingsPath()" in html
-    assert "projectId=${encodeURIComponent(state.pretripDataProjectId || projectId())}" in html
+    assert "projectId=${encodeURIComponent(resolvedPretripProjectId())}" in html
     assert "completedTripRecordingSelectPath(safeRecordingId)" in html
     assert "function renderCompletedGpxLifecycle()" in html
     assert "async function loadCompletedTripRecordings()" in html
@@ -1766,7 +2069,7 @@ def test_weather_embedded_map_keeps_the_basic_map_view_controls_visible() -> Non
     assert "top: 58px;" in frame_state_rule
 
 
-def test_weather_embedded_map_defaults_to_rudy_tw_and_cwa_imagery_only() -> None:
+def test_weather_embedded_map_defaults_to_rudy_tw_cwa_and_route_context() -> None:
     html = PAGE.read_text(encoding="utf-8")
     pretrip_html = PRETRIP_PAGE.read_text(encoding="utf-8")
     weather_layer_defaults = html.split(
@@ -1790,8 +2093,12 @@ def test_weather_embedded_map_defaults_to_rudy_tw_and_cwa_imagery_only() -> None
 
     assert '"rudy-twmap"' in weather_layer_contract
     assert '"cwa-weather"' in weather_layer_contract
+    assert '"route"' in weather_layer_contract
+    assert '"segments"' in weather_layer_contract
+    assert '"checkpoints"' in weather_layer_contract
     assert '"cwa-qpf"' not in weather_layer_contract
-    assert weather_layer_contract.count('"') == 4
+    assert '"weather-api"' not in weather_layer_contract
+    assert weather_layer_contract.count('"') == 10
     assert 'layerId === "cwa-weather"' in weather_layer_defaults
     assert "&mapOnly=1&wheelZoom=0&initialLayers=${encodeURIComponent(" in weather_section
     assert "WEATHER_EMBEDDED_MAP_LAYER_IDS.join" in weather_section
@@ -1804,6 +2111,7 @@ def test_weather_embedded_map_defaults_to_rudy_tw_and_cwa_imagery_only() -> None
         'layerId === "rudy-twmap" || state.layerEnabled[layerId] !== false'
         in weather_frame_adapter
     )
+    assert "setEmbeddedPretripLayerEnabled(frame, layerId, enabled);" in weather_frame_adapter
     assert 'get("initialLayers")' in pretrip_html
     assert "function applyInitialLayerSelection()" in pretrip_html
     assert pretrip_load.index("applyInitialLayerSelection();") < pretrip_load.index(
@@ -1816,19 +2124,29 @@ def test_weather_embedded_map_defaults_to_rudy_tw_and_cwa_imagery_only() -> None
     )
     assert 'sourceKind: "scout_proxy_tile"' in pretrip_html
     assert 'sourceId: "happyman_rudy_twmap"' in pretrip_html
-    assert 'cacheLayerId: "imagery"' in pretrip_html
+    assert 'cacheLayerId: "rudy-twmap"' in pretrip_html
     assert "renderRasterBasemapLayers(state.view);" in map_viewport_adapter
+    assert (
+        '#mapRendererShell[data-map-renderer-active="maplibre"] #map '
+        "{ display:none !important; }"
+        in weather_frame_adapter
+    )
+    assert (
+        '#mapRendererShell[data-map-renderer-active="svg"] #mapLibreEvidenceMap '
+        "{ display:none !important; }"
+        in weather_frame_adapter
+    )
 
 
 def test_weather_embedded_map_loads_cwa_imagery_only_after_layer_enable() -> None:
     html = PAGE.read_text(encoding="utf-8")
     pretrip_html = PRETRIP_PAGE.read_text(encoding="utf-8")
     imagery_gate = pretrip_html.split(
-        "async function loadCwaWeatherImageryIfEnabled(projectId)", 1
+        "async function loadCwaWeatherImageryIfEnabled(projectId,", 1
     )[1].split("async function loadCwaRainfallGridOverlay(view)", 1)[0]
     project_reload = pretrip_html.split(
         "async function reloadProjectView()", 1
-    )[1].split("async function loadOsmPbfVectorLayer(view)", 1)[0]
+    )[1].split("async function loadOsmPbfVectorLayer(view,", 1)[0]
     layer_change_handler = pretrip_html.split(
         "function handleLayerChange(event)", 1
     )[1].split("function closeLayerMenus(", 1)[0]
@@ -1840,7 +2158,7 @@ def test_weather_embedded_map_loads_cwa_imagery_only_after_layer_enable() -> Non
     assert "return null;" in imagery_gate
     assert "await loadCwaWeatherImagery(projectId)" in imagery_gate
     assert (
-        "const imageryPromise = loadCwaWeatherImageryIfEnabled(PROJECT_ID);"
+        "const imageryPromise = loadCwaWeatherImageryIfEnabled(PROJECT_ID, {redraw: false});"
         in project_reload
     )
     assert (
@@ -2169,6 +2487,17 @@ def test_scout_dashboard_outdoor_six_forces_subtree_contract() -> None:
         assert decision in html
 
 
+def test_navigation_ordered_clues_describes_named_point_route_positions() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    renderer = html.split("function renderNavigationOrderedClues", 1)[1].split(
+        "function renderNavigationTopology", 1
+    )[0]
+
+    assert 'ledger.ordered_clue_chain_kind === "named_point_route_positions"' in renderer
+    assert "依 Golden Route 路程排序的命名地點線索" in renderer
+    assert "僅供閱讀，不代表已確認歷史路線" in renderer
+
+
 def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() -> None:
     html = PAGE.read_text(encoding="utf-8")
     navigation = html.split("function renderNavigationPage", 1)[1].split(
@@ -2208,6 +2537,10 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
         "function destroyNavigationTerrainMapLibre(",
         "function renderNavigationTerrainReviewWorkbench(",
         "function renderNavigationTerrainEvidenceInspector(",
+        "function inspectNavigationTerrainRouteConsistency(",
+        "hypothesis.source_refs",
+        'ref.endsWith("/terrain_route_hypothesis.json")',
+        "function navigationTerrainRouteConsistencyFeatureCollection(",
         "function renderNavigationTerrainTopDownLayer(",
         "function renderNavigationFeatureExtraction(",
         "function renderNavigationSourceLedger(",
@@ -2241,7 +2574,9 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
         'data-navigation-terrain-band="true"',
         'data-navigation-terrain-event-id="',
             'data-navigation-terrain-event-timeline="true"',
-            'data-navigation-terrain-validation="',
+        'data-navigation-terrain-validation="',
+        'data-navigation-terrain-consistency-run="true"',
+        'data-navigation-terrain-consistency-result="',
         'data-navigation-source-ledger="true"',
         'data-navigation-ordered-clues="true"',
         'data-navigation-route-topology="true"',
@@ -2271,6 +2606,10 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
         "Shadow 關係說明",
         "不需要逐筆審核",
         "/navigation-terrain-intelligence",
+        "/terrain-route-consistency",
+        '"scout-gpx-terrain-consistency"',
+        'id: "scout-gpx-terrain-consistency-samples"',
+        "terrain consistency, not GPX validity",
         "Workspace terrain projection is preparing.",
         "scheduleNavigationTerrainPolling",
         "stopNavigationTerrainPolling",
@@ -2305,15 +2644,32 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
     assert 'dragPan: true' in html
     assert 'keyboard: true' in html
     assert 'source: "scout-terrain-dem"' in html
-    assert 'source: "scout-terrain-hillshade-dem"' in html
+    assert 'source: "scout-terrain-hillshade"' in html
     assert 'source: "scout-terrain-candidates"' in html
     assert 'function navigationTerrainRudyOpacity(mode)' in html
-    assert 'return mode === "3d" ? .38 : 1;' in html
+    assert 'function navigationTerrainUsesStandardGrass(snapshot)' in html
+    assert 'processing.primary_processor === "qgis_processing_grass"' in html
+    assert '${scopeIsAll ? "矩形全域" : "接觸 GPX"} GRASS 形態線' in html
+    assert '任一處與 Golden Route GPX 距離 ≤ ${formatInteger(routeFilter.maximum_contact_distance_m)}m' in html
+    assert "GPX 只作接觸篩選錨點" in html
+    assert 'local_python_comparator === "not_run"' in html
+    assert 'return mode === "3d" ? .82 : 1;' in html
+    assert 'function navigationTerrainRasterOpacity(snapshot, overlayMode, mode)' in html
+    assert 'overlay?.alpha_channel === true' in html
+    assert 'elevation_tint: .62' in html
+    assert 'hillshade: .26' in html
+    assert 'elevation_tint: .46' in html
+    assert 'hillshade: mode === "3d" ? .12 : .13' in html
+    assert 'contours: .08' in html
     assert '"raster-opacity": navigationTerrainRudyOpacity(mode)' in html
     assert '"raster-fade-duration": 0' in html
-    assert '"raster-contrast": mode === "3d" ? .24 : 0' in html
-    assert '"raster-saturation": mode === "3d" ? -.14 : 0' in html
-    assert 'hillshadeLayer,\n        ...(revealObservedContext ? [rudyLayer] : [])' in html
+    assert '"raster-contrast": mode === "3d" ? .08 : 0' in html
+    assert '"raster-saturation": 0' in html
+    assert 'class="navigation-terrain-elevation-scale"' in html
+    assert 'data-navigation-terrain-elevation-scale="true"' in html
+    assert '0 m</span><span>1000</span><span>2000</span><span>3000</span><span>4000 m' in html
+    assert 'elevationScale.hidden = !visible;' in html
+    assert '...(revealObservedContext ? [rudyLayer] : []),\n        ...terrainRasterLayers' in html
     assert 'mode === "3d" ? "terrain" : "flat"' in html
     assert 'data-navigation-rudy-opacity="${navigationTerrainRudyOpacity(mode)}"' in html
     assert 'function navigationTerrainCameraMinimumZoom(dem, mode)' in html
@@ -2322,7 +2678,7 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
     assert 'data-navigation-terrain-camera-min-zoom="${navigationTerrainCameraMinimumZoom(dem, mode)}"' in html
     assert 'data-navigation-terrain-source-min-zoom="${valueOrDash(dem.minzoom)}"' in html
     assert 'const terrainZoomFloor = navigationTerrainMapLibreRuntime.maps.reduce(' not in html
-    assert 'FULL GOLDEN ROUTE · independent 2D scale' in html
+    assert 'COMPLETE GPX + R1 · independent 2D scale' in html
     assert 'data-dashboard-map-screen-stroke="7"' in html
     assert 'data-dashboard-map-screen-stroke="4.5"' in html
     assert 'data-navigation-structure-label-visibility="selected-only"' in html
@@ -2414,6 +2770,344 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
     assert "尚未由目前 terrain pipeline 抽取" in html
     assert "P0、P1、P2 不合併成一個安全分數" in html
     assert "reference GPX 不自動升格成替代路線" in html
+
+
+def test_navigation_maplibre_composes_shared_2d_and_3d_terrain_layers() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    style = html.split(
+        "function navigationTerrainMapLibreStyle", 1
+    )[1].split("function navigationTerrainMapLibreCameraScope", 1)[0]
+
+    for helper in (
+        "function navigationTerrainRasterOverlay(",
+        "function navigationTerrainRasterImageSource(",
+        "function navigationTerrainLayerVisibility(",
+        "function navigationTerrainMapLayerIds(",
+        "function setNavigationTerrainMapLayerVisibility(",
+    ):
+        assert helper in html
+
+    for source_id in (
+        "scout-terrain-elevation-tint",
+        "scout-terrain-contours",
+        "scout-terrain-slope-shading",
+    ):
+        assert source_id in style
+
+    assert 'type: "image"' in style
+    assert 'type: "raster"' in style
+    assert 'const hillshadeSource = navigationTerrainRasterImageSource(snapshot, "hillshade");' in style
+    assert 'type: "hillshade"' not in style
+    assert 'const terrainRasterLayers = [' in style
+    assert style.index("rudyLayer") < style.index("...terrainRasterLayers")
+    assert style.index('id: "scout-terrain-elevation-tint"') < style.index(
+        'id: "scout-terrain-contours"'
+    )
+    assert '"raster-resampling": "linear"' in style
+    assert style.count('"raster-resampling": "linear"') >= 3
+    assert 'navigationTerrainLayerVisible("elevation")' in style
+    assert 'navigationTerrainLayerVisible("hillshade")' in style
+    assert 'navigationTerrainLayerVisible("contours")' in style
+    assert 'navigationTerrainLayerVisible("slope")' in style
+    assert 'navigationTerrainLayerVisible("basemap")' in style
+    assert 'navigationTerrainLayerVisible("route")' in style
+    assert 'navigationTerrainLayerVisible("candidates")' in style
+    assert 'terrain: {' in style
+    assert 'source: "scout-terrain-dem"' in style
+
+
+def test_navigation_hillshade_uses_corridor_overlay_not_dem_tile_rectangle() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    style = html.split(
+        "function navigationTerrainMapLibreStyle", 1
+    )[1].split("function navigationTerrainMapLibreCameraScope", 1)[0]
+
+    assert (
+        'const hillshadeSource = navigationTerrainRasterImageSource(snapshot, "hillshade");'
+        in style
+    )
+    assert 'sources["scout-terrain-hillshade"] = {' in style
+    assert 'source: "scout-terrain-hillshade"' in style
+    assert 'source: "scout-terrain-hillshade-dem"' not in style
+    assert 'type: "hillshade"' not in style
+    assert 'navigationTerrainLayerVisible("hillshade")' in style
+    assert '"raster-resampling": "linear"' in style
+
+
+def test_navigation_map_layer_controls_do_not_recreate_or_refit_maps() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    setter = html.split(
+        "function setNavigationTerrainMapLayerVisibility", 1
+    )[1].split("function navigationTerrainMapLibreEventFeatureCollection", 1)[0]
+    binder = html.split(
+        "function bindNavigationTerrainControls", 1
+    )[1].split("function bindSettingsControls", 1)[0]
+    assert 'navigationTerrainLayerVisibility: {' in html
+    assert 'navigationTerrainInspectorExpanded: false' in html
+    assert 'data-navigation-terrain-layer-toggle="' in html
+    assert 'data-navigation-terrain-inspector-toggle="true"' in html
+    assert 'data-navigation-inspector-expanded="${String(inspectorExpanded)}"' in html
+    assert 'hidden="${inspectorExpanded ? "" : "hidden"}"' not in html
+    assert '${inspectorExpanded ? "" : "hidden"}' in html
+    assert 'map.setLayoutProperty(layerId, "visibility", visibility);' in setter
+    assert "navigationTerrainMapLibreStyle" not in setter
+    assert "fitNavigationTerrainMapLibre" not in setter
+    assert "render()" not in setter
+    assert 'button.setAttribute("aria-pressed", String(visible));' in setter
+    assert 'state.navigationTerrainLayerVisibility = {' in setter
+    assert 'shell.querySelectorAll("button[data-navigation-terrain-layer-toggle]")' in binder
+    assert 'setNavigationTerrainMapLayerVisibility(layerKey, !current);' in binder
+
+
+def test_navigation_map_exposes_clear_rudy_tw_and_terrain_overlay_presets() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    initial_visibility = html.split(
+        "navigationTerrainLayerVisibility: {", 1
+    )[1].split("},", 1)[0]
+    binder = html.split(
+        "function bindNavigationTerrainControls", 1
+    )[1].split("function bindSettingsControls", 1)[0]
+
+    assert 'basemap: true' in initial_visibility
+    assert 'elevation: false' in initial_visibility
+    assert 'hillshade: false' in initial_visibility
+    assert 'contours: false' in initial_visibility
+    assert '["basemap", "Rudy+TW", "#8e9b86"]' in html
+    assert 'data-navigation-terrain-visual-preset="rudy"' in html
+    assert 'data-navigation-terrain-visual-preset="terrain"' in html
+    assert "Rudy+TW 原圖" in html
+    assert "地形疊圖" in html
+    assert "function navigationTerrainVisualPreset(" in html
+    assert "function applyNavigationTerrainVisualPreset(" in html
+    assert "Rudy+TW 原圖 · 高程/陰影/等高線疊圖關閉" in html
+    assert 'state.navigationTerrainEvidenceDomain = "observed";' in html
+    assert 'shell.querySelectorAll("button[data-navigation-terrain-visual-preset]")' in binder
+    assert "const preset = applyNavigationTerrainVisualPreset(" in binder
+    assert "rerenderNavigation(" in binder
+
+
+def test_navigation_map_renders_candidate_only_terrain_route_hypothesis_layers() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    helpers = html.split(
+        "function navigationTerrainRouteHypothesis", 1
+    )[1].split("function navigationTerrainRasterOpacity", 1)[0]
+    style = html.split(
+        "function navigationTerrainMapLibreStyle", 1
+    )[1].split("function navigationTerrainMapLibreCameraScope", 1)[0]
+    page = html.split("function renderNavigationPage", 1)[1].split(
+        "function architectureSnapshot", 1
+    )[0]
+
+    assert 'navigationTerrainHypothesisBand: "top_10_percent_corridor"' in html
+    assert "NAVIGATION_TERRAIN_ROUTE_CORRIDOR_MODES" in helpers
+    assert 'hypothesis?.status !== "candidate_ready"' in helpers
+    assert 'hypothesis?.path_model?.id !== "anisotropic_walk"' in helpers
+    assert (
+        'hypothesis?.corridor?.band_model?.id !== "symmetric_macro_terrain_cost"'
+        in helpers
+    )
+    assert '"separate_model_not_path_confidence_band"' in helpers
+    assert 'boundary.authority !== "candidate_only"' in helpers
+    assert 'boundary.source_type !== "terrain_hypothesis"' in helpers
+    assert 'boundary.runtime_safety_truth !== false' in helpers
+    assert 'boundary.promotion_allowed !== false' in helpers
+    assert 'labels.has("NOT A VERIFIED TRAIL")' in helpers
+    assert 'return {type: "FeatureCollection", features: []};' in helpers
+    assert 'properties.observed === false' in helpers
+    assert 'properties.official === false' in helpers
+    assert 'properties.human_verified === false' in helpers
+
+    for source_id in (
+        "scout-terrain-route-corridor-top-5",
+        "scout-terrain-route-corridor-top-10",
+        "scout-terrain-route-corridor-top-20",
+        "scout-terrain-route-hypothesis",
+    ):
+        assert source_id in style
+    for layer_id in (
+        "scout-terrain-route-hypothesis-halo",
+        "scout-terrain-route-hypothesis-endpoints",
+        "scout-terrain-route-hypothesis-labels",
+    ):
+        assert f'id: "{layer_id}"' in style
+    assert '"line-dasharray": [2.2, 1.1]' in style
+    assert 'attribution: "Scout candidate-only terrain route hypothesis"' in style
+    assert 'navigationTerrainLayerVisible("hypothesis")' in style
+
+    assert "CANDIDATE · TERRAIN HYPOTHESIS · NOT A VERIFIED TRAIL" in html
+    assert "minimum anisotropic model-cost trace" in html
+    assert "symmetric macro-terrain detour-score percentile cells" in html
+    assert "not trail-scale geometry" in html
+    assert "separate models, not a confidence band" in html
+    assert 'data-navigation-terrain-hypothesis-band="' in html
+    assert 'data-navigation-terrain-hypothesis-authority-strip="true"' in html
+    assert 'data-navigation-terrain-route-hypothesis-inspector="true"' in html
+    assert "UNKNOWNS PRESERVED" in html
+    assert "NO SAFETY AUTHORITY" in html
+    assert "ACTIVE COST TERMS" in html
+    assert "NOT INCLUDED IN V0.1" in html
+    assert "zero weight means disabled, not a terrain measurement of zero" in html
+    assert 'data-navigation-legend-kind="hypothesis"' in page
+    assert "renderNavigationTerrainRouteHypothesisInspector(snapshot)" in page
+
+
+def test_navigation_map_selects_local_hash_bound_terrain_hypothesis_without_promotion() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    helpers = html.split(
+        "function navigationTerrainRouteHypothesisBandLabel", 1
+    )[1].split("function navigationTerrainRasterOpacity", 1)[0]
+    binder = html.split(
+        "function bindNavigationTerrainControls", 1
+    )[1].split("function bindSettingsControls", 1)[0]
+    bounds_helpers = html.split(
+        "function navigationTerrainRouteHypothesisBounds", 1
+    )[1].split("function navigationTerrainRudyTileTemplate", 1)[0]
+    completed_refresh = html.split(
+        "async function refreshNavigationTerrainAfterCompletedRouteHypothesis", 1
+    )[1].split("async function loadQgisSpatialWorkflow", 1)[0]
+
+    assert 'navigationTerrainHypothesisId: ""' in html
+    assert "function navigationTerrainRouteHypothesisOptions(snapshot)" in helpers
+    assert "function navigationTerrainRouteHypothesisSelectionId(snapshot)" in helpers
+    assert "root?.selection?.default_id" in helpers
+    assert 'data-navigation-terrain-hypothesis-select="true"' in html
+    assert "option.selection_label" in html
+    assert "hypothesis.endpoint_labels" in helpers
+    assert 'focus_mode === "hypothesis"' in bounds_helpers
+    assert "return hypothesisBounds" in bounds_helpers
+    assert "hypothesis_id=iroko-1148-to-station" not in html
+    assert 'shell.querySelector("select[data-navigation-terrain-hypothesis-select' in binder
+    assert "state.navigationTerrainHypothesisId = select.value;" in binder
+    assert "state.navigationTerrainHypothesisBand = \"\";" in binder
+    assert 'state.navigationTerrainHypothesisId = "";' in completed_refresh
+    assert 'state.navigationTerrainHypothesisBand = "";' in completed_refresh
+    assert "fetchJson" not in binder.split(
+        'shell.querySelector("select[data-navigation-terrain-hypothesis-select', 1
+    )[1].split(
+        'shell.querySelectorAll("button[data-navigation-terrain-hypothesis-band]")', 1
+    )[0]
+    assert "observed_trail" not in binder
+    assert "official_trail" not in binder
+    assert "safe_route" not in binder
+    assert "recommended_route" not in binder
+
+
+def test_navigation_map_always_compares_typed_known_gpx_with_candidate_r1() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    style = html.split(
+        "function navigationTerrainMapLibreStyle", 1
+    )[1].split("function navigationTerrainMapLibreCameraScope", 1)[0]
+    gpx_helper = html.split(
+        "function navigationTerrainKnownGpxReferenceFeatureCollection", 1
+    )[1].split("function navigationTerrainRouteHypothesisFeatureCollection", 1)[0]
+
+    assert "navigationTerrainGoldenRouteFilterCoordinates(snapshot)" in gpx_helper
+    assert 'kind: "known_gpx_reference"' in gpx_helper
+    assert 'source_type: "known_gpx"' in gpx_helper
+    assert 'label: "Golden Route GPX · REFERENCE ONLY"' in gpx_helper
+    assert "runtime_safety_truth: false" in gpx_helper
+    assert "operational: false" in gpx_helper
+    assert '"scout-known-gpx-reference": {' in style
+    assert 'data: navigationTerrainKnownGpxReferenceFeatureCollection(snapshot)' in style
+    assert 'source: "scout-known-gpx-reference"' in style
+    assert "function navigationTerrainRouteAnnotationModels" in html
+    assert "function addNavigationTerrainRouteAnnotations" in html
+    assert 'label: "KNOWN GPX · REFERENCE ONLY"' in html
+    annotation_models = html.split(
+        "function navigationTerrainRouteAnnotationModels", 1
+    )[1].split("function addNavigationTerrainRouteAnnotations", 1)[0]
+    assert 'kind: "hypothesis"' not in annotation_models
+    assert "TERRAIN HYPOTHESIS" not in annotation_models
+    assert 'element.dataset.navigationTerrainRouteAnnotation = annotation.kind' in html
+    assert 'const routeAnnotations = addNavigationTerrainRouteAnnotations(' in html
+    assert 'map, mode, host, scopeKey, routeAnnotations' in html
+    destroy_match = re.search(
+        r"(?ms)^    function destroyNavigationTerrainMapLibre\(.*?^    \}", html
+    )
+    assert destroy_match, "The actual Navigation cleanup entrypoint must exist."
+    node_program = "\n".join((
+        "const assert = require('node:assert/strict');",
+        "const asArray = value => Array.isArray(value) ? value : [];",
+        "let navigationTerrainMapLibreRuntime;",
+        "const rememberNavigationTerrainMapLibreCamera = entry => entry.calls.push('camera');",
+        destroy_match.group(),
+        r"""
+for (const failingAnnotation of [null, 'first', 'second']) {
+  const calls = [];
+  const annotations = ['first', 'second', 'third'].map(name => ({
+    remove() {
+      calls.push(name);
+      if (name === failingAnnotation) throw new Error('annotation cleanup failed');
+    },
+  }));
+  const entry = {
+    calls,
+    routeAnnotations: annotations,
+    evidenceControlsCleanup() { calls.push('evidence-controls'); },
+    rudyTransport: {destroy() { calls.push('tile-transport'); }},
+    map: {remove() { calls.push('map-remove'); }},
+  };
+  navigationTerrainMapLibreRuntime = {maps: [entry], generation: 7, synchronizing: true};
+  destroyNavigationTerrainMapLibre();
+  assert.deepEqual(calls, ['camera', 'first', 'second', 'third', 'evidence-controls', 'tile-transport', 'map-remove'],
+    'Every annotation and the map must be released even if another annotation throws');
+  assert.equal(navigationTerrainMapLibreRuntime.maps.length, 0);
+  assert.equal(navigationTerrainMapLibreRuntime.generation, 8);
+  assert.equal(navigationTerrainMapLibreRuntime.synchronizing, false);
+  assert.equal(entry.mapDisposeReceipt.mapRemoved, true);
+  assert.equal(entry.mapDisposeReceipt.disposed, failingAnnotation === null);
+  assert.equal(entry.mapDisposeReceipt.errors.length, failingAnnotation === null ? 0 : 1);
+}
+""",
+    ))
+    subprocess.run(["node"], input=node_program, text=True, capture_output=True, check=True)
+    assert 'data-navigation-terrain-route-map-key="true"' in html
+    assert "Golden Route GPX" in html
+    assert 'terrain hypothesis</b><em>candidate_only · not verified' in html
+    assert "known_gpx · reference only" in html
+    assert "candidate_only · not verified" in html
+
+
+def test_navigation_terrain_hypothesis_band_switch_rebuilds_without_promotion() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    binder = html.split(
+        "function bindNavigationTerrainControls", 1
+    )[1].split("function bindSettingsControls", 1)[0]
+    hypothesis_binder = binder.split(
+        'shell.querySelectorAll("button[data-navigation-terrain-hypothesis-band]")',
+        1,
+    )[1].split(
+        'shell.querySelectorAll("button[data-navigation-terrain-layer-toggle]")',
+        1,
+    )[0]
+
+    assert (
+        'shell.querySelectorAll("button[data-navigation-terrain-hypothesis-band]")'
+        in binder
+    )
+    assert "NAVIGATION_TERRAIN_ROUTE_CORRIDOR_MODES.includes(band)" in binder
+    assert "state.navigationTerrainHypothesisBand = band;" in binder
+    assert "observed_trail" not in binder
+    assert "official_trail" not in binder
+    assert "safe_route" not in binder
+    assert "recommended_route" not in binder
+    assert "fetchJson" not in hypothesis_binder
+    assert "postJson" not in hypothesis_binder
+    assert "safety" not in hypothesis_binder.casefold()
+
+
+def test_navigation_2d_and_3d_do_not_synchronize_cross_mode_camera_state() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    synchronizer = html.split(
+        "function synchronizeNavigationTerrainMapLibre", 1
+    )[1].split("function navigationTerrainSelectionFocusTarget", 1)[0]
+
+    assert "const center = sourceEntry.map.getCenter();" in synchronizer
+    assert "const zoom = sourceEntry.map.getZoom();" in synchronizer
+    assert "entry.mode !== sourceEntry.mode" in synchronizer
+    assert "entry.map.jumpTo({center, zoom});" in synchronizer
+    assert "const synchronizeZoom" not in synchronizer
+    assert "fitNavigationTerrainMapLibre" not in synchronizer
 
 
 def test_navigation_page_is_a_map_first_reference_workspace() -> None:
@@ -2615,6 +3309,8 @@ def test_navigation_maplibre_preserves_independent_cameras_across_rerenders() ->
         (
             "const navigationTerrainMapLibreRuntime = {cameraByMode: {}};",
             'const projectId = () => "project-a";',
+            'let selectedHypothesisId = "full-route-r1";',
+            "const navigationTerrainRouteHypothesisSelectionId = () => selectedHypothesisId;",
             helpers,
             """
 const snapshotA = {
@@ -2648,6 +3344,10 @@ process.stdout.write(JSON.stringify({
   twoD: navigationTerrainMapLibreStoredCamera(snapshotA, "2d"),
   threeD: navigationTerrainMapLibreStoredCamera(snapshotA, "3d"),
   changedProjection: navigationTerrainMapLibreStoredCamera(snapshotB, "2d"),
+  changedHypothesis: (() => {
+    selectedHypothesisId = "iroko-1148-to-station";
+    return navigationTerrainMapLibreStoredCamera(snapshotA, "2d");
+  })(),
   modes: Object.keys(navigationTerrainMapLibreRuntime.cameraByMode).sort(),
 }));
 """,
@@ -2664,18 +3364,20 @@ process.stdout.write(JSON.stringify({
 
     assert payload["twoD"]["zoom"] == 13.75
     assert payload["threeD"]["zoom"] == 17
-    assert payload["twoD"]["center"] == [121.27, 24.07]
+    assert payload["twoD"]["center"] == [121.25, 24.05]
     assert payload["threeD"]["center"] == [121.27, 24.07]
     assert payload["twoD"]["pitch"] == 0
     assert payload["threeD"]["pitch"] == 58
     assert payload["changedProjection"] is None
+    assert payload["changedHypothesis"] is None
     assert payload["modes"] == ["2d", "3d"]
     assert lifecycle.index("rememberNavigationTerrainMapLibreCamera(entry);") < lifecycle.index(
         "entry.map.remove();"
     )
+    assert "entry.mode !== sourceEntry.mode" in lifecycle
 
 
-def test_navigation_maplibre_fit_uses_full_golden_route_without_dem_zoom_lock() -> None:
+def test_navigation_maplibre_fit_uses_complete_gpx_and_hypothesis_without_dem_zoom_lock() -> None:
     html = PAGE.read_text(encoding="utf-8")
     bounds_helpers = html.split(
         "function navigationTerrainGoldenRouteBounds", 1
@@ -2687,22 +3389,25 @@ def test_navigation_maplibre_fit_uses_full_golden_route_without_dem_zoom_lock() 
         "async function initializeNavigationTerrainMapLibre()", 1
     )[1].split("function navigationTerrainSelectedHierarchyEdge", 1)[0]
 
-    assert "snapshot?.route_samples?.points" in bounds_helpers
+    assert "navigationTerrainGoldenRouteFilterCoordinates(snapshot)" in bounds_helpers
     assert "navigationTerrainGoldenRouteBounds(snapshot)" in bounds_helpers
+    assert "navigationTerrainRouteHypothesisBounds(snapshot)" in bounds_helpers
+    assert "navigationTerrainUnionBounds(routeBounds, hypothesisBounds)" in bounds_helpers
     assert "navigationTerrainMapLibreBounds(snapshot?.terrain_raster_dem || {})" in bounds_helpers
-    assert 'const bounds = mode === "3d"' in fit_and_sync
+    assert 'const localHypothesisFocus = navigationTerrainRouteHypothesis(snapshot)?.focus_mode === "hypothesis"' in fit_and_sync
+    assert "const bounds = localHypothesisFocus" in fit_and_sync
     assert "navigationTerrainFitBounds(snapshot);" in fit_and_sync
     assert "map.getZoom() < minimumCameraZoom" in fit_and_sync
     assert "terrainZoomFloor" not in fit_and_sync
     assert "const zoom = sourceEntry.map.getZoom();" in fit_and_sync
-    assert "const synchronizeZoom = entry.mode === sourceEntry.mode;" in fit_and_sync
-    assert "...(synchronizeZoom ? {zoom} : {})" in fit_and_sync
+    assert "entry.mode !== sourceEntry.mode" in fit_and_sync
+    assert "entry.map.jumpTo({center, zoom});" in fit_and_sync
     assert "fitNavigationTerrainMapLibre(map, snapshot, mode);" in initializer
     assert "minZoom: navigationTerrainCameraMinimumZoom(dem, mode)" in initializer
-    assert 'isTerrain ? "prepared-dem-local-detail" : "golden-route"' in html
-    assert 'isTerrain ? "Reset prepared DEM local detail" : "Fit entire Golden Route"' in html
+    assert 'isTerrain ? "prepared-dem-local-detail" : "known-gpx-plus-terrain-hypothesis"' in html
+    assert 'isTerrain ? "Reset prepared DEM local detail" : "Fit complete GPX + TRH alternatives"' in html
     assert "3D LOCAL DETAIL" in html
-    assert "中心同步 / 尺度獨立" in html
+    assert "2D / 3D 視角各自獨立" in html
     assert "PARTIAL DEM COVERAGE" in html
     assert "map.queryTerrainElevation(cameraCenter)" in initializer
     assert "host.dataset.navigationTerrainElevationStatus" in initializer
@@ -2710,6 +3415,51 @@ def test_navigation_maplibre_fit_uses_full_golden_route_without_dem_zoom_lock() 
     assert "MAPLIBRE 3D TERRAIN · DEGRADED" in initializer
     assert "navigationTerrainVerticalExaggeration: 1," in html
     assert "bilinear display smoothing" in html
+
+
+def test_navigation_3d_local_detail_centers_on_gpx_hypothesis_comparison() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    helper = (
+        "function navigationTerrainRouteComparisonLocalDetail"
+        + html.split("function navigationTerrainRouteComparisonLocalDetail", 1)[1].split(
+            "function fitNavigationTerrainMapLibre", 1
+        )[0]
+    )
+    fit_and_sync = html.split("function fitNavigationTerrainMapLibre", 1)[1].split(
+        "async function initializeNavigationTerrainMapLibre", 1
+    )[0]
+    initializer = html.split(
+        "async function initializeNavigationTerrainMapLibre()", 1
+    )[1].split("function navigationTerrainSelectedHierarchyEdge", 1)[0]
+
+    node_program = "\n".join(
+        (
+            "const asArray = value => Array.isArray(value) ? value : [];",
+            "const NAVIGATION_TERRAIN_ROUTE_COMPARISON_TARGET_M = 700;",
+            "const navigationTerrainGoldenRouteFilterCoordinates = () => [[121,24],[121.01,24]];",
+            'const navigationTerrainRouteHypothesisFeatureCollection = () => ({features:[{geometry:{type:"LineString",coordinates:[[121,24.00633],[121.01,24.00633]]}}]});',
+            helper,
+            "process.stdout.write(JSON.stringify({comparison:navigationTerrainRouteComparisonLocalDetail({}, [[121,23.99],[121.02,24.02]]),center:navigationTerrainMapLibreLocalDetailCenter({}, [[121,23.99],[121.02,24.02]])}));",
+        )
+    )
+    result = subprocess.run(
+        ["node"],
+        input=node_program,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    payload = json.loads(result.stdout)
+    assert payload["center"] == [121, 24.003165]
+    assert payload["comparison"]["routeCoordinate"] == [121, 24]
+    assert payload["comparison"]["hypothesisCoordinate"] == [121, 24.00633]
+    assert abs(payload["comparison"]["separationM"] - 699.934) < 0.01
+    assert "const localDetailCenter = mode === \"3d\"" in fit_and_sync
+    assert "center: localDetailCenter || map.getCenter()" in fit_and_sync
+    assert "navigationTerrainMapLibreLocalDetailCenter(snapshot, bounds)" in initializer
+    assert '"route-comparison-camera.v2"' in html
+    assert "navigationTerrainRouteComparisonLocalDetail(" in html
     assert "adds source resolution: no" in html
 
 
@@ -2742,6 +3492,26 @@ def test_navigation_partial_states_preserve_truthful_map_control_shell() -> None
     assert "Rudy+TW orientation basemap only" in loading_renderer
     assert "No terrain vectors or terrain tiles are claimed" in loading_renderer
     assert "No terrain projection has been prepared" in loading_renderer
+
+
+def test_navigation_preserves_3d_workbench_for_ready_dem_when_projection_is_stale() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    renderer = html.split(
+        "function renderNavigationPage(force)", 1
+    )[1].split("function renderPaceDashboard", 1)[0]
+
+    assert (
+        "const terrainWorkbenchReady = liveReady || navigationTerrainDemReady(snapshot);"
+        in renderer
+    )
+    assert "terrainWorkbenchReady\n                    ? renderNavigationTerrainReviewWorkbench(" in renderer
+    assert "liveReady && evidenceDomain === \"observed\" && lens === \"events\"" in renderer
+    assert (
+        ".navigation-terrain-hypothesis-map-key {\n"
+        "        top: 72px;\n"
+        "        right: 56px;\n"
+        "        bottom: auto;"
+    ) in html
 
 
 def test_navigation_workspace_map_uses_dynamic_rudy_tw_tiles_with_shared_box_zoom() -> None:
@@ -2826,7 +3596,9 @@ def test_navigation_workspace_map_uses_dynamic_rudy_tw_tiles_with_shared_box_zoo
     assert "dashboardMapSvgVisibleRatios(viewport)" in html
     assert '"/admin/tiles/imagery"' in html
     assert "encodeURIComponent(projectId())" in html
-    assert "source_id=${encodeURIComponent(NAVIGATION_RUDY_TILE_SOURCE.sourceId)}&native=1" in html
+    tile_url = html.split("function navigationRudyTileUrl", 1)[1].split("function navigationRudyTileLongitude", 1)[0]
+    assert 'exact: "1"' in tile_url
+    assert 'options.cacheOnly ? "cache_only" : "native"' in tile_url
     assert "let zoom = NAVIGATION_RUDY_TILE_SOURCE.initialMaxZoom" in html
     assert "NAVIGATION_RUDY_TILE_SOURCE.maxZoom," in tile_refresh
     assert "NAVIGATION_RUDY_TILE_SOURCE.preparedMaxZoom," not in tile_refresh
@@ -2835,7 +3607,7 @@ def test_navigation_workspace_map_uses_dynamic_rudy_tw_tiles_with_shared_box_zoo
     assert "tile.happyman.idv.tw" not in html.split(
         "function navigationRudyTileUrl", 1
     )[1].split("function navigationRudyTileLongitude", 1)[0]
-    assert "URLSearchParams" not in html.split(
+    assert "URLSearchParams" in html.split(
         "function navigationRudyTileUrl", 1
     )[1].split("function navigationRudyTileLongitude", 1)[0]
     assert "tileLayer.innerHTML =" not in tile_refresh
@@ -2850,7 +3622,7 @@ def test_navigation_workspace_map_uses_dynamic_rudy_tw_tiles_with_shared_box_zoo
         "onRudyTileGenerationFailed)"
         in map_controller
     )
-    assert 'viewport.dataset.dashboardTileLoadState = "native-unavailable-retained-previous";' in tile_failure_handler
+    assert 'LoadState: "retained-previous", VerifiedZoom: ""' in tile_generation
     assert "announce(" in tile_failure_handler
     assert "viewState =" not in tile_failure_handler
     assert "apply(" not in tile_failure_handler
@@ -2898,6 +3670,47 @@ def test_navigation_architecture_permission_zoom_keep_evidence_screen_sized() ->
         assert "data-dashboard-map-screen-stroke=" in renderer
         assert 'vector-effect="non-scaling-stroke"' in renderer
     assert 'dashboardMapScreenSymbolTransform("architecture-map"' in architecture_map
+
+
+def test_dashboard_map_pan_preserves_evidence_clicks_until_dragging() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    handlers = "const onPointerDown =" + html.split(
+        "const onPointerDown =", 1
+    )[1].split("const finishPointer =", 1)[0]
+    program = """
+let pointerState = null;
+const viewState = {mode: "pan"};
+const captures = [];
+const viewport = {
+  dataset: {}, focus() {},
+  setPointerCapture(id) { captures.push(id); },
+  hasPointerCapture(id) { return captures.includes(id); },
+};
+const pointInViewport = event => ({x: event.clientX, y: event.clientY});
+const panBy = () => {};
+const updateSelection = () => {};
+const event = {button: 0, pointerId: 7, clientX: 0, clientY: 0,
+  target: {closest: () => null}, preventDefault() {}};
+""" + handlers + """
+onPointerDown(event);
+const afterDown = [...captures];
+onPointerMove({...event, clientX: 3});
+const afterSmallMove = [...captures];
+onPointerMove({...event, clientX: 18});
+const afterDrag = [...captures];
+viewState.mode = "box";
+onPointerDown({...event, pointerId: 8});
+process.stdout.write(JSON.stringify({afterDown, afterSmallMove, afterDrag, captures}));
+"""
+    result = subprocess.run(
+        ["node", "-e", program], capture_output=True, text=True, check=True
+    )
+    assert json.loads(result.stdout) == {
+        "afterDown": [],
+        "afterSmallMove": [],
+        "afterDrag": [7],
+        "captures": [7, 8],
+    }
 
 
 def test_dashboard_map_zoom_ceiling_uses_rudy_native_max_matrix() -> None:
@@ -3298,7 +4111,7 @@ def test_scout_dashboard_pace_fit_is_map_first_and_discloses_supporting_info() -
     )
     assert "function paceFitCheckpointContext()" in html
     assert "function paceFitCheckpointMapPoints(" in html
-    assert "function bindPaceFitControls()" in html
+    assert "function bindPaceFitControls(root = document, actions = {})" in html
     assert 'preserveAspectRatio="xMidYMid slice"' in html
     assert 'data-pace-checkpoint-select="${escapeHtml(point.id)}"' in html
     assert "{minimumZoom: 2}" in html
@@ -3518,6 +4331,9 @@ def test_scout_dashboard_moves_pace_fit_emergency_ui_to_safety_emergency() -> No
 
 def test_scout_dashboard_safety_emergency_embeds_desktop_approval_console() -> None:
     html = PAGE.read_text(encoding="utf-8")
+    legacy_illustration = html.split("function renderEmergencyLegacyIllustration()", 1)[1].split(
+        "function renderEmergencyPage()", 1
+    )[0]
     emergency_page = html.split("function renderEmergencyPage()", 1)[1].split(
         "function renderDebugPage()", 1
     )[0]
@@ -3528,11 +4344,16 @@ def test_scout_dashboard_safety_emergency_embeds_desktop_approval_console() -> N
     assert 'data-route="emergency"' in html
     assert 'data-safety-emergency-console="desktop"' in emergency_page
     assert 'data-daily-emergency-review="ready"' in emergency_page
+    assert 'data-daily-emergency-review="unavailable"' in emergency_page
+    assert "Daily Emergency Review unavailable" in emergency_page
+    assert "state.permissionDataError" in emergency_page
     assert 'data-emergency-decision="${decision}"' in emergency_page
     assert 'data-emergency-confirm-submit="true"' in html
-    assert 'data-emergency-approval-frame="desktop"' in emergency_page
-    assert 'src="/admin/dashboard/emergency-approval-desktop-v0"' in emergency_page
-    assert 'title="Legacy safety and emergency desktop approval console"' in emergency_page
+    assert emergency_page.count("renderEmergencyLegacyIllustration()") == 3
+    assert 'data-emergency-approval-frame="desktop"' in legacy_illustration
+    assert 'surfaceSrc("/admin/dashboard/emergency-approval-desktop-v0")' in legacy_illustration
+    assert 'title="Legacy safety and emergency desktop illustration"' in legacy_illustration
+    assert "不代表目前 workspace 路線、每日審查結果或任何安全權限" in legacy_illustration
     assert "emergency-mobile-approval-v0" not in emergency_page
     assert 'renderMapPanel("emergency")' in emergency_page
     assert ".safety-emergency-shell" in html
@@ -3567,7 +4388,7 @@ def test_contextual_permission_workbench_uses_typed_projection_and_dedicated_sco
     assert "state.permissionProjection = projection;" in permission_loader
     assert (
         "await loadPermissionBaselineMapContext(\n"
-        "          state.pretripDataProjectId || projectId(),\n"
+        "          resolvedPretripProjectId(),\n"
         "        );"
     ) in permission_loader
     assert "state.permissionReviewSession = await fetchJson" in permission_loader
@@ -3594,8 +4415,12 @@ def test_contextual_permission_workbench_uses_typed_projection_and_dedicated_sco
     assert "mission-baseline/map-context" in html
     assert "mission-baseline/rudy-background.png" in html
     assert "data-permission-day-map" in html
-    assert 'data-permission-rudy-background="true"' in html
-    assert 'data-rudy-image-policy="single-composite"' in html
+    # 2026-09-12 user arbitration: daily Permission maps must be interactive.
+    assert "permissionDayMapViewportId" in html
+    daily_map = html.split("function renderPermissionDayMap(", 1)[1].split("\n    function ", 1)[0]
+    assert "renderDashboardRudyTileLayer(" in daily_map
+    assert "renderDashboardMapViewport(" in daily_map
+    assert 'data-rudy-image-policy="single-composite"' not in daily_map
     assert "permission-day-grid" in html
     assert "permissionDayAnchorContext" in html
     assert "permissionDailyLabelAnchors" in html
@@ -3619,6 +4444,56 @@ def test_contextual_permission_workbench_uses_typed_projection_and_dedicated_sco
     assert "state.permissionProjection = result.projection" not in simulation
     assert "Current Decision not replaced" in simulation
     assert 'force: route === "emergency" || route === "outdoor-permission"' in html
+
+
+def test_permission_refresh_renders_settled_data_and_reenables_retry() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    selector = 'document.querySelectorAll("[data-permission-refresh]")'
+    binding = selector + html.split(selector, 1)[1].split(
+        'document.querySelector("[data-permission-projection-rebuild]")', 1
+    )[0]
+    program = """
+const assert = require("node:assert/strict");
+(async () => {
+  for (const route of ["outdoor-permission", "emergency", "outdoor-navigation"]) {
+    for (const result of ["degraded", "blocked", "error"]) {
+      const state = {route, permissionDataStatus: "blocked"};
+      const renders = [];
+      let click, settle;
+      const button = {
+        disabled: false,
+        addEventListener(type, handler) { assert.equal(type, "click"); click = handler; },
+      };
+      const document = {querySelectorAll: () => [button]};
+      const render = () => renders.push(state.permissionDataStatus);
+      const loadDataScope = (scope, options) => {
+        assert.equal(scope, "permission");
+        assert.deepEqual(options, {force: true});
+        return new Promise((resolve, reject) => {
+          settle = () => {
+            state.permissionDataStatus = result;
+            if (result === "error") reject(new Error("projection unavailable"));
+            else resolve();
+          };
+        });
+      };
+""" + binding + """
+      const pending = click();
+      assert.equal(button.disabled, true);
+      assert.equal(state.permissionDataStatus, "loading");
+      assert.deepEqual(renders, []);
+      settle();
+      await pending;
+      assert.equal(button.disabled, false);
+      assert.deepEqual(renders, route === "outdoor-navigation" ? [] : [result]);
+    }
+  }
+})().catch(error => { console.error(error); process.exitCode = 1; });
+"""
+    result = subprocess.run(
+        ["node", "-e", program], capture_output=True, text=True, check=False
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_daily_emergency_review_is_shared_fail_closed_and_two_step() -> None:
@@ -3863,7 +4738,7 @@ def test_scout_dashboard_route_context_embeds_skill_trip_briefing() -> None:
     assert "single Scout AI model call" in html
     assert "canonical briefing unchanged" in html
     assert "輸入契約 → 證據收集 → 確定性編譯 → DeepSeek 內容審核" in html
-    assert 'model: "deepseek/deepseek-v3.2"' in html
+    assert 'model: "deepseek/deepseek-v4-flash-0731"' in html
     assert "canonical_promoted" in html
     assert 'payload.review?.verdict === "PASS"' in html
     assert "payload.generation?.editorial_contract?.status" in html
@@ -3887,13 +4762,192 @@ def test_scout_dashboard_route_context_embeds_skill_trip_briefing() -> None:
     assert '<div class="debug-main-stack">\n            ${renderMetricPanel("Briefing Source"' not in html
 
 
+def test_route_context_regeneration_waits_without_disabling_other_post_timeouts() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    post_json = "async function postJson" + html.split("async function postJson", 1)[1].split(
+        "async function sha256Hex", 1
+    )[0]
+    constants = "\n".join(re.findall(
+        r"const (?:FETCH_TIMEOUT_MS|ROUTE_CONTEXT_REGENERATION_TIMEOUT_MS) = [^;]+;", html
+    ))
+    program = constants + "\n" + post_json + r"""
+const assert = require("node:assert/strict");
+const DIAGNOSTIC_MAP_PROBE = false;
+const apiBase = () => "http://example.test";
+const timers = [];
+const cleared = [];
+const requests = [];
+const window = {
+  setTimeout(callback, delay) {
+    const timer = {id: timers.length + 1, callback, delay};
+    timers.push(timer);
+    return timer.id;
+  },
+  clearTimeout(id) { cleared.push(id); },
+};
+const fetch = (url, options) => new Promise((resolve, reject) => {
+  requests.push({url, options, resolve});
+  options.signal.addEventListener("abort", () => {
+    reject(Object.assign(new Error("aborted"), {name: "AbortError"}));
+  }, {once: true});
+});
+(async () => {
+  const payload = {confirm_regenerate: true};
+  const result = {status: "completed", canonical_promoted: true};
+  const quality = postJson("/quality", payload, {
+    timeoutMs: ROUTE_CONTEXT_REGENERATION_TIMEOUT_MS,
+  });
+  assert.equal(timers.length, 0);
+  const qualityRequest = requests.shift();
+  assert.equal(qualityRequest.url, "http://example.test/quality");
+  assert.equal(qualityRequest.options.method, "POST");
+  assert.deepEqual(JSON.parse(qualityRequest.options.body), payload);
+  let completed = false;
+  quality.then(() => { completed = true; });
+  await Promise.resolve();
+  assert.equal(completed, false);
+  qualityRequest.resolve({ok: true, json: async () => result});
+  assert.deepEqual(await quality, result);
+  assert.equal(cleared.length, 0);
+
+  const timed = postJson("/normal", payload);
+  requests.shift();
+  assert.equal(timers.length, 1);
+  assert.equal(timers[0].delay, FETCH_TIMEOUT_MS);
+  timers[0].callback();
+  await assert.rejects(timed, /request timed out after 20s: \/normal/);
+  assert.deepEqual(cleared, [timers[0].id]);
+
+  const custom = postJson("/custom", payload, {timeoutMs: 120000});
+  assert.equal(timers[1].delay, 120000);
+  requests.shift().resolve({ok: true, json: async () => result});
+  assert.deepEqual(await custom, result);
+  assert.deepEqual(cleared, [timers[0].id, timers[1].id]);
+})().catch(error => { console.error(error); process.exitCode = 1; });
+"""
+    subprocess.run(
+        ["node", "-e", program], capture_output=True, text=True, check=True, timeout=30
+    )
+
+
+def test_route_context_frame_height_converges_after_content_growth() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    helpers = "function routeContextBriefingDocumentHeight" + html.split(
+        "function routeContextBriefingDocumentHeight", 1
+    )[1].split("function bindRouteContextBriefingFrame", 1)[0]
+    program = helpers + """
+let height = 760;
+let content = 16000;
+let writes = 0;
+const root = {
+  get scrollHeight() { return Math.max(height, content); },
+  get offsetHeight() { return height; },
+  get clientHeight() { return height; },
+};
+const frame = {
+  isConnected: true, dataset: {},
+  contentDocument: {documentElement: root, body: {
+    get scrollHeight() { return content; },
+    get offsetHeight() { return content; },
+  }},
+  style: {set height(value) { height = parseFloat(value); writes++; }},
+  getBoundingClientRect() { return {height}; },
+  setAttribute() {},
+};
+for (let i = 0; i < 100; i++) syncRouteContextBriefingFrameHeight(frame);
+const initial = {height, writes};
+content = 18000;
+for (let i = 0; i < 100; i++) syncRouteContextBriefingFrameHeight(frame);
+const expanded = {height, writes};
+content = 9000;
+for (let i = 0; i < 100; i++) syncRouteContextBriefingFrameHeight(frame);
+console.log(JSON.stringify({initial, expanded, height, writes}));
+"""
+    result = subprocess.run(
+        ["node", "-e", program], capture_output=True, text=True, check=True
+    )
+    assert json.loads(result.stdout) == {
+        "initial": {"height": 16000, "writes": 1},
+        "expanded": {"height": 18000, "writes": 2},
+        "height": 9000,
+        "writes": 3,
+    }
+
+
+def test_route_context_renders_before_optional_variants_finish() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    loader = "async function loadBriefingData()" + html.split(
+        "async function loadBriefingData()", 1
+    )[1].split("async function loadRouteContextBriefingArtifactStatus()", 1)[0]
+    program = """
+const state = {route: 'outdoor-route-context'};
+let rendered = false;
+let finished = false;
+let releaseVariants;
+const refreshCurrentDataView = () => { rendered = true; };
+const loadRouteContextBriefingArtifactStatus = async () => ({status: 'available'});
+const fetchFirstPretripJson = () => new Promise(resolve => { releaseVariants = resolve; });
+""" + loader + """
+(async () => {
+  const pending = loadBriefingData().then(() => { finished = true; });
+  await new Promise(resolve => setImmediate(resolve));
+  const beforeVariants = {rendered, finished};
+  releaseVariants({status: 'missing'});
+  await pending;
+  console.log(JSON.stringify({beforeVariants, finished}));
+})();
+"""
+    result = subprocess.run(
+        ["node", "-e", program], capture_output=True, text=True, check=True
+    )
+    assert json.loads(result.stdout) == {
+        "beforeVariants": {"rendered": True, "finished": False},
+        "finished": True,
+    }
+
+
+def test_route_context_background_refresh_preserves_loaded_document() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    refresh = "function refreshCurrentDataView()" + html.split(
+        "function refreshCurrentDataView()", 1
+    )[1].split("function routeUsesEmbeddedFrame", 1)[0]
+    program = """
+const state = {route: 'outdoor-route-context', briefingArtifactStatus: {status: 'available'}};
+let renderCount = 0;
+const render = () => { renderCount++; };
+const renderTruthStrip = () => {};
+const routeUsesEmbeddedFrame = () => false;
+const routeContextBriefingSrc = () => '/briefing?v=1';
+let src = '/briefing?v=1';
+const frame = {getAttribute: () => src};
+const document = {
+  getElementById: id => id === 'workspace' ? {} : null,
+  querySelector: selector => selector.startsWith('iframe') ? frame : null,
+};
+""" + refresh + """
+refreshCurrentDataView();
+const sameDocumentRenders = renderCount;
+src = '/briefing?v=0';
+refreshCurrentDataView();
+console.log(JSON.stringify({sameDocumentRenders, versionChangedRenders: renderCount}));
+"""
+    result = subprocess.run(
+        ["node", "-e", program], capture_output=True, text=True, check=True
+    )
+    assert json.loads(result.stdout) == {
+        "sameDocumentRenders": 0,
+        "versionChangedRenders": 1,
+    }
+
+
 def test_dashboard_route_context_binds_selected_project_before_first_render() -> None:
     html = PAGE.read_text(encoding="utf-8")
     project_binding = html.split(
         "function routeContextBriefingProjectId()", 1
     )[1].split("function routeContextBriefingSrc()", 1)[0]
 
-    assert "pretripDataProjectId: projectId()," in html
+    assert "pretripDataProjectId: null," in html
+    assert "pretripDataProjectId: projectId()," not in html
     assert "pretripDataProjectId: PROJECT_ID," not in html
     assert "return projectId();" in project_binding
     assert "PRETRIP_DATA_PROJECT_ID" not in project_binding
@@ -4346,7 +5400,7 @@ def test_dashboard_weather_route_consumes_cache_only_live_cwa_data() -> None:
         "Candidate evidence only.",
         "Weather decision reference",
         "example rules",
-        'loadDataForRoute("outdoor-weather", {force: true})',
+        'triggerDashboardConnectedPreparation("operator-refresh", {force: true})',
         "function triggerDashboardConnectedPreparation",
         "function connectedPreparationActivityLabel",
         "preparationInProgress",
@@ -4398,6 +5452,65 @@ def test_dashboard_weather_route_consumes_cache_only_live_cwa_data() -> None:
     assert "Weather is not a forecast." not in weather_page
     assert "It is a route constraint." not in weather_page
     assert ".weather-field-hero" not in html
+
+
+def test_dashboard_weather_refresh_runs_server_connected_preparation() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    weather_page = html.split("function renderWeatherPage", 1)[1].split(
+        "function renderNavigationPage", 1
+    )[0]
+    refresh_state = html.split("function weatherRefreshState", 1)[1].split(
+        "function renderWeatherActions", 1
+    )[0]
+    actions = html.split("function renderWeatherActions", 1)[1].split(
+        "function renderWeatherExampleRules", 1
+    )[0]
+    handler = html.split(
+        'document.querySelectorAll("[data-weather-recheck]").forEach', 1
+    )[1].split('document.querySelector("[data-debug-retry]")', 1)[0]
+
+    assert 'data-weather-refresh-primary="true"' in weather_page
+    assert 'data-weather-refresh-status="primary"' in weather_page
+    assert "weatherRefreshState(snapshot)" in weather_page
+    assert 'data-weather-refresh-status="true"' in actions
+    assert "更新 CWA 現況" in actions
+    assert "正在向 CWA 更新" in actions
+    assert "const evidenceFetchedAt = snapshot.preferredRainfall?.fetchedAt" in refresh_state
+    assert "目前 workspace 快取更新於" in refresh_state
+    assert "function setWeatherRefreshControlsBusy" in html
+    assert 'document.querySelectorAll("[data-weather-recheck]")' in html
+    assert "setWeatherRefreshControlsBusy(true)" in handler
+    assert 'triggerDashboardConnectedPreparation("operator-refresh", {force: true})' in handler
+    assert 'loadDataForRoute("outdoor-weather", {force: true})' not in handler
+    assert "connectedPreparation: state.connectedPreparation || weather.connectedPreparation" in html
+    assert "function formatCwaTimestampOr(value, fallback)" in html
+    assert 'formatCwaTimestampOr(preparation.completedAt, "not completed")' in html
+    assert 'formatCwaTimestampOr(snapshot.preferredRainfall?.validUntil, "unresolved")' in html
+    assert 'formatCwaTimestampOr(radarSourceTimestamp, "awaiting frame")' in html
+    assert "scheduleConnectedPreparationPolling" in html
+    assert "status.completedAt !== priorCompletedAt" in html
+    assert "await loadWeatherData();" in html
+
+
+def test_dashboard_weather_location_action_reports_cached_sampling_result() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    location_flow = html.split(
+        "function weatherRainfallTrendResultText", 1
+    )[1].split("function renderWeatherDecisionEvidence", 1)[0]
+    location_panel = html.split(
+        'data-weather-location-trend="true"', 1
+    )[1].split("</section>", 1)[0]
+
+    assert "以目前位置重算降雨趨勢" in location_panel
+    assert 'data-weather-location-mode="cached-sampling"' in location_panel
+    assert "不更新 CWA" in location_panel
+    assert "trend.sourceTimestamps?.next1hQpf" in location_flow
+    assert "trend.currentPosition" in location_flow
+    assert "trend.target" in location_flow
+    assert "未下載新 CWA" in location_flow
+    assert "座標未保存" in location_flow
+    assert "rawCoordinatesPersisted=" not in location_flow
+    assert "瀏覽器未允許位置存取" in html
 
 
 def test_dashboard_uses_weather_field_instrument_design_system_across_routes() -> None:
@@ -4457,6 +5570,74 @@ def test_dashboard_collapses_secondary_evidence_for_four_six_force_routes() -> N
         assert marker in html
 
 
+def test_dashboard_project_loading_prefers_selected_workspace_over_cached_fallback() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    helpers = "\n".join(
+        start + html.split(start, 1)[1].split(end, 1)[0]
+        for start, end in (
+            ("function resolvedPretripProjectId()", "async function fetchJson"),
+            ("async function fetchFirstPretripJson", "function scheduleBodyIndexWatchRefresh"),
+            ("async function loadProjectData()", "async function loadBriefingData()"),
+        )
+    )
+    node_program = "\n".join((
+        helpers,
+        """
+const PRETRIP_DATA_PROJECT_ID = "chilai_nanhua_day1";
+const PRETRIP_PROJECT_FETCH_TIMEOUT_MS = 1000;
+let selectedProject = "dongqing_batongguan_historic_trail_newImport";
+let unavailableProject = "";
+const state = {pretripDataProjectId: PRETRIP_DATA_PROJECT_ID};
+const projectId = () => selectedProject;
+let requests = [];
+async function fetchJson(path) {
+  const id = path.split("/")[4].split("?")[0];
+  requests.push(id);
+  if (id === unavailableProject) throw new Error("project unavailable");
+  return {project_id: id, events: [{project_id: id}]};
+}
+const results = [];
+(async () => {
+  async function capture() {
+    requests = [];
+    let error = null;
+    try { await loadProjectData(); } catch (e) { error = e.message; }
+    results.push({
+      error,
+      selectedProject,
+      project: state.project?.project_id || null,
+      admin: state.adminProjection?.project_id || null,
+      debug: state.debugEvents[0]?.project_id || null,
+      resolvedProject: state.pretripDataProjectId,
+      requests: [...requests],
+    });
+  }
+  await capture();
+  selectedProject = "chilai_nanhua_day1_scoutAI";
+  await capture();
+  unavailableProject = selectedProject;
+  state.pretripDataProjectId = PRETRIP_DATA_PROJECT_ID;
+  await capture();
+  process.stdout.write(JSON.stringify(results));
+})().catch(error => { console.error(error); process.exitCode = 1; });
+""",
+    ))
+    result = subprocess.run(
+        ["node"], input=node_program, text=True, capture_output=True,
+        check=True, timeout=30,
+    )
+    selected, switched, fallback = json.loads(result.stdout)
+    for observed in (selected, switched):
+        expected = observed["selectedProject"]
+        assert observed["project"] == observed["admin"] == observed["debug"] == expected
+        assert observed["resolvedProject"] == expected
+        assert observed["requests"] == [expected] * 3
+    assert fallback["project"] is fallback["admin"] is fallback["debug"] is None
+    assert fallback["error"] == "project unavailable"
+    assert fallback["requests"][:3] == [fallback["selectedProject"]] * 3
+    assert fallback["requests"][3:] == []
+
+
 def test_dashboard_uses_strict_project_route_scoped_loading_and_truthful_debug_state() -> None:
     html = PAGE.read_text(encoding="utf-8")
 
@@ -4464,8 +5645,9 @@ def test_dashboard_uses_strict_project_route_scoped_loading_and_truthful_debug_s
         "async function fetchJson", 1
     )[0]
     assert "replace(/_scoutAI$/" not in project_id_candidates
-    assert "PRETRIP_DATA_PROJECT_ID" not in project_id_candidates
-    assert "return [projectId()]" in project_id_candidates
+    assert "state.pretripDataProjectId" not in project_id_candidates
+    assert "resolvedPretripProjectId()" in project_id_candidates
+    assert "new Set" not in project_id_candidates
 
     for marker in (
         "ROUTE_DATA_SCOPES",
@@ -4693,6 +5875,7 @@ def test_dashboard_joint_review_truth_semantics_and_pagination_contract() -> Non
         "outdoor-weather",
         "agent",
         "surface-debug",
+        "scout-monitor",
         "debug",
         "settings",
         "diagnostic",
@@ -4777,15 +5960,15 @@ def test_dashboard_joint_review_information_architecture_and_qa_contract() -> No
     html = PAGE.read_text(encoding="utf-8")
 
     for copy in (
-        "Record clone request",
+        "Clone and prepare workspace",
         "Record transfer request",
         "Record package request",
         "Record restore request",
         "Request deletion review",
         "Preview Import",
         "Create Workspace",
-        "Only an append-only request record is written by this dashboard.",
-        "32 canonical layers",
+        "Clone starts a saved preparation job",
+        "33 canonical layers",
         "completed-track is after-action only",
         "Remaining Mission Projection",
         "Current decision",
@@ -4968,7 +6151,7 @@ process.stdout.write(JSON.stringify({{assistantCases, weatherCases, invalid, fai
     assert payload["successReceipt"]["reloadDisabled"] is False
 
 
-def test_dashboard_diagnostic_page_runs_38_read_only_checks() -> None:
+def test_dashboard_diagnostic_page_registers_50_checks() -> None:
     html = PAGE.read_text(encoding="utf-8")
 
     settings_nav = (
@@ -4983,15 +6166,15 @@ def test_dashboard_diagnostic_page_runs_38_read_only_checks() -> None:
     assert diagnostic_nav in html
     assert html.index(diagnostic_nav) > html.index(settings_nav)
     assert '"diagnostic": Object.freeze' in html
-    assert 'diagnostic: ["Diagnostic", "38 read-only Dashboard checks"]' in html
+    assert 'diagnostic: ["Diagnostic", "50 Dashboard checks · read-only workspace evidence and approved Rudy native GET"]' in html
     assert 'if (route === "diagnostic") return renderDiagnosticPage();' in html
 
     case_source = html.split(
         "const DASHBOARD_DIAGNOSTIC_CASES = Object.freeze([", 1
     )[1].split("]);", 1)[0]
-    for index in range(1, 39):
+    for index in range(1, 51):
         assert f'id: "DASH-{index:03d}"' in case_source
-    assert case_source.count('id: "DASH-') == 38
+    assert case_source.count('id: "DASH-') == 50
     assert "postJson(" not in case_source
 
     for marker in (
@@ -5019,7 +6202,7 @@ def test_dashboard_diagnostic_page_runs_38_read_only_checks() -> None:
         "Safety / Emergency 專屬決策與權限邊界",
         "Contextual Permission Evidence lineage 與隱私邊界",
         "Candidate Simulation 明確觸發與 no-write contract",
-        "Navigation、Architecture、Weather 動態圖磚倍率切換",
+        "所有 Rudy 地圖原生圖磚、缺圖與恢復",
         "Navigation MapLibre 2D/3D 鏡頭持久化",
         "DASHBOARD_MAP_APPROVED_SINGLE_IMAGE_THEMES",
         "const DASHBOARD_MAP_SURFACES = Object.freeze([",
@@ -5088,7 +6271,7 @@ def test_dashboard_diagnostic_page_runs_38_read_only_checks() -> None:
     assert "postJson(" not in runner
     assert 'status: "running"' in runner
     assert 'status: warning ? "warning" : "passed"' in runner
-    assert 'status: "failed"' in runner
+    assert 'error?.diagnosticStatus === "warning" ? "warning" : "failed"' in runner
     assert "performance.now()" in runner
 
     check_030 = html.split(
@@ -5109,7 +6292,7 @@ def test_dashboard_diagnostic_classifies_expected_runtime_gaps_without_false_red
     check_018 = html.split(
         "async function diagnosticCheck018()", 1
     )[1].split("async function diagnosticCheck019()", 1)[0]
-    assert "Route Context is recorded as deferred / not implemented" in check_018
+    assert "Route Context briefing artifact is unavailable (HTTP 404)" in check_018
     assert "return diagnosticWarning(" in check_018
 
     check_019 = html.split(
@@ -5123,8 +6306,9 @@ def test_dashboard_diagnostic_classifies_expected_runtime_gaps_without_false_red
     )[1].split("function diagnosticSourceText(", 1)[0]
     assert 'data-navigation-maplibre-shell="2d"' in check_025
     assert 'data-navigation-maplibre-shell="3d"' in check_025
-    assert 'Boolean(map || mapLibre2d)' in check_025
+    assert 'Boolean(map || mapLibre2d || mapLibre3d)' in check_025
     assert "MapLibre 2D primary terrain map rendered" in check_025
+    assert "MapLibre 3D terrain map rendered" in check_025
     assert "Navigation Map Literacy Checklist is missing" not in check_025
 
     permission_ready = html.split(
@@ -5197,7 +6381,7 @@ def test_dashboard_diagnostic_checks_probe_runtime_data_and_rendered_behavior() 
 
     assert "diagnosticFetchStatus(" in diagnostic_source
     assert "__diagnostic_missing_workspace__" in diagnostic_source
-    assert "Expected 31 pre-trip layer controls" in diagnostic_source
+    assert "Expected ${expectedPretripLayers.length} pre-trip layer controls" in diagnostic_source
     assert "diagnosticExerciseSharedMapController()" in diagnostic_source
     assert "paginateEvidenceGroup(pagedGroup, 2" in diagnostic_source
     assert "renderPaceFitPage(force)" in diagnostic_source
@@ -5224,8 +6408,8 @@ def test_dashboard_diagnostic_checks_probe_runtime_data_and_rendered_behavior() 
         "NAVIGATION_RUDY_TILE_SOURCE.maxZoom",
         "firstMatrix > initialMatrix",
         "NAVIGATION_RUDY_TILE_SOURCE.preparedMaxZoom + 1",
-        "request URL/TILEMATRIX contract crosses prepared Z14",
-        "definition.initialMaxZoom + Math.ceil(Math.log2(Math.max(1, state.zoom)))",
+        "diagnosticWeatherLiveTiles",
+        "diagnosticOpenRudyProbe(testCase, context)",
         "navigationTerrainMapLibreStoredCamera",
         "rememberNavigationTerrainMapLibreCamera",
         "changedProjection === null",
@@ -5257,7 +6441,7 @@ def test_dashboard_diagnostic_checks_probe_runtime_data_and_rendered_behavior() 
         "DASH-035",
     ):
         assert f'"{case_id}"' in browser_smoke
-    assert "const expectedDiagnosticCount = 38" in browser_smoke
+    assert "const expectedDiagnosticCount = 48" in browser_smoke
     assert '"DASH-037"' in browser_smoke
     assert '"DASH-038"' in browser_smoke
     assert "async function inspectNavigationMapLibreCameraPersistence(" in browser_smoke
@@ -5299,7 +6483,7 @@ def test_navigation_maplibre_camera_fail_case_and_diagnostic_gate_are_documented
     for marker in (
         "DASH-MAP-REG-003",
         "Navigation 2D/3D camera reset after MapLibre interaction",
-        "中心同步、尺度獨立",
+        "中心、尺度、俯角與方位各自獨立",
         "候選點、lens、Evidence、垂直誇張或 2D／3D／Split",
         "Only explicit Fit / Reset may reset the corresponding camera",
         "test_navigation_maplibre_preserves_independent_cameras_across_rerenders",
@@ -5307,11 +6491,11 @@ def test_navigation_maplibre_camera_fail_case_and_diagnostic_gate_are_documented
         assert marker in failure_log
 
     for marker in (
-        "目前版本：38 / 100",
-        "DASH-001～DASH-038",
+        "目前版本：50 / 100",
+        "DASH-001～DASH-050",
         "### DASH-038 Navigation MapLibre 2D/3D 鏡頭持久化",
         "DASH-MAP-REG-003",
-        "下一個可用編號為 `DASH-039`",
+        "下一個可用編號為 `DASH-051`",
     ):
         assert marker in checklist
 
@@ -5580,12 +6764,21 @@ def test_dashboard_route_architecture_intelligence_workbench_contract() -> None:
         'data-architecture-legend="${escapeHtml(state.architectureLens)}"',
         "Very high · 78–100",
         "No observed bin",
-        "Unverified segment reversibility",
+        "NEXT CP · AVG",
+        "TIME WINDOW · A",
+        '["time_window", "Time Window"]',
+        "data-architecture-window-mark",
+        "data-architecture-day-reset",
+        "data-architecture-window-node",
+        "function renderArchitectureReturnLanes",
+        "function renderArchitectureReturnSelection",
+        "data-architecture-return-boundary",
+        "historical_return_cost",
         "green means stronger evidence support; this is confidence, not pressure",
-        "gray means unverified candidate topology; it is not a safe-return claim",
+        "歷史 CP 回程成本 · 包含坡度配對與部分涵蓋推估 · 非即時安全返程判定",
         "candidate-only · runtime safety truth=false",
         "normalized route architecture missing",
-        "compiled mission graph missing",
+        "Reviewed topology unavailable",
         "const flattenedCoordinates = coordinates.length ? coordinates : coordinateSegments.flat();",
         "route.bbox_wgs84 || route.bounds || route.display_bounds || display.bounds",
         "coordinateSegments.length && flattenedCoordinates.length >= 2",
@@ -5635,6 +6828,144 @@ def test_dashboard_route_architecture_intelligence_workbench_contract() -> None:
     assert 'centerMap: focusSurface.startsWith("fingerprint")' in architecture_binding
     assert "routeDistanceM: target.dataset.architectureRouteDistanceM" in architecture_binding
     assert 'data-architecture-route-distance-m="${' in html
+
+
+def test_dashboard_historical_return_lanes_encode_cost_and_estimates() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    functions = "function architectureReturnNodes" + html.split(
+        "function architectureReturnNodes", 1
+    )[1].split("function architectureModeOpacity", 1)[0]
+    program = r'''
+      const state = {architectureSelectedPassageNodeId: "b"};
+      const asArray = value => Array.isArray(value) ? value : [];
+      const escapeHtml = value => String(value).replaceAll("<", "&lt;");
+      const formatInteger = value => String(value || 0);
+      const architecturePressureColor = () => "#62b8c6";
+      const architectureModeOpacity = () => 1;
+    ''' + functions + r'''
+      const nodes = [
+        {node_id:"a",node_kind:"checkpoint",label:"<start>",route_distance_m:0,
+         next_cp_id:"b",next_cp_label:"End",next_cp_distance_m:100,next_cp_average_minutes:20,
+         next_cp_timing_status:"estimated",return_target_label:"Start",return_cost_minutes:0,
+         return_cost_status:"observed",return_to_entry_minutes:0,budget_ratio:0},
+        {node_id:"b",node_kind:"checkpoint",label:"End",route_distance_m:100,
+         next_cp_id:null,next_cp_distance_m:null,next_cp_average_minutes:null,
+         return_target_label:"Camp",return_cost_minutes:10,return_cost_status:"estimated",
+         return_to_entry_minutes:120,budget_ratio:0.2,entry_day_exceeded:true,
+         decision_boundary:true,entry_decision_boundary:true},
+      ];
+      const snapshot = {historical_return_cost:{checkpoints:nodes}};
+      const lanes = renderArchitectureReturnLanes(snapshot, x=>x, {reversibility:0,next_cp:50}, 30);
+      console.log(JSON.stringify({
+        colors: [0,0.5,1,0.2,null].map(budget_ratio=>architectureReturnColor({budget_ratio})),
+        nullTime:architectureHistoricalTime(null), estimate:architectureHistoricalTime(120,"estimated"),
+        estimateHatch:lanes.includes('url(#architectureEstimatedHatch)'),
+        boundary:lanes.includes('data-architecture-return-boundary="entry-limit"'),
+        escaped:lanes.includes('&lt;start>'),
+        selection:lanes.includes('data-architecture-passage-selected="true"'),
+        previous:architectureReturnNodeAtDistance(snapshot, 50).node_id,
+      }));
+    '''
+    result = subprocess.run(["node"], input=program, text=True, capture_output=True, check=True)
+    payload = json.loads(result.stdout)
+    assert payload["colors"][:3] == ["rgb(251,209,200)", "rgb(209,106,103)", "rgb(118,37,62)"]
+    assert payload["colors"][3] != payload["colors"][2]
+    assert payload["colors"][4] == "#596960"
+    assert payload["nullTime"] == "資料不足"
+    assert "推估" in payload["estimate"]
+    assert all(payload[key] for key in ("estimateHatch", "boundary", "escaped", "selection"))
+    assert payload["previous"] == "a"
+
+
+def test_dashboard_time_window_encodes_remaining_balance_and_daily_reset() -> None:
+    from html.parser import HTMLParser
+
+    html = PAGE.read_text(encoding="utf-8")
+    functions = "function architectureReturnNodes" + html.split(
+        "function architectureReturnNodes", 1
+    )[1].split("function architectureModeOpacity", 1)[0]
+    binding = html.split("function bindArchitectureControls", 1)[1].split(
+        "function embeddedPretripLayerInput", 1
+    )[0]
+    keyboard_nodes = binding.split(
+        'if (!["ArrowLeft", "ArrowRight"].includes(event.key)) return;', 1
+    )[1].split("const currentIndex", 1)[0]
+    program = r'''
+      const state = {architectureSelectedPassageNodeId: "day2"};
+      const asArray = value => Array.isArray(value) ? value : [];
+      const escapeHtml = value => String(value).replaceAll("<", "&lt;");
+      const formatInteger = value => String(value || 0);
+      const architectureModeOpacity = () => 1;
+    ''' + functions + '''
+      function keyboardNodeIds(snapshot) {
+        const architectureSnapshot = () => snapshot;
+        const target = {hasAttribute:name=>name === "data-architecture-window-mark",
+                        dataset:{architectureSelectionSurface:"fingerprint-window"}};
+    ''' + keyboard_nodes + '''
+        return nodes.map(node => node.node_id);
+      }
+    ''' + r'''
+      const nodes = [
+        {node_id:"start",label:"<start>",route_distance_m:0,remaining_minutes:720,
+         remaining_ratio:1,remaining_status:"estimated",initial_window_minutes:720,
+         consumed_minutes:0,day_index:1,day_id:"day1",day_reset:true,departure_minute_of_day:360},
+        {node_id:"late",label:"Late",route_distance_m:100,remaining_minutes:-90,
+         remaining_ratio:-0.125,initial_window_minutes:720,consumed_minutes:810,day_index:1},
+        {node_id:"day2",label:"Departure",route_distance_m:200,remaining_minutes:660,
+         remaining_ratio:1,remaining_status:"estimated",initial_window_minutes:660,
+         consumed_minutes:0,day_index:2,day_id:"day2",day_reset:true,departure_minute_of_day:420},
+      ];
+      const snapshot = {historical_time_windows:{checkpoints:nodes,days:[{},{}]}};
+      const lane = renderArchitectureTimeWindowLane(snapshot, x=>x, 50, 30);
+      const gapSnapshot = {historical_time_windows:{days:[
+        {day_id:"day1",start_distance_m:0,end_distance_m:100},
+        {day_id:"day2",start_distance_m:105,end_distance_m:200},
+      ],checkpoints:[nodes[0],{...nodes[1],day_id:"day1"},{...nodes[2],route_distance_m:105}]}};
+      console.log(JSON.stringify({
+        colors: [nodes[0],{remaining_minutes:360,remaining_ratio:0.5},nodes[1],nodes[2],null]
+          .map(architectureTimeWindowColor),
+        negative:architectureHistoricalTime(-90,"estimated"),
+        clock:architectureClockMinutes(360.5),missingClock:architectureClockMinutes(null),
+        title:architectureTimeWindowTitle(nodes[0]),
+        reset:lane.includes('data-architecture-day-reset="day2"'),
+        selection:lane.includes('data-architecture-passage-selected="true"'),
+        hatch:lane.includes('url(#architectureEstimatedHatch)'),
+        negativeValue:lane.includes('data-architecture-remaining-minutes="-90"'),
+        validGeometry:!lane.includes('undefined') && !lane.includes('NaN'),
+        previous:architectureWindowNodeAtDistance(snapshot,150).node_id,
+        summary:renderArchitectureWindowSummary(snapshot),
+        gapIsUnknown:architectureWindowNodeAtDistance(gapSnapshot,102) === null,
+        gapLane:renderArchitectureTimeWindowLane(gapSnapshot, x=>x, 50, 30),
+        keyboardIds:keyboardNodeIds({historical_time_windows:{checkpoints:[
+          nodes[0],{node_id:"zz_missing_distance",route_distance_m:null},nodes[2],
+        ]}}),
+      }));
+    '''
+    result = subprocess.run(["node"], input=program, text=True, capture_output=True, check=True)
+    payload = json.loads(result.stdout)
+    assert payload["colors"] == ["rgb(155,216,176)", "rgb(227,186,111)", "#ad4558", "rgb(155,216,176)", "#596960"]
+    assert payload["negative"] == "-1h 30m · 推估"
+    assert payload["clock"] == "06:00"
+    assert payload["missingClock"] == "--:--"
+    assert "T 12h 0m" in payload["title"] and "A 12h 0m" in payload["title"]
+    assert all(payload[key] for key in ("reset", "selection", "hatch", "negativeValue", "validGeometry"))
+    assert payload["previous"] == "late"
+    assert "18:00 固定截止" in payload["summary"] and "非實測日落" in payload["summary"]
+    assert payload["gapIsUnknown"]
+    assert payload["keyboardIds"] == ["start", "day2"]
+    rectangles = []
+
+    class RectangleParser(HTMLParser):
+        def handle_starttag(self, tag, attrs):
+            if tag == "rect":
+                rectangles.append(dict(attrs))
+
+    RectangleParser().feed(payload["gapLane"])
+    cell = next(item for item in rectangles if item.get("data-architecture-window-cell") == "late")
+    hit = next(item for item in rectangles if item.get("data-architecture-passage-node-id") == "late")
+    assert float(cell["width"]) == 0
+    assert float(hit["width"]) >= 2
+    assert hit["fill"] == "transparent"
 
 
 def test_dashboard_architecture_map_focuses_distance_bound_evidence() -> None:
@@ -5748,7 +7079,7 @@ def test_dashboard_qgis_feature_samples_remain_candidate_only_and_toggleable() -
     assert "definition.count > 0" in html
     assert "scout-qgis-terrain-feature-samples" in html
     assert "features.push(...qgisSpatialMaplibreFeatures());" in html
-    qgis_projection = html.split("function qgisSpatialWorkflowFeatures", 1)[1].split(
+    qgis_projection = html.split("function qgisSpatialBuildNormalizedWorkflowFeatures", 1)[1].split(
         "function qgisSpatialMaplibreFeatures", 1
     )[0]
     assert 'kind !== "qgis_candidate_route"' in qgis_projection
@@ -5761,14 +7092,368 @@ def test_dashboard_qgis_feature_samples_remain_candidate_only_and_toggleable() -
     assert "QGIS outputs remain derived reference layers" in html
 
 
-def test_dashboard_terrain_candidates_use_golden_route_start_corridor() -> None:
+def test_dashboard_can_submit_arbitrary_ab_terrain_route_hypothesis() -> None:
     html = PAGE.read_text(encoding="utf-8")
 
-    assert "const QGIS_GOLDEN_ROUTE_START_DISTANCE_M = 10;" in html
+    assert 'const QGIS_TERRAIN_ROUTE_WORKFLOW_ID = "terrain_route_hypothesis.v1";' in html
+    assert "qgisTerrainRouteEndpoints" in html
+    assert "qgisTerrainRouteDraftStorageKey" in html
+    assert 'data-qgis-terrain-route-select="start"' in html
+    assert 'data-qgis-terrain-route-select="destination"' in html
+    assert 'data-qgis-terrain-route-generate="true"' in html
+    assert 'data-qgis-terrain-route-reset="true"' in html
+    assert 'data-qgis-terrain-route-margin="true"' in html
+    assert 'selection_source: "dashboard_map_selection"' in html
+    assert "terrain_route_endpoints:" in html
+    assert "candidate_only: true" in html
+    assert "runtime_safety_truth: false" in html
+    assert "operational: false" in html
+    assert 'safe_or_walkable: "not_determined"' in html
+    assert '"scout-terrain-route-draft-endpoints"' in html
+    assert 'feature_class: "terrain_route_endpoint_draft"' in html
+    assert "setQgisTerrainRouteEndpointFromMap(event.lngLat)" in html
+    assert "await refreshNavigationTerrainAfterCompletedRouteHypothesis(run)" in html
+    assert 'const workflowMessage = String(state.qgisSpatialMessage || "").trim();' in html
+    assert "Completed evidence remains optional when no persisted workflow exists." in html
+    assert "if (!workflowRunId)" in html
+    assert "NOT A VERIFIED TRAIL" in html
+
+
+def test_dashboard_reviews_narrative_guidance_and_submits_visible_r4() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+
+    assert "function renderTerrainRouteGuidanceWorkbench" in html
+    assert 'data-terrain-guidance-narrative="true"' in html
+    assert 'data-terrain-guidance-map-anchor="${escapeHtml(constraint.constraint_id)}"' in html
+    assert 'data-terrain-guidance-review="true"' in html
+    assert 'data-terrain-guidance-reviewer="true"' in html
+    assert 'data-terrain-guidance-generate-r4="true"' in html
+    assert 'data-qgis-terrain-route-use-selected-hypothesis="true"' in html
+    assert "function useSelectedTerrainRouteHypothesisEndpoints()" in html
+    assert "navigationTerrainRouteHypothesis(navigationTerrainSnapshot())" in html
+    assert "function terrainRouteGuidanceReferenceHypothesisId()" in html
+    assert "function terrainRouteGuidanceReferenceHypothesisIds()" in html
+    assert '["R1", "R2", "R3"].every(id => ids.has(id))' in html
+    assert "reference_hypothesis_ids: terrainRouteGuidanceReferenceHypothesisIds()" in html
+    assert "reference_corridor_band_name: navigationTerrainRouteHypothesisBand(navigationTerrainSnapshot())" in html
+    assert "reference_path_scope_m: 200" in html
+    assert "state.terrainRouteGuidanceManualAnchors = {};" in html
+    assert "state.terrainRouteGuidanceSelectedFeatures = {};" in html
+    assert "state.terrainRouteGuidanceDisabledConstraints = {};" in html
+    assert "async function startQgisGuidedTerrainRouteHypothesis()" in html
+    assert "guidance.guided_execution_ready !== true" in html
+    assert "/^[a-f0-9]{64}$/.test(reviewSha256)" in html
+    assert "terrain_route_guidance:" in html
+    assert 'guided_hypothesis_id: "R4"' in html
+    assert "route_start: normalizeQgisTerrainRoutePoint" in html
+    assert "route_destination: normalizeQgisTerrainRoutePoint" in html
+    assert "search_margin_m: state.qgisTerrainRouteCorridorM" in html
+    assert "qgisTerrainRouteEndpointsReady()" in html
+    assert "const manualCandidateIds = candidateIds.filter" in html
+    assert "function renderTerrainRouteGuidanceCandidatePreview" in html
+    assert "DEM ranked candidate preview" in html
+    assert "candidate_constraint_labels" in html
+    assert "best_candidate_rank" in html
+    assert 'kind: "terrain_route_guidance_rank_marker"' in html
+    assert "markerRank > 5" not in html
+    assert "elevation_sampling_status" in html
+    assert "reference_corridor_overlap" in html
+    assert "reference_corridor_overlaps" in html
+    assert "reference_path_proximities" in html
+    assert "function terrainRouteGuidanceMapCandidates" in html
+    assert "marker_inside_selected_corridor" in html
+    assert "source_feature_index_sha256" in html
+    assert "source_resolution_sha256" in html
+    assert "假說區域內" in html
+    assert "state.terrainRouteGuidanceNarrative = payload.narrative" in html
+    assert "state.terrainRouteGuidanceSourceId = String(plan.source_id" in html
+    assert 'terrainRouteGuidanceReviewerAlias: "dashboard_operator"' in html
+    assert "reviewed_by: reviewerAlias" in html
+    assert '"historical_narrative_guided", "#7fe36d"' in html
+    assert "candidate_only: true" in html
+    assert "runtime_safety_truth: false" in html
+    assert "safe_or_walkable: \"not_determined\"" in html
+
+
+def test_dashboard_focuses_one_r4_constraint_candidate_set_at_a_time() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    focus_setter = html.split(
+        "function setTerrainRouteGuidanceConstraintFocus", 1
+    )[1].split("function stepTerrainRouteGuidanceConstraintFocus", 1)[0]
+
+    assert "terrainRouteGuidanceFocusConstraintId" in html
+    assert "terrainRouteGuidanceFocusGuidanceId" in html
+    assert "function terrainRouteGuidanceFocusedConstraintId()" in html
+    assert "function setTerrainRouteGuidanceConstraintFocus(" in html
+    assert "function stepTerrainRouteGuidanceConstraintFocus(" in html
+    assert "function terrainRouteGuidanceFocusedCandidateBounds()" in html
+    assert "function refreshTerrainRouteGuidanceMapFocus(" in html
+    assert 'data-terrain-guidance-focus-constraint="${escapeHtml(constraint.constraint_id)}"' in html
+    assert 'data-terrain-guidance-focus-step="previous"' in html
+    assert 'data-terrain-guidance-focus-step="next"' in html
+    assert 'data-terrain-guidance-focus-clear="true"' in html
+    assert "constraint_focus_active" in html
+    assert "focused_constraint_candidate" in html
+    assert "focused_candidate_rank" in html
+    assert "focused_candidate_label" in html
+    assert "map.fitBounds(focusedBounds" in html
+    assert "全部 Gn · 僅限假說區域內" in html
+    assert 'feature.geometry?.type === "Point"' in html
+    assert "refreshTerrainRouteGuidanceMapFocus(fitMap)" in focus_setter
+    assert "render()" not in focus_setter
+    assert "source.setData(featureCollection)" in html
+    assert "terrainRouteGuidanceSelectedFeatures" not in focus_setter
+    assert "terrainRouteGuidanceManualAnchors" not in focus_setter
+    assert "setTerrainRouteGuidanceAnchorFromMap" not in focus_setter
+    assert "if (state.terrainRouteGuidanceAnchorTarget)" in html
+
+
+def test_dashboard_r4_map_projection_marks_only_the_focused_gn_candidates() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    guidance_helpers = (
+        "function terrainRouteGuidancePlan"
+        + html.split("function terrainRouteGuidancePlan", 1)[1].split(
+            "function terrainRouteGuidanceConstraintCandidateSummary", 1
+        )[0]
+    )
+    feature_collection = (
+        "function terrainRouteGuidanceFeatureCollection"
+        + html.split("function terrainRouteGuidanceFeatureCollection", 1)[1].split(
+            "function navigationTerrainMapLibreStyle", 1
+        )[0]
+    )
+    node_program = "\n".join(
+        (
+            "const asArray = value => Array.isArray(value) ? value : [];",
+            "const normalizeQgisTerrainRoutePoint = (point, label) => ({x: Number(point.x), y: Number(point.y), label});",
+            "const projectId = () => 'demo';",
+            "const navigationTerrainSnapshot = () => ({});",
+            "const navigationTerrainRouteHypothesis = () => ({selection_id: 'r1'});",
+            "const navigationTerrainRouteHypothesisBand = () => 'top_10_percent_corridor';",
+            "const state = {terrainRouteGuidanceFocusConstraintId: 'G1', terrainRouteGuidanceSelectedFeatures: {}, terrainRouteGuidance: {",
+            "  guidance_plan: {guidance_id: 'guidance-demo', constraints: [{constraint_id: 'G1'}, {constraint_id: 'G2'}]},",
+            "  resolution: {feature_index_sha256: 'a'.repeat(64), constraints: [",
+            "    {constraint_id: 'G1', candidate_feature_ids: ['F1', 'F2'], review_shortlist_feature_ids: ['F1', 'F2']},",
+            "    {constraint_id: 'G2', candidate_feature_ids: ['F2', 'F3'], review_shortlist_feature_ids: ['F2', 'F3']},",
+            "  ]},",
+            "  feature_index: {reference_paths: [{display_id: 'R1'}], features: [",
+            "    {feature_id: 'F1', label: 'one', selection_source: 'dem_derived', supported_constraint_ids: ['G1'], geometry: {type: 'LineString', coordinates: [[121, 24], [121.001, 24.001]]}, centroid: {x: 121.0005, y: 24.0005}},",
+            "    {feature_id: 'F2', label: 'two', selection_source: 'dem_derived', supported_constraint_ids: ['G1', 'G2'], geometry: {type: 'LineString', coordinates: [[121.002, 24.002], [121.003, 24.003]]}, centroid: {x: 121.0025, y: 24.0025}},",
+            "    {feature_id: 'F3', label: 'three', selection_source: 'dem_derived', supported_constraint_ids: ['G2'], geometry: {type: 'LineString', coordinates: [[121.004, 24.004], [121.005, 24.005]]}, centroid: {x: 121.0045, y: 24.0045}},",
+            "  ]},",
+            "}};",
+            guidance_helpers,
+            feature_collection,
+            "state.terrainRouteGuidanceMapScopeRequestKey = terrainRouteGuidanceMapScopeRequest().key;",
+            "state.terrainRouteGuidanceMapScope = {status: 'ready', project_id: 'demo', guidance_id: 'guidance-demo', reference_hypothesis_id: 'r1', band_name: 'top_10_percent_corridor', source_feature_index_sha256: 'a'.repeat(64), candidate_only: true, runtime_safety_truth: false, operational: false, execution_eligible: false, routing_effect: 'none', constraints: [",
+            "  {constraint_id: 'G1', candidates: [{feature_id: 'F1', rank: 1, inside_corridor: true}, {feature_id: 'F2', rank: 2, inside_corridor: true}]},",
+            "  {constraint_id: 'G2', candidates: [{feature_id: 'F2', rank: 1, inside_corridor: true}, {feature_id: 'F3', rank: 2, inside_corridor: true}]},",
+            "]};",
+            "const summarize = () => terrainRouteGuidanceFeatureCollection().features.map(feature => ({id: feature.properties.id, marker: feature.properties.rank_marker, focused: feature.properties.focused_constraint_candidate, rank: feature.properties.focused_candidate_rank, label: feature.properties.focused_candidate_label}));",
+            "const g1 = summarize();",
+            "state.terrainRouteGuidanceFocusConstraintId = 'G2';",
+            "const g2 = summarize();",
+            "state.terrainRouteGuidanceMapScope = {...state.terrainRouteGuidanceMapScope, constraints: [{constraint_id: 'G2', candidates: [{feature_id: 'F2', rank: 1, inside_corridor: false}, {feature_id: 'F3', rank: 2, inside_corridor: true}]}]};",
+            "const filtered = summarize();",
+            "state.terrainRouteGuidanceMapScope = {...state.terrainRouteGuidanceMapScope, band_name: 'top_5_percent_corridor'};",
+            "const staleBand = summarize();",
+            "state.terrainRouteGuidanceMapScope = null;",
+            "const unavailable = summarize();",
+            "process.stdout.write(JSON.stringify({g1, g2, filtered, staleBand, unavailable}));",
+        )
+    )
+    result = subprocess.run(
+        ["node"],
+        input=node_program,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    payload = json.loads(result.stdout)
+
+    assert [item["id"] for item in payload["g1"] if item["marker"]] == [
+        "F1-rank-marker",
+        "F2-rank-marker",
+    ]
+    assert [item["label"] for item in payload["g1"] if item["marker"]] == [
+        "G1 #1",
+        "G1 #2",
+    ]
+    assert [item["id"] for item in payload["g2"] if item["marker"]] == [
+        "F2-rank-marker",
+        "F3-rank-marker",
+    ]
+    assert [item["label"] for item in payload["g2"] if item["marker"]] == [
+        "G2 #1",
+        "G2 #2",
+    ]
+    assert all(
+        item["focused"] is False
+        for item in payload["g1"]
+        if item["id"] == "F3"
+    )
+    assert [item["label"] for item in payload["filtered"] if item["marker"]] == [
+        "G2 #2"
+    ]
+    assert {item["id"] for item in payload["filtered"]} == {"F3", "F3-rank-marker"}
+    assert payload["staleBand"] == []
+    assert payload["unavailable"] == []
+
+
+def test_dashboard_refreshes_corridor_scope_without_mutating_guidance_or_map() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    loader = html.split("async function loadTerrainRouteGuidanceMapScope", 1)[1].split(
+        "async function interpretTerrainRouteGuidance", 1
+    )[0]
+
+    assert "/map-review-scope?" in loader
+    assert "expected_feature_index_sha256" in loader
+    assert "expected_resolution_sha256" in loader
+    assert "state.terrainRouteGuidanceMapScopeRequestKey !== request.key" in loader
+    assert "updateTerrainRouteGuidanceFocusPresentation()" in loader
+    assert "refreshTerrainRouteGuidanceMapFocus(false)" in loader
+    assert "syncTerrainRouteGuidanceState" not in loader
+    assert "terrainRouteGuidanceSelectedFeatures" not in loader
+    assert "terrainRouteGuidanceManualAnchors" not in loader
+    assert "postJson" not in loader
+    assert "render()" not in loader
+
+
+def test_dashboard_places_r4_guidance_in_independent_right_frame() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    route_builder = html.split("function renderQgisTerrainRouteBuilder", 1)[1].split(
+        "function renderTerrainRouteGuidanceWorkbench", 1
+    )[0]
+    navigation_page = html.split("function renderNavigationPage", 1)[1].split(
+        "function architectureSnapshot", 1
+    )[0]
+    map_host = html.split("function renderNavigationTerrainMapLibreHost", 1)[1].split(
+        "function renderNavigationTerrainReviewWorkbench", 1
+    )[0]
+    guidance_workbench = html.split(
+        "function renderTerrainRouteGuidanceWorkbench", 1
+    )[1].split("function renderQgisAnalysisPanel", 1)[0]
+
+    assert "terrainRouteGuidanceExpanded: true" in html
+    assert "terrainRouteGuidanceFrameScrollTop: 0" in html
+    assert "function renderTerrainRouteGuidanceFrame()" in html
+    assert 'data-terrain-guidance-frame="true"' in html
+    assert (
+        'data-navigation-guidance-expanded="${String(state.terrainRouteGuidanceExpanded === true)}"'
+        in html
+    )
+    assert 'data-navigation-terrain-guidance-frame-toggle="true"' in html
+    assert "${renderTerrainRouteGuidanceFrame()}" not in route_builder
+    assert navigation_page.index('id="navigationTerrainContextInspector"') < navigation_page.index(
+        "${renderTerrainRouteGuidanceFrame()}"
+    )
+    assert navigation_page.index("${renderTerrainRouteGuidanceFrame()}") < navigation_page.index(
+        'data-navigation-supporting-evidence="true"'
+    )
+    assert "state.terrainRouteGuidanceExpanded = !state.terrainRouteGuidanceExpanded;" in html
+    assert "state.terrainRouteGuidanceFrameScrollTop = guidanceFrame.scrollTop;" in html
+    assert "guidanceFrame.scrollTop = state.terrainRouteGuidanceFrameScrollTop;" in html
+    assert "--terrain-guidance-body-size: 13px;" in html
+    assert "--terrain-guidance-small-size: 11px;" in html
+    assert (
+        '.navigation-terrain-workspace[data-navigation-inspector-expanded="false"]'
+        '[data-navigation-guidance-expanded="true"],\n'
+        '      .navigation-terrain-workspace[data-navigation-inspector-expanded="true"]'
+        '[data-navigation-guidance-expanded="true"] {\n'
+        '        grid-template-columns: minmax(0, 1fr);'
+        in html
+    )
+    assert '<details\n              class="navigation-terrain-outward-key"' in map_host
+    assert '<details\n              class="navigation-terrain-hypothesis-map-key"' in map_host
+    assert "<span>TRH 圖例</span>" in map_host
+    assert "<span>GRASS 形態圖例</span>" in map_host
+    assert "歷史文字引導 · R4 review" not in guidance_workbench
+
+
+def test_dashboard_keeps_trh_map_stable_and_locks_ab_controls_while_running() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    polling = html.split("function scheduleQgisSpatialPolling", 1)[1].split(
+        "async function loadQgisSpatialData", 1
+    )[0]
+    builder = html.split("function renderQgisTerrainRouteBuilder", 1)[1].split(
+        "function renderQgisAnalysisPanel", 1
+    )[0]
+
+    assert "function qgisTerrainRouteWorkflowActive(" in html
+    assert "function qgisTerrainRouteWorkflowProgress(" in html
+    assert "function updateQgisTerrainRouteBuilderWorkflowState(" in html
+    assert "qgisTerrainRouteWorkflowActive(polledWorkflow)" in polling
+    assert "updateQgisTerrainRouteBuilderWorkflowState();" in polling
+    assert "refreshCurrentDataView();" in polling
+    assert polling.index("qgisTerrainRouteWorkflowActive(polledWorkflow)") < polling.index(
+        "refreshCurrentDataView();"
+    )
+    assert 'data-qgis-terrain-route-status="true"' in builder
+    assert 'data-qgis-terrain-route-workflow-state="${escapeHtml(workflowState)}"' in builder
+    assert (
+        'const controlsLocked = state.qgisSpatialBusy || ["queued", "running"].includes(state.qgisSpatialWorkflow?.state);'
+        in builder
+    )
+    assert '${controlsLocked ? "disabled" : ""}' in builder
+    assert "const canGenerate = backendReady && endpointsReady && !controlsLocked && !checking && !starting;" in builder
+    assert "const backendReady = qgisTerrainRouteBackendReady();" in builder
+    assert "分析中" in builder
+    assert "地圖暫留上一個已完成候選" in html
+
+
+def test_dashboard_grass_outward_candidates_replace_route_morphology_ribbon() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+
+    assert "function qgisSpatialRouteTerrainClassificationFeatures" not in html
+    assert 'kind: "qgis_route_terrain_classification"' not in html
+    assert "scout-qgis-route-terrain-classification" not in html
+    assert "GRASS 沿線形態" not in html
+    assert "data-navigation-terrain-outward-key" in html
+    assert 'if (layerKey === "candidates")' in html
+    assert "outwardKey.hidden = !visible" in html
+    assert "接觸 GPX 的 GRASS 形態線" in html
+    assert "保留完整形態線" in html
+    assert "不是 R1 路線與 GPX 的距離" in html
+    assert "並非獸徑、舊路或可通行性證明" in html
+    assert "features: false" in html
+
+    style = html.split("function navigationTerrainMapLibreStyle", 1)[1].split(
+        "function destroyNavigationTerrainMapLibre", 1
+    )[0]
+    assert style.index('id: "scout-qgis-ridge-candidate"') < style.index(
+        'id: "scout-route-halo"'
+    )
+    assert style.index('id: "scout-qgis-valley-candidate"') < style.index(
+        'id: "scout-route-halo"'
+    )
+    assert style.index('id: "scout-qgis-stream-network-candidate"') < style.index(
+        'id: "scout-route-halo"'
+    )
+
+
+def test_dashboard_qgis_disabled_state_still_discovers_persisted_evidence() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    loader = html.split("async function loadQgisSpatialData", 1)[1].split(
+        "async function loadQgisSpatialWorkflow", 1
+    )[0]
+
+    assert "shouldDiscoverLatestWorkflow" not in loader
+    assert "state.qgisSpatialWorkflow?.workflow_run_id" in loader
+    assert "rememberedQgisSpatialWorkflowRunId()" in loader
+    assert (
+        "`${basePath}/workflows/latest?workflow_id=${encodeURIComponent("
+        "QGIS_NAVIGATION_PRIMARY_WORKFLOW_ID)}`"
+    ) in loader
+
+
+def test_dashboard_terrain_candidates_use_golden_route_contact_corridor() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+
+    assert "const QGIS_GOLDEN_ROUTE_CONTACT_DISTANCE_M = 10;" in html
     assert "qgisSpatialAnalysisRoute" in html
     assert "async function loadQgisSpatialAnalysisRoute" in html
-    assert "function navigationTerrainCandidateStartsWithinGoldenRouteCorridor" in html
-    assert "hidden_by_start_corridor" in html
+    assert "function navigationTerrainCandidateTouchesGoldenRouteCorridor" in html
+    assert "hidden_line_without_corridor_contact" in html
 
     distance_helper = (
         "function navigationTerrainPointToSegmentDistanceM"
@@ -5788,7 +7473,7 @@ def test_dashboard_terrain_candidates_use_golden_route_start_corridor() -> None:
             "function navigationTerrainCandidateStartsWithinGoldenRouteCorridor", 1
         )[0]
     )
-    corridor_helper = (
+    corridor_helpers = (
         "function navigationTerrainCandidateStartsWithinGoldenRouteCorridor"
         + html.split(
             "function navigationTerrainCandidateStartsWithinGoldenRouteCorridor", 1
@@ -5796,25 +7481,25 @@ def test_dashboard_terrain_candidates_use_golden_route_start_corridor() -> None:
     )
     node_program = "\n".join(
         (
-            "const QGIS_GOLDEN_ROUTE_START_DISTANCE_M = 10;",
+            "const asArray = value => Array.isArray(value) ? value : [];",
+            "const QGIS_GOLDEN_ROUTE_CONTACT_DISTANCE_M = 10;",
             distance_helper,
             start_helper,
             index_helper,
-            corridor_helper,
+            corridor_helpers,
             """
 const route = [[121, 24], [121.01, 24]];
 const corridorIndex = navigationTerrainGoldenRouteCorridorIndex(route);
 const near = {geometry: {type: "LineString", coordinates: [[121.001, 24.000045], [121.002, 24.000045]]}};
 const far = {geometry: {type: "LineString", coordinates: [[121.001, 24.000180], [121.002, 24.000180]]}};
-const nearPolygon = {geometry: {type: "Polygon", coordinates: [[[121.001, 24.000045], [121.002, 24.000045], [121.001, 24.000045]]]}};
-const farPolygon = {geometry: {type: "Polygon", coordinates: [[[121.001, 24.000180], [121.002, 24.000180], [121.001, 24.000180]]]}};
+const crossing = {geometry: {type: "LineString", coordinates: [[121.005, 23.9998], [121.005, 24.0002]]}};
 process.stdout.write(JSON.stringify({
-  near: navigationTerrainCandidateStartsWithinGoldenRouteCorridor(near, route),
-  far: navigationTerrainCandidateStartsWithinGoldenRouteCorridor(far, route),
-  nearPolygon: navigationTerrainCandidateStartsWithinGoldenRouteCorridor(nearPolygon, route),
-  farPolygon: navigationTerrainCandidateStartsWithinGoldenRouteCorridor(farPolygon, route),
-  nearIndexed: navigationTerrainCandidateStartsWithinGoldenRouteCorridor(near, route, 10, corridorIndex),
-  farIndexed: navigationTerrainCandidateStartsWithinGoldenRouteCorridor(far, route, 10, corridorIndex),
+  near: navigationTerrainCandidateTouchesGoldenRouteCorridor(near, route),
+  far: navigationTerrainCandidateTouchesGoldenRouteCorridor(far, route),
+  crossing: navigationTerrainCandidateTouchesGoldenRouteCorridor(crossing, route),
+  nearIndexed: navigationTerrainCandidateTouchesGoldenRouteCorridor(near, route, 10, corridorIndex),
+  farIndexed: navigationTerrainCandidateTouchesGoldenRouteCorridor(far, route, 10, corridorIndex),
+  crossingIndexed: navigationTerrainCandidateTouchesGoldenRouteCorridor(crossing, route, 10, corridorIndex),
 }));
 """,
         )
@@ -5829,25 +7514,28 @@ process.stdout.write(JSON.stringify({
     assert json.loads(result.stdout) == {
         "near": True,
         "far": False,
-        "nearPolygon": True,
-        "farPolygon": False,
+        "crossing": True,
         "nearIndexed": True,
         "farIndexed": False,
+        "crossingIndexed": True,
     }
 
 
-def test_scout_terrain_lines_use_route_corridor_touch_not_extraction_start() -> None:
+def test_scout_and_qgis_terrain_lines_use_corridor_touch_and_keep_full_geometry() -> None:
     html = PAGE.read_text(encoding="utf-8")
     feature_collection = html.split(
         "function navigationTerrainMapLibreFeatureCollection", 1
     )[1].split("function navigationTerrainMapLibreEventFeatureCollection", 1)[0]
-    qgis_projection = html.split("function qgisSpatialWorkflowFeatures", 1)[1].split(
+    qgis_projection = html.split("function qgisSpatialFeatureProjectionSets", 1)[1].split(
         "function qgisSpatialMaplibreFeatures", 1
     )[0]
 
     assert "function navigationTerrainCandidateTouchesGoldenRouteCorridor" in html
     assert "navigationTerrainCandidateTouchesGoldenRouteCorridor(" in feature_collection
-    assert "navigationTerrainCandidateStartsWithinGoldenRouteCorridor(" in qgis_projection
+    assert "navigationTerrainCandidateStartsWithinGoldenRouteCorridor(" in html
+    assert "navigationTerrainFilterCandidatePartsByCorridorTouch(" in qgis_projection
+    assert "navigationTerrainFilterCandidatePartsByStart(" not in qgis_projection
+    assert "qgisSpatialCandidateElementCount(" in html
     assert "function navigationTerrainMapLibreVisibilitySummary" in html
     assert "displayed_line_count" in html
     assert "raw_line_count" in html
@@ -5855,7 +7543,6 @@ def test_scout_terrain_lines_use_route_corridor_touch_not_extraction_start() -> 
     assert 'data-navigation-terrain-candidate-scope="${mode}"' in html
     assert 'navigationTerrainCandidateScope() === "all"' in feature_collection
     assert 'querySelectorAll("button[data-navigation-terrain-candidate-scope]")' in html
-
     helpers = (
         "function navigationTerrainPointToSegmentDistanceM"
         + html.split("function navigationTerrainPointToSegmentDistanceM", 1)[1].split(
@@ -5864,17 +7551,29 @@ def test_scout_terrain_lines_use_route_corridor_touch_not_extraction_start() -> 
     )
     node_program = "\n".join(
         (
-            "const QGIS_GOLDEN_ROUTE_START_DISTANCE_M = 10;",
+            "const asArray = value => Array.isArray(value) ? value : [];",
+            "const QGIS_GOLDEN_ROUTE_CONTACT_DISTANCE_M = 10;",
             helpers,
             """
 const route = [[121, 24], [121.01, 24]];
 const corridorIndex = navigationTerrainGoldenRouteCorridorIndex(route);
 const touchesLater = {geometry: {type: "LineString", coordinates: [[121.001, 24.000180], [121.002, 24.000045]]}};
 const alwaysFar = {geometry: {type: "LineString", coordinates: [[121.001, 24.000180], [121.002, 24.000180]]}};
+const multipart = {geometry: {type: "MultiLineString", coordinates: [
+  [[121.001, 24.000450], [121.002, 24.000045], [121.003, 24.000540]],
+  [[121.001, 24.000180], [121.002, 24.000180]],
+]}};
+const filteredMultipart = navigationTerrainFilterCandidatePartsByCorridorTouch(
+  multipart, route, 10, corridorIndex,
+);
 process.stdout.write(JSON.stringify({
   startOnly: navigationTerrainCandidateStartsWithinGoldenRouteCorridor(touchesLater, route, 10, corridorIndex),
   touchesLater: navigationTerrainCandidateTouchesGoldenRouteCorridor(touchesLater, route, 10, corridorIndex),
   alwaysFar: navigationTerrainCandidateTouchesGoldenRouteCorridor(alwaysFar, route, 10, corridorIndex),
+  multipartParts: filteredMultipart.geometry.coordinates.length,
+  retainedCoordinateCount: filteredMultipart.geometry.coordinates[0].length,
+  retainedStart: filteredMultipart.geometry.coordinates[0][0],
+  retainedEnd: filteredMultipart.geometry.coordinates[0][2],
 }));
 """,
         )
@@ -5890,7 +7589,31 @@ process.stdout.write(JSON.stringify({
         "startOnly": False,
         "touchesLater": True,
         "alwaysFar": False,
+        "multipartParts": 1,
+        "retainedCoordinateCount": 3,
+        "retainedStart": [121.001, 24.00045],
+        "retainedEnd": [121.003, 24.00054],
     }
+
+
+def test_navigation_exposes_separate_grass_morphology_toggles_in_map_toolbar() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    workbench = html.split(
+        "function renderNavigationTerrainReviewWorkbench", 1
+    )[1].split("function renderNavigationTerrainEvidenceInspector", 1)[0]
+
+    assert 'aria-label="GRASS terrain morphology candidate layers"' in workbench
+    assert '["ridges", "山脊", qgisScopeCounts.ridge' in workbench
+    assert '["valleys", "谷線", qgisScopeCounts.valley' in workbench
+    assert '["streams", "水系", qgisScopeCounts.stream' in workbench
+    assert 'data-qgis-layer-toggle="${layerKey}"' in workbench
+    assert "GRASS 形態範圍" in workbench
+    assert "接觸 GPX ≤" in workbench
+    assert "低成本 10%" in workbench
+    assert 'candidateScope === "all"' in workbench
+    assert 'qgisRawCounts' in workbench
+    assert 'qgisConnectedCounts' in workbench
+    assert 'document.querySelectorAll("[data-qgis-layer-toggle]")' in html
 
 
 def test_navigation_maplibre_lenses_drive_distinct_bounded_overlay_features() -> None:
@@ -5934,6 +7657,23 @@ def test_navigation_maplibre_lenses_drive_distinct_bounded_overlay_features() ->
     assert "candidate_only: true" in lens_features
     assert "runtime_safety_truth: false" in lens_features
     assert "operational: false" in lens_features
+
+
+def test_navigation_optional_corridor_error_does_not_fail_the_whole_map() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    initializer = html.split(
+        "async function initializeNavigationTerrainMapLibre()", 1
+    )[1].split("function navigationTerrainSelectedHierarchyEdge", 1)[0]
+    error_handler = initializer.split('map.on("error", event => {', 1)[1].split(
+        "});", 1
+    )[0]
+
+    assert "function navigationTerrainOptionalOverlayError(" in html
+    assert 'sourceId.startsWith("scout-terrain-route-corridor-")' in html
+    assert "navigationTerrainOptionalOverlayError(event)" in error_handler
+    assert 'navigationMaplibreOptionalOverlayStatus = "unavailable"' in error_handler
+    assert "return;" in error_handler
+    assert 'navigationMaplibreStatus = "failed"' in error_handler
 
 
 def test_navigation_candidate_selection_is_explicit_navigable_and_map_linked() -> None:

@@ -28,6 +28,98 @@ that would otherwise require all of the following on every change:
 
 The hard safety boundaries in this file never relax.
 
+## 全面回歸與完成宣告門檻（使用者要求，2026-09-12）
+
+**不要頭痛醫頭、腳痛醫腳。修正必須處理根因與完整影響範圍；所有適用檢查
+實際執行且 100% 通過，才可以宣稱「完成」「已修復」「可用」或交付驗收。**
+本規則優先於下文允許以單一垂直切片、局部測試或 WORKING PROTOTYPE 結束的
+完成宣告規則；Construction Mode 不是降低既有功能回歸驗證的理由。
+
+1. **先追根因與版本，再修正。** 重現使用者指定的入口、workspace 與操作，
+   比對實際執行版本、部署來源、近期 diff 及最後已知正常的證據。分清較早的
+   潛在缺陷與最近的觸發變更；沒有證據，不可把舊提交、上游缺資料或使用者
+   環境當成本次根因。不得用增加 fallback、預載資料或換入口掩蓋問題。
+2. **修正前建立完整影響與驗證清單。** 追蹤所有使用同一資料來源、共用程式、
+   狀態、快取、API 或部署路徑的功能與頁面，不能只測使用者報錯的那一處。
+   一處修改可能影響多處，就必須一起驗證；測試中發現新影響時擴充清單。
+   全面指本次功能及其相依影響範圍的完整覆蓋，不是任選幾項容易通過的測試。
+3. **以真實使用情境驗證結果。** 使用指定服務、真實 workspace、實際 UI 與
+   正常預設操作，覆蓋首次載入、重新載入、不同視角／資料、快取命中與未命中、
+   適用的不同 renderer，以及失敗後恢復。地圖要逐一驗證所有相關 Dashboard
+   地圖的放大、平移與原生圖磚細節；同來源、HTTP 200、仍有舊圖、單張截圖、
+   已預載快取或另一頁成功，都不能替代當前頁面實際所需圖磚已完整載入的證據。
+4. **Diagnostic 是必須維護的回歸門檻。** 將已發生問題固化於既有對應的
+   Diagnostic 與必要回歸測試，檢查實際結果及跨頁一致性，不只比對程式字串、
+   控制項存在或請求是否送出。確認修正前的失敗／等效回放能被檢查攔住。
+   不得另做一套局部測試取代既有檢查，也不得刪檢查、降低期待、改資料或跳過
+   失敗項目來湊出綠燈。
+   **Diagnostic 本身可能過時；衝突由使用者仲裁。** 若 Diagnostic、規格、
+   既有行為與本次要求不一致，先保留原檢查與失敗證據，列出檢查 ID、原標準、
+   現行實作／需求、具體證據、建議選項及各自影響，提交使用者決定。可以準備
+   可審閱的候選 patch，但在收到針對該衝突的明確裁決前，不得自行選定誰正確、
+   改動驗收語意／預期結果、刪除或停用檢查、將其改列 N/A 或通過，也不得把
+   依賴該裁決的工作宣稱完成。過去的一般放權、Construction Mode 或「繼續」
+   不代表使用者已批准新的規格／Diagnostic 衝突處置。記錄裁決後再實作與重驗；
+   不依賴裁決的既有授權工作可以繼續。
+5. **完成門檻是全部適用項目 100% PASS。** 有 FAIL、WARN、SKIP、未執行、
+   未驗證、阻塞或不穩定結果，就只能回報「未完成／部分驗證」並列明剩餘項目。
+   不得將它們計為成功；N/A 必須有影響範圍證據，不能在失敗後為過關而排除。
+   任何修正後，重跑所有受該修正影響的檢查與既有回歸項目，不只重跑最後失敗
+   的單一案例。既有的範圍內失敗也不能成為宣稱完成的例外。
+6. **交付可重現證據，不把首次驗收交給使用者。** 記錄服務入口、workspace、
+   實際版本／來源 SHA、逐頁／逐情境結果、Diagnostic 結果及必要畫面與網路
+   證據。宣稱完成前，核對交付版本就是通過測試的版本；UI 改動同步更新相關
+   教學與 PDF。使用者的再次測試是確認體驗，不能替代代理應完成的驗證。
+
+## Navigation Freeze: Temporarily Suspended
+
+**User-directed suspension, 2026-09-04:** The user temporarily cancelled the
+Navigation freeze approval blocker. Until the user explicitly reinstates it,
+the freeze-specific restrictions below are inactive. Continue scoped local
+Dashboard work under Construction Mode without another Navigation approval
+prompt. Run the guard before and after work in its default report-only mode;
+`NAVIGATION_FREEZE_SUSPENDED` reports drift without blocking it. Preserve the
+original baseline and unrelated work. Hard safety and external-action boundaries
+remain active. `--enforce` provides a read-only strict comparison, not policy
+reinstatement. The original freeze rules are retained below for later restoration.
+
+**Effective 2026-09-04, Dashboard Navigation is frozen at the current worktree
+baseline, including its existing uncommitted changes.** This rule overrides
+Construction Mode autonomy for Navigation-related work. It is not permission to
+revert that work, refactor Navigation, or promote it to production.
+
+- Do not change Navigation behavior, layout, 2D/3D/Rudy+TW maps, A/B TRH R1-R3,
+  corridors, R4/Gn review, highlights, Diagnostic Navigation checks, DEM
+  preparation, workspace/provenance contracts or QGIS/GRASS worker behavior
+  without the user's explicit approval for that particular change.
+- Shared Dashboard HTML/CSS/JavaScript, MapLibre, API entrypoints, dependencies,
+  map layer contracts and worker launchers are part of this boundary. Another
+  page's task does not authorize modifying these shared files. Keep that work
+  isolated; if Navigation impact cannot be ruled out, stop and ask first.
+- Read-only investigation and non-mutating tests are allowed. Test failures do
+  not authorize automatic repairs, workspace regeneration or worker restarts.
+- A specific user request to change Navigation approves only that scope.
+  Generic "continue", "commit", or unrelated-page work is not approval. State
+  the affected files and behavior before editing; approval is not a blanket unlock.
+- Run `rtk proxy ./venv/bin/python tools/verify_navigation_freeze.py` before and
+  after Dashboard/shared-GIS work. A failed check requires review, not a revert
+  or automatic baseline update. The guard never grants approval.
+- The baseline, guard, protected-path inventory and this policy also require
+  approval to change. Never bypass them or relax candidate-only safety contracts
+  to make a check pass.
+
+**Standing local-venv authorization, 2026-09-04:** The user explicitly authorized
+future local virtual-environment upgrades and their compatibility tests without
+another Navigation approval prompt. A local venv upgrade alone is not a
+Navigation page change. Record installed versions, preserve unrelated packages,
+and run focused checks. This authorization does not permit Navigation source or
+GIS contract changes, worker/server restarts, hardware deployment, or changes to
+the freeze baseline/guard. Source-controlled dependency edits remain scoped to
+the requested upgrade; it is not a blanket unlock for shared Navigation files.
+
+Details and approved-change procedure:
+`qualification/policies/navigation-freeze.md`.
+
 ## V1 Capability-First Cost Doctrine
 
 The first working version of a complex AI system is expected to be the most
@@ -416,8 +508,85 @@ Productization Mode reports every required gate as `PASS`, `FAIL`, or
 `NOT APPLICABLE` with evidence. Do not claim production completion while a
 required productization gate fails.
 
-Do not commit, push, merge, publish, or open a PR unless the user explicitly
-requests it.
+After every completed change, create a corresponding Git commit using the
+applicable repository workflow so that it can be tracked and rolled back later.
+Do not push, merge, publish, or open a PR unless the user explicitly requests
+it.
+
+## Mac Git Workflow: Scout Commit Gateway
+
+This Mac checkout intentionally has no `.git` directory. The canonical Git
+repository is hosted on Scout:
+
+`alexwang0315@scout.local:/home/alexwang0315/git/scout-fusion.git`
+
+Do not run `git init`, `git add`, `git commit`, `git push`, or recreate `.git`
+inside the Mac checkout.
+
+To inspect pending changes, run:
+
+```bash
+/Users/alexwang0315/bin/scout-commit status
+```
+
+After every completed change, run:
+
+```bash
+/Users/alexwang0315/bin/scout-commit commit "descriptive commit message"
+```
+
+The gateway synchronizes the Mac project to Scout, creates the commit on Scout,
+and pushes it to the local Scout bare repository. It excludes `.git`,
+`artifacts`, `node_modules`, `reports`, `.env*`, virtual environments, caches,
+and `.DS_Store`.
+
+The commit command includes all eligible changed and untracked files as one
+snapshot. If selective file commits are required, stop and ask the user rather
+than recreating a local Git repository.
+
+## Scout-to-Mac SSH Access
+
+When an agent running on Scout must connect to the Mac checkout, the Mac login
+account is `alexwang0315`. Use the dedicated Scout-to-Mac key; do not rely on a
+default SSH identity:
+
+```bash
+ssh -i /home/alexwang0315/.ssh/scout-to-mac \
+  -o IdentitiesOnly=yes \
+  -o StrictHostKeyChecking=yes \
+  -o UserKnownHostsFile=/home/alexwang0315/.ssh/known_hosts \
+  -o ConnectTimeout=10 \
+  alexwang0315@Lamb780722de-MacBook-Pro.local
+```
+
+If mDNS resolution fails, use `alexwang0315@192.168.8.155`. The private key
+must never be printed, copied into prompts, or committed. The verified Mac host
+key fingerprint is `SHA256:cFmaGA0olTmjLeQ1laeURtl0oBscHsfA4H0l/s+9i8g`, and
+the Scout-to-Mac public key fingerprint is
+`SHA256:pLCijCRBUa1mpJOtvVTiaqgJE9ZedaO4I+MJuUJN/vM`.
+
+## Mac Browser Handoff — User Preference
+
+**User-directed preference, 2026-09-10:** When a task produces or updates a
+website that can be opened, provide its Mac-accessible URL and a copyable command
+to open it in Google Chrome on the Mac:
+
+```bash
+open -a "Google Chrome" '<mac-accessible-url>'
+```
+
+When the existing Scout-to-Mac SSH connection is available, proactively execute
+the open command on the Mac for the current task's website; do not stop at
+providing the command or ask for confirmation again just to open that page.
+Verify reachability from the Mac first. Scout's `localhost` is not the Mac's
+`localhost`: reuse an existing tunnel or establish a temporary SSH forward bound
+to Mac loopback for an authorized local demo. Preserve unrelated listeners and
+production runtimes; this preference does not authorize public deployment.
+
+Report the actual outcome: confirmed Chrome tab when observable, otherwise the
+successful open request or exact blocker. If automatic opening is unavailable,
+still provide the Mac command and any required connection step. Never claim that
+a page opened solely because it is reachable from Scout.
 
 ## Graphify
 

@@ -1,6 +1,17 @@
 import json
 from pathlib import Path
 
+from weather_workflow_fixtures import (
+    CWA_ENVIRONMENT_TOOL_ID,
+    GEE_ENVIRONMENT_TOOL_ID,
+    REFERENCE_TIME,
+    assert_exact_weather_execution,
+    weather_tool_calls,
+    write_missing_weather_project,
+    write_reviewed_weather_project,
+    write_reviewed_route_context_project,
+)
+
 from scout_agent_builtin_tools import run_builtin_tool
 from scout_agent_tools import load_tool_manifest
 from scout_ai_answer_synthesis import (
@@ -122,17 +133,23 @@ def test_answer_synthesis_uses_risk_sentinel_for_forward_high_risk_segment() -> 
     assert "runtime safety truth" in result.answer
 
 
-def test_answer_synthesis_reports_weather_tool_missing_fresh_evidence_without_guessing() -> None:
+def test_answer_synthesis_reports_weather_tool_missing_fresh_evidence_without_guessing(tmp_path: Path, weather_tool_calls) -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "明天午後雷雨是否要紮營?",
-        project_root=PROJECT_ROOT,
+        project_root=write_missing_weather_project(tmp_path, PROJECT_ROOT),
         project_id="chilai_nanhua_day1",
+        reference_time=REFERENCE_TIME,
         limit=3,
     )
 
+    assert_exact_weather_execution(result, (
+        WEATHER_WINDOW_TOOL_ID,
+        CWA_ENVIRONMENT_TOOL_ID,
+    ), weather_tool_calls)
+
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.completed_source_count >= 1
-    assert result.missing_evidence_count >= 1
+    assert result.completed_source_count == 2
+    assert result.missing_evidence_count == 2
     assert result.synthesis_policy.model_provider_used is False
     assert result.synthesis_policy.model_synthesis_performed is False
 
@@ -153,13 +170,21 @@ def test_answer_synthesis_reports_weather_tool_missing_fresh_evidence_without_gu
     assert "runtime safety truth" in result.answer
 
 
-def test_answer_synthesis_uses_query_reported_recent_rain_weather_decision() -> None:
+def test_answer_synthesis_uses_query_reported_recent_rain_weather_decision(tmp_path: Path, weather_tool_calls) -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "前 24 小時明顯降雨，溪水和崩塌風險是否升高？今天還能走嗎？",
-        project_root=PROJECT_ROOT,
+        project_root=write_missing_weather_project(tmp_path, PROJECT_ROOT),
         project_id="chilai_nanhua_day1",
+        reference_time=REFERENCE_TIME,
         limit=5,
     )
+
+    assert_exact_weather_execution(result, (
+        RISK_SCORE_TOOL_ID,
+        WEATHER_WINDOW_TOOL_ID,
+        CWA_ENVIRONMENT_TOOL_ID,
+        GEE_ENVIRONMENT_TOOL_ID,
+    ), weather_tool_calls)
 
     assert result.answerability == "partial_evidence_with_missing_context"
     weather = _source(result, WEATHER_WINDOW_TOOL_ID)
@@ -204,18 +229,24 @@ def test_answer_synthesis_uses_energy_vitals_decision_output() -> None:
     assert result.decision_output["runtimeSafetyTruth"] is False
 
 
-def test_answer_synthesis_uses_weather_to_decision_field_answer(tmp_path: Path) -> None:
-    project_root = _write_route_weather_project(tmp_path)
+def test_answer_synthesis_uses_weather_to_decision_field_answer(tmp_path: Path, weather_tool_calls) -> None:
+    project_root = write_reviewed_weather_project(tmp_path, profile="thunderstorm")
 
     result = collect_and_synthesize_scout_ai_answer(
         "午後雷雨是否要改變計畫?",
         project_root=project_root,
         project_id="weather_decision_project",
+        reference_time=REFERENCE_TIME,
         limit=3,
     )
 
+    assert_exact_weather_execution(result, (
+        WEATHER_WINDOW_TOOL_ID,
+        CWA_ENVIRONMENT_TOOL_ID,
+    ), weather_tool_calls)
+
     assert result.answerability == "evidence_available"
-    assert result.completed_source_count >= 1
+    assert result.completed_source_count == 2
     assert result.missing_evidence_count == 0
     assert result.sources[0].tool_id == WEATHER_WINDOW_TOOL_ID
     assert result.sources[0].top_result_summary["decision"] == "CHANGE_PLAN"
@@ -260,19 +291,24 @@ def test_answer_synthesis_keeps_cold_exposure_risk_as_weather_decision() -> None
 
 
 def test_answer_synthesis_surfaces_heat_exposure_weather_decision(
-    tmp_path: Path,
-) -> None:
-    project_root = _write_heat_exposure_project(tmp_path)
+    tmp_path: Path, weather_tool_calls) -> None:
+    project_root = write_reviewed_weather_project(tmp_path, profile="heat")
 
     result = collect_and_synthesize_scout_ai_answer(
         "高溫曝曬，天氣決策怎麼看？",
         project_root=project_root,
         project_id="heat_exposure_project",
+        reference_time=REFERENCE_TIME,
         limit=3,
     )
 
+    assert_exact_weather_execution(result, (
+        WEATHER_WINDOW_TOOL_ID,
+        CWA_ENVIRONMENT_TOOL_ID,
+    ), weather_tool_calls)
+
     assert result.answerability == "evidence_available"
-    assert result.completed_source_count == 1
+    assert result.completed_source_count == 2
     assert result.missing_evidence_count == 0
     source = _source(result, WEATHER_WINDOW_TOOL_ID)
     assert source.top_result_summary["decision"] == "CHANGE_PLAN"
@@ -289,19 +325,24 @@ def test_answer_synthesis_surfaces_heat_exposure_weather_decision(
 
 
 def test_answer_synthesis_surfaces_forecast_source_disagreement_decision(
-    tmp_path: Path,
-) -> None:
-    project_root = _write_source_disagreement_project(tmp_path)
+    tmp_path: Path, weather_tool_calls) -> None:
+    project_root = write_reviewed_weather_project(tmp_path, profile="disagreement")
 
     result = collect_and_synthesize_scout_ai_answer(
         "預報來源不一致，天氣決策怎麼看？",
         project_root=project_root,
         project_id="source_disagreement_project",
+        reference_time=REFERENCE_TIME,
         limit=3,
     )
 
+    assert_exact_weather_execution(result, (
+        WEATHER_WINDOW_TOOL_ID,
+        CWA_ENVIRONMENT_TOOL_ID,
+    ), weather_tool_calls)
+
     assert result.answerability == "evidence_available"
-    assert result.completed_source_count == 1
+    assert result.completed_source_count == 2
     assert result.missing_evidence_count == 0
     source = _source(result, WEATHER_WINDOW_TOOL_ID)
     assert source.top_result_summary["decision"] == "DELAY"
@@ -585,17 +626,28 @@ def test_answer_synthesis_prices_photo_stop_budget_phrase() -> None:
     assert result.decision_output["runtimeSafetyTruth"] is False
 
 
-def test_answer_synthesis_treats_fog_photo_as_wait_permission() -> None:
+def test_answer_synthesis_treats_fog_photo_as_wait_permission(tmp_path: Path, weather_tool_calls) -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "可以等霧散再拍照嗎？",
-        project_root=PROJECT_ROOT,
+        project_root=write_missing_weather_project(tmp_path, PROJECT_ROOT),
         project_id="chilai_nanhua_day1",
+        reference_time=REFERENCE_TIME,
         limit=6,
     )
 
+    assert_exact_weather_execution(result, (
+        CONTEXTUAL_PERMISSION_TOOL_ID,
+        LIVE_NAVIGATION_STATE_TOOL_ID,
+        ROUTE_ARCHITECTURE_TOOL_ID,
+        WEATHER_WINDOW_TOOL_ID,
+        PACE_GUARDIAN_TOOL_ID,
+        RISK_SCORE_TOOL_ID,
+        CWA_ENVIRONMENT_TOOL_ID,
+    ), weather_tool_calls)
+
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.completed_source_count == 6
-    assert result.missing_evidence_count == 4
+    assert result.completed_source_count == 7
+    assert result.missing_evidence_count == 5
     _assert_on_route_micro_decision_support_sources(result)
     weather = _source(result, WEATHER_WINDOW_TOOL_ID)
     contextual = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
@@ -660,17 +712,28 @@ def test_answer_synthesis_allows_bounded_teammate_wait() -> None:
     assert "runtime safety truth" in result.answer
 
 
-def test_answer_synthesis_blocks_wind_exposed_lunch() -> None:
+def test_answer_synthesis_blocks_wind_exposed_lunch(tmp_path: Path, weather_tool_calls) -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "這裡是風口，我們可以在這裡吃午餐嗎？",
-        project_root=PROJECT_ROOT,
+        project_root=write_missing_weather_project(tmp_path, PROJECT_ROOT),
         project_id="chilai_nanhua_day1",
+        reference_time=REFERENCE_TIME,
         limit=6,
     )
 
+    assert_exact_weather_execution(result, (
+        CONTEXTUAL_PERMISSION_TOOL_ID,
+        LIVE_NAVIGATION_STATE_TOOL_ID,
+        ROUTE_ARCHITECTURE_TOOL_ID,
+        WEATHER_WINDOW_TOOL_ID,
+        PACE_GUARDIAN_TOOL_ID,
+        RISK_SCORE_TOOL_ID,
+        CWA_ENVIRONMENT_TOOL_ID,
+    ), weather_tool_calls)
+
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.completed_source_count == 6
-    assert result.missing_evidence_count == 4
+    assert result.completed_source_count == 7
+    assert result.missing_evidence_count == 5
     _assert_on_route_micro_decision_support_sources(result)
     weather = _source(result, WEATHER_WINDOW_TOOL_ID)
     contextual = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
@@ -709,17 +772,29 @@ def test_answer_synthesis_surfaces_lunch_alternate_cp_and_minutes() -> None:
     assert "約 18 分鐘到 CP3" in result.answer
 
 
-def test_answer_synthesis_escalates_stream_surge_crossing() -> None:
+def test_answer_synthesis_escalates_stream_surge_crossing(tmp_path: Path, weather_tool_calls) -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "前方溪水暴漲，還能過溪嗎？",
-        project_root=PROJECT_ROOT,
+        project_root=write_missing_weather_project(tmp_path, PROJECT_ROOT),
         project_id="chilai_nanhua_day1",
+        reference_time=REFERENCE_TIME,
         limit=6,
     )
 
+    assert_exact_weather_execution(result, (
+        CONTEXTUAL_PERMISSION_TOOL_ID,
+        LIVE_NAVIGATION_STATE_TOOL_ID,
+        ROUTE_ARCHITECTURE_TOOL_ID,
+        WEATHER_WINDOW_TOOL_ID,
+        PACE_GUARDIAN_TOOL_ID,
+        RISK_SCORE_TOOL_ID,
+        CWA_ENVIRONMENT_TOOL_ID,
+        GEE_ENVIRONMENT_TOOL_ID,
+    ), weather_tool_calls)
+
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.completed_source_count == 6
-    assert result.missing_evidence_count == 4
+    assert result.completed_source_count == 8
+    assert result.missing_evidence_count == 6
     _assert_on_route_micro_decision_support_sources(result)
     weather = _source(result, WEATHER_WINDOW_TOOL_ID)
     contextual = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
@@ -794,17 +869,30 @@ def test_answer_synthesis_blocks_split_team_micro_decision() -> None:
     assert "runtime safety truth" in result.answer
 
 
-def test_answer_synthesis_uses_rain_gear_micro_decision_before_missing_context() -> None:
+def test_answer_synthesis_uses_rain_gear_micro_decision_before_missing_context(tmp_path: Path, weather_tool_calls) -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "前面下雨了，要不要穿雨衣？",
-        project_root=PROJECT_ROOT,
+        project_root=write_missing_weather_project(tmp_path, PROJECT_ROOT),
         project_id="chilai_nanhua_day1",
+        reference_time=REFERENCE_TIME,
         limit=4,
     )
 
+    assert_exact_weather_execution(result, (
+        CONTEXTUAL_PERMISSION_TOOL_ID,
+        LIVE_NAVIGATION_STATE_TOOL_ID,
+        ROUTE_ARCHITECTURE_TOOL_ID,
+        WEATHER_WINDOW_TOOL_ID,
+        PACE_GUARDIAN_TOOL_ID,
+        RISK_SCORE_TOOL_ID,
+        EQUIPMENT_RESOURCE_TOOL_ID,
+        CWA_ENVIRONMENT_TOOL_ID,
+        GEE_ENVIRONMENT_TOOL_ID,
+    ), weather_tool_calls)
+
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.completed_source_count == 7
-    assert result.missing_evidence_count == 4
+    assert result.completed_source_count == 9
+    assert result.missing_evidence_count == 6
     _assert_on_route_micro_decision_support_sources(result)
     source = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     summary = source.top_result_summary
@@ -866,17 +954,29 @@ def test_answer_synthesis_blocks_shortcut_reroute_micro_decision() -> None:
     assert "runtime safety truth" in result.answer
 
 
-def test_answer_synthesis_blocks_rockfall_fast_passage() -> None:
+def test_answer_synthesis_blocks_rockfall_fast_passage(tmp_path: Path, weather_tool_calls) -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "前方是落石區，這段要不要快速通過？",
-        project_root=PROJECT_ROOT,
+        project_root=write_missing_weather_project(tmp_path, PROJECT_ROOT),
         project_id="chilai_nanhua_day1",
+        reference_time=REFERENCE_TIME,
         limit=4,
     )
 
+    assert_exact_weather_execution(result, (
+        CONTEXTUAL_PERMISSION_TOOL_ID,
+        LIVE_NAVIGATION_STATE_TOOL_ID,
+        ROUTE_ARCHITECTURE_TOOL_ID,
+        WEATHER_WINDOW_TOOL_ID,
+        PACE_GUARDIAN_TOOL_ID,
+        RISK_SCORE_TOOL_ID,
+        CWA_ENVIRONMENT_TOOL_ID,
+        GEE_ENVIRONMENT_TOOL_ID,
+    ), weather_tool_calls)
+
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.completed_source_count == 6
-    assert result.missing_evidence_count == 4
+    assert result.completed_source_count == 8
+    assert result.missing_evidence_count == 6
     _assert_on_route_micro_decision_support_sources(result)
     source = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     summary = source.top_result_summary
@@ -958,17 +1058,29 @@ def test_answer_synthesis_uses_direct_retreat_micro_decision() -> None:
     assert "runtime safety truth" in result.answer
 
 
-def test_answer_synthesis_uses_micro_decision_for_weather_fatigue_retreat() -> None:
+def test_answer_synthesis_uses_micro_decision_for_weather_fatigue_retreat(tmp_path: Path, weather_tool_calls) -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "天氣變差且隊友疲勞，是否需要撤退？",
-        project_root=PROJECT_ROOT,
+        project_root=write_missing_weather_project(tmp_path, PROJECT_ROOT),
         project_id="chilai_nanhua_day1",
+        reference_time=REFERENCE_TIME,
         limit=5,
     )
 
+    assert_exact_weather_execution(result, (
+        CONTEXTUAL_PERMISSION_TOOL_ID,
+        LIVE_NAVIGATION_STATE_TOOL_ID,
+        ROUTE_ARCHITECTURE_TOOL_ID,
+        WEATHER_WINDOW_TOOL_ID,
+        PACE_GUARDIAN_TOOL_ID,
+        RISK_SCORE_TOOL_ID,
+        ENERGY_VITALS_TOOL_ID,
+        CWA_ENVIRONMENT_TOOL_ID,
+    ), weather_tool_calls)
+
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.completed_source_count == 7
-    assert result.missing_evidence_count == 4
+    assert result.completed_source_count == 8
+    assert result.missing_evidence_count == 5
     _assert_on_route_micro_decision_support_sources(result)
     contextual = _source(result, CONTEXTUAL_PERMISSION_TOOL_ID)
     summary = contextual.top_result_summary
@@ -1382,17 +1494,29 @@ def test_answer_synthesis_routes_time_to_summit_to_micro_decision() -> None:
     assert "runtime safety truth" in result.answer
 
 
-def test_answer_synthesis_blocks_daylight_summit_pressure() -> None:
+def test_answer_synthesis_blocks_daylight_summit_pressure(tmp_path: Path, weather_tool_calls) -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "我們快摸黑了，但山頂只差一點，可以趕一下攻頂嗎？",
-        project_root=PROJECT_ROOT,
+        project_root=write_missing_weather_project(tmp_path, PROJECT_ROOT),
         project_id="chilai_nanhua_day1",
+        reference_time=REFERENCE_TIME,
         limit=6,
     )
 
+    assert_exact_weather_execution(result, (
+        CONTEXTUAL_PERMISSION_TOOL_ID,
+        LIVE_NAVIGATION_STATE_TOOL_ID,
+        ROUTE_ARCHITECTURE_TOOL_ID,
+        WEATHER_WINDOW_TOOL_ID,
+        PACE_GUARDIAN_TOOL_ID,
+        RISK_SCORE_TOOL_ID,
+        MEDIA_LITERACY_TOOL_ID,
+        CWA_ENVIRONMENT_TOOL_ID,
+    ), weather_tool_calls)
+
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.completed_source_count == 7
-    assert result.missing_evidence_count == 5
+    assert result.completed_source_count == 8
+    assert result.missing_evidence_count == 6
     _assert_on_route_micro_decision_support_sources(result)
     weather = _source(result, WEATHER_WINDOW_TOOL_ID)
     media = _source(result, MEDIA_LITERACY_TOOL_ID)
@@ -2057,16 +2181,28 @@ def test_answer_synthesis_blocks_natural_risk_layer_literacy_gap() -> None:
     assert "不建議自主前往" in result.answer
 
 
-def test_answer_synthesis_uses_route_readiness_field_answer_without_guessing() -> None:
+def test_answer_synthesis_uses_route_readiness_field_answer_without_guessing(weather_tool_calls) -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "出發前 Go/No-Go 可以出發嗎？",
         project_root=PROJECT_ROOT,
         project_id="chilai_nanhua_day1",
+        reference_time=REFERENCE_TIME,
         limit=3,
     )
 
+    assert_exact_weather_execution(result, (
+        ROUTE_READINESS_TOOL_ID,
+        ROUTE_ARCHITECTURE_TOOL_ID,
+        NAVIGATION_TERRAIN_TOOL_ID,
+        WEATHER_WINDOW_TOOL_ID,
+        CWA_ENVIRONMENT_TOOL_ID,
+        GEE_ENVIRONMENT_TOOL_ID,
+        PACE_GUARDIAN_TOOL_ID,
+        EQUIPMENT_RESOURCE_TOOL_ID,
+    ), weather_tool_calls)
+
     assert result.answerability == "partial_evidence_with_missing_context"
-    assert result.completed_source_count == 6
+    assert result.completed_source_count == 8
     assert result.missing_evidence_count == 4
     source_ids = {source.tool_id for source in result.sources}
     assert {
@@ -3553,15 +3689,28 @@ def test_answer_synthesis_answers_standard_glossary_without_operational_tool_det
     assert "沒有完成的 deterministic Scout evidence source" not in result.answer
 
 
-def test_answer_synthesis_routes_scout_ai_meta_power_to_dynamic_decision_overview() -> None:
+def test_answer_synthesis_routes_scout_ai_meta_power_to_dynamic_decision_overview(weather_tool_calls) -> None:
     result = collect_and_synthesize_scout_ai_answer(
         "Scout AI 力如何把六力轉成動態決策，而不是靜態分數表？",
         project_root=PROJECT_ROOT,
         project_id="chilai_nanhua_day1",
+        reference_time=REFERENCE_TIME,
         limit=8,
     )
 
-    assert result.completed_source_count == 7
+    assert_exact_weather_execution(result, (
+        ROUTE_CONTEXT_TOOL_ID,
+        PACE_GUARDIAN_TOOL_ID,
+        ROUTE_READINESS_TOOL_ID,
+        CONTEXTUAL_PERMISSION_TOOL_ID,
+        ROUTE_ARCHITECTURE_TOOL_ID,
+        WEATHER_WINDOW_TOOL_ID,
+        CWA_ENVIRONMENT_TOOL_ID,
+        GEE_ENVIRONMENT_TOOL_ID,
+        NAVIGATION_TERRAIN_TOOL_ID,
+    ), weather_tool_calls)
+
+    assert result.completed_source_count == 9
     assert result.decision_output["answerSourceToolId"] == (
         "scout.ai.standard_six_power_overview.v0"
     )

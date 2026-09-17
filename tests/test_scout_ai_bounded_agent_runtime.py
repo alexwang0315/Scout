@@ -24,7 +24,11 @@ from scout.schemas.agent_runtime import (
 )
 from scout.services.agent_budget_policy import AgentBudgetPolicy
 from scout.services.agent_recovery import AgentRecoveryOrchestrator
-from scout.services.bounded_agent_runtime import BoundedAgentRuntime, estimate_tokens
+from scout.services.bounded_agent_runtime import (
+    BoundedAgentRuntime,
+    _answer_sentences,
+    estimate_tokens,
+)
 
 
 def _context_handle(index: int, *, relevance: float = 0.5) -> ContextHandle:
@@ -1233,6 +1237,7 @@ def test_no_tool_synthesis_prompt_and_citation_verifier_are_bounded() -> None:
     assert "arguments" not in prompt.lower()
     assert "outputs/route/summary.json" in prompt
     assert "exact strings from source_refs" in prompt
+    assert "Preserve numeric values and units exactly" in prompt
     assert "Never cite continuation_handle" in prompt
     assert "at most three short sentences" in prompt
     assert len(prompt) <= 1600
@@ -1299,6 +1304,23 @@ def test_synthesis_verifier_validates_numbers_only_against_cited_cards() -> None
     assert right_card.passed is True
 
 
+def test_synthesis_verifier_rejects_unbound_unit_conversion() -> None:
+    runtime = BoundedAgentRuntime()
+    distance_evidence = _evidence_card(
+        claim_summary="Route distance in meters.",
+        source_ref="outputs/route/summary.json",
+        key_values={"distance_m": 55174.67},
+    )
+
+    verification = runtime.verify_synthesis(
+        "Route distance is 55.17467 km [outputs/route/summary.json].",
+        evidence_cards=[distance_evidence],
+    )
+
+    assert verification.passed is False
+    assert verification.unsupported_claims
+
+
 def test_synthesis_verifier_rejects_matching_number_for_unrelated_fact() -> None:
     runtime = BoundedAgentRuntime()
     checkpoint_evidence = _evidence_card(
@@ -1336,6 +1358,24 @@ def test_synthesis_verifier_fails_closed_for_unsupported_safety_claim() -> None:
     assert verification.output_disposition == "fail_closed"
     assert verification.unsupported_claims == [claim]
     assert verification.rejected_draft_claims == [claim]
+
+
+def test_synthesis_verifier_allows_explicit_non_authority_disclaimer() -> None:
+    runtime = BoundedAgentRuntime()
+    checkpoint_evidence = _evidence_card(
+        claim_summary="The route has 12 checkpoints.",
+        source_ref="outputs/route/summary.json",
+        key_values={"checkpoint_count": 12},
+    )
+
+    verification = runtime.verify_synthesis(
+        "The route has 12 checkpoints; this is not a runtime safety "
+        "determination [outputs/route/summary.json].",
+        evidence_cards=[checkpoint_evidence],
+    )
+
+    assert verification.passed is True
+    assert verification.rejected_draft_claims == []
 
 
 def test_synthesis_verifier_rejects_safety_polarity_contradiction() -> None:
@@ -1377,6 +1417,36 @@ def test_synthesis_verifier_does_not_infer_safety_from_citation_path() -> None:
     assert verification.passed is False
     assert verification.output_disposition == "needs_repair"
     assert verification.rejected_draft_claims == []
+
+
+def test_synthesis_verifier_splits_chinese_sentences_after_citations() -> None:
+    runtime = BoundedAgentRuntime()
+    route_evidence = _evidence_card(
+        claim_summary="Route has 12 checkpoints.",
+        source_ref="outputs/route/summary.json",
+        key_values={"checkpoint_count": 12},
+    )
+    weather_evidence = _evidence_card(
+        claim_summary="Weather has afternoon fog.",
+        source_ref="outputs/weather/summary.json",
+        key_values={"weather": "afternoon fog"},
+    )
+
+    answer = (
+        "Route has 12 checkpoints。[outputs/route/summary.json] "
+        "Weather has afternoon fog。[outputs/weather/summary.json]"
+    )
+    verification = runtime.verify_synthesis(
+        answer,
+        evidence_cards=[route_evidence, weather_evidence],
+    )
+
+    assert _answer_sentences(answer) == [
+        "Route has 12 checkpoints。[outputs/route/summary.json]",
+        "Weather has afternoon fog。[outputs/weather/summary.json]",
+    ]
+    assert verification.passed is True
+    assert verification.unsupported_claims == []
 
 
 def test_synthesis_verifier_accepts_full_width_chinese_citation_brackets() -> None:

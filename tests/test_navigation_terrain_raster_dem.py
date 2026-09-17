@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import hashlib
+import math
 from pathlib import Path
 
 import pytest
@@ -15,6 +17,100 @@ from navigation_terrain_raster_dem import (
     load_navigation_terrain_dem_manifest,
     prepare_navigation_terrain_dem_tiles,
 )
+
+
+def _prepared_workspace_dem(tmp_path: Path) -> tuple[Path, dict, dict]:
+    import numpy as np
+    from pretrip_source_ingest import wgs84_to_twd97
+    from workspace_terrain_dem import WorkspaceDemManifest
+
+    root = tmp_path / "prepared-dem"
+    root.mkdir()
+    bbox = tile_bounds_wgs84(15, 27400, 14180)
+    corners = [wgs84_to_twd97(lat, lon) for lat in (bbox["south"], bbox["north"])
+               for lon in (bbox["west"], bbox["east"])]
+    bounds = {
+        "min_x": math.floor(min(p[0] for p in corners) / 20) * 20 - 40,
+        "min_y": math.floor(min(p[1] for p in corners) / 20) * 20 - 40,
+        "max_x": math.ceil(max(p[0] for p in corners) / 20) * 20 + 40,
+        "max_y": math.ceil(max(p[1] for p in corners) / 20) * 20 + 40,
+    }
+    width = int((bounds["max_x"] - bounds["min_x"]) / 20)
+    height = int((bounds["max_y"] - bounds["min_y"]) / 20)
+    terrain = {"dtm_grid": {"cell_resolution_m": 20,
+        "bbox_twd97": bounds, "bbox_wgs84": bbox}}
+    (root / "terrain.json").write_text(json.dumps(terrain))
+    # The prepared source must work even when the older county mosaic is empty.
+    (root / "coverage.json").write_text(json.dumps({"source_dirs": [], "candidate_tiles": []}))
+    (root / "parent.json").write_text('{}')
+    (root / "parent.tif").write_bytes(b'parent fixture')
+    Image.fromarray(np.full((height, width), 1234.5, dtype=np.float32)).save(root / "dem.tif")
+    digest = lambda ref: hashlib.sha256((root / ref).read_bytes()).hexdigest()
+    manifest = WorkspaceDemManifest(
+        project_id=root.name, resolution_m=20, max_analysis_margin_m=1000,
+        grid_guard_cells=2, route_bounds=bounds, bounds=bounds,
+        width=width, height=height, finite_cell_count=width * height,
+        dem_ref="dem.tif", dem_sha256=digest("dem.tif"),
+        manifest_ref="dem-manifest.json", parent_ref="parent.json",
+        parent_dem_ref="parent.tif", coverage_ref="coverage.json", source_ref="parent.tif",
+        source_hashes={ref:digest(ref) for ref in ("parent.json", "parent.tif", "coverage.json")},
+        created_at="2026-09-08T00:00:00Z", gdal_version="fixture", commands=[],
+    ).model_dump(mode="json")
+    (root / "dem-manifest.json").write_text(json.dumps(manifest))
+    project = {
+        "project_id": root.name, "terrain_visualization_ref": "terrain.json",
+        "dtm_coverage_summary_ref": "coverage.json",
+        "terrain_feature_manifest_ref": "parent.json",
+        "terrain_dem_route_bbox_raster_ref": "parent.tif",
+        "terrain_workspace_dem_status": "ready",
+        "terrain_workspace_dem_manifest_ref": "dem-manifest.json",
+        "terrain_workspace_dem_manifest_sha256": digest("dem-manifest.json"),
+        "terrain_workspace_dem_raster_ref": "dem.tif",
+    }
+    (root / "project.json").write_text(json.dumps(project))
+    return root, project, manifest
+
+
+def test_prepared_workspace_dem_supplies_tiles_when_county_mosaic_is_empty(tmp_path: Path) -> None:
+    root, project, source = _prepared_workspace_dem(tmp_path)
+    result = prepare_navigation_terrain_dem_tiles(root, zoom=15, tile_size=16)
+    assert result["source_grid_kind"] == "workspace_prepared_dem"
+    assert result["source_hashes"]["dem.tif"] == source["dem_sha256"]
+    assert result["source_hashes"]["dem-manifest.json"] == project["terrain_workspace_dem_manifest_sha256"]
+    assert result["source_cell_resolution_m"] == 20
+    assert result["boundary"]["runtime_safety_truth"] is False
+    assert result["adds_source_resolution"] is False
+    assert result["tile_count"] > 0
+    for tile in result["tiles"]:
+        with Image.open(root / tile["source_ref"]) as image:
+            pixels = list(image.convert("RGBA").get_flattened_data())
+            assert all(pixel[3] == 255 for pixel in pixels)
+            assert all(decode_mapbox_terrain_rgb(pixel) == pytest.approx(1234.5) for pixel in pixels)
+
+
+@pytest.mark.parametrize("failure", ["manifest_hash", "dem_hash", "parent_hash", "active_parent", "nodata"])
+def test_invalid_prepared_dem_never_falls_back_or_publishes(tmp_path: Path, failure: str) -> None:
+    import numpy as np
+    root, project, manifest = _prepared_workspace_dem(tmp_path)
+    if failure == "manifest_hash":
+        project["terrain_workspace_dem_manifest_sha256"] = "0" * 64
+    elif failure == "dem_hash":
+        (root / "dem.tif").write_bytes(b'changed')
+    elif failure == "parent_hash":
+        (root / "parent.json").write_text('{"changed":true}')
+    elif failure == "active_parent":
+        project["terrain_feature_manifest_ref"] = "other-parent.json"
+    else:
+        cells = np.full((manifest["height"], manifest["width"]), 1234.5, dtype=np.float32)
+        cells[2, 2] = np.nan
+        Image.fromarray(cells).save(root / "dem.tif")
+        manifest["dem_sha256"] = hashlib.sha256((root / "dem.tif").read_bytes()).hexdigest()
+        (root / "dem-manifest.json").write_text(json.dumps(manifest))
+        project["terrain_workspace_dem_manifest_sha256"] = hashlib.sha256((root / "dem-manifest.json").read_bytes()).hexdigest()
+    (root / "project.json").write_text(json.dumps(project))
+    with pytest.raises(TerrainDemPreparationError):
+        prepare_navigation_terrain_dem_tiles(root, zoom=15, tile_size=16)
+    assert not (root / "outputs/navigation/terrain_rgb/manifest.json").exists()
 
 
 def test_mapbox_terrain_rgb_round_trip_preserves_decimetre_elevation() -> None:
@@ -65,6 +161,12 @@ def test_prepare_navigation_terrain_dem_tiles_writes_only_fully_supported_tiles(
     (project_root / terrain_ref).write_text(
         json.dumps(
             {
+                "visualization_spec": {
+                    "actual_processor": "qgis_processing_grass",
+                    "standard_processor_completed": True,
+                    "fallback_used": False,
+                    "python_dtm_processing_used": False,
+                },
                 "dtm_grid": {
                     "cell_resolution_m": 20,
                     "full_route_corridor_bbox_twd97": {
@@ -125,6 +227,13 @@ def test_prepare_navigation_terrain_dem_tiles_writes_only_fully_supported_tiles(
     assert result["visual_interpolation"] == "bilinear"
     assert result["interpolation_domain"] == "elevation_m_before_terrain_rgb_encoding"
     assert result["adds_source_resolution"] is False
+    assert result["source_analysis_processor"] == "qgis_processing_grass"
+    assert result["source_standard_processor_completed"] is True
+    assert result["source_python_dtm_processing_used"] is False
+    assert result["visualization_packaging_processor"] == (
+        "scout_mapbox_terrain_rgb_encoder.v1"
+    )
+    assert result["visualization_packaging_only"] is True
     assert result["nodata_policy"] == "exclude_incomplete_tiles"
     assert result["tile_block"] == {
         "x_min": x,

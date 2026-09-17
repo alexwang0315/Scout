@@ -1,0 +1,133 @@
+{
+  "schema_version": "scout.max_runtime_preflight.v0",
+  "experiment_id": "SCOUT-AI-EXP-MAX-PREFLIGHT-001",
+  "preflight_id": "9a2479c0-d9c1-42a7-b4d5-1fc9481ebced",
+  "generated_at": "2026-09-01T10:13:15.130772Z",
+  "disposition": "host_incompatible",
+  "runtime_id": "experimental.max.pi-preflight.qwen3-1.7b",
+  "provider": "max",
+  "requested_model_id": "Qwen/Qwen3-1.7B",
+  "accepted_observed_model_ids": [
+    "Qwen/Qwen3-1.7B"
+  ],
+  "transport_scope": "loopback",
+  "endpoint_sha256": "60dfe7857d4b1ad688a1635a94313add9667eef4aec7b4f730e1f81e46ce04a1",
+  "runtime_config_sha256": "6b07704c84c51a3f886a499cfbc8ec1a036e6a513e849c6b2713a89a77c1dc22",
+  "deployment_mode": "local_process",
+  "host": {
+    "os_family": "linux",
+    "machine": "aarch64",
+    "os_version": "6.12.75+rpt-rpi-2712",
+    "python_version": "3.13.5",
+    "memory_bytes": 8454602752,
+    "glibc_version": "2.41",
+    "cpu_model": "Cortex-A76",
+    "cpu_features": [
+      "aes",
+      "asimd",
+      "asimddp",
+      "asimdhp",
+      "asimdrdm",
+      "atomics",
+      "cpuid",
+      "crc32",
+      "dcpop",
+      "evtstrm",
+      "fp",
+      "fphp",
+      "lrcpc",
+      "pmull",
+      "sha1",
+      "sha2"
+    ]
+  },
+  "cli": {
+    "available": false,
+    "version": null,
+    "error_type": null
+  },
+  "endpoint": {
+    "health_status_code": null,
+    "health_path": null,
+    "model_status_code": null,
+    "observed_model_ids": [],
+    "error_type": "ConnectError"
+  },
+  "checks": [
+    {
+      "check_id": "host_compatibility",
+      "status": "failed",
+      "summary": "at least 8 GiB memory must be observable; ARM64 requires verified Neoverse N1 or newer.",
+      "latency_ms": 0,
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "check_id": "cli_availability",
+      "status": "unavailable",
+      "summary": "MAX CLI is not installed on the local host.",
+      "latency_ms": 0,
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "check_id": "endpoint_health",
+      "status": "unavailable",
+      "summary": "No bounded healthy MAX endpoint was observed.",
+      "latency_ms": 22,
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "check_id": "model_inventory",
+      "status": "not_run",
+      "summary": "Model inventory was not trusted because endpoint health did not pass.",
+      "latency_ms": 0,
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "check_id": "provider_identity",
+      "status": "not_applicable",
+      "summary": "Behavioral endpoint probing cannot attest that the server implementation is MAX.",
+      "latency_ms": 0,
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "check_id": "authority_boundary",
+      "status": "passed",
+      "summary": "The runtime remains experimental, candidate-only, and outside safety authority.",
+      "latency_ms": 0,
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    }
+  ],
+  "qualification_inputs": {
+    "case_file": "model_runtime_qualification_case.json",
+    "case_sha256": "0debcfcdc5dad2f6e64e0800375f03de0cbb725e52ef4390d6a8be0b0fd3ed30",
+    "evidence_catalog_file": "model_runtime_qualification_evidence.json",
+    "evidence_catalog_sha256": "846199ce7c8bb6567a0442659eebe39a532050a3d1c06bd2aebe816b07de7e32",
+    "qualification_module_sha256": "5d4bd0137674be3150633129a6ba2e0da6e020e8d8729b066e36c0a03c6cec61",
+    "qualification_launcher_sha256": "95c44b2283ea3ca0a14431668ed2925eef448814f39c33062ea5563702bce6ac",
+    "required_checks": [
+      "configuration",
+      "basic_chat",
+      "typed_output",
+      "tool_calling",
+      "praison_mcp",
+      "authority_boundary"
+    ]
+  },
+  "source_refs": [
+    "https://max.modular.com/packages/",
+    "https://max.modular.com/rest-api/health/",
+    "https://max.modular.com/rest-api/models/"
+  ],
+  "provider_identity_verified": false,
+  "provider_identity_basis": "operator_declared",
+  "model_request_count": 0,
+  "report_hash": "eff55adfa8b5b5ec437f3fd1a15f15f41a5c85b93091557a9e1a55e5044d1186",
+  "candidate_only": true,
+  "runtime_safety_truth": false
+}

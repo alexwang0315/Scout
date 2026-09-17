@@ -325,12 +325,20 @@ Implemented qualification surfaces:
   and proves the machine-only migration contract.
 - The explicit-input witness adds synthetic reference timing plus a separate
   pre-candidate day-end decision contract. Each selected target binds an input
-  ID, actor, decision reference, and SHA-256. Automatically inferred targets
+  ID, actor, decision reference, and SHA-256. Arbitrarily repartitioned targets
   remain proposals and make `review_ready=false`; they cannot be activated.
   The witness then creates an immutable candidate, accepts the exact
   day/uncertainty/handoff set, rebuilds against the observed
   snapshot/evaluator, reviews the exact ordered Permission rule-node set, and
   reaches Dashboard `status=ready`.
+- User clarification on 2026-09-07 distinguishes reconstruction from that
+  arbitrary partition witness. `Generate from Ref. GPX` copies historical daily
+  endpoints, route, stops and CP clocks from the selected reference. These use
+  `selection_origin=reference_evidence`, with no fabricated human actor or new
+  endpoint-input requirement. Save/Accept rebuild the source-bound reconstruction
+  and require exact compact review. `day_end_provenance_bound` accepts either
+  this historical evidence or the existing explicit custom-input contract;
+  missing/stale history remains a typed source failure.
 - Attempt-level write instrumentation wraps every production append/replace
   primitive before execution. The allowlist therefore records transient
   transaction journals even when final-tree diffs would hide them, covers all

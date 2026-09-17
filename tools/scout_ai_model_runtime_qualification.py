@@ -5,7 +5,14 @@ import json
 import sys
 from pathlib import Path
 
-from scout.nextgen.model_qualification import (
+
+ROOT = Path(__file__).resolve().parents[1]
+SRC = ROOT / "src"
+for import_root in (ROOT, SRC):
+    if str(import_root) not in sys.path:
+        sys.path.insert(0, str(import_root))
+
+from scout.nextgen.model_qualification import (  # noqa: E402
     ModelQualificationDisposition,
     build_model_capability_attestation,
     run_openai_compatible_qualification,
@@ -27,6 +34,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--stop-after",
         choices=("basic_chat", "typed_output", "tool_calling"),
     )
+    parser.add_argument(
+        "--continue-after-tool-failure",
+        action="store_true",
+        help=(
+            "Collect Praison MCP synthesis evidence after a failed tool gate; "
+            "the qualification still fails and cannot produce an attestation."
+        ),
+    )
     return parser
 
 
@@ -39,6 +54,7 @@ def main() -> int:
         python_executable=args.python_executable,
         pythonpath=args.pythonpath,
         stop_after=args.stop_after,
+        continue_after_tool_failure=args.continue_after_tool_failure,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     temporary_path = args.output.with_suffix(args.output.suffix + ".tmp")
@@ -58,18 +74,14 @@ def main() -> int:
                 parents=True,
                 exist_ok=True,
             )
-            attestation_temporary_path = (
-                args.capability_attestation_output.with_suffix(
-                    args.capability_attestation_output.suffix + ".tmp"
-                )
+            attestation_temporary_path = args.capability_attestation_output.with_suffix(
+                args.capability_attestation_output.suffix + ".tmp"
             )
             attestation_temporary_path.write_text(
                 attestation.model_dump_json(indent=2) + "\n",
                 encoding="utf-8",
             )
-            attestation_temporary_path.replace(
-                args.capability_attestation_output
-            )
+            attestation_temporary_path.replace(args.capability_attestation_output)
             attestation_output = str(args.capability_attestation_output)
     print(
         json.dumps(

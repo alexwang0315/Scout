@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import concurrent.futures
 import hashlib
 import json
@@ -10,6 +11,7 @@ import sys
 import threading
 import time
 from collections import Counter
+from contextlib import suppress
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
@@ -21,6 +23,7 @@ if str(ROOT) not in sys.path:
 from pydantic_ai import Agent, Tool  # noqa: E402
 from pydantic_ai.messages import ToolCallPart, ToolReturnPart  # noqa: E402
 
+from assistant_models import AssistantSurface, ScoutAssistantQuery  # noqa: E402
 from assistant_pydantic_provider import (  # noqa: E402
     _serialize_pydantic_response_metadata,
     _serialize_pydantic_result_usage,
@@ -32,21 +35,39 @@ from pydantic_ai_runtime_compat import (  # noqa: E402
     pydantic_result_output,
 )
 from scout.agents.model_execution import ScoutModelExecutionAdapter  # noqa: E402
+from scout.agents.model_execution import (  # noqa: E402
+    ModelRunCancellationRequested,
+    ModelRunDeadlineExceeded,
+)
+from scout.nextgen.exp_praison_bridge import (  # noqa: E402
+    ExpPraisonResearchBridge,
+)
+from scout.nextgen.intelligence_mcp import (  # noqa: E402
+    IntelligenceMcpClientConfig,
+    McpIntelligenceGateway,
+)
 from scout.services.mser_pipeline import (  # noqa: E402
     MSERExecutionMode,
     MSERPipeline,
     compact_pipeline_context,
     decision_hint_for_force,
     mser_enforcement_errors,
+    task_contract_for_question,
 )
 from scout.services.mser_runtime_adapter import MSERRuntimeAdapter  # noqa: E402
+from scout.services.mser_response_composer import (  # noqa: E402
+    compose_conservative_gap_response,
+)
+from tools.scout_ai_aihat2_fallback_eval import run_tools  # noqa: E402
 from tools.scout_ai_live_tool_selection_eval import load_env_file  # noqa: E402
 from tools.scout_ai_six_forces_aihat2_eval import (  # noqa: E402
     ARTIFACT_KIND as AIHAT_ARTIFACT_KIND,
     _write_summaries,
     apply_answer_quality_gate,
+    apply_structured_answer_obligation_recovery,
     assess_six_forces_answer_quality,
     build_three_axis_scorecard,
+    enrich_compact_evidence_spatial_bindings,
     execute_run,
     expand_case_runs,
     quality_tool_results_for_gaps,
@@ -61,6 +82,7 @@ DEFAULT_MODEL = "deepseek/deepseek-v4-flash"
 DEFAULT_WORKSPACE = Path("/Users/alexwang0315/workspace/chilai_nanhua_day1_scoutAI")
 DEFAULT_SCENARIO_ARTIFACT = Path("outputs/evals/scout_ai_six_forces_600_scenarios.json")
 OPENROUTER_ENDPOINT = "https://openrouter.ai/api/v1"
+EVIDENCE_FULLTEXT_TOOL_ID = "pydantic_ai.tool.search_scout_evidence_fulltext.v0"
 
 SYSTEM_PROMPT = """You are Scout AI's evidence-grounded answer synthesizer.
 The deterministic Scout runtime exposes complete sanitized evidence cards through
@@ -85,12 +107,70 @@ def build_openrouter_model_adapter(
         transport="pydantic_ai_openrouter",
         invoke=model_call,
         invoke_with_context=contextual_model_call,
+        supports_run_controls=True,
     )
 
 
 def normalize_openrouter_model(model: str) -> str:
     value = model.strip()
     return value if value.startswith("openrouter:") else f"openrouter:{value}"
+
+
+def build_exp_praison_bridge(
+    args: argparse.Namespace,
+    *,
+    workspace: Path,
+) -> ExpPraisonResearchBridge | None:
+    if not bool(getattr(args, "exp_praison_intelligence", False)):
+        return None
+    python = Path(getattr(args, "exp_praison_python", sys.executable)).expanduser()
+    if not python.is_absolute():
+        python = python.resolve()
+    command = [
+        str(python),
+        "-m",
+        "scout.nextgen.intelligence_mcp_server",
+        "--mode",
+        str(getattr(args, "exp_praison_mode", "praison-replay")),
+    ]
+    evidence_catalog = getattr(args, "exp_praison_evidence_catalog", None)
+    if evidence_catalog is not None:
+        catalog_path = Path(evidence_catalog).expanduser()
+        if not catalog_path.is_absolute():
+            catalog_path = workspace / catalog_path
+        command.extend(("--evidence-catalog", str(catalog_path.resolve())))
+    model_runtime_config = getattr(args, "exp_praison_model_runtime_config", None)
+    if model_runtime_config is not None:
+        config_path = Path(model_runtime_config).expanduser()
+        if not config_path.is_absolute():
+            config_path = workspace / config_path
+        command.extend(("--model-runtime-config", str(config_path.resolve())))
+    timeout_seconds = float(getattr(args, "exp_praison_timeout_seconds", 60))
+    startup_timeout_seconds = float(
+        getattr(args, "exp_praison_startup_timeout_seconds", 30)
+    )
+    mcp = McpIntelligenceGateway(
+        IntelligenceMcpClientConfig(
+            command=tuple(command),
+            timeout_seconds=timeout_seconds,
+            startup_timeout_seconds=startup_timeout_seconds,
+            pythonpath=os.pathsep.join((str(ROOT / "src"), str(ROOT))),
+        )
+    )
+    return ExpPraisonResearchBridge(
+        gateway=mcp,
+        allowed_domains=tuple(
+            getattr(args, "exp_praison_allowed_domain", ()) or ()
+        ),
+        blocked_domains=tuple(
+            getattr(args, "exp_praison_blocked_domain", ()) or ()
+        ),
+        max_runtime_seconds=int(timeout_seconds),
+        max_search_results=int(
+            getattr(args, "exp_praison_max_search_results", 6)
+        ),
+        max_fetches=int(getattr(args, "exp_praison_max_fetches", 2)),
+    )
 
 
 def normalize_thinking_setting(value: str) -> bool | str | None:
@@ -105,7 +185,7 @@ def normalize_thinking_setting(value: str) -> bool | str | None:
 def build_openrouter_model_settings(
     *,
     max_tokens: int | None,
-    timeout_seconds: int,
+    timeout_seconds: float | int,
     thinking: bool | str | None,
 ) -> dict[str, object]:
     settings: dict[str, object] = {"temperature": 0}
@@ -116,6 +196,76 @@ def build_openrouter_model_settings(
     if timeout_seconds > 0:
         settings["timeout"] = float(timeout_seconds)
     return settings
+
+
+async def _run_agent_with_controls(
+    agent: Agent,
+    prompt: str,
+    *,
+    model_settings: dict[str, object],
+    run_timeout_seconds: float | None,
+    cancellation_event: threading.Event | None,
+) -> Any:
+    if cancellation_event is not None and cancellation_event.is_set():
+        raise ModelRunCancellationRequested(
+            "model run was cancelled before Pydantic Agent execution"
+        )
+    task = asyncio.create_task(agent.run(prompt, model_settings=model_settings))
+    loop = asyncio.get_running_loop()
+    deadline = (
+        loop.time() + run_timeout_seconds
+        if run_timeout_seconds is not None
+        else None
+    )
+    try:
+        while True:
+            if cancellation_event is not None and cancellation_event.is_set():
+                raise ModelRunCancellationRequested(
+                    "model run cancellation was requested during Pydantic Agent execution"
+                )
+            remaining = None if deadline is None else deadline - loop.time()
+            if remaining is not None and remaining <= 0:
+                raise ModelRunDeadlineExceeded(
+                    "Pydantic Agent tool round exceeded the total run deadline"
+                )
+            wait_seconds = (
+                remaining
+                if cancellation_event is None
+                else min(remaining, 0.05)
+                if remaining is not None
+                else 0.05
+            )
+            done, _ = await asyncio.wait((task,), timeout=wait_seconds)
+            if task in done:
+                return task.result()
+    except (ModelRunCancellationRequested, ModelRunDeadlineExceeded):
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task
+        raise
+
+
+def run_agent_with_controls(
+    agent: Agent,
+    prompt: str,
+    *,
+    model_settings: dict[str, object],
+    run_timeout_seconds: float | None,
+    cancellation_event: threading.Event | None,
+) -> Any:
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(
+            _run_agent_with_controls(
+                agent,
+                prompt,
+                model_settings=model_settings,
+                run_timeout_seconds=run_timeout_seconds,
+                cancellation_event=cancellation_event,
+            )
+        )
+    raise RuntimeError("synchronous OpenRouter caller cannot run in an active event loop")
 
 
 def redact_provider_error(message: str, *, secrets: tuple[str, ...] = ()) -> str:
@@ -184,8 +334,10 @@ class OpenRouterModelCaller:
         endpoint: str,
         model: str,
         prompt: str,
-        timeout_seconds: int,
+        timeout_seconds: float | int,
         structured_json: bool,
+        run_timeout_seconds: float | None = None,
+        cancellation_event: threading.Event | None = None,
     ) -> tuple[str, dict[str, Any]]:
         del endpoint, model, structured_json
         model_settings = build_openrouter_model_settings(
@@ -194,7 +346,13 @@ class OpenRouterModelCaller:
             thinking=self.thinking,
         )
         try:
-            result = self._agent().run_sync(prompt, model_settings=model_settings)
+            result = run_agent_with_controls(
+                self._agent(),
+                prompt,
+                model_settings=model_settings,
+                run_timeout_seconds=run_timeout_seconds,
+                cancellation_event=cancellation_event,
+            )
         except Exception as exc:  # noqa: BLE001 - provider failures belong in eval traces.
             return "", {
                 "provider_error_type": type(exc).__name__,
@@ -213,10 +371,12 @@ class OpenRouterModelCaller:
         endpoint: str,
         model: str,
         prompt: str,
-        timeout_seconds: int,
+        timeout_seconds: float | int,
         structured_json: bool,
         evidence_cards: list[dict[str, Any]],
         selected_tool_ids: list[str],
+        run_timeout_seconds: float | None = None,
+        cancellation_event: threading.Event | None = None,
     ) -> tuple[str, dict[str, Any]]:
         del endpoint, model, structured_json
         tools, tool_name_to_id = build_native_evidence_tools(
@@ -229,9 +389,12 @@ class OpenRouterModelCaller:
             thinking=self.thinking,
         )
         try:
-            result = self._agent(tools=tools).run_sync(
+            result = run_agent_with_controls(
+                self._agent(tools=tools),
                 prompt,
                 model_settings=model_settings,
+                run_timeout_seconds=run_timeout_seconds,
+                cancellation_event=cancellation_event,
             )
         except Exception as exc:  # noqa: BLE001 - provider failures belong in eval traces.
             return "", {
@@ -340,7 +503,11 @@ def native_tool_trace(
     }
 
 
-def _load_existing_results(results_path: Path) -> tuple[list[dict[str, Any]], set[str]]:
+def _load_existing_results(
+    results_path: Path,
+    *,
+    include_failed: bool = False,
+) -> tuple[list[dict[str, Any]], set[str]]:
     if not results_path.exists():
         return [], set()
     latest_by_id: dict[str, dict[str, Any]] = {}
@@ -349,13 +516,16 @@ def _load_existing_results(results_path: Path) -> tuple[list[dict[str, Any]], se
             continue
         item = json.loads(line)
         latest_by_id[str(item["run_case_id"])] = item
-    existing = [
-        item
-        for item in latest_by_id.values()
-        if (item.get("verifier") or {}).get("status") == "pass"
-        and (item.get("context_identity_check") or {}).get("status") == "pass"
-        and item.get("failure_category") != "harness_failure"
-    ]
+    if include_failed:
+        existing = list(latest_by_id.values())
+    else:
+        existing = [
+            item
+            for item in latest_by_id.values()
+            if (item.get("verifier") or {}).get("status") == "pass"
+            and (item.get("context_identity_check") or {}).get("status") == "pass"
+            and item.get("failure_category") != "harness_failure"
+        ]
     completed_ids = {str(item["run_case_id"]) for item in existing}
     return existing, completed_ids
 
@@ -378,10 +548,7 @@ def _write_mser_revalidation_integrity_report(
             run_case_id = str(item["run_case_id"])
             line_count += 1
             latest_by_id[run_case_id] = item
-            if item.get("mser_mode") not in {
-                MSERExecutionMode.SHADOW.value,
-                MSERExecutionMode.ENFORCE.value,
-            }:
+            if not item.get("revalidation"):
                 prior_provider_by_id[run_case_id] = item
 
     preserved_fields = (
@@ -413,6 +580,15 @@ def _write_mser_revalidation_integrity_report(
             bool((item.get("revalidation") or {}).get("model_call_performed"))
             for item in latest_by_id.values()
         ),
+        "deterministic_tool_refresh_count": sum(
+            bool(item.get("deterministic_evidence_refresh"))
+            for item in latest_by_id.values()
+        ),
+        "deterministic_response_composition_count": sum(
+            (item.get("deterministic_response_composition") or {}).get("status")
+            == "composed"
+            for item in latest_by_id.values()
+        ),
         "mser_mode_counts": dict(
             sorted(
                 Counter(
@@ -438,18 +614,125 @@ def _write_mser_revalidation_integrity_report(
     return report
 
 
+def _is_legacy_ambiguous_fulltext_card(card: dict[str, Any]) -> bool:
+    records = card.get("records")
+    return (
+        card.get("tool_id") == EVIDENCE_FULLTEXT_TOOL_ID
+        and str(card.get("status") or "").casefold() == "completed"
+        and not card.get("answerability")
+        and not card.get("negative_search_receipt")
+        and not str(card.get("field_answer") or "").strip()
+        and (not records or records == [{}])
+    )
+
+
+def refresh_legacy_negative_search_evidence(
+    row: dict[str, Any],
+    *,
+    run: dict[str, Any],
+    project_root: Path,
+) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    """Re-run only an ambiguous legacy full-text card; preserve model payloads."""
+
+    tool_results = [dict(item) for item in row.get("tool_evidence_stage") or []]
+    targets = [
+        index
+        for index, item in enumerate(tool_results)
+        if _is_legacy_ambiguous_fulltext_card(item)
+    ]
+    if not targets:
+        return dict(row), None
+
+    query = ScoutAssistantQuery(
+        surface=AssistantSurface.PRETRIP,
+        question=str(run["question_text"]),
+        project_id=str(run["scenario"]["project_id"]),
+    )
+    refreshed, missing_tools, missing_evidence = run_tools(
+        query=query,
+        project_root=project_root,
+        tool_ids=[EVIDENCE_FULLTEXT_TOOL_ID],
+        max_tools=1,
+        synthetic_field_context=False,
+    )
+    if missing_tools or len(refreshed) != 1:
+        return (
+            dict(row),
+            {
+                "schema_version": "scout.ai.deterministic_evidence_refresh.v0",
+                "tool_id": EVIDENCE_FULLTEXT_TOOL_ID,
+                "status": "failed_closed",
+                "reason": "deterministic_fulltext_refresh_unavailable",
+                "missing_tools": missing_tools,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            },
+        )
+
+    refreshed_card = refreshed[0]
+    old_hash = hashlib.sha256(
+        json.dumps(
+            tool_results[targets[0]],
+            ensure_ascii=True,
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
+    new_hash = hashlib.sha256(
+        json.dumps(
+            refreshed_card,
+            ensure_ascii=True,
+            sort_keys=True,
+        ).encode("utf-8")
+    ).hexdigest()
+    for index in targets:
+        tool_results[index] = refreshed_card
+
+    source_refs = list(row.get("source_refs") or [])
+    source_refs.extend(
+        str(item) for item in refreshed_card.get("source_refs") or [] if item
+    )
+    receipt = refreshed_card.get("negative_search_receipt")
+    if isinstance(receipt, dict) and receipt.get("source_ref"):
+        source_refs.append(str(receipt["source_ref"]))
+    record = {
+        "schema_version": "scout.ai.deterministic_evidence_refresh.v0",
+        "tool_id": EVIDENCE_FULLTEXT_TOOL_ID,
+        "status": "refreshed",
+        "reason": "legacy_ambiguous_empty_fulltext_card",
+        "old_card_sha256": old_hash,
+        "new_card_sha256": new_hash,
+        "negative_search_receipt_created": isinstance(receipt, dict),
+        "missing_evidence": list(missing_evidence),
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+    return (
+        {
+            **row,
+            "tool_evidence_stage": tool_results,
+            "source_refs": list(dict.fromkeys(source_refs)),
+            "deterministic_evidence_refresh": record,
+        },
+        record,
+    )
+
+
 def revalidate_existing_result(
     row: dict[str, Any],
     *,
     run: dict[str, Any],
     mser_mode: str = "off",
     mser_runtime_adapter: MSERRuntimeAdapter | None = None,
+    compose_conservative_gap_responses: bool = False,
 ) -> dict[str, Any]:
     """Reapply deterministic gates without making another model request."""
 
     resolved_mser_mode = MSERExecutionMode(mser_mode)
     output = row.get("model_output")
-    compact = row.get("compact_evidence_stage") or {}
+    compact = enrich_compact_evidence_spatial_bindings(
+        compact_evidence=row.get("compact_evidence_stage") or {},
+        tool_results=list(row.get("tool_evidence_stage") or []),
+    )
     missing_tools = list(row.get("missing_tools") or [])
     blocking = list(row.get("blocking_missing_evidence") or [])
     quality_tools = quality_tool_results_for_gaps(
@@ -470,13 +753,11 @@ def revalidate_existing_result(
         available_source_refs=set(str(item) for item in row.get("source_refs") or []),
         compact_evidence=compact,
     )
-    verifier = apply_answer_quality_gate(
-        verifier,
-        quality,
-        evidence_sufficient=not missing_tools and not blocking,
-    )
     mser_trace: dict[str, Any] | None = None
     mser_answer_verification: dict[str, Any] | None = None
+    precomposition_mser_answer_verification: dict[str, Any] | None = None
+    deterministic_response_composition: dict[str, Any] | None = None
+    effective_response: dict[str, Any] | None = None
     mser_error: str | None = None
     final = None
     if resolved_mser_mode != MSERExecutionMode.OFF:
@@ -485,6 +766,18 @@ def revalidate_existing_result(
                 str(run["scenario"]["observed_at"]).replace("Z", "+00:00")
             )
             pipeline = MSERPipeline(runtime_adapter=mser_runtime_adapter)
+            decision_hint = decision_hint_for_force(str(run["force_code"]))
+            task_contract = task_contract_for_question(
+                str(run["question_text"]),
+                decision_hint=decision_hint,
+                answer_mode_hint=str(
+                    (run.get("expected_decision_boundary") or {}).get(
+                        "answer_mode"
+                    )
+                    or ""
+                ),
+                safety_relevant_hint=str(run["force_code"]) == "PER",
+            )
             initial = pipeline.prepare(
                 question=str(run["question_text"]),
                 scenario=run["scenario"],
@@ -493,7 +786,8 @@ def revalidate_existing_result(
                     if isinstance(row.get("total_info_stage"), dict)
                     else None
                 ),
-                decision_hint=decision_hint_for_force(str(run["force_code"])),
+                decision_hint=decision_hint,
+                task_contract=task_contract,
                 now=reference_time,
             )
             final = initial
@@ -505,11 +799,46 @@ def revalidate_existing_result(
                     tool_results=tool_results,
                     now=reference_time,
                 )
-            mser_answer_verification = pipeline.verify_model_output(
+            initial_verification = pipeline.verify_model_output(
                 state=final,
                 output=output,
                 now=reference_time,
-            ).model_dump(mode="json")
+            )
+            mser_answer_verification = initial_verification.model_dump(mode="json")
+            if compose_conservative_gap_responses:
+                composition = compose_conservative_gap_response(
+                    state=final,
+                    output=output,
+                    verification=initial_verification,
+                    base_contract_valid=(
+                        verifier.get("status") == "pass"
+                        and not verifier.get("errors")
+                    ),
+                )
+                deterministic_response_composition = composition.model_dump(
+                    mode="json"
+                )
+                if composition.status == "composed":
+                    precomposition_mser_answer_verification = (
+                        mser_answer_verification
+                    )
+                    effective_response = composition.effective_response.model_dump(
+                        mode="json"
+                    )
+                    verifier = verify_model_output(
+                        run=run,
+                        output=effective_response,
+                        parse_error=None,
+                        available_source_refs=set(
+                            str(item) for item in row.get("source_refs") or []
+                        ),
+                        compact_evidence=compact,
+                    )
+                    mser_answer_verification = pipeline.verify_model_output(
+                        state=final,
+                        output=effective_response,
+                        now=reference_time,
+                    ).model_dump(mode="json")
             mser_trace = {
                 "schema_version": "scout.mser.eval_trace.v0",
                 "mode": resolved_mser_mode.value,
@@ -561,6 +890,18 @@ def revalidate_existing_result(
                 *enforcement_errors,
             ],
         }
+    quality = apply_structured_answer_obligation_recovery(
+        quality,
+        run=run,
+        output=output,
+        compact_evidence=compact,
+        verifier=verifier,
+    )
+    verifier = apply_answer_quality_gate(
+        verifier,
+        quality,
+        evidence_sufficient=not missing_tools and not blocking,
+    )
     identity = row.get("context_identity_check") or {}
     scorecard = build_three_axis_scorecard(
         output=output,
@@ -592,9 +933,15 @@ def revalidate_existing_result(
         failure_category = None
     return {
         **row,
+        "compact_evidence_stage": compact,
         "mser_mode": resolved_mser_mode.value,
         "mser_trace": mser_trace,
         "mser_error": mser_error,
+        "precomposition_mser_answer_verification": (
+            precomposition_mser_answer_verification
+        ),
+        "deterministic_response_composition": deterministic_response_composition,
+        "effective_response": effective_response,
         "mser_answer_verification": mser_answer_verification,
         "verifier": verifier,
         "answer_quality_screen": quality,
@@ -605,8 +952,43 @@ def revalidate_existing_result(
             "model_call_performed": False,
             "preserved_model_output": True,
             "policy": "deterministic_answer_evidence_and_mser_gates",
+            "conservative_response_composition": bool(
+                deterministic_response_composition
+                and deterministic_response_composition.get("status") == "composed"
+            ),
         },
     }
+
+
+def resolve_run_directory(
+    *,
+    workspace: Path,
+    model: str,
+    run_id: str,
+    resume: bool,
+) -> Path:
+    model_slug = re.sub(
+        r"[^a-z0-9]+",
+        "_",
+        model.removeprefix("openrouter:").lower(),
+    ).strip("_")
+    eval_root = workspace / "outputs" / "evals"
+    canonical = eval_root / f"six_forces_600_openrouter_{model_slug}_{run_id}"
+    if not resume or canonical.exists():
+        return canonical
+
+    legacy = eval_root / f"six_forces_600_openrouter_deepseek_v4_flash_{run_id}"
+    manifest_path = legacy / "run_manifest.json"
+    if not manifest_path.exists():
+        return canonical
+    try:
+        legacy_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return canonical
+    legacy_model = normalize_openrouter_model(
+        str(legacy_manifest.get("model") or "")
+    )
+    return legacy if legacy_model == model else canonical
 
 
 def run_eval(args: argparse.Namespace) -> Path:
@@ -626,11 +1008,11 @@ def run_eval(args: argparse.Namespace) -> Path:
 
     model = normalize_openrouter_model(args.model)
     run_id = args.run_id or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    run_dir = (
-        workspace
-        / "outputs"
-        / "evals"
-        / f"six_forces_600_openrouter_deepseek_v4_flash_{run_id}"
+    run_dir = resolve_run_directory(
+        workspace=workspace,
+        model=model,
+        run_id=run_id,
+        resume=bool(args.resume),
     )
     run_dir.mkdir(parents=True, exist_ok=True)
     snapshot_path = run_dir / "scenario_artifact.snapshot.json"
@@ -643,7 +1025,12 @@ def run_eval(args: argparse.Namespace) -> Path:
     if args.resume and manifest_path.exists():
         previous_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     existing, completed_ids = (
-        _load_existing_results(results_path) if args.resume else ([], set())
+        _load_existing_results(
+            results_path,
+            include_failed=bool(args.revalidate_existing),
+        )
+        if args.resume
+        else ([], set())
     )
     run_by_id = {str(item["run_case_id"]): item for item in runs}
     if args.revalidate_existing:
@@ -662,19 +1049,47 @@ def run_eval(args: argparse.Namespace) -> Path:
                 if run is None:
                     updated_existing.append(row)
                     continue
+                working_row = row
+                refresh_record = None
+                if getattr(args, "refresh_negative_search_receipts", False):
+                    working_row, refresh_record = (
+                        refresh_legacy_negative_search_evidence(
+                            row,
+                            run=run,
+                            project_root=workspace,
+                        )
+                    )
                 revalidated = revalidate_existing_result(
-                    row,
+                    working_row,
                     run=run,
                     mser_mode=resolved_mser_mode.value,
                     mser_runtime_adapter=mser_runtime_adapter,
+                    compose_conservative_gap_responses=bool(
+                        getattr(args, "compose_conservative_gap_responses", False)
+                    ),
                 )
+                if refresh_record is not None:
+                    revalidated = {
+                        **revalidated,
+                        "revalidation": {
+                            **dict(revalidated.get("revalidation") or {}),
+                            "deterministic_tool_refresh": refresh_record,
+                        },
+                    }
                 updated_existing.append(revalidated)
                 if any(
                     revalidated.get(field) != row.get(field)
                     for field in (
+                        "compact_evidence_stage",
+                        "tool_evidence_stage",
+                        "source_refs",
+                        "deterministic_evidence_refresh",
                         "mser_mode",
                         "mser_trace",
                         "mser_error",
+                        "precomposition_mser_answer_verification",
+                        "deterministic_response_composition",
+                        "effective_response",
                         "mser_answer_verification",
                         "verifier",
                         "answer_quality_screen",
@@ -711,6 +1126,15 @@ def run_eval(args: argparse.Namespace) -> Path:
             )
         runtime_versions = require_pydantic_ai_232_or_newer()
     current_time = utc_iso()
+    provider_runtime_versions = (
+        previous_manifest.get("runtime_packages")
+        if args.revalidate_existing and previous_manifest.get("runtime_packages")
+        else runtime_versions
+    )
+    provider_model_calls_made = bool(
+        model_calls_required
+        or previous_manifest.get("model_external_api_calls_made", False)
+    )
     manifest = {
         "artifact_kind": ARTIFACT_KIND,
         "artifact_version": ARTIFACT_VERSION,
@@ -732,9 +1156,12 @@ def run_eval(args: argparse.Namespace) -> Path:
         "provider": "openrouter",
         "model_transport": "pydantic_ai_openrouter",
         "endpoint": OPENROUTER_ENDPOINT,
-        "runtime_packages": runtime_versions,
+        "runtime_packages": provider_runtime_versions,
         "max_tool_calls_per_attempt": 10,
         "max_model_requests_per_attempt": args.max_model_requests,
+        "total_run_timeout_seconds": float(
+            getattr(args, "total_run_timeout_seconds", 0) or 0
+        ),
         "guided_retry_enabled": args.guided_retry,
         "workers": args.workers,
         "model_max_tokens": args.model_max_tokens,
@@ -744,21 +1171,55 @@ def run_eval(args: argparse.Namespace) -> Path:
         "native_tool_calls_required": True,
         "mser_mode": getattr(args, "mser_mode", "shadow"),
         "weather_mode": "deterministic_weather_replay",
-        "model_external_api_calls_made": model_calls_required,
+        "model_external_api_calls_made": provider_model_calls_made,
         "preserved_model_outputs_from_prior_provider_run": bool(existing),
         "weather_external_api_calls_made": False,
         "candidate_only": True,
         "runtime_safety_truth": False,
         "deterministic_revalidation_enabled": bool(args.revalidate_existing),
+        "negative_search_receipt_refresh_enabled": bool(
+            getattr(args, "refresh_negative_search_receipts", False)
+        ),
+        "conservative_gap_response_composition_enabled": bool(
+            getattr(args, "compose_conservative_gap_responses", False)
+        ),
+        "experimental_praison_intelligence": {
+            "enabled": bool(getattr(args, "exp_praison_intelligence", False)),
+            "scope": "exp_deterministic_evidence_void_only",
+            "mode": (
+                str(getattr(args, "exp_praison_mode", "praison-replay"))
+                if getattr(args, "exp_praison_intelligence", False)
+                else None
+            ),
+            "transport": "stdio_mcp",
+            "allowed_domains": list(
+                getattr(args, "exp_praison_allowed_domain", ()) or ()
+            ),
+            "max_search_results": int(
+                getattr(args, "exp_praison_max_search_results", 6)
+            ),
+            "max_fetches": int(getattr(args, "exp_praison_max_fetches", 2)),
+            "silent_routing_allowed": False,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        },
         "deterministic_revalidated_row_count": sum(
             bool(item.get("revalidation")) for item in existing
         ),
     }
+    if args.revalidate_existing:
+        manifest["revalidation_runtime_packages"] = runtime_versions
+        manifest["revalidation_external_model_calls_made"] = False
     if args.resume:
         manifest["resumed_at"] = current_time
     manifest_path.write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True),
         encoding="utf-8",
+    )
+
+    experimental_intelligence_bridge = build_exp_praison_bridge(
+        args,
+        workspace=workspace,
     )
 
     thread_local = threading.local()
@@ -784,6 +1245,9 @@ def run_eval(args: argparse.Namespace) -> Path:
                 endpoint=OPENROUTER_ENDPOINT,
                 model=model,
                 timeout_seconds=args.timeout_seconds,
+                total_run_timeout_seconds=(
+                    float(getattr(args, "total_run_timeout_seconds", 0)) or None
+                ),
                 max_model_requests=args.max_model_requests,
                 guided_retry=args.guided_retry,
                 model_adapter=build_openrouter_model_adapter(
@@ -791,6 +1255,10 @@ def run_eval(args: argparse.Namespace) -> Path:
                     contextual_model_call=model_caller().call_with_context,
                 ),
                 mser_mode=getattr(args, "mser_mode", "shadow"),
+                compose_conservative_gap_responses=bool(
+                    getattr(args, "compose_conservative_gap_responses", False)
+                ),
+                experimental_intelligence_bridge=experimental_intelligence_bridge,
             )
         except Exception as exc:  # noqa: BLE001 - continue the matrix with an audit record.
             result = {
@@ -806,6 +1274,10 @@ def run_eval(args: argparse.Namespace) -> Path:
                 "model_profile": "cloud",
                 "provider": "openrouter",
                 "model_transport": "pydantic_ai_openrouter",
+                "total_run_timeout_seconds": (
+                    float(getattr(args, "total_run_timeout_seconds", 0)) or None
+                ),
+                "run_cancellation_receipt": None,
                 "mser_mode": getattr(args, "mser_mode", "shadow"),
                 "mser_trace": None,
                 "mser_error": (
@@ -813,6 +1285,7 @@ def run_eval(args: argparse.Namespace) -> Path:
                     f"{redact_provider_error(str(exc), secrets=(args.api_key,))}"
                 ),
                 "mser_answer_verification": None,
+                "experimental_intelligence": None,
                 "selected_tools": [],
                 "legacy_selected_tools": [],
                 "completed_tools": [],
@@ -864,30 +1337,35 @@ def run_eval(args: argparse.Namespace) -> Path:
         for index, run in enumerate(runs, start=1)
         if run["run_case_id"] not in completed_ids
     ]
-    with results_path.open("a", encoding="utf-8") as result_file:
-        with concurrent.futures.ThreadPoolExecutor(
-            max_workers=args.workers
-        ) as executor:
-            futures = {
-                executor.submit(evaluate_one, index, run): (index, run)
-                for index, run in pending
-            }
-            for future in concurrent.futures.as_completed(futures):
-                index, run = futures[future]
-                _, result = future.result()
-                result_file.write(
-                    json.dumps(result, ensure_ascii=False, sort_keys=True) + "\n"
-                )
-                result_file.flush()
-                all_results.append(result)
-                print(
-                    f"[six-forces-openrouter] {index}/{len(runs)} {run['run_case_id']} "
-                    f"verifier={result['verifier']['status']} "
-                    f"identity={result['context_identity_check']['status']} "
-                    f"requests={result['model_request_count']}",
-                    file=sys.stderr,
-                    flush=True,
-                )
+    try:
+        with results_path.open("a", encoding="utf-8") as result_file:
+            with concurrent.futures.ThreadPoolExecutor(
+                max_workers=args.workers
+            ) as executor:
+                futures = {
+                    executor.submit(evaluate_one, index, run): (index, run)
+                    for index, run in pending
+                }
+                for future in concurrent.futures.as_completed(futures):
+                    index, run = futures[future]
+                    _, result = future.result()
+                    result_file.write(
+                        json.dumps(result, ensure_ascii=False, sort_keys=True) + "\n"
+                    )
+                    result_file.flush()
+                    all_results.append(result)
+                    print(
+                        f"[six-forces-openrouter] {index}/{len(runs)} "
+                        f"{run['run_case_id']} "
+                        f"verifier={result['verifier']['status']} "
+                        f"identity={result['context_identity_check']['status']} "
+                        f"requests={result['model_request_count']}",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+    finally:
+        if experimental_intelligence_bridge is not None:
+            experimental_intelligence_bridge.close()
     _write_summaries(run_dir, manifest, all_results)
     if args.revalidate_existing:
         _write_mser_revalidation_integrity_report(
@@ -909,6 +1387,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--api-key-env-var", default="OPENROUTER_API_KEY")
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--timeout-seconds", type=int, default=180)
+    parser.add_argument(
+        "--total-run-timeout-seconds",
+        type=float,
+        default=0,
+        help=(
+            "Experimental total deadline across one Pydantic tool round and all "
+            "guided retries; 0 keeps the existing unbounded run behavior."
+        ),
+    )
     parser.add_argument("--model-max-tokens", type=int, default=None)
     parser.add_argument(
         "--thinking",
@@ -937,6 +1424,66 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Reapply deterministic gates to resumed rows without model calls.",
     )
+    parser.add_argument(
+        "--refresh-negative-search-receipts",
+        action="store_true",
+        help=(
+            "During deterministic revalidation, re-run only legacy ambiguous "
+            "full-text cards to attach typed negative-search receipts."
+        ),
+    )
+    parser.add_argument(
+        "--compose-conservative-gap-responses",
+        action="store_true",
+        help=(
+            "Experimental: during live execution or deterministic revalidation, "
+            "compose a separate typed DELAY response only for a sole "
+            "non-conservative MSER gap-decision violation."
+        ),
+    )
+    parser.add_argument(
+        "--exp-praison-intelligence",
+        action="store_true",
+        help=(
+            "Experimental: call the MCP-isolated Praison Research specialist only "
+            "for EXP questions with no deterministic field answer."
+        ),
+    )
+    parser.add_argument(
+        "--exp-praison-mode",
+        choices=(
+            "praison-replay",
+            "praison-live-web",
+            "praison-model-replay",
+            "praison-openai-compatible",
+        ),
+        default="praison-replay",
+    )
+    parser.add_argument(
+        "--exp-praison-python",
+        type=Path,
+        default=Path(sys.executable),
+    )
+    parser.add_argument("--exp-praison-evidence-catalog", type=Path)
+    parser.add_argument("--exp-praison-model-runtime-config", type=Path)
+    parser.add_argument(
+        "--exp-praison-allowed-domain",
+        action="append",
+        default=[],
+    )
+    parser.add_argument(
+        "--exp-praison-blocked-domain",
+        action="append",
+        default=[],
+    )
+    parser.add_argument("--exp-praison-timeout-seconds", type=int, default=60)
+    parser.add_argument(
+        "--exp-praison-startup-timeout-seconds",
+        type=int,
+        default=30,
+    )
+    parser.add_argument("--exp-praison-max-search-results", type=int, default=6)
+    parser.add_argument("--exp-praison-max-fetches", type=int, default=2)
     parser.add_argument("--workers", type=int, default=4)
     return parser
 
@@ -952,10 +1499,55 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--workers must be positive")
     if args.max_model_requests < 10:
         parser.error("--max-model-requests must be >= 10")
+    if args.total_run_timeout_seconds < 0:
+        parser.error("--total-run-timeout-seconds must be >= 0")
     if args.model_max_tokens is not None and args.model_max_tokens <= 0:
         parser.error("--model-max-tokens must be positive when provided")
     if args.revalidate_existing and not args.resume:
         parser.error("--revalidate-existing requires --resume")
+    if args.refresh_negative_search_receipts and not args.revalidate_existing:
+        parser.error(
+            "--refresh-negative-search-receipts requires --revalidate-existing"
+        )
+    if args.exp_praison_intelligence and args.revalidate_existing:
+        parser.error(
+            "--exp-praison-intelligence cannot acquire new evidence during "
+            "--revalidate-existing"
+        )
+    if args.exp_praison_intelligence and not args.exp_praison_allowed_domain:
+        parser.error(
+            "--exp-praison-intelligence requires at least one "
+            "--exp-praison-allowed-domain"
+        )
+    if args.exp_praison_timeout_seconds < 1:
+        parser.error("--exp-praison-timeout-seconds must be positive")
+    if args.exp_praison_startup_timeout_seconds < 1:
+        parser.error("--exp-praison-startup-timeout-seconds must be positive")
+    if args.exp_praison_max_search_results < 1:
+        parser.error("--exp-praison-max-search-results must be positive")
+    if not 1 <= args.exp_praison_max_fetches <= 9:
+        parser.error("--exp-praison-max-fetches must be between 1 and 9")
+    if args.exp_praison_max_fetches > args.exp_praison_max_search_results:
+        parser.error(
+            "--exp-praison-max-fetches cannot exceed "
+            "--exp-praison-max-search-results"
+        )
+    if (
+        args.exp_praison_mode == "praison-openai-compatible"
+        and args.exp_praison_intelligence
+        and args.exp_praison_model_runtime_config is None
+    ):
+        parser.error(
+            "--exp-praison-mode praison-openai-compatible requires "
+            "--exp-praison-model-runtime-config"
+        )
+    if (
+        args.compose_conservative_gap_responses
+        and args.mser_mode != MSERExecutionMode.ENFORCE.value
+    ):
+        parser.error(
+            "--compose-conservative-gap-responses requires --mser-mode enforce"
+        )
     os.environ.update(load_env_file(args.env_file))
     api_key = os.environ.get(args.api_key_env_var, "")
     if not api_key and not args.revalidate_existing:

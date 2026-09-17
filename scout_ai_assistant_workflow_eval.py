@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from scout_cwa_environment_tool import CWA_ENVIRONMENT_TOOL_ID
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -1502,7 +1503,9 @@ def _workflow_eval_case_from_question_item(
                 WEATHER_WINDOW_TOOL_ID: ("provider", "ttl_s", "route_weather_package"),
             },
             expected_full_workflow_answerability="partial_evidence_with_missing_context",
-            expected_full_workflow_source_tool_ids=(WEATHER_WINDOW_TOOL_ID,),
+            expected_full_workflow_source_tool_ids=(
+                WEATHER_WINDOW_TOOL_ID, CWA_ENVIRONMENT_TOOL_ID,
+            ),
             expected_full_workflow_missing_fields_by_tool={
                 WEATHER_WINDOW_TOOL_ID: ("provider", "ttl_s", "route_weather_package"),
             },

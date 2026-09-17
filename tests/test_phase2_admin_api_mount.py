@@ -6,6 +6,8 @@ from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
+from fastapi_route_inventory import registered_route_paths
+
 from phase2_brain_store import BrainFileStore
 from phase2_team_replay_store import persist_team_replay_to_brain_store
 
@@ -27,7 +29,7 @@ class Phase2AdminApiMountTests(unittest.TestCase):
             response = client.get("/phase2/admin/preview")
 
             self.assertEqual(response.status_code, 404)
-            routes = {route.path for route in server.app.routes}
+            routes = registered_route_paths(server.app)
             self.assertNotIn("/phase2/admin/preview", routes)
 
     def test_phase2_admin_api_mounts_when_enabled_with_fixture_brain_store_root(self):
@@ -53,7 +55,7 @@ class Phase2AdminApiMountTests(unittest.TestCase):
             payload = response.json()
             self.assertEqual(payload["mission_id"], "mission.ridge_loop_20260513")
             self.assertEqual(payload["remote_status"]["status"], "delayed_member_stale")
-            self.assertIn("/phase2/admin/preview", {route.path for route in server.app.routes})
+            self.assertIn("/phase2/admin/preview", registered_route_paths(server.app))
 
     def test_existing_phase1_admin_and_safety_routes_remain_registered(self):
         with patch.dict(os.environ, {}, clear=False):
@@ -62,7 +64,7 @@ class Phase2AdminApiMountTests(unittest.TestCase):
             server = self._reload_server()
             self.addCleanup(self._reload_server)
 
-            routes = {route.path for route in server.app.routes}
+            routes = registered_route_paths(server.app)
 
             self.assertIn("/admin", routes)
             self.assertIn("/admin/cases/{case_id}", routes)

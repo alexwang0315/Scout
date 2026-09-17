@@ -68,6 +68,18 @@ _SENSITIVE_VALUE_PATTERNS = (
         r"\s*[:=]\s*\S+"
     ),
 )
+_SAFETY_BOUNDARY_DISCLAIMER_PATTERNS = (
+    re.compile(
+        r"\b(?:this\s+is\s+)?not\s+(?:an?\s+)?(?:runtime\s+)?safety\s+"
+        r"(?:decision|determination|conclusion|truth)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"(?:均|這|此)?(?:不是|並非|非|不構成|不作為|不得視為)"
+        r"(?:任何)?(?:即時|運行時|runtime)?(?:的)?安全(?:判定|決策|結論|真值)",
+        re.IGNORECASE,
+    ),
+)
 _PRIVATE_SENSITIVITY_VALUES = frozenset(
     {"confidential", "private", "restricted", "secret"}
 )
@@ -596,6 +608,8 @@ class BoundedAgentRuntime:
             "missing_evidence": list(missing_evidence),
             "answer_contract": (
                 "Answer only from evidence_cards in at most three short sentences. "
+                "Preserve numeric values and units exactly as written in evidence; "
+                "never convert units. "
                 "After every concrete claim, cite exact strings from source_refs as "
                 "[exact/source/ref] or a record as [evidence:exact_evidence_id]. "
                 "Never cite continuation_handle, tool_id, "
@@ -648,6 +662,8 @@ class BoundedAgentRuntime:
                 "If repair_items contains missing_exact_field_fact, restore every "
                 "listed literal and preserve all clauses of each priority-100 "
                 "field_answer. "
+                "Preserve numeric values and units exactly as written in evidence; "
+                "never convert units. "
                 "Every factual sentence must cite an exact listed source_ref using "
                 "[exact/source/ref] or a record using [evidence:exact_evidence_id]. "
                 "Never cite continuation_handle, tool_id, or add a "
@@ -1290,11 +1306,58 @@ def _safe_source_ref(value: str) -> str | None:
 
 
 def _answer_sentences(answer: str) -> list[str]:
-    sentences = re.split(r"(?<=[.!?。！？])(?:\s+|$)|\n+", answer)
+    sentences: list[str] = []
+    start = 0
+    index = 0
+    while index < len(answer):
+        citation = _CITATION_PATTERN.match(answer, index)
+        if citation is not None:
+            index = citation.end()
+            continue
+        if answer[index] == "\n":
+            sentences.append(answer[start:index].strip())
+            index += 1
+            while index < len(answer) and answer[index].isspace():
+                index += 1
+            start = index
+            continue
+        if answer[index] not in ".!?。！？":
+            index += 1
+            continue
+
+        punctuation_index = index
+        cursor = index + 1
+        citation_seen = False
+        while cursor < len(answer):
+            while cursor < len(answer) and answer[cursor].isspace():
+                cursor += 1
+            citation = _CITATION_PATTERN.match(answer, cursor)
+            if citation is None:
+                break
+            citation_seen = True
+            cursor = citation.end()
+        has_boundary = (
+            citation_seen
+            or answer[punctuation_index] in "。！？"
+            or cursor >= len(answer)
+            or any(char.isspace() for char in answer[index + 1 : cursor])
+        )
+        if not has_boundary:
+            index += 1
+            continue
+        end = cursor if citation_seen else punctuation_index + 1
+        sentences.append(answer[start:end].strip())
+        index = end
+        while index < len(answer) and answer[index].isspace():
+            index += 1
+        start = index
+
+    if start < len(answer):
+        sentences.append(answer[start:].strip())
     return [
         sentence.strip()
         for sentence in sentences
-        if _TOKEN_PATTERN.search(_strip_citations(sentence))
+        if sentence and _TOKEN_PATTERN.search(_strip_citations(sentence))
     ]
 
 
@@ -1391,7 +1454,7 @@ def _claim_has_evidence_overlap(
     sentence: str,
     evidence_cards: Sequence[EvidenceCard],
 ) -> bool:
-    claim_text = _strip_citations(sentence)
+    claim_text = _strip_safety_boundary_disclaimers(_strip_citations(sentence))
     claim_tokens = _search_tokens(claim_text)
     informative = {
         token
@@ -1460,7 +1523,7 @@ def _availability_polarity_conflicts(claim: str, evidence: str) -> bool:
 
 
 def _safety_polarity(value: str) -> dict[str, bool]:
-    normalized = value.casefold()
+    normalized = _strip_safety_boundary_disclaimers(value).casefold()
     unsafe_phrases = (
         "not safe",
         "isn't safe",
@@ -1653,7 +1716,7 @@ def _number_is_grounded(number: str, evidence_numbers: set[str]) -> bool:
 
 
 def _safety_concepts(value: str) -> set[str]:
-    normalized = value.casefold()
+    normalized = _strip_safety_boundary_disclaimers(value).casefold()
     tokens = _search_tokens(normalized)
     concepts = {
         concept
@@ -1667,6 +1730,13 @@ def _safety_concepts(value: str) -> set[str]:
         if any(phrase in searchable for phrase in phrases):
             concepts.add(concept)
     return concepts
+
+
+def _strip_safety_boundary_disclaimers(value: str) -> str:
+    normalized = value
+    for pattern in _SAFETY_BOUNDARY_DISCLAIMER_PATTERNS:
+        normalized = pattern.sub(" ", normalized)
+    return normalized
 
 
 def _claim_summary(payload: Mapping[str, Any]) -> str:

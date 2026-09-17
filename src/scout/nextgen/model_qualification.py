@@ -15,7 +15,6 @@ from uuid import UUID, uuid4
 
 from pydantic import Field, model_validator
 
-from scout.agents.pydantic_ai_compat import pydantic_result_output
 from scout.nextgen.intelligence_gateway import (
     CapabilityBroker,
     FORBIDDEN_INTELLIGENCE_CAPABILITIES,
@@ -38,6 +37,7 @@ from scout.nextgen.model_gateway import (
     ScoutModelGateway,
 )
 from scout.nextgen.model_runtime import (
+    Locality,
     ModelCapabilityAttestation,
     ModelRuntimeCapability,
     ModelRuntimeProfile,
@@ -47,6 +47,7 @@ from scout.nextgen.openai_compatible_backend import (
     OpenAICompatiblePydanticBackend,
 )
 from scout.nextgen.praison_service import EvidenceCatalog
+from scout.pydantic_ai_result import pydantic_result_output
 from scout.schemas.base import NonEmptyStr, SchemaModel
 
 MAX_QUALIFICATION_CASE_BYTES = 64 * 1024
@@ -244,13 +245,18 @@ def run_openai_compatible_qualification(
     python_executable: str = sys.executable,
     pythonpath: str | None = None,
     stop_after: Literal["basic_chat", "typed_output", "tool_calling"] | None = None,
+    continue_after_tool_failure: bool = False,
 ) -> ModelRuntimeQualificationReport:
     started_monotonic = time.monotonic()
     rss_before = _peak_rss_bytes()
     config = OpenAICompatibleBackendConfig.from_json_file(runtime_config_path)
     case = ModelRuntimeQualificationCase.from_json_file(case_path)
     catalog = EvidenceCatalog.from_json_file(evidence_catalog_path)
-    request = _build_intelligence_request(case, catalog)
+    request = _build_intelligence_request(
+        case,
+        catalog,
+        allow_cloud_escalation=config.locality is Locality.CLOUD,
+    )
     checks = [_configuration_check(config)]
     execution: IntelligenceGatewayExecution | None = None
 
@@ -349,7 +355,10 @@ def run_openai_compatible_qualification(
     finally:
         tool_backend.close()
     checks.append(tool_check)
-    if tool_check.status is not ModelQualificationStatus.PASSED:
+    if (
+        tool_check.status is not ModelQualificationStatus.PASSED
+        and (not continue_after_tool_failure or stop_after == "tool_calling")
+    ):
         checks.extend(
             _not_run_checks(
                 "tool calling qualification did not pass",
@@ -402,10 +411,18 @@ def run_openai_compatible_qualification(
     checks.append(mcp_check)
     authority_check = _authority_check(execution)
     checks.append(authority_check)
+    failed_check = next(
+        (
+            check
+            for check in checks
+            if check.status is not ModelQualificationStatus.PASSED
+        ),
+        None,
+    )
     disposition = (
         ModelQualificationDisposition.PASSED
-        if all(check.status is ModelQualificationStatus.PASSED for check in checks)
-        else _failure_disposition(mcp_check.status)
+        if failed_check is None
+        else _failure_disposition(failed_check.status)
     )
     return _build_report(
         config=config,
@@ -518,6 +535,14 @@ def _run_basic_chat_probe(
     config: OpenAICompatibleBackendConfig,
     case: ModelRuntimeQualificationCase,
 ) -> ModelQualificationCheck:
+    return backend.run_on_model_loop(lambda: _run_basic_chat_probe_async(backend, config, case))
+
+
+async def _run_basic_chat_probe_async(
+    backend: OpenAICompatiblePydanticBackend,
+    config: OpenAICompatibleBackendConfig,
+    case: ModelRuntimeQualificationCase,
+) -> ModelQualificationCheck:
     from pydantic_ai import Agent, UsageLimits
 
     started_at = datetime.now(UTC)
@@ -535,7 +560,7 @@ def _run_basic_chat_probe(
             ),
             retries=10,
         )
-        result = agent.run_sync(
+        result = await agent.run(
             f"Return exactly this marker: {_BASIC_CHAT_MARKER}",
             model_settings=config.model_settings(
                 timeout_seconds=case.timeout_seconds,
@@ -623,12 +648,26 @@ def _run_typed_output_probe(
         parent_request_id=parent_request_id,
         max_model_requests=case.max_model_requests,
     )
+    profile = config.to_runtime_profile()
+    typed_output_capability = (
+        ModelRuntimeCapability.SMALL_TYPED_OUTPUT
+        if ModelRuntimeCapability.SMALL_TYPED_OUTPUT in profile.capabilities
+        else ModelRuntimeCapability.STRUCTURED_OUTPUT
+    )
     request = ModelInferenceRequest(
         parent_request_id=parent_request_id,
         task="Scout OpenAI-compatible typed output qualification",
         prompt=(
-            "Return the typed marker SCOUT_TYPED_OUTPUT_OK. Keep candidate_only true "
-            "and runtime_safety_truth false."
+            "Return exactly one JSON object: "
+            '{"marker":"SCOUT_TYPED_OUTPUT_OK","candidate_only":true,'
+            '"runtime_safety_truth":false}. '
+            "Do not include Markdown or any text before or after the object."
+        ),
+        required_capabilities=frozenset(
+            {
+                ModelRuntimeCapability.CHAT,
+                typed_output_capability,
+            }
         ),
         allowed_tiers=frozenset({config.tier}),
         prefer_local=config.locality.value != "cloud",
@@ -680,6 +719,14 @@ def _run_typed_output_probe(
 
 
 def _run_tool_calling_probe(
+    backend: OpenAICompatiblePydanticBackend,
+    config: OpenAICompatibleBackendConfig,
+    case: ModelRuntimeQualificationCase,
+) -> ModelQualificationCheck:
+    return backend.run_on_model_loop(lambda: _run_tool_calling_probe_async(backend, config, case))
+
+
+async def _run_tool_calling_probe_async(
     backend: OpenAICompatiblePydanticBackend,
     config: OpenAICompatibleBackendConfig,
     case: ModelRuntimeQualificationCase,
@@ -740,7 +787,7 @@ def _run_tool_calling_probe(
         )
 
     try:
-        result = agent.run_sync(
+        result = await agent.run(
             (
                 "Use the required Scout read tool before returning the fixed "
                 f"marker {TOOL_CALLING_OUTPUT_MARKER}."
@@ -941,6 +988,8 @@ def _run_praison_mcp_probe(
         started_monotonic=started_monotonic,
         config=config,
         request_count=request_count,
+        tool_call_count=len(tools),
+        tools_called=tuple(sorted(tools)),
         input_tokens=_sum_optional(record.input_tokens for record in records),
         output_tokens=_sum_optional(record.output_tokens for record in records),
         observed_model_id=observed_model_id,
@@ -985,6 +1034,8 @@ def _authority_check(
 def _build_intelligence_request(
     case: ModelRuntimeQualificationCase,
     catalog: EvidenceCatalog,
+    *,
+    allow_cloud_escalation: bool,
 ) -> IntelligenceRequest:
     available_refs = {item.source_ref for item in catalog.items}
     missing_refs = set(case.evidence_refs).difference(available_refs)
@@ -1030,6 +1081,8 @@ def _build_intelligence_request(
         evidence_refs=case.evidence_refs,
         max_runtime_seconds=case.max_runtime_seconds,
         max_model_requests=case.max_model_requests,
+        allow_cloud_escalation=allow_cloud_escalation,
+        privacy_sensitive=case.privacy_sensitive,
     )
 
 

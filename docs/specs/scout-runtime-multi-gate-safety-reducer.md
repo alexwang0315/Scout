@@ -8,8 +8,162 @@ emergency approval workflow, and verified delivery evidence are still open
 work. A static Emergency Mobile Approval UI v0 exists for local review and
 artifact validation only. Slice 36 now has a candidate/shadow implementation of
 the OD-001 through OD-018 Daily Emergency Review contract shared with Contextual
-Permissioning. It is not authenticated production approval, runtime safety
-authority, external transport, or verified delivery.
+Permissioning. Slice 37 adds local Emergency Call Out admission and dry-run
+executor receipts. Slice 38 adds a deterministic local Night Runtime Authority
+preflight that consumes only approved Daily Emergency Review receipts and
+revalidates freshness, gate matrix, event sequence, and hashes at use time.
+Slice 39 adds a deterministic production gate residency audit for all six
+primary gates. Slice 40 adds an authenticated production approval preflight that
+records operator identity proof without releasing transport. Slice 41 adds an
+approved transport executor selection preflight that blocks until production
+approval completion and delivery verification exist. Slice 42 adds deterministic
+transport-release, delivery-evidence verification, and workflow-completion
+closure contracts for approved executor receipts. Slice 43 adds a local
+live-evidence contract audit for weather and environment-threat gate inputs.
+Slice 44 adds a local live-observation bridge that turns sealed weather and
+environment-threat provider/field refs into reducer-owned gate events. These
+are not production runtime mutation, external transport, live-provider request
+execution, or Pi/hardware validation. Slice 45 adds a deterministic Phase 1
+runtime promotion readiness gate that checks reducer/adapter/request/audit
+lineage before any future writer invocation. Slice 46 adds a local writer
+invocation guard aㄏnd receipt around the deterministic Phase 1 writer. Slice 47
+adds a local production transport invocation guard and receipt between approved
+executor selection and verified delivery evidence. Slice 48 adds a local live
+provider connector readiness and request contract for weather/environment
+evidence, binding connector health, credential references, route scope, and
+reviewed provider-effect boundaries without calling the provider. Slice 49 adds
+a production transport effect receipt intake contract that converts an external
+executor's sanitized receipt into delivery evidence only after invocation
+lineage and delivered-status proof match. Slice 50 adds a Phase 1 writer
+production deployment readiness audit for runtime host, deployment, effect
+boundary, rollback, and operator-review refs before any production writer
+rollout. Slice 51 adds a production transport executor effect-boundary
+readiness check that binds the authorized invocation to reviewed executor,
+credential-ref, delivery-verifier, and fallback-plan refs before any separate
+executor can perform outbound transport. Slice 52 adds a local live-provider
+response receipt intake that binds an authorized provider request to sanitized
+provider evidence before preparing weather or environment-threat observations.
+Slice 53 adds a local live-provider connector health receipt intake that
+prepares request manifests from reviewed health evidence before provider
+request authorization. Slice 54 adds a local field/device validation receipt
+intake that can enrich live provider response observations with reviewed field
+or device validation refs before residency audits. Slice 55 adds a local
+resident freshness attestation receipt intake that can enrich live provider
+responses with reviewed freshness refs before the observation bridge. Slice 56
+adds a local live-provider executor effect-boundary readiness check before any
+future provider API execution. Slice 57 adds a local live-provider executor
+invocation guard and receipt that binds operator identity and exact
+confirmation to the reviewed executor boundary before any separate provider
+executor can make a live request. Slice 58 adds a local live-provider effect
+receipt intake that converts a sanitized external executor receipt into a
+provider response receipt only when invocation and provider execution lineage
+match. Slice 59 adds a local live connector-health executor invocation guard
+and receipt binding before connector health receipts can be promoted into
+request-ready provider connector manifests. Slice 60 adds a local live
+freshness-attestor invocation guard and receipt binding before freshness
+attestation receipts can enrich provider response observations. Slice 61 adds a
+local live field/device validator invocation guard and receipt binding before
+field/device validation receipts can enrich provider response observations.
+Slice 62 adds an injected live-provider executor harness that can call a
+reviewed provider client after Slice 57 authorization and emit a sanitized
+Slice 58 provider effect receipt; local tests use fake provider clients and do
+not perform a real provider API call. Slice 63 adds an injected live connector
+health executor harness that can call a reviewed health client after Slice 59
+authorization and emit a sanitized connector health receipt for Slice 53 intake;
+local tests use fake health clients and do not qualify a real connector. Slice
+64 adds an injected live freshness-attestor executor harness that calls a
+reviewed freshness client after Slice 60 authorization and emits a sanitized
+freshness attestation receipt for Slice 55 intake. Slice 65 adds an injected
+live field/device validator executor harness that calls a reviewed
+field/device validation client after Slice 61 authorization and emits a
+sanitized validation receipt for Slice 54 intake. Local tests for both new
+harnesses use fake clients and do not qualify real field devices, provider
+APIs, production network paths, Pi hardware, or runtime ingestion. Slice 66
+adds an injected production transport executor harness that can call a reviewed
+transport client after Slice 51 readiness and Slice 47 invocation authorization
+and emit a sanitized transport effect receipt for Slice 49 intake. Local tests
+use a fake transport client and do not send SMS, publish MQTT, transmit LoRa,
+use satellite bridges, invoke radios, or qualify hardware delivery. Slice 67
+adds a production cutover qualification audit that requires reviewed
+qualification receipts for real provider API, connector health, credential
+access, resident freshness, field/device validation, writer deployment,
+transport client, outbound delivery, and Pi/hardware before the system can be
+marked ready for production cutover. Slice 68 adds JSON load/write helpers and
+a local CLI for that cutover audit so a blocked or ready production-readiness
+decision can be persisted as a reusable artifact without performing external
+effects. Slice 69 adds an area-specific qualification claim matrix and evidence
+bundle admission gate so each production area must supply the exact required
+claims before a qualification receipt can be accepted for cutover audit. Slice
+70 wires that bundle admission path into the local CLI so reviewed bundle files
+can produce admission decisions, emitted receipts, and a cutover audit artifact
+in one deterministic no-effect pass. Slice 71 adds freshness and stale-binding
+checks to qualification claims so production evidence must be observed and
+reviewed within its declared age window before it can be admitted. Slice 72
+adds a local source-integrity verifier that binds qualification claim refs and
+hashes to sanitized local evidence package files before those files can support
+production-readiness evidence. Slice 73 wires that source-integrity report into
+bundle admission and the CLI so a qualification receipt cannot become cutover
+eligible unless its claim sources were verified. Slice 74 adds a manifest-driven
+production qualification dossier validator that runs source-integrity,
+admission, receipt, and cutover audit generation across all required areas and
+summarizes missing or failed production qualification evidence in one report.
+Slice 75 adds a qualification threat-coverage audit and wires it into the
+dossier so hallucination, agent runaway, prompt injection, malicious MCP
+results, stale candidates, authority escalation, accidental action, local/cloud
+inconsistency, and the required safety qualification modes must be reviewed
+before the dossier can claim production cutover readiness. Slice 76 adds
+source-integrity verification for the threat coverage evidence itself, so the
+threat and qualification-mode refs must bind to sanitized local artifact files
+before the coverage audit can pass. Slice 77 adds an internal production
+qualification gap plan that turns a dossier report's open area, threat, mode,
+and source-integrity blockers into machine-readable action rows with required
+artifacts and unblock conditions. Slice 78 adds an internal evidence request
+pack that expands those gap rows into reviewer/operator-facing artifact
+requests for area bundles, source packages, threat cases, qualification mode
+cases, threat source packages, and dossier reruns. Slice 79 adds an internal
+evidence request fulfillment intake that checks submitted reviewer/operator
+artifact refs against the request pack and reports fulfilled, missing,
+mismatched, rejected, or source-unverified rows before any dossier rerun. Slice
+80 adds source-integrity verification for those submitted fulfillment artifacts,
+so a fulfillment report cannot become verified unless each submitted ref binds
+to a sanitized local artifact file with the expected hash. Slice 81 adds a
+remediation readiness gate that checks the gap plan, request pack, fulfillment
+report, and source-integrity lineage before declaring the open gaps ready for a
+dossier rerun; it never claims production cutover readiness. Slice 82 adds an
+external qualification action packet that converts ready or blocked remediation
+rows into operator-authorized next actions for provider/API, transport,
+delivery, deployment, and Pi/hardware qualification without executing any of
+those actions. Slice 83 adds an external operator authorization intake that
+checks those action packets against operator identity, reviewed effect-boundary,
+idempotency, and expiry refs, while still producing only a local report with
+`execution_allowed=false`. Slice 84 adds an external executor invocation guard
+that checks a requested handoff against the recorded authorization, executor
+refs, invocation refs, idempotency, and second operator confirmation while still
+performing no executor call. Slice 85 adds an external result receipt intake
+that validates sanitized result receipts returned by a separate executor against
+the invocation handoff, then marks them ready for future evidence fulfillment
+without treating them as cutover proof. Slice 86 adds an external result
+evidence bridge that converts matching, sanitized external result artifacts back
+into an evidence fulfillment manifest, where the existing fulfillment
+source-integrity gate still has to verify local sanitized files before any
+dossier rerun or cutover claim. Slice 87 adds an external result remediation
+closure report that runs the bridged manifest through source-integrity,
+fulfillment, and remediation readiness in one deterministic local pass. Slice
+88 adds a closure-bound local dossier rerun intake that runs the existing
+dossier validator only after Slice 87 is ready, records nested dossier
+readiness for review, and still refuses production cutover or execution. Slice
+89 adds a local production cutover authorization intake that binds a ready
+rerun report to operator identity, authorization, reviewed effect-boundary,
+rollback, change-request, expiry, idempotency, and an explicit review
+confirmation phrase while still refusing execution or production cutover. Slice
+90 adds a local production cutover release handoff guard that turns a recorded
+cutover authorization into a future release-executor handoff envelope while
+still refusing executor invocation, deployment, or runtime mutation. Slice 91
+adds a sanitized cutover release effect receipt intake that records external
+executor result evidence without treating it as cutover authority. Slice 92
+adds a local cutover release closure review that binds the effect receipt to a
+reviewer, rollback plan, change-request, source-integrity, freshness, expiry,
+and explicit closure phrase while still refusing production cutover.
 
 This spec defines the shared contract between Scout runtime safety gates and the
 Safety Arbiter / State Reducer. It keeps every individual gate as an evidence
@@ -70,6 +224,62 @@ must not directly own Phase 1 safety truth.
 | 34. Emergency Mobile Closed-Loop Sandbox v0 | `[x]` | A synthetic phone/wearable scenario exercises the SensorLogger handler and real shadow reducer, then binds an immutable candidate packet to mobile approval, a sandbox-only transport attempt/receipt, and the Dashboard `Living` projection. Phase 1 truth, network transport, hardware, and production delivery remain untouched. |
 | 35. Alpha Mobile/Wearable GPX Simulation Sandbox v0.1 | `[x]` | Replays a canonical historical GPX on a deterministic virtual clock through a real `127.0.0.1` MQTT 3.1.1 broker, phone/wearable SensorLogger messages, scheduled and interactive faults, all six shadow gates, candidate approval, and a correlated simulator receipt. The Admin mobile console exposes the local-only flow without `/safety/*`, Phase 1 mutation, hardware control, external network, or delivery claims. |
 | 36. Safety / Emergency Daily Night-Alternative Human Review | `[x] candidate/shadow` | Extends the Safety / Emergency desktop and mobile surfaces with one shared, fail-closed daily review session. Each mission day groups exact `night_alternative` packets and append-only decisions, closes at the destination-driven day boundary, and returns only current-day receipts to Contextual Permissioning; this slice performs no runtime authorization, Phase 1 mutation, safety API call, transport, or outbound action. |
+| 37. Emergency Call Out executor admission v0 | `[x] local/no-send` | `scout_alert_application_layer.py` now gates Emergency Call Out through `execute_emergency_call_out()` and `run_emergency_call_out_dry_run()`, recording local admission, attempt, and unverified receipt artifacts while blocking production transport and verified-delivery claims. |
+| 38. Deterministic night runtime authority preflight | `[x] local/preflight` | `scout_contextual_permission_workbench.py` now provides `build_night_runtime_authority_request()` and `evaluate_night_runtime_authority()` to consume an `approve_for_runtime_consideration` receipt, revalidate current packet freshness, event sequence, gate matrix, aggregate hash, and envelope hash, and emit only a candidate authority decision without runtime mutation. |
+| 39. Production gate residency audit v0 | `[x] local/audit` | `scout_runtime_safety_reducer.py` now provides `build_production_gate_residency_audit()` plus JSON load/write helpers. The audit classifies all six primary gates as `resident_ready`, `shadow_only`, or `not_resident` by checking resident evidence, freshness, route context, field validation, and clean safety boundaries before a reducer candidate can be treated as production-resident evidence. |
+| 40. Production emergency approval preflight v0 | `[x] local/auth-preflight` | `scout_alert_application_layer.py` now provides `ProductionEmergencyApprovalRequest`, `ProductionEmergencyApprovalDecision`, and `evaluate_production_emergency_approval()` to bind an authenticated operator proof, exact approval phrase, alert packet, rendered message, outbound policy, and call-out admission while leaving production approval grant, transport release, workflow completion, and verified delivery false. |
+| 41. Approved transport executor selection preflight v0 | `[x] local/transport-preflight` | `scout_alert_application_layer.py` now provides `ApprovedTransportExecutor`, `ApprovedTransportExecutorSelectionRequest`, `ApprovedTransportExecutorSelectionDecision`, and `evaluate_approved_transport_executor_selection()` to select an approved executor only after packet lineage, production approval completion, and delivery-verification support all pass; the v0 selector performs no network, hardware, outbound send, or delivery verification. |
+| 42. Production transport release and delivery closure v0 | `[x] local/verification-contract` | `scout_alert_application_layer.py` now provides `ProductionTransportReleaseRequest`, `ProductionTransportReleaseDecision`, `ProductionDeliveryEvidenceReport`, `ProductionDeliveryVerificationDecision`, `ProductionEmergencyWorkflowCompletionDecision`, `evaluate_production_transport_release()`, `verify_production_delivery_evidence()`, and `evaluate_production_emergency_workflow_completion()` to close the approval -> executor -> verified-delivery evidence chain without invoking transport, hardware, `/safety/*`, or runtime mutation. |
+| 43. Weather/environment live-evidence contract audit v0 | `[x] local/audit` | `scout_runtime_safety_reducer.py` now provides `build_production_live_evidence_contract_audit()` plus JSON load/write helpers. The audit covers `weather_gate` and `environment_threat_gate`, requiring live source refs, source-gate hashes, freshness/current-observation proof, route scope, provider or field attestation, and clean effect boundaries before those inputs can be treated as production-ready live evidence. |
+| 44. Weather/environment live-observation bridge v0 | `[x] local/no-provider-call` | `scout_runtime_safety_gate_adapters.py` now provides `ProductionLiveWeatherObservation`, `ProductionLiveEnvironmentThreatObservation`, `build_production_weather_gate_event()`, `build_production_environment_threat_gate_event()`, and `build_runtime_safety_gate_events_from_live_observations()` to convert sealed provider/field/device refs into weather/threat gate events that pass the Slice 43 audit without opening network connections, ingesting runtime data, calling `/safety/*`, or mutating Phase 1. |
+| 45. Phase 1 runtime promotion readiness gate v0 | `[x] local/readiness-gate` | `scout_runtime_phase1_mutation.py` now provides `Phase1RuntimePromotionReadinessGate`, `evaluate_phase1_runtime_promotion_readiness()`, and JSON load/write helpers to verify reducer, adapter, transition request, production gate residency, live-evidence audit, runtime authority ref, and operator review ref before any future deterministic writer invocation. It performs no Phase 1 mutation, `/safety/*` call, outbound send, network connection, or hardware action. |
+| 46. Phase 1 writer invocation guard v0 | `[x] local/writer-guard` | `scout_runtime_phase1_mutation.py` now provides `Phase1RuntimeWriterInvocationRequest`, `Phase1RuntimeWriterInvocationReceipt`, `invoke_phase1_runtime_promotion_writer()`, and JSON receipt load/write helpers. The guard requires a ready Slice 45 gate, matching transition request hash, authenticated operator identity, exact local-writer confirmation phrase, and explicit mode before it can call the local deterministic `Phase1SafetyMutationService`; production runtime writes, `/safety/*`, outbound sends, network connections, and hardware remain false. |
+| 47. Production transport invocation guard v0 | `[x] local/no-send-guard` | `scout_alert_application_layer.py` now provides `ProductionTransportInvocationRequest`, `ProductionTransportInvocationReceipt`, `evaluate_production_transport_invocation_guard()`, and optional delivery-verifier binding to the invocation receipt. The guard requires a released transport, ready executor selection, matching packet/message/executor hashes, authenticated operator identity, exact transport-invocation phrase, and reviewed effect-boundary ref before producing an invocation receipt; it still performs no network connection, external send, hardware action, `/safety/*` call, or verified delivery. |
+| 48. Live provider connector request contract v0 | `[x] local/no-provider-call` | `scout_runtime_safety_gate_adapters.py` now provides `ProductionLiveProviderConnectorManifest`, `ProductionLiveProviderRequestContract`, `ProductionLiveProviderRequestReadinessReceipt`, and `evaluate_production_live_provider_request_contract()` to bind weather/environment connector health, credential refs, route scope, idempotency, and reviewed provider-effect boundary refs before a future provider request. The contract can produce a provider request boundary ref, but performs no live health check, provider API call, runtime ingest, `/safety/*` call, Phase 1 mutation, or credential/raw-location exposure. |
+| 49. Production transport effect receipt intake v0 | `[x] local/effect-receipt-intake` | `scout_alert_application_layer.py` now provides `ProductionTransportEffectReceipt`, `ProductionTransportEffectReceiptIntakeDecision`, `ProductionTransportEffectReceiptIntakeBoundary`, and `build_delivery_evidence_from_transport_effect_receipt()` to verify an external executor's sanitized effect receipt against the authorized transport invocation before preparing a delivery evidence report. The intake performs no network, hardware, external send, `/safety/*` call, Phase 1 mutation, or verified-delivery claim. |
+| 50. Phase 1 writer production deployment readiness v0 | `[x] local/deployment-readiness` | `scout_runtime_phase1_mutation.py` now provides `Phase1RuntimeWriterDeploymentManifest`, `Phase1RuntimeWriterDeploymentReadinessAudit`, `Phase1RuntimeWriterDeploymentBoundary`, `evaluate_phase1_writer_production_deployment_readiness()`, and JSON load/write helpers to require a successful local guarded writer invocation, runtime environment/deployment refs, runtime authority, reviewed writer effect boundary, rollback plan, and operator review before any future production rollout. The audit performs no production write, `/safety/*` call, network action, outbound send, or hardware control. |
+| 51. Production transport executor effect-boundary readiness v0 | `[x] local/no-send-readiness` | `scout_alert_application_layer.py` now provides `ProductionTransportExecutorEffectBoundaryManifest`, `ProductionTransportExecutorEffectBoundaryReadinessDecision`, `ProductionTransportExecutorEffectBoundaryReadinessBoundary`, and `evaluate_production_transport_executor_effect_boundary_readiness()` to require an authorized invocation, exact executor lineage, reviewed executor effect-boundary refs, credential ref, delivery verifier, and fallback plan before a separate executor can be considered ready. The readiness check performs no network, hardware, external send, `/safety/*` call, Phase 1 mutation, or delivery verification. |
+| 52. Live provider response receipt intake v0 | `[x] local/no-provider-ingest` | `scout_runtime_safety_gate_adapters.py` now provides `ProductionLiveProviderResponseReceipt`, `ProductionLiveProviderResponseIntakeDecision`, `ProductionLiveProviderResponseIntakeBoundary`, and `build_live_observation_from_provider_response_receipt()` to bind an authorized provider request to sanitized provider response evidence before preparing weather or environment-threat live observations. The intake performs no connector health check, provider API call, runtime ingest, `/safety/*` call, Phase 1 mutation, or credential/raw-location exposure. |
+| 53. Live provider connector health receipt intake v0 | `[x] local/health-intake` | `scout_runtime_safety_gate_adapters.py` now provides `ProductionLiveConnectorHealthReceipt`, `ProductionLiveConnectorHealthIntakeDecision`, `ProductionLiveConnectorHealthIntakeBoundary`, and `build_live_provider_connector_manifest_from_health_receipt()` to convert sanitized live connector health evidence into a request-ready connector manifest. The intake performs no connector health check, provider API call, runtime ingest, `/safety/*` call, Phase 1 mutation, or credential/raw-location exposure. |
+| 54. Live field/device validation receipt intake v0 | `[x] local/field-device-intake` | `scout_runtime_safety_gate_adapters.py` now provides `ProductionLiveFieldDeviceValidationReceipt`, `ProductionLiveFieldDeviceValidationDecision`, `ProductionLiveFieldDeviceValidationBoundary`, and `build_live_field_device_validation_intake()` to bind reviewed field/device validation evidence to provider response receipts and enrich prepared weather/threat observations. The intake performs no field validation action, provider API call, runtime ingest, `/safety/*` call, Phase 1 mutation, or credential/raw-location exposure. |
+| 55. Live freshness attestation receipt intake v0 | `[x] local/freshness-intake` | `scout_runtime_safety_gate_adapters.py` now provides `ProductionLiveFreshnessAttestationReceipt`, `ProductionLiveFreshnessAttestationDecision`, `ProductionLiveFreshnessAttestationBoundary`, and `build_live_freshness_attestation_intake()` to bind reviewed freshness evidence to provider response receipts and enrich prepared weather/threat observations. The intake performs no freshness check action, provider API call, runtime ingest, `/safety/*` call, Phase 1 mutation, or credential/raw-location exposure. |
+| 56. Live provider executor effect-boundary readiness v0 | `[x] local/provider-executor-readiness` | `scout_runtime_safety_gate_adapters.py` now provides `ProductionLiveProviderExecutorEffectBoundaryManifest`, `ProductionLiveProviderExecutorReadinessDecision`, `ProductionLiveProviderExecutorReadinessBoundary`, and `evaluate_live_provider_executor_effect_boundary_readiness()` to require an authorized provider request, exact request lineage, reviewed provider effect boundary, credential ref, response verifier, freshness attestor, field/device validator, and fallback plan before a separate provider executor can be considered ready. The readiness check performs no connector health check, provider API call, runtime ingest, `/safety/*` call, Phase 1 mutation, or credential/raw-location exposure. |
+| 57. Live provider executor invocation guard v0 | `[x] local/provider-invocation-guard` | `scout_runtime_safety_gate_adapters.py` now provides `ProductionLiveProviderExecutorInvocationRequest`, `ProductionLiveProviderExecutorInvocationReceipt`, `ProductionLiveProviderExecutorInvocationBoundary`, and `evaluate_live_provider_executor_invocation_guard()` to bind a ready provider executor boundary to operator identity, exact confirmation, idempotency, provider request refs, and future provider execution refs. The guard can authorize a deterministic handoff receipt for a separate executor and can be bound by response intake, but performs no connector health check, provider API call, runtime ingest, `/safety/*` call, Phase 1 mutation, or credential/raw-location exposure. |
+| 58. Live provider effect receipt intake v0 | `[x] local/provider-effect-intake` | `scout_runtime_safety_gate_adapters.py` now provides `ProductionLiveProviderEffectReceipt`, `ProductionLiveProviderEffectReceiptIntakeDecision`, `ProductionLiveProviderEffectReceiptIntakeBoundary`, and `build_provider_response_receipt_from_provider_effect_receipt()` to convert a sanitized external provider executor receipt into a `ProductionLiveProviderResponseReceipt` only after invocation, request, connector, source, route, provider execution, freshness, and evidence lineage match. The intake performs no connector health check, provider API call, runtime ingest, `/safety/*` call, Phase 1 mutation, or credential/raw-location/raw-provider exposure. |
+| 59. Live connector health executor invocation guard v0 | `[x] local/health-invocation-guard` | `scout_runtime_safety_gate_adapters.py` now provides `ProductionLiveConnectorHealthExecutorInvocationRequest`, `ProductionLiveConnectorHealthExecutorInvocationReceipt`, `ProductionLiveConnectorHealthExecutorInvocationBoundary`, and `evaluate_live_connector_health_executor_invocation_guard()` to bind connector health checks to reviewed effect-boundary refs, credential refs, fallback plans, operator identity, exact confirmation, and deterministic health execution refs. `build_live_provider_connector_manifest_from_health_receipt()` can now optionally require this invocation receipt before preparing a provider connector manifest. The guard and intake perform no live health check, provider API call, runtime ingest, `/safety/*` call, Phase 1 mutation, or credential/raw-location/raw-provider exposure. |
+| 60. Live freshness attestor invocation guard v0 | `[x] local/freshness-invocation-guard` | `scout_runtime_safety_gate_adapters.py` now provides `ProductionLiveFreshnessAttestorInvocationRequest`, `ProductionLiveFreshnessAttestorInvocationReceipt`, `ProductionLiveFreshnessAttestorInvocationBoundary`, and `evaluate_live_freshness_attestor_invocation_guard()` to bind freshness checks to provider evidence refs, reviewed freshness-attestor effect-boundary refs, fallback plans, operator identity, exact confirmation, and deterministic freshness execution refs. `build_live_freshness_attestation_intake()` can now optionally require this invocation receipt before preparing freshness evidence for provider response observations. The guard and intake perform no freshness check action, provider API call, runtime ingest, `/safety/*` call, Phase 1 mutation, or credential/raw-location/raw-provider exposure. |
+| 61. Live field/device validator invocation guard v0 | `[x] local/field-device-invocation-guard` | `scout_runtime_safety_gate_adapters.py` now provides `ProductionLiveFieldDeviceValidatorInvocationRequest`, `ProductionLiveFieldDeviceValidatorInvocationReceipt`, `ProductionLiveFieldDeviceValidatorInvocationBoundary`, and `evaluate_live_field_device_validator_invocation_guard()` to bind field/device validation checks to current observation or device evidence refs, reviewed validator effect-boundary refs, fallback plans, operator identity, exact confirmation, and deterministic validation execution refs. `build_live_field_device_validation_intake()` can now optionally require this invocation receipt before preparing field/device evidence for provider response observations. The guard and intake perform no field validation action, provider API call, runtime ingest, `/safety/*` call, Phase 1 mutation, or credential/raw-location/raw-provider exposure. |
+| 62. Live provider executor harness v0 | `[x] local/injected-client-harness` | `scout_runtime_safety_gate_adapters.py` now provides `ProductionLiveProviderExecutionRequest`, `ProductionLiveProviderExecutionResult`, `ProductionLiveProviderExecutionDecision`, `ProductionLiveProviderExecutionBoundary`, and `execute_live_provider_request_with_client()` to call only an injected reviewed provider client after provider executor readiness and invocation authorization match. It emits a sanitized `ProductionLiveProviderEffectReceipt` that can feed Slice 58 effect intake. The local verifier tests use fake provider clients and perform no credential-value exposure, raw payload exposure, runtime ingest, `/safety/*` call, Phase 1 mutation, outbound transport, hardware control, or real provider API qualification. |
+| 63. Live connector health executor harness v0 | `[x] local/injected-health-client-harness` | `scout_runtime_safety_gate_adapters.py` now provides `ProductionLiveConnectorHealthExecutionRequest`, `ProductionLiveConnectorHealthExecutionResult`, `ProductionLiveConnectorHealthExecutionDecision`, `ProductionLiveConnectorHealthExecutionBoundary`, and `execute_live_connector_health_check_with_client()` to call only an injected reviewed connector health client after connector-health invocation authorization. It emits a sanitized `ProductionLiveConnectorHealthReceipt` that can feed Slice 53 health intake. The local verifier tests use fake health clients and perform no credential-value exposure, raw payload exposure, runtime ingest, `/safety/*` call, Phase 1 mutation, outbound transport, hardware control, or real connector/API qualification. |
+| 64. Live freshness attestor executor harness v0 | `[x] local/injected-freshness-client-harness` | `scout_runtime_safety_gate_adapters.py` now provides `ProductionLiveFreshnessAttestationExecutionRequest`, `ProductionLiveFreshnessAttestationExecutionResult`, `ProductionLiveFreshnessAttestationExecutionDecision`, `ProductionLiveFreshnessAttestationExecutionBoundary`, and `execute_live_freshness_attestation_check_with_client()` to call only an injected reviewed freshness client after freshness-attestor invocation authorization. It emits a sanitized `ProductionLiveFreshnessAttestationReceipt` that can feed Slice 55 freshness intake. The local verifier tests use fake freshness clients and perform no credential-value exposure, raw payload exposure, provider API call, runtime ingest, `/safety/*` call, Phase 1 mutation, outbound transport, hardware control, or real freshness service qualification. |
+| 65. Live field/device validator executor harness v0 | `[x] local/injected-field-device-client-harness` | `scout_runtime_safety_gate_adapters.py` now provides `ProductionLiveFieldDeviceValidationExecutionRequest`, `ProductionLiveFieldDeviceValidationExecutionResult`, `ProductionLiveFieldDeviceValidationExecutionDecision`, `ProductionLiveFieldDeviceValidationExecutionBoundary`, and `execute_live_field_device_validation_with_client()` to call only an injected reviewed field/device validation client after field/device validator invocation authorization. It emits a sanitized `ProductionLiveFieldDeviceValidationReceipt` that can feed Slice 54 field/device validation intake. The local verifier tests use fake field/device clients and perform no credential-value exposure, raw payload exposure, provider API call, runtime ingest, `/safety/*` call, Phase 1 mutation, outbound transport, hardware control, or real field-device/Pi qualification. |
+| 66. Production transport executor harness v0 | `[x] local/injected-transport-client-harness` | `scout_alert_application_layer.py` now provides `ProductionTransportExecutorExecutionRequest`, `ProductionTransportExecutorExecutionResult`, `ProductionTransportExecutorExecutionDecision`, `ProductionTransportExecutorExecutionBoundary`, and `execute_production_transport_with_client()` to call only an injected reviewed transport client after transport executor readiness and invocation authorization match. It emits a sanitized `ProductionTransportEffectReceipt` that can feed Slice 49 effect intake and Slice 42 delivery verification. The local verifier tests use fake transport clients and perform no credential-value exposure, raw transport payload exposure, `/safety/*` call, Phase 1 mutation, runtime safety truth mutation, real SMS/MQTT/LoRa/satellite send, radio use, or Pi/hardware qualification. |
+| 67. Production cutover qualification audit v0 | `[x] local/qualification-audit` | `scout_runtime_safety_production_qualification.py` now provides `ProductionSafetyQualificationReceipt`, `ProductionSafetyCutoverReadinessAudit`, `ProductionSafetyQualificationBoundary`, and `evaluate_production_safety_cutover_readiness()` to require reviewed qualification receipts for all remaining production areas before any cutover-ready claim. The audit performs no provider call, credential load, writer deployment, outbound send, delivery verification, runtime safety truth mutation, production database mutation, or hardware control. |
+| 68. Production cutover qualification artifact writer v0 | `[x] local/audit-artifact-cli` | `scout_runtime_safety_production_qualification.py` now provides `load_production_safety_qualification_receipt()`, `load_production_safety_qualification_receipts()`, `write_production_safety_cutover_readiness_audit()`, `load_production_safety_cutover_readiness_audit()`, `run_production_safety_cutover_readiness_audit()`, and a local CLI that can read reviewed qualification receipt JSON files and write a blocked or ready cutover audit artifact. The writer/CLI performs no provider call, credential load, Safety API call, Phase 1 mutation, runtime safety truth mutation, outbound send, production database mutation, or hardware control. |
+| 69. Area-specific qualification bundle admission v0 | `[x] local/receipt-admission` | `scout_runtime_safety_production_qualification.py` now provides `ProductionSafetyQualificationEvidenceClaim`, `ProductionSafetyQualificationEvidenceBundle`, `ProductionSafetyQualificationReceiptAdmissionDecision`, `PRODUCTION_SAFETY_QUALIFICATION_REQUIRED_CLAIMS`, `evaluate_production_safety_qualification_bundle()`, and JSON load/write helpers for admission decisions. The admission gate requires common and area-specific accepted evidence claims before emitting a qualified receipt; incomplete or rejected claims become blocked receipts for the cutover audit. Admission performs no provider call, credential load, Safety API call, Phase 1 mutation, runtime safety truth mutation, outbound send, production database mutation, or hardware control. |
+| 70. Qualification bundle admission CLI bridge v0 | `[x] local/bundle-cli-bridge` | `scout_runtime_safety_production_qualification.py` now provides `write_production_safety_qualification_receipt()` and `run_production_safety_qualification_bundle_admission()`, and extends the local CLI with `--bundle`, `--admission-output-dir`, and `--receipt-output-dir`. The CLI can turn reviewed bundle files into admission decisions and receipt artifacts, then combine those receipts with explicit `--receipt` files for the persisted cutover audit. It still performs no provider call, credential load, Safety API call, Phase 1 mutation, runtime safety truth mutation, outbound send, production database mutation, or hardware control. |
+| 71. Qualification claim freshness/stale-binding gate v0 | `[x] local/claim-freshness` | `ProductionSafetyQualificationEvidenceClaim` now requires `evidence_observed_at`, `reviewer_observed_at`, and `max_age_seconds`, while `ProductionSafetyQualificationEvidenceBundle` requires `reference_time`. Bundle admission rejects future-dated evidence/reviews and blocks accepted-but-stale required claims as `blocked_stale_required_claims`, emitting blocked receipts for cutover audit. The freshness gate is deterministic and performs no provider call, credential load, Safety API call, Phase 1 mutation, runtime safety truth mutation, outbound send, production database mutation, or hardware control. |
+| 72. Qualification evidence source-integrity verifier v0 | `[x] local/source-integrity` | `scout_runtime_safety_production_qualification.py` now provides `ProductionSafetyQualificationEvidenceArtifact`, `ProductionSafetyQualificationEvidencePackage`, `ProductionSafetyQualificationSourceIntegrityRow`, `ProductionSafetyQualificationSourceIntegrityReport`, `verify_production_safety_qualification_source_integrity()`, and JSON load/write helpers for source-integrity reports. The verifier checks that every bundle claim evidence ref is represented by a sanitized local artifact whose file hash matches the claim hash, and blocks missing files, hash mismatches, unsafe credential-like paths, and sensitive/runtime material flags. It performs no provider call, credential load, Safety API call, Phase 1 mutation, runtime safety truth mutation, outbound send, production database mutation, or hardware control. |
+| 73. Source-integrity-bound qualification admission v0 | `[x] local/source-bound-admission` | `evaluate_production_safety_qualification_bundle()` now requires a verified source-integrity report before accepted claims can produce a qualified receipt. Missing reports, failed source-integrity rows, mismatched report area, or mismatched bundle refs block admission as `blocked_source_integrity_unverified`. `run_production_safety_qualification_bundle_admission()` and the CLI now accept `--source-package`, `--source-root`, and `--source-integrity-output-dir` to verify package files, persist source-integrity reports, emit receipts, and write the cutover audit in one deterministic no-effect pass. |
+| 74. Production qualification dossier validator v0 | `[x] local/dossier-validator` | `scout_runtime_safety_production_qualification.py` now provides `ProductionSafetyQualificationDossierManifest`, `ProductionSafetyQualificationDossierEntry`, `ProductionSafetyQualificationDossierRow`, `ProductionSafetyQualificationDossierReport`, `run_production_safety_qualification_dossier()`, and JSON load/write helpers for dossier reports. The CLI now accepts `--dossier` and `--dossier-output` to run all required area bundle/package pairs, persist optional source-integrity/admission/receipt artifacts, write the cutover audit, and summarize missing or failed areas. The validator performs no provider call, credential load, Safety API call, Phase 1 mutation, runtime safety truth mutation, outbound send, production database mutation, or hardware control. |
+| 75. Qualification threat-coverage audit v0 | `[x] local/threat-coverage` | `scout_runtime_safety_production_qualification.py` now provides `ProductionSafetyQualificationThreatCoverageManifest`, `ProductionSafetyQualificationThreatCoverageCase`, `ProductionSafetyQualificationModeCoverageCase`, `ProductionSafetyQualificationThreatCoverageAudit`, `evaluate_production_safety_qualification_threat_coverage()`, and JSON load/write helpers for threat coverage audits. The dossier manifest now accepts `threat_coverage_path`, the dossier report embeds the threat coverage audit, and `--threat-coverage` / `--threat-coverage-output` can run it from the CLI. Dossier readiness now requires complete reviewed threat and safety qualification mode coverage in addition to all area bundle/package receipts. This audit performs no provider call, credential load, Safety API call, Phase 1 mutation, runtime safety truth mutation, outbound send, production database mutation, or hardware control. |
+| 76. Threat-coverage evidence source-integrity v0 | `[x] local/threat-source-integrity` | `scout_runtime_safety_production_qualification.py` now provides `ProductionSafetyQualificationThreatCoverageEvidencePackage`, `ProductionSafetyQualificationThreatCoverageSourceIntegrityRow`, `ProductionSafetyQualificationThreatCoverageSourceIntegrityReport`, `verify_production_safety_qualification_threat_coverage_source_integrity()`, and JSON load/write helpers. `evaluate_production_safety_qualification_threat_coverage()` now requires verified source refs before reporting `qualification_threat_coverage_passed`; otherwise it blocks as `blocked_source_integrity_unverified`. The dossier manifest accepts `threat_coverage_source_package_path`, and the CLI accepts `--threat-coverage-source-package`. This verifier performs no provider call, credential load, Safety API call, Phase 1 mutation, runtime safety truth mutation, outbound send, production database mutation, or hardware control. |
+| 77. Production qualification gap plan v0 | `[x] local/gap-plan` | `scout_runtime_safety_production_qualification.py` now provides `ProductionSafetyQualificationGapRow`, `ProductionSafetyQualificationGapPlan`, `evaluate_production_safety_qualification_gap_plan()`, and JSON load/write helpers. The CLI accepts `--gap-plan` and `--gap-plan-output` to turn a dossier report into internal action rows for area qualification, threat coverage, qualification mode coverage, threat source-integrity, or dossier reruns. The plan performs no diagnostic probe, provider call, credential load, Safety API call, Phase 1 mutation, runtime safety truth mutation, outbound send, production database mutation, or hardware control. |
+| 78. Production qualification evidence request pack v0 | `[x] local/evidence-request-pack` | `scout_runtime_safety_production_qualification.py` now provides `ProductionSafetyQualificationEvidenceRequestRow`, `ProductionSafetyQualificationEvidenceRequestPack`, `build_production_safety_qualification_evidence_request_pack()`, and JSON load/write helpers. The CLI accepts `--evidence-request-pack` and `--evidence-request-output` to convert a gap plan into internal evidence requests that list required claim ids, threat ids, qualification modes, artifact kinds, human-review requirements, source-integrity requirements, and unblock conditions. The pack performs no evidence collection, diagnostic probe, provider call, credential load, Safety API call, Phase 1 mutation, runtime safety truth mutation, outbound send, production database mutation, or hardware control. |
+| 79. Production qualification evidence request fulfillment intake v0 | `[x] local/evidence-fulfillment-intake` | `scout_runtime_safety_production_qualification.py` now provides `ProductionSafetyQualificationEvidenceSubmission`, `ProductionSafetyQualificationEvidenceFulfillmentManifest`, `ProductionSafetyQualificationEvidenceFulfillmentReport`, `evaluate_production_safety_qualification_evidence_fulfillment()`, and JSON load/write helpers. The CLI accepts `--evidence-fulfillment-request-pack`, `--evidence-fulfillment-manifest`, and `--evidence-fulfillment-output` to check returned reviewer/operator artifact refs against a request pack. The intake performs no evidence collection, file inspection, diagnostic probe, provider call, credential load, Safety API call, Phase 1 mutation, runtime safety truth mutation, outbound send, production database mutation, or hardware control. |
+| 80. Production qualification fulfillment source-integrity v0 | `[x] local/fulfillment-source-integrity` | `scout_runtime_safety_production_qualification.py` now provides `ProductionSafetyQualificationEvidenceFulfillmentArtifact`, `ProductionSafetyQualificationEvidenceFulfillmentSourcePackage`, `ProductionSafetyQualificationEvidenceFulfillmentSourceIntegrityRow`, `ProductionSafetyQualificationEvidenceFulfillmentSourceIntegrityReport`, and `verify_production_safety_qualification_evidence_fulfillment_source_integrity()`. The CLI accepts `--evidence-fulfillment-source-package` and `--evidence-fulfillment-source-integrity-output`, and fulfillment reports now require source-integrity-verified submitted artifact refs before reporting `evidence_request_fulfillment_verified`. The verifier performs no evidence collection, provider call, credential load, Safety API call, Phase 1 mutation, runtime safety truth mutation, outbound send, production database mutation, delivery verification, or hardware control. |
+| 81. Production qualification remediation readiness v0 | `[x] local/remediation-readiness` | `scout_runtime_safety_production_qualification.py` now provides `ProductionSafetyQualificationRemediationRow`, `ProductionSafetyQualificationRemediationReadinessReport`, `evaluate_production_safety_qualification_remediation_readiness()`, and JSON load/write helpers. The CLI accepts `--remediation-gap-plan`, `--remediation-request-pack`, `--remediation-fulfillment-report`, and `--remediation-output` to verify that every open gap's expected request rows are fulfilled and source-verified before a dossier rerun. The report can say `ready_for_dossier_rerun` or `no_remediation_required`, but it always keeps `ready_for_production_cutover=false` and performs no evidence application, dossier execution, provider call, Safety API call, runtime mutation, transport, delivery verification, database mutation, or hardware control. |
+| 82. Production qualification external action packet v0 | `[x] local/external-action-packet` | `scout_runtime_safety_production_qualification.py` now provides `ProductionSafetyQualificationExternalActionRow`, `ProductionSafetyQualificationExternalActionPacket`, `build_production_safety_qualification_external_action_packet()`, and JSON load/write helpers. The CLI accepts `--external-action-remediation` and `--external-action-output` to turn remediation readiness rows into explicit operator-authorized next-action packets for real provider/API, connector health, credential, freshness, field-device, Phase 1 deployment, transport, delivery, Pi/hardware, threat coverage, and dossier rerun qualification. The packet can say `external_actions_ready_for_operator_authorization`, but it always keeps `execution_allowed=false` and `ready_for_production_cutover=false`; it performs no provider call, credential load, Safety API call, runtime mutation, transport, delivery verification, database mutation, dossier rerun, or hardware control. |
+| 83. Production qualification external authorization intake v0 | `[x] local/external-authorization-intake` | `scout_runtime_safety_production_qualification.py` now provides `ProductionSafetyQualificationExternalAuthorizationSubmission`, `ProductionSafetyQualificationExternalAuthorizationManifest`, `ProductionSafetyQualificationExternalAuthorizationRow`, `ProductionSafetyQualificationExternalAuthorizationReport`, `evaluate_production_safety_qualification_external_authorization()`, and JSON load/write helpers. The CLI accepts `--external-authorization-packet`, `--external-authorization-manifest`, and `--external-authorization-output` to verify that each external action packet row has matching operator identity, authorization, reviewed effect-boundary, idempotency, and expiry refs. The report can say `external_authorization_recorded`, but it always keeps `execution_allowed=false` and `ready_for_production_cutover=false`; it performs no provider call, credential load, Safety API call, runtime mutation, transport, delivery verification, database mutation, dossier rerun, or hardware control. |
+| 84. Production qualification external invocation guard v0 | `[x] local/external-invocation-guard` | `scout_runtime_safety_production_qualification.py` now provides `ProductionSafetyQualificationExternalInvocationRequest`, `ProductionSafetyQualificationExternalInvocationManifest`, `ProductionSafetyQualificationExternalInvocationRow`, `ProductionSafetyQualificationExternalInvocationReport`, `evaluate_production_safety_qualification_external_invocation()`, and JSON load/write helpers. The CLI accepts `--external-invocation-authorization-report`, `--external-invocation-manifest`, and `--external-invocation-output` to verify that each separate-executor handoff request matches the recorded authorization, operator identity, reviewed effect-boundary, external executor refs, executor invocation refs, authorization idempotency, invocation idempotency, and second operator confirmation. The report can say `external_invocation_handoff_recorded`, but it always keeps `execution_allowed=false` and `ready_for_production_cutover=false`; it performs no provider call, credential load, Safety API call, runtime mutation, transport, delivery verification, database mutation, dossier rerun, executor invocation, or hardware control. |
+| 85. Production qualification external result receipt intake v0 | `[x] local/external-result-intake` | `scout_runtime_safety_production_qualification.py` now provides `ProductionSafetyQualificationExternalResultReceipt`, `ProductionSafetyQualificationExternalResultManifest`, `ProductionSafetyQualificationExternalResultRow`, `ProductionSafetyQualificationExternalResultReport`, `evaluate_production_safety_qualification_external_result_intake()`, and JSON load/write helpers. The CLI accepts `--external-result-invocation-report`, `--external-result-manifest`, and `--external-result-output` to validate sanitized result receipts returned by a separate executor against the recorded executor handoff refs, result refs, reviewer refs, source-integrity evidence, and max-age metadata. The report can say `external_results_recorded` and `ready_for_evidence_fulfillment=true`, but it always keeps `execution_allowed=false` and `ready_for_production_cutover=false`; it performs no provider call, credential load, Safety API call, runtime mutation, transport, delivery verification, database mutation, dossier rerun, executor invocation, or hardware control. |
+| 86. Production qualification external result evidence bridge v0 | `[x] local/external-result-bridge` | `scout_runtime_safety_production_qualification.py` now provides `ProductionSafetyQualificationExternalResultArtifact`, `ProductionSafetyQualificationExternalResultEvidenceBridgeRow`, `ProductionSafetyQualificationExternalResultEvidenceBridgeReport`, `build_production_safety_qualification_evidence_fulfillment_manifest_from_external_results()`, and JSON load/write helpers. The CLI accepts `--external-result-bridge-request-pack`, `--external-result-bridge-report`, `--external-result-bridge-output`, and `--external-result-bridge-fulfillment-output` to turn source-ready external result artifacts back into an evidence fulfillment manifest. The bridge can say `external_result_bridge_ready` and `ready_for_fulfillment_intake=true`, but it still routes through the Slice 79/80 fulfillment and source-integrity gates and always keeps `execution_allowed=false` and `ready_for_production_cutover=false`; it performs no provider call, credential load, Safety API call, runtime mutation, transport, delivery verification, database mutation, dossier rerun, executor invocation, or hardware control. |
+| 87. Production qualification external result remediation closure v0 | `[x] local/external-result-closure` | `scout_runtime_safety_production_qualification.py` now provides `ProductionSafetyQualificationExternalResultRemediationClosureReport`, `evaluate_production_safety_qualification_external_result_remediation_closure()`, and JSON load/write helpers. The CLI accepts `--external-result-closure-gap-plan`, `--external-result-closure-request-pack`, `--external-result-closure-bridge-report`, `--external-result-closure-source-package`, and `--external-result-closure-output` to run a ready external result bridge through fulfillment source-integrity, fulfillment intake, and remediation readiness. The closure can say `external_result_remediation_ready_for_dossier_rerun`, but it always keeps `execution_allowed=false` and `ready_for_production_cutover=false`; it performs no provider call, credential load, Safety API call, runtime mutation, transport, delivery verification, database mutation, dossier rerun, executor invocation, or hardware control. |
+| 88. Production qualification dossier rerun intake v0 | `[x] local/dossier-rerun-intake` | `scout_runtime_safety_production_qualification.py` now provides `ProductionSafetyQualificationDossierRerunReport`, `evaluate_production_safety_qualification_dossier_rerun_intake()`, and JSON load/write helpers. The CLI accepts `--dossier-rerun-closure-report`, `--dossier-rerun-manifest`, and `--dossier-rerun-output` to run the existing local dossier validator only after Slice 87 has closed as `external_result_remediation_ready_for_dossier_rerun`. The report can say `dossier_rerun_ready_for_cutover_review` and expose `dossier_report_ready_for_cutover=true`, but it always keeps `execution_allowed=false` and top-level `ready_for_production_cutover=false`; it performs no provider call, credential load, Safety API call, runtime mutation, transport, delivery verification, database mutation, executor invocation, production deployment, or hardware control. |
+| 89. Production qualification cutover authorization intake v0 | `[x] local/cutover-authorization-intake` | `scout_runtime_safety_production_qualification.py` now provides `ProductionSafetyQualificationCutoverAuthorizationManifest`, `ProductionSafetyQualificationCutoverAuthorizationReport`, `evaluate_production_safety_qualification_cutover_authorization()`, and JSON load/write helpers. The CLI accepts `--cutover-authorization-dossier-rerun-report`, `--cutover-authorization-manifest`, and `--cutover-authorization-output` to verify a ready Slice 88 rerun against operator identity, authorization, reviewed effect-boundary, rollback plan, production change request, idempotency, expiry, and exact `AUTHORIZE SCOUT PRODUCTION CUTOVER REVIEW` phrase. The report can say `cutover_authorization_recorded` and `ready_for_human_cutover_review=true`, but it always keeps `execution_allowed=false` and `ready_for_production_cutover=false`; it performs no provider call, credential load, Safety API call, runtime mutation, transport, delivery verification, database mutation, executor invocation, production deployment, or hardware control. |
+| 90. Production qualification cutover release handoff guard v0 | `[x] local/cutover-release-handoff` | `scout_runtime_safety_production_qualification.py` now provides `ProductionSafetyQualificationCutoverReleaseHandoffRequest`, `ProductionSafetyQualificationCutoverReleaseHandoffManifest`, `ProductionSafetyQualificationCutoverReleaseHandoffReport`, `evaluate_production_safety_qualification_cutover_release_handoff()`, and JSON load/write helpers. The CLI accepts `--cutover-release-authorization-report`, `--cutover-release-handoff-manifest`, and `--cutover-release-handoff-output` to verify that a future release-executor handoff request is bound to the recorded Slice 89 authorization, release executor refs, release invocation refs, idempotency, request time, and exact `REQUEST SCOUT PRODUCTION CUTOVER HANDOFF` phrase. The report can say `cutover_release_handoff_recorded` and `ready_for_release_executor_handoff=true`, but it always keeps `execution_allowed=false` and `ready_for_production_cutover=false`; it performs no provider call, credential load, Safety API call, runtime mutation, transport, delivery verification, database mutation, executor invocation, production deployment, or hardware control. |
+| 91. Production qualification cutover release effect receipt intake v0 | `[x] local/cutover-release-effect-intake` | `scout_runtime_safety_production_qualification.py` now provides `ProductionSafetyQualificationCutoverReleaseEffectReceipt`, `ProductionSafetyQualificationCutoverReleaseEffectManifest`, `ProductionSafetyQualificationCutoverReleaseEffectReport`, `evaluate_production_safety_qualification_cutover_release_effect_intake()`, and JSON load/write helpers. The CLI accepts `--cutover-release-effect-handoff-report`, `--cutover-release-effect-manifest`, and `--cutover-release-effect-output` to validate a sanitized external release-executor receipt against the Slice 90 handoff report, release executor refs, release invocation refs, handoff idempotency, release execution/result refs, reviewer refs, source-integrity evidence, max-age metadata, and observation time. The report can say `cutover_release_effect_receipt_recorded` and `ready_for_release_closure=true`, but it always keeps `execution_allowed=false` and `ready_for_production_cutover=false`; it performs no provider call, credential load, Safety API call, runtime mutation, transport, delivery verification, database mutation, executor invocation, production deployment, or hardware control. |
+| 92. Production qualification cutover release closure review v0 | `[x] local/cutover-release-closure` | `scout_runtime_safety_production_qualification.py` now provides `ProductionSafetyQualificationCutoverReleaseClosureReview`, `ProductionSafetyQualificationCutoverReleaseClosureManifest`, `ProductionSafetyQualificationCutoverReleaseClosureReport`, `evaluate_production_safety_qualification_cutover_release_closure()`, and JSON load/write helpers. The CLI accepts `--cutover-release-closure-effect-report`, `--cutover-release-closure-manifest`, and `--cutover-release-closure-output` to validate a reviewer closure envelope against the Slice 91 effect report, release executor refs, release invocation refs, handoff idempotency, release execution/result refs, release-effect reviewer refs, rollback plan, production change request, source-integrity evidence, max-age metadata, expiry, and exact `CLOSE SCOUT PRODUCTION CUTOVER RELEASE REVIEW` phrase. The report can say `cutover_release_closure_recorded` and `ready_for_production_cutover_review=true`, but it always keeps `execution_allowed=false` and `ready_for_production_cutover=false`; it performs no provider call, credential load, Safety API call, runtime mutation, transport, delivery verification, database mutation, executor invocation, production deployment, or hardware control. |
 
 ```mermaid
 flowchart LR
@@ -80,6 +290,8 @@ flowchart LR
   Weather["[x] weather_gate adapter"]
   Darkness["[x] darkness_gate adapter"]
   Threat["[x] environment_threat_gate adapter"]
+  LiveProviderContract["[x] Live provider request contract<br/>health + secret refs + route scope"]
+  WeatherLiveBridge["[x] Weather/threat live-observation bridge<br/>sealed refs -> gate events"]
   RouteFeed["[x] Local route-progress feed<br/>planned timeline + daylight"]
   Batch["[x] scout_runtime_safety_gate_event_batch"]
   Shadow["[x] Local shadow runtime replay<br/>macOS fixture pipeline"]
@@ -91,6 +303,9 @@ flowchart LR
   Phase1["[x] Controlled Phase 1 adapter result"]
   Template["[x] Physiologic-first safety template<br/>slice 17 contract"]
   Request["[x] Phase1TransitionRequest<br/>slice 18"]
+  PromotionReadiness["[x] Phase 1 promotion readiness<br/>lineage + residency + authority refs"]
+  WriterGuard["[x] Phase 1 writer invocation guard<br/>dry-run or local state-machine receipt"]
+  WriterDeploymentReadiness["[x] Phase 1 writer deployment readiness<br/>runtime + rollback + operator review"]
   Mapping["[x] Reducer -> SafetyEvent mapping<br/>slice 19"]
   MutationService["[x] Phase1SafetyMutationService<br/>slice 20"]
   Audit["[x] Mutation audit store<br/>slice 21"]
@@ -106,11 +321,12 @@ flowchart LR
   AlertProjection["[x] Alert timeline projection<br/>slice 32"]
   EmergencyMobile["[x] Emergency approval UI v0<br/>mobile + desktop static surface"]
   ApprovalArtifact["[x] Local approval artifact preview<br/>sent=false"]
+  CallOutAdmission["[x] Emergency Call Out admission v0<br/>local dry-run + unverified receipt"]
   OfflineMap["[x] Emergency offline map preview<br/>cached layer toggles"]
   NightEligibility["[x] Contextual Permission night eligibility<br/>candidate + deep link"]
   EmergencyHumanReview["[x] Daily Emergency Review<br/>desktop + mobile · slice 36"]
   NightReviewReceipt["[x] Append-only night review receipt<br/>runtime authorization=false"]
-  NightRuntimeAuthority["[ ] Future deterministic night authority<br/>freshness + hash revalidation"]
+  NightRuntimeAuthority["[x] Deterministic night authority preflight<br/>freshness + hash revalidation"]
   DayEndTarget["[x] Destination-driven day close<br/>planned arrival receipt"]
   EmergencyBivy["[x] Emergency Bivy Review<br/>establishment receipt"]
   IndividualActivity["[x] Individual activity transitions<br/>on-device semantic receipts"]
@@ -121,9 +337,56 @@ flowchart LR
   DepartureChecklist["[x] Leader Departure Checklist<br/>6 rows + Scout suggestion"]
   FieldConflict["[x] Field conflict receipt<br/>leader report + resolution"]
   MissionDayStart["[x] MissionDayStartReceipt<br/>fresh departure review"]
-  ProductionApproval["[ ] Production approval workflow<br/>authenticated + delivery evidence"]
-  ProductionPaths["[ ] Production gate residency<br/>all six gates"]
-  HardwareTransport["[ ] Approved transport executors<br/>SMS / LoRa / MQTT publish"]
+  ProductionApproval["[x] Production approval preflight<br/>authenticated pending delivery"]
+  ProductionPaths["[x] Production gate residency audit<br/>all six gates classified"]
+  LiveEvidence["[x] Weather/threat live-evidence audit<br/>freshness + provider/field attestation"]
+  LiveConnectorHealthInvocation["[x] Live connector health invocation guard<br/>operator confirmation + health execution ref"]
+  LiveConnectorHealthExecution["[x] Live connector health executor harness<br/>injected health client -> sanitized health receipt"]
+  LiveConnectorHealth["[x] Live connector health receipt intake<br/>health evidence -> connector manifest"]
+  LiveProviderExecutor["[x] Live provider executor readiness<br/>effect boundary + verifier + fallback refs"]
+  LiveProviderInvocation["[x] Live provider invocation guard<br/>operator confirmation + execution ref"]
+  LiveProviderExecution["[x] Live provider executor harness<br/>injected reviewed client -> sanitized effect receipt"]
+  LiveProviderEffectReceipt["[x] Live provider effect receipt intake<br/>external executor evidence -> response receipt"]
+  LiveProviderResponse["[x] Live provider response receipt intake<br/>sanitized response -> live observation"]
+  FieldDeviceValidatorInvocation["[x] Field/device validator invocation guard<br/>operator confirmation + validation execution ref"]
+  FieldDeviceValidatorExecution["[x] Field/device validator executor harness<br/>injected client -> validation receipt"]
+  FieldDeviceValidation["[x] Field/device validation receipt intake<br/>field/device refs -> observation evidence"]
+  FreshnessAttestorInvocation["[x] Freshness attestor invocation guard<br/>operator confirmation + freshness execution ref"]
+  FreshnessAttestorExecution["[x] Freshness attestor executor harness<br/>injected client -> freshness receipt"]
+  FreshnessAttestation["[x] Freshness attestation receipt intake<br/>freshness refs -> observation evidence"]
+  HardwareTransport["[x] Transport executor selection preflight<br/>SMS / LoRa / MQTT blocked until approved publish"]
+  TransportRelease["[x] Production transport release<br/>approval completion contract"]
+  TransportInvocation["[x] Production transport invocation guard<br/>authorized receipt without send"]
+  TransportExecutorBoundary["[x] Transport executor effect-boundary readiness<br/>executor + verifier + fallback refs"]
+  TransportExecution["[x] Production transport executor harness<br/>injected transport client -> effect receipt"]
+  TransportEffectReceipt["[x] Transport effect receipt intake<br/>executor evidence -> delivery report"]
+  DeliveryVerification["[x] Verified delivery evidence<br/>executor receipt verification"]
+  WorkflowClosure["[x] Emergency workflow closure<br/>verified-delivery completion"]
+  QualificationAdmission["[x] Area-specific qualification bundle admission<br/>required claims -> qualified/blocked receipts"]
+  QualificationFreshness["[x] Qualification claim freshness gate<br/>observed/reviewed/max-age -> stale blocked"]
+  QualificationSourceIntegrity["[x] Qualification source integrity verifier<br/>claim refs + hashes -> sanitized local files"]
+  QualificationAdmissionCli["[x] Qualification bundle admission CLI<br/>bundle files -> decisions + receipts + cutover audit"]
+  QualificationDossier["[x] Production qualification dossier validator<br/>all area bundles/packages -> dossier report"]
+  QualificationThreatCoverage["[x] Qualification threat coverage audit<br/>threat model + safety modes required"]
+  QualificationThreatSourceIntegrity["[x] Threat coverage source integrity<br/>coverage refs + hashes -> sanitized files"]
+  QualificationGapPlan["[x] Production qualification gap plan<br/>dossier blockers -> action rows"]
+  QualificationEvidenceRequests["[x] Evidence request pack<br/>gap rows -> artifact requests"]
+  QualificationEvidenceFulfillment["[x] Evidence request fulfillment intake<br/>submitted refs -> fulfilled/blocked report"]
+  QualificationEvidenceFulfillmentSourceIntegrity["[x] Fulfillment source integrity<br/>submitted refs + hashes -> sanitized files"]
+  QualificationRemediationReadiness["[x] Remediation readiness<br/>fulfilled gaps -> dossier rerun gate"]
+  QualificationExternalActions["[x] External action packet<br/>operator authorization only · execution=false"]
+  QualificationExternalAuthorization["[x] External authorization intake<br/>operator + boundary refs · execution=false"]
+  QualificationExternalInvocation["[x] External invocation guard<br/>executor handoff refs · execution=false"]
+  QualificationExternalResults["[x] External result intake<br/>sanitized receipts -> evidence fulfillment input"]
+  QualificationExternalResultBridge["[x] External result evidence bridge<br/>result artifacts -> fulfillment manifest"]
+  QualificationExternalResultClosure["[x] External result remediation closure<br/>source integrity + fulfillment -> remediation"]
+  QualificationDossierRerun["[x] Dossier rerun intake<br/>ready closure -> local dossier validator"]
+  QualificationCutoverAuthorization["[x] Cutover authorization intake<br/>operator + rollback + change refs"]
+  QualificationCutoverReleaseHandoff["[x] Cutover release handoff<br/>authorization -> executor handoff envelope"]
+  QualificationCutoverReleaseEffect["[x] Cutover release effect intake<br/>sanitized executor receipt -> release closure"]
+  QualificationCutoverReleaseClosure["[x] Cutover release closure review<br/>effect receipt -> reviewed closure"]
+  CutoverQualification["[x] Production cutover qualification audit<br/>all real qualification receipts required"]
+  CutoverArtifact["[x] Production cutover audit artifact writer<br/>JSON receipt inputs -> cutover audit file"]
 
   Physio --> Event
   RouteFeed --> Pace
@@ -134,6 +397,14 @@ flowchart LR
   Weather --> Event
   Darkness --> Event
   Threat --> Event
+  LiveConnectorHealthInvocation --> LiveConnectorHealthExecution --> LiveConnectorHealth --> LiveProviderContract
+  LiveProviderContract --> LiveProviderExecutor
+  LiveProviderExecutor --> LiveProviderInvocation --> LiveProviderExecution --> LiveProviderEffectReceipt --> LiveProviderResponse
+  FreshnessAttestorInvocation --> FreshnessAttestorExecution --> FreshnessAttestation --> LiveProviderResponse
+  FieldDeviceValidatorInvocation --> FieldDeviceValidatorExecution --> FieldDeviceValidation --> LiveProviderResponse
+  LiveProviderResponse --> WeatherLiveBridge
+  WeatherLiveBridge --> Weather
+  WeatherLiveBridge --> Threat
   Event --> Batch --> Shadow --> Reducer --> StateStore
   StateStore --> StoreProjection
   StoreProjection --> DebugUI
@@ -141,7 +412,7 @@ flowchart LR
   Reducer --> DebugUI
   Reducer --> Phase1 --> StateStore
   Phase1 --> DebugUI
-  Phase1 --> Template --> Request --> Mapping --> MutationService --> Phase1Truth
+  Phase1 --> Template --> Request --> Mapping --> PromotionReadiness --> WriterGuard --> WriterDeploymentReadiness --> MutationService --> Phase1Truth
   MutationService --> Audit --> MutationProjection
   Shadow --> ShadowMutation --> Request
   Phase1Truth --> AlertPacket
@@ -154,6 +425,7 @@ flowchart LR
   OutboundPolicy --> DryRun --> AlertProjection
   AlertProjection --> EmergencyMobile
   EmergencyMobile --> ApprovalArtifact
+  ApprovalArtifact --> CallOutAdmission
   EmergencyMobile --> OfflineMap
   NightEligibility --> EmergencyHumanReview
   EmergencyMobile --> EmergencyHumanReview
@@ -171,10 +443,28 @@ flowchart LR
   CommWindow --> DepartureChecklist
   DepartureChecklist -.-> FieldConflict
   FieldConflict -.-> DepartureChecklist
-  ApprovalArtifact --> ProductionApproval
+  CallOutAdmission --> ProductionApproval
+  Weather --> LiveEvidence
+  Threat --> LiveEvidence
+  LiveEvidence --> ProductionPaths
   ProductionPaths --> Reducer
   ProductionApproval --> HardwareTransport
+  CallOutAdmission --> HardwareTransport
   OutboundPolicy --> HardwareTransport
+  ProductionApproval --> TransportRelease
+  ProductionPaths --> TransportRelease
+  TransportRelease --> HardwareTransport
+  HardwareTransport --> TransportInvocation
+  TransportInvocation --> TransportExecutorBoundary
+  TransportExecutorBoundary --> TransportExecution --> TransportEffectReceipt --> DeliveryVerification --> WorkflowClosure
+  LiveEvidence --> CutoverQualification
+  WriterDeploymentReadiness --> CutoverQualification
+  WorkflowClosure --> CutoverQualification
+  QualificationAdmission --> QualificationFreshness --> QualificationSourceIntegrity --> QualificationAdmissionCli --> QualificationDossier --> QualificationThreatSourceIntegrity --> QualificationThreatCoverage --> CutoverQualification
+  QualificationDossier --> QualificationGapPlan
+  CutoverQualification --> QualificationGapPlan
+  QualificationGapPlan --> QualificationEvidenceRequests --> QualificationEvidenceFulfillment --> QualificationEvidenceFulfillmentSourceIntegrity --> QualificationRemediationReadiness --> QualificationExternalActions --> QualificationExternalAuthorization --> QualificationExternalInvocation --> QualificationExternalResults --> QualificationExternalResultBridge --> QualificationExternalResultClosure --> QualificationDossierRerun --> QualificationCutoverAuthorization --> QualificationCutoverReleaseHandoff --> QualificationCutoverReleaseEffect --> QualificationCutoverReleaseClosure
+  CutoverQualification --> CutoverArtifact
 ```
 
 ## Slice 7 Contract
@@ -645,26 +935,2878 @@ It writes local evidence files:
 contract. The event can carry map refs from the Phase 1 mutation result and can
 show that packet drafts exist, but it must always mark `sent=false`.
 
+## Slice 37 Emergency Call Out Executor Admission v0
+
+`scout_alert_application_layer.py` now implements the first deterministic
+Emergency Call Out admission layer above the alert application packet. It is a
+local executor and evidence contract, not a production transport bridge.
+
+Implemented artifacts:
+
+- `scout_emergency_call_out_admission`;
+- `scout_emergency_call_out_attempt`;
+- `scout_emergency_call_out_delivery_receipt`;
+- `scout_emergency_call_out_executor_result`.
+
+Implemented functions:
+
+- `execute_emergency_call_out()`;
+- `run_emergency_call_out_dry_run()`;
+- `emergency_call_out_projection_events()`.
+
+The admission contract binds the exact alert packet id/hash, outbound-policy
+hash, rendered-message hash, requested transport profile, idempotency key,
+operator identity reference, authentication flag, and explicit confirmation.
+It admits only:
+
+- `local_dry_run`, which records a local attempt and a `dry_run_recorded`
+  receipt with `sent=false`; or
+- `manual_handoff`, only when the outbound policy already allows manual copy and
+  the call-out request carries an authenticated operator identity plus the exact
+  approval phrase.
+
+`production_transport` is always blocked in v0 with
+`blocked_production_executor_unavailable`. Every local attempt and receipt keeps
+`network_connection_attempted=false`, `production_transport_invoked=false`,
+`hardware_transport_invoked=false`, `external_send_performed=false`,
+`production_delivery_verified=false`, and `sent=false`. A manual handoff receipt
+is explicitly `manual_handoff_unverified`; it is not verified rescue delivery.
+
+## Slice 38 Deterministic Night Runtime Authority Preflight
+
+`scout_contextual_permission_workbench.py` now implements the first local
+preflight for the future deterministic night authority. It consumes the
+append-only Safety / Emergency review receipt and produces a candidate decision
+artifact only; it does not append a canonical event, mutate Phase 1, call a
+safety API, send a message, or control hardware.
+
+Implemented artifacts:
+
+- `scout_night_runtime_authority_decision`;
+- `NightRuntimeAuthorityRequest`;
+- `NightRuntimeAuthorityDecision`.
+
+Implemented functions:
+
+- `build_night_runtime_authority_request()`;
+- `evaluate_night_runtime_authority()`.
+
+The preflight admits only a current
+`approve_for_runtime_consideration` receipt. At use time it rebuilds the current
+night-alternative packet and revalidates:
+
+- receipt id/hash, packet binding, review generation, and reviewed envelope;
+- current event sequence with no later daily-review invalidation;
+- current freshness state and expiry;
+- every required hard night gate;
+- current packet hash, aggregate hash, and gate-matrix hash.
+
+The successful status is only `eligible_for_runtime_consideration`. It is not
+permission to travel at night and not production runtime authorization. Every
+decision keeps `candidate_only=true`, `runtime_safety_truth=false`,
+`runtime_authorization_performed=false`, `phase1_l0_l4_state_mutated=false`,
+`safety_api_called=false`, `outbound_action_performed=false`,
+`external_send_performed=false`, and `hardware_control_performed=false`.
+
+## Slice 39 Production Gate Residency Audit v0
+
+`scout_runtime_safety_reducer.py` now exposes a deterministic local audit for
+the production-residency state of all six primary gates. It does not make a
+gate production-ready by itself; it prevents ambiguous or fixture-only gate
+events from being mistaken for production-resident evidence.
+
+Implemented artifacts:
+
+- `scout_production_gate_residency_audit`;
+- `ProductionGateResidencyRow`;
+- `ProductionGateResidencyAudit`.
+
+Implemented functions:
+
+- `build_production_gate_residency_audit()`;
+- `write_production_gate_residency_audit()`;
+- `load_production_gate_residency_audit()`.
+
+The audit covers exactly:
+
+```text
+pace_gate
+delay_gate
+physiologic_gate
+weather_gate
+darkness_gate
+environment_threat_gate
+```
+
+Each row is `resident_ready` only when a current event has production-like
+resident evidence, a source gate hash, no missing or stale freshness signals, a
+route-context join, field/operator/device validation evidence, and clean safety
+boundary flags. Fixture, test, and `inline:` sources are classified as
+`shadow_only` when an event exists, or `not_resident` when the gate is missing.
+
+The audit's `all_resident` status only allows a reducer candidate to be treated
+as production-resident evidence. It still keeps `production_runtime_enabled=false`,
+`candidate_only=true`, `runtime_safety_truth=false`,
+`phase1_l0_l4_state_mutated=false`, `safety_api_called=false`,
+`outbound_alert_sent=false`, and `hardware_control_performed=false`.
+
+## Slice 40 Production Emergency Approval Preflight v0
+
+`scout_alert_application_layer.py` now implements a local authenticated approval
+preflight for the future production Emergency Call Out workflow. It is an
+operator-proof and continuity contract, not a production approval grant and not
+a transport release.
+
+Implemented artifacts:
+
+- `scout_production_emergency_approval_decision`;
+- `ProductionEmergencyApprovalRequest`;
+- `ProductionEmergencyApprovalDecision`.
+
+Implemented function:
+
+- `evaluate_production_emergency_approval()`.
+
+The preflight binds:
+
+- exact alert packet id/hash;
+- outbound policy hash;
+- rendered-message hash;
+- Emergency Call Out admission hash;
+- transport profile;
+- operator identity ref;
+- operator authentication ref/hash;
+- exact consequence-labelled approval phrase.
+
+It records only `authenticated_approval_recorded_pending_transport` when the
+operator proof and phrase are present and the call-out admission is already
+admitted. It keeps `production_approval_granted=false`,
+`transport_release_authorized=false`, `verified_delivery_present=false`, and
+`workflow_complete=false`. Missing authentication, missing phrase, blocked
+call-out admission, or hash mismatch fails closed.
+
+## Slice 41 Approved Transport Executor Selection Preflight v0
+
+`scout_alert_application_layer.py` now implements a local selector for future
+approved transport executors. The selector is not a transport executor and does
+not publish SMS, LoRa, satellite, MQTT, phone, or broker messages.
+
+Implemented artifacts:
+
+- `scout_approved_transport_executor_selection`;
+- `ApprovedTransportExecutor`;
+- `ApprovedTransportExecutorSelectionRequest`;
+- `ApprovedTransportExecutorSelectionDecision`.
+
+Implemented function:
+
+- `evaluate_approved_transport_executor_selection()`.
+
+The selector binds the production approval decision hash, alert packet hash,
+rendered-message hash, transport profile, executor id, and idempotency key. A
+matching executor must be explicitly approved for production, support delivery
+verification, and refer to credentials only by reference. Credential material is
+never embedded.
+
+Even when an approved executor registry entry exists, v0 blocks with
+`blocked_production_approval_incomplete` until the production transport release
+artifact exists. After Slice 42, an approved executor can become
+`ready_for_verified_transport_executor` only when the release artifact records
+approval completion and a reviewed effect boundary. The selector still keeps
+`network_connection_attempted=false`,
+`production_transport_invoked=false`, `hardware_transport_invoked=false`,
+`external_send_performed=false`, `sent=false`, and
+`production_delivery_verified=false` because executor invocation and delivery
+verification are separate steps.
+
+## Slice 42 Production Transport Release and Delivery Closure v0
+
+`scout_alert_application_layer.py` now implements the deterministic contracts
+that close the approval, executor selection, delivery evidence, and workflow
+completion chain. This slice verifies lineage and evidence refs; it does not
+send a message, open a network connection, invoke hardware, call `/safety/*`, or
+mutate runtime safety truth.
+
+Implemented artifacts:
+
+- `scout_production_transport_release_decision`;
+- `scout_production_delivery_evidence_report`;
+- `scout_production_delivery_verification_decision`;
+- `scout_production_emergency_workflow_completion`;
+- `ProductionEmergencyWorkflowBoundary`.
+
+Implemented functions:
+
+- `evaluate_production_transport_release()`;
+- `verify_production_delivery_evidence()`;
+- `evaluate_production_emergency_workflow_completion()`.
+
+The transport release contract requires an authenticated production approval
+preflight, exact packet/policy/message/admission hash lineage, an all-resident
+production gate audit, reviewed runtime authorization refs, reviewed effect
+boundary refs, and the exact consequence-labelled approval phrase. A successful
+release sets `production_approval_complete=true` and
+`transport_release_authorized=true`, but keeps `workflow_complete=false` and
+does not invoke transport.
+
+The delivery verifier accepts only executor-returned evidence that matches the
+approved executor selection, transport release, packet hash, rendered-message
+hash, executor id/hash, provider delivery evidence hash, transport execution
+hash, and reviewed verification method hash. Gateway acceptance alone is not
+verified delivery. Only `delivery_status=delivered` plus observed confirmation
+can produce `verified_delivery_evidence_accepted`.
+
+The workflow completion contract is the final deterministic join. It returns
+`workflow_completed_verified_delivery` only after release, executor selection,
+and verified delivery evidence all match. It still keeps
+`runtime_safety_truth_mutated=false`, `safety_api_called=false`,
+`external_send_performed_by_verifier=false`, and
+`hardware_transport_invoked_by_verifier=false`.
+
+## Slice 43 Weather/Environment Live-Evidence Contract Audit v0
+
+`scout_runtime_safety_reducer.py` now implements the deterministic audit that
+decides whether weather and environment-threat gate inputs have enough live
+evidence shape to be considered production-ready inputs. This is an evidence
+contract only; it does not fetch provider data, open network connections, invoke
+hardware, call `/safety/*`, send alerts, or mutate runtime safety truth.
+
+Implemented artifacts:
+
+- `scout_production_live_evidence_contract_audit`;
+- `ProductionLiveEvidenceContractRow`;
+- `ProductionLiveEvidenceContractAudit`.
+
+Implemented functions:
+
+- `build_production_live_evidence_contract_audit()`;
+- `write_production_live_evidence_contract_audit()`;
+- `load_production_live_evidence_contract_audit()`.
+
+The audit covers exactly:
+
+- `weather_gate`;
+- `environment_threat_gate`.
+
+Each gate row requires a production/live source reference, source-gate hash,
+freshness contract, current-observation evidence, route scope, provider or field
+attestation, and a clean runtime boundary. Fixture, inline, or test sources are
+classified as `contract_gap`; a missing required gate is classified as
+`not_present`. The aggregate audit reports `all_live_contracts_ready` only when
+both rows pass.
+
+## Slice 44 Weather/Environment Live-Observation Bridge v0
+
+`scout_runtime_safety_gate_adapters.py` now implements the local bridge from
+sealed live weather and environment-threat observations into reducer-owned gate
+events. The bridge consumes references and hashes only; it does not perform the
+provider request, open a network connection, start a connector, ingest runtime
+data, call `/safety/*`, send an alert, or mutate Phase 1.
+
+Implemented artifacts:
+
+- `scout_production_live_weather_observation`;
+- `scout_production_live_environment_threat_observation`.
+
+Implemented functions:
+
+- `build_production_weather_gate_event()`;
+- `build_production_environment_threat_gate_event()`;
+- `build_runtime_safety_gate_events_from_live_observations()`.
+
+The weather bridge requires production/live source refs, provider evidence,
+freshness attestation, route scope, bounded route context, and a source-age
+value. A stale source age still builds a gate event, but the Slice 43 audit
+classifies it as a `contract_gap`.
+
+The environment-threat bridge requires production/live source refs, a current
+observation ref, freshness attestation, route scope, route context, and at least
+one provider, field, or device evidence ref. Inconsistent field reports such as
+`route_blocked=true` with `passability=passable` fail closed before a gate event
+is emitted.
+
+## Slice 45 Phase 1 Runtime Promotion Readiness Gate v0
+
+`scout_runtime_phase1_mutation.py` now implements the final local readiness gate
+in front of the deterministic Phase 1 writer. It is a precondition verifier, not
+the writer itself.
+
+Implemented artifact:
+
+- `scout_phase1_runtime_promotion_readiness_gate`.
+
+Implemented functions:
+
+- `evaluate_phase1_runtime_promotion_readiness()`;
+- `write_phase1_runtime_promotion_readiness_gate()`;
+- `load_phase1_runtime_promotion_readiness_gate()`.
+
+The gate requires all of the following to match in one deterministic lineage:
+
+- `Phase1TransitionRequest`;
+- `RuntimeSafetyReducerDecision`;
+- `RuntimeSafetyPhase1AdapterResult`;
+- `ProductionGateResidencyAudit`;
+- `ProductionLiveEvidenceContractAudit`;
+- reviewed runtime authority ref/hash;
+- reviewed operator approval ref/hash.
+
+It returns `ready_for_deterministic_writer` only when the adapter is enabled and
+human-reviewed, all six primary gates are production-resident, weather and
+environment-threat live evidence pass their contract audit, and every relevant
+hash/event lineage matches. Missing authority, missing operator review, stale
+live evidence, shadow-only gate residency, or mismatched selected events fail
+closed.
+
+The readiness gate does not call the writer, mutate Phase 1, call `/safety/*`,
+open a network connection, perform an outbound send, invoke hardware, or claim
+runtime safety truth. A separate reviewed effect boundary must still invoke the
+deterministic writer.
+
+## Slice 46 Phase 1 Writer Invocation Guard v0
+
+`scout_runtime_phase1_mutation.py` now implements the local invocation guard
+between the Slice 45 promotion readiness gate and
+`Phase1SafetyMutationService.apply_transition_request()`. It exists to prove the
+controlled call boundary before any production runtime deployment.
+
+Implemented artifacts:
+
+- `scout_phase1_runtime_writer_invocation_request`;
+- `scout_phase1_runtime_writer_invocation_receipt`.
+
+Implemented functions:
+
+- `invoke_phase1_runtime_promotion_writer()`;
+- `write_phase1_runtime_writer_invocation_receipt()`;
+- `load_phase1_runtime_writer_invocation_receipt()`.
+
+The guard requires a ready promotion-readiness gate, matching transition request
+hash, authenticated operator identity, explicit confirmation, and the exact
+local-writer phrase:
+
+```text
+APPLY PHASE 1 LOCAL WRITER
+```
+
+`execution_mode=dry_run` returns `dry_run_ready` without invoking the writer.
+`execution_mode=local_test_writer` invokes the local deterministic writer and
+records a bounded receipt with the mutation id, mutation hash, previous level,
+resulting level, and mutation status. The receipt distinguishes local state
+machine mutation from production runtime mutation:
+`production_runtime_write_performed=false`,
+`production_runtime_safety_truth_mutated=false`, `safety_api_called=false`,
+`outbound_alert_sent=false`, `network_connection_attempted=false`,
+`external_send_performed=false`, and `hardware_control_performed=false`.
+
+Mismatched readiness or transition hashes, a non-ready promotion gate, missing
+operator authentication, missing explicit confirmation, or the wrong phrase all
+fail closed and do not call the writer.
+
+## Slice 47 Production Transport Invocation Guard v0
+
+`scout_alert_application_layer.py` now implements the local guard between
+approved executor selection and verified delivery evidence. It is the
+pre-invocation contract for a future transport effect boundary; it does not
+send SMS, LoRa, satellite, MQTT, phone, or broker messages.
+
+Implemented artifacts:
+
+- `scout_production_transport_invocation_receipt`;
+- `ProductionTransportInvocationRequest`;
+- `ProductionTransportInvocationReceipt`;
+- `ProductionTransportInvocationBoundary`.
+
+Implemented function:
+
+- `evaluate_production_transport_invocation_guard()`.
+
+The guard requires a released transport decision, ready approved-executor
+selection, exact packet/message/executor/release hash lineage, authenticated
+operator identity, explicit confirmation, the exact phrase
+`INVOKE SCOUT TRANSPORT`, and a reviewed transport effect-boundary ref/hash
+before it returns `transport_invocation_authorized`.
+
+`execution_mode=dry_run` returns `dry_run_ready` without producing execution
+refs. `execution_mode=production_effect_boundary_request` can produce
+`transport_execution_ref` and `transport_execution_sha256` for the separate
+transport effect boundary to consume, but the guard itself keeps
+`production_transport_invoked=false`, `network_connection_attempted=false`,
+`external_send_performed=false`, `hardware_transport_invoked=false`,
+`sent=false`, `production_delivery_verified=false`, and `safety_api_called=false`.
+
+The delivery verifier can now optionally bind a delivery report to the
+transport invocation receipt. If a receipt is supplied, the verifier requires
+matching executor selection, transport release, packet hash, rendered-message
+hash, executor id/hash, transport execution ref, and transport execution hash.
+
+## Slice 48 Live Provider Connector Request Contract v0
+
+`scout_runtime_safety_gate_adapters.py` now implements the local contract before
+weather/environment provider request execution. It is a readiness and lineage
+artifact for a future provider effect boundary; it does not open provider
+connections, call CWA/weather APIs, ingest runtime observations, or expose
+credential material.
+
+Implemented artifacts:
+
+- `scout_production_live_provider_connector_manifest`;
+- `scout_production_live_provider_request_contract`;
+- `scout_production_live_provider_request_readiness`;
+- `ProductionLiveProviderConnectorManifest`;
+- `ProductionLiveProviderRequestContract`;
+- `ProductionLiveProviderRequestReadinessReceipt`.
+
+Implemented function:
+
+- `evaluate_production_live_provider_request_contract()`.
+
+The contract requires exact manifest/request lineage for gate id, connector id,
+provider source, route scope, freshness requirement, connector health ref/hash,
+and credential ref. `execution_mode=dry_run` records a prepared local contract
+without producing a provider request ref. `execution_mode=provider_effect_boundary_request`
+requires a reviewed provider-effect boundary ref/hash before returning
+`provider_request_boundary_authorized` and a deterministic provider request ref.
+
+The returned receipt keeps `connector_health_checked_by_guard=false`,
+`provider_network_request_performed=false`, `real_provider_api_called=false`,
+`runtime_ingest_performed=false`, `safety_api_called=false`,
+`phase1_l0_l4_state_mutated=false`, `credential_material_embedded=false`, and
+`raw_location_payload_embedded=false`. Live weather and environment-threat
+observations can now carry the provider request ref/hash in their sealed evidence
+refs so the Slice 43 live-evidence audit can be tied back to this request
+readiness contract.
+
+## Slice 49 Production Transport Effect Receipt Intake v0
+
+`scout_alert_application_layer.py` now implements the local intake contract for
+an external approved transport executor's sanitized effect receipt. This is the
+handoff between the Slice 47 invocation receipt and the existing delivery
+verifier; it does not send SMS, LoRa, satellite, MQTT, phone, or broker
+messages.
+
+Implemented artifacts:
+
+- `scout_production_transport_effect_receipt`;
+- `scout_production_transport_effect_receipt_intake`;
+- `ProductionTransportEffectReceipt`;
+- `ProductionTransportEffectReceiptIntakeDecision`;
+- `ProductionTransportEffectReceiptIntakeBoundary`.
+
+Implemented function:
+
+- `build_delivery_evidence_from_transport_effect_receipt()`.
+
+The intake requires an authorized transport invocation receipt, exact request,
+approval, release, executor-selection, packet, rendered-message, executor, and
+transport-execution lineage, plus provider delivery evidence refs/hashes,
+delivery id hash, verification method refs/hashes, `delivery_status=delivered`,
+positive confirmation, and an executor-reported outbound transport/send.
+
+When accepted, the intake prepares a sanitized
+`ProductionDeliveryEvidenceReport` for `verify_production_delivery_evidence()`.
+It still keeps `intake_verified_delivery_claim=false` because only the delivery
+verifier can accept verified delivery evidence and only workflow closure can
+complete the emergency workflow.
+
+The intake boundary keeps
+`production_transport_executor_invoked_by_intake=false`,
+`network_connection_attempted_by_intake=false`,
+`external_send_performed_by_intake=false`,
+`hardware_transport_invoked_by_intake=false`, `safety_api_called=false`,
+`phase1_l0_l4_state_mutated=false`, `runtime_safety_truth_mutated=false`,
+`credential_material_embedded=false`, and
+`raw_transport_payload_embedded=false`.
+
+## Slice 50 Phase 1 Writer Production Deployment Readiness v0
+
+`scout_runtime_phase1_mutation.py` now implements the local readiness audit for a
+future production deployment of the deterministic Phase 1 writer effect boundary.
+This is not a deployment action; it records whether the reviewed inputs required
+for a rollout are present and lineage-matched.
+
+Implemented artifacts:
+
+- `scout_phase1_runtime_writer_deployment_manifest`;
+- `scout_phase1_runtime_writer_deployment_readiness`;
+- `Phase1RuntimeWriterDeploymentManifest`;
+- `Phase1RuntimeWriterDeploymentReadinessAudit`;
+- `Phase1RuntimeWriterDeploymentBoundary`.
+
+Implemented functions:
+
+- `evaluate_phase1_writer_production_deployment_readiness()`;
+- `write_phase1_runtime_writer_deployment_readiness_audit()`;
+- `load_phase1_runtime_writer_deployment_readiness_audit()`.
+
+The audit requires a ready Slice 45 promotion gate, a successful Slice 46 local
+guarded writer invocation, matching transition/readiness/writer receipt lineage,
+runtime environment and deployment refs, the same reviewed runtime authority
+ref/hash, reviewed writer effect-boundary ref/hash, rollback plan ref/hash, and
+operator review ref/hash. Missing or mismatched pieces fail closed before any
+production rollout can be considered ready.
+
+The audit keeps `production_runtime_write_performed=false`,
+`production_runtime_safety_truth_mutated=false`, `safety_api_called=false`,
+`outbound_alert_sent=false`, `network_connection_attempted=false`,
+`external_send_performed=false`, and `hardware_control_performed=false`.
+
+## Slice 51 Production Transport Executor Effect-Boundary Readiness v0
+
+`scout_alert_application_layer.py` now implements the local readiness check for
+a future approved production transport executor effect boundary. This is not a
+send action; it records whether the reviewed executor-side inputs required
+before SMS, LoRa, MQTT, satellite, phone, or broker transport are present and
+lineage-matched.
+
+Implemented artifacts:
+
+- `scout_production_transport_executor_effect_boundary_manifest`;
+- `scout_production_transport_executor_effect_boundary_readiness`;
+- `ProductionTransportExecutorEffectBoundaryManifest`;
+- `ProductionTransportExecutorEffectBoundaryReadinessDecision`;
+- `ProductionTransportExecutorEffectBoundaryReadinessBoundary`.
+
+Implemented function:
+
+- `evaluate_production_transport_executor_effect_boundary_readiness()`.
+
+The readiness check requires an authorized Slice 47 transport invocation
+receipt, exact executor-selection/request/approval/release/packet/rendered
+message/executor/transport-execution lineage, a reviewed executor
+effect-boundary ref/hash, a credential ref, a delivery-verifier ref/hash, and a
+fallback or rollback plan ref/hash. Missing or mismatched pieces fail closed
+before a separate executor can be considered ready to perform outbound
+transport.
+
+The readiness boundary keeps
+`production_transport_executor_invoked_by_readiness=false`,
+`network_connection_attempted_by_readiness=false`,
+`external_send_performed_by_readiness=false`,
+`hardware_transport_invoked_by_readiness=false`, `safety_api_called=false`,
+`phase1_l0_l4_state_mutated=false`, `runtime_safety_truth_mutated=false`,
+`credential_material_embedded=false`, and
+`raw_transport_payload_embedded=false`.
+
+## Slice 52 Live Provider Response Receipt Intake v0
+
+`scout_runtime_safety_gate_adapters.py` now implements the local intake contract
+for a sanitized response receipt produced by a future live-provider effect
+boundary. This is the handoff between the Slice 48 provider request readiness
+receipt and the Slice 44 live-observation bridge; it does not call CWA/weather
+providers, check connector health live, ingest runtime data, or mutate safety
+truth.
+
+Implemented artifacts:
+
+- `scout_production_live_provider_response_receipt`;
+- `scout_production_live_provider_response_intake`;
+- `ProductionLiveProviderResponseReceipt`;
+- `ProductionLiveProviderResponseIntakeDecision`;
+- `ProductionLiveProviderResponseIntakeBoundary`.
+
+Implemented function:
+
+- `build_live_observation_from_provider_response_receipt()`.
+
+The intake requires a Slice 48 receipt with
+`provider_request_boundary_authorized=true`, exact manifest/request-contract,
+gate id, connector id, source-observation, route-scope, provider-request ref,
+provider-request hash, and freshness-requirement lineage, sanitized provider
+evidence refs/hashes, freshness attestation refs/hashes, successful executor
+reported provider request/API execution, and a source age within the freshness
+requirement. Environment-threat responses additionally require a
+`current_observation_ref` and threat type.
+
+When accepted, the intake prepares exactly one
+`ProductionLiveWeatherObservation` or
+`ProductionLiveEnvironmentThreatObservation` that can be passed to
+`build_runtime_safety_gate_events_from_live_observations()`. It still keeps
+`intake_verified_live_safety_truth=false` because the adapter only prepares live
+gate evidence; reducer residency, Phase 1 promotion, runtime authority, and
+deterministic writer gates remain separate.
+
+The intake boundary keeps `connector_health_checked_by_intake=false`,
+`provider_network_request_performed_by_intake=false`,
+`real_provider_api_called_by_intake=false`,
+`runtime_ingest_performed_by_intake=false`, `safety_api_called=false`,
+`phase1_l0_l4_state_mutated=false`, `credential_material_embedded=false`,
+`raw_location_payload_embedded=false`, and `raw_provider_payload_embedded=false`.
+
+## Slice 53 Live Provider Connector Health Receipt Intake v0
+
+`scout_runtime_safety_gate_adapters.py` now implements the local intake contract
+for a sanitized connector health receipt produced by a future live-provider
+health-check effect boundary. This is the handoff before the Slice 48 provider
+request contract; it does not perform the health check, call providers, ingest
+runtime data, or mutate safety truth.
+
+Implemented artifacts:
+
+- `scout_production_live_connector_health_receipt`;
+- `scout_production_live_connector_health_intake`;
+- `ProductionLiveConnectorHealthReceipt`;
+- `ProductionLiveConnectorHealthIntakeDecision`;
+- `ProductionLiveConnectorHealthIntakeBoundary`.
+
+Implemented function:
+
+- `build_live_provider_connector_manifest_from_health_receipt()`.
+
+The intake requires an executor-reported connector health check, connector
+health ref/hash, `health_status=healthy`, approved credential ref, route-scope
+ref, source provider/path, provider dataset ids, freshness requirement, and the
+same clean runtime/effect boundaries as the request and response contracts.
+
+When accepted, the intake prepares a
+`ProductionLiveProviderConnectorManifest` that can be passed to
+`evaluate_production_live_provider_request_contract()`. Degraded health,
+missing health evidence, missing credential refs, missing check execution, raw
+payload claims, or runtime/safety effects fail closed before a provider request
+can be authorized.
+
+The intake boundary keeps `connector_health_checked_by_intake=false`,
+`provider_network_request_performed_by_intake=false`,
+`real_provider_api_called_by_intake=false`,
+`runtime_ingest_performed_by_intake=false`, `safety_api_called=false`,
+`phase1_l0_l4_state_mutated=false`, `credential_material_embedded=false`,
+`raw_location_payload_embedded=false`, and `raw_provider_payload_embedded=false`.
+
+## Slice 54 Live Field/Device Validation Receipt Intake v0
+
+`scout_runtime_safety_gate_adapters.py` now implements the local intake contract
+for reviewed field or device validation evidence attached to live weather and
+environment-threat provider responses. This is not the field validation action
+itself; it consumes a sanitized receipt produced elsewhere and can enrich the
+Slice 52 provider response intake before the Slice 44 live-observation bridge.
+
+Implemented artifacts:
+
+- `scout_production_live_field_device_validation_receipt`;
+- `scout_production_live_field_device_validation_intake`;
+- `ProductionLiveFieldDeviceValidationReceipt`;
+- `ProductionLiveFieldDeviceValidationDecision`;
+- `ProductionLiveFieldDeviceValidationBoundary`.
+
+Implemented function:
+
+- `build_live_field_device_validation_intake()`.
+
+The intake requires executor-reported field/device validation, field
+attestation ref/hash, a device evidence ref/hash or current-observation ref,
+`validation_status=confirmed`, a validation age within the configured maximum,
+route scope, bounded route context, and optional lineage to a provider response
+receipt. If a prepared validation decision is passed into
+`build_live_observation_from_provider_response_receipt()`, the response intake
+requires matching gate id, route scope, source observation, provider request,
+and provider response receipt hash before it adds field/device refs to the
+prepared observation.
+
+The intake boundary keeps `field_device_validation_performed_by_intake=false`,
+`provider_network_request_performed_by_intake=false`,
+`real_provider_api_called_by_intake=false`,
+`runtime_ingest_performed_by_intake=false`, `safety_api_called=false`,
+`phase1_l0_l4_state_mutated=false`, `credential_material_embedded=false`,
+`raw_location_payload_embedded=false`, and `raw_provider_payload_embedded=false`.
+
+## Slice 55 Live Freshness Attestation Receipt Intake v0
+
+`scout_runtime_safety_gate_adapters.py` now implements the local intake contract
+for reviewed resident freshness evidence attached to live weather and
+environment-threat provider responses. This is not the freshness check action
+itself; it consumes a sanitized receipt produced elsewhere and can enrich the
+Slice 52 provider response intake before the Slice 44 live-observation bridge.
+
+Implemented artifacts:
+
+- `scout_production_live_freshness_attestation_receipt`;
+- `scout_production_live_freshness_attestation_intake`;
+- `ProductionLiveFreshnessAttestationReceipt`;
+- `ProductionLiveFreshnessAttestationDecision`;
+- `ProductionLiveFreshnessAttestationBoundary`.
+
+Implemented function:
+
+- `build_live_freshness_attestation_intake()`.
+
+The intake requires executor-reported freshness checking, provider evidence
+ref/hash, freshness attestation ref/hash, `freshness_status=current`,
+`attested_current=true`, source age within the freshness requirement, route
+scope, bounded route context, and optional lineage to a provider response
+receipt. If a prepared freshness decision is passed into
+`build_live_observation_from_provider_response_receipt()`, the response intake
+requires matching gate id, route scope, source observation, provider request,
+provider evidence, freshness requirement, and provider response receipt hash
+before it adds freshness refs to the prepared observation.
+
+The intake boundary keeps `freshness_check_performed_by_intake=false`,
+`connector_health_checked_by_intake=false`,
+`provider_network_request_performed_by_intake=false`,
+`real_provider_api_called_by_intake=false`,
+`runtime_ingest_performed_by_intake=false`, `safety_api_called=false`,
+`phase1_l0_l4_state_mutated=false`, `credential_material_embedded=false`,
+`raw_location_payload_embedded=false`, and `raw_provider_payload_embedded=false`.
+
+## Slice 56 Live Provider Executor Effect-Boundary Readiness v0
+
+`scout_runtime_safety_gate_adapters.py` now implements the local readiness check
+for a future live-provider request executor effect boundary. This is the
+handoff after the Slice 48 provider request contract and before any separate
+executor performs a provider API request; it does not call CWA/weather
+providers, check connector health live, ingest runtime data, or mutate safety
+truth.
+
+Implemented artifacts:
+
+- `scout_production_live_provider_executor_effect_boundary_manifest`;
+- `scout_production_live_provider_executor_readiness`;
+- `ProductionLiveProviderExecutorEffectBoundaryManifest`;
+- `ProductionLiveProviderExecutorReadinessDecision`;
+- `ProductionLiveProviderExecutorReadinessBoundary`.
+
+Implemented function:
+
+- `evaluate_live_provider_executor_effect_boundary_readiness()`.
+
+The readiness check requires a Slice 48 receipt with
+`provider_request_boundary_authorized=true`, exact manifest/request-contract,
+gate id, connector id, source-observation, route-scope, connector-health,
+provider-request ref, and provider-request hash lineage, plus a reviewed
+provider effect-boundary ref/hash, credential ref, response-verifier ref/hash,
+freshness-attestor ref/hash, field/device-validator ref/hash, fallback-plan
+ref/hash, and idempotency key. Missing or mismatched pieces fail closed before a
+separate provider executor can be considered ready to call a provider.
+
+The readiness boundary keeps `connector_health_checked_by_readiness=false`,
+`provider_network_request_performed_by_readiness=false`,
+`real_provider_api_called_by_readiness=false`,
+`runtime_ingest_performed_by_readiness=false`, `safety_api_called=false`,
+`phase1_l0_l4_state_mutated=false`, `credential_material_embedded=false`,
+`raw_location_payload_embedded=false`, and `raw_provider_payload_embedded=false`.
+
+## Slice 57 Live Provider Executor Invocation Guard v0
+
+`scout_runtime_safety_gate_adapters.py` now implements the local invocation
+guard that sits after Slice 56 provider executor readiness and before any
+separate live-provider executor is allowed to perform a provider request. It
+does not call the provider itself; it emits a deterministic handoff receipt and
+future provider execution ref/hash only when the ready executor boundary, exact
+request lineage, operator identity, and exact confirmation phrase all match.
+
+Implemented artifacts:
+
+- `scout_production_live_provider_executor_invocation_request`;
+- `scout_production_live_provider_executor_invocation_receipt`;
+- `ProductionLiveProviderExecutorInvocationRequest`;
+- `ProductionLiveProviderExecutorInvocationReceipt`;
+- `ProductionLiveProviderExecutorInvocationBoundary`.
+
+Implemented function:
+
+- `evaluate_live_provider_executor_invocation_guard()`.
+
+The guard requires `ready_for_reviewed_provider_effect_boundary`, exact
+provider request readiness hash, provider executor manifest hash, connector
+manifest hash, request contract hash, gate id, connector id, source observation
+path, route scope, provider request ref/hash, reviewed provider effect-boundary
+ref/hash, response-verifier ref/hash, freshness-attestor ref/hash,
+field/device-validator ref/hash, fallback-plan ref/hash, operator identity
+ref/hash, idempotency key, explicit confirmation, and the exact phrase
+`INVOKE SCOUT LIVE PROVIDER`.
+
+When authorized, the guard emits `provider_execution_ref` and
+`provider_execution_sha256` as a deterministic boundary reference for a
+separate provider executor. `build_live_observation_from_provider_response_receipt()`
+can now optionally require a matching invocation receipt; if supplied, the
+provider response receipt must bind the invocation receipt hash plus the
+provider execution ref/hash before weather or environment-threat observations
+are prepared.
+
+The invocation boundary keeps `connector_health_checked_by_guard=false`,
+`provider_network_request_performed_by_guard=false`,
+`real_provider_api_called_by_guard=false`,
+`runtime_ingest_performed_by_guard=false`, `safety_api_called=false`,
+`phase1_l0_l4_state_mutated=false`, `credential_material_embedded=false`,
+`raw_location_payload_embedded=false`, and `raw_provider_payload_embedded=false`.
+
+## Slice 58 Live Provider Effect Receipt Intake v0
+
+`scout_runtime_safety_gate_adapters.py` now implements the local intake contract
+for a sanitized provider effect receipt produced by a separate executor after a
+Slice 57 invocation receipt. This is the adapter-side equivalent of accepting a
+reviewed external effect receipt; it does not check connector health, call the
+provider, ingest runtime data, or mutate safety truth itself.
+
+Implemented artifacts:
+
+- `scout_production_live_provider_effect_receipt`;
+- `scout_production_live_provider_effect_receipt_intake`;
+- `ProductionLiveProviderEffectReceipt`;
+- `ProductionLiveProviderEffectReceiptIntakeDecision`;
+- `ProductionLiveProviderEffectReceiptIntakeBoundary`.
+
+Implemented function:
+
+- `build_provider_response_receipt_from_provider_effect_receipt()`.
+
+The intake requires an authorized Slice 57 invocation, exact provider executor
+readiness hash, provider request readiness hash, provider executor manifest
+hash, connector manifest hash, request contract hash, gate id, connector id,
+source observation path, route scope, provider request ref/hash, provider
+execution ref/hash, provider evidence ref/hash, freshness attestation ref/hash,
+successful response status, and executor-reported provider network/API
+execution. When all checks pass it prepares a `ProductionLiveProviderResponseReceipt`
+that can be passed to Slice 52 response intake and optionally re-bound to the
+same invocation receipt.
+
+The effect receipt may record that the external executor performed a provider
+network request and real provider API call. The local intake boundary still
+keeps `connector_health_checked_by_intake=false`,
+`provider_network_request_performed_by_intake=false`,
+`real_provider_api_called_by_intake=false`,
+`runtime_ingest_performed_by_intake=false`, `safety_api_called=false`,
+`phase1_l0_l4_state_mutated=false`, `credential_material_embedded=false`,
+`raw_location_payload_embedded=false`, and `raw_provider_payload_embedded=false`.
+
+## Slice 59 Live Connector Health Executor Invocation Guard v0
+
+`scout_runtime_safety_gate_adapters.py` now implements the local invocation
+guard for a future connector health checker. This closes the pre-provider
+handoff before Slice 53 connector health receipt intake. It does not perform
+the health check itself; it emits a deterministic connector-health execution
+ref/hash only when the requested connector, route scope, credential reference,
+reviewed connector-health effect boundary, fallback plan, operator identity,
+and exact confirmation phrase are present.
+
+Implemented artifacts:
+
+- `scout_production_live_connector_health_executor_invocation_request`;
+- `scout_production_live_connector_health_executor_invocation_receipt`;
+- `ProductionLiveConnectorHealthExecutorInvocationRequest`;
+- `ProductionLiveConnectorHealthExecutorInvocationReceipt`;
+- `ProductionLiveConnectorHealthExecutorInvocationBoundary`.
+
+Implemented function:
+
+- `evaluate_live_connector_health_executor_invocation_guard()`.
+
+The guard requires a production live source path, route scope ref, credential
+ref, reviewed connector-health effect-boundary ref/hash, fallback-plan
+ref/hash, operator identity ref/hash, idempotency key, explicit confirmation,
+and the exact phrase `INVOKE SCOUT CONNECTOR HEALTH`. When authorized it emits
+`connector_health_execution_ref` and `connector_health_execution_sha256` for a
+separate executor to bind its health receipt.
+
+`build_live_provider_connector_manifest_from_health_receipt()` now accepts an
+optional connector health invocation receipt. When supplied, the health receipt
+must bind `connector_health_invocation_sha256`, connector-health execution
+ref/hash, gate id, connector id, provider name, source path, and route scope to
+the invocation receipt before a connector manifest can be prepared.
+
+The invocation boundary keeps `connector_health_checked_by_guard=false`,
+`provider_network_request_performed_by_guard=false`,
+`real_provider_api_called_by_guard=false`,
+`runtime_ingest_performed_by_guard=false`, `safety_api_called=false`,
+`phase1_l0_l4_state_mutated=false`, `credential_material_embedded=false`,
+`raw_location_payload_embedded=false`, and `raw_provider_payload_embedded=false`.
+
+## Slice 60 Live Freshness Attestor Invocation Guard v0
+
+`scout_runtime_safety_gate_adapters.py` now implements the local invocation
+guard for a future freshness attestor. This closes the handoff before Slice 55
+freshness attestation receipt intake. It does not perform freshness checking
+itself; it emits a deterministic freshness-attestation execution ref/hash only
+when provider evidence, route scope, reviewed freshness-attestor effect
+boundary, fallback plan, operator identity, and exact confirmation all match.
+
+Implemented artifacts:
+
+- `scout_production_live_freshness_attestor_invocation_request`;
+- `scout_production_live_freshness_attestor_invocation_receipt`;
+- `ProductionLiveFreshnessAttestorInvocationRequest`;
+- `ProductionLiveFreshnessAttestorInvocationReceipt`;
+- `ProductionLiveFreshnessAttestorInvocationBoundary`.
+
+Implemented function:
+
+- `evaluate_live_freshness_attestor_invocation_guard()`.
+
+The guard requires a freshness attestation source ref, route scope ref,
+provider evidence ref/hash, freshness requirement, reviewed freshness-attestor
+effect-boundary ref/hash, fallback-plan ref/hash, operator identity ref/hash,
+idempotency key, explicit confirmation, and the exact phrase
+`INVOKE SCOUT FRESHNESS ATTESTOR`. It can optionally bind source observation,
+provider request, and provider response receipt hashes when those are already
+available.
+
+`build_live_freshness_attestation_intake()` now accepts an optional freshness
+attestor invocation receipt. When supplied, the freshness attestation receipt
+must bind `freshness_attestor_invocation_sha256`, freshness-attestation
+execution ref/hash, gate id, source observation, route scope, provider request,
+provider response receipt hash, provider evidence ref/hash, and freshness
+requirement before freshness evidence can be prepared for provider response
+observations.
+
+The invocation boundary keeps `freshness_check_performed_by_guard=false`,
+`connector_health_checked_by_guard=false`,
+`provider_network_request_performed_by_guard=false`,
+`real_provider_api_called_by_guard=false`,
+`runtime_ingest_performed_by_guard=false`, `safety_api_called=false`,
+`phase1_l0_l4_state_mutated=false`, `credential_material_embedded=false`,
+`raw_location_payload_embedded=false`, and `raw_provider_payload_embedded=false`.
+
+## Slice 61 Live Field/Device Validator Invocation Guard v0
+
+`scout_runtime_safety_gate_adapters.py` now implements the local invocation
+guard for a future field/device validator. This closes the handoff before Slice
+54 field/device validation receipt intake. It does not perform field
+validation itself; it emits a deterministic field/device validation execution
+ref/hash only when current observation or device evidence, route scope,
+reviewed validator effect boundary, fallback plan, operator identity, and exact
+confirmation all match.
+
+Implemented artifacts:
+
+- `scout_production_live_field_device_validator_invocation_request`;
+- `scout_production_live_field_device_validator_invocation_receipt`;
+- `ProductionLiveFieldDeviceValidatorInvocationRequest`;
+- `ProductionLiveFieldDeviceValidatorInvocationReceipt`;
+- `ProductionLiveFieldDeviceValidatorInvocationBoundary`.
+
+Implemented function:
+
+- `evaluate_live_field_device_validator_invocation_guard()`.
+
+The guard requires a field/device validator source ref, route scope ref,
+current observation or device evidence ref/hash, reviewed validator
+effect-boundary ref/hash, fallback-plan ref/hash, operator identity ref/hash,
+idempotency key, explicit confirmation, and the exact phrase
+`INVOKE SCOUT FIELD DEVICE VALIDATOR`. It can optionally bind source
+observation, provider request, and provider response receipt hashes when those
+are already available.
+
+`build_live_field_device_validation_intake()` now accepts an optional
+field/device validator invocation receipt. When supplied, the validation
+receipt must bind `field_device_validator_invocation_sha256`, field/device
+validation execution ref/hash, gate id, source observation, route scope,
+provider request, provider response receipt hash, current observation ref, and
+device evidence ref/hash before field/device evidence can be prepared for
+provider response observations.
+
+The invocation boundary keeps `field_device_validation_performed_by_guard=false`,
+`provider_network_request_performed_by_guard=false`,
+`real_provider_api_called_by_guard=false`,
+`runtime_ingest_performed_by_guard=false`, `safety_api_called=false`,
+`phase1_l0_l4_state_mutated=false`, `credential_material_embedded=false`,
+`raw_location_payload_embedded=false`, and `raw_provider_payload_embedded=false`.
+
+## Slice 62 Live Provider Executor Harness v0
+
+`scout_runtime_safety_gate_adapters.py` now implements an injected-client
+executor harness for a future reviewed live provider client. This closes the
+local handoff between Slice 57 provider executor invocation and Slice 58
+provider effect receipt intake. The harness does not contain a built-in network
+stack, provider credential loader, raw response parser, runtime ingest path,
+Safety API client, Phase 1 writer, outbound transport, or hardware control.
+
+Implemented artifacts:
+
+- `scout_production_live_provider_execution_request`;
+- `scout_production_live_provider_execution_result`;
+- `scout_production_live_provider_execution_decision`;
+- `ProductionLiveProviderExecutionRequest`;
+- `ProductionLiveProviderExecutionResult`;
+- `ProductionLiveProviderExecutionDecision`;
+- `ProductionLiveProviderExecutionBoundary`.
+
+Implemented function:
+
+- `execute_live_provider_request_with_client()`.
+
+The harness accepts a ready provider executor boundary, an authorized provider
+executor invocation receipt, and an injected provider client. It checks exact
+readiness/invocation lineage before the client is called. The client receives
+only ref/hash-bound request metadata: provider request ref/hash, execution
+ref/hash, route scope ref, source observation ref, reviewed effect-boundary
+refs, verifier refs, fallback refs, operator identity refs, and
+`credential_ref_present=true`. It does not receive credential material or raw
+location payloads from this harness.
+
+The provider client must return a sanitized `ProductionLiveProviderExecutionResult`.
+Only when that result reports a provider network request and real provider API
+call, avoids raw payload and credential material, preserves source observation
+lineage, and passes schema validation does the harness emit a
+`ProductionLiveProviderEffectReceipt`. That receipt can then be consumed by
+`build_provider_response_receipt_from_provider_effect_receipt()` and the
+existing live provider response intake path.
+
+The execution boundary keeps `connector_health_checked_by_executor=false`,
+`runtime_ingest_performed_by_executor=false`, `safety_api_called=false`,
+`phase1_l0_l4_state_mutated=false`, `outbound_transport_invoked=false`,
+`hardware_control_performed=false`, `credential_material_embedded=false`,
+`raw_location_payload_embedded=false`, and `raw_provider_payload_embedded=false`.
+Local regression tests use fake provider clients; they do not qualify a real
+CWA/API client, credential access path, provider freshness policy, production
+network environment, or Pi deployment.
+
+## Slice 63 Live Connector Health Executor Harness v0
+
+`scout_runtime_safety_gate_adapters.py` now implements an injected-client
+executor harness for a future reviewed connector health client. This closes the
+local handoff between Slice 59 connector health invocation and Slice 53
+connector health receipt intake. The harness does not contain a built-in
+network stack, credential-value loader, raw provider response parser, runtime
+ingest path, Safety API client, Phase 1 writer, outbound transport, or
+hardware control.
+
+Implemented artifacts:
+
+- `scout_production_live_connector_health_execution_request`;
+- `scout_production_live_connector_health_execution_result`;
+- `scout_production_live_connector_health_execution_decision`;
+- `ProductionLiveConnectorHealthExecutionRequest`;
+- `ProductionLiveConnectorHealthExecutionResult`;
+- `ProductionLiveConnectorHealthExecutionDecision`;
+- `ProductionLiveConnectorHealthExecutionBoundary`.
+
+Implemented function:
+
+- `execute_live_connector_health_check_with_client()`.
+
+The harness accepts an authorized connector health invocation receipt and an
+injected connector health client. It calls the client only when the invocation
+is authorized. The client receives connector/source refs, route scope,
+provider dataset ids, reviewed connector-health effect-boundary refs, fallback
+refs, operator identity refs, and a `secret://...` credential reference. It
+does not receive credential values or raw location payloads from this harness.
+
+The health client must return a sanitized
+`ProductionLiveConnectorHealthExecutionResult`. Only when that result reports
+connector health checking, provider network request, real provider API call,
+avoids raw payload and credential material, preserves source path lineage, and
+passes schema validation does the harness emit a
+`ProductionLiveConnectorHealthReceipt`. That receipt can then be consumed by
+`build_live_provider_connector_manifest_from_health_receipt()` and the existing
+live provider request-readiness path.
+
+The execution boundary keeps `runtime_ingest_performed_by_executor=false`,
+`safety_api_called=false`, `phase1_l0_l4_state_mutated=false`,
+`outbound_transport_invoked=false`, `hardware_control_performed=false`,
+`credential_material_embedded=false`, `raw_location_payload_embedded=false`,
+and `raw_provider_payload_embedded=false`. Local regression tests use fake
+health clients; they do not qualify a real CWA/API health endpoint, credential
+access path, production network environment, or Pi deployment.
+
+## Slice 64 Live Freshness Attestor Executor Harness v0
+
+`scout_runtime_safety_gate_adapters.py` now implements an injected-client
+executor harness for a future reviewed freshness attestor. This closes the
+local handoff between Slice 60 freshness-attestor invocation and Slice 55
+freshness attestation receipt intake. The harness does not contain a built-in
+network stack, credential loader, provider API client, runtime ingest path,
+Safety API client, Phase 1 writer, outbound transport, or hardware control.
+
+Implemented artifacts:
+
+- `scout_production_live_freshness_attestation_execution_request`;
+- `scout_production_live_freshness_attestation_execution_result`;
+- `scout_production_live_freshness_attestation_execution_decision`;
+- `ProductionLiveFreshnessAttestationExecutionRequest`;
+- `ProductionLiveFreshnessAttestationExecutionResult`;
+- `ProductionLiveFreshnessAttestationExecutionDecision`;
+- `ProductionLiveFreshnessAttestationExecutionBoundary`.
+
+Implemented function:
+
+- `execute_live_freshness_attestation_check_with_client()`.
+
+The harness accepts an authorized freshness-attestor invocation receipt and an
+injected freshness client. It calls the client only when the invocation is
+authorized. The client receives only ref/hash-bound evidence: source
+observation ref, route scope ref, provider request ref, provider response
+receipt hash, provider evidence ref/hash, freshness requirement, reviewed
+freshness-attestor effect-boundary refs, fallback refs, operator identity refs,
+and deterministic freshness execution refs.
+
+The freshness client must return a sanitized
+`ProductionLiveFreshnessAttestationExecutionResult`. Only when that result
+reports a freshness check, avoids provider API/network effects, avoids raw
+payload and credential material, preserves provider-evidence and route lineage,
+and passes schema validation does the harness emit a
+`ProductionLiveFreshnessAttestationReceipt`. That receipt can then be consumed
+by `build_live_freshness_attestation_intake()` and the existing live provider
+response observation path.
+
+The execution boundary keeps `provider_network_request_performed_by_executor=false`,
+`real_provider_api_called_by_executor=false`,
+`runtime_ingest_performed_by_executor=false`, `safety_api_called=false`,
+`phase1_l0_l4_state_mutated=false`, `outbound_transport_invoked=false`,
+`hardware_control_performed=false`, `credential_material_embedded=false`,
+`raw_location_payload_embedded=false`, and `raw_provider_payload_embedded=false`.
+Local regression tests use fake freshness clients; they do not qualify a real
+freshness attestor service, production network environment, provider timestamp
+policy, resident clock source, or Pi deployment.
+
+## Slice 65 Live Field/Device Validator Executor Harness v0
+
+`scout_runtime_safety_gate_adapters.py` now implements an injected-client
+executor harness for a future reviewed field/device validator. This closes the
+local handoff between Slice 61 field/device validator invocation and Slice 54
+field/device validation receipt intake. The harness does not contain a built-in
+device driver, camera/GNSS reader, network stack, credential loader, provider
+API client, runtime ingest path, Safety API client, Phase 1 writer, outbound
+transport, or hardware control.
+
+Implemented artifacts:
+
+- `scout_production_live_field_device_validation_execution_request`;
+- `scout_production_live_field_device_validation_execution_result`;
+- `scout_production_live_field_device_validation_execution_decision`;
+- `ProductionLiveFieldDeviceValidationExecutionRequest`;
+- `ProductionLiveFieldDeviceValidationExecutionResult`;
+- `ProductionLiveFieldDeviceValidationExecutionDecision`;
+- `ProductionLiveFieldDeviceValidationExecutionBoundary`.
+
+Implemented function:
+
+- `execute_live_field_device_validation_with_client()`.
+
+The harness accepts an authorized field/device validator invocation receipt and
+an injected field/device validation client. It calls the client only when the
+invocation is authorized. The client receives only ref/hash-bound evidence:
+source observation ref, route scope ref, provider response receipt hash,
+current observation ref, device evidence ref/hash, reviewed validator
+effect-boundary refs, fallback refs, operator identity refs, and deterministic
+field/device validation execution refs.
+
+The field/device client must return a sanitized
+`ProductionLiveFieldDeviceValidationExecutionResult`. Only when that result
+reports field/device validation, avoids provider API/network effects, avoids
+raw payload and credential material, preserves source/route/device lineage, and
+passes schema validation does the harness emit a
+`ProductionLiveFieldDeviceValidationReceipt`. That receipt can then be consumed
+by `build_live_field_device_validation_intake()` and the existing live provider
+response observation path.
+
+The execution boundary keeps `provider_network_request_performed_by_executor=false`,
+`real_provider_api_called_by_executor=false`,
+`runtime_ingest_performed_by_executor=false`, `safety_api_called=false`,
+`phase1_l0_l4_state_mutated=false`, `outbound_transport_invoked=false`,
+`hardware_control_performed=false`, `credential_material_embedded=false`,
+`raw_location_payload_embedded=false`, and `raw_provider_payload_embedded=false`.
+Local regression tests use fake field/device clients; they do not qualify real
+camera/GNSS/sensor devices, operator field procedures, resident device trust,
+production network environment, or Pi deployment.
+
+## Slice 66 Production Transport Executor Harness v0
+
+`scout_alert_application_layer.py` now implements an injected-client executor
+harness for a future reviewed production transport client. This closes the
+local handoff between Slice 51 transport executor effect-boundary readiness and
+Slice 49 transport effect receipt intake. The harness does not contain a
+built-in SMS gateway, MQTT publisher, LoRa radio driver, satellite bridge,
+credential loader, Safety API client, Phase 1 writer, runtime safety truth
+writer, delivery verifier, or hardware controller.
+
+Implemented artifacts:
+
+- `scout_production_transport_executor_execution_request`;
+- `scout_production_transport_executor_execution_result`;
+- `scout_production_transport_executor_execution_decision`;
+- `ProductionTransportExecutorExecutionRequest`;
+- `ProductionTransportExecutorExecutionResult`;
+- `ProductionTransportExecutorExecutionDecision`;
+- `ProductionTransportExecutorExecutionBoundary`.
+
+Implemented function:
+
+- `execute_production_transport_with_client()`.
+
+The harness accepts a ready transport executor effect-boundary decision, an
+authorized transport invocation receipt, and an injected transport client. It
+checks exact readiness/invocation lineage before the client is called. The
+client receives only ref/hash-bound execution metadata: production approval,
+transport release, executor selection, source packet hash, rendered-message
+hash, transport profile, executor id/hash, transport execution refs, reviewed
+effect-boundary refs, delivery verifier refs, fallback refs, and
+`credential_ref_present=true`. It does not receive credential material or raw
+transport payloads from this harness.
+
+The transport client must return a sanitized
+`ProductionTransportExecutorExecutionResult`. Only when that result preserves
+transport execution lineage, reports transport invocation plus outbound-send
+effects, avoids Safety API and runtime/Phase 1 mutation claims, avoids raw
+payload and credential material, and passes schema validation does the harness
+emit a `ProductionTransportEffectReceipt`. That receipt can then be consumed by
+`build_delivery_evidence_from_transport_effect_receipt()` and the existing
+delivery verification path.
+
+The execution decision never marks `production_delivery_verified=true`; delivery
+verification remains a separate deterministic verifier over the emitted receipt.
+Local regression tests use fake transport clients; they do not qualify a real
+SMS gateway, MQTT broker, LoRa radio, satellite bridge, credential access path,
+production network environment, delivery-verifier endpoint, or Pi deployment.
+
+## Slice 67 Production Cutover Qualification Audit v0
+
+`scout_runtime_safety_production_qualification.py` now implements the first
+deterministic production cutover readiness audit for the remaining external and
+deployment work. This audit is intentionally not an executor. It does not call
+providers, read credentials, deploy the writer, send transport, verify delivery,
+mutate runtime safety truth, touch production databases, or control hardware.
+
+Implemented artifacts:
+
+- `scout_production_safety_qualification_receipt`;
+- `scout_production_safety_cutover_readiness_audit`;
+- `ProductionSafetyQualificationReceipt`;
+- `ProductionSafetyQualificationRow`;
+- `ProductionSafetyCutoverReadinessAudit`;
+- `ProductionSafetyQualificationBoundary`.
+
+Implemented function:
+
+- `evaluate_production_safety_cutover_readiness()`.
+
+The audit requires one reviewed qualification receipt for each required
+production area:
+
+- `live_provider_api`;
+- `connector_health_endpoint`;
+- `credential_access_path`;
+- `resident_freshness_attestor`;
+- `field_device_validator`;
+- `phase1_writer_deployment`;
+- `transport_client`;
+- `outbound_delivery`;
+- `pi_hardware`.
+
+Each qualified receipt must include a qualification ref/hash, reviewed
+effect-boundary ref/hash, operator review ref/hash, capability observation,
+production-environment verification, lineage verification, fail-closed
+verification, and rollback/fallback verification. Receipts cannot embed
+credential material or raw payloads and cannot claim Safety API calls, Phase 1
+mutation, or runtime safety truth mutation.
+
+The audit reports `blocked_missing_required_qualification` when any required
+area is absent, `blocked_failed_required_qualification` when every area has a
+receipt but at least one receipt is failed/blocked/unknown or lacks required
+evidence, and `ready_for_production_cutover` only when all required rows are
+qualified. This converts the production gap list into a machine-checkable
+cutover gate while preserving the current no-effect local verifier boundary.
+
+## Slice 68 Production Cutover Qualification Artifact Writer v0
+
+`scout_runtime_safety_production_qualification.py` now adds local JSON artifact
+helpers and a CLI around the Slice 67 audit. This lets the UI, qualification
+workflow, or a later release gate load reviewed qualification receipt files and
+persist the resulting blocked or ready cutover decision instead of relying on
+ad-hoc in-memory state.
+
+Implemented functions:
+
+- `load_production_safety_qualification_receipt()`;
+- `load_production_safety_qualification_receipts()`;
+- `write_production_safety_cutover_readiness_audit()`;
+- `load_production_safety_cutover_readiness_audit()`;
+- `run_production_safety_cutover_readiness_audit()`;
+- `main()`.
+
+The writer follows the existing Scout pattern of writing JSON and reading the
+artifact back through the Pydantic schema before returning it. Missing receipts
+produce a persisted `blocked_missing_required_qualification` audit; complete
+reviewed receipt sets produce a persisted `ready_for_production_cutover` audit.
+The CLI is deliberately local and deterministic: it does not call providers,
+load credential material, call `/safety/*`, mutate Phase 1 or runtime safety
+truth, send transport, touch production databases, or control hardware.
+
+## Slice 69 Area-Specific Qualification Bundle Admission v0
+
+`scout_runtime_safety_production_qualification.py` now adds the first
+area-specific admission gate for the qualification receipts consumed by the
+Slice 67 cutover audit. A receipt can no longer be treated as a generic
+production checkbox by the local helper path: it must come from an evidence
+bundle whose claims match the required matrix for that production area.
+
+Implemented artifacts and constants:
+
+- `scout_production_safety_qualification_evidence_claim`;
+- `scout_production_safety_qualification_evidence_bundle`;
+- `scout_production_safety_qualification_receipt_admission`;
+- `ProductionSafetyQualificationEvidenceClaim`;
+- `ProductionSafetyQualificationEvidenceBundle`;
+- `ProductionSafetyQualificationReceiptAdmissionDecision`;
+- `COMMON_PRODUCTION_SAFETY_QUALIFICATION_CLAIMS`;
+- `PRODUCTION_SAFETY_QUALIFICATION_REQUIRED_CLAIMS`.
+
+Implemented functions:
+
+- `evaluate_production_safety_qualification_bundle()`;
+- `load_production_safety_qualification_evidence_bundle()`;
+- `write_production_safety_qualification_receipt_admission_decision()`;
+- `load_production_safety_qualification_receipt_admission_decision()`.
+
+Every production area still needs the common claims for capability observation,
+production-environment verification, lineage verification, fail-closed
+behavior, and rollback/fallback behavior. The matrix then adds area-specific
+claims such as provider API execution and sanitized response evidence for
+`live_provider_api`, connector-health execution and degraded fail-closed
+behavior for `connector_health_endpoint`, credential-ref resolution without
+credential material for `credential_access_path`, stale-source rejection for
+`resident_freshness_attestor`, disputed-validation rejection for
+`field_device_validator`, guarded writer deployment claims for
+`phase1_writer_deployment`, delivery-verifier binding for `transport_client`,
+verified approved outbound delivery for `outbound_delivery`, and Pi identity
+plus hardware fail-closed behavior for `pi_hardware`.
+
+Accepted bundles emit a qualified `ProductionSafetyQualificationReceipt`.
+Bundles with missing or rejected required claims emit blocked receipts, so the
+cutover audit reports `blocked_failed_required_qualification` instead of
+silently treating partial evidence as complete. The admission path is local and
+deterministic: it reads only supplied ref/hash evidence and does not call
+providers, load credentials, call `/safety/*`, mutate Phase 1 or runtime safety
+truth, send transport, touch production databases, or control hardware.
+
+## Slice 70 Qualification Bundle Admission CLI Bridge v0
+
+`scout_runtime_safety_production_qualification.py` now connects the Slice 69
+bundle admission path to the local audit CLI. A production qualification run can
+prepare reviewed bundle JSON files, pass them to the CLI with `--bundle`, and
+receive both the per-area admission decisions and the emitted qualification
+receipt artifacts. The same CLI can then combine those emitted receipts with any
+explicit `--receipt` files and write the Slice 67 cutover audit artifact.
+
+Implemented functions:
+
+- `write_production_safety_qualification_receipt()`;
+- `run_production_safety_qualification_bundle_admission()`.
+
+Implemented CLI options:
+
+- `--bundle`;
+- `--admission-output-dir`;
+- `--receipt-output-dir`.
+
+The bridge keeps the previous `--receipt` and `--output` cutover audit behavior.
+When bundles are supplied with an output path, the CLI admits each bundle,
+persists optional admission/receipt artifacts, and writes the resulting cutover
+audit. If one bundle lacks a required area-specific claim, the emitted receipt
+is blocked and the cutover audit remains `blocked_failed_required_qualification`.
+The bridge remains deterministic and no-effect: it does not execute the
+qualification itself, call providers, load credentials, call `/safety/*`, mutate
+Phase 1 or runtime safety truth, send transport, touch production databases, or
+control hardware.
+
+## Slice 71 Qualification Claim Freshness/Stale-Binding Gate v0
+
+`scout_runtime_safety_production_qualification.py` now requires qualification
+claims to carry explicit freshness metadata before admission:
+
+- `evidence_observed_at`;
+- `reviewer_observed_at`;
+- `max_age_seconds`;
+- bundle-level `reference_time`.
+
+The evidence claim validator rejects review timestamps that precede the
+evidence observation. The bundle validator rejects evidence or review timestamps
+that are after the bundle reference time. Bundle admission then compares every
+accepted required claim against its declared `max_age_seconds`; if a required
+claim is too old, the decision becomes `blocked_stale_required_claims` and the
+emitted receipt is blocked. This keeps old provider, credential, field-device,
+writer, transport, outbound-delivery, or Pi/hardware evidence from being reused
+as production cutover proof after its validity window has expired.
+
+The stale-binding gate does not fetch fresh evidence by itself. It only evaluates
+the timestamps and refs supplied in the reviewed bundle, and it performs no
+provider call, credential load, `/safety/*` call, Phase 1 mutation, runtime
+safety truth mutation, outbound send, production database mutation, or hardware
+control.
+
+## Slice 72 Qualification Evidence Source-Integrity Verifier v0
+
+`scout_runtime_safety_production_qualification.py` now adds a local
+source-integrity verifier for the evidence files behind qualification bundles.
+The verifier checks the current local evidence package, not the external system
+that produced it. Its job is to ensure that a bundle claim's `evidence_ref` and
+`evidence_sha256` are backed by a sanitized local artifact file before that
+evidence can be relied on in a production-readiness packet.
+
+Implemented artifacts:
+
+- `scout_production_safety_qualification_evidence_artifact`;
+- `scout_production_safety_qualification_evidence_package`;
+- `scout_production_safety_qualification_source_integrity_report`;
+- `ProductionSafetyQualificationEvidenceArtifact`;
+- `ProductionSafetyQualificationEvidencePackage`;
+- `ProductionSafetyQualificationSourceIntegrityRow`;
+- `ProductionSafetyQualificationSourceIntegrityReport`.
+
+Implemented functions:
+
+- `verify_production_safety_qualification_source_integrity()`;
+- `load_production_safety_qualification_evidence_package()`;
+- `write_production_safety_qualification_source_integrity_report()`;
+- `load_production_safety_qualification_source_integrity_report()`.
+
+For every claim in the bundle, the verifier looks for a matching package
+artifact by `evidence_ref`, verifies that the artifact hash matches the claim
+hash, resolves the artifact path under an optional root path, rejects unsafe
+credential-like paths such as `.env`, key files, `.ssh`, `secret`, or
+`credentials` directories, and compares the local file hash to the claim hash.
+Artifacts flagged as not redacted/sanitized, credential material, raw payload,
+Safety API path evidence, or runtime safety truth material are blocked before
+hashing. The report classifies rows as `verified`, `missing`, `hash_mismatch`,
+`unsafe_path`, or `sensitive_material`; only an all-verified report receives
+`source_integrity_verified`.
+
+The verifier does not execute qualification checks or fetch evidence. It only
+validates supplied local artifacts and performs no provider call, credential
+load, `/safety/*` call, Phase 1 mutation, runtime safety truth mutation,
+outbound send, production database mutation, or hardware control.
+
+## Slice 73 Source-Integrity-Bound Qualification Admission v0
+
+Slice 73 closes the gap between Slice 72's standalone source verifier and Slice
+69's receipt admission gate. `evaluate_production_safety_qualification_bundle()`
+now accepts a source-integrity report and only treats a required claim as
+accepted when all three things are true:
+
+- the claim is present and reviewer-accepted;
+- the claim is still within its freshness window;
+- the claim's evidence source is verified by the matching source-integrity
+  report.
+
+If no source-integrity report is provided, if the report is for another area, if
+the report points at a different bundle ref, or if any accepted required claim
+lacks verified source integrity, admission returns
+`blocked_source_integrity_unverified` and emits a blocked qualification receipt.
+This prevents manually assembled bundle JSON from becoming cutover-eligible
+unless its claim artifacts have also been hash-verified.
+
+`run_production_safety_qualification_bundle_admission()` and the CLI now accept
+source packages alongside bundles:
+
+- `--source-package`;
+- `--source-root`;
+- `--source-integrity-output-dir`.
+
+When bundle/package pairs are supplied, the CLI verifies each source package,
+optionally persists the source-integrity report, admits the bundle against that
+report, optionally persists the admission decision and emitted receipt, and then
+writes the final cutover audit. A missing provider API claim, stale freshness
+claim, hash mismatch, unsafe local evidence path, or sensitive/runtime-material
+flag keeps the emitted receipt blocked and prevents production cutover readiness.
+
+The source-bound admission bridge still performs no provider call, credential
+load, `/safety/*` call, Phase 1 mutation, runtime safety truth mutation,
+outbound send, production database mutation, or hardware control.
+
+## Slice 74 Production Qualification Dossier Validator v0
+
+`scout_runtime_safety_production_qualification.py` now adds a manifest-driven
+dossier validator for the complete production qualification evidence set. The
+manifest lists the bundle and source-package files for each production
+qualification area; the runner then executes the local source-integrity verifier,
+source-bound admission gate, emitted receipt path, and cutover audit across all
+required areas.
+
+Implemented artifacts:
+
+- `scout_production_safety_qualification_dossier_manifest`;
+- `scout_production_safety_qualification_dossier_report`;
+- `ProductionSafetyQualificationDossierEntry`;
+- `ProductionSafetyQualificationDossierManifest`;
+- `ProductionSafetyQualificationDossierRow`;
+- `ProductionSafetyQualificationDossierReport`.
+
+Implemented functions:
+
+- `load_production_safety_qualification_dossier_manifest()`;
+- `run_production_safety_qualification_dossier()`;
+- `write_production_safety_qualification_dossier_report()`;
+- `load_production_safety_qualification_dossier_report()`.
+
+Implemented CLI options:
+
+- `--dossier`;
+- `--dossier-output`;
+- `--evaluation-time` (also applies to dossier rerun).
+
+The dossier and dossier-rerun CLI evaluate all area bundles and threat/mode
+coverage at one current UTC time by default. An explicit timezone-aware ISO
+`--evaluation-time` selects reproducible historical evaluation. The runner
+revalidates in-memory copies at that time; it never rewrites source bundles,
+observation timestamps, reviewer timestamps, or source packages. Future-dated
+observations fail validation, and expired observations fail admission. The
+report records `evaluation_time` and binds it into its digest, so downstream
+hash-bound references must be regenerated after an evaluation-time change.
+
+For library replay compatibility, omitting `evaluation_time` retains the old
+per-bundle reference times and records `evaluation_time=null`. Such a result is
+a historical replay, not evidence of present-time cutover eligibility. Any
+future effectful executor must re-evaluate current source evidence immediately
+before its effect; loading an old ready report or overriding the time for a
+historical replay cannot authorize deployment.
+
+The dossier report summarizes every required area as `qualified`,
+`missing_entry`, `missing_paths`, `load_failed`, `source_integrity_failed`, or
+`admission_failed`, embeds the resulting cutover audit, and reports
+`dossier_ready_for_production_cutover` only when all rows are qualified and the
+cutover audit is ready. Missing area entries become
+`blocked_dossier_incomplete`; failed source-integrity or admission rows become
+`blocked_dossier_failed`.
+
+This is the local qualification intake for real production evidence once that
+evidence exists. It still does not perform the external qualification work
+itself: no provider calls, credential loads, `/safety/*` calls, Phase 1
+mutations, runtime safety truth mutations, outbound sends, production database
+mutations, or hardware controls occur in the dossier validator.
+
+## Slice 75 Qualification Threat-Coverage Audit v0
+
+`scout_runtime_safety_production_qualification.py` now adds a deterministic
+threat-coverage audit for the production qualification dossier. This gate
+separates "all production area receipts exist" from "the safety promotion threat
+model and qualification modes were reviewed." A dossier cannot report
+`dossier_ready_for_production_cutover` unless this audit also passes.
+
+Implemented artifacts:
+
+- `scout_production_safety_qualification_threat_manifest`;
+- `scout_production_safety_qualification_threat_case`;
+- `scout_production_safety_qualification_mode_case`;
+- `scout_production_safety_qualification_threat_audit`;
+- `ProductionSafetyQualificationThreatCoverageManifest`;
+- `ProductionSafetyQualificationThreatCoverageCase`;
+- `ProductionSafetyQualificationModeCoverageCase`;
+- `ProductionSafetyQualificationThreatCoverageAudit`.
+
+Required threat coverage:
+
+- `hallucination`;
+- `agent_runaway`;
+- `prompt_injection`;
+- `malicious_mcp_results`;
+- `stale_candidates`;
+- `authority_escalation`;
+- `accidental_action`;
+- `local_cloud_inconsistency`.
+
+Required qualification modes:
+
+- `functional`;
+- `schema`;
+- `tool_use`;
+- `workspace`;
+- `authority_boundary`;
+- `latency`;
+- `memory`;
+- `failure_mode`;
+- `offline`;
+- `regression`;
+- `adversarial`;
+- `missing_evidence`;
+- `contradiction`;
+- `stale_state`;
+- `human_review`.
+
+Implemented functions:
+
+- `evaluate_production_safety_qualification_threat_coverage()`;
+- `load_production_safety_qualification_threat_coverage_manifest()`;
+- `write_production_safety_qualification_threat_coverage_audit()`;
+- `load_production_safety_qualification_threat_coverage_audit()`.
+
+Implemented dossier and CLI bindings:
+
+- `ProductionSafetyQualificationDossierManifest.threat_coverage_path`;
+- `ProductionSafetyQualificationDossierReport.threat_coverage_audit`;
+- `ProductionSafetyQualificationDossierReport.threat_coverage_status`;
+- `ProductionSafetyQualificationDossierReport.threat_coverage_ready`;
+- `--threat-coverage`;
+- `--threat-coverage-output`.
+
+The audit reports `qualification_threat_coverage_passed` only when every
+required threat has a fresh reviewed mitigation case and every required
+qualification mode has fresh reviewed passing evidence. Missing threat or mode
+coverage becomes `blocked_missing_qualification_coverage`; failed cases become
+`blocked_failed_qualification_coverage`; stale evidence becomes
+`blocked_stale_qualification_coverage`.
+
+This remains a local qualification verifier. It performs no provider calls,
+credential loads, `/safety/*` calls, Phase 1 mutations, runtime safety truth
+mutations, outbound sends, production database mutations, or hardware controls.
+
+## Slice 76 Threat-Coverage Evidence Source-Integrity v0
+
+Slice 76 closes the gap inside Slice 75: reviewed threat and qualification-mode
+coverage must now be backed by source-integrity-verified sanitized local
+artifacts, not just declared refs and hashes.
+
+Implemented artifacts:
+
+- `scout_production_safety_qualification_threat_evidence_package`;
+- `scout_production_safety_qualification_threat_source_integrity_report`;
+- `ProductionSafetyQualificationThreatCoverageEvidencePackage`;
+- `ProductionSafetyQualificationThreatCoverageSourceIntegrityRow`;
+- `ProductionSafetyQualificationThreatCoverageSourceIntegrityReport`.
+
+Implemented functions:
+
+- `verify_production_safety_qualification_threat_coverage_source_integrity()`;
+- `load_production_safety_qualification_threat_coverage_evidence_package()`;
+- `write_production_safety_qualification_threat_coverage_source_integrity_report()`;
+- `load_production_safety_qualification_threat_coverage_source_integrity_report()`.
+
+Implemented dossier and CLI bindings:
+
+- `ProductionSafetyQualificationDossierManifest.threat_coverage_source_package_path`;
+- `ProductionSafetyQualificationThreatCoverageAudit.source_integrity_report_ref`;
+- `ProductionSafetyQualificationThreatCoverageAudit.source_integrity_verified`;
+- `--threat-coverage-source-package`.
+
+`evaluate_production_safety_qualification_threat_coverage()` now accepts a
+source-integrity report and only treats a threat or qualification-mode row as
+`covered` if the case passed, remains fresh, and its evidence ref was verified
+against the sanitized package file hash. Missing source reports, failed source
+rows, or unverified required refs block as
+`blocked_source_integrity_unverified`.
+
+The verifier blocks missing files, hash mismatches, unsafe credential-like local
+paths, and evidence artifacts marked as credential material, raw payload,
+Safety API path, or runtime safety truth. It performs no provider calls,
+credential loads, `/safety/*` calls, Phase 1 mutations, runtime safety truth
+mutations, outbound sends, production database mutations, or hardware controls.
+
+## Slice 77 Production Qualification Gap Plan v0
+
+Slice 77 adds an internal qualification planning artifact for the remaining
+production gaps. It consumes a `scout_production_safety_qualification_dossier_report`
+and turns every open area, threat, qualification-mode, threat source-integrity,
+or dossier blocker into a machine-readable action row.
+
+Implemented artifacts:
+
+- `scout_production_safety_qualification_gap_plan`;
+- `ProductionSafetyQualificationGapRow`;
+- `ProductionSafetyQualificationGapPlan`.
+
+Implemented functions:
+
+- `evaluate_production_safety_qualification_gap_plan()`;
+- `write_production_safety_qualification_gap_plan()`;
+- `load_production_safety_qualification_gap_plan()`.
+
+Implemented CLI options:
+
+- `--gap-plan`;
+- `--gap-plan-output`.
+
+Gap rows classify blockers as:
+
+- `area_qualification`;
+- `threat_coverage`;
+- `qualification_mode_coverage`;
+- `threat_source_integrity`;
+- `dossier`.
+
+Each row records an action, source status, blockers, required artifact classes,
+and an unblock condition. A fully ready dossier produces
+`production_qualification_gaps_resolved` with zero rows. Any open row produces
+`blocked_production_qualification_gaps_open`.
+
+This artifact is intentionally Internal Qualification, not Runtime Diagnostic:
+it does not probe the live runtime, alter Dashboard behavior, call providers,
+load credentials, call `/safety/*`, mutate Phase 1, mutate runtime safety truth,
+send transport, verify delivery, mutate production databases, or control
+hardware.
+
+## Slice 78 Production Qualification Evidence Request Pack v0
+
+Slice 78 turns the internal gap plan into a reviewer/operator-facing evidence
+request pack. It does not collect evidence and does not qualify the production
+system by itself; it makes the next required evidence artifacts explicit.
+
+Implemented artifacts:
+
+- `scout_production_safety_qualification_evidence_request_pack`;
+- `ProductionSafetyQualificationEvidenceRequestRow`;
+- `ProductionSafetyQualificationEvidenceRequestPack`.
+
+Implemented functions:
+
+- `build_production_safety_qualification_evidence_request_pack()`;
+- `write_production_safety_qualification_evidence_request_pack()`;
+- `load_production_safety_qualification_evidence_request_pack()`.
+
+Implemented CLI options:
+
+- `--evidence-request-pack`;
+- `--evidence-request-output`.
+
+Request rows may ask for:
+
+- `area_evidence_bundle`;
+- `area_source_package`;
+- `threat_coverage_manifest`;
+- `threat_coverage_source_package`;
+- `threat_coverage_case`;
+- `qualification_mode_case`;
+- `dossier_rerun`.
+
+Each row carries the source gap kind/action, area/threat/mode where applicable,
+required claim ids, required threat ids, required qualification modes, required
+artifact kinds, source-integrity and human-review requirements, max-age
+metadata requirement, and an unblock condition. A resolved gap plan produces
+`no_evidence_requests_required`; any open gaps produce
+`evidence_request_pack_ready`.
+
+This is still an Internal Qualification artifact. It performs no evidence
+collection, runtime diagnostic probe, provider call, credential load,
+`/safety/*` call, Phase 1 mutation, runtime safety truth mutation, outbound
+send, production database mutation, or hardware control.
+
+## Slice 79 Production Qualification Evidence Request Fulfillment Intake v0
+
+Slice 79 consumes a request pack and a reviewer/operator fulfillment manifest,
+then reports whether every requested artifact has a matching submitted ref. It
+does not inspect the artifact files or collect missing evidence; it closes the
+local bookkeeping loop between "what evidence is required next" and "what was
+returned for review."
+
+Implemented artifacts:
+
+- `scout_production_safety_qualification_evidence_submission`;
+- `scout_production_safety_qualification_evidence_fulfillment_manifest`;
+- `scout_production_safety_qualification_evidence_fulfillment_report`;
+- `ProductionSafetyQualificationEvidenceSubmission`;
+- `ProductionSafetyQualificationEvidenceFulfillmentManifest`;
+- `ProductionSafetyQualificationEvidenceFulfillmentRow`;
+- `ProductionSafetyQualificationEvidenceFulfillmentReport`.
+
+Implemented functions:
+
+- `evaluate_production_safety_qualification_evidence_fulfillment()`;
+- `load_production_safety_qualification_evidence_fulfillment_manifest()`;
+- `write_production_safety_qualification_evidence_fulfillment_report()`;
+- `load_production_safety_qualification_evidence_fulfillment_report()`.
+
+Implemented CLI options:
+
+- `--evidence-fulfillment-request-pack`;
+- `--evidence-fulfillment-manifest`;
+- `--evidence-fulfillment-output`.
+
+The intake matches each request by `request_kind`, `area`, `threat_id`, and
+`mode_id`. A row is fulfilled only when the submitted artifact kind was
+requested, human review is present when required, source-integrity evidence is
+declared when required, max-age metadata is declared when required, and the
+reviewer/operator marked the submission as accepted.
+
+Fulfillment reports use these fail-closed statuses:
+
+- `evidence_request_fulfillment_verified`;
+- `blocked_missing_requested_evidence`;
+- `blocked_mismatched_requested_evidence`;
+- `blocked_rejected_requested_evidence`.
+- `blocked_fulfillment_source_integrity_unverified`.
+
+This remains an Internal Qualification intake. It performs no evidence
+collection, file inspection, runtime diagnostic probe, provider call,
+credential load, `/safety/*` call, Phase 1 mutation, runtime safety truth
+mutation, outbound send, production database mutation, delivery verification,
+or hardware control.
+
+## Slice 80 Production Qualification Fulfillment Source-Integrity v0
+
+Slice 80 verifies the submitted artifacts named by a fulfillment manifest
+against a sanitized local source package. This closes the gap where a request
+could be marked fulfilled by matching metadata alone: a fulfillment report now
+requires a source-integrity report before it can return
+`evidence_request_fulfillment_verified`.
+
+Implemented artifacts:
+
+- `scout_production_safety_qualification_evidence_fulfillment_artifact`;
+- `scout_production_safety_qualification_evidence_fulfillment_source_package`;
+- `scout_production_safety_qualification_evidence_fulfillment_source_integrity_report`;
+- `ProductionSafetyQualificationEvidenceFulfillmentArtifact`;
+- `ProductionSafetyQualificationEvidenceFulfillmentSourcePackage`;
+- `ProductionSafetyQualificationEvidenceFulfillmentSourceIntegrityRow`;
+- `ProductionSafetyQualificationEvidenceFulfillmentSourceIntegrityReport`.
+
+Implemented functions:
+
+- `verify_production_safety_qualification_evidence_fulfillment_source_integrity()`;
+- `load_production_safety_qualification_evidence_fulfillment_source_package()`;
+- `write_production_safety_qualification_evidence_fulfillment_source_integrity_report()`;
+- `load_production_safety_qualification_evidence_fulfillment_source_integrity_report()`.
+
+Implemented CLI options:
+
+- `--evidence-fulfillment-source-package`;
+- `--evidence-fulfillment-source-integrity-output`.
+
+Source-integrity rows report:
+
+- `verified`;
+- `missing`;
+- `hash_mismatch`;
+- `unsafe_path`;
+- `sensitive_material`;
+- `unrequested`.
+
+The verifier binds every `submitted_artifact_ref` and
+`submitted_artifact_sha256` from the fulfillment manifest to one sanitized
+local file. It blocks missing artifacts, mismatched package hashes, mismatched
+file hashes, unsafe credential-like paths, sensitive/runtime material flags,
+and extra unrequested package artifacts. The fulfillment evaluator now marks
+otherwise matching submissions as `source_unverified` until their submitted
+artifact refs appear in a verified fulfillment source-integrity report.
+
+This remains an Internal Qualification verifier. It performs no evidence
+collection, provider call, credential load, `/safety/*` call, Phase 1 mutation,
+runtime safety truth mutation, outbound send, production database mutation,
+delivery verification, or hardware control.
+
+## Slice 81 Production Qualification Remediation Readiness v0
+
+Slice 81 consumes the gap plan, evidence request pack, and source-verified
+fulfillment report, then determines whether each open production qualification
+gap has enough returned evidence to justify a dossier rerun. It is deliberately
+one step short of applying evidence or claiming cutover readiness.
+
+Implemented artifacts:
+
+- `scout_production_safety_qualification_remediation_readiness`;
+- `ProductionSafetyQualificationRemediationRow`;
+- `ProductionSafetyQualificationRemediationReadinessReport`.
+
+Implemented functions:
+
+- `evaluate_production_safety_qualification_remediation_readiness()`;
+- `write_production_safety_qualification_remediation_readiness_report()`;
+- `load_production_safety_qualification_remediation_readiness_report()`.
+
+Implemented CLI options:
+
+- `--remediation-gap-plan`;
+- `--remediation-request-pack`;
+- `--remediation-fulfillment-report`;
+- `--remediation-output`.
+
+The remediation gate verifies lineage across:
+
+- gap plan refs and hashes in the request pack;
+- request pack refs and hashes in the fulfillment report;
+- every expected request row generated from each open gap;
+- every fulfillment row status for that gap.
+
+Remediation rows may report:
+
+- `ready_for_dossier_rerun`;
+- `blocked_request_pack_mismatch`;
+- `blocked_missing_requested_evidence`;
+- `blocked_mismatched_requested_evidence`;
+- `blocked_rejected_requested_evidence`;
+- `blocked_fulfillment_source_integrity_unverified`.
+
+The top-level report may report `no_remediation_required`,
+`ready_for_dossier_rerun`, or `blocked_remediation_incomplete`.
+`ready_for_dossier_rerun` means only that the open gap rows have fulfilled,
+source-verified request returns and should be fed into the next dossier run.
+The report schema rejects any `ready_for_production_cutover=true` claim.
+
+This remains an Internal Qualification gate. It performs no evidence
+application, dossier execution, provider call, credential load, `/safety/*`
+call, Phase 1 mutation, runtime safety truth mutation, outbound send,
+production database mutation, delivery verification, or hardware control.
+
+## Slice 82 Production Qualification External Action Packet v0
+
+Slice 82 consumes a remediation readiness report and builds an explicit
+operator-facing action packet for the remaining real-world qualification work.
+It is the handoff boundary after remediation rows become source-verified enough
+to justify the next review step, but before any provider/API, transport,
+deployment, delivery, dossier rerun, or Pi/hardware action is allowed.
+
+Implemented artifacts:
+
+- `scout_production_safety_qualification_external_action_packet`;
+- `ProductionSafetyQualificationExternalActionRow`;
+- `ProductionSafetyQualificationExternalActionPacket`.
+
+Implemented functions:
+
+- `build_production_safety_qualification_external_action_packet()`;
+- `write_production_safety_qualification_external_action_packet()`;
+- `load_production_safety_qualification_external_action_packet()`.
+
+Implemented CLI options:
+
+- `--external-action-remediation`;
+- `--external-action-output`.
+
+External action rows map the remediated gap to one of these review lanes:
+
+- `provider_api_qualification`;
+- `connector_health_qualification`;
+- `credential_access_review`;
+- `freshness_attestor_qualification`;
+- `field_device_validation`;
+- `phase1_writer_deployment_verification`;
+- `transport_client_qualification`;
+- `delivery_verification`;
+- `pi_hardware_validation`;
+- `threat_coverage_review`;
+- `threat_coverage_source_integrity_review`;
+- `qualification_mode_review`;
+- `dossier_rerun`.
+
+Rows may report `ready_for_operator_authorization` only when the corresponding
+remediation row is `ready_for_dossier_rerun`; otherwise they remain
+`blocked_remediation_incomplete` and carry the remediation blockers forward.
+Ready rows still set `requires_explicit_operator_approval=true`,
+`reviewed_effect_boundary_required=true`, and `execution_allowed=false`.
+
+The packet may report `no_external_actions_required`,
+`external_actions_ready_for_operator_authorization`, or
+`blocked_external_actions_incomplete`. The ready state means only that the
+packet is suitable for a future operator authorization workflow; it is not an
+authorization, execution receipt, delivery proof, dossier rerun, or production
+cutover claim. The schema rejects `ready_for_production_cutover=true` and
+`execution_allowed=true`.
+
+This remains an Internal Qualification handoff artifact. It performs no
+provider call, credential load, `/safety/*` call, Phase 1 mutation, runtime
+safety truth mutation, outbound send, production database mutation, delivery
+verification, dossier execution, or hardware control.
+
+## Slice 83 Production Qualification External Authorization Intake v0
+
+Slice 83 consumes an external action packet plus an operator authorization
+manifest, then records whether each pending external qualification action has a
+matching, current, effect-boundary-reviewed authorization artifact. It closes
+the gap between "this action is ready to ask a human/operator" and "the returned
+authorization record is complete enough to hand to a future separate executor."
+It does not execute the action.
+
+Implemented artifacts:
+
+- `scout_production_safety_qualification_external_authorization_submission`;
+- `scout_production_safety_qualification_external_authorization_manifest`;
+- `scout_production_safety_qualification_external_authorization_report`;
+- `ProductionSafetyQualificationExternalAuthorizationSubmission`;
+- `ProductionSafetyQualificationExternalAuthorizationManifest`;
+- `ProductionSafetyQualificationExternalAuthorizationRow`;
+- `ProductionSafetyQualificationExternalAuthorizationReport`.
+
+Implemented function:
+
+- `evaluate_production_safety_qualification_external_authorization()`;
+- `load_production_safety_qualification_external_authorization_manifest()`;
+- `write_production_safety_qualification_external_authorization_report()`;
+- `load_production_safety_qualification_external_authorization_report()`.
+
+Implemented CLI options:
+
+- `--external-authorization-packet`;
+- `--external-authorization-manifest`;
+- `--external-authorization-output`.
+
+Each authorization row verifies:
+
+- exact packet-row identity: gap kind, action, area, threat, and mode;
+- expected external action kind;
+- paired operator identity ref and hash;
+- paired authorization ref and hash;
+- paired reviewed effect-boundary ref and hash;
+- idempotency key;
+- authorization observation time and expiry;
+- non-expired authorization at manifest reference time;
+- no execution or runtime effect flags.
+
+Rows may report:
+
+- `authorization_recorded`;
+- `missing_authorization`;
+- `mismatched_authorization`;
+- `rejected_authorization`;
+- `expired_authorization`;
+- `blocked_packet_incomplete`.
+
+The top-level report may report `no_external_authorization_required`,
+`external_authorization_recorded`, or
+`blocked_external_authorization_incomplete`. A recorded authorization means only
+that future executor invocation may use the report as one input. It is not an
+executor invocation, provider response, transport delivery, Pi hardware result,
+dossier rerun, production deployment, or cutover claim. The schema rejects
+`execution_allowed=true` and `ready_for_production_cutover=true`.
+
+This remains an Internal Qualification authorization-intake artifact. It
+performs no provider call, credential load, `/safety/*` call, Phase 1 mutation,
+runtime safety truth mutation, outbound send, production database mutation,
+delivery verification, dossier execution, or hardware control.
+
+## Slice 84 Production Qualification External Invocation Guard v0
+
+Slice 84 consumes an external authorization report plus a proposed external
+executor invocation manifest, then verifies that every separate-executor handoff
+request is bound to the recorded authorization. It closes the gap between "an
+operator authorization record exists" and "the requested executor handoff has
+the exact refs needed for a future external executor." It still does not invoke
+that executor.
+
+Implemented artifacts:
+
+- `scout_production_safety_qualification_external_invocation_request`;
+- `scout_production_safety_qualification_external_invocation_manifest`;
+- `scout_production_safety_qualification_external_invocation_report`;
+- `ProductionSafetyQualificationExternalInvocationRequest`;
+- `ProductionSafetyQualificationExternalInvocationManifest`;
+- `ProductionSafetyQualificationExternalInvocationRow`;
+- `ProductionSafetyQualificationExternalInvocationReport`.
+
+Implemented function:
+
+- `evaluate_production_safety_qualification_external_invocation()`;
+- `load_production_safety_qualification_external_invocation_manifest()`;
+- `write_production_safety_qualification_external_invocation_report()`;
+- `load_production_safety_qualification_external_invocation_report()`.
+
+Implemented CLI options:
+
+- `--external-invocation-authorization-report`;
+- `--external-invocation-manifest`;
+- `--external-invocation-output`.
+
+Each invocation row verifies:
+
+- exact authorization-row identity: gap kind, action, area, threat, and mode;
+- expected external action kind;
+- matching operator identity ref and hash;
+- matching authorization ref and hash;
+- matching reviewed effect-boundary ref and hash;
+- authorization idempotency key match;
+- separate invocation idempotency key;
+- external executor ref and hash;
+- executor invocation ref and hash;
+- second operator confirmation for the handoff;
+- no execution or runtime effect flags.
+
+Rows may report:
+
+- `invocation_handoff_recorded`;
+- `missing_invocation_request`;
+- `mismatched_invocation_request`;
+- `missing_operator_confirmation`;
+- `rejected_invocation_request`;
+- `blocked_authorization_incomplete`.
+
+The top-level report may report `no_external_invocation_required`,
+`external_invocation_handoff_recorded`, or
+`blocked_external_invocation_incomplete`. A recorded handoff means only that a
+future separate executor has a reviewed, hash-bound input artifact. It is not
+the executor invocation itself, provider response, transport send, delivery
+proof, Pi hardware result, dossier rerun, production deployment, or cutover
+claim. The schema rejects `execution_allowed=true` and
+`ready_for_production_cutover=true`.
+
+This remains an Internal Qualification invocation-guard artifact. It performs
+no provider call, credential load, `/safety/*` call, Phase 1 mutation, runtime
+safety truth mutation, outbound send, production database mutation, delivery
+verification, dossier execution, executor invocation, or hardware control.
+
+## Slice 85 Production Qualification External Result Receipt Intake v0
+
+Slice 85 consumes an external invocation guard report plus a manifest of
+sanitized result receipts returned by a separate executor. It verifies that each
+receipt binds back to the exact executor handoff before marking it as ready for
+future evidence fulfillment. This is the return path for real provider/API,
+transport, delivery, deployment, and Pi/hardware qualification evidence, but it
+does not treat the receipt itself as cutover proof.
+
+Implemented artifacts:
+
+- `scout_production_safety_qualification_external_result_receipt`;
+- `scout_production_safety_qualification_external_result_manifest`;
+- `scout_production_safety_qualification_external_result_report`;
+- `ProductionSafetyQualificationExternalResultReceipt`;
+- `ProductionSafetyQualificationExternalResultManifest`;
+- `ProductionSafetyQualificationExternalResultRow`;
+- `ProductionSafetyQualificationExternalResultReport`.
+
+Implemented function:
+
+- `evaluate_production_safety_qualification_external_result_intake()`;
+- `load_production_safety_qualification_external_result_manifest()`;
+- `write_production_safety_qualification_external_result_report()`;
+- `load_production_safety_qualification_external_result_report()`.
+
+Implemented CLI options:
+
+- `--external-result-invocation-report`;
+- `--external-result-manifest`;
+- `--external-result-output`.
+
+Each result row verifies:
+
+- exact invocation-row identity: gap kind, action, area, threat, and mode;
+- expected external action kind;
+- matching external executor ref and hash;
+- matching executor invocation ref and hash;
+- accepted sanitized result receipt;
+- result artifact kind, ref, hash, and observation time;
+- paired reviewer ref and hash;
+- source-integrity evidence presence;
+- max-age metadata presence;
+- no execution or runtime effect flags in the local intake.
+
+Rows may report:
+
+- `result_receipt_recorded`;
+- `missing_result_receipt`;
+- `mismatched_result_receipt`;
+- `rejected_result_receipt`;
+- `unverified_result_source`;
+- `blocked_invocation_incomplete`.
+
+The top-level report may report `no_external_result_required`,
+`external_results_recorded`, or `blocked_external_results_incomplete`.
+`external_results_recorded` means only that the sanitized receipts are ready to
+be fed into future evidence fulfillment. It is not provider truth, transport
+delivery proof, Pi hardware qualification, dossier rerun, production deployment,
+or cutover readiness by itself. The schema rejects `execution_allowed=true` and
+`ready_for_production_cutover=true`.
+
+This remains an Internal Qualification result-intake artifact. It performs no
+provider call, credential load, `/safety/*` call, Phase 1 mutation, runtime
+safety truth mutation, outbound send, production database mutation, delivery
+verification, dossier execution, executor invocation, or hardware control.
+
+## Slice 86 Production Qualification External Result Evidence Bridge v0
+
+Slice 86 consumes the original evidence request pack plus the Slice 85 external
+result report. It verifies that every requested artifact has a matching,
+source-ready result artifact from the separate executor, then emits a normal
+evidence fulfillment manifest that must still pass the Slice 79 fulfillment
+intake and Slice 80 source-integrity verifier before any remediation or dossier
+rerun can continue.
+
+Implemented artifacts:
+
+- `scout_production_safety_qualification_external_result_artifact`;
+- `scout_production_safety_qualification_external_result_evidence_bridge`;
+- `ProductionSafetyQualificationExternalResultArtifact`;
+- `ProductionSafetyQualificationExternalResultEvidenceBridgeRow`;
+- `ProductionSafetyQualificationExternalResultEvidenceBridgeReport`.
+
+Implemented function:
+
+- `build_production_safety_qualification_evidence_fulfillment_manifest_from_external_results()`;
+- `write_production_safety_qualification_external_result_evidence_bridge_report()`;
+- `load_production_safety_qualification_external_result_evidence_bridge_report()`;
+- `write_production_safety_qualification_evidence_fulfillment_manifest()`.
+
+Implemented CLI options:
+
+- `--external-result-bridge-request-pack`;
+- `--external-result-bridge-report`;
+- `--external-result-bridge-output`;
+- `--external-result-bridge-fulfillment-output`.
+
+Each bridge row verifies:
+
+- matching request-pack identity: source gap kind, action, area, threat, and
+  mode;
+- a ready Slice 85 result row;
+- submitted artifact kind is one of the request row's required artifacts;
+- submitted artifact ref and hash are present;
+- accepted artifact status;
+- paired reviewer ref and hash when human review is required;
+- source-integrity evidence presence when requested;
+- max-age metadata presence when requested.
+
+Rows may report:
+
+- `bridged_to_fulfillment_submission`;
+- `missing_result_for_request`;
+- `mismatched_result_artifact`;
+- `blocked_result_not_ready`.
+
+The top-level bridge may report `no_external_result_bridge_required`,
+`external_result_bridge_ready`, or `blocked_external_result_bridge_incomplete`.
+`external_result_bridge_ready` means only that a deterministic fulfillment
+manifest was prepared from result artifacts. It is not local source-integrity
+verification, provider truth, transport delivery proof, Pi hardware
+qualification, dossier rerun, production deployment, or cutover readiness by
+itself. The schema rejects `execution_allowed=true` and
+`ready_for_production_cutover=true`.
+
+This remains an Internal Qualification evidence-bridge artifact. It performs no
+provider call, credential load, `/safety/*` call, Phase 1 mutation, runtime
+safety truth mutation, outbound send, production database mutation, delivery
+verification, dossier execution, executor invocation, or hardware control.
+
+## Slice 87 Production Qualification External Result Remediation Closure v0
+
+Slice 87 consumes the original gap plan, original evidence request pack, a Slice
+86 external result evidence bridge report, and an optional fulfillment source
+package. It provides one deterministic local closure report for the post-result
+path: bridge readiness, submitted artifact source-integrity, fulfillment intake,
+and remediation readiness.
+
+Implemented artifact:
+
+- `scout_production_safety_qualification_external_result_remediation_closure`;
+- `ProductionSafetyQualificationExternalResultRemediationClosureReport`.
+
+Implemented function:
+
+- `evaluate_production_safety_qualification_external_result_remediation_closure()`;
+- `write_production_safety_qualification_external_result_remediation_closure_report()`;
+- `load_production_safety_qualification_external_result_remediation_closure_report()`.
+
+Implemented CLI options:
+
+- `--external-result-closure-gap-plan`;
+- `--external-result-closure-request-pack`;
+- `--external-result-closure-bridge-report`;
+- `--external-result-closure-source-package`;
+- `--external-result-closure-output`.
+
+The closure report verifies:
+
+- request pack lineage matches the gap plan;
+- bridge report lineage matches the request pack;
+- ready bridge reports contain a fulfillment manifest;
+- a source package is present when a bridge is ready;
+- source package manifest ref/hash matches the bridged fulfillment manifest;
+- submitted artifact hashes bind to sanitized local files through the Slice 80
+  source-integrity verifier;
+- fulfillment rows pass the Slice 79 intake with verified source refs;
+- remediation rows pass the Slice 81 readiness gate.
+
+The top-level closure may report:
+
+- `no_external_result_remediation_required`;
+- `external_result_remediation_ready_for_dossier_rerun`;
+- `blocked_external_result_bridge_incomplete`;
+- `blocked_external_result_source_package_missing`;
+- `blocked_external_result_source_integrity_failed`;
+- `blocked_external_result_fulfillment_incomplete`;
+- `blocked_external_result_remediation_incomplete`.
+
+`external_result_remediation_ready_for_dossier_rerun` means only that the local
+post-result evidence closure is ready for a later dossier rerun. It is not a
+dossier rerun, production deployment, provider truth, transport delivery proof,
+Pi hardware qualification, or production cutover readiness. The schema rejects
+`execution_allowed=true` and `ready_for_production_cutover=true`.
+
+This remains an Internal Qualification remediation-closure artifact. It
+performs no provider call, credential load, `/safety/*` call, Phase 1 mutation,
+runtime safety truth mutation, outbound send, production database mutation,
+delivery verification, dossier execution, executor invocation, or hardware
+control.
+
+## Slice 88 Production Qualification Dossier Rerun Intake v0
+
+Slice 88 consumes a Slice 87 external result remediation closure report and a
+proposed production qualification dossier manifest. It provides one deterministic
+local wrapper around the existing dossier validator so a dossier rerun can occur
+only after the post-result closure has reached
+`external_result_remediation_ready_for_dossier_rerun`.
+
+Implemented artifact:
+
+- `scout_production_safety_qualification_dossier_rerun`;
+- `ProductionSafetyQualificationDossierRerunReport`.
+
+Implemented function:
+
+- `evaluate_production_safety_qualification_dossier_rerun_intake()`;
+- `write_production_safety_qualification_dossier_rerun_report()`;
+- `load_production_safety_qualification_dossier_rerun_report()`.
+
+Implemented CLI options:
+
+- `--dossier-rerun-closure-report`;
+- `--dossier-rerun-manifest`;
+- `--dossier-rerun-output`.
+
+The dossier rerun report verifies:
+
+- closure refs and hashes bind to the supplied Slice 87 closure report;
+- blocked closure reports cannot trigger the local dossier validator;
+- no-remediation closure reports return `no_dossier_rerun_required`;
+- ready closure reports run the existing local dossier validator with the
+  supplied manifest;
+- nested dossier report refs, hashes, dossier status, cutover audit status, and
+  threat coverage status remain internally consistent.
+
+The top-level report may return:
+
+- `no_dossier_rerun_required`;
+- `dossier_rerun_ready_for_cutover_review`;
+- `blocked_external_result_remediation_incomplete`;
+- `blocked_dossier_rerun_incomplete`;
+- `blocked_dossier_rerun_failed`.
+
+`dossier_rerun_ready_for_cutover_review` means only that the local dossier
+validator produced a nested dossier report that is ready for production cutover
+review. The wrapper still rejects `execution_allowed=true` and top-level
+`ready_for_production_cutover=true`; the nested
+`dossier_report_ready_for_cutover=true` is review evidence, not production
+authorization.
+
+This remains an Internal Qualification dossier-rerun artifact. It performs no
+provider call, credential load, `/safety/*` call, Phase 1 mutation, runtime
+safety truth mutation, outbound send, production database mutation, delivery
+verification, executor invocation, production deployment, or hardware control.
+
+## Slice 89 Production Qualification Cutover Authorization Intake v0
+
+Slice 89 consumes a Slice 88 dossier rerun report and a production cutover
+authorization manifest. It records whether a human/operator review package is
+complete enough for later cutover decision-making, while still refusing to
+execute production cutover or mutate runtime safety truth.
+
+Implemented artifacts:
+
+- `scout_production_safety_qualification_cutover_authorization_manifest`;
+- `scout_production_safety_qualification_cutover_authorization_report`;
+- `ProductionSafetyQualificationCutoverAuthorizationManifest`;
+- `ProductionSafetyQualificationCutoverAuthorizationReport`.
+
+Implemented function:
+
+- `evaluate_production_safety_qualification_cutover_authorization()`;
+- `load_production_safety_qualification_cutover_authorization_manifest()`;
+- `write_production_safety_qualification_cutover_authorization_report()`;
+- `load_production_safety_qualification_cutover_authorization_report()`.
+
+Implemented CLI options:
+
+- `--cutover-authorization-dossier-rerun-report`;
+- `--cutover-authorization-manifest`;
+- `--cutover-authorization-output`.
+
+The authorization intake verifies:
+
+- the manifest's dossier rerun ref/hash matches the supplied Slice 88 report;
+- the Slice 88 report is `dossier_rerun_ready_for_cutover_review`;
+- the nested dossier report is ready for production cutover review;
+- operator identity, authorization, reviewed effect-boundary, rollback plan,
+  production change request, idempotency, authorization timestamp, and expiry
+  are present;
+- expiry is after the reference time;
+- the explicit confirmation phrase is exactly
+  `AUTHORIZE SCOUT PRODUCTION CUTOVER REVIEW`;
+- nested dossier report refs, status, cutover audit status, and threat coverage
+  status remain internally consistent.
+
+The top-level report may return:
+
+- `cutover_authorization_recorded`;
+- `blocked_dossier_rerun_not_ready`;
+- `missing_cutover_authorization`;
+- `mismatched_cutover_authorization`;
+- `rejected_cutover_authorization`;
+- `expired_cutover_authorization`.
+
+`cutover_authorization_recorded` means only that a bounded human review package
+has been recorded for later release control. It sets
+`ready_for_human_cutover_review=true`, but the report still rejects
+`execution_allowed=true` and `ready_for_production_cutover=true`.
+
+This remains an Internal Qualification authorization artifact. It performs no
+provider call, credential load, `/safety/*` call, Phase 1 mutation, runtime
+safety truth mutation, outbound send, production database mutation, delivery
+verification, executor invocation, production deployment, or hardware control.
+
+## Slice 90 Production Qualification Cutover Release Handoff Guard v0
+
+Slice 90 consumes a Slice 89 cutover authorization report and a production
+cutover release handoff manifest. It records whether a future release-executor
+handoff envelope is complete enough to be reviewed by a separate executor. It
+does not invoke that executor and does not perform production cutover.
+
+Implemented artifacts:
+
+- `scout_production_safety_qualification_cutover_release_handoff_request`;
+- `scout_production_safety_qualification_cutover_release_handoff_manifest`;
+- `scout_production_safety_qualification_cutover_release_handoff_report`;
+- `ProductionSafetyQualificationCutoverReleaseHandoffRequest`;
+- `ProductionSafetyQualificationCutoverReleaseHandoffManifest`;
+- `ProductionSafetyQualificationCutoverReleaseHandoffReport`.
+
+Implemented function:
+
+- `evaluate_production_safety_qualification_cutover_release_handoff()`;
+- `load_production_safety_qualification_cutover_release_handoff_manifest()`;
+- `write_production_safety_qualification_cutover_release_handoff_report()`;
+- `load_production_safety_qualification_cutover_release_handoff_report()`.
+
+Implemented CLI options:
+
+- `--cutover-release-authorization-report`;
+- `--cutover-release-handoff-manifest`;
+- `--cutover-release-handoff-output`.
+
+The release handoff guard verifies:
+
+- the manifest's cutover authorization ref/hash matches the supplied Slice 89
+  report;
+- the Slice 89 report is `cutover_authorization_recorded`;
+- the request repeats the same operator identity, authorization,
+  reviewed-effect-boundary, rollback-plan, production-change-request, and
+  cutover authorization idempotency refs;
+- release executor refs and release invocation refs are present and paired;
+- a handoff idempotency key and request timestamp are present;
+- request time is not after the manifest reference time;
+- the explicit confirmation phrase is exactly
+  `REQUEST SCOUT PRODUCTION CUTOVER HANDOFF`.
+
+The top-level report may return:
+
+- `cutover_release_handoff_recorded`;
+- `blocked_cutover_authorization_incomplete`;
+- `missing_cutover_release_request`;
+- `mismatched_cutover_release_request`;
+- `rejected_cutover_release_request`;
+- `missing_operator_confirmation`.
+
+`cutover_release_handoff_recorded` means only that the future release-executor
+handoff envelope has been recorded. It sets
+`ready_for_release_executor_handoff=true`, but the report still rejects
+`execution_allowed=true` and `ready_for_production_cutover=true`.
+
+This remains an Internal Qualification release-handoff artifact. It performs no
+provider call, credential load, `/safety/*` call, Phase 1 mutation, runtime
+safety truth mutation, outbound send, production database mutation, delivery
+verification, executor invocation, production deployment, or hardware control.
+
+## Slice 91 Production Qualification Cutover Release Effect Receipt Intake v0
+
+Slice 91 consumes a Slice 90 cutover release handoff report and a sanitized
+external release-executor effect manifest. It records whether the external
+executor returned a complete, source-verifiable receipt for the requested
+release handoff. It does not perform the release and does not convert the
+receipt into runtime safety truth.
+
+Implemented artifacts:
+
+- `scout_production_safety_qualification_cutover_release_effect_receipt`;
+- `scout_production_safety_qualification_cutover_release_effect_manifest`;
+- `scout_production_safety_qualification_cutover_release_effect_report`;
+- `ProductionSafetyQualificationCutoverReleaseEffectReceipt`;
+- `ProductionSafetyQualificationCutoverReleaseEffectManifest`;
+- `ProductionSafetyQualificationCutoverReleaseEffectReport`.
+
+Implemented function:
+
+- `evaluate_production_safety_qualification_cutover_release_effect_intake()`;
+- `load_production_safety_qualification_cutover_release_effect_manifest()`;
+- `write_production_safety_qualification_cutover_release_effect_report()`;
+- `load_production_safety_qualification_cutover_release_effect_report()`.
+
+Implemented CLI options:
+
+- `--cutover-release-effect-handoff-report`;
+- `--cutover-release-effect-manifest`;
+- `--cutover-release-effect-output`.
+
+The release effect receipt intake verifies:
+
+- the manifest's cutover release handoff ref/hash matches the supplied Slice 90
+  report;
+- the Slice 90 report is `cutover_release_handoff_recorded`;
+- the receipt repeats the same release executor refs, release invocation refs,
+  and handoff idempotency key;
+- release execution refs, release result refs, reviewer refs, source-integrity
+  evidence, and max-age metadata are present;
+- the external executor reports the release effect as completed;
+- receipt observation time is not after the manifest reference time;
+- no credentials, raw payloads, production database payload, runtime safety
+  truth, `/safety/*` mutation, transport, or hardware effect is embedded in the
+  receipt.
+
+The top-level report may return:
+
+- `cutover_release_effect_receipt_recorded`;
+- `blocked_cutover_release_handoff_incomplete`;
+- `missing_cutover_release_effect_receipt`;
+- `mismatched_cutover_release_effect_receipt`;
+- `rejected_cutover_release_effect_receipt`;
+- `unverified_cutover_release_effect_source`.
+
+`cutover_release_effect_receipt_recorded` means only that a sanitized external
+executor receipt has been recorded and is ready for release closure review. It
+sets `ready_for_release_closure=true`, but the report still rejects
+`execution_allowed=true` and `ready_for_production_cutover=true`.
+
+This remains an Internal Qualification release-effect intake artifact. It
+performs no provider call, credential load, `/safety/*` call, Phase 1 mutation,
+runtime safety truth mutation, outbound send, production database mutation,
+delivery verification, executor invocation, production deployment, or hardware
+control.
+
+## Slice 92 Production Qualification Cutover Release Closure Review v0
+
+Slice 92 consumes a Slice 91 cutover release effect report and a local cutover
+release closure manifest. It records whether a reviewer has accepted the
+sanitized release effect receipt as closed for cutover-review purposes. It does
+not perform production cutover and does not convert the closure into runtime
+safety truth.
+
+Implemented artifacts:
+
+- `scout_production_safety_qualification_cutover_release_closure_review`;
+- `scout_production_safety_qualification_cutover_release_closure_manifest`;
+- `scout_production_safety_qualification_cutover_release_closure_report`;
+- `ProductionSafetyQualificationCutoverReleaseClosureReview`;
+- `ProductionSafetyQualificationCutoverReleaseClosureManifest`;
+- `ProductionSafetyQualificationCutoverReleaseClosureReport`.
+
+Implemented function:
+
+- `evaluate_production_safety_qualification_cutover_release_closure()`;
+- `load_production_safety_qualification_cutover_release_closure_manifest()`;
+- `write_production_safety_qualification_cutover_release_closure_report()`;
+- `load_production_safety_qualification_cutover_release_closure_report()`.
+
+Implemented CLI options:
+
+- `--cutover-release-closure-effect-report`;
+- `--cutover-release-closure-manifest`;
+- `--cutover-release-closure-output`.
+
+The release closure review verifies:
+
+- the manifest's cutover release effect report ref/hash matches the supplied
+  Slice 91 report;
+- the Slice 91 report is `cutover_release_effect_receipt_recorded`;
+- the closure review repeats the same release executor refs, release invocation
+  refs, handoff idempotency key, release execution refs, and release result
+  refs;
+- the release-effect reviewer refs match the Slice 91 effect receipt reviewer;
+- rollback plan refs and production change request refs match the recorded
+  cutover release handoff chain;
+- closure reviewer refs, source-integrity evidence, max-age metadata, review
+  time, expiry, and reviewer confirmation are present;
+- closure review time is not after the manifest reference time and expiry is
+  still after that reference time;
+- the explicit confirmation phrase is exactly
+  `CLOSE SCOUT PRODUCTION CUTOVER RELEASE REVIEW`;
+- no credentials, raw payloads, production database payload, runtime safety
+  truth, `/safety/*` mutation, transport, or hardware effect is embedded in the
+  closure review.
+
+The top-level report may return:
+
+- `cutover_release_closure_recorded`;
+- `blocked_cutover_release_effect_incomplete`;
+- `missing_cutover_release_closure_review`;
+- `mismatched_cutover_release_closure_review`;
+- `rejected_cutover_release_closure_review`;
+- `unverified_cutover_release_closure_source`;
+- `expired_cutover_release_closure_review`;
+- `missing_release_closure_confirmation`.
+
+`cutover_release_closure_recorded` means only that a reviewer accepted the
+sanitized release effect receipt as closed for production cutover review. It
+sets `ready_for_production_cutover_review=true`, but the report still rejects
+`execution_allowed=true` and `ready_for_production_cutover=true`.
+
+This remains an Internal Qualification release-closure artifact. It performs no
+provider call, credential load, `/safety/*` call, Phase 1 mutation, runtime
+safety truth mutation, outbound send, production database mutation, delivery
+verification, executor invocation, production deployment, or hardware control.
+
 ## Production Readiness Gaps
 
 The completed slices should be treated as the first safety template, not as the
-complete Scout safety system. The current production gaps are intentional:
+complete Scout safety system. Qualification snapshots do not close the missing
+production integrations described below.
 
-- `physiologic_gate` has the most complete end-to-end path; the other five
-  primary gates still need production parity for resident evidence, source
-  freshness, route context joins, and field validation.
-- `weather_gate` and `environment_threat_gate` need stronger live evidence
-  contracts before they can be trusted as production safety inputs.
-- SMS, LoRa, satellite, and MQTT are only application-layer drafts today. No
-  hardware radio, broker publish, phone bridge, or satellite bridge is invoked.
+### Simulator-first development evidence - 2026-09-04
+
+Development verification must first reuse the
+[Alpha Simulation Sandbox](scout-alpha-mobile-wearable-simulation-sandbox.md).
+Its existing CLI accepts a selected workspace's canonical historical GPX,
+scenario profile, virtual clock, and scheduled faults, then executes the real
+observer boundary and six-gate shadow reducer with sandbox-only receipts.
+Missing physical GNSS, wearable input, or live weather is not a prerequisite
+blocker for development work covered by those simulations.
+
+Keep the two evidence scopes separate:
+
+- Development: verify expected gate/level, degraded-input behavior, source and
+  scenario hashes, no-effect boundaries, and simulated approval/receipt lineage
+  using deterministic workspace-based test cases. Preserve the virtual clock;
+  rerun when source/code/scenario inputs change instead of requiring a fresh
+  field observation for every development iteration.
+- Production release: verify the actual approved deployment, hardware/provider
+  integration and delivery effects within their required freshness windows.
+  A simulator receipt cannot qualify those effects or authorize cutover.
+
+On 2026-09-04, the unchanged Alpha CLI passed all ten existing profiles on each
+of two Dashboard-catalog workspaces: `chilai_nanhua_day1_scoutAI` and
+`dongqing_batongguan_historic_trail_newImport`. Each profile replayed 48 frames
+through a local MQTT broker. All twenty expected gate/level results matched;
+GNSS/network/device fault evidence and source hashes verified, with twelve
+simulated approval/receipt chains and no production mutation or delivery.
+The 49 focused simulator, API/UI-contract, MQTT harness, shadow replay, and
+legacy runtime simulator tests passed after replacing one FastAPI-internal
+route-list assertion with HTTP feature-flag checks. Simulator runtime code
+was unchanged.
+The current Dashboard entrypoint does not expose Alpha routes and passes a
+workspace collection root, so selected-project UI integration remains separate
+work subject to the Navigation freeze. The CLI is usable without that change.
+
+Evidence is under
+`artifacts/qualification/scout-safety-simulator-revalidation-20260904/`.
+The node 9 production attempt below records a release boundary, not a reason
+to halt simulator-based construction or require field hardware for coding.
+
+### Node 9 cutover attempt - 2026-09-03
+
+The operator requested execution of node 9 (production cutover). The request is
+recorded; a second copy of the same authorization is not the blocker. Preflight
+stopped before any deployment, restart, runtime mutation, or outbound send:
+
+- The Pi admin container was running and healthy with zero restarts, but its
+  image differs from the earlier qualification snapshot. A fresh read-only
+  writer probe returned `phase1_writer_runtime_verified`, with matching local
+  and deployed module hashes. This proves the guarded surface is present, not
+  that a resident production caller executes it.
+- Evaluation at `2026-09-03T05:33:28.904805Z` returned
+  `blocked_dossier_failed`: all nine source packages verified, but all 72 area
+  claims exceeded their 3,600-second TTL. Eight threat cases and 15 qualification
+  modes were also stale. The generated gap plan has 32 evidence gaps and its
+  request pack has 41 artifact requests; these are not 41 independent code bugs.
+- The former `9/9` result was a historical replay using each bundle's saved
+  reference time. It did not demonstrate one fresh, coherent qualification
+  window. The CLI now checks current time by default; old evidence is preserved.
+- Slices 89-92 remain no-effect review/handoff/receipt/closure contracts.
+  `deployment://scout/safety-release-executor` names a target, not an implemented
+  release executor. The production writer caller, production-scoped MQTT
+  integration, canary execution, and verified rollback remain unproven.
+
+Local evidence is under
+`artifacts/qualification/scout-safety-cutover-20260903/`: the fresh writer probe,
+`dossier-report.current.json`, `gap-plan.current.json`,
+`evidence-request-pack.current.json`, and `node9-attempt.json`. The historical
+`scout-safety-production-20260831` artifacts were not refreshed or overwritten.
+
+The remaining execution sequence is:
+
+1. Implement the deterministic release executor for a pinned target/image,
+   with idempotency, exclusive activation, a captured rollback target, and
+   authenticated execution receipts. Review its concrete effect boundary.
+2. Connect the resident observation/reducer path to the guarded Phase 1 writer
+   and production transport client. Bind the reviewed MQTT topic/recipient and
+   consumer acknowledgement; the qualification-only topic is not a production
+   destination and a broker acknowledgement alone is not delivery evidence.
+3. Prove isolated canary and rollback behavior, including stale/missing input,
+   denied permission, replay, delivery failure, and interrupted activation.
+   Preserve fail-closed behavior without genuine rescue messages.
+4. Recollect and review the required evidence for that exact release within one
+   current qualification window. Re-run the dossier and source-integrity gates;
+   do not renew evidence by editing timestamps or treating a new wrapper report
+   as a new underlying observation.
+5. Bind the operator request to the reviewed change/rollback/target evidence,
+   perform the bounded activation, verify runtime and delivery receipts, and
+   close the release only after those checks pass.
+
+Node 9 is therefore `BLOCKED`, not completed or merely awaiting authorization.
+No real SOS, production state mutation, service restart, or hardware action
+occurred during this attempt.
+
+Validation of the current-time repair passed: 328 tests across the 20 selected
+Safety/Phase 1/permissions/UI/GNSS test modules (346.95 seconds), Ruff on the
+changed Python files, and scoped diff whitespace checks. The real dossier CLI
+reproduced the stale-evidence block. These local checks do not replace the
+missing production activation, canary, delivery, or rollback evidence.
+
+### Fresh evidence revalidation - 2026-09-03
+
+At `2026-09-03T06:18:42.218949Z` (14:18 Taipei), the current-time dossier
+evaluated newly collected CWA, authenticated MQTT, Pi, Phase 1 writer, bounded
+freshness, and regression/threat evidence. The old artifacts were preserved.
+
+- All 72 required claims have current observation/review timestamps within the
+  qualification window: zero stale claims. This is a freshness result, not 72
+  accepted claims; 71 are accepted and one is rejected.
+- Eight of nine areas qualify, and all nine source packages verify. The sole
+  rejected claim is `credential_scope_and_rotation_verified` in
+  `credential_access_path`. The current credential successfully reads CWA, but
+  the valid historical rotation receipt binds the September 1 live report,
+  not this fresh report. It needs fresh, report-bound scope/rotation review;
+  this does not establish that another provider key rotation is required.
+- Eight threat cases and 15 qualification modes pass. The generated gap plan
+  contains one qualification gap and two evidence requests. These counts do
+  not replace the separate production integration gaps listed above.
+- The selected regression and threat tests pass: 347 tests in 151.68 seconds.
+  Ruff and scoped diff whitespace checks pass. Evidence bridges now preserve
+  the oldest prerequisite observation, so a new test or companion receipt
+  cannot renew old live evidence. Pi qualification also rejects missing,
+  stale, or future attestor heartbeat timestamps and accepts an explicit
+  fresh receipt path.
+
+The real MQTT action used the previously authorized qualification-only topic,
+with authentication and a matching consumer receipt. It was not a genuine SOS
+or a test of the production destination. Pi GNSS still reports
+`blocked_no_nmea_stream`: the device claims prove bounded read-only observation
+and fail-closed rejection, not a valid fix or field accuracy. The freshness
+attestor completed 20 heartbeats with two current sources and one rejected
+stale source; no permanent resident service was installed.
+
+The current Pi image lacks the CWA collector, and its deployed gate adapter
+lacks the required execution-request interface. CWA qualification therefore
+used reviewed code in an isolated qualification directory with a process-local
+`PYTHONPATH` overlay. The provider/API/environment path works, but this does not
+prove the deployed resident adapter or production entrypoint. No `/app` code
+was replaced and no service was restarted. The Phase 1 writer probe remains
+read-only module/hash/symbol evidence, not proof of a resident writer caller.
+
+The dossier remains `blocked_dossier_failed` and node 9 remains `BLOCKED`.
+No credential rotation, production cutover, runtime safety mutation, production
+database write, or hardware control occurred. Artifacts and the explicit effect
+summary are under
+`artifacts/qualification/scout-safety-revalidation-20260903/`, including
+`revalidation-summary.json`, `dossier-report.current.json`, and
+`safety-revalidation.junit.xml`. Freshness is assessed at the stated evaluation
+time; any later release must recheck the evidence against its own current time.
+
+### Qualification snapshot — 2026-09-01
+
+- The reviewed Phase 1 writer surface is deployed on the Pi admin runtime. The
+  running container is healthy, the deployed module hash matches the reviewed
+  module, and the guarded writer/deployment-readiness symbols are present.
+- The selected MQTT qualification path now uses broker authentication. Anonymous
+  access is rejected, the credential is supplied only by an opaque secret-file
+  reference, and a bounded qualification publish has a matching consumer
+  receipt. This evidence does not claim an SOS, SMS, satellite, or rescue send.
+- The CWA Open Data credential was provider-rotated and installed in protected
+  Mac and Pi secret files. Post-rotation live provider runs passed on both macOS
+  and the Pi runtime. The Pi-origin report is hash-bound to a sanitized
+  credential-rotation receipt; neither artifact embeds credential material or
+  a raw provider response.
+- The saved-time dossier replay returned `9/9`: every required area was
+  `qualified` at its stored reference time, threat coverage was ready, and the
+  generated gap plan had zero open gaps. This is historical evidence, not a
+  current coherent live qualification window.
+- `ready_for_production_cutover=true` is a deterministic qualification result,
+  not an execution authorization. The local dossier validator performed no Safety
+  API call, outbound transport, hardware control, production database write, or
+  runtime-safety-truth mutation. The bounded MQTT qualification publish described
+  above was a separate action. Cutover remains a separate operator/reviewer
+  boundary and `execution_allowed=false`.
+
+- `physiologic_gate` has the most complete end-to-end path. All six gates now
+  have a local residency audit, but any gate classified as `shadow_only` or
+  `not_resident` still needs production evidence, source freshness,
+  route-context joins, and field validation before it can be considered
+  production-resident.
+- Slices 67 through 92 now machine-check and persist the remaining production
+  gaps, and the local helper path requires area-specific qualification claims
+  with freshness metadata and source-integrity-verified sanitized local
+  artifacts before producing cutover-eligible receipts. The dossier validator
+  can run the entire local intake across all required areas, and the
+  threat-coverage audit now requires reviewed coverage for the safety promotion
+  threat model and qualification modes with source-integrity-verified local
+  artifacts. The gap plan turns any remaining blockers into internal action
+  rows, and the evidence request pack expands those rows into the exact
+  artifacts reviewers/operators must provide next. The fulfillment intake can
+  then verify returned reviewer/operator artifact refs against the request pack
+  and report missing, mismatched, rejected, or source-unverified rows before a
+  dossier rerun. The fulfillment source-integrity verifier binds returned
+  artifact refs and hashes to sanitized local files. The remediation readiness
+  gate then checks whether each open gap has fulfilled, source-verified request
+  rows before allowing a dossier rerun. The external action packet turns those
+  remediation rows into explicit operator-authorization next actions while
+  keeping execution disabled. The external authorization intake verifies
+  returned operator identity, authorization, reviewed effect-boundary,
+  idempotency, and expiry refs while still keeping execution disabled. The
+  external invocation guard verifies the future executor handoff request against
+  that authorization while still keeping execution disabled. The external result
+  intake verifies sanitized separate-executor receipts against that handoff, and
+  the external result evidence bridge converts matching result artifacts back
+  into a fulfillment manifest that must still pass the existing fulfillment and
+  source-integrity gates. The external result remediation closure then runs the
+  bridged manifest, source package, fulfillment report, and remediation
+  readiness in one local pass before a local dossier rerun. The dossier rerun
+  intake then requires that ready closure before running the existing local
+  dossier validator and keeps nested dossier readiness separate from top-level
+  production cutover authorization. The cutover authorization intake then binds
+  a ready rerun to operator identity, reviewed effect-boundary, rollback plan,
+  production change request, expiry, idempotency, and the exact cutover-review
+  phrase while still refusing execution. The cutover release handoff guard then
+  binds that authorization to a future release executor and invocation envelope
+  while still refusing executor invocation and deployment. The cutover release
+  effect receipt intake then records a sanitized external executor receipt for
+  release closure review while still refusing production cutover authority. The
+  cutover release closure review then binds that receipt to a reviewer, rollback
+  plan, change request, source-integrity evidence, freshness metadata, expiry,
+  and exact closure phrase while still refusing production cutover authority.
+  The dossier still blocks cutover unless all required real qualification evidence is
+  supplied, current, hash-verified, and threat-coverage complete. This makes the
+  absence,
+  staleness, source mismatch, unreviewed/unverified threat coverage, missing
+  unblock action, missing evidence request, unfulfilled request return, or
+  unverified fulfillment artifact source, missing external result source
+  package, incomplete remediation closure, or unbridged external result artifact
+  for provider/API, transport, deployment, and Pi/hardware evidence explicit, and
+  it also makes missing or rejected release closure explicit; it
+  does not replace those external qualifications or execute production cutover.
+- `weather_gate` and `environment_threat_gate` now have a local live-observation
+  bridge, live-evidence contract audit, provider request readiness contract,
+  provider response receipt intake, connector health invocation guard and
+  executor harness plus receipt intake, field/device validation receipt intake,
+  invocation guard, and injected executor harness, plus a freshness attestation
+  receipt intake, invocation guard, and injected executor harness, provider
+  executor readiness, provider executor invocation guard, injected provider
+  executor harness, plus provider effect receipt intake, but the real reviewed
+  provider client/API, connector health endpoint, credential access path,
+  production network environment, resident freshness attestor service, and real
+  field-device validation devices/procedures still need to be connected and
+  qualified before production trust.
+- SMS, LoRa, satellite, and MQTT now have application-layer drafts plus local
+  transport release, executor selection, invocation guard, executor
+  effect-boundary readiness, injected transport executor harness, and
+  effect-receipt intake contracts, but local tests use fake transport clients;
+  no real hardware radio, broker publish, phone bridge, SMS gateway, or
+  satellite bridge is invoked by the local verifier.
+- Phase 1 runtime promotion now has a local readiness gate, local writer
+  invocation guard, and production deployment readiness audit, but actual
+  production deployment of that effect boundary is not implemented by the local
+  verifier.
 - The Raspberry Pi Scout hardware path is not validated while the device is
   unavailable; macOS shadow replay is evidence for deterministic logic only.
 - `/admin` and `/admin/debug` are review and diagnostic surfaces, not the
   operator approval surface for emergency field use.
 - The Dashboard now has a candidate/shadow Daily Emergency Review for the
-  bounded OD-001 through OD-018 workflow. Authenticated production approval,
-  the separate Emergency Call Out executor, and verified delivery evidence are
-  not implemented.
+  bounded OD-001 through OD-018 workflow, a local Emergency Call Out
+  admission/executor v0, a local Night Runtime Authority preflight, and a local
+  production gate residency audit, plus a local weather/environment live
+  observation bridge, live-evidence audit, and provider request readiness
+  contract, provider response receipt intake, and connector health invocation
+  guard, executor harness, and receipt intake, field/device validation receipt
+  intake, invocation guard, and executor harness, and freshness attestation
+  receipt intake, invocation guard, and executor harness, and provider executor
+  readiness and injected provider executor harness, authenticated production
+  approval preflight, transport release, transport executor selection preflight,
+  injected transport executor harness, delivery evidence
+  verification, workflow closure contracts, a local transport invocation guard,
+  local transport executor effect-boundary readiness, local transport
+  effect-receipt intake, a local Phase 1 runtime promotion readiness gate,
+  local Phase 1 writer invocation guard, and local Phase 1 writer deployment
+  readiness audit. Real live-provider client/API and connector-health endpoint
+  qualification, production transport executors, actual outbound delivery,
+  production deployment of the writer effect boundary, real resident freshness
+  attestor service qualification, real field/device validator qualification,
+  and Pi/hardware validation are not implemented by the local verifier.
 
 Until these gaps close, production language must say:
 

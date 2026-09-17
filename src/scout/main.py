@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from threading import Lock
 
 from scout.api.routes import create_app
 
@@ -31,7 +32,18 @@ def create_default_app():
     )
 
 
-app = create_default_app()
+_app_creation_lock = Lock()
+
+
+def __getattr__(name: str):
+    if name != "app":
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    # Importing a factory or a constant must not open the default store.
+    # Uvicorn's scout.main:app lookup still receives one real FastAPI instance.
+    with _app_creation_lock:
+        if "app" not in globals():
+            globals()["app"] = create_default_app()
+        return globals()["app"]
 
 
 __all__ = [

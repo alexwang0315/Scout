@@ -2,19 +2,28 @@
   "use strict";
 
   const MAPLIBRE_VERSION = "6.2.0";
+  // The shipped MapLibre camera transform uses a 512-CSS-pixel world tile.
+  const MAPLIBRE_WORLD_TILE_SIZE = 512;
   const DEFAULT_MODULE_URL = "/admin/vendor/maplibre-gl/6.2.0/maplibre-gl.mjs";
   const RENDERER_PREFERENCES = new Set(["auto", "maplibre", "svg"]);
   const EVIDENCE_SOURCE_ID = "scout-evidence";
   const EVIDENCE_LAYER_IDS = Object.freeze({
     background: "scout-evidence-background",
+    osmFill: "scout-evidence-osm-fill",
+    osmLineCasing: "scout-evidence-osm-line-casing",
+    osmLine: "scout-evidence-osm-line",
+    osmPoint: "scout-evidence-osm-point",
     fill: "scout-evidence-fill",
     line: "scout-evidence-line",
     point: "scout-evidence-point",
+    overlayFill: "scout-evidence-overlay-fill",
   });
   const RASTER_NETWORK_SCOPES = new Set(["same_origin", "explicit_remote"]);
+  const RASTER_RENDER_POSITIONS = new Set(["base", "overlay"]);
   const RASTER_LAYER_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{0,79}$/;
   const MAX_RASTER_TILE_TEMPLATES = 4;
   let mapLibreModulePromise = null;
+  let rasterProtocolSequence = 0;
 
   function normalizeRendererPreference(value) {
     const normalized = String(value || "auto").trim().toLowerCase();
@@ -239,6 +248,12 @@
     );
     const tileSize = Number(definition.tile_size || definition.tileSize) === 512 ? 512 : 256;
     const opacity = Math.max(0, Math.min(1, Number(definition.opacity ?? 1)));
+    const renderPosition = String(
+      definition.render_position || definition.renderPosition || "base",
+    ).trim();
+    if (!RASTER_RENDER_POSITIONS.has(renderPosition)) {
+      throw new Error("invalid_raster_render_position");
+    }
     return Object.freeze({
       layer_id: layerId,
       control_layer_id: controlLayerId,
@@ -258,6 +273,7 @@
       attribution: String(definition.attribution || "").slice(0, 500),
       opacity,
       visible: definition.visible !== false,
+      render_position: renderPosition,
       network_scope: networkScope,
       candidate_only: candidateOnly,
       runtime_safety_truth: false,
@@ -284,9 +300,78 @@
     }));
   }
 
+  function rasterSourceDefinition(layer) {
+    return layer.source_type === "image"
+      ? {
+        type: "image",
+        url: layer.image_url,
+        coordinates: layer.image_coordinates.map(pair => [...pair]),
+      }
+      : {
+        type: "raster",
+        tiles: [...layer.tiles],
+        tileSize: layer.tile_size,
+        minzoom: layer.minzoom,
+        maxzoom: layer.maxzoom,
+        ...(layer.bounds ? {bounds: [...layer.bounds]} : {}),
+        ...(layer.attribution ? {attribution: layer.attribution} : {}),
+      };
+  }
+
+  function rasterStyleLayerDefinition(layer) {
+    return {
+      id: layer.map_layer_id,
+      type: "raster",
+      source: layer.map_source_id,
+      layout: {visibility: layer.visible ? "visible" : "none"},
+      paint: {
+        "raster-opacity": layer.opacity,
+        ...(layer.source_type === "image" ? {"raster-resampling": "nearest"} : {}),
+      },
+      metadata: {
+        "scout:layer_id": layer.layer_id,
+        "scout:control_layer_id": layer.control_layer_id,
+        "scout:source_type": layer.source_type,
+        "scout:render_position": layer.render_position,
+        "scout:candidate_only": layer.candidate_only,
+        "scout:runtime_safety_truth": false,
+        "scout:visualization_only": true,
+        "scout:adds_source_resolution": false,
+        "scout:source_resolution": layer.source_resolution,
+        "scout:artifact_hash": layer.artifact_hash,
+      },
+    };
+  }
+
+  function rasterLayersSignature(layers) {
+    return JSON.stringify(layers.map(layer => ({
+      layer_id: layer.layer_id,
+      control_layer_id: layer.control_layer_id,
+      source_id: layer.source_id,
+      source_type: layer.source_type,
+      tiles: [...layer.tiles],
+      image_url: layer.image_url,
+      image_coordinates: layer.image_coordinates,
+      tile_size: layer.tile_size,
+      minzoom: layer.minzoom,
+      maxzoom: layer.maxzoom,
+      bounds: layer.bounds,
+      attribution: layer.attribution,
+      opacity: layer.opacity,
+      visible: layer.visible,
+      render_position: layer.render_position,
+      network_scope: layer.network_scope,
+      source_resolution: layer.source_resolution,
+      artifact_hash: layer.artifact_hash,
+    })));
+  }
+
   function rasterLayerEventPatch(current = {}, eventKind = "") {
     if (current?.visible !== true) return null;
     if (eventKind === "source_loaded") {
+      // A settled source can still contain failed tiles. Retry/reconfiguration
+      // clears errors; a later source event must not hide a missing detail tile.
+      if (Number(current.error_count || 0) > 0) return null;
       return Object.freeze({state: "available", reason: "source_loaded"});
     }
     if (eventKind === "tile_error") {
@@ -297,6 +382,454 @@
       });
     }
     return null;
+  }
+
+  function createLayerOrderResult(renderer, layers, violations = [], gaps = []) {
+    const groupedViolations = new Map();
+    violations.forEach(violation => {
+      const key = JSON.stringify([violation.code, violation.detail]);
+      const previous = groupedViolations.get(key);
+      groupedViolations.set(key, {...violation, occurrences: (previous?.occurrences || 0) + 1});
+    });
+    const uniqueViolations = [...groupedViolations.values()];
+    const failed = uniqueViolations.some(violation => !String(violation?.code || "").startsWith("empty_"));
+    return {
+      status: failed ? "failed" : gaps.length || violations.length ? "warning" : "passed",
+      renderer,
+      layers,
+      violations: uniqueViolations,
+      gaps: [...new Set(gaps)],
+    };
+  }
+
+  function layerOrderVisibleFromDom(node) {
+    if (!node) return false;
+    let current = node;
+    while (current && String(current.tagName || "").toLowerCase() !== "svg") {
+      const currentStyle = current.getAttribute?.("style") || "";
+      if (current.hidden
+        || current.dataset?.layerHidden === "true"
+        || svgClassIncludes(current, "is-hidden")
+        || /(^|;)\s*display\s*:\s*none\b/i.test(currentStyle)
+        || /(^|;)\s*visibility\s*:\s*hidden\b/i.test(currentStyle)
+        || /(^|;)\s*opacity\s*:\s*0(?:\.0+)?\s*(?:!important\s*)?(?:;|$)/i.test(currentStyle)) {
+        return false;
+      }
+      current = current.parentElement;
+    }
+    const style = node.getAttribute?.("style") || "";
+    return !/(^|;)\s*display\s*:\s*none\b/i.test(style)
+      && !/(^|;)\s*visibility\s*:\s*hidden\b/i.test(style)
+      && !/(^|;)\s*opacity\s*:\s*0(?:\.0+)?\s*(?:!important\s*)?(?:;|$)/i.test(style);
+  }
+
+  function svgElementHasPaintContent(node) {
+    if (!node) return false;
+    const tag = String(node.tagName || "").toLowerCase();
+    if (["defs", "clipPath", "mask", "pattern", "metadata", "title", "desc"].includes(tag)) return false;
+    if (tag === "image") {
+      return Boolean(firstIdentifier(
+        node.getAttribute?.("href"),
+        node.getAttribute?.("xlink:href"),
+      ));
+    }
+    if (tag === "path") return Boolean(String(node.getAttribute?.("d") || "").trim());
+    if (["line", "polyline", "polygon", "circle", "ellipse", "rect"].includes(tag)) return true;
+    if (tag === "text") return Boolean(String(node.textContent || "").trim());
+    return false;
+  }
+
+  function svgDescendantHasPaintContent(node) {
+    if (!node || !node.querySelectorAll) return svgElementHasPaintContent(node);
+    if (svgElementHasPaintContent(node)) return true;
+    return [...node.querySelectorAll("*")].some(svgElementHasPaintContent);
+  }
+
+  function svgDescendantHasVisiblePaintContent(node) {
+    if (!node || !node.querySelectorAll) return svgElementHasPaintContent(node) && layerOrderVisibleFromDom(node);
+    if (svgElementHasPaintContent(node) && layerOrderVisibleFromDom(node)) return true;
+    return [...node.querySelectorAll("*")]
+      .some(child => svgElementHasPaintContent(child) && layerOrderVisibleFromDom(child));
+  }
+
+  function svgClassIncludes(node, token) {
+    const classes = String(node?.getAttribute?.("class") || "").split(/\s+/);
+    return classes.includes(token);
+  }
+
+  function svgRoleOverride(node) {
+    const role = String(node?.dataset?.mapOrderRole || "").trim().toLowerCase();
+    return role || null;
+  }
+
+  function semanticDatasetValue(node, key, fallback) {
+    if (!Object.prototype.hasOwnProperty.call(node?.dataset || {}, key)) return null;
+    const value = String(node?.dataset?.[key] || "").trim();
+    return value && value !== "true" ? value : fallback;
+  }
+
+  function svgSemanticLayerId(node) {
+    return firstIdentifier(
+      node?.dataset?.layerGroup,
+      node?.dataset?.layer,
+      node?.dataset?.mapLayer,
+      node?.dataset?.mapTileSource,
+      node?.dataset?.dashboardMapHintSource,
+      semanticDatasetValue(node, "dashboardContextPoints", "dashboard-context-points"),
+      node?.dataset?.paceCheckpointId,
+      node?.dataset?.permissionMapAnchor,
+      node?.dataset?.architectureNodeId,
+      node?.dataset?.navigationNodeId,
+      node?.dataset?.mapRenderKind,
+      node?.getAttribute?.("id"),
+      String(node?.tagName || "").toLowerCase(),
+    );
+  }
+
+  function svgLayerRole(layerId, node) {
+    const roleOverride = svgRoleOverride(node);
+    if (roleOverride) return roleOverride;
+    const id = String(layerId || "").toLowerCase();
+    const tag = String(node?.tagName || "").toLowerCase();
+    const kind = String(node?.dataset?.mapRenderKind || node?.dataset?.layerKind || "").toLowerCase();
+    const hintSource = String(node?.dataset?.dashboardMapHintSource || "").toLowerCase();
+    if (node?.hasAttribute?.("data-navigation-route-path")
+      || node?.hasAttribute?.("data-navigation-route-halo")
+      || node?.hasAttribute?.("data-navigation-terrain-3d-route")
+      || id === "route-structure") return "route";
+    if (hintSource.endsWith("-route-evidence")) return "route";
+    if (node?.dataset?.dashboardContextPoints !== undefined
+      || node?.dataset?.paceCheckpointId
+      || node?.dataset?.permissionMapAnchor) {
+      return "checkpoint";
+    }
+    if (svgClassIncludes(node, "route-structure")
+      || svgClassIncludes(node, "navigation-route")
+      || svgClassIncludes(node, "terrain-route")
+      || svgClassIncludes(node, "terrain-route-reference")
+      || svgClassIncludes(node, "terrain-retreat-arrow")
+      || svgClassIncludes(node, "route-line")
+      || svgClassIncludes(node, "retreat-line")
+      || svgClassIncludes(node, "segment-overlay")) {
+      return "route";
+    }
+    if (["route", "completed-track", "reference-tracks"].includes(id)) return "route";
+    if (id === "segments") return "segment";
+    if (["checkpoints", "mcp", "boss-points"].includes(id)) return "checkpoint";
+    if (["pois", "hazards", "route-notes", "events"].includes(id)) return "evidence";
+    if (tag === "image" || ["tile", "raster", "image"].includes(kind)
+      || ["imagery", "rudy", "rudy-twmap", "relief", "geology", "topo-5k", "forest", "osm"].includes(id)) {
+      return "background";
+    }
+    if (["terrain", "risk-heatmap", "risk-delta", "soil-moisture", "antecedent-rain", "cwa-qpf", "cwa-weather", "weather-api"].includes(id)) {
+      // Classify painted geometry, never exempt an entire mixed group.
+      if (tag === "path" && ["risk-heatmap", "risk-delta"].includes(id)
+        && svgClassIncludes(node, id)
+        && node?.getAttribute?.("data-risk-layer") === (id === "risk-heatmap" ? "calibrated" : "delta")) {
+        return "evidence";
+      }
+      if (tag === "circle" && ["soil-moisture", "antecedent-rain", "cwa-qpf", "cwa-weather"].includes(id)
+        && svgClassIncludes(node, `${id}-point`)) return "evidence";
+      return "thematic-background";
+    }
+    if (["corridors", "overpass", "retreat", "risk-ribbon", "risk-score"].includes(id)) return "evidence";
+    return "unknown";
+  }
+
+  function mergeLayerSummary(left, right) {
+    return {
+      id: left.id,
+      role: left.role,
+      visible: left.visible || right.visible,
+      hasContent: left.hasContent || right.hasContent,
+    };
+  }
+
+  function compactSvgOrderLayers(svg, paintLayers, exceptionIndexes = new Set()) {
+    const topLevelGroups = svg?.querySelectorAll
+      ? [...svg.querySelectorAll(":scope > [data-layer-group]")]
+      : [];
+    if (topLevelGroups.length) {
+      const representedIds = new Set();
+      const compact = topLevelGroups.map(node => {
+        const id = node.dataset.layerGroup;
+        representedIds.add(id);
+        return {
+          id,
+          role: svgLayerRole(id, node),
+          visible: svgDescendantHasVisiblePaintContent(node),
+          hasContent: svgDescendantHasPaintContent(node),
+        };
+      });
+      [...exceptionIndexes].forEach(index => {
+        const layer = paintLayers[index];
+        if (layer && !representedIds.has(layer.id)) compact.push({...layer});
+      });
+      return compact;
+    }
+    return paintLayers.reduce((compact, layer) => {
+      const previous = compact[compact.length - 1];
+      if (previous && previous.id === layer.id && previous.role === layer.role) {
+        compact[compact.length - 1] = mergeLayerSummary(previous, layer);
+      } else {
+        compact.push({...layer});
+      }
+      return compact;
+    }, []);
+  }
+
+  function collectSvgPaintLayers(svg) {
+    const layers = [];
+    const walk = node => {
+      if (!node || ["defs", "clippath", "mask", "pattern"].includes(String(node.tagName || "").toLowerCase())) return;
+      if (node !== svg && svgElementHasPaintContent(node)) {
+        let id = svgSemanticLayerId(node);
+        let role = svgLayerRole(id, node);
+        const marker = node.closest?.("[data-dashboard-context-points], [data-pace-checkpoint-id], [data-permission-map-anchor], [data-navigation-terrain-3d-saddle], [data-terrain-feature]");
+        const group = node.closest?.("[data-layer-group]");
+        if (role === "unknown" && marker) {
+          id = svgSemanticLayerId(marker);
+          role = "checkpoint";
+        } else if (role === "unknown" && group) {
+          id = group.dataset.layerGroup;
+          role = svgLayerRole(id, node);
+        } else if (group && id === String(node.tagName || "").toLowerCase()) {
+          id = `${group.dataset.layerGroup}:${id}`;
+        }
+        layers.push({
+          id,
+          role,
+          visible: layerOrderVisibleFromDom(node),
+          hasContent: true,
+        });
+      }
+      [...(node.children || [])].forEach(walk);
+    };
+    walk(svg);
+    return layers;
+  }
+
+  function normalizeExpectedLayerOrder(expectedLayerOrder) {
+    return expectedLayerOrder
+      .map(entry => Array.isArray(entry) ? entry.map(String) : [String(entry)])
+      .filter(group => group.some(Boolean));
+  }
+
+  function expectedLayerRankMap(expectedLayerOrder) {
+    const rankMap = new Map();
+    normalizeExpectedLayerOrder(expectedLayerOrder).forEach((group, rank) => {
+      group.forEach(layerId => rankMap.set(layerId, rank));
+    });
+    return rankMap;
+  }
+
+  function inspectExpectedSvgGroupOrder(svg, expectedLayerOrder, violations) {
+    if (!expectedLayerOrder.length || !svg?.querySelectorAll) return;
+    const groupOrder = [...svg.querySelectorAll(":scope > [data-layer-group]")]
+      .map(node => node.dataset.layerGroup);
+    const rankMap = expectedLayerRankMap(expectedLayerOrder);
+    groupOrder.forEach((layerId, observedIndex) => {
+      const leftRank = rankMap.get(layerId);
+      if (!Number.isInteger(leftRank)) return;
+      groupOrder.slice(observedIndex + 1).forEach(laterId => {
+        const rightRank = rankMap.get(laterId);
+        if (!Number.isInteger(rightRank) || leftRank <= rightRank) return;
+        violations.push({
+          code: "expected_layer_order_inversion",
+          detail: `${layerId} is painted below ${laterId}, but the layer contract requires it above.`,
+        });
+      });
+    });
+  }
+
+  function inspectSvgLayerOrder(svg, options = {}) {
+    const requiredLayerIds = Array.isArray(options.requiredLayerIds) ? options.requiredLayerIds.map(String) : [];
+    const expectedLayerOrder = Array.isArray(options.expectedLayerOrder) ? options.expectedLayerOrder : [];
+    const requireRoute = options.requireRoute !== false;
+    const violations = [];
+    const gaps = [];
+    if (!svg || String(svg.tagName || "").toLowerCase() !== "svg") {
+      return createLayerOrderResult("svg", [], [], ["no SVG element supplied"]);
+    }
+    const paintLayers = collectSvgPaintLayers(svg);
+    if (!paintLayers.length) gaps.push("SVG contains no painted layer content");
+    if (!requireRoute && ![...svg.querySelectorAll("path,polyline,polygon,line,circle,ellipse")]
+      .some(node => !node.closest("defs,clipPath,mask,pattern") && svgElementHasPaintContent(node))) {
+      gaps.push("SVG contains no route, terrain, or point geometry to verify");
+    }
+    const topLevelGroups = svg.querySelectorAll
+      ? [...svg.querySelectorAll(":scope > [data-layer-group]")]
+      : [];
+    const groupIds = topLevelGroups.map(node => node.dataset.layerGroup);
+    topLevelGroups.filter(node => layerOrderVisibleFromDom(node) && !svgDescendantHasVisiblePaintContent(node))
+      .forEach(node => gaps.push(`${node.dataset.layerGroup} has no rendered content`));
+    requiredLayerIds.forEach(layerId => {
+      if (!groupIds.includes(layerId)) {
+        violations.push({code: "missing_required_layer", detail: `${layerId} is missing.`});
+      }
+    });
+    [...new Set(groupIds)].forEach(layerId => {
+      if (groupIds.filter(id => id === layerId).length > 1) {
+        violations.push({code: "duplicate_layer_group", detail: `${layerId} appears more than once.`});
+      }
+    });
+    inspectExpectedSvgGroupOrder(svg, expectedLayerOrder, violations);
+    paintLayers.filter(layer => layer.visible && !layer.hasContent).forEach(layer => {
+      gaps.push(`${layer.id} has no rendered content`);
+    });
+    const routeIndexes = paintLayers
+      .map((layer, index) => ["route", "segment"].includes(layer.role) ? index : -1)
+      .filter(index => index >= 0);
+    if (requireRoute && !routeIndexes.length) gaps.push("route or segment layer is missing or empty");
+    const checkpointIndexes = paintLayers
+      .map((layer, index) => layer.role === "checkpoint" ? index : -1)
+      .filter(index => index >= 0);
+    const backgroundIndexes = paintLayers
+      .map((layer, index) => ["background", "thematic-background"].includes(layer.role) ? index : -1)
+      .filter(index => index >= 0);
+    const exceptionIndexes = new Set();
+    if (routeIndexes.length) {
+      const firstRoute = Math.min(...routeIndexes);
+      backgroundIndexes
+        .filter(index => index > firstRoute)
+        .forEach(index => {
+          exceptionIndexes.add(index);
+          violations.push({
+            code: "background_over_route",
+            detail: `${paintLayers[index].id} is painted above a route or segment layer.`,
+          });
+        });
+    }
+    if (routeIndexes.length && checkpointIndexes.length) {
+      const lastRoute = Math.max(...routeIndexes);
+      checkpointIndexes
+        .filter(index => index < lastRoute)
+        .forEach(index => {
+          exceptionIndexes.add(index);
+          violations.push({
+            code: "route_over_checkpoint_anchor",
+            detail: `${paintLayers[index].id} is painted below a later route or segment layer.`,
+          });
+        });
+    }
+    const layers = compactSvgOrderLayers(svg, paintLayers, exceptionIndexes);
+    return createLayerOrderResult("svg", layers, violations, gaps);
+  }
+
+  function mapLibreStyleFromMapOrStyle(mapOrStyle) {
+    if (mapOrStyle?.getStyle && typeof mapOrStyle.getStyle === "function") {
+      try {
+        return mapOrStyle.getStyle();
+      } catch (error) {
+        return {__scoutOrderInspectorGap: `getStyle failed: ${String(error?.message || error || "unknown error")}`};
+      }
+    }
+    return mapOrStyle && typeof mapOrStyle === "object" ? mapOrStyle : null;
+  }
+
+  function mapLibreLayerRole(layer) {
+    const id = String(layer?.id || "").toLowerCase();
+    const source = String(layer?.source || "").toLowerCase();
+    const type = String(layer?.type || "").toLowerCase();
+    if (layer?.type === "raster" || layer?.type === "hillshade" || id.includes("raster") || id.includes("hillshade")) {
+      return "background";
+    }
+    if (id === EVIDENCE_LAYER_IDS.osmLine || id === EVIDENCE_LAYER_IDS.osmLineCasing) return "osm-basemap";
+    if (type === "line" && (id === EVIDENCE_LAYER_IDS.line || /(^|[-_])(route|track|segment)([-_]|$)/.test(id))) return "route";
+    if (["circle", "symbol"].includes(type)
+      && (id === EVIDENCE_LAYER_IDS.point || /(^|[-_])(checkpoint|cp|anchor|poi|hazard|boss|mcp|event)([-_]|$)/.test(id))) {
+      return "checkpoint";
+    }
+    if (source === EVIDENCE_SOURCE_ID) return "evidence";
+    return "unknown";
+  }
+
+  function mapLibreLayerVisible(layer) {
+    return layer?.layout?.visibility !== "none";
+  }
+
+  function mapLibreSourceHasGeometry(style, sourceId, role) {
+    const source = style?.sources?.[sourceId];
+    const data = source?.data;
+    const features = Array.isArray(data?.features) ? data.features : [];
+    if (!features.length) return false;
+    if (role === "route") {
+      return features.some(feature => ["LineString", "MultiLineString"].includes(feature?.geometry?.type)
+        && String(feature?.properties?.layer_id || "").toLowerCase() !== "osm");
+    }
+    if (role === "checkpoint") {
+      return features.some(feature => feature?.geometry?.type === "Point"
+        && String(feature?.properties?.layer_id || "").toLowerCase() !== "osm");
+    }
+    return true;
+  }
+
+  function inspectMapLibreLayerOrder(mapOrStyle, options = {}) {
+    const requireRoute = options.requireRoute !== false;
+    const style = mapLibreStyleFromMapOrStyle(mapOrStyle);
+    const violations = [];
+    const gaps = [];
+    if (style?.__scoutOrderInspectorGap) {
+      return createLayerOrderResult("maplibre", [], [], [style.__scoutOrderInspectorGap]);
+    }
+    if (!style || !Array.isArray(style.layers)) {
+      return createLayerOrderResult("maplibre", [], [], ["empty or missing MapLibre style"]);
+    }
+    style.layers
+      .map(layer => String(layer?.id || ""))
+      .filter(Boolean)
+      .filter((id, index, ids) => ids.indexOf(id) !== index)
+      .filter((id, index, ids) => ids.indexOf(id) === index)
+      .forEach(id => violations.push({
+        code: "duplicate_style_layer_id",
+        detail: `${id} appears more than once.`,
+      }));
+    const layers = style.layers.map(layer => {
+      const role = mapLibreLayerRole(layer);
+      return {
+        id: String(layer?.id || ""),
+        role,
+        visible: mapLibreLayerVisible(layer),
+        hasContent: role === "background"
+          ? Boolean(style.sources?.[layer.source])
+          : mapLibreSourceHasGeometry(style, layer.source, role),
+      };
+    });
+    if (!layers.length) gaps.push("MapLibre style contains no layers");
+    const routeIndexes = layers
+      .map((layer, index) => layer.role === "route" ? index : -1)
+      .filter(index => index >= 0);
+    const checkpointIndexes = layers
+      .map((layer, index) => layer.role === "checkpoint" ? index : -1)
+      .filter(index => index >= 0);
+    const backgroundIndexes = layers
+      .map((layer, index) => layer.role === "background" ? index : -1)
+      .filter(index => index >= 0);
+    if (requireRoute && !routeIndexes.length) gaps.push("route layer is missing");
+    if (requireRoute && routeIndexes.length && !routeIndexes.some(index => layers[index].hasContent)) {
+      gaps.push("route layer has no non-OSM source geometry");
+    }
+    layers.filter(layer => layer.visible && !layer.hasContent && layer.role !== "unknown" && layer.role !== "osm-basemap")
+      .forEach(layer => gaps.push(`${layer.id} has no source geometry or raster source`));
+    if (routeIndexes.length) {
+      const firstRoute = Math.min(...routeIndexes);
+      backgroundIndexes
+        .filter(index => index > firstRoute)
+        .forEach(index => violations.push({
+          code: "background_over_route",
+          detail: `${layers[index].id} is above a protected route layer.`,
+        }));
+    }
+    if (routeIndexes.length && checkpointIndexes.length) {
+      const lastRoute = Math.max(...routeIndexes);
+      checkpointIndexes
+        .filter(index => index < lastRoute)
+        .forEach(index => violations.push({
+          code: "route_over_checkpoint_anchor",
+          detail: `${layers[index].id} is below a later protected route layer.`,
+        }));
+    }
+    return createLayerOrderResult("maplibre", layers, violations, gaps);
   }
 
   function buildEvidenceIndex(features = []) {
@@ -454,6 +987,132 @@
     ];
   }
 
+  function osmFillColorExpression() {
+    return [
+      "match",
+      ["get", "osm_style_category"],
+      "forest", "#add19e",
+      "park", "#c8facc",
+      "grass", "#cdebb0",
+      "farmland", "#eef0d5",
+      "residential", "#e0dfdf",
+      "building", "#d9d0c9",
+      "water", "#aad3df",
+      "glacier", "#ddecec",
+      "terrain", "#e7dfd2",
+      "#eeeece",
+    ];
+  }
+
+  function osmFillOutlineColorExpression() {
+    return [
+      "match",
+      ["get", "osm_style_category"],
+      "building", "#b8ada6",
+      "water", "#4d80b3",
+      "rgba(110,114,102,0.46)",
+    ];
+  }
+
+  function osmLineCasingColorExpression() {
+    return [
+      "match",
+      ["get", "osm_style_category"],
+      "path", "#ffffff",
+      "footway", "#ffffff",
+      "steps", "#ffffff",
+      "track", "#8d6f38",
+      "motorway", "#dc2a67",
+      "waterway", "rgba(255,255,255,0.86)",
+      "terrain", "rgba(255,255,255,0.76)",
+      "infrastructure", "rgba(255,255,255,0.82)",
+      "#b9a16f",
+    ];
+  }
+
+  function osmLineCoreColorExpression() {
+    return [
+      "match",
+      ["get", "osm_style_category"],
+      "path", "#b47d46",
+      "footway", "#cf5f70",
+      "steps", "#9e7048",
+      "track", "#996600",
+      "service", "#ffffff",
+      "motorway", "#e892a2",
+      "trunk", "#f9b29c",
+      "primary", "#fcd6a4",
+      "secondary", "#f7fabf",
+      "tertiary", "#ffffff",
+      "unclassified", "#ffffff",
+      "residential", "#ffffff",
+      "road", "#ffffff",
+      "route", "#7b8f2a",
+      "waterway", "#4d80b3",
+      "terrain", "#9c8d78",
+      "infrastructure", "#8a8f99",
+      "#a36b2c",
+    ];
+  }
+
+  function osmLineCasingWidthExpression() {
+    return [
+      "match",
+      ["get", "osm_style_category"],
+      "motorway", 6.6,
+      "trunk", 6.2,
+      "primary", 5.9,
+      "secondary", 5.5,
+      "tertiary", 5.1,
+      "unclassified", 5.1,
+      "residential", 5.1,
+      "road", 5.3,
+      "track", 4.8,
+      "service", 4.5,
+      "path", 3.8,
+      "footway", 3.8,
+      "steps", 3.8,
+      2.8,
+    ];
+  }
+
+  function osmLineCoreWidthExpression() {
+    return [
+      "match",
+      ["get", "osm_style_category"],
+      "motorway", 4.1,
+      "trunk", 3.8,
+      "primary", 3.5,
+      "secondary", 3.2,
+      "tertiary", 3,
+      "unclassified", 3,
+      "residential", 3,
+      "road", 3.1,
+      "track", 2.5,
+      "service", 2.5,
+      "path", 1.55,
+      "footway", 1.45,
+      "steps", 1.55,
+      "route", 1.55,
+      "waterway", 1.35,
+      1.15,
+    ];
+  }
+
+  function osmPointColorExpression() {
+    return [
+      "match",
+      ["get", "osm_style_category"],
+      "milestone", "#8c6a21",
+      "mobile", "#0077b6",
+      "peak", "#a46020",
+      "shelter", "#6d5e3a",
+      "parking", "#3f78b5",
+      "water", "#2f90c8",
+      "#5a5f63",
+    ];
+  }
+
   function createEvidenceStyle(
     featureCollection = createEvidenceFeatureCollection(),
     {rasterLayers = []} = {},
@@ -464,44 +1123,25 @@
     const normalizedRasterLayers = normalizeRasterLayers(rasterLayers);
     const rasterSources = Object.fromEntries(normalizedRasterLayers.map(layer => [
       layer.map_source_id,
-      layer.source_type === "image"
-        ? {
-          type: "image",
-          url: layer.image_url,
-          coordinates: layer.image_coordinates.map(pair => [...pair]),
-        }
-        : {
-          type: "raster",
-          tiles: [...layer.tiles],
-          tileSize: layer.tile_size,
-          minzoom: layer.minzoom,
-          maxzoom: layer.maxzoom,
-          ...(layer.bounds ? {bounds: [...layer.bounds]} : {}),
-          ...(layer.attribution ? {attribution: layer.attribution} : {}),
-        },
+      rasterSourceDefinition(layer),
     ]));
-    const rasterStyleLayers = normalizedRasterLayers.map(layer => ({
-      id: layer.map_layer_id,
-      type: "raster",
-      source: layer.map_source_id,
-      layout: {visibility: layer.visible ? "visible" : "none"},
-      paint: {
-        "raster-opacity": layer.opacity,
-        ...(layer.source_type === "image" ? {"raster-resampling": "nearest"} : {}),
-      },
-      metadata: {
-        "scout:layer_id": layer.layer_id,
-        "scout:control_layer_id": layer.control_layer_id,
-        "scout:source_type": layer.source_type,
-        "scout:candidate_only": layer.candidate_only,
-        "scout:runtime_safety_truth": false,
-        "scout:visualization_only": true,
-        "scout:adds_source_resolution": false,
-        "scout:source_resolution": layer.source_resolution,
-        "scout:artifact_hash": layer.artifact_hash,
-      },
-    }));
+    const baseRasterStyleLayers = normalizedRasterLayers
+      .filter(layer => layer.render_position === "base")
+      .map(rasterStyleLayerDefinition);
+    const overlayRasterStyleLayers = normalizedRasterLayers
+      .filter(layer => layer.render_position === "overlay")
+      .map(rasterStyleLayerDefinition);
     const visibleFilter = ["==", ["get", "_scout_visible"], true];
+    const osmVisibleFilter = [
+      "all",
+      visibleFilter,
+      ["==", ["get", "layer_id"], "osm"],
+    ];
+    const evidenceVisibleFilter = [
+      "all",
+      visibleFilter,
+      ["!=", ["get", "layer_id"], "osm"],
+    ];
     return {
       version: 8,
       sources: {
@@ -517,23 +1157,77 @@
           type: "background",
           paint: {"background-color": "#e8eef2"},
         },
-        ...rasterStyleLayers,
+        ...baseRasterStyleLayers,
+        {
+          id: EVIDENCE_LAYER_IDS.osmFill,
+          type: "fill",
+          source: EVIDENCE_SOURCE_ID,
+          filter: ["all", osmVisibleFilter, ["==", ["geometry-type"], "Polygon"]],
+          paint: {
+            "fill-color": osmFillColorExpression(),
+            "fill-opacity": ["case", ["boolean", ["feature-state", "selected"], false], 0.82, 0.68],
+            "fill-outline-color": osmFillOutlineColorExpression(),
+          },
+        },
+        {
+          id: EVIDENCE_LAYER_IDS.osmLineCasing,
+          type: "line",
+          source: EVIDENCE_SOURCE_ID,
+          filter: ["all", osmVisibleFilter, ["==", ["geometry-type"], "LineString"]],
+          layout: {"line-cap": "round", "line-join": "round"},
+          paint: {
+            "line-color": osmLineCasingColorExpression(),
+            "line-width": osmLineCasingWidthExpression(),
+            "line-opacity": 0.92,
+          },
+        },
+        {
+          id: EVIDENCE_LAYER_IDS.osmLine,
+          type: "line",
+          source: EVIDENCE_SOURCE_ID,
+          filter: ["all", osmVisibleFilter, ["==", ["geometry-type"], "LineString"]],
+          layout: {"line-cap": "round", "line-join": "round"},
+          paint: {
+            "line-color": osmLineCoreColorExpression(),
+            "line-width": osmLineCoreWidthExpression(),
+            "line-opacity": 0.96,
+          },
+        },
+        {
+          id: EVIDENCE_LAYER_IDS.osmPoint,
+          type: "circle",
+          source: EVIDENCE_SOURCE_ID,
+          filter: ["all", osmVisibleFilter, ["==", ["geometry-type"], "Point"]],
+          paint: {
+            "circle-color": osmPointColorExpression(),
+            "circle-radius": ["case", ["boolean", ["feature-state", "selected"], false], 7, 3.2],
+            "circle-stroke-color": "rgba(255,255,255,0.94)",
+            "circle-stroke-width": 1,
+            "circle-opacity": 0.86,
+          },
+        },
         {
           id: EVIDENCE_LAYER_IDS.fill,
           type: "fill",
           source: EVIDENCE_SOURCE_ID,
-          filter: ["all", visibleFilter, ["==", ["geometry-type"], "Polygon"]],
+          filter: [
+            "all",
+            evidenceVisibleFilter,
+            ["==", ["geometry-type"], "Polygon"],
+            ["!=", ["get", "render_position"], "overlay"],
+          ],
           paint: {
             "fill-color": evidenceLayerColorExpression(),
             "fill-opacity": ["case", ["boolean", ["feature-state", "selected"], false], 0.5, 0.24],
             "fill-outline-color": "#263746",
           },
         },
+        ...overlayRasterStyleLayers,
         {
           id: EVIDENCE_LAYER_IDS.line,
           type: "line",
           source: EVIDENCE_SOURCE_ID,
-          filter: ["all", visibleFilter, ["==", ["geometry-type"], "LineString"]],
+          filter: ["all", evidenceVisibleFilter, ["==", ["geometry-type"], "LineString"]],
           layout: {"line-cap": "round", "line-join": "round"},
           paint: {
             "line-color": evidenceLayerColorExpression(),
@@ -545,13 +1239,34 @@
           id: EVIDENCE_LAYER_IDS.point,
           type: "circle",
           source: EVIDENCE_SOURCE_ID,
-          filter: ["all", visibleFilter, ["==", ["geometry-type"], "Point"]],
+          filter: ["all", evidenceVisibleFilter, ["==", ["geometry-type"], "Point"]],
           paint: {
             "circle-color": evidenceLayerColorExpression(),
             "circle-radius": ["case", ["boolean", ["feature-state", "selected"], false], 10, 6],
             "circle-stroke-color": "#ffffff",
             "circle-stroke-width": ["case", ["boolean", ["feature-state", "selected"], false], 3, 1.5],
             "circle-opacity": 0.95,
+          },
+        },
+        {
+          id: EVIDENCE_LAYER_IDS.overlayFill,
+          type: "fill",
+          source: EVIDENCE_SOURCE_ID,
+          filter: [
+            "all",
+            evidenceVisibleFilter,
+            ["==", ["geometry-type"], "Polygon"],
+            ["==", ["get", "render_position"], "overlay"],
+          ],
+          paint: {
+            "fill-color": ["coalesce", ["get", "render_color"], "#00a8f3"],
+            "fill-opacity": [
+              "case",
+              ["boolean", ["feature-state", "selected"], false],
+              0.72,
+              ["coalesce", ["get", "render_opacity"], 0.5],
+            ],
+            "fill-outline-color": "rgba(255,255,255,0.48)",
           },
         },
       ],
@@ -571,25 +1286,588 @@
     ]);
   }
 
-  function waitForMapLoad(map, timeoutMs = 15000) {
-    if (map.loaded?.()) return Promise.resolve();
+  function waitForMapLoad(map, timeoutMs = 15000, container = null, signal = null) {
+    const startedAt = Date.now();
+    const timeoutBudgetMs = Math.max(1000, Number(timeoutMs) || 15000);
+    const visibilityDocument = container?.ownerDocument || global.document;
+    const documentVisibility = () => ["visible", "hidden", "prerender"]
+      .includes(visibilityDocument?.visibilityState) ? visibilityDocument.visibilityState : "unknown";
+    const visibilityAware = documentVisibility() !== "unknown"
+      && typeof visibilityDocument?.addEventListener === "function"
+      && typeof visibilityDocument?.removeEventListener === "function";
+    const isHidden = () => visibilityAware && ["hidden", "prerender"].includes(documentVisibility());
+    let budgetWasHidden = isHidden();
+    let accountedAt = startedAt;
+    let visibleElapsedMs = 0;
+    let hiddenElapsedMs = 0;
+    let removedAt = null;
+    const accountWait = () => {
+      const now = Date.now();
+      const elapsed = Math.max(0, now - accountedAt);
+      if (removedAt === null) {
+        if (budgetWasHidden) hiddenElapsedMs += elapsed;
+        else visibleElapsedMs += elapsed;
+      }
+      accountedAt = now;
+    };
+    const receipt = {version: 1, phase: budgetWasHidden ? "waiting_hidden" : "waiting", elapsedMs: 0, eventCount: 0,
+      deadlineBasis: visibilityAware ? "visible-time" : "wall-clock", timeoutMs: timeoutBudgetMs,
+      visibleElapsedMs: 0, hiddenElapsedMs: 0, visibilityTransitionCount: 0,
+      droppedEvents: 0, styleLoadEventSeen: false, firstRenderElapsedMs: null, events: []};
+    const publicBoolean = method => {
+      try { return typeof map?.[method] === "function" ? map[method]() === true : null; }
+      catch (_error) { return null; }
+    };
+    const sourceSnapshot = () => {
+      let sourceIds = [];
+      try { sourceIds = Object.keys(map.getStyle?.()?.sources || {}); } catch (_error) { /* Removed style. */ }
+      const safeId = value => String(value).replace(/[^a-zA-Z0-9_.-]/g, "_").slice(0, 96);
+      const waitingSourceIds = [], unknownSourceIds = [];
+      sourceIds.slice(0, 64).forEach(sourceId => {
+        try {
+          const loaded = map.isSourceLoaded?.(sourceId);
+          if (loaded === false) waitingSourceIds.push(safeId(sourceId));
+          else if (loaded !== true) unknownSourceIds.push(safeId(sourceId));
+        } catch (_error) { unknownSourceIds.push(safeId(sourceId)); }
+      });
+      return {sourceCount: sourceIds.length, sourcesTruncated: sourceIds.length > 64,
+        waitingSourceIds, unknownSourceIds};
+    };
+    const record = (type, event = {}, terminal = false) => {
+      accountWait();
+      if (type === "style.load") receipt.styleLoadEventSeen = true;
+      receipt.elapsedMs = Math.max(0, Date.now() - startedAt);
+      receipt.visibleElapsedMs = visibleElapsedMs;
+      receipt.hiddenElapsedMs = hiddenElapsedMs;
+      receipt.removedWaitElapsedMs = removedAt === null ? 0 : Math.max(0, Date.now() - removedAt);
+      receipt.remainingVisibleMs = Math.max(0, timeoutBudgetMs - visibleElapsedMs);
+      receipt.styleReady = publicBoolean("isStyleLoaded");
+      receipt.allTilesLoaded = publicBoolean("areTilesLoaded");
+      receipt.mapLoaded = publicBoolean("loaded");
+      receipt.documentVisibility = documentVisibility();
+      try {
+        const bounds = container?.getBoundingClientRect?.();
+        const canvas = map.getCanvas?.();
+        receipt.containerWidth = Number.isFinite(bounds?.width) ? Math.round(bounds.width) : null;
+        receipt.containerHeight = Number.isFinite(bounds?.height) ? Math.round(bounds.height) : null;
+        receipt.canvasWidth = Number.isFinite(canvas?.width) ? canvas.width : null;
+        receipt.canvasHeight = Number.isFinite(canvas?.height) ? canvas.height : null;
+      } catch (_error) { /* Detached canvas is still observable through the remove event. */ }
+      if (type === "render" && receipt.firstRenderElapsedMs === null) receipt.firstRenderElapsedMs = receipt.elapsedMs;
+      const item = {type, elapsedMs: receipt.elapsedMs, styleReady: receipt.styleReady,
+        allTilesLoaded: receipt.allTilesLoaded, mapLoaded: receipt.mapLoaded,
+        documentVisibility: receipt.documentVisibility,
+        visibleElapsedMs, hiddenElapsedMs, remainingVisibleMs: receipt.remainingVisibleMs};
+      let sources = {};
+      try { sources = map.getStyle?.()?.sources || {}; } catch (_error) { /* Removed style. */ }
+      if (Object.prototype.hasOwnProperty.call(sources, event.sourceId)) {
+        item.sourceId = String(event.sourceId).replace(/[^a-zA-Z0-9_.-]/g, "_").slice(0, 96);
+      }
+      if (["metadata", "content", "visibility", "idle"].includes(event.sourceDataType)) {
+        item.dataType = event.sourceDataType;
+      }
+      if (typeof event.isSourceLoaded === "boolean") item.isSourceLoaded = event.isSourceLoaded;
+      if (type === "error") {
+        item.errorName = ["Error", "TypeError", "RangeError", "AbortError", "GPUInitializationError"]
+          .includes(event.error?.name) ? event.error.name : "Error";
+      }
+      receipt.eventCount += 1;
+      if (receipt.events.length >= 64) {
+        receipt.events.splice(1, 1); // Preserve the start and the most recent observations.
+        receipt.droppedEvents += 1;
+      }
+      receipt.events.push(item);
+      if (terminal || type === "start") Object.assign(receipt, sourceSnapshot());
+      if (container?.dataset) container.dataset.maplibreInitReceipt = JSON.stringify(receipt);
+    };
+    record("start");
+    if (map.loaded?.()) {
+      receipt.phase = "already_loaded";
+      record("already_loaded", {}, true);
+      return Promise.resolve();
+    }
     return new Promise((resolve, reject) => {
       let settled = false;
       let timer = null;
+      let timerGeneration = 0;
+      let abortListener = null;
+      let visibilityListener = null;
+      let mapRemoved = false;
+      const listeners = new Map();
+      const listen = (type, callback) => {
+        listeners.set(type, callback);
+        map.on(type, callback);
+      };
+      const removeListeners = () => {
+        listeners.forEach((listener, type) => map.off?.(type, listener));
+        listeners.clear();
+      };
       const finish = callback => value => {
         if (settled) return;
         settled = true;
         global.clearTimeout(timer);
+        if (abortListener) signal?.removeEventListener("abort", abortListener);
+        if (visibilityListener) visibilityDocument.removeEventListener("visibilitychange", visibilityListener);
+        removeListeners();
         callback(value);
       };
       const complete = finish(resolve);
       const fail = finish(reject);
-      timer = global.setTimeout(
-        () => fail(new Error("maplibre_initialization_timeout")),
-        Math.max(1000, Number(timeoutMs) || 15000),
-      );
-      map.once("load", complete);
+      abortListener = () => {
+        receipt.phase = "cancelled";
+        record("cancelled", {}, true);
+        fail(Object.assign(new Error("maplibre_initialization_cancelled"), {name: "AbortError"}));
+      };
+      if (signal?.aborted) { abortListener(); return; }
+      signal?.addEventListener("abort", abortListener, {once: true});
+      listen("render", event => {
+        record("render", event);
+        map.off?.("render", listeners.get("render"));
+        listeners.delete("render");
+      });
+      ["style.load", "sourcedata", "dataloading", "error", "remove"].forEach(type => {
+        listen(type, event => {
+          if (type === "remove") {
+            accountWait();
+            removedAt = Date.now();
+            mapRemoved = true;
+            receipt.phase = "removed_waiting_timeout";
+            receipt.deadlineBasis = "removed-renderer-wall-clock";
+          }
+          record(type, event, type === "remove");
+          if (type === "remove") {
+            removeListeners();
+            if (visibilityListener) visibilityDocument.removeEventListener("visibilitychange", visibilityListener);
+            visibilityListener = null;
+            // A removed map cannot progress after returning to the foreground.
+            // Keep the original timeout error and wall deadline, including while hidden.
+            armTimer();
+          }
+        });
+      });
+      listen("load", event => {
+        receipt.phase = "loaded";
+        record("load", event, true);
+        complete(event);
+      });
+      // Inline MapLibre styles wait for requestAnimationFrame before loading.
+      // Background tabs may suspend that frame; only visible time consumes the deadline.
+      function armTimer() {
+        const generation = ++timerGeneration;
+        global.clearTimeout(timer);
+        timer = null;
+        accountWait();
+        if (budgetWasHidden && !mapRemoved) return;
+        timer = global.setTimeout(() => {
+          if (settled || generation !== timerGeneration) return;
+          global.clearTimeout(timer);
+          timer = null;
+          if (!mapRemoved && isHidden()) { visibilityListener(); return; }
+          accountWait();
+          if (!mapRemoved && visibilityAware && visibleElapsedMs < timeoutBudgetMs) { armTimer(); return; }
+          receipt.phase = "timeout";
+          record("timeout", {}, true);
+          fail(new Error("maplibre_initialization_timeout"));
+        }, mapRemoved ? Math.max(0, timeoutBudgetMs - (Date.now() - startedAt))
+          : visibilityAware ? Math.max(0, timeoutBudgetMs - visibleElapsedMs) : timeoutBudgetMs);
+      }
+      if (visibilityAware && !mapRemoved) {
+        visibilityListener = () => {
+          if (settled) return;
+          accountWait();
+          const hidden = isHidden();
+          if (hidden !== budgetWasHidden) receipt.visibilityTransitionCount += 1;
+          budgetWasHidden = hidden;
+          receipt.phase = hidden ? "waiting_hidden" : "waiting";
+          record(hidden ? "visibility_hidden" : "visibility_visible");
+          armTimer();
+        };
+        visibilityDocument.addEventListener("visibilitychange", visibilityListener);
+      }
+      armTimer();
     });
+  }
+
+  function rasterTileCoverage(layer, map) {
+    if (typeof map?.coveringTiles === "function") {
+      // Use the renderer's frustum and variable-LOD selection. A pitched terrain
+      // view does not require every tile in its axis-aligned bounds at one zoom.
+      try {
+        const source = map.getSource?.(layer.map_source_id);
+        const ideal = map.coveringTiles({
+          tileSize: source?.tileSize ?? layer.tile_size,
+          minzoom: source?.minzoom ?? layer.minzoom,
+          maxzoom: source?.maxzoom ?? layer.maxzoom,
+          roundZoom: source?.roundZoom ?? true,
+          reparseOverscaled: source?.reparseOverscaled ?? false,
+          terrain: map.terrain,
+          calculateTileZoom: source?.calculateTileZoom,
+        });
+        const tileKeys = new Set();
+        const zooms = new Set();
+        for (const tileId of ideal) {
+          if (typeof source?.hasTile === "function" && !source.hasTile(tileId)) continue;
+          const tile = tileId.canonical;
+          if (!tile || ![tile.z, tile.x, tile.y].every(Number.isInteger)) return null;
+          tileKeys.add(`${tile.z}/${tile.x}/${tile.y}`);
+          zooms.add(tile.z);
+        }
+        const nativeZooms = [...zooms].sort((left, right) => left - right);
+        const keys = [...tileKeys].sort();
+        return {
+          z: nativeZooms.at(-1) ?? null,
+          native_zooms: nativeZooms,
+          coverage_basis: "maplibre-covering-tiles",
+          tiles: keys.map(key => {
+            const [z, x, y] = key.split("/").map(Number);
+            return {z, x, y};
+          }),
+          count: keys.length,
+          key: JSON.stringify(keys),
+          contains: tile => tileKeys.has(`${tile.z}/${tile.x}/${tile.y}`),
+        };
+      } catch (_error) {
+        // Never substitute an optimistic rectangle when the active renderer's
+        // coverage cannot be established (style loading/removal, for example).
+        return null;
+      }
+    }
+    if (Number(map?.getPitch?.() || 0) !== 0 || Number(map?.getBearing?.() || 0) !== 0) return null;
+    const bounds = map?.getBounds?.();
+    const zoom = Number(map?.getZoom?.());
+    if (!bounds || !Number.isFinite(zoom)) return null;
+    // RasterTileSource.roundZoom is true in MapLibre 6.2; its map tile size is 512.
+    const z = Math.max(Math.ceil(layer.minzoom), Math.min(Math.floor(layer.maxzoom),
+      Math.round(zoom + Math.log2(512 / layer.tile_size))));
+    const size = 2 ** z;
+    const rangeFor = ([west, south, east, north]) => {
+      if (![west, south, east, north].every(Number.isFinite) || south > north) return null;
+      if (east < west) east += 360;
+      const y = latitude => {
+        const radians = Math.max(-85.05112878, Math.min(85.05112878, latitude)) * Math.PI / 180;
+        return size * (1 - Math.log(Math.tan(radians) + 1 / Math.cos(radians)) / Math.PI) / 2;
+      };
+      const xMin = Math.floor(size * (west + 180) / 360);
+      const xMax = Math.max(xMin, Math.ceil(size * (east + 180) / 360) - 1);
+      const wrap = value => ((value % size) + size) % size;
+      const xs = xMax - xMin + 1 >= size ? [[0, size - 1]]
+        : wrap(xMin) <= wrap(xMax) ? [[wrap(xMin), wrap(xMax)]]
+          : [[0, wrap(xMax)], [wrap(xMin), size - 1]];
+      return {xs, yMin: Math.max(0, Math.floor(y(north))),
+        yMax: Math.min(size - 1, Math.max(Math.floor(y(north)), Math.ceil(y(south)) - 1))};
+    };
+    let range = rangeFor([bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()]);
+    if (!range) return null;
+    if (layer.bounds) {
+      const source = rangeFor(layer.bounds);
+      if (!source) return null;
+      range = {
+        xs: range.xs.flatMap(viewX => source.xs.map(sourceX => [
+          Math.max(viewX[0], sourceX[0]), Math.min(viewX[1], sourceX[1]),
+        ]).filter(([min, max]) => min <= max)),
+        yMin: Math.max(range.yMin, source.yMin), yMax: Math.min(range.yMax, source.yMax),
+      };
+    }
+    const count = range.xs.reduce((sum, [min, max]) => sum + max - min + 1, 0)
+      * Math.max(0, range.yMax - range.yMin + 1);
+    return {z, count, native_zooms: [z], coverage_basis: "unpitched-bounds-fallback",
+      key: JSON.stringify([z, range.xs, range.yMin, range.yMax]),
+      contains: tile => tile.z === z && tile.y >= range.yMin && tile.y <= range.yMax
+        && range.xs.some(([min, max]) => tile.x >= min && tile.x <= max)};
+  }
+
+  function inspectRasterRenderPolicySources(map, transport) {
+    const style = map?.getStyle?.();
+    return {available: Boolean(style?.sources),
+      sources: Object.entries(style?.sources || {}).filter(([, source]) =>
+        source.type === "raster" || source.type === "image").map(([id, source]) => {
+          const layers = (style.layers || []).filter(layer => layer.source === id);
+          // Metadata identifies the candidate mapping; the actual source ID and
+          // protocol URLs (including revision) must also match the live transport.
+          const matching = layers.map(layer => transport?.layers?.get(layer.metadata?.["scout:layer_id"]))
+            .find(entry => entry?.layer.map_source_id === id
+              && JSON.stringify(transport.sourceDefinition(entry.layer).tiles) === JSON.stringify(source.tiles));
+          return {
+            id, type: source.type, tiles: source.tiles ? [...source.tiles] : null,
+            requestTemplates: matching ? [...matching.templates] : null,
+            url: source.url || null, coordinates: source.coordinates?.map(pair => [...pair]) || null,
+            tileSize: source.tileSize ?? null, minzoom: source.minzoom ?? null, maxzoom: source.maxzoom ?? null,
+            layers: layers.map(layer => ({
+              id: layer.id, type: layer.type, source: layer.source,
+              metadata: Object.fromEntries(Object.entries(layer.metadata || {})
+                .filter(([key]) => key.startsWith("scout:"))),
+            })),
+          };
+        })};
+  }
+
+  function rasterNativeDemand(map, layer, receiver = map) {
+    const source = map.getSource?.(layer.map_source_id);
+    const requested = map.coveringTiles.call(receiver, {
+      tileSize: source?.tileSize ?? layer.tile_size,
+      minzoom: source?.minzoom ?? layer.minzoom, maxzoom: 24,
+      roundZoom: source?.roundZoom ?? true,
+      reparseOverscaled: source?.reparseOverscaled ?? false, terrain: map.terrain,
+      calculateTileZoom: source?.calculateTileZoom,
+    });
+    const inBounds = requested.filter(tile => typeof source?.hasTile !== "function" || source.hasTile(tile));
+    return [...new Set(inBounds.map(tile => tile.canonical?.z).filter(Number.isInteger))].sort((a, b) => a - b);
+  }
+
+  function pitchedNativeCameraCap(map, maplibregl, layer, maximum) {
+    const evidence = {status: "unverified", basis: "maplibre-6.2.0-cloned-camera-unclamped-cohort",
+      vendorVersion: null, evaluations: 0};
+    try {
+      // This is the only pinned-vendor private bridge. MapLibre 6.2.0's
+      // public coveringTiles() reads this._camera.transform. Evaluate its
+      // unchanged algorithm on a clone, never by moving the visible camera.
+      evidence.vendorVersion = maplibregl?.getVersion?.() || null;
+      if (evidence.vendorVersion !== MAPLIBRE_VERSION
+        || map.coveringTiles !== maplibregl?.Map?.prototype?.coveringTiles) {
+        throw new Error("native_camera_projection_vendor_unverified");
+      }
+      const original = map._camera?.transform;
+      const transform = original?.clone?.();
+      if (!transform || transform === original || transform._helper === original?._helper
+        || typeof transform.setZoom !== "function" || typeof transform.setMaxZoom !== "function"
+        || !(transform.width > 0 && transform.height > 0)) {
+        throw new Error("native_camera_projection_clone_unavailable");
+      }
+      transform.setMaxZoom(maximum);
+      const receiver = {_camera: {transform}};
+      const evaluate = zoom => {
+        transform.setZoom(zoom);
+        if (Math.abs(transform.zoom - zoom) > .000001) throw new Error("native_camera_projection_zoom_constrained");
+        const demand = rasterNativeDemand(map, layer, receiver);
+        evidence.evaluations += 1;
+        if (!demand.length) throw new Error("native_camera_projection_cohort_unavailable");
+        return {zoom, demand, withinNative: demand.every(value => value <= layer.maxzoom)};
+      };
+      let upper = maximum, lower = maximum, result = evaluate(maximum);
+      evidence.requestedNativeZoomsAtBaseMaximum = result.demand;
+      const minimum = Math.max(0, Number(original.minZoom) || 0);
+      while (!result.withinNative && lower > minimum) {
+        lower = Math.max(minimum, lower - 1);
+        result = evaluate(lower);
+      }
+      if (!result.withinNative) throw new Error("native_camera_projection_no_native_view");
+      while (upper - lower > .001) {
+        const middle = (upper + lower) / 2;
+        const trial = evaluate(middle);
+        if (trial.withinNative) { lower = middle; result = trial; } else upper = middle;
+      }
+      const maxCameraZoom = Math.floor(lower * 1000) / 1000;
+      result = evaluate(maxCameraZoom);
+      if (!result.withinNative) throw new Error("native_camera_projection_final_cohort_unverified");
+      return {maxCameraZoom, evidence: {...evidence, status: "verified", maxCameraZoom,
+        requestedNativeZoomsAtMaximum: result.demand}};
+    } catch (error) {
+      return {maxCameraZoom: maximum, evidence: {...evidence, reason: error.message}};
+    }
+  }
+
+  function rasterNativeCameraPolicy(layers = [], defaultMaxZoom = 22, context = null) {
+    const rudy = layers.find(layer => layer.layer_id === "rudy-twmap"
+      && layer.source_type === "raster" && layer.visible !== false);
+    const nativeTileSize = rudy?.tile_size || null;
+    const nativeMaxZoom = rudy?.maxzoom ?? null;
+    const policy = {
+      active: Boolean(rudy), layerId: rudy?.layer_id || null,
+      maxCameraZoom: rudy ? Math.min(defaultMaxZoom,
+        nativeMaxZoom - Math.log2(MAPLIBRE_WORLD_TILE_SIZE / nativeTileSize)) : defaultMaxZoom,
+      providerNativeMaxZoom: nativeMaxZoom, nativeTileSize,
+      worldTileSize: MAPLIBRE_WORLD_TILE_SIZE,
+    };
+    if (rudy && Number(context?.map?.getPitch?.()) !== 0 && context?.map) {
+      const projected = pitchedNativeCameraCap(context.map, context.maplibregl, rudy, policy.maxCameraZoom);
+      policy.maxCameraZoom = projected.maxCameraZoom;
+      policy.nativeDemandCap = projected.evidence;
+    }
+    return policy;
+  }
+
+  function rasterNativeCameraReceipt(map, layer, policy = rasterNativeCameraPolicy(layer ? [layer] : [])) {
+    const cameraZoom = Number(map?.getZoom?.());
+    const pitch = Number(map?.getPitch?.() || 0);
+    const receipt = {...policy, cameraZoom: Number.isFinite(cameraZoom) ? cameraZoom : null,
+      maxCameraZoom: Number(map?.getMaxZoom?.() ?? policy.maxCameraZoom), pitch,
+      worldPixelsPerProviderPixel: policy.active && Number.isFinite(cameraZoom)
+        ? MAPLIBRE_WORLD_TILE_SIZE * (2 ** cameraZoom) / (policy.nativeTileSize * (2 ** policy.providerNativeMaxZoom)) : null,
+      pixelScaleScope: pitch ? "camera-world-scale-only" : "unpitched-camera-pixel-scale",
+      requestedNativeZooms: [], requestedAboveNativeMax: null};
+    if (policy.active && layer && typeof map?.coveringTiles === "function") {
+      try {
+        receipt.requestedNativeZooms = rasterNativeDemand(map, layer);
+        receipt.requestedAboveNativeMax = receipt.requestedNativeZooms.length
+          ? receipt.requestedNativeZooms.some(zoom => zoom > policy.providerNativeMaxZoom) : null;
+      } catch (_error) { /* Unavailable selection remains explicitly unknown. */ }
+    }
+    return receipt;
+  }
+
+  class RasterTileTransport {
+    constructor({maplibregl, getMap, onState, container, coverageResolver = rasterTileCoverage}) {
+      this.maplibregl = maplibregl;
+      this.getMap = getMap;
+      this.onState = onState;
+      this.container = container;
+      this.coverageResolver = coverageResolver;
+      this.protocol = `scout-raster-${++rasterProtocolSequence}`;
+      this.revision = 0;
+      this.requestSequence = 0;
+      this.layers = new Map();
+      this.records = new Map();
+      this.controllers = new Set();
+      this.viewErrors = new Map();
+      this.destroyed = false;
+      this.enabled = typeof maplibregl.addProtocol === "function"
+        && typeof maplibregl.removeProtocol === "function" && typeof global.fetch === "function";
+      if (this.enabled) maplibregl.addProtocol(this.protocol, (request, controller) => this.load(request, controller));
+      container.dataset.maplibreRasterTransport = this.enabled ? "same-origin-protocol" : "event-only";
+    }
+
+    configure(layers) {
+      this.revision += 1;
+      this.controllers.forEach(controller => controller.abort());
+      this.controllers.clear();
+      this.records.clear();
+      this.viewErrors.clear();
+      this.layers.clear();
+      const origin = String(global.location?.origin || "");
+      layers.forEach(layer => {
+        if (layer.source_type !== "raster" || !origin) return;
+        try {
+          const templates = layer.tiles.map(template => new URL(template, origin));
+          if (!templates.every(url => url.origin === origin && !url.username && !url.password
+            && !/\{(?!z\}|x\}|y\})/.test(decodeURI(url.href)))) return;
+          this.layers.set(layer.layer_id, {layer, visible: layer.visible,
+            templates: layer.tiles.map(template => new URL(template, origin).href
+              .replace(/%7B([zxy])%7D/gi, "{$1}"))});
+        } catch (_error) { /* Unsupported sources retain their existing public loader. */ }
+      });
+    }
+
+    sourceDefinition(layer) {
+      const source = rasterSourceDefinition(layer);
+      if (!this.enabled || !this.layers.has(layer.layer_id)) return source;
+      source.tiles = layer.tiles.map((_template, index) => (
+        `${this.protocol}://${this.revision}/${layer.layer_id}/${index}/{z}/{x}/{y}`
+      ));
+      return source;
+    }
+
+    handles(layerId) {
+      return !this.destroyed && this.layers.has(layerId);
+    }
+
+    publish(layerId) {
+      const entry = this.layers.get(layerId);
+      if (this.destroyed || !entry) return;
+      const coverage = this.coverageResolver(entry.layer, this.getMap(), this.records);
+      const records = [...this.records.values()].filter(record => record.layerId === layerId && coverage?.contains(record));
+      const errors = records.filter(record => record.state === "error");
+      const pending = records.filter(record => record.state === "pending").length;
+      const successes = records.filter(record => record.state === "success").length;
+      const viewError = this.viewErrors.get(layerId)?.key === coverage?.key;
+      const missing = Math.max(0, Number(coverage?.count || 0) - successes - pending - errors.length);
+      let settled = false;
+      try { settled = this.getMap()?.isSourceLoaded?.(entry.layer.map_source_id) === true; } catch (_error) { /* Source removal. */ }
+      const state = !entry.visible ? "hidden" : !this.enabled || errors.length || viewError ? "degraded"
+        : !coverage ? "loading" : !coverage.count ? "configured"
+          : settled && !pending ? missing ? "degraded" : "available" : "loading";
+      const reason = !entry.visible ? "layer_hidden" : !this.enabled ? "tile_transport_unavailable"
+        : errors.length ? "native_tile_http_error" : viewError ? "tile_decode_failed"
+          : !coverage ? "viewport_pending" : !coverage.count ? "outside_source_bounds"
+            : state === "available" ? "native_tiles_loaded" : state === "degraded" ? "native_tiles_unverified" : "tiles_loading";
+      this.onState(layerId, {state, reason, visible: entry.visible, error_count: errors.length + Number(viewError),
+        pending_count: pending, success_count: successes, unverified_count: missing,
+        required_count: coverage?.count || 0, required_tile_count: coverage?.count || 0,
+        native_zoom: coverage?.z ?? null, verified_native_zoom: state === "available" ? coverage.z : null,
+        native_zooms: coverage?.native_zooms || (coverage ? [coverage.z] : []),
+        verified_native_zooms: state === "available" ? coverage.native_zooms || [coverage.z] : [],
+        coverage_basis: coverage?.coverage_basis || "viewport-bounds",
+        last_http_status: errors.at(-1)?.status || null, transport_revision: this.revision,
+        transport: this.enabled ? "same-origin-protocol" : "unavailable"});
+    }
+
+    publishAll() {
+      this.layers.forEach((_entry, layerId) => this.publish(layerId));
+    }
+
+    setVisibility(layerId, visible) {
+      const entry = this.layers.get(layerId);
+      if (!entry) return;
+      entry.visible = Boolean(visible);
+      this.publish(layerId);
+    }
+
+    recordMapError(layerId) {
+      const entry = this.layers.get(layerId);
+      if (!entry) return;
+      const coverage = this.coverageResolver(entry.layer, this.getMap(), this.records);
+      this.viewErrors.set(layerId, {key: coverage?.key});
+      this.publish(layerId);
+    }
+
+    async load(request, controller) {
+      const abortError = () => Object.assign(new Error("Raster request cancelled"), {name: "AbortError"});
+      const match = String(request.url).match(new RegExp(`^${this.protocol}://(\\d+)/([a-z0-9._-]+)/(\\d+)/(\\d+)/(\\d+)/(\\d+)$`));
+      const entry = match && this.layers.get(match[2]);
+      if (this.destroyed || !entry || Number(match[1]) !== this.revision || controller.signal.aborted) throw abortError();
+      const [index, z, x, y] = match.slice(3).map(Number);
+      const template = entry.templates[index];
+      if (!template || z < Math.floor(entry.layer.minzoom) || z > Math.ceil(entry.layer.maxzoom)
+        || x >= 2 ** z || y >= 2 ** z) throw new Error("invalid_raster_protocol_tile");
+      const url = new URL(template.replaceAll("{z}", String(z)).replaceAll("{x}", String(x)).replaceAll("{y}", String(y)));
+      if (url.origin !== global.location.origin || url.username || url.password) throw new Error("invalid_raster_protocol_origin");
+      const revision = this.revision;
+      const key = `${match[2]}:${z}/${x}/${y}`;
+      const previous = this.records.get(key);
+      const record = {layerId: match[2], z, x, y, state: "pending", status: null, attempt: ++this.requestSequence};
+      const current = () => !this.destroyed && revision === this.revision && this.records.get(key) === record;
+      this.records.set(key, record);
+      // A different tile succeeding cannot repair a decoder failure in this view.
+      // Only a new configured source generation clears that failure.
+      this.controllers.add(controller);
+      this.publish(record.layerId);
+      try {
+        const response = await global.fetch(url.href, {signal: controller.signal, credentials: "same-origin",
+          redirect: "error", headers: {Accept: "image/webp,*/*"}});
+        if (controller.signal.aborted) throw abortError();
+        record.status = response.status;
+        if (!response.ok) throw Object.assign(new Error(`Raster tile HTTP ${response.status}`), {status: response.status});
+        const data = await response.arrayBuffer();
+        if (controller.signal.aborted) throw abortError();
+        if (current()) record.state = "success";
+        return {data, cacheControl: response.headers.get("Cache-Control"), expires: response.headers.get("Expires")};
+      } catch (error) {
+        if (current()) {
+          if (controller.signal.aborted || error?.name === "AbortError") {
+            if (previous && previous.state !== "pending") this.records.set(key, previous);
+            else this.records.delete(key);
+          } else record.state = "error";
+        }
+        // MapLibre may suppress HTTP 404 events; HTTP status is already recorded above.
+        throw Object.assign(new Error(error?.message || "Raster transport failed"), {
+          name: controller.signal.aborted ? "AbortError" : error?.name || "Error",
+          status: error?.status, scoutRasterTransport: true,
+        });
+      } finally {
+        this.controllers.delete(controller);
+        if (!this.destroyed && revision === this.revision) this.publish(record.layerId);
+      }
+    }
+
+    destroy() {
+      this.destroyed = true;
+      this.controllers.forEach(controller => controller.abort());
+      this.controllers.clear();
+      if (this.enabled) this.maplibregl.removeProtocol(this.protocol);
+      this.layers.clear();
+      this.records.clear();
+      this.viewErrors.clear();
+      this.container.dataset.maplibreRasterTransport = "destroyed";
+    }
   }
 
   class MapLibreEvidenceRenderer {
@@ -601,7 +1879,9 @@
       onFeatureLeave = null,
       onStatus = null,
       onRasterStatus = null,
+      onViewState = null,
       rasterLayers = [],
+      scrollZoom = true,
       timeoutMs = 15000,
     } = {}) {
       if (typeof maplibregl?.Map !== "function") throw new Error("maplibre_map_unavailable");
@@ -613,7 +1893,9 @@
       this.onFeatureLeave = typeof onFeatureLeave === "function" ? onFeatureLeave : null;
       this.onStatus = typeof onStatus === "function" ? onStatus : null;
       this.onRasterStatus = typeof onRasterStatus === "function" ? onRasterStatus : null;
+      this.onViewState = typeof onViewState === "function" ? onViewState : null;
       this.rasterLayers = normalizeRasterLayers(rasterLayers);
+      this.rasterLayerSignature = rasterLayersSignature(this.rasterLayers);
       this.rasterLayerStates = new Map(this.rasterLayers.map(layer => [
         layer.layer_id,
         Object.freeze({
@@ -626,7 +1908,13 @@
         }),
       ]));
       this.timeoutMs = timeoutMs;
+      this.scrollZoom = scrollZoom;
       this.map = null;
+      this.destroyed = false;
+      this.initializationAbortController = new AbortController();
+      this.rasterTransport = new RasterTileTransport({maplibregl, container,
+        getMap: () => this.map, onState: (layerId, patch) => this.updateRasterLayerState(layerId, patch)});
+      this.rasterTransport.configure(this.rasterLayers);
       this.featureCollection = createEvidenceFeatureCollection();
       this.index = buildEvidenceIndex();
       this.hiddenLayerIds = new Set();
@@ -646,6 +1934,7 @@
     }
 
     updateRasterLayerState(layerId, patch = {}) {
+      if (this.destroyed) return null;
       const key = String(layerId || "");
       const current = this.rasterLayerStates.get(key);
       if (!current) return null;
@@ -664,6 +1953,18 @@
               ? "configured"
               : "not_configured";
       this.container.dataset.maplibreRasterState = aggregate;
+      const native = values.find(value => value.layer_id === "rudy-twmap" && value.visible);
+      this.container.dataset.maplibreRudyState = native?.state || "hidden";
+      this.container.dataset.maplibreRasterNativeZooms = (native?.native_zooms || []).join(",");
+      this.container.dataset.maplibreRasterVerifiedNativeZooms = (native?.verified_native_zooms || []).join(",");
+      this.container.dataset.maplibreRasterCoverageBasis = native?.coverage_basis || "pending";
+      this.container.dataset.maplibreRasterNativeZoom = native?.native_zoom == null ? "" : String(native.native_zoom);
+      this.container.dataset.maplibreRasterVerifiedNativeZoom = native?.verified_native_zoom == null
+        ? "" : String(native.verified_native_zoom);
+      ["required_count", "success_count", "pending_count", "error_count", "unverified_count"].forEach((field, index) => {
+        const key = ["RequiredCount", "SuccessCount", "PendingCount", "ErrorCount", "UnverifiedCount"][index];
+        this.container.dataset[`maplibreRaster${key}`] = String(native?.[field] || 0);
+      });
       if (this.onRasterStatus) this.onRasterStatus(next, values);
       return next;
     }
@@ -681,9 +1982,19 @@
           });
         }
       });
+      ["move", "moveend", "idle"].forEach(event => {
+        this.map.on(event, () => {
+          this.publishCameraLimitReceipt();
+          this.rasterTransport.publishAll();
+        });
+      });
       this.map.on("sourcedata", event => {
         const layer = this.rasterLayerForSource(event?.sourceId);
         if (!layer || event?.isSourceLoaded !== true) return;
+        if (this.rasterTransport.handles(layer.layer_id)) {
+          this.rasterTransport.publish(layer.layer_id);
+          return;
+        }
         const patch = rasterLayerEventPatch(
           this.rasterLayerStates.get(layer.layer_id),
           "source_loaded",
@@ -693,10 +2004,95 @@
       this.map.on("error", event => {
         const layer = this.rasterLayerForSource(event?.sourceId);
         if (!layer) return;
+        if (event.error?.name === "AbortError" || event.error?.scoutRasterTransport) return;
+        if (this.rasterTransport.handles(layer.layer_id)) {
+          this.rasterTransport.recordMapError(layer.layer_id);
+          return;
+        }
         const current = this.rasterLayerStates.get(layer.layer_id);
         const patch = rasterLayerEventPatch(current, "tile_error");
         if (patch) this.updateRasterLayerState(layer.layer_id, patch);
       });
+    }
+
+    setRasterLayers(definitions = []) {
+      const nextLayers = normalizeRasterLayers(definitions);
+      const nextSignature = rasterLayersSignature(nextLayers);
+      if (nextSignature === this.rasterLayerSignature) return false;
+
+      const previousLayers = this.rasterLayers;
+      this.rasterTransport.configure(nextLayers);
+      if (this.map) {
+        [...previousLayers].reverse().forEach(layer => {
+          if (this.map.getLayer(layer.map_layer_id)) this.map.removeLayer(layer.map_layer_id);
+        });
+        previousLayers.forEach(layer => {
+          if (this.map.getSource(layer.map_source_id)) this.map.removeSource(layer.map_source_id);
+        });
+      }
+
+      this.rasterLayers = nextLayers;
+      this.rasterLayerSignature = nextSignature;
+      this.rasterLayerStates = new Map(nextLayers.map(layer => [
+        layer.layer_id,
+        Object.freeze({
+          layer_id: layer.layer_id,
+          source_id: layer.source_id,
+          state: layer.visible ? "loading" : "hidden",
+          reason: layer.visible ? "tiles_loading" : "layer_hidden",
+          visible: layer.visible,
+          error_count: 0,
+        }),
+      ]));
+
+      if (this.map) {
+        nextLayers.forEach(layer => {
+          this.map.addSource(layer.map_source_id, this.rasterTransport.sourceDefinition(layer));
+        });
+        nextLayers.filter(layer => layer.render_position === "base").forEach(layer => {
+          this.map.addLayer(
+            rasterStyleLayerDefinition(layer),
+            this.map.getLayer(EVIDENCE_LAYER_IDS.fill) ? EVIDENCE_LAYER_IDS.fill : undefined,
+          );
+        });
+        const overlayBeforeLayerId = this.map.getLayer(EVIDENCE_LAYER_IDS.line)
+          ? EVIDENCE_LAYER_IDS.line
+          : this.map.getLayer(EVIDENCE_LAYER_IDS.point)
+            ? EVIDENCE_LAYER_IDS.point
+            : undefined;
+        nextLayers.filter(layer => layer.render_position === "overlay").forEach(layer => {
+          this.map.addLayer(rasterStyleLayerDefinition(layer), overlayBeforeLayerId);
+        });
+      }
+
+      const states = [...this.rasterLayerStates.values()];
+      this.syncRasterCameraLimits();
+      const aggregate = states.some(state => state.state === "loading")
+        ? "loading"
+        : states.length
+          ? "configured"
+          : "not_configured";
+      this.container.dataset.maplibreRasterState = aggregate;
+      if (this.onRasterStatus) this.onRasterStatus(null, states);
+      return true;
+    }
+
+    syncRasterCameraLimits() {
+      const layers = this.rasterLayers.map(layer => ({...layer,
+        visible: this.rasterLayerStates.get(layer.layer_id)?.visible ?? layer.visible}));
+      this.nativeCameraPolicy = rasterNativeCameraPolicy(layers, 22, {map: this.map, maplibregl: this.maplibregl});
+      if (this.map && this.map.getMaxZoom?.() !== this.nativeCameraPolicy.maxCameraZoom) {
+        this.map.setMaxZoom?.(this.nativeCameraPolicy.maxCameraZoom);
+      }
+      return this.publishCameraLimitReceipt();
+    }
+
+    publishCameraLimitReceipt() {
+      const layer = this.rasterLayers.find(item => item.layer_id === "rudy-twmap");
+      const policy = this.nativeCameraPolicy || rasterNativeCameraPolicy(this.rasterLayers);
+      const receipt = rasterNativeCameraReceipt(this.map, layer, policy);
+      this.container.dataset.maplibreNativeCameraReceipt = JSON.stringify(receipt);
+      return receipt;
     }
 
     emitStatus(state, reason, detail = "") {
@@ -718,39 +2114,66 @@
     }
 
     async initialize(featureCollection = createEvidenceFeatureCollection()) {
+      if (this.destroyed) throw Object.assign(new Error("maplibre_initialization_cancelled"), {name: "AbortError"});
       this.emitStatus("loading", "map_initializing");
       this.featureCollection = createEvidenceFeatureCollection(featureCollection.features || []);
       this.index = buildEvidenceIndex(this.featureCollection.features);
+      const style = createEvidenceStyle(this.visibleFeatureCollection(), {rasterLayers: this.rasterLayers});
+      this.rasterLayers.forEach(layer => {
+        style.sources[layer.map_source_id] = this.rasterTransport.sourceDefinition(layer);
+      });
+      // Resolve IDs exactly as fitAll/fitFeatureIds do, including duplicate IDs
+      // and legacy features that only have a properties.feature_id identifier.
+      const initialFeatures = this.featureCollection.features
+        .map(feature => this.index.feature(String(feature.id))).filter(Boolean);
+      const bounds = featureCollectionBounds(createEvidenceFeatureCollection(initialFeatures));
+      const maxCameraZoom = rasterNativeCameraPolicy(this.rasterLayers).maxCameraZoom;
+      const pointBounds = bounds && bounds[0] === bounds[2] && bounds[1] === bounds[3];
+      // MapLibre applies constructor bounds before loading the style. Start the
+      // first source cohort at the evidence extent, not a disposable world view.
+      const initialCamera = !bounds ? {center: [0, 0], zoom: 1}
+        : pointBounds ? {center: [bounds[0], bounds[1]], zoom: Math.min(16, maxCameraZoom)}
+          : {bounds: [[bounds[0], bounds[1]], [bounds[2], bounds[3]]],
+            fitBoundsOptions: {padding: 72, maxZoom: 16, duration: 0}};
       this.map = new this.maplibregl.Map({
         container: this.container,
-        style: createEvidenceStyle(this.visibleFeatureCollection(), {
-          rasterLayers: this.rasterLayers,
-        }),
-        center: [0, 0],
-        zoom: 1,
+        style,
+        ...initialCamera,
+        maxZoom: maxCameraZoom,
         attributionControl: true,
         dragRotate: false,
         pitchWithRotate: false,
         boxZoom: false,
+        scrollZoom: this.scrollZoom,
       });
+      this.syncRasterCameraLimits();
       this.bindRasterStatus();
       if (typeof this.maplibregl.NavigationControl === "function") {
         this.map.addControl(new this.maplibregl.NavigationControl({showCompass: false}), "top-right");
       }
-      await waitForMapLoad(this.map, this.timeoutMs);
+      await waitForMapLoad(this.map, this.timeoutMs, this.container, this.initializationAbortController.signal);
+      if (this.destroyed) throw Object.assign(new Error("maplibre_initialization_cancelled"), {name: "AbortError"});
       this.bindFeatureInteractions();
       this.bindRectangleZoomInteractions();
       this.bindViewState();
       this.setInteractionMode(this.interactionMode);
-      this.setFeatureCollection(this.featureCollection);
-      this.fitAll({duration: 0});
+      // The style already owns the complete collection and initial viewport.
+      // Resending it here invalidates the load we just awaited before "ready".
       this.container.dataset.maplibreFeatureCount = String(this.featureCollection.features.length);
       this.emitStatus("ready", "evidence_rendered");
       return this;
     }
 
     bindFeatureInteractions() {
-      [EVIDENCE_LAYER_IDS.fill, EVIDENCE_LAYER_IDS.line, EVIDENCE_LAYER_IDS.point].forEach(layerId => {
+      [
+        EVIDENCE_LAYER_IDS.osmFill,
+        EVIDENCE_LAYER_IDS.osmLine,
+        EVIDENCE_LAYER_IDS.osmPoint,
+        EVIDENCE_LAYER_IDS.fill,
+        EVIDENCE_LAYER_IDS.line,
+        EVIDENCE_LAYER_IDS.point,
+        EVIDENCE_LAYER_IDS.overlayFill,
+      ].forEach(layerId => {
         this.map.on("click", layerId, event => {
           if (Date.now() < this.suppressFeatureClickUntil) return;
           const renderedFeature = event?.features?.[0];
@@ -803,6 +2226,9 @@
         if (Number.isFinite(zoom)) this.container.dataset.maplibreZoom = zoom.toFixed(6);
         if (center && Number.isFinite(Number(center.lng)) && Number.isFinite(Number(center.lat))) {
           this.container.dataset.maplibreCenter = `${Number(center.lng).toFixed(7)},${Number(center.lat).toFixed(7)}`;
+        }
+        if (this.onViewState && Number.isFinite(zoom)) {
+          this.onViewState({zoom, minZoom: this.map.getMinZoom?.(), maxZoom: this.map.getMaxZoom?.()});
         }
         this.syncSelectionLabel();
       };
@@ -953,7 +2379,8 @@
           const east = Math.max(Number(northWest.lng), Number(southEast.lng));
           const south = Math.min(Number(northWest.lat), Number(southEast.lat));
           const north = Math.max(Number(northWest.lat), Number(southEast.lat));
-          const maxZoom = Math.min(Number(this.map?.getZoom?.() || 0) + 2, 18);
+          const maxZoom = Math.min(Number(this.map?.getZoom?.() || 0) + 2,
+            Number(this.map?.getMaxZoom?.() ?? 22));
           this.map.fitBounds([[west, south], [east, north]], {
             padding: 24,
             maxZoom,
@@ -967,7 +2394,8 @@
         const center = this.map?.unproject?.([selection.start.x, selection.start.y]);
         this.map?.easeTo?.({
           center,
-          zoom: Math.min(Number(this.map?.getZoom?.() || 0) + 1, 18),
+          zoom: Math.min(Number(this.map?.getZoom?.() || 0) + 1,
+            Number(this.map?.getMaxZoom?.() ?? 22)),
           duration: 220,
         });
       }
@@ -1050,6 +2478,9 @@
 
     setLayerVisibility(layerId, visible) {
       const requestedLayerId = String(layerId);
+      const wasVisible = !this.hiddenLayerIds.has(requestedLayerId);
+      const evidenceVisibilityChanged = wasVisible !== Boolean(visible)
+        && this.featureCollection.features.some(feature => feature.properties?.layer_id === requestedLayerId);
       const nextHiddenLayerIds = new Set(this.hiddenLayerIds);
       if (visible) nextHiddenLayerIds.delete(requestedLayerId);
       else nextHiddenLayerIds.add(requestedLayerId);
@@ -1080,10 +2511,16 @@
               : "tiles_loading"
             : "layer_hidden",
         });
+        this.rasterTransport.setVisibility(rasterLayer.layer_id, visible);
       });
       const source = this.map?.getSource(EVIDENCE_SOURCE_ID);
-      if (typeof source?.setData === "function") source.setData(this.visibleFeatureCollection());
+      // Reapplying the same checkbox state must not restart the GeoJSON worker.
+      // Actual visibility changes still send every feature with its new flag.
+      if (evidenceVisibilityChanged && typeof source?.setData === "function") {
+        source.setData(this.visibleFeatureCollection());
+      }
       this.container.dataset.maplibreHiddenLayers = [...this.hiddenLayerIds].sort().join(",");
+      this.syncRasterCameraLimits();
       return !this.hiddenLayerIds.has(requestedLayerId);
     }
 
@@ -1229,32 +2666,61 @@
         raster_layer_states: Object.freeze(Object.fromEntries(
           [...this.rasterLayerStates.entries()].map(([layerId, state]) => [layerId, state]),
         )),
+        raster_layer_order: Object.freeze(this.rasterLayers.map(layer => Object.freeze({
+          layer_id: layer.layer_id,
+          control_layer_id: layer.control_layer_id,
+          render_position: layer.render_position,
+        }))),
         zoom: this.map?.getZoom?.() ?? null,
         center: this.map?.getCenter?.()?.toArray?.() ?? null,
       });
     }
 
     destroy() {
-      this.cancelRectangleZoom();
-      if (this.interactionSurface?.removeEventListener) {
-        this.interactionSurface.removeEventListener("pointerdown", this.boundRectangleZoomStart, true);
-        this.interactionSurface.removeEventListener("pointermove", this.boundRectangleZoomMove, true);
-        this.interactionSurface.removeEventListener("pointerup", this.boundRectangleZoomEnd, true);
-        this.interactionSurface.removeEventListener("pointercancel", this.boundRectangleZoomCancel, true);
-      }
-      this.rectangleZoomOverlay?.remove?.();
-      this.interactionCapture?.remove?.();
-      this.selectionLabel?.remove?.();
-      if (this.onFeatureLeave) this.onFeatureLeave();
-      this.map?.remove();
+      if (this.destroyed) return;
+      this.destroyed = true;
+      this.initializationAbortController.abort();
+      const map = this.map;
       this.map = null;
-      this.emitStatus("disabled", "renderer_destroyed");
+      try {
+        this.rasterTransport.destroy();
+        this.cancelRectangleZoom();
+        if (this.interactionSurface?.removeEventListener) {
+          this.interactionSurface.removeEventListener("pointerdown", this.boundRectangleZoomStart, true);
+          this.interactionSurface.removeEventListener("pointermove", this.boundRectangleZoomMove, true);
+          this.interactionSurface.removeEventListener("pointerup", this.boundRectangleZoomEnd, true);
+          this.interactionSurface.removeEventListener("pointercancel", this.boundRectangleZoomCancel, true);
+        }
+        this.rectangleZoomOverlay?.remove?.();
+        this.interactionCapture?.remove?.();
+        this.selectionLabel?.remove?.();
+        if (this.onFeatureLeave) this.onFeatureLeave();
+      } finally {
+        try { map?.remove(); }
+        finally { this.emitStatus("disabled", "renderer_destroyed"); }
+      }
     }
   }
 
   async function createRenderer(options, featureCollection = createEvidenceFeatureCollection()) {
+    if (options.signal?.aborted) throw Object.assign(new Error("maplibre_initialization_cancelled"), {name: "AbortError"});
     const renderer = new MapLibreEvidenceRenderer(options);
-    return renderer.initialize(featureCollection);
+    let cancellationFailure = null;
+    const cancel = () => {
+      try { renderer.destroy(); }
+      catch (error) { cancellationFailure = error; }
+    };
+    options.signal?.addEventListener("abort", cancel, {once: true});
+    try {
+      options.onCreated?.(renderer);
+      if (options.signal?.aborted) renderer.destroy();
+      return await renderer.initialize(featureCollection);
+    } catch (error) {
+      renderer.destroy();
+      throw cancellationFailure || error;
+    } finally {
+      options.signal?.removeEventListener("abort", cancel);
+    }
   }
 
   async function loadMapLibre(moduleUrl = DEFAULT_MODULE_URL) {
@@ -1305,6 +2771,11 @@
     normalizeEvidenceIdentity,
     normalizeRasterLayer,
     normalizeRasterLayers,
+    RasterTileTransport,
+    rasterTileCoverage,
+    inspectRasterRenderPolicySources,
+    rasterNativeCameraPolicy,
+    rasterNativeCameraReceipt,
     rasterLayerEventPatch,
     buildEvidenceIndex,
     geometryBounds,
@@ -1312,6 +2783,8 @@
     createEvidenceFeatureCollection,
     createEvidenceStyle,
     featureCollectionBounds,
+    inspectSvgLayerOrder,
+    inspectMapLibreLayerOrder,
     createRenderer,
     sourceId: EVIDENCE_SOURCE_ID,
     layerIds: EVIDENCE_LAYER_IDS,

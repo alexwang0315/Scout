@@ -16,6 +16,7 @@ SourceFamily = Literal[
     "offline_map_ocr",
     "scout_generated_cp",
     "terrain_risk",
+    "openstreetmap",
 ]
 McpClass = Literal[
     "fork_junction",
@@ -96,6 +97,39 @@ class NamedPointEvidencePage(McpModel):
     stale_risk: StaleRisk = "low"
     snippet_hash: str
     full_payload_embedded: Literal[False] = False
+    evidence_kind: Literal["web_page", "gpx_document", "osm_snapshot"] = "web_page"
+    source_ref: str | None = None
+    source_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    source_record_ids: tuple[str, ...] = Field(default_factory=tuple)
+    independent_document_id: str | None = None
+    acceptance_reason: str | None = None
+
+
+class NamedPointCollectedEvidenceProfile(McpModel):
+    """Observed source collection; missing searches remain explicit gaps.
+
+    ``live_network_performed`` describes this deterministic compiler. Upstream
+    fetches have their own source receipts and are never invented by compilation.
+    The original fixture/search profile and the MCP promotion policy are intact.
+    """
+
+    profile_id: Literal["route_bound_source_documents.v1"] = "route_bound_source_documents.v1"
+    required_source_families: tuple[SourceFamily, ...] = (
+        "ptt_hiking", "hiking_biji", "sunriver_culture",
+    )
+    attempted_source_families: tuple[SourceFamily, ...] = Field(default_factory=tuple)
+    unattempted_required_source_families: tuple[SourceFamily, ...]
+    accepted_evidence_page_count: int = Field(ge=0)
+    live_network_performed: Literal[False] = False
+    source_acquisition_network_performed: bool = False
+    fixture_backed: Literal[False] = False
+
+    @model_validator(mode="after")
+    def _preserve_unattempted_families(self) -> "NamedPointCollectedEvidenceProfile":
+        missing = set(self.required_source_families) - set(self.attempted_source_families)
+        if missing != set(self.unattempted_required_source_families):
+            raise ValueError("unattempted required source families must remain explicit")
+        return self
 
 
 class NamedPointRoutePosition(McpModel):
@@ -138,6 +172,8 @@ class NamedPoint(McpModel):
     ocr_labels: tuple[NamedPointOcrLabel, ...] = Field(default_factory=tuple)
     stale_risk: StaleRisk = "low"
     boundary: NamedPointBoundary = Field(default_factory=NamedPointBoundary)
+    source_record_refs: tuple[str, ...] = Field(default_factory=tuple)
+    route_corridor_offset_m: float | None = Field(default=None, ge=0)
 
     @model_validator(mode="after")
     def _enforce_counts(self) -> "NamedPoint":
@@ -155,7 +191,7 @@ class NamedPointEvidenceSet(McpModel):
     artifact_version: Literal["named_point_evidence.v1"] = "named_point_evidence.v1"
     project_id: str
     source_path: str
-    search_profile: NamedPointSearchProfile
+    search_profile: NamedPointSearchProfile | NamedPointCollectedEvidenceProfile
     evidence_pages: tuple[NamedPointEvidencePage, ...]
     named_points: tuple[NamedPoint, ...]
     boundary: NamedPointBoundary = Field(default_factory=NamedPointBoundary)
@@ -163,6 +199,17 @@ class NamedPointEvidenceSet(McpModel):
     @model_validator(mode="after")
     def _enforce_evidence_counts(self) -> "NamedPointEvidenceSet":
         page_by_id = {page.page_id: page for page in self.evidence_pages}
+        if len(page_by_id) != len(self.evidence_pages):
+            raise ValueError("evidence page ids must be unique")
+        if isinstance(self.search_profile, NamedPointCollectedEvidenceProfile):
+            accepted_ids = []
+            for page in self.evidence_pages:
+                if not page.source_ref or not page.source_sha256 or not page.independent_document_id:
+                    raise ValueError("collected evidence requires source and document bindings")
+                if page.accepted:
+                    accepted_ids.append(page.independent_document_id)
+            if len(accepted_ids) != len(set(accepted_ids)):
+                raise ValueError("accepted collected documents must be independent")
         accepted_count = sum(1 for page in self.evidence_pages if page.accepted)
         if self.search_profile.accepted_evidence_page_count != accepted_count:
             raise ValueError("accepted_evidence_page_count must match accepted pages")

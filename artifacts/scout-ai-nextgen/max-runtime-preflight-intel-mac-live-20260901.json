@@ -1,0 +1,116 @@
+{
+  "schema_version": "scout.max_runtime_preflight.v0",
+  "experiment_id": "SCOUT-AI-EXP-MAX-PREFLIGHT-001",
+  "preflight_id": "86bcf0a4-f7f7-4f1b-bcc0-2547d398218c",
+  "generated_at": "2026-09-01T10:06:35.744325Z",
+  "disposition": "host_incompatible",
+  "runtime_id": "experimental.max.qwen3-1.7b",
+  "provider": "max",
+  "requested_model_id": "Qwen/Qwen3-1.7B",
+  "accepted_observed_model_ids": [
+    "Qwen/Qwen3-1.7B"
+  ],
+  "transport_scope": "loopback",
+  "endpoint_sha256": "87459d11adee7bce23cb37e9d210800e77403ecd52229858300b9215af0ed0fd",
+  "runtime_config_sha256": "a4af6b0a65a0da68a1a4363f1c3833b9e56bf1b75138ca2f02681ab9375938a4",
+  "deployment_mode": "local_process",
+  "host": {
+    "os_family": "darwin",
+    "machine": "x86_64",
+    "os_version": "13.7.8",
+    "python_version": "3.12.3",
+    "memory_bytes": 8589934592,
+    "glibc_version": null,
+    "cpu_model": null,
+    "cpu_features": []
+  },
+  "cli": {
+    "available": false,
+    "version": null,
+    "error_type": null
+  },
+  "endpoint": {
+    "health_status_code": null,
+    "health_path": null,
+    "model_status_code": null,
+    "observed_model_ids": [],
+    "error_type": "ConnectError"
+  },
+  "checks": [
+    {
+      "check_id": "host_compatibility",
+      "status": "failed",
+      "summary": "current MAX macOS packages require Apple silicon; current MAX macOS packages require macOS 15 or later.",
+      "latency_ms": 0,
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "check_id": "cli_availability",
+      "status": "unavailable",
+      "summary": "MAX CLI is not installed on the local host.",
+      "latency_ms": 0,
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "check_id": "endpoint_health",
+      "status": "unavailable",
+      "summary": "No bounded healthy MAX endpoint was observed.",
+      "latency_ms": 146,
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "check_id": "model_inventory",
+      "status": "not_run",
+      "summary": "Model inventory was not trusted because endpoint health did not pass.",
+      "latency_ms": 0,
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "check_id": "provider_identity",
+      "status": "not_applicable",
+      "summary": "Behavioral endpoint probing cannot attest that the server implementation is MAX.",
+      "latency_ms": 0,
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "check_id": "authority_boundary",
+      "status": "passed",
+      "summary": "The runtime remains experimental, candidate-only, and outside safety authority.",
+      "latency_ms": 0,
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    }
+  ],
+  "qualification_inputs": {
+    "case_file": "model_runtime_qualification_case.json",
+    "case_sha256": "0debcfcdc5dad2f6e64e0800375f03de0cbb725e52ef4390d6a8be0b0fd3ed30",
+    "evidence_catalog_file": "model_runtime_qualification_evidence.json",
+    "evidence_catalog_sha256": "846199ce7c8bb6567a0442659eebe39a532050a3d1c06bd2aebe816b07de7e32",
+    "qualification_module_sha256": "5d4bd0137674be3150633129a6ba2e0da6e020e8d8729b066e36c0a03c6cec61",
+    "qualification_launcher_sha256": "95c44b2283ea3ca0a14431668ed2925eef448814f39c33062ea5563702bce6ac",
+    "required_checks": [
+      "configuration",
+      "basic_chat",
+      "typed_output",
+      "tool_calling",
+      "praison_mcp",
+      "authority_boundary"
+    ]
+  },
+  "source_refs": [
+    "https://max.modular.com/packages/",
+    "https://max.modular.com/rest-api/health/",
+    "https://max.modular.com/rest-api/models/"
+  ],
+  "provider_identity_verified": false,
+  "provider_identity_basis": "operator_declared",
+  "model_request_count": 0,
+  "report_hash": "bb59d10b047cb3db7d05c8734805a09bdd9b8cd77e8a5e47bfd5b87aba564252",
+  "candidate_only": true,
+  "runtime_safety_truth": false
+}

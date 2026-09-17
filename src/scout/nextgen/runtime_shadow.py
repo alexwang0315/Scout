@@ -17,6 +17,7 @@ from pydantic import Field, model_validator
 from scout.nextgen.model_runtime import (
     Locality,
     ModelRuntimeCapability,
+    ModelRuntimeHostKind,
     ModelRuntimeProfile,
     ModelRuntimeRequest,
     ModelRuntimeTier,
@@ -88,6 +89,7 @@ def maybe_build_assistant_runtime_shadow_trace(
     estimated_context_tokens: int,
     environ: Mapping[str, str] | None = None,
     profiles: Sequence[ModelRuntimeProfile] | None = None,
+    current_host_kind: ModelRuntimeHostKind | None = None,
     request_id: UUID | None = None,
 ) -> ModelRuntimeShadowTrace | None:
     """Return a shadow decision when enabled, without touching execution."""
@@ -105,7 +107,8 @@ def maybe_build_assistant_runtime_shadow_trace(
             estimated_context_tokens=estimated_context_tokens,
         )
         selection = ScoutModelRuntimeRouter(
-            tuple(profiles) if profiles is not None else default_runtime_profiles()
+            tuple(profiles) if profiles is not None else default_runtime_profiles(),
+            current_host_kind=current_host_kind,
         ).select(request)
     except Exception as exc:
         return ModelRuntimeShadowTrace(
@@ -149,10 +152,7 @@ def _assistant_runtime_request(
     normalized_preference = (
         str(runtime_preference).strip().casefold() if runtime_preference else None
     )
-    capabilities = {
-        ModelRuntimeCapability.CHAT,
-        ModelRuntimeCapability.STRUCTURED_OUTPUT,
-    }
+    capabilities = {ModelRuntimeCapability.CHAT}
     if normalized_preference == "cloud":
         allowed_tiers = {
             ModelRuntimeTier.CLOUD_REASONING,

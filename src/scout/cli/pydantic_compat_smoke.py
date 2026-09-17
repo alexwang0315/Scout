@@ -8,28 +8,32 @@ import inspect
 import json
 import os
 import re
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any, Literal
+from uuid import uuid4
 
 from pydantic import BaseModel
-from pydantic_ai import Agent, ModelRetry, Tool, ToolFailed, UsageLimits
+from pydantic_ai import Agent, ModelRetry, RunContext, Tool, ToolFailed, UsageLimits
+from pydantic_ai.capabilities.native_tool import NativeTool
 from pydantic_ai.capabilities.web_fetch import WebFetch
 from pydantic_ai.capabilities.web_search import WebSearch
 from pydantic_ai.exceptions import ModelHTTPError, UserError
 from pydantic_ai.messages import (
     CompactionPart,
+    InstructionPart,
     ModelMessagesTypeAdapter,
     ModelResponse,
     NativeToolCallPart,
     NativeToolReturnPart,
+    PartStartEvent,
     RetryPromptPart,
     TextPart,
     ToolCallPart,
     ToolReturnPart,
 )
-from pydantic_ai.models.function import AgentInfo, FunctionModel
+from pydantic_ai.models.function import AgentInfo, DeltaToolCall, FunctionModel
 from pydantic_ai.models.test import TestModel
 from pydantic_ai.native_tools import AdvisorTool, WebSearchTool
 
@@ -41,10 +45,13 @@ from scout.agents.pydantic_ai_compat import (
     pydantic_agent_runtime_kwargs,
     pydantic_native_research_capabilities,
 )
+from scout.cli.pydantic_243_checks import check_banner_output, check_stream_boundaries
 
-REQUIRED_VERSION = "2.33.0"
-DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v3.2"
+REQUIRED_VERSION = "2.43.0"
+DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4-flash-0731"
 DEFAULT_TIMEOUT_SECONDS = 120.0
+REPO_ROOT = Path(__file__).resolve().parents[3]
+PERSISTENT_SCOUT_ENV = Path.home() / ".scout" / ".env"
 
 
 class StructuredSmokeOutput(BaseModel):
@@ -55,6 +62,14 @@ class StructuredSmokeOutput(BaseModel):
 class LiveStructuredSmokeOutput(BaseModel):
     status: Literal["ok"]
     runtime_version: str
+
+
+class SmokeCheckFailure(AssertionError):
+    """Retain non-sensitive fixture evidence when a compatibility assertion fails."""
+
+    def __init__(self, message: str, details: dict[str, Any]):
+        super().__init__(message)
+        self.details = details
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -75,15 +90,24 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--env-file",
-        default=".env",
-        help="Server-side env file used only to load the OpenRouter credential.",
+        default=None,
+        help=(
+            "Explicit server-side env file. By default live smoke loads the repo "
+            ".env followed by ~/.scout/.env without overriding process values."
+        ),
+    )
+    parser.add_argument(
+        "--expected-version",
+        default=REQUIRED_VERSION,
+        help="Verify an isolated upgrade candidate without changing runtime pins.",
     )
     args = parser.parse_args(argv)
     report = asyncio.run(
         run_compatibility_smoke(
             live_openrouter=args.live_openrouter,
             model_name=args.model,
-            env_file=Path(args.env_file),
+            env_file=Path(args.env_file) if args.env_file else None,
+            expected_version=args.expected_version,
         )
     )
     print(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True))
@@ -95,10 +119,12 @@ async def run_compatibility_smoke(
     live_openrouter: bool = False,
     model_name: str | None = None,
     env_file: Path | None = None,
+    expected_version: str = REQUIRED_VERSION,
 ) -> dict[str, Any]:
-    if env_file is not None:
-        _load_env_file(env_file)
-    checks = await _run_checks(_offline_checks())
+    loaded_env_files: tuple[str, ...] = ()
+    if live_openrouter:
+        loaded_env_files = _load_live_env_files(env_file)
+    checks = await _run_checks(_offline_checks(expected_version=expected_version))
     resolved_model = _normalize_openrouter_model(
         model_name or os.getenv("SCOUT_AI_OS_MODEL") or DEFAULT_OPENROUTER_MODEL
     )
@@ -115,16 +141,22 @@ async def run_compatibility_smoke(
             )
         else:
             model = build_chat_model(model_name=resolved_model, api_key=api_key)
-            checks.extend(await _run_checks(_live_checks(model)))
+            checks.extend(
+                await _run_checks(
+                    _live_checks(model, expected_version=expected_version)
+                )
+            )
     failed = [item for item in checks if item["status"] != "passed"]
     return {
         "artifact_kind": "scout_pydantic_ai_compatibility_smoke",
         "schema_version": "scout.pydantic_ai.compatibility_smoke.v1",
         "status": "passed" if not failed else "failed",
-        "required_version": REQUIRED_VERSION,
+        "required_version": expected_version,
+        "configured_version": REQUIRED_VERSION,
         "package_versions": _package_versions(),
         "live_openrouter_requested": live_openrouter,
         "openrouter_credential_present": bool(os.getenv("OPENROUTER_API_KEY")),
+        "loaded_env_files": list(loaded_env_files),
         "model": resolved_model if live_openrouter else None,
         "check_count": len(checks),
         "passed_count": len(checks) - len(failed),
@@ -133,10 +165,23 @@ async def run_compatibility_smoke(
     }
 
 
-def _offline_checks() -> list[tuple[str, Callable[[], Any]]]:
+def _offline_checks(
+    *,
+    expected_version: str = REQUIRED_VERSION,
+) -> list[tuple[str, Callable[[], Any]]]:
     return [
-        ("runtime_versions", _offline_runtime_versions),
-        ("v232_capability_contract", _offline_v232_capability_contract),
+        (
+            "runtime_versions",
+            lambda: _offline_runtime_versions(expected_version=expected_version),
+        ),
+        ("v236_capability_contract", _offline_v236_capability_contract),
+        ("v237_zai_finish_reasons", _offline_v237_zai_finish_reasons),
+        ("v241_capability_contract", _offline_v241_capability_contract),
+        ("v242_deferred_approvals", _offline_v242_deferred_approvals),
+        ("v242_tool_content_history", _offline_v242_tool_content_history),
+        ("v242_code_mode_refs", _offline_v242_code_mode_refs),
+        ("v243_stream_boundaries", check_stream_boundaries),
+        ("v243_banner_output", check_banner_output),
         ("openrouter_web_search_annotations", _offline_openrouter_annotations),
         ("instrumentation_v6_tool_role", _offline_instrumentation_v6_tool_role),
         ("function_tool_call", _offline_function_tool_call),
@@ -145,6 +190,7 @@ def _offline_checks() -> list[tuple[str, Callable[[], Any]]]:
         ("structured_output", _offline_structured_output),
         ("mcp_instructions_and_tool", _offline_mcp_instructions),
         ("web_capability_contract", _offline_web_capabilities),
+        ("agent_event_hook", _offline_agent_event_hook),
         ("stream_events_and_compaction", _offline_stream_events_and_compaction),
         ("agent_web_content_type_guard", _offline_agent_web_content_type_guard),
         ("agent_web_host_guard", _offline_agent_web_host_guard),
@@ -155,12 +201,23 @@ def _offline_checks() -> list[tuple[str, Callable[[], Any]]]:
     ]
 
 
-def _live_checks(model: Any) -> list[tuple[str, Callable[[], Any]]]:
+def _live_checks(
+    model: Any,
+    *,
+    expected_version: str = REQUIRED_VERSION,
+) -> list[tuple[str, Callable[[], Any]]]:
     return [
         ("live_openrouter_function_tool", lambda: _live_function_tool(model)),
-        ("live_openrouter_structured_output", lambda: _live_structured_output(model)),
+        (
+            "live_openrouter_structured_output",
+            lambda: _live_structured_output(model, expected_version=expected_version),
+        ),
         ("live_openrouter_mcp", lambda: _live_mcp(model)),
         ("live_openrouter_stream_events", lambda: _live_stream_events(model)),
+        (
+            "live_openrouter_native_web_search",
+            lambda: _live_native_web_search(model),
+        ),
         ("live_openrouter_web_search", lambda: _live_web_search(model)),
         ("live_openrouter_web_fetch", lambda: _live_web_fetch(model)),
         ("live_openrouter_tool_failed", lambda: _live_tool_failed(model)),
@@ -184,23 +241,28 @@ async def _run_checks(
                     "status": "failed",
                     "error_type": type(exc).__name__,
                     "error": _redact_error(str(exc)),
+                    **({"details": exc.details} if isinstance(exc, SmokeCheckFailure) else {}),
                 }
             )
     return results
 
 
-def _offline_runtime_versions() -> dict[str, str]:
+def _offline_runtime_versions(
+    *,
+    expected_version: str = REQUIRED_VERSION,
+) -> dict[str, str]:
     versions = _package_versions()
     for package_name in ("pydantic-ai-slim", "pydantic-evals", "pydantic-graph"):
-        if versions[package_name] != REQUIRED_VERSION:
+        if versions[package_name] != expected_version:
             raise AssertionError(
-                f"{package_name}={versions[package_name]}, expected {REQUIRED_VERSION}"
+                f"{package_name}={versions[package_name]}, expected {expected_version}"
             )
     return versions
 
 
-def _offline_v232_capability_contract() -> dict[str, Any]:
+async def _offline_v236_capability_contract() -> dict[str, Any]:
     from pydantic_ai import RunContext
+    from pydantic_ai.capabilities import durable_operation
     from pydantic_ai.mcp import MCPToolset
     from pydantic_ai.toolsets._tool_search import ToolSearchToolset
 
@@ -216,6 +278,47 @@ def _offline_v232_capability_contract() -> dict[str, Any]:
         hasattr(RunContext, "is_tool_available"),
         "RunContext.is_tool_available is unavailable",
     )
+    _require(
+        hasattr(RunContext, "capability_active"),
+        "RunContext.capability_active is unavailable",
+    )
+    _require(
+        hasattr(RunContext, "active_capability_ids"),
+        "RunContext.active_capability_ids is unavailable",
+    )
+    explicit_empty_description = Tool(lambda: None, description="")
+    _require(
+        explicit_empty_description.description == "",
+        "Tool explicit empty description was not preserved",
+    )
+    instruction = InstructionPart(
+        content="Use bounded Scout evidence.",
+        name="scout-runtime-policy",
+        id="scout-instruction-v236",
+    )
+    _require(
+        instruction.id == "scout-instruction-v236",
+        "InstructionPart stable id is unavailable",
+    )
+
+    @durable_operation("scout.route.read")
+    async def read_route_marker(value: str) -> str:
+        return value
+
+    durable_marker = getattr(
+        read_route_marker,
+        "__pydantic_ai_durable_operation__",
+        None,
+    )
+    _require(durable_marker is not None, "durable operation marker is unavailable")
+    _require(
+        getattr(durable_marker, "name", None) == "scout.route.read",
+        "durable operation name changed",
+    )
+    _require(
+        await read_route_marker("CP-07") == "CP-07",
+        "durable operation changed the wrapped result",
+    )
     _require("prefer_tasks" in mcp_parameters, "MCP prefer_tasks is unavailable")
     _require(
         "max_retries" in tool_search_parameters,
@@ -228,9 +331,264 @@ def _offline_v232_capability_contract() -> dict[str, Any]:
     return {
         "per_request_input_tokens_limit": None,
         "run_context_tool_availability": True,
+        "run_context_active_capability_contract": True,
+        "explicit_empty_tool_description_preserved": True,
+        "instruction_part_id": instruction.id,
+        "durable_operation_name": durable_marker.name,
         "mcp_prefer_tasks_default": mcp_parameters["prefer_tasks"].default,
         "tool_search_max_retries": True,
         "agent_web_allowed_hosts": True,
+    }
+
+
+async def _offline_v237_zai_finish_reasons() -> dict[str, Any]:
+    cases = []
+    for raw_reason, expected in (
+        ("sensitive", "content_filter"),
+        ("model_context_window_exceeded", "length"),
+        ("network_error", "error"),
+    ):
+        for streaming in (False, True):
+            case = await _zai_finish_reason_case(raw_reason, streaming=streaming)
+            _require(case["finish_reason"] == expected, f"lost {raw_reason}")
+            _require(case["partial_answer_preserved"], "partial response was lost")
+            cases.append(case)
+    return {"network_performed": False, "case_count": len(cases), "cases": cases}
+
+
+async def _zai_finish_reason_case(
+    raw_reason: str, *, streaming: bool
+) -> dict[str, Any]:
+    import httpx2
+    from openai import AsyncOpenAI
+    from pydantic_ai.models.zai import ZaiModel
+    from pydantic_ai.providers.zai import ZaiProvider
+
+    partial = "Partial Scout evidence."
+
+    def respond(request: httpx2.Request) -> httpx2.Response:
+        payload = json.loads(request.content)
+        _require(bool(payload.get("stream")) == streaming, "unexpected request mode")
+        completion = {
+            "id": "scout-zai-termination-fixture",
+            "created": 0,
+            "model": "glm-5.2",
+            "object": "chat.completion.chunk" if streaming else "chat.completion",
+            "choices": [
+                {
+                    "index": 0,
+                    "finish_reason": raw_reason,
+                    "delta" if streaming else "message": {
+                        "role": "assistant",
+                        "content": partial,
+                    },
+                }
+            ],
+        }
+        if streaming:
+            return httpx2.Response(
+                200,
+                headers={"content-type": "text/event-stream"},
+                content=f"data: {json.dumps(completion)}\n\ndata: [DONE]\n\n",
+            )
+        return httpx2.Response(200, json=completion)
+
+    async with httpx2.AsyncClient(transport=httpx2.MockTransport(respond)) as http:
+        async with AsyncOpenAI(
+            base_url="https://fixture.invalid/v1",
+            api_key=uuid4().hex,
+            http_client=http,
+        ) as client:
+            model = ZaiModel("glm-5.2", provider=ZaiProvider(openai_client=client))
+            agent = Agent(model, **pydantic_agent_runtime_kwargs())
+            limits = UsageLimits(request_limit=10, tool_calls_limit=10)
+            if streaming:
+                async with agent.run_stream(
+                    "Read Scout evidence.", usage_limits=limits
+                ) as run:
+                    chunks = [
+                        chunk async for chunk in run.stream_text(debounce_by=None)
+                    ]
+                    output, response = chunks[-1], run.response
+            else:
+                run = await agent.run("Read Scout evidence.", usage_limits=limits)
+                output, response = run.output, run.response
+    provider_reason = (response.provider_details or {}).get("finish_reason")
+    _require(provider_reason == raw_reason, "raw provider finish reason was lost")
+    return {
+        "streaming": streaming,
+        "provider_finish_reason": provider_reason,
+        "finish_reason": response.finish_reason,
+        "partial_answer_preserved": output == partial,
+    }
+
+
+async def _offline_v241_capability_contract() -> dict[str, Any]:
+    from pydantic_ai import ImageGenerator
+    from pydantic_ai.capabilities import ImageGeneration, XSearch
+    from pydantic_ai.images import TestImageGenerationModel
+    from pydantic_ai.providers.openai_codex import OpenAICodexProvider
+
+    model = TestModel()
+    for capability_type in (ImageGeneration, XSearch):
+        capability = capability_type(fallback_subagent_model=model)
+        _require(
+            capability.fallback_subagent_model is model,
+            f"{capability_type.__name__} lost its fallback subagent model",
+        )
+
+    image_model = TestImageGenerationModel(model_name="scout-fixture-image")
+    result = await ImageGenerator(image_model, instrument=False).generate(
+        "Compatibility fixture only.", settings={"aspect_ratio": "16:9"}
+    )
+    _require(result.image.media_type == "image/png", "Fixture image type changed")
+    _require(
+        result.provider_name == "test" and result.model_name == image_model.model_name,
+        "Image fixture unexpectedly used a real provider",
+    )
+    _require(
+        image_model.last_settings == {"aspect_ratio": "16:9"},
+        "Image settings were not forwarded",
+    )
+    return {
+        "fallback_parameter": "fallback_subagent_model",
+        "capabilities": ["ImageGeneration", "XSearch"],
+        "codex_provider_class": OpenAICodexProvider.__name__,
+        "image_model": result.model_name,
+        "image_media_type": result.image.media_type,
+        "image_provider": result.provider_name,
+        "network_performed": False,
+        "subscription_authentication_performed": False,
+    }
+
+
+async def _offline_v242_deferred_approvals() -> dict[str, Any]:
+    from pydantic_ai import DeferredToolRequests, DeferredToolResults
+
+    executions: list[str] = []
+    agent = Agent(
+        TestModel(custom_output_text="Fixture candidate read complete."),
+        output_type=str | DeferredToolRequests,
+    )
+
+    @agent.tool_plain(requires_approval=True)
+    def read_candidate() -> str:
+        executions.append("fixture-read")
+        return "candidate_only=true; runtime_safety_truth=false"
+
+    pending = await agent.run("Read the approval-protected fixture candidate.")
+    assert isinstance(pending.output, DeferredToolRequests)
+    assert len(pending.output.approvals) == 1
+    assert not executions
+    call_id = pending.output.approvals[0].tool_call_id
+    history = ModelMessagesTypeAdapter.validate_json(pending.all_messages_json())
+    try:
+        await agent.run(
+            message_history=history,
+            deferred_tool_results=DeferredToolResults(approvals={call_id: "true"}),
+        )
+    except UserError:
+        pass
+    else:
+        raise AssertionError("String approval must not execute the protected tool")
+    assert not executions
+    denied = await agent.run(
+        message_history=history,
+        deferred_tool_results=DeferredToolResults(approvals={call_id: False}),
+    )
+    assert not executions
+    assert any(
+        isinstance(part, ToolReturnPart) and "denied" in str(part.content).lower()
+        for message in denied.new_messages()
+        for part in message.parts
+    )
+    approved = await agent.run(
+        message_history=history,
+        deferred_tool_results=DeferredToolResults(approvals={call_id: True}),
+    )
+    assert executions == ["fixture-read"]
+    assert isinstance(approved.output, str)
+    return {
+        "invalid_approval_rejected": True,
+        "denied_tool_executions": 0,
+        "approved_tool_executions": len(executions),
+        "serialized_history_resumed": True,
+        "network_performed": False,
+    }
+
+
+def _offline_v242_tool_content_history() -> dict[str, Any]:
+    from pydantic_ai.messages import ImageUrl, ModelRequest
+
+    cards = [
+        {
+            "id": f"fixture-{index}",
+            "source_ref": f"outputs/risk/fixture.json#/features/{index}",
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "values": [index, None, True, {"freshness": "fixture"}],
+        }
+        for index in range(300)
+    ]
+    content = {
+        "cards": cards,
+        "media": {
+            "kind": "image-url",
+            "url": "https://scout.invalid/report",
+            "nested": [
+                ImageUrl("https://scout.invalid/map", media_type="image/png"),
+            ],
+        },
+    }
+    messages = [ModelRequest(parts=[ToolReturnPart(
+        tool_name="scout_workspace_evidence", tool_call_id="fixture-read", content=content,
+    )])]
+    raw = ModelMessagesTypeAdapter.dump_json(messages)
+    restored = ModelMessagesTypeAdapter.validate_json(raw)
+    part = restored[0].parts[0]
+    assert isinstance(part, ToolReturnPart)
+    assert part.tool_call_id == "fixture-read"
+    assert part.content["cards"] == cards
+    media = part.content["media"]
+    assert isinstance(media, dict)
+    assert media["url"] == content["media"]["url"]
+    assert isinstance(media["nested"][0], ImageUrl)
+    assert media["nested"][0].media_type == "image/png"
+    assert ModelMessagesTypeAdapter.dump_json(restored) == raw
+    return {
+        "evidence_card_count": len(cards),
+        "history_bytes": len(raw),
+        "source_refs_preserved": True,
+        "ambiguous_mapping_preserved": True,
+        "nested_image_restored": True,
+        "network_performed": False,
+    }
+
+
+def _offline_v242_code_mode_refs() -> dict[str, Any]:
+    from pydantic_ai.function_signature import FunctionSignature
+
+    definitions = {
+        "CheckpointId": {"type": "string"},
+        "CheckpointList": {"type": "array", "items": {"$ref": "#/$defs/CheckpointId"}},
+    }
+    signature = FunctionSignature.from_schema(
+        name="read_candidate_checkpoints",
+        parameters_schema={
+            "type": "object", "$defs": definitions,
+            "properties": {"checkpoints": {"$ref": "#/$defs/CheckpointList"}},
+            "required": ["checkpoints"],
+        },
+        return_schema={"$defs": definitions, "$ref": "#/$defs/CheckpointList"},
+    )
+    assert str(signature.params["checkpoints"].type) == "list[str]"
+    assert str(signature.return_type) == "list[str]"
+    assert not signature.referenced_types
+    return {
+        "signature": signature.render("..."),
+        "non_object_refs_inlined": True,
+        "sandbox_execution_performed": False,
+        "network_performed": False,
     }
 
 
@@ -275,7 +633,9 @@ def _offline_openrouter_annotations() -> dict[str, Any]:
     )
     model = OpenRouterModel(
         "openai/gpt-4o-mini",
-        provider=OpenRouterProvider(api_key="-".join(("fixture", "value"))),
+        provider=OpenRouterProvider(
+            api_key="-".join(("fixture", "value")),  # noqa: FLY002
+        ),
     )
     mapped = model._process_response(response)
     provider_details = mapped.provider_details or {}
@@ -341,6 +701,29 @@ async def _offline_stream_events_and_compaction() -> dict[str, Any]:
     return {
         "event_types": event_types,
         "compaction_round_trip": True,
+    }
+
+
+async def _offline_agent_event_hook() -> dict[str, Any]:
+    observed: list[str] = []
+    agent = Agent(
+        TestModel(custom_output_text="Scout event hook observed."),
+        **pydantic_agent_runtime_kwargs(),
+    )
+
+    @agent.on_event(PartStartEvent)
+    async def capture_part_start(
+        ctx: RunContext[None], event: PartStartEvent
+    ) -> None:
+        del ctx
+        observed.append(type(event).__name__)
+
+    result = await agent.run("Emit one model response part.")
+    _require(result.output == "Scout event hook observed.", "event hook changed output")
+    _require(observed == ["PartStartEvent"], "filtered agent event hook was not called")
+    return {
+        "filtered_event": "PartStartEvent",
+        "observed_count": len(observed),
     }
 
 
@@ -516,33 +899,62 @@ async def _offline_mcp_instructions() -> dict[str, Any]:
 
     captured_instructions: list[str | None] = []
 
-    def model_function(messages: list[object], info: AgentInfo) -> ModelResponse:
+    async def model_stream(
+        messages: list[object],
+        info: AgentInfo,
+    ) -> AsyncIterator[str | dict[int, DeltaToolCall]]:
         del info
         captured_instructions.extend(
             getattr(message, "instructions", None) for message in messages
         )
         if _has_part(messages, ToolReturnPart):
-            return ModelResponse(parts=[TextPart("CP-07")])
-        return ModelResponse(parts=[ToolCallPart("route_marker", {})])
+            yield "CP-07"
+            return
+        yield {
+            0: DeltaToolCall(
+                name="route_marker",
+                json_args="{}",
+                tool_call_id="scout-mcp-stream-call",
+            )
+        }
 
     agent = Agent(
-        FunctionModel(model_function),
+        FunctionModel(stream_function=model_stream),
         toolsets=[MCPToolset(server, include_instructions=True)],
         **pydantic_agent_runtime_kwargs(),
     )
-    result = await agent.run("Use the MCP route marker.")
+    result = None
+    event_types: list[str] = []
+    async with agent.run_stream_events("Use the MCP route marker.") as events:
+        async for event in events:
+            event_types.append(type(event).__name__)
+            if type(event).__name__ == "AgentRunResultEvent":
+                result = event.result
+    _require(result is not None, "MCP stream omitted the final agent result")
     trace = _message_trace(result)
     _require(
         any(marker in (item or "") for item in captured_instructions),
         "MCP instructions were not added to the model request",
     )
     _require(trace["tool_call_count"] == 1, "MCP tool was not called once")
-    return {**trace, "instructions_present": True}
+    _require(
+        "FunctionToolCallEvent" in event_types,
+        "MCP stream omitted the tool call event",
+    )
+    _require(
+        "FunctionToolResultEvent" in event_types,
+        "MCP stream omitted the tool result event",
+    )
+    return {
+        **trace,
+        "instructions_present": True,
+        "event_types": event_types,
+    }
 
 
 def _offline_web_capabilities() -> dict[str, Any]:
     policy = resolve_model_policy(
-        "openrouter:deepseek/deepseek-v3.2",
+        "openrouter:deepseek/deepseek-v4-flash-0731",
         env={"SCOUT_AI_OS_NATIVE_RESEARCH": "1"},
     )
     search, fetch = pydantic_native_research_capabilities(policy)
@@ -669,7 +1081,7 @@ async def _live_function_tool(model: Any) -> dict[str, Any]:
     def scout_runtime_version() -> str:
         """Return the installed Scout Pydantic AI version."""
 
-        return REQUIRED_VERSION
+        return version("pydantic-ai-slim")
 
     agent = Agent(
         model,
@@ -683,16 +1095,22 @@ async def _live_function_tool(model: Any) -> dict[str, Any]:
     result = await _live_run(agent, "What Scout Pydantic AI version is installed?")
     trace = _message_trace(result)
     _require("scout_runtime_version" in trace["tool_names"], "live tool was not called")
-    _require(REQUIRED_VERSION in str(result.output), "live tool result was not used")
+    _require(
+        scout_runtime_version() in str(result.output), "live tool result was not used"
+    )
     return {**trace, "output": str(result.output)}
 
 
-async def _live_structured_output(model: Any) -> dict[str, Any]:
+async def _live_structured_output(
+    model: Any,
+    *,
+    expected_version: str = REQUIRED_VERSION,
+) -> dict[str, Any]:
     agent = Agent(
         model,
         output_type=LiveStructuredSmokeOutput,
         instructions=(
-            f"Return status='ok' and runtime_version='{REQUIRED_VERSION}' "
+            f"Return status='ok' and runtime_version='{expected_version}' "
             "using the required structured output."
         ),
         **pydantic_agent_runtime_kwargs(),
@@ -700,7 +1118,7 @@ async def _live_structured_output(model: Any) -> dict[str, Any]:
     result = await _live_run(agent, "Produce the compatibility result.")
     _require(result.output.status == "ok", "live structured status mismatch")
     _require(
-        result.output.runtime_version == REQUIRED_VERSION,
+        result.output.runtime_version == expected_version,
         "live structured version mismatch",
     )
     return result.output.model_dump(mode="json")
@@ -711,13 +1129,15 @@ async def _live_mcp(model: Any) -> dict[str, Any]:
     from pydantic_ai.mcp import MCPToolset
 
     marker = "SCOUT_LIVE_MCP_INSTRUCTION"
+    receipts: list[str] = []
     server = FastMCP("scout-live-smoke", instructions=f"{marker}: call route_marker.")
 
     @server.tool()
     def route_marker() -> str:
         """Return the live smoke route marker."""
 
-        return "MCP-CP-07"
+        receipts.append("MCP-CP-07")
+        return receipts[-1]
 
     agent = Agent(
         model,
@@ -725,17 +1145,53 @@ async def _live_mcp(model: Any) -> dict[str, Any]:
         toolsets=[MCPToolset(server, include_instructions=True)],
         **pydantic_agent_runtime_kwargs(),
     )
-    result = await _live_run(agent, "Which route marker does the MCP server expose?")
+
+    @agent.output_validator
+    def require_mcp_evidence(output: str) -> str:
+        if not receipts:
+            raise ModelRetry("No MCP evidence was returned. Call route_marker before answering.")
+        if receipts[-1] not in output:
+            raise ModelRetry("Use the marker returned by route_marker in the final answer.")
+        return output
+
+    result = None
+    event_types: list[str] = []
+    async with asyncio.timeout(DEFAULT_TIMEOUT_SECONDS):
+        async with agent.run_stream_events(
+            "Which route marker does the MCP server expose?",
+            usage_limits=UsageLimits(request_limit=10, tool_calls_limit=10),
+            model_settings={
+                "temperature": 0,
+                "timeout": DEFAULT_TIMEOUT_SECONDS,
+            },
+        ) as events:
+            async for event in events:
+                event_types.append(type(event).__name__)
+                if type(event).__name__ == "AgentRunResultEvent":
+                    result = event.result
+    _require(result is not None, "live MCP stream omitted the final agent result")
     trace = _message_trace(result)
     instructions = [
         getattr(message, "instructions", None) for message in result.all_messages()
     ]
-    _require(
-        any(marker in (item or "") for item in instructions),
-        "live MCP instructions were not attached",
-    )
-    _require("route_marker" in trace["tool_names"], "live MCP tool was not called")
-    return {**trace, "output": str(result.output), "instructions_present": True}
+    details = {
+        **trace,
+        "output": _redact_error(_bounded_text(str(result.output))),
+        "instructions_present": any(marker in (item or "") for item in instructions),
+        "event_types": event_types,
+        "server_execution_count": len(receipts),
+        "result_used": bool(receipts) and receipts[-1] in str(result.output),
+    }
+    for condition, message in (
+        (details["instructions_present"], "live MCP instructions were not attached"),
+        ("route_marker" in trace["tool_names"], "live MCP tool was not called"),
+        ("FunctionToolCallEvent" in event_types, "live MCP stream omitted the tool call event"),
+        ("FunctionToolResultEvent" in event_types, "live MCP stream omitted the tool result event"),
+        (details["result_used"], "live MCP result was not used"),
+    ):
+        if not condition:
+            raise SmokeCheckFailure(message, details)
+    return details
 
 
 async def _live_stream_events(model: Any) -> dict[str, Any]:
@@ -791,6 +1247,37 @@ async def _live_web_search(model: Any) -> dict[str, Any]:
     )
     _require("pydantic" in output.lower(), "web search output lacks Pydantic result")
     return {**trace, "output": output}
+
+
+async def _live_native_web_search(model: Any) -> dict[str, Any]:
+    search_tool = WebSearchTool(max_uses=10)
+    agent = Agent(
+        model,
+        instructions=(
+            "Use the provider-native web search tool to find the official Pydantic AI "
+            "changelog. Return one result title and its pydantic.dev URL."
+        ),
+        capabilities=[NativeTool(search_tool)],
+        **pydantic_agent_runtime_kwargs(),
+    )
+    result = await _live_run(
+        agent,
+        "Search the web now for the official Pydantic AI changelog.",
+    )
+    trace = _message_trace(result)
+    output = str(result.output)
+    _require("pydantic" in output.lower(), "native web search lacks Pydantic result")
+    _require(
+        "pydantic.dev" in output.lower(),
+        "native web search lacks the official Pydantic domain",
+    )
+    return {
+        **trace,
+        "output": output,
+        "qualification_scope": "provider_transport_only",
+        "native_search_max_uses": search_tool.max_uses,
+        "provider_exposed_native_parts": bool(trace["native_tool_call_count"]),
+    }
 
 
 async def _live_web_fetch(model: Any) -> dict[str, Any]:
@@ -961,6 +1448,23 @@ def _load_env_file(path: Path) -> bool:
         if key:
             os.environ.setdefault(key, value.strip().strip('"').strip("'"))
     return True
+
+
+def _load_live_env_files(env_file: Path | None) -> tuple[str, ...]:
+    loaded: list[str] = []
+    for candidate in _live_env_candidates(env_file):
+        if _load_env_file(candidate):
+            loaded.append(str(candidate))
+    return tuple(loaded)
+
+
+def _live_env_candidates(env_file: Path | None) -> tuple[Path, ...]:
+    if env_file is not None:
+        return (Path(env_file).expanduser(),)
+    configured = str(os.getenv("SCOUT_ENV_FILE") or "").strip()
+    if configured:
+        return (Path(configured).expanduser(),)
+    return (REPO_ROOT / ".env", PERSISTENT_SCOUT_ENV)
 
 
 def _redact_error(message: str) -> str:

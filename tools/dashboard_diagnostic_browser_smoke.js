@@ -20,7 +20,8 @@ const baseUrl = process.env.SCOUT_DASHBOARD_DIAGNOSTIC_URL
 const browserExecutablePath = process.env.SCOUT_BROWSER_EXECUTABLE || undefined;
 const dynamicTilesOnly = process.env.SCOUT_DIAGNOSTIC_DYNAMIC_TILES_ONLY === "1";
 const cameraPersistenceOnly = process.env.SCOUT_DIAGNOSTIC_CAMERA_ONLY === "1";
-const expectedDiagnosticCount = 38;
+const mapOrderOnly = process.env.SCOUT_DIAGNOSTIC_MAP_ORDER_ONLY === "1";
+const expectedDiagnosticCount = 48;
 const dataDependentDiagnosticIds = new Set([
   "DASH-009",
   "DASH-018",
@@ -29,6 +30,16 @@ const dataDependentDiagnosticIds = new Set([
   "DASH-032",
   "DASH-033",
   "DASH-035",
+  "DASH-039",
+  "DASH-040",
+  "DASH-041",
+  "DASH-042",
+  "DASH-043",
+  "DASH-044",
+  "DASH-045",
+  "DASH-046",
+  "DASH-047",
+  "DASH-048",
 ]);
 
 function assert(condition, message) {
@@ -1019,14 +1030,18 @@ async function inspectNavigationMapMarkerFocus(page) {
 
 async function main() {
   assert(
-    !(dynamicTilesOnly && cameraPersistenceOnly),
-    "Dynamic tile and camera-persistence focused modes cannot run together.",
+    [dynamicTilesOnly, cameraPersistenceOnly, mapOrderOnly].filter(Boolean).length <= 1,
+    "Only one focused diagnostic mode can run at a time.",
   );
   const browser = await chromium.launch({
     headless: true,
     ...(browserExecutablePath ? {executablePath: browserExecutablePath} : {}),
   });
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+  if (mapOrderOnly) {
+    await page.route("**/*", route => ["GET", "HEAD"].includes(route.request().method())
+      ? route.continue() : route.abort("blockedbyclient"));
+  }
   const consoleErrors = [];
   const failedResponses = [];
   const postRequests = [];
@@ -1118,6 +1133,51 @@ async function main() {
     let mobileLayout = null;
     let navigationCameraPersistence = null;
     let navigationMapMarkerFocus = null;
+    if (mapOrderOnly) {
+      const fs = require("fs");
+      const outputDir = process.env.SCOUT_DIAGNOSTIC_OUTPUT_DIR || "artifacts/browser/dashboard-map-layer-order";
+      fs.mkdirSync(outputDir, {recursive: true});
+      const item = page.locator('[data-diagnostic-case="DASH-044"]');
+      await item.locator('[data-diagnostic-action="retest"]').click();
+      await page.waitForFunction(() => document.querySelector('[data-diagnostic-case="DASH-044"]')?.dataset.diagnosticStatus === "running");
+      const progressTimer = setInterval(async () => {
+        const progress = await page.evaluate(() => window.scoutDashboardDiagnostics.snapshot().results["DASH-044"]).catch(() => null);
+        if (progress) {
+          fs.writeFileSync(path.join(outputDir, "progress.json"), JSON.stringify(progress, null, 2));
+          console.error(`Map order: ${progress.detail}`);
+        }
+      }, 30000);
+      try {
+        await page.waitForFunction(() => ["passed", "warning", "failed"].includes(
+          document.querySelector('[data-diagnostic-case="DASH-044"]')?.dataset.diagnosticStatus,
+        ), null, {timeout: 600000});
+      } finally {
+        clearInterval(progressTimer);
+      }
+      const result = await page.evaluate(() => window.scoutDashboardDiagnostics.snapshot().results["DASH-044"]);
+      const expected = await page.evaluate(() => window.scoutDashboardDiagnostics.mapOrderSurfaces.map(item => item.id));
+      const covered = new Set(result.mapLayerOrder?.surfaces?.map(item => item.id) || []);
+      assert(expected.every(id => covered.has(id)), "Map layer order diagnostic omitted a registered map.");
+      assert(await page.locator("iframe[data-diagnostic-map-order-probe]").count() === 0, "Map probe iframe leaked after completion.");
+      await item.scrollIntoViewIfNeeded();
+      await page.screenshot({path: path.join(outputDir, "desktop.png")});
+      const firstFailure = item.locator('details[data-map-order-status="failed"] summary').first();
+      if (await firstFailure.count()) {
+        await firstFailure.click();
+        await firstFailure.locator("..").screenshot({path: path.join(outputDir, "failure-detail.png")});
+        await page.screenshot({path: path.join(outputDir, "desktop-detail.png")});
+      }
+      await page.setViewportSize({width: 390, height: 844});
+      await item.screenshot({path: path.join(outputDir, "mobile.png")});
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth);
+      const evidence = {baseUrl, result, expected, covered: [...covered], postRequests, consoleErrors, failedResponses, overflow};
+      fs.writeFileSync(path.join(outputDir, "evidence.json"), JSON.stringify(evidence, null, 2));
+      console.log(JSON.stringify({status: result.status, detail: result.detail, coverage: covered.size, outputDir, overflow, postRequestCount: postRequests.length}));
+      assert(!overflow, "Map diagnostic has horizontal overflow on mobile.");
+      assert(postRequests.length === 0, "Map diagnostic attempted a POST.");
+      assert(result.status !== "failed", `Map order errors: ${result.detail}`);
+      return;
+    }
     if (cameraPersistenceOnly) {
       const dash038 = page.locator('[data-diagnostic-case="DASH-038"]');
       await dash038.locator('[data-diagnostic-action="retest"]').click();
@@ -1172,7 +1232,7 @@ async function main() {
       return snapshot
         && snapshot.summary.running === 0
         && snapshot.summary.idle === 0
-        && snapshot.summary.passed + snapshot.summary.failed === expectedCount;
+        && snapshot.summary.passed + snapshot.summary.warning + snapshot.summary.failed === expectedCount;
     }, expectedDiagnosticCount, { timeout: 480000 });
 
       snapshot = await page.evaluate(() => window.scoutDashboardDiagnostics.snapshot());
@@ -1180,13 +1240,13 @@ async function main() {
     assert(snapshot.summary.running === 0, "Diag all left a running case.");
     assert(snapshot.summary.idle === 0, "Diag all left an untested case.");
     assert(
-      snapshot.summary.passed + snapshot.summary.failed === expectedDiagnosticCount,
+      snapshot.summary.passed + snapshot.summary.warning + snapshot.summary.failed === expectedDiagnosticCount,
       "Diag all did not finish all cases.",
     );
     for (let index = 1; index <= expectedDiagnosticCount; index += 1) {
       const caseId = `DASH-${String(index).padStart(3, "0")}`;
       const result = snapshot.results[caseId];
-      assert(result && ["passed", "failed"].includes(result.status), `${caseId} has no terminal result.`);
+      assert(result && ["passed", "warning", "failed"].includes(result.status), `${caseId} has no terminal result.`);
       assert(Boolean(result.detail?.trim()), `${caseId} has no diagnostic evidence detail.`);
       assert(!/\bis not defined\b|ReferenceError|TypeError:/i.test(result.detail), `${caseId} failed inside its checker: ${result.detail}`);
       if (!dataDependentDiagnosticIds.has(caseId)) {

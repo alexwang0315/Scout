@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import shutil
 from pathlib import Path
 
@@ -63,6 +62,13 @@ def test_local_evidence_query_finds_hazard_route_note_with_source_refs() -> None
     assert first["source_path"] == "candidates/route_note_candidates.json"
     assert first["metadata"]["note_category"] == "hazard_hint"
     assert first["boundary"]["live_safety_api_calls_allowed"] is False
+    assert len(result.index_snapshot_sha256) == 64
+    assert result.index_snapshot_sha256 == query_project_local_evidence(
+        PROJECT_ROOT,
+        query="大崩塌",
+        limit=3,
+        evidence_types={"pretrip_route_note_candidate"},
+    ).index_snapshot_sha256
 
 
 def test_local_evidence_query_finds_mcp_candidate_and_cp_support() -> None:
@@ -157,10 +163,29 @@ def test_local_evidence_sqlite_index_uses_fts_bm25(tmp_path: Path) -> None:
 
     assert index_path.is_file()
     assert result.retrieval_engine == "sqlite_fts5_bm25"
-    assert result.searched_record_count == index.record_count
+    assert result.index_record_count == index.record_count
+    assert result.searched_record_count == sum(
+        record.evidence_type == "pretrip_route_note_candidate"
+        for record in index.records
+    )
     assert result.results[0]["record_id"] == "route_note.golden_route.wpt_051"
     assert "retrieval_rank" in result.results[0]
     assert result.results[0]["boundary"]["live_safety_api_calls_allowed"] is False
+
+
+def test_local_evidence_query_reports_zero_records_for_absent_scope() -> None:
+    index = build_local_evidence_index(PROJECT_ROOT)
+
+    result = query_local_evidence_index(
+        index,
+        query="黑水塘",
+        limit=2,
+        evidence_types={"not_present_in_index"},
+    )
+
+    assert result.index_record_count == index.record_count
+    assert result.searched_record_count == 0
+    assert result.result_count == 0
 
 
 def test_local_evidence_sqlite_index_diversifies_general_place_results(

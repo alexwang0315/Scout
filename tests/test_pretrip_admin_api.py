@@ -16,7 +16,11 @@ from admin_api import (
     _run_route_context_briefing_scout_ai,
     create_admin_app,
 )
-from admin_local_raster_tiles import raster_tile_cache_path
+from admin_imagery_sources import imagery_source_for_project
+from admin_local_raster_tiles import (
+    imagery_source_raster_tile_cache_path,
+    raster_tile_cache_path,
+)
 
 
 PROJECT_ID = "chilai_nanhua_day1"
@@ -1200,7 +1204,7 @@ def test_pretrip_project_route_context_quality_cycle_promotes_reviewed_briefing(
                     "summary": "可供領隊與隊員順序閱讀。",
                     "findings": [],
                     "priority_revisions": [],
-                    "model": "deepseek/deepseek-v3.2",
+                    "model": "deepseek/deepseek-v4-flash-0731",
                     "provider": "openrouter",
                     "reviewed_at": "2026-08-02T04:00:00Z",
                 },
@@ -1221,7 +1225,7 @@ def test_pretrip_project_route_context_quality_cycle_promotes_reviewed_briefing(
             "canonical_promoted": True,
             "rejected_candidate_ref": None,
             "generation": {
-                "model": "deepseek/deepseek-v3.2",
+                "model": "deepseek/deepseek-v4-flash-0731",
                 "provider": "openrouter",
                 "receipt_ref": "outputs/route_context_regeneration/regeneration_receipt.json",
                 "model_request_count": 2,
@@ -1237,7 +1241,7 @@ def test_pretrip_project_route_context_quality_cycle_promotes_reviewed_briefing(
                 "findings": [],
                 "priority_revisions": [],
                 "finding_count": 0,
-                "model": "deepseek/deepseek-v3.2",
+                "model": "deepseek/deepseek-v4-flash-0731",
                 "provider": "openrouter",
                 "semantic_review_ref": review_ref,
             },
@@ -1262,7 +1266,7 @@ def test_pretrip_project_route_context_quality_cycle_promotes_reviewed_briefing(
         json={
             "confirm_regenerate": True,
             "operator_alias": "dashboard_operator",
-            "model": "deepseek/deepseek-v3.2",
+            "model": "deepseek/deepseek-v4-flash-0731",
             "timeout_seconds": 240,
         },
     )
@@ -1277,7 +1281,7 @@ def test_pretrip_project_route_context_quality_cycle_promotes_reviewed_briefing(
     assert payload["generation"]["editorial_contract"]["status"] == "PASS"
     assert payload["operator_triggered"] is True
     assert payload["iframe_src"].endswith(f"?v={payload['briefing_sha256'][:16]}")
-    assert captured["model_name"] == "deepseek/deepseek-v3.2"
+    assert captured["model_name"] == "deepseek/deepseek-v4-flash-0731"
     assert captured["timeout_seconds"] == 240
 
     status = client.get(
@@ -1286,7 +1290,7 @@ def test_pretrip_project_route_context_quality_cycle_promotes_reviewed_briefing(
     assert status["content_reviewed"] is True
     assert status["content_review_verdict"] == "PASS"
     assert status["readability_score"] == 5
-    assert status["content_review_model"] == "deepseek/deepseek-v3.2"
+    assert status["content_review_model"] == "deepseek/deepseek-v4-flash-0731"
 
     briefing_response = client.get(
         f"/admin/pretrip/projects/{PROJECT_ID}/briefings/route-context"
@@ -1682,6 +1686,245 @@ def test_pretrip_project_terrain_overlay_api_serves_workspace_png(tmp_path: Path
     assert response.headers["x-scout-terrain-overlay"] == "slope_shading"
     assert response.headers["x-scout-runtime-safety-truth"] == "false"
     assert response.content == png_bytes
+
+
+def test_pretrip_terrain_route_corridor_api_enforces_candidate_authority_and_hashes(
+    tmp_path: Path,
+) -> None:
+    workspace_root = tmp_path / "pretrip_workspace"
+    project_root = workspace_root / PROJECT_ID
+    overlay_ref = (
+        "outputs/spatial/qgis/terrain-route-cache/cache-1/"
+        "top_10_percent_corridor.png"
+    )
+    visualization_ref = (
+        "outputs/spatial/qgis/terrain-route-cache/cache-1/"
+        "terrain_route_visualization.json"
+    )
+    png_bytes = bytes.fromhex(
+        "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+        "0000000d49444154789c6360606060000000050001a5f645400000000049454e44"
+        "ae426082"
+    )
+    overlay_path = project_root / overlay_ref
+    overlay_path.parent.mkdir(parents=True, exist_ok=True)
+    overlay_path.write_bytes(png_bytes)
+    overlay_sha = hashlib.sha256(png_bytes).hexdigest()
+    visualization = {
+        "artifact_kind": "terrain_route_hypothesis_visualization",
+        "authority": "candidate_only",
+        "source_type": "terrain_hypothesis",
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "operational": False,
+        "boundary": {"promotion_allowed": False},
+        "raster_overlays": [
+            {
+                "mode": "top_10_percent_corridor",
+                "source_path": overlay_ref,
+                "sha256": overlay_sha,
+                "contains_best_path": True,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "operational": False,
+            }
+        ],
+    }
+    visualization_path = project_root / visualization_ref
+    visualization_path.write_text(json.dumps(visualization), encoding="utf-8")
+    project = {
+        "terrain_route_hypothesis_visualization_ref": visualization_ref,
+        "terrain_route_hypothesis_visualization_sha256": hashlib.sha256(
+            visualization_path.read_bytes()
+        ).hexdigest(),
+        "terrain_route_hypothesis_status": "completed",
+        "terrain_route_hypothesis_authority": "candidate_only",
+        "terrain_route_hypothesis_candidate_only": True,
+        "terrain_route_hypothesis_runtime_safety_truth": False,
+    }
+    (project_root / "project.json").write_text(
+        json.dumps(project), encoding="utf-8"
+    )
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/terrain-route-overlays/"
+        "top_10_percent_corridor.png"
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
+    assert response.headers["x-scout-terrain-route-corridor"] == (
+        "top_10_percent_corridor"
+    )
+    assert response.headers["x-scout-authority"] == "candidate_only"
+    assert response.headers["x-scout-source-type"] == "terrain_hypothesis"
+    assert response.headers["x-scout-candidate-only"] == "true"
+    assert response.headers["x-scout-runtime-safety-truth"] == "false"
+    assert response.headers["x-scout-operational"] == "false"
+    assert response.headers["x-scout-terrain-route-overlay-hash"] == overlay_sha
+    assert response.content == png_bytes
+    assert client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/terrain-route-overlays/"
+        "recommended_route.png"
+    ).status_code == 422
+
+    visualization["authority"] = "official_trail"
+    visualization_path.write_text(json.dumps(visualization), encoding="utf-8")
+    project["terrain_route_hypothesis_visualization_sha256"] = hashlib.sha256(
+        visualization_path.read_bytes()
+    ).hexdigest()
+    (project_root / "project.json").write_text(
+        json.dumps(project), encoding="utf-8"
+    )
+    promoted = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/terrain-route-overlays/"
+        "top_10_percent_corridor.png"
+    )
+    assert promoted.status_code == 422
+    assert "authority" in promoted.json()["detail"]
+
+
+def test_pretrip_terrain_route_corridor_api_serves_hash_bound_catalog_selection(
+    tmp_path: Path,
+) -> None:
+    workspace_root = tmp_path / "pretrip_workspace"
+    project_root = workspace_root / PROJECT_ID
+    cache_key = "2" * 64
+    overlay_ref = (
+        f"outputs/spatial/qgis/terrain-route-cache/{cache_key}/"
+        "top_10_percent_corridor.png"
+    )
+    visualization_ref = (
+        f"outputs/spatial/qgis/terrain-route-cache/{cache_key}/"
+        "terrain_route_visualization.json"
+    )
+    png_bytes = bytes.fromhex(
+        "89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489"
+        "0000000d49444154789c6360606060000000050001a5f645400000000049454e44"
+        "ae426082"
+    )
+    overlay_path = project_root / overlay_ref
+    overlay_path.parent.mkdir(parents=True, exist_ok=True)
+    overlay_path.write_bytes(png_bytes)
+    overlay_sha = hashlib.sha256(png_bytes).hexdigest()
+    visualization = {
+        "artifact_kind": "terrain_route_hypothesis_visualization",
+        "authority": "candidate_only",
+        "source_type": "terrain_hypothesis",
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "operational": False,
+        "boundary": {"promotion_allowed": False},
+        "raster_overlays": [
+            {
+                "mode": "top_10_percent_corridor",
+                "source_path": overlay_ref,
+                "sha256": overlay_sha,
+                "contains_best_path": True,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "operational": False,
+            }
+        ],
+    }
+    visualization_path = project_root / visualization_ref
+    visualization_path.write_text(json.dumps(visualization), encoding="utf-8")
+    visualization_sha = hashlib.sha256(visualization_path.read_bytes()).hexdigest()
+    hypothesis_ref = "outputs/spatial/qgis/local-hypothesis.json"
+    hypothesis_path = project_root / hypothesis_ref
+    hypothesis_path.parent.mkdir(parents=True, exist_ok=True)
+    hypothesis_path.write_text("{}", encoding="utf-8")
+    hypothesis_sha = hashlib.sha256(hypothesis_path.read_bytes()).hexdigest()
+    catalog_ref = "outputs/spatial/qgis/terrain-route-hypothesis-catalog.json"
+    catalog = {
+        "schema_version": "scout_terrain_route_hypothesis_catalog.v0_1",
+        "artifact_kind": "terrain_route_hypothesis_catalog",
+        "project_id": PROJECT_ID,
+        "default_id": "iroko-1148-to-station",
+        "entries": [
+            {
+                "id": "iroko-1148-to-station",
+                "label": "1148 saddle to Iroko station",
+                "scope": "local",
+                "focus_mode": "hypothesis",
+                "start_label": "1148 saddle",
+                "destination_label": "Iroko station",
+                "hypothesis_ref": hypothesis_ref,
+                "hypothesis_sha256": hypothesis_sha,
+                "visualization_ref": visualization_ref,
+                "visualization_sha256": visualization_sha,
+                "cache_key": cache_key,
+            }
+        ],
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "operational": False,
+    }
+    catalog_path = project_root / catalog_ref
+    catalog_path.parent.mkdir(parents=True, exist_ok=True)
+    catalog_path.write_text(json.dumps(catalog), encoding="utf-8")
+    project = {
+        "terrain_route_hypothesis_visualization_ref": visualization_ref,
+        "terrain_route_hypothesis_visualization_sha256": visualization_sha,
+        "terrain_route_hypothesis_status": "completed",
+        "terrain_route_hypothesis_authority": "candidate_only",
+        "terrain_route_hypothesis_candidate_only": True,
+        "terrain_route_hypothesis_runtime_safety_truth": False,
+        "terrain_route_hypothesis_catalog_ref": catalog_ref,
+        "terrain_route_hypothesis_catalog_sha256": hashlib.sha256(
+            catalog_path.read_bytes()
+        ).hexdigest(),
+    }
+    (project_root / "project.json").write_text(
+        json.dumps(project), encoding="utf-8"
+    )
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/terrain-route-overlays/"
+        "top_10_percent_corridor.png?hypothesis_id=iroko-1148-to-station"
+    )
+
+    assert response.status_code == 200
+    assert response.content == png_bytes
+    assert response.headers["x-scout-terrain-route-hypothesis"] == (
+        "iroko-1148-to-station"
+    )
+    assert response.headers["x-scout-authority"] == "candidate_only"
+
+    project.pop("terrain_route_hypothesis_visualization_ref")
+    project.pop("terrain_route_hypothesis_visualization_sha256")
+    project.pop("terrain_route_hypothesis_authority")
+    project["terrain_route_hypothesis_status"] = "pending"
+    (project_root / "project.json").write_text(
+        json.dumps(project), encoding="utf-8"
+    )
+    pending_catalog = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/terrain-route-overlays/"
+        "top_10_percent_corridor.png?hypothesis_id=iroko-1148-to-station"
+    )
+    assert pending_catalog.status_code == 200
+    assert pending_catalog.content == png_bytes
+    assert client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/terrain-route-overlays/"
+        "top_10_percent_corridor.png"
+    ).status_code == 404
+
+    catalog["entries"][0]["visualization_sha256"] = "f" * 64
+    catalog_path.write_text(json.dumps(catalog), encoding="utf-8")
+    project["terrain_route_hypothesis_catalog_sha256"] = hashlib.sha256(
+        catalog_path.read_bytes()
+    ).hexdigest()
+    (project_root / "project.json").write_text(
+        json.dumps(project), encoding="utf-8"
+    )
+    drifted = client.get(
+        f"/admin/pretrip/projects/{PROJECT_ID}/terrain-route-overlays/"
+        "top_10_percent_corridor.png?hypothesis_id=iroko-1148-to-station"
+    )
+    assert drifted.status_code == 422
+    assert "hash mismatch" in drifted.json()["detail"]
 
 
 def test_pretrip_project_osm_pbf_vector_api_serves_workspace_geojson(tmp_path: Path):
@@ -2141,6 +2384,75 @@ def test_admin_imagery_tile_proxy_api_can_fill_named_rudy_layer_from_source_id(
     assert cached_path.read_bytes() == remote_body
 
 
+def test_admin_imagery_tile_proxy_api_caches_historical_theme_in_its_own_namespace(
+    monkeypatch,
+    tmp_path,
+):
+    workspace_root = tmp_path / "workspaces"
+    project_id = "dongqing_batongguan_historic_trail_newImport"
+    project_root = workspace_root / project_id
+    cache_root = tmp_path / "raster-tiles"
+    project_root.mkdir(parents=True)
+    (project_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": project_id,
+                "imagery_tile_cache_root": str(cache_root),
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    remote_body = b"\xff\xd8\xff\xdbscout-historical-map"
+    requested = []
+
+    class FakeResponse:
+        headers = {"Content-Type": "image/jpeg"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return remote_body
+
+    def fake_urlopen(request, timeout):
+        requested.append((request.full_url, timeout))
+        return FakeResponse()
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.get(
+        f"/admin/tiles/imagery/{project_id}/historical-fandi-1916/"
+        "14/13703/7093.png?source_id=sinica_jm50k_1916&native=true&refresh=true"
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/jpeg")
+    assert response.headers["x-scout-tile-source"] == "remote_refresh_cache_replace"
+    assert response.headers["x-scout-imagery-source-id"] == "sinica_jm50k_1916"
+    assert requested == [
+        (
+            "https://gis.sinica.edu.tw/tileserver/file-exists.php?"
+            "img=JM50K_1916-jpg-14-13703-7093",
+            3.0,
+        )
+    ]
+    cached_path = imagery_source_raster_tile_cache_path(
+        project_id,
+        "historical-fandi-1916",
+        imagery_source_for_project({}, source_id="sinica_jm50k_1916"),
+        14,
+        13703,
+        7093,
+        cache_root=cache_root,
+    )
+    assert cached_path.read_bytes() == remote_body
+
+
 def test_admin_imagery_tile_proxy_api_native_zoom_uses_explicit_xyz_source(
     monkeypatch,
     tmp_path,
@@ -2197,6 +2509,100 @@ def test_admin_imagery_tile_proxy_api_native_zoom_uses_explicit_xyz_source(
             3.0,
         )
     ]
+
+
+def test_admin_imagery_tile_proxy_explicit_refresh_replaces_cached_tile(
+    monkeypatch,
+    tmp_path,
+):
+    workspace_root = tmp_path / "workspaces"
+    project_id = "chilai_nanhua_day1"
+    project_root = workspace_root / project_id
+    cache_root = project_root / "cache" / "raster-tiles"
+    project_root.mkdir(parents=True)
+    (project_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": project_id,
+                "imagery_tile_cache_root": str(cache_root),
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    legacy_path = raster_tile_cache_path(
+        project_id,
+        "geology",
+        13,
+        6853,
+        3534,
+        cache_root=cache_root,
+    )
+    cached_path = imagery_source_raster_tile_cache_path(
+        project_id,
+        "geology",
+        imagery_source_for_project({}, source_id="happyman_geo2016"),
+        13,
+        6853,
+        3534,
+        cache_root=cache_root,
+    )
+    legacy_path.parent.mkdir(parents=True)
+    legacy_path.write_bytes(b"\x89PNG\r\n\x1a\nlegacy-other-source")
+    cached_path.parent.mkdir(parents=True)
+    cached_path.write_bytes(b"\x89PNG\r\n\x1a\nstale-geology")
+    remote_body = b"\x89PNG\r\n\x1a\nrefreshed-geology"
+
+    class FakeResponse:
+        headers = {"Content-Type": "image/png"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+        def read(self):
+            return remote_body
+
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda request, timeout: FakeResponse(),
+    )
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.get(
+        f"/admin/tiles/imagery/{project_id}/geology/13/6853/3534.png"
+        "?source_id=happyman_geo2016&native=1&refresh=1"
+    )
+
+    assert response.status_code == 200
+    assert response.headers["x-scout-tile-source"] == "remote_refresh_cache_replace"
+    assert response.content == remote_body
+    assert cached_path.read_bytes() == remote_body
+    assert legacy_path.read_bytes() == b"\x89PNG\r\n\x1a\nlegacy-other-source"
+
+
+def test_admin_imagery_tile_proxy_cache_only_never_fetches_missing_tile(
+    monkeypatch,
+    tmp_path,
+):
+    monkeypatch.setenv("SCOUT_ADMIN_RASTER_TILE_CACHE_ROOT", str(tmp_path))
+    monkeypatch.setenv("SCOUT_ADMIN_IMAGERY_REMOTE_FETCH", "true")
+
+    def unexpected_urlopen(request, timeout):
+        raise AssertionError("cache_only tile request must not fetch WMTS")
+
+    monkeypatch.setattr("urllib.request.urlopen", unexpected_urlopen)
+    client = TestClient(create_admin_app())
+
+    response = client.get(
+        "/admin/tiles/imagery/chilai_nanhua_day1/geology/13/6853/3534.png"
+        "?source_id=happyman_geo2016&cache_only=1"
+    )
+
+    assert response.status_code == 200
+    assert response.headers["x-scout-tile-source"] == "transparent_fallback"
 
 
 def test_admin_imagery_tile_proxy_api_rejects_invalid_identity():
@@ -2285,6 +2691,7 @@ def test_dashboard_workspace_catalog_resolves_server_owned_workspace_root(tmp_pa
         (workspace_root / PROJECT_ID).resolve()
     )
     assert project["capabilities"]["switch"] is True
+    assert project["capabilities"]["clone_from_import_inputs"] is True
     assert project["capabilities"]["record_operation_request"] is True
 
 
@@ -2296,6 +2703,70 @@ def test_dashboard_workspace_context_rejects_unknown_project(tmp_path):
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Dashboard workspace not found"
+
+
+def test_dashboard_workspace_clone_runs_clean_import_and_preparation(
+    tmp_path,
+    monkeypatch,
+):
+    workspace_root = _copy_pretrip_workspace(tmp_path)
+    source_root = workspace_root / PROJECT_ID
+    source_project_bytes = (source_root / "project.json").read_bytes()
+    captured = []
+
+    def fake_clone(request):
+        captured.append(request)
+        return {
+            "source_project_id": request.source_project_id,
+            "target_project_id": request.target_project_id,
+            "project_root": str(workspace_root / request.target_project_id),
+            "status": "completed",
+            "receipt": {"boundary": {"runtime_safety_truth": False}},
+            "map_preparation": {
+                "normalized_layers": list(request.layers),
+            },
+            "boundary": {"runtime_safety_truth": False},
+        }
+
+    monkeypatch.setattr(admin_api, "clone_pretrip_workspace_from_inputs", fake_clone)
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.post(
+        f"/admin/dashboard/workspaces/{PROJECT_ID}/clone",
+        json={
+            "target_project_id": "dongqing_newImport",
+            "confirm_clone": True,
+        },
+    )
+
+    assert response.status_code == 201
+    assert len(captured) == 1
+    assert captured[0].source_project_id == PROJECT_ID
+    assert captured[0].target_project_id == "dongqing_newImport"
+    assert captured[0].source_project_root == source_root.resolve()
+    assert len(captured[0].layers) == 23
+    assert response.json()["executed"] is True
+    assert response.json()["mutation"] == {
+        "source_workspace_mutated": False,
+        "target_workspace_created": True,
+        "target_workspace_overwritten": False,
+        "runtime_mutated": False,
+        "phase1_runtime_mutated": False,
+    }
+    assert (source_root / "project.json").read_bytes() == source_project_bytes
+
+
+def test_dashboard_workspace_clone_requires_confirmation(tmp_path):
+    workspace_root = _copy_pretrip_workspace(tmp_path)
+    client = TestClient(create_admin_app(pretrip_workspace_root=workspace_root))
+
+    response = client.post(
+        f"/admin/dashboard/workspaces/{PROJECT_ID}/clone",
+        json={"target_project_id": "new_workspace", "confirm_clone": False},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "confirm_clone=true is required"
 
 
 def test_dashboard_workspace_operation_request_requires_explicit_confirmation(
@@ -2482,6 +2953,12 @@ def test_pretrip_import_gpx_preview_validates_paths_without_writing(tmp_path):
     golden_route = inbox / "golden-route.gpx"
     explicit_reference = inbox / "reference-explicit.gpx"
     directory_reference = reference_dir / "reference-dir.gpx"
+    material_root = tmp_path / "materials"
+    dtm_dir = material_root / "sources" / "dtm" / "hualien"
+    mcp_evidence = material_root / "sources" / "mcp" / "named_points.json"
+    dtm_dir.mkdir(parents=True)
+    mcp_evidence.parent.mkdir(parents=True)
+    mcp_evidence.write_text("{}", encoding="utf-8")
     _write_small_gpx(
         golden_route,
         name="api preview golden route",
@@ -2512,6 +2989,10 @@ def test_pretrip_import_gpx_preview_validates_paths_without_writing(tmp_path):
             "profile": "pi-offline",
             "checkpoint_spacing_m": 500.0,
             "max_reference_display_points": 3,
+            "max_previous_gpx_speed_ratio": 6.0,
+            "material_root": str(material_root),
+            "dtm_dirs": [str(dtm_dir)],
+            "mcp_named_point_evidence": str(mcp_evidence),
         },
     )
 
@@ -2524,6 +3005,10 @@ def test_pretrip_import_gpx_preview_validates_paths_without_writing(tmp_path):
     assert payload["plan"]["source_file_count"] == 3
     assert payload["plan"]["golden_route_count"] == 1
     assert payload["plan"]["reference_track_count"] == 2
+    assert payload["plan"]["max_previous_gpx_speed_ratio"] == 6.0
+    assert payload["inputs"]["material_root"] == str(material_root)
+    assert payload["inputs"]["dtm_dirs"] == [str(dtm_dir)]
+    assert payload["inputs"]["mcp_named_point_evidence"] == str(mcp_evidence)
     assert payload["provenance"]["golden_route_gpx"]["role"] == "golden_route_reference"
     assert payload["provenance"]["golden_route_gpx"]["route_summary"]["route_name"] == (
         "api preview golden route"
@@ -2750,6 +3235,37 @@ def test_pretrip_prepare_layers_preview_is_workspace_metadata_only(tmp_path):
     assert workspace_bytes_after == workspace_bytes_before
     assert "<trkpt" not in response.text.lower()
     assert _repo_fixture_bytes() == original_fixture_bytes
+
+
+def test_pretrip_prepare_layers_api_defaults_to_full_preparation_contract():
+    request = admin_api.PreTripPrepareLayersRequest()
+
+    assert len(request.layers) == 23
+    assert request.layers == [
+        "imagery",
+        "osm",
+        "overpass",
+        "terrain",
+        "risk-score",
+        "risk-ribbon",
+        "risk-heatmap",
+        "risk-delta",
+        "cwa-qpf",
+        "soil-moisture",
+        "antecedent-rain",
+        "cwa-weather",
+        "weather",
+        "reference-tracks",
+        "route",
+        "segments",
+        "checkpoints",
+        "mcp",
+        "pois",
+        "hazards",
+        "corridors",
+        "retreat",
+        "route-notes",
+    ]
 
 
 def test_pretrip_prepare_layers_run_writes_workspace_and_feeds_admin_debug(tmp_path):

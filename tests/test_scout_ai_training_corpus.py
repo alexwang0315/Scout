@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
@@ -33,6 +35,7 @@ from scout.nextgen.workspace_snapshot import (
     WorkspaceSnapshotMode,
     build_workspace_benchmark_cases,
 )
+from tools.scout_ai_synthetic_corpus import _validate_source_artifact
 
 FIXTURES = Path(__file__).parent / "fixtures" / "nextgen"
 EVIDENCE_PATH = FIXTURES / "model_runtime_qualification_evidence.json"
@@ -198,6 +201,20 @@ def test_frozen_gold_cannot_leak_into_training_prompts_or_generator_seed() -> No
     policy.authorize(record=frozen, use=CorpusUse.EVALUATION)
 
 
+def test_synthetic_generator_rejects_model_evaluation_benchmark_seed() -> None:
+    payload = {
+        "schema_version": "scout.workspace_snapshot_benchmark.v0",
+        "artifact_role": "model_evaluation",
+        "cases": [],
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+    payload["artifact_hash"] = _canonical_hash(payload)
+
+    with pytest.raises(ValueError, match="synthetic seed"):
+        _validate_source_artifact(payload)
+
+
 def test_record_rejects_tool_trace_outside_available_toolset() -> None:
     payload = _bundle().records[0].model_dump(mode="json")
     payload["expected_tool_trace"].append(
@@ -212,3 +229,14 @@ def test_record_rejects_tool_trace_outside_available_toolset() -> None:
 
     with pytest.raises(ValidationError, match="available toolset"):
         ScoutTrainingCorpusRecord.model_validate(payload)
+
+
+def _canonical_hash(payload: object) -> str:
+    return hashlib.sha256(
+        json.dumps(
+            payload,
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()

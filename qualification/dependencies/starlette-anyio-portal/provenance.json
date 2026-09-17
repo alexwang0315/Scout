@@ -1,0 +1,23 @@
+{
+  "scope": "Optional isolated QA overlay; not an official release or runtime installation",
+  "base_version": "1.6.0",
+  "local_version": "1.6.0+scout.anyioportal1",
+  "official_wheel_url": "https://files.pythonhosted.org/packages/c8/cb/6a6a47d5b464bd08695d254f3da6e7986cc70c9fa5d778eda57538edfe56/starlette-1.6.0-py3-none-any.whl",
+  "official_wheel_sha256": "a86dd39d14bb45f85a3d18525215a9ef0cfd1f192ac793220e72598c90335f0c",
+  "official_reference_commit": "03f12b7fcf0a3e21a8da648ca0900c79472e9efe",
+  "candidate_wheel_sha256": "f5bd3ea5a9c7a2237f293f59e7f9b076cba330782fadc9e30f71f12c11442be5",
+  "candidate_testclient_sha256": "1b1218ff0831e25fd660499062b743c00a3a35918f56f8bff1642535dbc1a616",
+  "replacement": {
+    "from": "anyio.abc.BlockingPortal",
+    "to": "anyio.from_thread.BlockingPortal",
+    "count": 3
+  },
+  "metadata_updates": [
+    "local version",
+    "wheel generator",
+    "dist-info",
+    "RECORD",
+    "scout-build.json"
+  ],
+  "isolated_reference_evidence_date": "2026-09-14"
+}

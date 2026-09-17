@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import math
 import re
@@ -636,7 +637,8 @@ def search_project_route_structure(
     root = Path(project_root)
     project = _load_json_object(root / "project.json")
     project_id = str(project.get("project_id") or root.name)
-    route = _load_json_object(_project_path(root, str(project.get("route_summary_ref", ""))))
+    route_ref = str(project.get("route_summary_ref") or "")
+    route = _load_json_object(_project_path(root, route_ref)) if route_ref else {}
     checkpoints, checkpoint_source = _load_project_list(root, project, "checkpoint_candidates_ref")
     segments, segment_source = _load_project_list(root, project, "segment_candidates_ref")
     resolved_limit = _bounded_limit(limit)
@@ -1023,9 +1025,9 @@ def _historical_gpx_overlap_summary(
     tracks_ref = str(project.get("reference_tracks_ref") or "")
     index_payload = _load_json_object(_project_path(root, index_ref)) if index_ref else {}
     tracks_payload = _load_json_object(_project_path(root, tracks_ref)) if tracks_ref else {}
-    raw_sources = index_payload.get("sources") if isinstance(index_payload, dict) else []
+    raw_sources = index_payload.get("sources", []) if isinstance(index_payload, dict) else []
     raw_tracks = (
-        tracks_payload.get("reference_tracks")
+        tracks_payload.get("reference_tracks", [])
         if isinstance(tracks_payload, dict)
         else []
     )
@@ -1271,7 +1273,7 @@ def _checkpoint_event_summary(
         project.get("checkpoint_events_ref") or "outputs/checkpoint_events.json"
     )
     payload = _load_json_object(_project_path(root, ref))
-    raw_events = payload.get("events") if isinstance(payload, dict) else []
+    raw_events = payload.get("events", []) if isinstance(payload, dict) else []
     events = [item for item in raw_events if isinstance(item, dict)]
     planned_keys = ("planned_at", "expected_at", "eta", "planned_arrival_at")
     actual_keys = ("actual_at", "actual_arrival_at", "live_observed_at")
@@ -1914,25 +1916,114 @@ def search_project_evidence_fulltext(
     limit: int = DEFAULT_WORKSPACE_SEARCH_LIMIT,
     evidence_types: list[str] | None = None,
 ) -> dict[str, Any]:
-    from scout_agent_kb import query_project_local_evidence
+    from scout_agent_kb import (
+        ScoutAgentKbNegativeSearchReceipt,
+        query_project_local_evidence,
+    )
 
     root = Path(project_root)
     project = _load_json_object(root / "project.json")
     project_id = str(project.get("project_id") or root.name)
+    resolved_limit = _bounded_limit(limit)
+    resolved_evidence_types = tuple(
+        sorted({str(item) for item in evidence_types or [] if str(item).strip()})
+    )
     result = query_project_local_evidence(
         root,
         query=query,
-        limit=_bounded_limit(limit),
-        evidence_types=set(evidence_types) if evidence_types else None,
+        limit=resolved_limit,
+        evidence_types=set(resolved_evidence_types) or None,
     )
+    negative_receipt: ScoutAgentKbNegativeSearchReceipt | None = None
+    if result.result_count == 0 and result.searched_record_count > 0:
+        identity = json.dumps(
+            {
+                "project_id": project_id,
+                "query": result.query,
+                "retrieval_engine": result.retrieval_engine,
+                "evidence_types": resolved_evidence_types,
+                "requested_limit": resolved_limit,
+                "searched_record_count": result.searched_record_count,
+                "index_snapshot_sha256": result.index_snapshot_sha256,
+            },
+            ensure_ascii=True,
+            sort_keys=True,
+        )
+        receipt_digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:16]
+        negative_receipt = ScoutAgentKbNegativeSearchReceipt(
+            receipt_id=f"negative-search.{receipt_digest}",
+            source_ref=f"receipts/negative-search/{receipt_digest}.json",
+            project_id=project_id,
+            query=result.query,
+            query_sha256=hashlib.sha256(result.query.encode("utf-8")).hexdigest(),
+            retrieval_engine=result.retrieval_engine,
+            evidence_types=resolved_evidence_types,
+            requested_limit=resolved_limit,
+            searched_record_count=result.searched_record_count,
+            index_snapshot_sha256=result.index_snapshot_sha256,
+        )
+
+    if result.result_count > 0:
+        answerability = "evidence_fulltext_matches_available"
+        missing_fields: list[str] = []
+        quality = "verified"
+        summary = f"Scoped local search returned {result.result_count} matching records."
+        source_refs = list(
+            dict.fromkeys(
+                str(item.get("source_path"))
+                for item in result.results
+                if item.get("source_path")
+            )
+        )
+    elif negative_receipt is not None:
+        answerability = "evidence_fulltext_no_match"
+        missing_fields = ["matching_scoped_evidence"]
+        quality = "verified"
+        summary = (
+            "Scoped local search completed with zero matches; this proves only an "
+            "evidence gap inside the bound index snapshot."
+        )
+        source_refs = [negative_receipt.source_ref]
+    elif result.index_record_count > 0:
+        answerability = "evidence_fulltext_scope_unavailable"
+        missing_fields = ["searchable_scoped_evidence"]
+        quality = "unavailable"
+        summary = (
+            "The local evidence index contains no records in the requested scope; "
+            "no negative-search claim is allowed."
+        )
+        source_refs = []
+    else:
+        answerability = "evidence_fulltext_index_unavailable"
+        missing_fields = ["searchable_evidence_index"]
+        quality = "unavailable"
+        summary = "Local evidence index is empty; no negative-search claim is allowed."
+        source_refs = []
+
     return {
         "tool_id": EVIDENCE_FULLTEXT_TOOL_ID,
         "status": "completed",
         "project_id": project_id,
         "query": result.query,
         "retrieval_engine": result.retrieval_engine,
+        "answerability": answerability,
+        "summary": summary,
+        "quality": quality,
+        "freshness": "workspace_snapshot",
         "result_count": result.result_count,
+        "index_record_count": result.index_record_count,
         "searched_record_count": result.searched_record_count,
+        "index_snapshot_sha256": result.index_snapshot_sha256,
+        "missing_fields": missing_fields,
+        "source_refs": source_refs,
+        "negative_search_receipt": (
+            negative_receipt.model_dump(mode="json")
+            if negative_receipt is not None
+            else None
+        ),
+        "field_answer": None,
+        "field_answer_priority": 0,
+        "field_answer_source_ref": None,
         "results": result.results,
         "boundary": {
             **result.boundary.model_dump(mode="json"),
@@ -2751,6 +2842,8 @@ def _load_project_list(
     ref_key: str,
 ) -> tuple[list[Any], str]:
     ref = str(project.get(ref_key) or "")
+    if not ref:
+        return [], ref
     payload = _load_json_object(_project_path(root, ref))
     if isinstance(payload, list):
         return payload, ref

@@ -27,6 +27,7 @@ from scout.agents.model_gateway import (
     ModelSlaTelemetryRecord,
 )
 from scout.agents.pydantic_provider import PydanticScoutAgentProvider
+from scout.agents.terrain_narrative_guidance import TerrainNarrativeGuidanceAgent
 from scout.agents.workflow_compiler import WorkflowCompilerAgent
 
 
@@ -51,6 +52,7 @@ __all__ = [
     "ScoutAgentRequest",
     "ScoutDeps",
     "ScoutToolbox",
+    "TerrainNarrativeGuidanceAgent",
     "WorkflowCompilerAgent",
     "resolve_model_policy",
 ]

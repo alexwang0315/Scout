@@ -22,5 +22,7 @@
   "max_context_chars": 24000,
   "connect_on_startup": false,
   "fallback_to_local_on_error": true,
-  "local_fallback_fixed_schema": false
+  "local_fallback_fixed_schema": false,
+  "production_promotion_manifest_path": "model-promotions/openrouter-gpt-5.6-sol-20260902.json",
+  "production_promotion_manifest_sha256": "af2ff41e82481b811dd4f0c5d362f9d209d8670b21525ea1f433aeb7ea2d5e97"
 }

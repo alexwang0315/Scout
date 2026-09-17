@@ -1095,8 +1095,74 @@ def test_evidence_fulltext_wraps_local_evidence_index() -> None:
     assert result["status"] == "completed"
     assert result["result_count"] >= 1
     assert any(item["record_id"] == "mcp.heishuitang.002" for item in result["results"])
+    assert result["answerability"] == "evidence_fulltext_matches_available"
+    assert result["negative_search_receipt"] is None
     assert result["boundary"]["local_evidence_only"] is True
     assert result["boundary"]["runtime_safety_truth"] is False
+
+
+def test_evidence_fulltext_emits_typed_negative_receipt_for_scoped_no_match() -> None:
+    result = search_project_evidence_fulltext(
+        PROJECT_ROOT,
+        query="zzzxqv_no_scout_record_91c7e3",
+        limit=4,
+        evidence_types=["pretrip_route_note_candidate"],
+    )
+
+    receipt = result["negative_search_receipt"]
+    assert result["status"] == "completed"
+    assert result["result_count"] == 0
+    assert result["searched_record_count"] > 0
+    assert result["answerability"] == "evidence_fulltext_no_match"
+    assert result["missing_fields"] == ["matching_scoped_evidence"]
+    assert receipt["artifact_kind"] == "scout_negative_search_receipt"
+    assert receipt["schema_version"] == "scout.negative_search_receipt.v0"
+    assert receipt["result_count"] == 0
+    assert receipt["searched_record_count"] == result["searched_record_count"]
+    assert receipt["evidence_types"] == ["pretrip_route_note_candidate"]
+    assert len(receipt["index_snapshot_sha256"]) == 64
+    assert receipt["candidate_only"] is True
+    assert receipt["runtime_safety_truth"] is False
+    assert receipt["proves_only"] == "no_match_in_bound_local_index_scope"
+    assert receipt["does_not_prove"] == "fact_false_or_absent_in_world"
+    assert result["source_refs"] == [receipt["source_ref"]]
+
+
+def test_evidence_fulltext_empty_index_fails_closed_without_negative_receipt(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "empty-workspace"
+    workspace.mkdir()
+    (workspace / "project.json").write_text(
+        json.dumps({"project_id": "empty-workspace"}),
+        encoding="utf-8",
+    )
+
+    result = search_project_evidence_fulltext(
+        workspace,
+        query="任何資料",
+        limit=4,
+    )
+
+    assert result["searched_record_count"] == 0
+    assert result["negative_search_receipt"] is None
+    assert result["answerability"] == "evidence_fulltext_index_unavailable"
+    assert result["missing_fields"] == ["searchable_evidence_index"]
+
+
+def test_evidence_fulltext_absent_scope_fails_closed_without_negative_receipt() -> None:
+    result = search_project_evidence_fulltext(
+        PROJECT_ROOT,
+        query="黑水塘",
+        limit=4,
+        evidence_types=["not_present_in_index"],
+    )
+
+    assert result["index_record_count"] > 0
+    assert result["searched_record_count"] == 0
+    assert result["negative_search_receipt"] is None
+    assert result["answerability"] == "evidence_fulltext_scope_unavailable"
+    assert result["missing_fields"] == ["searchable_scoped_evidence"]
 
 
 def test_evidence_fulltext_indexes_mileage_and_raster_ocr_artifacts(

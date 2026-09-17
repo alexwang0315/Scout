@@ -1,0 +1,6 @@
+# Optional experiment environment; not a production dependency surface.
+fastapi==0.141.1
+pydantic==2.13.5
+uvicorn==0.52.4
+numpy==2.5.3
+Pillow==12.3.0

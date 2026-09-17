@@ -4,6 +4,7 @@ import json
 import importlib.util
 import socket
 import sys
+import re
 import threading
 import time
 from collections.abc import Iterator
@@ -22,6 +23,7 @@ from pydantic_ai.models.function import AgentInfo, FunctionModel
 
 from scout.nextgen.model_gateway import (
     ModelGatewayExecutionError,
+    ModelInferencePriority,
     ModelInferenceRequest,
     PydanticAIStructuredBackend,
     ScoutModelGateway,
@@ -43,6 +45,7 @@ from scout.nextgen.model_runtime import (
     AcceleratorKind,
     Locality,
     ModelRuntimeCapability,
+    ModelRuntimeHostKind,
     ModelRuntimeProfile,
     ModelRuntimeTier,
 )
@@ -55,6 +58,9 @@ from scout.nextgen.openai_compatible_backend import (
     build_praison_openai_compatible_runtime,
 )
 from scout.nextgen.praison_service import (
+    _CompactSpecialistAdvisory,
+    _CompactSpecialistFinding,
+    _compact_specialist_model_prompt,
     EvidenceCatalog,
     EvidenceCatalogItem,
     PraisonIntelligenceService,
@@ -62,6 +68,7 @@ from scout.nextgen.praison_service import (
     SpecialistModelInput,
     SpecialistReport,
     SpecialistRole,
+    _ground_compact_specialist_advisory,
     _ground_specialist_report,
     replay_specialist_report,
 )
@@ -78,10 +85,12 @@ class _ReplayState:
         output_arguments: dict[str, Any] | None = None,
         failure_status: int | None = None,
         responder: Any | None = None,
+        created_timestamp: int | None = None,
     ) -> None:
         self.output_arguments = output_arguments or {"value": "http-replay-ok"}
         self.failure_status = failure_status
         self.responder = responder
+        self.created_timestamp = created_timestamp
         self.requests: list[dict[str, Any]] = []
         self.paths: list[str] = []
         self.lock = threading.Lock()
@@ -93,11 +102,13 @@ def _openai_replay_server(
     output_arguments: dict[str, Any] | None = None,
     failure_status: int | None = None,
     responder: Any | None = None,
+    created_timestamp: int | None = None,
 ) -> Iterator[tuple[str, _ReplayState]]:
     state = _ReplayState(
         output_arguments=output_arguments,
         failure_status=failure_status,
         responder=responder,
+        created_timestamp=created_timestamp,
     )
 
     class Handler(BaseHTTPRequestHandler):
@@ -151,7 +162,7 @@ def _openai_replay_server(
             body = {
                 "id": "chatcmpl-scout-replay",
                 "object": "chat.completion",
-                "created": int(time.time()),
+                "created": state.created_timestamp or int(time.time()),
                 "model": payload["model"],
                 "choices": [
                     {
@@ -206,10 +217,8 @@ def _config(
         "offline_capable": True,
         "privacy_preserving": True,
     }
-    return OpenAICompatibleBackendConfig(
-        **payload,
-        **overrides,
-    )
+    payload.update(overrides)
+    return OpenAICompatibleBackendConfig(**payload)
 
 
 def _request(parent_request_id: UUID) -> ModelInferenceRequest:
@@ -350,6 +359,18 @@ def test_max_local_server_is_non_cloud_without_claiming_offline_capability() -> 
         runtime.close()
 
 
+def test_openai_runtime_can_select_compact_specialist_advisory() -> None:
+    config = _config(
+        "http://127.0.0.1:8000/v1",
+        specialist_output_mode="compact_advisory",
+    )
+    runtime = build_praison_openai_compatible_runtime(config=config, environ={})
+    try:
+        assert runtime.specialist_output_mode == "compact_advisory"
+    finally:
+        runtime.close()
+
+
 def test_openai_compatible_backend_executes_real_http_typed_output() -> None:
     with _openai_replay_server() as (base_url, state):
         config = _config(base_url)
@@ -402,6 +423,112 @@ def test_openai_compatible_backend_executes_native_json_schema_output() -> None:
     assert result.output == _ProbeOutput(value="http-replay-ok")
     assert payload.get("tools") is None
     assert payload["response_format"]["type"] == "json_schema"
+
+
+def test_native_schema_retries_keep_evidence_without_accumulating_bad_answers() -> None:
+    calls = 0
+
+    def respond(payload):
+        nonlocal calls
+        calls += 1
+        text = json.dumps(payload["messages"])
+        assert "Return the typed replay result" in text
+        assert not any(message["role"] == "assistant" for message in payload["messages"])
+        if calls > 1:
+            assert "schema validation" in text
+            assert "bad-untrusted-answer" not in text
+        return {"wrong_field": "bad-untrusted-answer"} if calls < 3 else {"value": "repaired"}
+
+    with _openai_replay_server(responder=respond) as (base_url, state):
+        config = _config(base_url, structured_output_mode="native", native_retry_context_mode="fresh_attempt")
+        backend = OpenAICompatiblePydanticBackend(config=config, environ={})
+        with ScoutModelGateway(profiles=(config.to_runtime_profile(),), backends=(backend,)) as gateway:
+            session = gateway.open_session(parent_request_id=uuid4(), max_model_requests=10)
+            result = session.infer(_request(session.parent_request_id), output_type=_ProbeOutput)
+    assert result.output.value == "repaired"
+    assert result.execution_record.model_request_count == 3
+    assert len(state.requests[1]["messages"]) == len(state.requests[2]["messages"])
+
+
+def test_fresh_attempt_context_rejects_tool_calling_runtime() -> None:
+    with pytest.raises(ValidationError, match="native"):
+        _config("http://127.0.0.1:8000/v1", native_retry_context_mode="fresh_attempt")
+
+
+def test_hailo_timestamp_mode_normalizes_nanoseconds_before_pydantic_ai() -> None:
+    with _openai_replay_server(
+        created_timestamp=1_787_463_187_012_202_212,
+    ) as (base_url, state):
+        config = _config(
+            base_url,
+            provider="hailo_ollama",
+            response_created_timestamp_mode="auto_to_seconds",
+        )
+        backend = OpenAICompatiblePydanticBackend(config=config, environ={})
+        with ScoutModelGateway(
+            profiles=(config.to_runtime_profile(),),
+            backends=(backend,),
+            max_local_concurrency=1,
+        ) as gateway:
+            session = gateway.open_session(
+                parent_request_id=uuid4(),
+                max_model_requests=10,
+            )
+            result = session.infer(
+                _request(session.parent_request_id),
+                output_type=_ProbeOutput,
+            )
+
+    assert result.output == _ProbeOutput(value="http-replay-ok")
+    assert state.requests[0]["model"] == config.model_id
+
+
+def test_timestamp_normalization_is_restricted_to_hailo_provider() -> None:
+    with pytest.raises(ValidationError, match="only available for hailo_ollama"):
+        _config(
+            "http://127.0.0.1:8000/v1",
+            response_created_timestamp_mode="auto_to_seconds",
+        )
+
+
+def test_hailo_prompted_output_flattens_message_control_characters() -> None:
+    with _openai_replay_server() as (base_url, state):
+        config = _config(
+            base_url,
+            provider="hailo_ollama",
+            structured_output_mode="prompted",
+            request_message_control_mode="replace_controls_with_spaces",
+        )
+        backend = OpenAICompatiblePydanticBackend(config=config, environ={})
+        with ScoutModelGateway(
+            profiles=(config.to_runtime_profile(),),
+            backends=(backend,),
+            max_local_concurrency=1,
+        ) as gateway:
+            session = gateway.open_session(
+                parent_request_id=uuid4(),
+                max_model_requests=10,
+            )
+            request = _request(session.parent_request_id).model_copy(
+                update={"prompt": "Return\nthis\ttyped replay result."}
+            )
+            result = session.infer(request, output_type=_ProbeOutput)
+
+    assert result.output == _ProbeOutput(value="http-replay-ok")
+    assert state.requests[0].get("tools") is None
+    message_text = json.dumps(
+        state.requests[0]["messages"],
+        ensure_ascii=False,
+    )
+    assert re.search(r"[\x00-\x1f\x7f-\x9f]", message_text) is None
+
+
+def test_hailo_request_control_mode_is_restricted_to_hailo_provider() -> None:
+    with pytest.raises(ValidationError, match="only available for hailo_ollama"):
+        _config(
+            "http://127.0.0.1:8000/v1",
+            request_message_control_mode="replace_controls_with_spaces",
+        )
 
 
 def test_openai_compatible_backend_applies_bounded_inference_defaults() -> None:
@@ -739,6 +866,63 @@ def test_specialist_grounding_preserves_typed_features_and_scope() -> None:
     )
 
 
+def test_compact_advisory_leaves_ids_and_authority_to_server_grounding() -> None:
+    request = _intelligence_request()
+    model_input = SpecialistModelInput(
+        request_id=request.request_id,
+        mission_id=request.mission_id,
+        role=SpecialistRole.TERRAIN,
+        question=request.question,
+        workspace_binding=request.workspace_binding,
+        geographic_scope=request.geographic_scope,
+        evidence=tuple(
+            item
+            for item in _catalog().items
+            if item.evidence_id in {"ev-http-route", "ev-http-dem"}
+        ),
+        capabilities_used=("route.read", "dem.read"),
+    )
+    advisory = _CompactSpecialistAdvisory(
+        findings=(
+            _CompactSpecialistFinding(
+                claim="HTTP model suggests a ridge candidate near CP2.",
+                confidence=0.7,
+                evidence_id="ev-http-route",
+            ),
+            _CompactSpecialistFinding(
+                claim="HTTP model suggests a saddle candidate near CP3.",
+                confidence=0.6,
+                evidence_id="ev-http-dem",
+            ),
+        )
+    )
+
+    grounded = _ground_compact_specialist_advisory(
+        model_input=model_input,
+        advisory=advisory,
+    )
+
+    assert [finding.claim for finding in grounded.findings] == [
+        "HTTP model suggests a ridge candidate near CP2.",
+        "HTTP model suggests a saddle candidate near CP3.",
+    ]
+    assert all(finding.candidate_only is True for finding in grounded.findings)
+    assert grounded.runtime_safety_truth is False
+    assert any(
+        uncertainty.uncertainty_id.endswith("not_normalized_candidate")
+        for uncertainty in grounded.uncertainties
+    )
+
+    prompt = _compact_specialist_model_prompt(
+        task_prompt="Analyze terrain candidates.",
+        model_input=model_input,
+    )
+    assert "exactly 2 objects in the findings array" in prompt
+    assert '{"findings":[{"claim":"...","confidence":0.5' in prompt
+    assert "confidence must be a JSON number from 0 to 1" in prompt
+    assert "never rename it to confidentiality" in prompt
+
+
 def _specialist_responder(payload: dict[str, Any]) -> dict[str, Any]:
     for message in reversed(payload["messages"]):
         content = message.get("content")
@@ -749,6 +933,20 @@ def _specialist_responder(payload: dict[str, Any]) -> dict[str, Any]:
         )
         return replay_specialist_report(model_input).model_dump(mode="json")
     raise AssertionError("Scout specialist input marker was absent from HTTP request")
+
+
+def _compact_specialist_responder(payload: dict[str, Any]) -> dict[str, Any]:
+    report = _specialist_responder(payload)
+    return {
+        "findings": [
+            {
+                "claim": finding["claim"],
+                "confidence": finding["confidence"],
+                "evidence_id": finding["evidence_ids"][0],
+            }
+            for finding in report["findings"]
+        ]
+    }
 
 
 def _unused_loopback_base_url() -> str:
@@ -781,6 +979,72 @@ def test_checked_in_max_runtime_example_stays_valid_and_candidate_only() -> None
     assert config.max_concurrency == 1
     assert config.candidate_only is True
     assert config.runtime_safety_truth is False
+
+
+def test_hailo_config_declares_only_chat_and_small_typed_output() -> None:
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "configs"
+        / "scout-nextgen-openai-compatible.hailo-qwen3-1.7b.json"
+    )
+    config = OpenAICompatibleBackendConfig.from_json_file(path)
+    profile = config.to_runtime_profile()
+    runtime = build_praison_openai_compatible_runtime(config=config, environ={})
+    try:
+        assert profile.capabilities == frozenset(
+            {
+                ModelRuntimeCapability.CHAT,
+                ModelRuntimeCapability.SMALL_TYPED_OUTPUT,
+                ModelRuntimeCapability.OFFLINE,
+            }
+        )
+        assert runtime.required_capabilities == frozenset(
+            {
+                ModelRuntimeCapability.CHAT,
+                ModelRuntimeCapability.SMALL_TYPED_OUTPUT,
+            }
+        )
+        assert runtime.inference_priority is ModelInferencePriority.NORMAL
+    finally:
+        runtime.close()
+
+
+def test_pi_cpu_ollama_config_is_background_reasoning_runtime() -> None:
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "configs"
+        / "scout-nextgen-openai-compatible.pi-cpu-ollama-qwen3-1.7b.json"
+    )
+    old_mac_path = (
+        Path(__file__).resolve().parents[1]
+        / "configs"
+        / "scout-nextgen-openai-compatible.ollama-qwen3-1.7b.json"
+    )
+    config = OpenAICompatibleBackendConfig.from_json_file(path)
+    profile = config.to_runtime_profile()
+    runtime = build_praison_openai_compatible_runtime(config=config, environ={})
+    try:
+        assert old_mac_path.exists() is False
+        assert config.transport_scope is OpenAICompatibleTransportScope.LOOPBACK
+        assert config.base_url == "http://127.0.0.1:11434/v1"
+        assert profile.runtime_id == "edge.pi.ollama.cpu.background"
+        assert profile.locality is Locality.EDGE
+        assert profile.accelerator is AcceleratorKind.CPU
+        assert profile.required_host_kind is ModelRuntimeHostKind.RASPBERRY_PI
+        assert profile.capabilities.issuperset(
+            {
+                ModelRuntimeCapability.CHAT,
+                ModelRuntimeCapability.STRUCTURED_OUTPUT,
+                ModelRuntimeCapability.SLOW_BACKGROUND_REASONING,
+                ModelRuntimeCapability.OFFLINE,
+            }
+        )
+        assert ModelRuntimeCapability.SLOW_BACKGROUND_REASONING in (
+            runtime.required_capabilities
+        )
+        assert runtime.inference_priority is ModelInferencePriority.BACKGROUND
+    finally:
+        runtime.close()
 
 
 @pytest.mark.skipif(
@@ -842,6 +1106,47 @@ def test_praison_openai_compatible_runtime_uses_one_http_model() -> None:
         "qgis.deterministic",
     )
     assert response.provenance.model_runtimes == (config.runtime_id,)
+    assert response.runtime_safety_truth is False
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec("praisonaiagents") is None,
+    reason="optional praisonaiagents dependency is not installed",
+)
+def test_compact_praison_advisory_uses_server_owned_candidate_envelope() -> None:
+    request = _intelligence_request()
+    with _openai_replay_server(responder=_compact_specialist_responder) as (
+        base_url,
+        state,
+    ):
+        config = _config(
+            base_url,
+            structured_output_mode="native",
+            specialist_output_mode="compact_advisory",
+        )
+        runtime = build_praison_openai_compatible_runtime(config=config, environ={})
+        try:
+            response = PraisonIntelligenceService(
+                runtime=runtime,
+                evidence_catalog=_catalog(),
+                max_concurrency=1,
+            ).execute(request)
+        finally:
+            runtime.close()
+
+    assert len(response.findings) == 3, response.model_dump_json(indent=2)
+    assert len(state.requests) == 1
+    schema = state.requests[0]["response_format"]["json_schema"]["schema"]
+    assert set(schema["properties"]) == {"findings"}
+    item_schema = schema["properties"]["findings"]["items"]
+    if "$ref" in item_schema:
+        item_schema = schema["$defs"][item_schema["$ref"].rsplit("/", 1)[-1]]
+    assert set(item_schema["properties"]) == {
+        "claim",
+        "confidence",
+        "evidence_id",
+    }
+    assert all(finding.candidate_only is True for finding in response.findings)
     assert response.runtime_safety_truth is False
 
 

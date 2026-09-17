@@ -4,6 +4,8 @@ import json
 import shutil
 from pathlib import Path
 
+from weather_workflow_fixtures import write_missing_weather_project
+
 from pretrip_artifact_manifest import build_pretrip_artifact_manifest
 from pretrip_weather_decision_collection import (
     ROUTE_WEATHER_PACKAGE_REF,
@@ -44,10 +46,11 @@ def test_weather_decision_collection_dry_run_plans_sec10_refs(tmp_path: Path) ->
 def test_weather_decision_collection_writes_conservative_candidate_without_fresh_weather(
     tmp_path: Path,
 ) -> None:
-    project_root = _copy_project(tmp_path)
+    project_root = write_missing_weather_project(tmp_path, PROJECT_FIXTURE)
     result = collect_pretrip_weather_decision(
         project_root,
         generated_at="2099-06-07T08:00:00Z",
+        reference_time="2099-06-07T08:00:00Z",
     )
 
     assert result["writes_performed"] is True
@@ -87,7 +90,7 @@ def test_weather_decision_collection_writes_conservative_candidate_without_fresh
 def test_weather_decision_collection_builds_route_package_for_scout_ai(
     tmp_path: Path,
 ) -> None:
-    project_root = _copy_project(tmp_path)
+    project_root = write_missing_weather_project(tmp_path, PROJECT_FIXTURE)
     weather_points = project_root / "normalized" / "weather" / "forecast_snapshots.json"
     weather_points.parent.mkdir(parents=True, exist_ok=True)
     weather_points.write_text(
@@ -96,6 +99,7 @@ def test_weather_decision_collection_builds_route_package_for_scout_ai(
                 {
                     "source": "fixture_cwa_forecast",
                     "source_run_id": "cwa.fixture.20990607",
+                    "issued_at": "2099-06-07T08:00:00Z",
                     "validFrom": "2099-06-08T04:00:00+08:00",
                     "validTo": "2099-06-08T07:00:00+08:00",
                     "areaName": "仁愛鄉",
@@ -115,6 +119,7 @@ def test_weather_decision_collection_builds_route_package_for_scout_ai(
         weather_points_path="normalized/weather/forecast_snapshots.json",
         default_township="仁愛鄉",
         generated_at="2099-06-07T08:00:00Z",
+        reference_time="2099-06-07T08:00:00Z",
         valid_until="2099-06-10T08:00:00Z",
     )
 
@@ -139,7 +144,10 @@ def test_weather_decision_collection_builds_route_package_for_scout_ai(
     assert project["route_weather_package_ref"] == ROUTE_WEATHER_PACKAGE_REF
     assert project["weather_decision_candidate_count"] == 1
 
-    assessed = assess_scout_weather_window(project_root, query="午後雷雨是否要改線?")
+    assessed = assess_scout_weather_window(
+        project_root, query="午後雷雨是否要改線?",
+        reference_time="2099-06-07T08:00:00Z",
+    )
     assert assessed["answerability"] == "route_weather_risk_available"
     assert assessed["decision"] == "CHANGE_PLAN"
     assert assessed["missing_fields"] == []

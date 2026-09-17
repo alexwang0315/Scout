@@ -16,6 +16,10 @@ from scout.nextgen.max_runtime_preflight import (
     probe_max_endpoint,
     run_max_runtime_preflight,
 )
+from scout.nextgen.max_runtime_preflight import (
+    _parse_lscpu_model,
+    _parse_linux_cpu_facts,
+)
 from scout.nextgen.openai_compatible_backend import OpenAICompatibleBackendConfig
 
 
@@ -121,10 +125,7 @@ def test_external_endpoint_is_not_constrained_by_client_host(
         is MaxRuntimeReadinessDisposition.READY_FOR_BEHAVIOR_QUALIFICATION
     )
     checks = {check.check_id: check for check in report.checks}
-    assert (
-        checks["host_compatibility"].status
-        is MaxReadinessCheckStatus.NOT_APPLICABLE
-    )
+    assert checks["host_compatibility"].status is MaxReadinessCheckStatus.NOT_APPLICABLE
     assert checks["cli_availability"].status is MaxReadinessCheckStatus.NOT_APPLICABLE
     assert checks["endpoint_health"].status is MaxReadinessCheckStatus.PASSED
     assert checks["model_inventory"].status is MaxReadinessCheckStatus.PASSED
@@ -224,13 +225,59 @@ def test_preflight_binds_frozen_qualification_inputs(tmp_path: Path) -> None:
     )
 
     assert report.qualification_inputs is not None
-    assert report.qualification_inputs.case_sha256 == hashlib.sha256(
-        case_path.read_bytes()
-    ).hexdigest()
-    assert report.qualification_inputs.evidence_catalog_sha256 == hashlib.sha256(
-        evidence_path.read_bytes()
-    ).hexdigest()
+    assert (
+        report.qualification_inputs.case_sha256
+        == hashlib.sha256(case_path.read_bytes()).hexdigest()
+    )
+    assert (
+        report.qualification_inputs.evidence_catalog_sha256
+        == hashlib.sha256(evidence_path.read_bytes()).hexdigest()
+    )
     assert report.qualification_inputs.required_checks[-2:] == (
         "praison_mcp",
         "authority_boundary",
     )
+
+
+def test_linux_cpu_facts_prefer_arm_model_name_over_processor_index() -> None:
+    cpu_model, features = _parse_linux_cpu_facts(
+        """
+processor : 0
+model name : ARM Cortex-A76
+Features : fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics
+processor : 1
+model name : ARM Cortex-A76
+Features : fp asimd evtstrm aes pmull sha1 sha2 crc32 atomics
+Hardware : Raspberry Pi 5 Model B Rev 1.0
+"""
+    )
+
+    assert cpu_model == "ARM Cortex-A76"
+    assert features == (
+        "aes",
+        "asimd",
+        "atomics",
+        "crc32",
+        "evtstrm",
+        "fp",
+        "pmull",
+        "sha1",
+        "sha2",
+    )
+
+
+def test_lscpu_model_parser_reads_structured_model_name() -> None:
+    assert (
+        _parse_lscpu_model(
+            json.dumps(
+                {
+                    "lscpu": [
+                        {"field": "Architecture:", "data": "aarch64"},
+                        {"field": "Model name:", "data": "Cortex-A76"},
+                    ]
+                }
+            )
+        )
+        == "Cortex-A76"
+    )
+    assert _parse_lscpu_model('{"lscpu": "invalid"}') is None

@@ -148,7 +148,7 @@ rtk ./venv/bin/python -m pretrip_route_context_scout_ai_regenerate \
   --evidence <reviewed-regeneration-evidence.json> \
   --model-config configs/assistant-models.dashboard-aihat2.json \
   --skill .agents/skills/scout-route-context-briefing/SKILL.md \
-  --model deepseek/deepseek-v3.2 \
+  --model deepseek/deepseek-v4-flash-0731 \
   --env-file <repo-env-file>
 ```
 
@@ -164,7 +164,7 @@ Then run an independent model pass against the regenerated hash:
 rtk ./venv/bin/python -m pretrip_route_context_scout_ai_review \
   --project-root <workspace-root>/<project-id> \
   --model-config configs/assistant-models.dashboard-aihat2.json \
-  --model deepseek/deepseek-v3.2 \
+  --model deepseek/deepseek-v4-flash-0731 \
   --env-file <repo-env-file>
 ```
 

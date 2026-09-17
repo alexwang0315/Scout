@@ -24,6 +24,7 @@ const SCOUT_ADMIN_UI_STARTUP_TIMEOUT_MS = Math.max(
 
 const scoutLayerIds = [
   "imagery",
+  "historical-map",
   "rudy",
   "rudy-twmap",
   "relief",
@@ -58,8 +59,8 @@ const scoutLayerIds = [
 ];
 
 const expectedLayerIdsBySurface = {
-  debug: scoutLayerIds.filter((layerId) => layerId !== "completed-track"),
-  "after-action": scoutLayerIds,
+  debug: scoutLayerIds.filter((layerId) => !["completed-track", "historical-map"].includes(layerId)),
+  "after-action": scoutLayerIds.filter((layerId) => layerId !== "historical-map"),
   pretrip: scoutLayerIds.filter((layerId) => layerId !== "completed-track"),
   dashboard: scoutLayerIds.filter((layerId) => layerId !== "completed-track"),
 };

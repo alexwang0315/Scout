@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import threading
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
@@ -15,7 +16,9 @@ from pydantic import BaseModel, Field, ValidationError
 
 from scout.nextgen.intelligence_gateway import ModelExecutionRecord
 from scout.nextgen.model_runtime import (
+    AcceleratorKind,
     Locality,
+    ModelRuntimeHostKind,
     ModelRuntimeCapability,
     ModelRuntimeProfile,
     ModelRuntimeRequest,
@@ -23,6 +26,7 @@ from scout.nextgen.model_runtime import (
     ModelRuntimeTier,
     ScoutModelRuntimeRouter,
 )
+from scout.nextgen.model_loop import OwnedModelLoop, await_model_operation
 from scout.nextgen.model_scheduler import (
     BoundedInferenceScheduler,
     InferenceSchedulerBackpressure,
@@ -31,6 +35,7 @@ from scout.nextgen.model_scheduler import (
     InferenceSchedulerSnapshot,
     InferenceSchedulerTimeout,
 )
+from scout.pydantic_ai_result import pydantic_result_output
 from scout.schemas.base import NonEmptyStr, SchemaModel
 
 OutputT = TypeVar("OutputT", bound=BaseModel)
@@ -48,6 +53,28 @@ _PRIORITY_RANK = {
     ModelInferencePriority.NORMAL: 10,
     ModelInferencePriority.BACKGROUND: 20,
 }
+
+
+class ModelRuntimeCapabilityMatrixEntry(SchemaModel):
+    """Queryable Scout-owned view of one registered runtime's bounded role."""
+
+    schema_version: Literal["scout.model_runtime_capability.v0"] = (
+        "scout.model_runtime_capability.v0"
+    )
+    runtime_id: NonEmptyStr
+    provider: NonEmptyStr
+    model_id: NonEmptyStr
+    tier: ModelRuntimeTier
+    locality: Locality
+    required_host_kind: ModelRuntimeHostKind
+    accelerator: AcceleratorKind
+    capabilities: frozenset[ModelRuntimeCapability]
+    recommended_priority: ModelInferencePriority
+    context_limit_tokens: int = Field(ge=1)
+    max_concurrency: int = Field(ge=1)
+    offline_capable: bool
+    candidate_only: Literal[True] = True
+    runtime_safety_truth: Literal[False] = False
 
 
 class ModelGatewayError(RuntimeError):
@@ -69,6 +96,10 @@ class BackendInferenceFailure(RuntimeError):
         self.model_request_count = model_request_count
         self.input_tokens = input_tokens
         self.output_tokens = output_tokens
+
+
+class BackendInferenceCancelled(BackendInferenceFailure):
+    pass
 
 
 class ModelRuntimeUnavailable(ModelGatewayError):
@@ -110,6 +141,26 @@ class ModelInferenceCancelled(ModelGatewayExecutionError):
 
 class ModelOutputValidationError(ModelGatewayExecutionError):
     pass
+
+
+class _InferenceCancellation(threading.Event):
+    """A scheduler timeout may abort inference, but cannot cancel its parent job."""
+
+    def __init__(self, parent: threading.Event) -> None:
+        super().__init__()
+        self._parent = parent
+
+    def is_set(self) -> bool:
+        return super().is_set() or self._parent.is_set()
+
+    def wait(self, timeout: float | None = None) -> bool:
+        deadline = time.monotonic() + timeout if timeout is not None else None
+        while not self.is_set():
+            remaining = None if deadline is None else deadline - time.monotonic()
+            if remaining is not None and remaining <= 0:
+                return self.is_set()
+            super().wait(0.05 if remaining is None else min(0.05, remaining))
+        return True
 
 
 class ModelInferenceRequest(SchemaModel):
@@ -187,19 +238,55 @@ class PydanticAIStructuredBackend:
         *,
         runtime_id: str,
         model_id: str,
-        model: Any,
+        model: Any = None,
         default_model_settings: Mapping[str, Any] | None = None,
+        model_factory: Callable[[], Any] | None = None,
+        close_model: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
         from pydantic_ai import Agent, UsageLimits
 
+        if model is not None and model_factory is not None:
+            raise ValueError("provide a resident model or its factory, not both")
         self.runtime_id = runtime_id
         self.model_id = model_id
-        self.resident_model = model
         self._default_model_settings = dict(default_model_settings or {})
         self._agent_type = Agent
         self._usage_limits_type = UsageLimits
         self._agents: dict[type[BaseModel], Any] = {}
         self._agent_lock = threading.Lock()
+        self._close_model = close_model
+        self._model_loop = OwnedModelLoop(
+            name=f"scout-model-owner-{runtime_id}", close_resources=self._close_owned_resources,
+        )
+
+        async def initialize() -> Any:
+            return model_factory() if model_factory is not None else model
+
+        try:
+            self.resident_model = self._model_loop.run(initialize)
+        except BaseException:
+            self._model_loop.close()
+            raise
+
+    async def _close_owned_resources(self) -> None:
+        if self._close_model is not None:
+            await self._close_model()
+        self._agents.clear()
+
+    def close(self) -> None:
+        self._model_loop.close()
+
+    def run_on_model_loop(self, operation: Callable[[], Awaitable[Any]]) -> Any:
+        from pydantic_ai._utils import check_no_nested_sync_run
+
+        check_no_nested_sync_run()
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            pass
+        else:
+            raise RuntimeError("synchronous model execution cannot run inside an active event loop")
+        return self._model_loop.run(operation)
 
     def infer(
         self,
@@ -210,9 +297,29 @@ class PydanticAIStructuredBackend:
         cancellation_event: threading.Event,
     ) -> BackendInferenceResult:
         if cancellation_event.is_set():
-            raise RuntimeError("model inference was cancelled before execution")
-        from scout.agents.pydantic_ai_compat import pydantic_result_output
+            raise BackendInferenceCancelled(
+                "model inference was cancelled before execution", model_request_count=0,
+            )
+        return self.run_on_model_loop(
+            lambda: self._infer_async(
+                request=request, output_type=output_type,
+                model_request_limit=model_request_limit, cancellation_event=cancellation_event,
+            )
+        )
 
+    async def _infer_async(
+        self,
+        *,
+        request: ModelInferenceRequest,
+        output_type: type[BaseModel],
+        model_request_limit: int,
+        cancellation_event: threading.Event,
+    ) -> BackendInferenceResult:
+        if cancellation_event.is_set():
+            raise BackendInferenceCancelled(
+                "model inference was cancelled before execution",
+                model_request_count=0,
+            )
         agent = self._agent_for(output_type)
         requests_before = _resident_model_request_count(self.resident_model)
         request_scope = _begin_model_request_scope(self.resident_model)
@@ -226,18 +333,28 @@ class PydanticAIStructuredBackend:
                 model_settings["temperature"] = request.temperature
             if request.thinking is not None:
                 model_settings["thinking"] = request.thinking
-            result = agent.run_sync(
-                request.prompt,
-                model_settings=model_settings or None,
-                usage_limits=self._usage_limits_type(
-                    request_limit=model_request_limit,
-                    tool_calls_limit=10,
+            result = await await_model_operation(
+                agent.run(
+                    request.prompt,
+                    model_settings=model_settings or None,
+                    usage_limits=self._usage_limits_type(
+                        request_limit=model_request_limit,
+                        tool_calls_limit=10,
+                    ),
+                    retries=10,
                 ),
-                retries=10,
+                cancellation_event,
             )
             if cancellation_event.is_set():
                 raise RuntimeError("model inference was cancelled during execution")
             output = output_type.model_validate(pydantic_result_output(result))
+        except asyncio.CancelledError as exc:
+            raise BackendInferenceCancelled(
+                "model inference was cancelled during execution",
+                model_request_count=_finish_model_request_scope(
+                    self.resident_model, request_scope, requests_before,
+                ),
+            ) from exc
         except ValidationError:
             _finish_model_request_scope(
                 self.resident_model,
@@ -246,7 +363,12 @@ class PydanticAIStructuredBackend:
             )
             raise
         except Exception as exc:
-            raise BackendInferenceFailure(
+            failure_type = (
+                BackendInferenceCancelled
+                if cancellation_event.is_set()
+                else BackendInferenceFailure
+            )
+            raise failure_type(
                 "Pydantic AI model execution failed",
                 model_request_count=_finish_model_request_scope(
                     self.resident_model,
@@ -343,29 +465,68 @@ class ScoutModelGateway:
         self.close()
 
     def close(self) -> None:
-        self._local_scheduler.close()
-        self._cloud_scheduler.close()
+        errors: list[BaseException] = []
+        for scheduler in (self._local_scheduler, self._cloud_scheduler):
+            try:
+                scheduler.close()
+            except BaseException as exc:
+                errors.append(exc)
         for backend in self._backends.values():
             close_backend = getattr(backend, "close", None)
             if callable(close_backend):
-                close_backend()
+                try:
+                    close_backend()
+                except BaseException as exc:
+                    errors.append(exc)
+        if len(errors) == 1:
+            raise errors[0]
+        if errors:
+            raise BaseExceptionGroup("model gateway cleanup failed", errors)
 
     def open_session(
         self,
         *,
         parent_request_id: UUID,
         max_model_requests: int = 10,
+        cancellation_event: threading.Event | None = None,
     ) -> "ModelGatewaySession":
         return ModelGatewaySession(
             gateway=self,
             parent_request_id=parent_request_id,
             max_model_requests=max_model_requests,
+            cancellation_event=cancellation_event,
         )
 
     def scheduler_snapshots(
         self,
     ) -> tuple[InferenceSchedulerSnapshot, InferenceSchedulerSnapshot]:
         return self._local_scheduler.snapshot(), self._cloud_scheduler.snapshot()
+
+    def capability_matrix(self) -> tuple[ModelRuntimeCapabilityMatrixEntry, ...]:
+        """Return immutable routing facts without probing or invoking a model."""
+
+        return tuple(
+            ModelRuntimeCapabilityMatrixEntry(
+                runtime_id=profile.runtime_id,
+                provider=profile.provider,
+                model_id=profile.model_id,
+                tier=profile.tier,
+                locality=profile.locality,
+                required_host_kind=profile.required_host_kind,
+                accelerator=profile.accelerator,
+                capabilities=profile.capabilities,
+                recommended_priority=(
+                    ModelInferencePriority.BACKGROUND
+                    if ModelRuntimeCapability.SLOW_BACKGROUND_REASONING
+                    in profile.capabilities
+                    else ModelInferencePriority.NORMAL
+                ),
+                context_limit_tokens=profile.context_limit_tokens,
+                max_concurrency=profile.max_concurrency,
+                offline_capable=profile.offline_capable,
+            )
+            for profile in self._router.profiles
+        )
 
     def _infer(
         self,
@@ -406,13 +567,14 @@ class ScoutModelGateway:
         started_at = datetime.now(UTC)
         started_monotonic = time.monotonic()
         backend_result: BackendInferenceResult | None = None
+        inference_cancellation = _InferenceCancellation(cancellation_event)
 
         def operation() -> BackendInferenceResult:
             return backend.infer(
                 request=request,
                 output_type=output_type,
                 model_request_limit=model_request_limit,
-                cancellation_event=cancellation_event,
+                cancellation_event=inference_cancellation,
             )
 
         try:
@@ -420,7 +582,7 @@ class ScoutModelGateway:
                 operation,
                 priority=_PRIORITY_RANK[request.priority],
                 timeout_seconds=request.timeout_seconds,
-                cancellation_event=cancellation_event,
+                cancellation_event=inference_cancellation,
             )
             if backend_result.model_request_count > model_request_limit:
                 record = _execution_record(
@@ -477,6 +639,23 @@ class ScoutModelGateway:
                 error_type=type(exc).__name__,
             )
             raise ModelInferenceCancelled(str(exc), record=record) from exc
+        except BackendInferenceCancelled as exc:
+            record = _execution_record(
+                request=request,
+                profile=profile,
+                selection=selection,
+                started_at=started_at,
+                started_monotonic=started_monotonic,
+                status="cancelled",
+                model_request_count=exc.model_request_count,
+                input_tokens=exc.input_tokens,
+                output_tokens=exc.output_tokens,
+                error_type=type(exc.__cause__ or exc).__name__,
+            )
+            raise ModelInferenceCancelled(
+                "model backend request was cancelled",
+                record=record,
+            ) from exc
         except BackendInferenceFailure as exc:
             record = _execution_record(
                 request=request,
@@ -568,6 +747,7 @@ class ModelGatewaySession:
         gateway: ScoutModelGateway,
         parent_request_id: UUID,
         max_model_requests: int,
+        cancellation_event: threading.Event | None = None,
     ) -> None:
         if max_model_requests < 10:
             raise ValueError("model request ceiling cannot be below 10")
@@ -578,7 +758,7 @@ class ModelGatewaySession:
         self._records: list[ModelExecutionRecord] = []
         self._call_lock = threading.Lock()
         self._state_lock = threading.Lock()
-        self._cancellation_event = threading.Event()
+        self._cancellation_event = cancellation_event or threading.Event()
 
     @property
     def records(self) -> tuple[ModelExecutionRecord, ...]:
@@ -728,6 +908,7 @@ __all__ = [
     "ModelGatewayExecutionError",
     "ModelGatewayResult",
     "ModelGatewaySession",
+    "ModelRuntimeCapabilityMatrixEntry",
     "ModelInferenceBackpressure",
     "ModelInferenceCancelled",
     "ModelInferencePriority",

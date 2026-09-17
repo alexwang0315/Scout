@@ -45,6 +45,8 @@ from scout_contextual_permission_rudy import (
     render_daily_rudy_background,
     rudy_cache_settings,
 )
+from scout_analysis_subject import build_analysis_subject
+from scout_planned_route_api import create_planned_route_router
 
 
 ROOT = Path(__file__).resolve().parent
@@ -120,6 +122,11 @@ def create_contextual_permission_workbench_router(
         except ContextualPermissionConflict:
             raise
 
+    @router.get("/pretrip/projects/{project_id}/analysis-subject")
+    def analysis_subject(project_id: str, response: Response) -> dict[str, object]:
+        response.headers["Cache-Control"] = "no-store"
+        return build_analysis_subject(project_root_for(project_id)).model_dump(mode="json")
+
     @router.get(
         "/pretrip/projects/{project_id}/contextual-permission-dashboard"
     )
@@ -141,6 +148,9 @@ def create_contextual_permission_workbench_router(
                 "stale_candidate_hash",
                 "baseline_candidate_hash_mismatch",
                 "baseline_timing_binding_mismatch",
+                "reference_itinerary_unavailable",
+                "reference_reconstruction_mismatch",
+                "reference_route_selection_mismatch",
                 "baseline_review_receipt_missing",
                 "baseline_review_receipt_mismatch",
                 "baseline_review_receipt_hash_mismatch",
@@ -168,6 +178,9 @@ def create_contextual_permission_workbench_router(
                     "stale_candidate_hash",
                     "baseline_candidate_hash_mismatch",
                     "baseline_timing_binding_mismatch",
+                    "reference_itinerary_unavailable",
+                    "reference_reconstruction_mismatch",
+                    "reference_route_selection_mismatch",
                     "baseline_review_receipt_missing",
                     "baseline_review_receipt_mismatch",
                     "baseline_review_receipt_hash_mismatch",
@@ -291,6 +304,31 @@ def create_contextual_permission_workbench_router(
             return workbench_for(
                 project_id, allow_stale_projection=True
             ).save_baseline_candidate(request).model_dump(
+                mode="json"
+            )
+        except ContextualPermissionConflict as exc:
+            raise _http_conflict(exc) from exc
+
+    @router.get("/pretrip/projects/{project_id}/mission-baseline/candidates")
+    def list_mission_baseline_candidates(project_id: str) -> dict[str, object]:
+        try:
+            return workbench_for(
+                project_id, allow_stale_projection=True
+            ).list_baseline_candidates().model_dump(
+                mode="json"
+            )
+        except ContextualPermissionConflict as exc:
+            raise _http_conflict(exc) from exc
+
+    @router.get("/pretrip/projects/{project_id}/mission-baseline/candidates/detail")
+    def mission_baseline_candidate_detail(
+        project_id: str,
+        candidate_ref: str,
+    ) -> dict[str, object]:
+        try:
+            return workbench_for(
+                project_id, allow_stale_projection=True
+            ).baseline_candidate_detail(candidate_ref).model_dump(
                 mode="json"
             )
         except ContextualPermissionConflict as exc:
@@ -820,6 +858,13 @@ def create_contextual_permission_workbench_router(
         except ContextualPermissionConflict as exc:
             raise _http_conflict(exc) from exc
 
+    router.include_router(create_planned_route_router(project_root_for=project_root_for))
+    from scout_planned_map_api import create_planned_map_router
+    router.include_router(create_planned_map_router(project_root_for=project_root_for))
+    from scout_recorded_api import create_recorded_router
+    router.include_router(create_recorded_router(project_root_for=project_root_for))
+    from scout_exploration_api import create_exploration_router
+    router.include_router(create_exploration_router(workspace_root=Path(pretrip_workspace_root or DEFAULT_FIXTURE_WORKSPACE_ROOT)))
     return router
 
 

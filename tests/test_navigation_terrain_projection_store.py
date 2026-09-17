@@ -218,6 +218,54 @@ def test_fingerprint_tracks_observed_passage_sources(tmp_path: Path) -> None:
     assert first != second
 
 
+def test_fingerprint_tracks_projection_compiler_revision(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    project_root, project = _project(tmp_path)
+    first = navigation_terrain_projection_store.navigation_terrain_input_fingerprint(
+        project_root,
+        project,
+    )
+
+    monkeypatch.setattr(
+        navigation_terrain_projection_store,
+        "NAVIGATION_TERRAIN_PROJECTION_COMPILER",
+        "navigation_terrain_projection_store.future",
+    )
+    second = navigation_terrain_projection_store.navigation_terrain_input_fingerprint(
+        project_root,
+        project,
+    )
+
+    assert first != second
+
+
+def test_fingerprint_tracks_terrain_route_hypothesis_catalog(tmp_path: Path) -> None:
+    project_root, project = _project(tmp_path)
+    catalog_ref = "outputs/spatial/qgis/terrain-route-hypothesis-catalog.json"
+    project = {
+        **project,
+        "terrain_route_hypothesis_catalog_ref": catalog_ref,
+    }
+    _write_json(project_root / catalog_ref, {"default_id": "full-route-r1"})
+    first = navigation_terrain_projection_store.navigation_terrain_input_fingerprint(
+        project_root,
+        project,
+    )
+
+    _write_json(
+        project_root / catalog_ref,
+        {"default_id": "full-route-r1", "entries": ["local-hypothesis"]},
+    )
+    second = navigation_terrain_projection_store.navigation_terrain_input_fingerprint(
+        project_root,
+        project,
+    )
+
+    assert first != second
+
+
 def test_fingerprint_ignores_mtime_only_refreshes(tmp_path: Path) -> None:
     project_root, project = _project(tmp_path)
     source_path = project_root / project["terrain_visualization_ref"]

@@ -6,17 +6,41 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import pytest
+
+import pretrip_layer_preparation
+from navigation_terrain_projection_store import inspect_navigation_terrain_projection
 from qgis_spatial_backend import (
     QgisMcpHttpTransport,
     QgisSpatialBackend,
+    QgisSpatialBackendError,
     QgisSpatialBackendConfig,
+    _compact_json_bytes,
+    _json_bytes,
+    _public_worker_error,
+    _validated_terrain_surface_manifest_bytes,
+    _validated_candidate_geojson,
 )
 from qgis_spatial_contracts import (
     TERRAIN_FEATURE_STACK_WORKFLOW_ID,
+    TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_ID,
     QgisBackendAvailability,
+    SpatialAnalysisError,
+    SpatialAnalysisErrorCode,
     SpatialAnalysisRequest,
     SpatialWorkflowState,
+    TerrainRouteEndpointSelection,
 )
+from pretrip_layer_preparation import LayerPreparationRequest
+from terrain_route_guidance_workspace import (
+    TerrainGuidanceInterpretRequest,
+    TerrainGuidanceManualAnchorRequest,
+    TerrainGuidanceResolveRequest,
+    TerrainGuidanceReviewRequest,
+    TerrainRouteGuidanceWorkspaceService,
+)
+from terrain_route_hypothesis_models import GeoPoint
+from terrain_route_hypothesis_artifacts import build_terrain_route_resolution_identity
 
 
 def _test_access_value() -> str:
@@ -46,9 +70,23 @@ def _workspace(root: Path) -> tuple[Path, dict[str, Any], Path]:
     (project_root / "project.json").write_text(json.dumps(project), encoding="utf-8")
     dem = root / "source-dem.grd"
     dem.write_bytes(b"source-dem")
+    full_dem = root / "full-source-dem.tif"
+    full_dem.write_bytes(b"full-source-dem")
     summary = {
         "summary_id": "dtm_coverage.qgis_worker_demo",
         "missing_grid_count": 0,
+        "raster_sources": [
+            {
+                "path": str(full_dem),
+                "role": "operator_supplied_full_extent_dem_raster",
+                "sha256": hashlib.sha256(full_dem.read_bytes()).hexdigest(),
+                "crs": "EPSG:3826",
+                "crs_evidence": "Metadata.xml",
+                "source_resolution_m": 20.0,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        ],
         "candidate_tiles": [
             {
                 "tile_id": "demo-dem",
@@ -62,7 +100,7 @@ def _workspace(root: Path) -> tuple[Path, dict[str, Any], Path]:
     summary_path = project_root / "normalized" / "terrain" / "dtm_coverage_summary.json"
     summary_path.parent.mkdir(parents=True)
     summary_path.write_text(json.dumps(summary), encoding="utf-8")
-    return project_root, project, dem
+    return project_root, project, full_dem
 
 
 def _worker_run(state: str) -> dict[str, Any]:
@@ -287,8 +325,64 @@ def _candidate_vector_bytes(kind: str) -> bytes:
 
 
 _TERRAIN_FEATURE_BYTES = {
+    "dem_route_bbox_raster": b"route-bbox-dem-raster",
     "slope_raster": b"grass-slope-raster",
     "aspect_raster": b"grass-aspect-raster",
+    "hillshade_raster": b"grass-hillshade-raster",
+    "elevation_tint_overlay": b"elevation-tint-png",
+    "hillshade_overlay": b"hillshade-png",
+    "slope_shading_overlay": b"slope-shading-png",
+    "contour_lines_vector": _candidate_vector_bytes("qgis_candidate_contour_line"),
+    "contours_overlay": b"contours-png",
+    "terrain_surface_manifest": json.dumps(
+        {
+            "schema_version": "scout_qgis_terrain_surface.v0_1",
+            "artifact_kind": "scout_qgis_terrain_surface_manifest",
+            "status": "completed_candidate_surface",
+            "coverage_scope": "full_route_extent_rectangle",
+            "overlay_alpha_channel": True,
+            "overlay_pixel_format": "RGBA",
+            "overlay_compositing": "source-over",
+            "analysis_extent": {
+                "scope": "full_route_extent_rectangle",
+                "crs": "EPSG:3826",
+                "margin_m": 250.0,
+                "resolution_m": 20.0,
+                "width": 526,
+                "height": 526,
+                "cell_count": 276676,
+                "bbox_twd97": {
+                    "min_x": 259740.0,
+                    "min_y": 2639740.0,
+                    "max_x": 270260.0,
+                    "max_y": 2650260.0,
+                },
+                "bbox_wgs84": {
+                    "west": 121.09,
+                    "south": 23.86,
+                    "east": 121.20,
+                    "north": 23.96,
+                },
+                "qgis_extent": "259740,270260,2639740,2650260",
+            },
+            "actual_processor": "qgis_processing_grass",
+            "actual_processors": {
+                "dem_crop": "gdal:cliprasterbyextent",
+                "slope_aspect": "grass:r.slope.aspect",
+                "hillshade": "grass:r.relief",
+                "contours": "grass:r.contour",
+                "contour_rasterization": "gdal:rasterize",
+                "display_colorization": "gdal:colorrelief",
+            },
+            "fallback_used": False,
+            "python_dtm_processing_used": False,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "operational": False,
+            "adds_source_resolution": False,
+        },
+        separators=(",", ":"),
+    ).encode("utf-8"),
     "geomorphon_raster": b"grass-geomorphon-raster",
     "geomorphon_fine_raster": b"grass-geomorphon-fine-raster",
     "geomorphon_coarse_raster": b"grass-geomorphon-coarse-raster",
@@ -302,10 +396,47 @@ _TERRAIN_FEATURE_BYTES = {
         "qgis_candidate_stream_network"
     ),
     "terrain_feature_route_samples": _ROUTE_SAMPLE_BYTES,
-    "terrain_feature_manifest": b'{"candidate_only":true}',
+    "terrain_feature_manifest": json.dumps(
+        {
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "operational": False,
+            "fixture": False,
+            "synthetic": False,
+            "artifacts": {"dem_route_bbox": "dem_route_bbox.tif"},
+            "source_resolution": {
+                "status": "reported",
+                "source_kind": "declared_full_extent_raster",
+                "x_m": 20.0,
+                "y_m": 20.0,
+                "crs": "EPSG:3826",
+                "crs_evidence": "Metadata.xml",
+                "adds_source_resolution": False,
+            },
+            "parameters": {
+                "analysis_extent": {
+                    "resolution_m": 20.0,
+                }
+            },
+        },
+        separators=(",", ":"),
+    ).encode("utf-8"),
     "qgis_visual_context": b'{"rendered_feature":"grass_slope_candidate"}',
     "qgis_render_preview": b"real-grass-qgis-render-png",
 }
+
+
+def test_qgis_surface_manifest_rejects_grid_extent_misalignment() -> None:
+    payload = json.loads(_TERRAIN_FEATURE_BYTES["terrain_surface_manifest"])
+    payload["analysis_extent"]["bbox_twd97"]["max_x"] += 20.0
+
+    with pytest.raises(
+        QgisSpatialBackendError,
+        match="grid is not aligned",
+    ):
+        _validated_terrain_surface_manifest_bytes(
+            json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        )
 
 
 def _terrain_feature_worker_run(state: str) -> dict[str, Any]:
@@ -314,8 +445,16 @@ def _terrain_feature_worker_run(state: str) -> dict[str, Any]:
     if state != "completed":
         return payload
     artifact_files = {
+        "dem_route_bbox_raster": "dem_route_bbox.tif",
         "slope_raster": "grass_slope.tif",
         "aspect_raster": "grass_aspect.tif",
+        "hillshade_raster": "grass_hillshade.tif",
+        "elevation_tint_overlay": "terrain_elevation_tint.png",
+        "hillshade_overlay": "terrain_hillshade.png",
+        "slope_shading_overlay": "terrain_slope_shading.png",
+        "contour_lines_vector": "grass_contours.geojson",
+        "contours_overlay": "terrain_contours.png",
+        "terrain_surface_manifest": "terrain_surface_manifest.json",
         "geomorphon_raster": "grass_geomorphon_landforms.tif",
         "geomorphon_fine_raster": "grass_geomorphon_fine.tif",
         "geomorphon_coarse_raster": "grass_geomorphon_coarse.tif",
@@ -332,8 +471,16 @@ def _terrain_feature_worker_run(state: str) -> dict[str, Any]:
         "qgis_render_preview": "qgis_render_preview.png",
     }
     artifact_media = {
+        "dem_route_bbox_raster": "image/tiff",
         "slope_raster": "image/tiff",
         "aspect_raster": "image/tiff",
+        "hillshade_raster": "image/tiff",
+        "elevation_tint_overlay": "image/png",
+        "hillshade_overlay": "image/png",
+        "slope_shading_overlay": "image/png",
+        "contour_lines_vector": "application/geo+json",
+        "contours_overlay": "image/png",
+        "terrain_surface_manifest": "application/json",
         "geomorphon_raster": "image/tiff",
         "geomorphon_fine_raster": "image/tiff",
         "geomorphon_coarse_raster": "image/tiff",
@@ -362,17 +509,39 @@ def _terrain_feature_worker_run(state: str) -> dict[str, Any]:
             "runtime_safety_truth": False,
             "operational": False,
             "visualization_only": artifact_type
-            in {"qgis_visual_context", "qgis_render_preview"},
+            in {
+                "elevation_tint_overlay",
+                "hillshade_overlay",
+                "slope_shading_overlay",
+                "contour_lines_vector",
+                "contours_overlay",
+                "terrain_surface_manifest",
+                "qgis_visual_context",
+                "qgis_render_preview",
+            },
             "adds_source_resolution": False,
         }
         if artifact_type == "qgis_render_preview":
             artifact.update({"width_px": 960, "height_px": 540})
+        elif artifact_type in {
+            "elevation_tint_overlay",
+            "hillshade_overlay",
+            "slope_shading_overlay",
+        }:
+            artifact.update({"width_px": 526, "height_px": 526})
+        elif artifact_type == "contours_overlay":
+            artifact.update({"width_px": 1052, "height_px": 1052})
         artifacts.append(artifact)
     payload["result"] = {
         **payload["result"],
         "artifacts": artifacts,
         "processing_algorithms": [
+            "gdal:cliprasterbyextent",
+            "gdal:colorrelief",
+            "gdal:rasterize",
+            "grass:r.contour",
             "grass:r.slope.aspect",
+            "grass:r.relief",
             "grass:r.geomorphon",
             "grass:r.mapcalc.simple",
             "grass:r.thin",
@@ -380,6 +549,28 @@ def _terrain_feature_worker_run(state: str) -> dict[str, Any]:
             "grass:r.watershed",
         ],
         "processing_parameters": {
+            "analysis_extent": {
+                "scope": "full_route_extent_rectangle",
+                "crs": "EPSG:3826",
+                "margin_m": 250.0,
+                "resolution_m": 20.0,
+                "width": 526,
+                "height": 526,
+                "cell_count": 276676,
+                "bbox_twd97": {
+                    "min_x": 259740.0,
+                    "min_y": 2639740.0,
+                    "max_x": 270260.0,
+                    "max_y": 2650260.0,
+                },
+                "bbox_wgs84": {
+                    "west": 121.09,
+                    "south": 23.86,
+                    "east": 121.20,
+                    "north": 23.96,
+                },
+                "qgis_extent": "259740,270260,2639740,2650260",
+            },
             "geomorphon_search_cells": {"fine": 5, "medium": 10, "coarse": 20},
             "watershed_threshold_cells": 50,
         },
@@ -415,6 +606,811 @@ class TerrainFeatureWorkerTransport(AsyncWorkerTransport):
         if artifact_type in _TERRAIN_FEATURE_BYTES:
             return _TERRAIN_FEATURE_BYTES[artifact_type]
         raise AssertionError(f"unexpected artifact: {url}")
+
+
+def _terrain_route_worker_evidence(
+    request_payload: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, bytes]]:
+    cache_keys = dict(request_payload["terrain_route_cache_keys"])
+    cache_key = cache_keys["route_hypothesis"]
+    coordinates = request_payload["route_geojson"]["features"][0]["geometry"][
+        "coordinates"
+    ]
+    parent_ref = next(
+        ref
+        for ref in request_payload["source_refs"]
+        if str(ref).endswith("terrain_feature_manifest.json")
+    )
+    bbox = {"west": 121.09, "south": 23.86, "east": 121.2, "north": 23.96}
+    relative_refs = {
+        "terrain_route_hypothesis": "terrain_route_hypothesis.json",
+        "terrain_route_best_path_vector": "terrain_route_best_path.geojson",
+        "terrain_route_slope_raster": "terrain_route_slope.tif",
+        "terrain_route_flow_accumulation_raster": "terrain_route_flow_accumulation.tif",
+        "terrain_route_drainage_pressure_raster": "terrain_route_drainage_pressure.tif",
+        "terrain_route_friction_raster": "terrain_route_friction.tif",
+        "terrain_route_walk_cost_raster": "terrain_route_walk_cost.tif",
+        "terrain_route_walk_direction_raster": "terrain_route_walk_direction.tif",
+        "terrain_route_cost_from_a_raster": "terrain_route_cost_from_a.tif",
+        "terrain_route_cost_from_b_raster": "terrain_route_cost_from_b.tif",
+        "terrain_route_cost_direction_a_raster": "terrain_route_cost_direction_a.tif",
+        "terrain_route_cost_direction_b_raster": "terrain_route_cost_direction_b.tif",
+        "terrain_route_corridor_raster": "terrain_route_corridor.tif",
+        "terrain_route_quantiles": "terrain_route_quantiles.json",
+        "terrain_route_processing_manifest": "terrain_route_processing_manifest.json",
+    }
+    bytes_by_key: dict[str, bytes] = {
+        key: f"real-{key}".encode("ascii")
+        for key in (
+            "terrain_route_slope_raster",
+            "terrain_route_flow_accumulation_raster",
+            "terrain_route_drainage_pressure_raster",
+            "terrain_route_friction_raster",
+            "terrain_route_walk_cost_raster",
+            "terrain_route_walk_direction_raster",
+            "terrain_route_cost_from_a_raster",
+            "terrain_route_cost_from_b_raster",
+            "terrain_route_cost_direction_a_raster",
+            "terrain_route_cost_direction_b_raster",
+            "terrain_route_corridor_raster",
+        )
+    }
+    bytes_by_key["terrain_route_quantiles"] = json.dumps(
+        {"5": 0.5, "10": 1.0, "20": 2.0}, separators=(",", ":")
+    ).encode("utf-8")
+    best_path = {
+        "type": "FeatureCollection",
+        "metadata": {
+            "schema_version": "scout_terrain_route_best_path.v0_2",
+            "workflow_id": TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_ID,
+            "crs": "EPSG:4326",
+            "authority": "candidate_only",
+            "source_type": "terrain_hypothesis",
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "operational": False,
+            "safe_or_walkable": "not_determined",
+        },
+        "features": [
+            {
+                "type": "Feature",
+                "geometry": {"type": "LineString", "coordinates": coordinates},
+                "properties": {
+                    "id": "qgis-worker-demo-run.terrain_route_hypothesis.R1",
+                    "kind": "terrain_route_hypothesis_best_path",
+                    "feature_class": "terrain_route_hypothesis_best_path",
+                    "label": "R1 minimum anisotropic model-cost trace",
+                    "path_model": "anisotropic_walk",
+                    "path_semantics": "minimum_anisotropic_model_cost_trace",
+                    "path_band_relationship": "separate_model_not_path_confidence_band",
+                    "authority": "candidate_only",
+                    "source_type": "terrain_hypothesis",
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                    "operational": False,
+                    "safe_or_walkable": "not_determined",
+                    "observed": False,
+                    "official": False,
+                    "human_verified": False,
+                    "not_verified_trail": True,
+                },
+            }
+        ],
+    }
+    bytes_by_key["terrain_route_best_path_vector"] = json.dumps(
+        best_path, separators=(",", ":")
+    ).encode("utf-8")
+    bands: list[dict[str, Any]] = []
+    band_keys: list[tuple[str, str, str]] = []
+    for percentile in (5, 10, 20):
+        mode = f"top_{percentile}_percent_corridor"
+        raster_key = f"terrain_route_corridor_band_raster_{percentile}"
+        overlay_key = f"terrain_route_corridor_overlay_{percentile}"
+        raster_ref = f"{mode}.tif"
+        overlay_ref = f"{mode}.png"
+        relative_refs[raster_key] = raster_ref
+        relative_refs[overlay_key] = overlay_ref
+        bytes_by_key[raster_key] = f"real-{raster_key}".encode("ascii")
+        bytes_by_key[overlay_key] = f"real-{overlay_key}".encode("ascii")
+        bands.append(
+            {
+                "name": mode,
+                "percentile": percentile,
+                "max_relative_corridor_cost": percentile / 10,
+                "cell_count": percentile * 100,
+                "contains_best_path": True,
+                "raster_ref": {
+                    "artifact_ref": raster_ref,
+                    "sha256": hashlib.sha256(bytes_by_key[raster_key]).hexdigest(),
+                    "media_type": "image/tiff",
+                    "crs": "EPSG:3826",
+                    "bbox_wgs84": bbox,
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                    "operational": False,
+                },
+                "overlay_ref": {
+                    "artifact_ref": overlay_ref,
+                    "sha256": hashlib.sha256(bytes_by_key[overlay_key]).hexdigest(),
+                    "media_type": "image/png",
+                    "crs": "EPSG:3826",
+                    "bbox_wgs84": bbox,
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                    "operational": False,
+                },
+            }
+        )
+        band_keys.append((raster_key, overlay_key, mode))
+    processing_manifest = {
+        "schema_version": "scout_terrain_route_processing_manifest.v0_2",
+        "workflow_id": TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_ID,
+        "parent_terrain_feature_manifest_ref": parent_ref,
+        "cache_keys": cache_keys,
+        "corridor_semantics": (
+            "finite_symmetric_macro_terrain_relative_cost_cell_percentile"
+        ),
+        "corridor_formula": "C_A(x,y)+C_B(x,y)-C_AB",
+        "corridor_cost_symmetric": True,
+        "best_path_cost_symmetric": False,
+        "path_model": {
+            "id": "anisotropic_walk",
+            "semantics": "minimum_anisotropic_model_cost_trace",
+            "recipe": "grass:r.walk.coords+grass:r.path",
+        },
+        "band_model": {
+            "id": "symmetric_macro_terrain_cost",
+            "semantics": "finite_symmetric_macro_terrain_relative_cost_cell_percentile",
+            "recipe": "symmetric_grass:r.cost",
+        },
+        "path_band_relationship": "separate_model_not_path_confidence_band",
+        "best_path_union_applied": False,
+        "path_orientation": "A_TO_B",
+        "search_complete": True,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "operational": False,
+        "safe_or_walkable": "not_determined",
+    }
+    bytes_by_key["terrain_route_processing_manifest"] = json.dumps(
+        processing_manifest, separators=(",", ":")
+    ).encode("utf-8")
+    cost_config = request_payload["terrain_routing_cost_config"]
+    corridor_raw = bytes_by_key["terrain_route_corridor_raster"]
+    hypothesis = {
+        "schema_version": "scout_terrain_route_hypothesis.v0_2",
+        "artifact_kind": "terrain_route_hypothesis_run",
+        "status": "completed",
+        "created_at": "2026-08-21T04:30:01Z",
+        "hypotheses": [
+            {
+                "id": "qgis-worker-demo-run.terrain_route_hypothesis.R1",
+                "label": "R1 terrain route hypothesis",
+                "start": {
+                    "x": coordinates[0][0],
+                    "y": coordinates[0][1],
+                    "crs": "EPSG:4326",
+                },
+                "destination": {
+                    "x": coordinates[-1][0],
+                    "y": coordinates[-1][1],
+                    "crs": "EPSG:4326",
+                },
+                "best_path": {
+                    "type": "LineString",
+                    "coordinates": coordinates,
+                    "crs": "EPSG:4326",
+                },
+                "path_model": "anisotropic_walk",
+                "path_semantics": "minimum_anisotropic_model_cost_trace",
+                "corridor": {
+                    "bands": bands,
+                    "raster_ref": {
+                        "artifact_ref": relative_refs["terrain_route_corridor_raster"],
+                        "sha256": hashlib.sha256(corridor_raw).hexdigest(),
+                        "media_type": "image/tiff",
+                        "crs": "EPSG:3826",
+                        "bbox_wgs84": bbox,
+                        "candidate_only": True,
+                        "runtime_safety_truth": False,
+                        "operational": False,
+                    },
+                },
+                "metrics": {
+                    "relative_score": 1.0,
+                    "relative_cost": 42.0,
+                    "distance_m": 1500.0,
+                    "elevation_gain_m": 210.0,
+                    "elevation_loss_m": 70.0,
+                    "max_slope_degrees": 34.0,
+                    "median_slope_degrees": 16.0,
+                    "high_cost_fraction": 0.08,
+                },
+                "reasons": [
+                    {
+                        "code": "moderate_slope",
+                        "polarity": "positive",
+                        "description": "Most sampled cells have moderate modeled slope cost.",
+                    },
+                    {
+                        "code": "short_high_slope_section",
+                        "polarity": "negative",
+                        "description": "A short section has high modeled slope cost.",
+                    },
+                ],
+                "unknowns": [
+                    {
+                        "code": "legal_access_unknown",
+                        "description": "Terrain evidence does not establish legal access.",
+                    },
+                    {
+                        "code": "recent_landslide_unknown",
+                        "description": "Recent landslide state is unknown.",
+                    },
+                ],
+                "dem_resolution_m": 20.0,
+                "resolution_class": "macro_terrain_only",
+                "confidence_limits": ["microterrain_not_resolved"],
+                "cost_model_version": cost_config["model_version"],
+                "provenance": {
+                    "dem_dataset_id": "qgis_worker_demo.dem_route_bbox",
+                    "dem_sha256": next(iter(request_payload["source_hashes"].values())),
+                    "dem_resolution_m": 20.0,
+                    "dem_crs": "EPSG:3826",
+                    "dem_extent": {
+                        "x_min": 259740.0,
+                        "y_min": 2639740.0,
+                        "x_max": 270260.0,
+                        "y_max": 2650260.0,
+                    },
+                    "input_endpoints": {
+                        "start": {"lon": coordinates[0][0], "lat": coordinates[0][1]},
+                        "destination": {"lon": coordinates[-1][0], "lat": coordinates[-1][1]},
+                    },
+                    "cost_model_version": cost_config["model_version"],
+                    "weights": {
+                        key: value
+                        for key, value in cost_config.items()
+                        if key.endswith("_weight")
+                    },
+                    "weights_hash": "e" * 64,
+                    "grass_version": "8.5.0",
+                    "qgis_version": "3.44.12",
+                    "backend_id": "qgis_processing_grass",
+                    "modules_executed": [
+                        "r.slope.aspect",
+                        "r.mapcalc",
+                        "r.walk",
+                        "r.path",
+                        "r.cost",
+                        "r.quantile",
+                    ],
+                    "timestamp": "2026-08-21T04:30:01Z",
+                    "algorithm_version": cost_config["algorithm_version"],
+                    "processing_manifest": {
+                        "parent_terrain_feature_manifest_ref": parent_ref
+                    },
+                    "cache_key": cache_key,
+                    "cache_keys": cache_keys,
+                },
+            }
+        ],
+    }
+    midpoint_lon = (float(coordinates[0][0]) + float(coordinates[-1][0])) / 2
+    midpoint_lat = (float(coordinates[0][1]) + float(coordinates[-1][1])) / 2
+    route_profiles = [
+        ("drainage_averse", 4.0, [midpoint_lon - 0.001, midpoint_lat + 0.001]),
+        ("balanced", 1.5, [midpoint_lon, midpoint_lat]),
+        ("terrain_only_baseline", 0.0, [midpoint_lon + 0.001, midpoint_lat - 0.001]),
+    ]
+    guidance_execution = request_payload.get(
+        "terrain_route_guidance_execution_plan"
+    )
+    if isinstance(guidance_execution, dict):
+        anchor = guidance_execution["anchors"][0]["point"]
+        route_profiles.append(
+            (
+                "historical_narrative_guided",
+                1.5,
+                [anchor["x"], anchor["y"]],
+            )
+        )
+    typed_hypotheses = []
+    path_features = []
+    for alternative_index, (strategy, multiplier, midpoint) in enumerate(
+        route_profiles,
+        start=1,
+    ):
+        candidate_id = f"R{alternative_index}"
+        profile_coordinates = [coordinates[0], midpoint, coordinates[-1]]
+        route = json.loads(json.dumps(hypothesis["hypotheses"][0]))
+        route.update(
+            {
+                "id": f"qgis-worker-demo-run.terrain_route_hypothesis.{candidate_id}",
+                "label": f"{candidate_id} {strategy} terrain hypothesis",
+                "alternative_index": alternative_index,
+                "strategy": strategy,
+                "drainage_penalty_multiplier": multiplier,
+            }
+        )
+        route["best_path"]["coordinates"] = profile_coordinates
+        if strategy == "historical_narrative_guided":
+            route["path_semantics"] = (
+                "ordered_anchor_piecewise_anisotropic_model_cost_trace"
+            )
+            route["provenance"]["optional_evidence_refs"] = [
+                f"terrain-guidance-review:{guidance_execution['guidance_id']}"
+            ]
+            route["provenance"]["optional_evidence_hashes"] = {
+                "terrain_guidance_review": guidance_execution[
+                    "guidance_review_sha256"
+                ]
+            }
+        if alternative_index > 1:
+            route["corridor"] = None
+        route["provenance"]["weights"]["drainage_penalty_multiplier"] = multiplier
+        route["provenance"]["processing_manifest"]["active_profile"] = {
+            "candidate_id": candidate_id,
+            "strategy": strategy,
+            "drainage_penalty_multiplier": multiplier,
+            "corridor_profile": alternative_index == 1,
+        }
+        typed_hypotheses.append(route)
+
+        feature = json.loads(json.dumps(best_path["features"][0]))
+        feature["geometry"]["coordinates"] = profile_coordinates
+        feature["properties"].update(
+            {
+                "id": route["id"],
+                "candidate_id": candidate_id,
+                "alternative_index": alternative_index,
+                "label": route["label"],
+                "strategy": strategy,
+                "drainage_penalty_multiplier": multiplier,
+                "relative_cost_comparison_scope": "within_profile_only",
+                "path_semantics": route.get(
+                    "path_semantics",
+                    "minimum_anisotropic_model_cost_trace",
+                ),
+            }
+        )
+        path_features.append(feature)
+    hypothesis["hypotheses"] = typed_hypotheses
+    best_path["features"] = path_features
+    best_path["metadata"].update(
+        {
+            "candidate_ids": [
+                f"R{index}" for index in range(1, len(route_profiles) + 1)
+            ],
+            "candidate_count": len(route_profiles),
+            "distinct_geometry_count": len(route_profiles),
+        }
+    )
+    bytes_by_key["terrain_route_best_path_vector"] = json.dumps(
+        best_path, separators=(",", ":")
+    ).encode("utf-8")
+    bytes_by_key["terrain_route_hypothesis"] = json.dumps(
+        hypothesis, separators=(",", ":")
+    ).encode("utf-8")
+    artifact_types = {
+        **{key: key for key in relative_refs},
+        **{
+            raster_key: "terrain_route_corridor_band_raster"
+            for raster_key, _, _ in band_keys
+        },
+        **{
+            overlay_key: "terrain_route_corridor_overlay"
+            for _, overlay_key, _ in band_keys
+        },
+    }
+    artifacts = []
+    for key, raw in bytes_by_key.items():
+        artifact_type = artifact_types[key]
+        media_type = (
+            "image/tiff"
+            if relative_refs[key].endswith(".tif")
+            else "image/png"
+            if relative_refs[key].endswith(".png")
+            else "application/geo+json"
+            if relative_refs[key].endswith(".geojson")
+            else "application/json"
+        )
+        artifact = {
+            "artifact_id": f"qgis-worker-demo-run.{key}",
+            "artifact_type": artifact_type,
+            "relative_ref": relative_refs[key],
+            "media_type": media_type,
+            "sha256": hashlib.sha256(raw).hexdigest(),
+            "byte_count": len(raw),
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "operational": False,
+            "visualization_only": media_type in {"image/png", "application/geo+json"},
+            "adds_source_resolution": False,
+        }
+        if media_type == "image/png":
+            artifact.update({"width_px": 526, "height_px": 526})
+        artifacts.append(artifact)
+    return (
+        {
+            "maplibre_geojson": best_path,
+            "artifacts": artifacts,
+            "qgis_version": "3.44.12",
+            "qgis_mcp_plugin_version": "0.4.9",
+            "crs": "EPSG:3826",
+            "source_resolution": request_payload["source_resolution"],
+            "output_resolution": {"width": 526, "height": 526},
+            "processing_algorithms": [
+                "grass:r.slope.aspect",
+                "grass:r.mapcalc.simple",
+                "grass:r.walk.coords",
+                "grass:r.path",
+                "grass:r.cost",
+                "grass:r.quantile",
+            ],
+            "processing_parameters": {"cache_keys": cache_keys},
+            "warnings": ["candidate terrain route execution evidence only"],
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "operational": False,
+            "adds_source_resolution": False,
+        },
+        {
+            f"qgis-worker-demo-run.{key}": raw
+            for key, raw in bytes_by_key.items()
+        },
+    )
+
+
+class TerrainRouteWorkerTransport(AsyncWorkerTransport):
+    def __init__(self) -> None:
+        super().__init__()
+        self.request_payload: dict[str, Any] | None = None
+        self.artifact_bytes: dict[str, bytes] = {}
+
+    def _run(self, state: str) -> dict[str, Any]:
+        request_payload = self.request_payload or {
+            "request_id": "request-worker-demo",
+        }
+        payload = _worker_run("completed" if state == "completed" else "queued")
+        payload.update(
+            {
+                "workflow_id": TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_ID,
+                "request_id": request_payload["request_id"],
+                "state": state,
+                "processing_status": "completed" if state == "completed" else state,
+                "render_status": "completed" if state == "completed" else "pending",
+            }
+        )
+        if state != "completed":
+            payload["result"] = None
+            return payload
+        result, self.artifact_bytes = _terrain_route_worker_evidence(request_payload)
+        payload["result"] = result
+        return payload
+
+    def get_json(self, url: str, *, timeout_s: float) -> Any:
+        self.get_calls.append(url)
+        if url.endswith("/status"):
+            return {
+                "availability": "available",
+                "mcp_reachable": True,
+                "qgis_application_available": True,
+                "plugin_bridge_available": True,
+                "capabilities_discoverable": True,
+                "qgis_version": "3.44.12",
+                "qgis_mcp_plugin_version": "0.4.9",
+            }
+        if url.endswith("/workflows/qgis-worker-demo-run/request"):
+            if self.request_payload is None:
+                raise AssertionError("terrain route request was not submitted")
+            return self.request_payload
+        if url.endswith("/workflows/qgis-worker-demo-run"):
+            return self._run("completed")
+        raise AssertionError(f"unexpected GET: {url}")
+
+    def post_json(self, url: str, payload: dict[str, Any], *, timeout_s: float) -> Any:
+        self.post_calls.append((url, payload))
+        self.request_payload = payload
+        return self._run("queued")
+
+    def get_bytes(self, url: str, *, timeout_s: float, max_bytes: int) -> bytes:
+        self.byte_calls.append(url)
+        artifact_id = url.rsplit("/", 1)[-1]
+        if artifact_id in self.artifact_bytes:
+            return self.artifact_bytes[artifact_id]
+        raise AssertionError(f"unexpected terrain route artifact: {url}")
+
+
+@pytest.fixture
+def prepared_ab_workspace(tmp_path: Path):
+    root, project, full_dem = _workspace(tmp_path)
+    config = QgisSpatialBackendConfig(
+        enabled=True, worker_url="http://127.0.0.1:9876",
+        worker_token=_test_access_value(),
+    )
+    feature_backend = QgisSpatialBackend(
+        config=config, transport=TerrainFeatureWorkerTransport(), now_factory=_fixed_now,
+    )
+    queued = feature_backend.start_workflow(
+        project_id=project["project_id"], project_root=root, project=project,
+        request=SpatialAnalysisRequest(
+            project_id=project["project_id"], workflow_id=TERRAIN_FEATURE_STACK_WORKFLOW_ID,
+            request_id="request-worker-demo",
+        ),
+    )
+    prepared = feature_backend.get_run(
+        project_root=root, workflow_run_id=queued.workflow_run_id,
+    )
+    assert prepared.state is SpatialWorkflowState.COMPLETED, prepared.error
+    project = json.loads((root / "project.json").read_text())
+    parent_path = root / project["terrain_feature_manifest_ref"]
+    parent = json.loads(parent_path.read_text())
+    summary_ref = "normalized/terrain/dtm_coverage_summary.json"
+    raster_ref = f"{summary_ref}#raster_sources/0/operator_supplied_full_extent_dem_raster"
+    parent["source_hashes"] = {
+        summary_ref: hashlib.sha256((root / summary_ref).read_bytes()).hexdigest(),
+        raster_ref: hashlib.sha256(full_dem.read_bytes()).hexdigest(),
+    }
+    parent["source_refs"] = list(parent["source_hashes"])
+    parent_path.write_text(json.dumps(parent))
+    transport = TerrainRouteWorkerTransport()
+    backend = QgisSpatialBackend(config=config, transport=transport, now_factory=_fixed_now)
+    request = SpatialAnalysisRequest(
+        project_id=project["project_id"], workflow_id=TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_ID,
+        corridor_m=1000,
+        terrain_route_endpoints=TerrainRouteEndpointSelection(
+            start={"x": 121.27166904, "y": 23.33401754, "crs": "EPSG:4326"},
+            destination={"x": 121.23066591, "y": 23.35160555, "crs": "EPSG:4326"},
+            selection_source="dashboard_map_selection",
+        ),
+    )
+    return root, project, full_dem, backend, transport, request
+
+
+def test_qgis_backend_recovers_missing_wrapper_from_authenticated_worker(
+    prepared_ab_workspace,
+) -> None:
+    root, project, _, backend, _, request = prepared_ab_workspace
+    queued = backend.start_workflow(
+        project_id=project["project_id"],
+        project_root=root,
+        project=project,
+        request=request,
+    )
+    wrapper = (
+        root
+        / "outputs"
+        / "spatial"
+        / "qgis"
+        / queued.workflow_run_id
+        / "workflow_run.json"
+    )
+    wrapper.unlink()
+
+    completed = backend.get_run(
+        project_id=project["project_id"],
+        project_root=root,
+        workflow_run_id=queued.workflow_run_id,
+    )
+
+    assert completed.state is SpatialWorkflowState.COMPLETED
+    assert wrapper.is_file()
+    assert completed.candidate_only is True
+    assert completed.runtime_safety_truth is False
+    assert completed.operational is False
+    assert any(
+        item.get("event") == "worker_workflow_wrapper_recovered"
+        for item in completed.audit_trail
+    )
+    assert any(
+        "workspace workflow wrapper was unavailable" in warning
+        for warning in completed.warnings
+    )
+
+
+def test_qgis_backend_rejects_orphan_recovery_when_request_identity_changes(
+    prepared_ab_workspace,
+) -> None:
+    root, project, _, backend, transport, request = prepared_ab_workspace
+    queued = backend.start_workflow(
+        project_id=project["project_id"],
+        project_root=root,
+        project=project,
+        request=request,
+    )
+    wrapper = (
+        root
+        / "outputs"
+        / "spatial"
+        / "qgis"
+        / queued.workflow_run_id
+        / "workflow_run.json"
+    )
+    wrapper.unlink()
+    assert transport.request_payload is not None
+    transport.request_payload = {
+        **transport.request_payload,
+        "project_id": "different_project",
+    }
+
+    with pytest.raises(QgisSpatialBackendError, match="identity did not match"):
+        backend.get_run(
+            project_id=project["project_id"],
+            project_root=root,
+            workflow_run_id=queued.workflow_run_id,
+        )
+
+    assert not wrapper.exists()
+
+
+def test_arbitrary_ab_uses_parent_bound_full_dem_not_previous_gpx_crop(prepared_ab_workspace):
+    root, project, full_dem, backend, transport, request = prepared_ab_workspace
+    queued = backend.start_workflow(
+        project_id=project["project_id"], project_root=root, project=project, request=request,
+    )
+    assert queued.state is SpatialWorkflowState.QUEUED, queued.error
+    submitted = transport.post_calls[0][1]
+    assert submitted["dem_refs"] == [str(full_dem)]
+    assert submitted["corridor_m"] == 1000
+    assert submitted["source_resolution"]["source_kind"] == "parent_bound_full_extent_raster"
+    assert submitted["source_resolution"]["x_m"] == 20
+    assert submitted["source_resolution"]["parent_terrain_feature_manifest_ref"] == project["terrain_feature_manifest_ref"]
+    parent_dem_ref = project["terrain_dem_route_bbox_raster_ref"]
+    parent_dem_sha = hashlib.sha256((root / parent_dem_ref).read_bytes()).hexdigest()
+    assert submitted["source_hashes"][parent_dem_ref] == parent_dem_sha
+    assert submitted["source_resolution"]["parent_dem_sha256"] == parent_dem_sha
+    identity = build_terrain_route_resolution_identity(submitted["source_resolution"])
+    assert identity["parent_dem_sha256"] == parent_dem_sha
+    assert "parent_terrain_feature_manifest_ref" not in identity
+    assert identity != build_terrain_route_resolution_identity({
+        **submitted["source_resolution"], "parent_dem_sha256": "0" * 64,
+    })
+    assert submitted["candidate_only"] is True
+    assert submitted["runtime_safety_truth"] is False
+    assert hashlib.sha256(full_dem.read_bytes()).hexdigest() in submitted["source_hashes"].values()
+
+
+def _prepare_workspace_buffer(prepared_ab_workspace):
+    from test_workspace_terrain_dem import FakeGdal
+
+    root, project, _, backend, _, _ = prepared_ab_workspace
+    ref = "normalized/terrain/dtm_coverage_summary.json"
+    coverage = json.loads((root / ref).read_text())
+    coverage["route_bbox_twd97"] = {"min_x": 242479.596, "min_y": 2581030.537,
+                                    "max_x": 277868.065, "max_y": 2606119.118}
+    (root / ref).write_text(json.dumps(coverage))
+    parent_path = root / project["terrain_feature_manifest_ref"]
+    parent = json.loads(parent_path.read_text())
+    parent["source_hashes"][ref] = hashlib.sha256((root / ref).read_bytes()).hexdigest()
+    parent_path.write_text(json.dumps(parent))
+    before = json.loads((root / "project.json").read_text())
+    result = backend.prepare_workspace_terrain_dem(project_root=root, adapter=FakeGdal())
+    assert result["status"] == "completed", result
+    after = json.loads((root / "project.json").read_text())
+    assert all(after[key] == value for key, value in before.items())
+    return after
+
+
+def test_arbitrary_ab_prefers_workspace_dem_without_original_material(prepared_ab_workspace):
+    root, _, full_dem, backend, transport, request = prepared_ab_workspace
+    project = _prepare_workspace_buffer(prepared_ab_workspace)
+    full_dem.unlink()
+    queued = backend.start_workflow(
+        project_id=project["project_id"], project_root=root, project=project, request=request,
+    )
+    assert queued.state is SpatialWorkflowState.QUEUED, queued.error
+    payload = transport.post_calls[0][1]
+    assert payload["dem_refs"] == [str(root / project["terrain_workspace_dem_raster_ref"])]
+    assert payload["source_resolution"]["source_kind"] == "workspace_prepared_dem"
+    assert payload["source_resolution"]["parent_dem_sha256"] in payload["source_hashes"].values()
+    assert payload["corridor_m"] == 1000
+    assert payload["candidate_only"] is True
+    assert payload["runtime_safety_truth"] is False
+
+
+@pytest.mark.parametrize("damage", ["raster", "manifest", "coverage", "parent", "outside"])
+def test_workspace_dem_never_falls_back_on_invalid_preparation(prepared_ab_workspace, damage):
+    root, _, _, backend, transport, request = prepared_ab_workspace
+    project = _prepare_workspace_buffer(prepared_ab_workspace)
+    if damage == "outside":
+        request = request.model_copy(update={"terrain_route_endpoints": TerrainRouteEndpointSelection(
+            start={"x": 121.8, "y": 24.0, "crs": "EPSG:4326"},
+            destination={"x": 121.7, "y": 24.01, "crs": "EPSG:4326"},
+            selection_source="dashboard_map_selection",
+        )})
+    else:
+        ref = {"raster": project["terrain_workspace_dem_raster_ref"],
+               "manifest": project["terrain_workspace_dem_manifest_ref"],
+               "coverage": "normalized/terrain/dtm_coverage_summary.json",
+               "parent": project["terrain_feature_manifest_ref"]}[damage]
+        (root / ref).write_bytes((root / ref).read_bytes() + b" ")
+    result = backend.start_workflow(
+        project_id=project["project_id"], project_root=root, project=project, request=request,
+    )
+    assert result.state is SpatialWorkflowState.FAILED
+    assert result.error.code is SpatialAnalysisErrorCode.SOURCE_UNAVAILABLE
+    assert not transport.post_calls
+
+
+def test_layer_preparation_materializes_workspace_dem_after_terrain_parent(tmp_path):
+    calls = []
+
+    class Backend:
+        def prepare_workspace_terrain_dem(self, *, project_root):
+            calls.append(project_root)
+            return {"status": "completed", "output_refs": {"terrain_workspace_dem_manifest_ref": "dem/manifest.json"}}
+
+    result = pretrip_layer_preparation._prepare_workspace_terrain_dem_after_terrain(
+        project_root=tmp_path, terrain_result={"status": "completed"}, backend=Backend(),
+    )
+    assert result["status"] == "completed"
+    assert calls == [tmp_path]
+    skipped = pretrip_layer_preparation._prepare_workspace_terrain_dem_after_terrain(
+        project_root=tmp_path, terrain_result={"status": "failed"}, backend=Backend(),
+    )
+    assert skipped["status"] == "not_run"
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("damage", ["missing", "changed_bytes", "changed_declaration", "parent_hash", "resolution"])
+def test_arbitrary_ab_rejects_unbound_full_dem_without_falling_back(prepared_ab_workspace, damage):
+    root, project, full_dem, backend, transport, request = prepared_ab_workspace
+    if damage == "missing":
+        full_dem.unlink()
+    elif damage == "changed_bytes":
+        full_dem.write_bytes(b"different-dem")
+    elif damage == "changed_declaration":
+        path = root / "normalized/terrain/dtm_coverage_summary.json"
+        payload = json.loads(path.read_text())
+        payload["raster_sources"][0]["source_resolution_m"] = 5
+        path.write_text(json.dumps(payload))
+    else:
+        path = root / project["terrain_feature_manifest_ref"]
+        payload = json.loads(path.read_text())
+        if damage == "parent_hash":
+            ref = next(ref for ref in payload["source_hashes"] if "#raster_sources/" in ref)
+            payload["source_hashes"][ref] = "0" * 64
+        else:
+            payload["source_resolution"]["x_m"] = 5
+            payload["source_resolution"]["y_m"] = 5
+            payload["parameters"]["analysis_extent"]["resolution_m"] = 5
+        path.write_text(json.dumps(payload))
+    run = backend.start_workflow(
+        project_id=project["project_id"], project_root=root, project=project, request=request,
+    )
+    assert run.state is SpatialWorkflowState.FAILED
+    assert run.error.code is SpatialAnalysisErrorCode.SOURCE_UNAVAILABLE
+    assert not transport.post_calls
+
+
+def test_new_ab_attempt_keeps_published_candidate_when_worker_fails(prepared_ab_workspace, monkeypatch):
+    root, project, _, backend, transport, request = prepared_ab_workspace
+    queued = backend.start_workflow(
+        project_id=project["project_id"], project_root=root, project=project, request=request,
+    )
+    completed = backend.get_run(project_root=root, workflow_run_id=queued.workflow_run_id)
+    assert completed.state is SpatialWorkflowState.COMPLETED, completed.error
+    published = json.loads((root / "project.json").read_text())
+    changed = request.model_copy(update={"corridor_m": 1200})
+    queued = backend.start_workflow(
+        project_id=project["project_id"], project_root=root, project=published, request=changed,
+    )
+    assert queued.state is SpatialWorkflowState.QUEUED, queued.error
+    pending = json.loads((root / "project.json").read_text())
+    assert pending["terrain_route_hypothesis_ref"] == published["terrain_route_hypothesis_ref"]
+    worker_failed = transport._run("failed")
+    worker_failed["error"] = {
+        "code": "NODATA_PRESENT", "message": "The DEM contains NoData cells.",
+    }
+    monkeypatch.setattr(transport, "get_json", lambda *args, **kwargs: worker_failed)
+    failed = backend.get_run(project_root=root, workflow_run_id=queued.workflow_run_id)
+    assert failed.state is SpatialWorkflowState.FAILED
+    assert failed.error.code is SpatialAnalysisErrorCode.NODATA_PRESENT
+    after = json.loads((root / "project.json").read_text())
+    for key in published:
+        if key.startswith("terrain_route_hypothesis_"):
+            assert after.get(key) == published[key]
 
 
 def test_qgis_backend_requires_worker_token_before_network_call() -> None:
@@ -459,6 +1455,8 @@ def test_qgis_backend_worker_flow_is_queued_polled_and_normalized(tmp_path: Path
     submitted = transport.post_calls[0][1]
     assert submitted["dem_refs"] == [str(dem)]
     assert submitted["source_resolution"]["x_m"] == 20.0
+    assert submitted["source_resolution"]["crs"] == "EPSG:3826"
+    assert submitted["source_resolution"]["source_kind"] == "declared_full_extent_raster"
     assert submitted["candidate_only"] is True
     assert submitted["runtime_safety_truth"] is False
 
@@ -485,6 +1483,62 @@ def test_qgis_backend_worker_flow_is_queued_polled_and_normalized(tmp_path: Path
         assert artifact.candidate_only is True
         assert artifact.runtime_safety_truth is False
         assert artifact.operational is False
+
+
+def test_qgis_backend_preserves_typed_artifact_normalization_detail(tmp_path: Path) -> None:
+    class CorruptArtifactTransport(AsyncWorkerTransport):
+        def get_bytes(self, url: str, *, timeout_s: float, max_bytes: int) -> bytes:
+            if url.endswith("qgis-worker-demo-run.slope"):
+                return b"corrupt"
+            return super().get_bytes(url, timeout_s=timeout_s, max_bytes=max_bytes)
+
+    project_root, project, _ = _workspace(tmp_path)
+    backend = QgisSpatialBackend(
+        config=QgisSpatialBackendConfig(
+            enabled=True,
+            worker_url="http://127.0.0.1:9876",
+            worker_token=_test_access_value(),
+        ),
+        transport=CorruptArtifactTransport(),
+        now_factory=_fixed_now,
+    )
+    queued = backend.start_workflow(
+        project_id="qgis_worker_demo",
+        project_root=project_root,
+        project=project,
+        request=SpatialAnalysisRequest(
+            project_id="qgis_worker_demo",
+            request_id="request-worker-demo",
+        ),
+    )
+    failed = backend.get_run(
+        project_root=project_root,
+        workflow_run_id=queued.workflow_run_id,
+    )
+
+    assert failed.state is SpatialWorkflowState.FAILED
+    assert failed.error is not None
+    assert failed.error.code.value == "ARTIFACT_EXPORT_FAILED"
+    assert failed.error.detail == "QGIS slope artifact hash mismatch"
+
+
+def test_public_worker_error_explains_route_cache_contract_recovery() -> None:
+    error = SpatialAnalysisError(
+        code=SpatialAnalysisErrorCode.INVALID_INPUT,
+        message="Terrain route cache keys do not match the submitted inputs.",
+        detail="internal hashes must not be exposed",
+    )
+
+    public = _public_worker_error(error)
+
+    assert public is not None
+    assert public.code is SpatialAnalysisErrorCode.INVALID_INPUT
+    assert public.detail is None
+    assert public.retryable is False
+    assert public.message == (
+        "Terrain route cache contract does not match the active QGIS worker. "
+        "Restart the QGIS worker and resubmit the same A/B inputs."
+    )
 
 
 def test_qgis_backend_grass_feature_stack_is_hashed_and_normalized(
@@ -528,8 +1582,16 @@ def test_qgis_backend_grass_feature_stack_is_hashed_and_normalized(
     assert len(transport.byte_calls) == len(_TERRAIN_FEATURE_BYTES)
     assert {artifact.artifact_type for artifact in completed.artifacts} == {
         "route_geometry",
+        "dem_route_bbox_raster",
         "slope_raster",
         "aspect_raster",
+        "hillshade_raster",
+        "elevation_tint_overlay",
+        "hillshade_overlay",
+        "slope_shading_overlay",
+        "contour_lines_vector",
+        "contours_overlay",
+        "terrain_surface_manifest",
         "geomorphon_raster",
         "geomorphon_fine_raster",
         "geomorphon_coarse_raster",
@@ -543,6 +1605,7 @@ def test_qgis_backend_grass_feature_stack_is_hashed_and_normalized(
         "terrain_feature_route_samples",
         "terrain_feature_manifest",
         "qgis_visual_context",
+        "maplibre_terrain_visualization",
         "workflow_metadata",
     }
     assert completed.render_artifacts[0].artifact_type == "qgis_render_preview"
@@ -557,6 +1620,985 @@ def test_qgis_backend_grass_feature_stack_is_hashed_and_normalized(
         for artifact in [*completed.artifacts, *completed.render_artifacts]
         if artifact.artifact_ref
     )
+    persisted_project = json.loads(
+        (project_root / "project.json").read_text(encoding="utf-8")
+    )
+    visualization_ref = persisted_project["terrain_visualization_ref"]
+    assert visualization_ref == (
+        f"outputs/spatial/qgis/{queued.workflow_run_id}/terrain_visualization.geojson"
+    )
+    assert persisted_project["terrain_visualization_processor"] == (
+        "qgis_processing_grass"
+    )
+    assert persisted_project["terrain_visualization_workflow_run_id"] == (
+        queued.workflow_run_id
+    )
+    visualization = json.loads(
+        (project_root / visualization_ref).read_text(encoding="utf-8")
+    )
+    assert visualization["status"] == "ready_from_qgis_grass_route_extent_rectangle"
+    assert visualization["visualization_spec"]["actual_processor"] == (
+        "qgis_processing_grass"
+    )
+    assert visualization["visualization_spec"]["fallback_used"] is False
+    assert visualization["visualization_spec"]["python_dtm_processing_used"] is False
+    assert visualization["visualization_spec"]["coverage_scope"] == (
+        "full_route_extent_rectangle"
+    )
+    assert [item["mode"] for item in visualization["raster_overlays"]] == [
+        "elevation_tint",
+        "hillshade",
+        "slope_shading",
+        "contours",
+    ]
+    assert all(
+        item["alpha_channel"] is True
+        and item["compositing"] == "source-over"
+        for item in visualization["raster_overlays"]
+    )
+    assert {
+        item["mode"]: item["opacity"]
+        for item in visualization["raster_overlays"]
+    } == {
+        "elevation_tint": 0.62,
+        "hillshade": 0.26,
+        "slope_shading": 0.5,
+        "contours": 0.72,
+    }
+    assert all(
+        item["bbox_wgs84"]
+        == {
+            "west": 121.09,
+            "south": 23.86,
+            "east": 121.2,
+            "north": 23.96,
+        }
+        for item in visualization["raster_overlays"]
+    )
+    assert visualization["boundary"] == {
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "operational": False,
+        "visualization_only": True,
+        "adds_source_resolution": False,
+    }
+
+
+def test_qgis_backend_submits_only_reviewed_guidance_points_to_worker(
+    tmp_path: Path,
+) -> None:
+    project_root, project, _ = _workspace(tmp_path)
+    feature_backend = QgisSpatialBackend(
+        config=QgisSpatialBackendConfig(
+            enabled=True,
+            worker_url="http://127.0.0.1:9876",
+            worker_token=_test_access_value(),
+        ),
+        transport=TerrainFeatureWorkerTransport(),
+        now_factory=_fixed_now,
+    )
+    feature_queued = feature_backend.start_workflow(
+        project_id="qgis_worker_demo",
+        project_root=project_root,
+        project=project,
+        request=SpatialAnalysisRequest(
+            project_id="qgis_worker_demo",
+            workflow_id=TERRAIN_FEATURE_STACK_WORKFLOW_ID,
+            request_id="request-worker-demo",
+        ),
+    )
+    feature_completed = feature_backend.get_run(
+        project_root=project_root,
+        workflow_run_id=feature_queued.workflow_run_id,
+    )
+    assert feature_completed.state is SpatialWorkflowState.COMPLETED
+
+    guidance_service = TerrainRouteGuidanceWorkspaceService(now_factory=_fixed_now)
+    narrative = (
+        "於1148鞍沿著稜線走至其開始轉為上坡後，往西邊的坡切，"
+        "沿遇到的第一個溝東側的稜線續行，在寬闊的稜線上抓方向往北走。"
+        "H820m轉稜，下至溪底，過溪。沿著小溪溝上大概15m之後，"
+        "往西腰繞，沿著獵徑之字繞上稜，抵達異祿閣稜線。"
+    )
+    interpreted = guidance_service.interpret(
+        project_root,
+        project_id="qgis_worker_demo",
+        request=TerrainGuidanceInterpretRequest(
+            narrative=narrative,
+            source_id="iroko-d3",
+        ),
+    )
+    plan = interpreted["guidance_plan"]
+    required = [item for item in plan["constraints"] if item["required_anchor"]]
+    resolved = guidance_service.resolve(
+        project_root,
+        project_id="qgis_worker_demo",
+        request=TerrainGuidanceResolveRequest(
+            guidance_id=plan["guidance_id"],
+            route_start=GeoPoint(x=121.21, y=24.05, crs="EPSG:4326"),
+            route_destination=GeoPoint(x=121.22, y=24.04, crs="EPSG:4326"),
+            search_margin_m=1000,
+            manual_anchors=[
+                TerrainGuidanceManualAnchorRequest(
+                    constraint_id=item["constraint_id"],
+                    point=GeoPoint(
+                        x=121.212 + index * 0.001,
+                        y=24.048 - index * 0.001,
+                        crs="EPSG:4326",
+                    ),
+                )
+                for index, item in enumerate(required)
+            ],
+        ),
+    )
+    selected = {
+        item["supported_constraint_ids"][0]: item["feature_id"]
+        for item in resolved["feature_index"]["features"]
+        if item["selection_source"] == "human_map_annotation"
+    }
+    disabled = [
+        item["constraint_id"]
+        for item in resolved["resolution"]["constraints"]
+        if item["constraint_id"] not in selected
+        and item["status"] in {"unresolved", "multiple_candidates"}
+    ]
+    reviewed = guidance_service.review(
+        project_root,
+        project_id="qgis_worker_demo",
+        request=TerrainGuidanceReviewRequest(
+            guidance_id=plan["guidance_id"],
+            selected_feature_ids=selected,
+            disabled_constraint_ids=disabled,
+            reviewed_by="trip_leader",
+        ),
+    )
+    assert reviewed["guided_execution_ready"] is True
+
+    route_transport = TerrainRouteWorkerTransport()
+    route_backend = QgisSpatialBackend(
+        config=QgisSpatialBackendConfig(
+            enabled=True,
+            worker_url="http://127.0.0.1:9876",
+            worker_token=_test_access_value(),
+        ),
+        transport=route_transport,
+        now_factory=_fixed_now,
+    )
+    active_project = json.loads((project_root / "project.json").read_text())
+    queued = route_backend.start_workflow(
+        project_id="qgis_worker_demo",
+        project_root=project_root,
+        project=active_project,
+        request=SpatialAnalysisRequest(
+            project_id="qgis_worker_demo",
+            workflow_id=TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_ID,
+            request_id="request-guided-terrain-route",
+            terrain_route_endpoints=TerrainRouteEndpointSelection(
+                start=GeoPoint(x=121.21, y=24.05, crs="EPSG:4326"),
+                destination=GeoPoint(x=121.22, y=24.04, crs="EPSG:4326"),
+            ),
+            terrain_route_guidance={
+                "guidance_id": plan["guidance_id"],
+                "guided_hypothesis_id": "R4",
+                "review_sha256": reviewed["review_sha256"],
+            },
+        ),
+    )
+
+    assert queued.state is SpatialWorkflowState.QUEUED, queued.error
+    submitted = route_transport.post_calls[0][1]
+    execution = submitted["terrain_route_guidance_execution_plan"]
+    assert execution["guided_hypothesis_id"] == "R4"
+    assert execution["guidance_review_sha256"] == reviewed["review_sha256"]
+    coordinates = submitted["route_geojson"]["features"][0]["geometry"][
+        "coordinates"
+    ]
+    assert coordinates[0] == [121.21, 24.05]
+    assert coordinates[-1] == [121.22, 24.04]
+    assert coordinates[1:-1] == [
+        [item["point"]["x"], item["point"]["y"]]
+        for item in execution["anchors"]
+    ]
+    assert submitted["candidate_only"] is True
+    assert submitted["runtime_safety_truth"] is False
+    assert submitted["operational"] is False
+
+    completed = route_backend.get_run(
+        project_root=project_root,
+        workflow_run_id=queued.workflow_run_id,
+    )
+    assert completed.state is SpatialWorkflowState.COMPLETED, completed.error
+    persisted = json.loads((project_root / "project.json").read_text())
+    hypothesis_run = json.loads(
+        (project_root / persisted["terrain_route_hypothesis_ref"]).read_text()
+    )
+    assert [item["strategy"] for item in hypothesis_run["hypotheses"]] == [
+        "drainage_averse",
+        "balanced",
+        "terrain_only_baseline",
+        "historical_narrative_guided",
+    ]
+    assert hypothesis_run["hypotheses"][3]["path_semantics"] == (
+        "ordered_anchor_piecewise_anisotropic_model_cost_trace"
+    )
+    navigation = inspect_navigation_terrain_projection(
+        project_root,
+        persisted,
+        project_id="qgis_worker_demo",
+    )
+    assert "alternatives" in navigation.payload["terrain_route_hypothesis"], (
+        navigation.payload
+    )
+    alternatives = navigation.payload["terrain_route_hypothesis"]["alternatives"]
+    assert len(alternatives) == 4
+    assert alternatives[3]["strategy"] == "historical_narrative_guided"
+
+
+def test_qgis_backend_materializes_and_reuses_candidate_terrain_route_cache(
+    tmp_path: Path,
+) -> None:
+    project_root, project, _ = _workspace(tmp_path)
+    feature_backend = QgisSpatialBackend(
+        config=QgisSpatialBackendConfig(
+            enabled=True,
+            worker_url="http://127.0.0.1:9876",
+            worker_token=_test_access_value(),
+        ),
+        transport=TerrainFeatureWorkerTransport(),
+        now_factory=_fixed_now,
+    )
+    feature_queued = feature_backend.start_workflow(
+        project_id="qgis_worker_demo",
+        project_root=project_root,
+        project=project,
+        request=SpatialAnalysisRequest(
+            project_id="qgis_worker_demo",
+            workflow_id=TERRAIN_FEATURE_STACK_WORKFLOW_ID,
+            request_id="request-worker-demo",
+        ),
+    )
+    feature_completed = feature_backend.get_run(
+        project_root=project_root,
+        workflow_run_id=feature_queued.workflow_run_id,
+    )
+    assert feature_completed.state is SpatialWorkflowState.COMPLETED
+
+    route_transport = TerrainRouteWorkerTransport()
+    route_backend = QgisSpatialBackend(
+        config=QgisSpatialBackendConfig(
+            enabled=True,
+            worker_url="http://127.0.0.1:9876",
+            worker_token=_test_access_value(),
+        ),
+        transport=route_transport,
+        now_factory=_fixed_now,
+    )
+    active_project = json.loads(
+        (project_root / "project.json").read_text(encoding="utf-8")
+    )
+    queued = route_backend.start_workflow(
+        project_id="qgis_worker_demo",
+        project_root=project_root,
+        project=active_project,
+        request=SpatialAnalysisRequest(
+            project_id="qgis_worker_demo",
+            workflow_id=TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_ID,
+            request_id="request-terrain-route",
+        ),
+    )
+
+    assert queued.state is SpatialWorkflowState.QUEUED, queued.error
+    submitted = route_transport.post_calls[0][1]
+    assert submitted["workflow_id"] == TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_ID
+    assert len(
+        submitted["route_geojson"]["features"][0]["geometry"]["coordinates"]
+    ) == 2
+    assert submitted["candidate_only"] is True
+    assert submitted["runtime_safety_truth"] is False
+    assert submitted["operational"] is False
+    assert submitted["source_resolution"] == {
+        "status": "reported",
+        "source_kind": "active_terrain_feature_dem",
+        "x_m": 20.0,
+        "y_m": 20.0,
+        "crs": "EPSG:3826",
+        "crs_evidence": "Metadata.xml",
+        "adds_source_resolution": False,
+        "parent_terrain_feature_manifest_ref": (
+            active_project["terrain_feature_manifest_ref"]
+        ),
+    }
+    assert set(submitted["terrain_route_cache_keys"]) == {
+        "schema_version",
+        "derived_terrain",
+        "friction",
+        "cost_raster",
+        "route_hypothesis",
+    }
+
+    completed = route_backend.get_run(
+        project_root=project_root,
+        workflow_run_id=queued.workflow_run_id,
+    )
+
+    assert completed.state is SpatialWorkflowState.COMPLETED, completed.error
+    assert completed.workflow_id == TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_ID
+    assert completed.candidate_only is True
+    assert completed.runtime_safety_truth is False
+    assert completed.operational is False
+    assert len(route_transport.byte_calls) == 21
+    persisted = json.loads(
+        (project_root / "project.json").read_text(encoding="utf-8")
+    )
+    cache_key = submitted["terrain_route_cache_keys"]["route_hypothesis"]
+    assert persisted["terrain_route_hypothesis_cache_key"] == cache_key
+    assert persisted["terrain_route_hypothesis_authority"] == "candidate_only"
+    assert persisted["terrain_route_hypothesis_candidate_only"] is True
+    assert persisted["terrain_route_hypothesis_runtime_safety_truth"] is False
+    assert persisted["terrain_route_hypothesis_ref"].startswith(
+        f"outputs/spatial/qgis/terrain-route-cache/{cache_key}/"
+    )
+    for ref_key in (
+        "terrain_route_hypothesis_ref",
+        "terrain_route_hypothesis_visualization_ref",
+        "terrain_route_hypothesis_best_path_ref",
+        "terrain_route_hypothesis_processing_manifest_ref",
+    ):
+        assert (project_root / persisted[ref_key]).is_file()
+    normalized = json.loads(
+        (project_root / persisted["terrain_route_hypothesis_ref"]).read_text(
+            encoding="utf-8"
+        )
+    )
+    assert len(normalized["hypotheses"]) == 3
+    assert [item["strategy"] for item in normalized["hypotheses"]] == [
+        "drainage_averse",
+        "balanced",
+        "terrain_only_baseline",
+    ]
+    hypothesis = normalized["hypotheses"][0]
+    assert hypothesis["authority"] == "candidate_only"
+    assert hypothesis["source_type"] == "terrain_hypothesis"
+    assert hypothesis["runtime_safety_truth"] is False
+    navigation_project = json.loads(
+        (project_root / "project.json").read_text(encoding="utf-8")
+    )
+    navigation = inspect_navigation_terrain_projection(
+        project_root,
+        navigation_project,
+        project_id="qgis_worker_demo",
+    )
+    assert navigation.payload["projection_state"] == "ready"
+    assert navigation.payload["terrain_route_hypothesis"]["status"] == (
+        "candidate_ready"
+    )
+    assert len(
+        navigation.payload["terrain_route_hypothesis"]["alternatives"]
+    ) == 3
+    route_boundary = navigation.payload["terrain_route_hypothesis"]["boundary"]
+    assert route_boundary["candidate_only"] is True
+    assert route_boundary["runtime_safety_truth"] is False
+    assert all(
+        band["overlay_ref"]["artifact_ref"].startswith(
+            f"outputs/spatial/qgis/terrain-route-cache/{cache_key}/"
+        )
+        for band in hypothesis["corridor"]["bands"]
+    )
+    visualization = json.loads(
+        (
+            project_root / persisted["terrain_route_hypothesis_visualization_ref"]
+        ).read_text(encoding="utf-8")
+    )
+    assert visualization["display_labels"] == [
+        "CANDIDATE",
+        "TERRAIN HYPOTHESIS",
+        "NOT A VERIFIED TRAIL",
+    ]
+    assert len(visualization["alternative_profiles"]) == 3
+    assert [item["mode"] for item in visualization["raster_overlays"]] == [
+        "top_5_percent_corridor",
+        "top_10_percent_corridor",
+        "top_20_percent_corridor",
+    ]
+
+    cached = route_backend.start_workflow(
+        project_id="qgis_worker_demo",
+        project_root=project_root,
+        project=persisted,
+        request=SpatialAnalysisRequest(
+            project_id="qgis_worker_demo",
+            workflow_id=TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_ID,
+            request_id="request-terrain-route-cache-hit",
+        ),
+    )
+    assert cached.state is SpatialWorkflowState.COMPLETED
+    assert cached.workflow_run_id == completed.workflow_run_id
+    assert len(route_transport.post_calls) == 1
+
+
+def test_qgis_backend_uses_explicit_terrain_route_endpoints_instead_of_gpx(
+    tmp_path: Path,
+) -> None:
+    project_root, project, _ = _workspace(tmp_path)
+    feature_backend = QgisSpatialBackend(
+        config=QgisSpatialBackendConfig(
+            enabled=True,
+            worker_url="http://127.0.0.1:9876",
+            worker_token=_test_access_value(),
+        ),
+        transport=TerrainFeatureWorkerTransport(),
+        now_factory=_fixed_now,
+    )
+    feature_queued = feature_backend.start_workflow(
+        project_id="qgis_worker_demo",
+        project_root=project_root,
+        project=project,
+        request=SpatialAnalysisRequest(
+            project_id="qgis_worker_demo",
+            workflow_id=TERRAIN_FEATURE_STACK_WORKFLOW_ID,
+            request_id="request-worker-demo",
+        ),
+    )
+    assert feature_backend.get_run(
+        project_root=project_root,
+        workflow_run_id=feature_queued.workflow_run_id,
+    ).state is SpatialWorkflowState.COMPLETED
+
+    transport = TerrainRouteWorkerTransport()
+    backend = QgisSpatialBackend(
+        config=QgisSpatialBackendConfig(
+            enabled=True,
+            worker_url="http://127.0.0.1:9876",
+            worker_token=_test_access_value(),
+        ),
+        transport=transport,
+        now_factory=_fixed_now,
+    )
+    active_project = json.loads(
+        (project_root / "project.json").read_text(encoding="utf-8")
+    )
+    route_ref = active_project.pop("compiled_mission_graph_reviewed_ref", None)
+    if route_ref:
+        (project_root / route_ref).unlink()
+    (project_root / "project.json").write_text(
+        json.dumps(active_project),
+        encoding="utf-8",
+    )
+    endpoints = TerrainRouteEndpointSelection(
+        start={"x": 121.11, "y": 23.9, "crs": "EPSG:4326", "label": "A"},
+        destination={"x": 121.15, "y": 23.92, "crs": "EPSG:4326", "label": "B"},
+        selection_source="dashboard_map_selection",
+    )
+    queued = backend.start_workflow(
+        project_id="qgis_worker_demo",
+        project_root=project_root,
+        project=active_project,
+        request=SpatialAnalysisRequest(
+            project_id="qgis_worker_demo",
+            workflow_id=TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_ID,
+            request_id="request-explicit-terrain-route",
+            terrain_route_endpoints=endpoints,
+        ),
+    )
+
+    assert queued.state is SpatialWorkflowState.QUEUED, queued.error
+    submitted = transport.post_calls[0][1]
+    assert submitted["route_geojson"]["features"][0]["geometry"]["coordinates"] == [
+        [121.11, 23.9],
+        [121.15, 23.92],
+    ]
+    assert "request://terrain-route-endpoints.v1" in submitted["source_refs"]
+    assert submitted["source_hashes"]["request://terrain-route-endpoints.v1"]
+    assert "outputs/compiled_mission_graph.reviewed.json" not in submitted["source_refs"]
+    assert queued.audit_trail[0]["endpoint_selection_source"] == (
+        "dashboard_map_selection"
+    )
+    assert queued.audit_trail[0]["endpoint_source_ref"] == (
+        "request://terrain-route-endpoints.v1"
+    )
+    assert queued.candidate_only is True
+    assert queued.runtime_safety_truth is False
+    assert queued.operational is False
+
+    completed = backend.get_run(
+        project_root=project_root,
+        workflow_run_id=queued.workflow_run_id,
+    )
+    assert completed.state is SpatialWorkflowState.COMPLETED, completed.error
+    persisted = json.loads(
+        (project_root / "project.json").read_text(encoding="utf-8")
+    )
+    hypothesis_run = json.loads(
+        (project_root / persisted["terrain_route_hypothesis_ref"]).read_text(
+            encoding="utf-8"
+        )
+    )
+    hypothesis = hypothesis_run["hypotheses"][0]
+    assert hypothesis["start"] == {
+        "x": 121.11,
+        "y": 23.9,
+        "crs": "EPSG:4326",
+        "label": None,
+    }
+    assert hypothesis["destination"] == {
+        "x": 121.15,
+        "y": 23.92,
+        "crs": "EPSG:4326",
+        "label": None,
+    }
+    assert hypothesis["authority"] == "candidate_only"
+    assert hypothesis["source_type"] == "terrain_hypothesis"
+    assert hypothesis["runtime_safety_truth"] is False
+
+
+def test_qgis_backend_rejects_terrain_route_when_parent_dem_resolution_is_unknown(
+    tmp_path: Path,
+) -> None:
+    project_root, project, _ = _workspace(tmp_path)
+    feature_backend = QgisSpatialBackend(
+        config=QgisSpatialBackendConfig(
+            enabled=True,
+            worker_url="http://127.0.0.1:9876",
+            worker_token=_test_access_value(),
+        ),
+        transport=TerrainFeatureWorkerTransport(),
+        now_factory=_fixed_now,
+    )
+    feature_queued = feature_backend.start_workflow(
+        project_id="qgis_worker_demo",
+        project_root=project_root,
+        project=project,
+        request=SpatialAnalysisRequest(
+            project_id="qgis_worker_demo",
+            workflow_id=TERRAIN_FEATURE_STACK_WORKFLOW_ID,
+            request_id="request-worker-demo",
+        ),
+    )
+    feature_completed = feature_backend.get_run(
+        project_root=project_root,
+        workflow_run_id=feature_queued.workflow_run_id,
+    )
+    assert feature_completed.state is SpatialWorkflowState.COMPLETED
+
+    active_project = json.loads(
+        (project_root / "project.json").read_text(encoding="utf-8")
+    )
+    parent_path = project_root / active_project["terrain_feature_manifest_ref"]
+    parent = json.loads(parent_path.read_text(encoding="utf-8"))
+    parent["source_resolution"].pop("x_m")
+    parent_path.write_text(json.dumps(parent), encoding="utf-8")
+    route_transport = TerrainRouteWorkerTransport()
+    route_backend = QgisSpatialBackend(
+        config=QgisSpatialBackendConfig(
+            enabled=True,
+            worker_url="http://127.0.0.1:9876",
+            worker_token=_test_access_value(),
+        ),
+        transport=route_transport,
+        now_factory=_fixed_now,
+    )
+
+    failed = route_backend.start_workflow(
+        project_id="qgis_worker_demo",
+        project_root=project_root,
+        project=active_project,
+        request=SpatialAnalysisRequest(
+            project_id="qgis_worker_demo",
+            workflow_id=TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_ID,
+            request_id="request-terrain-route-missing-resolution",
+        ),
+    )
+
+    assert failed.state is SpatialWorkflowState.FAILED
+    assert failed.error is not None
+    assert failed.error.code is SpatialAnalysisErrorCode.SOURCE_UNAVAILABLE
+    assert route_transport.post_calls == []
+
+
+def test_pretrip_terrain_route_stage_activates_and_clears_stale_refs_fail_closed(
+    tmp_path: Path,
+) -> None:
+    project_root, project, _ = _workspace(tmp_path)
+    feature_backend = QgisSpatialBackend(
+        config=QgisSpatialBackendConfig(
+            enabled=True,
+            worker_url="http://127.0.0.1:9876",
+            worker_token=_test_access_value(),
+        ),
+        transport=TerrainFeatureWorkerTransport(),
+        now_factory=_fixed_now,
+    )
+    feature_queued = feature_backend.start_workflow(
+        project_id="qgis_worker_demo",
+        project_root=project_root,
+        project=project,
+        request=SpatialAnalysisRequest(
+            project_id="qgis_worker_demo",
+            workflow_id=TERRAIN_FEATURE_STACK_WORKFLOW_ID,
+            request_id="request-worker-demo",
+        ),
+    )
+    assert feature_backend.get_run(
+        project_root=project_root,
+        workflow_run_id=feature_queued.workflow_run_id,
+    ).state is SpatialWorkflowState.COMPLETED
+    route_backend = QgisSpatialBackend(
+        config=QgisSpatialBackendConfig(
+            enabled=True,
+            worker_url="http://127.0.0.1:9876",
+            worker_token=_test_access_value(),
+        ),
+        transport=TerrainRouteWorkerTransport(),
+        now_factory=_fixed_now,
+    )
+    request = LayerPreparationRequest(
+        project_id="qgis_worker_demo",
+        project_root=project_root,
+        layers=("terrain",),
+        qgis_terrain_workflow_timeout_s=2.0,
+        qgis_terrain_poll_interval_s=0.0,
+    )
+    parent = {
+        "status": "completed",
+        "workflow_id": TERRAIN_FEATURE_STACK_WORKFLOW_ID,
+        "workflow_run_id": feature_queued.workflow_run_id,
+    }
+    result = (
+        pretrip_layer_preparation._run_qgis_terrain_route_hypothesis_after_layer_preparation(
+            project_root=project_root,
+            manifest={
+                "project_id": "qgis_worker_demo",
+                "job_id": "layer_preparation.qgis_worker_demo.terrain-route",
+                "normalized_layers": ["terrain"],
+                "finished_at": "2026-08-28T00:00:00Z",
+            },
+            request=request,
+            qgis_terrain_feature_stack=parent,
+            backend=route_backend,
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert result["workflow_id"] == TERRAIN_ROUTE_HYPOTHESIS_WORKFLOW_ID
+    assert result["actual_processor"] == "qgis_processing_grass"
+    assert result["fallback_used"] is False
+    assert result["python_dtm_processing_used"] is False
+    assert result["authority"] == "candidate_only"
+    assert result["source_type"] == "terrain_hypothesis"
+    receipt_ref = result["output_refs"]["qgis_terrain_route_preparation_ref"]
+    receipt = json.loads((project_root / receipt_ref).read_text(encoding="utf-8"))
+    assert receipt["artifact_kind"] == "terrain_route_hypothesis_preparation_status"
+    assert receipt["boundary"]["runtime_safety_truth"] is False
+    active = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
+    active_ref = active["terrain_route_hypothesis_ref"]
+    assert active["terrain_route_hypothesis_status"] == "completed"
+
+    unavailable = (
+        pretrip_layer_preparation._run_qgis_terrain_route_hypothesis_after_layer_preparation(
+            project_root=project_root,
+            manifest={
+                "project_id": "qgis_worker_demo",
+                "job_id": "layer_preparation.qgis_worker_demo.terrain-route.retry",
+                "normalized_layers": ["terrain"],
+                "finished_at": "2026-08-28T00:01:00Z",
+            },
+            request=request,
+            qgis_terrain_feature_stack=parent,
+            backend=QgisSpatialBackend(
+                config=QgisSpatialBackendConfig(enabled=False),
+                now_factory=_fixed_now,
+            ),
+        )
+    )
+    assert unavailable["status"] == "disabled"
+    assert unavailable["error"]["code"] == "BACKEND_NOT_CONFIGURED"
+    cleared = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
+    assert "terrain_route_hypothesis_ref" not in cleared
+    assert cleared["terrain_route_hypothesis_previous_ref"] == active_ref
+    assert cleared["terrain_route_hypothesis_status"] == "unavailable"
+    assert cleared["terrain_route_hypothesis_candidate_only"] is True
+    assert cleared["terrain_route_hypothesis_runtime_safety_truth"] is False
+
+
+def test_map_preparation_stage_materializes_and_activates_grass_artifacts(
+    tmp_path: Path,
+) -> None:
+    project_root, project, _ = _workspace(tmp_path)
+
+    class PreparationTransport(TerrainFeatureWorkerTransport):
+        request_id = ""
+
+        def post_json(
+            self,
+            url: str,
+            payload: dict[str, Any],
+            *,
+            timeout_s: float,
+        ) -> Any:
+            self.request_id = str(payload["request_id"])
+            response = super().post_json(url, payload, timeout_s=timeout_s)
+            return {**response, "request_id": self.request_id}
+
+        def get_json(self, url: str, *, timeout_s: float) -> Any:
+            response = super().get_json(url, timeout_s=timeout_s)
+            if url.endswith("/status"):
+                return response
+            return {**response, "request_id": self.request_id}
+
+    backend = QgisSpatialBackend(
+        config=QgisSpatialBackendConfig(
+            enabled=True,
+            worker_url="http://127.0.0.1:9876",
+            worker_token=_test_access_value(),
+        ),
+        transport=PreparationTransport(),
+        now_factory=_fixed_now,
+    )
+    result = (
+        pretrip_layer_preparation._run_qgis_terrain_feature_stack_after_layer_preparation(
+            project_root=project_root,
+            manifest={
+                "project_id": "qgis_worker_demo",
+                "job_id": "layer_preparation.qgis_worker_demo.20260828T000000Z",
+                "normalized_layers": ["terrain"],
+                "finished_at": "2026-08-28T00:00:00Z",
+            },
+            request=LayerPreparationRequest(
+                project_id="qgis_worker_demo",
+                project_root=project_root,
+                layers=("terrain",),
+                qgis_terrain_workflow_timeout_s=2.0,
+                qgis_terrain_poll_interval_s=0.0,
+            ),
+            backend=backend,
+        )
+    )
+
+    assert result["status"] == "completed"
+    assert result["workflow_id"] == TERRAIN_FEATURE_STACK_WORKFLOW_ID
+    assert result["actual_processor"] == "qgis_processing_grass"
+    assert result["fallback_used"] is False
+    assert result["python_dtm_processing_used"] is False
+    assert result["output_refs"]["terrain_visualization_ref"].endswith(
+        "/terrain_visualization.geojson"
+    )
+    persisted_project = json.loads(
+        (project_root / "project.json").read_text(encoding="utf-8")
+    )
+    assert persisted_project["terrain_visualization_ref"] == (
+        result["output_refs"]["terrain_visualization_ref"]
+    )
+    assert persisted_project["terrain_visualization_processor"] == (
+        "qgis_processing_grass"
+    )
+    assert (project_root / persisted_project["qgis_ridge_lines_vector_ref"]).is_file()
+    assert (project_root / persisted_project["qgis_valley_lines_vector_ref"]).is_file()
+    assert (project_root / persisted_project["qgis_stream_network_vector_ref"]).is_file()
+
+
+def test_qgis_backend_prefers_imported_golden_gpx_over_checkpoint_fallback(
+    tmp_path: Path,
+) -> None:
+    project_root, project, _ = _workspace(tmp_path)
+    filtered_ref = "normalized/routes/filtered/primary.golden.speed_filtered.gpx"
+    filtered_path = project_root / filtered_ref
+    filtered_path.parent.mkdir(parents=True)
+    filtered_path.write_text(
+        """<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="test" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><name>Golden route</name><trkseg>
+    <trkpt lat="23.9000" lon="121.1000"><ele>1000</ele></trkpt>
+    <trkpt lat="23.9010" lon="121.1010"><ele>1010</ele></trkpt>
+    <trkpt lat="23.9020" lon="121.1020"><ele>1020</ele></trkpt>
+  </trkseg></trk>
+</gpx>
+""",
+        encoding="utf-8",
+    )
+    bundle_ref = "normalized/routes/route_evidence_bundle.json"
+    bundle_path = project_root / bundle_ref
+    bundle_path.write_text(
+        json.dumps(
+            {
+                "artifact_kind": "pretrip_historical_gpx_route_evidence_bundle",
+                "project_id": "qgis_worker_demo",
+                "golden_route": {
+                    "filtered_geometry_ref": filtered_ref,
+                    "filtered_geometry_sha256": hashlib.sha256(
+                        filtered_path.read_bytes()
+                    ).hexdigest(),
+                    "role": "golden_route_reference",
+                },
+                "boundary": {
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    project = {**project, "route_evidence_bundle_ref": bundle_ref}
+    (project_root / "project.json").write_text(json.dumps(project), encoding="utf-8")
+    transport = AsyncWorkerTransport()
+    backend = QgisSpatialBackend(
+        config=QgisSpatialBackendConfig(
+            enabled=True,
+            worker_url="http://127.0.0.1:9876",
+            worker_token=_test_access_value(),
+        ),
+        transport=transport,
+        now_factory=_fixed_now,
+    )
+
+    backend.start_workflow(
+        project_id="qgis_worker_demo",
+        project_root=project_root,
+        project=project,
+        request=SpatialAnalysisRequest(
+            project_id="qgis_worker_demo",
+            workflow_id=TERRAIN_FEATURE_STACK_WORKFLOW_ID,
+            request_id="request-worker-demo",
+        ),
+    )
+
+    submitted = transport.post_calls[0][1]
+    assert submitted["route_geojson"]["features"][0]["geometry"]["coordinates"] == [
+        [121.1, 23.9],
+        [121.101, 23.901],
+        [121.102, 23.902],
+    ]
+    assert filtered_ref in submitted["source_refs"]
+    assert submitted["source_hashes"][filtered_ref] == hashlib.sha256(
+        filtered_path.read_bytes()
+    ).hexdigest()
+
+
+def test_qgis_backend_fails_closed_when_imported_golden_gpx_hash_mismatches(
+    tmp_path: Path,
+) -> None:
+    project_root, project, _ = _workspace(tmp_path)
+    filtered_ref = "normalized/routes/filtered/primary.golden.speed_filtered.gpx"
+    filtered_path = project_root / filtered_ref
+    filtered_path.parent.mkdir(parents=True)
+    filtered_path.write_text(
+        """<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="test" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><trkseg>
+    <trkpt lat="23.9000" lon="121.1000" />
+    <trkpt lat="23.9010" lon="121.1010" />
+  </trkseg></trk>
+</gpx>
+""",
+        encoding="utf-8",
+    )
+    bundle_ref = "normalized/routes/route_evidence_bundle.json"
+    bundle_path = project_root / bundle_ref
+    bundle_path.write_text(
+        json.dumps(
+            {
+                "project_id": "qgis_worker_demo",
+                "golden_route": {
+                    "filtered_geometry_ref": filtered_ref,
+                    "filtered_geometry_sha256": "0" * 64,
+                },
+                "boundary": {
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    project = {**project, "route_evidence_bundle_ref": bundle_ref}
+    (project_root / "project.json").write_text(json.dumps(project), encoding="utf-8")
+    transport = AsyncWorkerTransport()
+    backend = QgisSpatialBackend(
+        config=QgisSpatialBackendConfig(
+            enabled=True,
+            worker_url="http://127.0.0.1:9876",
+            worker_token=_test_access_value(),
+        ),
+        transport=transport,
+        now_factory=_fixed_now,
+    )
+
+    run = backend.start_workflow(
+        project_id="qgis_worker_demo",
+        project_root=project_root,
+        project=project,
+        request=SpatialAnalysisRequest(
+            project_id="qgis_worker_demo",
+            workflow_id=TERRAIN_FEATURE_STACK_WORKFLOW_ID,
+            request_id="request-worker-hash-mismatch",
+        ),
+    )
+
+    assert run.state is SpatialWorkflowState.FAILED
+    assert run.error is not None
+    assert run.error.code is SpatialAnalysisErrorCode.INVALID_INPUT
+    assert transport.post_calls == []
+
+
+def test_qgis_backend_fails_closed_when_filtered_golden_gpx_hash_is_missing(
+    tmp_path: Path,
+) -> None:
+    project_root, project, _ = _workspace(tmp_path)
+    filtered_ref = "normalized/routes/filtered/primary.golden.speed_filtered.gpx"
+    filtered_path = project_root / filtered_ref
+    filtered_path.parent.mkdir(parents=True)
+    filtered_path.write_text(
+        """<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="test" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk><trkseg>
+    <trkpt lat="23.9000" lon="121.1000" />
+    <trkpt lat="23.9010" lon="121.1010" />
+  </trkseg></trk>
+</gpx>
+""",
+        encoding="utf-8",
+    )
+    bundle_ref = "normalized/routes/route_evidence_bundle.json"
+    (project_root / bundle_ref).write_text(
+        json.dumps(
+            {
+                "project_id": "qgis_worker_demo",
+                "golden_route": {"filtered_geometry_ref": filtered_ref},
+                "boundary": {
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    project = {**project, "route_evidence_bundle_ref": bundle_ref}
+    (project_root / "project.json").write_text(json.dumps(project), encoding="utf-8")
+    transport = AsyncWorkerTransport()
+    backend = QgisSpatialBackend(
+        config=QgisSpatialBackendConfig(
+            enabled=True,
+            worker_url="http://127.0.0.1:9876",
+            worker_token=_test_access_value(),
+        ),
+        transport=transport,
+        now_factory=_fixed_now,
+    )
+
+    run = backend.start_workflow(
+        project_id="qgis_worker_demo",
+        project_root=project_root,
+        project=project,
+        request=SpatialAnalysisRequest(
+            project_id="qgis_worker_demo",
+            workflow_id=TERRAIN_FEATURE_STACK_WORKFLOW_ID,
+            request_id="request-worker-missing-filtered-hash",
+        ),
+    )
+
+    assert run.state is SpatialWorkflowState.FAILED
+    assert run.error is not None
+    assert run.error.code is SpatialAnalysisErrorCode.INVALID_INPUT
+    assert transport.post_calls == []
 
 
 def test_qgis_backend_cancellation_is_forwarded_to_worker(tmp_path: Path) -> None:
@@ -611,3 +2653,28 @@ def test_http_transport_attaches_bearer_token(monkeypatch: Any) -> None:
     assert payload == {"ok": True}
     assert captured["authorization"] == f"Bearer {_test_access_value()}"
     assert captured["timeout"] == 2.5
+
+
+def test_qgis_maplibre_limit_uses_canonical_compact_json_size() -> None:
+    point = [121.123456, 24.123456]
+    payload = {
+        "type": "FeatureCollection",
+        "features": [
+            {
+                "type": "Feature",
+                "geometry": {
+                    "type": "MultiLineString",
+                    "coordinates": [[point] * 230_000],
+                },
+                "properties": {
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                    "operational": False,
+                },
+            }
+        ],
+    }
+
+    assert len(_compact_json_bytes(payload)) < 8 * 1024 * 1024
+    assert len(_json_bytes(payload)) > 8 * 1024 * 1024
+    assert _validated_candidate_geojson(payload)["features"]

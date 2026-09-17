@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import json
 import shutil
+import subprocess
+import threading
 from pathlib import Path
+
+import pytest
 
 from admin_local_raster_tiles import raster_tile_cache_path
 from pretrip_raster_label_adapter import build_raster_label_evidence
@@ -21,6 +25,60 @@ FIXTURE_PROJECT = (
 
 def _load(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("configured, expected", [(None, 0.0), ("0", 0.0), ("42", 42.0)])
+def test_pytesseract_runner_preserves_unlimited_default_and_explicit_deadline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, configured: str | None, expected: float,
+) -> None:
+    from PIL import Image
+    import pytesseract
+    from pretrip_raster_label_ocr import _build_pytesseract_runner
+
+    if configured is None:
+        monkeypatch.delenv("SCOUT_TESSERACT_TIMEOUT_S", raising=False)
+    else:
+        monkeypatch.setenv("SCOUT_TESSERACT_TIMEOUT_S", configured)
+    image_path = tmp_path / "tile.png"
+    Image.new("RGB", (2, 2)).save(image_path)
+    observed = []
+
+    def image_to_data(_image, **kwargs):
+        observed.append(kwargs["timeout"])
+        return {"text": ["5K"], "conf": [90], "left": [0], "top": [0],
+                "width": [1], "height": [1]}
+
+    monkeypatch.setattr(pytesseract, "image_to_data", image_to_data)
+    runner, missing = _build_pytesseract_runner(tesseract_lang="chi_tra+eng")
+    assert runner is not None and missing == []
+    assert runner(image_path)[0]["label_text"] == "5K"
+    assert observed == [expected]
+
+
+@pytest.mark.parametrize("configured, expected", [(None, None), ("0", None), ("42", 42.0)])
+def test_tesseract_cli_runner_preserves_unlimited_default_and_explicit_deadline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, configured: str | None,
+    expected: float | None,
+) -> None:
+    from pretrip_raster_label_ocr import _build_tesseract_cli_runner
+
+    if configured is None:
+        monkeypatch.delenv("SCOUT_TESSERACT_TIMEOUT_S", raising=False)
+    else:
+        monkeypatch.setenv("SCOUT_TESSERACT_TIMEOUT_S", configured)
+    observed = []
+    image_path = tmp_path / "tile.png"
+
+    def run(command, **kwargs):
+        observed.append(kwargs["timeout"])
+        assert command == ["/test/tesseract", str(image_path), "stdout", "-l", "chi_tra+eng", "tsv"]
+        return subprocess.CompletedProcess(command, 0,
+            "text\tconf\tleft\ttop\twidth\theight\n5K\t90\t0\t0\t1\t1\n", "")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    runner = _build_tesseract_cli_runner(tesseract_bin=Path("/test/tesseract"), tesseract_lang="chi_tra+eng")
+    assert runner(image_path)[0]["label_text"] == "5K"
+    assert observed == [expected]
 
 
 def test_raster_label_ocr_extractor_writes_explicit_adapter_input(tmp_path: Path) -> None:
@@ -128,6 +186,94 @@ def test_raster_label_ocr_extractor_writes_explicit_adapter_input(tmp_path: Path
     assert features["台14線94K"]["properties"]["label_role"] == "road_mileage_stone"
     assert features["遠傳 112"]["properties"]["communication_emergency_hint"] is True
     assert features["1500"]["properties"]["contour_elevation_m"] == 1500.0
+
+
+def test_raster_label_ocr_can_process_cache_misses_with_bounded_workers(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "chilai_nanhua_day1"
+    shutil.copytree(FIXTURE_PROJECT, project_root)
+    project_path = project_root / "project.json"
+    project = _load(project_path)
+    cache_root = project_root / "cache" / "raster-tiles"
+    from PIL import Image
+
+    for x, color in ((6853, (255, 255, 255)), (6854, (235, 235, 235))):
+        tile_path = raster_tile_cache_path(
+            "chilai_nanhua_day1",
+            "rudy-twmap",
+            13,
+            x,
+            3534,
+            cache_root=cache_root,
+        )
+        tile_path.parent.mkdir(parents=True, exist_ok=True)
+        Image.new("RGB", (256, 256), color).save(tile_path)
+
+    tile_plan_ref = "outputs/layers/plans/rudy_twmap_parallel_plan.json"
+    raster_plan_ref = "outputs/layers/plans/raster_label_plan.json"
+    (project_root / tile_plan_ref).parent.mkdir(parents=True, exist_ok=True)
+    (project_root / tile_plan_ref).write_text(
+        json.dumps(
+            {
+                "artifact_kind": "admin_imagery_tile_cache_plan",
+                "project_id": "chilai_nanhua_day1",
+                "layer_id": "rudy-twmap",
+                "source_id": "happyman_rudy_twmap",
+                "source_kind": "xyz_tile",
+                "cache_root": str(cache_root),
+                "tile_size": 256,
+                "zoom_ranges": [
+                    {
+                        "z": 13,
+                        "x_min": 6853,
+                        "x_max": 6854,
+                        "y_min": 3534,
+                        "y_max": 3534,
+                    }
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+    (project_root / raster_plan_ref).write_text(
+        json.dumps(
+            {
+                "artifact_kind": "pretrip_raster_label_plan",
+                "preferred_ocr_source_ids": ["happyman_rudy_twmap"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    project["raster_label_tile_cache_plan_ref"] = tile_plan_ref
+    project["raster_label_plan_ref"] = raster_plan_ref
+    project_path.write_text(json.dumps(project), encoding="utf-8")
+    both_workers_started = threading.Barrier(2, timeout=2)
+
+    def synchronized_runner(image_path: Path) -> list[dict]:
+        both_workers_started.wait()
+        return [
+            {
+                "label_text": f"tile-{image_path.parent.name}",
+                "bbox_px": [10, 10, 80, 30],
+                "confidence": 0.9,
+            }
+        ]
+
+    result = extract_raster_label_ocr(
+        project_root,
+        ocr_runner=synchronized_runner,
+        max_workers=2,
+        collected_at="2026-08-25T00:00:00Z",
+    )
+
+    assert result["status"] == "completed"
+    assert result["label_count"] == 2
+    output = _load(project_root / result["output_ref"])
+    assert output["counts"]["ocr_worker_count"] == 2
+    assert output["counts"]["ocr_cache_write_count"] == 2
 
 
 def test_raster_label_ocr_extractor_skips_timed_out_tile(tmp_path: Path) -> None:
@@ -436,6 +582,64 @@ def test_raster_label_ocr_extractor_reports_missing_dependency(
     assert output["labels"] == []
     assert output["boundary"]["ocr_or_vision_performed"] is False
     assert output["candidate_only"] is True
+
+
+def test_raster_label_ocr_uses_tesseract_cli_when_python_wrapper_is_missing(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    import pretrip_raster_label_ocr as module
+
+    monkeypatch.setattr(
+        module,
+        "_build_pytesseract_runner",
+        lambda *, tesseract_lang: (None, ["Pillow", "pytesseract"]),
+    )
+    monkeypatch.setattr(module.shutil, "which", lambda _: "/usr/local/bin/tesseract")
+    calls: list[list[str]] = []
+
+    def fake_run(args, **kwargs):
+        calls.append(list(args))
+        return subprocess.CompletedProcess(
+            args,
+            0,
+            stdout=(
+                "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\t"
+                "left\ttop\twidth\theight\tconf\ttext\n"
+                "5\t1\t1\t1\t1\t1\t10\t20\t30\t40\t88.5\t八通關\n"
+            ),
+            stderr="",
+        )
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+    image_path = tmp_path / "tile.png"
+    image_path.write_bytes(b"fixture")
+
+    runner, missing = module._build_ocr_runner(
+        "tesseract",
+        tesseract_lang="chi_tra+eng",
+    )
+
+    assert missing == []
+    assert runner is not None
+    assert runner(image_path) == [
+        {
+            "label_text": "八通關",
+            "confidence": "88.5",
+            "bbox_px": [10, 20, 40, 60],
+            "ocr_engine": "tesseract_cli",
+        }
+    ]
+    assert calls == [
+        [
+            "/usr/local/bin/tesseract",
+            str(image_path),
+            "stdout",
+            "-l",
+            "chi_tra+eng",
+            "tsv",
+        ]
+    ]
 
 
 def test_raster_label_ocr_derives_tile_records_from_map_preparation_plan(

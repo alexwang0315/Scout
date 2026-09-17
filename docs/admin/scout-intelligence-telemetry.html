@@ -1,0 +1,471 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <link rel="icon" href="data:,">
+  <title>Scout Intelligence Telemetry</title>
+  <style>
+    :root {
+      --canvas: #f2f4f1;
+      --surface: #ffffff;
+      --surface-muted: #e8ece8;
+      --ink: #18211d;
+      --muted: #5b6861;
+      --line: #cbd3cd;
+      --accent: #087f5b;
+      --accent-soft: #dff3eb;
+      --warn: #a45c00;
+      --warn-soft: #fff0d8;
+      --bad: #b3261e;
+      --bad-soft: #fde8e6;
+      --info: #235f9c;
+      --info-soft: #e6f0fa;
+      --shadow: 0 8px 24px rgba(29, 42, 35, 0.08);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: var(--canvas);
+    }
+
+    * { box-sizing: border-box; }
+    body { margin: 0; min-width: 280px; background: var(--canvas); }
+    button, input, select { font: inherit; }
+    button { color: inherit; }
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      overflow-wrap: anywhere;
+    }
+
+    .shell { min-height: 100vh; }
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      min-height: 76px;
+      padding: 14px clamp(16px, 3vw, 36px);
+      color: #f8fffb;
+      background: #17352a;
+      border-bottom: 4px solid var(--accent);
+    }
+    .identity { min-width: 0; }
+    .identity h1 { margin: 0; font-size: 22px; line-height: 1.2; letter-spacing: 0; }
+    .identity p { margin: 5px 0 0; color: #c5d7ce; font-size: 13px; }
+    .top-actions { display: flex; align-items: center; gap: 10px; flex: 0 0 auto; }
+    .icon-button {
+      width: 42px;
+      height: 42px;
+      display: inline-grid;
+      place-items: center;
+      border: 1px solid #6f8d7f;
+      border-radius: 6px;
+      color: #ffffff;
+      background: transparent;
+      cursor: pointer;
+      font-size: 23px;
+      line-height: 1;
+    }
+    .icon-button:hover, .icon-button:focus-visible { background: #285343; outline: 2px solid #b5e0cc; outline-offset: 2px; }
+    .icon-button[disabled] { opacity: 0.55; cursor: wait; }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 25px;
+      padding: 3px 8px;
+      border: 1px solid currentColor;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 750;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+    .badge.ok { color: #076747; background: var(--accent-soft); }
+    .badge.warn { color: var(--warn); background: var(--warn-soft); }
+    .badge.bad { color: var(--bad); background: var(--bad-soft); }
+    .badge.info { color: var(--info); background: var(--info-soft); }
+    .topbar .badge { color: #ccf6e4; background: #214a3a; }
+
+    .summary-band {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      background: var(--surface);
+      border-bottom: 1px solid var(--line);
+    }
+    .metric { min-width: 0; padding: 13px clamp(10px, 2vw, 22px); border-right: 1px solid var(--line); }
+    .metric:last-child { border-right: 0; }
+    .metric span { display: block; color: var(--muted); font-size: 11px; text-transform: uppercase; }
+    .metric strong { display: block; margin-top: 3px; font-size: 21px; font-variant-numeric: tabular-nums; }
+
+    .status-line {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 9px clamp(16px, 3vw, 36px);
+      color: var(--muted);
+      background: #e7ece8;
+      border-bottom: 1px solid var(--line);
+      font-size: 12px;
+    }
+
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(280px, 360px) minmax(0, 1fr);
+      gap: 0;
+      min-height: calc(100vh - 166px);
+      max-width: 1700px;
+      margin: 0 auto;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+    .job-pane { min-width: 0; background: #f7f8f6; border-right: 1px solid var(--line); }
+    .pane-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 50px;
+      padding: 10px 15px;
+      border-bottom: 1px solid var(--line);
+    }
+    .pane-heading h2 { margin: 0; font-size: 14px; }
+    .job-list { display: grid; gap: 8px; padding: 10px; }
+    .job-button {
+      width: 100%;
+      min-width: 0;
+      padding: 11px;
+      text-align: left;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--surface);
+      cursor: pointer;
+    }
+    .job-button:hover, .job-button:focus-visible { border-color: var(--accent); outline: 2px solid #bfe8d8; outline-offset: 1px; }
+    .job-button[aria-current="true"] { border-color: var(--accent); box-shadow: inset 4px 0 var(--accent); }
+    .job-button-header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    .job-button strong { min-width: 0; font-size: 13px; overflow-wrap: anywhere; }
+    .job-meta { display: grid; gap: 3px; margin-top: 9px; color: var(--muted); font-size: 11px; }
+    .progress-track { height: 4px; margin-top: 9px; overflow: hidden; background: var(--surface-muted); border-radius: 2px; }
+    .progress-track span { display: block; height: 100%; background: var(--accent); }
+
+    .detail-pane { min-width: 0; padding: clamp(15px, 2.5vw, 30px); }
+    .detail-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding-bottom: 17px; border-bottom: 1px solid var(--line); }
+    .detail-header h2 { margin: 0; font-size: 18px; }
+    .detail-header p { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
+    .detail-section { padding: 19px 0; border-bottom: 1px solid var(--line); }
+    .detail-section:last-child { border-bottom: 0; }
+    .detail-section h3 { margin: 0 0 11px; font-size: 13px; text-transform: uppercase; color: #30433a; }
+    .fact-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+    .fact { min-width: 0; padding: 10px; background: var(--surface); }
+    .fact span { display: block; color: var(--muted); font-size: 10px; text-transform: uppercase; }
+    .fact strong { display: block; margin-top: 4px; font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+    .token-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+    .token-list li { max-width: 100%; padding: 5px 7px; border: 1px solid var(--line); border-radius: 4px; background: #f5f7f5; font-size: 11px; overflow-wrap: anywhere; }
+    .table-wrap { width: 100%; overflow-x: auto; border: 1px solid var(--line); }
+    table { width: 100%; min-width: 700px; border-collapse: collapse; font-size: 11px; }
+    th, td { padding: 8px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+    th { color: var(--muted); background: #f1f4f1; font-weight: 700; text-transform: uppercase; }
+    tbody tr:last-child td { border-bottom: 0; }
+    .empty {
+      display: grid;
+      place-items: center;
+      min-height: 260px;
+      padding: 30px;
+      color: var(--muted);
+      text-align: center;
+    }
+    .empty strong { display: block; color: var(--ink); margin-bottom: 5px; }
+    .error-copy { color: var(--bad); }
+
+    @media (max-width: 920px) {
+      .summary-band { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .metric:nth-child(3) { border-right: 0; }
+      .metric:nth-child(-n+3) { border-bottom: 1px solid var(--line); }
+      .workspace { grid-template-columns: minmax(230px, 300px) minmax(0, 1fr); }
+      .fact-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 680px) {
+      .topbar { align-items: flex-start; padding: 12px 14px; }
+      .identity h1 { font-size: 18px; }
+      .top-actions .badge { display: none; }
+      .status-line { align-items: flex-start; padding: 8px 14px; }
+      .workspace { display: block; min-height: 0; box-shadow: none; }
+      .job-pane { border-right: 0; border-bottom: 1px solid var(--line); }
+      .job-list { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; }
+      .job-button { flex: 0 0 min(84vw, 320px); scroll-snap-align: start; }
+      .detail-pane { padding: 14px; }
+      .detail-header { display: block; }
+      .detail-header .badge { margin-top: 9px; }
+      .fact-grid { grid-template-columns: 1fr; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * { scroll-behavior: auto !important; }
+    }
+  </style>
+</head>
+<body data-intelligence-telemetry-page="true">
+  <div class="shell">
+    <header class="topbar">
+      <div class="identity">
+        <h1>Scout Intelligence Telemetry</h1>
+        <p>Background intelligence job ledger</p>
+      </div>
+      <div class="top-actions">
+        <span class="badge" id="authorityBadge">Candidate only / no runtime authority</span>
+        <button class="icon-button" id="refreshButton" type="button" title="Refresh telemetry" aria-label="Refresh telemetry">&#8635;</button>
+      </div>
+    </header>
+
+    <section class="summary-band" aria-label="Intelligence job summary">
+      <div class="metric"><span>Visible</span><strong id="metricTotal">0</strong></div>
+      <div class="metric"><span>Queued</span><strong id="metricQueued">0</strong></div>
+      <div class="metric"><span>Running</span><strong id="metricRunning">0</strong></div>
+      <div class="metric"><span>Completed</span><strong id="metricCompleted">0</strong></div>
+      <div class="metric"><span>Failed</span><strong id="metricFailed">0</strong></div>
+      <div class="metric"><span>Cancelled</span><strong id="metricCancelled">0</strong></div>
+    </section>
+
+    <div class="status-line" role="status" aria-live="polite">
+      <span id="statusText">Loading typed telemetry</span>
+      <span class="mono" id="generatedAt">not loaded</span>
+    </div>
+
+    <main class="workspace">
+      <aside class="job-pane" aria-label="Background intelligence jobs">
+        <div class="pane-heading">
+          <h2>Jobs</h2>
+          <span class="badge info" id="storeBadge">checking</span>
+        </div>
+        <div class="job-list" id="jobList"></div>
+      </aside>
+      <section class="detail-pane" id="jobDetail" aria-live="polite">
+        <div class="empty"><div><strong>No job selected</strong><span>Telemetry will appear after a candidate intelligence job is persisted.</span></div></div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    (() => {
+      "use strict";
+
+      const TELEMETRY_PATH = "/admin/intelligence/telemetry";
+      const state = {snapshot: null, selectedJobId: null, loading: false};
+
+      const byId = id => document.getElementById(id);
+      const array = value => Array.isArray(value) ? value : [];
+      const text = value => value === null || value === undefined || value === "" ? "unknown" : String(value);
+      const escapeHtml = value => text(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+      const formatTime = value => {
+        if (!value) return "not recorded";
+        const parsed = new Date(value);
+        return Number.isNaN(parsed.getTime()) ? text(value) : parsed.toLocaleString();
+      };
+      const shortId = value => {
+        const normalized = text(value);
+        return normalized.length > 18 ? `${normalized.slice(0, 8)}...${normalized.slice(-6)}` : normalized;
+      };
+      const statusTone = value => {
+        const normalized = text(value).toLowerCase();
+        if (["completed", "ready", "accepted_candidate"].includes(normalized)) return "ok";
+        if (["failed", "degraded", "rejected", "capability_violation"].includes(normalized)) return "bad";
+        if (["queued", "running", "cancelling", "stale_binding", "unavailable"].includes(normalized)) return "warn";
+        return "info";
+      };
+      const tokens = values => {
+        const items = array(values);
+        return items.length
+          ? `<ul class="token-list">${items.map(value => `<li class="mono">${escapeHtml(value)}</li>`).join("")}</ul>`
+          : `<span class="mono">none</span>`;
+      };
+      const fact = (label, value, mono = false) => `
+        <div class="fact"><span>${escapeHtml(label)}</span><strong class="${mono ? "mono" : ""}">${escapeHtml(value)}</strong></div>
+      `;
+
+      function renderSummary(snapshot) {
+        const summary = snapshot?.summary || {};
+        byId("metricTotal").textContent = Number(summary.total_jobs || 0).toLocaleString();
+        byId("metricQueued").textContent = Number(summary.queued_jobs || 0).toLocaleString();
+        byId("metricRunning").textContent = Number(summary.running_jobs || 0).toLocaleString();
+        byId("metricCompleted").textContent = Number(summary.completed_jobs || 0).toLocaleString();
+        byId("metricFailed").textContent = Number(summary.failed_jobs || 0).toLocaleString();
+        byId("metricCancelled").textContent = Number(summary.cancelled_jobs || 0).toLocaleString();
+        const status = text(snapshot?.status || "unavailable");
+        const storeBadge = byId("storeBadge");
+        storeBadge.textContent = status;
+        storeBadge.className = `badge ${statusTone(status)}`;
+        const shown = Number(summary.total_jobs || 0);
+        const available = Number(summary.available_job_count || 0);
+        const truncated = summary.truncated ? ` / ${available} available` : "";
+        byId("statusText").textContent = `${status} / ${text(snapshot?.status_reason)} / ${shown} visible${truncated}`;
+        byId("generatedAt").textContent = formatTime(snapshot?.generated_at);
+      }
+
+      function renderJobs(snapshot) {
+        const jobs = array(snapshot?.jobs);
+        const list = byId("jobList");
+        if (!jobs.length) {
+          list.innerHTML = `<div class="empty"><div><strong>${escapeHtml(snapshot?.status === "ready" ? "No persisted jobs" : "Telemetry unavailable")}</strong><span>${escapeHtml(snapshot?.status_reason)}</span></div></div>`;
+          byId("jobDetail").innerHTML = `<div class="empty"><div><strong>No candidate telemetry</strong><span>Authoritative Scout state is unaffected.</span></div></div>`;
+          state.selectedJobId = null;
+          return;
+        }
+        if (!jobs.some(job => job.job_id === state.selectedJobId)) state.selectedJobId = jobs[0].job_id;
+        list.innerHTML = jobs.map(job => `
+          <button class="job-button" type="button" data-job-id="${escapeHtml(job.job_id)}" aria-current="${job.job_id === state.selectedJobId ? "true" : "false"}">
+            <div class="job-button-header">
+              <strong>${escapeHtml(job.task_type)}</strong>
+              <span class="badge ${statusTone(job.state)}">${escapeHtml(job.state)}</span>
+            </div>
+            <div class="job-meta">
+              <span class="mono">${escapeHtml(shortId(job.job_id))}</span>
+              <span>${escapeHtml(job.stage)} / ${Number(job.progress_percent || 0)}%</span>
+              <span>${escapeHtml(formatTime(job.updated_at))}</span>
+            </div>
+            <div class="progress-track" aria-hidden="true"><span style="width:${Math.max(0, Math.min(100, Number(job.progress_percent || 0)))}%"></span></div>
+          </button>
+        `).join("");
+        list.querySelectorAll("[data-job-id]").forEach(button => {
+          button.addEventListener("click", () => {
+            state.selectedJobId = button.dataset.jobId;
+            renderJobs(state.snapshot);
+            renderDetail(state.snapshot);
+          });
+        });
+      }
+
+      function renderModelRows(job) {
+        const records = array(job.model_execution_records);
+        if (!records.length) return `<div class="empty"><div><strong>No model request recorded</strong><span>The job may be deterministic or may have failed before inference.</span></div></div>`;
+        return `
+          <div class="table-wrap"><table>
+            <thead><tr><th>Runtime / model</th><th>Locality</th><th>Status</th><th>Latency</th><th>Requests</th><th>Tokens</th><th>Fallback</th></tr></thead>
+            <tbody>${records.map(record => `
+              <tr>
+                <td><strong class="mono">${escapeHtml(record.runtime_id)}</strong><br><span class="mono">${escapeHtml(record.observed_model_id || record.model_id)}</span></td>
+                <td>${escapeHtml(record.locality)}</td>
+                <td><span class="badge ${statusTone(record.status)}">${escapeHtml(record.status)}</span></td>
+                <td>${Number(record.latency_ms || 0).toLocaleString()} ms</td>
+                <td>${Number(record.model_request_count || 0).toLocaleString()}</td>
+                <td>${Number(record.input_tokens || 0).toLocaleString()} / ${Number(record.output_tokens || 0).toLocaleString()}</td>
+                <td>${record.fallback_used ? "yes" : "no"}</td>
+              </tr>
+            `).join("")}</tbody>
+          </table></div>
+        `;
+      }
+
+      function renderEventRows(job) {
+        const events = array(job.events);
+        if (!events.length) return `<span class="mono">No persisted events</span>`;
+        return `
+          <div class="table-wrap"><table>
+            <thead><tr><th>Sequence</th><th>Event</th><th>State</th><th>Stage</th><th>Time</th></tr></thead>
+            <tbody>${events.map(event => `
+              <tr><td>${escapeHtml(event.sequence_id)}</td><td class="mono">${escapeHtml(event.event_type)}</td><td>${escapeHtml(event.state)}</td><td>${escapeHtml(event.stage)}</td><td>${escapeHtml(formatTime(event.occurred_at))}</td></tr>
+            `).join("")}</tbody>
+          </table></div>
+        `;
+      }
+
+      function renderDetail(snapshot) {
+        const job = array(snapshot?.jobs).find(item => item.job_id === state.selectedJobId);
+        const detail = byId("jobDetail");
+        if (!job) return;
+        const binding = job.workspace_binding || {};
+        const capability = job.capability || {};
+        detail.innerHTML = `
+          <div class="detail-header">
+            <div><h2>${escapeHtml(job.task_type)}</h2><p class="mono">job ${escapeHtml(job.job_id)} / request ${escapeHtml(job.request_id)}</p></div>
+            <span class="badge ${statusTone(job.validation_result)}">${escapeHtml(job.validation_result)}</span>
+          </div>
+          <section class="detail-section">
+            <h3>Binding</h3>
+            <div class="fact-grid">
+              ${fact("Mission", `${job.mission_id} / ${binding.mission_version}`, true)}
+              ${fact("Workspace", `${binding.workspace_id} / ${binding.workspace_revision}`, true)}
+              ${fact("Route", `${text(binding.route_id)} / ${text(binding.route_version)}`, true)}
+              ${fact("Input hash", binding.input_hash, true)}
+              ${fact("Question hash", job.question_hash, true)}
+              ${fact("Promotion", job.promotion_result)}
+            </div>
+          </section>
+          <section class="detail-section">
+            <h3>Execution</h3>
+            <div class="fact-grid">
+              ${fact("State", `${job.state} / ${job.stage}`)}
+              ${fact("Progress", `${job.progress_percent}%`)}
+              ${fact("Submitted", formatTime(job.submitted_at))}
+              ${fact("Started", formatTime(job.started_at))}
+              ${fact("Completed", formatTime(job.completed_at))}
+              ${fact("Error", text(job.error_type))}
+              ${fact("Findings / evidence", `${job.finding_count} / ${job.evidence_count}`)}
+              ${fact("Uncertainty / conflict", `${job.uncertainty_count} / ${job.conflict_count}`)}
+              ${fact("Output hash", text(job.output_hash), true)}
+            </div>
+          </section>
+          <section class="detail-section"><h3>Agent path</h3>${tokens(job.agent_path)}</section>
+          <section class="detail-section"><h3>Tools called</h3>${tokens(job.tools_called)}</section>
+          <section class="detail-section"><h3>Model execution</h3>${renderModelRows(job)}</section>
+          <section class="detail-section">
+            <h3>Capability grant</h3>
+            <div class="fact-grid">
+              ${fact("Grant", capability.grant_id, true)}
+              ${fact("Expires", formatTime(capability.expires_at))}
+              ${fact("Budgets", `${text(capability.max_runtime_seconds)} sec / ${text(capability.max_model_requests)} model / ${text(capability.max_tool_calls)} tool`)}
+            </div>
+            <h3 style="margin-top:16px">Allowed</h3>${tokens(capability.allowed_capabilities)}
+            <h3 style="margin-top:16px">Denied</h3>${tokens(capability.denied_capabilities)}
+          </section>
+          <section class="detail-section"><h3>Evidence sources</h3>${tokens(job.evidence_source_refs)}</section>
+          <section class="detail-section"><h3>Lifecycle events</h3>${renderEventRows(job)}</section>
+        `;
+      }
+
+      async function refresh() {
+        if (state.loading) return;
+        state.loading = true;
+        byId("refreshButton").disabled = true;
+        byId("statusText").textContent = "Loading typed telemetry";
+        try {
+          const response = await fetch(TELEMETRY_PATH, {cache: "no-store", headers: {Accept: "application/json"}});
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          state.snapshot = await response.json();
+        } catch (error) {
+          state.snapshot = {
+            status: "degraded",
+            status_reason: `telemetry_fetch_failed:${error instanceof Error ? error.message : "unknown"}`,
+            generated_at: new Date().toISOString(),
+            summary: {},
+            jobs: [],
+            candidate_only: true,
+            runtime_safety_truth: false,
+            promotion_result: "not_promoted",
+          };
+        } finally {
+          state.loading = false;
+          byId("refreshButton").disabled = false;
+          renderSummary(state.snapshot);
+          renderJobs(state.snapshot);
+          renderDetail(state.snapshot);
+        }
+      }
+
+      byId("refreshButton").addEventListener("click", refresh);
+      window.addEventListener("focus", refresh);
+      refresh();
+      window.setInterval(() => {
+        if (document.visibilityState === "visible") refresh();
+      }, 5000);
+    })();
+  </script>
+</body>
+</html>

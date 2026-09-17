@@ -39,6 +39,42 @@ This spec consolidates the directory expectations currently spread across:
    timestamps, and hardware logs may live in local workspace roots, but official
    transfer packages must redact or coarsen them by default.
 
+### Planned route revisions (2026-09-10)
+
+Scenario two retains the prepared Golden/Ref source corpus and stores a separate
+candidate plan. The project-scoped layout is:
+
+```text
+reviews/planned_routes/
+  versions/{version_id}/
+    manifest.json
+    request.json
+    preview.json
+    planned.gpx
+    route.geojson
+    route_axis.json
+    checkpoints.json
+    segments.json
+    itinerary.json
+    mission_baseline_candidate.json
+  reviews/{version_id}/{review_id}.json
+  selections/{command_hash}.json
+  analysis_selection.json
+```
+
+Publication is atomic and immutable; source hashes, parent version, command
+identity and file hashes bind the complete bundle. The review and analysis
+selection are separate explicit actions. The candidate's new graph must not be
+activated as an already-reviewed Golden graph. A selected Planned version has
+its own axis, CP, segments and timing. Existing Golden projections remain
+historical until a producer binds its output to that selected version.
+
+The GPX metadata records `role=planned`, geometry and itinerary hashes; its
+default export contains geometry without synthetic recording timestamps. Keep
+the companion bundle for the day plan, fixed stops, camps, source provenance and
+uncertainty. Re-import preserves this role and cannot create a completed personal
+Recorded activity. See [Planned delivery and validation](scout-golden-planned-gpx-delivery-plan.md#4-第二項人工行程如何生成-planned-gpx).
+
 ## Root Model
 
 Production Scout hosts should use configurable roots. The examples below show

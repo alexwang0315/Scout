@@ -80,6 +80,7 @@ def run_scout_ai_full_workflow(
     include_missing_context_sources: bool = True,
     include_not_implemented_tools: bool = True,
     max_result_items_per_tool: int = 6,
+    reference_time: str | None = None,
 ) -> ScoutAiFullWorkflowOutput:
     answer_synthesis = collect_and_synthesize_scout_ai_answer(
         question,
@@ -90,6 +91,7 @@ def run_scout_ai_full_workflow(
         include_missing_context_sources=include_missing_context_sources,
         include_not_implemented_tools=include_not_implemented_tools,
         max_result_items_per_tool=max_result_items_per_tool,
+        reference_time=reference_time,
     )
     return full_workflow_from_answer_synthesis(answer_synthesis)
 

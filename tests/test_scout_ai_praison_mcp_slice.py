@@ -165,6 +165,35 @@ def test_deterministic_router_skips_research_for_pure_terrain_evidence() -> None
     )
 
 
+def test_normalized_qgis_uncertainty_is_ingested_without_model_promotion() -> None:
+    item = _catalog().items[2].model_copy(
+        update={
+            "attributes": {
+                **_catalog().items[2].attributes,
+                "uncertainties": [
+                    {
+                        "description": "Saddle extraction was not run.",
+                        "missing_evidence": ["qgis.saddle_derivative"],
+                        "impact": "No saddle candidate can be concluded.",
+                        "recommended_next_evidence": [
+                            "run_reviewed_saddle_extraction"
+                        ],
+                    }
+                ],
+            }
+        }
+    )
+
+    report = SpecialistReport.from_catalog_item(role="qgis", item=item)
+
+    assert report.uncertainties[0].description == "Saddle extraction was not run."
+    assert report.uncertainties[0].missing_evidence == (
+        "qgis.saddle_derivative",
+    )
+    assert report.candidate_only is True
+    assert report.runtime_safety_truth is False
+
+
 def test_deterministic_router_includes_research_for_bound_conflict_evidence() -> None:
     request = _request()
     catalog = _catalog()
@@ -441,7 +470,10 @@ def test_mcp_stdio_round_trip_keeps_core_and_service_lifecycles_separate() -> No
 def test_mcp_process_crash_degrades_without_affecting_authoritative_state() -> None:
     request = _request()
     config = IntelligenceMcpClientConfig(
-        command=(sys.executable, "-m", "scout.nextgen.module_that_does_not_exist"),
+        command=(
+            sys.executable,
+            str(Path("src/scout/nextgen/module_that_does_not_exist.py").resolve()),
+        ),
         pythonpath=str(Path("src").resolve()),
         timeout_seconds=1,
     )
@@ -472,6 +504,7 @@ def test_mcp_timeout_cancels_service_and_degrades(tmp_path: Path) -> None:
     config = IntelligenceMcpClientConfig(
         command=(sys.executable, str(sleepy_service)),
         timeout_seconds=0.25,
+        startup_timeout_seconds=0.25,
     )
 
     with McpIntelligenceGateway(config) as gateway:
@@ -592,6 +625,48 @@ def test_real_praison_specialists_share_one_typed_model_gateway_session() -> Non
         "local.fast.pydantic-function",
     )
     assert response.runtime_safety_truth is False
+
+
+@pytest.mark.parametrize("model_backed", [False, True])
+def test_scout_requests_do_not_reuse_team_tasks_or_approval_scopes(monkeypatch, tmp_path, model_backed):
+    sdk = pytest.importorskip("praisonaiagents")
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("PRAISONAI_HOME", str(tmp_path / ".praisonai"))
+    monkeypatch.setenv("OPENAI_API_KEY", "fixture-only")
+    monkeypatch.setenv("PRAISONAI_TELEMETRY_DISABLED", "true")
+    teams = []
+
+    class ObservedTeam(sdk.AgentTeam):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            teams.append(self)
+
+    monkeypatch.setattr(sdk, "AgentTeam", ObservedTeam)
+    runtime = build_praison_model_replay_runtime() if model_backed else PraisonAgentTeamRuntime()
+    service = PraisonIntelligenceService(runtime=runtime, evidence_catalog=_catalog(), max_concurrency=1)
+    requests = [_request(), _request()]
+    try:
+        responses = [service.execute(request) for request in requests]
+        assert len(teams) == 2 and teams[0] is not teams[1]
+        assert not {id(t) for t in teams[0].tasks.values()} & {id(t) for t in teams[1].tasks.values()}
+        scopes = [{agent._approval_scope_id for agent in team.agents} for team in teams]
+        assert scopes[0] and scopes[1] and scopes[0].isdisjoint(scopes[1])
+        for request, response in zip(requests, responses, strict=True):
+            assert len(response.findings) == 3
+            assert response.candidate_only and not response.runtime_safety_truth
+            validation = PydanticContractGateway().validate_response(
+                request=request, response=response, current_binding=request.workspace_binding,
+            )
+            assert validation.accepted
+            if model_backed:
+                assert {r.parent_request_id for r in response.provenance.model_execution_records} == {request.request_id}
+    finally:
+        for team in teams:
+            for agent in team.agents:
+                agent.close()
+        if model_backed:
+            runtime.close()
 
 
 @pytest.mark.skipif(

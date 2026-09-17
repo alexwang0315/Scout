@@ -23,6 +23,7 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
+from scout.agents.pydantic_model_lifecycle import run_in_model_worker  # noqa: E402
 from pydantic_ai_runtime_compat import (  # noqa: E402
     build_chat_model,
     pydantic_agent_runtime_kwargs,
@@ -194,7 +195,7 @@ class UsageRecordingPydanticAIRunner:
             return output
 
         executor = ThreadPoolExecutor(max_workers=1)
-        future = executor.submit(run_once, prompt)
+        future = executor.submit(run_in_model_worker, run_once, prompt)
         try:
             output = future.result(timeout=timeout_seconds)
             self.last_response = output

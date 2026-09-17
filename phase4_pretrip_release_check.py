@@ -9446,6 +9446,71 @@ def _check_review_decision_apply_plan(
     }
 
 
+def _workspace_forbidden_source_fragments(
+    source: str, forbidden_fragments: Sequence[str]
+) -> list[str]:
+    """Check source coupling; real network effects also require the API replay."""
+    network_modules = {"requests", "httpx", "urllib", "aiohttp"}
+    network_forbidden = network_modules.intersection(forbidden_fragments)
+    found = {
+        fragment
+        for fragment in forbidden_fragments
+        if fragment not in network_modules and fragment in source
+    }
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return [*sorted(found), "python_syntax_error"]
+
+    module_references: set[str] = set()
+    import_functions = {"__import__", "importlib.import_module"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                module_references.add(alias.name)
+                if alias.name == "importlib":
+                    import_functions.add(f"{alias.asname or alias.name}.import_module")
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            if node.module == "urllib":
+                module_references.update(f"urllib.{alias.name}" for alias in node.names)
+            else:
+                module_references.add(node.module)
+            if node.module == "importlib":
+                import_functions.update(
+                    alias.asname or alias.name
+                    for alias in node.names
+                    if alias.name == "import_module"
+                )
+
+    def call_name(node: ast.expr) -> str:
+        if isinstance(node, ast.Name):
+            return node.id
+        if isinstance(node, ast.Attribute):
+            parent = call_name(node.value)
+            return f"{parent}.{node.attr}" if parent else ""
+        return ""
+
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        name = call_name(node.func)
+        module_references.add(name)
+        if name in import_functions and node.args:
+            module = node.args[0]
+            if isinstance(module, ast.Constant) and isinstance(module.value, str):
+                module_references.add(module.value)
+
+    for fragment in network_forbidden:
+        for reference in module_references:
+            if fragment == "urllib" and (
+                reference == "urllib.parse" or reference.startswith("urllib.parse.")
+            ):
+                continue
+            if reference == fragment or reference.startswith(f"{fragment}."):
+                found.add(fragment)
+    return [fragment for fragment in forbidden_fragments if fragment in found]
+
+
 def _check_admin_workspace_persistence_contract(root: Path) -> dict[str, Any]:
     admin_path = root / "admin_api.py"
     store_path = root / "pretrip_review_decision_store.py"
@@ -9540,9 +9605,10 @@ def _check_admin_workspace_persistence_contract(root: Path) -> dict[str, Any]:
     }
     forbidden_source_fragments: list[dict[str, str]] = []
     for ref, text in source_text_by_ref.items():
-        for fragment in forbidden_fragments:
-            if fragment in text:
-                forbidden_source_fragments.append({"path": ref, "fragment": fragment})
+        for fragment in _workspace_forbidden_source_fragments(
+            text, forbidden_fragments
+        ):
+            forbidden_source_fragments.append({"path": ref, "fragment": fragment})
     missing.extend(
         f"admin_workspace_forbidden_fragment:{item['path']}:{item['fragment']}"
         for item in forbidden_source_fragments
@@ -9670,9 +9736,10 @@ def _check_admin_workspace_project_creation_contract(root: Path) -> dict[str, An
     }
     forbidden_source_fragments: list[dict[str, str]] = []
     for ref, text in source_text_by_ref.items():
-        for fragment in forbidden_fragments:
-            if fragment in text:
-                forbidden_source_fragments.append({"path": ref, "fragment": fragment})
+        for fragment in _workspace_forbidden_source_fragments(
+            text, forbidden_fragments
+        ):
+            forbidden_source_fragments.append({"path": ref, "fragment": fragment})
     missing.extend(
         f"admin_workspace_project_creation_forbidden_fragment:"
         f"{item['path']}:{item['fragment']}"

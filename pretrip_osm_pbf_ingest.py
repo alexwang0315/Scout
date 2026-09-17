@@ -335,11 +335,14 @@ class _PbfRouteEvidenceHandler:
         if tags is None:
             return
         geometry = []
+        node_ids = []
         for node_ref in way.nodes:
             location = getattr(node_ref, "location", None)
             if location is None or not _osmium_location_valid(location):
                 return
             geometry.append({"lat": float(location.lat), "lon": float(location.lon)})
+            node_id = getattr(node_ref, "ref", None)
+            node_ids.append(int(node_id) if node_id is not None else None)
         if not any(
             _point_in_bbox(lat=point["lat"], lon=point["lon"], bbox=self.bbox)
             for point in geometry
@@ -347,9 +350,12 @@ class _PbfRouteEvidenceHandler:
             return
         way_id = int(way.id)
         self._way_geometries[way_id] = geometry
-        self.elements.append(
-            {"type": "way", "id": way_id, "tags": tags, "geometry": geometry}
-        )
+        element = {"type": "way", "id": way_id, "tags": tags, "geometry": geometry}
+        # Preserve actual OSM identities for junction routing.  Old recordings
+        # without node refs remain geometry-only; never invent IDs from locations.
+        if node_ids and all(node_id is not None for node_id in node_ids):
+            element["nodes"] = node_ids
+        self.elements.append(element)
 
     def _handle_relation(self, relation: Any) -> None:
         tags = _osmium_tags_if_matches(

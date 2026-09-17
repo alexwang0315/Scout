@@ -13,6 +13,9 @@ import math
 import re
 from typing import Any, Iterable, Mapping, Sequence
 
+from pretrip_historical_return_cost import build_historical_return_cost
+from pretrip_historical_time_window import build_historical_time_windows
+
 
 SCHEMA_VERSION = "scout_route_architecture_intelligence.v0"
 MAX_SPINE_NODES = 40
@@ -166,6 +169,18 @@ def build_route_architecture_intelligence(
         default_source_ref=reference_source_ref,
         demand_vectors=vectors,
     )
+    historical_return_cost = _historical_return_cost_projection(
+        reference_value.get("historical_route_timing"),
+        route_distance_m=route_distance_m,
+        distance_scale=_route_axis_scale(route_axis_transform),
+        source_ref=reference_source_ref,
+    )
+    historical_time_windows = _historical_time_window_projection(
+        reference_value.get("historical_route_timing"),
+        return_projection=historical_return_cost,
+        route_distance_m=route_distance_m,
+        source_ref=reference_source_ref,
+    )
     evidence_quality = _evidence_quality(
         status=status,
         reference=reference_value,
@@ -280,6 +295,8 @@ def build_route_architecture_intelligence(
         },
         "segment_demand_vectors": vectors,
         "checkpoint_passage_timing": checkpoint_passage_timing,
+        "historical_return_cost": historical_return_cost,
+        "historical_time_windows": historical_time_windows,
         "checkpoint_graph": _checkpoint_graph(
             checkpoint_values,
             segment_values,
@@ -362,6 +379,206 @@ def build_route_architecture_intelligence(
     }
     payload["sha256"] = _payload_sha256(payload)
     return payload
+
+
+def _historical_mapping(value: Any) -> dict:
+    return dict(value) if isinstance(value, Mapping) else {}
+
+
+def _historical_records(value: Any) -> list[dict]:
+    if not isinstance(value, Sequence) or isinstance(value, (str, bytes)):
+        return []
+    # Keep malformed positions so a broken bin/day cannot disappear into a valid sum.
+    return [_historical_mapping(item) for item in value]
+
+
+def _historical_project_distance(
+    value: Any, *, source_distance_m: float | None,
+    route_distance_m: float, distance_scale: float | None,
+) -> float | None:
+    number = _number(value)
+    target = _number(route_distance_m)
+    scale = _number(distance_scale)
+    if number is None or number < 0 or target is None or target < 0:
+        return None
+    if source_distance_m is not None:
+        if number > source_distance_m or source_distance_m < 0:
+            return None
+        # Exact source equality, not a tolerance: genuinely outside points stay invalid.
+        if source_distance_m > 0 and number == source_distance_m:
+            return target
+    if scale is None or scale <= 0:
+        return None
+    projected = number * scale
+    return projected if math.isfinite(projected) and projected <= target else None
+
+
+def _historical_project_records(
+    value: Any, keys: tuple[str, ...], *, source_distance_m: float | None,
+    route_distance_m: float, distance_scale: float | None,
+) -> list[dict]:
+    return [
+        {
+            **item,
+            **{
+                key: _historical_project_distance(
+                    item.get(key), source_distance_m=source_distance_m,
+                    route_distance_m=route_distance_m, distance_scale=distance_scale,
+                )
+                for key in keys
+            },
+        }
+        for item in _historical_records(value)
+    ]
+
+
+def _historical_departure_ready(value: Mapping, *, allow_legacy: bool = False) -> bool:
+    return (
+        value.get("status", "ready" if allow_legacy else None) == "ready"
+        and not value.get("reason")
+    )
+
+
+def _historical_return_cost_projection(
+    value: Any, *, route_distance_m: float, distance_scale: float, source_ref: str,
+) -> dict[str, Any]:
+    timing = _historical_mapping(value)
+    source_distance = _number(timing.get("route_distance_m"))
+    if source_distance is not None and source_distance > 0:
+        distance_scale = route_distance_m / source_distance
+    axis = {
+        "source_distance_m": source_distance,
+        "route_distance_m": route_distance_m,
+        "distance_scale": distance_scale,
+    }
+    bins = _historical_project_records(
+        timing.get("bins"), ("start_distance_m", "end_distance_m"), **axis
+    )
+    checkpoints = _historical_project_records(
+        timing.get("checkpoints"), ("route_distance_m",), **axis
+    )
+    camp_evidence = _historical_mapping(timing.get("camp_evidence"))
+    camps = _historical_project_records(
+        camp_evidence.get("camps"), ("route_distance_m",), **axis
+    )
+    overnight_camps = _historical_overnight_candidates(
+        timing.get("daily_departures"), **axis
+    )
+    daily_budget = _historical_mapping(timing.get("daily_budget"))
+    result = build_historical_return_cost(
+        bins=bins,
+        checkpoints=checkpoints,
+        camps=[*camps, *overnight_camps],
+        daily_budget_minutes=_number(daily_budget.get("minutes")),
+        route_distance_m=route_distance_m,
+    )
+    return {
+        **result,
+        "daily_budget": daily_budget,
+        "directional_counts": _historical_mapping(timing.get("counts")),
+        "estimation_policy": _historical_mapping(timing.get("policy")),
+        "camp_evidence": {
+            **camp_evidence,
+            "camps": [*camps, *overnight_camps],
+            "explicit_camp_count": len(camps),
+            "overnight_candidate_count": len(overnight_camps),
+        },
+        "source_path": f"{source_ref}#historical_route_timing",
+        "distance_scale": distance_scale,
+        "duration_scaled": False,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+
+
+def _historical_overnight_candidates(
+    value: Any, *, source_distance_m: float | None,
+    route_distance_m: float, distance_scale: float,
+) -> list[dict]:
+    departure = _historical_mapping(value)
+    if not _historical_departure_ready(departure):
+        return []
+    days = _historical_records(departure.get("days"))
+    return [
+        {
+            "node_id": f"historical_overnight.{day['day_id']}",
+            "label": f"D{day['day_index']} 隔夜停留候選",
+            "route_distance_m": distance,
+            "node_kind": "overnight_candidate",
+            "source_refs": [ref for ref in day.get("source_refs", []) if isinstance(ref, str)]
+            if isinstance(day.get("source_refs"), (list, tuple)) else [],
+            "candidate_only": True,
+            "overnight_assignment_verified": False,
+            "field_verified": False,
+            "runtime_safety_truth": False,
+        }
+        for day, following in zip(days, days[1:])
+        if isinstance(day.get("day_id"), str) and day["day_id"].strip()
+        and (index := _number(day.get("day_index"))) is not None
+        and index >= 0 and index.is_integer()
+        and (distance := _historical_project_distance(
+            day.get("end_distance_m"), source_distance_m=source_distance_m,
+            route_distance_m=route_distance_m, distance_scale=distance_scale,
+        )) is not None
+        and (gap := _number(following.get("preceding_gap_hours"))) is not None
+        and 6 <= gap <= 36
+    ]
+
+
+def _historical_time_window_projection(
+    value: Any,
+    *,
+    return_projection: Mapping[str, Any],
+    route_distance_m: float,
+    source_ref: str,
+) -> dict[str, Any]:
+    timing = _historical_mapping(value)
+    distance_scale = _number(return_projection.get("distance_scale"))
+    axis = {
+        "source_distance_m": _number(timing.get("route_distance_m")),
+        "route_distance_m": route_distance_m,
+        "distance_scale": distance_scale,
+    }
+    departure = _historical_mapping(timing.get("daily_departures"))
+    days = _historical_project_records(
+        departure.get("days") if _historical_departure_ready(departure, allow_legacy=True) else [],
+        ("start_distance_m", "end_distance_m"), **axis,
+    )
+    bins = _historical_project_records(
+        timing.get("bins"), ("start_distance_m", "end_distance_m"), **axis
+    )
+    checkpoints = _historical_records(return_projection.get("checkpoints"))
+    camps = _historical_records(
+        _historical_mapping(return_projection.get("camp_evidence")).get("camps")
+    )
+    finish = next(
+        (
+            node
+            for node in reversed(checkpoints)
+            if (distance := _number(node.get("route_distance_m"))) is not None
+            and abs(distance - route_distance_m) < 0.01
+        ),
+        None,
+    )
+    safe_points = [*camps, *([finish] if finish else [])]
+    result = build_historical_time_windows(
+        bins=bins,
+        checkpoints=checkpoints,
+        days=days,
+        safe_points=safe_points,
+        route_distance_m=route_distance_m,
+        cutoff_minute_of_day=18 * 60,
+    )
+    return {
+        **result,
+        "departure_evidence": departure,
+        "safe_point_policy": "historical_camp_or_overnight_candidate_not_verified_current_safety",
+        "source_path": f"{source_ref}#historical_route_timing",
+        "distance_scale": distance_scale,
+        "duration_scaled": False,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
 
 
 def _golden_route_elevation_profile_projection(value: Any) -> dict[str, Any]:
@@ -1151,8 +1368,7 @@ def _checkpoint_passage_timing_projection(
             node_kind = "mcp"
             selection_role = "route_micro_checkpoint"
             display_priority = "context"
-        nodes.append(
-            {
+        node = {
                 "node_id": str(raw.get("node_id") or f"passage.{len(nodes) + 1}"),
                 "source_node_kind": source_node_kind,
                 "node_kind": node_kind,
@@ -1234,6 +1450,22 @@ def _checkpoint_passage_timing_projection(
                 "candidate_only": True,
                 "runtime_safety_truth": False,
             }
+        nodes.append(
+            _with_candidate_metadata(
+                node,
+                source_ref=default_source_ref,
+                confidence=_quality_confidence(str(node["data_quality"])),
+                stale_risk="medium",
+                review_state="candidate",
+                method=(
+                    "pretrip_route_architecture_intelligence."
+                    "checkpoint_passage_timing"
+                ),
+                summary=(
+                    "Historical checkpoint passage timing projection; candidate-only "
+                    "planning evidence, not runtime safety truth."
+                ),
+            )
         )
     nodes = _promote_difficulty_cp_nodes(
         nodes,
@@ -1998,7 +2230,7 @@ def _number(value: Any) -> float | None:
         return None
     try:
         number = float(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None
     return number if math.isfinite(number) else None
 

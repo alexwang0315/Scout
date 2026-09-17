@@ -4,12 +4,13 @@ This interface gives Scout AI a deterministic way to read available tool
 contracts and run read-only local evidence tools without depending on prompt-only
 knowledge.
 
-## Implementation Update 2026-08-22
+## Implementation Update 2026-09-14
 
-Scout AI now runs against Pydantic AI v2.33.0 on the Mac and Pi dependency
-tracks. Tool execution remains deterministic and read-only by default:
+Scout AI's Mac runtime and Pi dependency manifests target Pydantic AI v2.43.0.
+The September 14 upgrade is local only, not a new hardware deployment.
+Tool execution remains deterministic and read-only by default:
 
-- `pydantic-ai-slim[duckduckgo,mcp,openai,openrouter]` is pinned to v2.33.0 for Pi
+- `pydantic-ai-slim[duckduckgo,mcp,openai,openrouter]` is pinned to v2.43.0 for Pi
   admin/live runtimes and the local development venv.
 - Scout keeps `pydantic_ai.Agent(end_strategy="early")` for typed Scout
   provider calls. This intentionally avoids Pydantic AI v2's default graceful
@@ -31,21 +32,111 @@ tracks. Tool execution remains deterministic and read-only by default:
   legacy v5 role, OpenRouter annotation preservation, and timeout enforcement
   for blocking synchronous tools. Scout does not opt into instrumentation v6
   until its trace consumers accept the role change.
-- The v2.33.0 smoke rejects nested synchronous agent runs from framework-managed
+- The v2.36.0 smoke rejects nested synchronous agent runs from framework-managed
   sync callbacks. Delegated Scout agents must use an async callback and
   `await agent.run(...)`, avoiding the former deadlock path.
 - Pydantic AI v2.32 uses `httpx2` for compatible clients. Provider smoke must
   cover OpenRouter/OpenAI-compatible construction without exposing headers or
   credentials.
 - Pydantic AI v2.32.2 normalizes DeepSeek Responses function-call replay. The
-  v2.33.0 compatibility smoke keeps the OpenRouter/DeepSeek tool replay path in
+  v2.36.0 compatibility smoke keeps the OpenRouter/DeepSeek tool replay path in
   scope so a provider handoff cannot lose tool-call/result pairing.
-- Pydantic AI v2.33.0 supports `anthropic>=1.0.0`; a custom Anthropic provider
+- Pydantic AI v2.36.0 supports `anthropic>=1.0.0`; a custom Anthropic provider
   client must be an `httpx2.AsyncClient`. Scout does not construct or log such
   a client unless the Anthropic provider is explicitly configured.
+- Pydantic AI v2.36.0 deprecates `RunContext.capability_loaded` and
+  `available_capability_ids`; Scout integrations must use `capability_active` and
+  `active_capability_ids`. The compatibility smoke verifies the replacement
+  contract and preserves explicitly empty `Tool.description` values.
+- Pydantic AI v2.36.0 adds stable `InstructionPart.id` values and explicitly
+  named `@durable_operation` capability functions. Scout uses these as
+  replay/audit identities only; deterministic permission and effect gates
+  remain authoritative.
+- The v2.37.0 smoke adds fixture-backed Z.AI termination cases for both ordinary
+  and streamed responses. It checks `sensitive -> content_filter`,
+  `model_context_window_exceeded -> length`, and `network_error -> error`,
+  retaining partial output and the original provider reason. This verifies the
+  dedicated Z.AI adapter only; it neither changes Scout's configured model nor
+  assumes OpenRouter/NVIDIA automatically inherit that provider-specific fix.
+- The v2.38.0 regressions cover same-ID capability merging, run-level WebSearch
+  replacement without losing WebFetch, first-tool cancellation/resumption, and
+  the opt-in streamed finish-reason check. Scout keeps one traced search/fetch
+  pair and does not enable strict finish reasons on every compatible provider.
+  Installed version metadata, not a constant answer, must satisfy the live
+  version tool. See the
+  [upgrade and failed-case report](../evals/scout-ai-pydantic-238-failed-case-smoke-20260904.md).
+- The v2.40.0 regressions verify filtered `Agent.on_event` listeners and ensure
+  parallel sibling tool results remain together before synthetic deferred-tool
+  reveal exchanges. The live OpenRouter smoke continues to verify structured
+  output, MCP stream events, traced search/fetch, visible tool failure, and
+  retry. See the
+  [2.40/Praison 1.7.4 report](../evals/scout-ai-pydantic-240-praison-174-smoke-20260907.md).
+- Pydantic AI v2.41 deprecates `fallback_model` on `ImageGeneration` and
+  `XSearch` in favor of `fallback_subagent_model`. Scout has no existing use of
+  those capabilities; compatibility checks cover the new name and legacy alias
+  and reject ambiguous constructor/merge combinations without enabling
+  additional providers or network research paths. The new
+  `openai-codex` provider and `ImageGenerator` API are not automatically routed
+  or activated by upgrading. Image generation is tested only with the SDK's
+  local fixture model, and provider search usage survives message serialization.
+  See the
+  [2.41 compatibility report](../evals/scout-ai-pydantic-241-smoke-20260909.md).
+- Pydantic AI v2.42 rejects invalid `DeferredToolResults.approvals` before
+  execution. Pass explicit booleans, `ToolApproved` or `ToolDenied`, never
+  strings or integers; serialized approvals must not rely on coercion. The
+  smoke exercises approval/denial after restoring history with a fixture-only
+  tool. Scout's own effect and human-approval gates remain authoritative.
+- `ToolReturnContent` reconstructs URL media mappings only with an explicit
+  non-empty `media_type`; a user mapping merely sharing `kind=image-url`
+  remains data. Preserve source refs and media metadata when persisting tool
+  evidence. Large evidence-card history and nested image restoration are
+  regression-tested without fetching the fixture URLs. Code Mode non-object
+  `$ref` definitions must retain scalar/list/union types in signatures instead
+  of becoming empty object types. See the
+  [2.42 compatibility report](../evals/scout-ai-pydantic-242-smoke-20260910.md).
+- The v2.43 smoke exercises OpenAI and OpenRouter text/tool/text streaming,
+  including thinking tags and multiple tool boundaries. Every text/reasoning
+  delta must belong to an open part, and source refs and tool-call/result IDs
+  must survive into the consumer stream. These are fixture-backed transport
+  regressions, not evidence of improved answer quality.
+- Pydantic AI v2.43 prints a first-run banner to interactive stderr. The smoke
+  requires machine-readable stdout to remain clean and verifies one banner per
+  process plus the `BANNER_ENABLED=False`, `PYDANTIC_AI_NO_BANNER=1`, and CI
+  suppression contracts in credential-free subprocesses. Scout does not disable
+  native research or change model policy to suppress informational output.
+  There is no Scout Temporal execution path to exercise the separate upstream
+  Temporal/MCP fix. See the
+  [2.43 compatibility report](../evals/scout-ai-pydantic-243-smoke-20260914.md).
+- Optional Praison intelligence dependencies target `praisonaiagents==1.7.5`.
+  Real SDK orchestration, MCP lifecycle, Scout Model Gateway replay, and isolated
+  opt-in file memory are compatibility checks, not new authority or implicit
+  memory activation. Scout creates a fresh Team, Tasks and approval scopes per
+  request; do not reuse one SDK Team across concurrent asyncio tasks. Fixture
+  tests cover sync/async/stream tool call-return pairing, tool-error recovery,
+  handoff history restoration, local embedding routing, and explicit typed
+  workflow variables. Preserve Scout's own clocks and model transport: upstream
+  sync latency and initial SSE tool arguments still have known defects. See the
+  [1.7.5 report](../evals/scout-ai-praison-175-smoke-20260911.md).
+- The live MCP compatibility smoke now requires an actual server execution and
+  the returned marker in the answer. Missing evidence triggers model feedback
+  within the unchanged 10/10 budget, not a fabricated tool receipt. Assertions
+  retain fixture trace details; model prose without tool execution is a failure.
+- MCP compatibility is now exercised through `run_stream_events()`. A valid
+  trace must include both `FunctionToolCallEvent` and
+  `FunctionToolResultEvent` before `AgentRunResultEvent`; merely listing an MCP
+  tool is not sufficient evidence that streaming execution works.
+- The 2.36.0 live OpenRouter compatibility run passed all 26 checks with
+  `deepseek/deepseek-v4-flash-0731`, including structured output, function
+  tools, MCP streaming, WebSearch, WebFetch, visible tool failure, and retry.
+- Live compatibility smoke keeps shell values at highest priority. An explicit
+  `--env-file` or `SCOUT_ENV_FILE` is authoritative; otherwise it loads the
+  optional repo `.env` followed by the persistent `~/.scout/.env`. Offline
+  smoke and hermetic tests do not load operator credentials.
 - OpenRouter's native web plugin may complete without exposing a source or tool
   trace. A successful transport response is not accepted as grounded evidence;
   Scout keeps the local traced search/fetch path as the OpenRouter default.
+  The native-search smoke labels its scope `provider_transport_only` and grants
+  10 search uses, preserving the same minimum capacity as other Scout tools.
 - NVIDIA-hosted GLM uses `SCOUT_AI_OS_MODEL=z-ai/glm-5.2` and
   `NVIDIA_API_KEY`. Scout routes it to the OpenAI-compatible NVIDIA endpoint
   while preserving `z-ai/glm-5.2` as the outbound model id.
@@ -824,6 +915,15 @@ Planner behavior:
   support evidence when the workspace provides it.
 - Missing or stale CWA/GEE artifacts are reported as evidence gaps; Scout AI
   must not infer low weather risk from absent environment artifacts.
+
+Recent-rain aggregation (user arbitration, 2026-09-14):
+
+- When Weather emits the typed query-reported previous-24-hour-rain route-reassessment CHANGE_PLAN and BOTH CWA/GEE emit native missing-support DELAY decisions at the same existing source priority, use the Weather change-plan candidate as the first layer. This is a bounded aggregation rule, not a global ordering of CHANGE_PLAN above DELAY.
+- Both environment DELAYs must be attributable to their original missing/error source records. Stale, future or other freshness failures, or existing measured CWA warning/QPF or GEE wetness/antecedent-rain review pressure, do not qualify for this rule. Preserve the native readers' existing pressure predicates and decision branch order. Mixed or complete support and other typed Weather rules keep the existing aggregation behavior.
+- Retain every native source result and gap unchanged. The aggregate must retain Weather's existing action limit and add the CWA/GEE missing-support limits and next steps; all missing support is included in required conditions. The first layer must identify the reason as user-reported rain and state that missing evidence and human review still prevent departure authorization.
+- The aggregate remains allowed=false, candidate-only, human-review-required and runtime-safety-truth=false. Higher-priority Permission/Media decisions and source-specific factual answers retain their existing precedence. The projection cannot write or reclassify source evidence, clear gaps, approve a route, or alter runtime safety state.
+
+Arbitration receipt: weather_recent_rain_aggregation_20260914, SHA-256 a60d5a11eaf36dd6fba37455b47f6101211742dc39fac37b8ec0c52df791aed5; user chose “採建議：改計畫為主，保留缺口與限制”.
 
 Boundary:
 

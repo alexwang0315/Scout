@@ -109,6 +109,10 @@ class PydanticAIV2MacLocalFallback:
             raise RuntimeError(
                 "NVIDIA_API_KEY is required for Mac local Pydantic AI fallback"
             )
+        if _requires_openai_key(self.model_name) and not api_key:
+            raise RuntimeError(
+                "OPENAI_API_KEY is required for Mac local Pydantic AI fallback"
+            )
 
         runner = PydanticAIEnvRunner(
             model_name=self.model_name,
@@ -185,7 +189,7 @@ def _api_key_for_model(model_name: str, environ: Mapping[str, str]) -> str | Non
             or environ.get("NVIDIA_API_KEY")
             or environ.get("SCOUT_NVIDIA_API_KEY")
         )
-    if model_name.startswith("openai:") or model_name.startswith("openai/"):
+    if _requires_openai_key(model_name):
         return environ.get("OPENAI_API_KEY")
     return (
         environ.get("SCOUT_AI_ASSISTANT_API_KEY")
@@ -205,6 +209,13 @@ def _requires_nvidia_key(model_name: str) -> bool:
         "z-ai/glm-5.2",
         "glm-5.2",
     }
+
+
+def _requires_openai_key(model_name: str) -> bool:
+    normalized = model_name.strip().casefold()
+    return normalized == "gpt-6-astra" or normalized.startswith(
+        ("openai:", "openai/", "openai-chat:", "openai-responses:")
+    )
 
 
 def _int_from_environ(

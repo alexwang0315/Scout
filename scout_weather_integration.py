@@ -863,6 +863,14 @@ def _segment_source(
     return {
         "weather_source": point.get("source") if isinstance(point, dict) else None,
         "source_run_id": point.get("source_run_id") if isinstance(point, dict) else None,
+        # Keep source publication and packaging clocks per matched point.
+        # The enclosing package creation time must not replace this provenance.
+        **{
+            key: point[key]
+            for key in ("issued_at", "issuedAt", "generated_at", "generatedAt")
+            if isinstance(point, dict) and isinstance(point.get(key), str)
+            and point[key].strip()
+        },
         "warning_count": len(warnings),
     }
 

@@ -46,6 +46,379 @@ Each entry should include:
 
 ## Implementation Record
 
+### 2026-09-14 - Reconnect Scout monitor without a Mac 9151 listener
+
+User request: improve automatic connection while keeping Mac 9151 closed.
+Status: **PARTIAL / deployed with remaining validation failures**, not official qualification.
+
+- Root cause at the real 9099 entry: the Mac backend only retried local HTTP,
+  but its temporary SSH forward was absent. Ordinary SSH and the Scout API
+  were reachable. HTTP refresh could not recreate that separate process.
+- `tools/hardware_monitor_proxy.py` now chooses per-request SSH on native Mac;
+  `tools/hardware_monitor_ssh.py` owns a bounded stdio exchange to the fixed
+  `scout` alias and `127.0.0.1:9151`. No local listener, remote shell command,
+  persistent tunnel, control operation or authentication relaxation is added.
+  Scout/Linux native backends keep fixed loopback HTTP; container localhost
+  must still be configured according to its deployment, not presumed Scout.
+- Fixed GET allowlist/query bounds, no redirects, strict SSH host verification,
+  no inherited local forwards/control socket, bounded response/stderr/deadline,
+  and child cleanup. HTTP 503 JSON is preserved, and failures are not cached.
+  The next regular poll/manual read opens a new SSH connection.
+- Same-origin routes and existing Dashboard auth remain unchanged. All three
+  status/history/events endpoints and both embedded/full-page consumers are
+  in scope; no Navigation/GIS behavior or workspace selection is changed.
+- Monitor text explains automatic retries; typed failures distinguish SSH from
+  a refused Scout API. Existing DASH-050 is extended with transport evidence
+  and disconnection/recovery notices, without adding a Diagnostic ID or
+  changing the unresolved regular-count expectation. The inline block remains
+  an exact mirror of `docs/admin/scout-monitor-power-diagnostic.js`.
+- Tests: proxy/stdio first pass 35/35; real concurrent reads all HTTP 200 in
+  0.661 s, status fresh/warning, history 60 and events 50. Mac 9151 remained
+  closed. Expanded verification and immutable failure notes are recorded in
+  `artifacts/scout-monitor-reconnect-20260914/verification.md`.
+- The user approved restarting the existing 9099 process to load this change.
+  It now serves SSH-backed status/history/events with Mac 9151 closed. A second
+  issue was reproduced: cached iframe HTML kept old retry notices, and real
+  DASH-050 failed 22/26. Monitor HTML now sends no-store; a scoped document
+  revision query on the System iframe and DASH-050 probe invalidates already
+  cached copies. Root Dashboard route and API paths remain unchanged.
+  After actual document reload, the same DASH-050 passed 26/26 at 10:51:38
+  Asia/Taipei (current API data, 3231 ms); it does not certify UPS health.
+  The gateway includes unrelated dirty Navigation/GIS files;
+  a mixed snapshot must not be submitted without explicit user permission.
+- Final real-browser smoke passed on 9099: all three same-origin API routes,
+  seven inventory lists/details, keyboard refresh with expansion retained,
+  desktop and 390px/320px mobile layouts; no console/page errors. Final targeted
+  tests were 61 PASS / 2 FAIL (30s Node/JSDOM subprocess timeouts), with earlier
+  synthetic replay failures preserved. The 48-versus-50 Diagnostic count
+  conflict is unchanged. These failures prevent full acceptance; the earlier
+  63/63 run and live DASH-050 pass do not supersede the final failure evidence.
+- This is not a repair of UPS I²C communication or a hardware-health verdict.
+  `docs/admin/scout-monitor-power-guide.md` and its PDF describe the new path.
+
+### 2026-09-13 - Separate UPS battery readability from host supply observations
+
+User request: investigate unreadable battery/power, then apply the proposed
+software-only separation. Status: **PARTIAL / not acceptance complete**.
+
+- Reproduced the existing 9099 entry and compared the real 9151 response with
+  Scout's existing power observer record. UPS I²C reads failed while PMIC 5V and
+  throttle flags remained valid. The old aggregate `power.status` gate discarded
+  both groups, hiding independently valid supply observations. This change does
+  not establish the physical cause of the UPS communication failure.
+- The Mac 9099 Dashboard remains a native process (PID 7361) with workspace
+  `/Users/alexwang0315/workspace`; its backend and fixed same-origin GET proxy
+  were not restarted or changed. Mac 9151 remains the temporary SSH forward
+  (PID 7075), not permanent deployment. In-app browser workspace:
+  `golden_g1_chilai_repeat8_20260909_r14`; the isolated live smoke profile used
+  the server's default `chilai_nanhua_day1_scoutAI`. Hardware APIs are host-wide
+  and do not receive or change workspace selection.
+- Scout changes are limited to the existing hardware sampler normalization,
+  API Power model, passive I²C telemetry provenance, standalone monitor UI,
+  their focused tests/browser harness, and API guide. Optional `ups_status`,
+  `supply_status` and fixed error codes preserve backward compatibility. UPS,
+  PMIC voltage, and throttle flags are checked independently from the same raw
+  row; missing/invalid/stale values are never filled from an older successful
+  sample. Battery alerts, flow events, history, and text summaries use the
+  appropriate source, without masking independent low-voltage/throttle alerts.
+- Dashboard changes are limited to `tools/scout_hardware_monitor.html`, its
+  two existing smoke harnesses, the capability manifest, this record, and the
+  new power guide/PDF. Missing battery readings remain 未知. Valid host 5V and
+  flags remain visible, including older samples whose new status fields are
+  null. A visible UPS 通訊失敗（I²C） notice does not claim UPS recovery. Top-level
+  warning/critical/stale state, 60-second polling, abort cleanup, and expanded
+  inventory state are retained.
+- Added `DASH-050` to the existing Regular System Diagnostic using the existing
+  inline pattern, with `docs/admin/scout-monitor-power-diagnostic.js` as its
+  tested mirror and `tests/test_scout_monitor_power_diagnostic.py`. No module
+  route, service, Navigation/GIS behavior, hardware controls, active scan,
+  notifications, or Mac hardware metrics were added. The existing parent
+  iframe readiness timing was investigated but not changed.
+- Scout installed copies were backed up to
+  `/home/alexwang0315/.local/state/scout-hardware-monitor/backups/power-split-20260913.H8NebU/`.
+  Only the resident API was restarted once to load its added response fields
+  (PID 1011 → 879901). The existing raw observer PID 1486, timer cadence, and
+  hardware operations were not changed. The next scheduled sample retained
+  roughly 5.15–5.16 V and flags 0, with battery null and a backend warning.
+  The final 19:24 browser run observed 5.13 V with the same UPS failure.
+- Backend focused tests passed 55/55 on Mac and Scout; Scout still emitted its
+  existing Starlette/AnyIO deprecation warning. The standalone real-API browser
+  smoke passed all 12 scenarios at 1440/1024/768/320 px. Dashboard live smoke
+  passed desktop/mobile, keyboard refresh, all seven device lists and disclosure
+  persistence. Final live `DASH-050` passed 24/24 at 19:17:44 Taipei (one real
+  API check plus 23 synthetic render checks), explicitly not hardware health.
+  A final real-API desktop/mobile run after the legacy-null correction passed
+  at 19:24 (`live-dashboard-served-final`); its served HTML SHA-256 matched
+  `e9db2b15a92d8ed779cd18d64c2aec4019b3da940aaa8943eabc5fc905545328`.
+- Retained failures: the final-version 34-scenario Dashboard run passed 29 and
+  failed 5 (loading capture, three screenshot timeouts, one simulated-clock
+  reversal). The 24-test Diagnostic/proxy run had 8 subprocess timeouts;
+  unchanged sequential retry passed 24/24. A later full 9099 served-entrypoint
+  replay passed 34/34 (`scout-monitor-state-synthetic-xAFEjP`). These
+  timing-sensitive results are not relabelled as unconditional success.
+  Earlier 33/33 smoke evidence used the intermediate version before the
+  additional legacy-null case.
+- **Arbitration required:** `tests/test_diagnostic_advanced_entrypoint.py`
+  expects exactly 48 Regular cases, but the pre-change registry already had 49;
+  adding `DASH-050` gives 50. The test failed 50 != 48. The original check and
+  its evidence remain unchanged. Proposed decision: update the count to 50
+  while retaining the rule that Advanced cases stay separate. No approval has
+  yet been received for that expectation change.
+- `pnpm lint`, `pnpm typecheck`, `pnpm test`, the 20-capability manifest, and
+  existing Diagnostic coverage/alignment checks were run. The Navigation guard
+  stayed report-only with the same pre-existing drift; its baseline was not
+  edited. Full map/runtime/GPT Pro qualification was not performed; this is
+  scoped construction evidence, not promotion or runtime safety truth.
+- Evidence index: `artifacts/scout-power-split-20260913/verification.md`;
+  reports preserve both failures and later checks. Operator instructions:
+  `docs/admin/scout-monitor-power-guide.md` and its one-page, visually checked
+  Traditional-Chinese PDF. Entry:
+  `http://127.0.0.1:9099/admin/dashboard#scout-monitor`.
+
+### 2026-09-11 - Expand Scout hardware monitoring with device inventory
+
+User request: integrate the seven passive inventory sections from the resident
+Scout Hardware Monitor API into the existing Dashboard page.
+
+- Read the Mac checkout `AGENTS.md`, the API guide at
+  `scout:/home/alexwang0315/work/scout-fusion/docs/admin/scout-hardware-monitor-api.md`,
+  and the live 9151 OpenAPI contract before implementation. The existing 9099
+  Dashboard is native on the Mac (PID 63012); 9151 is the existing temporary
+  SSH forward (PID 53539), not a container or permanent Mac deployment setting.
+- Expanded only the Scout monitor HTML, focused test harnesses, and capability
+  documentation. The existing fixed same-origin GET proxy and permissions are
+  unchanged. No service restart, Mac metrics, active scan, pairing, GPIO
+  read/write control, or serial-port access was added.
+- Added Network, Bluetooth, USB, PCIe, I²C, GPIO, and UART/serial sections from
+  `data.inventory.sections`. Read status is labelled 已讀取 / 部分讀取 /
+  無法讀取, independently of device connection or power state. USB root hubs
+  and external devices have separate counts; PCIe counts are API-driven.
+- Device fields, raw properties, notes, errors, and GPIO line tables use DOM
+  text nodes. Missing values remain unknown; GPIO null values are 未採樣.
+  I²C and serial sections explain the limits of passive enumeration. Null or
+  missing inventory in an older sample shows a waiting state.
+- Section, properties, notes, and line-table expansion survives refresh,
+  including keyboard focus and table scroll position. Stale or disconnected
+  readings remain visible with explicit retained-data notices. The page keeps
+  the original 60-second cadence and cancels in-flight reads on pagehide.
+- Narrow-screen spacing was adjusted within this monitor only. The first live
+  smoke observed one interrupted history request; a separate real history read
+  returned HTTP 200 with 835442 bytes in 13.355503 seconds. The exact original
+  interruption cause was not captured. Since that observed transfer exceeds the
+  old 12-second client bound, history now has a bounded 30-second timeout while
+  status/events retain 12 seconds and independent rendering. This does not
+  change the backend 8-second socket timeout or make the SSH forward permanent.
+- Verification: 10 focused Dashboard/proxy Python tests passed, including
+  preservation of inventory, null GPIO values, and a stale 503 envelope.
+  `pnpm lint`, `pnpm typecheck` (1 test), and `pnpm test` (27 tests) passed;
+  focused Ruff, JavaScript syntax, and the 20-capability manifest passed.
+- The final synthetic browser harness passed all 28 scenarios in 49.475 seconds,
+  including warning/critical, stale-503, disconnected/recovered inventory,
+  old/null inventory, partial/empty sections, pure-text injection protection,
+  dynamic device counts, GPIO null/false/direction semantics, 60-second polling,
+  expansion persistence, independent 12/30-second timeouts, and a successful
+  13-second history response. It produced 42 screenshots at
+  `artifacts/scout-monitor-state-synthetic-y82dqM/`. The initial provisional
+  harness run at `artifacts/scout-monitor-state-synthetic-aVppm9/` is retained:
+  its five failures were outdated timeout expectations and provisional
+  fixture/wording expectations, corrected against the API contract rather than
+  changing device semantics. Synthetic evidence is not real hardware testing.
+- Final Chrome smoke on the existing 9099 service passed at desktop 1440px and
+  mobile 390/320px. It operated all seven category summaries, their notes and
+  first-device properties, a GPIO line disclosure with the keyboard, and manual
+  refresh; all expanded keys survived. All nine hardware requests were
+  same-origin GET/200, with no Mac-monitor requests or browser errors. Live
+  counts matched the API: 2 network interfaces, 1 Bluetooth controller, 4 USB
+  root hubs / 0 external devices, 10 PCIe entries, 3 I²C adapters + 1 UPS
+  telemetry item, 5 GPIO controllers / 111 lines, and 3 serial nodes.
+- Evidence: `artifacts/scout-monitor-inventory-20260911/` contains
+  `runtime-verification.json`, `initial-live-observation.md`, and
+  `live-browser-final/browser-smoke.json` with 15 desktop/mobile screenshots.
+  The final live report SHA-256 is
+  `904aa96e173094f3a0e411e95f360bcb2986272f3ddc5c37d36e1b938766cc59`.
+  The Dashboard and SSH listener PIDs stayed unchanged. Pre/post Navigation
+  guards reported `NAVIGATION_FREEZE_SUSPENDED` with the same existing drift;
+  no Navigation/GIS source or baseline was changed. The 32-layer change gate
+  is not applicable. These are WORKING PROTOTYPE construction proofs, not
+  official full qualification, independent GPT Pro review, or production
+  promotion; the initial intermittent history transport observation is retained.
+
+Reproduce (use a new artifact directory/report path per run):
+
+```bash
+./venv/bin/python -m pytest -q tests/test_dashboard_scout_monitor.py tests/test_hardware_monitor_proxy.py
+node tools/dashboard_scout_monitor_state_smoke.js http://127.0.0.1:9099
+node tools/dashboard_scout_monitor_browser_smoke.js --base-url http://127.0.0.1:9099 --screenshots-dir artifacts/scout-monitor-inventory-new-live
+pnpm lint && pnpm typecheck && pnpm test
+```
+
+Open `http://127.0.0.1:9099/admin/dashboard#scout-monitor` on the Mac. The direct
+same-origin monitor URL is `http://127.0.0.1:9099/admin/dashboard/scout-monitor`.
+
+### 2026-09-11 - Keep only Scout host monitoring in System
+
+User request: remove the Mac monitoring portion of scout monitor.
+
+- The Dashboard now serves `tools/scout_hardware_monitor.html`, containing
+  only the Scout hardware status, metrics, disks, history, alerts, and events.
+  Local Mac identity, resource cards, polling controls, local trend, and
+  process observations were removed from this page.
+- Both Dashboard application factories stopped mounting the macOS collector;
+  the former monitor `/api/health` and `/api/snapshot` paths return 404. The
+  Scout hardware proxy, 60-second polling, and stale/null handling are retained.
+- Updated the page description and capability manifest to reflect Scout-only
+  monitoring. The standalone macOS utility remains separate from Dashboard.
+- Verification: 94 focused Python tests passed, all 12 browser state replays
+  passed (including stale 503, nulls, 60-second polling, and leave/restore), and
+  `pnpm lint`, `pnpm typecheck`, and `pnpm test` passed. JavaScript syntax,
+  focused Ruff, and the 20-capability manifest validation also passed.
+- Reloaded the existing native Mac Dashboard on `127.0.0.1:9099`; the QGIS
+  worker (PID 1668) and existing Scout API SSH forward (PID 53539) were retained.
+  Dashboard PID 63012 was observed after reload. The former Mac health and
+  snapshot endpoints returned 404; the Scout status, history, and events proxy
+  endpoints returned 200 with host `scout`, 60 history items, and 37 events.
+- Real Chrome desktop/mobile/keyboard smoke on 9099 passed with zero Mac UI
+  elements, zero Mac monitoring requests, no browser errors, and no mobile
+  horizontal overflow. All nine observed hardware requests were same-origin
+  GET requests. Evidence is under
+  `artifacts/scout-monitor-scout-only-20260911/`: `state-replay.json`,
+  `live-browser/browser-smoke.json`, and desktop/mobile screenshots.
+- The pre/post Navigation guard reported `NAVIGATION_FREEZE_SUSPENDED` in
+  report-only mode; no Navigation/GIS behavior or baseline was changed. This
+  is scoped working-prototype evidence, not full Dashboard qualification or
+  production promotion. The 9151 SSH forward remains temporary.
+
+### 2026-09-11 - Integrate Scout hardware monitoring into scout monitor
+
+User request:
+
+- Integrate the existing Scout hardware monitor into the Dashboard's `System >
+  scout monitor` page, using Traditional Chinese, real API data, and a
+  same-origin Dashboard proxy.
+
+Implementation:
+
+- Added a fixed, GET-only Dashboard proxy for
+  `/api/v1/hardware-monitor/status`, `history?limit=60`, and
+  `events?limit=50`. The Dashboard server reads the local Scout upstream at
+  `http://127.0.0.1:9151`; the browser never calls that upstream directly.
+- Extended the existing monitor frame with hardware status, Taipei sample time,
+  data age, battery/power, memory and Swap, disk/inode/read-only rows,
+  CPU/load, temperatures, source-qualified NVMe sensors, fan RPM, uptime,
+  history trend, current alerts, thresholds, and status-change events.
+- Added explicit loading, unavailable, stale-503, null, empty, warning, and
+  critical states. A stale 503 remains stale even when its retained snapshot
+  reports `data.status=ok`; a 503 `unavailable` remains disconnected. Sample
+  age advances between requests and changes fresh status to stale after 150
+  seconds. History uses actual timestamps and breaks at null or missing samples.
+- Status, history, and events render independently, with bounded requests,
+  60-second polling, pagehide cancellation, and pageshow restoration. Metric
+  states use the supplied thresholds; missing metrics have unknown icons.
+- Added focused proxy coverage and a candidate-only capability entry. No
+  Navigation/GIS or hardware-control behavior was changed.
+
+Boundary and safety:
+
+- The new surface is read-only telemetry and does not write samples, mutate
+  Scout runtime safety truth, control hardware, send notifications, or call
+  outbound services. Refresh and polling issue GET requests only.
+- The verified local process is Dashboard `127.0.0.1:9099`; its fixed Scout
+  upstream is the local SSH-forwarded `127.0.0.1:9151`. This is a Mac process,
+  not a container. The proxy rejects redirects and ignores ambient HTTP proxy
+  settings. It runs inside the existing Dashboard application/access boundary;
+  this loopback workspace entrypoint has no separate login middleware.
+- After confirming all 21 preparation jobs were terminal, the existing 9099
+  process (PID 1728) was gracefully restarted through its original launcher.
+  The updated Dashboard runs as PID 60087, parent 60078. QGIS PID 1668 and the
+  SSH forward PID 53539 were preserved. No additional Dashboard port is needed.
+
+Verification:
+
+- Live OpenAPI was read in full for the affected contracts. The 9099 main page,
+  monitor page, and all three proxy endpoints returned 200. The live API sample
+  at 2026-09-11 10:59 Asia/Taipei was `ok`, with 60 history samples, 2 disks,
+  and 12 event records.
+- Focused collector/proxy/Dashboard tests: `13 passed`; project `pnpm lint`,
+  `pnpm typecheck` (1 test), and `pnpm test` (27 tests) passed. The earlier
+  qualification bootstrap had `81 passed`; manifest validation still reports
+  21 capabilities. Targeted Ruff and JavaScript syntax checks passed. Tests
+  supply an empty assistant environment and do not load real `.env` values.
+- After the final UI changes, both targeted Dashboard route/action-contract
+  regressions passed. The 12-case replay was rerun using the served 9099 HTML.
+- Real Chrome smoke used the existing 9099 Dashboard, navigated System to
+  scout monitor, activated refresh using the keyboard, and checked desktop
+  and 390px mobile. All 9 hardware requests were same-origin GETs returning
+  200; console errors, page errors, and failed hardware requests were empty.
+  Mobile document width and scroll width were both 364px.
+- A separate browser replay passed 12 cases, including stale 503, disconnected
+  503, null readings, empty data, thresholds/GiB/zero-RPM, timestamp/null gaps,
+  local age expiration, retained/partial list failures, request timeout,
+  exactly-60-second polling, and in-flight abort/restore on pagehide/pageshow.
+- Final live evidence at 11:03 Asia/Taipei also passed after increasing mobile
+  text size/contrast: 60 history samples, 2 disks, and 14 event records.
+- Evidence: `artifacts/scout-monitor-20260911/state-live-entrypoint.json`,
+  `artifacts/scout-monitor-20260911/live-browser-final/browser-smoke.json`, and the
+  desktop/mobile hardware screenshots alongside that browser report.
+- The pre/post Navigation freeze guard remained report-only with
+  `NAVIGATION_FREEZE_SUSPENDED`; no Navigation/GIS files were intentionally
+  changed.
+
+Known remaining gaps:
+
+- This is a Construction Mode integration, not an official full Dashboard
+  qualification or productization verdict. The live upstream depends on the
+  existing temporary SSH forward. The older Dashboard static suite had one
+  unrelated failure for its existing FETCH_TIMEOUT_MS fallback assertion
+  (`149 passed, 1 failed`); that fallback was not changed here.
+
+### 2026-09-11 - Add the macOS resource monitor to System
+
+User request:
+
+- Add the Scout macOS resource monitor to Dashboard as a new System page named
+  `scout monitor`.
+
+Implementation:
+
+- Added `scout monitor` to the System navigation, route truth contract, route
+  metadata, and Dashboard's existing same-origin embedded-surface frame.
+- Mounted the monitor collector at
+  `/admin/dashboard/scout-monitor` for both the Dashboard factory and the
+  `tools/dashboard_workspace_app.py` 9099 entrypoint. The standalone 8877
+  monitor remains available.
+- Made the monitor resolve its snapshot API relative to the embedded route,
+  while preserving its standalone `/api/snapshot` path.
+- Added the route to the browser action contract and a candidate-only,
+  read-only capability entry. Added deterministic API/route coverage.
+
+Boundary and safety:
+
+- The page only observes local macOS resources; samples are not persisted and
+  the UI cannot change runtime safety truth, workspace state, notifications,
+  outbound transports, or hardware.
+- No Navigation map, route, GIS, worker, or freeze baseline behavior was
+  changed. The existing 9099 process was not restarted during verification.
+
+Verification:
+
+- Focused monitor, Dashboard route, manifest, and contract tests: `6 passed`.
+- Manifest validation, Python/JavaScript parsing, and browser smoke passed.
+  Isolated Chrome interaction opened System → `scout monitor`, rendered a real
+  macOS snapshot in the same-origin frame, and observed no console or HTTP
+  failures with the fixture workspace.
+- The real `tools/dashboard_workspace_app.py` entrypoint returned HTTP 200 for
+  Dashboard, monitor page, and monitor health.
+- The broader Dashboard page/telemetry run reached `157 passed, 1 failed`; the
+  remaining failure is an unrelated existing timeout-string assertion in the
+  Dashboard source and was not changed by this slice.
+
+Known remaining gaps:
+
+- The user-started 9099 process predates this change and must be restarted by
+  the operator before the new page appears there.
+- This is a Construction Mode integration, not an official full Dashboard
+  qualification or productization verdict.
+
 ### 2026-08-17 - Q0057 required weather/hydrology layers and Q0060 compact readability
 
 User decisions:
@@ -297,10 +670,10 @@ Root cause:
   Dashboard render.
 - Dashboard renders destroy and recreate the MapLibre instances. The load
   handler always called Fit because no route-scoped camera state was retained.
-- 2D and 3D require `中心同步、尺度獨立`: center changes must follow each
-  other, while zoom, pitch, and bearing remain mode-specific. The old runtime
-  had no contract for preserving that distinction across a rerender or a
-  single-view transition.
+- 2D and 3D require `中心、尺度、俯角與方位各自獨立`. The runtime must not
+  overwrite one mode's camera when the other mode is fitted, moved, or restored.
+  The old runtime had no contract for preserving those mode-specific cameras
+  across a rerender or a single-view transition.
 
 Correction:
 
@@ -308,8 +681,8 @@ Correction:
 - The Navigation MapLibre runtime records center, zoom, pitch, and bearing
   before map removal and after camera movement. Records are scoped to project,
   route projection fingerprint, and DEM source fingerprint.
-- The latest center is propagated across stored 2D and 3D cameras, while each
-  mode keeps its own zoom, pitch, and bearing.
+- Each mode retains its own center, zoom, pitch, and bearing. Split View does
+  not propagate camera movement across modes.
 - A stored camera is restored after candidate, lens, Evidence, vertical
   exaggeration, or 2D/3D/Split rerenders. A changed route or DEM scope starts
   with a new Fit instead of reusing stale camera state.
@@ -317,15 +690,14 @@ Correction:
 Permanent acceptance gate:
 
 1. In Split view, Fit/Reset both maps, zoom 2D and 3D independently, then drag
-   or keyboard-pan 3D. Both centers must match; neither zoom may change because
-   the other map moved.
+   or keyboard-pan 3D. The 2D center and zoom must remain unchanged.
 2. Trigger rerenders through a candidate selection and at least one lens,
    Evidence, vertical exaggeration, and view-mode switch. The recreated maps
-   must restore the same mode-specific zoom and the shared center.
-3. In 3D-only view, pan the terrain map and switch to 2D-only. The 2D center
-   must equal the latest 3D center while its previous 2D zoom is retained.
+   must restore the same mode-specific center, zoom, pitch, and bearing.
+3. In 3D-only view, pan the terrain map and switch to 2D-only. The previous 2D
+   center and zoom must both be retained.
 4. Only explicit Fit / Reset may reset the corresponding camera. Fit on 2D
-   must not reset 3D zoom; Reset on 3D must not reset 2D zoom.
+   must not reset any 3D camera field; Reset on 3D must not reset any 2D field.
 5. A route-projection or DEM fingerprint change must invalidate the stored
    camera and use the new bounded Fit.
 6. Preserve
@@ -343,6 +715,25 @@ Verification at correction time:
   errors, failed responses, or POST requests.
 - This camera behavior is presentation state only and does not create route,
   terrain, operational, or runtime safety authority.
+
+### 2026-09-13 - Approved candidate-focus exception to DASH-MAP-REG-003
+
+The user explicitly retained candidate positioning as an exception to camera
+preservation. The 2026-08-24 report above is historical; its broad prohibition
+on candidate-driven camera movement no longer defines the current expectation.
+
+Selecting a candidate may center each applicable view on that exact candidate.
+The focus zoom is at least Z15 for 2D or Z16 for 3D, bounded by the source's
+native maximum and retaining an already higher zoom. Pitch and bearing remain
+unchanged. DASH-038 checks the selected candidate, actual focus receipt and
+native cap before accepting this exception. Later lens, Evidence, exaggeration
+or view-mode rerenders must preserve the resulting independent cameras; they
+cannot reuse the exception to justify another movement. Explicit Fit / Reset
+and changed route/DEM scope retain their existing meanings.
+
+The updated probe has 26 phases. Focused replays establish the decision logic;
+the matching 9099 Chrome run remains required before reporting this repair as
+accepted. No camera behavior grants route or runtime safety authority.
 
 ### 2026-07-28 - Repair false zero Evidence counts and explain empty states
 
@@ -1928,7 +2319,7 @@ Implementation:
   still read server-side from environment variables and are never returned to
   the browser.
 - The active cloud profile uses OpenRouter model
-  `deepseek/deepseek-v3.2`; the AI HAT+2 local profile remains available as the
+  `deepseek/deepseek-v4-flash-0731`; the AI HAT+2 local profile remains available as the
   explicit fallback.
 - The context resolver uses `SCOUT_PRETRIP_WORKSPACE_ROOT` when configured and
   otherwise discovers the conventional `~/workspace` root.
