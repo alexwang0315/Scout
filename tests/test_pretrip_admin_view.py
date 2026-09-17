@@ -35,6 +35,7 @@ from pretrip_admin_view import (
     _project_summary,
     _reference_segment_timing_summary,
     _review_item_map_target_ids,
+    _terrain_visualization_summary,
     build_pretrip_admin_view,
     list_pretrip_admin_projects,
     load_pretrip_debug_projection_view,
@@ -93,6 +94,36 @@ WEARABLE_FIXTURES = [
     WEARABLE_FIXTURE_ROOT / "apple_health_missing_hr_interval.json",
     WEARABLE_FIXTURE_ROOT / "garmin_body_battery_provider_values.json",
 ]
+
+
+def test_terrain_visualization_summary_backfills_qgis_overlay_runtime_hrefs() -> None:
+    project_id = "dongqing_batongguan_historic_trail_newImport"
+    payload = {
+        "raster_overlays": [
+            {
+                "mode": mode,
+                "source_path": f"outputs/spatial/qgis/terrain_{mode}.png",
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+            for mode in ("elevation_tint", "hillshade", "slope_shading", "contours")
+        ]
+    }
+
+    summary = _terrain_visualization_summary(
+        project_id,
+        payload,
+        "outputs/spatial/qgis/terrain_visualization.geojson",
+    )
+
+    assert [item["runtime_href"] for item in summary["raster_overlays"]] == [
+        f"/admin/pretrip/projects/{project_id}/terrain-overlays/{mode}.png"
+        for mode in ("elevation_tint", "hillshade", "slope_shading", "contours")
+    ]
+    assert all(item["candidate_only"] for item in summary["raster_overlays"])
+    assert all(
+        item["runtime_safety_truth"] is False for item in summary["raster_overlays"]
+    )
 
 
 def test_project_summary_projects_workspace_cache_metadata() -> None:

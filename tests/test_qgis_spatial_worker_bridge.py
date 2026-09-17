@@ -1651,6 +1651,10 @@ def test_qgis_backend_grass_feature_stack_is_hashed_and_normalized(
         "slope_shading",
         "contours",
     ]
+    assert [item["runtime_href"] for item in visualization["raster_overlays"]] == [
+        f"/admin/pretrip/projects/qgis_worker_demo/terrain-overlays/{mode}.png"
+        for mode in ("elevation_tint", "hillshade", "slope_shading", "contours")
+    ]
     assert all(
         item["alpha_channel"] is True
         and item["compositing"] == "source-over"

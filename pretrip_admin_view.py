@@ -72,6 +72,9 @@ ROUTE_PROJECTION_FILTER_VERSION = "pretrip_route_bounds_projection_filter.v1"
 ROUTE_DISPLAY_BOUNDS_VERSION = "pretrip_route_reference_display_bounds.v1"
 ROUTE_DISPLAY_BOUNDS_PRIMARY_OVERLAP_MIN = 0.55
 ROUTE_DISPLAY_BOUNDS_COMPARISON_OVERLAP_MIN = 0.55
+TERRAIN_VISUALIZATION_OVERLAY_MODES = frozenset(
+    {"hillshade", "elevation_tint", "slope_shading", "contours"}
+)
 RISK_DELTA_COLORS = {
     "calibrated_higher": "#9333ea",
     "baseline_higher": "#2563eb",
@@ -7218,6 +7221,17 @@ def _terrain_visualization_summary(
         if not overlay_id:
             continue
         overlay_source_path = str(overlay.get("source_path") or "")
+        overlay_mode = str(overlay.get("mode") or overlay_id)
+        runtime_href = overlay.get("runtime_href")
+        if (
+            (not isinstance(runtime_href, str) or not runtime_href.strip())
+            and overlay_mode in TERRAIN_VISUALIZATION_OVERLAY_MODES
+            and re.fullmatch(r"[A-Za-z0-9_.-]+", project_id)
+        ):
+            runtime_href = (
+                f"/admin/pretrip/projects/{project_id}"
+                f"/terrain-overlays/{overlay_mode}.png"
+            )
         model_hash = _stable_projection_hash(
             {
                 "source_path": source_path,
@@ -7236,8 +7250,8 @@ def _terrain_visualization_summary(
                 "parent_source_path": source_path,
                 "evidence_type": "pretrip_terrain_visualization_bitmap_overlay",
                 "status": "candidate_only",
-                "mode": overlay.get("mode") or overlay_id,
-                "runtime_href": overlay.get("runtime_href"),
+                "mode": overlay_mode,
+                "runtime_href": runtime_href,
                 "media_type": overlay.get("media_type", "image/png"),
                 "sha256": overlay.get("sha256"),
                 "bbox_wgs84": overlay.get("bbox_wgs84"),
