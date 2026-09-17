@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from pretrip_comparison_policy import compare_reference_value, workspace_comparison_allowed
+
 
 DEFAULT_FIXTURE_ROOT = Path("tests/fixtures/pretrip")
 DEFAULT_MAX_FILE_BYTES = 256 * 1024
@@ -93,6 +95,16 @@ class PreTripFixtureHygieneManifest:
 
     def to_json(self) -> str:
         return json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n"
+
+
+def compare_hygiene_counts(historical: dict[str, Any], current: dict[str, Any]) -> dict[str, Any]:
+    """Compare file counts/sizes only for the same workspace identity."""
+    if not workspace_comparison_allowed(historical, current):
+        return {"status": "NOT_APPLICABLE", "reason": "workspace_identity_mismatch", "fields": {}}
+    h = historical.get("counts", {})
+    c = current.get("counts", {})
+    keys = ("files_scanned", "json_files_scanned", "raw_suffix_files", "raw_route_suffix_files", "oversized_files", "json_parse_errors", "forbidden_fragments", "total_issues")
+    return {"status": "COMPARED", "fields": {key: compare_reference_value(h.get(key), c.get(key)).to_dict() for key in keys}}
 
 
 def build_pretrip_fixture_hygiene_manifest(

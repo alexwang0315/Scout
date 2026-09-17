@@ -209,9 +209,12 @@ def plan_scout_ai_tools(
         )
     if (
         _looks_like_route_structure_question(normalized_question)
-        and not route_context_question
+        and (not route_context_question or _looks_like_route_metric_question(normalized_question))
         and not _looks_like_post_trip_route_context_update_question(normalized_question)
-        and not _has_tool(selected, MAJOR_POINT_TOOL_ID)
+        and (
+            not _has_tool(selected, MAJOR_POINT_TOOL_ID)
+            or _looks_like_route_metric_question(normalized_question)
+        )
     ):
         selected.append(
             (
@@ -536,6 +539,10 @@ def plan_scout_ai_tools(
                 tool_id == ROUTE_ARCHITECTURE_TOOL_ID
                 and _looks_like_route_architecture_question(normalized_question)
             )
+            or (
+                tool_id == ROUTE_STRUCTURE_TOOL_ID
+                and _looks_like_route_metric_question(normalized_question)
+            )
             or tool_id
             in {
                 TERRAIN_ROUTE_EXPLAIN_TOOL_ID,
@@ -743,9 +750,12 @@ def classify_workspace_query_requirements(
     summary_artifact_question = "summary" in question and not bool(
         re.search(r"(?:多少|幾)(?:個|筆|條|feature|frame)", question)
     )
-    route_scalar_summary = _has_any(
-        question,
-        ("總里程", "點數", "最低與最高海拔", "總爬升", "總下降", "平均坡度"),
+    route_scalar_summary = (
+        _looks_like_route_elevation_bounds_question(question)
+        or _has_any(
+            question,
+            ("總里程", "點數", "最低與最高海拔", "總爬升", "總下降", "平均坡度"),
+        )
     )
     if summary_artifact_question or route_scalar_summary:
         return (
@@ -955,7 +965,7 @@ def _classify_explicit_workspace_operations(
     )
     asks_list = _has_any(
         question,
-        ("列出", "哪些", "哪幾", "各段名稱", "分別靠近", "項目有哪些"),
+        ("列出", "哪些", "哪幾", "各段名稱", "分別靠近", "項目有哪些", "list"),
     )
     root_document = _has_any(
         question,
@@ -1064,6 +1074,8 @@ def _classify_explicit_workspace_operations(
         ),
     ):
         return [WorkspaceQueryOperation.INSPECT], False
+    if asks_list and "boss" in question:
+        return [WorkspaceQueryOperation.FILTER], False
     return None
 
 
@@ -1082,6 +1094,7 @@ def _looks_like_workspace_fact_question(question: str) -> bool:
             "checkpoint",
             " cp",
             "mcp",
+            "boss",
             "risk",
             "terrain",
             "cwa",
@@ -1106,7 +1119,8 @@ def _explicit_workspace_evidence_tools(
 ) -> list[str] | None:
     if _looks_like_checkpoint_placement_question(question):
         return None
-    if not expected_operations or not _has_any(
+    route_metric_question = _looks_like_route_metric_question(question)
+    workspace_entity_question = _has_any(
         question,
         (
             "workspace",
@@ -1120,7 +1134,7 @@ def _explicit_workspace_evidence_tools(
             "routesummary",
             "segment",
             "checkpoint",
-            "bosspoint",
+            "boss",
             "mcp",
             "ocr",
             "mileage",
@@ -1148,7 +1162,8 @@ def _explicit_workspace_evidence_tools(
             "post-trip",
             "posttrip",
         ),
-    ):
+    )
+    if not expected_operations or not (route_metric_question or workspace_entity_question):
         return None
 
     selected: list[str] = []
@@ -1207,7 +1222,7 @@ def _explicit_workspace_evidence_tools(
     if catalog:
         add(WORKSPACE_CATALOG_TOOL_ID)
 
-    route_structure = _has_any(
+    route_structure = route_metric_question or _has_any(
         question,
         (
             "primaryroute",
@@ -1228,7 +1243,7 @@ def _explicit_workspace_evidence_tools(
         question,
         ("referencegpx", "reference gpx"),
     )
-    major_point_context = _has_any(question, ("bosspoint", "mcp", "namedpoint"))
+    major_point_context = _has_any(question, ("boss", "mcp", "namedpoint"))
     terrain_record_context = _has_any(
         question,
         ("terrain", "teii", "trailobscurity", "wetnessflashflood"),
@@ -3274,7 +3289,103 @@ def _looks_like_workspace_inventory_question(text: str) -> bool:
     return _has_any(text, inventory_terms) and _has_any(text, ask_terms)
 
 
+def _looks_like_route_elevation_bounds_question(text: str) -> bool:
+    return (
+        _has_any(text, ("route", "路線", "路徑"))
+        and _has_any(text, ("海拔", "elevation", "altitude"))
+        and _has_any(
+            text,
+            (
+                "最低", "最高", "範圍", "高差", "minimum", "maximum",
+                "min", "max", "range", "lowest", "highest",
+            ),
+        )
+        and not _has_any(text, ("segment", "路段", "checkpoint", "各", "排名"))
+        and not _has_any(
+            text,
+            (
+                "頭痛", "高山症", "症狀", "血氧", "心率", "呼吸",
+                "headache", "symptom", "spo2", "vitals",
+                "是否安全", "該不該", "繼續走", "撤退", "go/no-go",
+            ),
+        )
+    )
+
+
+def _looks_like_static_route_geometry_inventory_question(text: str) -> bool:
+    """Separate saved GPX/CP inventory facts from live navigation state."""
+
+    return (
+        _has_any(text, ("gpx", "trackpoint", "trackpoints", "軌跡點"))
+        and _has_any(text, ("多少", "數量", "點數", "點總數", "差別", "區別"))
+        and not _has_any(
+            text,
+            (
+                "我現在",
+                "目前位置",
+                "即時",
+                "偏離",
+                "走對",
+                "導航",
+                "gps誤差",
+                "dr誤差",
+                "定位誤差",
+            ),
+        )
+    )
+
+
+def _looks_like_route_metric_question(text: str) -> bool:
+    """Route measurements require structured data, not a catalog or story pack."""
+
+    if (
+        _looks_like_route_elevation_bounds_question(text)
+        or _looks_like_historical_timing_question(text)
+        or _looks_like_static_route_geometry_inventory_question(text)
+    ):
+        return True
+
+    return bool(
+        re.search(
+            r"全長|總距離|總里程|累積(?:上升|下降|爬升)|總(?:爬升|下降)|"
+            r"海拔(?:範圍|高差)|最高點.*最低點|最低點.*最高點|"
+            r"(?:cp|路段|兩點|兩個).*(?:距離|公尺|公里)|"
+            r"(?:距離|路段).*(?:最長|最短)|"
+            r"(?:gpx|軌跡).*(?:點數|點總數)|"
+            r"(?:歷史|中位|p50).*(?:中位|時間|多久)|"
+            r"(?:route|primary).*(?:distance|ascent|descent|elevation)",
+            text,
+            re.IGNORECASE,
+        )
+    )
+
+
+def _looks_like_historical_timing_question(text: str) -> bool:
+    if "reference_segment_timing" in text.lower():
+        return True
+    source_context = re.search(r"歷史|參考|reference|historical|recorded", text, re.IGNORECASE)
+    timing_metric = re.search(
+        r"p(?:25|50|75|90|95)|中位|分位|時間統計|路段時間|樣本.*(?:分|時)|"
+        r"(?:時間|耗時).*(?:樣本|量測|測量|路段)|"
+        r"timing|duration|median|percentile",
+        text,
+        re.IGNORECASE,
+    )
+    explicit_distribution = re.search(
+        r"p(?:25|50|75|90|95)",
+        text,
+        re.IGNORECASE,
+    ) and re.search(
+        r"時間|耗時|樣本|變異|分布|分佈|duration|sample|min|max",
+        text,
+        re.IGNORECASE,
+    )
+    return bool(explicit_distribution or (source_context and timing_metric))
+
+
 def _looks_like_route_structure_question(text: str) -> bool:
+    if _looks_like_route_metric_question(text):
+        return True
     if "corridor" in text and _has_any(text, ("太寬", "太窄", "寬度", "宽度")):
         return True
     if _has_any(text, ("轉折", "急轉", "稜線轉折", "路線轉折", "turnpoint", "route turn", "sharp turn")):
@@ -3501,12 +3612,14 @@ def _looks_like_major_point_question(text: str) -> bool:
         return False
     if _looks_like_external_deadline_pressure_question(text):
         return False
+    if _looks_like_historical_timing_question(text):
+        return False
     return _has_any(
         text,
         (
             "黑水塘",
             "mcp",
-            "bosspoint",
+            "boss",
             "boss點",
             "majorcritical",
             "namedpoint",
@@ -3772,6 +3885,8 @@ def _looks_like_local_terrain_shape_question(text: str) -> bool:
 
 
 def _looks_like_navigation_terrain_question(text: str) -> bool:
+    if _looks_like_static_route_geometry_inventory_question(text):
+        return False
     live_terms = (
         "我現在",
         "現在是不是",
@@ -4811,6 +4926,8 @@ def _looks_like_post_trip_route_context_update_question(text: str) -> bool:
 
 
 def _looks_like_ins_dr_trace_question(text: str) -> bool:
+    if _looks_like_static_route_geometry_inventory_question(text):
+        return False
     if _has_any(text, ("routeanchor", "route anchor")) and not _has_any(
         text,
         ("gps", "ins", "dr", "pdr", "imu", "軌跡", "偏差", "uncertainty"),
@@ -5409,6 +5526,10 @@ def _looks_like_route_context_question(text: str) -> bool:
         return True
     if _looks_like_route_briefing_question(text):
         return True
+    if _looks_like_historical_timing_question(text) and not _has_route_context_terms(
+        text.replace("歷史", "").replace("historical", "")
+    ):
+        return False
     if _looks_like_post_trip_route_context_update_question(text):
         return False
     if _looks_like_media_literacy_question(raw_text):

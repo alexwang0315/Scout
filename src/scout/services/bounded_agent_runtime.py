@@ -46,7 +46,8 @@ _LABELED_SOURCE_REF_CITATION_PATTERN = re.compile(
     r"|【\s*(?:source_ref|source|ref|citation)\s*:\s*([^【】]+?)\s*】",
     re.IGNORECASE,
 )
-_NUMBER_PATTERN = re.compile(r"(?<![A-Za-z])\d+(?:\.\d+)?")
+_NUMBER_TEXT = r"(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?"
+_NUMBER_PATTERN = re.compile(r"(?<![A-Za-z])" + _NUMBER_TEXT)
 _DATETIME_LIKE_PATTERN = re.compile(
     r"\b\d{4}-\d{2}-\d{2}[Tt][0-9:.+-]+(?:Z|[+-]\d{2}:\d{2})?\b"
 )
@@ -859,6 +860,13 @@ class BoundedAgentRuntime:
         card. Unsupported facts and numbers remain unchanged and fail closed.
         """
 
+        mentioned_refs = {
+            ref
+            for card in evidence_cards
+            for ref in card.source_refs
+            if re.search(r"(?<![\w./:#-])" + re.escape(ref) + r"(?![\w./:#-])", answer)
+        }
+
         ordered_cards = sorted(
             enumerate(evidence_cards),
             key=lambda item: (-_field_answer_priority(item[1]), item[0]),
@@ -890,6 +898,7 @@ class BoundedAgentRuntime:
             cited_sentence = _first_verified_citation_candidate(
                 sentence,
                 evidence_cards=evidence_cards,
+                preferred_source_refs=mentioned_refs,
             )
             if cited_sentence is None:
                 continue
@@ -961,8 +970,12 @@ def _lexical_score(query: str, text: str) -> float:
 
 def _search_tokens(value: str) -> set[str]:
     tokens: set[str] = set()
-    for raw in _TOKEN_PATTERN.findall(value.casefold()):
-        pieces = [raw, *re.split(r"[_.-]+", raw)]
+    for match in _TOKEN_PATTERN.finditer(value.casefold()):
+        raw = match.group()
+        pieces = (
+            [raw, *re.split(r"[_.-]+", raw)]
+            if any(separator in raw for separator in "_.-") else (raw,)
+        )
         for piece in pieces:
             if not piece:
                 continue
@@ -1393,29 +1406,38 @@ def _first_verified_citation_candidate(
     sentence: str,
     *,
     evidence_cards: Sequence[EvidenceCard],
+    preferred_source_refs: Iterable[str] = (),
 ) -> str | None:
+    preferred = set(preferred_source_refs)
     ordered_cards = sorted(
         enumerate(evidence_cards),
-        key=lambda item: (-_field_answer_priority(item[1]), item[0]),
+        key=lambda item: (
+            -_field_answer_priority(item[1]),
+            not any(ref in preferred for ref in item[1].source_refs),
+            item[0],
+        ),
     )
     for _, card in ordered_cards:
-        for source_ref in card.source_refs:
+        refs = [
+            *card.source_refs,
+            *(f"evidence:{record.evidence_id}" for record in card.evidence_records),
+        ]
+        # A model-named valid source outranks an incidental alias, but it still
+        # has to pass the same per-claim verification as every other candidate.
+        refs.sort(key=lambda ref: ref not in preferred)
+        for source_ref in refs:
             candidate = _append_source_ref(sentence, source_ref)
-            if BoundedAgentRuntime.verify_synthesis(
+            verification = BoundedAgentRuntime.verify_synthesis(
                 candidate,
                 evidence_cards=[card],
-            ).passed:
-                return candidate
-        for record in card.evidence_records:
-            candidate = _append_source_ref(
-                sentence,
-                f"evidence:{record.evidence_id}",
             )
-            if BoundedAgentRuntime.verify_synthesis(
-                candidate,
-                evidence_cards=[card],
-            ).passed:
+            if verification.passed:
                 return candidate
+            # All aliases resolve to this same card's evidence. Changing an
+            # alias cannot repair an unsupported claim, but source-specific
+            # failures still require checking the remaining references.
+            if verification.unsupported_claims:
+                break
     return None
 
 
@@ -1647,7 +1669,7 @@ def _priority_exact_field_literals(value: str) -> list[str]:
         r"\b(?:seg|cp|mcp)\.[A-Za-z0-9_.-]+",
         r"\b[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+){2,}\b",
         r"\b[A-Za-z][A-Za-z0-9]*(?:_[A-Za-z0-9]+)+\b",
-        r"(?<![A-Za-z0-9_.])\d+(?:\.\d+)?(?:%|K|km|m)?(?![A-Za-z0-9_])",
+        rf"(?<![A-Za-z0-9_.]){_NUMBER_TEXT}(?:%|K|km|m)?(?![A-Za-z0-9_])",
     )
     return _dedupe(
         match.group(0)
@@ -1665,7 +1687,7 @@ def _priority_exact_literal_is_present(
     if literal.casefold() in answer_folded:
         return True
     match = re.fullmatch(
-        r"(?P<number>\d+(?:\.\d+)?)(?P<unit>%|K|km|m)?",
+        rf"(?P<number>{_NUMBER_TEXT})(?P<unit>%|K|km|m)?",
         literal,
         flags=re.IGNORECASE,
     )
@@ -1679,7 +1701,7 @@ def _priority_exact_literal_is_present(
         found.group("number")
         for found in re.finditer(
             rf"(?<![A-Za-z0-9_.])"
-            rf"(?P<number>\d+(?:\.\d+)?)\s*{re.escape(unit)}"
+            rf"(?P<number>{_NUMBER_TEXT})\s*{re.escape(unit)}"
             rf"(?![A-Za-z0-9_])",
             answer_folded,
             flags=re.IGNORECASE,
@@ -1702,12 +1724,12 @@ def _grounding_concepts(value: str) -> set[str]:
 
 def _number_is_grounded(number: str, evidence_numbers: set[str]) -> bool:
     try:
-        claim_value = float(number)
+        claim_value = float(number.replace(",", ""))
     except ValueError:
         return False
     for raw in evidence_numbers:
         try:
-            evidence_value = float(raw)
+            evidence_value = float(raw.replace(",", ""))
         except ValueError:
             continue
         if math.isclose(claim_value, evidence_value, rel_tol=1e-3, abs_tol=0.02):

@@ -15,8 +15,16 @@ Module._initPaths();
 
 const { chromium } = require("playwright");
 
-const baseUrl = process.env.SCOUT_DASHBOARD_DIAGNOSTIC_URL
-  || "http://127.0.0.1:9099/admin/dashboard?projectId=chilai_nanhua_day1_scoutAI#diagnostic";
+const baseUrl = process.env.SCOUT_DASHBOARD_DIAGNOSTIC_URL;
+if (!baseUrl) {
+  throw new Error(
+    "SCOUT_DASHBOARD_DIAGNOSTIC_URL is required; resolve the loaded workspace explicitly.",
+  );
+}
+const diagnosticUrl = new URL(baseUrl);
+if (!/^[A-Za-z0-9_.-]+$/.test(diagnosticUrl.searchParams.get("projectId") || "")) {
+  throw new Error("SCOUT_DASHBOARD_DIAGNOSTIC_URL must include a valid projectId for the loaded workspace.");
+}
 const browserExecutablePath = process.env.SCOUT_BROWSER_EXECUTABLE || undefined;
 const dynamicTilesOnly = process.env.SCOUT_DIAGNOSTIC_DYNAMIC_TILES_ONLY === "1";
 const cameraPersistenceOnly = process.env.SCOUT_DIAGNOSTIC_CAMERA_ONLY === "1";

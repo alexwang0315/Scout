@@ -25,8 +25,10 @@ from typing import Any
 
 try:
     from tools.scout_hardware_inventory import collect_inventory
+    from tools.scout_hailo_monitor import collect_hailo, hailo_transitions
 except ModuleNotFoundError:  # Installed next to monitor.py, outside the checkout.
     from scout_hardware_inventory import collect_inventory
+    from scout_hailo_monitor import collect_hailo, hailo_transitions
 
 
 DEFAULT_SOURCE = Path.home() / "scout-power-path-monitor/power-path-telemetry.jsonl"
@@ -212,6 +214,7 @@ def collect(power_source: Path, previous: dict[str, Any]) -> dict[str, Any]:
     if not any(s["name"] == "cpu_thermal" for s in snapshot["sensors"]):
         snapshot["errors"]["cpu_temperature"] = "sensor unavailable"
     snapshot["inventory"] = collect_inventory(snapshot["power"])
+    snapshot["hailo"] = collect_hailo(snapshot["inventory"])
     return snapshot
 
 
@@ -363,6 +366,9 @@ def describe(snapshot: dict[str, Any]) -> str:
     lines.extend(alert["severity"].upper() + ": " + alert["message"] for alert in snapshot["alerts"].values())
     for name, group in snapshot.get("inventory", {}).get("sections", {}).items():
         lines.append(f"{name} [{group['status']}] {group['summary']}")
+    hailo = snapshot.get("hailo")
+    if hailo:
+        lines.append(f"Hailo [{hailo['status']}] {len(hailo['devices'])} 個裝置；約 1 秒樣本，不代表整分鐘平均")
     return "\n".join(lines) + "\n"
 
 
@@ -380,6 +386,7 @@ def run_once(state_dir: Path, power_source: Path, notify: bool) -> dict[str, Any
         severities = {alert["severity"] for alert in snapshot["alerts"].values()}
         snapshot["status"] = "critical" if "critical" in severities else "warning" if severities else "ok"
         events = transitions(snapshot, previous)
+        journal_events = events + hailo_transitions(snapshot, previous)
         pending = list(previous.get("pending_notifications", []))
         pending.extend(snapshot["captured_at"] + " " + event for event in events)
         # Events also have their own rotated journal; bound offline notification state.
@@ -408,8 +415,8 @@ def run_once(state_dir: Path, power_source: Path, notify: bool) -> dict[str, Any
                 snapshot["notification"] = {"status": "pending", "reason": "waiting for retry"}
         atomic_write(state_path, json.dumps(snapshot, ensure_ascii=False, indent=2) + "\n")
         atomic_write(state_dir / "status.txt", snapshot["summary"])
-        for filename, payload in [("history.jsonl", snapshot), ("events.jsonl", {"captured_at": snapshot["captured_at"], "events": events})]:
-            if filename == "events.jsonl" and not events:
+        for filename, payload in [("history.jsonl", snapshot), ("events.jsonl", {"captured_at": snapshot["captured_at"], "events": journal_events})]:
+            if filename == "events.jsonl" and not journal_events:
                 continue
             handler = RotatingFileHandler(state_dir / filename, maxBytes=10 * 1024 * 1024, backupCount=3, encoding="utf-8")
             try:

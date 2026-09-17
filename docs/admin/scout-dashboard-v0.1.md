@@ -46,6 +46,103 @@ Each entry should include:
 
 ## Implementation Record
 
+### 2026-09-15 - Add read-only Hailo operation telemetry
+
+User request: add measured AI HAT / Hailo operating indicators to Scout monitor.
+Status: **PARTIAL / deployed; remaining validation gaps**, not qualified.
+
+Follow-up on 2026-09-15: the authorized resident deployment is recorded in
+`artifacts/scout-monitor-hailo-deploy-20260915/verification.md`. Scout HailoRT /
+firmware 5.4.0 now supplies real Hailo status and history through the unchanged
+Mac9099 SSH proxy; Mac9151 remains closed. The deployment restarted only the
+9151 API, not the AI or Dashboard. The implementation-stage notes below are
+historical and do not mean deployment is still pending.
+
+The user specifically approved classifying Diagnostic-owned probe cancellation
+and selective Scout-side commits. The browser smoke now records initial GET
+`net::ERR_ABORTED` separately only for one newly observed, same-origin, hidden
+DASH-050 frame with the exact probe identity, a successful Diagnostic report,
+successful cleanup and confirmed frame detachment. Ordinary/unknown frames,
+real connection errors, unexpected routes/methods, duplicate reads and failed
+cleanup remain failures. The production Diagnostic, timeouts and unrelated
+48-versus-50 Diagnostic count are unchanged. The classifier has31 passing
+positive/negative tests; real9099 desktop/mobile smoke exited0 and DASH-050
+passed47/47, with three evidenced probe cancellations and no ordinary failed
+requests. These are bounded construction checks, not independent qualification;
+prior startup timeouts, incomplete consolidated JSDOM validation and the count
+disagreement remain recorded. New evidence:
+`artifacts/scout-monitor-hailo-selective-20260915/`.
+
+Reproduce the classification checks without hardware access:
+
+```bash
+node --test tests/dashboard_scout_monitor_probe_requests.test.cjs
+```
+
+- Confirmed real HailoRT 5.3.0 / HAILO10H at `pci/0001:03:00.0`. The existing
+  API contained only PCIe enumeration, not accelerator operating metrics.
+  Native Mac Dashboard remains on 9099; Mac 9151 stays closed and the existing
+  fixed same-origin SSH transport is unchanged.
+- `tools/scout_hailo_monitor.py` adds a bounded, read-only first-table query to
+  the existing one-minute sampler. It drains stdout/stderr, enforces limits,
+  terminates only its owned child, and never starts inference, resets devices,
+  changes voltage or measures power. Device IDs come from PCIe inventory.
+- Typed optional `Snapshot.hailo` in `scout_hardware_monitor_api.py` carries
+  NNC%, internal CPU%, dedicated RAM% and used/total bytes, die temperature °C,
+  and die voltage mV. CLI MB labels are binary MiB; conversion retains their
+  1 MiB reporting precision. Invalid values remain null, not zero. Hailo has
+  its own actual capture time and read-completeness state, not a health verdict.
+- Dashboard `tools/scout_hardware_monitor.html` and the existing standalone
+  `docs/admin/hardware-monitor/` page add device details and NNC/temperature
+  history with real timestamps and gaps. Pi CPU/memory stay distinct. Global
+  stale/transport failure and independently old Hailo samples invalidate current
+  status while retaining last readings. Device expansion and keyboard focus
+  survive refresh; all source strings are text-only.
+- Existing DASH-050 is extended with typed Hailo/render scenarios and mutation
+  guards, preserving its power assertions and Diagnostic registration. The
+  monitor document revision becomes `20260915-hailo1`. No Navigation/GIS
+  behavior, workspace selection or API allowlist is changed.
+- Hailo read-status/device-list transitions only enter the existing local event
+  journal. They never enter Mac notification delivery; no temperature/load
+  health threshold or power estimate is introduced. The installation source
+  copies the new collector alongside the existing sampler.
+- Backend/API/route tests: 90 PASS; proxy/SSH and existing Diagnostic
+  coverage/alignment: 46 PASS. First real candidate collector completed in
+  1.394 s with all seven metrics readable and no child left running. Existing
+  lint/typecheck/test scripts passed. These checks do not qualify AI inference.
+- Final sampler/API/inventory/route/proxy/SSH suite passed125 tests. Dashboard
+  Hailo replay passed16 tests once, including keyboard and320px rendering, but
+  an earlier Chrome startup timeout remains recorded. Consolidated final
+  Diagnostic tests hit repeated30s JSDOM import timeouts before application
+  assertions; that run was stopped after4 failures, not reported as passed.
+- The original34-case browser suite caught a Hailo-history class collision with
+  the existing alert-threshold disclosure. The new history now uses its own
+  class; the old test and a new uniqueness guard remain. A separate pre-load
+  simulated-clock race was corrected without changing polling or assertions.
+  The repaired full-suite rerun passed34/34 with no skips and unchanged loaded
+  HTML (SHA979e5283...), recorded in the evidence index. It does not clear the
+  separate JSDOM startup failures or deployment gap.
+- Real9099 backwards compatibility was demonstrated with an upstream snapshot
+  lacking Hailo: the new panel waits for an update, same-origin SSH GETs work,
+  and390/320px layouts have no overflow. This is not proof of deployed Hailo
+  metrics. A later live retry returned null data and failed; the following
+  read-only probe was fresh again. Both outcomes are preserved.
+- Latest normal Diagnostic-page click at03:24:43Z produced DASH050 WARNING:
+  46/47 checks passed (45 isolated render cases plus the real power row), while
+  the real Hailo row correctly reports missing_field. New-field live acceptance
+  therefore remains blocked on deployment. Final lint/typecheck/test commands
+  passed; no count arbitration, remote deployment or mixed Git commit occurred.
+- Operator guide and two-page Traditional-Chinese PDF were updated and both
+  rendered pages visually inspected. API and deployment instructions preserve
+  the Mac-9151-closed policy. Detailed outcomes and remaining work:
+  `artifacts/scout-monitor-hailo-20260915/verification.md`.
+- Pending: resident Scout monitor/API deployment approval and live browser
+  acceptance of the new API field. The shared Chrome DevTools profile is busy;
+  project Playwright is the fallback without closing another browser. Existing
+  48-versus-50 Regular Diagnostic disagreement is preserved pending user
+  arbitration. The all-files Git gateway includes unrelated work, so no mixed
+  snapshot is committed without an explicit scope decision.
+
 ### 2026-09-14 - Reconnect Scout monitor without a Mac 9151 listener
 
 User request: improve automatic connection while keeping Mac 9151 closed.

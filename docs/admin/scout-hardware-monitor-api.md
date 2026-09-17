@@ -63,6 +63,7 @@ curl --fail-with-body 'http://127.0.0.1:9151/api/v1/hardware-monitor/history?lim
 | CPU／系統 | `cpu_used_percent`, `cpu_count`, `load_average[1/5/15 分鐘]`, `uptime_seconds`, `host` |
 | 告警／門檻 | `alerts` 是 `{key: {severity, message}}`；另有 `thresholds` 與 `errors` |
 | 連線／裝置 | `inventory.sections` 包含 `network`, `bluetooth`, `usb`, `pcie`, `i2c`, `gpio`, `serial`；舊採樣為 null |
+| AI HAT／Hailo | 選填 `hailo`；`devices[]` 為 AI 加速器自身的負載、RAM、晶片溫度與電壓，不是 Pi 主機數值 |
 
 `power.flow` 是 `charging / discharging / idle`。`battery_power_w` 正值充電、負值放電，
 可用絕對值加方向顯示；不要從 UPS VBUS=0 就推斷 Scout 已斷電。
@@ -133,6 +134,38 @@ section 的 `ok` 表示資訊讀取成功，**不等於每個裝置功能正常*
 資料未讀到要顯示未知。I²C 沒被系統登錄的裝置可能仍已接上；GPIO direction 並非電位。
 UI 將裝置名稱、SSID、consumer 等值當作純文字處理，不能插入 `innerHTML`。
 
+### Hailo-10H 運作觀測（2026-09-15）
+
+`data.hailo` 與 history 的 `items[].hailo` 使用相同選填型別。舊紀錄缺少此欄位
+時回 null，應顯示等待新採樣，而不是零使用率。新紀錄形狀為：
+
+```text
+{captured_at, status, source:"hailortcli.monitor", sample_window_ms:1000,
+ read_only:true, devices:[{device_id, architecture, status,
+ nnc_utilization_percent, cpu_utilization_percent, ram_utilization_percent,
+ ram_used_bytes, ram_total_bytes, temperature_c, voltage_mv, errors:[]}], errors:[]}
+```
+
+- 裝置以 PCIe `device_id` 區分，不寫死數量。NNC 是 AI 核心，CPU 與 RAM
+  是 Hailo 裝置自身，不可拿來取代 Pi CPU／主記憶體。
+- 元件與裝置 `status=ok/partial/unavailable` 僅代表讀值完整度；ok 標示
+  「已讀取」，不是模型推論通過或硬體功能正常。空清單只有在 PCIe 枚舉可讀且
+  沒有 Hailo 時代表未偵測到；枚舉不可讀時是 unavailable。
+- 每分鐘由既有採樣器執行一次有期限的固定 `hailortcli monitor` 查詢，取得
+  約一秒負載樣本後停止並回收子程序。不常駐 CLI，不執行模型、重設、韌體更新、
+  記憶體寫入或功耗量測控制。API GET 只讀紀錄，不會觸發 Hailo 查詢。
+- `captured_at` 是此次 Hailo 查詢完成時間，可能稍晚於整體快照的時間。
+  約一秒的 NNC 讀值不能代表整分鐘平均或短任務的完整負載；0% 不單獨判為故障。
+- HailoRT 5.3.0 CLI 的 RAM 標頭雖寫 MB，原始統計為 KiB 除以 1024，
+  因此用回報整數 × 1024² 轉為 bytes，解析度為 1 MiB；UI 再以 bytes / 1024³
+  顯示 GiB。不可把這些數值宣稱為 byte 級精確測量。
+- 所有指標可為 null。N/A、-1 sentinel、無效數字、逾時與部分讀取都不補零；
+  新的未知值不沿用舊成功值。全局 stale／斷線時可保留最後整筆觀測，但必須標明。
+- 晶片電壓單位為 mV，不是 UPS 電壓，也不是功耗 W；不由電壓推算功耗。
+  本次沒有新增 Hailo 溫度／負載健康門檻；全局告警仍遵循既有 alerts／thresholds。
+- Hailo 裝置清單／資料可讀性改變會使用真實快照時間加入既有事件紀錄，
+  但不加入 Mac 通知佇列。這不是新的通知服務或硬體故障判定。
+
 ## 接到 Dashboard
 
 建議 UI 使用**同源相對路徑** `/api/v1/hardware-monitor/...`，由 Dashboard 後端
@@ -141,8 +174,8 @@ CORS。後端轉接應沿用 Dashboard 的登入／權限，固定上游與 rout
 保留 HTTP 503 的 JSON，不讓用戶輸入任意 upstream URL 或檔案路徑。
 
 - Dashboard 後端直接在 Scout 主機：upstream `http://127.0.0.1:9151`。
-- Dashboard 後端在 Mac：用已建立的 Mac loopback SSH forward，upstream 同樣是
-  `http://127.0.0.1:9151`；此 forward 目前為暫時連線，斷線後要重建。
+- Dashboard 後端在原生 Mac：目前代理對每次 GET 建立有期限的 SSH stdio
+  通道到 Scout loopback 9151；不需要 Mac 9151 監聽埠或臨時常駐 forward。
 - Dashboard 後端在容器：容器的 `127.0.0.1` 不是 Scout 主機。先確認部署方式，
   使用私有的代理／SSH forward，或把下列 router 放進有授權唯讀掛載資料的 backend；
   不要以把此無驗證 API 公開到 `0.0.0.0` 解決連線問題。
@@ -177,15 +210,15 @@ systemctl --user disable --now scout-hardware-monitor-api.service
 API unit 的 `Wants` 包含採樣 service 與 timer，`After` 先等初次採樣完成。
 兩個可啟用 unit 均已 enabled，且 Scout `Linger=yes`；開機會自動帶起，不需要登入 shell。
 
-Mac 文件：`http://127.0.0.1:9151/docs`。若暫時 forward 已斷，Mac 可自行開啟：
+Mac 使用既有 Dashboard 的 System → scout monitor；Mac 9151 保持關閉。
+後端會以每次請求建立的 SSH 通道讀取 Scout loopback，無須手動建立 port forward：
 
 ```bash
-ssh -N -L 127.0.0.1:9151:127.0.0.1:9151 \
-  -o BatchMode=yes -o StrictHostKeyChecking=yes -o ExitOnForwardFailure=yes \
-  alexwang0315@scout.local
-# 另開一個 Mac 終端機
-open -a "Google Chrome" 'http://127.0.0.1:9151/docs'
+open -a "Google Chrome" 'http://127.0.0.1:9099/admin/dashboard#scout-monitor'
 ```
+
+`/docs` 與 `/openapi.json` 是 Scout 9151 的開發文件，不由 Dashboard 的固定三條
+硬體資料代理路徑轉接；不要把 Mac 的 localhost 誤認為 Scout。
 
 ## 驗證紀錄
 
@@ -229,3 +262,19 @@ API 可辨識採樣停止後的過期資料，整台 Scout 離線則由 Dashboar
 Navigation guard 在擴充前後仍因本 checkout 缺檔無法執行，沒有修改或建立替代 guard。
 API GET 只讀快照；背景採樣只做本機 metadata 查詢，不掃描 Wi-Fi／藍牙／I²C，不做配對、
 GPIO line request、硬體寫入或網路設定變更。
+
+## Hailo 監控常駐部署觀測（2026-09-15）
+
+使用者批准後，已更新 Scout 既有採樣器、Hailo helper、API 與獨立頁資產，
+僅重啟 `scout-hardware-monitor-api.service`；AI 推論服務與 Mac9099 未重啟，
+Mac9151 保持關閉。舊檔備份於
+`~/.local/state/scout-hardware-monitor/hailo-deploy-jlZLtU8y/backup/`。
+
+HailoRT／韌體5.4.0的自然每分鐘採樣已回傳 `data.hailo`；Mac9099的同源SSH代理
+與Scout9151均讀到新欄位，history保留舊採樣的null。七項值及趨勢已在真實頁面
+比對，DASH-050為47/47；這不是模型品質或硬體健康判定。
+
+本輪仍為**部分驗證**：完整Dashboard smoke保留首次等待回應逾時，以及將
+Diagnostic私有探針主動取消請求計為失敗的候選驗收衝突。未改原檢查分類；
+既有JSDOM、48/50衝突及混合gateway提交尚未解決。細項與不可覆寫的失敗證據：
+`artifacts/scout-monitor-hailo-deploy-20260915/verification.md`。

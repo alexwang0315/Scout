@@ -12064,16 +12064,24 @@
   <script>
 // scout-monitor-power-diagnostic-inline:start
 /* DASH-050. Fixed same-origin GETs and an owned monitor-frame render replay only.
- * This is a presentation/contract regression check, never a UPS health verdict.
+ * This is a presentation/contract regression check, never a UPS/Hailo health verdict.
  */
 (function (root) {
   "use strict";
   const PAGE = "/admin/dashboard/scout-monitor";
-  const PAGE_URL = `${PAGE}?ui=20260914-ssh1`;
+  const PAGE_URL = `${PAGE}?ui=20260915-hailo1`;
   const STATUS = `${PAGE}/api/v1/hardware-monitor/status`;
   const ERROR_CODES = Object.freeze(["communication_error", "invalid_telemetry", "stale", "missing", "unreadable"]);
   const finite = value => typeof value === "number" && Number.isFinite(value);
   const requireValue = (value, message) => { if (!value) throw new Error(message); };
+  const HAILO_METRICS = Object.freeze([
+    "nnc_utilization_percent", "cpu_utilization_percent", "ram_utilization_percent",
+    "ram_used_bytes", "ram_total_bytes", "temperature_c", "voltage_mv",
+  ]);
+  const HAILO_LABELS = Object.freeze({ok: "已讀取", partial: "部分讀取", unavailable: "無法讀取"});
+  const object = value => value !== null && typeof value === "object" && !Array.isArray(value);
+  const awareTime = value => typeof value === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/i.test(value)
+    && Number.isFinite(Date.parse(value));
   let lastReport = null;
 
   function text(doc, id) {
@@ -12095,9 +12103,156 @@
     }
     const aggregate = (power.ups_status ?? power.status) === "ok" && (power.supply_status ?? power.status) === "ok" ? "ok" : "unavailable";
     requireValue(power.status === aggregate, "power.status 未保留全體可用性語意");
+    verifyHailoContract(payload.data.hailo);
   }
 
-  function verifyRendered(doc, payload, httpStatus = 200, retainedPower = null) {
+  // Mirror HailoTelemetry/HailoDevice's public value and read-state invariants,
+  // not hardware-health thresholds. Legacy snapshots may omit the whole field.
+  function verifyHailoContract(hailo) {
+    if (hailo == null) return;
+    requireValue(object(hailo), "hailo 必須是物件或 null");
+    requireValue(awareTime(hailo.captured_at), "hailo.captured_at 必須是含時區的真實採樣時間");
+    requireValue(hailo.source === "hailortcli.monitor", "無效的 hailo.source");
+    requireValue(hailo.read_only === true && hailo.sample_window_ms === 1000, "Hailo 唯讀／採樣視窗契約不符");
+    const errors = (value, path) => {
+      requireValue(value === undefined || Array.isArray(value) && value.every(error => typeof error === "string"), `${path} 必須是文字清單`);
+      return value || [];
+    };
+    const sectionErrors = errors(hailo.errors, "hailo.errors");
+    requireValue(Array.isArray(hailo.devices), "hailo.devices 必須是清單");
+    const ids = new Set(), statuses = new Set();
+    for (const device of hailo.devices) {
+      requireValue(object(device), "hailo.devices 裝置不是物件");
+      requireValue(typeof device.device_id === "string" && /^pci\/[0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-7]$/.test(device.device_id), "無效的 Hailo device_id");
+      requireValue(!ids.has(device.device_id), "Hailo device_id 重複，不能合併裝置");
+      ids.add(device.device_id);
+      requireValue(typeof device.architecture === "string", "Hailo architecture 必須是文字");
+      const deviceErrors = errors(device.errors, "hailo.devices.errors");
+      for (const key of HAILO_METRICS) {
+        const value = device[key];
+        if (value == null) continue;
+        requireValue(finite(value), `Hailo ${key} 必須是有限數值或 null，不可轉型補零`);
+        if (key.endsWith("_percent")) requireValue(value >= 0 && value <= 100, `Hailo ${key} 超出百分比範圍`);
+        else if (key.endsWith("_bytes")) requireValue(Number.isSafeInteger(value) && value >= (key === "ram_total_bytes" ? 1 : 0), `Hailo ${key} 必須是有效整數 bytes`);
+        else if (key === "temperature_c") requireValue(value >= -273.15 && value !== -1, "Hailo temperature_c 無效或含未採樣 sentinel");
+        else requireValue(value >= 0, "Hailo voltage_mv 不可為負");
+      }
+      requireValue(device.ram_used_bytes == null || device.ram_total_bytes == null
+        || device.ram_used_bytes <= device.ram_total_bytes, "Hailo RAM 已用量超過總量");
+      const measured = HAILO_METRICS.filter(key => device[key] != null).length;
+      const expected = measured === HAILO_METRICS.length ? "ok" : measured ? "partial" : "unavailable";
+      requireValue(device.status === expected && (expected !== "ok" || !deviceErrors.length), "Hailo 裝置讀取狀態與實際欄位不一致");
+      statuses.add(device.status);
+    }
+    const expected = sectionErrors.length && !ids.size || statuses.size === 1 && statuses.has("unavailable") ? "unavailable"
+      : sectionErrors.length || [...statuses].some(status => status !== "ok") ? "partial" : "ok";
+    requireValue(hailo.status === expected, "Hailo 全體讀取狀態與裝置清單不一致");
+  }
+
+  function hailoSampleAge(payload, hailo, elapsedSeconds = 0) {
+    if (!awareTime(hailo?.captured_at)) return null;
+    const freshness = payload?.freshness, captured = Date.parse(hailo.captured_at);
+    const elapsed = Math.max(0, elapsedSeconds);
+    // The two captures belong to Scout. A Mac wall-clock offset must not turn a
+    // current Scout observation stale (or an old Scout observation current).
+    const age = finite(freshness?.age_seconds) && freshness.age_seconds >= 0 && awareTime(freshness.captured_at)
+      ? freshness.age_seconds + (Date.parse(freshness.captured_at) - captured) / 1000 + elapsed
+      : awareTime(payload?.server_time) ? (Date.parse(payload.server_time) - captured) / 1000 + elapsed
+      : (Date.now() - captured) / 1000;
+    return finite(age) && age >= -1 ? Math.max(0, age) : null;
+  }
+
+  function hailoValidity(payload, httpStatus, hailo, elapsedSeconds = 0) {
+    const freshness = payload?.freshness;
+    if (payload?.status === "stale" || freshness?.state === "stale"
+      || finite(freshness?.age_seconds) && finite(freshness?.stale_after_seconds)
+        && freshness.age_seconds + Math.max(0, elapsedSeconds) > freshness.stale_after_seconds) return "stale";
+    if (httpStatus !== 200 || !payload || payload.status === "unavailable") return "unavailable";
+    if (!payload.data || !["ok", "warning", "critical"].includes(payload.status)
+      || freshness?.state !== "fresh" || !finite(freshness.age_seconds)
+      || !finite(freshness.stale_after_seconds)) return "unknown";
+    const age = hailoSampleAge(payload, hailo, elapsedSeconds);
+    if (hailo && age === null) return "unknown";
+    if (hailo && age > 150) return "stale";
+    return "current";
+  }
+
+  function verifyHailoRendered(doc, payload, httpStatus = 200, retainedHailo = null, elapsedSeconds = 0) {
+    const status = text(doc, "hardwareHailoStatus"), meta = text(doc, "hardwareHailoMeta");
+    const panel = doc.getElementById("hardwareHailoPanel"), grid = doc.getElementById("hardwareHailoDevices");
+    requireValue(panel && grid && !panel.hidden, "scout monitor 缺少可讀的 Hailo 區塊，可能載入舊版 UI");
+    const hailo = payload?.data ? payload.data.hailo : retainedHailo;
+    const validity = hailoValidity(payload, httpStatus, hailo, elapsedSeconds);
+    // A transport failure carries no source anchor. Retained readings are
+    // checked below, but do not invent their age from the Mac's wall clock.
+    const ageSeconds = payload?.data ? hailoSampleAge(payload, hailo, elapsedSeconds) : null;
+    const cards = [...grid.querySelectorAll("[data-hailo-device]")];
+    requireValue(!panel.querySelector("script,img,iframe,object,embed,[onload],[onerror]"), "Hailo 內容未以安全純文字呈現");
+    if (validity === "stale") requireValue(panel.dataset.state === "stale" && /資料已過期/.test(meta), "Hailo 過期資料未明確標示");
+    if (validity === "unavailable") requireValue(panel.dataset.state === "unavailable" && /斷線|上次採樣/.test(meta), "Hailo 斷線保留值被當成目前資料");
+    if (validity === "unknown") requireValue(panel.dataset.state === "unknown" && /未知/.test(meta), "Hailo 資料有效性未知卻通過目前資料檢查");
+    if (!hailo) {
+      requireValue(cards.length === 0 && /等待更新/.test(meta) && /未知/.test(status), "舊採樣／null Hailo 未顯示等待更新或殘留假裝置");
+      return {status, meta, validity, deviceCount: 0, capturedAt: null, devices: []};
+    }
+    requireValue(status.includes(HAILO_LABELS[hailo.status]), "Hailo 區塊讀取狀態未遵循 API");
+    requireValue(!/正常|故障/.test(status), "Hailo 已讀取被誤稱為硬體健康／故障");
+    if (validity !== "current") requireValue(/上次採樣/.test(status), "失效的 Hailo 已讀取徽章缺少上次採樣註記");
+    else requireValue(panel.dataset.state === hailo.status && !/上次採樣|資料已過期|斷線/.test(meta), "Hailo 恢復後仍保留失效狀態");
+    requireValue(meta.includes(hailo.source) && /採樣視窗 1 秒/.test(meta) && /唯讀旗標 是/.test(meta), "Hailo 觀測來源／唯讀／採樣視窗未呈現");
+    requireValue(cards.length === hailo.devices.length, "Hailo 裝置數量未遵循 API 清單");
+    if (!cards.length) requireValue(hailo.status === "ok" ? /未列出 Hailo 裝置/.test(grid.textContent)
+      : /清單無法確認/.test(grid.textContent) && !/未列出|沒有偵測到/.test(grid.textContent),
+      "空 Hailo 清單未區分已讀取與讀取失敗，或虛構装置");
+    const plain = element => {
+      requireValue(element && element.childElementCount === 0, "Hailo 欄位遺失或未以純文字呈現");
+      return element.textContent.trim();
+    };
+    const checkErrors = (scope, values) => {
+      requireValue(scope, "Hailo 讀取錯誤區塊遺失");
+      const actual = [...scope.querySelectorAll(".inventory-errors li")].map(plain);
+      for (const error of values || []) requireValue(actual.includes(error), "Hailo 讀取錯誤未原樣以純文字保留");
+    };
+    checkErrors(doc.getElementById("hardwareHailoErrors"), hailo.errors);
+    const devices = hailo.devices.map(device => {
+      // Compare identifiers as data; never interpolate untrusted text into CSS.
+      const matching = cards.filter(card => card.dataset.hailoDevice === device.device_id);
+      requireValue(matching.length === 1, "Hailo 多裝置混合、重複或遺失");
+      const card = matching[0], badge = card.querySelector(".inventory-section-status");
+      requireValue(badge && badge.textContent.includes(HAILO_LABELS[device.status])
+        && badge.dataset.state === (validity === "current" ? device.status : validity), "Hailo 裝置讀取狀態未保留／失效資料仍是目前已讀取");
+      requireValue(plain(card.querySelector(".inventory-section-name")) === device.device_id, "Hailo 裝置名稱未以純文字保留");
+      requireValue(plain(card.querySelector(".inventory-section-summary")).includes(device.architecture), "Hailo architecture 未以純文字保留");
+      const metrics = {};
+      for (const key of HAILO_METRICS) {
+        const reading = plain(card.querySelector(`[data-hailo-metric="${key}"]`));
+        metrics[key] = reading;
+        if (!finite(device[key])) {
+          requireValue(["未知", "—"].includes(reading), `Hailo ${key} 未知值被補零或殘留上次讀值`);
+          continue;
+        }
+        const bytes = key.endsWith("_bytes"), percent = key.endsWith("_percent");
+        const unit = bytes ? "GiB" : percent ? "%" : key === "temperature_c" ? "°C" : "mV";
+        const match = /^(-?\d+(?:\.\d+)?)\s*(%|GiB|°C|mV)$/.exec(reading);
+        const expected = bytes ? device[key] / 1024 ** 3 : device[key];
+        const tolerance = bytes ? 0.005000001 : key === "voltage_mv" ? 0.000000001 : 0.050000001;
+        requireValue(match && match[2] === unit && Math.abs(Number(match[1]) - expected) <= tolerance,
+          `Hailo ${key} 數值／${unit} 單位與 API 不符`);
+        if (device[key] === 0) requireValue(Number(match[1]) === 0, `Hailo ${key} 有效零讀值未保留`);
+      }
+      const captured = awareTime(hailo.captured_at) ? new Date(hailo.captured_at).toLocaleString("zh-TW", {timeZone: "Asia/Taipei",
+        year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false}) : "未知";
+      requireValue(plain(card.querySelector('[data-hailo-metric="captured_at"]')) === captured, "Hailo 時間未使用來源 captured_at／Asia/Taipei");
+      requireValue(plain(card.querySelector('[data-hailo-metric="source"]')) === hailo.source, "Hailo 裝置來源遺失");
+      checkErrors(card, device.errors);
+      return {deviceId: device.device_id, status: device.status, metrics};
+    });
+    if (finite(payload?.data?.cpu_used_percent)) requireValue(text(doc, "hardwareCpuPercent") === `${payload.data.cpu_used_percent.toFixed(1)}%`, "Hailo 內部 CPU 覆蓋了主機 CPU");
+    if (!awareTime(hailo.captured_at) || payload?.data && ageSeconds === null) requireValue(text(doc, "hardwareHailoAge") === "未知", "未知 Hailo 自身時間被補成目前資料年齡");
+    return {status, meta, validity, ageSeconds, deviceCount: cards.length, capturedAt: hailo.captured_at, devices};
+  }
+
+  function verifyRendered(doc, payload, httpStatus = 200, retainedPower = null, retainedHailo = null) {
     const overall = text(doc, "hardwareOverallStatus");
     const battery = text(doc, "hardwareBatteryPercent");
     const supply = text(doc, "hardwareSupplyStatus");
@@ -12149,7 +12304,7 @@
     if (power?.supply_status === "unavailable") requireValue(/主機|5V|供電/.test(notice), "主機供電不可讀未與 UPS 狀態分開說明");
     if (upsOk && supplyOk) requireValue(!/通訊失敗/.test(notice), "恢復後仍殘留 UPS 通訊失敗告警");
     requireValue(note.length > 0, "電源採樣說明遺失");
-    return {overall, battery, supply, note, notice};
+    return {overall, battery, supply, note, notice, hailo: verifyHailoRendered(doc, payload, httpStatus, retainedHailo)};
   }
 
   function fixture(overrides = {}) {
@@ -12161,6 +12316,89 @@
           captured_at: captured, age_seconds: 1, battery_percent: 68.5, battery_power_w: -3.5, battery_voltage_mv: 8100,
           flow: "discharging", ups_vbus_power_mw: 4000, ext5v_v: 5.18, active_throttle_bits: 0, ...overrides}},
     };
+  }
+
+  function hailoFixture() {
+    const payload = fixture();
+    payload.data.cpu_used_percent = 33.3;
+    payload.data.hailo = {
+      captured_at: new Date(Date.parse(payload.freshness.captured_at) - 2000).toISOString(), status: "ok", source: "hailortcli.monitor",
+      sample_window_ms: 1000, read_only: true, errors: [], devices: [{
+        device_id: "pci/0001:03:00.0", architecture: "HAILO10H", status: "ok", errors: [],
+        nnc_utilization_percent: 12.5, cpu_utilization_percent: 0.2, ram_utilization_percent: 1.1,
+        ram_used_bytes: 82 * 1024 ** 2, ram_total_bytes: 7221 * 1024 ** 2,
+        temperature_c: 46.2, voltage_mv: 802,
+      }],
+    };
+    return payload;
+  }
+
+  function hailoScenarios() {
+    const empty = {status: "unavailable", freshness: {state: "missing"}, data: null};
+    const rows = [{id: "hailo-first-null-data", seed: structuredClone(empty), payload: empty},
+      {id: "hailo-current-metrics-and-source-time", payload: hailoFixture()}];
+    const zero = hailoFixture();
+    for (const key of HAILO_METRICS.filter(key => key !== "ram_total_bytes")) zero.data.hailo.devices[0][key] = 0;
+    rows.push({id: "hailo-zero-is-measured-not-failure", payload: zero});
+    const partial = hailoFixture();
+    partial.data.hailo.status = partial.data.hailo.devices[0].status = "partial";
+    Object.assign(partial.data.hailo.devices[0], {nnc_utilization_percent: null, ram_used_bytes: null,
+      temperature_c: null, errors: ["metric_unavailable"]});
+    rows.push({id: "hailo-partial-null-replaces-last-values", seed: hailoFixture(), payload: partial});
+    const missing = structuredClone(partial);
+    for (const key of ["nnc_utilization_percent", "ram_used_bytes", "temperature_c"]) delete missing.data.hailo.devices[0][key];
+    rows.push({id: "hailo-missing-metrics-remain-unknown", payload: missing});
+    const unavailable = hailoFixture();
+    unavailable.data.hailo.status = unavailable.data.hailo.devices[0].status = "unavailable";
+    Object.assign(unavailable.data.hailo.devices[0], Object.fromEntries(HAILO_METRICS.map(key => [key, null])), {errors: ["timeout"]});
+    rows.push({id: "hailo-unavailable-all-null", payload: unavailable});
+    rows.push({id: "hailo-legacy-missing-waits", seed: hailoFixture(), payload: fixture()});
+    const legacyNull = fixture(); legacyNull.data.hailo = null;
+    rows.push({id: "hailo-legacy-null-clears-last-devices", seed: hailoFixture(), payload: legacyNull});
+    const noDevices = hailoFixture(); noDevices.data.hailo.devices = [];
+    rows.push({id: "hailo-empty-list-is-read-not-health", seed: hailoFixture(), payload: noDevices});
+    const unreadableList = structuredClone(noDevices);
+    unreadableList.data.hailo.status = "unavailable";
+    unreadableList.data.hailo.errors = ["inventory_unavailable"];
+    rows.push({id: "hailo-empty-unavailable-is-not-absence", seed: hailoFixture(), payload: unreadableList});
+    const multi = hailoFixture();
+    multi.data.hailo.devices.push({...multi.data.hailo.devices[0], device_id: "pci/0001:05:00.0",
+      nnc_utilization_percent: 87.3, cpu_utilization_percent: 4.6, ram_utilization_percent: 18.75,
+      ram_used_bytes: 1.5 * 1024 ** 3, ram_total_bytes: 8 * 1024 ** 3, temperature_c: 61.8, voltage_mv: 804});
+    rows.push({id: "hailo-multi-device-independent-metrics", payload: multi});
+    const mixed = structuredClone(multi);
+    mixed.data.hailo.status = "partial";
+    mixed.data.hailo.devices[0] = structuredClone(unavailable.data.hailo.devices[0]);
+    rows.push({id: "hailo-multi-device-partial-is-not-all-ok", payload: mixed});
+    const ownStale = hailoFixture();
+    ownStale.data.hailo.captured_at = new Date(Date.parse(ownStale.freshness.captured_at) - 181000).toISOString();
+    rows.push({id: "hailo-own-stale-with-fresh-host", payload: ownStale});
+    const afterHost = hailoFixture(), anchor = Date.now() - 4000;
+    afterHost.freshness.captured_at = afterHost.data.captured_at = new Date(anchor).toISOString();
+    afterHost.freshness.age_seconds = 4;
+    afterHost.data.hailo.captured_at = new Date(anchor + 2000).toISOString();
+    rows.push({id: "hailo-captured-after-host-anchor", payload: afterHost});
+    const future = hailoFixture();
+    future.data.hailo.captured_at = new Date(Date.parse(future.freshness.captured_at) + 300000).toISOString();
+    rows.push({id: "hailo-future-source-time-is-unknown", payload: future});
+    const globalStale = hailoFixture(); globalStale.status = "stale";
+    Object.assign(globalStale.freshness, {state: "stale", age_seconds: 151});
+    rows.push({id: "hailo-global-503-retains-not-current", payload: globalStale, httpStatus: 503});
+    for (const [id, payload, httpStatus] of [
+      ["hailo-transport-disconnect-retains-last-values", null, 0],
+      ["hailo-ssh-503-retains-last-values", {status: "unavailable", data: null, freshness: {state: "unreadable"},
+        connection: {transport: "ssh", error_code: "ssh_unavailable"}, next_steps: ["請確認 scout SSH 連線；每 60 秒自動重試。"]}, 503],
+    ]) {
+      const seed = hailoFixture();
+      rows.push({id, seed, payload, httpStatus, retainedPower: seed.data.power, retainedHailo: seed.data.hailo});
+    }
+    const hostile = structuredClone(partial);
+    const markup = '<img src=x onerror="window.hailoInjected=true">Hailo <安全文字>';
+    hostile.data.hailo.devices[0].architecture = markup;
+    hostile.data.hailo.devices[0].errors = [markup]; hostile.data.hailo.errors = [markup];
+    rows.push({id: "hailo-architecture-and-errors-safe-text", payload: hostile});
+    rows.push({id: "hailo-recovery-clears-invalid-state", payload: hailoFixture()});
+    return rows;
   }
 
   function scenarios() {
@@ -12212,6 +12450,7 @@
       payload: {status: "unavailable", data: null, freshness: {state: "unreadable"},
         connection: {transport: "ssh", error_code: code}, next_steps: [step]}});
     rows.push({id: "recovery", payload: fixture()});
+    rows.push(...hailoScenarios());
     return rows;
   }
 
@@ -12219,9 +12458,15 @@
     const rows = [];
     for (const item of scenarios()) {
       try {
+        if (item.seed) {
+          probe.apply({response: {ok: true, status: 200}, payload: item.seed});
+          verifyRendered(probe.doc, item.seed);
+        }
         const httpStatus = item.httpStatus ?? 200;
+        if (item.payload) verifyContract(item.payload);
         probe.apply({response: httpStatus ? {ok: httpStatus === 200, status: httpStatus} : null, payload: item.payload});
-        rows.push({id: item.id, status: "passed", evidence: verifyRendered(probe.doc, item.payload, httpStatus, item.retainedPower)});
+        rows.push({id: item.id, status: "passed", capturedAt: item.payload?.data?.hailo?.captured_at || item.retainedHailo?.captured_at || item.payload?.data?.captured_at || null,
+          evidence: verifyRendered(probe.doc, item.payload, httpStatus, item.retainedPower, item.retainedHailo)});
       } catch (error) { rows.push({id: item.id, status: "failed", detail: error.message}); }
     }
     return rows;
@@ -12235,10 +12480,28 @@
     return {payload, httpStatus: response.status, transport: response.headers?.get("X-Scout-Monitor-Transport") || null};
   }
 
+  function verifyCurrentHailo(doc, payload, httpStatus = 200) {
+    const hailo = payload?.data?.hailo;
+    verifyHailoContract(hailo);
+    const evidence = verifyHailoRendered(doc, payload, httpStatus);
+    const dataStatus = !hailo ? "missing_field" : evidence.validity !== "current" ? "unavailable_or_stale"
+      : !hailo.devices.length ? "empty_devices"
+      : hailo.status !== "ok" || hailo.devices.some(device => HAILO_METRICS.some(key => !finite(device[key]))) ? "partial_metrics" : "current";
+    const detail = {
+      missing_field: "目前 API 沒有新版 Hailo 資料；等待更新呈現已核對，新能力的目前資料檢查仍有缺口。",
+      unavailable_or_stale: "Hailo 失效／過期呈現已核對，但目前讀值未驗證。",
+      empty_devices: "目前 Hailo 清單為空，不能把空清單算成新指標已驗證。",
+      partial_metrics: "Hailo 部分／未知讀值已核對；目前七項指標仍有未取得資料。",
+      current: "目前 Hailo 來源時間與各裝置七項指標呈現吻合；不是推論成功或硬體健康證明。",
+    }[dataStatus];
+    return {id: "live-hailo-current-payload", status: dataStatus === "current" ? "passed" : "warning",
+      dataStatus, detail, evidence, capturedAt: hailo?.captured_at || null, httpStatus};
+  }
+
   function openProbe({document: doc, signal, timeoutMs = 15000}) {
     return new Promise((resolve, reject) => {
       const frame = doc.createElement("iframe");
-      frame.title = "scout monitor 電源分離隔離檢查"; frame.tabIndex = -1;
+      frame.title = "scout monitor 電源分離與 Hailo 隔離檢查"; frame.tabIndex = -1;
       frame.setAttribute("aria-hidden", "true"); frame.hidden = true;
       let timer, readyTimer;
       const close = () => {
@@ -12279,13 +12542,18 @@
     const timer = setTimeout(cancel, 30000);
     win.addEventListener("pagehide", cancel, {once: true});
     let probe = null;
-    const report = {id: "DASH-050", status: "failed", structureStatus: "not_checked", dataStatus: "not_checked",
+    const report = {id: "DASH-050", status: "failed", structureStatus: "not_checked", dataStatus: "not_checked", hailoDataStatus: "not_checked",
       evidenceMode: "same-origin-status-and-isolated-production-render", official_qualification_eligible: false,
       runtime_safety_truth: false, hardware_control_invoked: false, rows: [], probeCleanup: "pending"};
     try {
       let live = null;
       try { live = await readStatus({fetch: win.fetch.bind(win), signal: controller.signal}); }
-      catch (_) { report.rows.push({id: "live-status", status: "warning", detail: "同源 status JSON 不可讀；不能判定目前電源資料"}); }
+      catch (_) {
+        report.rows.push({id: "live-status", status: "warning", detail: "同源 status JSON 不可讀；不能判定目前電源／Hailo 資料"});
+        report.hailoDataStatus = "unavailable_or_stale";
+        report.rows.push({id: "live-hailo-current-payload", status: "warning", dataStatus: report.hailoDataStatus,
+          detail: "目前 status JSON 不可讀，Hailo 新能力的目前資料檢查仍有缺口。"});
+      }
       probe = await openProbe({document: doc, signal: controller.signal});
       report.structureStatus = "passed";
       if (live) {
@@ -12303,6 +12571,14 @@
             capturedAt: live.payload.data?.captured_at || null, httpStatus: live.httpStatus, transport: live.transport,
             detail: fresh ? "目前採樣的電源分離呈現吻合；不代表 UPS 通訊恢復" : "失效／無資料呈現已核對，但目前電源資料未驗證"});
         } catch (error) { report.rows.push({id: "live-status", status: "failed", detail: error.message}); }
+        try {
+          const row = verifyCurrentHailo(probe.doc, live.payload, live.httpStatus);
+          report.hailoDataStatus = row.dataStatus;
+          report.rows.push(row);
+        } catch (error) {
+          report.hailoDataStatus = "failed";
+          report.rows.push({id: "live-hailo-current-payload", status: "failed", detail: error.message});
+        }
       }
       report.rows.push(...runRenderScenarios(probe));
     } catch (error) { report.rows.push({id: "monitor-entry", status: "failed", detail: error.message}); }
@@ -12314,14 +12590,15 @@
     report.status = report.rows.some(row => row.status === "failed") ? "failed"
       : report.rows.some(row => row.status === "warning") ? "warning" : "passed";
     const failed = report.rows.filter(row => row.status !== "passed");
-    report.detail = `scout monitor 電源分離：${report.rows.filter(row => row.status === "passed").length}/${report.rows.length} 檢查通過。`
-      + (failed.length ? failed.map(row => `${row.id}: ${row.detail}`).join("；") : "UPS 不可讀時電池未知，主機有效 5V 與旗標獨立保留；含 503、斷線、未知與恢復重播。")
-      + " 僅同源 GET 與隔離呈現檢查；不代表 UPS 通訊恢復或硬體正常。";
+    report.detail = `scout monitor 電源分離與 Hailo：${report.rows.filter(row => row.status === "passed").length}/${report.rows.length} 檢查通過。`
+      + (failed.length ? failed.map(row => `${row.id}: ${row.detail}`).join("；") : "UPS 不可讀時電池未知，主機有效 5V 與旗標獨立保留；Hailo 含七項指標、多裝置、503、自身過期、斷線、未知與恢復重播。")
+      + " 僅同源 GET 與隔離呈現檢查；不代表 UPS 通訊恢復、Hailo 推論成功或硬體正常。";
     lastReport = structuredClone(report);
     return report;
   }
 
-  const api = Object.freeze({run, verifyContract, verifyRendered, scenarios, runRenderScenarios, readStatus, openProbe,
+  const api = Object.freeze({run, verifyContract, verifyRendered, verifyHailoContract, verifyHailoRendered, verifyCurrentHailo,
+    scenarios, runRenderScenarios, readStatus, openProbe,
     snapshot: () => lastReport && structuredClone(lastReport)});
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   root.ScoutMonitorPowerDiagnostic = api;
@@ -12484,7 +12761,10 @@
     "use strict";
     const DIAGNOSTIC_MAP_PROBE = new URLSearchParams(window.location.search).get("diagnosticMapProbe") === "1";
 
-    const PROJECT_ID = "chilai_nanhua_day1_scoutAI";
+    // A Dashboard instance has no implicit workspace. The URL/local selection
+    // is only a request; all data work waits for the matching catalog entry.
+    const PROJECT_ID = "";
+    const WORKSPACE_REQUIRED_MESSAGE = "A loaded workspace is required before Dashboard data or diagnostics can run.";
     const ASSISTANT_STATUS_PATH = "/assistant/status";
     const ASSISTANT_QUERY_PATH = "/assistant/query";
     const ASSISTANT_QUERY_TIMEOUT_MS = 240000;
@@ -12574,6 +12854,12 @@
       runtime_audit: ["runtime-audit"],
     });
     let diagnosticCheck037Runner = null;
+    const SCOUT_AI_SCORE_DIAGNOSTICS = Object.freeze([
+      {id: "AI-SCORE-001", family: "answer_quality", title: "回答品質分數", description: "由 Scout AI 專用 evaluator 測試回答是否完整、正確並符合問題；不屬於 Dashboard correctness PASS/FAIL。", recorded: "未在本頁執行"},
+      {id: "AI-SCORE-002", family: "tool_grounding", title: "工具與證據整合分數", description: "測試工具選擇、workspace retrieval、Weather／CWA／GEE／GPX 證據與回答整合。", recorded: "未在本頁執行"},
+      {id: "AI-SCORE-003", family: "domain_reasoning", title: "戶外領域推理分數", description: "測試六力、route context、pace、risk、permission、navigation 等候選分析能力。", recorded: "未在本頁執行"},
+      {id: "AI-SCORE-004", family: "model_runtime", title: "模型 runtime 能力分數", description: "測試 DeepSeek、retrieval、model gateway、Praison MCP 與回答流程的能力與退化。", recorded: "未在本頁執行"},
+    ]);
     const DASHBOARD_DIAGNOSTIC_CASES = Object.freeze([
       {id: "DASH-001", category: "Global / Overview", title: "Dashboard 啟動、入口與必要 API", description: "確認 Dashboard、workspace 與 project read APIs 可用。", run: diagnosticCheck001},
       {id: "DASH-002", category: "Global / Overview", title: "全站導覽、路由與返回狀態", description: "確認現有 route contract 與 Diagnostic 導覽位置。", run: diagnosticCheck002},
@@ -12624,7 +12910,7 @@
       {id: "DASH-047", category: "System", title: "Intelligence 內嵌頁面與工作紀錄", description: "確認 iframe、telemetry GET、store 與 candidate-only 工作資料；不執行模型。", run: diagnosticCheck047},
       {id: "DASH-048", category: "Assistant / System / Safety", title: "Emergency packet、Field 與離線就緒狀態", description: "讀取 mission-day packet 與 field group，檢查離線 API 能力；不寫入離線資料或執行安全決策。", run: diagnosticCheck048},
       {id: "DASH-049", category: "Map & Evidence", title: "Planned 比較圖與 Legacy 示意圖用途", description: "9 個 Planned 正式入口核對已選 Saved 來源、版本、完整雙線幾何及操作；Legacy 桌面圖核對示意用途、7 個圖層與權限邊界。隔離正式 render/bind，只讀 GET，不生成計畫、不更改 selection，不代替 Rudy 原生圖磚或完整 Chrome 頁面驗收。", run: diagnosticCheck049},
-      {id: "DASH-050", category: "System", title: "scout monitor 電池／主機供電分離", description: "同源 GET 核對目前採樣，並隔離重播 UPS 通訊失敗、主機 5V 保留、未知、503 過期與恢復。只驗證資料呈現，不操作硬體，不把檢查通過當成 UPS 恢復。", run: diagnosticCheck050},
+      {id: "DASH-050", category: "System", title: "scout monitor 電源／Hailo 讀值判讀", description: "同源 GET 核對目前採樣，隔離重播 UPS 通訊失敗、主機 5V 保留、Hailo 專用 RAM 單位、零值、未知、503 過期、斷線與恢復。只驗證資料呈現，不操作硬體，不把通過當成 UPS 恢復或 AI 推論健康證明。", run: diagnosticCheck050},
     ]);
     const NAVIGATION_DIAGNOSTIC_CASE_IDS = Object.freeze([
       "DASH-025", "DASH-038", "DASH-039", "DASH-040", "DASH-041", "DASH-042", "DASH-043",
@@ -13492,15 +13778,22 @@
       bindNavigation();
       bindMobileNavigation();
       bindAgentChatControls();
-      setRoute(routeFromHash());
-      if (state.route === "outdoor-route-context") void loadDataScope("briefing");
-      void loadConnectedPreparationStatus();
-      loadWorkspaceCatalog().finally(() => loadData()).finally(() => {
-        if (state.route === "outdoor-route-context") refreshCurrentDataView();
-        else if (!routeUsesEmbeddedFrame(state.route)) setRoute(state.route, {loadRouteData: false});
+      const initialRoute = routeFromHash();
+      // Render only the static shell until the catalog identifies the selected
+      // workspace. This prevents an early hash route from creating a map or
+      // issuing a data request against a stale/default project.
+      setRoute("home");
+      void bootstrapDashboardWorkspace(initialRoute);
+      window.addEventListener("hashchange", () => {
+        const requestedRoute = routeFromHash();
+        if (workspaceIdentityReady() || ["home", "settings"].includes(requestedRoute)) {
+          setRoute(requestedRoute, {loadRouteData: true});
+        } else {
+          state.route = requestedRoute;
+          const status = document.getElementById("dashboardRouteStatus");
+          if (status) status.textContent = `${projectId() || "workspace"} · loading workspace`;
+        }
       });
-      void rebuildPermissionTruthAndSyncOfflineIntents();
-      window.addEventListener("hashchange", () => setRoute(routeFromHash(), {loadRouteData: true}));
       window.addEventListener("online", () => {
         state.emergencyDecisionStatus = "Online · rebuilding server truth before offline-intent sync.";
         void rebuildPermissionTruthAndSyncOfflineIntents();
@@ -13520,7 +13813,45 @@
     function projectId() {
       const paramProjectId = new URLSearchParams(window.location.search).get("projectId") || "";
       if (/^[A-Za-z0-9_.-]+$/.test(paramProjectId)) return paramProjectId;
-      return localStorage.getItem("scout.dashboardProjectId") || localStorage.getItem("scout.emergencyProjectId") || PROJECT_ID;
+      const storedProjectId = localStorage.getItem("scout.dashboardProjectId") || localStorage.getItem("scout.emergencyProjectId") || "";
+      return /^[A-Za-z0-9_.-]+$/.test(storedProjectId) ? storedProjectId : "";
+    }
+
+    function workspaceIdentityReady(candidateProjectId = projectId()) {
+      // Isolated function replays provide no Dashboard state object; their
+      // selected id remains the explicit test fixture. Production always has
+      // state and therefore requires a catalog-backed identity.
+      if (typeof state === "undefined") return Boolean(candidateProjectId);
+      return Boolean(
+        candidateProjectId
+        && state.workspaceCatalogStatus === "ready"
+        && state.workspaceContext?.project_id === candidateProjectId,
+      );
+    }
+
+    function requireLoadedWorkspaceProjectId() {
+      const selectedProjectId = projectId();
+      if (!workspaceIdentityReady(selectedProjectId)) {
+        throw new Error(WORKSPACE_REQUIRED_MESSAGE);
+      }
+      return state.workspaceContext.project_id;
+    }
+
+    async function bootstrapDashboardWorkspace(initialRoute = "home") {
+      await loadWorkspaceCatalog();
+      if (!workspaceIdentityReady()) {
+        state.dataScopeErrors = {workspace: WORKSPACE_REQUIRED_MESSAGE};
+        refreshCurrentDataView();
+        return false;
+      }
+      setRoute(initialRoute, {loadRouteData: false});
+      if (state.route === "outdoor-route-context") await loadDataScope("briefing");
+      await loadConnectedPreparationStatus();
+      await loadData();
+      await rebuildPermissionTruthAndSyncOfflineIntents();
+      if (state.route === "outdoor-route-context") refreshCurrentDataView();
+      else if (!routeUsesEmbeddedFrame(state.route)) setRoute(state.route, {loadRouteData: false});
+      return true;
     }
 
     function completedTripRecordingsPath() {
@@ -14135,6 +14466,7 @@
     }
 
     async function rebuildPermissionTruthAndSyncOfflineIntents() {
+      requireLoadedWorkspaceProjectId();
       await refreshEmergencyOfflineIntentCount();
       if (!state.emergencyOfflineIntentCount || navigator.onLine === false) return;
       state.emergencyOfflineSyncStatus = "Rebuilding current server truth before sync…";
@@ -14198,7 +14530,7 @@
     }
 
     async function loadConnectedPreparationStatus() {
-      const expectedProjectId = projectId();
+      const expectedProjectId = requireLoadedWorkspaceProjectId();
       const expectedApiBase = apiBase();
       const project = encodeURIComponent(expectedProjectId);
       try {
@@ -14228,7 +14560,7 @@
     }
 
     async function triggerDashboardConnectedPreparation(reason, {force = false} = {}) {
-      const expectedProjectId = projectId();
+      const expectedProjectId = requireLoadedWorkspaceProjectId();
       const expectedApiBase = apiBase();
       const project = encodeURIComponent(expectedProjectId);
       try {
@@ -14319,6 +14651,7 @@
     }
 
     async function loadDataForRoute(route, {force = false} = {}) {
+      requireLoadedWorkspaceProjectId();
       document.getElementById("dashboardRouteStatus").textContent = projectId();
       const scopes = dataScopesForRoute(route);
       if (scopes.includes("analysis_subject")) {
@@ -14340,6 +14673,7 @@
     }
 
     async function loadDataScope(scope, {force = false} = {}) {
+      requireLoadedWorkspaceProjectId();
       if (dataScopePromises.has(scope)) return dataScopePromises.get(scope);
       if (force) loadedDataScopes.delete(scope);
       if (!force && loadedDataScopes.has(scope)) return;
@@ -17354,7 +17688,7 @@
         return renderSurfaceFrame({
           route,
           title: "scout monitor",
-          src: "/admin/dashboard/scout-monitor?ui=20260914-ssh1",
+          src: "/admin/dashboard/scout-monitor?ui=20260915-hailo1",
           summary: "Scout 主機硬體的唯讀監控。",
         });
       }
@@ -20532,6 +20866,35 @@
       `;
     }
 
+    function renderScoutAIScoreSection() {
+      return `
+        <section class="diagnostic-category diagnostic-ai-score" data-diagnostic-purpose="scout-ai-score">
+          <div class="diagnostic-category-header">
+            <div>
+              <h3>Scout AI Score｜模型能力分數</h3>
+              <p class="diagnostic-category-description">這是獨立的能力評測類別。分數可有失敗案例，不以 100% PASS 為目標；模型、工具與證據缺口會在專用 evaluator 中分開記錄。</p>
+            </div>
+            <span>${SCOUT_AI_SCORE_DIAGNOSTICS.length} score families</span>
+          </div>
+          <div class="diagnostic-case-list">
+            ${SCOUT_AI_SCORE_DIAGNOSTICS.map(item => `
+              <article class="diagnostic-case diagnostic-score-card" data-diagnostic-score-family="${escapeHtml(item.family)}">
+                <div class="diagnostic-case-copy">
+                  <span class="diagnostic-case-id">${escapeHtml(item.id)} · ${escapeHtml(item.family)}</span>
+                  <h4>${escapeHtml(item.title)}</h4>
+                  <p>${escapeHtml(item.description)}</p>
+                </div>
+                <div class="diagnostic-result">
+                  <div class="diagnostic-status"><span class="diagnostic-light diagnostic-score-light" aria-hidden="true"></span><span>Score evaluator</span></div>
+                  <p class="diagnostic-result-detail">${escapeHtml(item.recorded)}；不納入下方 Correctness Gate 統計。</p>
+                </div>
+              </article>
+            `).join("")}
+          </div>
+        </section>
+      `;
+    }
+
     async function diagnosticAdvancedAssistantReplay() {
       const production = [submitAgentQuestion, formatAgentEvalAnswer, displayAgentAnswer, agentResponseMeta,
         agentGroundingGuard, agentAiHatGenerationMode, agentAiHatSkillId, agentAiHatTypedDecision,
@@ -20712,7 +21075,7 @@
           <section class="diagnostic-command">
             <div>
               <h3>Dashboard Diagnostic</h3>
-              <p><strong>Read-only diagnostics for itinerary and runtime.</strong> These ${DASHBOARD_DIAGNOSTIC_CASES.length} checks use the current UI contract, same-origin GET APIs and existing artifacts. DASH-037 includes the approved native Rudy GET probe: missing original tiles may be downloaded into the Rudy cache, without forced refresh or itinerary changes. CWA remains cache-only. The checks do not run imports, connected preparation, HealthExport watch, model generation, MQTT publish, Emergency send or hardware actions, and this page does not replace the full acceptance checklist.</p><p>037 經使用者核准可用 native GET 補入 Rudy 圖磚快取；不強制 refresh、不刪快取、不生成或修改行程。綠燈只代表本題明列的驗證範圍；介面／契約與資料／依賴分開顯示。「未檢測」不代表資料已就緒，也不代表完整操作流程通過。</p>
+              <p><strong>Read-only diagnostics for itinerary and runtime.</strong> These ${DASHBOARD_DIAGNOSTIC_CASES.length} checks use the current UI contract, same-origin GET APIs and existing artifacts. DASH-037 includes the approved native Rudy GET probe: missing original tiles may be downloaded into the Rudy cache, without forced refresh or itinerary changes. CWA remains cache-only. The checks do not run imports, connected preparation, HealthExport watch, model generation, MQTT publish, Emergency send or hardware actions, and this page does not replace the full acceptance checklist. Dashboard Diagnostic is a Correctness Gate; Scout AI capability scores are reported separately and are not mixed into this PASS/FAIL gate.</p><p>037 經使用者核准可用 native GET 補入 Rudy 圖磚快取；不強制 refresh、不刪快取、不生成或修改行程。綠燈只代表本題明列的驗證範圍；介面／契約與資料／依賴分開顯示。「未檢測」不代表資料已就緒，也不代表完整操作流程通過。Scout AI 的回答能力另以分數呈現，不與此頁的正確性 PASS／FAIL 混算。</p>
             </div>
             <button type="button" data-diagnostic-action="all" ${diagnosticExecutionBusy() ? "disabled" : ""}>${state.diagnosticBatchRunning ? "Diag all running…" : "Diag all"}</button>
           </section>
@@ -20730,6 +21093,16 @@
                 <strong data-diagnostic-summary="${escapeHtml(key)}">${escapeHtml(value)}</strong>
               </div>
             `).join("")}
+          </section>
+          ${renderScoutAIScoreSection()}
+          <section class="diagnostic-category diagnostic-correctness-heading" data-diagnostic-purpose="correctness-gate">
+            <div class="diagnostic-category-header">
+              <div>
+                <h3>Correctness Gate｜程式與資料正確性</h3>
+                <p class="diagnostic-category-description">下列 Dashboard Diagnostic 只檢查 UI、workspace、地圖、artifact、runtime、release 與安全邊界；適用項目必須全部 PASS 才能宣稱完成。</p>
+              </div>
+              <span>${DASHBOARD_DIAGNOSTIC_CASES.length} checks</span>
+            </div>
           </section>
           ${renderDiagnosticAdvanced()}
           ${categories.map(category => {
@@ -25954,6 +26327,11 @@
       });
       updateDiagnosticDom(caseId);
       try {
+        const loadedWorkspaceProjectId = requireLoadedWorkspaceProjectId();
+        diagnosticRequire(
+          resolvedPretripProjectId() === loadedWorkspaceProjectId,
+          "Diagnostic workspace identity is not the loaded workspace.",
+        );
         const outcome = await item.run();
         diagnosticRequire(!scopeKey || scopeKey === diagnosticCaseScopeKey(caseId), "專案或檢查範圍已變更，請重新體檢。");
         const mapEvidence = mapEvidenceFields(outcome);
@@ -26067,6 +26445,7 @@
 
     window.scoutDashboardDiagnostics = Object.freeze({
       ...(DIAGNOSTIC_MAP_PROBE ? {dispose: diagnosticDisposeRudyProbe} : {}),
+      aiScoreCases: SCOUT_AI_SCORE_DIAGNOSTICS.map(({id, family, title, description}) => ({id, family, title, description, purpose: "scout_ai_score"})),
       cases: DASHBOARD_DIAGNOSTIC_CASES.map(({id, category, title, description}) => ({id, category, title, description})),
       mapSurfaces: DASHBOARD_MAP_SURFACES.map(
         ({id, route, label, family, basemapPolicy}) => ({

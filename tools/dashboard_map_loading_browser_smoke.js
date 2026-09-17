@@ -17,7 +17,10 @@ const { chromium } = require("playwright");
 
 async function main() {
   const baseUrl = process.argv[2] || "http://127.0.0.1:9099";
-  const projectId = process.argv[3] || "chilai_nanhua_day1_scoutAI";
+  const projectId = process.argv[3] || process.env.SCOUT_DASHBOARD_PROJECT_ID || "";
+  if (!/^[A-Za-z0-9_.-]+$/.test(projectId)) {
+    throw new Error("A loaded workspace project id is required as argv[3] or SCOUT_DASHBOARD_PROJECT_ID.");
+  }
   const screenshotPath = process.argv[4] || "/tmp/scout-dashboard-map-loading-smoke.png";
   const browser = await chromium.launch({ headless: true });
   const startedAt = Date.now();

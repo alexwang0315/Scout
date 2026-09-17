@@ -434,4 +434,3 @@ Recorded 版本不可覆寫，還原後核對資料性質與 SHA。
 
 目前畫面：待擷取，尚無 revision5 標記圖。
 擷取前置：在 Weather canonical frame 保留實際失敗和恢復 receipt。 ready 時隱藏的 #mapRendererStatus 不能作有效 target；若無故障畫面本頁待拍，不能冒充目前失敗。
-

@@ -4726,6 +4726,10 @@ def _qgis_grass_terrain_visualization(
                 "overlay_id": mode,
                 "mode": mode,
                 "source_path": refs_by_type[artifact_type],
+                "runtime_href": (
+                    f"/admin/pretrip/projects/{project_id}"
+                    f"/terrain-overlays/{mode}.png"
+                ),
                 "media_type": "image/png",
                 "sha256": worker.sha256,
                 "bbox_wgs84": bbox_wgs84,

@@ -1580,8 +1580,12 @@ class AssistantApiTests(unittest.TestCase):
         self.assertIn("model answer unavailable", payload["answer"])
         self.assertNotIn("map perception tool fallback", payload["answer"])
         self.assertIn("map perception tool fallback", payload["evidence_backed_answer"])
-        self.assertEqual(payload["sources"][0]["source_id"], MAP_PERCEPTION_TOOL_ID)
-        latest = payload["sources"][0]["context_summary"]["latest"]
+        map_sources = [
+            source for source in payload["sources"]
+            if source.get("source_id") == MAP_PERCEPTION_TOOL_ID
+        ]
+        self.assertEqual(len(map_sources), 1, "Map Perception source must be unique")
+        latest = map_sources[0]["context_summary"]["latest"]
         self.assertEqual(latest["status"], "completed")
         self.assertGreater(latest["result_count"], 0)
         self.assertEqual(latest["results"][0]["evidence_type"], "ocr_label")

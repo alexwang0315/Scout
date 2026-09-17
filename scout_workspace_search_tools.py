@@ -681,6 +681,7 @@ def search_project_route_structure(
         reference_tracks=reference_tracks,
         checkpoint_events=checkpoint_events,
         checkpoint_annotations=checkpoint_annotations,
+        checkpoint_quality=checkpoint_quality,
         route_source=str(project.get("route_summary_ref") or "") or None,
         checkpoint_source=checkpoint_source,
         segment_source=segment_source,
@@ -784,21 +785,35 @@ def _segment_quality_summary(segments: list[Any]) -> dict[str, Any]:
     segments_with_distance = [
         item
         for item in segment_dicts
-        if _optional_float(item.get("distance_m")) is not None
+        if (distance := _optional_float(item.get("distance_m"))) is not None
+        and distance >= 0
     ]
-    longest = (
-        max(
-            segments_with_distance,
-            key=lambda item: float(item["distance_m"]),
+    extrema: dict[str, Any] = {}
+    for name, select in (("shortest_segment", min), ("longest_segment", max)):
+        selected = (
+            select(segments_with_distance, key=lambda item: float(item["distance_m"]))
+            if segments_with_distance
+            else None
         )
-        if segments_with_distance
-        else None
-    )
-    longest_distance_m = (
-        _optional_float(longest.get("distance_m"))
-        if isinstance(longest, dict)
-        else None
-    )
+        if selected is None:
+            extrema[name] = None
+            continue
+        distance_m = float(selected["distance_m"])
+        extrema[name] = {
+            "candidate_id": selected.get("candidate_id"),
+            "label": selected.get("label"),
+            "from_candidate_id": selected.get("from_candidate_id"),
+            "to_candidate_id": selected.get("to_candidate_id"),
+            "distance_m": distance_m,
+            "distance_km": round(distance_m / 1000.0, 3),
+            "tied_candidate_ids": [
+                item.get("candidate_id")
+                for item in segments_with_distance
+                if float(item["distance_m"]) == distance_m
+            ],
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
     return {
         "segment_missing_distance_count": sum(
             1 for item in segment_dicts if item.get("distance_m") is None
@@ -814,24 +829,9 @@ def _segment_quality_summary(segments: list[Any]) -> dict[str, Any]:
             if item.get("route_point_start_index") is not None
             and item.get("route_point_end_index") is not None
         ),
-        "longest_segment": (
-            {
-                "candidate_id": longest.get("candidate_id"),
-                "label": longest.get("label"),
-                "from_candidate_id": longest.get("from_candidate_id"),
-                "to_candidate_id": longest.get("to_candidate_id"),
-                "distance_m": longest_distance_m,
-                "distance_km": (
-                    round(longest_distance_m / 1000.0, 3)
-                    if longest_distance_m is not None
-                    else None
-                ),
-                "candidate_only": True,
-                "runtime_safety_truth": False,
-            }
-            if isinstance(longest, dict)
-            else None
-        ),
+        "segment_distance_available_count": len(segments_with_distance),
+        "segment_distance_unavailable_count": len(segment_dicts) - len(segments_with_distance),
+        **extrema,
     }
 
 
@@ -924,27 +924,52 @@ def _reference_segment_timing_summary(
     raw_segments = payload.get("segments") if isinstance(payload, dict) else []
     segments = raw_segments if isinstance(raw_segments, list) else []
     compact = []
-    for item in segments[:12]:
+    for item in segments:
         if not isinstance(item, dict):
             continue
         duration = item.get("duration_minutes")
         duration = duration if isinstance(duration, dict) else {}
+        duration_values = {
+            key: _optional_float(duration.get(key))
+            for key in ("min", "p25", "p50", "p75", "max")
+        }
+        low, high = duration_values["min"], duration_values["max"]
+        duration_values["range"] = (
+            round(high - low, 6)
+            if low is not None and high is not None and 0 <= low <= high
+            else None
+        )
         compact.append(
             {
                 "segment_id": item.get("segment_id"),
                 "label": item.get("label"),
                 "sample_count": item.get("sample_count"),
                 "source_count": item.get("source_count"),
-                "duration_minutes": {
-                    key: _optional_float(duration.get(key))
-                    for key in ("min", "p50", "p75", "max")
-                },
+                "duration_minutes": duration_values,
             }
         )
     return {
         "available": bool(ref and isinstance(payload, dict) and payload),
         "segment_count": int(counts.get("segment_count") or len(segments)),
         "measurement_count": int(counts.get("measurement_count") or 0),
+        "distance_rejected_measurement_count": _optional_int(
+            counts.get("distance_rejected_measurement_count")
+        ),
+        "track_boundary_crossed_measurement_count": _optional_int(
+            counts.get("track_boundary_crossed_measurement_count")
+        ),
+        "track_segment_boundary_crossing_allowed": (
+            payload.get("method", {}).get("track_segment_boundary_crossing_allowed")
+            if isinstance(payload.get("method"), dict)
+            else None
+        ),
+        "track_segment_boundary_crossing_is_timing_only": (
+            payload.get("method", {}).get(
+                "track_segment_boundary_crossing_is_timing_only"
+            )
+            if isinstance(payload.get("method"), dict)
+            else None
+        ),
         "segments": compact,
         "source_ref": ref or None,
         "candidate_only": True,
@@ -1025,9 +1050,11 @@ def _historical_gpx_overlap_summary(
     tracks_ref = str(project.get("reference_tracks_ref") or "")
     index_payload = _load_json_object(_project_path(root, index_ref)) if index_ref else {}
     tracks_payload = _load_json_object(_project_path(root, tracks_ref)) if tracks_ref else {}
-    raw_sources = index_payload.get("sources", []) if isinstance(index_payload, dict) else []
+    raw_sources = (
+        index_payload.get("sources") or [] if isinstance(index_payload, dict) else []
+    )
     raw_tracks = (
-        tracks_payload.get("reference_tracks", [])
+        tracks_payload.get("reference_tracks") or []
         if isinstance(tracks_payload, dict)
         else []
     )
@@ -1273,7 +1300,7 @@ def _checkpoint_event_summary(
         project.get("checkpoint_events_ref") or "outputs/checkpoint_events.json"
     )
     payload = _load_json_object(_project_path(root, ref))
-    raw_events = payload.get("events", []) if isinstance(payload, dict) else []
+    raw_events = payload.get("events") or [] if isinstance(payload, dict) else []
     events = [item for item in raw_events if isinstance(item, dict)]
     planned_keys = ("planned_at", "expected_at", "eta", "planned_arrival_at")
     actual_keys = ("actual_at", "actual_arrival_at", "live_observed_at")
@@ -1468,10 +1495,102 @@ def _route_structure_field_answer(
     reference_tracks: dict[str, Any],
     checkpoint_events: dict[str, Any],
     checkpoint_annotations: dict[str, Any],
+    checkpoint_quality: dict[str, Any],
     route_source: str | None,
     checkpoint_source: str,
     segment_source: str,
 ) -> tuple[str | None, str | None]:
+    query_compact = _compact_lookup_text(query)
+    checkpoint_rows = [item for item in checkpoints if isinstance(item, dict)]
+
+    if re.search(
+        r"(?:主|primary).*(?:路線|route).*(?:名稱|name).*(?:全長|distance|公里)|"
+        r"(?:全長|distance).*(?:主|primary).*(?:路線|route).*(?:名稱|name)",
+        query,
+        re.IGNORECASE,
+    ):
+        distance_m = _optional_float(route.get("distance_m"))
+        distance_km = round(distance_m / 1000.0, 3) if distance_m is not None else None
+        return (
+            f"主路線名稱是「{route.get('route_name')}」，全長約 "
+            f"{_display_number(distance_km)} 公里；資料來源："
+            f"{route_source or 'route summary'}。",
+            route_source,
+        )
+    if (
+        re.search(r"\bcp\b|checkpoint|檢查點", query, re.IGNORECASE)
+        and re.search(r"segment|相鄰路段|路段", query, re.IGNORECASE)
+        and re.search(r"鏈|連續|chain|link", query, re.IGNORECASE)
+    ):
+        chain = checkpoint_quality.get("checkpoint_chain_continuity")
+        chain = chain if isinstance(chain, dict) else {}
+        if chain.get("status") == "valid" and chain.get("is_single_chain") is True:
+            chain_text = (
+                "端點 ID 的有向鏈檢查為連續單鏈"
+                f"（{chain.get('start_checkpoint_id')} 到 "
+                f"{chain.get('end_checkpoint_id')}）"
+            )
+        elif chain.get("status") == "invalid":
+            reasons = ", ".join(str(value) for value in chain.get("reason_codes") or [])
+            chain_text = f"端點 ID 鏈檢查不連續（{reasons or '原因未標示'}）"
+        else:
+            chain_text = "端點 ID 鏈檢查結果未知"
+        return (
+            f"主路線有 {len(checkpoint_rows)} 個 CP、{len(segments)} 個相鄰路段；"
+            f"{chain_text}。單鏈通常是 CP 數減 1 個路段；這裡另有逐一檢查端點，"
+            "不是只靠數量推論，也不等同於實體 GPX 幾何已驗證。",
+            checkpoint_source,
+        )
+    if (
+        re.search(r"gpx|軌跡", query, re.IGNORECASE)
+        and re.search(r"點數|軌跡點|point count|track points?", query, re.IGNORECASE)
+        and re.search(r"\bcp\b|checkpoint|檢查點", query, re.IGNORECASE)
+    ):
+        return (
+            f"主 GPX 有 {_display_number(route.get('point_count'))} 個軌跡點，"
+            f"checkpoint 清單有 {len(checkpoint_rows)} 個 CP；"
+            "GPX 點是路線幾何取樣，CP 是檢查點候選，兩者不是同一類資料。",
+            route_source or checkpoint_source,
+        )
+    if re.search(
+        r"(?:最低|minimum|min).*(?:最高|maximum|max).*(?:海拔|elevation|altitude)|"
+        r"(?:最高|maximum|max).*(?:最低|minimum|min).*(?:海拔|elevation|altitude)",
+        query,
+        re.IGNORECASE,
+    ) and not re.search(
+        r"總里程|全長|點數|point count|distance", query, re.IGNORECASE
+    ):
+        low = _optional_float(route.get("elevation_min_m"))
+        high = _optional_float(route.get("elevation_max_m"))
+        difference = round(high - low, 6) if low is not None and high is not None else None
+        return (
+            f"主路線最低海拔 {_display_number(low)} 公尺、最高海拔 "
+            f"{_display_number(high)} 公尺，兩者高差 "
+            f"{_display_number(difference)} 公尺。這是海拔極值差，不是累積上升量。",
+            route_source,
+        )
+    if re.search(r"重複.*(?:標籤|label)|duplicate.*labels?", query, re.IGNORECASE):
+        type_counts = Counter(
+            str(item.get("checkpoint_type") or "unknown") for item in checkpoint_rows
+        )
+        requested_types = ("start", "route_progress", "finish")
+        type_text = "、".join(
+            f"{name}={type_counts.get(name, 0)}" for name in requested_types
+        )
+        other_types = sorted(set(type_counts) - set(requested_types))
+        other_text = (
+            "；其他類型："
+            + "、".join(f"{name}={type_counts[name]}" for name in other_types)
+            if other_types
+            else ""
+        )
+        return (
+            "checkpoint 清單的重複標籤組數為 "
+            f"{checkpoint_quality.get('checkpoint_duplicate_label_group_count')}；"
+            f"類型數量為 {type_text}{other_text}。此處只計算 checkpoint 清單，"
+            "不把 named-point alias 當成重複 CP 標籤。",
+            checkpoint_source,
+        )
     if re.search(
         r"primary route.*(?:gpx|總里程|點數|最低|最高海拔)",
         query,
@@ -1489,7 +1608,6 @@ def _route_structure_field_answer(
     if "route summary" in query.casefold() and re.search(
         r"起點|終點|bbox", query, re.IGNORECASE
     ):
-        checkpoint_rows = [item for item in checkpoints if isinstance(item, dict)]
         start = checkpoint_rows[0] if checkpoint_rows else {}
         finish = checkpoint_rows[-1] if checkpoint_rows else {}
         bbox = route.get("bbox_wgs84")
@@ -1508,7 +1626,6 @@ def _route_structure_field_answer(
     if re.search(r"checkpoint candidates?", query, re.IGNORECASE) and re.search(
         r"多少|幾個|第一個|最後一個", query, re.IGNORECASE
     ):
-        checkpoint_rows = [item for item in checkpoints if isinstance(item, dict)]
         first = checkpoint_rows[0] if checkpoint_rows else {}
         last = checkpoint_rows[-1] if checkpoint_rows else {}
         return (
@@ -1694,6 +1811,97 @@ def _route_structure_field_answer(
             f"Resume segment report 共 {resume_segments.get('count')} 段：{details}。",
             resume_segments.get("source_ref"),
         )
+    if (
+        re.search(r"歷史|reference|timing", query, re.IGNORECASE)
+        and re.search(r"多少段|幾段|segment count|涵蓋.*段", query, re.IGNORECASE)
+        and re.search(r"多少筆|幾筆|measurement|量測|測量", query, re.IGNORECASE)
+    ):
+        return (
+            f"歷史分段時間涵蓋 {reference_timing.get('segment_count')} 段、"
+            f"{reference_timing.get('measurement_count')} 筆時間測量。測量筆數不能"
+            "推論為同樣多位獨立山友或獨立行程，因為這份聚合沒有唯一人員身分計數。",
+            reference_timing.get("source_ref"),
+        )
+    timing_rows = reference_timing.get("segments") or []
+    if re.search(r"p50", query, re.IGNORECASE) and re.search(
+        r"最長|最高|highest|longest", query, re.IGNORECASE
+    ):
+        ranked_rows = [
+            item
+            for item in timing_rows
+            if isinstance(item, dict)
+            and _optional_float((item.get("duration_minutes") or {}).get("p50"))
+            is not None
+        ]
+        if ranked_rows:
+            selected = max(
+                ranked_rows,
+                key=lambda item: float((item.get("duration_minutes") or {})["p50"]),
+            )
+            return (
+                f"八段歷史時間中，P50 最長的是「{selected.get('label')}」，"
+                f"P50={_display_number((selected.get('duration_minutes') or {}).get('p50'))} "
+                f"分鐘，樣本數={selected.get('sample_count')}。排名依 P50，不是依單筆最大值。",
+                reference_timing.get("source_ref"),
+            )
+    matching_timing_rows = []
+    for item in timing_rows:
+        if not isinstance(item, dict):
+            continue
+        label_parts = re.split(r"\s*(?:->|→|至|到)\s*", str(item.get("label") or ""))
+        compact_parts = [_compact_lookup_text(part) for part in label_parts if part.strip()]
+        if len(compact_parts) >= 2 and all(part in query_compact for part in compact_parts[:2]):
+            matching_timing_rows.append(item)
+    if matching_timing_rows and re.search(
+        r"樣本|sample|min|max|p25|p50|p75|變異|分布|統計",
+        query,
+        re.IGNORECASE,
+    ):
+        selected = matching_timing_rows[0]
+        duration = selected.get("duration_minutes") or {}
+        statistics_text = "、".join(
+            f"{name}={_display_number(duration.get(name))}"
+            for name in ("min", "p25", "p50", "p75", "max")
+            if duration.get(name) is not None
+        )
+        minimum = _optional_float(duration.get("min"))
+        maximum = _optional_float(duration.get("max"))
+        range_text = ""
+        if minimum is not None and maximum is not None and maximum >= minimum:
+            range_text = (
+                f"；max-min 全距={_display_number(maximum - minimum)} 分鐘"
+            )
+        variation_boundary = ""
+        if re.search(r"變異|variation", query, re.IGNORECASE):
+            variation_boundary = (
+                "資料未定義變異大或小的判定閾值，因此只能報告分布與全距，"
+                "不能客觀標成變異大或變異小。"
+            )
+        return (
+            f"「{selected.get('label')}」共有 {selected.get('sample_count')} 個樣本；"
+            f"歷史時間（分鐘）為 {statistics_text}{range_text}。{variation_boundary}"
+            "這是歷史分布，不能直接當成個人即時 ETA。",
+            reference_timing.get("source_ref"),
+        )
+    if re.search(
+        r"(?:距離.*(?:排除|不符)|(?:排除|不符).*距離|distance.*reject|reject.*distance)",
+        query,
+        re.IGNORECASE,
+    ) and re.search(
+        r"track.*(?:邊界|boundary)|跨.*gpx", query, re.IGNORECASE
+    ):
+        timing_only = reference_timing.get(
+            "track_segment_boundary_crossing_is_timing_only"
+        )
+        return (
+            "歷史時間整理排除距離不符的測量 "
+            f"{reference_timing.get('distance_rejected_measurement_count')} 筆；"
+            "跨 GPX track 邊界的時間測量有 "
+            f"{reference_timing.get('track_boundary_crossed_measurement_count')} 筆。"
+            f"track 邊界跨越規則是否僅供 timing 使用：{str(timing_only).lower()}；"
+            "允許時間測量跨邊界不等於證明路線幾何連通或可通行。",
+            reference_timing.get("source_ref"),
+        )
     if re.search(r"reference.*timing|路段時間|時間統計", query, re.IGNORECASE):
         rows = reference_timing.get("segments") or []
         if not rows:
@@ -1728,7 +1936,12 @@ def _route_structure_field_answer(
             f"Rest area candidates 共 {rest_areas.get('count')} 個：{details}。",
             rest_areas.get("source_ref"),
         )
-    if re.search(r"總爬升|總下降|平均坡度|total ascent|total descent", query, re.IGNORECASE):
+    if re.search(
+        r"總爬升|總下降|累積上升|累積下降|上升和下降|"
+        r"total ascent|total descent|cumulative ascent|cumulative descent",
+        query,
+        re.IGNORECASE,
+    ):
         slope_text = (
             f"平均坡度={route_elevation.get('average_slope')}"
             if route_elevation.get("average_slope_available")
@@ -1740,20 +1953,66 @@ def _route_structure_field_answer(
             f"總下降 {route_elevation.get('total_descent_m')} m；{slope_text}。",
             segment_source,
         )
-    if re.search(r"最長|longest|max(?:imum)?.*distance", query, re.IGNORECASE):
-        longest = segment_quality.get("longest_segment")
-        if not isinstance(longest, dict) or not longest.get("candidate_id"):
-            return "Route segment 距離資料缺失，無法計算最長路段。", segment_source
-        return (
-            f"距離最長的 route segment 是 {longest['candidate_id']}"
-            f"（{longest.get('label') or '未命名'}），"
-            f"位於 {longest.get('from_candidate_id')}->"
-            f"{longest.get('to_candidate_id')}，"
-            f"長度 {longest.get('distance_km')} 公里"
-            f"（{longest.get('distance_m')} 公尺）。",
-            segment_source,
-        )
+    extrema = _requested_segment_distance_extrema(query)
+    if extrema:
+        details = []
+        for name in extrema:
+            label = "最短" if name == "shortest_segment" else "最長"
+            item = segment_quality.get(name)
+            if not isinstance(item, dict) or not item.get("candidate_id"):
+                details.append(f"Route segment 距離資料缺失，無法計算{label}路段。")
+                continue
+            ties = item.get("tied_candidate_ids") or []
+            tie_text = f"並列：{', '.join(str(value) for value in ties)}。" if len(ties) > 1 else ""
+            details.append(
+                f"距離{label}的 route segment 是 {item['candidate_id']}"
+                f"（{item.get('label') or '未命名'}），"
+                f"位於 {item.get('from_candidate_id')}->{item.get('to_candidate_id')}，"
+                f"長度 {item.get('distance_km')} 公里（{item.get('distance_m')} 公尺）。"
+                f"{tie_text}"
+            )
+        missing = segment_quality.get("segment_distance_unavailable_count", 0)
+        if missing:
+            details.append(f"以上只比較距離已知的路段；另有 {missing} 段距離缺失或無效，不能確認全路線極值。")
+        return "".join(details), segment_source
     return None, None
+
+
+def _requested_segment_distance_extrema(query: str) -> list[str]:
+    # Resolve positive requests clause by clause; a negated alternative is not a target.
+    requested: list[str] = []
+    for clause in re.split(r"[,，。;；?？!！\n]|而是|而要|\bbut\b", query, flags=re.IGNORECASE):
+        for match in re.finditer(
+            r"最短|最長|shortest|longest|(?:min(?:imum)?|max(?:imum)?)\s*(?:segment\s*)?distance",
+            clause,
+            re.IGNORECASE,
+        ):
+            if re.search(
+                r"時間|耗時|歷時|分鐘|小時|坡度|爬升|下降|海拔|"
+                r"\b(?:duration|time|minutes?|hours?|elevation|ascent|descent|slope|p\d{2})\b",
+                clause,
+                re.IGNORECASE,
+            ) and not re.search(
+                r"距離|公里|公尺|\b(?:distance|kilometers?|metres?|meters?|km)\b",
+                clause,
+                re.IGNORECASE,
+            ):
+                continue
+            if re.search(
+                r"不要|不必|不是|別|而非|忽略|排除|\b(?:not|never|ignore|exclude)\b|"
+                r"\bdon['’]t\b|\binstead\s+of\b|\brather\s+than\b",
+                clause[:match.start()],
+                re.IGNORECASE,
+            ):
+                continue
+            name = (
+                "shortest_segment"
+                if re.match(r"最短|shortest|min", match.group(), re.IGNORECASE)
+                else "longest_segment"
+            )
+            if name not in requested:
+                requested.append(name)
+    return requested
 
 
 def _rest_area_display_id(value: Any) -> str:
@@ -1805,10 +2064,172 @@ def _checkpoint_quality_summary(
     return {
         "expected_segment_count_from_checkpoints": expected_segment_count,
         "segment_count_matches_checkpoint_chain": segment_count == expected_segment_count,
+        "segment_count_matches_checkpoint_chain_basis": "count_only",
+        "checkpoint_chain_continuity": _checkpoint_chain_continuity(checkpoints, segments),
         "segment_count_delta_from_expected": segment_count - expected_segment_count,
         "checkpoint_duplicate_label_group_count": len(duplicate_groups),
         "checkpoint_duplicate_label_groups": duplicate_groups,
     }
+
+
+def _checkpoint_chain_continuity(
+    checkpoints: list[Any],
+    segments: list[Any],
+) -> dict[str, Any]:
+    """Verify one directed ID chain, not source completeness or GPX geometry.
+
+    Order comes from segment endpoints, never array positions or CP labels.
+    No checkpoint evidence is unknown; one identified CP without edges is a
+    valid trivial graph. Malformed records are unknown, not silently dropped.
+    """
+    result: dict[str, Any] = {
+        "status": "unknown",
+        "is_single_chain": None,
+        "scope": "provided_checkpoint_and_segment_identifier_graph",
+        "source_completeness": "not_assessed",
+        "physical_gpx_geometry_continuity": None,
+        "reason_codes": [],
+        "malformed_collections": [],
+        "malformed_records": [],
+        "duplicate_checkpoint_ids": [],
+        "duplicate_segment_ids": [],
+        "unknown_endpoint_ids": [],
+        "branching_checkpoint_ids": [],
+        "merging_checkpoint_ids": [],
+        "component_count": None,
+        "has_cycle": None,
+        "start_checkpoint_id": None,
+        "end_checkpoint_id": None,
+        "checkpoint_order": None,
+        "segment_order": None,
+    }
+    collections = (("checkpoints", checkpoints), ("segments", segments))
+    result["malformed_collections"] = [
+        name for name, rows in collections if not isinstance(rows, list)
+    ]
+    if result["malformed_collections"]:
+        result["reason_codes"].append("malformed_collections")
+        return result
+    if not checkpoints:
+        result["reason_codes"].append("no_checkpoint_records")
+        return result
+
+    for name, rows in collections:
+        fields = ("candidate_id",) if name == "checkpoints" else (
+            "candidate_id", "from_candidate_id", "to_candidate_id",
+        )
+        for index, row in enumerate(rows):
+            if not isinstance(row, dict):
+                result["malformed_records"].append(
+                    {"collection": name, "index": index, "field": "$record"}
+                )
+                continue
+            for field in fields:
+                value = row.get(field)
+                if not isinstance(value, str) or not value or value.strip() != value:
+                    result["malformed_records"].append(
+                        {"collection": name, "index": index, "field": field}
+                    )
+    if result["malformed_records"]:
+        result["reason_codes"].append("malformed_records")
+        return result
+
+    checkpoint_ids = Counter(row["candidate_id"] for row in checkpoints)
+    segment_ids = Counter(row["candidate_id"] for row in segments)
+    result["duplicate_checkpoint_ids"] = sorted(
+        value for value, count in checkpoint_ids.items() if count > 1
+    )
+    result["duplicate_segment_ids"] = sorted(
+        value for value, count in segment_ids.items() if count > 1
+    )
+    result["unknown_endpoint_ids"] = sorted({
+        row[field]
+        for row in segments
+        for field in ("from_candidate_id", "to_candidate_id")
+        if row[field] not in checkpoint_ids
+    })
+    for key in ("duplicate_checkpoint_ids", "duplicate_segment_ids"):
+        if result[key]:
+            result["reason_codes"].append(key)
+    if result["unknown_endpoint_ids"]:
+        result["reason_codes"].append("unknown_endpoints")
+    if result["reason_codes"]:
+        result.update(status="invalid", is_single_chain=False)
+        return result
+
+    outgoing: dict[str, list[tuple[str, str]]] = {value: [] for value in checkpoint_ids}
+    incoming = dict.fromkeys(checkpoint_ids, 0)
+    neighbors: dict[str, set[str]] = {value: set() for value in checkpoint_ids}
+    for row in segments:
+        start, end = row["from_candidate_id"], row["to_candidate_id"]
+        outgoing[start].append((end, row["candidate_id"]))
+        incoming[end] += 1
+        neighbors[start].add(end)
+        neighbors[end].add(start)
+
+    starts = sorted(value for value in checkpoint_ids if incoming[value] == 0)
+    ends = sorted(value for value in checkpoint_ids if not outgoing[value])
+    result["branching_checkpoint_ids"] = sorted(
+        value for value in checkpoint_ids if len(outgoing[value]) > 1
+    )
+    result["merging_checkpoint_ids"] = sorted(
+        value for value in checkpoint_ids if incoming[value] > 1
+    )
+
+    # Check all components and cycles, including ones outside a start's path.
+    remaining = set(checkpoint_ids)
+    component_count = 0
+    while remaining:
+        component_count += 1
+        pending = [remaining.pop()]
+        while pending:
+            unseen = neighbors[pending.pop()] & remaining
+            remaining.difference_update(unseen)
+            pending.extend(unseen)
+    result["component_count"] = component_count
+    pending = list(starts)
+    indegrees = incoming.copy()
+    removed_count = 0
+    while pending:
+        value = pending.pop()
+        removed_count += 1
+        for end, _ in outgoing[value]:
+            indegrees[end] -= 1
+            if indegrees[end] == 0:
+                pending.append(end)
+    result["has_cycle"] = removed_count != len(checkpoint_ids)
+
+    if component_count != 1:
+        result["reason_codes"].append("disconnected")
+    if result["has_cycle"]:
+        result["reason_codes"].append("cycle")
+    if result["branching_checkpoint_ids"]:
+        result["reason_codes"].append("branching")
+    if result["merging_checkpoint_ids"]:
+        result["reason_codes"].append("merging")
+    if len(segments) != len(checkpoint_ids) - 1:
+        result["reason_codes"].append("segment_count_mismatch")
+    if len(starts) != 1 or len(ends) != 1:
+        result["reason_codes"].append("non_unique_endpoints")
+    if result["reason_codes"]:
+        result.update(status="invalid", is_single_chain=False)
+        return result
+
+    checkpoint_order = [starts[0]]
+    segment_order = []
+    while outgoing[checkpoint_order[-1]]:
+        end, segment_id = outgoing[checkpoint_order[-1]][0]
+        checkpoint_order.append(end)
+        segment_order.append(segment_id)
+    result.update(
+        status="valid",
+        is_single_chain=True,
+        start_checkpoint_id=starts[0],
+        end_checkpoint_id=ends[0],
+        checkpoint_order=checkpoint_order,
+        segment_order=segment_order,
+    )
+    return result
 
 
 def search_project_major_points(
@@ -2597,7 +3018,13 @@ def _major_point_water_query(query: str, *, point_kinds: set[str]) -> bool:
 
 def _major_point_boss_query(query: str) -> bool:
     normalized = query.casefold().replace(" ", "")
-    return "bosspoint" in normalized or "boss點" in normalized
+    return (
+        "bosspoint" in normalized
+        or "boss點" in normalized
+        or re.search(
+            r"(?<![a-z0-9_])boss(?![a-z0-9_])", query, re.IGNORECASE
+        ) is not None
+    )
 
 
 def _load_boss_point_items(
@@ -2856,13 +3283,20 @@ def _load_project_list(
 
 
 def _compact_route_summary(route: dict[str, Any]) -> dict[str, Any]:
+    low = _optional_float(route.get("elevation_min_m"))
+    high = _optional_float(route.get("elevation_max_m"))
     return {
         "route_name": route.get("route_name"),
         "artifact_id": route.get("artifact_id"),
         "distance_m": _optional_float(route.get("distance_m")),
         "distance_km": _km(route.get("distance_m")),
-        "elevation_min_m": _optional_float(route.get("elevation_min_m")),
-        "elevation_max_m": _optional_float(route.get("elevation_max_m")),
+        "elevation_min_m": low,
+        "elevation_max_m": high,
+        "elevation_range_m": (
+            round(high - low, 6)
+            if low is not None and high is not None and low <= high
+            else None
+        ),
         "point_count": route.get("point_count"),
         "started_at": route.get("started_at"),
         "ended_at": route.get("ended_at"),
@@ -3068,6 +3502,19 @@ def _optional_int(value: Any) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _display_number(value: Any) -> str:
+    number = _optional_float(value)
+    if number is None:
+        return "unknown"
+    if number.is_integer():
+        return str(int(number))
+    return f"{number:.6f}".rstrip("0").rstrip(".")
+
+
+def _compact_lookup_text(value: Any) -> str:
+    return re.sub(r"[^0-9a-z\u4e00-\u9fff]+", "", str(value or "").casefold())
 
 
 def _km(value: Any) -> float | None:

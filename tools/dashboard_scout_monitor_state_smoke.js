@@ -294,8 +294,14 @@ async function runScenario(browser, name, fixture) {
   }
   if (fixture.clock) {
     const now = new Date("2026-09-11T02:00:00Z");
-    await page.clock.install({ time: now });
+    // Install before the test epoch, then pause at that exact epoch while the
+    // page is still blank. install() starts advancing time; pausing at the same
+    // install timestamp races with the protocol round trip ("past" error).
+    // No application timer runs before this pause; 59999/60000ms checks below
+    // retain their original boundary and assertions.
+    await page.clock.install({ time: new Date(now.getTime() - 3600000) });
     await page.clock.pauseAt(now);
+    assert(await page.evaluate(() => Date.now()) === now.getTime(), "clock fixture did not pause at the exact test epoch");
   }
   await page.addInitScript(({ auditInventoryHtml }) => {
     window.hardwareRequestEvidence = [];

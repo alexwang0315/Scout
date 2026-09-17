@@ -22,7 +22,10 @@ async function gotoWhenReady(page, url) {
 
 async function main() {
   const baseUrl = process.argv[2] || "http://127.0.0.1:9099";
-  const projectId = process.argv[3] || "chilai_nanhua_day1_scoutAI";
+  const projectId = process.argv[3] || process.env.SCOUT_DASHBOARD_PROJECT_ID || "";
+  if (!/^[A-Za-z0-9_.-]+$/.test(projectId)) {
+    throw new Error("A loaded workspace project id is required as argv[3] or SCOUT_DASHBOARD_PROJECT_ID.");
+  }
   const outputDir = path.resolve(process.argv[4] || "/tmp/scout-qgis-browser-qualification");
   fs.mkdirSync(outputDir, { recursive: true });
 

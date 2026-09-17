@@ -18,6 +18,8 @@ Dashboard 可透過新增的唯讀 HTTP API 讀取結果：
 - 實體 Wi-Fi／Ethernet 連線、目前 SSID／訊號／速率／IP、無線停用狀態。
 - 藍牙控制器電源及目前已連線裝置、USB／PCIe 枚舉與驅動、I²C 匯流排與已登錄裝置。
 - GPIO 控制器、線路方向與 consumer；UART／序列埠節點。
+- Hailo-10H：AI 核心 NNC／裝置內部 CPU 使用率、專用 RAM、晶片溫度與 mV 電壓。
+  固定 CLI 查詢取得約一秒樣本後結束；每分鐘一次，不代表整分鐘平均。
 
 UPS 資料沿用 `/home/alexwang0315/scout-power-path-monitor/power-path-telemetry.jsonl`。
 每次只讀最多 64 KiB 的檔案尾端，15 秒以上的舊資料及錯誤資料會發出感測告警。
@@ -53,7 +55,7 @@ journalctl --user -u scout-hardware-monitor.service -n 20
 ```
 
 安裝程式把獨立程式複製到 `~/.local/lib/scout-hardware-monitor/monitor.py`，
-並帶入相同目錄的 `scout_hardware_inventory.py`。
+並帶入相同目錄的 `scout_hardware_inventory.py` 與 `scout_hailo_monitor.py`。
 排程不依賴開發 checkout 的後續變化。已有同名安裝時不覆寫。
 `--render-only DIRECTORY` 可先產生可審查的 unit 檔，不安裝或啟動。
 監控的使用者需已啟用 linger 才能在登出後繼續執行，部署時以
@@ -75,6 +77,8 @@ Mac 離線時本機監控繼續，通知暫存並每五分鐘重試；新狀態�
 待送通知最多保留最近 100 筆與更早筆數，事件另記於輪替紀錄。
 通知成功只表示 macOS 接受請求；橫幅顯示受 macOS 通知權限與專注模式影響。
 網路／藍牙連線與 USB／PCIe 裝置清單改變也會記錄事件；GPIO 線路活動不作通知來源。
+新增的 Hailo 資料讀取狀態／裝置清單事件僅寫本機事件紀錄，不加入 Mac 通知佇列；
+不新增 Hailo 健康門檻、不把 0% 判定為故障，也不從電壓換算功耗。
 
 ## 常駐 API 與總覽頁
 
@@ -84,9 +88,9 @@ API 與總覽頁都使用 **9151**，不需要 9150。
 API 使用 `Restart=on-failure`，服務與 timer 已 enabled，Scout 的 `Linger=yes`。
 因此無需開啟終端機或持續登入即可隨系統開機運作。
 
-直接查看 `http://127.0.0.1:9151/monitor`。Mac 可沿用既有 SSH loopback forward，
-但 forward 是另一條連線，不會因 Scout API 的 systemd 設定就自動跨重開機重建。
-斷線時依 API 說明重建 forward；監控本身仍在 Scout 上執行。
+Scout 本機可查看 `http://127.0.0.1:9151/monitor`。Mac 使用既有 9099 Dashboard
+的 System → scout monitor。原生 Mac 後端每次以 SSH stdio 讀取固定 Scout API，
+Mac 9151 保持關閉；監控採樣仍在 Scout 執行，不依賴瀏覽器開啟。
 
 ## 暫停及回復
 

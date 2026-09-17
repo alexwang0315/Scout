@@ -73,6 +73,19 @@ def _inventory() -> dict[str, Any]:
     }
 
 
+def _hailo() -> dict[str, Any]:
+    return {
+        "captured_at": "2026-09-11T01:59:01Z", "status": "partial",
+        "source": "hailortcli.monitor", "sample_window_ms": 1000, "read_only": True,
+        "devices": [{"device_id": "pci/0001:03:00.0", "architecture": "HAILO10H",
+                     "status": "partial", "nnc_utilization_percent": 0,
+                     "cpu_utilization_percent": 0, "ram_utilization_percent": 1.1,
+                     "ram_used_bytes": 82 * 1024**2, "ram_total_bytes": 7221 * 1024**2,
+                     "temperature_c": None, "voltage_mv": 802,
+                     "errors": ["unknown:temperature_c"]}], "errors": [],
+    }
+
+
 def test_dashboard_proxy_keeps_hardware_api_same_origin_and_forwards_limits(
     tmp_path: Path,
 ) -> None:
@@ -82,6 +95,7 @@ def test_dashboard_proxy_keeps_hardware_api_same_origin_and_forwards_limits(
         "alerts": {},
         "thresholds": {},
         "inventory": _inventory(),
+        "hailo": _hailo(),
     }
 
     def fetcher(endpoint: str, params: Mapping[str, str]) -> tuple[int, Any]:
@@ -139,6 +153,7 @@ def test_dashboard_proxy_preserves_stale_503_and_old_data_is_not_reclassified(
         "alerts": {},
         "thresholds": {},
         "inventory": _inventory(),
+        "hailo": _hailo(),
     }
     stale_payload = _status_payload(status="stale", data=stale_data)
 
@@ -164,6 +179,7 @@ def test_dashboard_proxy_preserves_stale_503_and_old_data_is_not_reclassified(
     assert response.json() == stale_payload
     assert response.json()["status"] == "stale"
     assert response.json()["data"]["status"] == "ok"
+    assert response.json()["data"]["hailo"] == _hailo()
     assert response.headers["cache-control"] == "no-store"
 
 

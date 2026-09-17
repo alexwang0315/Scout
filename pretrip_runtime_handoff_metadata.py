@@ -32,7 +32,7 @@ class HandoffPackageVersion(StrictHandoffModel):
     project_id: str
     version: str
     status: Literal["reviewed"]
-    human_review_count: int = Field(ge=0)
+    human_review_count: int | None = Field(default=None, ge=0)
     reviewed_package_is_not_departure_approval: Literal[True] = True
     departure_approval_granted: Literal[False] = False
     departure_gate_required_before_runtime: Literal[True] = True
@@ -71,7 +71,7 @@ class HandoffCounts(StrictHandoffModel):
     readiness_ref_count: int = Field(ge=0)
     route_ref_count: int = Field(ge=0)
     route_source_count: int = Field(ge=0)
-    human_review_count: int = Field(ge=0)
+    human_review_count: int | None = Field(default=None, ge=0)
     runtime_write_count: Literal[0] = 0
     safety_call_count: Literal[0] = 0
     bridge_mutation_count: Literal[0] = 0

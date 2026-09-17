@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from pretrip_comparison_policy import compare_reference_value, workspace_comparison_allowed
+
 
 DEFAULT_PROJECT_REFS: tuple[str, ...] = (
     "tests/fixtures/pretrip/projects/chilai_nanhua_day1/project.json",
@@ -39,6 +41,15 @@ class PreTripProjectMatrix:
 
     def to_json(self) -> str:
         return json.dumps(self.to_dict(), indent=2, sort_keys=True) + "\n"
+
+
+def compare_project_counts(historical: dict[str, Any], current: dict[str, Any]) -> dict[str, Any]:
+    """Return per-field decisions; unrelated workspaces are never compared."""
+    if not workspace_comparison_allowed(historical, current):
+        return {"status": "NOT_APPLICABLE", "reason": "workspace_identity_mismatch", "fields": {}}
+    h = historical.get("candidate_counts", {})
+    c = current.get("candidate_counts", {})
+    return {"status": "COMPARED", "fields": {key: compare_reference_value(h.get(key), c.get(key)).to_dict() for key in sorted(set(h) | set(c))}}
 
 
 def build_pretrip_project_matrix(

@@ -147,6 +147,55 @@ class HardwareInventory(PublicModel):
     gpio_value_sampling_performed: Literal[False] = False
 
 
+class HailoDevice(PublicModel):
+    device_id: Annotated[str, Field(pattern=r"^pci/[0-9a-f]{4}:[0-9a-f]{2}:[0-9a-f]{2}\.[0-7]$")]
+    architecture: str
+    status: Literal["ok", "partial", "unavailable"]
+    nnc_utilization_percent: Annotated[float, Field(strict=True, ge=0, le=100)] | None = None
+    cpu_utilization_percent: Annotated[float, Field(strict=True, ge=0, le=100)] | None = None
+    ram_utilization_percent: Annotated[float, Field(strict=True, ge=0, le=100)] | None = None
+    ram_used_bytes: Annotated[int, Field(strict=True, ge=0)] | None = None
+    ram_total_bytes: Annotated[int, Field(strict=True, gt=0)] | None = None
+    temperature_c: Annotated[float, Field(strict=True, ge=-273.15)] | None = None
+    voltage_mv: Annotated[float, Field(strict=True, ge=0)] | None = None
+    errors: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def measured_state(self) -> HailoDevice:
+        values = (self.nnc_utilization_percent, self.cpu_utilization_percent,
+                  self.ram_utilization_percent, self.ram_used_bytes, self.ram_total_bytes,
+                  self.temperature_c, self.voltage_mv)
+        if self.ram_used_bytes is not None and self.ram_total_bytes is not None and self.ram_used_bytes > self.ram_total_bytes:
+            raise ValueError("Hailo RAM usage exceeds reported total")
+        if self.temperature_c == -1:
+            raise ValueError("Hailo invalid-stat sentinel is not a temperature")
+        expected = "ok" if all(v is not None for v in values) else "unavailable" if all(v is None for v in values) else "partial"
+        if self.status != expected or (self.status == "ok" and self.errors):
+            raise ValueError("Hailo read status disagrees with measured values")
+        return self
+
+
+class HailoTelemetry(PublicModel):
+    captured_at: AwareDatetime
+    status: Literal["ok", "partial", "unavailable"]
+    source: Literal["hailortcli.monitor"]
+    sample_window_ms: Literal[1000] = 1000
+    read_only: Literal[True] = True
+    devices: list[HailoDevice]
+    errors: list[str] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def coherent_devices(self) -> HailoTelemetry:
+        ids = [d.device_id for d in self.devices]
+        if len(ids) != len(set(ids)):
+            raise ValueError("duplicate Hailo device IDs")
+        statuses = {d.status for d in self.devices}
+        expected = "unavailable" if (self.errors and not self.devices) or statuses == {"unavailable"} else "partial" if self.errors or statuses - {"ok"} else "ok"
+        if self.status != expected:
+            raise ValueError("Hailo aggregate read status disagrees with device values")
+        return self
+
+
 class Snapshot(PublicModel):
     captured_at: AwareDatetime
     host: str
@@ -163,6 +212,7 @@ class Snapshot(PublicModel):
     errors: dict[str, str]
     thresholds: dict[str, Threshold | float]
     inventory: HardwareInventory | None = None
+    hailo: HailoTelemetry | None = None
 
 
 class Freshness(PublicModel):

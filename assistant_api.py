@@ -667,6 +667,10 @@ def _provider_grounded_synthesis_response(
         return None
     if not str(synthesized or "").strip():
         return None
+    profile = _provider_runtime_value(provider, "last_profile") or _provider_runtime_value(
+        provider, "profile_name"
+    )
+    profile = profile if profile in {"local", "cloud"} else "unknown"
     return fallback_response.model_copy(
         update={
             "answer": (
@@ -674,11 +678,13 @@ def _provider_grounded_synthesis_response(
                 + str(synthesized).strip()
             ),
             "evidence_backed_answer": fallback_response.answer,
+            "local_model_answer": str(synthesized).strip() if profile == "local" else None,
             "limitations": [
                 *fallback_response.limitations,
                 f"initial_provider_error_type={provider_error_type}",
                 "grounded_model_synthesis_after_provider_error=passed",
-                "Initial provider run failed, but Scout retried the cloud model with compact read-only tool evidence and used that model synthesis as the answer.",
+                f"synthesis_retry_profile={profile}",
+                "Initial provider run failed; Scout retried the selected model with read-only tool evidence and used its synthesis as the answer.",
             ],
         }
     )

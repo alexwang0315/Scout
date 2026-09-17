@@ -45,6 +45,9 @@ def main() -> int:
         inventory = installed.with_name("scout_hardware_inventory.py")
         shutil.copy2(Path(__file__).resolve().parents[1] / "tools/scout_hardware_inventory.py", inventory)
         inventory.chmod(0o600)
+        hailo = installed.with_name("scout_hailo_monitor.py")
+        shutil.copy2(Path(__file__).resolve().parents[1] / "tools/scout_hailo_monitor.py", hailo)
+        hailo.chmod(0o600)
         state.mkdir(parents=True, exist_ok=True, mode=0o700)
     for path, value in files.items():
         path.write_text(value)

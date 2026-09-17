@@ -359,8 +359,16 @@ def _build_pretrip_admin_case_view(
         pretrip_summary_source_files.append(str(state_store_source_path))
 
     route_points = _pretrip_route_points(segment_display_geometry, route_summary, source_refs)
-    mission_checkpoints = _pretrip_mission_checkpoints(checkpoints, source_refs)
-    mission_segments = _pretrip_mission_segments(segments, source_refs)
+    mission_checkpoints = _pretrip_mission_checkpoints(
+        checkpoints,
+        source_refs,
+        project_id=case_id,
+    )
+    mission_segments = _pretrip_mission_segments(
+        segments,
+        source_refs,
+        project_id=case_id,
+    )
     map_payload = _pretrip_map_payload(map_context, source_refs)
     route_bounds = _bounds([(point["lat"], point["lon"]) for point in route_points])
 
@@ -378,7 +386,7 @@ def _build_pretrip_admin_case_view(
         "incident_count": 0,
         "recording_profiles": ["pretrip_projection"],
         "completed_mission_replay": False,
-        "source_id": "admin_surface_projection.chilai_nanhua_day1",
+        "source_id": f"admin_surface_projection.{case_id}",
         "source_path": admin_projection_ref,
         "evidence_type": "replay_summary",
     }
@@ -430,7 +438,7 @@ def _build_pretrip_admin_case_view(
         "mission": {
             "mission_id": case_id,
             "name": route_summary["route_name"],
-            "route_source": "artifact.gpx.chilai_nanhua_day1",
+            "route_source": f"artifact.gpx.{case_id}",
             "checkpoints": mission_checkpoints,
             "segments": mission_segments,
             "control_zones": [
@@ -492,6 +500,7 @@ def _build_pretrip_admin_case_view(
         "safety_timeline": _pretrip_safety_timeline(
             checkpoint_events,
             source_refs,
+            project_id=case_id,
             debug_projection_ref=debug_projection_ref,
             runtime_safety_state_store_projection=runtime_safety_state_store_projection,
         ),
@@ -500,7 +509,7 @@ def _build_pretrip_admin_case_view(
         "incident_packages": [],
         "admin_surface_projection": {
             **admin_projection,
-            "source_id": "admin_surface_projection.chilai_nanhua_day1",
+            "source_id": f"admin_surface_projection.{case_id}",
             "source_path": admin_projection_ref,
             "evidence_type": "pretrip_admin_surface_projection",
         },
@@ -560,6 +569,8 @@ def _pretrip_route_points(
 def _pretrip_mission_checkpoints(
     checkpoints: list[dict[str, Any]],
     source_refs: dict[str, str],
+    *,
+    project_id: str,
 ) -> list[dict[str, Any]]:
     return [
         {
@@ -573,7 +584,7 @@ def _pretrip_mission_checkpoints(
             "control_zone_after": "zone_pretrip_projection",
             "must_emit_checkin": checkpoint.get("checkpoint_type") in {"start", "finish"},
             "route_point_index": checkpoint.get("route_point_index"),
-            "source": "artifact.gpx.chilai_nanhua_day1",
+            "source": f"artifact.gpx.{project_id}",
             "source_id": checkpoint["candidate_id"],
             "source_path": source_refs["checkpoints"],
             "evidence_type": "mission_checkpoint",
@@ -585,6 +596,8 @@ def _pretrip_mission_checkpoints(
 def _pretrip_mission_segments(
     segments: list[dict[str, Any]],
     source_refs: dict[str, str],
+    *,
+    project_id: str,
 ) -> list[dict[str, Any]]:
     return [
         {
@@ -597,7 +610,7 @@ def _pretrip_mission_segments(
             "elevation_loss_m": segment.get("elevation_loss_m"),
             "route_point_start_index": segment.get("route_point_start_index"),
             "route_point_end_index": segment.get("route_point_end_index"),
-            "source": "artifact.gpx.chilai_nanhua_day1",
+            "source": f"artifact.gpx.{project_id}",
             "source_id": segment["candidate_id"],
             "source_path": source_refs["segments"],
             "evidence_type": "mission_segment",
@@ -693,6 +706,7 @@ def _pretrip_safety_timeline(
     checkpoint_events: dict[str, Any],
     source_refs: dict[str, str],
     *,
+    project_id: str,
     debug_projection_ref: str,
     runtime_safety_state_store_projection: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
@@ -716,7 +730,7 @@ def _pretrip_safety_timeline(
                 "label": event.get("checkpoint_candidate_id"),
                 "reason": (
                     f"Checkpoint candidate {event.get('checkpoint_candidate_id')} "
-                    "is projected from the chilai_nanhua_day1 GPX set."
+                    f"is projected from the {project_id} GPX set."
                 ),
                 "checkpoint": {
                     "checkpoint_id": event.get("checkpoint_candidate_id"),
@@ -894,7 +908,11 @@ def _synthetic_pretrip_debug_projection_events(
         "boundary": boundary,
     }
     events = [
-        ("debug_session_started", "chilai_nanhua_day1 GPX projection started.", {}),
+        (
+            "debug_session_started",
+            f"{case_id} GPX projection started.",
+            {},
+        ),
         (
             "provider_status_recorded",
             "Local GPX corpus projection sources were inspected.",
@@ -917,7 +935,7 @@ def _synthetic_pretrip_debug_projection_events(
         ),
         (
             "debug_session_completed",
-            "chilai_nanhua_day1 GPX projection completed without runtime mutation.",
+            f"{case_id} GPX projection completed without runtime mutation.",
             {
                 "safety_level": "L0_NORMAL",
                 "observations_processed": route_summary["point_count"],
@@ -938,7 +956,7 @@ def _synthetic_pretrip_debug_projection_events(
             "phase": "phase35",
             "severity": "info",
             "subject_ref": case_id,
-            "correlation_refs": ["artifact.gpx.chilai_nanhua_day1"],
+            "correlation_refs": [f"artifact.gpx.{case_id}"],
             "summary": summary,
             "payload": {**base_payload, **payload},
         }

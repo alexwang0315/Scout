@@ -13,6 +13,7 @@ let current = null, receivedAt = 0, controller = null, generation = 0, offline =
 
 function badge(state) { return make("span", stateNames[state] || state, `badge ${state}`); }
 function statusClock() {
+  updateHailoFreshness();
   if (!current) return;
   const age = finite(current.freshness?.age_seconds) ? current.freshness.age_seconds + (Date.now() - receivedAt) / 1000 : null;
   const state = offline ? "offline" : finite(age) && age > current.freshness.stale_after_seconds ? "stale" : current.status;
@@ -30,8 +31,9 @@ function metric(title, value, details, percent) {
 }
 
 function renderStatus(body) {
-  current = body; receivedAt = Date.now(); offline = false; statusClock();
+  current = body; receivedAt = Date.now(); hailoReceivedAt = performance.now(); offline = false; statusClock();
   const d = body.data; $("metrics").setAttribute("aria-busy", "false");
+  renderHailo(d?.hailo);
   if (!d) { $("metrics").replaceChildren(make("p", "目前沒有可顯示的有效採樣。", "panel muted")); $("inventory").replaceChildren(make("p", "裝置資訊不可用", "panel muted")); $("resources").textContent = "資源資訊不可用"; $("alerts").textContent = body.summary; $("alert-count").textContent = "—"; $("uptime").textContent = ""; return; }
   const rawPower = d.power || {}, upsReadable = (rawPower.ups_status || rawPower.status) === "ok";
   const power = upsReadable ? rawPower : {}, supply = rawPower;
@@ -59,6 +61,119 @@ function renderStatus(body) {
   ];
   const resourceList = make("dl", undefined, "properties"); rows.forEach(([key, value]) => { const row = make("div"); row.append(make("dt", key), make("dd", value)); resourceList.append(row); }); $("resources").replaceChildren(resourceList);
   renderInventory(d.inventory);
+}
+
+const hailoStateNames = {ok: "已讀取", partial: "部分可讀", unavailable: "無法讀取", unknown: "未知"};
+const hailoExpanded = new Map();
+let hailoReceivedAt = 0;
+const hailoReadState = (value) => Object.hasOwn(hailoStateNames, value) ? value : "unknown";
+const hailoValue = (value, unit, digits = 1) => finite(value) ? `${number(value, digits)} ${unit}` : "未知";
+const hailoTimestamp = (value) => typeof value === "string" && /(?:Z|[+-]\d{2}:\d{2})$/i.test(value) ? Date.parse(value) : NaN;
+
+function updateHailoFreshness() {
+  const panel = $("hailo-panel"), hailo = current?.data?.hailo;
+  const freshness = current?.freshness;
+  const elapsed = Math.max(0, (performance.now() - hailoReceivedAt) / 1000);
+  const captured = hailoTimestamp(freshness?.captured_at), hailoCaptured = hailoTimestamp(hailo?.captured_at);
+  const serverTime = hailoTimestamp(current?.server_time);
+  const freshnessTimeKnown = finite(freshness?.age_seconds) && freshness.age_seconds >= 0 && finite(captured);
+  const age = freshnessTimeKnown ? freshness.age_seconds + elapsed : null;
+  // Both timestamps come from Scout. Never subtract Scout time from the Mac's
+  // wall clock; Hailo's end-of-query time may legitimately follow Snapshot time.
+  const ownBaseAge = finite(hailoCaptured) && freshnessTimeKnown
+    ? finite(serverTime) ? (serverTime - hailoCaptured) / 1000 : freshness.age_seconds + (captured - hailoCaptured) / 1000
+    : null;
+  const hailoAge = finite(ownBaseAge) && ownBaseAge >= 0 ? ownBaseAge + elapsed : null;
+  $("hailo-age").textContent = `Hailo 資料年齡：${finite(hailoAge) && hailoAge >= 0 ? `${Math.floor(hailoAge)} 秒` : "未知"}`;
+  const stale = current?.status === "stale" || freshness?.state === "stale"
+    || (finite(age) && age > 150) || (finite(hailoAge) && hailoAge > 150);
+  const invalid = current && (freshness?.state !== "fresh" || !freshnessTimeKnown || (hailo && !finite(hailoAge)));
+  const state = offline ? "offline" : stale ? "stale" : current?.status === "unavailable" ? "unavailable" : invalid ? "invalid" : null;
+  panel.classList.toggle("hailo-old", Boolean(state));
+  const notice = $("hailo-freshness"); notice.hidden = !state;
+  notice.textContent = state === "offline" ? "與 Scout 斷線：以下若有 Hailo 讀值或趨勢，為最後取得的紀錄，不能代表目前運作。每 60 秒自動重試。"
+    : state === "stale" ? "資料已過期：以下 Hailo 讀值與趨勢為最後紀錄，不能代表目前運作。"
+      : state === "invalid" ? "資料時間未知或無效：Hailo 採樣時間或全域 freshness 無法確認有效性；以下讀值僅為收到的紀錄，不能代表目前運作。"
+        : state ? "採樣不可用：保留的 Hailo 紀錄不能代表目前運作。" : "";
+  const readState = hailoReadState(hailo?.status);
+  const label = state === "invalid" ? "資料時間未知／無效" : state ? stateNames[state] : hailo ? hailoStateNames[readState] : current ? "等待更新" : "正在讀取";
+  $("hailo-state").textContent = label; $("hailo-state").className = `badge ${state === "invalid" ? "unavailable" : state || readState}`;
+  panel.querySelectorAll(".hailo-read-status").forEach((node) => {
+    node.textContent = `${state ? "最後紀錄 · " : ""}${hailoStateNames[node.dataset.readState]}`;
+  });
+  if (offline) {
+    if (!current && panel.getAttribute("aria-busy") === "true") $("hailo-devices").replaceChildren(make("p", "尚未取得 Hailo 監測資料，等待連線恢復。", "panel muted"));
+    panel.setAttribute("aria-busy", "false");
+  }
+}
+
+function renderHailo(hailo) {
+  const devices = $("hailo-devices");
+  devices.querySelectorAll("details[data-key]").forEach((node) => hailoExpanded.set(node.dataset.key, node.open));
+  const focusedKey = devices.contains(document.activeElement) && document.activeElement.tagName === "SUMMARY" ? document.activeElement.parentElement.dataset.key : null;
+  $("hailo-panel").setAttribute("aria-busy", "false");
+  $("hailo-errors").replaceChildren();
+  if (!hailo) {
+    $("hailo-meta").textContent = "尚無 Hailo 採樣時間／來源";
+    devices.replaceChildren(make("p", current?.data ? "此筆舊版採樣尚無 Hailo 遙測，等待下一次更新。" : "目前沒有可顯示的 Hailo 採樣，等待更新。", "panel muted"));
+    updateHailoFreshness(); return;
+  }
+  const sampleTime = finite(hailoTimestamp(hailo.captured_at)) ? date(hailo.captured_at) : "未知";
+  const windowText = finite(hailo.sample_window_ms) ? `${number(hailo.sample_window_ms / 1000)} 秒` : "未知";
+  $("hailo-meta").textContent = `Hailo 最後採樣 ${sampleTime}（Asia/Taipei） · 來源 ${hailo.source ?? "未知"} · 觀測窗口 ${windowText} · 唯讀 ${hailo.read_only === true ? "是" : "未知"}`;
+  for (const error of hailo.errors || []) $("hailo-errors").append(make("p", `Hailo 讀取限制：${error}`, "notes warning"));
+  const rows = (hailo.devices || []).map((device, index) => {
+    const id = device.device_id ?? "未知裝置 ID";
+    const key = JSON.stringify(["hailo", device.device_id ?? index]);
+    const block = make("details", undefined, "device-group hailo-device");
+    block.dataset.key = key; block.dataset.deviceId = id; block.dataset.hailoDevice = id;
+    block.open = hailoExpanded.has(key) ? hailoExpanded.get(key) : true;
+    const readState = hailoReadState(device.status), readBadge = make("span", hailoStateNames[readState], `badge hailo-read-status ${readState}`);
+    readBadge.dataset.readState = readState;
+    const summary = make("summary"); summary.append(make("h3", id), make("span", device.architecture ?? "未知架構", "group-summary"), readBadge); block.append(summary);
+    const content = make("div", undefined, "group-body"), properties = make("dl", undefined, "properties hailo-properties");
+    const metrics = [
+      ["nnc_utilization_percent", "AI 核心使用率（NNC）", hailoValue(device.nnc_utilization_percent, "%")],
+      ["cpu_utilization_percent", "Hailo 內部 CPU 使用率", hailoValue(device.cpu_utilization_percent, "%")],
+      ["ram_utilization_percent", "Hailo 專用記憶體使用率", hailoValue(device.ram_utilization_percent, "%")],
+      ["ram_used_bytes", "Hailo 專用記憶體已用", finite(device.ram_used_bytes) ? gib(device.ram_used_bytes) : "未知"],
+      ["ram_total_bytes", "Hailo 專用記憶體總量", finite(device.ram_total_bytes) ? gib(device.ram_total_bytes) : "未知"],
+      ["temperature_c", "Hailo 晶片溫度", hailoValue(device.temperature_c, "°C")],
+      ["voltage_mv", "Hailo 晶片電壓（非功耗）", hailoValue(device.voltage_mv, "mV", 0)]
+    ];
+    for (const [key, label, value] of metrics) {
+      const row = make("div"), reading = make("dd", value); reading.dataset.metric = key; reading.dataset.hailoMetric = key;
+      row.append(make("dt", label), reading); properties.append(row);
+    }
+    content.append(properties);
+    for (const error of device.errors || []) content.append(make("p", `讀取限制：${error}`, "notes warning"));
+    block.append(content); return block;
+  });
+  devices.replaceChildren(...(rows.length ? rows : [make("p", hailo.status === "unavailable" ? "Hailo 遙測無法讀取，無法確認裝置清單。" : hailo.status === "partial" ? "尚未取得 Hailo 裝置，部分資料不可讀。" : "本次沒有偵測到 Hailo 裝置。", "panel muted")]));
+  if (focusedKey !== null) rows.find((node) => node.dataset.key === focusedKey)?.firstElementChild.focus({preventScroll: true});
+  updateHailoFreshness();
+}
+
+function renderHailoHistory(body) {
+  const items = body.items || [], container = $("hailo-trends"), label = $("hailo-history-state");
+  if (body.status === "unavailable") { label.textContent = "Hailo 歷史資料不可用"; container.replaceChildren(make("p", body.summary ?? "歷史讀取失敗", "panel muted")); return; }
+  const ids = new Set(items.flatMap((item) => (item.hailo?.devices || []).map((device) => device.device_id)).filter((id) => id !== null && id !== undefined));
+  const times = items.map((item) => item.hailo?.captured_at).filter((time) => finite(hailoTimestamp(time)));
+  label.textContent = times.length ? `${date(times[0])} — ${date(times.at(-1))}（Asia/Taipei）${body.status === "partial" ? " · 部分紀錄不可用" : ""}` : `尚無 Hailo 歷史採樣${body.status === "partial" ? " · 部分紀錄不可用" : ""}`;
+  const charts = [...ids].flatMap((id) => [
+    ["nnc_utilization_percent", "AI 核心使用率（NNC）", "%"], ["temperature_c", "晶片溫度", "°C"]
+  ].map(([key, title, unit]) => {
+    const box = chart(`${id} · ${title}`, items, (item) => item.hailo?.devices?.find((device) => device.device_id === id)?.[key], unit, (item) => finite(hailoTimestamp(item.hailo?.captured_at)) ? item.hailo.captured_at : null);
+    // A real isolated sample is a point, never a line over the missing interval.
+    box.querySelectorAll("polyline").forEach((line) => {
+      const points = line.getAttribute("points"); if (points.includes(" ")) return;
+      const [x, y] = points.split(","), dot = document.createElementNS(line.namespaceURI, "circle");
+      dot.setAttribute("cx", x); dot.setAttribute("cy", y); dot.setAttribute("r", "3");
+      dot.setAttribute("class", "hailo-chart-point"); line.parentNode.append(dot);
+    });
+    box.dataset.deviceId = id; box.dataset.metric = key; return box;
+  }));
+  container.replaceChildren(...(charts.length ? charts : [make("p", "尚無 Hailo 裝置趨勢資料。", "panel muted")]));
 }
 
 function gpioTable(lines) {
@@ -94,9 +209,9 @@ function renderInventory(inventory) {
   $("inventory").replaceChildren(...nodes);
 }
 
-function chart(title, items, getter, suffix) {
+function chart(title, items, getter, suffix, capturedAt = (item) => item.captured_at) {
   const box = make("div", undefined, "panel chart"); box.append(make("h3", title));
-  const valid = items.map((v) => ({time: Date.parse(v.captured_at), value: getter(v)}));
+  const valid = items.map((v) => ({time: Date.parse(capturedAt(v)), value: getter(v)}));
   const values = valid.filter((v) => finite(v.value) && finite(v.time));
   if (values.length < 2) { box.append(make("p", "尚無足夠資料繪製趨勢", "muted")); return box; }
   const minTime = values[0].time, maxTime = values.at(-1).time, lo = Math.min(...values.map((v) => v.value)), hi = Math.max(...values.map((v) => v.value));
@@ -104,14 +219,15 @@ function chart(title, items, getter, suffix) {
   let segment = [], previousTime = null;
   const draw = () => { if (!segment.length) return; const line = document.createElementNS(svg.namespaceURI, "polyline"); line.setAttribute("class", "chart-line"); line.setAttribute("points", segment.join(" ")); svg.append(line); segment = []; };
   for (const point of valid) {
-    if (!finite(point.value)) { draw(); previousTime = null; continue; }
-    if (previousTime !== null && point.time - previousTime > 150000) draw();
+    if (!finite(point.value) || !finite(point.time)) { draw(); previousTime = null; continue; }
+    if (previousTime !== null && (point.time - previousTime > 150000 || point.time <= previousTime)) draw();
     segment.push(`${10 + 580 * (point.time - minTime) / Math.max(1, maxTime - minTime)},${115 - 90 * (point.value - lo) / Math.max(1, hi - lo)}`); previousTime = point.time;
   }
   draw(); box.append(svg); const caption = make("footer"); caption.append(make("span", `${number(lo)} – ${number(hi)}${suffix}`), make("span", `${values.length} 筆有效採樣`)); box.append(caption); return box;
 }
 
 function renderHistory(body) {
+  renderHailoHistory(body);
   if (body.status === "unavailable") { $("history-range").textContent = "歷史資料不可用"; $("history").replaceChildren(make("p", body.summary, "panel warning")); return; }
   const items = body.items || [];
   $("history-range").textContent = items.length ? `${date(items[0].captured_at)} — ${date(items.at(-1).captured_at)}${body.status === "partial" ? " · 部分紀錄不可用" : ""}` : "尚無歷史紀錄";
@@ -132,7 +248,8 @@ async function refresh() {
   clearTimeout(timeout); if (ticket !== generation) return;
   if (results[0].status === "fulfilled") renderStatus(results[0].value);
   else { offline = true; if (current) statusClock(); else { $("status").textContent = "連線失敗"; $("status").className = "badge offline"; $("notice").hidden = false; $("notice").textContent = "無法取得 Scout 監控資料，請確認連線後重新讀取。"; $("metrics").setAttribute("aria-busy", "false"); $("metrics").textContent = "尚未取得監控結果"; } }
-  if (results[1].status === "fulfilled") renderHistory(results[1].value); else $("history-range").textContent = "歷史資料讀取失敗";
+  updateHailoFreshness();
+  if (results[1].status === "fulfilled") renderHistory(results[1].value); else { $("history-range").textContent = "歷史資料讀取失敗"; $("hailo-history-state").textContent = "Hailo 歷史讀取失敗；以下若有趨勢，為上次取得的歷史紀錄。"; }
   if (results[2].status === "fulfilled") renderEvents(results[2].value); else $("events").textContent = "事件紀錄讀取失敗";
   $("refresh").disabled = false;
 }

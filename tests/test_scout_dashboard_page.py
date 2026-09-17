@@ -29,6 +29,7 @@ DEBUG_PAGE = ROOT / "docs" / "admin" / "phase-3-5-runtime-debug.html"
 LAYER_CONTRACT_DOC = ROOT / "docs" / "specs" / "scout-admin-map-layer-contract.md"
 WEATHER_DOC = ROOT / "docs" / "specs" / "scout-weather-environment-sensing.md"
 SMOKE_TOOL = ROOT / "tools" / "admin_ui_visual_smoke.js"
+DIAGNOSTIC_SMOKE_TOOL = ROOT / "tools" / "dashboard_diagnostic_browser_smoke.js"
 
 
 def test_scout_dashboard_page_serves_static_shell() -> None:
@@ -510,6 +511,27 @@ def test_scout_dashboard_body_index_fresh_project_has_no_fabricated_evidence(
     assert payload["boundary"]["safety_api_called"] is False
     assert payload["boundary"]["outbound_alert_sent"] is False
 
+
+def test_scout_dashboard_body_index_requires_explicit_loaded_workspace() -> None:
+    client = TestClient(create_admin_app())
+
+    missing_read = client.get("/admin/dashboard/body-index")
+    assert missing_read.status_code == 400
+    assert "project_id is required" in missing_read.json()["detail"]
+
+    missing_import = client.post(
+        "/admin/dashboard/body-index/import",
+        json={"confirm_import": True},
+    )
+    assert missing_import.status_code == 422
+    assert any(
+        error.get("loc", [])[-1] == "project_id"
+        for error in missing_import.json().get("detail", [])
+    )
+
+    missing_watch = client.get("/admin/dashboard/body-index/watch/status")
+    assert missing_watch.status_code == 400
+
     html = PAGE.read_text(encoding="utf-8")
     for fabricated_value in (
         'value: "3.8 km/h"',
@@ -885,10 +907,13 @@ def test_scout_dashboard_contains_requested_navigation_contract() -> None:
     assert 'data-route="outdoor-pace-fit-emergency"' not in html
 
 
-def test_scout_dashboard_points_to_current_chilai_workspace() -> None:
+def test_scout_dashboard_requires_the_loaded_workspace() -> None:
     html = PAGE.read_text(encoding="utf-8")
 
-    assert 'const PROJECT_ID = "chilai_nanhua_day1_scoutAI";' in html
+    assert 'const PROJECT_ID = "";' in html
+    assert "WORKSPACE_REQUIRED_MESSAGE" in html
+    assert "async function bootstrapDashboardWorkspace(initialRoute = \"home\")" in html
+    assert "requireLoadedWorkspaceProjectId()" in html
     assert 'new URLSearchParams(window.location.search).get("projectId")' in html
     assert "^[A-Za-z0-9_.-]+$" in html
     assert "const WORKSPACE_ROOT =" not in html
@@ -939,8 +964,9 @@ def test_scout_dashboard_data_fetches_have_timeout_fallback() -> None:
     assert "signal: controller.signal" in html
     assert "window.clearTimeout(timer)" in html
     assert "{ timeoutMs: PRETRIP_PROJECT_FETCH_TIMEOUT_MS }" in html
-    assert "setRoute(routeFromHash());" in html
-    assert "loadWorkspaceCatalog().finally(() => loadData()).finally(() =>" in html
+    assert "const initialRoute = routeFromHash();" in html
+    assert 'setRoute("home");' in html
+    assert "bootstrapDashboardWorkspace(initialRoute)" in html
     assert "routeUsesEmbeddedFrame(state.route)" in html
     assert 'return route === "map" || route === "agent" || route.startsWith("surface-");' in html
     assert "routeUsesWideFrame(route)" in html
@@ -1219,7 +1245,7 @@ def test_scout_dashboard_workspace_tab_exposes_structure_cache_and_operations() 
     assert 'url.hash = "features-workspace";' in html
     assert "validateWorkspaceSelection(nextProjectId)" in html
     assert "const WORKSPACE_ROOT =" not in html
-    assert "void loadConnectedPreparationStatus();" in html
+    assert "await loadConnectedPreparationStatus();" in html
     assert 'triggerDashboardConnectedPreparation("dashboard-open")' not in html
     assert workspace_page.index("renderWorkspaceOperationConsole()") < workspace_page.index(
         "renderWorkspaceStatsPanels(stats)"
@@ -2739,7 +2765,7 @@ def test_scout_dashboard_navigation_terrain_intelligence_workbench_contract() ->
     assert "不要求使用者逐筆驗真或修正等高線" in navigation
     assert "點選只用於查看計算來源" in html
     assert 'role="listitem"\n                class="navigation-event-card"' not in navigation
-    assert "void loadConnectedPreparationStatus();" in html
+    assert "await loadConnectedPreparationStatus();" in html
     assert 'triggerDashboardConnectedPreparation("dashboard-open")' not in html
     assert 'const pageHeaderHidden = route === "outdoor-navigation";' in html
     assert (
@@ -5343,7 +5369,7 @@ def test_dashboard_open_only_reads_connected_preparation_status() -> None:
         "async function loadConnectedPreparationStatus()", 1
     )[1].split("async function triggerDashboardConnectedPreparation", 1)[0]
 
-    assert "void loadConnectedPreparationStatus();" in startup
+    assert "void bootstrapDashboardWorkspace(initialRoute);" in startup
     assert 'triggerDashboardConnectedPreparation("dashboard-open")' not in startup
     assert "fetchJson(" in status_loader
     assert "postJson(" not in status_loader
@@ -5422,7 +5448,7 @@ def test_dashboard_weather_route_consumes_cache_only_live_cwa_data() -> None:
         'data-weather-location-trend="true"',
         ):
             assert marker in html
-    assert "void loadConnectedPreparationStatus();" in html
+    assert "await loadConnectedPreparationStatus();" in html
     assert 'triggerDashboardConnectedPreparation("dashboard-open")' not in html
     assert 'const pastRainfall = rainfallProducts.find(item => item.gridKind === "qpe_past_1h")' in html
     assert 'const futureRainfall = rainfallProducts.find(item => item.gridKind === "qpf_next_1h")' in html
@@ -5767,6 +5793,7 @@ def test_dashboard_p0_p2_review_regressions_are_fail_closed() -> None:
     html = PAGE.read_text(encoding="utf-8")
     pretrip_html = PRETRIP_PAGE.read_text(encoding="utf-8")
     smoke = SMOKE_TOOL.read_text(encoding="utf-8")
+    diagnostic_smoke = DIAGNOSTIC_SMOKE_TOOL.read_text(encoding="utf-8")
 
     assert 'if (snapshot.status === "unavailable") return "unavailable";' in html
     assert "dataScopeErrors" in html
@@ -5785,7 +5812,8 @@ def test_dashboard_p0_p2_review_regressions_are_fail_closed() -> None:
     assert 'grid_overlay_status: overlay.status' in overlay_loader
     assert 'overlay.status === "ready" && gridCells.length ? "ready" : "no_coverage"' not in overlay_loader
 
-    assert "/admin/dashboard?projectId=chilai_nanhua_day1#map" in smoke
+    assert "SCOUT_DASHBOARD_DIAGNOSTIC_URL is required" in diagnostic_smoke
+    assert "projectId for the loaded workspace" in diagnostic_smoke
     assert 'replace(\n      "/projects/chilai_nanhua_day1_scoutAI"' not in smoke
 
 

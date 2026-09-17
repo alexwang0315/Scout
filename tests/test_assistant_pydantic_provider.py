@@ -9663,6 +9663,24 @@ def test_grounding_guard_accepts_delayed_start_uncertain_context_wording():
     assert assistant_provider_module._model_output_preserves_grounding(output, grounded)
 
 
+def test_grounding_guard_rejects_explicit_negation_inversion():
+    grounded = (
+        "歷史時間整理排除了 5 筆距離不符的測量；跨 GPX track 邊界的時間測量有 "
+        "13 筆。允許時間測量跨邊界不等於證明路線幾何連通或可通行。"
+    )
+
+    assert not assistant_provider_module._model_output_preserves_grounding(
+        "歷史時間整理排除了 5 筆，跨 GPX track 邊界有 13 筆。"
+        "允許時間跨邊界等於證明路線幾何連通。",
+        grounded,
+    )
+    assert assistant_provider_module._model_output_preserves_grounding(
+        "歷史時間整理排除了 5 筆，跨 GPX track 邊界有 13 筆；"
+        "允許時間跨邊界不等於證明路線幾何連通。",
+        grounded,
+    )
+
+
 def test_workspace_catalog_fallback_summarizes_artifact_ref_counts():
     response = assistant_provider_module.build_workspace_tool_fallback_response(
         ScoutAssistantQuery(
@@ -11808,6 +11826,71 @@ def test_hailo_exact_repair_uses_only_priority_100_evidence_cards():
     )
 
     assert selected == [exact]
+
+
+def test_hailo_bounded_verifier_repairs_priority_exact_negation_inversion():
+    runtime = assistant_provider_module.BoundedAgentRuntime()
+    exact = assistant_provider_module.EvidenceCard(
+        tool_id="route_timing",
+        key_values={
+            "field_answer": (
+                "跨 GPX track 邊界有 13 筆；"
+                "允許時間跨邊界不等於證明路線幾何連通。"
+            ),
+            "field_answer_priority": 100,
+        },
+        source_refs=["outputs/reference_segment_timing.json"],
+    )
+
+    rejected = assistant_provider_module._verify_hailo_bounded_synthesis(
+        runtime,
+        "跨 GPX track 邊界有 13 筆 [outputs/reference_segment_timing.json]。"
+        "允許時間跨邊界等於證明路線幾何連通。",
+        evidence_cards=[exact],
+    )
+    accepted = assistant_provider_module._verify_hailo_bounded_synthesis(
+        runtime,
+        "跨 GPX track 邊界有 13 筆；允許時間跨邊界不等於證明路線幾何連通 "
+        "[outputs/reference_segment_timing.json]。",
+        evidence_cards=[exact],
+    )
+
+    assert rejected.passed is False
+    assert rejected.output_disposition == "needs_repair"
+    assert "contradicts_priority_exact_field_answer" in rejected.repair_items
+    assert accepted.passed is True
+
+
+def test_hailo_bounded_verifier_rejects_undefined_variation_label():
+    runtime = assistant_provider_module.BoundedAgentRuntime()
+    exact = assistant_provider_module.EvidenceCard(
+        tool_id="route_timing",
+        key_values={
+            "field_answer": (
+                "歷史時間 min=215.3、p50=242.9、max=287.4；"
+                "資料未定義變異大或小的判定閾值，因此不能客觀標成變異大或變異小。"
+            ),
+            "field_answer_priority": 100,
+        },
+        source_refs=["outputs/reference_segment_timing.json"],
+    )
+
+    rejected = assistant_provider_module._verify_hailo_bounded_synthesis(
+        runtime,
+        "這段時間變異不大 [outputs/reference_segment_timing.json]。",
+        evidence_cards=[exact],
+    )
+    accepted = assistant_provider_module._verify_hailo_bounded_synthesis(
+        runtime,
+        "資料沒有定義變異大小閾值；可確認 min=215.3、p50=242.9、max=287.4 "
+        "[outputs/reference_segment_timing.json]。",
+        evidence_cards=[exact],
+    )
+
+    assert rejected.passed is False
+    assert rejected.output_disposition == "needs_repair"
+    assert "contradicts_priority_exact_field_answer" in rejected.repair_items
+    assert accepted.passed is True
 
 
 def test_hailo_bounded_prompt_orders_exact_field_answer_before_catalog_noise():

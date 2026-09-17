@@ -112,7 +112,7 @@ def test_runtime_and_deployment_dependency_pins_stay_aligned() -> None:
     expected_versions = {
         "pydantic-ai-slim": "2.43.0",
         "pydantic-evals": "2.43.0",
-        "praisonaiagents": "1.7.5",
+        "praisonaiagents": "1.7.6",
     }
     seen = set()
     for surface, dependencies in dependency_sets.items():

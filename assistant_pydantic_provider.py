@@ -51,6 +51,7 @@ from pydantic_ai_runtime_compat import (
 )
 from scout.agents.hailo_native_research import (
     build_hailo_native_research_model,
+    parse_hailo_research_action,
     research_tool_return_trace,
 )
 from scout.agents.model_policy import resolve_model_policy
@@ -5398,6 +5399,8 @@ def _model_output_contradicts_grounding(
 ) -> bool:
     output = re.sub(r"\s+", "", str(model_output or "").casefold())
     grounded = re.sub(r"\s+", "", str(grounded_answer or "").casefold())
+    if _model_output_inverts_explicit_negation(output, grounded):
+        return True
     if any(marker in grounded for marker in ("目前缺少", "不能判定")) and any(
         phrase in output
         for phrase in (
@@ -5644,6 +5647,60 @@ def _model_output_contradicts_grounding(
         ):
             return True
     return False
+
+
+def _model_output_inverts_explicit_negation(output: str, grounded: str) -> bool:
+    """Reject a positive claim when verified evidence explicitly negates it."""
+
+    output = re.sub(r"\s+", "", str(output or "").casefold())
+    grounded = re.sub(r"\s+", "", str(grounded or "").casefold())
+    polarity_pairs = (
+        ("不等於證明", "等於證明"),
+        ("不等于证明", "等于证明"),
+        ("不能推論為", "可以推論為"),
+        ("不能推论为", "可以推论为"),
+        ("不代表", "代表"),
+        ("doesnotprove", "proves"),
+        ("cannotinfer", "caninfer"),
+    )
+    for negative, positive in polarity_pairs:
+        for match in re.finditer(
+            rf"{re.escape(negative)}([^。；，,或]{{2,40}})",
+            grounded,
+        ):
+            claim = match.group(1)
+            if f"{negative}{claim}" in output:
+                continue
+            if f"{positive}{claim}" in output:
+                return True
+    return False
+
+
+def _model_output_overstates_undefined_variation(output: str, grounded: str) -> bool:
+    """Reject categorical variation labels when evidence defines no threshold."""
+
+    output = re.sub(r"\s+", "", str(output or "").casefold())
+    grounded = re.sub(r"\s+", "", str(grounded or "").casefold())
+    threshold_is_undefined = (
+        any(marker in grounded for marker in ("未定義", "没有定义", "沒有定義"))
+        and any(marker in grounded for marker in ("閾值", "阈值"))
+    )
+    if not threshold_is_undefined:
+        return False
+    if any(
+        marker in output
+        for marker in (
+            "未定義",
+            "沒有定義",
+            "没有定义",
+            "無法判定",
+            "无法判定",
+            "不能客觀標成",
+            "不能客观标成",
+        )
+    ):
+        return False
+    return re.search(r"變異(?:很|不)?(?:大|小)|变异(?:很|不)?(?:大|小)", output) is not None
 
 
 def _model_output_introduces_unsupported_evidence_tokens(
@@ -7697,7 +7754,15 @@ class PydanticAIAssistantProvider:
             local_model_answer=(
                 ai_hat_raw_model_output
                 if requested_ai_hat_fallback and ai_hat_raw_model_output is not None
-                else (str(model_output).strip() if requested_ai_hat_fallback else None)
+                else (
+                    str(model_output).strip()
+                    if requested_ai_hat_fallback
+                    else (
+                        getattr(self.runner, "last_raw_model_output", None) or None
+                        if profile == "local"
+                        else None
+                    )
+                )
             ),
             local_model_attempts=(
                 list(
@@ -7894,6 +7959,7 @@ class PydanticAIEnvRunner:
         hardware_accelerator: str = "none",
         workspace_tools_enabled: bool = True,
         workspace_model_max_tokens: int | None = None,
+        hailo_model_settings: dict[str, object] | None = None,
     ):
         self.model_name = model_name or os.getenv(
             "SCOUT_AI_ASSISTANT_MODEL",
@@ -7904,8 +7970,17 @@ class PydanticAIEnvRunner:
         self.token_env_var = token_env_var
         self.api_key = api_key
         self.profile_name = profile_name
+        self.last_profile: str | None = None
+        self.local_model_name: str | None = None
+        self.local_hardware_accelerator: str | None = None
+        self.local_backend: str | None = None
         self.backend = backend
         self.hardware_accelerator = hardware_accelerator
+        self.hailo_model_settings = dict(hailo_model_settings or {})
+        if self.hailo_model_settings.get("hailo_chat_roles", "user") not in {
+            "user", "system_user"
+        }:
+            raise ValueError("Unsupported Hailo chat role format")
         self.workspace_tools_enabled = workspace_tools_enabled
         uses_local_token_budget = _uses_local_workspace_token_budget(
             profile_name=profile_name,
@@ -7972,6 +8047,7 @@ class PydanticAIEnvRunner:
             backend=profile.backend,
             hardware_accelerator=profile.hardware_accelerator,
             workspace_tools_enabled=profile.workspace_tools_enabled(),
+            hailo_model_settings=profile.model_settings,
             workspace_model_max_tokens=_workspace_model_max_tokens_from_settings(
                 profile.model_settings,
                 environ=resolved_environ,
@@ -7991,6 +8067,7 @@ class PydanticAIEnvRunner:
             profile_name=self.profile_name,
             backend=self.backend,
             hardware_accelerator=self.hardware_accelerator,
+            hailo_model_settings=self.hailo_model_settings,
             workspace_tools_enabled=self.workspace_tools_enabled,
             workspace_model_max_tokens=self.workspace_model_max_tokens,
         )
@@ -10200,7 +10277,14 @@ class PydanticAIEnvRunner:
         ]
         context_reads: list[dict[str, Any]] = []
         project_root = tool_context._project_root()
-        if not selected_tool_ids and project_root is not None:
+        # A disclosed follow-up schema is not an executable evidence step.
+        # Keep context acquisition available when the planner has no requests.
+        has_planned_request = any(
+            getattr(item, "tool_id", None)
+            and isinstance(getattr(item, "request", None), dict)
+            for item in selected_plan_items
+        )
+        if not has_planned_request and project_root is not None:
             for handle in handles:
                 context_read = _read_workspace_context(
                     project_root,
@@ -10525,7 +10609,8 @@ class PydanticAIEnvRunner:
             evidence_cards=evidence_cards,
         )
         verification = (
-            bounded_runtime.verify_synthesis(
+            _verify_hailo_bounded_synthesis(
+                bounded_runtime,
                 output,
                 evidence_cards=evidence_cards,
             )
@@ -10542,7 +10627,8 @@ class PydanticAIEnvRunner:
             )
             if provenance_repaired_output != output:
                 output = provenance_repaired_output
-                verification = bounded_runtime.verify_synthesis(
+                verification = _verify_hailo_bounded_synthesis(
+                    bounded_runtime,
                     output,
                     evidence_cards=evidence_cards,
                 )
@@ -10561,6 +10647,7 @@ class PydanticAIEnvRunner:
                 _priority_exact_evidence_cards(evidence_cards)
                 if any(
                     item.startswith("missing_exact_field_")
+                    or item == "contradicts_priority_exact_field_answer"
                     for item in verification.repair_items
                 )
                 else evidence_cards
@@ -10733,7 +10820,8 @@ class PydanticAIEnvRunner:
                     output,
                     evidence_cards=evidence_cards,
                 )
-                verification = bounded_runtime.verify_synthesis(
+                verification = _verify_hailo_bounded_synthesis(
+                    bounded_runtime,
                     output,
                     evidence_cards=evidence_cards,
                 )
@@ -10746,7 +10834,8 @@ class PydanticAIEnvRunner:
                     )
                     if provenance_repaired_output != output:
                         output = provenance_repaired_output
-                        verification = bounded_runtime.verify_synthesis(
+                        verification = _verify_hailo_bounded_synthesis(
+                            bounded_runtime,
                             output,
                             evidence_cards=evidence_cards,
                         )
@@ -10759,7 +10848,8 @@ class PydanticAIEnvRunner:
             )
             if provenance_repaired_output != output:
                 output = provenance_repaired_output
-                verification = bounded_runtime.verify_synthesis(
+                verification = _verify_hailo_bounded_synthesis(
+                    bounded_runtime,
                     output,
                     evidence_cards=evidence_cards,
                 )
@@ -10863,6 +10953,10 @@ class PydanticAIEnvRunner:
         }
 
     def _reset_hailo_request_state(self) -> None:
+        self.last_profile = None
+        self.local_model_name = None
+        self.local_hardware_accelerator = None
+        self.local_backend = None
         self.last_hailo_response_received = False
         self.last_hailo_response_model = None
         self.last_hailo_prompt_eval_count = None
@@ -11105,6 +11199,7 @@ class PydanticAIEnvRunner:
                 "SCOUT_BOUNDED_SYNTHESIS_CONTINUATION_V1\n",
             )
         )
+        research_action_prompt = control_prompt.startswith("SCOUT_NATIVE_RESEARCH_ACTION_V1\n")
         use_semantic_stop = bounded_hailo_prompt and semantic_stop_enabled
         if use_semantic_stop:
             system_prompt = (
@@ -11122,7 +11217,9 @@ class PydanticAIEnvRunner:
         normalized_user_prompt = _normalize_hailo_chat_content(
             _strip_hailo_control_markers(prompt)
         )
-        if bounded_hailo_prompt:
+        if bounded_hailo_prompt and self.hailo_model_settings.get(
+            "hailo_chat_roles", "user"
+        ) == "user":
             # Hailo Ollama 5.3 keeps a model-level conversation cache and rejects
             # a repeated system role after a failed/continued request. Keeping the
             # bounded instruction and evidence in one user message makes every
@@ -11140,6 +11237,11 @@ class PydanticAIEnvRunner:
             if "AI_HAT_RAW_LABEL_CLEANUP_V1" in prompt:
                 messages.extend(_local_grounded_label_cleanup_few_shot_messages())
             messages.append({"role": "user", "content": normalized_user_prompt})
+        if (
+            model_name.startswith("qwen3:")
+            and self.hailo_model_settings.get("think") is False
+        ):
+            messages[-1]["content"] += " /no_think"
         semantic_sentence_target = (
             _hailo_bounded_semantic_sentence_target(prompt)
             if bounded_hailo_prompt
@@ -11154,6 +11256,11 @@ class PydanticAIEnvRunner:
             "model": model_name,
             "messages": messages,
             "stream": True,
+            **(
+                {"think": self.hailo_model_settings["think"]}
+                if isinstance(self.hailo_model_settings.get("think"), bool)
+                else {}
+            ),
             "options": {
                 **({"num_predict": num_predict} if num_predict is not None else {}),
                 "temperature": (
@@ -11293,6 +11400,13 @@ class PydanticAIEnvRunner:
             )
         self.last_hailo_system_chars = len(normalized_system_prompt)
         self.last_hailo_user_chars = len(normalized_user_prompt)
+        temperature = self.hailo_model_settings.get("temperature")
+        if (
+            isinstance(temperature, (int, float))
+            and not isinstance(temperature, bool)
+            and 0 <= temperature <= 2
+        ):
+            payload["options"]["temperature"] = temperature
         self.last_hailo_input_estimated_tokens = _estimate_hailo_chat_input_tokens(
             normalized_system_prompt,
             normalized_user_prompt,
@@ -11362,6 +11476,10 @@ class PydanticAIEnvRunner:
                             response_payload=response_payload,
                         )
                     combined_output = "".join(content_parts)
+                    if research_action_prompt and _hailo_research_action_complete(combined_output):
+                        semantic_completion = True
+                        stream_done = True
+                        break
                     if use_semantic_stop and HAILO_SEMANTIC_STOP in combined_output:
                         semantic_stop = True
                         stream_done = True
@@ -11482,6 +11600,10 @@ class PydanticAIEnvRunner:
             ),
         }
         if output:
+            self.last_profile = "local"
+            self.local_model_name = self.last_hailo_response_model
+            self.local_hardware_accelerator = self.hardware_accelerator
+            self.local_backend = "hailo_ollama"
             self.last_raw_model_output = output
             self.last_raw_model_outputs.append(output)
             return output
@@ -11868,12 +11990,13 @@ def _run_cloud_grounded_synthesis_retry(
     if not compact_evidence:
         return None
     prompt = (
-        "你是 Scout AI 的雲端模型回答合成器。"
+        "你是 Scout AI 的回答合成器。"
         "下方是 Scout read-only 工具已取得的 workspace evidence 摘要。"
         "請直接回答使用者問題，不要輸出 JSON、tool call、程式碼、工具名稱清單或英文 debug 前綴。"
-        "答案必須使用工具摘要中的 CP、GPX 里程、座標、score、bucket、缺資料說明；"
+        "依原始問題取用工具摘要中的相關欄位，保留實體、數值、單位、來源與缺資料說明；"
+        "逐項回答複合問題，不要拿無關欄位或整條路線的總數代替局部資料。"
         "不可把 candidate-only evidence 說成 runtime safety truth。"
-        "若工具摘要說天氣或即時定位缺資料，仍要回答已知的 route/risk 候選，並清楚補一句缺口。"
+        "部分資料不足時，回答問題中已有足夠證據的部分，再明確說明其餘缺口。"
         "\n\n"
         f"使用者問題：{question[:240]}\n"
         f"Scout 工具摘要：{compact_evidence[:1800]}\n\n"
@@ -17981,13 +18104,46 @@ def _hailo_bounded_semantic_sentence_target(prompt: str) -> int:
     return max(1, min(3, target))
 
 
+def _hailo_bounded_prompt_payload(prompt: str) -> dict[str, Any] | None:
+    """Decode the leading bounded JSON while allowing appended MSER context."""
+
+    _, separator, raw_payload = prompt.partition("\n")
+    if not separator:
+        return None
+    try:
+        payload, _ = json.JSONDecoder().raw_decode(raw_payload.lstrip())
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
 def _hailo_bounded_semantic_completion_allowed(prompt: str) -> bool:
     """Use sentence completion only for simple, single-clause exact answers."""
 
     exact_answers = _hailo_bounded_exact_answers(prompt)
     if not exact_answers:
-        return True
+        payload = _hailo_bounded_prompt_payload(prompt)
+        if payload is None:
+            return False
+        # A sentence ending does not prove that a multi-fact evidence answer
+        # is complete. Let EOS, the explicit marker or continuation handle it.
+        return isinstance(payload, dict) and not (
+            payload.get("evidence_cards") or payload.get("evidence_delta")
+        )
     return len(exact_answers) == 1 and not re.search(r"[；;\n]", exact_answers[0])
+
+
+def _hailo_research_action_complete(output: str) -> bool:
+    """A validated complete action, unlike punctuation, is a semantic boundary."""
+
+    text = output.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
+    try:
+        value = json.loads(text)
+    except json.JSONDecodeError:
+        return False
+    return isinstance(value, dict) and parse_hailo_research_action(text) is not None
 
 
 def _hailo_bounded_exact_answers_covered(prompt: str, output: str) -> bool:
@@ -17995,6 +18151,11 @@ def _hailo_bounded_exact_answers_covered(prompt: str, output: str) -> bool:
 
     exact_answers = _hailo_bounded_exact_answers(prompt)
     if not exact_answers:
+        return False
+    # Punctuation-insensitive clause matching must not cut a streamed location
+    # label or citation immediately before its closing delimiter.
+    if any(output.count(left) != output.count(right)
+           for left, right in (("(", ")"), ("（", "）"), ("[", "]"), ("【", "】"))):
         return False
     normalized_output = _normalize_hailo_exact_answer_text(output)
     if not normalized_output:
@@ -18090,14 +18251,8 @@ def _clean_hailo_model_answer_line(value: str) -> str:
 
 
 def _hailo_bounded_exact_answers(prompt: str) -> list[str]:
-    _, separator, raw_payload = prompt.partition("\n")
-    if not separator:
-        return []
-    try:
-        payload = json.loads(raw_payload)
-    except json.JSONDecodeError:
-        return []
-    if not isinstance(payload, dict):
+    payload = _hailo_bounded_prompt_payload(prompt)
+    if payload is None:
         return []
     raw_cards = payload.get("evidence_delta") or payload.get("evidence_cards")
     if not isinstance(raw_cards, list):
@@ -18138,6 +18293,50 @@ def _priority_exact_evidence_cards(
         if priority >= 100 and str(card.key_values.get("field_answer") or "").strip():
             exact_cards.append(card)
     return exact_cards or evidence_cards
+
+
+def _verify_hailo_bounded_synthesis(
+    bounded_runtime: BoundedAgentRuntime,
+    output: str,
+    *,
+    evidence_cards: list[EvidenceCard],
+) -> GroundingVerification:
+    """Apply citation checks plus semantic polarity checks to Hailo output."""
+
+    verification = bounded_runtime.verify_synthesis(
+        output,
+        evidence_cards=evidence_cards,
+    )
+    exact_answers = [
+        str(card.key_values.get("field_answer") or "").strip()
+        for card in evidence_cards
+        if _hailo_verified_field_answer_priority(card.key_values) >= 100
+        and str(card.key_values.get("field_answer") or "").strip()
+    ]
+    exact_grounding = " ".join(exact_answers)
+    semantic_conflict = _model_output_inverts_explicit_negation(
+        output,
+        exact_grounding,
+    ) or _model_output_overstates_undefined_variation(output, exact_grounding)
+    if not exact_answers or not semantic_conflict:
+        return verification
+    return verification.model_copy(
+        update={
+            "passed": False,
+            "output_disposition": "needs_repair",
+            "rejected_draft_claims": list(
+                dict.fromkeys([*verification.rejected_draft_claims, output])
+            ),
+            "repair_items": list(
+                dict.fromkeys(
+                    [
+                        *verification.repair_items,
+                        "contradicts_priority_exact_field_answer",
+                    ]
+                )
+            ),
+        }
+    )
 
 
 def _hailo_completed_sentence_count(value: str) -> int:
@@ -18283,10 +18482,13 @@ _HAILO_HIGH_VALUE_EVIDENCE_FIELDS = frozenset(
         "candidate_id",
         "completed_at",
         "count",
+        "checkpoint_count",
         "decision",
         "display_label",
         "distance_km",
         "distance_m",
+        "elevation_min_m",
+        "elevation_max_m",
         "field_answer",
         "field_answer_source_ref",
         "label",
@@ -18297,10 +18499,10 @@ _HAILO_HIGH_VALUE_EVIDENCE_FIELDS = frozenset(
         "nearest_checkpoint",
         "nearest_mileage_anchor",
         "primary_gpx_filename",
+        "point_count",
         "profile",
         "project_id",
         "readable_location",
-        "result_count",
         "risk_bucket",
         "route_name",
         "score",
@@ -18308,10 +18510,13 @@ _HAILO_HIGH_VALUE_EVIDENCE_FIELDS = frozenset(
         "segment_join_method",
         "segment_join_status",
         "segment_label",
+        "segment_count",
         "segment_risk_summary",
         "source_gpx",
         "status",
         "summary_fields",
+        "total_ascent_m",
+        "total_descent_m",
         "warning_count",
         "warnings",
     }
@@ -18324,16 +18529,10 @@ def _compact_hailo_bounded_synthesis_prompt(
     system_prompt: str,
     max_input_tokens: int,
 ) -> str:
-    """Fit verified evidence to the Hailo model's external context window."""
+    """Fit evidence to the configured Hailo input-packing envelope."""
 
-    _, separator, raw_payload = prompt.partition("\n")
-    if not separator:
-        return prompt
-    try:
-        payload = json.loads(raw_payload)
-    except json.JSONDecodeError:
-        return prompt
-    if not isinstance(payload, dict):
+    payload = _hailo_bounded_prompt_payload(prompt)
+    if payload is None:
         return prompt
 
     marker = prompt.split("\n", 1)[0]
@@ -18341,18 +18540,30 @@ def _compact_hailo_bounded_synthesis_prompt(
     if marker == "SCOUT_BOUNDED_SYNTHESIS_REPAIR_V1":
         raw_cards = payload.get("evidence_delta") or raw_cards
     cards = raw_cards if isinstance(raw_cards, list) else []
-    fact_limit = max(2, min(8, 24 // max(1, len(cards))))
     compact_cards = [
-        _compact_hailo_evidence_card(card, fact_limit=fact_limit)
+        _compact_hailo_evidence_card(card, fact_limit=None)
         for card in cards
         if isinstance(card, dict)
     ]
+    for card in compact_cards:
+        values = dict(card.get("key_values") or {})
+        omitted_paths = []
+        for path, value in tuple(values.items()):
+            if not isinstance(value, str):
+                continue
+            if _estimate_hailo_chat_input_tokens(
+                system_prompt, json.dumps({path: value}, ensure_ascii=False)
+            ) > max_input_tokens:
+                values.pop(path)
+                omitted_paths.append(path)
+        card["key_values"] = values
+        if omitted_paths:
+            card["omitted_fact_paths"] = omitted_paths
     compact_cards.sort(
         key=lambda card: (
             -int(card.get("verified_field_answer_priority") or 0),
             0 if card.get("verified_field_answer") else 1,
             len(card.get("missing_fields") or []),
-            str(card.get("tool_id") or ""),
         )
     )
     has_priority_exact_card = any(
@@ -18360,6 +18571,28 @@ def _compact_hailo_bounded_synthesis_prompt(
         and bool(card.get("verified_field_answer"))
         for card in compact_cards
     )
+    # The exact-answer contract already excludes secondary narrative. Remove
+    # duplicate prose and repeated envelope metadata before losing any facts.
+    for card in compact_cards:
+        values = dict(card.get("key_values") or {})
+        if values.get("field_answer") == card.get("verified_field_answer"):
+            values.pop("field_answer", None)
+        if has_priority_exact_card and int(
+            card.get("verified_field_answer_priority") or 0
+        ) < 100:
+            card.pop("verified_field_answer", None)
+            card.pop("claim_summary", None)
+        elif card.get("verified_field_answer"):
+            card.pop("claim_summary", None)
+        card["key_values"] = values
+        card.pop("result_count", None)
+        card.pop("candidate_only", None)
+        card.pop("runtime_safety_truth", None)
+        if not card.get("verified_field_answer_priority"):
+            card.pop("verified_field_answer_priority", None)
+        for key in tuple(card):
+            if card[key] == "" or card[key] == [] or card[key] == {}:
+                card.pop(key)
     compact_payload: dict[str, Any] = {
         "question": _truncate_utf8(str(payload.get("question") or ""), 360),
         "evidence_cards": compact_cards,
@@ -18369,15 +18602,13 @@ def _compact_hailo_bounded_synthesis_prompt(
             if str(item).strip()
         ],
         "answer_contract": (
-            "只用 evidence_cards 事實，以繁中三句內直接回答。"
-            "verified_field_answer_priority=100 是封閉的精確工具結論；必須保留其全部子句，"
-            "不得加入同卡其他欄位、其他卡片的相似欄位或自行推導關係。"
-            "unavailable/None 就是答案，禁止估值。"
-            "synthetic eval fixture 必須明說不是 live sensor snapshot。"
-            "每句只引用最直接的一個 source_ref；缺失只可引用 missing_evidence。"
+            "繁中直接答。priority=100 的 verified_field_answer 必須保留全部子句，"
+            "禁止混用其他欄位或推估。保留單位、unavailable、None、False、缺失與時效；"
+            "fixture/歷史資料不是當下觀測。每句只引用直接 source_ref；"
             "禁止把未使用的 source_refs 單獨列成引用句。"
-            "candidate evidence 不是 runtime safety truth。"
         ),
+        "candidate_only": True,
+        "runtime_safety_truth": False,
     }
     if marker == "SCOUT_BOUNDED_SYNTHESIS_REPAIR_V1":
         compact_payload = {
@@ -18417,27 +18648,60 @@ def _compact_hailo_bounded_synthesis_prompt(
     if _estimate_hailo_chat_input_tokens(system_prompt, compact) <= max_input_tokens:
         return compact
 
-    # Keep every selected tool represented while progressively shedding the
-    # least relevant facts. The original evidence cards remain in the runtime
-    # ledger and verifier; only the external Hailo request is compacted.
+    # Source aliases can occupy more space than the measured values. Preserve
+    # the primary document and shed alias overhead before removing facts.
+    compact_cards = [
+        {**card, "source_refs": list(card.get("source_refs") or [])[:1]}
+        for card in compact_cards
+    ]
+    compact_payload = {**compact_payload, "evidence_cards": compact_cards}
+    compact = _hailo_bounded_prompt_json(compact_payload, marker=marker)
+
+    # Priority-100 field answers already contain the bounded facts needed for
+    # synthesis. Shed unrelated cards before any fallback can erase them.
+    if (
+        has_priority_exact_card
+        and _estimate_hailo_chat_input_tokens(system_prompt, compact)
+        > max_input_tokens
+    ):
+        compact_cards = [
+            card
+            for card in compact_cards
+            if int(card.get("verified_field_answer_priority") or 0) >= 100
+            and bool(card.get("verified_field_answer"))
+        ]
+        compact_payload = {
+            **compact_payload,
+            "evidence_cards": compact_cards,
+            "missing_evidence": [],
+        }
+        compact = _hailo_bounded_prompt_json(compact_payload, marker=marker)
+
+    # Preserve each tool and its highest-priority facts. Binary search avoids
+    # serializing a large artifact once for every discarded scalar field.
     reduced_cards = compact_cards
-    while _estimate_hailo_chat_input_tokens(system_prompt, compact) > max_input_tokens:
-        candidates = [
-            (len(card.get("key_values") or {}), index)
-            for index, card in enumerate(reduced_cards)
-            if isinstance(card.get("key_values"), dict)
-            and len(card.get("key_values") or {}) > 1
-        ]
-        if not candidates:
-            break
-        _, index = max(candidates)
-        card = reduced_cards[index]
-        key_values = dict(card.get("key_values") or {})
-        key_values.pop(next(reversed(key_values)))
-        reduced_cards = [
-            item if item_index != index else {**item, "key_values": key_values}
-            for item_index, item in enumerate(reduced_cards)
-        ]
+    if _estimate_hailo_chat_input_tokens(system_prompt, compact) > max_input_tokens:
+        fact_lists = [list((card.get("key_values") or {}).items()) for card in compact_cards]
+
+        def retain_facts(count: int) -> list[dict[str, Any]]:
+            return [
+                {**card, "key_values": dict(facts[:count])}
+                for card, facts in zip(compact_cards, fact_lists, strict=True)
+            ]
+
+        low, high = 1, max((len(facts) for facts in fact_lists), default=1)
+        reduced_cards = retain_facts(1)
+        while low <= high:
+            midpoint = (low + high) // 2
+            candidate_cards = retain_facts(midpoint)
+            candidate = _hailo_bounded_prompt_json(
+                {**compact_payload, "evidence_cards": candidate_cards}, marker=marker
+            )
+            if _estimate_hailo_chat_input_tokens(system_prompt, candidate) <= max_input_tokens:
+                reduced_cards = candidate_cards
+                low = midpoint + 1
+            else:
+                high = midpoint - 1
         compact_payload = {**compact_payload, "evidence_cards": reduced_cards}
         compact = _hailo_bounded_prompt_json(compact_payload, marker=marker)
 
@@ -18493,7 +18757,8 @@ def _compact_hailo_bounded_synthesis_prompt(
             "evidence_cards": [
                 {"tool_id": card.get("tool_id", "unknown")} for card in reduced_cards
             ],
-            "answer_contract": "只用證據直接短答。",
+            "evidence_omitted_due_to_external_context": True,
+            "answer_contract": "此頁僅有工具名稱，沒有可回答的事實；必須取得證據後才能回答。",
         }
         compact = _hailo_bounded_prompt_json(compact_payload, marker=marker)
 
@@ -18503,7 +18768,7 @@ def _compact_hailo_bounded_synthesis_prompt(
 def _compact_hailo_evidence_card(
     card: dict[str, Any],
     *,
-    fact_limit: int,
+    fact_limit: int | None,
 ) -> dict[str, Any]:
     key_values = card.get("key_values")
     key_values = key_values if isinstance(key_values, dict) else {}
@@ -18531,6 +18796,10 @@ def _compact_hailo_evidence_card(
             *exact_source_refs,
             *(item for item in source_refs if item not in exact_source_refs),
         ]
+    else:
+        # A named top-level summary has stronger provenance than an incidental
+        # nested reference (for example a resume-segment sidecar).
+        source_refs.sort(key=lambda ref: Path(ref).stem not in key_values)
 
     if verified_field_answer and verified_field_answer_priority >= 100:
         return {
@@ -18548,7 +18817,7 @@ def _compact_hailo_evidence_card(
     evidence_records = card.get("evidence_records")
     record_facts: list[tuple[int, str, Any]] = []
     if isinstance(evidence_records, list):
-        for index, record in enumerate(evidence_records[:3]):
+        for index, record in enumerate(evidence_records):
             if not isinstance(record, dict):
                 continue
             record_ref = str(record.get("source_ref") or "").strip()
@@ -18565,7 +18834,7 @@ def _compact_hailo_evidence_card(
         *_hailo_evidence_fact_candidates(key_values, path=""),
         *record_facts,
     ]
-    facts.sort(key=lambda item: (-item[0], item[1]))
+    facts.sort(key=lambda item: (-item[0], "[" in item[1], item[1]))
     compact_values: dict[str, Any] = {}
     if verified_field_answer:
         compact_values["field_answer"] = verified_field_answer
@@ -18574,7 +18843,7 @@ def _compact_hailo_evidence_card(
         if key in compact_values:
             continue
         compact_values[key] = value
-        if len(compact_values) >= fact_limit:
+        if fact_limit is not None and len(compact_values) >= fact_limit:
             break
     return {
         "tool_id": str(card.get("tool_id") or "unknown"),
@@ -18623,8 +18892,6 @@ def _hailo_evidence_fact_candidates(
     path: str,
     depth: int = 0,
 ) -> list[tuple[int, str, Any]]:
-    if depth > 4:
-        return []
     if isinstance(value, dict):
         candidates: list[tuple[int, str, Any]] = []
         for key, child in value.items():
@@ -18642,7 +18909,7 @@ def _hailo_evidence_fact_candidates(
         return candidates
     if isinstance(value, list):
         candidates = []
-        for index, child in enumerate(value[:3]):
+        for index, child in enumerate(value):
             child_path = f"{path}[{index}]" if path else f"item[{index}]"
             candidates.extend(
                 _hailo_evidence_fact_candidates(
@@ -18652,14 +18919,14 @@ def _hailo_evidence_fact_candidates(
                 )
             )
         return candidates
-    if value is None or isinstance(value, bool):
-        return []
     leaf = path.rsplit(".", 1)[-1].split("[", 1)[0]
     priority = 100 if leaf in _HAILO_HIGH_VALUE_EVIDENCE_FIELDS else 10
-    if isinstance(value, str):
-        if priority < 100 and len(value.encode("utf-8")) > 240:
+    if value is None or isinstance(value, bool):
+        if value is None and leaf in {"field_answer", "field_answer_source_ref"}:
             return []
-        normalized: Any = _truncate_utf8(value.strip(), 360)
+        return [(priority, path, value)]
+    if isinstance(value, str):
+        normalized: Any = value.strip()
         if not normalized:
             return []
     elif isinstance(value, int | float):
