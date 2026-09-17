@@ -12826,6 +12826,12 @@
       runtime_audit: ["runtime-audit"],
     });
     let diagnosticCheck037Runner = null;
+    const SCOUT_AI_SCORE_DIAGNOSTICS = Object.freeze([
+      {id: "AI-SCORE-001", family: "answer_quality", title: "回答品質分數", description: "由 Scout AI 專用 evaluator 測試回答是否完整、正確並符合問題；不屬於 Dashboard correctness PASS/FAIL。", recorded: "未在本頁執行"},
+      {id: "AI-SCORE-002", family: "tool_grounding", title: "工具與證據整合分數", description: "測試工具選擇、workspace retrieval、Weather／CWA／GEE／GPX 證據與回答整合。", recorded: "未在本頁執行"},
+      {id: "AI-SCORE-003", family: "domain_reasoning", title: "戶外領域推理分數", description: "測試六力、route context、pace、risk、permission、navigation 等候選分析能力。", recorded: "未在本頁執行"},
+      {id: "AI-SCORE-004", family: "model_runtime", title: "模型 runtime 能力分數", description: "測試 DeepSeek、retrieval、model gateway、Praison MCP 與回答流程的能力與退化。", recorded: "未在本頁執行"},
+    ]);
     const DASHBOARD_DIAGNOSTIC_CASES = Object.freeze([
       {id: "DASH-001", category: "Global / Overview", title: "Dashboard 啟動、入口與必要 API", description: "確認 Dashboard、workspace 與 project read APIs 可用。", run: diagnosticCheck001},
       {id: "DASH-002", category: "Global / Overview", title: "全站導覽、路由與返回狀態", description: "確認現有 route contract 與 Diagnostic 導覽位置。", run: diagnosticCheck002},
@@ -20762,6 +20768,35 @@
       `;
     }
 
+    function renderScoutAIScoreSection() {
+      return `
+        <section class="diagnostic-category diagnostic-ai-score" data-diagnostic-purpose="scout-ai-score">
+          <div class="diagnostic-category-header">
+            <div>
+              <h3>Scout AI Score｜模型能力分數</h3>
+              <p class="diagnostic-category-description">這是獨立的能力評測類別。分數可有失敗案例，不以 100% PASS 為目標；模型、工具與證據缺口會在專用 evaluator 中分開記錄。</p>
+            </div>
+            <span>${SCOUT_AI_SCORE_DIAGNOSTICS.length} score families</span>
+          </div>
+          <div class="diagnostic-case-list">
+            ${SCOUT_AI_SCORE_DIAGNOSTICS.map(item => `
+              <article class="diagnostic-case diagnostic-score-card" data-diagnostic-score-family="${escapeHtml(item.family)}">
+                <div class="diagnostic-case-copy">
+                  <span class="diagnostic-case-id">${escapeHtml(item.id)} · ${escapeHtml(item.family)}</span>
+                  <h4>${escapeHtml(item.title)}</h4>
+                  <p>${escapeHtml(item.description)}</p>
+                </div>
+                <div class="diagnostic-result">
+                  <div class="diagnostic-status"><span class="diagnostic-light diagnostic-score-light" aria-hidden="true"></span><span>Score evaluator</span></div>
+                  <p class="diagnostic-result-detail">${escapeHtml(item.recorded)}；不納入下方 Correctness Gate 統計。</p>
+                </div>
+              </article>
+            `).join("")}
+          </div>
+        </section>
+      `;
+    }
+
     async function diagnosticAdvancedAssistantReplay() {
       const production = [submitAgentQuestion, formatAgentEvalAnswer, displayAgentAnswer, agentResponseMeta,
         agentGroundingGuard, agentAiHatGenerationMode, agentAiHatSkillId, agentAiHatTypedDecision,
@@ -20960,6 +20995,16 @@
                 <strong data-diagnostic-summary="${escapeHtml(key)}">${escapeHtml(value)}</strong>
               </div>
             `).join("")}
+          </section>
+          ${renderScoutAIScoreSection()}
+          <section class="diagnostic-category diagnostic-correctness-heading" data-diagnostic-purpose="correctness-gate">
+            <div class="diagnostic-category-header">
+              <div>
+                <h3>Correctness Gate｜程式與資料正確性</h3>
+                <p class="diagnostic-category-description">下列 Dashboard Diagnostic 只檢查 UI、workspace、地圖、artifact、runtime、release 與安全邊界；適用項目必須全部 PASS 才能宣稱完成。</p>
+              </div>
+              <span>${DASHBOARD_DIAGNOSTIC_CASES.length} checks</span>
+            </div>
           </section>
           ${renderDiagnosticAdvanced()}
           ${categories.map(category => {
@@ -26297,6 +26342,7 @@
 
     window.scoutDashboardDiagnostics = Object.freeze({
       ...(DIAGNOSTIC_MAP_PROBE ? {dispose: diagnosticDisposeRudyProbe} : {}),
+      aiScoreCases: SCOUT_AI_SCORE_DIAGNOSTICS.map(({id, family, title, description}) => ({id, family, title, description, purpose: "scout_ai_score"})),
       cases: DASHBOARD_DIAGNOSTIC_CASES.map(({id, category, title, description}) => ({id, category, title, description})),
       mapSurfaces: DASHBOARD_MAP_SURFACES.map(
         ({id, route, label, family, basemapPolicy}) => ({
