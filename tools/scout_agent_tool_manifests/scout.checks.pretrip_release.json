@@ -20,7 +20,7 @@
   "allowed_reads": [
     "repo.release_check.phase4_pretrip",
     "pretrip.workspace.project",
-    "pretrip.fixture.chilai_nanhua_day1",
+    "pretrip.workspace.selected_project",
     "docs.specs.pretrip"
   ],
   "allowed_writes": [],

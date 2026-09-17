@@ -212,7 +212,7 @@ class DebugPageTests(unittest.TestCase):
         self.assertNotIn("map-dock", html)
         self.assertIn('role="button"', html)
         self.assertIn('tabindex="0"', html)
-        self.assertIn('aria-label="chilai_nanhua_day1 debug evidence map"', html)
+        self.assertIn('aria-label="Loaded workspace debug evidence map"', html)
         self.assertIn("background: #111820;", html)
         self.assertIn("renderDebugEvidenceMap", html)
 
@@ -889,9 +889,11 @@ class DebugPageTests(unittest.TestCase):
             "`/admin/pretrip/projects/${encodeURIComponent(PRETRIP_PROJECT_ID)}/debug-projection-events`",
             html,
         )
-        self.assertIn('const DEFAULT_PRETRIP_PROJECT_ID = "chilai_nanhua_day1"', html)
+        self.assertIn('const PRETRIP_PROJECT_ID_PARAM = new URLSearchParams(window.location.search).get("projectId") || "";', html)
         self.assertIn('new URLSearchParams(window.location.search).get("projectId")', html)
         self.assertIn("const PRETRIP_PROJECT_ID = /^[A-Za-z0-9_.-]+$/.test(PRETRIP_PROJECT_ID_PARAM)", html)
+        self.assertIn("WORKSPACE_REQUIRED_MESSAGE", html)
+        self.assertIn("if (!PRETRIP_PROJECT_ID)", html)
         self.assertIn("PRETRIP_DEBUG_PROJECTION_PATH", html)
         self.assertIn("PRETRIP_DEBUG_PROJECTION_EVENTS_PATH", html)
         self.assertIn("loadProjectedDebugEventPayload", html)

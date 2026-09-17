@@ -12737,7 +12737,10 @@
     "use strict";
     const DIAGNOSTIC_MAP_PROBE = new URLSearchParams(window.location.search).get("diagnosticMapProbe") === "1";
 
-    const PROJECT_ID = "chilai_nanhua_day1_scoutAI";
+    // A Dashboard instance has no implicit workspace. The URL/local selection
+    // is only a request; all data work waits for the matching catalog entry.
+    const PROJECT_ID = "";
+    const WORKSPACE_REQUIRED_MESSAGE = "A loaded workspace is required before Dashboard data or diagnostics can run.";
     const ASSISTANT_STATUS_PATH = "/assistant/status";
     const ASSISTANT_QUERY_PATH = "/assistant/query";
     const ASSISTANT_QUERY_TIMEOUT_MS = 240000;
@@ -13748,15 +13751,22 @@
       bindNavigation();
       bindMobileNavigation();
       bindAgentChatControls();
-      setRoute(routeFromHash());
-      if (state.route === "outdoor-route-context") void loadDataScope("briefing");
-      void loadConnectedPreparationStatus();
-      loadWorkspaceCatalog().finally(() => loadData()).finally(() => {
-        if (state.route === "outdoor-route-context") refreshCurrentDataView();
-        else if (!routeUsesEmbeddedFrame(state.route)) setRoute(state.route, {loadRouteData: false});
+      const initialRoute = routeFromHash();
+      // Render only the static shell until the catalog identifies the selected
+      // workspace. This prevents an early hash route from creating a map or
+      // issuing a data request against a stale/default project.
+      setRoute("home");
+      void bootstrapDashboardWorkspace(initialRoute);
+      window.addEventListener("hashchange", () => {
+        const requestedRoute = routeFromHash();
+        if (workspaceIdentityReady() || ["home", "settings"].includes(requestedRoute)) {
+          setRoute(requestedRoute, {loadRouteData: true});
+        } else {
+          state.route = requestedRoute;
+          const status = document.getElementById("dashboardRouteStatus");
+          if (status) status.textContent = `${projectId() || "workspace"} · loading workspace`;
+        }
       });
-      void rebuildPermissionTruthAndSyncOfflineIntents();
-      window.addEventListener("hashchange", () => setRoute(routeFromHash(), {loadRouteData: true}));
       window.addEventListener("online", () => {
         state.emergencyDecisionStatus = "Online · rebuilding server truth before offline-intent sync.";
         void rebuildPermissionTruthAndSyncOfflineIntents();
@@ -13776,7 +13786,45 @@
     function projectId() {
       const paramProjectId = new URLSearchParams(window.location.search).get("projectId") || "";
       if (/^[A-Za-z0-9_.-]+$/.test(paramProjectId)) return paramProjectId;
-      return localStorage.getItem("scout.dashboardProjectId") || localStorage.getItem("scout.emergencyProjectId") || PROJECT_ID;
+      const storedProjectId = localStorage.getItem("scout.dashboardProjectId") || localStorage.getItem("scout.emergencyProjectId") || "";
+      return /^[A-Za-z0-9_.-]+$/.test(storedProjectId) ? storedProjectId : "";
+    }
+
+    function workspaceIdentityReady(candidateProjectId = projectId()) {
+      // Isolated function replays provide no Dashboard state object; their
+      // selected id remains the explicit test fixture. Production always has
+      // state and therefore requires a catalog-backed identity.
+      if (typeof state === "undefined") return Boolean(candidateProjectId);
+      return Boolean(
+        candidateProjectId
+        && state.workspaceCatalogStatus === "ready"
+        && state.workspaceContext?.project_id === candidateProjectId,
+      );
+    }
+
+    function requireLoadedWorkspaceProjectId() {
+      const selectedProjectId = projectId();
+      if (!workspaceIdentityReady(selectedProjectId)) {
+        throw new Error(WORKSPACE_REQUIRED_MESSAGE);
+      }
+      return state.workspaceContext.project_id;
+    }
+
+    async function bootstrapDashboardWorkspace(initialRoute = "home") {
+      await loadWorkspaceCatalog();
+      if (!workspaceIdentityReady()) {
+        state.dataScopeErrors = {workspace: WORKSPACE_REQUIRED_MESSAGE};
+        refreshCurrentDataView();
+        return false;
+      }
+      setRoute(initialRoute, {loadRouteData: false});
+      if (state.route === "outdoor-route-context") await loadDataScope("briefing");
+      await loadConnectedPreparationStatus();
+      await loadData();
+      await rebuildPermissionTruthAndSyncOfflineIntents();
+      if (state.route === "outdoor-route-context") refreshCurrentDataView();
+      else if (!routeUsesEmbeddedFrame(state.route)) setRoute(state.route, {loadRouteData: false});
+      return true;
     }
 
     function completedTripRecordingsPath() {
@@ -14391,6 +14439,7 @@
     }
 
     async function rebuildPermissionTruthAndSyncOfflineIntents() {
+      requireLoadedWorkspaceProjectId();
       await refreshEmergencyOfflineIntentCount();
       if (!state.emergencyOfflineIntentCount || navigator.onLine === false) return;
       state.emergencyOfflineSyncStatus = "Rebuilding current server truth before sync…";
@@ -14454,7 +14503,7 @@
     }
 
     async function loadConnectedPreparationStatus() {
-      const expectedProjectId = projectId();
+      const expectedProjectId = requireLoadedWorkspaceProjectId();
       const expectedApiBase = apiBase();
       const project = encodeURIComponent(expectedProjectId);
       try {
@@ -14484,7 +14533,7 @@
     }
 
     async function triggerDashboardConnectedPreparation(reason, {force = false} = {}) {
-      const expectedProjectId = projectId();
+      const expectedProjectId = requireLoadedWorkspaceProjectId();
       const expectedApiBase = apiBase();
       const project = encodeURIComponent(expectedProjectId);
       try {
@@ -14575,6 +14624,7 @@
     }
 
     async function loadDataForRoute(route, {force = false} = {}) {
+      requireLoadedWorkspaceProjectId();
       document.getElementById("dashboardRouteStatus").textContent = projectId();
       const scopes = dataScopesForRoute(route);
       if (scopes.includes("analysis_subject")) {
@@ -14596,6 +14646,7 @@
     }
 
     async function loadDataScope(scope, {force = false} = {}) {
+      requireLoadedWorkspaceProjectId();
       if (dataScopePromises.has(scope)) return dataScopePromises.get(scope);
       if (force) loadedDataScopes.delete(scope);
       if (!force && loadedDataScopes.has(scope)) return;
@@ -26229,6 +26280,11 @@
       });
       updateDiagnosticDom(caseId);
       try {
+        const loadedWorkspaceProjectId = requireLoadedWorkspaceProjectId();
+        diagnosticRequire(
+          resolvedPretripProjectId() === loadedWorkspaceProjectId,
+          "Diagnostic workspace identity is not the loaded workspace.",
+        );
         const outcome = await item.run();
         diagnosticRequire(!scopeKey || scopeKey === diagnosticCaseScopeKey(caseId), "專案或檢查範圍已變更，請重新體檢。");
         const mapEvidence = mapEvidenceFields(outcome);

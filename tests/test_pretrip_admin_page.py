@@ -886,7 +886,7 @@ def test_pretrip_admin_page_has_wearable_inventory_energy_controls():
     assert "/admin/pretrip/projects/${PROJECT_ID}/refresh-companion-match" in html
     assert "/admin/pretrip/projects/${PROJECT_ID}/refresh-energy-feedback" in html
     assert 'id="routeContextBriefingLink"' in html
-    assert "/admin/pretrip/projects/chilai_nanhua_day1/briefings/route-context" in html
+    assert 'href="#"' in html
     assert "candidate_capsule_paths" in html
     assert "medical_diagnosis: false" in html
     assert "phase1_runtime_safety_truth: false" in html
@@ -896,9 +896,10 @@ def test_pretrip_admin_page_has_wearable_inventory_energy_controls():
 def test_pretrip_admin_page_fetches_fixture_backed_read_only_project_api():
     html = PAGE.read_text(encoding="utf-8")
 
-    assert 'const DEFAULT_PROJECT_ID = "chilai_nanhua_day1"' in html
     assert "new URLSearchParams(window.location.search).get(\"projectId\")" in html
     assert "const PROJECT_ID = /^[A-Za-z0-9_.-]+$/.test(PROJECT_ID_PARAM)" in html
+    assert "WORKSPACE_REQUIRED_MESSAGE" in html
+    assert "if (!PROJECT_ID)" in html
     assert "encodeURIComponent(PROJECT_ID)" in html
     assert "/admin/pretrip/projects/${PROJECT_ID}" in html
     assert "apiBase()" in html

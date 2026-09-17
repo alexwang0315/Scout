@@ -401,6 +401,21 @@ def _dashboard_body_index_project_id(value: str) -> bool:
     )
 
 
+def _require_dashboard_body_index_project_id(value: str | None) -> str:
+    project_id = str(value or "").strip()
+    if not project_id:
+        raise HTTPException(
+            status_code=400,
+            detail="project_id is required; Dashboard must use the loaded workspace",
+        )
+    if not _dashboard_body_index_project_id(project_id):
+        raise HTTPException(
+            status_code=422,
+            detail="project_id may only contain letters, numbers, dot, underscore, and dash",
+        )
+    return project_id
+
+
 def _dashboard_body_index_store_path(project_id: str) -> Path:
     if not _dashboard_body_index_project_id(project_id):
         raise HTTPException(
@@ -1890,7 +1905,7 @@ class DashboardTripIntakeValidateRequest(BaseModel):
 class DashboardBodyIndexImportRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    project_id: str = Field(default="chilai_nanhua_day1_scoutAI", min_length=1)
+    project_id: str = Field(min_length=1)
     source_dir: str | None = Field(default=None, min_length=1)
     confirm_import: bool = False
     operator_alias: str = Field(default="dashboard_operator", min_length=1)
@@ -1911,7 +1926,7 @@ class DashboardBodyIndexWatchRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     confirm_watch: bool = False
-    project_id: str = Field(default="chilai_nanhua_day1_scoutAI", min_length=1)
+    project_id: str = Field(min_length=1)
     source_dir: str | None = Field(default=None, min_length=1)
     interval_seconds: int = Field(default=300, ge=1, le=86_400)
     operator_alias: str = Field(default="dashboard_operator", min_length=1)
@@ -2903,9 +2918,9 @@ def create_admin_router(
 
     @router.get("/dashboard/body-index")
     def scout_dashboard_body_index(
-        project_id: str = "chilai_nanhua_day1_scoutAI",
+        project_id: str | None = None,
     ) -> Response:
-        project_id = project_id.strip()
+        project_id = _require_dashboard_body_index_project_id(project_id)
         snapshot = _load_dashboard_body_index_snapshot(project_id)
         return Response(
             json.dumps(snapshot, ensure_ascii=False),
@@ -3248,9 +3263,9 @@ def create_admin_router(
 
     @router.get("/dashboard/body-index/watch/status")
     def scout_dashboard_body_index_watch_status(
-        project_id: str = "chilai_nanhua_day1_scoutAI",
+        project_id: str | None = None,
     ) -> Response:
-        project_id = project_id.strip()
+        project_id = _require_dashboard_body_index_project_id(project_id)
         status = _dashboard_body_index_watch_status(project_id)
         return Response(
             json.dumps(status, ensure_ascii=False),
@@ -8112,8 +8127,12 @@ def create_admin_router(
         project_id: str,
         request: PreTripRouteNoteDispositionRequest,
     ) -> dict[str, Any]:
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
         try:
-            build_pretrip_admin_view(project_id)
+            build_pretrip_admin_view(project_id, project_root=project_root)
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="Pre-trip project not found") from exc
 
@@ -8127,10 +8146,6 @@ def create_admin_router(
                 ),
             )
 
-        project_root = _pretrip_workspace_project_root(
-            pretrip_workspace_root,
-            project_id=project_id,
-        )
         if project_root is None:
             raise HTTPException(
                 status_code=409,
@@ -8322,15 +8337,15 @@ def create_admin_router(
 
     @router.post("/pretrip/projects/{project_id}/review-decision-apply-plan")
     def pretrip_review_decision_apply_plan(project_id: str) -> dict[str, Any]:
-        try:
-            build_pretrip_admin_view(project_id)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="Pre-trip project not found") from exc
-
         project_root = _pretrip_workspace_project_root(
             pretrip_workspace_root,
             project_id=project_id,
         )
+        try:
+            build_pretrip_admin_view(project_id, project_root=project_root)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found") from exc
+
         if project_root is None:
             raise HTTPException(
                 status_code=409,
@@ -8381,15 +8396,15 @@ def create_admin_router(
 
     @router.post("/pretrip/projects/{project_id}/departure-reviewed-candidates")
     def pretrip_departure_reviewed_candidates(project_id: str) -> dict[str, Any]:
-        try:
-            build_pretrip_admin_view(project_id)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="Pre-trip project not found") from exc
-
         project_root = _pretrip_workspace_project_root(
             pretrip_workspace_root,
             project_id=project_id,
         )
+        try:
+            build_pretrip_admin_view(project_id, project_root=project_root)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found") from exc
+
         if project_root is None:
             raise HTTPException(
                 status_code=409,
@@ -8445,15 +8460,15 @@ def create_admin_router(
 
     @router.post("/pretrip/projects/{project_id}/route-note-reviewed-assumptions")
     def pretrip_route_note_reviewed_assumptions(project_id: str) -> dict[str, Any]:
-        try:
-            build_pretrip_admin_view(project_id)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="Pre-trip project not found") from exc
-
         project_root = _pretrip_workspace_project_root(
             pretrip_workspace_root,
             project_id=project_id,
         )
+        try:
+            build_pretrip_admin_view(project_id, project_root=project_root)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found") from exc
+
         if project_root is None:
             raise HTTPException(
                 status_code=409,
@@ -8506,15 +8521,15 @@ def create_admin_router(
 
     @router.post("/pretrip/projects/{project_id}/expert-contribution-apply-plan")
     def pretrip_expert_contribution_apply_plan(project_id: str) -> dict[str, Any]:
-        try:
-            build_pretrip_admin_view(project_id)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="Pre-trip project not found") from exc
-
         project_root = _pretrip_workspace_project_root(
             pretrip_workspace_root,
             project_id=project_id,
         )
+        try:
+            build_pretrip_admin_view(project_id, project_root=project_root)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found") from exc
+
         if project_root is None:
             raise HTTPException(
                 status_code=409,
@@ -8571,15 +8586,15 @@ def create_admin_router(
 
     @router.post("/pretrip/projects/{project_id}/expert-contribution-workspace-apply-result")
     def pretrip_expert_contribution_workspace_apply_result(project_id: str) -> dict[str, Any]:
-        try:
-            build_pretrip_admin_view(project_id)
-        except KeyError as exc:
-            raise HTTPException(status_code=404, detail="Pre-trip project not found") from exc
-
         project_root = _pretrip_workspace_project_root(
             pretrip_workspace_root,
             project_id=project_id,
         )
+        try:
+            build_pretrip_admin_view(project_id, project_root=project_root)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="Pre-trip project not found") from exc
+
         if project_root is None:
             raise HTTPException(
                 status_code=409,

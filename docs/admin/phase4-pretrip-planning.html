@@ -2000,7 +2000,7 @@
               </div>
               <div class="import-gpx-field">
                 <label for="importTemplateRoot">Template project root</label>
-                <input id="importTemplateRoot" type="text" autocomplete="off" placeholder="/Users/alexwang0315/scout-fusion/tests/fixtures/pretrip/projects/chilai_nanhua_day1…">
+                <input id="importTemplateRoot" type="text" autocomplete="off" placeholder="Select a template project root…">
               </div>
             </div>
             <div class="import-gpx-grid">
@@ -2192,7 +2192,7 @@
           </div>
           <p class="import-gpx-copy">Registry projection only. The UI lists available tools but does not execute skills, call live safety endpoints, or mutate runtime state.</p>
           <div class="import-gpx-actions" aria-label="Route context briefing actions">
-            <a id="routeContextBriefingLink" class="tool-button" href="/admin/pretrip/projects/chilai_nanhua_day1/briefings/route-context" target="_blank" rel="noopener noreferrer" title="Open route context briefing" aria-label="Open route context briefing">Route briefing</a>
+            <a id="routeContextBriefingLink" class="tool-button" href="#" target="_blank" rel="noopener noreferrer" title="Open route context briefing" aria-label="Open route context briefing">Route briefing</a>
           </div>
           <div id="agentSkillsSummary" class="summary-list"></div>
           <div id="agentSkillsList" class="agent-skill-list"></div>
@@ -2252,7 +2252,7 @@
           <h3>Context</h3>
           <ul id="assistantContextList" class="assistant-list">
             <li>surface: pretrip</li>
-            <li>project_id: chilai_nanhua_day1</li>
+            <li>project_id: loading workspace</li>
             <li>selected_artifact_id: selected planning evidence</li>
             <li>provider status hides token values</li>
           </ul>
@@ -2306,11 +2306,11 @@
   <script src="/admin/scout-assistant-ui.js"></script>
   <script src="/admin/scout-maplibre-evidence.js"></script>
   <script>
-    const DEFAULT_PROJECT_ID = "chilai_nanhua_day1";
     const PROJECT_ID_PARAM = new URLSearchParams(window.location.search).get("projectId") || "";
     const PROJECT_ID = /^[A-Za-z0-9_.-]+$/.test(PROJECT_ID_PARAM)
       ? PROJECT_ID_PARAM
-      : DEFAULT_PROJECT_ID;
+      : "";
+    const WORKSPACE_REQUIRED_MESSAGE = "A loaded workspace is required before Pre-trip data or map operations can run.";
     const DASHBOARD_MAP_ONLY = new URLSearchParams(window.location.search).get("mapOnly") === "1";
     const DIAGNOSTIC_MAP_PROBE = new URLSearchParams(window.location.search).get("diagnosticMapProbe") === "1";
     const DIAGNOSTIC_NATIVE_TILE_PROBE = DIAGNOSTIC_MAP_PROBE
@@ -2330,7 +2330,12 @@
       : new Set(INITIAL_LAYER_IDS_PARAM.split(",").map(value => value.trim()).filter(Boolean));
     const routeContextBriefingLink = document.getElementById("routeContextBriefingLink");
     if (routeContextBriefingLink) {
-      routeContextBriefingLink.href = `/admin/pretrip/projects/${encodeURIComponent(PROJECT_ID)}/briefings/route-context`;
+      if (PROJECT_ID) {
+        routeContextBriefingLink.href = `/admin/pretrip/projects/${encodeURIComponent(PROJECT_ID)}/briefings/route-context`;
+      } else {
+        routeContextBriefingLink.setAttribute("aria-disabled", "true");
+        routeContextBriefingLink.addEventListener("click", event => event.preventDefault());
+      }
     }
     const MAP_WIDTH = 1000;
     const MAP_HEIGHT = 720;
@@ -9767,6 +9772,14 @@
       }
     }
     async function load() {
+      if (!PROJECT_ID) {
+        const status = document.getElementById("detailTitle");
+        if (status) status.textContent = WORKSPACE_REQUIRED_MESSAGE;
+        const detail = document.getElementById("detailJson");
+        if (detail) detail.textContent = "Select a workspace from the Dashboard before opening Pre-trip.";
+        publishPretripProjectBridge("degraded", WORKSPACE_REQUIRED_MESSAGE);
+        return;
+      }
       applyInitialLayerSelection();
       bindControls();
       bindCwaWeatherImageryControls();

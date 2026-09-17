@@ -1987,7 +1987,7 @@
     <header>
       <div>
         <h1>Runtime Debug <span class="title-timestamp">2026-06-23 12:13:54 CST</span></h1>
-        <p class="meta">Read-only engineering console aligned to chilai_nanhua_day1 when available.</p>
+        <p class="meta">Read-only engineering console aligned to the loaded workspace.</p>
         <code>/debug/events /debug/state /debug/messages /debug/mobile-wearable/ingress</code>
       </div>
       <div class="boundary">
@@ -2424,8 +2424,8 @@
               data-map-renderer-state="loading"
               data-map-renderer-reason="not_initialized"
             >
-              <div id="runtimeMapLibre" role="application" aria-label="chilai_nanhua_day1 MapLibre debug evidence map" hidden></div>
-              <svg id="runtimeMap" viewBox="0 0 1000 720" role="img" aria-label="chilai_nanhua_day1 debug evidence map">
+              <div id="runtimeMapLibre" role="application" aria-label="Loaded workspace MapLibre debug evidence map" hidden></div>
+              <svg id="runtimeMap" viewBox="0 0 1000 720" role="img" aria-label="Loaded workspace debug evidence map">
               </svg>
               <output id="runtimeMapRendererStatus" role="status" aria-live="polite">Selecting debug map renderer.</output>
               <output id="debugRudyTileStatus" role="status" aria-live="polite">Rudy+TW 圖磚尚未載入。</output>
@@ -2565,11 +2565,11 @@
     const DIAGNOSTIC_NATIVE_TILE_PROBE = DIAGNOSTIC_MAP_PROBE
       && new URLSearchParams(location.search).get("diagnosticNativeTiles") === "1";
     const MAP_WHEEL_ZOOM_ENABLED = new URLSearchParams(location.search).get("wheelZoom") !== "0";
-    const DEFAULT_PRETRIP_PROJECT_ID = "chilai_nanhua_day1";
     const PRETRIP_PROJECT_ID_PARAM = new URLSearchParams(window.location.search).get("projectId") || "";
     const PRETRIP_PROJECT_ID = /^[A-Za-z0-9_.-]+$/.test(PRETRIP_PROJECT_ID_PARAM)
       ? PRETRIP_PROJECT_ID_PARAM
-      : DEFAULT_PRETRIP_PROJECT_ID;
+      : "";
+    const WORKSPACE_REQUIRED_MESSAGE = "A loaded workspace is required before Runtime Debug data or map operations can run.";
     const PRETRIP_DEBUG_PROJECTION_PATH = `/admin/pretrip/projects/${encodeURIComponent(PRETRIP_PROJECT_ID)}/debug-projection`;
     const PRETRIP_DEBUG_PROJECTION_EVENTS_PATH = `/admin/pretrip/projects/${encodeURIComponent(PRETRIP_PROJECT_ID)}/debug-projection-events`;
     function requestedDebugMapRenderer() {
@@ -7992,7 +7992,7 @@
         setText(
           "loadStatus",
           eventResult.projected
-            ? "chilai_nanhua_day1 projection loaded."
+            ? `${PRETRIP_PROJECT_ID} projection loaded.`
             : "Runtime debug snapshots loaded; pretrip projection endpoint unavailable."
         );
       } catch (error) {
@@ -8131,7 +8131,9 @@
     bindCwaWeatherImageryControls();
     bindDebugTabs();
     switchDebugTab(document.querySelector(`[data-tab-target="${debugPageState.selectedTabId}"]`), { syncUrl: false });
-    if (DIAGNOSTIC_MAP_PROBE) {
+    if (!PRETRIP_PROJECT_ID) {
+      setText("loadStatus", WORKSPACE_REQUIRED_MESSAGE);
+    } else if (DIAGNOSTIC_MAP_PROBE) {
       (async () => {
         try {
           debugPageState.projection = await fetchJson(PRETRIP_DEBUG_PROJECTION_PATH);

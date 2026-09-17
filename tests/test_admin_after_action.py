@@ -288,6 +288,7 @@ class AdminAfterActionTests(unittest.TestCase):
                 for item in pretrip_view["evidence_timeline"]["categories"]
             }["mileage"],
         )
+
         first_boss = view["boss_points"]["boss_points"][0]
         self.assertTrue(first_boss["label"].startswith("高壓路段 "))
         self.assertEqual(
@@ -318,6 +319,51 @@ class AdminAfterActionTests(unittest.TestCase):
         self.assertTrue(boss_layer["available"])
         self.assertEqual(boss_layer["source_path"], "outputs/boss_points.geojson")
         self.assertFalse(view["boss_points"]["boundary"]["runtime_safety_truth"])
+
+    def test_pretrip_admin_case_projection_uses_loaded_workspace_identity(self):
+        project_id = "workspace_case_for_identity_test"
+        with tempfile.TemporaryDirectory() as temp_dir:
+            project_root = Path(temp_dir) / project_id
+            shutil.copytree(
+                ROOT / "tests" / "fixtures" / "pretrip" / "projects" / PRETRIP_CASE_ID,
+                project_root,
+            )
+            project = json.loads((project_root / "project.json").read_text(encoding="utf-8"))
+            project["project_id"] = project_id
+            (project_root / "project.json").write_text(
+                json.dumps(project),
+                encoding="utf-8",
+            )
+
+            view = build_admin_case_view(
+                project_id,
+                root=ROOT,
+                pretrip_project_root=project_root,
+            )
+
+        expected_source = f"artifact.gpx.{project_id}"
+        expected_projection = f"admin_surface_projection.{project_id}"
+        self.assertEqual(view["mission"]["route_source"], expected_source)
+        self.assertEqual(view["replay"]["source_id"], expected_projection)
+        self.assertEqual(
+            view["admin_surface_projection"]["source_id"],
+            expected_projection,
+        )
+        self.assertEqual(
+            {item["source"] for item in view["mission"]["checkpoints"]},
+            {expected_source},
+        )
+        self.assertEqual(
+            {item["source"] for item in view["mission"]["segments"]},
+            {expected_source},
+        )
+        self.assertTrue(
+            all(
+                project_id in item["reason"]
+                for item in view["safety_timeline"]
+                if item.get("checkpoint")
+            )
+        )
 
     def test_admin_case_api_can_project_any_workspace_pretrip_project(self):
         custom_project_id = "chilai_nanhua_day1_tryimport_scoutAI_1"

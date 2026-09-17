@@ -28,14 +28,60 @@ from scout_runtime_safety_state_store import RuntimeSafetyStateStore
 from pretrip_boss_point_synthesis import synthesize_pretrip_boss_points
 from pretrip_mileage_tag_alignment import align_pretrip_workspace_mileage_tags
 from pretrip_admin_view import (
+    _brain_seed_summary,
+    _debug_projection_timeline_events,
     _geojson_line_coordinates,
     _mileage_tag_alignment_summary,
     _project_summary,
     _reference_segment_timing_summary,
+    _review_item_map_target_ids,
     build_pretrip_admin_view,
     list_pretrip_admin_projects,
     load_pretrip_debug_projection_view,
 )
+
+
+def test_pretrip_projection_refs_follow_the_loaded_workspace() -> None:
+    project_id = "dongqing_batongguan_historic_trail_newImport"
+    view = {
+        "project_id": project_id,
+        "route": {
+            "source_id": f"artifact.gpx.{project_id}",
+            "started_at": "2026-09-17T00:00:00Z",
+            "point_count": 2,
+            "distance_m": 10,
+        },
+        "checkpoints": [],
+        "segments": [],
+        "reference_tracks": {"reference_track_count": 0},
+        "checkpoint_events": {"events": []},
+        "runtime_safety_state_store_projection": {
+            "status": "missing",
+            "project_id": project_id,
+        },
+    }
+
+    events = _debug_projection_timeline_events(view, [])
+    assert events
+    assert all(
+        f"artifact.gpx.{project_id}" in event["correlation_refs"]
+        for event in events
+    )
+    assert "artifact.gpx.chilai_nanhua_day1" not in json.dumps(events)
+
+    brain_seed = _brain_seed_summary({}, "outputs/brain_seed_nodes.json", project_id)
+    assert brain_seed["source_id"] == f"brain_seed_nodes.{project_id}"
+
+    targets = _review_item_map_target_ids(
+        {
+            "candidate_ref": f"policy_candidate.{project_id}.seg.001",
+            "review_focus": ["map.poi.evacuation_exit"],
+        },
+        project_id,
+    )
+    assert f"policy_candidate.{project_id}.seg.001" in targets
+    assert f"retreat.{project_id}.return_to_entry" in targets
+    assert "retreat.chilai_nanhua_day1.return_to_entry" not in targets
 from tests.test_pretrip_spatial_imprint_export import _candidate_set, _review_log
 
 

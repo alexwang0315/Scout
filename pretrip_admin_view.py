@@ -1088,7 +1088,7 @@ def build_pretrip_admin_view(
             source_refs["route_note_review_options"],
         ),
         "review_queue": _review_queue_summary(
-            review_queue, source_refs["review_queue"]
+            review_queue, source_refs["review_queue"], project_id
         ),
         "review_draft_log": _review_draft_log_summary(
             review_draft_log,
@@ -1369,7 +1369,9 @@ def build_pretrip_admin_view(
         "after_action_next_plan": _after_action_summary(
             after_action, source_refs["after_action"]
         ),
-        "brain_seed": _brain_seed_summary(brain_seed, source_refs["brain_seed"]),
+        "brain_seed": _brain_seed_summary(
+            brain_seed, source_refs["brain_seed"], project_id
+        ),
     }
     if planning_skill_audit is not None:
         post_analysis_tab["planning_skill_audit"] = _planning_skill_audit_summary(
@@ -4578,6 +4580,7 @@ def _debug_projection_timeline_events(
 ) -> list[dict[str, Any]]:
     project_id = view["project_id"]
     route = view["route"]
+    route_source_id = str(route.get("source_id") or f"artifact.gpx.{project_id}")
     checkpoints = view["checkpoints"]
     segments = view["segments"]
     checkpoint_event_by_id = {
@@ -4631,7 +4634,7 @@ def _debug_projection_timeline_events(
                 "summary": summary,
                 "subject_ref": subject_ref,
                 "correlation_refs": [
-                    "artifact.gpx.chilai_nanhua_day1",
+                    route_source_id,
                     *map_target_ids,
                 ],
                 "payload": {
@@ -6100,7 +6103,9 @@ def _summary_with_source(
     }
 
 
-def _review_queue_summary(payload: dict[str, Any], source_path: str) -> dict[str, Any]:
+def _review_queue_summary(
+    payload: dict[str, Any], source_path: str, project_id: str
+) -> dict[str, Any]:
     return {
         "source_id": payload["manifest_id"],
         "source_path": source_path,
@@ -6109,12 +6114,15 @@ def _review_queue_summary(payload: dict[str, Any], source_path: str) -> dict[str
         "counts": payload["counts"],
         "boundary": payload["boundary"],
         "items": [
-            _review_queue_item(item, source_path) for item in payload.get("items", [])
+            _review_queue_item(item, source_path, project_id)
+            for item in payload.get("items", [])
         ],
     }
 
 
-def _review_queue_item(item: dict[str, Any], source_path: str) -> dict[str, Any]:
+def _review_queue_item(
+    item: dict[str, Any], source_path: str, project_id: str
+) -> dict[str, Any]:
     evidence_summary = item.get("evidence_summary", {})
     source_refs = _review_queue_source_refs(item)
     source_attribution = _review_queue_source_attribution(item, source_refs)
@@ -6164,7 +6172,7 @@ def _review_queue_item(item: dict[str, Any], source_path: str) -> dict[str, Any]
             "Pretrip review queue item; candidate review aid only, "
             "not runtime safety truth."
         ),
-        "map_target_ids": _review_item_map_target_ids(item),
+        "map_target_ids": _review_item_map_target_ids(item, project_id),
     }
     return result
 
@@ -6412,21 +6420,22 @@ def _ensure_admin_summary_metadata(summary: dict[str, Any]) -> None:
             summary[key] = value
 
 
-def _review_item_map_target_ids(item: dict[str, Any]) -> list[str]:
+def _review_item_map_target_ids(item: dict[str, Any], project_id: str) -> list[str]:
     targets: list[str] = []
     candidate_ref = str(item.get("candidate_ref") or "")
     if candidate_ref:
         targets.append(candidate_ref)
     targets.extend(str(ref) for ref in item.get("review_focus", []))
 
-    if candidate_ref.startswith("policy_candidate.chilai_nanhua_day1."):
+    project_prefix = f"policy_candidate.{project_id}."
+    if candidate_ref.startswith(project_prefix):
         targets.append(
-            candidate_ref.removeprefix("policy_candidate.chilai_nanhua_day1.")
+            candidate_ref.removeprefix(project_prefix)
         )
     if ".seg." in candidate_ref:
         segment_id = "seg." + candidate_ref.rsplit(".seg.", maxsplit=1)[-1]
         targets.append(segment_id)
-    targets.extend(_review_focus_map_aliases(targets))
+    targets.extend(_review_focus_map_aliases(targets, project_id))
 
     deduped: list[str] = []
     for target in targets:
@@ -6435,7 +6444,7 @@ def _review_item_map_target_ids(item: dict[str, Any]) -> list[str]:
     return deduped
 
 
-def _review_focus_map_aliases(targets: list[str]) -> list[str]:
+def _review_focus_map_aliases(targets: list[str], project_id: str) -> list[str]:
     aliases: list[str] = []
     for target in targets:
         if target in {
@@ -6445,7 +6454,7 @@ def _review_focus_map_aliases(targets: list[str]) -> list[str]:
         }:
             aliases.extend(
                 [
-                    "retreat.chilai_nanhua_day1.return_to_entry",
+                    f"retreat.{project_id}.return_to_entry",
                     "map.poi.trailhead_entry",
                     "map.hazard.deep_mountain_no_easy_exit",
                 ]
@@ -12891,7 +12900,9 @@ def _post_analysis_energy_feedback_summary(
     }
 
 
-def _brain_seed_summary(payload: dict[str, Any], source_path: str) -> dict[str, Any]:
+def _brain_seed_summary(
+    payload: dict[str, Any], source_path: str, project_id: str
+) -> dict[str, Any]:
     observed_facts = list(payload.get("observed_facts", []) or [])
     nodes = list(payload.get("nodes", []) or [])
     model_interpretations = list(payload.get("model_interpretations", []) or [])
@@ -12902,7 +12913,7 @@ def _brain_seed_summary(payload: dict[str, Any], source_path: str) -> dict[str, 
     )
     node_types = sorted({str(node.get("type")) for node in nodes if node.get("type")})
     return {
-        "source_id": "brain_seed_nodes.chilai_nanhua_day1",
+        "source_id": f"brain_seed_nodes.{project_id}",
         "source_path": source_path,
         "evidence_type": "pretrip_brain_seed_nodes",
         "node_count": len(nodes),
