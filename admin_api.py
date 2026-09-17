@@ -8665,6 +8665,9 @@ def create_admin_router(
         except KeyError as exc:
             raise HTTPException(status_code=404, detail="Admin case not found") from exc
 
+    from scout_trip_notebook_api import create_trip_notebook_router
+
+    router.include_router(create_trip_notebook_router(pretrip_workspace_root))
     return router
 
 
@@ -9748,6 +9751,15 @@ def _compact_gis_perception_timeline(payload: Any) -> Any:
                     "review_category",
                     "semantic_aggregation_key",
                     "nearby_group_id",
+                    "nearby_group_label",
+                    "nearby_group_size",
+                    "cluster_name",
+                    "display_label",
+                    "map_label",
+                    "member_count",
+                    "route_alignment_status",
+                    "route_projection_distance_m",
+                    "route_projection_source_id",
                 ),
             )
             if isinstance(item, dict)
@@ -9766,6 +9778,11 @@ def _compact_gis_perception_timeline(payload: Any) -> Any:
                     "timeline_element_type",
                     "review_category",
                     "semantic_aggregation_key",
+                    "cluster_name",
+                    "display_label",
+                    "map_label",
+                    "anchor_candidate_id",
+                    "deterministic_coordinate_merge",
                 ),
             )
             if isinstance(item, dict)

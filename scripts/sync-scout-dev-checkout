@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -eu
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+repo_root=$(git -C "$script_dir/.." rev-parse --show-toplevel)
+remote=${SCOUT_DEV_GIT_REMOTE:-origin}
+current_branch=$(git -C "$repo_root" branch --show-current)
+requested_branch=${1:-$current_branch}
+
+if [ -z "$current_branch" ]; then
+  echo "blocked: Scout development checkout is in detached HEAD state" >&2
+  exit 2
+fi
+
+if [ "$requested_branch" != "$current_branch" ]; then
+  echo "blocked: current branch is $current_branch, requested $requested_branch" >&2
+  echo "switch branches explicitly, review the checkout, then rerun this helper" >&2
+  exit 2
+fi
+
+if [ -n "$(git -C "$repo_root" status --porcelain)" ]; then
+  echo "blocked: Scout development checkout has local changes" >&2
+  echo "commit, stash, or review them before syncing; nothing was changed" >&2
+  exit 2
+fi
+
+echo "fetching $remote/$requested_branch into $repo_root"
+git -C "$repo_root" fetch "$remote" "$requested_branch"
+
+if ! git -C "$repo_root" merge-base --is-ancestor HEAD FETCH_HEAD; then
+  echo "blocked: local HEAD is not an ancestor of fetched branch" >&2
+  echo "the histories are ahead or divergent; resolve them manually on Mac/Scout" >&2
+  exit 3
+fi
+
+git -C "$repo_root" merge --ff-only FETCH_HEAD
+echo "ready: Scout development checkout is synced to $remote/$requested_branch"

@@ -46,6 +46,7 @@ scout-ai-os-hardware-smoke = "scout.cli.hardware_smoke:main"
 scout-ai-os-mac-chat = "scout.cli.mac_chat:main"
 scout-ai-os-intelligence-mcp = "scout.nextgen.intelligence_mcp_server:main"
 scout-ai-os-intelligence-mcp-http = "scout.nextgen.intelligence_mcp_http_server:main"
+scout-ai-os-dev-server = "scout.cli.dev_server:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

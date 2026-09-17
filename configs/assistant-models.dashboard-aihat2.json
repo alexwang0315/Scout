@@ -2,7 +2,7 @@
   "active_profile": "cloud",
   "cloud_model": {
     "profile": "cloud",
-    "model_name": "openrouter:openai/gpt-5.6-sol",
+    "model_name": "openrouter:deepseek/deepseek-v4-flash-0731",
     "base_url": "https://openrouter.ai/api/v1",
     "backend": "openai_compatible",
     "token_id": "operator-managed-openrouter-token",

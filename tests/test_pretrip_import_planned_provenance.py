@@ -103,10 +103,18 @@ def test_planned_export_real_import_preserves_primary_reference_and_filtered_rol
     route_bundle = _load(root / "normalized/routes/route_evidence_bundle.json")
     filtering = _load(root / "outputs/gpx_speed_filter_report.json")
     checkpoint_events = _load(root / "outputs/checkpoint_events.json")
+    import_manifest = _load(root / "outputs/import_manifest.json")
 
     assert project["route_role"] == "planned_gpx_reference"
     assert project["gpx_provenance_role"] == "planned"
     assert project["actual_user_track_available"] is False
+    assert project["checkpoint_naming_policy_version"] == "scout.checkpoint_naming.v1"
+    assert project["checkpoint_naming_checkpoint_count"] == project["checkpoint_candidate_count"]
+    assert project["checkpoint_naming_validation"]["status"] == "validated"
+    assert project["checkpoint_naming_validation"]["dtm_mapping_basis"] == "segment_candidate_id_and_checkpoint_candidate_id"
+    assert import_manifest["checkpoint_naming"]["report_ref"] == "outputs/checkpoint_naming.json"
+    assert import_manifest["checkpoint_naming_validation"]["status"] == "validated"
+    assert inbox["checkpoint_naming"]["report_sha256"] == _sha(root / "outputs/checkpoint_naming.json")
     assert manifest["inputs"]["golden_route_gpx"]["role"] == "planned_gpx_reference"
     assert summary["golden_route"]["role"] == summary["primary_route"]["role"] == "planned_gpx_reference"
     assert summary["primary_route"]["time_role"] == "planned_estimate"

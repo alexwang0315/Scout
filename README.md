@@ -77,6 +77,9 @@ Mac-side chat UI against a Scout hardware AI server:
 ```
 
 See `docs/SCOUT_AI_MAC_CHAT.md` for the hardware server command and UI boundary.
+For the guarded Git handoff, source-checkout development server, large artifact
+transfer boundary, and GPT-6 Astra opt-in path, see
+`docs/admin/mac-to-scout-development-handoff.md`.
 
 This produces a JSON readiness report for a Scout host. The default run forces
 the local Pydantic AI `FunctionModel`, verifies API/UI/capability/sandbox/
@@ -132,12 +135,16 @@ to model strings:
 ./venv/bin/scout-ai-os-pydantic-smoke --model z-ai/glm-5.2
 ```
 
-For direct OpenAI, use `openai-chat:<model>` or the compatibility alias
-`openai:<model>`. Scout normalizes `openai:` to `openai-chat:` because Pydantic
-AI v2 uses the OpenAI Responses API for the raw `openai:` model string, while
-Scout's current tool and typed-output contract is Chat-Completions-like. Direct
-OpenAI calls require `OPENAI_API_KEY`; NVIDIA calls require `NVIDIA_API_KEY`;
-OpenRouter calls require `OPENROUTER_API_KEY`.
+For direct OpenAI Chat Completions, use `openai-chat:<model>` or the compatibility
+alias `openai:<model>`. GPT-6 Astra is the scoped exception: `gpt-6-astra`,
+`openai:gpt-6-astra`, and `openai-responses:gpt-6-astra` all select Pydantic
+AI's OpenAI Responses model because GPT-6 Astra tool calling requires the
+Responses API. Start from
+`configs/assistant-models.openai-gpt-6-astra.example.json`; it keeps the AI
+HAT+2 local fallback and does not connect on startup. Direct OpenAI calls require
+`OPENAI_API_KEY`; NVIDIA calls require `NVIDIA_API_KEY`; OpenRouter calls require
+`OPENROUTER_API_KEY`. Repository support does not grant account access or add a
+model to the Codex Desktop selector.
 
 Scout AI model paths always expose trusted, no-per-query-approval WebSearch and
 WebFetch. Legacy disable values such as the following are accepted for rollout

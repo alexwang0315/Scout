@@ -28,7 +28,9 @@ from scout_runtime_safety_state_store import RuntimeSafetyStateStore
 from pretrip_boss_point_synthesis import synthesize_pretrip_boss_points
 from pretrip_mileage_tag_alignment import align_pretrip_workspace_mileage_tags
 from pretrip_admin_view import (
+    _aggregate_gis_perception_timeline_checkpoints,
     _geojson_line_coordinates,
+    _gis_perception_timeline_summary,
     _mileage_tag_alignment_summary,
     _project_summary,
     _reference_segment_timing_summary,
@@ -102,6 +104,122 @@ def test_geojson_line_coordinates_tolerates_extra_nested_segments():
         {"lon": 121.22, "lat": 24.06},
         {"lon": 121.221, "lat": 24.061},
     ]
+
+
+def test_gis_cp_cluster_uses_a_member_derived_name_and_stays_on_a_hairpin_route():
+    route_geometry = {
+        "source_id": "route.hairpin",
+        "coordinate_segments": [
+            [
+                {"lat": 0.0, "lon": 0.0},
+                {"lat": 0.0, "lon": 0.0005},
+                {"lat": 0.0004, "lon": 0.0005},
+                {"lat": 0.0004, "lon": 0.0},
+            ]
+        ],
+    }
+    candidates = [
+        {
+            "candidate_id": "cp.cut.generic",
+            "checkpoint_type": "hint_review",
+            "semantic_aggregation_key": "route:cut",
+            "source_profile": "gpx_corpus_route_notes",
+            "lat": 0.0,
+            "lon": 0.0002,
+            "display_label": "上切",
+            "route_note_summary": "上切",
+        },
+        {
+            "candidate_id": "cp.cut.108",
+            "checkpoint_type": "hint_review",
+            "semantic_aggregation_key": "route:cut",
+            "source_profile": "gpx_corpus_route_notes",
+            "lat": 0.0004,
+            "lon": 0.0002,
+            "display_label": "108 上切點",
+            "route_note_summary": "108 上切點",
+        },
+        {
+            "candidate_id": "cp.cut.103",
+            "checkpoint_type": "hint_review",
+            "semantic_aggregation_key": "route:cut",
+            "source_profile": "gpx_corpus_route_notes",
+            "lat": 0.0004,
+            "lon": 0.0003,
+            "display_label": "103上切點",
+            "route_note_summary": "103上切點",
+        },
+    ]
+
+    clustered = _aggregate_gis_perception_timeline_checkpoints(
+        candidates,
+        radius_m=80.0,
+        walked_route_geometries=[route_geometry],
+    )
+
+    assert len(clustered) == 1
+    cluster = clustered[0]
+    assert cluster["display_label"] == "上切點"
+    assert cluster["map_label"] == "上切點"
+    assert cluster["label"] == "上切點"
+    assert cluster["member_count"] == 3
+    assert cluster["lat"] == pytest.approx(0.0004)
+    assert cluster["lon"] == pytest.approx(0.0002)
+    assert cluster["route_alignment_status"] == "aligned_to_walked_route"
+    assert cluster["route_projection_distance_m"] == pytest.approx(0.0, abs=0.01)
+    assert cluster["aggregation"]["anchor_candidate_id"] == "cp.cut.108"
+    assert cluster["aggregation"]["deterministic_coordinate_merge"] == (
+        "walked_route_projected_member_medoid"
+    )
+    assert "walked_route_projection" not in cluster
+
+
+def test_gis_cp_timeline_excludes_candidates_outside_the_walked_route_corridor():
+    route_geometry = {
+        "source_id": "route.straight",
+        "coordinate_segments": [
+            [
+                {"lat": 23.5, "lon": 121.0},
+                {"lat": 23.5, "lon": 121.01},
+            ]
+        ],
+    }
+    gis_perception = {
+        "source_path": "outputs/gis_perception_candidates.json",
+        "checkpoint_candidates": [
+            {
+                "candidate_id": "cp.near",
+                "checkpoint_type": "hint_review",
+                "lat": 23.5001,
+                "lon": 121.005,
+                "route_note_summary": "近路上切點",
+            },
+            {
+                "candidate_id": "cp.far",
+                "checkpoint_type": "hint_review",
+                "lat": 23.51,
+                "lon": 121.005,
+                "route_note_summary": "遠方上切點",
+            },
+        ],
+    }
+
+    timeline = _gis_perception_timeline_summary(
+        "demo",
+        gis_perception,
+        walked_route_geometries=[route_geometry],
+        route_corridor_m=500.0,
+    )
+
+    assert timeline["counts"]["raw_checkpoint_candidate_count"] == 2
+    assert timeline["counts"]["route_eligible_raw_checkpoint_candidate_count"] == 1
+    assert timeline["counts"]["filtered_outside_walked_route_corridor_count"] == 1
+    assert timeline["counts"]["checkpoint_candidate_count"] == 1
+    checkpoint = timeline["checkpoint_candidates"][0]
+    assert checkpoint["candidate_id"].startswith("gis_cp_cluster.")
+    assert checkpoint["lat"] == pytest.approx(23.5)
+    assert checkpoint["lon"] == pytest.approx(121.005)
+    assert checkpoint["route_alignment_status"] == "aligned_to_walked_route"
 
 
 def test_reference_segment_timing_without_projection_does_not_highlight_whole_route():
@@ -631,7 +749,7 @@ def test_admin_view_bounds_overpass_aligned_segment_geometry_payload(
     assert view["evidence_timeline"]["counts"] == {
         "category_count": 14,
         "available_category_count": 13,
-        "total_evidence_count": 6276,
+        "total_evidence_count": 6274,
     }
     assert view["scout_agent_skills"]["artifact_kind"] == "scout_agent_skill_registry_summary"
     assert view["scout_agent_skills"]["counts"]["tool_count"] >= 45
@@ -745,7 +863,13 @@ def test_admin_view_bounds_overpass_aligned_segment_geometry_payload(
         view["gis_perception"]["checkpoint_candidates"],
         view["route"]["bounds"],
     )
-    assert view["gis_perception_timeline"]["counts"]["checkpoint_candidate_count"] == 111
+    assert view["gis_perception_timeline"]["counts"]["checkpoint_candidate_count"] == 110
+    assert (
+        view["gis_perception_timeline"]["counts"][
+            "filtered_outside_walked_route_corridor_count"
+        ]
+        == 1
+    )
     _assert_points_within_route_bounds(
         view["gis_perception_timeline"]["checkpoint_candidates"],
         view["route"]["bounds"],
@@ -776,7 +900,11 @@ def test_admin_view_bounds_overpass_aligned_segment_geometry_payload(
     assert timeline_gis_cp["map_label"] == "3159南鞍營地"
     clustered_gis_cp = view["gis_perception_timeline"]["checkpoint_candidates"][1]
     assert clustered_gis_cp["candidate_id"].startswith("gis_cp_cluster.")
-    assert clustered_gis_cp["display_label"] == "上切 / 108 上切點 / 103上切點"
+    assert clustered_gis_cp["display_label"] == "上切點"
+    assert clustered_gis_cp["route_alignment_status"] == "aligned_to_walked_route"
+    assert clustered_gis_cp["aggregation"]["deterministic_coordinate_merge"] == (
+        "walked_route_projected_member_medoid"
+    )
     assert "gis_cp_cluster" not in clustered_gis_cp["display_label"]
     assert timeline_gis_cp["source_refs"]
     assert timeline_gis_cp["source_attribution"]
@@ -786,7 +914,7 @@ def test_admin_view_bounds_overpass_aligned_segment_geometry_payload(
         assert nearby_group["review_state"] == "display_group_only"
         assert nearby_group["candidate_only"] is True
         assert nearby_group["runtime_safety_truth"] is False
-        assert nearby_group["display_label"].startswith("附近 CP: ")
+        assert nearby_group["display_label"].startswith("附近：")
         assert "gis_cp_nearby_group" not in nearby_group["display_label"]
         assert nearby_group["semantic_merge_allowed"] is False
         assert nearby_group["source_refs"]
@@ -881,9 +1009,9 @@ def test_admin_view_bounds_overpass_aligned_segment_geometry_payload(
         for candidate in view["gis_perception_timeline"]["checkpoint_candidates"]
         for attribution in candidate["source_attribution"]
     )
-    assert view["review_queue"]["counts"]["item_count"] == 254
+    assert view["review_queue"]["counts"]["item_count"] == 253
     assert view["review_queue"]["counts"]["category_counts"]["route_note"] == 23
-    assert view["review_queue"]["counts"]["category_counts"]["gis_perception_cp"] == 111
+    assert view["review_queue"]["counts"]["category_counts"]["gis_perception_cp"] == 110
     first_review_item = view["review_queue"]["items"][0]
     assert first_review_item["review_state"] == "needs_review"
     assert first_review_item["candidate_only"] is True
@@ -918,13 +1046,13 @@ def test_admin_view_bounds_overpass_aligned_segment_geometry_payload(
     assert first_review_item["model_output_summary"]
     assert view["review_workbench"]["status"] == "projection_only"
     assert view["review_workbench"]["counts"]["category_group_count"] == 8
-    assert view["review_workbench"]["counts"]["bulk_eligible_count"] == 217
+    assert view["review_workbench"]["counts"]["bulk_eligible_count"] == 216
     assert view["review_workbench"]["counts"]["single_review_required_count"] == 37
     assert view["review_workbench"]["boundary"]["ai_triage_is_review_aid"] is True
     assert view["review_workbench"]["boundary"]["runtime_safety_truth"] is False
     assert any(
         group["group_id"] == "review_group.category.gis_perception_cp"
-        and group["bulk_eligible_count"] == 88
+        and group["bulk_eligible_count"] == 87
         for group in view["review_workbench"]["category_groups"]
     )
     assert view["review_draft_log"]["status"] == "draft_only"
@@ -2917,7 +3045,7 @@ def test_tabs_expose_compact_traceable_detail_sections():
         "hazard_note_count": 2,
         "source_ref_count": 2,
     }
-    assert sections_by_id["review_queue"]["counts"]["item_count"] == 254
+    assert sections_by_id["review_queue"]["counts"]["item_count"] == 253
     assert sections_by_id["review_draft_log"]["counts"]["action_count"] == 3
     assert sections_by_id["review_draft_log"]["summary"]["draft_only"] is True
     assert sections_by_id["review_draft_log"]["summary"]["decisions_recorded"] is False

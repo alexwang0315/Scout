@@ -5,6 +5,7 @@ from scout.agents.pydantic_model_lifecycle import pydantic_model_session
 
 from pydantic_ai_runtime_compat import (
     build_chat_model,
+    is_openai_responses_model,
     normalize_chat_model_name,
     pydantic_agent_runtime_kwargs,
     pydantic_ai_runtime_version,
@@ -18,6 +19,9 @@ from scout.agents.pydantic_ai_compat import (
 )
 from scout.agents.pydantic_ai_compat import (
     build_chat_model as build_packaged_chat_model,
+)
+from scout.agents.pydantic_ai_compat import (
+    is_openai_responses_model as is_packaged_openai_responses_model,
 )
 from scout.agents.pydantic_ai_compat import (
     normalize_chat_model_name as normalize_packaged_chat_model_name,
@@ -127,6 +131,37 @@ def test_openai_prefix_normalizes_to_chat_model_semantics() -> None:
         normalize_packaged_chat_model_name("openai:gpt-4o-mini")
         == "openai-chat:gpt-4o-mini"
     )
+
+
+def test_gpt6_astra_normalizes_to_openai_responses_semantics() -> None:
+    expected = "openai-responses:gpt-6-astra"
+
+    for configured_name in (
+        "gpt-6-astra",
+        "openai:gpt-6-astra",
+        expected,
+    ):
+        assert normalize_chat_model_name(configured_name) == expected
+        assert normalize_packaged_chat_model_name(configured_name) == expected
+        assert is_openai_responses_model(configured_name) is True
+        assert is_packaged_openai_responses_model(configured_name) is True
+
+
+def test_gpt6_astra_builds_responses_model_without_network() -> None:
+    root_model = build_chat_model(
+        model_name="openai-responses:gpt-6-astra",
+        api_key="test-token",
+    )
+    packaged_model = build_packaged_chat_model(
+        model_name="openai:gpt-6-astra",
+        api_key="test-token",
+    )
+
+    for model in (root_model, packaged_model):
+        assert type(model).__name__ == "OpenAIResponsesModel"
+        assert model.model_name == "gpt-6-astra"
+        assert model.system == "openai"
+        assert model.settings == {"openai_reasoning_effort": "low"}
 
 
 def test_openrouter_alias_builds_openrouter_model_without_network() -> None:
@@ -319,7 +354,10 @@ def test_native_research_capabilities_include_web_search_and_fetch() -> None:
     assert policy.native_research_requires_approval is False
     assert policy.native_research_candidate_only is True
     assert policy.native_research_runtime_safety_truth is False
-    assert [type(item).__name__ for item in capabilities] == ["WebSearch", "WebFetch"]
+    assert [type(item).__name__ for item in capabilities] == [
+        "WebSearch",
+        "WebFetch",
+    ]
     assert capabilities[0].native is False
     assert capabilities[0].local is not None
     assert capabilities[0].max_uses is None
@@ -350,3 +388,20 @@ def test_openai_chat_keeps_native_search_but_uses_local_fetch() -> None:
     assert capabilities[1].local is not None
     assert capabilities[1].max_uses is None
     assert capabilities[1].allowed_domains == ["pydantic.dev"]
+
+
+def test_openai_responses_keeps_native_search_but_uses_local_fetch() -> None:
+    policy = resolve_model_policy(
+        "openai-responses:gpt-6-astra",
+        env={"SCOUT_AI_OS_NATIVE_RESEARCH_ALLOWED_DOMAINS": "openai.com"},
+    )
+
+    capabilities = packaged_native_research_capabilities(policy)
+
+    assert [type(item).__name__ for item in capabilities] == ["WebSearch", "WebFetch"]
+    assert capabilities[0].native is not False
+    assert capabilities[0].local is None
+    assert capabilities[0].max_uses == 10
+    assert capabilities[0].allowed_domains == ["openai.com"]
+    assert capabilities[1].native is False
+    assert capabilities[1].local is not None

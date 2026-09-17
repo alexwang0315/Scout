@@ -1855,6 +1855,9 @@ def test_scout_dashboard_timeline_evidence_uses_pretrip_tree_categories() -> Non
         "Review Queue",
     ):
         assert group_name in html
+    assert "item.display_label || item.map_label || item.cluster_name || item.label" in html
+    assert "item.nearby_group_label ||" in html
+    assert "group ${item.nearby_group_id" not in html
 
     assert 'data-evidence-tab="${escapeHtml(tab.id)}"' in html
     assert 'rerenderEvidenceContext("timeline", selectedTab);' in html

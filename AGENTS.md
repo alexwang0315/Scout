@@ -565,6 +565,29 @@ key fingerprint is `SHA256:cFmaGA0olTmjLeQ1laeURtl0oBscHsfA4H0l/s+9i8g`, and
 the Scout-to-Mac public key fingerprint is
 `SHA256:pLCijCRBUa1mpJOtvVTiaqgJE9ZedaO4I+MJuUJN/vM`.
 
+## Mac Browser Handoff — User Preference
+
+**User-directed preference, 2026-09-10:** When a task produces or updates a
+website that can be opened, provide its Mac-accessible URL and a copyable command
+to open it in Google Chrome on the Mac:
+
+```bash
+open -a "Google Chrome" '<mac-accessible-url>'
+```
+
+When the existing Scout-to-Mac SSH connection is available, proactively execute
+the open command on the Mac for the current task's website; do not stop at
+providing the command or ask for confirmation again just to open that page.
+Verify reachability from the Mac first. Scout's `localhost` is not the Mac's
+`localhost`: reuse an existing tunnel or establish a temporary SSH forward bound
+to Mac loopback for an authorized local demo. Preserve unrelated listeners and
+production runtimes; this preference does not authorize public deployment.
+
+Report the actual outcome: confirmed Chrome tab when observable, otherwise the
+successful open request or exact blocker. If automatic opening is unavailable,
+still provide the Mac command and any required connection step. Never claim that
+a page opened solely because it is reachable from Scout.
+
 ## Graphify
 
 - `graphify` (`~/.Codex/skills/graphify/SKILL.md`) converts input to a knowledge

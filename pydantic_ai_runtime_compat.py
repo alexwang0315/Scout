@@ -14,6 +14,8 @@ from scout.agents.pydantic_model_lifecycle import (
 OPENAI_KEY_ENV = "OPENAI_API_KEY"
 OPENROUTER_KEY_ENV = "OPENROUTER_API_KEY"
 NVIDIA_KEY_ENV = "NVIDIA_API_KEY"
+OPENAI_RESPONSES_PREFIX = "openai-responses:"
+GPT6_ASTRA_MODEL_ID = "gpt-6-astra"
 NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 AI_HAT_PLUS_2_HAILO_OLLAMA_BASE_URL = "http://127.0.0.1:8000/v1"
 LOCAL_OPENAI_COMPATIBLE_API_KEY = "scout-local-openai-compatible"
@@ -117,12 +119,36 @@ def build_chat_model(
     """Build a Pydantic AI model for Scout cloud calls.
 
     OpenRouter is handled through Pydantic AI's dedicated v2 provider when the
-    configured base URL or model alias indicates OpenRouter. Other OpenAI-like
-    endpoints remain on ``OpenAIChatModel`` to preserve the existing Scout
-    runtime contract.
+    configured base URL or model alias indicates OpenRouter. Explicit
+    ``openai-responses:`` models use ``OpenAIResponsesModel``; other
+    OpenAI-like endpoints remain on ``OpenAIChatModel``.
     """
 
+    if not base_url and model_name.strip().casefold() == GPT6_ASTRA_MODEL_ID:
+        model_name = f"{OPENAI_RESPONSES_PREFIX}{GPT6_ASTRA_MODEL_ID}"
     model_name = normalize_chat_model_name(model_name)
+    if is_openai_responses_model(model_name):
+        try:
+            from pydantic_ai.models.openai import OpenAIResponsesModel
+        except ImportError as exc:  # pragma: no cover - old runtime guard.
+            raise RuntimeError(
+                "openai-responses models require a Pydantic AI runtime with "
+                "OpenAIResponsesModel support"
+            ) from exc
+        from pydantic_ai.providers.openai import OpenAIProvider
+
+        provider = OpenAIProvider(
+            base_url=base_url,
+            api_key=_resolve_openai_compatible_api_key(
+                base_url=base_url,
+                api_key=api_key,
+            ),
+        )
+        return OpenAIResponsesModel(
+            _strip_openai_responses_prefix(model_name),
+            provider=provider,
+            settings={"openai_reasoning_effort": "low"},
+        )
     if _is_openrouter_model(model_name=model_name, base_url=base_url):
         normalized_name = _strip_openrouter_prefix(model_name)
         try:
@@ -186,17 +212,32 @@ def build_chat_model(
 
 
 def normalize_chat_model_name(model_name: str) -> str:
-    """Normalize Scout cloud aliases to chat-model semantics.
+    """Normalize Scout aliases while preserving explicit Responses models.
 
     Pydantic AI v2 assigns the ``openai:`` model string prefix to the OpenAI
     Responses API. Scout's current assistant/tooling contract is
     Chat-Completions-like, so explicit or env-provided ``openai:`` model names
-    are routed through ``OpenAIChatModel`` instead.
+    are routed through ``OpenAIChatModel`` instead. GPT-6 Astra is the scoped
+    exception because its tool calling requires Responses.
     """
 
-    if model_name.startswith("openai:"):
-        return "openai-chat:" + model_name.removeprefix("openai:")
-    return model_name
+    normalized = model_name.strip()
+    if normalized.casefold() in {
+        GPT6_ASTRA_MODEL_ID,
+        f"openai:{GPT6_ASTRA_MODEL_ID}",
+    }:
+        return f"{OPENAI_RESPONSES_PREFIX}{GPT6_ASTRA_MODEL_ID}"
+    if normalized.startswith("openai:"):
+        return "openai-chat:" + normalized.removeprefix("openai:")
+    return normalized
+
+
+def is_openai_responses_model(model_name: str) -> bool:
+    normalized = str(model_name or "").strip().casefold()
+    return normalized.startswith(OPENAI_RESPONSES_PREFIX) or normalized in {
+        GPT6_ASTRA_MODEL_ID,
+        f"openai:{GPT6_ASTRA_MODEL_ID}",
+    }
 
 
 def _is_openrouter_model(*, model_name: str, base_url: str | None) -> bool:
@@ -238,6 +279,12 @@ def _strip_hailo_prefix(model_name: str) -> str:
 def _strip_openai_chat_prefix(model_name: str) -> str:
     if model_name.startswith("openai-chat:"):
         return model_name.removeprefix("openai-chat:")
+    return model_name
+
+
+def _strip_openai_responses_prefix(model_name: str) -> str:
+    if model_name.startswith(OPENAI_RESPONSES_PREFIX):
+        return model_name.removeprefix(OPENAI_RESPONSES_PREFIX)
     return model_name
 
 

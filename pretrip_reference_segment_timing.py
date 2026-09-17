@@ -143,8 +143,27 @@ def build_reference_segment_timing(
     target_segments: tuple[ReferenceSegmentSpec, ...] | None = None,
     target_checkpoint_coordinates: dict[str, tuple[float, float]] | None = None,
     target_checkpoint_match_radius_m: float | None = None,
+    timing_nodes: list[ReferenceTimingNode] | None = None,
+    allow_external_sources: bool = True,
 ) -> dict[str, Any]:
     project_root = Path(project_root)
+    if timing_nodes is not None and target_segments is not None:
+        raise ValueError("timing_nodes and target_segments are ambiguous; provide one route axis")
+    if timing_nodes is not None and target_checkpoint_coordinates is not None:
+        raise ValueError("timing_nodes and explicit target checkpoint coordinates are ambiguous")
+    if target_checkpoint_coordinates is not None and target_segments is None:
+        raise ValueError("Explicit checkpoint coordinates require explicit target segments")
+    if timing_nodes is not None:
+        if len(timing_nodes) < 2:
+            raise ValueError("timing_nodes requires at least two route nodes")
+        for node in timing_nodes:
+            if (
+                not math.isfinite(float(node.lat))
+                or not math.isfinite(float(node.lon))
+                or abs(float(node.lat)) > 90
+                or abs(float(node.lon)) > 180
+            ):
+                raise ValueError("timing_nodes must contain finite WGS84 coordinates")
     match_radius_m = CHECKPOINT_MATCH_RADIUS_M
     if target_checkpoint_match_radius_m is not None:
         if target_checkpoint_coordinates is None or not math.isfinite(target_checkpoint_match_radius_m) or target_checkpoint_match_radius_m <= 0:
@@ -163,27 +182,33 @@ def build_reference_segment_timing(
     guide_candidates = _load_json(guide_path) if guide_path.exists() else []
     guide_graph = _guide_graph(guide_candidates if isinstance(guide_candidates, list) else [])
 
-    available_sources = [
-        source for source in source_records if Path(str(source.get("original_path") or "")).exists()
-    ]
-    existing_sources, planned_sources = [], []
-    for source in available_sources:
-        declared_planned = source.get("gpx_provenance_role") == "planned" or any(
-            source.get(field) in {"planned", "planned_route", "planned_gpx_reference"}
-            for field in ("role", "route_role")
-        )
-        if declared_planned or gpx_provenance_role(Path(source["original_path"])) == "planned":
+    from pretrip_gpx_source_resolution import resolve_gpx_sources
+
+    resolved_sources, source_resolution = resolve_gpx_sources(
+        project_root, source_records,
+        allow_external_original_paths=allow_external_sources,
+        include_duplicate_content=True,
+    )
+    source_groups: dict[str, list[dict[str, Any]]] = {}
+    planned_sources: list[dict[str, Any]] = []
+    for source in resolved_sources:
+        if _source_is_planned(source):
             planned_sources.append(source)
-        else:
-            existing_sources.append(source)
-    workspace_nodes = (
+        digest = str(source.get("sha256") or "")
+        if digest:
+            source_groups.setdefault(digest, []).append(source)
+    planned_digests = {str(source.get("sha256") or "") for source in planned_sources}
+    existing_sources = [
+        records[0]
+        for digest, records in source_groups.items()
+        if digest not in planned_digests
+    ]
+    workspace_nodes = timing_nodes or (
         _workspace_route_timing_nodes(project_root, project)
         if target_segments is None
         else []
     )
     if target_checkpoint_coordinates is not None:
-        if target_segments is None:
-            raise ValueError("Explicit checkpoint coordinates require explicit target segments")
         for lat, lon in target_checkpoint_coordinates.values():
             if not math.isfinite(lat) or not math.isfinite(lon) or abs(lat) > 90 or abs(lon) > 180:
                 raise ValueError("Explicit target checkpoint coordinates must be finite WGS84 coordinates")
@@ -192,6 +217,13 @@ def build_reference_segment_timing(
         checkpoint_quality = {key: {"source": "explicit_target_route_axis", "coordinate_sha256": _stable_hash(value)}
                               for key, value in canonical_checkpoints.items()}
         checkpoint_source = "explicit_target_route_axis"
+    elif timing_nodes is not None:
+        resolved_target_segments = _workspace_reference_segments(timing_nodes)
+        canonical_checkpoints = {
+            node.key: (node.lat, node.lon) for node in timing_nodes
+        }
+        checkpoint_quality = _workspace_checkpoint_quality(timing_nodes)
+        checkpoint_source = "workspace_route_distance_cp_mcp"
     elif len(workspace_nodes) >= 2:
         resolved_target_segments = _workspace_reference_segments(workspace_nodes)
         canonical_checkpoints = {
@@ -311,9 +343,13 @@ def build_reference_segment_timing(
         "evidence_type": "pretrip_reference_segment_timing",
         "counts": {
             "source_file_count": len(source_records),
-            "existing_source_file_count": len(available_sources),
+            "existing_source_file_count": len(source_groups),
             "eligible_historical_source_file_count": len(existing_sources),
             "planned_source_file_count": len(planned_sources),
+            "unique_content_source_count": len(source_groups),
+            "duplicate_content_source_count": sum(
+                item["status"] == "duplicate_content" for item in source_resolution
+            ),
             "timed_source_file_count": timed_source_count,
             "time_quality_rejected_source_file_count": (
                 time_quality_rejected_source_count
@@ -352,10 +388,15 @@ def build_reference_segment_timing(
         },
         "checkpoint_match_quality": checkpoint_quality,
         "source_time_quality": source_time_quality,
+        "source_resolution": source_resolution,
         "segments": segment_summaries,
         "data_quality": {
             "source_file_count": len(source_records),
-            "existing_source_file_count": len(available_sources),
+            "unique_content_source_count": len(source_groups),
+            "duplicate_content_source_count": sum(
+                item["status"] == "duplicate_content" for item in source_resolution
+            ),
+            "existing_source_file_count": len(source_groups),
             "eligible_historical_source_file_count": len(existing_sources),
             "planned_source_file_count": len(planned_sources),
             "timed_source_file_count": timed_source_count,
@@ -675,6 +716,22 @@ def _float_or_none(value: Any) -> float | None:
         return float(value) if value is not None else None
     except (TypeError, ValueError):
         return None
+
+
+def _source_is_planned(source: dict[str, Any]) -> bool:
+    """Classify planned GPX by both manifest role and the verified file payload."""
+    if source.get("gpx_provenance_role") == "planned" or any(
+        source.get(field) in {"planned", "planned_route", "planned_gpx_reference"}
+        for field in ("role", "route_role")
+    ):
+        return True
+    path = Path(str(source.get("original_path") or ""))
+    if not path.is_file():
+        return False
+    try:
+        return gpx_provenance_role(path) == "planned"
+    except (OSError, ValueError):
+        return False
 
 
 def write_reference_segment_timing(

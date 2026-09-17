@@ -42,6 +42,7 @@ from assistant_workspace_total_info import (
 )
 from pydantic_ai_runtime_compat import (
     build_chat_model,
+    is_openai_responses_model,
     pydantic_agent_runtime_kwargs,
     pydantic_native_research_capabilities,
     pydantic_native_research_trace,
@@ -8266,6 +8267,7 @@ class PydanticAIEnvRunner:
                 max_tokens=request_max_tokens,
                 timeout_seconds=request_timeout_seconds,
                 workspace_tools=False,
+                model_name=chat_model_name,
             )
         }
         if bounded_runtime is not None:
@@ -9361,6 +9363,7 @@ class PydanticAIEnvRunner:
                     max_tokens=initial_max_tokens,
                     timeout_seconds=request_timeout_seconds,
                     workspace_tools=True,
+                    model_name=chat_model_name,
                 ),
                 usage_limits=pydantic_usage_limits_from_budget(bounded_runtime.budget),
             )
@@ -9602,6 +9605,7 @@ class PydanticAIEnvRunner:
                             max_tokens=repair_max_tokens,
                             timeout_seconds=request_timeout_seconds,
                             workspace_tools=False,
+                            model_name=chat_model_name,
                         ),
                         usage_limits=pydantic_usage_limits_from_budget(
                             bounded_runtime.budget,
@@ -9927,6 +9931,7 @@ class PydanticAIEnvRunner:
                     max_tokens=self.workspace_model_max_tokens,
                     timeout_seconds=timeout_seconds,
                     workspace_tools=False,
+                    model_name=model_id,
                 ),
                 usage_limits=pydantic_usage_limits_from_budget(continuation.budget),
             )
@@ -19518,16 +19523,15 @@ def _workspace_request_model_settings(
     max_tokens: int | None,
     timeout_seconds: int | None,
     workspace_tools: bool,
+    model_name: str | None = None,
 ) -> dict[str, object]:
     settings: dict[str, object] = {
         "timeout": _request_timeout(timeout_seconds),
     }
     if workspace_tools:
-        settings = {
-            **settings,
-            "temperature": 0,
-            "parallel_tool_calls": True,
-        }
+        settings["parallel_tool_calls"] = True
+        if not is_openai_responses_model(model_name or ""):
+            settings["temperature"] = 0
     if max_tokens is not None:
         settings = {**settings, "max_tokens": max_tokens}
     return settings

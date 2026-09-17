@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>東清・八通關古道 | Scout Route Context</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/maplibre/maplibre-gl.css">
+  <link rel="stylesheet" href="/assets/style.css">
+  <script src="/assets/lucide.min.js" defer></script>
+  <script type="module" src="/assets/app.mjs"></script>
+</head>
+<body>
+  <a class="skip-link" href="#context-panel">前往路線內容</a>
+  <header class="app-header">
+    <div class="brand"><i data-lucide="mountain" aria-hidden="true"></i><strong>SCOUT</strong><span>ROUTE CONTEXT</span></div>
+    <div class="header-actions"><span class="mode-badge">本機研究展示</span><button id="export-evidence" class="icon-button" aria-label="下載證據索引" title="下載證據索引"><i data-lucide="file-down" aria-hidden="true"></i></button></div>
+  </header>
+  <section class="route-header" aria-labelledby="route-title">
+    <div class="route-heading"><div class="eyebrow">24 + 35 / CULTURAL LANDSCAPE</div><h1 id="route-title">東清・八通關古道</h1><p id="route-direction">東埔 → 卓溪</p></div>
+    <dl class="route-stats"><div><dt>綁定 GPX</dt><dd id="route-distance">載入中</dd></div><div><dt>GPX 高程</dt><dd id="route-elevation">載入中</dd></div><div><dt>軌跡記錄 · UTC+8</dt><dd id="route-period">載入中</dd></div></dl>
+  </section>
+  <div class="status-band"><i data-lucide="shield-alert" aria-hidden="true"></i><span id="closure-status">讀取既有查核記錄</span><span class="status-tail">研究候選資料 · 非通行判定</span></div>
+  <main class="workspace">
+    <section class="map-workspace" aria-label="歷史地圖與正射影像">
+      <div class="map-toolbar"><div class="map-heading"><i data-lucide="layers-2" aria-hidden="true"></i><h2 id="map-heading">古今對照</h2></div><div class="map-options"><label class="check-control"><input id="route-toggle" type="checkbox" checked><span class="line-swatch"></span>GPX</label><button id="fit-route" class="icon-button" title="全線範圍" aria-label="全線範圍"><i data-lucide="scan" aria-hidden="true"></i></button><button id="focus-public" class="icon-button" title="大水窟公開候選點" aria-label="大水窟公開候選點"><i data-lucide="map-pin" aria-hidden="true"></i></button><button id="start-note" class="icon-button" title="新增影像觀察" aria-label="新增影像觀察"><i data-lucide="notebook-pen" aria-hidden="true"></i></button></div></div>
+      <div id="map-frame" class="map-frame" aria-label="互動路線地圖">
+        <div id="modern-map" class="map"></div>
+        <div id="historic-clip" class="historic-clip"><div id="historic-map" class="map"></div></div>
+        <div id="comparison-divider" class="comparison-divider" aria-hidden="true"><span><i data-lucide="move-horizontal"></i></span></div>
+        <div id="map-captions" class="map-captions"><span id="historic-caption">1916 · 蕃地地形圖</span><span id="modern-caption">NLSC 正射影像 · 拍攝日期未記錄</span></div>
+        <div id="map-loading" class="map-notice">正在讀取工作區圖磚</div>
+        <div id="selection-caption" class="selection-caption" hidden></div>
+        <div class="map-key"><span><b class="route-key"></b>2020–2021 GPX 記錄</span><span id="coverage-status">本機圖磚</span></div>
+      </div>
+      <div class="timeline-toolbar"><div class="era-control"><label for="era">歷史圖幅</label><select id="era" aria-label="歷史圖幅年代" disabled><option>載入中</option></select></div><div class="comparison-control"><label for="comparison">古圖 / 影像</label><input id="comparison" type="range" min="0" max="100" value="52" aria-label="古圖與影像分界"><output id="comparison-value" for="comparison">52 / 48</output></div></div>
+      <div class="map-source-line"><span id="map-source">圖磚來源載入中</span><button id="map-evidence" class="text-button">圖資證據 <i data-lucide="arrow-up-right" aria-hidden="true"></i></button></div>
+      <section class="profile-section" aria-label="GPX 高程剖面"><div class="section-heading"><h2>沿線高程</h2><span id="profile-label">GPX 記錄值 · 垂直基準未記錄</span></div><canvas id="elevation-profile" height="116" aria-label="GPX 沿線高程剖面，非現況路況" role="img"></canvas><input id="route-position" type="range" min="0" max="1000" value="0" aria-label="沿 GPX 選取位置"><div class="profile-axis"><span>東埔</span><output id="profile-position">0.0 km</output><span>卓溪</span></div></section>
+    </section>
+    <aside id="context-panel" class="context-panel" aria-label="路線內容">
+      <div class="context-tabs" role="tablist" aria-label="Route Context 內容"><button id="tab-stories" role="tab" aria-controls="panel-stories" aria-selected="true" data-tab="stories">路線故事</button><button id="tab-places" role="tab" aria-controls="panel-places" aria-selected="false" tabindex="-1" data-tab="places">文化地點</button><button id="tab-research" role="tab" aria-controls="panel-research" aria-selected="false" tabindex="-1" data-tab="research">影像研究</button><button id="tab-notes" role="tab" aria-controls="panel-notes" aria-selected="false" tabindex="-1" data-tab="notes">觀察簿 <span id="note-count">0</span></button></div>
+      <section id="panel-stories" class="tab-panel" role="tabpanel" aria-labelledby="tab-stories"><div class="panel-intro"><div class="eyebrow">時間、地名與地景</div><h2>同名古道，不同的歷史</h2><p id="identity-summary"></p><div id="identity-sources" class="source-links"></div></div><div class="filter-control"><label for="story-filter">主題</label><select id="story-filter"><option value="all">全部故事</option><option value="historical">歷史</option><option value="cultural">地方記憶</option><option value="natural">自然地景</option><option value="observation_point">觀察視角</option></select></div><div id="story-list"></div></section>
+      <section id="panel-places" class="tab-panel" role="tabpanel" aria-labelledby="tab-places" hidden><div class="panel-intro"><div class="eyebrow">地名與祖居地</div><h2>名字背後的地方</h2><p>清代道路、布農族祖居地與今日地名並存。名稱保留原有記錄，候選關聯仍待人工確認。</p><div class="notice"><i data-lucide="lock-keyhole" aria-hidden="true"></i><span id="sensitivity-summary"></span></div></div><div id="place-list"></div></section>
+      <section id="panel-research" class="tab-panel" role="tabpanel" aria-labelledby="tab-research" hidden><div class="panel-intro"><div class="eyebrow">34 + 40 / IMAGE RESEARCH</div><h2>影像到證據</h2><p>本區現有的是 RGB 正射圖磚。拍攝時間、原生解析度及輻射校正資料未記錄，不能當成多光譜或高光譜反射率。</p></div><dl class="readiness-list"><div><dt>RGB 正射影像</dt><dd class="ok">本機可檢視</dd></div><div><dt>多光譜 / 高光譜配對</dt><dd>尚未建立</dd></div><div><dt>獨立驗證標註</dt><dd>尚未建立</dd></div><div><dt>模型訓練與評估</dt><dd>尚未執行</dd></div><div><dt>GEE 有效原始特徵</dt><dd id="gee-feature-count">讀取中</dd></div></dl><p id="gee-status" class="meta research-meta"></p><div class="research-section"><h3>本區的第一份觀察集</h3><p class="meta">人工 RGB 判讀草稿，不是獨立真值；無法辨識的地物保留「不確定」。</p><button id="research-add" class="primary-button"><i data-lucide="crosshair" aria-hidden="true"></i>建立影像觀察</button></div><div class="research-section"><h3>可檢驗的模型問題</h3><ul class="research-questions"><li>RGB、多光譜與高光譜，對裸露地與植被的辨識差異？</li><li>在不同山谷保留測試區後，模型是否仍能泛化？</li><li>陰影、雲與日期差距造成多少錯誤？</li></ul><div class="result-row"><span>mIoU / Macro-F1</span><strong>未評估</strong></div></div><div class="research-section"><h3>已儲存觀察的類別分布</h3><div id="label-distribution"></div><p class="meta">只統計人工樣本，不代表整條路線的土地覆蓋比例。</p></div></section>
+      <section id="panel-notes" class="tab-panel" role="tabpanel" aria-labelledby="tab-notes" hidden><div class="panel-intro"><div class="eyebrow">LOCAL FIELD NOTES</div><h2>我的影像觀察</h2><p>本機草稿 · 未審核 · 不寫入 Scout 工作區</p></div><form id="note-form"><div class="form-heading"><h3>新增觀察</h3><button type="button" id="pick-position" class="icon-button" title="取用地圖中心位置" aria-label="取用地圖中心位置"><i data-lucide="crosshair" aria-hidden="true"></i></button></div><div id="note-position" class="position-readout">尚未選取位置</div><label for="note-class">地表類別</label><select id="note-class"><option value="uncertain">不確定</option><option value="forest">森林 / 木本植被</option><option value="grass">草地 / 低矮植被</option><option value="bare">裸露地</option><option value="water">可見水體</option></select><label for="note-text">觀察記錄</label><textarea id="note-text" rows="3" maxlength="1200" placeholder="觀察內容、疑點或待補證據"></textarea><p class="meta">來源：NLSC RGB 圖磚；拍攝日期未知。影像標註不判斷通行、水量或遺址身分。</p><button id="save-note" type="submit" class="primary-button" disabled><i data-lucide="save" aria-hidden="true"></i>儲存本機草稿</button><p id="note-feedback" class="form-feedback" role="status"></p></form><div class="notes-heading"><h3>已儲存 <span id="saved-count">0</span></h3><button id="export-notes" class="icon-button" title="下載觀察 JSON" aria-label="下載觀察 JSON" disabled><i data-lucide="download" aria-hidden="true"></i></button></div><div id="note-list"></div></section>
+    </aside>
+  </main>
+  <footer class="app-footer"><span id="workspace-id">dongqing_batongguan_historic_trail_newImport</span><span>候選證據 · 唯讀工作區 · 原有 Route Context 未變更</span></footer>
+  <dialog id="evidence-dialog" aria-labelledby="evidence-title"><div class="dialog-heading"><h2 id="evidence-title">來源證據</h2><button id="close-evidence" class="icon-button" aria-label="關閉來源證據" title="關閉"><i data-lucide="x" aria-hidden="true"></i></button></div><div id="evidence-body"></div></dialog>
+  <div id="app-feedback" class="app-feedback" role="status" hidden></div>
+</body>
+</html>

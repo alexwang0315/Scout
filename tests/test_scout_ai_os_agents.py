@@ -227,6 +227,29 @@ def test_model_policy_keeps_openai_chat_contract_on_pydantic_ai_v2() -> None:
     assert "sk-test-secret" not in str(with_key.model_dump(mode="json"))
 
 
+def test_model_policy_routes_gpt6_astra_through_openai_responses() -> None:
+    for configured_name in (
+        "gpt-6-astra",
+        "openai:gpt-6-astra",
+        "openai-responses:gpt-6-astra",
+    ):
+        policy = resolve_model_policy(configured_name, env={})
+
+        assert policy.mode is ModelPolicyMode.EXTERNAL_PYDANTIC_AI
+        assert policy.model_for_agent == "openai-responses:gpt-6-astra"
+        assert policy.provider == "openai-responses"
+        assert policy.provider_model_id == "gpt-6-astra"
+        assert policy.required_credential_env == ["OPENAI_API_KEY"]
+        assert policy.missing_credential_env == ["OPENAI_API_KEY"]
+
+    with_key = resolve_model_policy(
+        "gpt-6-astra",
+        env={"OPENAI_API_KEY": "sk-test-secret"},
+    )
+    assert with_key.missing_credential_env == []
+    assert "sk-test-secret" not in str(with_key.model_dump(mode="json"))
+
+
 def test_model_policy_supports_nvidia_api_key_models() -> None:
     policy = resolve_model_policy("nemotron-super", env={})
 

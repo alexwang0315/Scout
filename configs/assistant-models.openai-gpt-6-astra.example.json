@@ -1,0 +1,26 @@
+{
+  "active_profile": "cloud",
+  "cloud_model": {
+    "profile": "cloud",
+    "model_name": "openai-responses:gpt-6-astra",
+    "backend": "auto",
+    "token_id": "operator-managed-openai-token",
+    "token_env_var": "OPENAI_API_KEY",
+    "tool_calling": "enabled"
+  },
+  "local_model": {
+    "profile": "local",
+    "model_name": "hailo:qwen3:1.7b",
+    "base_url": "http://127.0.0.1:8000",
+    "backend": "hailo_ollama",
+    "hardware_accelerator": "raspberry_pi_ai_hat_plus_2_hailo10h",
+    "token_id": "scout-ai-hat-plus-2-local-ollama",
+    "tool_calling": "enabled"
+  },
+  "aggressive_construction_mode": true,
+  "max_tool_calls_per_attempt": 10,
+  "max_model_requests_per_attempt": 10,
+  "connect_on_startup": false,
+  "fallback_to_local_on_error": true,
+  "local_fallback_fixed_schema": false
+}

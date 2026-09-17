@@ -66,6 +66,26 @@ def test_loads_cloud_and_local_model_profiles_from_external_json(tmp_path: Path)
     assert config.local_fallback_fixed_schema is True
 
 
+def test_gpt6_astra_example_keeps_ten_call_budget_and_local_fallback() -> None:
+    config_path = (
+        Path(__file__).resolve().parents[1]
+        / "configs"
+        / "assistant-models.openai-gpt-6-astra.example.json"
+    )
+
+    config = load_assistant_model_config(config_path)
+
+    assert config.active_profile == "cloud"
+    assert config.cloud_model.model_name == "openai-responses:gpt-6-astra"
+    assert config.cloud_model.token_env_var == "OPENAI_API_KEY"
+    assert config.cloud_model.workspace_tools_enabled() is True
+    assert config.local_model.model_name == "hailo:qwen3:1.7b"
+    assert config.fallback_to_local_on_error is True
+    assert config.connect_on_startup is False
+    assert config.max_tool_calls_per_attempt == 10
+    assert config.max_model_requests_per_attempt == 10
+
+
 def test_model_config_requires_distinct_cloud_and_local_profiles():
     with pytest.raises(ValidationError, match="cloud_model.profile must be cloud"):
         AssistantModelConfig.model_validate(

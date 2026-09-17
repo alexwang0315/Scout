@@ -18,6 +18,12 @@ from pretrip_candidate_generation import (
     generate_pretrip_candidates_from_gpx,
     generate_segment_candidates,
 )
+from pretrip_checkpoint_naming import (
+    REPORT_REF as CHECKPOINT_NAMING_REPORT_REF,
+    load_previous_naming,
+    name_checkpoints,
+)
+from pretrip_route_note_candidates import build_route_note_candidates_from_gpx
 from pretrip_geojson_import import import_pretrip_geojson_candidates
 from pretrip_gis_perception import build_gpx_gis_perception
 from pretrip_gpx_corpus import (
@@ -359,6 +365,8 @@ class PretripImportRequest:
     mcp_named_point_evidence: Path | None = None
     dtm_raster_sources: tuple[DtmRasterSource, ...] = ()
     resolve_default_material_root: bool = True
+    checkpoint_naming_source_root: Path | None = None
+    trusted_checkpoint_name_sha256s: tuple[str, ...] = ()
 
 
 class PretripPreparationInputError(ValueError):
@@ -378,6 +386,9 @@ def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
     _validate_request(request)
     preparation_inputs = _preparation_source_inputs(request)
     project_root = request.workspace_root.expanduser() / request.project_id
+    previous_checkpoints, previous_reviews = load_previous_naming(
+        request.checkpoint_naming_source_root or request.template_project_root or project_root
+    )
     _prepare_project_root(
         project_root=project_root,
         template_project_root=request.template_project_root,
@@ -434,6 +445,22 @@ def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
         rest_area_report=rest_area_report,
         primary_gpx=primary_gpx,
         primary_artifact_id=primary_artifact_id,
+    )
+    naming_notes = [
+        build_route_note_candidates_from_gpx(
+            path,
+            project_id=request.project_id,
+            source_artifact_id=(primary_artifact_id if index == 0 else f"{primary_artifact_id}.reference.{index:03d}"),
+            source_key=f"checkpoint_names_{index:03d}",
+            freshness_as_of=import_timestamp,
+        )
+        for index, path in enumerate([primary_gpx, *reference_paths])
+    ]
+    checkpoint_candidates, checkpoint_naming = name_checkpoints(
+        route, checkpoint_candidates, naming_notes,
+        previous_checkpoints=previous_checkpoints,
+        reviews=previous_reviews,
+        trusted_source_sha256s=request.trusted_checkpoint_name_sha256s,
     )
     checkpoint_candidates = _stamp_import_checkpoint_candidates(
         checkpoint_candidates,
@@ -585,6 +612,22 @@ def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
         project_root=project_root,
         package=package,
     )
+    checkpoint_naming_metadata = _checkpoint_naming_metadata(
+        checkpoint_naming,
+        report_ref=CHECKPOINT_NAMING_REPORT_REF,
+    )
+    checkpoint_naming_validation = _validate_checkpoint_naming_preparation(
+        checkpoint_candidates=checkpoint_candidates,
+        segment_candidates=segment_candidates,
+        checkpoint_naming=checkpoint_naming,
+        segment_dtm_coverage=segment_dtm_coverage,
+    )
+    source_inbox_manifest["checkpoint_naming"] = checkpoint_naming_metadata
+    source_inbox_manifest["checkpoint_naming_validation"] = checkpoint_naming_validation
+    source_inbox_manifest.setdefault("preparation_inputs", {})[
+        "checkpoint_naming"
+    ] = checkpoint_naming_metadata
+    write_json(project_root / "inbox" / "source_manifest.json", source_inbox_manifest)
     retreat_routes = _build_default_retreat_routes(
         request=request,
         route_summary=route_summary.model_dump(mode="json"),
@@ -651,6 +694,7 @@ def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
         "map_context_ref": "normalized/map/map_context.geojson",
         "map_candidates_ref": "candidates/map_candidates.json",
         "checkpoint_candidates_ref": "candidates/checkpoints.json",
+        "checkpoint_naming_ref": CHECKPOINT_NAMING_REPORT_REF,
         "segment_candidates_ref": "candidates/segments.json",
         "retreat_routes_ref": "candidates/retreat_routes.json",
         "route_note_candidates_ref": "candidates/route_note_candidates.json",
@@ -730,6 +774,8 @@ def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
         source_inbox_manifest=source_inbox_manifest,
         historical_gpx_source_index=historical_gpx_source_index,
         gpx_speed_filter=gpx_filter_report,
+        checkpoint_naming_metadata=checkpoint_naming_metadata,
+        checkpoint_naming_validation=checkpoint_naming_validation,
     )
     _attach_mcp_import_manifest(manifest, mcp_import_summary)
     admin_projection = _build_admin_projection(
@@ -772,6 +818,7 @@ def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
         skill_config_manifest=skill_config_manifest,
     )
 
+    write_json(project_root / output_refs["checkpoint_naming_ref"], checkpoint_naming)
     write_json(project_root / output_refs["package_ref"], package.model_dump(mode="json"))
     write_json(project_root / output_refs["route_summary_ref"], route_summary.model_dump(mode="json"))
     write_json(
@@ -909,6 +956,8 @@ def run_pretrip_import(request: PretripImportRequest) -> dict[str, Any]:
             else None
         ),
         mcp_import_summary=mcp_import_summary,
+        checkpoint_naming_metadata=checkpoint_naming_metadata,
+        checkpoint_naming_validation=checkpoint_naming_validation,
     )
     write_json(project_root / "project.json", project_payload)
     brain_seed = _rebuild_brain_seed_if_possible(
@@ -1005,6 +1054,8 @@ def main(argv: list[str] | None = None) -> None:
         ),
     )
     parser.add_argument("--checkpoint-spacing-m", type=float, default=DEFAULT_CHECKPOINT_SPACING_M)
+    parser.add_argument("--checkpoint-naming-source-root", type=Path, help="Read-only prior workspace supplying existing names and human review evidence.")
+    parser.add_argument("--trusted-checkpoint-name-sha256", action="append", default=[], help="Explicitly trusted GPX content SHA-256 for original waypoint names.")
     parser.add_argument("--max-reference-display-points", type=int, default=1_000)
     parser.add_argument(
         "--max-reasonable-gpx-speed-kmh",
@@ -1040,6 +1091,8 @@ def main(argv: list[str] | None = None) -> None:
             profile=args.profile,
             template_project_root=args.template_project_root,
             checkpoint_spacing_m=args.checkpoint_spacing_m,
+            checkpoint_naming_source_root=args.checkpoint_naming_source_root,
+            trusted_checkpoint_name_sha256s=tuple(args.trusted_checkpoint_name_sha256),
             max_reference_display_points=args.max_reference_display_points,
             max_reasonable_gpx_speed_kmh=args.max_reasonable_gpx_speed_kmh,
             max_previous_gpx_speed_ratio=args.max_previous_gpx_speed_ratio,
@@ -1979,6 +2032,101 @@ def _build_import_segment_dtm_coverage(
     )
 
 
+def _checkpoint_naming_metadata(
+    checkpoint_naming: dict[str, Any],
+    *,
+    report_ref: str,
+) -> dict[str, Any]:
+    """Bind the display-name report to the immutable candidate/preparation inputs."""
+    report_text = json.dumps(
+        checkpoint_naming,
+        ensure_ascii=False,
+        indent=2,
+        sort_keys=True,
+    ) + "\n"
+    return {
+        "policy_version": str(checkpoint_naming.get("schema_version") or "unknown"),
+        "report_ref": report_ref,
+        "report_sha256": hashlib.sha256(report_text.encode("utf-8")).hexdigest(),
+        "checkpoint_count": int(checkpoint_naming.get("checkpoint_count") or 0),
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "labels_are_display_only": True,
+    }
+
+
+def _validate_checkpoint_naming_preparation(
+    *,
+    checkpoint_candidates: list[PreTripCheckpointCandidate],
+    segment_candidates: list[Any],
+    checkpoint_naming: dict[str, Any],
+    segment_dtm_coverage: Any | None,
+) -> dict[str, Any]:
+    """Verify names are keyed to candidates while DTM remains keyed to IDs/geometry."""
+    checkpoint_ids = {candidate.candidate_id for candidate in checkpoint_candidates}
+    decision_ids = {
+        str(item.get("candidate_id"))
+        for item in checkpoint_naming.get("decisions", [])
+        if isinstance(item, dict) and item.get("candidate_id")
+    }
+    endpoint_ids = {
+        endpoint
+        for segment in segment_candidates
+        for endpoint in (
+            getattr(segment, "from_candidate_id", None),
+            getattr(segment, "to_candidate_id", None),
+        )
+        if endpoint
+    }
+    missing_decisions = sorted(checkpoint_ids - decision_ids)
+    unknown_decisions = sorted(decision_ids - checkpoint_ids)
+    missing_segment_endpoints = sorted(endpoint_ids - checkpoint_ids)
+    dtm_items = (
+        list(getattr(segment_dtm_coverage, "segment_metadata", ()) or ())
+        if segment_dtm_coverage is not None
+        else []
+    )
+    dtm_segment_ids = {
+        str(getattr(item, "segment_candidate_id", ""))
+        for item in dtm_items
+        if getattr(item, "segment_candidate_id", None)
+    }
+    segment_ids = {getattr(segment, "candidate_id", "") for segment in segment_candidates}
+    unknown_dtm_segment_ids = sorted(dtm_segment_ids - segment_ids)
+    naming_count_mismatch = int(checkpoint_naming.get("checkpoint_count") or 0) != len(checkpoint_ids)
+    status = "validated" if not (
+        missing_decisions
+        or unknown_decisions
+        or missing_segment_endpoints
+        or unknown_dtm_segment_ids
+        or naming_count_mismatch
+    ) else "invalid"
+    if status == "invalid":
+        raise ValueError(
+            "checkpoint naming preparation validation failed: "
+            f"missing_decisions={missing_decisions}, unknown_decisions={unknown_decisions}, "
+            f"missing_segment_endpoints={missing_segment_endpoints}, "
+            f"unknown_dtm_segment_ids={unknown_dtm_segment_ids}, "
+            f"naming_count_mismatch={naming_count_mismatch}"
+        )
+    return {
+        "status": status,
+        "policy_version": str(checkpoint_naming.get("schema_version") or "unknown"),
+        "checkpoint_candidate_count": len(checkpoint_ids),
+        "naming_decision_count": len(decision_ids),
+        "segment_candidate_count": len(segment_ids),
+        "segment_endpoint_id_count": len(endpoint_ids),
+        "dtm_status": "validated" if segment_dtm_coverage is not None else "not_available",
+        "dtm_segment_count": len(dtm_items),
+        "dtm_unlinked_segment_count": len(segment_ids - dtm_segment_ids),
+        "unknown_dtm_segment_count": len(unknown_dtm_segment_ids),
+        "dtm_mapping_basis": "segment_candidate_id_and_checkpoint_candidate_id",
+        "labels_are_display_only": True,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+
+
 def _build_dtm_coverage_from_material(
     *,
     request: PretripImportRequest,
@@ -2677,6 +2825,8 @@ def _build_import_manifest(
     source_inbox_manifest: dict[str, Any],
     historical_gpx_source_index: dict[str, Any],
     gpx_speed_filter: dict[str, Any],
+    checkpoint_naming_metadata: dict[str, Any],
+    checkpoint_naming_validation: dict[str, Any],
 ) -> dict[str, Any]:
     filter_summary = _gpx_filter_summary(gpx_speed_filter, output_refs=output_refs)
     imagery_scope = _build_imagery_acquisition_scope(route_summary)
@@ -2716,6 +2866,8 @@ def _build_import_manifest(
             ],
         },
         "outputs": output_refs,
+        "checkpoint_naming": checkpoint_naming_metadata,
+        "checkpoint_naming_validation": checkpoint_naming_validation,
         "gpx_speed_filter": filter_summary,
         "imagery_acquisition_scope": imagery_scope,
         "counts": {
@@ -2738,6 +2890,7 @@ def _build_import_manifest(
             "rest_area_candidate_count": rest_area_report["rest_area_candidate_count"],
             "rest_area_checkpoint_count": rest_area_report["rest_area_checkpoint_count"],
             "checkpoint_candidate_count": checkpoint_count,
+            "checkpoint_naming_count": checkpoint_naming_metadata["checkpoint_count"],
             "segment_candidate_count": segment_count,
             "route_note_candidate_count": route_note_candidates["counts"]["note_candidate_count"],
             "route_note_potential_ln_signal_count": route_note_candidates["counts"][
@@ -3889,6 +4042,8 @@ def _project_payload(
     segment_dtm_coverage: dict[str, Any] | None,
     dtm_coverage_summary: dict[str, Any] | None,
     mcp_import_summary: dict[str, Any] | None,
+    checkpoint_naming_metadata: dict[str, Any],
+    checkpoint_naming_validation: dict[str, Any],
 ) -> dict[str, Any]:
     project_path = project_root / "project.json"
     payload: dict[str, Any] = {}
@@ -3916,6 +4071,12 @@ def _project_payload(
             "source_inbox_file_count": source_inbox_manifest["source_file_count"],
             "source_artifact_count": 1 + reference_track_count,
             "checkpoint_candidate_count": checkpoint_count,
+            "checkpoint_naming_policy_version": checkpoint_naming_metadata["policy_version"],
+            "checkpoint_naming_report_sha256": checkpoint_naming_metadata["report_sha256"],
+            "checkpoint_naming_checkpoint_count": checkpoint_naming_metadata["checkpoint_count"],
+            "checkpoint_naming_candidate_only": True,
+            "checkpoint_naming_runtime_safety_truth": False,
+            "checkpoint_naming_validation": checkpoint_naming_validation,
             "segment_candidate_count": segment_count,
             "resume_segment_count": resume_segment_count,
             "rest_area_candidate_count": rest_area_candidate_count,

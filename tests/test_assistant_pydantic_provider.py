@@ -328,6 +328,20 @@ def test_cloud_runner_does_not_apply_local_default_token_limit(monkeypatch):
     assert request_settings["timeout"] == 29.0
 
 
+def test_gpt6_responses_workspace_settings_omit_unsupported_temperature():
+    request_settings = assistant_provider_module._workspace_request_model_settings(
+        max_tokens=None,
+        timeout_seconds=30,
+        workspace_tools=True,
+        model_name="openai-responses:gpt-6-astra",
+    )
+
+    assert request_settings == {
+        "timeout": 29.0,
+        "parallel_tool_calls": True,
+    }
+
+
 def test_provider_bound_runner_preserves_configured_openrouter_model_id():
     runner = PydanticAIEnvRunner(
         model_name="z-ai/glm-5.2",
