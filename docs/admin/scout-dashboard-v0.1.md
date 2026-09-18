@@ -115,7 +115,29 @@ Verification and remaining gaps:
   historical CP reference averages remain independently available. Official
   browser qualification was not rerun against the already-running 9099 process,
   which predates this change; the contract and replay checks above are not
-  claimed as that qualification.
+  claimed as that qualification. A read-only browser continuity check at
+  `http://127.0.0.1:9099/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport`
+  confirmed the same runtime stayed reachable, but its Body Index response was
+  the pre-change `not_imported` schema without the candidate-only boundary.
+  DASH-021 therefore failed on the stale runtime (`Body Index response is not
+  candidate-only`), DASH-020 failed because its stale Pace Fit response lacked
+  `personal_mapping`, while DASH-022 and DASH-023 passed without executing a
+  private import or starting a watcher. The live page exposes 50 Diagnostic
+  cases while the existing browser smoke runner still expects 48; the runner
+  exited with `Expected 48 diagnostic cases.` This evidence is preserved as a
+  runtime-version/Diagnostic conflict, not reclassified as current-code PASS.
+- A separate construction-only replay used the repository launcher on temporary
+  `http://127.0.0.1:9100` with the same real workspace, then stopped that
+  process. Through the Body Index UI it imported the local HealthExport exports
+  and rendered 3 deduplicated ZIPs, 40 run/walk activities, 13,865.2 kJ run
+  energy, 390.9 W covered-energy rate, 5/10-minute available windows,
+  15/20-minute unavailable windows, and 33/32/32 complete active/static/total
+  days. The Pace Fit page rendered 219 checkpoint candidates, 218 adjacent
+  pairs, and 86 historical CP averages; all personal percentages remained
+  unavailable because the Architecture speed/time mapping was absent. Browser
+  retests DASH-020, DASH-021, DASH-022, and DASH-023 all passed on this
+  current-code temporary runtime. This is stronger local browser evidence, but
+  it is not official qualification or a trusted baseline.
 - Existing out-of-scope failures remain recorded: phase3
   `dashboard-shell-control` reports `SURFACE-INVENTORY-DRIFT`, and the outdoor
   standard audit still reports `contextOrReviewEvidenceGapToolCount == 1`
