@@ -499,6 +499,10 @@ def test_scout_dashboard_body_index_fresh_project_has_no_fabricated_evidence(
         ["GPX tracks", "0", "no route traces imported"],
         ["15-min windows", "0", "no sanitized pressure windows"],
         ["Provider metrics", "0", "no source-value metric families"],
+        ["Time-series activities", "0", "deduplicated run/walk activities; not an ability score"],
+        ["Classified segments", "0", "speed/cadence-led inferred run/walk/stop/unknown segments"],
+        ["Sustained windows", "0", "available 5/10/15/20-min run windows only"],
+        ["Daily energy baseline", "0", "complete active/static days; total is available only when both exist"],
     ]
     assert payload["pressure_timeline"] == []
     assert payload["provider_metrics"] == []
@@ -559,8 +563,88 @@ def test_scout_dashboard_pace_fit_missing_workspace_stays_unavailable(
     assert payload["status"] == "unavailable"
     assert payload["failure_code"] == "workspace_project_not_found"
     assert payload["pairs"] == []
+    assert payload["pace_fit_mapping"]["status"] == "unavailable"
+    assert payload["pace_fit_mapping"]["energy_or_w_not_converted_directly"] is True
     assert payload["boundary"]["candidate_only"] is True
     assert payload["boundary"]["runtime_safety_truth"] is False
+    assert response.headers["x-scout-candidate-only"] == "true"
+    assert response.headers["x-scout-runtime-safety-truth"] == "false"
+
+
+def test_scout_dashboard_pace_fit_attaches_only_explicit_architecture_mapping(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    project_id = "pace_fit_mapping_fixture"
+    body_snapshot = {
+        "body_index": {
+            "flat_speed_by_mode": {
+                "walking": {"median_speed_mps": 1.0},
+            },
+        },
+    }
+    reference = {
+        "schema_version": "scout_pace_fit_reference.v1",
+        "project_id": project_id,
+        "status": "available",
+        "pairs": [
+            {
+                "pair_id": "cp-a-to-cp-b",
+                "reference_available": True,
+                "from_route_distance_m": 0,
+                "to_route_distance_m": 600,
+                "distance_m": 600,
+                "duration_minutes": {"average": 10.0},
+            },
+        ],
+        "coverage": {
+            "checkpoint_count": 2,
+            "pair_count": 1,
+            "measured_pair_count": 1,
+            "unmeasured_pair_count": 0,
+            "sample_count": 1,
+        },
+        "boundary": {"candidate_only": True, "runtime_safety_truth": False},
+    }
+    monkeypatch.setattr(
+        admin_api,
+        "_pretrip_workspace_project_root",
+        lambda _root, *, project_id: tmp_path / project_id,
+    )
+    monkeypatch.setattr(
+        admin_api,
+        "build_workspace_checkpoint_pace_fit_reference",
+        lambda _project_root, *, project_id: dict(reference),
+    )
+    monkeypatch.setattr(
+        admin_api,
+        "build_pretrip_admin_view",
+        lambda *args, **kwargs: {
+            "route_architecture_intelligence": {
+                "segment_demand_vectors": [
+                    {
+                        "start_distance_m": 0,
+                        "end_distance_m": 600,
+                        "pace_speed_correction_ratio": 0.8,
+                    },
+                ],
+            },
+        },
+    )
+    monkeypatch.setattr(admin_api, "_load_dashboard_body_index_snapshot", lambda _project_id: body_snapshot)
+    client = TestClient(create_admin_app(pretrip_workspace_root=tmp_path))
+
+    response = client.get(f"/admin/dashboard/pace-fit?project_id={project_id}")
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    mapping = payload["pairs"][0]["personal_mapping"]
+    assert mapping["status"] == "available"
+    assert mapping["expected_minutes"] == 12.5
+    assert mapping["pace_fit_percent"] == 125
+    assert mapping["energy_not_used_as_time_ratio"] is True
+    assert payload["pace_fit_mapping"]["mapped_pair_count"] == 1
+    assert "energy_or_w_not_converted_directly" not in payload
     assert response.headers["x-scout-candidate-only"] == "true"
     assert response.headers["x-scout-runtime-safety-truth"] == "false"
 
@@ -653,12 +737,13 @@ def test_scout_dashboard_body_index_import_dedupes_and_sanitizes(
     assert payload["project_id"] == "test_body_index"
     assert payload["import_status"] == "imported"
     assert payload["summary"]["evidence_status"] == "available"
-    assert payload["summary"]["pace_coefficient_semantics"] == "relative_speed_factor"
-    assert payload["summary"]["pace_fit_semantics"] == "estimated_elapsed_time_ratio_to_reference_average"
-    assert float(payload["summary"]["pace_fit_time_ratio"]) > 0
-    assert payload["summary"]["pace_fit_time_percent"] == round(
-        float(payload["summary"]["pace_fit_time_ratio"]) * 100
+    assert payload["summary"]["pace_coefficient_semantics"] == "not calculated from activity counts or energy alone"
+    assert payload["summary"]["pace_fit_semantics"] == (
+        "requires traceable speed/time mapping with Architecture route demand; "
+        "energy or W is not a Pace Fit percentage"
     )
+    assert payload["summary"]["pace_fit_time_ratio"] == "unavailable"
+    assert payload["summary"]["pace_fit_time_percent"] == "unavailable"
     assert payload["import_result"]["new_source_count"] == 2
     assert payload["import_result"]["duplicate_source_count"] == 0
     assert payload["import_result"]["processed_source_count"] == 2
@@ -672,6 +757,15 @@ def test_scout_dashboard_body_index_import_dedupes_and_sanitizes(
     assert coverage["GPX tracks"] == "2"
     assert int(coverage["15-min windows"]) > 0
     assert int(coverage["Provider metrics"]) >= 4
+    assert int(coverage["Time-series activities"]) == 2
+    assert int(coverage["Classified segments"]) > 0
+    assert int(coverage["Sustained windows"]) == 0
+    assert "/" in coverage["Daily energy baseline"]
+    assert payload["body_index"]["status"] == "available"
+    assert payload["body_index"]["body_mass_kg"] == 70.0
+    assert payload["body_index"]["body_mass_basis"] == "user_assumption"
+    assert payload["body_index"]["flat_speed_by_mode"]["walking"]["median_speed_mps"] is not None
+    assert payload["body_index"]["sustained_output"]["not_extrapolated"] is True
     assert "vo2_max" in payload["provider_metrics"]
     assert "walking_heart_rate_average" in payload["provider_metrics"]
     provider_metric_summaries = {
@@ -699,10 +793,29 @@ def test_scout_dashboard_body_index_import_dedupes_and_sanitizes(
     assert pressure_trend["max_label"].startswith("max ")
     assert payload["boundary"]["raw_health_payload_shared"] is False
     assert payload["boundary"]["raw_gpx_shared"] is False
+    assert payload["boundary"]["candidate_only"] is True
+    assert payload["boundary"]["runtime_safety_truth"] is False
     assert payload["boundary"]["exact_timestamps_shared"] is False
     assert payload["boundary"]["phase1_runtime_safety_truth"] is False
     assert payload["boundary"]["safety_api_called"] is False
     assert payload["boundary"]["outbound_alert_sent"] is False
+
+    adjusted_response = client.post(
+        "/admin/dashboard/body-index/import",
+        json={
+            "project_id": "test_body_index",
+            "source_dir": str(source_dir),
+            "confirm_import": True,
+            "body_mass_kg": 80.0,
+        },
+    )
+    assert adjusted_response.status_code == 200, adjusted_response.text
+    adjusted_payload = adjusted_response.json()
+    assert adjusted_payload["body_index"]["body_mass_kg"] == 80.0
+    assert all(
+        source["body_index_analysis"]["body_mass_kg"] == 80.0
+        for source in adjusted_payload["source_index"]
+    )
 
     serialized = json.dumps(payload, ensure_ascii=False)
     assert "heartRateData" not in serialized
@@ -4204,7 +4317,7 @@ def test_scout_dashboard_pace_fit_compares_each_cp_interval_with_body_index_time
         "paceFitPercent",
         "pace_fit_time_ratio",
         "pace_fit_time_percent",
-        "estimated_elapsed_time_ratio_to_reference_average",
+        "requires_traceable_speed_time_mapping_with_architecture",
     ):
         assert marker in html
 
@@ -4296,6 +4409,8 @@ def test_scout_dashboard_pace_fit_body_index_dashboard_contract() -> None:
         'BODY_INDEX_WATCH_STATUS_PATH = "/admin/dashboard/body-index/watch/status"',
         'BODY_INDEX_WATCH_START_PATH = "/admin/dashboard/body-index/watch/start"',
         'BODY_INDEX_WATCH_STOP_PATH = "/admin/dashboard/body-index/watch/stop"',
+        "bodyIndexBodyMass",
+        "body_mass_kg",
         "fetchJson(bodyIndexStatusPath(), { timeoutMs: BODY_INDEX_FETCH_TIMEOUT_MS })",
         "fetchJson(bodyIndexWatchStatusPath())",
         'data-body-index-import',
@@ -4330,11 +4445,12 @@ def test_scout_dashboard_pace_fit_body_index_dashboard_contract() -> None:
         "Scout Pace Coefficient",
         "Energy Reserve",
         "Vulnerability",
-        "Experience Trust",
+        "Mean daily active baseline",
         "Route Impact Mapping",
         "Evidence Matrix",
-        "Challenge Fit",
-        "slowest member basis",
+        "Activity energy · original observations and model outputs",
+        "historical highest sustained output estimate",
+        "same-day fraction ≠ baseline multiplier",
         "advisory planning",
         "planning evidence",
         "source_provider only",
@@ -4342,12 +4458,12 @@ def test_scout_dashboard_pace_fit_body_index_dashboard_contract() -> None:
         "no Phase 1 mutation",
         "no safety endpoint",
         "no outbound",
-        "completed_trip_gpx",
-        "route_progress_frame",
-        "terrain_time_model",
-        "rest_stop_pattern",
-        "weather_overlay",
-        "team_slowest_member",
+        "原始觀察 / HealthAutoExport",
+        "原始觀察 / 分類",
+        "模型估計 / sustained",
+        "模型估計 / daily",
+        "假設 / metabolic cross-check",
+        "未知 / Architecture",
         "Body Index Overview",
         "Health Baseline Signals",
         "Window Pressure Timeline",
@@ -4382,7 +4498,7 @@ def test_scout_dashboard_pace_fit_body_index_dashboard_contract() -> None:
         "No provider metrics imported.",
         "No Scout Pace Coefficient has been calculated.",
         "awaiting evidence",
-        "unavailable until evidence import",
+        "unavailable until Architecture speed/time mapping",
         "coefficient_metrics",
         "source value only",
         "not live oxygen uptake",

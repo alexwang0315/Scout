@@ -100,6 +100,58 @@ Pace Dashboard:
 This analysis does not infer medical condition, fatigue, comfort, motivation, or
 absolute metabolic energy from GPX alone.
 
+## Body Index Personal Activity Energy Boundary
+
+Body Index is the personal activity-evidence input to Pace Fit; it is not a
+replacement for Architecture's route-demand model. The current standardized
+scenario uses a configurable 70 kg body mass (`user_assumption`), grade 0°,
+zero load, and light clothing. These are model conditions and do not prove that
+historical activities were flat, unloaded, or performed in light clothing.
+
+The local HealthExport time-series contract is:
+
+```text
+activity_energy_kcal = sum(distinct interval activeEnergy_kJ) / 4.184
+activity_energy_rate_W = sum(distinct interval activeEnergy_kJ) * 1000 / covered_seconds
+```
+
+Interval energy is summed once and is never multiplied by interval duration a
+second time. Duplicate ZIPs, daily summaries, and activity details are
+deduplicated before aggregation. The resulting W is a provider-estimated
+active-energy rate, not external mechanical power.
+
+Activity mode is inferred from speed/time and cadence/time, with heart rate as
+auxiliary evidence. Smoothing, minimum segment duration, and transition
+hysteresis allow run/walk/run changes while avoiding single-sample flips.
+Missing data is unknown rather than stopped, and an uncovered gap cannot be
+crossed to create a continuous run segment. Five-, ten-, fifteen-, and
+twenty-minute historical highest sustained output estimates use only qualifying
+continuous run segments; an uncovered duration stays unavailable and is never
+extrapolated. Run-to-walk/stop cumulative energy and later run resumption are
+observations, not proof of exhaustion or a physiological maximum.
+
+The flat-ground cross-check uses the ACSM walking/running equations, with the
+net active 3.5 mL/kg/min resting component removed before converting oxygen
+cost to kcal and W. The published equation summary and its speed/grade terms
+are available in [this peer-reviewed study](https://pmc.ncbi.nlm.nih.gov/articles/PMC12419060/).
+The cross-check retains its applicability limits and never re-labels the
+provider's active-energy value as a newly calculated 70 kg measurement.
+
+Pace Fit retains each CP pair's historical reference average independently. A
+personal percentage is emitted only after a traceable mapping exists from Body
+Index flat speed through an explicit Architecture route speed/time correction:
+
+```text
+Pace Fit % = personal_expected_elapsed_time
+             / same_CP_pair_historical_average_elapsed_time * 100
+```
+
+Energy and W are not a time ratio. If Architecture has not supplied the
+explicit correction, the personal mapping is unavailable while the historical
+CP average remains visible. No slope or load coefficient is multiplied into
+personal usable energy; those variables remain route-demand inputs owned by
+Architecture.
+
 ### 2026-07-21 Golden-Scope And Pairwise-Filter Correction
 
 Architecture measures route demand from the crowd corpus inside the route the

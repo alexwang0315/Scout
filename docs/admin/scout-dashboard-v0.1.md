@@ -46,6 +46,83 @@ Each entry should include:
 
 ## Implementation Record
 
+### 2026-09-18 - HealthExport time-series Body Index and traceable Pace Fit mapping
+
+This entry supersedes the same-date prototype note below wherever it described
+an existing relative-speed-to-time ratio; the current contract keeps that ratio
+unavailable until the explicit Architecture mapping exists.
+
+User request:
+
+- Build the personal Body Index reference from real HealthExport time series,
+  including run/walk/stop/unknown segments, interval active energy, sustained
+  output, cumulative transition energy, and daily active/static/total energy.
+- Keep a 70 kg body mass, flat grade, zero load, and light clothing as explicit
+  user/model assumptions rather than historical observations.
+- Keep route grade, load, terrain, weather, and route speed correction in
+  Architecture. Pace Fit may emit a personal percentage only after a traceable
+  Body Index speed plus Architecture route speed/time mapping exists.
+
+Implementation steps:
+
+- Added `scout_body_index.py`, a local HealthExport ZIP parser and deterministic
+  aggregator. It deduplicates activities and daily records, sums interval
+  `activeEnergy` once, converts kJ to kcal and covered seconds to the provider's
+  active-energy W estimate, and never treats that W as mechanical power.
+- Added speed/time and cadence/time classification with smoothing, minimum
+  segment duration, hysteresis, auxiliary heart-rate evidence, explicit gaps,
+  confidence, basis, and coverage. Missing data becomes unknown, not stopped;
+  inferred transitions remain estimates and are not labelled exhaustion.
+- Added historical highest sustained output windows for 5/10/15/20 minutes,
+  using only qualifying continuous run segments. Uncovered windows remain
+  unavailable and are not extrapolated. Added transition cumulative energy and
+  post-transition run resumption references.
+- Added an ACSM flat-ground metabolic-cost cross-check for the standardized
+  scenario. The source formula and applicability range remain in the output;
+  this cross-check is separate from the watch's interval energy estimate.
+- Exposed `body_mass_kg` on Body Index import/watch requests and the page
+  control. A changed mass re-parses existing source ZIPs and remains labelled
+  `user_assumption` in the resulting model.
+- Replaced Body Index count/GPX/metric-count heuristics in `admin_api.py` with
+  the new aggregate and attached `personal_mapping` to each Pace Fit CP pair.
+  The Pace Fit page still shows historical CP averages when personal mapping is
+  unavailable and never derives a percentage from energy or W.
+- Added model/observation/assumption/unknown panels and sustained/daily energy
+  details to the Body Index page. All outputs remain candidate-only with
+  `runtime_safety_truth=false`; raw HealthExport rows, exact timestamps,
+  precise locations, and original ZIP names are not returned.
+
+Revalidated local source coverage:
+
+- The current local `~/downloads/HealthExport` inventory contains 3 ZIP exports,
+  41 deduplicated workouts (40 run/walk candidates and 1 other activity). The
+  parser observed run/walk transitions, interval active energy, and mixed
+  export granularities. The iCloud CloudDocs location has no `Auto Export`
+  directory available to this checkout.
+- The real aggregate provides 5- and 10-minute sustained windows; 15- and
+  20-minute windows remain unavailable because no qualifying continuous run
+  segment covers them. This is an evidence boundary, not an extrapolation.
+
+Verification and remaining gaps:
+
+- Focused Body Index tests: 7 passed. The focused Pace/Diagnostic replay passed
+  19 tests, and the full Dashboard page regression passed 170 tests. The real
+  HealthExport API replay passed with 3 source ZIPs, 40 eligible run/walk
+  activities, HR-supported classified segments, 5/10-minute available windows,
+  15/20-minute unavailable windows, and no private raw fields in the response.
+- The current workspace's Pace Fit API keeps the personal mapping unavailable
+  because Architecture has not supplied an explicit route speed/time correction;
+  historical CP reference averages remain independently available. Official
+  browser qualification was not rerun against the already-running 9099 process,
+  which predates this change; the contract and replay checks above are not
+  claimed as that qualification.
+- Existing out-of-scope failures remain recorded: phase3
+  `dashboard-shell-control` reports `SURFACE-INVENTORY-DRIFT`, and the outdoor
+  standard audit still reports `contextOrReviewEvidenceGapToolCount == 1`
+  where its expectation is 0. Neither was changed or downgraded here.
+- This change does not claim a medical aerobic threshold, physiological maximum,
+  route safety, or a calibrated mountain daily energy budget.
+
 ### 2026-09-18 - Pace Fit CP interval averages and Body Index time ratio
 
 User request:

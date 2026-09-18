@@ -135,6 +135,12 @@ from pretrip_import import (
 from pretrip_reference_segment_timing import (
     build_workspace_checkpoint_pace_fit_reference,
 )
+from scout_body_index import (
+    DEFAULT_BODY_MASS_KG,
+    aggregate_body_index_sources,
+    attach_pace_fit_mappings,
+    build_body_index_source_analysis,
+)
 from pretrip_energy_projection import (
     DEFAULT_PRETRIP_ENERGY_PROJECTION_REF,
     write_pretrip_energy_reserve_projection,
@@ -441,6 +447,8 @@ def _dashboard_body_index_source_dir(source_dir: str | None) -> Path:
 
 def _dashboard_body_index_boundary() -> dict[str, Any]:
     return {
+        "candidate_only": True,
+        "runtime_safety_truth": False,
         "advisory_only": True,
         "source_provider_only": True,
         "raw_health_payload_shared": False,
@@ -536,10 +544,10 @@ def _dashboard_body_index_default_health_signals() -> list[list[Any]]:
 def _dashboard_body_index_unavailable_summary() -> dict[str, Any]:
     return {
         "scout_pace_coefficient": "unavailable",
-        "pace_coefficient_semantics": "relative_speed_factor",
+        "pace_coefficient_semantics": "not calculated from activity counts or energy alone",
         "pace_fit_time_ratio": "unavailable",
         "pace_fit_time_percent": "unavailable",
-        "pace_fit_semantics": "estimated_elapsed_time_ratio_to_reference_average",
+        "pace_fit_semantics": "requires traceable speed/time mapping with Architecture route demand",
         "energy_reserve": "unavailable",
         "vulnerability": "unavailable",
         "experience_trust": "unavailable",
@@ -549,34 +557,37 @@ def _dashboard_body_index_unavailable_summary() -> dict[str, Any]:
 
 
 def _dashboard_body_index_enrich_summary(summary: dict[str, Any]) -> dict[str, Any]:
-    """Expose the Body Index time-ratio meaning without moving its formula."""
+    """Expose legacy summary keys without reviving count-based heuristics."""
     enriched = dict(summary)
-    enriched.setdefault("pace_coefficient_semantics", "relative_speed_factor")
+    enriched.setdefault(
+        "pace_coefficient_semantics",
+        "not calculated from activity counts or energy alone",
+    )
     enriched.setdefault(
         "pace_fit_semantics",
-        "estimated_elapsed_time_ratio_to_reference_average",
+        "requires_traceable_speed_time_mapping_with_architecture",
     )
-    def optional_float(key: str) -> float | None:
-        raw = summary.get(key)
-        if raw is None or raw == "" or raw == "unavailable":
-            return None
-        try:
-            return float(raw)
-        except (TypeError, ValueError):
-            return None
-
-    coefficient = optional_float("scout_pace_coefficient")
-    ratio = optional_float("pace_fit_time_ratio")
-    if ratio is None and coefficient is not None and coefficient > 0:
-        ratio = 1.0 / coefficient
-        enriched["pace_fit_time_ratio"] = f"{ratio:.2f}"
-        enriched["pace_fit_time_percent"] = round(ratio * 100)
-    enriched.setdefault("pace_fit_time_ratio", "unavailable")
-    enriched.setdefault("pace_fit_time_percent", "unavailable")
+    # These fields existed in the former count-based preview.  An imported
+    # legacy snapshot must not continue to expose them as if they were a
+    # personal ability estimate or a Pace Fit mapping.
+    for key in (
+        "scout_pace_coefficient",
+        "pace_fit_time_ratio",
+        "pace_fit_time_percent",
+        "energy_reserve",
+        "vulnerability",
+        "experience_trust",
+    ):
+        enriched[key] = "unavailable"
+    enriched["pace_fit_semantics"] = (
+        "requires traceable speed/time mapping with Architecture route demand; "
+        "energy or W is not a Pace Fit percentage"
+    )
     return enriched
 
 
 def _dashboard_body_index_default_snapshot(project_id: str) -> dict[str, Any]:
+    empty_model = aggregate_body_index_sources([])
     return {
         "schema_version": DASHBOARD_BODY_INDEX_SCHEMA_VERSION,
         "project_id": project_id,
@@ -584,12 +595,17 @@ def _dashboard_body_index_default_snapshot(project_id: str) -> dict[str, Any]:
         "import_status": "not_imported",
         "source_dir": None,
         "summary": _dashboard_body_index_unavailable_summary(),
+        "body_index": empty_model,
         "coverage_cards": [
             ["Health exports", "0", "no local HealthExport sources imported"],
             ["Walking sessions", "0", "no walking workouts imported"],
             ["GPX tracks", "0", "no route traces imported"],
             ["15-min windows", "0", "no sanitized pressure windows"],
             ["Provider metrics", "0", "no source-value metric families"],
+            ["Time-series activities", "0", "deduplicated run/walk activities; not an ability score"],
+            ["Classified segments", "0", "speed/cadence-led inferred run/walk/stop/unknown segments"],
+            ["Sustained windows", "0", "available 5/10/15/20-min run windows only"],
+            ["Daily energy baseline", "0", "complete active/static days; total is available only when both exist"],
         ],
         "health_signals": _dashboard_body_index_default_health_signals(),
         "pressure_timeline": [],
@@ -627,6 +643,7 @@ def _load_dashboard_body_index_snapshot(project_id: str) -> dict[str, Any]:
         ]
     if isinstance(data.get("summary"), dict):
         data["summary"] = _dashboard_body_index_enrich_summary(data["summary"])
+    data.setdefault("body_index", aggregate_body_index_sources([]))
     data.setdefault("boundary", _dashboard_body_index_boundary())
     return data
 
@@ -645,6 +662,7 @@ def _dashboard_body_index_sanitize_source_entry(source: dict[str, Any]) -> dict[
         "total_duration_min",
         "provider_metric_names",
         "provider_metric_summaries",
+        "body_index_analysis",
     }
     sanitized = {key: source[key] for key in allowed_keys if key in source}
     source_sha = str(sanitized.get("sha256") or source.get("sha256") or "")
@@ -850,8 +868,18 @@ def _dashboard_body_index_window_trend(
     }
 
 
-def _dashboard_body_index_source_from_zip(path: Path, imported_at: str) -> dict[str, Any]:
+def _dashboard_body_index_source_from_zip(
+    path: Path,
+    imported_at: str,
+    *,
+    body_mass_kg: float = DEFAULT_BODY_MASS_KG,
+) -> dict[str, Any]:
     source_sha = sha256_file(path)
+    body_index_analysis = build_body_index_source_analysis(
+        path,
+        body_mass_kg=body_mass_kg,
+        source_sha256=source_sha,
+    )
     analysis = build_health_auto_export_physio_analysis(path, activity_type="walking")
     provider_metric_names = sorted(
         metric.metric_name for metric in analysis.provider_metric_summaries
@@ -865,7 +893,11 @@ def _dashboard_body_index_source_from_zip(path: Path, imported_at: str) -> dict[
         "source_label": f"HealthExport source {source_sha[:8]}",
         "sha256": source_sha,
         "gpx_count": _dashboard_body_index_zip_gpx_count(path),
-        "walking_sessions": analysis.session_count,
+        "walking_sessions": int(
+            (body_index_analysis.get("coverage") or {})
+            .get("activity_count_by_mode", {})
+            .get("walking", 0)
+        ),
         "analysis_windows": analysis.overall.total_windows,
         "hr_pressure_windows": analysis.overall.total_hr_pressure_windows,
         "recovery_debt_windows": (
@@ -875,6 +907,7 @@ def _dashboard_body_index_source_from_zip(path: Path, imported_at: str) -> dict[
         "total_duration_min": analysis.overall.total_duration_min,
         "provider_metric_names": provider_metric_names,
         "provider_metric_summaries": provider_metric_summaries,
+        "body_index_analysis": body_index_analysis,
         "imported_at": imported_at,
     }
 
@@ -1092,6 +1125,7 @@ def _dashboard_body_index_snapshot_from_sources(
     sources: list[dict[str, Any]],
     import_result: dict[str, Any],
     import_errors: list[dict[str, str]],
+    body_mass_kg: float = DEFAULT_BODY_MASS_KG,
 ) -> dict[str, Any]:
     provider_metrics = sorted(
         {
@@ -1131,50 +1165,31 @@ def _dashboard_body_index_snapshot_from_sources(
         1,
     )
     provider_metric_count = len(provider_metrics)
-    if sources:
-        experience = min(
-            0.92,
-            0.55
-            + (total_sessions * 0.01)
-            + (total_gpx * 0.002)
-            + (provider_metric_count * 0.005),
-        )
-        energy = min(
-            0.86,
-            0.54
-            + (total_sessions * 0.004)
-            + (provider_metric_count * 0.003),
-        )
-        vulnerability = max(
-            0.18,
-            0.48
-            - (total_sessions * 0.003)
-            - (provider_metric_count * 0.004),
-        )
-        pace_coefficient = min(
-            0.9,
-            0.7
-            + (experience * 0.12)
-            + (energy * 0.08)
-            - (vulnerability * 0.04),
-        )
-        summary = {
-            "scout_pace_coefficient": f"{pace_coefficient:.2f}",
-            "pace_coefficient_semantics": "relative_speed_factor",
-            "pace_fit_time_ratio": f"{(1.0 / pace_coefficient):.2f}",
-            "pace_fit_time_percent": round((1.0 / pace_coefficient) * 100),
-            "pace_fit_semantics": "estimated_elapsed_time_ratio_to_reference_average",
-            "energy_reserve": f"{energy:.2f}",
-            "vulnerability": f"{vulnerability:.2f}",
-            "experience_trust": f"{experience:.2f}",
-            "score_percent": round(pace_coefficient * 100),
-            "evidence_status": "available",
-            "total_distance_km": total_distance_km,
-            "total_duration_min": total_duration_min,
-        }
-    else:
-        summary = _dashboard_body_index_unavailable_summary()
+    body_index_analyses = [
+        source["body_index_analysis"]
+        for source in sources
+        if isinstance(source.get("body_index_analysis"), dict)
+    ]
+    body_index = aggregate_body_index_sources(
+        body_index_analyses,
+        body_mass_kg=body_mass_kg,
+    )
+    summary = dict(body_index.get("summary") or _dashboard_body_index_unavailable_summary())
+    summary["total_distance_km"] = total_distance_km
+    summary["total_duration_min"] = total_duration_min
     summary = _dashboard_body_index_enrich_summary(summary)
+    segment_count = len(body_index.get("segments") or [])
+    sustained_count = sum(
+        item.get("status") == "available"
+        for item in (body_index.get("sustained_output", {}).get("windows", {}) or {}).values()
+        if isinstance(item, dict)
+    )
+    daily_coverage_label = (
+        "0"
+        if not body_index_analyses
+        else f"{(body_index.get('daily_energy') or {}).get('complete_active_day_count', 0)}/"
+        f"{(body_index.get('daily_energy') or {}).get('complete_static_day_count', 0)}"
+    )
     return {
         "schema_version": DASHBOARD_BODY_INDEX_SCHEMA_VERSION,
         "project_id": project_id,
@@ -1197,6 +1212,26 @@ def _dashboard_body_index_snapshot_from_sources(
                 str(provider_metric_count),
                 "source-value metric families",
             ],
+            [
+                "Time-series activities",
+                str((body_index.get("observations") or {}).get("eligible_activity_count", 0)),
+                "deduplicated run/walk activities; not an ability score",
+            ],
+            [
+                "Classified segments",
+                str(segment_count),
+                "speed/cadence-led inferred run/walk/stop/unknown segments",
+            ],
+            [
+                "Sustained windows",
+                str(sustained_count),
+                "available 5/10/15/20-min run windows only",
+            ],
+            [
+                "Daily energy baseline",
+                daily_coverage_label,
+                "complete active/static days; total is available only when both exist",
+            ],
         ],
         "health_signals": _dashboard_body_index_health_signals(
             set(provider_metrics),
@@ -1208,6 +1243,7 @@ def _dashboard_body_index_snapshot_from_sources(
         "pressure_timeline": _dashboard_body_index_pressure_timeline(sources),
         "provider_metrics": provider_metrics,
         "provider_metric_summaries": provider_metric_summaries,
+        "body_index": body_index,
         "source_index": [
             _dashboard_body_index_sanitize_source_entry(source)
             for source in sources
@@ -1272,6 +1308,19 @@ def _import_dashboard_body_index(
                 if existing_source is not None
                 else []
             )
+            existing_analysis = (
+                existing_source.get("body_index_analysis", {})
+                if isinstance(existing_source, dict)
+                else {}
+            )
+            try:
+                existing_body_mass = float(existing_analysis.get("body_mass_kg"))
+            except (TypeError, ValueError):
+                existing_body_mass = None
+            body_mass_changed = (
+                existing_body_mass is None
+                or abs(existing_body_mass - request.body_mass_kg) > 1e-9
+            )
             needs_summary_refresh = (
                 existing_source is not None
                 and (
@@ -1279,6 +1328,8 @@ def _import_dashboard_body_index(
                         bool(existing_source.get("provider_metric_names"))
                         and not existing_summaries
                     )
+                    or not isinstance(existing_source.get("body_index_analysis"), dict)
+                    or body_mass_changed
                     or any(
                         isinstance(summary, dict)
                         and summary.get("mean_value") is None
@@ -1291,6 +1342,7 @@ def _import_dashboard_body_index(
                     current_by_sha[source_sha] = _dashboard_body_index_source_from_zip(
                         zip_path,
                         str(existing_source.get("imported_at") or imported_at),
+                        body_mass_kg=request.body_mass_kg,
                     )
                 except (OSError, ValueError, zipfile.BadZipFile, ValidationError) as exc:
                     import_errors.append(
@@ -1302,7 +1354,11 @@ def _import_dashboard_body_index(
                     )
             continue
         try:
-            source = _dashboard_body_index_source_from_zip(zip_path, imported_at)
+            source = _dashboard_body_index_source_from_zip(
+                zip_path,
+                imported_at,
+                body_mass_kg=request.body_mass_kg,
+            )
         except (OSError, ValueError, zipfile.BadZipFile, ValidationError) as exc:
             import_errors.append(
                 {
@@ -1326,8 +1382,10 @@ def _import_dashboard_body_index(
             "new_source_count": len(new_sources),
             "duplicate_source_count": duplicate_source_count,
             "operator_alias": request.operator_alias,
+            "body_mass_kg": request.body_mass_kg,
         },
         import_errors=import_errors,
+        body_mass_kg=request.body_mass_kg,
     )
     _write_dashboard_body_index_snapshot(snapshot)
     return snapshot
@@ -1341,11 +1399,13 @@ class _DashboardBodyIndexDirectoryWatcher:
         source_dir: Path,
         interval_seconds: int,
         operator_alias: str,
+        body_mass_kg: float,
     ) -> None:
         self.project_id = project_id
         self.source_dir = source_dir
         self.interval_seconds = interval_seconds
         self.operator_alias = operator_alias
+        self.body_mass_kg = body_mass_kg
         self._stop_event = threading.Event()
         self._status_lock = threading.Lock()
         self._thread = threading.Thread(
@@ -1360,6 +1420,7 @@ class _DashboardBodyIndexDirectoryWatcher:
             "source_dir": str(source_dir),
             "interval_seconds": interval_seconds,
             "operator_alias": operator_alias,
+            "body_mass_kg": body_mass_kg,
             "started_at": now,
             "stopped_at": None,
             "scan_count": 0,
@@ -1440,6 +1501,7 @@ class _DashboardBodyIndexDirectoryWatcher:
                         source_dir=str(self.source_dir),
                         confirm_import=True,
                         operator_alias=self.operator_alias,
+                        body_mass_kg=self.body_mass_kg,
                     )
                 )
                 result = payload.get("import_result", {})
@@ -1503,6 +1565,7 @@ def _dashboard_body_index_watch_status(project_id: str) -> dict[str, Any]:
             "last_import_at": None,
             "last_result": None,
             "last_error": None,
+            "body_mass_kg": DEFAULT_BODY_MASS_KG,
             "boundary": _dashboard_body_index_boundary(),
         }
     return watcher.status()
@@ -1526,6 +1589,7 @@ def _start_dashboard_body_index_watcher(
             source_dir=source_dir,
             interval_seconds=request.interval_seconds,
             operator_alias=request.operator_alias,
+            body_mass_kg=request.body_mass_kg,
         )
         _BODY_INDEX_WATCHERS[request.project_id] = watcher
         watcher.start()
@@ -1951,6 +2015,7 @@ class DashboardBodyIndexImportRequest(BaseModel):
     source_dir: str | None = Field(default=None, min_length=1)
     confirm_import: bool = False
     operator_alias: str = Field(default="dashboard_operator", min_length=1)
+    body_mass_kg: float = Field(default=DEFAULT_BODY_MASS_KG, gt=0, le=500)
 
     @model_validator(mode="after")
     def normalize_dashboard_body_index_import(
@@ -1972,6 +2037,7 @@ class DashboardBodyIndexWatchRequest(BaseModel):
     source_dir: str | None = Field(default=None, min_length=1)
     interval_seconds: int = Field(default=300, ge=1, le=86_400)
     operator_alias: str = Field(default="dashboard_operator", min_length=1)
+    body_mass_kg: float = Field(default=DEFAULT_BODY_MASS_KG, gt=0, le=500)
 
     @model_validator(mode="after")
     def normalize_dashboard_body_index_watch(
@@ -2967,7 +3033,11 @@ def create_admin_router(
         return Response(
             json.dumps(snapshot, ensure_ascii=False),
             media_type="application/json",
-            headers={"Cache-Control": "no-store"},
+            headers={
+                "Cache-Control": "no-store",
+                "X-Scout-Candidate-Only": "true",
+                "X-Scout-Runtime-Safety-Truth": "false",
+            },
         )
 
     @router.get("/dashboard/pace-fit")
@@ -3055,6 +3125,23 @@ def create_admin_router(
                         "source_original_paths_embedded": False,
                     },
                 }
+        architecture = None
+        if project_root is not None:
+            try:
+                architecture = build_pretrip_admin_view(
+                    project_id,
+                    project_root=project_root,
+                ).get("route_architecture_intelligence")
+            except Exception:
+                # Pace Fit remains reference-only when the architecture
+                # projection cannot be loaded; it must not invent a correction.
+                architecture = None
+        body_snapshot = _load_dashboard_body_index_snapshot(project_id)
+        payload = attach_pace_fit_mappings(
+            payload,
+            body_snapshot.get("body_index", {}),
+            architecture,
+        )
         return Response(
             json.dumps(payload, ensure_ascii=False),
             media_type="application/json",
@@ -3395,7 +3482,11 @@ def create_admin_router(
         return Response(
             json.dumps(snapshot, ensure_ascii=False),
             media_type="application/json",
-            headers={"Cache-Control": "no-store"},
+            headers={
+                "Cache-Control": "no-store",
+                "X-Scout-Candidate-Only": "true",
+                "X-Scout-Runtime-Safety-Truth": "false",
+            },
         )
 
     @router.get("/dashboard/body-index/watch/status")

@@ -469,6 +469,7 @@
           <li><a href="#why">可以幫你什麼</a></li>
           <li><a href="#prepare">使用前準備</a></li>
           <li><a href="#use-ui">畫面操作</a></li>
+          <li><a href="#body-index">Body Index 與 Pace Fit</a></li>
           <li><a href="#read">怎麼看結果</a></li>
           <li><a href="#share">同行與交接</a></li>
           <li><a href="#safe">安全邊界</a></li>
@@ -536,6 +537,37 @@
               <path d="M580 61 C640 70 660 96 696 111" stroke="#66766e" stroke-width="2" fill="none" marker-end="url(#arrow)"></path>
               <path d="M580 145 C640 144 660 136 696 128" stroke="#66766e" stroke-width="2" fill="none" marker-end="url(#arrow)"></path>
             </svg>
+          </div>
+        </section>
+
+        <section id="body-index">
+          <h2>Body Index 與 Pace Fit</h2>
+          <p>Dashboard 的 Pace Fit &gt; Body Index 會從本機 HealthExport 時間序列建立個人活動參考，不再用活動筆數、GPX 數量或指標種類數量直接推算能力。頁面會把原始觀察、模型估計、使用者假設與未知分開顯示。</p>
+          <div class="notice">
+            <strong>模型假設：</strong>預設體重 70 kg（可調整，標記為 user assumption），平地 0°、零負重、輕便衣服。這是標準化模型情境，不代表歷史活動實際都在平地或沒有裝備。
+          </div>
+          <div class="cards">
+            <div class="card">
+              <span>跑／走／停／未知</span>
+              <strong>以速度與步頻為主</strong>
+              <p>心率只作輔助；平滑、最短段長與切換遲滯允許跑→走→跑。缺資料是未知，不是停止，也不會跨缺口拼接跑段。</p>
+            </div>
+            <div class="card">
+              <span>活動能量</span>
+              <strong>區間 activeEnergy 只加總一次</strong>
+              <p><code>kcal = kJ / 4.184</code>；<code>W = kJ × 1000 / 覆蓋秒數</code>。W 是手錶活動能量估計率，不是機械功率。</p>
+            </div>
+            <div class="card">
+              <span>持續輸出</span>
+              <strong>5／10／15／20 分鐘</strong>
+              <p>只取合格連續跑段。未涵蓋的時長顯示 unavailable，不用短活動外推長時間能力；跑轉走／停及恢復跑段另保留為觀察。</p>
+            </div>
+          </div>
+          <div class="panel" style="margin-top: 18px;">
+            <h3>與 Pace Fit 的銜接</h3>
+            <p>Architecture 負責坡度、負重、地形與路線速度修正。只有完成「Body Index 平地速度 × Architecture 明確速度／耗時修正」後，才會用下面的同一對 CP 比例輸出個人百分比：</p>
+            <pre><code>Pace Fit % = 個人預估耗時 ÷ 同一對 CP 的歷史平均耗時 × 100</code></pre>
+            <p>105% 表示比該 CP 對的歷史平均多 5%。活動能量或 W 不能直接換成 Pace Fit%；尚未完成映射時，歷史 CP 平均仍顯示，但個人百分比是 unavailable。</p>
           </div>
         </section>
 

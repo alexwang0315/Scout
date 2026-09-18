@@ -13710,6 +13710,7 @@
       bodyIndexWatchStatus: null,
       bodyIndexWatchBusy: false,
       bodyIndexWatchIntervalSeconds: 300,
+      bodyIndexBodyMassKg: 70,
       bodyIndexWatchRefreshTimer: null,
       agentMessages: [],
       agentResponses: [],
@@ -14683,6 +14684,8 @@
           }
           const bodyIndex = await fetchJson(bodyIndexStatusPath(), { timeoutMs: BODY_INDEX_FETCH_TIMEOUT_MS });
           state.bodyIndexData = bodyIndex;
+          const bodyMass = Number(bodyIndex?.body_index?.body_mass_kg);
+          if (Number.isFinite(bodyMass) && bodyMass > 0) state.bodyIndexBodyMassKg = bodyMass;
         } catch {
           // Keep the last visible watch state; the operator can retry or stop.
         } finally {
@@ -16953,7 +16956,11 @@
         fetchJson(bodyIndexStatusPath(), {timeoutMs: BODY_INDEX_FETCH_TIMEOUT_MS}),
         fetchJson(bodyIndexWatchStatusPath()),
       ]);
-      if (results[0].status === "fulfilled") state.bodyIndexData = results[0].value;
+      if (results[0].status === "fulfilled") {
+        state.bodyIndexData = results[0].value;
+        const bodyMass = Number(results[0].value?.body_index?.body_mass_kg);
+        if (Number.isFinite(bodyMass) && bodyMass > 0) state.bodyIndexBodyMassKg = bodyMass;
+      }
       if (results[1].status === "fulfilled") {
         const watch = results[1].value;
         state.bodyIndexWatchStatus = watch;
@@ -22126,6 +22133,10 @@
           pair.reference_available === (average !== null),
           `Pace Fit reference availability disagrees with the CP pair average for ${pair?.pair_id || "unknown pair"}.`,
         );
+        diagnosticRequire(pair.personal_mapping && typeof pair.personal_mapping === "object", `Pace Fit personal mapping is missing for ${pair?.pair_id || "unknown pair"}.`);
+        if (pair.personal_mapping.status === "available") {
+          diagnosticRequire(pair.personal_mapping.energy_not_used_as_time_ratio === true, `Pace Fit mapping for ${pair?.pair_id || "unknown pair"} does not declare its non-energy basis.`);
+        }
       }
       const unavailableBodyIndex = {
         summary: {
@@ -22141,7 +22152,7 @@
         diagnosticRequire(Boolean(root.querySelector(selector)), `Pace CP context is missing ${selector}.`);
       }
       const markup = root.textContent || "";
-      for (const marker of ["CP Timeline", "Historical CP Interval Averages", "Body Index", "not live location or safety truth", "fixture / non-runtime"]) {
+      for (const marker of ["CP Timeline", "Historical CP Interval Averages", "Body Index", "not live location or safety truth", "fixture / non-runtime", "可追溯速度—耗時映射"]) {
         diagnosticRequire(markup.includes(marker), `Pace context boundary ${marker} is missing.`);
       }
       const ids = new Set(context.checkpoints.map(point => point.id));
@@ -22160,12 +22171,19 @@
         diagnosticRequire(!serialized.includes(forbidden), `Body Index response contains forbidden raw field ${forbidden}.`);
       }
       diagnosticRequire(body && typeof body === "object", "Body Index response is unavailable.");
+      diagnosticRequire(body.boundary?.candidate_only === true, "Body Index response is not candidate-only.");
+      diagnosticRequire(body.boundary?.runtime_safety_truth === false, "Body Index response claims runtime safety truth.");
+      diagnosticRequire(body.body_index && typeof body.body_index === "object", "Body Index model output is unavailable.");
+      diagnosticRequire(Number(body.body_index.body_mass_kg) > 0, "Body Index body-mass assumption is unavailable.");
+      diagnosticRequire(Array.isArray(body.body_index.segments), "Body Index classified segments are unavailable.");
+      diagnosticRequire(body.body_index.sustained_output?.not_extrapolated === true, "Body Index sustained output permits extrapolation.");
+      diagnosticRequire(body.body_index.observations?.energy_rate_definition?.includes("interval"), "Body Index energy-rate basis is not exposed.");
       const root = diagnosticMarkupRoot(renderPaceFitBodyIndexPage());
       diagnosticRequire(Boolean(root.querySelector('[data-body-index-dashboard="true"]')), "Body Index dashboard shell is missing.");
       diagnosticRequire(root.querySelectorAll("[data-body-index-metric]").length === 9, "Body Index must render nine Pace Coefficient cards.");
       diagnosticRequire(root.querySelectorAll("[data-body-index-health-signal]").length === 8, "Body Index must render eight Health Baseline Signals.");
       diagnosticRequire(Boolean(root.querySelector("[data-body-index-provider-metrics]")), "Body Index provider-metrics drawer is missing.");
-      const evidenceStatus = body.evidence_status || body.status || "sanitized response";
+      const evidenceStatus = body.summary?.evidence_status || body.body_index?.status || body.import_status || "sanitized response";
       if (["unavailable", "pending", "empty", "not_found"].includes(String(evidenceStatus).toLowerCase())) {
         diagnosticRequire(root.textContent.includes("No Scout Pace Coefficient has been calculated"), "Body Index empty state invents a Pace Coefficient.");
       }
@@ -22180,6 +22198,7 @@
       const body = await diagnosticBodyIndex();
       const importHandler = diagnosticCompactSource(bindBodyIndexControls);
       diagnosticRequire(importHandler.includes("confirm_import: true"), "Body Index import does not require explicit confirmation.");
+      diagnosticRequire(importHandler.includes("body_mass_kg"), "Body Index import does not expose the adjustable body-mass assumption.");
       diagnosticRequire(importHandler.includes("BODY_INDEX_IMPORT_PATH"), "Body Index import control is not wired to the bounded endpoint.");
       const serialized = JSON.stringify(body);
       for (const forbidden of ["original_zip_filename", "\"coordinates\"", "heartRateData", "<gpx"]) {
@@ -37263,9 +37282,9 @@
     }
 
     function paceFitBodyIndexTimeRatio() {
-      const summary = bodyIndexSummary();
-      const ratio = Number(summary.pace_fit_time_ratio);
-      return Number.isFinite(ratio) && ratio > 0 ? ratio : null;
+      const pair = arguments[0] || null;
+      const ratio = Number(pair?.personal_mapping?.pace_fit_percent);
+      return Number.isFinite(ratio) && ratio > 0 ? ratio / 100 : null;
     }
 
     function paceFitPairAverageMinutes(pair) {
@@ -37278,7 +37297,7 @@
 
     function paceFitPairConclusion(pair) {
       const referenceMinutes = paceFitPairAverageMinutes(pair);
-      const timeRatio = paceFitBodyIndexTimeRatio();
+      const mapping = pair?.personal_mapping;
       if (!pair) {
         return {
           status: "unavailable",
@@ -37297,17 +37316,26 @@
           text: "這個 CP 區間沒有足夠的歷史 reference GPX 通過資料；不補推平均耗時。",
         };
       }
-      if (timeRatio === null) {
+      if (!mapping || mapping.status !== "available") {
         return {
           status: "body_index_unavailable",
           referenceMinutes,
           expectedMinutes: null,
           percent: null,
-          text: `歷史 reference GPX 平均 ${referenceMinutes.toFixed(1)} 分鐘；Body Index 尚未產生個人預估腳程，因此暫不計算百分比。`,
+          text: `歷史 reference GPX 平均 ${referenceMinutes.toFixed(1)} 分鐘；Body Index／Architecture 尚未完成可追溯速度—耗時映射，因此暫不計算百分比。`,
         };
       }
-      const expectedMinutes = referenceMinutes * timeRatio;
-      const percent = Math.round(timeRatio * 100);
+      const expectedMinutes = Number(mapping.expected_minutes);
+      const percent = Number(mapping.pace_fit_percent);
+      if (!Number.isFinite(expectedMinutes) || !Number.isFinite(percent) || expectedMinutes <= 0 || percent <= 0) {
+        return {
+          status: "body_index_unavailable",
+          referenceMinutes,
+          expectedMinutes: null,
+          percent: null,
+          text: `歷史 reference GPX 平均 ${referenceMinutes.toFixed(1)} 分鐘；個人速度—耗時映射資料不完整，因此暫不計算百分比。`,
+        };
+      }
       return {
         status: "available",
         referenceMinutes,
@@ -37408,6 +37436,10 @@
       const referenceCoverageLabel = state.paceFitData
         ? `${measuredPairCount}/${referencePairCount} CP 區間有歷史平均耗時`
         : "歷史 CP 區間平均耗時載入中";
+      const paceMapping = state.paceFitData?.pace_fit_mapping || {};
+      const paceMappingLabel = paceMapping.status === "available"
+        ? `${Number(paceMapping.mapped_pair_count || 0)}/${Number(paceMapping.pair_count || 0)} CP 區間已映射`
+        : "unavailable · 需要 Architecture 速度／耗時映射";
       const referencePairs = paceFitReferencePairs();
       const referencePairRows = referencePairs.map(pair => {
         const conclusion = paceFitPairConclusion(pair);
@@ -37419,7 +37451,7 @@
             <td>${escapeHtml(pair.from_checkpoint_label || pair.from_checkpoint_id || "--")}<br><small>${escapeHtml(pair.to_checkpoint_label || pair.to_checkpoint_id || "--")}</small></td>
             <td>${referenceMinutes === null ? "--" : `${referenceMinutes.toFixed(1)} min`}</td>
             <td>${expectedMinutes === null ? "--" : `${expectedMinutes.toFixed(1)} min`}</td>
-            <td><strong>${escapeHtml(percentLabel)}</strong><br><small>${escapeHtml(conclusion.status === "available" ? "Body Index × reference" : conclusion.status === "body_index_unavailable" ? "等待 Body Index" : "reference unavailable")}</small></td>
+            <td><strong>${escapeHtml(percentLabel)}</strong><br><small>${escapeHtml(conclusion.status === "available" ? "speed/time mapping × reference" : conclusion.status === "body_index_unavailable" ? "等待可追溯映射" : "reference unavailable")}</small></td>
           </tr>
         `;
       }).join("");
@@ -37455,6 +37487,7 @@
             <div class="pace-fit-status-cell"><span>Selected CP</span><strong>${escapeHtml(context.label)}</strong><em>${escapeHtml(context.selectionReason)}</em></div>
             <div class="pace-fit-status-cell"><span>Route position</span><strong>${escapeHtml(distanceLabel)}</strong><em>${escapeHtml(elevationLabel)}</em></div>
             <div class="pace-fit-status-cell"><span>Reference CP averages</span><strong>${escapeHtml(referenceCoverageLabel)}</strong><em>candidate-only historical GPX aggregate</em></div>
+            <div class="pace-fit-status-cell"><span>可追溯速度—耗時映射</span><strong>${escapeHtml(paceMappingLabel)}</strong><em>energy / W 不直接換算 Pace Fit %</em></div>
           </div>
 
           <div class="pace-spatial-workbench" data-pace-map-primary="true">
@@ -37619,8 +37652,8 @@
           id: "flat_ground_speed",
           label: "Flat Ground Speed",
           spec: "平地移動速度",
-          effect: "baseline walking ability",
-          source: "awaiting completed GPX evidence",
+          effect: "classified flat-speed observation",
+          source: "awaiting HealthExport speed/cadence evidence",
         },
         {
           id: "ascent_speed",
@@ -37730,10 +37763,10 @@
     function bodyIndexSummary() {
       return state.bodyIndexData?.summary || {
         scout_pace_coefficient: "unavailable",
-        pace_coefficient_semantics: "relative_speed_factor",
+        pace_coefficient_semantics: "not_calculated_from_activity_counts_or_energy_alone",
         pace_fit_time_ratio: "unavailable",
         pace_fit_time_percent: "unavailable",
-        pace_fit_semantics: "estimated_elapsed_time_ratio_to_reference_average",
+        pace_fit_semantics: "requires_traceable_speed_time_mapping_with_architecture",
         energy_reserve: "unavailable",
         vulnerability: "unavailable",
         experience_trust: "unavailable",
@@ -37942,6 +37975,11 @@
     function renderPaceFitBodyIndexPage() {
       const metrics = bodyIndexMetrics();
       const summary = bodyIndexSummary();
+      const model = state.bodyIndexData?.body_index || {};
+      const observations = model.observations || {};
+      const dailyEnergy = model.daily_energy || {};
+      const sustainedWindows = model.sustained_output?.windows || {};
+      const mapping = state.paceFitData?.pace_fit_mapping || {};
       const scorePercent = bodyIndexScorePercent(summary);
       const coefficient = bodyIndexDisplayValue(summary.scout_pace_coefficient);
       const paceFitTimePercent = bodyIndexDisplayValue(summary.pace_fit_time_percent);
@@ -37949,7 +37987,7 @@
       const energyReserve = bodyIndexDisplayValue(summary.energy_reserve);
       const vulnerability = bodyIndexDisplayValue(summary.vulnerability);
       const experienceTrust = bodyIndexDisplayValue(summary.experience_trust);
-      const hasBodyIndexEvidence = summary.evidence_status !== "unavailable" && Number(bodyIndexCoverageValue("Health exports", "0")) > 0;
+      const hasBodyIndexEvidence = model.status === "available" && Number(bodyIndexCoverageValue("Health exports", "0")) > 0;
       const importStatus = bodyIndexImportStatus();
       const importTone = ["ok", "warn", "bad", "info"].includes(importStatus.tone) ? importStatus.tone : "info";
       const watchTone = bodyIndexWatchTone();
@@ -37960,33 +37998,43 @@
       const pressureWindows = bodyIndexCoverageValue("15-min windows", "0");
       const healthExportEvidence = hasBodyIndexEvidence ? `${healthExports} local exports / ${walkingSessions} walking sessions` : "no HealthExport evidence imported";
       const pressureWindowEvidence = hasBodyIndexEvidence ? `${pressureWindows} sanitized 15-min windows` : "no sanitized windows imported";
+      const formatKj = value => value === null || value === undefined || value === "" ? "unavailable" : `${Number(value).toFixed(1)} kJ`;
+      const formatW = value => value === null || value === undefined || value === "" ? "unavailable" : `${Number(value).toFixed(1)} W`;
+      const formatCount = value => Number.isFinite(Number(value)) ? Number(value).toLocaleString() : "0";
+      const windowRows = [300, 600, 900, 1200].map(seconds => {
+        const item = sustainedWindows[String(seconds)] || {};
+        return [
+          `${seconds / 60} min`,
+          item.status === "available" ? formatW(item.average_active_energy_w) : "unavailable",
+          item.status === "available" ? `${Math.round(Number(item.coverage || 0) * 100)}% coverage · n=${formatCount(item.covered_window_count)}` : (item.unavailable_reason || "no qualifying continuous run segment"),
+          item.status === "available" ? "historical highest sustained output estimate" : "not extrapolated",
+        ];
+      });
       const impactRows = [
-        ["Boss demand", "CP087-CP093 ridge section", "route pressure 0.68"],
-        ["Energy Reserve", hasBodyIndexEvidence ? `${energyReserve} retained for slowest member basis` : "unavailable until evidence import", "planning evidence"],
-        ["Pace Fit input", hasBodyIndexEvidence ? `${paceFitTimePercent} of reference average` : "unavailable until Body Index evidence", "Body Index elapsed-time ratio"],
-        ["Challenge Fit", "route demand x pace vulnerability", "advisory only"],
-        ["Boundary", "no diagnosis, no Phase 1 mutation, no safety endpoint", "no outbound"],
+        ["原始觀察", `${formatCount(observations.eligible_activity_count)} 去重跑／走活動 · ${formatCount(observations.classification_speed_coverage ? Math.round(Number(observations.classification_speed_coverage) * 100) : 0)}% speed coverage`, "HealthExport time series"],
+        ["模型估計", `${formatKj(observations.run_active_energy_kj)} run active energy · ${formatW(observations.energy_rate_w)}`, "interval activeEnergy sum / covered seconds"],
+        ["假設", "70 kg · flat 0° · zero load · light clothing", "user assumption / model scenario"],
+        ["Pace Fit", mapping.status === "available" ? `${formatCount(mapping.mapped_pair_count)} CP pairs mapped` : "unavailable until Architecture speed/time mapping", "energy or W is not converted directly"],
+        ["未知", "grade, terrain, load, weather, IMU and pure aerobic separation", "Architecture or future evidence"],
       ];
       const evidenceRows = [
-        ["completed_trip_gpx", "speed split history"],
-        ["HealthAutoExport", healthExportEvidence],
-        ["physiologic_windowed_replay", pressureWindowEvidence],
-        ["route_progress_frame", "current CP and delay"],
-        ["terrain_time_model", "ascent/descent/technical penalty"],
-        ["rest_stop_pattern", "rest frequency and recovery"],
-        ["weather_overlay", "CWA forecast impact"],
-        ["team_slowest_member", "vulnerable-member basis"],
+        ["原始觀察 / HealthAutoExport", healthExportEvidence],
+        ["原始觀察 / 分類", "speed/time + cadence/time；HR 僅作輔助"],
+        ["模型估計 / sustained", "5、10、15、20 分鐘只取合格連續跑段"],
+        ["模型估計 / daily", `${formatCount(dailyEnergy.complete_active_day_count)} active · ${formatCount(dailyEnergy.complete_static_day_count)} static · ${formatCount(dailyEnergy.complete_total_day_count)} total days`],
+        ["假設 / metabolic cross-check", "ACSM flat-ground cost with 70 kg user assumption"],
+        ["未知 / Architecture", "坡度、負重、地形與路線速度修正未由 Body Index 代算"],
       ];
       return `
         ${outdoorTabs("outdoor-pace-fit")}
         ${paceFitSubTabs("outdoor-pace-fit-body-index")}
         <section class="body-index-dashboard" data-body-index-dashboard="true" data-scout-pace-coefficient="true">
-          <div class="body-index-summary" aria-label="Scout Pace Coefficient summary">
+          <div class="body-index-summary" aria-label="Body Index personal activity reference; Scout Pace Coefficient unavailable unless a traceable speed/time mapping exists">
             <section class="body-index-score-card">
               <div class="body-index-ring" style="--value:${scorePercent}%"><span>${escapeHtml(coefficient)}</span></div>
               <div class="body-index-score-copy">
-                <h3>Scout Pace Coefficient</h3>
-                <p>${hasBodyIndexEvidence ? `HealthExport 先產生相對速度係數 ${escapeHtml(coefficient)}；Pace Fit 使用 Body Index 換算的預估耗時 ${escapeHtml(paceFitTimePercent)}（${escapeHtml(paceFitTimeRatio)}× reference average）。` : "No Scout Pace Coefficient has been calculated. 先匯入並審閱 HealthExport，Pace Fit 才會得到個人預估耗時百分比。"}</p>
+                <h3>Body Index personal activity reference</h3>
+                <p>${hasBodyIndexEvidence ? `已由 HealthExport 時間序列建立跑／走／停分類、活動能量、持續輸出與每日基準；Scout Pace Coefficient 維持 unavailable，因為不能由活動筆數或能量直接推算能力。` : "No Scout Pace Coefficient has been calculated. 先匯入並審閱 HealthExport；Pace Fit 仍須另有 Architecture 速度—耗時映射才會產生百分比。"}</p>
                 <div class="body-index-chip-row">
                   <span class="chip info">spec 7.2</span>
                   <span class="chip info">HealthExport-aware</span>
@@ -37998,19 +38046,19 @@
               </div>
             </section>
             <section class="body-index-mini">
-              <span>Energy Reserve</span>
-              <strong>${escapeHtml(energyReserve)}</strong>
-              <em>${hasBodyIndexEvidence ? "calculated reserve" : "awaiting evidence"}</em>
+              <span>Run active energy</span>
+              <strong>${escapeHtml(formatKj(observations.run_active_energy_kj))}</strong>
+              <em>${hasBodyIndexEvidence ? "provider interval estimate" : "awaiting evidence"}</em>
             </section>
             <section class="body-index-mini">
-              <span>Vulnerability</span>
-              <strong>${escapeHtml(vulnerability)}</strong>
-              <em>${hasBodyIndexEvidence ? "pace + terrain" : "awaiting evidence"}</em>
+              <span>Mean daily active baseline</span>
+              <strong>${escapeHtml(formatKj(dailyEnergy.mean_daily_active_energy_kj))}</strong>
+              <em>${hasBodyIndexEvidence ? "date range disclosed below" : "awaiting evidence"}</em>
             </section>
             <section class="body-index-mini">
-              <span>Experience Trust</span>
-              <strong>${escapeHtml(experienceTrust)}</strong>
-              <em>${hasBodyIndexEvidence ? "records weighted" : "awaiting evidence"}</em>
+              <span>Pace mapping</span>
+              <strong>${escapeHtml(mapping.status === "available" ? "available" : "unavailable")}</strong>
+              <em>${mapping.status === "available" ? "Architecture correction attached" : "reference averages remain independent"}</em>
             </section>
           </div>
 
@@ -38027,6 +38075,16 @@
                   data-body-index-import
                   ${state.bodyIndexImportBusy ? "disabled" : ""}
                 >${state.bodyIndexImportBusy ? "Importing..." : "Import HealthExport"}</button>
+                <label for="bodyIndexBodyMass">Body mass kg</label>
+                <input
+                  id="bodyIndexBodyMass"
+                  type="number"
+                  min="1"
+                  max="500"
+                  step="0.1"
+                  value="${escapeHtml(state.bodyIndexBodyMassKg || 70)}"
+                  ${state.bodyIndexImportBusy || state.bodyIndexWatchBusy ? "disabled" : ""}
+                />
                 <div class="body-index-watch-controls" data-body-index-watch-controls="true">
                   <label for="bodyIndexWatchInterval">Scan sec</label>
                   <input
@@ -38064,6 +38122,63 @@
                     <em>${escapeHtml(detail)}</em>
                   </div>
                 `).join("")}
+              </div>
+            </div>
+          </section>
+
+          <div class="body-index-layout" data-body-index-model-output="true">
+            <section class="body-index-panel" data-body-index-energy="true">
+              <div class="body-index-panel-head">
+                <h3>Activity energy · original observations and model outputs</h3>
+                <span class="chip info">activeEnergy interval sum</span>
+              </div>
+              <div class="body-index-panel-body">
+                <div class="body-index-source-grid">
+                  ${[
+                    ["原始觀察 · run active energy", formatKj(observations.run_active_energy_kj)],
+                    ["原始觀察 · all activity energy", formatKj(observations.all_activity_active_energy_kj)],
+                    ["模型估計 · covered energy rate", formatW(observations.energy_rate_w)],
+                    ["模型估計 · run/walk speed", `${escapeHtml(model.flat_speed_by_mode?.walking?.median_speed_mps ?? "unavailable")} / ${escapeHtml(model.flat_speed_by_mode?.running?.median_speed_mps ?? "unavailable")} m/s`],
+                    ["單位核對", "kJ interval → kcal ÷ 4.184; W = kJ × 1000 ÷ covered seconds"],
+                    ["邊界", "W 是手錶活動能耗率，不是肌肉對外機械功率"],
+                  ].map(([label, value]) => `
+                    <div class="body-index-source"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(value)}</span></div>
+                  `).join("")}
+                </div>
+              </div>
+            </section>
+            <section class="body-index-panel" data-body-index-sustained-output="true">
+              <div class="body-index-panel-head">
+                <h3>歷史最高持續輸出估計</h3>
+                <span class="chip warn">continuous run only</span>
+              </div>
+              <div class="body-index-panel-body">
+                <div class="pace-table-scroll">
+                  <table class="pace-budget-table">
+                    <thead><tr><th>Window</th><th>Highest avg</th><th>Sample / coverage</th><th>Meaning</th></tr></thead>
+                    <tbody>${windowRows.map(([window, value, detail, meaning]) => `<tr><td>${escapeHtml(window)}</td><td>${escapeHtml(value)}</td><td>${escapeHtml(detail)}</td><td>${escapeHtml(meaning)}</td></tr>`).join("")}</tbody>
+                  </table>
+                </div>
+                <p class="status">未涵蓋的時長顯示 unavailable；不把約 20 分鐘外推成 60 分鐘或全天能力。</p>
+              </div>
+            </section>
+          </div>
+
+          <section class="body-index-panel" data-body-index-daily-energy="true">
+            <div class="body-index-panel-head">
+              <h3>每日活動／靜態／合計基準</h3>
+              <span class="chip info">same-day fraction ≠ baseline multiplier</span>
+            </div>
+            <div class="body-index-panel-body">
+              <div class="body-index-source-grid">
+                ${[
+                  ["日期範圍", `${dailyEnergy.date_range?.start || "unavailable"} → ${dailyEnergy.date_range?.end || "unavailable"}`],
+                  ["完整 active / static / total", `${formatCount(dailyEnergy.complete_active_day_count)} / ${formatCount(dailyEnergy.complete_static_day_count)} / ${formatCount(dailyEnergy.complete_total_day_count)} days`],
+                  ["同日跑段占比", dailyEnergy.run_fraction_mean === null || dailyEnergy.run_fraction_mean === undefined ? "unavailable" : `${(Number(dailyEnergy.run_fraction_mean) * 100).toFixed(1)}%`],
+                  ["相對日常基準倍率", dailyEnergy.run_baseline_multiplier_mean === null || dailyEnergy.run_baseline_multiplier_mean === undefined ? "unavailable" : `${Number(dailyEnergy.run_baseline_multiplier_mean).toFixed(2)}×`],
+                  ["解讀", "同日占比的分母是同日全部活動能量；倍率的分母是日平均活動能量，兩者都不是登山每日上限"],
+                  ["排除", "缺 active/static、不一致重複日值與未知資料不補值、不合併"],
+                ].map(([label, value]) => `<div class="body-index-source"><strong>${escapeHtml(label)}</strong><span>${escapeHtml(value)}</span></div>`).join("")}
               </div>
             </div>
           </section>
@@ -43204,6 +43319,14 @@
     }
 
     function bindBodyIndexControls() {
+      const massInput = document.getElementById("bodyIndexBodyMass");
+      const readBodyMassKg = () => {
+        const value = Number(massInput?.value || state.bodyIndexBodyMassKg || 70);
+        const mass = Number.isFinite(value) && value > 0 ? Math.min(500, Math.max(1, value)) : 70;
+        state.bodyIndexBodyMassKg = mass;
+        return mass;
+      };
+      if (massInput) massInput.addEventListener("change", readBodyMassKg);
       const button = document.querySelector("[data-body-index-import]");
       if (button) button.addEventListener("click", async () => {
         state.bodyIndexImportBusy = true;
@@ -43217,6 +43340,7 @@
             project_id: projectId(),
             confirm_import: true,
             operator_alias: "dashboard_operator",
+            body_mass_kg: readBodyMassKg(),
           }, { timeoutMs: BODY_INDEX_FETCH_TIMEOUT_MS });
           state.bodyIndexData = payload;
           const result = payload.import_result || {};
@@ -43254,6 +43378,7 @@
             project_id: projectId(),
             interval_seconds: intervalSeconds,
             operator_alias: "dashboard_operator",
+            body_mass_kg: readBodyMassKg(),
           }, { timeoutMs: BODY_INDEX_FETCH_TIMEOUT_MS });
           state.bodyIndexWatchStatus = payload;
           scheduleBodyIndexWatchRefresh();
