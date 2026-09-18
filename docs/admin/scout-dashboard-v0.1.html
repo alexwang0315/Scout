@@ -22188,6 +22188,31 @@
       diagnosticRequire(body.body_index.daily_energy?.ratio_definitions?.same_day_fraction?.includes("same-day"), "Body Index same-day energy fraction definition is unavailable.");
       diagnosticRequire(body.body_index.daily_energy?.ratio_definitions?.baseline_multiplier?.includes("mean daily"), "Body Index baseline multiplier definition is unavailable.");
       diagnosticRequire(body.body_index.daily_energy?.completeness && typeof body.body_index.daily_energy.completeness === "object", "Body Index daily completeness is unavailable.");
+      const detailedActivitiesByKey = new Map();
+      for (const source of Array.isArray(body.source_index) ? body.source_index : []) {
+        const activities = source?.body_index_analysis?.activities;
+        if (!Array.isArray(activities)) continue;
+        for (const activity of activities) {
+          const key = activity?.activity_key || activity?.activity_ref;
+          if (key && !detailedActivitiesByKey.has(key)) detailedActivitiesByKey.set(key, activity);
+        }
+      }
+      if (detailedActivitiesByKey.size) {
+        let detailAllEnergy = 0;
+        let detailRunningEnergy = 0;
+        for (const activity of detailedActivitiesByKey.values()) {
+          const activityEnergy = Number(activity?.active_energy_kj || 0);
+          const segments = Array.isArray(activity?.segments) ? activity.segments : [];
+          const segmentEnergy = segments.reduce((sum, segment) => sum + Number(segment?.active_energy_kj || 0), 0);
+          diagnosticRequire(Math.abs(segmentEnergy - activityEnergy) <= 0.05, `Body Index segment/detail energy mismatch for ${activity?.activity_ref || "activity"}.`);
+          detailAllEnergy += activityEnergy;
+          detailRunningEnergy += segments
+            .filter(segment => segment?.state === "running")
+            .reduce((sum, segment) => sum + Number(segment?.active_energy_kj || 0), 0);
+        }
+        diagnosticRequire(Math.abs(detailAllEnergy - Number(body.body_index.observations?.all_activity_active_energy_kj || 0)) <= 0.1, "Body Index activity detail does not reconcile with all-activity energy summary.");
+        diagnosticRequire(Math.abs(detailRunningEnergy - Number(body.body_index.observations?.run_active_energy_kj || 0)) <= 0.1, "Body Index running-segment detail does not reconcile with run energy summary.");
+      }
       for (const seconds of [300, 600, 900, 1200]) {
         const window = body.body_index.sustained_output?.windows?.[String(seconds)];
         diagnosticRequire(window && ["available", "unavailable"].includes(window.status), `Body Index ${seconds}-second sustained status is unavailable.`);
