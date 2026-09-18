@@ -269,6 +269,13 @@ Latest current-code evidence on temporary `http://127.0.0.1:9101`:
   tests), the added non-gait regression and route contract subset (32 tests),
   and Phase-3 replay/runner tests (13 tests). `node --check` also passed for
   the browser runner.
+- A broader Body/Pace/Architecture integration collection completed with 221
+  passed and one current baseline failure in
+  `tests/test_pretrip_admin_view.py::test_admin_view_exposes_workspace_risk_score_layer`:
+  the fixture expected `terrain_visualization.status=candidate_only`, while the
+  current view returned `not_available`. No file in that test's failing
+  implementation path was changed here, so the result remains an explicit
+  failure rather than a reclassified pass.
 - The temporary 9101 server was stopped after validation. A final check found
   9099 not reachable and no 9101 listener. Official qualification against the
   pre-existing 9099 runtime was not performed and remains unavailable.
