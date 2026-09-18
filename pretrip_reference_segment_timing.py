@@ -437,6 +437,254 @@ def build_reference_segment_timing(
     }
 
 
+def build_workspace_checkpoint_pace_fit_reference(
+    project_root: Path,
+    *,
+    project_id: str | None = None,
+    source_index_ref: str = DEFAULT_SOURCE_INDEX_REF,
+    allow_external_sources: bool = True,
+) -> dict[str, Any]:
+    """Build aggregate historical elapsed time for every adjacent workspace CP pair.
+
+    The regular reference-segment artifact intentionally reduces a long route to
+    named timing nodes. Pace Fit needs a different axis: each adjacent checkpoint
+    in the selected workspace. This builder reuses the deterministic GPX visit
+    matching and time-quality rules above, then removes raw measurements from the
+    browser-facing contract. A pair without an accepted historical observation
+    remains unavailable instead of receiving an inferred value.
+    """
+    project_root = Path(project_root)
+    project_path = project_root / "project.json"
+    project = _load_json(project_path) if project_path.exists() else {}
+    resolved_project_id = str(
+        project_id or project.get("project_id") or project_root.name
+    )
+    checkpoint_ref = str(
+        project.get("overpass_aligned_checkpoint_candidates_ref")
+        or project.get("checkpoint_candidates_ref")
+        or ""
+    )
+    event_ref = str(project.get("checkpoint_events_ref") or "")
+    checkpoints = _payload_items(
+        _load_optional_json(project_root / checkpoint_ref),
+        "checkpoint_candidates",
+        "checkpoints",
+        "candidates",
+    ) if checkpoint_ref else []
+    events = _payload_items(
+        _load_optional_json(project_root / event_ref),
+        "events",
+        "checkpoint_events",
+    ) if event_ref else []
+    events_by_checkpoint = {
+        str(item.get("checkpoint_candidate_id") or ""): item
+        for item in events
+        if item.get("checkpoint_candidate_id")
+    }
+
+    nodes: list[ReferenceTimingNode] = []
+    seen_ids: set[str] = set()
+    for index, checkpoint in enumerate(checkpoints):
+        checkpoint_id = str(
+            checkpoint.get("candidate_id")
+            or checkpoint.get("checkpoint_id")
+            or checkpoint.get("mcp_id")
+            or f"checkpoint-{index + 1}"
+        ).strip()
+        if not checkpoint_id or checkpoint_id in seen_ids:
+            continue
+        event = events_by_checkpoint.get(checkpoint_id, {})
+        lat = _float_or_none(event.get("lat", checkpoint.get("lat")))
+        lon = _float_or_none(event.get("lon", checkpoint.get("lon")))
+        route_distance_m = _float_or_none(event.get("progress_m"))
+        if route_distance_m is None:
+            route_distance_m = _float_or_none(
+                checkpoint.get("route_distance_m", checkpoint.get("distance_m"))
+            )
+        label = str(
+            event.get("label")
+            or checkpoint.get("label")
+            or checkpoint.get("name")
+            or checkpoint_id
+        ).strip()
+        if (
+            lat is None
+            or lon is None
+            or route_distance_m is None
+            or route_distance_m < 0
+            or not label
+        ):
+            continue
+        seen_ids.add(checkpoint_id)
+        nodes.append(
+            ReferenceTimingNode(
+                key=checkpoint_id,
+                label=label,
+                lat=lat,
+                lon=lon,
+                route_distance_m=route_distance_m,
+                source_kind="checkpoint",
+                source_id=checkpoint_id,
+                priority=1,
+            )
+        )
+    nodes.sort(key=lambda node: (node.route_distance_m, node.source_id))
+
+    if len(nodes) < 2:
+        return {
+            "artifact_kind": "scout_pace_fit_reference",
+            "schema_version": "scout_pace_fit_reference.v1",
+            "project_id": resolved_project_id,
+            "status": "unavailable",
+            "source_provider": "historical_gpx_source_index",
+            "source_path": source_index_ref,
+            "checkpoint_count": len(nodes),
+            "pair_count": 0,
+            "measured_pair_count": 0,
+            "sample_count": 0,
+            "pairs": [],
+            "coverage": {
+                "checkpoint_count": len(nodes),
+                "pair_count": 0,
+                "measured_pair_count": 0,
+                "sample_count": 0,
+            },
+            "method": {
+                "pair_basis": "adjacent_workspace_checkpoints_sorted_by_route_distance",
+                "average_basis": "arithmetic_mean_of_accepted_historical_gpx_elapsed_minutes",
+            },
+            "privacy": {
+                "aggregate_only": True,
+                "raw_gpx_embedded": False,
+                "coordinates_embedded": False,
+                "precise_timestamps_embedded": False,
+                "source_original_paths_embedded": False,
+            },
+            "boundary": {
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "phase1_runtime_mutation_allowed": False,
+                "historical_gpx_is_actual_user_track": False,
+            },
+            "notes": [
+                "At least two workspace checkpoints with route distance and coordinates are required.",
+            ],
+        }
+
+    timing = build_reference_segment_timing(
+        project_root,
+        project_id=resolved_project_id,
+        source_index_ref=source_index_ref,
+        timing_nodes=nodes,
+        allow_external_sources=allow_external_sources,
+    )
+    pairs: list[dict[str, Any]] = []
+    for index, raw_segment in enumerate(timing.get("segments", [])):
+        if index + 1 >= len(nodes):
+            break
+        start = nodes[index]
+        end = nodes[index + 1]
+        measurements = [
+            item
+            for item in raw_segment.get("measurements", [])
+            if isinstance(item, dict)
+            and _float_or_none(item.get("duration_minutes")) is not None
+        ]
+        durations = [float(item["duration_minutes"]) for item in measurements]
+        average = _round1(sum(durations) / len(durations)) if durations else None
+        duration_minutes = dict(raw_segment.get("duration_minutes") or {})
+        duration_minutes["average"] = average
+        pairs.append(
+            {
+                "pair_id": f"{start.source_id}__{end.source_id}",
+                "from_checkpoint_id": start.source_id,
+                "from_checkpoint_label": start.label,
+                "from_route_distance_m": _round1(start.route_distance_m),
+                "to_checkpoint_id": end.source_id,
+                "to_checkpoint_label": end.label,
+                "to_route_distance_m": _round1(end.route_distance_m),
+                "distance_m": _round1(
+                    max(0.0, end.route_distance_m - start.route_distance_m)
+                ),
+                "duration_minutes": duration_minutes,
+                "sample_count": len(measurements),
+                "source_count": int(raw_segment.get("source_count") or 0),
+                "reference_available": average is not None,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "source_refs": [source_index_ref],
+                "data_quality": {
+                    "distance_filter_applied": True,
+                    "track_boundary_crossed_count": int(
+                        (raw_segment.get("rejected_summary") or {}).get(
+                            "track_boundary_crossed_count", 0
+                        )
+                    ),
+                },
+            }
+        )
+    measured_pair_count = sum(1 for pair in pairs if pair["reference_available"])
+    sample_count = sum(int(pair["sample_count"]) for pair in pairs)
+    status = (
+        "available"
+        if measured_pair_count == len(pairs) and pairs
+        else "partial"
+        if measured_pair_count
+        else "unavailable"
+    )
+    return {
+        "artifact_kind": "scout_pace_fit_reference",
+        "schema_version": "scout_pace_fit_reference.v1",
+        "project_id": resolved_project_id,
+        "status": status,
+        "source_provider": timing.get("source_provider", "historical_gpx_source_index"),
+        "source_path": source_index_ref,
+        "checkpoint_count": len(nodes),
+        "pair_count": len(pairs),
+        "measured_pair_count": measured_pair_count,
+        "sample_count": sample_count,
+        "pairs": pairs,
+        "coverage": {
+            "checkpoint_count": len(nodes),
+            "pair_count": len(pairs),
+            "measured_pair_count": measured_pair_count,
+            "unmeasured_pair_count": len(pairs) - measured_pair_count,
+            "sample_count": sample_count,
+            "timed_source_file_count": int(
+                (timing.get("counts") or {}).get("timed_source_file_count", 0)
+            ),
+        },
+        "method": {
+            "pair_basis": "adjacent_workspace_checkpoints_sorted_by_route_distance",
+            "average_basis": "arithmetic_mean_of_accepted_historical_gpx_elapsed_minutes",
+            "duration_basis": (timing.get("method") or {}).get(
+                "duration_basis", "nearest_trackpoint_to_checkpoint_centroid"
+            ),
+            "distance_basis": (timing.get("method") or {}).get(
+                "distance_basis", "trackline_distance_between_checkpoint_passages"
+            ),
+            "historical_source_excludes_planned": True,
+        },
+        "privacy": {
+            "aggregate_only": True,
+            "raw_gpx_embedded": False,
+            "coordinates_embedded": False,
+            "precise_timestamps_embedded": False,
+            "source_original_paths_embedded": False,
+        },
+        "boundary": {
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+            "phase1_runtime_mutation_allowed": False,
+            "historical_gpx_is_actual_user_track": False,
+        },
+        "notes": [
+            "Each row is the elapsed time between two adjacent workspace checkpoint candidates.",
+            "The average is computed only from accepted historical GPX observations; missing pairs remain unavailable.",
+        ],
+    }
+
+
 def _workspace_route_timing_nodes(
     project_root: Path,
     project: dict[str, Any],

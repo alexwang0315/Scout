@@ -323,6 +323,14 @@ def test_section_7_documents_multigate_physiologic_gate_boundary() -> None:
     assert "stop_and_rest" in standard_text
     assert "retreat_suggested" in standard_text
     assert "alert_candidate" in standard_text
+    assert "### 7.6 2026-09-18 Body Index → Pace Fit 討論紀錄" in standard_text
+    assert "pace_fit_time_percent_i" in standard_text
+    assert "personal_expected_i / reference_average_i" in standard_text
+    assert "historical_highest_sustained_output_estimate" in standard_text
+    assert "70 kg" in standard_text
+    assert "candidate hypothesis" in standard_text
+    assert "compatible only with joint-evidence scope" in standard_text
+    assert "目前仍以 walking 分析與樣本數／GPX／metric count 的啟發式係數為主" in standard_text
     assert "flowchart LR" in physiologic_spec
     assert "Implemented Artifact Integration Overview" in physiologic_spec
     assert "Batch / Admin Review" in physiologic_spec

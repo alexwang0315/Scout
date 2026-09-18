@@ -7,6 +7,7 @@ import pytest
 from pretrip_reference_segment_timing import (
     ReferenceTimingNode,
     build_reference_segment_timing,
+    build_workspace_checkpoint_pace_fit_reference,
     write_reference_segment_timing,
 )
 
@@ -185,6 +186,86 @@ def test_reference_segment_timing_rejects_ambiguous_route_axes(tmp_path: Path) -
         )
 
 
+def test_workspace_checkpoint_pace_fit_reference_exposes_adjacent_average_without_raw_gpx(
+    tmp_path: Path,
+) -> None:
+    project_root = tmp_path / "pace-fit"
+    (project_root / "sources").mkdir(parents=True)
+    checkpoints = [
+        {"candidate_id": "cp.start", "label": "Start", "lat": 23.000, "lon": 121.000},
+        {"candidate_id": "cp.one", "label": "CP one", "lat": 23.010, "lon": 121.000},
+        {"candidate_id": "cp.finish", "label": "Finish", "lat": 23.020, "lon": 121.000},
+    ]
+    events = [
+        {"checkpoint_candidate_id": "cp.start", "label": "Start", "lat": 23.000, "lon": 121.000, "progress_m": 0},
+        {"checkpoint_candidate_id": "cp.one", "label": "CP one", "lat": 23.010, "lon": 121.000, "progress_m": 1112},
+        {"checkpoint_candidate_id": "cp.finish", "label": "Finish", "lat": 23.020, "lon": 121.000, "progress_m": 2224},
+    ]
+    source_rows = []
+    for index, minutes in enumerate((10, 20, 40), start=1):
+        source_path = tmp_path / f"reference-{index}.gpx"
+        source_path.write_text(
+            _gpx(
+                [
+                    ("2026-01-01T00:00:00+00:00", 23.000, 121.000),
+                    (f"2026-01-01T00:{minutes:02d}:00+00:00", 23.010, 121.000),
+                    (f"2026-01-01T01:{minutes:02d}:00+00:00", 23.020, 121.000),
+                ],
+                [],
+            ),
+            encoding="utf-8",
+        )
+        source_rows.append(
+            {
+                "source_id": f"reference-{index}",
+                "original_path": str(source_path),
+                "original_filename": source_path.name,
+                "role": "reference_track",
+                "route_role": "reference_track",
+            }
+        )
+    (project_root / "sources" / "historical_gpx_source_index.json").write_text(
+        json.dumps({"project_id": "pace-fit", "sources": source_rows}),
+        encoding="utf-8",
+    )
+    (project_root / "candidates").mkdir()
+    (project_root / "candidates" / "checkpoints.json").write_text(
+        json.dumps(checkpoints),
+        encoding="utf-8",
+    )
+    (project_root / "outputs").mkdir()
+    (project_root / "outputs" / "checkpoint_events.json").write_text(
+        json.dumps({"events": events}),
+        encoding="utf-8",
+    )
+    (project_root / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": "pace-fit",
+                "checkpoint_candidates_ref": "candidates/checkpoints.json",
+                "checkpoint_events_ref": "outputs/checkpoint_events.json",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    payload = build_workspace_checkpoint_pace_fit_reference(project_root)
+
+    assert payload["status"] == "available"
+    assert payload["pair_count"] == 2
+    assert payload["measured_pair_count"] == 2
+    first_pair = payload["pairs"][0]
+    assert first_pair["duration_minutes"]["p50"] == 20.0
+    assert first_pair["duration_minutes"]["average"] == pytest.approx(23.3)
+    assert first_pair["reference_available"] is True
+    assert payload["privacy"]["raw_gpx_embedded"] is False
+    serialized = json.dumps(payload, ensure_ascii=False)
+    assert str(tmp_path) not in serialized
+    assert "<trkpt" not in serialized
+    assert "2026-01-01T" not in serialized
+    assert '"lat":' not in serialized
+    assert '"lon":' not in serialized
+    assert '"observed_at"' not in serialized
 def test_chilai_reference_segment_timing_fixture_contract() -> None:
     payload = json.loads(
         (

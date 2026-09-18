@@ -544,6 +544,27 @@ def test_scout_dashboard_body_index_requires_explicit_loaded_workspace() -> None
         assert fabricated_value not in html
 
 
+def test_scout_dashboard_pace_fit_missing_workspace_stays_unavailable(
+    tmp_path: Path,
+) -> None:
+    client = TestClient(create_admin_app(pretrip_workspace_root=tmp_path))
+
+    response = client.get(
+        "/admin/dashboard/pace-fit?project_id=missing_pace_fit_project"
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "scout_pace_fit_reference.v1"
+    assert payload["status"] == "unavailable"
+    assert payload["failure_code"] == "workspace_project_not_found"
+    assert payload["pairs"] == []
+    assert payload["boundary"]["candidate_only"] is True
+    assert payload["boundary"]["runtime_safety_truth"] is False
+    assert response.headers["x-scout-candidate-only"] == "true"
+    assert response.headers["x-scout-runtime-safety-truth"] == "false"
+
+
 def test_scout_dashboard_body_index_all_invalid_import_stays_unavailable(
     tmp_path: Path,
     monkeypatch,
@@ -632,6 +653,12 @@ def test_scout_dashboard_body_index_import_dedupes_and_sanitizes(
     assert payload["project_id"] == "test_body_index"
     assert payload["import_status"] == "imported"
     assert payload["summary"]["evidence_status"] == "available"
+    assert payload["summary"]["pace_coefficient_semantics"] == "relative_speed_factor"
+    assert payload["summary"]["pace_fit_semantics"] == "estimated_elapsed_time_ratio_to_reference_average"
+    assert float(payload["summary"]["pace_fit_time_ratio"]) > 0
+    assert payload["summary"]["pace_fit_time_percent"] == round(
+        float(payload["summary"]["pace_fit_time_ratio"]) * 100
+    )
     assert payload["import_result"]["new_source_count"] == 2
     assert payload["import_result"]["duplicate_source_count"] == 0
     assert payload["import_result"]["processed_source_count"] == 2
@@ -4137,6 +4164,7 @@ def test_scout_dashboard_pace_fit_is_map_first_and_discloses_supporting_info() -
     )
     assert "function paceFitCheckpointContext()" in html
     assert "function paceFitCheckpointMapPoints(" in html
+    assert "Math.max(24, asArray(context?.checkpoints).length)" in html
     assert "function bindPaceFitControls(root = document, actions = {})" in html
     assert 'preserveAspectRatio="xMidYMid slice"' in html
     assert 'data-pace-checkpoint-select="${escapeHtml(point.id)}"' in html
@@ -4150,6 +4178,40 @@ def test_scout_dashboard_pace_fit_is_map_first_and_discloses_supporting_info() -
     assert "23.120456, 120.832156" not in html
     assert "min-height: clamp(520px, 62vh, 760px)" in pace_css
     assert "height: 210px" not in pace_css
+
+
+def test_scout_dashboard_pace_fit_compares_each_cp_interval_with_body_index_time_ratio() -> None:
+    html = PAGE.read_text(encoding="utf-8")
+    renderer = html.split("function renderPaceFitPage", 1)[1].split(
+        "function bodyIndexMetrics", 1
+    )[0]
+
+    for marker in (
+        'const PACE_FIT_STATUS_PATH = "/admin/dashboard/pace-fit"',
+        'pace_fit: ["outdoor-pace-fit"]',
+        "async function loadPaceFitData()",
+        "function paceFitReferencePairs()",
+        "function paceFitReferencePairFor(",
+        "function paceFitBodyIndexTimeRatio()",
+        "if (pair?.reference_available !== true) return null;",
+        'if (raw === null || raw === undefined || raw === "" || raw === "unavailable") return null;',
+        "function paceFitPairConclusion(",
+        'data-pace-fit-conclusion="${escapeHtml(selectedConclusion.status)}"',
+        'data-pace-fit-reference-table="true"',
+        "Historical CP Interval Averages",
+        "referenceAverageMinutes",
+        "personalExpectedMinutes",
+        "paceFitPercent",
+        "pace_fit_time_ratio",
+        "pace_fit_time_percent",
+        "estimated_elapsed_time_ratio_to_reference_average",
+    ):
+        assert marker in html
+
+    assert "arithmetic_mean_of_accepted_historical_gpx_elapsed_minutes" not in renderer
+    assert "No Scout Pace Coefficient has been calculated" in html
+    assert "不補推平均耗時" in html
+    assert "個人預估耗時 ÷" in renderer
 
 
 def test_dashboard_truth_metadata_uses_progressive_disclosure() -> None:
@@ -6458,6 +6520,7 @@ def test_dashboard_diagnostic_checks_probe_runtime_data_and_rendered_behavior() 
     )[1].split("async function diagnosticCheck021()", 1)[0]
     assert "Function.prototype.toString.call(renderPaceFitPage)" not in check_020
     assert "() => renderPaceFitPage(force)" in check_020
+    assert "const average = paceFitPairAverageMinutes(pair);" in check_020
 
     for case_id in (
         "DASH-009",

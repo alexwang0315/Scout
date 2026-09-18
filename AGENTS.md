@@ -120,6 +120,60 @@ the requested upgrade; it is not a blanket unlock for shared Navigation files.
 Details and approved-change procedure:
 `qualification/policies/navigation-freeze.md`.
 
+## Dashboard / QGIS Startup Prerequisite
+
+Before starting the local Dashboard for Navigation, TRH, or other QGIS-backed
+terrain work, start the prepared Scout QGIS profile so the QGIS MCP bridge can
+initialize its connection file and worker handshake:
+
+```bash
+open -a "/Applications/QGIS-LTR.app" --args \
+  --profiles-path "$HOME/.scout-fusion/qgis-desktop" \
+  --profile scout --nologo --noversioncheck
+```
+
+Save and close any unrelated QGIS session first. Do not force-quit an existing
+QGIS process or use an unprepared/default profile. Then start the Dashboard
+through the repository launcher, keeping that launcher process alive:
+
+```bash
+cd /Users/alexwang0315/scout-fusion
+tools/run_dashboard_workspace.sh \
+  --host 127.0.0.1 \
+  --port 9099 \
+  --workspace-root /Users/alexwang0315/workspace
+```
+
+Do not start the normal Dashboard with
+`python tools/dashboard_workspace_app.py` directly. That bypasses the
+launcher environment setup (`SCOUT_QGIS_ENABLED`, worker URL, and worker
+token), so a healthy worker can still appear to the Dashboard as
+`BACKEND_NOT_CONFIGURED` / `QGIS backend is disabled`. Run one Dashboard
+launcher per port; do not start a second instance on `9099`.
+
+After QGIS is ready, use Navigation's `重新檢查 Worker` and continue only after
+the live QGIS/Worker handshake reports `READY`. A listening port, stale
+connection file, saved candidate result, or the presence of a
+`dashboard_workspace_app.py` child process alone is not proof of readiness. A
+child process is expected only when it is still managed by
+`run_dashboard_workspace.sh` and the live spatial status reports
+`availability=available`, `enabled=true`, `configured=true`, `reachable=true`,
+and `plugin_bridge_available=true`.
+
+Interpret startup failures before investigating DEM or A/B inputs:
+
+- `BACKEND_NOT_CONFIGURED` / `QGIS backend is disabled`: the Dashboard was
+  bypassed around the repository launcher, or its worker token/configuration is
+  missing. Restart the launcher and recheck the live status.
+- `QGIS_SESSION_REQUIRES_ATTENTION`: QGIS is open but the Scout profile/MCP
+  bridge has not completed its handshake. Keep the existing QGIS session
+  intact, correct the profile/bridge, and recheck; this is not evidence that
+  the DEM or A/B endpoints are invalid.
+
+These checks are runtime readiness checks only. They never promote a terrain
+hypothesis to a trail, passability, safety, legal-access, or operational
+authority.
+
 ## V1 Capability-First Cost Doctrine
 
 The first working version of a complex AI system is expected to be the most

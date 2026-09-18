@@ -506,6 +506,119 @@ Scout 正確輸出：
 
 > 以隊伍中最慢成員的可靠腳程估算，若照原計畫出發，回程將有 70 分鐘摸黑風險。建議提前 1 小時出發、縮短路線，或改為較短版本。
 
+### 7.6 2026-09-18 Body Index → Pace Fit 討論紀錄
+
+本次討論把「自信力」收斂成一個可以逐一檢查 CP 間隔的結論。Pace Fit
+必須回答：以 Body Index 推出的個人腳程，走完每一對相鄰 CP 預計需要歷史參考
+平均耗時的多少百分比。個人腳程的公式仍由 Body Index 負責；Pace Fit 只負責
+以相同 CP 間隔的參考資料做對照。
+
+#### 7.6.1 個人 CP 間隔結論契約
+
+對第 `i` 對相鄰 CP，定義：
+
+```text
+reference_average_i
+  = accepted historical GPX 中 CP_i → CP_i+1 的 elapsed time 算術平均
+
+personal_expected_i
+  = Body Index 對同一 CP 間隔的個人預估 elapsed time
+
+pace_fit_time_ratio_i
+  = personal_expected_i / reference_average_i
+
+pace_fit_time_percent_i
+  = pace_fit_time_ratio_i × 100
+```
+
+因此 `105%` 的意思是「個人預估耗時約為歷史參考平均的 `1.05` 倍」；它是
+**時間比率**，不是速度達到 `105%`。若同時保留 `Scout Pace Coefficient`，必須
+明確標成 `relative_speed_factor`，並說明它與時間比率互為倒數，不能讓兩個百分比
+使用同一個未說明的語意。
+
+Pace Fit 的資料狀態必須分開處理：
+
+- Body Index 尚未算出個人預估腳程時，仍先顯示每一對 CP 的歷史參考平均耗時；
+  個人耗時與百分比顯示 `unavailable`／待計算，不得以固定速度、隊伍平均或缺失
+  資料補推。
+- 歷史 CP 間隔沒有 accepted observation 時，該對 CP 的參考平均與百分比都保持
+  unavailable；不可把相鄰區段、全線平均或其他 GPX 的時間填入。
+- 參考耗時使用 accepted GPX trackpoint 的實際 `delta_t` 與相鄰 CP 投影結果；
+  不假設固定取樣間隔。是否包含中途停留必須由 traversal 的時間語意明示，
+  moving-only 時間不能悄悄取代 elapsed time。
+
+#### 7.6.2 三個責任邊界
+
+| 責任 | 產物與規則 |
+| --- | --- |
+| Body Index | 從 HealthExport 的個人活動資料建立個人腳程、能量與不確定性；HealthExport 公式只在此處定義，不由 Pace Fit 重算。 |
+| Pace Fit | 以相同 CP 間隔 join `personal_expected_i` 與 `reference_average_i`，輸出時間比率、百分比、支援數與缺口狀態。它是 advisory planning evidence。 |
+| Architecture | 提供路線軸、坡度、負重、地形與 Route Boss Demand 的修正；Body Index 的平地基準不可直接冒充山域完成時間或安全能力。 |
+
+這個分工延續第 7.4 節的 Route Demand 與 User Pace 分離，也延續
+`Body Index -> Pace advisory only` 的跨域邊界。任何結果仍保持
+`candidate_only=true`、`runtime_safety_truth=false`，不可作醫療診斷、不可直接改寫
+Phase 1、不可呼叫 `/safety/*` 或送出通報。
+
+#### 7.6.3 本次提出的 Body Index 基準實驗
+
+以下是為了得到可比較的個人基準而提出的假設，不是已驗證的山域模型：
+
+- 體重先以 `70 kg` 作為可替換參數。
+- 標準操場、坡度 `0°`、無重裝、輕便衣服；活動可自由跑、走與停，沒有固定
+  目標。這些條件只定義校準基線，不代表實際路線條件。
+- Apple Watch workout mode、route、速度、心率、步數／步頻與可用的 IMU 共同
+  用來辨識連續跑步、跑中放慢走路、行走與停止。若原始資料沒有 IMU/PDR，模式
+  只能標為 inferred，降低 data quality，不得假裝有明確的感測器分段。
+- 每個活動段落必須成對保留 distance、elapsed time、speed、active energy，並
+  保存 segment 起訖與缺失理由；能量單位必須先正規化。
+
+「功率」在此必須分成兩種，避免把資料欄位誤稱為物理真值：
+
+```text
+metabolic_power_W = active_energy_kJ × 1000 / elapsed_seconds
+positive_climb_mechanical_power_W = mass_kg × g × positive_elevation_m / elapsed_seconds
+```
+
+第一式是 HealthExport active energy 的**代謝功率代理值**；距離、時間與速度本身
+不足以在平地推出機械功率。第二式只代表正爬升的位能機械功率，不能當作總代謝
+消耗。`70 kg` 讓這些計算可以產生可重現的候選值，但不會補上地面阻力、風阻、
+技術地形、負重或姿勢效率。
+
+持續輸出能力可以先以「有效連續跑步段內，固定視窗的最高平均代謝功率」作歷史
+候選，例如 5／10／15／20 分鐘視窗；輸出名稱應是
+`historical_highest_sustained_output_estimate`，並保留視窗長度、樣本數與
+confidence。沒有高頻率能量／功率或運動感測資料時，不得宣稱瞬間最大輸出功率；
+日粒度的 provider `running_power` 只能是 `source_provider` value，不能充當瞬時
+峰值。
+
+「有氧運動功率」與「最大總功率乘數」仍是研究假說，尚未成為本標準的驗收欄位。
+若把活動能量除以全天總能量，得到的是同一時間尺度下的**能量占比**；若要稱為
+功率，兩者都必須先除以明確的時間窗。每日平均總功率應先由
+`(active_energy + basal_energy) × 4184 / 86400` 換成平均 W。把這個無因次占比直接
+乘上每日 kcal 來宣稱山域可用總功率，必須先經過 Architecture 的坡度、負重、地形
+阻力與校準驗證，暫時只能顯示為 candidate hypothesis，不能作個人能力或安全保證。
+
+### 7.7 與既有紀錄的差異審查
+
+本次紀錄與現有規格、程式及測試的對照如下。`aligned` 表示直接沿用；`additive`
+表示補上既有紀錄沒有寫清楚的契約；`gap` 表示應列為後續實作，不代表目前已完成。
+
+| 對照面 | 既有紀錄／實作 | 本次討論 | 判定 |
+| --- | --- | --- | --- |
+| 自信力定義 | §7.1 要求以資料支持使用者與隊伍的體能、腳程、休息與路線匹配估計。 | 把結果收斂為每一對 CP 的個人預估耗時相對參考平均的百分比。 | `aligned + additive` |
+| 參考 CP 時間 | `pretrip_reference_segment_timing.py` 已針對相鄰 CP 建立 reference artifact，使用 accepted GPX 的實際時間，缺資料保持 unavailable；Pace Fit UI／測試也已有 CP interval table 與 time-ratio 欄位。 | 明確規定百分比的分子、分母與 `105%` 的時間語意。 | `aligned + semantic clarification` |
+| Body Index 來源 | Dashboard Body Index 目前匯入去識別化 HealthExport 聚合、15 分鐘視窗與 provider metric summary；provider 值標示為 source value。 | Body Index 必須成為個人 CP 預估腳程的唯一公式來源，並處理跑／走／停的活動段。 | `gap`：目前仍以 walking 分析與樣本數／GPX／metric count 的啟發式係數為主。 |
+| 跑步與功率 | 現有 physiologic pipeline 的 HealthAutoExport analysis 只接受 walking／hiking；沒有持續跑步視窗或瞬時功率契約。 | 加入 70 kg 平地基準、連續跑步 sustained output candidate、代謝功率與機械爬升功率的分離。 | `gap`，且瞬時峰值需更高頻資料。 |
+| GPX 與絕對能量 | `pretrip-reference-pace-energy-analysis.md` 已明示 GPX 單獨不能推出絕對 watts/kJ 或代謝耗能，位能功率也不是總代謝。 | 改用 HealthExport active energy 加上體重／時間建立代謝功率代理；GPX 仍只提供路線與時間配對。 | `compatible only with joint-evidence scope`；不能把 GPX-only 限制改成 GPX 可算功率。 |
+| 坡度、負重、地形 | §7.4 Route Boss Demand 與 Architecture 負責路線需求、terrain、risk 與 buffer。 | 明確把山域坡度、負重、地形修正留給 Architecture。 | `aligned` |
+| 隊伍判斷 | §7.3 要以最慢者與最脆弱環節為基準，不用平均值掩蓋風險。 | 先建立個人 Body Index，再由 Pace Fit 產生個人 CP 結論。 | `additive`；個人結果不能取代最慢隊員規則。 |
+| 安全與私有資料 | Body Index → Pace 只作 advisory；HealthExport 原始內容、精確時間與 GPX 不直接暴露，也不改 Phase 1。 | 新的能量／功率估計仍只能是 candidate evidence，不能成為安全真相或醫療診斷。 | `aligned` |
+
+目前可把實作狀態精確描述為：Pace Fit 的 reference CP 平均與時間比率顯示路徑
+已有基礎；Body Index 尚未依本節建立個人 CP 預估時間，也尚未提供持續／瞬時功率
+的可驗證欄位。因此本節是規格與差異審查紀錄，不是對上述能力已完成的宣告。
+
 ---
 
 ## 8. Contextual Permissioning：勇氣力的 Scout 化

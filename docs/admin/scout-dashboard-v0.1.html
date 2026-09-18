@@ -2983,6 +2983,42 @@
       line-height: 1.4;
     }
 
+    .pace-fit-conclusion {
+      display: grid;
+      grid-template-columns: minmax(190px, .7fr) minmax(280px, 1.3fr);
+      gap: 12px 18px;
+      align-items: start;
+      padding: 14px;
+      border: 1px solid rgba(183, 207, 99, .35);
+      border-radius: 8px;
+      background: rgba(183, 207, 99, .055);
+    }
+
+    .pace-fit-conclusion[data-pace-fit-conclusion="available"] {
+      border-color: rgba(113, 206, 152, .45);
+      background: rgba(113, 206, 152, .07);
+    }
+
+    .pace-fit-conclusion h3 {
+      margin: 7px 0 0;
+      color: var(--text);
+      font-size: 15px;
+    }
+
+    .pace-fit-conclusion > strong {
+      color: var(--text);
+      font-size: 18px;
+      line-height: 1.45;
+    }
+
+    .pace-fit-conclusion p {
+      grid-column: 1 / -1;
+      margin: 0;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.55;
+    }
+
     .pace-timeline-band {
       padding-bottom: 10px;
     }
@@ -3034,7 +3070,7 @@
 
     .pace-supporting-grid {
       display: grid;
-      grid-template-columns: minmax(300px, 1.1fr) minmax(280px, .95fr) minmax(250px, .75fr);
+      grid-template-columns: repeat(4, minmax(250px, 1fr));
       border-top: 1px solid var(--line);
     }
 
@@ -3419,6 +3455,14 @@
     }
 
     @media (max-width: 620px) {
+      .pace-fit-conclusion {
+        grid-template-columns: 1fr;
+      }
+
+      .pace-fit-conclusion p {
+        grid-column: auto;
+      }
+
       .pace-fit-status-cell {
         padding: 9px 10px;
       }
@@ -12784,7 +12828,9 @@
     const PRETRIP_PROJECT_FETCH_TIMEOUT_MS = 180000;
     const MAP_EVIDENCE_FOCUS_MAX_ATTEMPTS = 45;
     const BODY_INDEX_FETCH_TIMEOUT_MS = 180000;
+    const PACE_FIT_FETCH_TIMEOUT_MS = 180000;
     const BODY_INDEX_STATUS_PATH = "/admin/dashboard/body-index";
+    const PACE_FIT_STATUS_PATH = "/admin/dashboard/pace-fit";
     const BODY_INDEX_IMPORT_PATH = "/admin/dashboard/body-index/import";
     const BODY_INDEX_WATCH_STATUS_PATH = "/admin/dashboard/body-index/watch/status";
     const BODY_INDEX_WATCH_START_PATH = "/admin/dashboard/body-index/watch/start";
@@ -12842,6 +12888,7 @@
     const ROUTE_DATA_SCOPES = Object.freeze({
       analysis_subject: ["outdoor-route-context", "outdoor-pace-fit", "outdoor-permission", "outdoor-architecture", "outdoor-weather", "outdoor-navigation"],
       project: ["home", "timeline", "features-lbs", "features-workspace", "features-import-new-trip", "surface-debug", "emergency", "outdoor-route-context", "outdoor-pace-fit", "outdoor-architecture", "outdoor-weather"],
+      pace_fit: ["outdoor-pace-fit"],
       briefing: ["outdoor-route-context"],
       body: ["outdoor-pace-fit", "outdoor-pace-fit-body-index"],
       weather: ["home", "outdoor-weather"],
@@ -13654,6 +13701,7 @@
         text: "Scout AI variants idle",
       },
       bodyIndexData: null,
+      paceFitData: null,
       bodyIndexImportBusy: false,
       bodyIndexImportStatus: {
         tone: "info",
@@ -14700,6 +14748,7 @@
     async function performDataScope(scope) {
       if (scope === "analysis_subject") return loadAnalysisSubject();
       if (scope === "project") return loadProjectData();
+      if (scope === "pace_fit") return loadPaceFitData();
       if (scope === "briefing") return loadBriefingData();
       if (scope === "body") return loadBodyIndexData();
       if (scope === "weather") return loadWeatherData();
@@ -16792,6 +16841,14 @@
           .then(data => { state.debugEvents = data.events || data.timeline || []; }),
       ];
       await Promise.all(tasks);
+    }
+
+    async function loadPaceFitData() {
+      state.paceFitData = null;
+      state.paceFitData = await fetchFirstPretripJson(
+        candidateId => `${PACE_FIT_STATUS_PATH}?project_id=${encodeURIComponent(candidateId)}`,
+        { timeoutMs: PACE_FIT_FETCH_TIMEOUT_MS },
+      );
     }
 
     async function loadBriefingData() {
@@ -21324,6 +21381,13 @@
       return diagnosticJson(bodyIndexStatusPath(), BODY_INDEX_FETCH_TIMEOUT_MS);
     }
 
+    function diagnosticPaceFit() {
+      return diagnosticJson(
+        `${PACE_FIT_STATUS_PATH}?project_id=${encodeURIComponent(projectId())}`,
+        PACE_FIT_FETCH_TIMEOUT_MS,
+      );
+    }
+
     function diagnosticBodyIndexWatch() {
       return diagnosticJson(bodyIndexWatchStatusPath(), BODY_INDEX_FETCH_TIMEOUT_MS);
     }
@@ -21967,8 +22031,8 @@
       return `Five existing variants · reference gate=${gate}`;
     }
 
-    function diagnosticPaceInteractions(project, force) {
-      return diagnosticRenderWithState({project, adminProjection: project, paceSelectedCheckpointId: ""}, () => {
+    function diagnosticPaceInteractions(project, force, paceFitData = null, bodyIndexData = null) {
+      return diagnosticRenderWithState({project, adminProjection: project, paceSelectedCheckpointId: "", paceFitData, bodyIndexData}, () => {
         const root = document.createElement("div");
         const repaint = () => {
           root.innerHTML = renderPaceFitPage(force);
@@ -22048,15 +22112,36 @@
     async function diagnosticCheck020() {
       const force = SIX_FORCES.find(item => item.route === "outdoor-pace-fit");
       diagnosticRequire(Boolean(force), "Pace Fit route contract is unavailable.");
-      const project = await diagnosticProjectProjection();
-      const overrides = {project, adminProjection: project};
+      const [project, paceFit] = await Promise.all([
+        diagnosticProjectProjection(),
+        diagnosticPaceFit(),
+      ]);
+      diagnosticRequire(paceFit?.schema_version === "scout_pace_fit_reference.v1", "Pace Fit reference contract is unavailable.");
+      diagnosticRequire(Array.isArray(paceFit?.pairs), "Pace Fit reference pair list is unavailable.");
+      diagnosticRequire(paceFit?.boundary?.candidate_only === true, "Pace Fit reference is not candidate-only.");
+      diagnosticRequire(paceFit?.boundary?.runtime_safety_truth === false, "Pace Fit reference claims runtime safety truth.");
+      for (const pair of paceFit.pairs) {
+        const average = paceFitPairAverageMinutes(pair);
+        diagnosticRequire(
+          pair.reference_available === (average !== null),
+          `Pace Fit reference availability disagrees with the CP pair average for ${pair?.pair_id || "unknown pair"}.`,
+        );
+      }
+      const unavailableBodyIndex = {
+        summary: {
+          scout_pace_coefficient: "unavailable",
+          pace_fit_time_ratio: "unavailable",
+          evidence_status: "unavailable",
+        },
+      };
+      const overrides = {project, adminProjection: project, paceFitData: paceFit, bodyIndexData: unavailableBodyIndex};
       const root = diagnosticMarkupRoot(diagnosticRenderWithState(overrides, () => renderPaceFitPage(force)));
       const context = diagnosticRenderWithState(overrides, () => paceFitCheckpointContext());
       for (const selector of ['[data-pace-fit-dashboard="true"]', '[data-dashboard-map-viewport="pace-fit-map"]', '[aria-label="Selected checkpoint inspector"]', '[aria-label="Pace checkpoint timeline"]', '[data-pace-supporting-details]']) {
         diagnosticRequire(Boolean(root.querySelector(selector)), `Pace CP context is missing ${selector}.`);
       }
       const markup = root.textContent || "";
-      for (const marker of ["CP Timeline", "not live location or safety truth", "terrain risk not evaluated", "fixture / non-runtime"]) {
+      for (const marker of ["CP Timeline", "Historical CP Interval Averages", "Body Index", "not live location or safety truth", "fixture / non-runtime"]) {
         diagnosticRequire(markup.includes(marker), `Pace context boundary ${marker} is missing.`);
       }
       const ids = new Set(context.checkpoints.map(point => point.id));
@@ -22064,7 +22149,7 @@
       if (ids.size) {
         diagnosticRequire(rendered.some(id => ids.has(id)), "Workspace CP candidates have no matching selection controls.");
       }
-      const interaction = diagnosticPaceInteractions(project, force);
+      const interaction = diagnosticPaceInteractions(project, force, paceFit, unavailableBodyIndex);
       return diagnosticAvailability(interaction.complete ? "available" : "incomplete", `${ids.size} workspace checkpoint candidates · ${interaction.detail} · detached production controls; live map camera/runtime pace not evaluated`);
     }
 
@@ -37147,7 +37232,89 @@
           candidateOnly: checkpoint?.candidate_only === true,
           runtimeSafetyTruth: checkpoint?.runtime_safety_truth === true,
         }];
+      }).sort((left, right) => {
+        const leftDistance = Number(left.routeDistanceM);
+        const rightDistance = Number(right.routeDistanceM);
+        if (Number.isFinite(leftDistance) && Number.isFinite(rightDistance)) {
+          return leftDistance - rightDistance;
+        }
+        if (Number.isFinite(leftDistance)) return -1;
+        if (Number.isFinite(rightDistance)) return 1;
+        return 0;
       });
+    }
+
+    function paceFitReferencePairs() {
+      return asArray(state.paceFitData?.pairs).filter(pair => (
+        pair && typeof pair === "object"
+        && String(pair.from_checkpoint_id || "")
+        && String(pair.to_checkpoint_id || "")
+      ));
+    }
+
+    function paceFitReferencePairFor(fromCheckpointId, toCheckpointId) {
+      const fromId = String(fromCheckpointId || "");
+      const toId = String(toCheckpointId || "");
+      if (!fromId || !toId) return null;
+      return paceFitReferencePairs().find(pair => (
+        String(pair.from_checkpoint_id || "") === fromId
+        && String(pair.to_checkpoint_id || "") === toId
+      )) || null;
+    }
+
+    function paceFitBodyIndexTimeRatio() {
+      const summary = bodyIndexSummary();
+      const ratio = Number(summary.pace_fit_time_ratio);
+      return Number.isFinite(ratio) && ratio > 0 ? ratio : null;
+    }
+
+    function paceFitPairAverageMinutes(pair) {
+      if (pair?.reference_available !== true) return null;
+      const raw = pair?.duration_minutes?.average;
+      if (raw === null || raw === undefined || raw === "" || raw === "unavailable") return null;
+      const value = Number(raw);
+      return Number.isFinite(value) && value >= 0 ? value : null;
+    }
+
+    function paceFitPairConclusion(pair) {
+      const referenceMinutes = paceFitPairAverageMinutes(pair);
+      const timeRatio = paceFitBodyIndexTimeRatio();
+      if (!pair) {
+        return {
+          status: "unavailable",
+          referenceMinutes: null,
+          expectedMinutes: null,
+          percent: null,
+          text: "尚未選到有下一個 CP 的區間。",
+        };
+      }
+      if (referenceMinutes === null) {
+        return {
+          status: "reference_unavailable",
+          referenceMinutes: null,
+          expectedMinutes: null,
+          percent: null,
+          text: "這個 CP 區間沒有足夠的歷史 reference GPX 通過資料；不補推平均耗時。",
+        };
+      }
+      if (timeRatio === null) {
+        return {
+          status: "body_index_unavailable",
+          referenceMinutes,
+          expectedMinutes: null,
+          percent: null,
+          text: `歷史 reference GPX 平均 ${referenceMinutes.toFixed(1)} 分鐘；Body Index 尚未產生個人預估腳程，因此暫不計算百分比。`,
+        };
+      }
+      const expectedMinutes = referenceMinutes * timeRatio;
+      const percent = Math.round(timeRatio * 100);
+      return {
+        status: "available",
+        referenceMinutes,
+        expectedMinutes,
+        percent,
+        text: `自己的預估耗時是歷史 reference GPX 平均的 ${percent}%（${expectedMinutes.toFixed(1)} 分鐘／${referenceMinutes.toFixed(1)} 分鐘）。`,
+      };
     }
 
     function paceFitCheckpointContext() {
@@ -37177,12 +37344,14 @@
           }, null);
       const selected = selectedByOperator || midpointCheckpoint || checkpoints[0];
       const selectedIndex = checkpoints.findIndex(checkpoint => checkpoint.id === selected.id);
+      const nextCheckpoint = checkpoints[selectedIndex + 1] || null;
       return {
         ...selected,
         available: true,
         checkpoints,
         selectedIndex,
-        nextCheckpoint: checkpoints[selectedIndex + 1] || null,
+        nextCheckpoint,
+        referencePair: paceFitReferencePairFor(selected.id, nextCheckpoint?.id),
         selectionReason: selectedByOperator ? "operator selected" : "route midpoint default",
       };
     }
@@ -37231,9 +37400,37 @@
       const nextSegmentLabel = context.nextCheckpoint
         ? `${context.label} -> ${context.nextCheckpoint.label}`
         : "No following checkpoint in workspace";
+      const selectedPair = context.referencePair;
+      const selectedConclusion = paceFitPairConclusion(selectedPair);
+      const referenceCoverage = state.paceFitData?.coverage || {};
+      const referencePairCount = Number(referenceCoverage.pair_count || 0);
+      const measuredPairCount = Number(referenceCoverage.measured_pair_count || 0);
+      const referenceCoverageLabel = state.paceFitData
+        ? `${measuredPairCount}/${referencePairCount} CP 區間有歷史平均耗時`
+        : "歷史 CP 區間平均耗時載入中";
+      const referencePairs = paceFitReferencePairs();
+      const referencePairRows = referencePairs.map(pair => {
+        const conclusion = paceFitPairConclusion(pair);
+        const referenceMinutes = paceFitPairAverageMinutes(pair);
+        const expectedMinutes = conclusion.expectedMinutes;
+        const percentLabel = conclusion.percent === null ? "--" : `${conclusion.percent}%`;
+        return `
+          <tr data-pace-fit-pair="${escapeHtml(pair.pair_id || "")}">
+            <td>${escapeHtml(pair.from_checkpoint_label || pair.from_checkpoint_id || "--")}<br><small>${escapeHtml(pair.to_checkpoint_label || pair.to_checkpoint_id || "--")}</small></td>
+            <td>${referenceMinutes === null ? "--" : `${referenceMinutes.toFixed(1)} min`}</td>
+            <td>${expectedMinutes === null ? "--" : `${expectedMinutes.toFixed(1)} min`}</td>
+            <td><strong>${escapeHtml(percentLabel)}</strong><br><small>${escapeHtml(conclusion.status === "available" ? "Body Index × reference" : conclusion.status === "body_index_unavailable" ? "等待 Body Index" : "reference unavailable")}</small></td>
+          </tr>
+        `;
+      }).join("");
       const paceObjectPreview = JSON.stringify({
         selectedCheckpointId: context.available ? context.id : null,
         selectedCheckpointLabel: context.available ? context.label : null,
+        selectedPairId: selectedPair?.pair_id || null,
+        referenceAverageMinutes: selectedConclusion.referenceMinutes,
+        personalExpectedMinutes: selectedConclusion.expectedMinutes,
+        paceFitPercent: selectedConclusion.percent,
+        paceFitSemantics: "personal_expected_elapsed_time_divided_by_reference_average",
         selectionBasis: context.selectionReason,
         slowestMemberBasis: null,
         paceRuntimeAttached: false,
@@ -37257,7 +37454,7 @@
             <div class="pace-fit-status-cell"><span>Workspace route</span><strong>${escapeHtml(routeLabel)}</strong><em>${escapeHtml(`${context.checkpoints.length} checkpoint candidates`)}</em></div>
             <div class="pace-fit-status-cell"><span>Selected CP</span><strong>${escapeHtml(context.label)}</strong><em>${escapeHtml(context.selectionReason)}</em></div>
             <div class="pace-fit-status-cell"><span>Route position</span><strong>${escapeHtml(distanceLabel)}</strong><em>${escapeHtml(elevationLabel)}</em></div>
-            <div class="pace-fit-status-cell"><span>Boundary</span><strong>candidate context</strong><em>not live location or safety truth</em></div>
+            <div class="pace-fit-status-cell"><span>Reference CP averages</span><strong>${escapeHtml(referenceCoverageLabel)}</strong><em>candidate-only historical GPX aggregate</em></div>
           </div>
 
           <div class="pace-spatial-workbench" data-pace-map-primary="true">
@@ -37276,21 +37473,34 @@
                     ["Review state", context.reviewState || "unknown"],
                     ["Source", context.sourceId || "unavailable"],
                     ["Recorded GPX time", context.observedAt ? formatDateTime(context.observedAt) : "unavailable"],
+                    ["Next CP interval", nextSegmentLabel],
+                    ["Reference average", selectedConclusion.referenceMinutes === null ? "unavailable" : `${selectedConclusion.referenceMinutes.toFixed(1)} min`],
+                    ["Body Index expected", selectedConclusion.expectedMinutes === null ? "unavailable" : `${selectedConclusion.expectedMinutes.toFixed(1)} min`],
                   ].map(([label, value]) => `<div class="pace-cp-fact"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("")}
                 </div>
-                <p class="pace-cp-meaning">這個位置來自目前 workspace 的 checkpoint candidate，作用是把 CP 編號、路線位置與來源證據綁在一起；它不代表隊伍目前位於此處，也不是安全或通行判定。</p>
+                <p class="pace-cp-meaning">這個位置來自目前 workspace 的 checkpoint candidate，作用是把 CP 編號、路線位置與來源證據綁在一起；下面的 reference average 是同一段相鄰 CP 的歷史 GPX 耗時，不代表隊伍目前位於此處，也不是安全或通行判定。</p>
                 <a class="chip info" href="${escapeHtml(surfaceSrc('/admin/trip-notebook/') + '&cpId=' + encodeURIComponent(context.id || '') + '&tab=points')}" target="_blank" rel="noopener">查看此 CP 的時間、資源與本機紀錄</a>
                 <div class="pace-primary-advisory">
                   <span>Pace runtime</span>
                   <strong>尚未接上即時隊伍速度；此頁目前只提供可查證的空間上下文。</strong>
+                  <small>not live location or safety truth</small>
                 </div>
               </div>
             </aside>
           </div>
 
+          <section class="pace-fit-conclusion" data-pace-fit-conclusion="${escapeHtml(selectedConclusion.status)}" aria-label="Selected CP pace fit conclusion">
+            <div>
+              <span class="chip ${selectedConclusion.status === "available" ? "ok" : "warn"}">Pace Fit conclusion</span>
+              <h3>${escapeHtml(nextSegmentLabel)}</h3>
+            </div>
+            <strong>${escapeHtml(selectedConclusion.text)}</strong>
+            <p>百分比定義：Body Index 產生的個人預估耗時 ÷ 同一對 CP 的 reference GPX 平均耗時 × 100。歷史平均尚未取得或 Body Index 尚未完成時，畫面保留未知，不產生百分比。</p>
+          </section>
+
           <section class="pace-timeline-band">
             <div class="pace-timeline-head">
-              <div><h3>CP Timeline</h3><p>選擇 checkpoint 會同步地圖與 inspector；距離來自 workspace route projection。</p></div>
+              <div><h3>CP Timeline</h3><p>選擇某個 CP 會查看「該 CP → 下一個 CP」的歷史平均耗時與 Pace Fit；距離來自 workspace route projection。</p></div>
               <span class="chip info">${escapeHtml(`${context.checkpoints.length} candidates`)}</span>
             </div>
             <div class="pace-timeline-scroll">
@@ -37314,8 +37524,19 @@
           </section>
 
           <details class="pace-supporting-details" data-pace-supporting-details="true">
-            <summary><span>Supporting pace preview and evidence</span><em>Fixture calculations, parameters, provenance, and raw object</em></summary>
+            <summary><span>CP interval averages and supporting evidence</span><em>Every adjacent CP pair, Body Index comparison, parameters, provenance, and raw object</em></summary>
             <div class="pace-fit-workbench pace-supporting-grid">
+              <section class="pace-support-section" data-pace-fit-reference-table="true">
+                <h3>Historical CP Interval Averages <span class="chip info">reference GPX aggregate</span></h3>
+                <p class="status">每列都是相鄰兩個 CP 的移動區間。Reference average 使用通過兩點的歷史 GPX elapsed time 算術平均；沒有足夠樣本的區間維持 --。</p>
+                <div class="pace-table-scroll">
+                  <table class="pace-budget-table pace-fit-reference-table">
+                    <thead><tr><th>CP interval</th><th>Reference average</th><th>Body Index expected</th><th>Pace Fit</th></tr></thead>
+                    <tbody>${referencePairRows || `<tr><td colspan="4">尚未取得 CP interval reference timing。</td></tr>`}</tbody>
+                  </table>
+                </div>
+              </section>
+
               <section class="pace-support-section">
                 <h3>Risk Budget Calculator <span class="chip warn">fixture / non-runtime</span></h3>
                 <div class="pace-table-scroll">
@@ -37357,7 +37578,8 @@
                 <div class="pace-stat-list">
                   ${[
                     ["Selected candidate", context.label, coordinateLabel],
-                    ["Next segment", nextSegmentLabel, "terrain risk not evaluated"],
+                    ["Next CP reference average", nextSegmentLabel, selectedConclusion.referenceMinutes === null ? "historical average unavailable" : `${selectedConclusion.referenceMinutes.toFixed(1)} min average`],
+                    ["Pace Fit", selectedConclusion.percent === null ? "unavailable" : `${selectedConclusion.percent}% of reference average`, selectedConclusion.status === "available" ? "Body Index expected elapsed time" : selectedConclusion.text],
                     ["Team position", "unavailable", "no live location source attached"],
                     ["Slowest member", "unavailable", "no pace runtime attached"],
                   ].map(([label, value, detail]) => `<div class="pace-stat-row"><div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div><em>${escapeHtml(detail)}</em></div>`).join("")}
@@ -37508,6 +37730,10 @@
     function bodyIndexSummary() {
       return state.bodyIndexData?.summary || {
         scout_pace_coefficient: "unavailable",
+        pace_coefficient_semantics: "relative_speed_factor",
+        pace_fit_time_ratio: "unavailable",
+        pace_fit_time_percent: "unavailable",
+        pace_fit_semantics: "estimated_elapsed_time_ratio_to_reference_average",
         energy_reserve: "unavailable",
         vulnerability: "unavailable",
         experience_trust: "unavailable",
@@ -37718,6 +37944,8 @@
       const summary = bodyIndexSummary();
       const scorePercent = bodyIndexScorePercent(summary);
       const coefficient = bodyIndexDisplayValue(summary.scout_pace_coefficient);
+      const paceFitTimePercent = bodyIndexDisplayValue(summary.pace_fit_time_percent);
+      const paceFitTimeRatio = bodyIndexDisplayValue(summary.pace_fit_time_ratio);
       const energyReserve = bodyIndexDisplayValue(summary.energy_reserve);
       const vulnerability = bodyIndexDisplayValue(summary.vulnerability);
       const experienceTrust = bodyIndexDisplayValue(summary.experience_trust);
@@ -37735,7 +37963,7 @@
       const impactRows = [
         ["Boss demand", "CP087-CP093 ridge section", "route pressure 0.68"],
         ["Energy Reserve", hasBodyIndexEvidence ? `${energyReserve} retained for slowest member basis` : "unavailable until evidence import", "planning evidence"],
-        ["Pace gate input", "Scout Pace Coefficient feeds schedule buffer", "source_provider only"],
+        ["Pace Fit input", hasBodyIndexEvidence ? `${paceFitTimePercent} of reference average` : "unavailable until Body Index evidence", "Body Index elapsed-time ratio"],
         ["Challenge Fit", "route demand x pace vulnerability", "advisory only"],
         ["Boundary", "no diagnosis, no Phase 1 mutation, no safety endpoint", "no outbound"],
       ];
@@ -37758,7 +37986,7 @@
               <div class="body-index-ring" style="--value:${scorePercent}%"><span>${escapeHtml(coefficient)}</span></div>
               <div class="body-index-score-copy">
                 <h3>Scout Pace Coefficient</h3>
-                <p>${hasBodyIndexEvidence ? "Route pace estimate for Chilai Nanhua day 1, calculated as planning evidence for the slowest member basis." : "No Scout Pace Coefficient has been calculated. Import reviewed local evidence before using this planning surface."}</p>
+                <p>${hasBodyIndexEvidence ? `HealthExport 先產生相對速度係數 ${escapeHtml(coefficient)}；Pace Fit 使用 Body Index 換算的預估耗時 ${escapeHtml(paceFitTimePercent)}（${escapeHtml(paceFitTimeRatio)}× reference average）。` : "No Scout Pace Coefficient has been calculated. 先匯入並審閱 HealthExport，Pace Fit 才會得到個人預估耗時百分比。"}</p>
                 <div class="body-index-chip-row">
                   <span class="chip info">spec 7.2</span>
                   <span class="chip info">HealthExport-aware</span>
@@ -38582,7 +38810,11 @@
             1200,
           )
         : "";
-      const checkpointPoints = paceFitCheckpointMapPoints(mapData, context, 24);
+      const checkpointPoints = paceFitCheckpointMapPoints(
+        mapData,
+        context,
+        Math.max(24, asArray(context?.checkpoints).length),
+      );
       const checkpointMarkup = checkpointPoints.map((point, index) => {
         const position = dashboardMapPointPosition(point, displayBounds, width, height);
         if (!position) return "";

@@ -47,7 +47,7 @@ from scout.agents.pydantic_ai_compat import (
 )
 from scout.cli.pydantic_243_checks import check_banner_output, check_stream_boundaries
 
-REQUIRED_VERSION = "2.43.0"
+REQUIRED_VERSION = "2.44.0"
 DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4-flash-0731"
 DEFAULT_TIMEOUT_SECONDS = 120.0
 REPO_ROOT = Path(__file__).resolve().parents[3]

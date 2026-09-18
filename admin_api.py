@@ -132,6 +132,9 @@ from pretrip_import import (
     PretripImportRequest,
     run_pretrip_import,
 )
+from pretrip_reference_segment_timing import (
+    build_workspace_checkpoint_pace_fit_reference,
+)
 from pretrip_energy_projection import (
     DEFAULT_PRETRIP_ENERGY_PROJECTION_REF,
     write_pretrip_energy_reserve_projection,
@@ -533,12 +536,44 @@ def _dashboard_body_index_default_health_signals() -> list[list[Any]]:
 def _dashboard_body_index_unavailable_summary() -> dict[str, Any]:
     return {
         "scout_pace_coefficient": "unavailable",
+        "pace_coefficient_semantics": "relative_speed_factor",
+        "pace_fit_time_ratio": "unavailable",
+        "pace_fit_time_percent": "unavailable",
+        "pace_fit_semantics": "estimated_elapsed_time_ratio_to_reference_average",
         "energy_reserve": "unavailable",
         "vulnerability": "unavailable",
         "experience_trust": "unavailable",
         "score_percent": 0,
         "evidence_status": "unavailable",
     }
+
+
+def _dashboard_body_index_enrich_summary(summary: dict[str, Any]) -> dict[str, Any]:
+    """Expose the Body Index time-ratio meaning without moving its formula."""
+    enriched = dict(summary)
+    enriched.setdefault("pace_coefficient_semantics", "relative_speed_factor")
+    enriched.setdefault(
+        "pace_fit_semantics",
+        "estimated_elapsed_time_ratio_to_reference_average",
+    )
+    def optional_float(key: str) -> float | None:
+        raw = summary.get(key)
+        if raw is None or raw == "" or raw == "unavailable":
+            return None
+        try:
+            return float(raw)
+        except (TypeError, ValueError):
+            return None
+
+    coefficient = optional_float("scout_pace_coefficient")
+    ratio = optional_float("pace_fit_time_ratio")
+    if ratio is None and coefficient is not None and coefficient > 0:
+        ratio = 1.0 / coefficient
+        enriched["pace_fit_time_ratio"] = f"{ratio:.2f}"
+        enriched["pace_fit_time_percent"] = round(ratio * 100)
+    enriched.setdefault("pace_fit_time_ratio", "unavailable")
+    enriched.setdefault("pace_fit_time_percent", "unavailable")
+    return enriched
 
 
 def _dashboard_body_index_default_snapshot(project_id: str) -> dict[str, Any]:
@@ -590,6 +625,8 @@ def _load_dashboard_body_index_snapshot(project_id: str) -> dict[str, Any]:
             for source in sources
             if isinstance(source, dict) and source.get("sha256")
         ]
+    if isinstance(data.get("summary"), dict):
+        data["summary"] = _dashboard_body_index_enrich_summary(data["summary"])
     data.setdefault("boundary", _dashboard_body_index_boundary())
     return data
 
@@ -1123,6 +1160,10 @@ def _dashboard_body_index_snapshot_from_sources(
         )
         summary = {
             "scout_pace_coefficient": f"{pace_coefficient:.2f}",
+            "pace_coefficient_semantics": "relative_speed_factor",
+            "pace_fit_time_ratio": f"{(1.0 / pace_coefficient):.2f}",
+            "pace_fit_time_percent": round((1.0 / pace_coefficient) * 100),
+            "pace_fit_semantics": "estimated_elapsed_time_ratio_to_reference_average",
             "energy_reserve": f"{energy:.2f}",
             "vulnerability": f"{vulnerability:.2f}",
             "experience_trust": f"{experience:.2f}",
@@ -1133,6 +1174,7 @@ def _dashboard_body_index_snapshot_from_sources(
         }
     else:
         summary = _dashboard_body_index_unavailable_summary()
+    summary = _dashboard_body_index_enrich_summary(summary)
     return {
         "schema_version": DASHBOARD_BODY_INDEX_SCHEMA_VERSION,
         "project_id": project_id,
@@ -2926,6 +2968,101 @@ def create_admin_router(
             json.dumps(snapshot, ensure_ascii=False),
             media_type="application/json",
             headers={"Cache-Control": "no-store"},
+        )
+
+    @router.get("/dashboard/pace-fit")
+    def scout_dashboard_pace_fit(
+        project_id: str | None = None,
+    ) -> Response:
+        project_id = _require_dashboard_body_index_project_id(project_id)
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            payload = {
+                "artifact_kind": "scout_pace_fit_reference",
+                "schema_version": "scout_pace_fit_reference.v1",
+                "project_id": project_id,
+                "status": "unavailable",
+                "failure_code": "workspace_project_not_found",
+                "source_provider": "historical_gpx_source_index",
+                "source_path": "sources/historical_gpx_source_index.json",
+                "checkpoint_count": 0,
+                "pair_count": 0,
+                "measured_pair_count": 0,
+                "sample_count": 0,
+                "pairs": [],
+                "coverage": {
+                    "checkpoint_count": 0,
+                    "pair_count": 0,
+                    "measured_pair_count": 0,
+                    "unmeasured_pair_count": 0,
+                    "sample_count": 0,
+                },
+                "boundary": {
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                    "phase1_runtime_mutation_allowed": False,
+                    "historical_gpx_is_actual_user_track": False,
+                },
+                "privacy": {
+                    "aggregate_only": True,
+                    "raw_gpx_embedded": False,
+                    "coordinates_embedded": False,
+                    "precise_timestamps_embedded": False,
+                    "source_original_paths_embedded": False,
+                },
+            }
+        else:
+            try:
+                payload = build_workspace_checkpoint_pace_fit_reference(
+                    project_root,
+                    project_id=project_id,
+                )
+            except Exception:
+                payload = {
+                    "artifact_kind": "scout_pace_fit_reference",
+                    "schema_version": "scout_pace_fit_reference.v1",
+                    "project_id": project_id,
+                    "status": "unavailable",
+                    "failure_code": "pace_fit_reference_build_failed",
+                    "source_provider": "historical_gpx_source_index",
+                    "source_path": "sources/historical_gpx_source_index.json",
+                    "checkpoint_count": 0,
+                    "pair_count": 0,
+                    "measured_pair_count": 0,
+                    "sample_count": 0,
+                    "pairs": [],
+                    "coverage": {
+                        "checkpoint_count": 0,
+                        "pair_count": 0,
+                        "measured_pair_count": 0,
+                        "unmeasured_pair_count": 0,
+                        "sample_count": 0,
+                    },
+                    "boundary": {
+                        "candidate_only": True,
+                        "runtime_safety_truth": False,
+                        "phase1_runtime_mutation_allowed": False,
+                        "historical_gpx_is_actual_user_track": False,
+                    },
+                    "privacy": {
+                        "aggregate_only": True,
+                        "raw_gpx_embedded": False,
+                        "coordinates_embedded": False,
+                        "precise_timestamps_embedded": False,
+                        "source_original_paths_embedded": False,
+                    },
+                }
+        return Response(
+            json.dumps(payload, ensure_ascii=False),
+            media_type="application/json",
+            headers={
+                "Cache-Control": "no-store",
+                "X-Scout-Candidate-Only": "true",
+                "X-Scout-Runtime-Safety-Truth": "false",
+            },
         )
 
     @router.post("/dashboard/trip-intake/validate")

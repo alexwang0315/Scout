@@ -46,6 +46,55 @@ Each entry should include:
 
 ## Implementation Record
 
+### 2026-09-18 - Pace Fit CP interval averages and Body Index time ratio
+
+User request:
+
+- Pace Fit must compare the user's estimated elapsed time for one adjacent CP
+  interval with the historical reference GPX average for that same interval.
+- Pace Fit must show historical CP interval averages before Body Index has a
+  personal estimate; Body Index remains the owner of the HealthExport formula.
+- Verify the Pace Dashboard and Body Index surfaces without inventing missing
+  rest areas, map data, or personal pace values.
+
+Implementation steps:
+
+- Added the read-only `/admin/dashboard/pace-fit` contract. It builds timing for
+  every adjacent workspace checkpoint from accepted historical GPX trackpoint
+  passages, reports an arithmetic average in minutes, and keeps unmeasured
+  pairs unavailable. The response is aggregate-only and candidate-only.
+- Added Body Index semantics for the existing relative speed factor and its
+  derived elapsed-time ratio (`pace_fit_time_percent`). Pace Fit consumes this
+  Body Index output; it does not duplicate the HealthExport formula.
+- Pace Dashboard now loads the CP-pair contract, shows the selected interval's
+  reference average, expected personal elapsed time, and the percentage
+  conclusion, exposes every adjacent CP pair in the supporting table, and keeps
+  every workspace CP candidate available as a selectable map marker.
+- Updated the Body Index copy to explain the conversion from relative speed to
+  elapsed time against the same reference average.
+- Preserved the map and checkpoint selection boundary: all values remain
+  candidate-only, `runtime_safety_truth=false`, and no live location or safety
+  recommendation is implied.
+
+Verification:
+
+- `tests/test_scout_dashboard_page.py`: 169 passed; `tests/test_pretrip_reference_segment_timing.py`: 7 passed; the affected `tests/test_pretrip_admin_api.py`: 109 passed.
+- The real workspace replay and `/admin/dashboard/pace-fit` endpoint returned
+  219 checkpoints, 218 adjacent pairs, 86 measured historical averages, and
+  221 accepted observations without raw GPX, coordinates, or precise timestamps.
+- On a temporary 9100 launcher using the real workspace, browser evidence showed
+  219 CP markers, 218 interval rows, Rudy+TW tile state `ready` with 25 native
+  tiles and no tile errors. Zoom, reset, mouse pan, keyboard pan, and rectangle
+  zoom all changed the map state. Missing reference intervals stayed `--`; a
+  synthetic sanitized Body Index snapshot produced the real `11.7 / 11.1 =
+  105%` selected-interval conclusion.
+- Targeted live diagnostics DASH-020, DASH-021, and DASH-022 passed on 9100.
+  The existing full browser runner remains blocked by its stale fixed expectation
+  of 48 diagnostic cases while the page currently exposes 50. The pre-existing
+  9099 process also returned 404 for the new Pace Fit endpoint because it was
+  loaded before this change; it was left running and not restarted. A fresh
+  launcher is required before treating 9099 as the delivered runtime.
+
 ### 2026-09-15 - Add read-only Hailo operation telemetry
 
 User request: add measured AI HAT / Hailo operating indicators to Scout monitor.
