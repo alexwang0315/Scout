@@ -139,6 +139,12 @@ def test_body_index_classifies_run_walk_run_stop_and_preserves_gap_as_unknown(tm
     assert aggregate["observations"]["walk_active_energy_kj"] == pytest.approx(2.0)
     assert aggregate["observations"]["stop_active_energy_kj"] == pytest.approx(1.5)
     assert aggregate["observations"]["unknown_segment_active_energy_kj"] > 0
+    assert sum(float(segment["active_energy_kj"] or 0.0) for segment in activity["segments"]) == pytest.approx(
+        activity["active_energy_kj"]
+    )
+    assert aggregate["observations"]["all_activity_active_energy_kj"] == pytest.approx(
+        sum(float(segment["active_energy_kj"] or 0.0) for segment in activity["segments"])
+    )
     cross_check = aggregate["energy_cross_check"]
     assert cross_check["status"] == "available"
     assert cross_check["watch_source"].startswith("HealthExport interval activeEnergy")
