@@ -9,7 +9,8 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_advanced_cases_do_not_enter_regular_batch_and_are_scope_bound():
     page=(ROOT/'docs/admin/scout-dashboard-v0.1.html').read_text()
     regular=page.split('const DASHBOARD_DIAGNOSTIC_CASES =',1)[1].split('];',1)[0]
-    assert len(re.findall(r'id: "DASH-\d+"',regular))==48
+    assert len(re.findall(r'id: "DASH-\d+"',regular))==50
+    assert all(f'id: "{case_id}"' in regular for case_id in ("DASH-049", "DASH-050"))
     assert 'runDiagnosticAdvanced' not in function('runAllDashboardDiagnostics')
     assert 'data-diagnostic-advanced-run' in function('bindDiagnosticControls')
     assert 'stored?.scopeKey === diagnosticCaseScopeKey' in function('renderDiagnosticAdvanced')

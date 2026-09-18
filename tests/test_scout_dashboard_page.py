@@ -6697,9 +6697,11 @@ def test_dashboard_diagnostic_checks_probe_runtime_data_and_rendered_behavior() 
         "DASH-032",
         "DASH-033",
         "DASH-035",
+        "DASH-049",
+        "DASH-050",
     ):
         assert f'"{case_id}"' in browser_smoke
-    assert "const expectedDiagnosticCount = 48" in browser_smoke
+    assert "const expectedDiagnosticCount = 50" in browser_smoke
     assert '"DASH-037"' in browser_smoke
     assert '"DASH-038"' in browser_smoke
     assert "async function inspectNavigationMapLibreCameraPersistence(" in browser_smoke

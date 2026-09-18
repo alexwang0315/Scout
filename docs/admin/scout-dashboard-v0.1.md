@@ -167,6 +167,50 @@ Verification and remaining gaps:
 - This change does not claim a medical aerobic threshold, physiological maximum,
   route safety, or a calibrated mountain daily energy budget.
 
+### 2026-09-18 - Decision A: promote DASH-049 and DASH-050 to the regular contract
+
+The user selected option A for the preserved 48-versus-50 Diagnostic conflict.
+The regular browser contract now treats the existing page registry's
+`DASH-001` through `DASH-050` as one batch. DASH-049 and DASH-050 retain their
+existing read-only, candidate-only semantics and remain outside the Navigation
+diagnostic list and the five separately scoped advanced replays.
+
+Implementation and verification:
+
+- Updated `tools/dashboard_diagnostic_browser_smoke.js` to require 50 rendered
+  cases, 50 retest controls, and a 50-case `Diag all` terminal summary. The two
+  newly regular cases are data-dependent, so a real workspace warning remains
+  evidence rather than an implementation failure.
+- Updated `tests/test_scout_dashboard_page.py` and
+  `tests/test_diagnostic_advanced_entrypoint.py` to assert the 50-case regular
+  contract and explicit inclusion of DASH-049/050. Existing focused registry
+  tests still prove DASH-049/050 are not Navigation or advanced cases.
+- `node --check tools/dashboard_diagnostic_browser_smoke.js`: PASS.
+- Contract/page/alignment/coverage/monitor focused tests: 208 passed. The
+  targeted DASH-049/DASH-050 registry tests: 3 passed.
+- A broader run including the existing production DOM replay had 234 passed and
+  one retained DASH-049 replay failure. It still fails at the existing
+  `requireLoadedWorkspaceProjectId` boundary (`A loaded workspace is required
+  before Dashboard data or diagnostics can run`); the failure was preserved and
+  no expectation or fixture was weakened.
+- The updated regular browser smoke was attempted twice against current-code
+  `http://127.0.0.1:9101/admin/dashboard?projectId=dongqing_batongguan_historic_trail_newImport`
+  with the local Chrome executable; both attempts retained a 60-second
+  `data-diagnostic-page` wait failure. A minimal replay of the same URL and
+  executable then observed `domcontentloaded`, 50 cases, and the Diagnostic
+  page in 223 ms. This runner/harness discrepancy is recorded as failed smoke
+  evidence, not converted to PASS. The direct browser run separately recorded
+  DASH-050 PASS and DASH-049 FAIL for the missing selected Planned version.
+- At handoff, a read-only listener check and GET to the previously recorded
+  9099 URL found no listener (`curl` connection refused). No 9099 restart,
+  replacement, or qualification attempt was performed in this change.
+
+This resolves the count-specification conflict for the current code. It does
+not qualify the stale 9099 process, restart it, or claim the official full
+browser contract passed. A current-code temporary replay may support
+construction evidence, but the official qualification still requires the
+pre-existing real runtime and its continuity/reviewer gates.
+
 ### 2026-09-18 - Pace Fit CP interval averages and Body Index time ratio
 
 User request:
