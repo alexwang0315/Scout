@@ -84,7 +84,9 @@ Implementation steps:
   post-transition run resumption references.
 - Added an ACSM flat-ground metabolic-cost cross-check for the standardized
   scenario. The source formula and applicability range remain in the output;
-  this cross-check is separate from the watch's interval energy estimate.
+  this cross-check is separate from the watch's interval energy estimate, and
+  the aggregate retains the comparable-segment watch/model difference and
+  both source descriptions.
 - Exposed `body_mass_kg` on Body Index import/watch requests and the page
   control. A changed mass re-parses existing source ZIPs and remains labelled
   `user_assumption` in the resulting model.
@@ -121,6 +123,8 @@ Verification and remaining gaps:
   that process. It imported the 3 local HealthExport ZIPs (duplicate source
   refresh after the model change), rendered 41 activities / 40 eligible
   run-walk activities, 13,268.909 kJ inferred running-segment energy,
+  11,030.527 kJ watch energy versus 7,744.457 kJ flat-ground model energy on
+  40 comparable activities (difference +3,286.070 kJ),
   5/10-minute available windows, 15/20-minute unavailable windows, and
   33/32/32 complete active/static/total days. Body Index and Pace Fit both
   rendered with candidate-only boundaries and no raw fields; Pace Fit showed

@@ -138,8 +138,10 @@ The flat-ground cross-check uses the ACSM walking/running equations, with the
 net active 3.5 mL/kg/min resting component removed before converting oxygen
 cost to kcal and W. The published equation summary and its speed/grade terms
 are available in [this peer-reviewed study](https://pmc.ncbi.nlm.nih.gov/articles/PMC12419060/).
-The cross-check retains its applicability limits and never re-labels the
-provider's active-energy value as a newly calculated 70 kg measurement.
+The cross-check retains its applicability limits and reports the comparable-
+segment watch value, flat-ground model value, and their difference with both
+sources. It never re-labels the provider's active-energy value as a newly
+calculated 70 kg measurement.
 
 Pace Fit retains each CP pair's historical reference average independently. A
 personal percentage is emitted only after a traceable mapping exists from Body

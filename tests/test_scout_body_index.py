@@ -139,6 +139,14 @@ def test_body_index_classifies_run_walk_run_stop_and_preserves_gap_as_unknown(tm
     assert aggregate["observations"]["walk_active_energy_kj"] == pytest.approx(2.0)
     assert aggregate["observations"]["stop_active_energy_kj"] == pytest.approx(1.5)
     assert aggregate["observations"]["unknown_segment_active_energy_kj"] > 0
+    cross_check = aggregate["energy_cross_check"]
+    assert cross_check["status"] == "available"
+    assert cross_check["watch_source"].startswith("HealthExport interval activeEnergy")
+    assert cross_check["model_source"].startswith("ACSM flat-ground")
+    assert cross_check["difference_watch_minus_model_kj"] == pytest.approx(
+        cross_check["watch_interval_active_energy_kj_on_comparable_segments"]
+        - cross_check["flat_ground_model_active_energy_kj"]
+    )
 
 
 def test_active_energy_interval_values_are_summed_once_and_kcal_converted(tmp_path: Path) -> None:

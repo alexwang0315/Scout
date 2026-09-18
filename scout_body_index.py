@@ -753,6 +753,71 @@ def _activity_analysis(workout: Mapping[str, Any], body_mass_kg: float) -> dict[
         index = end_index
 
     transition_events: list[dict[str, Any]] = []
+    comparable_watch_energy_kj = 0.0
+    comparable_model_energy_kj = 0.0
+    comparable_watch_coverage_s = 0.0
+    comparable_duration_s = 0.0
+    comparable_segment_refs: list[str] = []
+    for segment in segments:
+        if segment["state"] not in {"running", "walking"}:
+            continue
+        theoretical = segment.get("theoretical_flat_energy_cost") or {}
+        if theoretical.get("status") != "available":
+            continue
+        estimated_w = _finite(theoretical.get("estimated_active_energy_w"))
+        segment_duration = _finite(segment.get("duration_s"))
+        if estimated_w is None or segment_duration is None or segment_duration <= 0:
+            continue
+        comparable_segment_refs.append(str(segment["segment_ref"]))
+        comparable_model_energy_kj += estimated_w * segment_duration / 1000.0
+        comparable_watch_energy_kj += float(segment.get("active_energy_kj") or 0.0)
+        comparable_watch_coverage_s += float(
+            segment.get("data_coverage", {}).get("active_energy") or 0.0
+        ) * segment_duration
+        comparable_duration_s += segment_duration
+    cross_check_status = (
+        "available"
+        if energy_intervals and comparable_segment_refs and comparable_model_energy_kj > 0
+        else "unavailable"
+    )
+    energy_cross_check = {
+        "status": cross_check_status,
+        "watch_interval_active_energy_kj_on_comparable_segments": _round(
+            comparable_watch_energy_kj, 5
+        )
+        if cross_check_status == "available"
+        else None,
+        "flat_ground_model_active_energy_kj": _round(comparable_model_energy_kj, 5)
+        if cross_check_status == "available"
+        else None,
+        "difference_watch_minus_model_kj": _round(
+            comparable_watch_energy_kj - comparable_model_energy_kj, 5
+        )
+        if cross_check_status == "available"
+        else None,
+        "difference_percent_of_model": _round(
+            (comparable_watch_energy_kj - comparable_model_energy_kj)
+            / comparable_model_energy_kj
+            * 100.0,
+            2,
+        )
+        if cross_check_status == "available"
+        else None,
+        "watch_energy_coverage": _round(
+            comparable_watch_coverage_s / comparable_duration_s, 4
+        )
+        if comparable_duration_s
+        else None,
+        "comparable_segment_count": len(comparable_segment_refs),
+        "source_segment_refs": sorted(set(comparable_segment_refs))[:12],
+        "watch_source": "HealthExport interval activeEnergy; summed once and converted to kJ",
+        "model_source": "ACSM flat-ground walking/running cost at configured body mass, grade 0, zero load",
+        "interpretation": "cross-check difference only; watch W is active-energy rate, not mechanical power",
+        "body_mass_kg": body_mass_kg,
+        "body_mass_basis": "user_assumption",
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
     cumulative_energy_prefix = [0.0]
     for segment in segments:
         cumulative_energy_prefix.append(
@@ -847,6 +912,7 @@ def _activity_analysis(workout: Mapping[str, Any], body_mass_kg: float) -> dict[
             if scalar_kj is not None
             else "unavailable"
         ),
+        "energy_cross_check": energy_cross_check,
         "energy_unit_status": energy_unit_status,
         "scalar_energy_cross_check_kj": _round(scalar_kj, 5),
         "scalar_energy_added": not bool(energy_intervals) and scalar_kj is not None,
@@ -1441,6 +1507,59 @@ def aggregate_body_index_sources(
     total_duration = sum(float(activity.get("duration_s") or 0.0) for activity in activities)
     metric_rows = _merge_daily_metrics(analyses)
     daily_energy = _daily_energy_summary(activities, metric_rows)
+    cross_checks = [
+        activity.get("energy_cross_check")
+        for activity in eligible
+        if isinstance(activity.get("energy_cross_check"), Mapping)
+        and activity.get("energy_cross_check", {}).get("status") == "available"
+    ]
+    comparable_watch_energy_kj = sum(
+        float(item.get("watch_interval_active_energy_kj_on_comparable_segments") or 0.0)
+        for item in cross_checks
+    )
+    comparable_model_energy_kj = sum(
+        float(item.get("flat_ground_model_active_energy_kj") or 0.0)
+        for item in cross_checks
+    )
+    cross_check = {
+        "status": "available" if cross_checks and comparable_model_energy_kj > 0 else "unavailable",
+        "watch_interval_active_energy_kj_on_comparable_segments": _round(
+            comparable_watch_energy_kj, 5
+        )
+        if cross_checks and comparable_model_energy_kj > 0
+        else None,
+        "flat_ground_model_active_energy_kj": _round(comparable_model_energy_kj, 5)
+        if cross_checks and comparable_model_energy_kj > 0
+        else None,
+        "difference_watch_minus_model_kj": _round(
+            comparable_watch_energy_kj - comparable_model_energy_kj, 5
+        )
+        if cross_checks and comparable_model_energy_kj > 0
+        else None,
+        "difference_percent_of_model": _round(
+            (comparable_watch_energy_kj - comparable_model_energy_kj)
+            / comparable_model_energy_kj
+            * 100.0,
+            2,
+        )
+        if cross_checks and comparable_model_energy_kj > 0
+        else None,
+        "comparable_activity_count": len(cross_checks),
+        "source_segment_refs": sorted(
+            {
+                str(ref)
+                for item in cross_checks
+                for ref in item.get("source_segment_refs", [])
+            }
+        )[:12],
+        "watch_source": "HealthExport interval activeEnergy; summed once and converted to kJ",
+        "model_source": "ACSM flat-ground walking/running cost at configured body mass, grade 0, zero load",
+        "interpretation": "cross-check difference only; watch W is active-energy rate, not mechanical power",
+        "body_mass_kg": mass,
+        "body_mass_basis": "user_assumption",
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
     date_values = [str(activity.get("date")) for activity in activities if activity.get("date")] + [str(row.get("date")) for row in metric_rows if row.get("date")]
     classification_coverage = statistics.mean(float(activity.get("data_coverage", {}).get("speed") or 0.0) for activity in eligible) if eligible else 0.0
     coefficient_metrics = _coefficient_metrics(mode_speeds=mode_speeds, segments=segments, transition_count=len(transitions), body_mass_kg=mass)
@@ -1509,6 +1628,7 @@ def aggregate_body_index_sources(
             "not_extrapolated": True,
         },
         "daily_energy": daily_energy,
+        "energy_cross_check": cross_check,
         "daily_metric_records": metric_rows,
         "coefficient_metrics": coefficient_metrics,
         "model_assumptions": [

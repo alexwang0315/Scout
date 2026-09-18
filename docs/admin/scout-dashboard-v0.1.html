@@ -22179,6 +22179,12 @@
       diagnosticRequire(body.body_index.sustained_output?.not_extrapolated === true, "Body Index sustained output permits extrapolation.");
       diagnosticRequire(body.body_index.observations?.energy_rate_definition?.includes("interval"), "Body Index energy-rate basis is not exposed.");
       diagnosticRequire(body.body_index.observations?.run_energy_definition?.includes("running segments"), "Body Index run energy is not segment-based.");
+      const energyCrossCheck = body.body_index.energy_cross_check || {};
+      diagnosticRequire(["available", "unavailable"].includes(energyCrossCheck.status), "Body Index watch/model energy cross-check status is unavailable.");
+      if (energyCrossCheck.status === "available") {
+        diagnosticRequire(energyCrossCheck.difference_watch_minus_model_kj !== null, "Body Index watch/model energy cross-check difference is unavailable.");
+        diagnosticRequire(typeof energyCrossCheck.watch_source === "string" && typeof energyCrossCheck.model_source === "string", "Body Index watch/model energy cross-check sources are unavailable.");
+      }
       diagnosticRequire(body.body_index.daily_energy?.ratio_definitions?.same_day_fraction?.includes("same-day"), "Body Index same-day energy fraction definition is unavailable.");
       diagnosticRequire(body.body_index.daily_energy?.ratio_definitions?.baseline_multiplier?.includes("mean daily"), "Body Index baseline multiplier definition is unavailable.");
       diagnosticRequire(body.body_index.daily_energy?.completeness && typeof body.body_index.daily_energy.completeness === "object", "Body Index daily completeness is unavailable.");
@@ -37993,6 +37999,7 @@
       const model = state.bodyIndexData?.body_index || {};
       const observations = model.observations || {};
       const dailyEnergy = model.daily_energy || {};
+      const energyCrossCheck = model.energy_cross_check || {};
       const sustainedWindows = model.sustained_output?.windows || {};
       const mapping = state.paceFitData?.pace_fit_mapping || {};
       const scorePercent = bodyIndexScorePercent(summary);
@@ -38028,6 +38035,7 @@
       const impactRows = [
         ["原始觀察", `${formatCount(observations.eligible_activity_count)} 去重跑／走活動 · ${formatCount(observations.classification_speed_coverage ? Math.round(Number(observations.classification_speed_coverage) * 100) : 0)}% speed coverage`, "HealthExport time series"],
         ["模型估計", `${formatKj(observations.run_active_energy_kj)} run-segment active energy · ${formatW(observations.energy_rate_w)}`, "running-classified segment interval activeEnergy sum / covered seconds"],
+        ["交叉比較", energyCrossCheck.status === "available" ? `${formatKj(energyCrossCheck.watch_interval_active_energy_kj_on_comparable_segments)} watch / ${formatKj(energyCrossCheck.flat_ground_model_active_energy_kj)} flat model · Δ ${formatKj(energyCrossCheck.difference_watch_minus_model_kj)}` : "unavailable", "same classified segments; watch source vs ACSM 70 kg model"],
         ["假設", "70 kg · flat 0° · zero load · light clothing", "user assumption / model scenario"],
         ["Pace Fit", mapping.status === "available" ? `${formatCount(mapping.mapped_pair_count)} CP pairs mapped` : "unavailable until Architecture speed/time mapping", "energy or W is not converted directly"],
         ["未知", "grade, terrain, load, weather, IMU and pure aerobic separation", "Architecture or future evidence"],
@@ -38154,6 +38162,8 @@
                     ["原始觀察 · all activity energy", formatKj(observations.all_activity_active_energy_kj)],
                     ["模型估計 · covered energy rate", formatW(observations.energy_rate_w)],
                     ["模型估計 · run/walk speed", `${escapeHtml(model.flat_speed_by_mode?.walking?.median_speed_mps ?? "unavailable")} / ${escapeHtml(model.flat_speed_by_mode?.running?.median_speed_mps ?? "unavailable")} m/s`],
+                    ["交叉比較 · watch vs flat model", energyCrossCheck.status === "available" ? `${formatKj(energyCrossCheck.watch_interval_active_energy_kj_on_comparable_segments)} / ${formatKj(energyCrossCheck.flat_ground_model_active_energy_kj)} · Δ ${formatKj(energyCrossCheck.difference_watch_minus_model_kj)}` : "unavailable"],
+                    ["交叉比較來源", "watch interval activeEnergy vs ACSM flat-ground cost · 70 kg user assumption"],
                     ["單位核對", "kJ interval → kcal ÷ 4.184; W = kJ × 1000 ÷ covered seconds"],
                     ["邊界", "W 是手錶活動能耗率，不是肌肉對外機械功率"],
                   ].map(([label, value]) => `

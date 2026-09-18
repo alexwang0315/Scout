@@ -4482,6 +4482,8 @@ def test_scout_dashboard_pace_fit_body_index_dashboard_contract() -> None:
         "Evidence Matrix",
         "Activity energy · original observations and model outputs",
         "historical highest sustained output estimate",
+        "交叉比較來源",
+        "watch source vs ACSM 70 kg model",
         "same-day fraction ≠ baseline multiplier",
         "advisory planning",
         "planning evidence",

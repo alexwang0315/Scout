@@ -71,6 +71,8 @@ Dashboard 的 Pace Fit > Body Index 會從本機 HealthExport 時間序列建立
 
 平地速度／能量成本另以 ACSM walking/running metabolic equations 作為 70 kg 模型交叉檢查；公式的適用速度範圍與來源會隨輸出保留。它不會覆寫手錶既有熱量，也不會把坡度、負重係數直接乘到個人可用能量。
 
+頁面會在可比的分類段落上分開顯示手錶 interval activeEnergy、ACSM 平地模型與兩者差值；這是來源核對，不是重新按 70 kg 產生手錶熱量或能力分數。
+
 ### Body Index 與 Pace Fit 的分工
 
 Body Index 提供個人的跑／走／停行為、活動能量、持續輸出與恢復觀察。Architecture 提供路線的坡度、負重、地形與速度修正。Pace Fit 只在同一對 CP 有歷史 reference GPX 平均耗時，且已完成「Body Index 平地速度 × Architecture 明確路線速度／耗時修正」時輸出：
