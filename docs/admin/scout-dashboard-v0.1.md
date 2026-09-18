@@ -211,6 +211,35 @@ browser contract passed. A current-code temporary replay may support
 construction evidence, but the official qualification still requires the
 pre-existing real runtime and its continuity/reviewer gates.
 
+### 2026-09-18 - Regular 50-case runner revalidation and DASH-002 conflict
+
+The current-code regular browser runner was rerun on temporary 9101 with the
+50-case contract. It passed the initial page/registry gate and reached the
+`Diag all` terminal-result validation, then stopped at the existing DASH-002
+implementation assertion:
+`Unregistered sidebar route IDs: trip-notebook`.
+
+This is a preserved specification/implementation conflict, not a reason to
+lower the runner expectation. The current page has `trip-notebook` in the
+sidebar, `ROUTE_TRUTH`, route metadata, and its rendered Planning Fine-tune
+Panel. DASH-002's `expectedRoutes` omits it, and the Phase-3 canonical route
+inventory also omits it. The existing route addendum's DASH-002 arbitration
+only records the prior telemetry-route scope; it does not resolve this newer
+`trip-notebook` membership disagreement.
+
+Required user decision before changing this Diagnostic contract:
+
+- add `trip-notebook` to DASH-002 and the Phase-3 canonical inventory, treating
+  the Dashboard as a 26-route surface; or
+- keep the accepted 25-route inventory and separately authorize removing or
+  reclassifying the existing Planning Fine-tune route.
+
+The camera-only runner separately reached DASH-038 and preserved its failure
+(`Helper: passed; D038 production page: 0/26 phases`). Direct current-code
+browser evidence still records DASH-050 PASS and DASH-049 unavailable/failing
+because no selected Planned version exists. No 9099 runtime was started or
+replaced.
+
 ### 2026-09-18 - Pace Fit CP interval averages and Body Index time ratio
 
 User request:
