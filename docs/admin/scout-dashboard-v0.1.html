@@ -22178,6 +22178,21 @@
       diagnosticRequire(Array.isArray(body.body_index.segments), "Body Index classified segments are unavailable.");
       diagnosticRequire(body.body_index.sustained_output?.not_extrapolated === true, "Body Index sustained output permits extrapolation.");
       diagnosticRequire(body.body_index.observations?.energy_rate_definition?.includes("interval"), "Body Index energy-rate basis is not exposed.");
+      diagnosticRequire(body.body_index.observations?.run_energy_definition?.includes("running segments"), "Body Index run energy is not segment-based.");
+      diagnosticRequire(body.body_index.daily_energy?.ratio_definitions?.same_day_fraction?.includes("same-day"), "Body Index same-day energy fraction definition is unavailable.");
+      diagnosticRequire(body.body_index.daily_energy?.ratio_definitions?.baseline_multiplier?.includes("mean daily"), "Body Index baseline multiplier definition is unavailable.");
+      diagnosticRequire(body.body_index.daily_energy?.completeness && typeof body.body_index.daily_energy.completeness === "object", "Body Index daily completeness is unavailable.");
+      for (const seconds of [300, 600, 900, 1200]) {
+        const window = body.body_index.sustained_output?.windows?.[String(seconds)];
+        diagnosticRequire(window && ["available", "unavailable"].includes(window.status), `Body Index ${seconds}-second sustained status is unavailable.`);
+        if (window.status === "unavailable") diagnosticRequire(window.average_active_energy_w === null, `Body Index ${seconds}-second unavailable window exposes a value.`);
+      }
+      for (const transition of body.body_index.transition_events || []) {
+        diagnosticRequire(transition.cumulative_active_energy_before_transition_kj !== undefined, "Body Index transition lacks cumulative pre-transition energy.");
+        diagnosticRequire(typeof transition.interpretation === "string" && transition.interpretation.includes("not failure"), "Body Index transition is overstated as failure.");
+      }
+      diagnosticRequire(body.boundary?.exact_timestamps_shared === false, "Body Index response exposes exact timestamps.");
+      diagnosticRequire(body.boundary?.precise_location_shared === false, "Body Index response exposes precise locations.");
       const root = diagnosticMarkupRoot(renderPaceFitBodyIndexPage());
       diagnosticRequire(Boolean(root.querySelector('[data-body-index-dashboard="true"]')), "Body Index dashboard shell is missing.");
       diagnosticRequire(root.querySelectorAll("[data-body-index-metric]").length === 9, "Body Index must render nine Pace Coefficient cards.");
@@ -38012,7 +38027,7 @@
       });
       const impactRows = [
         ["原始觀察", `${formatCount(observations.eligible_activity_count)} 去重跑／走活動 · ${formatCount(observations.classification_speed_coverage ? Math.round(Number(observations.classification_speed_coverage) * 100) : 0)}% speed coverage`, "HealthExport time series"],
-        ["模型估計", `${formatKj(observations.run_active_energy_kj)} run active energy · ${formatW(observations.energy_rate_w)}`, "interval activeEnergy sum / covered seconds"],
+        ["模型估計", `${formatKj(observations.run_active_energy_kj)} run-segment active energy · ${formatW(observations.energy_rate_w)}`, "running-classified segment interval activeEnergy sum / covered seconds"],
         ["假設", "70 kg · flat 0° · zero load · light clothing", "user assumption / model scenario"],
         ["Pace Fit", mapping.status === "available" ? `${formatCount(mapping.mapped_pair_count)} CP pairs mapped` : "unavailable until Architecture speed/time mapping", "energy or W is not converted directly"],
         ["未知", "grade, terrain, load, weather, IMU and pure aerobic separation", "Architecture or future evidence"],
@@ -38046,7 +38061,7 @@
               </div>
             </section>
             <section class="body-index-mini">
-              <span>Run active energy</span>
+              <span>Run-segment active energy</span>
               <strong>${escapeHtml(formatKj(observations.run_active_energy_kj))}</strong>
               <em>${hasBodyIndexEvidence ? "provider interval estimate" : "awaiting evidence"}</em>
             </section>
@@ -38135,7 +38150,7 @@
               <div class="body-index-panel-body">
                 <div class="body-index-source-grid">
                   ${[
-                    ["原始觀察 · run active energy", formatKj(observations.run_active_energy_kj)],
+                    ["原始觀察 · run-segment active energy", formatKj(observations.run_active_energy_kj)],
                     ["原始觀察 · all activity energy", formatKj(observations.all_activity_active_energy_kj)],
                     ["模型估計 · covered energy rate", formatW(observations.energy_rate_w)],
                     ["模型估計 · run/walk speed", `${escapeHtml(model.flat_speed_by_mode?.walking?.median_speed_mps ?? "unavailable")} / ${escapeHtml(model.flat_speed_by_mode?.running?.median_speed_mps ?? "unavailable")} m/s`],
@@ -38173,6 +38188,8 @@
               <div class="body-index-source-grid">
                 ${[
                   ["日期範圍", `${dailyEnergy.date_range?.start || "unavailable"} → ${dailyEnergy.date_range?.end || "unavailable"}`],
+                  ["活動基準來源", dailyEnergy.active_energy_source || "unavailable"],
+                  ["基準日期範圍", `${dailyEnergy.baseline_date_range?.start || "unavailable"} → ${dailyEnergy.baseline_date_range?.end || "unavailable"}`],
                   ["完整 active / static / total", `${formatCount(dailyEnergy.complete_active_day_count)} / ${formatCount(dailyEnergy.complete_static_day_count)} / ${formatCount(dailyEnergy.complete_total_day_count)} days`],
                   ["同日跑段占比", dailyEnergy.run_fraction_mean === null || dailyEnergy.run_fraction_mean === undefined ? "unavailable" : `${(Number(dailyEnergy.run_fraction_mean) * 100).toFixed(1)}%`],
                   ["相對日常基準倍率", dailyEnergy.run_baseline_multiplier_mean === null || dailyEnergy.run_baseline_multiplier_mean === undefined ? "unavailable" : `${Number(dailyEnergy.run_baseline_multiplier_mean).toFixed(2)}×`],

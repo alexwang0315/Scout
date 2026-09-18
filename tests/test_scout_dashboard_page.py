@@ -511,9 +511,41 @@ def test_scout_dashboard_body_index_fresh_project_has_no_fabricated_evidence(
     assert all("--" in row[2] for row in payload["health_signals"])
     assert payload["boundary"]["raw_health_payload_shared"] is False
     assert payload["boundary"]["raw_gpx_shared"] is False
+    assert payload["boundary"]["precise_location_shared"] is False
+    assert payload["boundary"]["external_network_calls"] is False
     assert payload["boundary"]["phase1_runtime_safety_truth"] is False
     assert payload["boundary"]["safety_api_called"] is False
     assert payload["boundary"]["outbound_alert_sent"] is False
+
+
+def test_scout_dashboard_body_index_migrates_privacy_boundary_defaults(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    project_id = "legacy_body_index_boundary"
+    store_root = tmp_path / "body_index_store"
+    monkeypatch.setattr(admin_api, "DEFAULT_DASHBOARD_BODY_INDEX_STORE_ROOT", store_root)
+    store_root.mkdir()
+    (store_root / f"{project_id}.json").write_text(
+        json.dumps(
+            {
+                "schema_version": "scout_dashboard_body_index.v1",
+                "project_id": project_id,
+                "boundary": {
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    payload = TestClient(create_admin_app()).get(
+        f"/admin/dashboard/body-index?project_id={project_id}"
+    ).json()
+
+    assert payload["boundary"]["precise_location_shared"] is False
+    assert payload["boundary"]["external_network_calls"] is False
 
 
 def test_scout_dashboard_body_index_requires_explicit_loaded_workspace() -> None:
@@ -6637,6 +6669,20 @@ def test_dashboard_diagnostic_checks_probe_runtime_data_and_rendered_behavior() 
     assert "Function.prototype.toString.call(renderPaceFitPage)" not in check_020
     assert "() => renderPaceFitPage(force)" in check_020
     assert "const average = paceFitPairAverageMinutes(pair);" in check_020
+
+    check_021 = diagnostic_source.split(
+        "async function diagnosticCheck021()", 1
+    )[1].split("async function diagnosticCheck022()", 1)[0]
+    for marker in (
+        "run_energy_definition",
+        "same_day_fraction",
+        "baseline_multiplier",
+        "daily_energy.completeness",
+        "cumulative_active_energy_before_transition_kj",
+        "exact_timestamps_shared",
+        "precise_location_shared",
+    ):
+        assert marker in check_021
 
     for case_id in (
         "DASH-009",

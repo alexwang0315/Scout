@@ -127,8 +127,12 @@ Missing data is unknown rather than stopped, and an uncovered gap cannot be
 crossed to create a continuous run segment. Five-, ten-, fifteen-, and
 twenty-minute historical highest sustained output estimates use only qualifying
 continuous run segments; an uncovered duration stays unavailable and is never
-extrapolated. Run-to-walk/stop cumulative energy and later run resumption are
-observations, not proof of exhaustion or a physiological maximum.
+extrapolated. Aggregate run energy is the interval energy assigned to inferred
+`running` segments, not the entire activity merely because its name says
+running. Daily interval energy is split at local-midnight boundaries, so a
+cross-midnight activity is not assigned wholly to its start date. Run-to-
+walk/stop cumulative energy and later run resumption are observations, not
+proof of exhaustion or a physiological maximum.
 
 The flat-ground cross-check uses the ACSM walking/running equations, with the
 net active 3.5 mL/kg/min resting component removed before converting oxygen

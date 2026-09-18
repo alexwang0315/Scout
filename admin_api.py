@@ -454,6 +454,8 @@ def _dashboard_body_index_boundary() -> dict[str, Any]:
         "raw_health_payload_shared": False,
         "raw_gpx_shared": False,
         "exact_timestamps_shared": False,
+        "precise_location_shared": False,
+        "external_network_calls": False,
         "phase1_runtime_safety_truth": False,
         "safety_api_called": False,
         "outbound_alert_sent": False,
@@ -644,7 +646,10 @@ def _load_dashboard_body_index_snapshot(project_id: str) -> dict[str, Any]:
     if isinstance(data.get("summary"), dict):
         data["summary"] = _dashboard_body_index_enrich_summary(data["summary"])
     data.setdefault("body_index", aggregate_body_index_sources([]))
-    data.setdefault("boundary", _dashboard_body_index_boundary())
+    boundary = _dashboard_body_index_boundary()
+    if isinstance(data.get("boundary"), dict):
+        boundary.update(data["boundary"])
+    data["boundary"] = boundary
     return data
 
 

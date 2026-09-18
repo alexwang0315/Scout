@@ -73,6 +73,11 @@ Implementation steps:
   segment duration, hysteresis, auxiliary heart-rate evidence, explicit gaps,
   confidence, basis, and coverage. Missing data becomes unknown, not stopped;
   inferred transitions remain estimates and are not labelled exhaustion.
+- Run energy in the aggregate is now the sum of interval energy assigned to
+  inferred `running` segments only; a workout named running does not make its
+  walking, stopping, or unknown portions run energy. Interval energy is split
+  at local-midnight boundaries for daily summaries, including cross-midnight
+  activities.
 - Added historical highest sustained output windows for 5/10/15/20 minutes,
   using only qualifying continuous run segments. Uncovered windows remain
   unavailable and are not extrapolated. Added transition cumulative energy and
@@ -105,11 +110,27 @@ Revalidated local source coverage:
 
 Verification and remaining gaps:
 
-- Focused Body Index tests: 7 passed. The focused Pace/Diagnostic replay passed
-  19 tests, and the full Dashboard page regression passed 170 tests. The real
-  HealthExport API replay passed with 3 source ZIPs, 40 eligible run/walk
-  activities, HR-supported classified segments, 5/10-minute available windows,
-  15/20-minute unavailable windows, and no private raw fields in the response.
+- Focused Body Index tests: 10 passed, including segment-only run energy,
+  cross-midnight daily allocation, conflicting daily values, unit conversion,
+  and transition cumulative energy. The affected Body/Pace/Diagnostic/page
+  suite passed 193 tests; the pretrip/reference/admin API suite passed 116
+  tests. Python compilation and the Diagnostic browser-smoke JavaScript syntax
+  check also passed.
+- The current-code construction browser replay used the repository launcher on
+  temporary `http://127.0.0.1:9101` with the same real workspace, then stopped
+  that process. It imported the 3 local HealthExport ZIPs (duplicate source
+  refresh after the model change), rendered 41 activities / 40 eligible
+  run-walk activities, 13,268.909 kJ inferred running-segment energy,
+  5/10-minute available windows, 15/20-minute unavailable windows, and
+  33/32/32 complete active/static/total days. Body Index and Pace Fit both
+  rendered with candidate-only boundaries and no raw fields; Pace Fit showed
+  218 CP pairs, 86 historical averages, and 218 unavailable personal mappings
+  because Architecture has no explicit speed/time correction. DASH-020 through
+  DASH-023 all passed on this current-code runtime.
+- The import path now migrates newly required privacy-boundary defaults when a
+  deduplicated pre-change snapshot is read. A controlled local reparse at 70.1
+  kg followed by 70 kg was used only to refresh the current source snapshot;
+  the delivered assumption remains 70 kg.
 - The current workspace's Pace Fit API keeps the personal mapping unavailable
   because Architecture has not supplied an explicit route speed/time correction;
   historical CP reference averages remain independently available. Official
@@ -126,18 +147,8 @@ Verification and remaining gaps:
   cases while the existing browser smoke runner still expects 48; the runner
   exited with `Expected 48 diagnostic cases.` This evidence is preserved as a
   runtime-version/Diagnostic conflict, not reclassified as current-code PASS.
-- A separate construction-only replay used the repository launcher on temporary
-  `http://127.0.0.1:9100` with the same real workspace, then stopped that
-  process. Through the Body Index UI it imported the local HealthExport exports
-  and rendered 3 deduplicated ZIPs, 40 run/walk activities, 13,865.2 kJ run
-  energy, 390.9 W covered-energy rate, 5/10-minute available windows,
-  15/20-minute unavailable windows, and 33/32/32 complete active/static/total
-  days. The Pace Fit page rendered 219 checkpoint candidates, 218 adjacent
-  pairs, and 86 historical CP averages; all personal percentages remained
-  unavailable because the Architecture speed/time mapping was absent. Browser
-  retests DASH-020, DASH-021, DASH-022, and DASH-023 all passed on this
-  current-code temporary runtime. This is stronger local browser evidence, but
-  it is not official qualification or a trusted baseline.
+- The earlier 9100 construction replay is superseded by the 9101 evidence above;
+  neither temporary process is an official qualification or trusted baseline.
 - The 48-versus-50 conflict has two explicit, non-equivalent resolutions that
   require a specification decision: (A) promote DASH-049 and DASH-050 into the
   regular browser contract, update the runner/contract tests to 50, and qualify

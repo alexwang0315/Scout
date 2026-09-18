@@ -16,7 +16,7 @@ import statistics
 import zipfile
 from bisect import bisect_left, bisect_right
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -250,6 +250,70 @@ def _overlap_value(intervals: Sequence[_Interval], start: float, end: float) -> 
         total += item.value * fraction
         covered += right - left
     return total, covered
+
+
+def _calendar_boundary_offsets(origin: datetime, finish: datetime) -> list[float]:
+    """Return local-midnight offsets inside an activity without exposing timestamps."""
+    boundaries: list[float] = []
+    current_date = origin.date() + timedelta(days=1)
+    while True:
+        midnight = datetime.combine(current_date, datetime.min.time(), tzinfo=origin.tzinfo)
+        offset = (midnight - origin).total_seconds()
+        if offset >= (finish - origin).total_seconds():
+            break
+        if offset > 0:
+            boundaries.append(offset)
+        current_date += timedelta(days=1)
+    return boundaries
+
+
+def _energy_by_local_date(
+    intervals: Sequence[_Interval],
+    origin: datetime,
+    finish: datetime,
+    *,
+    scalar_kj: float | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Split interval energy at local midnight; never multiply an interval value by time."""
+    output: dict[str, dict[str, Any]] = {}
+    if not intervals:
+        if scalar_kj is not None:
+            output[_local_date(origin)] = {
+                "all_active_energy_kj": _round(scalar_kj, 5),
+                "energy_coverage_s": 0.0,
+                "allocation_status": "scalar_activity_start_date_fallback",
+            }
+        return output
+    for item in intervals:
+        cursor = item.start
+        while cursor < item.end - 1e-9:
+            current = origin + timedelta(seconds=cursor)
+            next_midnight = datetime.combine(
+                current.date() + timedelta(days=1),
+                datetime.min.time(),
+                tzinfo=origin.tzinfo,
+            )
+            midnight_offset = (next_midnight - origin).total_seconds()
+            right = min(item.end, midnight_offset)
+            if right <= cursor:
+                right = item.end
+            fraction = (right - cursor) / (item.end - item.start)
+            day = _local_date(current)
+            bucket = output.setdefault(
+                day,
+                {
+                    "all_active_energy_kj": 0.0,
+                    "energy_coverage_s": 0.0,
+                    "allocation_status": "interval_time_aligned",
+                },
+            )
+            bucket["all_active_energy_kj"] += item.value * fraction
+            bucket["energy_coverage_s"] += right - cursor
+            cursor = right
+    for bucket in output.values():
+        bucket["all_active_energy_kj"] = _round(float(bucket["all_active_energy_kj"]), 5)
+        bucket["energy_coverage_s"] = _round(float(bucket["energy_coverage_s"]), 1)
+    return output
 
 
 def _median(values: Iterable[float]) -> float | None:
@@ -533,6 +597,12 @@ def _activity_analysis(workout: Mapping[str, Any], body_mass_kg: float) -> dict[
         energy_unit_status = "validated_scalar_fallback"
 
     if kind == "other":
+        daily_energy_by_date = _energy_by_local_date(
+            energy_intervals,
+            origin,
+            finish,
+            scalar_kj=scalar_kj if not energy_intervals else None,
+        )
         return {
             "activity_ref": activity_key[:16],
             "activity_key": activity_key,
@@ -542,10 +612,18 @@ def _activity_analysis(workout: Mapping[str, Any], body_mass_kg: float) -> dict[
             "active_energy_kj": _round(energy_total_kj, 5),
             "active_energy_kcal": _round(energy_total_kj / KJ_PER_KCAL, 5),
             "active_energy_coverage_s": _round(energy_coverage_seconds, 1),
+            "active_energy_allocation_status": (
+                "interval_time_aligned"
+                if energy_intervals
+                else "scalar_activity_start_date_fallback"
+                if scalar_kj is not None
+                else "unavailable"
+            ),
             "energy_unit_status": energy_unit_status,
             "segments": [],
             "transition_events": [],
             "sustained_windows": [],
+            "daily_energy_by_date": daily_energy_by_date,
             "data_coverage": {"speed": 0.0, "cadence": 0.0, "heart_rate": 0.0, "energy": _round(energy_coverage_seconds / duration if duration else 0.0, 4)},
             "classification_status": "not_applicable",
             "note": "Non-running/walking workout retained for daily all-activity denominator; no gait classification inferred.",
@@ -557,6 +635,7 @@ def _activity_analysis(workout: Mapping[str, Any], body_mass_kg: float) -> dict[
             boundaries.add(max(0.0, min(duration, item.start)))
     for position, _ in hr_values:
         boundaries.add(max(0.0, min(duration, position)))
+    boundaries.update(_calendar_boundary_offsets(origin, finish))
     ordered = sorted(boundaries)
     frame_labels: list[dict[str, Any]] = []
     frames: list[dict[str, Any]] = []
@@ -674,6 +753,11 @@ def _activity_analysis(workout: Mapping[str, Any], body_mass_kg: float) -> dict[
         index = end_index
 
     transition_events: list[dict[str, Any]] = []
+    cumulative_energy_prefix = [0.0]
+    for segment in segments:
+        cumulative_energy_prefix.append(
+            cumulative_energy_prefix[-1] + float(segment.get("active_energy_kj") or 0.0)
+        )
     for segment_index, segment in enumerate(segments[:-1]):
         following = segments[segment_index + 1]
         if segment["state"] != "running" or following["state"] not in {"walking", "stop"}:
@@ -692,6 +776,9 @@ def _activity_analysis(workout: Mapping[str, Any], body_mass_kg: float) -> dict[
                 "from_segment_ref": segment["segment_ref"],
                 "to_state": following["state"],
                 "pre_transition_active_energy_kj": segment["active_energy_kj"],
+                "cumulative_active_energy_before_transition_kj": _round(
+                    cumulative_energy_prefix[segment_index + 1], 5
+                ),
                 "pre_transition_duration_s": segment["duration_s"],
                 "transition_confidence": min(float(segment["confidence"]), float(following["confidence"])),
                 "recovery_states": recovery_states,
@@ -699,6 +786,10 @@ def _activity_analysis(workout: Mapping[str, Any], body_mass_kg: float) -> dict[
                 "recovery_active_energy_kj": _round(recovery_energy, 5),
                 "recovered_to_running": resumed is not None,
                 "recovery_run_segment_ref": resumed["segment_ref"] if resumed else None,
+                "cumulative_energy_basis": (
+                    "sum of interval activeEnergy through the pre-transition run segment; "
+                    "scalar-only energy cannot be allocated to classified segments"
+                ),
                 "interpretation": "transition observation; not failure, exhaustion, or physiological maximum",
             }
         )
@@ -707,6 +798,34 @@ def _activity_analysis(workout: Mapping[str, Any], body_mass_kg: float) -> dict[
     for segment in segments:
         segment.pop("_frame_start", None)
         segment.pop("_frame_end", None)
+    daily_energy_by_date: dict[str, dict[str, Any]] = {}
+    for frame in frames:
+        day = _local_date(origin + timedelta(seconds=float(frame["start"])))
+        bucket = daily_energy_by_date.setdefault(
+            day,
+            {
+                "all_active_energy_kj": 0.0,
+                "running_active_energy_kj": 0.0,
+                "walking_active_energy_kj": 0.0,
+                "energy_coverage_s": 0.0,
+                "allocation_status": (
+                    "interval_time_aligned"
+                    if energy_intervals
+                    else "scalar_activity_start_date_fallback"
+                ),
+            },
+        )
+        energy_kj = float(frame.get("energy_kj") or 0.0)
+        bucket["all_active_energy_kj"] += energy_kj
+        if frame["state"] == "running":
+            bucket["running_active_energy_kj"] += energy_kj
+        elif frame["state"] == "walking":
+            bucket["walking_active_energy_kj"] += energy_kj
+        bucket["energy_coverage_s"] += float(frame.get("energy_covered_s") or 0.0)
+    for bucket in daily_energy_by_date.values():
+        for key in ("all_active_energy_kj", "running_active_energy_kj", "walking_active_energy_kj"):
+            bucket[key] = _round(float(bucket[key]), 5)
+        bucket["energy_coverage_s"] = _round(float(bucket["energy_coverage_s"]), 1)
     speed_coverage = sum(frame["duration_s"] for frame in frames if frame["speed_mps"] is not None) / duration if duration else 0.0
     cadence_coverage = sum(frame["duration_s"] for frame in frames if frame["cadence_spm"] is not None) / duration if duration else 0.0
     hr_coverage = sum(frame["duration_s"] for frame in frames if frame["heart_rate"] is not None) / duration if duration else 0.0
@@ -721,12 +840,20 @@ def _activity_analysis(workout: Mapping[str, Any], body_mass_kg: float) -> dict[
         "active_energy_coverage_s": _round(energy_coverage_seconds, 1),
         "active_energy_rate_w": _round(energy_total_kj * 1000.0 / energy_coverage_seconds, 2) if energy_coverage_seconds else None,
         "active_energy_unit_basis": "sum_interval_activeEnergy_kJ; activeEnergyBurned scalar is cross-check only when interval series exists",
+        "active_energy_allocation_status": (
+            "interval_time_aligned"
+            if energy_intervals
+            else "scalar_activity_start_date_fallback"
+            if scalar_kj is not None
+            else "unavailable"
+        ),
         "energy_unit_status": energy_unit_status,
         "scalar_energy_cross_check_kj": _round(scalar_kj, 5),
         "scalar_energy_added": not bool(energy_intervals) and scalar_kj is not None,
         "segments": segments,
         "transition_events": transition_events,
         "sustained_windows": sustained_windows,
+        "daily_energy_by_date": daily_energy_by_date,
         "data_coverage": {
             "speed": _round(speed_coverage, 4),
             "cadence": _round(cadence_coverage, 4),
@@ -1092,6 +1219,14 @@ def _merge_daily_metrics(analyses: Sequence[Mapping[str, Any]]) -> list[dict[str
     return output
 
 
+def _activity_segment_energy(activity: Mapping[str, Any], state: str) -> float:
+    return sum(
+        float(segment.get("active_energy_kj") or 0.0)
+        for segment in activity.get("segments", [])
+        if isinstance(segment, Mapping) and segment.get("state") == state
+    )
+
+
 def _daily_energy_summary(
     activities: Sequence[Mapping[str, Any]],
     metric_rows: Sequence[Mapping[str, Any]],
@@ -1099,11 +1234,36 @@ def _daily_energy_summary(
     workout_all: dict[str, float] = {}
     workout_run: dict[str, float] = {}
     for activity in activities:
+        daily_rows = activity.get("daily_energy_by_date", [])
+        if isinstance(daily_rows, Mapping):
+            daily_rows = [
+                {"date": day, **row}
+                for day, row in daily_rows.items()
+                if isinstance(row, Mapping)
+            ]
+        if isinstance(daily_rows, list) and daily_rows:
+            for row in daily_rows:
+                if not isinstance(row, Mapping):
+                    continue
+                day = str(row.get("date") or "")
+                if not day:
+                    continue
+                workout_all[day] = workout_all.get(day, 0.0) + float(
+                    row.get("all_active_energy_kj") or 0.0
+                )
+                workout_run[day] = workout_run.get(day, 0.0) + float(
+                    row.get("running_active_energy_kj") or 0.0
+                )
+            continue
         day = str(activity.get("date") or "")
-        energy = float(activity.get("active_energy_kj") or 0.0)
-        workout_all[day] = workout_all.get(day, 0.0) + energy
-        if activity.get("activity_kind") == "running":
-            workout_run[day] = workout_run.get(day, 0.0) + energy
+        if not day:
+            continue
+        workout_all[day] = workout_all.get(day, 0.0) + float(
+            activity.get("active_energy_kj") or 0.0
+        )
+        workout_run[day] = workout_run.get(day, 0.0) + _activity_segment_energy(
+            activity, "running"
+        )
     metric_active = {
         str(row["date"]): float(row["value_kj"])
         for row in metric_rows
@@ -1114,17 +1274,51 @@ def _daily_energy_summary(
         for row in metric_rows
         if row.get("metric_name") == "basal_energy_burned" and row.get("status") == "available" and row.get("value_kj") is not None
     }
-    active_source = "HealthExport active_energy metric" if metric_active else "deduplicated workout activeEnergy"
-    all_days = sorted(set(workout_all) | set(metric_active) | set(metric_static))
+    metric_active_rows = {
+        str(row["date"]): row
+        for row in metric_rows
+        if row.get("metric_name") == "active_energy"
+    }
+    ambiguous_active_days = {
+        day
+        for day, row in metric_active_rows.items()
+        if row.get("status") == "ambiguous_duplicate"
+    }
+    if ambiguous_active_days:
+        active_source = "HealthExport active_energy metric contains conflicting daily candidates"
+    elif metric_active and workout_all:
+        active_source = "HealthExport active_energy metric with deduplicated workout fallback"
+    elif metric_active:
+        active_source = "HealthExport active_energy metric"
+    else:
+        active_source = "deduplicated workout activeEnergy"
+    all_days = sorted(
+        set(workout_all)
+        | set(metric_active_rows)
+        | set(metric_active)
+        | set(metric_static)
+    )
     days: list[dict[str, Any]] = []
     run_fractions: list[float] = []
     multipliers: list[float] = []
     for day in all_days:
-        active = metric_active.get(day, workout_all.get(day))
+        if day in ambiguous_active_days:
+            active = None
+        else:
+            active = metric_active.get(day, workout_all.get(day))
         static = metric_static.get(day)
         total = active + static if active is not None and static is not None else None
         run = workout_run.get(day, 0.0)
         fraction = run / active if active and run <= active + 1e-8 else None
+        active_basis = (
+            "HealthExport active_energy metric"
+            if day in metric_active
+            else "unavailable: conflicting HealthExport active_energy candidates"
+            if day in ambiguous_active_days
+            else "deduplicated workout activeEnergy"
+            if day in workout_all
+            else "unavailable"
+        )
         days.append(
             {
                 "date": day,
@@ -1134,13 +1328,14 @@ def _daily_energy_summary(
                 "total_energy_kj": _round(total, 5) if total is not None else None,
                 "same_day_run_fraction": _round(fraction, 5),
                 "same_day_fraction_status": "available" if fraction is not None else "unavailable_inconsistent_or_missing_denominator",
-                "source": active_source,
+                "active_energy_basis": active_basis,
+                "source": active_basis,
             }
         )
         if fraction is not None:
             run_fractions.append(fraction)
     baseline_values = [float(value) for value in metric_active.values()]
-    if not baseline_values:
+    if not baseline_values and not metric_active_rows:
         baseline_values = list(workout_all.values())
     baseline = statistics.mean(baseline_values) if baseline_values else None
     for day in days:
@@ -1152,8 +1347,19 @@ def _daily_energy_summary(
         else:
             day["run_energy_vs_mean_active_baseline"] = None
     dates = [day["date"] for day in days]
+    baseline_dates = (
+        sorted(metric_active)
+        if metric_active
+        else sorted(workout_all)
+        if not metric_active_rows
+        else []
+    )
     return {
         "date_range": {"start": min(dates) if dates else None, "end": max(dates) if dates else None},
+        "baseline_date_range": {
+            "start": baseline_dates[0] if baseline_dates else None,
+            "end": baseline_dates[-1] if baseline_dates else None,
+        },
         "days": days,
         "active_energy_source": active_source,
         "static_energy_source": "HealthExport basal_energy_burned metric only",
@@ -1164,6 +1370,13 @@ def _daily_energy_summary(
         "complete_active_day_count": sum(day["all_activity_energy_kj"] is not None for day in days),
         "complete_static_day_count": sum(day["static_energy_kj"] is not None for day in days),
         "complete_total_day_count": sum(day["total_energy_kj"] is not None for day in days),
+        "completeness": {
+            "date_range": {"start": min(dates) if dates else None, "end": max(dates) if dates else None},
+            "active_days": sum(day["all_activity_energy_kj"] is not None for day in days),
+            "static_days": sum(day["static_energy_kj"] is not None for day in days),
+            "total_days": sum(day["total_energy_kj"] is not None for day in days),
+            "baseline_days": len(baseline_values),
+        },
         "exclusions": [
             "conflicting duplicate daily values are unavailable and are not summed",
             "a missing active/static metric is not imputed",
@@ -1220,8 +1433,10 @@ def aggregate_body_index_sources(
             "unavailable_reason": None if best else "no qualifying continuous run segment; no extrapolation to uncovered duration",
         }
     total_energy = sum(float(activity.get("active_energy_kj") or 0.0) for activity in activities)
-    run_energy = sum(float(activity.get("active_energy_kj") or 0.0) for activity in activities if activity.get("activity_kind") == "running")
-    walk_energy = sum(float(activity.get("active_energy_kj") or 0.0) for activity in activities if activity.get("activity_kind") == "walking")
+    run_energy = sum(_activity_segment_energy(activity, "running") for activity in eligible)
+    walk_energy = sum(_activity_segment_energy(activity, "walking") for activity in eligible)
+    stop_energy = sum(_activity_segment_energy(activity, "stop") for activity in eligible)
+    unknown_energy = sum(_activity_segment_energy(activity, "unknown") for activity in eligible)
     energy_coverage = sum(float(activity.get("active_energy_coverage_s") or 0.0) for activity in activities)
     total_duration = sum(float(activity.get("duration_s") or 0.0) for activity in activities)
     metric_rows = _merge_daily_metrics(analyses)
@@ -1273,11 +1488,14 @@ def aggregate_body_index_sources(
             "run_active_energy_kj": _round(run_energy, 5),
             "run_active_energy_kcal": _round(run_energy / KJ_PER_KCAL, 5),
             "walk_active_energy_kj": _round(walk_energy, 5),
+            "stop_active_energy_kj": _round(stop_energy, 5),
+            "unknown_segment_active_energy_kj": _round(unknown_energy, 5),
             "all_activity_active_energy_kj": _round(total_energy, 5),
             "all_activity_active_energy_kcal": _round(total_energy / KJ_PER_KCAL, 5),
             "active_energy_covered_seconds": _round(energy_coverage, 1),
             "energy_rate_w": _round(total_energy * 1000.0 / energy_coverage, 2) if energy_coverage else None,
             "energy_rate_definition": "sum of interval activeEnergy kJ x 1000 / covered interval seconds; not mechanical power",
+            "run_energy_definition": "sum of activeEnergy assigned to inferred running segments only; activity name is not used as segment energy",
             "classification_speed_coverage": _round(classification_coverage, 4),
         },
         "flat_speed_by_mode": mode_summary,
