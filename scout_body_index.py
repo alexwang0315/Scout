@@ -1675,6 +1675,11 @@ def attach_pace_fit_mappings(
         item for item in (architecture or {}).get("segment_demand_vectors", [])
         if isinstance(item, Mapping)
     ]
+    explicit_correction_vectors = [
+        item
+        for item in vectors
+        if (_finite(item.get("pace_speed_correction_ratio")) or 0.0) > 0
+    ]
     walking_speed = ((body_index.get("flat_speed_by_mode") or {}).get("walking") or {}).get("median_speed_mps")
     speed = _finite(walking_speed)
     mapping_available = 0
@@ -1683,6 +1688,8 @@ def attach_pace_fit_mappings(
         mapping: dict[str, Any] = {
             "status": "unavailable",
             "reason": "architecture_speed_time_mapping_unavailable",
+            "architecture_vector_count": len(vectors),
+            "architecture_explicit_correction_vector_count": len(explicit_correction_vectors),
             "candidate_only": True,
             "runtime_safety_truth": False,
         }
@@ -1720,6 +1727,8 @@ def attach_pace_fit_mappings(
                 "pace_fit_percent": round(ratio * 100),
                 "basis": "Body Index walking flat speed x explicit Architecture route speed correction; reference is same CP pair average",
                 "energy_not_used_as_time_ratio": True,
+                "architecture_vector_count": len(vectors),
+                "architecture_explicit_correction_vector_count": len(explicit_correction_vectors),
                 "candidate_only": True,
                 "runtime_safety_truth": False,
             }
@@ -1731,6 +1740,8 @@ def attach_pace_fit_mappings(
         "status": "available" if mapping_available else "unavailable",
         "mapped_pair_count": mapping_available,
         "pair_count": len(pairs),
+        "architecture_vector_count": len(vectors),
+        "architecture_explicit_correction_vector_count": len(explicit_correction_vectors),
         "method": "personal flat speed -> explicit Architecture route speed correction -> expected elapsed time -> same-pair historical average",
         "energy_or_w_not_converted_directly": True,
         "candidate_only": True,

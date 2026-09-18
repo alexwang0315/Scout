@@ -330,6 +330,17 @@ def test_pace_fit_requires_explicit_architecture_speed_mapping() -> None:
     unavailable = attach_pace_fit_mappings(payload, body)
     assert unavailable["pairs"][0]["personal_mapping"]["status"] == "unavailable"
     assert unavailable["pace_fit_mapping"]["status"] == "unavailable"
+    assert unavailable["pace_fit_mapping"]["architecture_vector_count"] == 0
+    assert unavailable["pace_fit_mapping"]["architecture_explicit_correction_vector_count"] == 0
+    architecture_without_correction = {
+        "segment_demand_vectors": [
+            {"start_distance_m": 0, "end_distance_m": 1000, "reference_speed_kmh": {"p50": 2.5}}
+        ]
+    }
+    still_unavailable = attach_pace_fit_mappings(payload, body, architecture_without_correction)
+    assert still_unavailable["pace_fit_mapping"]["status"] == "unavailable"
+    assert still_unavailable["pace_fit_mapping"]["architecture_vector_count"] == 1
+    assert still_unavailable["pace_fit_mapping"]["architecture_explicit_correction_vector_count"] == 0
     mapped = attach_pace_fit_mappings(
         payload,
         body,

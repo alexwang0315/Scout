@@ -257,7 +257,10 @@ Latest current-code evidence on temporary `http://127.0.0.1:9101`:
   active/static/total days.
 - Pace Fit returned 218 CP pairs, 86 historical reference averages, and 218
   unavailable personal mappings because no explicit Architecture speed/time
-  correction exists. It did not derive a percentage from energy or W.
+  correction exists. The current Architecture projection contains 328 demand
+  vectors but zero explicit correction vectors; the API exposes those counts
+  so `unavailable` is traceable rather than silently falling back to a
+  reference speed. It did not derive a percentage from energy or W.
 - The full 50-case browser runner completed all cases: 24 passed, 20 warning,
   and 6 failed. Failed IDs were `DASH-038`, `DASH-040` through `DASH-043`,
   and `DASH-049`. The remaining implementation-check warnings included stale
@@ -279,6 +282,10 @@ Latest current-code evidence on temporary `http://127.0.0.1:9101`:
 - The temporary 9101 server was stopped after validation. A final check found
   9099 not reachable and no 9101 listener. Official qualification against the
   pre-existing 9099 runtime was not performed and remains unavailable.
+- After the mapping-contract change, direct Chrome operations on the current
+  9101 page passed DASH-020 (Pace CP context) and DASH-021 (Body Index
+  sanitized overview/detail reconciliation). The temporary server was then
+  stopped again.
 
 ### 2026-09-18 - Pace Fit CP interval averages and Body Index time ratio
 
