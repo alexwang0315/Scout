@@ -219,26 +219,59 @@ The current-code regular browser runner was rerun on temporary 9101 with the
 implementation assertion:
 `Unregistered sidebar route IDs: trip-notebook`.
 
-This is a preserved specification/implementation conflict, not a reason to
+This was a preserved specification/implementation conflict, not a reason to
 lower the runner expectation. The current page has `trip-notebook` in the
 sidebar, `ROUTE_TRUTH`, route metadata, and its rendered Planning Fine-tune
-Panel. DASH-002's `expectedRoutes` omits it, and the Phase-3 canonical route
-inventory also omits it. The existing route addendum's DASH-002 arbitration
-only records the prior telemetry-route scope; it does not resolve this newer
-`trip-notebook` membership disagreement.
-
-Required user decision before changing this Diagnostic contract:
-
-- add `trip-notebook` to DASH-002 and the Phase-3 canonical inventory, treating
-  the Dashboard as a 26-route surface; or
-- keep the accepted 25-route inventory and separately authorize removing or
-  reclassifying the existing Planning Fine-tune route.
+Panel. The user selected option A: retain that route and treat the Dashboard
+as a 26-route surface. DASH-002 and the Phase-3 canonical route disposition
+now record `trip-notebook` under `workspace-lifecycle`; the prior telemetry
+route arbitration remains unchanged. This inventory update does not qualify
+the stale 9099 process or claim the official full browser contract passed.
 
 The camera-only runner separately reached DASH-038 and preserved its failure
 (`Helper: passed; D038 production page: 0/26 phases`). Direct current-code
 browser evidence still records DASH-050 PASS and DASH-049 unavailable/failing
 because no selected Planned version exists. No 9099 runtime was started or
 replaced.
+
+### 2026-09-18 - Option A applied, non-gait detail reconciliation, and latest runner result
+
+The user selected option A for DASH-002. The existing `trip-notebook` route is
+now included in the 26-route DASH-002 and Phase-3 canonical inventory under
+`workspace-lifecycle`; the route was not removed, renamed, or given runtime
+authority.
+
+The previous DASH-021 failure was also corrected at the Diagnostic boundary.
+The real export contains one non-running/walking workout. Body Index retains
+its interval active energy, but intentionally emits no gait segments and marks
+classification `not_applicable`. DASH-021 now checks that explicit non-gait
+contract separately and still requires segment-energy reconciliation for every
+classified run/walk activity.
+
+Latest current-code evidence on temporary `http://127.0.0.1:9101`:
+
+- Real import processed 3 existing sources as duplicates with zero errors; the
+  sanitized snapshot still contains 41 activities / 40 eligible activities,
+  13,268.90901 kJ inferred running-segment energy, 5/10-minute available
+  sustained windows, 15/20-minute unavailable windows, and 33/32/32 complete
+  active/static/total days.
+- Pace Fit returned 218 CP pairs, 86 historical reference averages, and 218
+  unavailable personal mappings because no explicit Architecture speed/time
+  correction exists. It did not derive a percentage from energy or W.
+- The full 50-case browser runner completed all cases: 24 passed, 20 warning,
+  and 6 failed. Failed IDs were `DASH-038`, `DASH-040` through `DASH-043`,
+  and `DASH-049`. The remaining implementation-check warnings included stale
+  Weather data, static Observer presentation, partial Architecture, isolated
+  map interaction coverage, degraded Contextual Permission, and zero completed
+  D037/D038 production phases; none was promoted to PASS.
+- Focused regression commands passed: Body Index plus Phase-3 catalog and
+  telemetry contracts (40 tests), Dashboard Diagnostic/page alignment (14
+  tests), the added non-gait regression and route contract subset (32 tests),
+  and Phase-3 replay/runner tests (13 tests). `node --check` also passed for
+  the browser runner.
+- The temporary 9101 server was stopped after validation. A final check found
+  9099 not reachable and no 9101 listener. Official qualification against the
+  pre-existing 9099 runtime was not performed and remains unavailable.
 
 ### 2026-09-18 - Pace Fit CP interval averages and Body Index time ratio
 

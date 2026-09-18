@@ -1,7 +1,7 @@
 {
   "schema_version": "scout.dashboard.phase3-route-addendum.v1",
   "recorded_date": "2026-09-14",
-  "purpose": "Complete existing Phase 3 production read telemetry contracts for the approved 25-route Dashboard inventory. This is isolated construction evidence, not an official live Dashboard verdict.",
+  "purpose": "Complete existing Phase 3 production read telemetry contracts for the approved 26-route Dashboard inventory. This is isolated construction evidence, not an official live Dashboard verdict.",
   "historical_design": {
     "path": "docs/evals/dashboard-internal-qualification-phase3-design-rev2.json",
     "canonical_sha256": "5a3b14b3ea9fd64a086bb106b277140c0bb0ecc5ef3d6ed8415e347f43736112",
@@ -18,6 +18,17 @@
       "Recognize existing scout-monitor route without removing monitor",
       "Retain exact membership and add real duplicate rejection",
       "Preserve all remaining D002 requirements"
+    ]
+  },
+  "current_route_inventory_arbitration": {
+    "check_id": "DASH-002",
+    "choice": "A",
+    "decision": "將現有 trip-notebook 納入 DASH-002 與 Phase-3 canonical inventory",
+    "route_count": 26,
+    "scope": [
+      "保留 trip-notebook 現有頁面、ROUTE_TRUTH 與 candidate-only 邊界",
+      "更新 DASH-002 expectedRoutes 與 Phase-3 route disposition",
+      "不移除或重命名既有 route"
     ]
   },
   "existing_specification_basis": {
@@ -131,6 +142,10 @@
     [
       "scout-monitor",
       "observer-hardware-boundary"
+    ],
+    [
+      "trip-notebook",
+      "workspace-lifecycle"
     ]
   ],
   "domain_count": 9,

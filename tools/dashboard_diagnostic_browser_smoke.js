@@ -1253,15 +1253,43 @@ async function main() {
       snapshot.summary.passed + snapshot.summary.warning + snapshot.summary.failed === expectedDiagnosticCount,
       "Diag all did not finish all cases.",
     );
+    const implementationFailures = [];
     for (let index = 1; index <= expectedDiagnosticCount; index += 1) {
       const caseId = `DASH-${String(index).padStart(3, "0")}`;
       const result = snapshot.results[caseId];
-      assert(result && ["passed", "warning", "failed"].includes(result.status), `${caseId} has no terminal result.`);
-      assert(Boolean(result.detail?.trim()), `${caseId} has no diagnostic evidence detail.`);
-      assert(!/\bis not defined\b|ReferenceError|TypeError:/i.test(result.detail), `${caseId} failed inside its checker: ${result.detail}`);
-      if (!dataDependentDiagnosticIds.has(caseId)) {
-        assert(result.status === "passed", `${caseId} implementation check failed: ${result.detail}`);
+      if (!result || !["passed", "warning", "failed"].includes(result.status)) {
+        implementationFailures.push(`${caseId} has no terminal result.`);
+        continue;
       }
+      if (!result.detail?.trim()) {
+        implementationFailures.push(`${caseId} has no diagnostic evidence detail.`);
+        continue;
+      }
+      if (/\bis not defined\b|ReferenceError|TypeError:/i.test(result.detail)) {
+        implementationFailures.push(`${caseId} failed inside its checker: ${result.detail}`);
+        continue;
+      }
+      if (!dataDependentDiagnosticIds.has(caseId) && result.status !== "passed") {
+        implementationFailures.push(`${caseId} implementation check failed: ${result.detail}`);
+      }
+    }
+    if (implementationFailures.length) {
+      process.stderr.write(`${JSON.stringify({
+        ok: false,
+        mode: dynamicTilesOnly ? "dynamic-tiles-only" : "all-dashboard-maps",
+        url: baseUrl,
+        summary: snapshot.summary,
+        failedCaseIds: Object.entries(snapshot.results)
+          .filter(([, result]) => result.status === "failed")
+          .map(([id]) => id),
+        failedCases: Object.fromEntries(
+          Object.entries(snapshot.results)
+            .filter(([, result]) => result.status === "failed")
+            .map(([id, result]) => [id, result.detail]),
+        ),
+        dataDependentDiagnosticIds: [...dataDependentDiagnosticIds],
+      }, null, 2)}\n`);
+      assert(false, `Implementation checks failed:\n${implementationFailures.join("\n")}`);
     }
     for (const caseId of ["DASH-026", "DASH-027", "DASH-028", "DASH-029"]) {
       assert(snapshot.results[caseId]?.status === "passed", `${caseId} did not pass for every Dashboard map.`);

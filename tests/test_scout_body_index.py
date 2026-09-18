@@ -32,6 +32,7 @@ def _write_export(
     include_daily_metrics: bool = False,
     scalar_energy_factor: float = 1.0,
     workout_id: str = "synthetic-activity",
+    workout_name: str = "戶外 跑步",
     start: datetime = datetime(2026, 1, 1, tzinfo=TZ),
     energy_units: str = "kJ",
     daily_active_kj: float = 120.0,
@@ -66,7 +67,7 @@ def _write_export(
             heart_rate.append({"date": _stamp(second, start=start), "qty": hr, "units": "bpm"})
     workout = {
         "id": workout_id,
-        "name": "戶外 跑步",
+        "name": workout_name,
         "start": _stamp(0, start=start),
         "end": _stamp(end_seconds, start=start),
         "duration": end_seconds,
@@ -165,6 +166,22 @@ def test_active_energy_interval_values_are_summed_once_and_kcal_converted(tmp_pa
     assert activity["active_energy_rate_w"] == pytest.approx(100.0, abs=0.1)
     assert activity["scalar_energy_added"] is False
     assert "sum_interval_activeEnergy_kJ" in activity["active_energy_unit_basis"]
+
+
+def test_non_gait_activity_keeps_energy_without_inventing_gait_segments(tmp_path: Path) -> None:
+    path = tmp_path / "pilates.zip"
+    _write_export(
+        path,
+        phases=[(0, 10, "missing")],
+        energy_kj=0.25,
+        workout_name="皮拉提斯",
+    )
+    activity = build_body_index_source_analysis(path)["activities"][0]
+    assert activity["activity_kind"] == "other"
+    assert activity["classification_status"] == "not_applicable"
+    assert activity["segments"] == []
+    assert activity["active_energy_kj"] == pytest.approx(2.5)
+    assert activity["active_energy_allocation_status"] == "interval_time_aligned"
 
 
 def test_minute_granularity_does_not_turn_interval_energy_into_power_by_multiplication(tmp_path: Path) -> None:

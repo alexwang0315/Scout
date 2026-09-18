@@ -21568,6 +21568,7 @@
         "home", "features-workspace", "features-import-new-trip", "features-country-material-pool",
         "map", "timeline", "features-lbs", "outdoor-route-context",
         "outdoor-pace-fit", "outdoor-pace-fit-body-index", "outdoor-permission",
+        "trip-notebook",
         "outdoor-architecture", "outdoor-weather", "outdoor-navigation", "emergency",
         "agent", "living", "runtime-audit", "surface-intelligence", "scout-monitor", "surface-debug", "debug", "observer",
         "settings", "diagnostic",
@@ -22203,6 +22204,13 @@
         for (const activity of detailedActivitiesByKey.values()) {
           const activityEnergy = Number(activity?.active_energy_kj || 0);
           const segments = Array.isArray(activity?.segments) ? activity.segments : [];
+          if (!segments.length && activity?.activity_kind === "other") {
+            diagnosticRequire(activity?.classification_status === "not_applicable", `Body Index non-gait activity classification is not explicit for ${activity?.activity_ref || "activity"}.`);
+            diagnosticRequire(activity?.active_energy_allocation_status === "interval_time_aligned" || activity?.active_energy_allocation_status === "scalar_activity_start_date_fallback", `Body Index non-gait activity energy allocation is unavailable for ${activity?.activity_ref || "activity"}.`);
+            detailAllEnergy += activityEnergy;
+            continue;
+          }
+          diagnosticRequire(segments.length > 0, `Body Index classified activity has no segment detail for ${activity?.activity_ref || "activity"}.`);
           const segmentEnergy = segments.reduce((sum, segment) => sum + Number(segment?.active_energy_kj || 0), 0);
           diagnosticRequire(Math.abs(segmentEnergy - activityEnergy) <= 0.05, `Body Index segment/detail energy mismatch for ${activity?.activity_ref || "activity"}.`);
           detailAllEnergy += activityEnergy;

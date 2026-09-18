@@ -22,11 +22,11 @@ from tests.qualification.phase3_catalog import (
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_phase3_catalog_has_nine_unique_domains_and_twenty_five_routes() -> None:
+def test_phase3_catalog_has_nine_unique_domains_and_twenty_six_routes() -> None:
     assert len(DOMAIN_IDS) == 9
     assert len(set(DOMAIN_IDS)) == len(DOMAIN_IDS)
-    assert len(CANONICAL_ROUTE_DISPOSITION) == 25
-    assert len({route for route, _ in CANONICAL_ROUTE_DISPOSITION}) == 25
+    assert len(CANONICAL_ROUTE_DISPOSITION) == 26
+    assert len({route for route, _ in CANONICAL_ROUTE_DISPOSITION}) == 26
     assert (RUNTIME_DIAGNOSTIC_ROUTE, "separate-runtime-diagnostic") in (
         CANONICAL_ROUTE_DISPOSITION
     )

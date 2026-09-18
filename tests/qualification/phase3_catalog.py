@@ -36,29 +36,33 @@ PHASE2_REPORT_SEMANTIC_SHA256 = (
 )
 
 CANONICAL_ROUTE_DISPOSITION: tuple[tuple[str, str], ...] = (
-    ("home", "dashboard-shell-control"),
-    ("features-workspace", "workspace-lifecycle"),
-    ("features-import-new-trip", "workspace-lifecycle"),
-    ("features-country-material-pool", "workspace-lifecycle"),
-    ("map", "geospatial-weather-navigation"),
-    ("timeline", "dashboard-shell-control"),
-    ("features-lbs", "geospatial-weather-navigation"),
-    ("outdoor-route-context", "route-intelligence"),
-    ("outdoor-pace-fit", "route-intelligence"),
-    ("outdoor-pace-fit-body-index", "body-index-privacy"),
-    ("outdoor-permission", "contextual-permission"),
-    ("outdoor-architecture", "route-intelligence"),
-    ("outdoor-weather", "geospatial-weather-navigation"),
-    ("outdoor-navigation", "geospatial-weather-navigation"),
-    ("emergency", "safety-emergency"),
-    ("agent", "assistant-planner"),
-    ("living", "safety-emergency"),
-    ("surface-debug", "dashboard-shell-control"),
-    ("debug", "dashboard-shell-control"),
-    ("observer", "observer-hardware-boundary"),
-    ("settings", "dashboard-shell-control"),
-    ("diagnostic", "separate-runtime-diagnostic"),
-) + tuple((item.route, item.domain_id) for item in READ_TELEMETRY_CONTRACTS)
+    (
+        ("home", "dashboard-shell-control"),
+        ("features-workspace", "workspace-lifecycle"),
+        ("features-import-new-trip", "workspace-lifecycle"),
+        ("features-country-material-pool", "workspace-lifecycle"),
+        ("map", "geospatial-weather-navigation"),
+        ("timeline", "dashboard-shell-control"),
+        ("features-lbs", "geospatial-weather-navigation"),
+        ("outdoor-route-context", "route-intelligence"),
+        ("outdoor-pace-fit", "route-intelligence"),
+        ("outdoor-pace-fit-body-index", "body-index-privacy"),
+        ("outdoor-permission", "contextual-permission"),
+        ("outdoor-architecture", "route-intelligence"),
+        ("outdoor-weather", "geospatial-weather-navigation"),
+        ("outdoor-navigation", "geospatial-weather-navigation"),
+        ("emergency", "safety-emergency"),
+        ("agent", "assistant-planner"),
+        ("living", "safety-emergency"),
+        ("surface-debug", "dashboard-shell-control"),
+        ("debug", "dashboard-shell-control"),
+        ("observer", "observer-hardware-boundary"),
+        ("settings", "dashboard-shell-control"),
+        ("diagnostic", "separate-runtime-diagnostic"),
+    )
+    + tuple((item.route, item.domain_id) for item in READ_TELEMETRY_CONTRACTS)
+    + (("trip-notebook", "workspace-lifecycle"),)
+)
 
 FIXTURE_CLASSES = (
     "current",
@@ -162,7 +166,7 @@ DOMAIN_SPECS: tuple[DashboardDomainSpec, ...] = (
             background_execution=True,
             downstream_decision_impact=True,
         ),
-        ("features-workspace", "features-import-new-trip", "features-country-material-pool"),
+        ("features-workspace", "features-import-new-trip", "features-country-material-pool", "trip-notebook"),
         ("/admin/dashboard/workspaces", "/admin/pretrip/projects"),
         (
             "dashboard_workspace_publication.py",

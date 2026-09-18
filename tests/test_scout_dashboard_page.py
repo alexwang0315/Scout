@@ -6672,6 +6672,11 @@ def test_dashboard_diagnostic_checks_probe_runtime_data_and_rendered_behavior() 
     assert "() => renderPaceFitPage(force)" in check_020
     assert "const average = paceFitPairAverageMinutes(pair);" in check_020
 
+    check_002 = diagnostic_source.split(
+        "async function diagnosticCheck002()", 1
+    )[1].split("async function diagnosticProjectIsolationReplay()", 1)[0]
+    assert '"trip-notebook"' in check_002
+
     check_021 = diagnostic_source.split(
         "async function diagnosticCheck021()", 1
     )[1].split("async function diagnosticCheck022()", 1)[0]
@@ -6681,6 +6686,8 @@ def test_dashboard_diagnostic_checks_probe_runtime_data_and_rendered_behavior() 
         "baseline_multiplier",
         "daily_energy.completeness",
         "detailedActivitiesByKey",
+        "non-gait activity classification is not explicit",
+        "classified activity has no segment detail",
         "segment/detail energy mismatch",
         "running-segment detail does not reconcile",
         "cumulative_active_energy_before_transition_kj",

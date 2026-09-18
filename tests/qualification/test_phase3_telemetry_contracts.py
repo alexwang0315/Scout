@@ -24,8 +24,9 @@ def test_route_addendum_retains_historical_packet_and_all_original_dispositions(
         ("runtime-audit", "dashboard-shell-control"),
         ("surface-intelligence", "assistant-planner"),
         ("scout-monitor", "observer-hardware-boundary"),
+        ("trip-notebook", "workspace-lifecycle"),
     )
-    assert len(set(CANONICAL_ROUTE_DISPOSITION)) == 25
+    assert len(set(CANONICAL_ROUTE_DISPOSITION)) == 26
 
 
 def test_new_telemetry_routes_have_full_declared_domain_obligations() -> None:
@@ -87,6 +88,8 @@ def test_addendum_binds_history_approved_routes_and_exact_fixture_boundary() -> 
     assert tuple(tuple(row) for row in addendum["canonical_route_disposition"]) == CANONICAL_ROUTE_DISPOSITION
     assert addendum["user_arbitration"]["check_id"] == "DASH-002"
     assert addendum["user_arbitration"]["decision"] == "依建議更新 D002"
+    assert addendum["current_route_inventory_arbitration"]["choice"] == "A"
+    assert addendum["current_route_inventory_arbitration"]["route_count"] == 26
     assert addendum["domain_count"] == 9
     contracts = {item["route"]: item for item in addendum["new_route_contracts"]}
     for contract in READ_TELEMETRY_CONTRACTS:
