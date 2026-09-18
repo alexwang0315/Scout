@@ -138,6 +138,13 @@ Verification and remaining gaps:
   retests DASH-020, DASH-021, DASH-022, and DASH-023 all passed on this
   current-code temporary runtime. This is stronger local browser evidence, but
   it is not official qualification or a trusted baseline.
+- The 48-versus-50 conflict has two explicit, non-equivalent resolutions that
+  require a specification decision: (A) promote DASH-049 and DASH-050 into the
+  regular browser contract, update the runner/contract tests to 50, and qualify
+  both new cases; or (B) preserve a 48-case regular contract and move/reclassify
+  DASH-049 and DASH-050 as separately governed advanced checks. The current
+  page, checklist, and registry support A, while the existing runner and
+  advanced-entrypoint test assert B. No option was selected or silently changed.
 - Existing out-of-scope failures remain recorded: phase3
   `dashboard-shell-control` reports `SURFACE-INVENTORY-DRIFT`, and the outdoor
   standard audit still reports `contextOrReviewEvidenceGapToolCount == 1`
