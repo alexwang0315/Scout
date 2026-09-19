@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Run the isolated Jev compatibility benchmark against one Scout workspace.
-
-The workspace is read-only.  The only payload sent to OpenRouter is the
-allowlisted aggregate projection and synthetic benchmark question state built
-by :mod:`scout.nextgen.jev_decisions`.
-"""
+"""Run the Scout Jev baseline/shadow/active benchmark on one workspace."""
 
 from __future__ import annotations
 
@@ -12,15 +7,21 @@ import argparse
 import json
 import os
 import re
+import sys
 from pathlib import Path
 
-from scout.nextgen.jev_decisions import (
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(_REPO_ROOT / "src"))
+
+from scout.nextgen.jev_decisions import (  # noqa: E402
     JEvEndpoint,
     OpenRouterJevClient,
     build_anonymized_workspace_projection,
-    build_jev_benchmark_cases,
-    build_jev_dataset,
-    run_jev_benchmark,
+)
+from scout.nextgen.jev_decision_service import (  # noqa: E402
+    build_jev_experiment_cases,
+    build_jev_experiment_dataset,
+    run_jev_experiment,
 )
 
 
@@ -86,7 +87,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=Path("artifacts/jev-benchmark-20260919"),
+        default=Path("artifacts/jev-experiment-20260919"),
     )
     parser.add_argument("--timeout-seconds", type=float, default=120.0)
     parser.add_argument(
@@ -100,12 +101,11 @@ def _parser() -> argparse.ArgumentParser:
 def main() -> int:
     args = _parser().parse_args()
     projection = build_anonymized_workspace_projection(args.workspace)
-    cases = build_jev_benchmark_cases(projection)
-    dataset = build_jev_dataset(projection, cases)
+    cases = build_jev_experiment_cases(projection)
+    dataset = build_jev_experiment_dataset(projection, cases)
     args.output_dir.mkdir(parents=True, exist_ok=True)
     dataset_path = args.output_dir / "jev-anonymized-dataset.json"
     _write_json(dataset_path, dataset.model_dump(mode="json"))
-
     print(
         json.dumps(
             {
@@ -115,6 +115,8 @@ def main() -> int:
                 "workspace_projection_hash": projection.projection_hash,
                 "endpoint": JEvEndpoint,
                 "dry_run": args.dry_run,
+                "candidate_only": dataset.candidate_only,
+                "runtime_safety_truth": dataset.runtime_safety_truth,
             },
             ensure_ascii=False,
             sort_keys=True,
@@ -124,39 +126,51 @@ def main() -> int:
         return 0
 
     key = _api_key(args.env_file)
-    models = tuple(args.models or DEFAULT_MODELS)
-    for model_id in models:
+    for model_id in tuple(args.models or DEFAULT_MODELS):
         client = OpenRouterJevClient(
             api_key=key,
             model_id=model_id,
             timeout_seconds=args.timeout_seconds,
         )
-        report = run_jev_benchmark(
+        report = run_jev_experiment(
             model_id=model_id,
             cases=cases,
             client=client,
-            workspace_root=args.workspace,
             dataset_hash=dataset.dataset_hash,
             workspace_projection_hash=projection.projection_hash,
+            workspace_root=args.workspace,
         )
-        report_path = args.output_dir / f"jev-report-{_safe_model_filename(model_id)}.json"
+        report_path = args.output_dir / f"jev-experiment-{_safe_model_filename(model_id)}.json"
         _write_json(report_path, report.model_dump(mode="json"))
         print(
             json.dumps(
                 {
                     "model": model_id,
                     "report": str(report_path),
-                    "disposition": report.disposition.value,
-                    "passed_cases": report.metrics.passed_cases,
-                    "total_cases": report.metrics.total_cases,
-                    "decision_accuracy": report.metrics.decision_accuracy,
-                    "critical_failures": report.metrics.critical_failures,
-                    "query_executor_successes": report.metrics.query_executor_successes,
-                    "query_cases": report.metrics.query_cases,
-                    "input_tokens": report.metrics.total_input_tokens,
-                    "output_tokens": report.metrics.total_output_tokens,
-                    "cost": report.metrics.total_cost,
-                    "latency_ms": report.metrics.total_latency_ms,
+                    "modes": [
+                        {
+                            "mode": mode.mode.value,
+                            "passed_cases": mode.metrics.passed_cases,
+                            "total_cases": mode.metrics.total_cases,
+                            "decision_accuracy": mode.metrics.decision_accuracy,
+                            "route_accuracy": mode.metrics.route_accuracy,
+                            "disposition_accuracy": mode.metrics.disposition_accuracy,
+                            "jev_called_cases": mode.metrics.jev_called_cases,
+                            "model_requests": mode.metrics.total_model_requests,
+                            "input_tokens": mode.metrics.total_input_tokens,
+                            "output_tokens": mode.metrics.total_output_tokens,
+                            "cost": mode.metrics.total_cost,
+                            "latency_ms": mode.metrics.total_latency_ms,
+                            "over_escalations": mode.metrics.over_escalations,
+                            "critical_safety_boundary_violations": (
+                                mode.metrics.critical_safety_boundary_violations
+                            ),
+                            "failure_counts": mode.metrics.failure_counts,
+                        }
+                        for mode in report.mode_reports
+                    ],
+                    "candidate_only": report.candidate_only,
+                    "runtime_safety_truth": report.runtime_safety_truth,
                 },
                 ensure_ascii=False,
                 sort_keys=True,
