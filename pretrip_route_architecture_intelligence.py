@@ -15,6 +15,7 @@ from typing import Any, Iterable, Mapping, Sequence
 
 from pretrip_historical_return_cost import build_historical_return_cost
 from pretrip_historical_time_window import build_historical_time_windows
+from scout_pace_correction_calibration import architecture_route_power_summary
 
 
 SCHEMA_VERSION = "scout_route_architecture_intelligence.v0"
@@ -88,7 +89,6 @@ def build_route_architecture_intelligence(
         ),
         source_sha256=str(reference_value.get("sha256") or ""),
         crowd_axis=crowd_axis,
-        pace_speed_correction_inputs=_pace_speed_correction_inputs(normalized_value),
     )
     source_route_distance_m = (
         _number(crowd_axis.get("source_route_distance_m"))
@@ -169,6 +169,21 @@ def build_route_architecture_intelligence(
         distance_scale=_route_axis_scale(route_axis_transform),
         default_source_ref=reference_source_ref,
         demand_vectors=vectors,
+    )
+    power_config = (
+        normalized_value.get("route_power_model")
+        if isinstance(normalized_value.get("route_power_model"), Mapping)
+        else {}
+    )
+    route_power_model = architecture_route_power_summary(
+        vectors,
+        body_mass_kg=_number(power_config.get("body_mass_kg")) or 70.0,
+        load_kg=_number(power_config.get("load_kg")) or 0.0,
+        terrain_factor=_number(power_config.get("terrain_factor")) or 1.0,
+        psychological_stress_multiplier=(
+            _number(power_config.get("psychological_stress_multiplier")) or 1.0
+        ),
+        source_ref=f"{reference_source_ref}#route_bins.reference_speed_mps.p50",
     )
     historical_return_cost = _historical_return_cost_projection(
         reference_value.get("historical_route_timing"),
@@ -299,7 +314,9 @@ def build_route_architecture_intelligence(
             vectors,
             source_ref=source_ref_values.get("route_architecture")
             or "normalized/architecture/route_architecture.json",
+            route_power_model=route_power_model,
         ),
+        "route_power_model": route_power_model,
         "checkpoint_passage_timing": checkpoint_passage_timing,
         "historical_return_cost": historical_return_cost,
         "historical_time_windows": historical_time_windows,
@@ -355,6 +372,8 @@ def build_route_architecture_intelligence(
             "route_axis_transform": "Source metric distances are preserved, then normalized by route progress when the source axis differs from golden GPX distance.",
             "checkpoint_passage_duration": "Historical aggregate duration for a fixed 500 m route window centered on each CP/MCP; mode is rounded to 5-minute buckets.",
             "difficulty_cp_selection": "Route-progress nodes default to MCP; only guidance-eligible high-pressure cluster peaks at composite pressure >=55 are promoted to Architecture CP, capped at 10.",
+            "route_total_power": "Time-weighted Pandolf metabolic-power estimate at the fixed reference/golden GPX schedule speed; not mechanical power and not watch activeEnergy W.",
+            "pace_correction_ratio": "Route total metabolic-power estimate divided by Body Index personal flat total metabolic-power estimate; starts at one as an uncalibrated prior and is updated only by successful-climb receipts.",
         },
         "limitations": [
             "Reference GPX reflects uploader behavior and selection bias, not the current user's capacity.",
@@ -813,7 +832,6 @@ def _demand_vectors(
     source_path: str,
     source_sha256: str,
     crowd_axis: Mapping[str, Any] | None = None,
-    pace_speed_correction_inputs: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     viscosity_values = [_number(item.get("grade_adjusted_viscosity_index")) for item in raw_bins]
     duration_values = [_number(item.get("continuous_moving_minutes_p50")) for item in raw_bins]
@@ -932,24 +950,6 @@ def _demand_vectors(
             "candidate_only": True,
             "runtime_safety_truth": False,
         }
-        explicit_correction = (pace_speed_correction_inputs or {}).get(route_bin_id)
-        if explicit_correction is not None:
-            vector.update(
-                {
-                    "pace_speed_correction_ratio": explicit_correction[
-                        "pace_speed_correction_ratio"
-                    ],
-                    "pace_speed_correction_basis": explicit_correction[
-                        "pace_speed_correction_basis"
-                    ],
-                    "pace_speed_correction_source_ref": explicit_correction[
-                        "pace_speed_correction_source_ref"
-                    ],
-                    "pace_speed_correction_review_state": explicit_correction[
-                        "pace_speed_correction_review_state"
-                    ],
-                }
-            )
         vectors.append(
             _with_candidate_metadata(
                 vector,
@@ -967,67 +967,57 @@ def _demand_vectors(
     return vectors
 
 
-def _pace_speed_correction_inputs(
-    normalized_route_architecture: Mapping[str, Any],
-) -> dict[str, dict[str, Any]]:
-    """Read only explicit, route-bin keyed Architecture correction inputs.
-
-    Historical ``reference_speed_kmh`` and grade/load demand fields are
-    observations, not an implicit personal speed multiplier.  A correction
-    becomes eligible only when Architecture supplies the named field in its
-    own route-architecture artifact.
-    """
-    raw_vectors = normalized_route_architecture.get("pace_speed_correction_vectors")
-    if not isinstance(raw_vectors, list):
-        return {}
-    result: dict[str, dict[str, Any]] = {}
-    for raw in raw_vectors:
-        if not isinstance(raw, Mapping):
-            continue
-        route_bin_id = str(raw.get("route_bin_id") or "").strip()
-        ratio = _number(raw.get("pace_speed_correction_ratio"))
-        if not route_bin_id or ratio is None or ratio <= 0.0:
-            continue
-        result[route_bin_id] = {
-            "pace_speed_correction_ratio": round(ratio, 6),
-            "pace_speed_correction_basis": str(
-                raw.get("basis")
-                or "explicit Architecture route speed/time correction"
-            ),
-            "pace_speed_correction_source_ref": str(
-                raw.get("source_ref")
-                or "normalized/architecture/route_architecture.json#pace_speed_correction_vectors"
-            ),
-            "pace_speed_correction_review_state": str(
-                raw.get("review_state") or "proposed"
-            ),
-        }
-    return result
-
-
 def _pace_fit_mapping_projection(
     vectors: Sequence[Mapping[str, Any]],
     *,
     source_ref: str,
+    route_power_model: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    explicit_count = sum(
+    schedule_count = sum(
         1
         for vector in vectors
-        if (_number(vector.get("pace_speed_correction_ratio")) or 0.0) > 0.0
+        if _reference_speed_mps(vector, "p50") is not None
     )
     return {
-        "status": "available" if explicit_count else "unavailable",
-        "explicit_correction_vector_count": explicit_count,
-        "required_field": "pace_speed_correction_ratio",
+        "status": "available" if schedule_count else "unavailable",
+        "reference_schedule_vector_count": schedule_count,
+        "correction_owner": "Scout Dashboard adaptive calibration",
+        "correction_default_ratio": 1.0,
+        "correction_default_status": "prior_uninformed",
+        "power_domain": str(
+            (route_power_model or {}).get(
+                "power_domain", "pandolf_metabolic_power_w_estimate"
+            )
+        ),
         "source_ref": source_ref,
         "method": (
-            "Architecture explicit route speed/time correction; do not infer "
-            "from reference_speed_kmh, grade, load, or personal energy"
+            "fixed reference/golden GPX schedule speed/time; apply only the "
+            "route-scoped Dashboard correction ratio learned from successful climbs"
         ),
-        "slope_load_not_applied_to_personal_energy": True,
+        "schedule_is_not_corrected": True,
+        "slope_load_terrain_stress_feed_route_power_model": True,
+        "route_power_model_status": str((route_power_model or {}).get("status") or "unavailable"),
+        "route_power_model_source_ref": (route_power_model or {}).get("source_ref"),
         "candidate_only": True,
         "runtime_safety_truth": False,
     }
+
+
+def _reference_speed_mps(
+    vector: Mapping[str, Any],
+    key: str = "p50",
+) -> float | None:
+    speeds = vector.get("reference_speed_mps")
+    if isinstance(speeds, Mapping):
+        speed = _number(speeds.get(key))
+        if speed is not None and speed > 0:
+            return speed
+    kmh = vector.get("reference_speed_kmh")
+    if isinstance(kmh, Mapping):
+        speed_kmh = _number(kmh.get(key))
+        if speed_kmh is not None and speed_kmh > 0:
+            return speed_kmh / 3.6
+    return None
 
 
 def _route_spine_nodes(

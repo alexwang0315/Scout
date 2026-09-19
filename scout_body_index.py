@@ -20,6 +20,11 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Sequence
 
+from scout_pace_correction_calibration import (
+    build_body_flat_power_reference,
+    default_pace_correction_calibration,
+)
+
 
 SCHEMA_VERSION = "scout_body_index.v1"
 DEFAULT_BODY_MASS_KG = 70.0
@@ -1595,6 +1600,13 @@ def aggregate_body_index_sources(
     date_values = [str(activity.get("date")) for activity in activities if activity.get("date")] + [str(row.get("date")) for row in metric_rows if row.get("date")]
     classification_coverage = statistics.mean(float(activity.get("data_coverage", {}).get("speed") or 0.0) for activity in eligible) if eligible else 0.0
     coefficient_metrics = _coefficient_metrics(mode_speeds=mode_speeds, segments=segments, transition_count=len(transitions), body_mass_kg=mass)
+    flat_power_reference = build_body_flat_power_reference(
+        {
+            mode: {"median_speed_mps": _median(values)}
+            for mode, values in mode_speeds.items()
+        },
+        body_mass_kg=mass,
+    )
     mode_summary = {
         mode: {
             "median_speed_mps": _round(_median(values), 4),
@@ -1650,6 +1662,7 @@ def aggregate_body_index_sources(
             "classification_speed_coverage": _round(classification_coverage, 4),
         },
         "flat_speed_by_mode": mode_summary,
+        "flat_power_reference": flat_power_reference,
         "segments": [dict(segment) for segment in segments],
         "transition_events": [dict(event) for event in transitions],
         "sustained_output": {
@@ -1674,8 +1687,9 @@ def aggregate_body_index_sources(
             "historical grade, terrain, load, weather, and clothing are not identified by this Body Index model",
             "uncovered 5/10/15/20 minute windows remain unavailable and are not extrapolated",
             "active-energy W is a provider estimate, not external mechanical power",
+            "flat total power reference uses the declared Pandolf metabolic-power estimate so it can be compared with Architecture route power; it is not Apple activeEnergy W",
             "pure aerobic metabolism is not separated from the active-energy estimate",
-            "Pace Fit remains unavailable until Architecture supplies a traceable route speed correction",
+            "Pace Fit uses the fixed reference/golden GPX schedule and a route-scoped correction prior; it is not derived by directly converting energy or W into a percentage",
         ],
         "source_date_range": {"start": min(date_values) if date_values else None, "end": max(date_values) if date_values else None},
         "boundary": {
@@ -1694,12 +1708,15 @@ def attach_pace_fit_mappings(
     payload: Mapping[str, Any],
     body_index: Mapping[str, Any],
     architecture: Mapping[str, Any] | None = None,
+    calibration: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Attach only an explicit Architecture speed correction to CP pairs.
+    """Attach fixed reference-schedule estimates and adaptive Pace Fit.
 
-    A historical reference average remains useful without Body Index.  A
-    personal percentage is emitted only when a pair has distance, Body Index
-    flat speed, and a reviewed Architecture `pace_speed_correction_ratio`.
+    The reference/golden GPX schedule is not corrected.  A route-scoped
+    correction ratio starts at one as an explicit uncalibrated prior and is
+    supplied by successful-climb calibration receipts.  Power is used only to
+    create that ratio in a declared common domain; it is never converted
+    directly into a Pace Fit percentage.
     """
     result = dict(payload)
     pairs: list[dict[str, Any]] = []
@@ -1707,60 +1724,101 @@ def attach_pace_fit_mappings(
         item for item in (architecture or {}).get("segment_demand_vectors", [])
         if isinstance(item, Mapping)
     ]
-    explicit_correction_vectors = [
-        item
-        for item in vectors
-        if (_finite(item.get("pace_speed_correction_ratio")) or 0.0) > 0
-    ]
-    walking_speed = ((body_index.get("flat_speed_by_mode") or {}).get("walking") or {}).get("median_speed_mps")
+    correction = dict(
+        calibration
+        or default_pace_correction_calibration(
+            str(payload.get("project_id") or "unknown_project")
+        )
+    )
+    correction_ratio = _finite(correction.get("correction_ratio"))
+    correction_status = str(correction.get("status") or "unavailable")
+    if correction_ratio is None or correction_ratio <= 0 or correction_status == "unavailable":
+        correction_ratio = None
+    flat_power = body_index.get("flat_power_reference")
+    if not isinstance(flat_power, Mapping):
+        flat_power = build_body_flat_power_reference(
+            body_index.get("flat_speed_by_mode")
+            if isinstance(body_index.get("flat_speed_by_mode"), Mapping)
+            else {},
+            body_mass_kg=_finite(body_index.get("body_mass_kg")) or DEFAULT_BODY_MASS_KG,
+        )
+    walking_speed = ((body_index.get("flat_speed_by_mode") or {}).get("walking") or {}).get(
+        "median_speed_mps"
+    )
     speed = _finite(walking_speed)
+    schedule_vector_count = sum(
+        1 for item in vectors if _reference_vector_speed_mps(item) is not None
+    )
     mapping_available = 0
     for raw_pair in payload.get("pairs", []):
         pair = dict(raw_pair)
         mapping: dict[str, Any] = {
             "status": "unavailable",
-            "reason": "architecture_speed_time_mapping_unavailable",
+            "reason": "fixed_reference_schedule_or_calibration_unavailable",
             "architecture_vector_count": len(vectors),
-            "architecture_explicit_correction_vector_count": len(explicit_correction_vectors),
+            "reference_schedule_vector_count": schedule_vector_count,
+            "correction_ratio": correction_ratio,
+            "correction_status": correction_status,
+            "calibrated_success_count": int(correction.get("calibrated_success_count") or 0),
+            "schedule_is_not_corrected": True,
             "candidate_only": True,
             "runtime_safety_truth": False,
         }
         distance = _finite(pair.get("distance_m"))
-        midpoint = None
-        if distance is not None:
-            start = _finite(pair.get("from_route_distance_m"))
-            end = _finite(pair.get("to_route_distance_m"))
-            if start is not None and end is not None:
-                midpoint = (start + end) / 2.0
-        vector = None
-        if midpoint is not None:
-            vector = next(
-                (
-                    item
-                    for item in vectors
-                    if (_finite(item.get("start_distance_m")) is not None)
-                    and (_finite(item.get("end_distance_m")) is not None)
-                    and _finite(item.get("start_distance_m")) <= midpoint <= _finite(item.get("end_distance_m"))
-                ),
-                None,
-            )
-        correction = _finite(vector.get("pace_speed_correction_ratio")) if vector else None
         reference = _finite((pair.get("duration_minutes") or {}).get("average"))
-        if speed is not None and speed > 0 and distance is not None and distance > 0 and correction is not None and correction > 0 and reference is not None and reference > 0:
-            expected = distance / (speed * correction) / 60.0
+        schedule_minutes = _reference_schedule_minutes(pair, vectors)
+        if (
+            speed is not None
+            and speed > 0
+            and distance is not None
+            and distance > 0
+            and correction_ratio is not None
+            and correction_ratio > 0
+            and schedule_minutes is not None
+            and schedule_minutes > 0
+            and reference is not None
+            and reference > 0
+            and str(flat_power.get("status")) == "available"
+        ):
+            expected = schedule_minutes * correction_ratio
             ratio = expected / reference
             mapping = {
                 "status": "available",
                 "flat_speed_mps": _round(speed, 4),
-                "route_speed_correction_ratio": _round(correction, 5),
+                "body_flat_total_power_w": _round(_finite(flat_power.get("power_w")), 3),
+                "body_flat_power_domain": flat_power.get("power_domain"),
+                "correction_ratio": _round(correction_ratio, 6),
+                "correction_status": correction_status,
+                "calibrated_success_count": int(correction.get("calibrated_success_count") or 0),
+                "schedule_is_not_corrected": True,
                 "route_distance_m": _round(distance, 2),
+                "reference_schedule_minutes": _round(schedule_minutes, 3),
+                "reference_schedule_speed_mps": _round(
+                    distance / (schedule_minutes * 60.0), 6
+                ),
                 "expected_minutes": _round(expected, 3),
                 "reference_average_minutes": _round(reference, 3),
                 "pace_fit_percent": round(ratio * 100),
-                "basis": "Body Index walking flat speed x explicit Architecture route speed correction; reference is same CP pair average",
+                "basis": (
+                    "fixed reference/golden GPX schedule time x route-scoped adaptive "
+                    "correction ratio; reference is same CP pair historical average"
+                ),
+                "reference_schedule_basis": "Architecture reference/golden GPX p50 speed integrated over the CP interval",
+                "reference_schedule_source_ref": (
+                    (architecture or {}).get("route_power_model", {}) or {}
+                ).get("source_ref")
+                or (architecture or {}).get("pace_fit_mapping", {}).get("source_ref"),
+                "schedule_miss_candidate": expected > schedule_minutes,
+                "schedule_miss_semantics": (
+                    "candidate elapsed-time overrun against the fixed schedule; "
+                    "not a runtime safety decision"
+                ),
+                "power_ratio_not_direct_pace_conversion": True,
                 "energy_not_used_as_time_ratio": True,
                 "architecture_vector_count": len(vectors),
-                "architecture_explicit_correction_vector_count": len(explicit_correction_vectors),
+                "reference_schedule_vector_count": schedule_vector_count,
+                "power_domain": correction.get("power_domain"),
+                "calibration_source_refs": list(correction.get("source_refs") or []),
                 "candidate_only": True,
                 "runtime_safety_truth": False,
             }
@@ -1773,13 +1831,63 @@ def attach_pace_fit_mappings(
         "mapped_pair_count": mapping_available,
         "pair_count": len(pairs),
         "architecture_vector_count": len(vectors),
-        "architecture_explicit_correction_vector_count": len(explicit_correction_vectors),
-        "method": "personal flat speed -> explicit Architecture route speed correction -> expected elapsed time -> same-pair historical average",
+        "reference_schedule_vector_count": schedule_vector_count,
+        "correction_ratio": correction_ratio,
+        "correction_status": correction_status,
+        "calibrated_success_count": int(correction.get("calibrated_success_count") or 0),
+        "correction_ratio_definition": correction.get("correction_ratio_definition"),
+        "power_domain": correction.get("power_domain"),
+        "method": "fixed reference/golden GPX schedule -> adaptive route correction ratio -> expected elapsed time -> same-pair historical average",
+        "schedule_is_not_corrected": True,
+        "schedule_source": "Architecture reference/golden GPX p50 speed integrated per CP interval",
+        "route_power_model": (architecture or {}).get("route_power_model"),
         "energy_or_w_not_converted_directly": True,
         "candidate_only": True,
         "runtime_safety_truth": False,
     }
     return result
+
+
+def _reference_vector_speed_mps(vector: Mapping[str, Any]) -> float | None:
+    speeds = vector.get("reference_speed_mps")
+    if isinstance(speeds, Mapping):
+        value = _finite(speeds.get("p50"))
+        if value is not None and value > 0:
+            return value
+    speeds_kmh = vector.get("reference_speed_kmh")
+    if isinstance(speeds_kmh, Mapping):
+        value = _finite(speeds_kmh.get("p50"))
+        if value is not None and value > 0:
+            return value / 3.6
+    return None
+
+
+def _reference_schedule_minutes(
+    pair: Mapping[str, Any],
+    vectors: Sequence[Mapping[str, Any]],
+) -> float | None:
+    start = _finite(pair.get("from_route_distance_m"))
+    end = _finite(pair.get("to_route_distance_m"))
+    if start is None or end is None or end <= start:
+        return None
+    total_seconds = 0.0
+    covered_distance = 0.0
+    for vector in vectors:
+        vector_start = _finite(vector.get("start_distance_m"))
+        vector_end = _finite(vector.get("end_distance_m"))
+        speed = _reference_vector_speed_mps(vector)
+        if vector_start is None or vector_end is None or vector_end <= vector_start or speed is None:
+            continue
+        overlap_start = max(start, vector_start)
+        overlap_end = min(end, vector_end)
+        if overlap_end <= overlap_start:
+            continue
+        distance = overlap_end - overlap_start
+        total_seconds += distance / speed
+        covered_distance += distance
+    if covered_distance < (end - start) * 0.999:
+        return None
+    return total_seconds / 60.0 if total_seconds > 0 else None
 
 
 __all__ = [

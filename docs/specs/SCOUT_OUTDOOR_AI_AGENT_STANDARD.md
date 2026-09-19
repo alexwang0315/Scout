@@ -599,25 +599,70 @@ confidence。沒有高頻率能量／功率或運動感測資料時，不得宣�
 乘上每日 kcal 來宣稱山域可用總功率，必須先經過 Architecture 的坡度、負重、地形
 阻力與校準驗證，暫時只能顯示為 candidate hypothesis，不能作個人能力或安全保證。
 
+#### 7.6.4 2026-09-19 固定 GPX 行程與成功攀爬自適應 correction ratio
+
+以下規則取代本節先前把 Architecture 的靜態
+`pace_speed_correction_ratio` 當成個人速度輸入的做法；舊討論仍保留作為歷史紀錄，
+但不得再作現行 runtime 契約：
+
+- `reference/golden GPX` 的每一對 CP 行程時間是固定的成功案例 schedule。它是
+  目前 Pace Fit 的速度／時間基準；Architecture 不再以個人能力去修正這個 schedule。
+  缺少可追溯的 reference speed/time 向量時，該段仍是 `unavailable`。
+- Body Index 不把活動能量或 provider W 直接換成 Pace Fit 百分比。它提供個人平地、
+  70 kg 使用者假設、坡度 0、無負重、輕便衣服條件下的同功率域
+  `Body Index personal flat total power`；這是模型估計，不是 HealthExport 的新觀測。
+- Architecture 以固定 GPX schedule speed，配合坡度、負重、地形與明示的心理壓力情境，
+  計算同一 Pandolf metabolic-power estimate domain 的
+  `Architecture route total power`。這個 power 是候選代謝功率估計，不是機械功率，
+  也不是手錶 active-energy W。
+- `correction_ratio` 是 Scout Dashboard 的 route-scoped adaptive candidate variable：
+  沒有成功攀爬紀錄時固定為 `1`、狀態為 `prior_uninformed`；這只代表中性先驗，
+  不代表已證實能照 schedule 完成。首筆成功攀爬 receipt 才產生第一筆校準觀測，
+  之後以 `Architecture route total power / Body Index personal flat total power` 的
+  觀測比值，採透明的等權更新逐步逼近，不把失敗、部分完成、重複 receipt 或功率域
+  不一致的資料納入。
+- Pace Fit 個人預估耗時定義為：
+
+  ```text
+  personal_expected_i = fixed_reference_schedule_i × correction_ratio
+  pace_fit_percent_i = personal_expected_i / historical_average_i × 100
+  ```
+
+  因此 `105%` 仍表示比同一 CP 對的歷史平均多花約 5%；功率比值只負責產生
+  `correction_ratio`，不能直接當作 Pace Fit 百分比。`schedule_is_not_corrected=true`
+  且超過 schedule 只標記 `schedule_miss_candidate`，不改寫安全真相。
+- 只有在成功 receipt 能追溯到 route scope、兩側使用相同 power domain 且數值完整時，
+  才能更新 candidate artifact。這個變數可以供下一次 Dashboard 計算使用，但仍是
+  `candidate_only=true`、`runtime_safety_truth=false`，不能自動授權、宣稱攀登安全或
+  證明生理極限。
+
+因此現行實作狀態是：reference CP 平均與固定 schedule 可以獨立顯示；有 Body Index
+平地功率與 schedule 時，Pace Fit 可先用 ratio 1 輸出明確標示「未校準」的候選值；
+沒有成功攀爬 receipt 時，校準值仍不是歷史能力證據。持續輸出窗口和日級能量的資料
+缺口仍照 7.6.3 的 `unavailable` 規則處理，不可外推。
+
 ### 7.7 與既有紀錄的差異審查
 
-本次紀錄與現有規格、程式及測試的對照如下。`aligned` 表示直接沿用；`additive`
+下表是 2026-09-18 討論當下與現有規格、程式及測試的對照；2026-09-19 的固定
+schedule／adaptive calibration 補充契約以 7.6.4 為現行語意。`aligned` 表示直接沿用；`additive`
 表示補上既有紀錄沒有寫清楚的契約；`gap` 表示應列為後續實作，不代表目前已完成。
 
 | 對照面 | 既有紀錄／實作 | 本次討論 | 判定 |
 | --- | --- | --- | --- |
 | 自信力定義 | §7.1 要求以資料支持使用者與隊伍的體能、腳程、休息與路線匹配估計。 | 把結果收斂為每一對 CP 的個人預估耗時相對參考平均的百分比。 | `aligned + additive` |
 | 參考 CP 時間 | `pretrip_reference_segment_timing.py` 已針對相鄰 CP 建立 reference artifact，使用 accepted GPX 的實際時間，缺資料保持 unavailable；Pace Fit UI／測試也已有 CP interval table 與 time-ratio 欄位。 | 明確規定百分比的分子、分母與 `105%` 的時間語意。 | `aligned + semantic clarification` |
-| Body Index 來源 | Dashboard Body Index 目前匯入去識別化 HealthExport 聚合、15 分鐘視窗與 provider metric summary；provider 值標示為 source value。 | Body Index 必須成為個人 CP 預估腳程的唯一公式來源，並處理跑／走／停的活動段。 | `gap`：目前仍以 walking 分析與樣本數／GPX／metric count 的啟發式係數為主。 |
+| Body Index 來源 | Dashboard Body Index 目前匯入去識別化 HealthExport 聚合、15 分鐘視窗與 provider metric summary；provider 值標示為 source value。 | Body Index 必須成為個人平地功率／活動依據，Pace Fit 另以固定 GPX schedule 與 route-scoped calibration 估計時間。 | `aligned + implemented candidate`；原始活動仍須依跑／走／停與資料覆蓋率處理，不能以活動數量推算能力。 |
 | 跑步與功率 | 現有 physiologic pipeline 的 HealthAutoExport analysis 只接受 walking／hiking；沒有持續跑步視窗或瞬時功率契約。 | 加入 70 kg 平地基準、連續跑步 sustained output candidate、代謝功率與機械爬升功率的分離。 | `gap`，且瞬時峰值需更高頻資料。 |
 | GPX 與絕對能量 | `pretrip-reference-pace-energy-analysis.md` 已明示 GPX 單獨不能推出絕對 watts/kJ 或代謝耗能，位能功率也不是總代謝。 | 改用 HealthExport active energy 加上體重／時間建立代謝功率代理；GPX 仍只提供路線與時間配對。 | `compatible only with joint-evidence scope`；不能把 GPX-only 限制改成 GPX 可算功率。 |
 | 坡度、負重、地形 | §7.4 Route Boss Demand 與 Architecture 負責路線需求、terrain、risk 與 buffer。 | 明確把山域坡度、負重、地形修正留給 Architecture。 | `aligned` |
 | 隊伍判斷 | §7.3 要以最慢者與最脆弱環節為基準，不用平均值掩蓋風險。 | 先建立個人 Body Index，再由 Pace Fit 產生個人 CP 結論。 | `additive`；個人結果不能取代最慢隊員規則。 |
 | 安全與私有資料 | Body Index → Pace 只作 advisory；HealthExport 原始內容、精確時間與 GPX 不直接暴露，也不改 Phase 1。 | 新的能量／功率估計仍只能是 candidate evidence，不能成為安全真相或醫療診斷。 | `aligned` |
 
-目前可把實作狀態精確描述為：Pace Fit 的 reference CP 平均與時間比率顯示路徑
-已有基礎；Body Index 尚未依本節建立個人 CP 預估時間，也尚未提供持續／瞬時功率
-的可驗證欄位。因此本節是規格與差異審查紀錄，不是對上述能力已完成的宣告。
+依 7.6.4 更新後，現行可把實作狀態精確描述為：Pace Fit 的 reference CP 平均與
+固定 reference/golden GPX schedule 可獨立顯示；Body Index 已提供候選平地功率、
+活動能量與持續輸出欄位，且可在 ratio 1 的未校準先驗下產生明確標示的候選 CP 時間。
+成功攀爬 receipt 尚未出現時，不能把 ratio 1 解讀為已驗證個人能力；15／20 分鐘或
+其他未涵蓋窗口仍保持 `unavailable`，也不能把候選 Pace Fit 當作安全授權。
 
 ---
 

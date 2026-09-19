@@ -427,7 +427,7 @@ def _reference_pace_payload() -> dict:
     }
 
 
-def test_route_architecture_carries_only_explicit_pace_speed_corrections() -> None:
+def test_route_architecture_keeps_reference_schedule_and_defers_correction_to_calibration() -> None:
     projection = build_route_architecture_intelligence(
         project_id="explicit_pace_mapping",
         route={"route_name": "Explicit mapping route", "distance_m": 750.0},
@@ -451,30 +451,22 @@ def test_route_architecture_carries_only_explicit_pace_speed_corrections() -> No
     )
 
     vectors = projection["segment_demand_vectors"]
-    corrected = next(
+    scheduled = next(
         vector
         for vector in vectors
         if vector["route_bin_id"] == "reference_pace.bin.0001"
     )
-    assert corrected["pace_speed_correction_ratio"] == 0.5
-    assert corrected["pace_speed_correction_review_state"] == "reviewed"
-    assert corrected["pace_speed_correction_source_ref"].endswith(
-        "#pace_speed_correction_vectors"
-    )
+    assert "pace_speed_correction_ratio" not in scheduled
     assert "pace_speed_correction_ratio" not in vectors[0]
-    assert projection["pace_fit_mapping"] == {
-        "status": "available",
-        "explicit_correction_vector_count": 1,
-        "required_field": "pace_speed_correction_ratio",
-        "source_ref": "normalized/architecture/route_architecture.json",
-        "method": (
-            "Architecture explicit route speed/time correction; do not infer "
-            "from reference_speed_kmh, grade, load, or personal energy"
-        ),
-        "slope_load_not_applied_to_personal_energy": True,
-        "candidate_only": True,
-        "runtime_safety_truth": False,
-    }
+    pace_mapping = projection["pace_fit_mapping"]
+    assert pace_mapping["status"] == "available"
+    assert pace_mapping["reference_schedule_vector_count"] > 0
+    assert pace_mapping["correction_default_ratio"] == 1.0
+    assert pace_mapping["correction_default_status"] == "prior_uninformed"
+    assert pace_mapping["correction_owner"] == "Scout Dashboard adaptive calibration"
+    assert pace_mapping["schedule_is_not_corrected"] is True
+    assert projection["route_power_model"]["power_domain"] == "pandolf_metabolic_power_w_estimate"
+    assert projection["route_power_model"]["status"] == "available"
 
 
 def test_route_architecture_projection_builds_candidate_only_mobility_vectors() -> None:

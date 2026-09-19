@@ -70,21 +70,38 @@ Dashboard 的 Pace Fit > Body Index 會從本機 HealthExport 時間序列建立
 - 每日會分別顯示活動能量、靜態能量與合計，並揭露日期範圍、完整性與排除規則。同日跑段占比與「相對平日平均活動能量倍率」是不同欄位；倍率不預設為 2，也不等同登山每日最大可用能量。
 - 預設匯入會合併本機 `~/downloads/HealthExport` 的 ZIP 與 iCloud Documents 下 `Healthy export automation` 的標準 JSON，並以檔案 SHA、活動 fingerprint 去重。iCloud `AutoSync/Workouts` 的 `.hae` 壓縮內部檔與 automation 設定不會被當成標準 Auto Export JSON；活動內 `basalEnergy` 也不會冒充全天靜態能量。
 
-平地速度／能量成本另以 ACSM walking/running metabolic equations 作為 70 kg 模型交叉檢查；公式的適用速度範圍與來源會隨輸出保留。它不會覆寫手錶既有熱量，也不會把坡度、負重係數直接乘到個人可用能量。
+平地速度／能量成本另以 ACSM walking/running metabolic equations 作為 70 kg 模型交叉檢查；Pace Fit 校準兩端則使用同一 `pandolf_metabolic_power_w_estimate` 域的候選代謝功率。公式的適用範圍與來源會隨輸出保留。這些模型不會覆寫手錶既有熱量，也不會把坡度、負重係數直接乘到個人可用能量。
 
 頁面會在可比的分類段落上分開顯示手錶 interval activeEnergy、ACSM 平地模型與兩者差值；這是來源核對，不是重新按 70 kg 產生手錶熱量或能力分數。
 
 ### Body Index 與 Pace Fit 的分工
 
-Body Index 提供個人的跑／走／停行為、活動能量、持續輸出與恢復觀察。Architecture 提供路線的坡度、負重、地形與速度修正。Pace Fit 只在同一對 CP 有歷史 reference GPX 平均耗時，且已完成「Body Index 平地速度 × Architecture 明確路線速度／耗時修正」時輸出：
+Body Index 提供個人的跑／走／停行為、活動能量、持續輸出與恢復觀察。Architecture 提供固定 reference/golden GPX schedule，以及坡度、負重、地形與其他路線需求的功率模型。Pace Fit 只在同一對 CP 有歷史 reference GPX 平均耗時，且固定 schedule 可追溯時輸出：
 
 ```text
+固定 schedule 耗時 = reference/golden GPX schedule 耗時
+個人預估耗時 = 固定 schedule 耗時 × correction_ratio
 Pace Fit % = 個人預估耗時 ÷ 同一對 CP 的歷史平均耗時 × 100
 ```
 
-例如 105% 是比該 CP 對的歷史平均多 5%。活動能量或 W 不能直接換成這個百分比；尚未有可追溯映射時，Pace Fit 仍顯示歷史平均耗時，但個人百分比維持 `unavailable`。
+例如 105% 是比該 CP 對的歷史平均多 5%。沒有任何成功攀爬紀錄時，`correction_ratio=1` 只是 `prior_uninformed` 中性先驗，不代表已證明能追上 schedule。每次完整成功攀爬才可用候選 receipt 讓它逐步逼近：
 
-Architecture 只有在 `normalized/architecture/route_architecture.json` 提供以 `route_bin_id` 對齊的 `pace_speed_correction_vectors` 與明確 `pace_speed_correction_ratio` 時，才會讓這條映射進入 Pace Fit；歷史 `reference_speed_kmh`、坡度、負重或 Body Index 能量不會自動變成個人倍率。
+```text
+correction_ratio 的觀測方向
+= Architecture 路線總代謝功率估計
+  / Body Index 個人平地總代謝功率估計
+```
+
+活動能量或 W 不能直接換成 Pace Fit 百分比；校準兩端必須是同一功率域。固定 schedule 不會被 correction 改寫，超時只顯示 candidate schedule miss，不是 runtime safety truth。缺 schedule 或歷史平均時，該 CP 百分比維持 `unavailable`。
+
+Dashboard calibration artifact 為 `outputs/pace_correction_calibration.json`（若不存在即使用 ratio 1 的中性先驗）。失敗、未完成、重複或功率域不一致的攀爬 receipt 不會更新倍率；所有輸出仍是 candidate-only，不會寫入 Phase 1 safety truth。
+
+只有在已有外部、可追溯的完整成功攀爬 receipt 時，才可明確呼叫
+`POST /admin/dashboard/pace-fit/calibration` 寫入候選校準。request 必須提供
+`project_id`、唯一 `climb_id`、`route_total_power_w`、
+`body_flat_total_power_w`、同一 `power_domain`、`source_refs`，並帶
+`confirm_update=true`；這個 endpoint 不會自行判定攀爬成功，也不會把資料寫入
+安全真值。重複或不合格 receipt 回傳 `409` 且保留原倍率。
 
 ## UI 操作
 

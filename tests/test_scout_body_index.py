@@ -13,6 +13,7 @@ from scout_body_index import (
     build_body_index_source_analysis,
     flat_ground_metabolic_cost,
 )
+from scout_pace_correction_calibration import apply_successful_climb_calibration
 
 
 TZ = timezone(timedelta(hours=8))
@@ -365,7 +366,7 @@ def test_flat_cost_uses_70kg_assumption_and_marks_out_of_range() -> None:
     assert adjusted["estimated_active_energy_w"] > result["estimated_active_energy_w"]
 
 
-def test_pace_fit_requires_explicit_architecture_speed_mapping() -> None:
+def test_pace_fit_uses_fixed_reference_schedule_and_adaptive_ratio() -> None:
     payload = {
         "pairs": [
             {
@@ -383,23 +384,113 @@ def test_pace_fit_requires_explicit_architecture_speed_mapping() -> None:
     assert unavailable["pairs"][0]["personal_mapping"]["status"] == "unavailable"
     assert unavailable["pace_fit_mapping"]["status"] == "unavailable"
     assert unavailable["pace_fit_mapping"]["architecture_vector_count"] == 0
-    assert unavailable["pace_fit_mapping"]["architecture_explicit_correction_vector_count"] == 0
-    architecture_without_correction = {
+    assert unavailable["pace_fit_mapping"]["correction_ratio"] == 1
+    assert unavailable["pace_fit_mapping"]["correction_status"] == "prior_uninformed"
+    architecture_schedule = {
         "segment_demand_vectors": [
-            {"start_distance_m": 0, "end_distance_m": 1000, "reference_speed_kmh": {"p50": 2.5}}
+            {
+                "start_distance_m": 0,
+                "end_distance_m": 1000,
+                "reference_speed_kmh": {"p50": 3.6},
+                "signed_grade_ratio_p50": 0,
+            }
         ]
     }
-    still_unavailable = attach_pace_fit_mappings(payload, body, architecture_without_correction)
-    assert still_unavailable["pace_fit_mapping"]["status"] == "unavailable"
-    assert still_unavailable["pace_fit_mapping"]["architecture_vector_count"] == 1
-    assert still_unavailable["pace_fit_mapping"]["architecture_explicit_correction_vector_count"] == 0
-    mapped = attach_pace_fit_mappings(
-        payload,
-        body,
-        {"segment_demand_vectors": [{"start_distance_m": 0, "end_distance_m": 1000, "pace_speed_correction_ratio": 0.5}]},
-    )
+    mapped = attach_pace_fit_mappings(payload, body, architecture_schedule)
     mapping = mapped["pairs"][0]["personal_mapping"]
     assert mapping["status"] == "available"
-    assert mapping["expected_minutes"] == pytest.approx(33.333, abs=0.01)
-    assert mapping["pace_fit_percent"] == pytest.approx(167, abs=1)
+    assert mapping["reference_schedule_minutes"] == pytest.approx(16.667, abs=0.01)
+    assert mapping["expected_minutes"] == pytest.approx(16.667, abs=0.01)
+    assert mapping["pace_fit_percent"] == pytest.approx(83, abs=1)
+    assert mapping["correction_ratio"] == 1
+    assert mapping["correction_status"] == "prior_uninformed"
+    assert mapping["schedule_is_not_corrected"] is True
+    assert mapping["schedule_miss_candidate"] is False
     assert mapping["energy_not_used_as_time_ratio"] is True
+
+    calibration = {
+        "project_id": "test",
+        "route_scope_key": "test",
+        "status": "calibrated",
+        "correction_ratio": 1.5,
+        "power_domain": "pandolf_metabolic_power_w_estimate",
+        "calibrated_success_count": 1,
+        "source_refs": ["outputs/pace_correction_calibration.json"],
+    }
+    calibrated = attach_pace_fit_mappings(payload, body, architecture_schedule, calibration)
+    calibrated_mapping = calibrated["pairs"][0]["personal_mapping"]
+    assert calibrated_mapping["expected_minutes"] == pytest.approx(25.0, abs=0.01)
+    assert calibrated_mapping["pace_fit_percent"] == pytest.approx(125, abs=1)
+    assert calibrated_mapping["schedule_miss_candidate"] is True
+
+    legacy_ratio = attach_pace_fit_mappings(
+        payload,
+        body,
+        {
+            **architecture_schedule,
+            "segment_demand_vectors": [
+                {**architecture_schedule["segment_demand_vectors"][0], "pace_speed_correction_ratio": 0.2}
+            ],
+        },
+    )
+    assert legacy_ratio["pairs"][0]["personal_mapping"]["correction_ratio"] == 1
+
+
+def test_successful_climb_calibration_approaches_route_to_body_power_ratio() -> None:
+    prior = {
+        "project_id": "route-a",
+        "route_scope_key": "route-a",
+        "status": "prior_uninformed",
+        "correction_ratio": 1.0,
+        "power_domain": "pandolf_metabolic_power_w_estimate",
+        "calibrated_success_count": 0,
+        "observations": [],
+        "prior": {"ratio": 1.0, "weight": 1.0},
+    }
+    first = apply_successful_climb_calibration(
+        prior,
+        {
+            "climb_id": "climb-001",
+            "success": True,
+            "completion_status": "completed",
+            "route_scope_key": "route-a",
+            "power_domain": "pandolf_metabolic_power_w_estimate",
+            "route_total_power_w": 300,
+            "body_flat_total_power_w": 100,
+            "source_refs": ["outputs/completed_trip_receipt.json"],
+        },
+        project_id="route-a",
+    )
+    assert first["correction_ratio"] == pytest.approx(2.0)
+    assert first["calibrated_success_count"] == 1
+    second = apply_successful_climb_calibration(
+        first,
+        {
+            "climb_id": "climb-002",
+            "success": True,
+            "completion_status": "successful",
+            "route_scope_key": "route-a",
+            "power_domain": "pandolf_metabolic_power_w_estimate",
+            "route_total_power_w": 300,
+            "body_flat_total_power_w": 100,
+        },
+        project_id="route-a",
+    )
+    assert second["correction_ratio"] == pytest.approx(2.333333, abs=1e-5)
+    assert second["correction_ratio"] < 3
+    rejected = apply_successful_climb_calibration(
+        second,
+        {
+            "climb_id": "failed-001",
+            "success": False,
+            "completion_status": "partial",
+            "route_scope_key": "route-a",
+            "power_domain": "pandolf_metabolic_power_w_estimate",
+            "route_total_power_w": 900,
+            "body_flat_total_power_w": 100,
+        },
+        project_id="route-a",
+    )
+    assert rejected["correction_ratio"] == second["correction_ratio"]
+    assert rejected["calibrated_success_count"] == 2
+    assert rejected["last_update"]["reason"] == "climb_not_marked_successful"

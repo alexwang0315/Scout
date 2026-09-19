@@ -49,8 +49,8 @@ Each entry should include:
 ### 2026-09-19 - HealthExport ZIP and iCloud Auto Export JSON source bridge
 
 This entry records the next implementation step after the 2026-09-18 Body
-Index prototype. It does not change the explicit Architecture correction
-requirement for Pace Fit.
+Index prototype. The later adaptive-calibration record below supersedes the
+former explicit Architecture correction requirement for Pace Fit.
 
 Scope and implementation:
 
@@ -71,13 +71,9 @@ Scope and implementation:
   metric. Static and total daily energy remain unavailable unless an explicit
   daily metric covers that date.
 - Architecture now exposes the additive `pace_fit_mapping` contract and
-  carries only route-bin keyed values from
-  `normalized/architecture/route_architecture.json#pace_speed_correction_vectors`.
-  The required field is `pace_speed_correction_ratio`; historical
-  `reference_speed_kmh`, grade, load, and Body Index energy are not used to
-  invent it. The current workspace supplies zero such vectors, so Pace Fit
-  continues to show CP historical averages while personal percentages remain
-  unavailable.
+  retains the reference/golden GPX p50 speed as the fixed schedule. A legacy
+  `pace_speed_correction_vectors` value is not used to set a personal ratio;
+  `correction_ratio` belongs to the route-scoped Dashboard calibration state.
 
 Real-source parser replay on 2026-09-19 found 6 ZIP sources and 49 standard
 Auto Export JSON sources. After activity deduplication it retained 104
@@ -87,6 +83,40 @@ the 20-minute window remained unavailable and was not extrapolated. Daily
 active/static/total completeness was 65/32/32 days for the combined source
 set. This is parser evidence; the 9099 page import and official qualification
 are recorded separately.
+
+### 2026-09-19 - Fixed GPX schedule and successful-climb correction calibration
+
+Pace Fit now treats the reference/golden GPX or generated planned schedule as
+the fixed successful-case schedule. Architecture integrates its reference p50
+speed over each CP interval; it does not multiply a personal speed by a
+pre-filled Architecture correction and it never changes the schedule itself.
+
+- With no successful climb receipt, the route-scoped calibration state exposes
+  `correction_ratio=1`, `correction_status=prior_uninformed`, and
+  `calibrated_success_count=0`. This is a neutral prior, not a claim that the
+  user can meet the schedule.
+- After a complete successful climb, an explicit candidate receipt can update
+  the ratio toward `Architecture route total metabolic power /
+  Body Index personal flat total metabolic power`. The update uses a declared
+  same-domain `pandolf_metabolic_power_w_estimate`, a neutral prior, and an
+  equal-weight running update. Failed, partial, duplicate, or mismatched-domain
+  receipts leave the ratio unchanged.
+- `route_power_model` is a time-weighted Pandolf metabolic-power estimate at
+  the fixed schedule speed. Slope, load, terrain factor, and an explicitly
+  supplied psychological scenario multiplier belong to Architecture. The
+  estimate is neither external mechanical power nor HealthExport activeEnergy
+  W; the latter remains a separate provider cross-check.
+- Pace Fit remains
+  `personal_expected_elapsed_time / same_CP_pair_historical_average_elapsed_time
+  × 100`. A schedule overrun is exposed as a candidate schedule-miss field,
+  never as runtime safety truth. Missing schedule coverage or historical CP
+  average remains `unavailable`.
+
+The real current workspace has no successful climb calibration artifact, so
+the live result is expected to show the neutral prior and unvalidated status.
+The candidate write boundary is `POST /admin/dashboard/pace-fit/calibration`; it
+requires an explicit completed-climb receipt and `confirm_update=true`, and a
+duplicate or invalid receipt is rejected without changing the ratio.
 
 ### 2026-09-18 - HealthExport time-series Body Index and traceable Pace Fit mapping
 

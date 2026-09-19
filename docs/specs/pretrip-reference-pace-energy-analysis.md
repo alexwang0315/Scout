@@ -154,42 +154,71 @@ segment watch value, flat-ground model value, and their difference with both
 sources. It never re-labels the provider's active-energy value as a newly
 calculated 70 kg measurement.
 
-Pace Fit retains each CP pair's historical reference average independently. A
-personal percentage is emitted only after a traceable mapping exists from Body
-Index flat speed through an explicit Architecture route speed/time correction:
+Pace Fit retains each CP pair's historical reference average independently. The
+reference/golden GPX (or its generated planned schedule) supplies the fixed
+per-interval speed/time baseline. A personal percentage is emitted only when
+that schedule is traceable and the route-scoped Dashboard correction state is
+valid:
 
 ```text
-Pace Fit % = personal_expected_elapsed_time
-             / same_CP_pair_historical_average_elapsed_time * 100
+reference_schedule_time_i = fixed reference/golden GPX schedule time_i
+personal_expected_elapsed_time_i = reference_schedule_time_i × correction_ratio
+Pace Fit % = personal_expected_elapsed_time_i
+             / same_CP_pair_historical_average_elapsed_time_i × 100
 ```
 
-Energy and W are not a time ratio. If Architecture has not supplied the
-explicit correction, the personal mapping is unavailable while the historical
-CP average remains visible. No slope or load coefficient is multiplied into
-personal usable energy; those variables remain route-demand inputs owned by
-Architecture.
+`correction_ratio` is initially `1` when there are no successful climb
+records. That value is an explicit uncalibrated prior, not evidence that the
+user can hold the schedule. After each successful, complete climb, Scout may
+append a sanitized receipt and update the route-scoped state toward:
 
-The Architecture-to-Pace Fit input contract is explicit and route-bin keyed:
+```text
+observed_ratio = Architecture route total metabolic power estimate
+                 / Body Index personal flat total metabolic power estimate
+```
+
+The current update is a neutral-prior, equal-weight running update; failed,
+partial, duplicate, or different-power-domain receipts do not update it. The
+reference schedule is never changed by the correction. A predicted overrun is a
+candidate schedule-miss observation and must not be promoted to runtime safety
+truth.
+
+Energy and W are not directly converted into a Pace Fit percentage. Both sides
+of the calibration ratio must use the same declared
+`pandolf_metabolic_power_w_estimate` domain. HealthExport active-energy W is
+kept as a provider estimate/cross-check, not substituted into that ratio, and
+the route model's slope, load, terrain factor, and explicitly supplied
+psychological scenario multiplier remain Architecture inputs.
+
+The Architecture-to-Pace Fit input contract is the fixed reference schedule;
+its route-bin p50 speed is integrated over each CP interval. A legacy
+`pace_speed_correction_vectors` field is not used to set the personal ratio:
 
 ```json
 {
-  "pace_speed_correction_vectors": [
+  "segment_demand_vectors": [
     {
-      "route_bin_id": "reference_pace.bin.0001",
-      "pace_speed_correction_ratio": 0.8,
-      "source_ref": "normalized/architecture/route_architecture.json#pace_speed_correction_vectors",
-      "review_state": "reviewed"
+      "start_distance_m": 0,
+      "end_distance_m": 250,
+      "reference_speed_kmh": {"p50": 2.9},
+      "signed_grade_ratio_p50": 0.12
     }
   ]
 }
 ```
 
-The ratio is a route speed/time correction applied to the Body Index flat
-speed; it is not a Body Index energy multiplier. `reference_speed_kmh`, grade,
-load, and terrain-demand fields alone do not satisfy this contract. When the
-vector list is absent or has no positive explicit ratio, the Architecture
-projection reports `pace_fit_mapping.status=unavailable` and Pace Fit keeps
-the personal percentage unavailable.
+When the fixed schedule vectors or the historical CP average are missing, that
+CP percentage remains `unavailable`; the independent historical average still
+renders. When no climb calibration artifact exists, the dashboard exposes
+`correction_ratio=1`, `correction_status=prior_uninformed`, and zero calibrated
+successes rather than hiding or overstating the assumption.
+
+The candidate write boundary is `POST /admin/dashboard/pace-fit/calibration`. It
+accepts only an explicit, traceable completed-climb receipt with a unique climb
+identifier, positive route/body power values in the same declared domain, source
+references, and `confirm_update=true`. The endpoint does not infer completion,
+does not revise the fixed schedule, and does not mutate runtime safety truth;
+duplicate or invalid receipts leave the stored ratio unchanged.
 
 ### 2026-07-21 Golden-Scope And Pairwise-Filter Correction
 

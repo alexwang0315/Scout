@@ -37376,7 +37376,7 @@
           referenceMinutes,
           expectedMinutes: null,
           percent: null,
-          text: `歷史 reference GPX 平均 ${referenceMinutes.toFixed(1)} 分鐘；Body Index／Architecture 尚未完成可追溯速度—耗時映射，因此暫不計算百分比。`,
+          text: `歷史 reference GPX 平均 ${referenceMinutes.toFixed(1)} 分鐘；固定 reference schedule 或 Dashboard correction calibration 尚未完成，因此暫不計算百分比。`,
         };
       }
       const expectedMinutes = Number(mapping.expected_minutes);
@@ -37493,7 +37493,7 @@
       const paceMapping = state.paceFitData?.pace_fit_mapping || {};
       const paceMappingLabel = paceMapping.status === "available"
         ? `${Number(paceMapping.mapped_pair_count || 0)}/${Number(paceMapping.pair_count || 0)} CP 區間已映射`
-        : "unavailable · 需要 Architecture 速度／耗時映射";
+        : "unavailable · 需要固定 reference schedule 與 calibration";
       const referencePairs = paceFitReferencePairs();
       const referencePairRows = referencePairs.map(pair => {
         const conclusion = paceFitPairConclusion(pair);
@@ -37582,7 +37582,7 @@
               <h3>${escapeHtml(nextSegmentLabel)}</h3>
             </div>
             <strong>${escapeHtml(selectedConclusion.text)}</strong>
-            <p>百分比定義：Body Index 產生的個人預估耗時 ÷ 同一對 CP 的 reference GPX 平均耗時 × 100。歷史平均尚未取得或 Body Index 尚未完成時，畫面保留未知，不產生百分比。</p>
+            <p>百分比定義：個人預估耗時 ÷ 同一對 CP 的 reference GPX 平均耗時 × 100；其中個人預估耗時 = 固定 reference/golden GPX schedule 耗時 × route-scoped correction ratio。schedule 或 calibration 不完整時，畫面保留未知，不產生百分比。</p>
           </section>
 
           <section class="pace-timeline-band">
@@ -38070,7 +38070,7 @@
         ["模型估計", `${formatKj(observations.run_active_energy_kj)} run-segment active energy · ${formatW(observations.energy_rate_w)}`, "running-classified segment interval activeEnergy sum / covered seconds"],
         ["交叉比較", energyCrossCheck.status === "available" ? `${formatKj(energyCrossCheck.watch_interval_active_energy_kj_on_comparable_segments)} watch / ${formatKj(energyCrossCheck.flat_ground_model_active_energy_kj)} flat model · Δ ${formatKj(energyCrossCheck.difference_watch_minus_model_kj)}` : "unavailable", "same classified segments; watch source vs ACSM 70 kg model"],
         ["假設", "70 kg · flat 0° · zero load · light clothing", "user assumption / model scenario"],
-        ["Pace Fit", mapping.status === "available" ? `${formatCount(mapping.mapped_pair_count)} CP pairs mapped` : "unavailable until Architecture speed/time mapping", "energy or W is not converted directly"],
+        ["Pace Fit", mapping.status === "available" ? `${formatCount(mapping.mapped_pair_count)} CP pairs · correction ${mapping.correction_ratio ?? "unavailable"} (${mapping.correction_status || "unknown"})` : "unavailable until fixed GPX schedule/calibration is traceable", "energy or W is not converted directly"],
         ["未知", "grade, terrain, load, weather, IMU and pure aerobic separation", "Architecture or future evidence"],
       ];
       const evidenceRows = [
@@ -38079,7 +38079,7 @@
         ["模型估計 / sustained", "5、10、15、20 分鐘只取合格連續跑段"],
         ["模型估計 / daily", `${formatCount(dailyEnergy.complete_active_day_count)} active · ${formatCount(dailyEnergy.complete_static_day_count)} static · ${formatCount(dailyEnergy.complete_total_day_count)} total days`],
         ["假設 / metabolic cross-check", "ACSM flat-ground cost with 70 kg user assumption"],
-        ["未知 / Architecture", "坡度、負重、地形與路線速度修正未由 Body Index 代算"],
+        ["未知 / Architecture", mapping.status === "available" ? `固定 reference/golden GPX schedule · ratio ${mapping.correction_ratio ?? "unavailable"} · ${mapping.correction_status || "unknown"}` : "固定 schedule 或 route correction calibration unavailable"],
       ];
       return `
         ${outdoorTabs("outdoor-pace-fit")}
@@ -38090,7 +38090,7 @@
               <div class="body-index-ring" style="--value:${scorePercent}%"><span>${escapeHtml(coefficient)}</span></div>
               <div class="body-index-score-copy">
                 <h3>Body Index personal activity reference</h3>
-                <p>${hasBodyIndexEvidence ? `已由 HealthExport 時間序列建立跑／走／停分類、活動能量、持續輸出與每日基準；Scout Pace Coefficient 維持 unavailable，因為不能由活動筆數或能量直接推算能力。` : "No Scout Pace Coefficient has been calculated. 先匯入並審閱 HealthExport；Pace Fit 仍須另有 Architecture 速度—耗時映射才會產生百分比。"}</p>
+                <p>${hasBodyIndexEvidence ? `已由 HealthExport 時間序列建立跑／走／停分類、活動能量、持續輸出與每日基準；Pace Fit 另以固定 reference/golden GPX schedule 和 route-scoped correction calibration 產生候選耗時。` : "No Scout Pace Coefficient has been calculated. 先匯入並審閱 HealthExport；Pace Fit 仍須固定 reference/golden GPX schedule 才能產生候選百分比。"}</p>
                 <div class="body-index-chip-row">
                   <span class="chip info">spec 7.2</span>
                   <span class="chip info">HealthExport-aware</span>
@@ -38114,7 +38114,7 @@
             <section class="body-index-mini">
               <span>Pace mapping</span>
               <strong>${escapeHtml(mapping.status === "available" ? "available" : "unavailable")}</strong>
-              <em>${mapping.status === "available" ? "Architecture correction attached" : "reference averages remain independent"}</em>
+              <em>${mapping.status === "available" ? `固定 GPX schedule · correction ${mapping.correction_ratio ?? "unavailable"} · ${mapping.correction_status || "unknown"}` : "reference averages remain independent"}</em>
             </section>
           </div>
 

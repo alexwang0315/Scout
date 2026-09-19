@@ -603,7 +603,7 @@ def test_scout_dashboard_pace_fit_missing_workspace_stays_unavailable(
     assert response.headers["x-scout-runtime-safety-truth"] == "false"
 
 
-def test_scout_dashboard_pace_fit_attaches_only_explicit_architecture_mapping(
+def test_scout_dashboard_pace_fit_attaches_adaptive_reference_schedule_mapping(
     tmp_path: Path,
     monkeypatch,
 ) -> None:
@@ -657,10 +657,27 @@ def test_scout_dashboard_pace_fit_attaches_only_explicit_architecture_mapping(
                     {
                         "start_distance_m": 0,
                         "end_distance_m": 600,
-                        "pace_speed_correction_ratio": 0.8,
+                        "reference_speed_kmh": {"p50": 3.6},
                     },
                 ],
+                "pace_fit_mapping": {
+                    "source_ref": "outputs/reference_pace_energy_analysis.json",
+                },
             },
+        },
+    )
+    monkeypatch.setattr(
+        admin_api,
+        "load_pace_correction_calibration",
+        lambda _project_root, *, project_id: {
+            "project_id": project_id,
+            "route_scope_key": project_id,
+            "status": "calibrated",
+            "correction_ratio": 1.25,
+            "correction_ratio_definition": "route / body",
+            "power_domain": "pandolf_metabolic_power_w_estimate",
+            "calibrated_success_count": 1,
+            "source_refs": ["outputs/pace_correction_calibration.json"],
         },
     )
     monkeypatch.setattr(admin_api, "_load_dashboard_body_index_snapshot", lambda _project_id: body_snapshot)
@@ -674,11 +691,100 @@ def test_scout_dashboard_pace_fit_attaches_only_explicit_architecture_mapping(
     assert mapping["status"] == "available"
     assert mapping["expected_minutes"] == 12.5
     assert mapping["pace_fit_percent"] == 125
+    assert mapping["reference_schedule_minutes"] == 10
+    assert mapping["correction_ratio"] == 1.25
+    assert mapping["correction_status"] == "calibrated"
+    assert mapping["schedule_is_not_corrected"] is True
     assert mapping["energy_not_used_as_time_ratio"] is True
     assert payload["pace_fit_mapping"]["mapped_pair_count"] == 1
     assert "energy_or_w_not_converted_directly" not in payload
     assert response.headers["x-scout-candidate-only"] == "true"
     assert response.headers["x-scout-runtime-safety-truth"] == "false"
+
+
+def test_scout_dashboard_pace_fit_calibration_writes_only_explicit_success_candidate(
+    tmp_path: Path,
+) -> None:
+    project_id = "pace_fit_calibration_fixture"
+    project_root = tmp_path / project_id
+    project_root.mkdir()
+    (project_root / "project.json").write_text(
+        json.dumps({"project_id": project_id}),
+        encoding="utf-8",
+    )
+    client = TestClient(create_admin_app(pretrip_workspace_root=tmp_path))
+
+    missing_confirmation = client.post(
+        "/admin/dashboard/pace-fit/calibration",
+        json={
+            "project_id": project_id,
+            "climb_id": "climb-001",
+            "route_total_power_w": 200,
+            "body_flat_total_power_w": 100,
+            "source_refs": ["completed-trip-receipt#climb-001"],
+        },
+    )
+    assert missing_confirmation.status_code == 400
+
+    response = client.post(
+        "/admin/dashboard/pace-fit/calibration",
+        json={
+            "project_id": project_id,
+            "climb_id": "climb-001",
+            "completion_status": "completed",
+            "route_total_power_w": 200,
+            "body_flat_total_power_w": 100,
+            "source_refs": ["completed-trip-receipt#climb-001"],
+            "confirm_update": True,
+        },
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["status"] == "updated"
+    assert payload["correction_ratio"] == 1.5
+    assert payload["calibrated_success_count"] == 1
+    assert payload["boundary"] == {
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "automatic_safety_decision_allowed": False,
+    }
+    artifact = project_root / payload["artifact_ref"]
+    assert artifact.exists()
+    saved = json.loads(artifact.read_text(encoding="utf-8"))
+    assert saved["correction_ratio"] == 1.5
+    assert saved["observations"][0]["climb_id"] == "climb-001"
+
+    partial = client.post(
+        "/admin/dashboard/pace-fit/calibration",
+        json={
+            "project_id": project_id,
+            "climb_id": "climb-partial",
+            "completion_status": "partial",
+            "route_total_power_w": 900,
+            "body_flat_total_power_w": 100,
+            "source_refs": ["completed-trip-receipt#climb-partial"],
+            "confirm_update": True,
+        },
+    )
+    assert partial.status_code == 409
+    assert partial.json()["calibration"]["correction_ratio"] == 1.5
+    assert partial.json()["calibration"]["last_update"]["reason"] == (
+        "climb_not_marked_successful"
+    )
+
+    duplicate = client.post(
+        "/admin/dashboard/pace-fit/calibration",
+        json={
+            "project_id": project_id,
+            "climb_id": "climb-001",
+            "route_total_power_w": 900,
+            "body_flat_total_power_w": 100,
+            "source_refs": ["completed-trip-receipt#climb-001"],
+            "confirm_update": True,
+        },
+    )
+    assert duplicate.status_code == 409
+    assert duplicate.json()["calibration"]["correction_ratio"] == 1.5
 
 
 def test_scout_dashboard_body_index_all_invalid_import_stays_unavailable(
@@ -4588,7 +4694,7 @@ def test_scout_dashboard_pace_fit_body_index_dashboard_contract() -> None:
         "No provider metrics imported.",
         "No Scout Pace Coefficient has been calculated.",
         "awaiting evidence",
-        "unavailable until Architecture speed/time mapping",
+            "unavailable until fixed GPX schedule/calibration is traceable",
         "coefficient_metrics",
         "source value only",
         "not live oxygen uptake",

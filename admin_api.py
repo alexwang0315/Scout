@@ -142,6 +142,12 @@ from scout_body_index import (
     attach_pace_fit_mappings,
     build_body_index_source_analysis,
 )
+from scout_pace_correction_calibration import (
+    PANDOLF_POWER_DOMAIN,
+    apply_successful_climb_calibration,
+    load_pace_correction_calibration,
+    write_pace_correction_calibration,
+)
 from pretrip_energy_projection import (
     DEFAULT_PRETRIP_ENERGY_PROJECTION_REF,
     write_pretrip_energy_reserve_projection,
@@ -2277,6 +2283,45 @@ class DashboardBodyIndexWatchRequest(BaseModel):
         return self
 
 
+class DashboardPaceCorrectionCalibrationRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: str = Field(min_length=1, max_length=120)
+    climb_id: str = Field(min_length=1, max_length=160)
+    completion_status: Literal[
+        "success",
+        "successful",
+        "complete",
+        "completed",
+        "partial",
+        "failed",
+        "incomplete",
+        "unknown",
+    ] = "completed"
+    route_total_power_w: float = Field(gt=0)
+    body_flat_total_power_w: float = Field(gt=0)
+    power_domain: str = Field(default=PANDOLF_POWER_DOMAIN, min_length=1, max_length=120)
+    source_refs: list[str] = Field(min_length=1, max_length=16)
+    schedule_adherence: str = Field(default="unreported", min_length=1, max_length=80)
+    observed_at: str | None = Field(default=None, max_length=80)
+    confirm_update: bool = False
+
+    @model_validator(mode="after")
+    def normalize_pace_correction_calibration(self) -> "DashboardPaceCorrectionCalibrationRequest":
+        self.project_id = self.project_id.strip()
+        if not _dashboard_body_index_project_id(self.project_id):
+            raise ValueError(
+                "project_id may only contain letters, numbers, dot, underscore, and dash"
+            )
+        self.climb_id = self.climb_id.strip()
+        self.power_domain = self.power_domain.strip()
+        self.schedule_adherence = self.schedule_adherence.strip()
+        self.source_refs = [ref.strip() for ref in self.source_refs if ref.strip()]
+        if not self.source_refs:
+            raise ValueError("source_refs must contain at least one non-blank reference")
+        return self
+
+
 class WearableImportRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -3363,14 +3408,115 @@ def create_admin_router(
                 # projection cannot be loaded; it must not invent a correction.
                 architecture = None
         body_snapshot = _load_dashboard_body_index_snapshot(project_id)
+        calibration = (
+            load_pace_correction_calibration(
+                project_root,
+                project_id=project_id,
+            )
+            if project_root is not None
+            else None
+        )
         payload = attach_pace_fit_mappings(
             payload,
             body_snapshot.get("body_index", {}),
             architecture,
+            calibration,
         )
         return Response(
             json.dumps(payload, ensure_ascii=False),
             media_type="application/json",
+            headers={
+                "Cache-Control": "no-store",
+                "X-Scout-Candidate-Only": "true",
+                "X-Scout-Runtime-Safety-Truth": "false",
+            },
+        )
+
+    @router.post("/dashboard/pace-fit/calibration")
+    def scout_dashboard_pace_fit_calibration(
+        request: DashboardPaceCorrectionCalibrationRequest,
+    ) -> Response:
+        """Persist one explicit successful-climb candidate calibration receipt."""
+
+        if not request.confirm_update:
+            raise HTTPException(
+                status_code=400,
+                detail="confirm_update=true is required to write Pace Fit calibration",
+            )
+        project_id = _require_dashboard_body_index_project_id(request.project_id)
+        project_root = _pretrip_workspace_project_root(
+            pretrip_workspace_root,
+            project_id=project_id,
+        )
+        if project_root is None:
+            raise HTTPException(
+                status_code=404,
+                detail="loaded workspace project not found",
+            )
+        prior = load_pace_correction_calibration(
+            project_root,
+            project_id=project_id,
+        )
+        updated = apply_successful_climb_calibration(
+            prior,
+            {
+                "climb_id": request.climb_id,
+                "completion_status": request.completion_status,
+                "success": request.completion_status
+                in {"success", "successful", "complete", "completed"},
+                "route_scope_key": project_id,
+                "route_total_power_w": request.route_total_power_w,
+                "body_flat_total_power_w": request.body_flat_total_power_w,
+                "power_domain": request.power_domain,
+                "source_refs": request.source_refs,
+                "schedule_adherence": request.schedule_adherence,
+                "observed_at": request.observed_at,
+            },
+            project_id=project_id,
+        )
+        update = updated.get("last_update") or {}
+        if update.get("status") != "accepted":
+            payload = {
+                "status": "not_updated",
+                "project_id": project_id,
+                "calibration": updated,
+                "boundary": {
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                    "automatic_safety_decision_allowed": False,
+                },
+            }
+            return JSONResponse(
+                status_code=409,
+                content=payload,
+                headers={
+                    "Cache-Control": "no-store",
+                    "X-Scout-Candidate-Only": "true",
+                    "X-Scout-Runtime-Safety-Truth": "false",
+                },
+            )
+        artifact_path = write_pace_correction_calibration(
+            project_root,
+            updated,
+        )
+        payload = {
+            "status": "updated",
+            "project_id": project_id,
+            "artifact_ref": str(artifact_path.relative_to(project_root)),
+            "correction_ratio": updated.get("correction_ratio"),
+            "correction_status": updated.get("status"),
+            "calibrated_success_count": updated.get("calibrated_success_count"),
+            "last_update": update,
+            "power_domain": updated.get("power_domain"),
+            "boundary": {
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+                "automatic_safety_decision_allowed": False,
+            },
+        }
+        return JSONResponse(
+            status_code=200,
+            content=payload,
             headers={
                 "Cache-Control": "no-store",
                 "X-Scout-Candidate-Only": "true",
