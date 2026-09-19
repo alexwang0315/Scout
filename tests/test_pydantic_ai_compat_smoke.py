@@ -110,8 +110,8 @@ def test_runtime_and_deployment_dependency_pins_stay_aligned() -> None:
         "requirements.pi.live.txt",
     } <= dependency_sets.keys()
     expected_versions = {
-        "pydantic-ai-slim": "2.44.0",
-        "pydantic-evals": "2.44.0",
+        "pydantic-ai-slim": "2.45.0",
+        "pydantic-evals": "2.45.0",
         "praisonaiagents": "1.7.6",
     }
     seen = set()
