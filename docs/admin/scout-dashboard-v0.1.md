@@ -46,6 +46,40 @@ Each entry should include:
 
 ## Implementation Record
 
+### 2026-09-19 - HealthExport ZIP and iCloud Auto Export JSON source bridge
+
+This entry records the next implementation step after the 2026-09-18 Body
+Index prototype. It does not change the explicit Architecture correction
+requirement for Pace Fit.
+
+Scope and implementation:
+
+- `scout_body_index.py` now accepts both a HealthExport ZIP and one standalone
+  Auto Export JSON document using the shared `{"data": ...}` envelope.
+- `admin_api.py` now discovers the local `~/downloads/HealthExport` root and
+  the iCloud Documents Auto Export child (`Healthy export automation`) on a
+  default import. Explicit source directories remain scoped to the requested
+  directory. `.hae` AutoSync records and automation configuration JSON are
+  outside this source contract and are ignored.
+- Source entries retain only SHA-based provenance plus a safe source format
+  (`health_export_zip` or `health_auto_export_json`); raw filenames, exact
+  timestamps, routes, and coordinates remain excluded from the response.
+- File SHA deduplication and activity fingerprint deduplication remain
+  separate. Identical daily metric values are merged once; conflicting daily
+  values remain unavailable instead of being summed.
+- Workout-local `basalEnergy` is not treated as an all-day static-energy
+  metric. Static and total daily energy remain unavailable unless an explicit
+  daily metric covers that date.
+
+Real-source parser replay on 2026-09-19 found 6 ZIP sources and 49 standard
+Auto Export JSON sources. After activity deduplication it retained 104
+activities (46 running, 56 walking, 2 other; 102 run/walk eligible). The
+5/10/15-minute historical highest sustained output windows were available;
+the 20-minute window remained unavailable and was not extrapolated. Daily
+active/static/total completeness was 65/32/32 days for the combined source
+set. This is parser evidence; the 9099 page import and official qualification
+are recorded separately.
+
 ### 2026-09-18 - HealthExport time-series Body Index and traceable Pace Fit mapping
 
 This entry supersedes the same-date prototype note below wherever it described

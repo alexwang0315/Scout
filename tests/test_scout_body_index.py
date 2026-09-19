@@ -102,6 +102,25 @@ def _write_export(
         archive.writestr("HealthAutoExport.json", json.dumps({"data": data}))
 
 
+def _write_standalone_auto_export_json(
+    path: Path,
+    *,
+    phases: list[tuple[int, int, str]],
+    workout_id: str = "auto-export-activity",
+) -> None:
+    zip_path = path.with_suffix(".zip")
+    _write_export(
+        zip_path,
+        phases=phases,
+        include_daily_metrics=True,
+        workout_id=workout_id,
+    )
+    with zipfile.ZipFile(zip_path) as archive:
+        payload = archive.read("HealthAutoExport.json")
+    path.write_bytes(payload)
+    zip_path.unlink()
+
+
 def test_body_index_classifies_run_walk_run_stop_and_preserves_gap_as_unknown(tmp_path: Path) -> None:
     path = tmp_path / "export.zip"
     _write_export(
@@ -154,6 +173,39 @@ def test_body_index_classifies_run_walk_run_stop_and_preserves_gap_as_unknown(tm
         cross_check["watch_interval_active_energy_kj_on_comparable_segments"]
         - cross_check["flat_ground_model_active_energy_kj"]
     )
+
+
+def test_body_index_reads_standalone_auto_export_json_and_deduplicates_zip_activity(
+    tmp_path: Path,
+) -> None:
+    json_path = tmp_path / "HealthyAutoExport-2026-01-01.json"
+    _write_standalone_auto_export_json(
+        json_path,
+        phases=[(0, 600, "running")],
+        workout_id="same-auto-export-workout",
+    )
+
+    analysis = build_body_index_source_analysis(json_path)
+    assert analysis["source_format"] == "health_auto_export_json"
+    assert analysis["coverage"]["activity_count"] == 1
+    assert analysis["coverage"]["activity_count_by_mode"]["running"] == 1
+    assert {row["metric_name"] for row in analysis["daily_metric_records"]} == {
+        "active_energy",
+        "basal_energy_burned",
+    }
+
+    duplicate_zip = tmp_path / "same-activity.zip"
+    _write_export(
+        duplicate_zip,
+        phases=[(0, 600, "running")],
+        include_daily_metrics=True,
+        workout_id="same-auto-export-workout",
+    )
+    aggregate = aggregate_body_index_sources(
+        [analysis, build_body_index_source_analysis(duplicate_zip)]
+    )
+    assert aggregate["observations"]["activity_count"] == 1
+    assert aggregate["observations"]["eligible_activity_count"] == 1
 
 
 def test_active_energy_interval_values_are_summed_once_and_kcal_converted(tmp_path: Path) -> None:

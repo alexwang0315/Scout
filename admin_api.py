@@ -7,6 +7,7 @@ import math
 import os
 import secrets
 import sys
+import statistics
 import tempfile
 import threading
 import time
@@ -322,6 +323,22 @@ ROUTE_CONTEXT_INTELLIGENCE_SPEC_REF = (
 )
 DEFAULT_OSM_CARTO_PALETTE = ROOT / "config" / "osm_carto_palette.yaml"
 DEFAULT_BODY_INDEX_SOURCE_DIR = Path.home() / "downloads" / "HealthExport"
+DEFAULT_BODY_INDEX_DOWNLOADS_SOURCE_DIR = Path.home() / "Downloads" / "HealthExport"
+DEFAULT_BODY_INDEX_ICLOUD_DOCUMENTS_DIR = (
+    Path.home()
+    / "Library"
+    / "Mobile Documents"
+    / "iCloud~com~ifunography~HealthExport"
+    / "Documents"
+)
+DEFAULT_BODY_INDEX_ICLOUD_AUTO_EXPORT_DIR = (
+    DEFAULT_BODY_INDEX_ICLOUD_DOCUMENTS_DIR / "Healthy export automation"
+)
+_BODY_INDEX_AUTO_EXPORT_DIR_NAMES = (
+    "Healthy export automation",
+    "Auto Export",
+    "AutoExport",
+)
 DEFAULT_DASHBOARD_BODY_INDEX_STORE_ROOT = ROOT / "outputs" / "dashboard" / "body_index"
 DEFAULT_EMERGENCY_MOBILE_SANDBOX_STORE_ROOT = (
     ROOT / "outputs" / "dashboard" / "living"
@@ -435,14 +452,90 @@ def _dashboard_body_index_store_path(project_id: str) -> Path:
 
 
 def _dashboard_body_index_source_dir(source_dir: str | None) -> Path:
+    roots = _dashboard_body_index_source_dirs(source_dir)
+    return roots[0]
+
+
+def _dashboard_body_index_source_dirs(source_dir: str | None) -> list[Path]:
+    """Return local HealthExport roots without exposing them in snapshots.
+
+    A default import intentionally considers both the existing Downloads
+    export and the iCloud Documents export.  An explicit ``source_dir`` stays
+    scoped to that directory (or its named Auto Export child).
+    """
     if source_dir:
-        return Path(source_dir).expanduser()
-    if DEFAULT_BODY_INDEX_SOURCE_DIR.exists():
-        return DEFAULT_BODY_INDEX_SOURCE_DIR
-    downloads_candidate = Path.home() / "Downloads" / "HealthExport"
-    if downloads_candidate.exists():
-        return downloads_candidate
-    return DEFAULT_BODY_INDEX_SOURCE_DIR
+        return [Path(source_dir).expanduser()]
+    candidates = [
+        DEFAULT_BODY_INDEX_SOURCE_DIR,
+        DEFAULT_BODY_INDEX_DOWNLOADS_SOURCE_DIR,
+        DEFAULT_BODY_INDEX_ICLOUD_DOCUMENTS_DIR,
+    ]
+    roots: list[Path] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        if not candidate.exists() or not candidate.is_dir():
+            continue
+        resolved = str(candidate.resolve())
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        roots.append(candidate)
+    return roots or [DEFAULT_BODY_INDEX_SOURCE_DIR]
+
+
+def _dashboard_body_index_source_candidate_dirs(
+    root: Path,
+    *,
+    explicit_root: bool,
+) -> list[Path]:
+    """Find direct ZIP/JSON roots while excluding iCloud config JSON files."""
+    root = root.expanduser()
+    if not root.exists() or not root.is_dir():
+        return []
+    is_icloud_documents = root.resolve() == DEFAULT_BODY_INDEX_ICLOUD_DOCUMENTS_DIR.resolve()
+    candidates: list[Path] = []
+    if not is_icloud_documents:
+        direct_sources = [
+            item
+            for item in root.iterdir()
+            if item.is_file() and item.suffix.lower() in {".zip", ".json"}
+        ]
+        if direct_sources or explicit_root:
+            candidates.append(root)
+    for name in _BODY_INDEX_AUTO_EXPORT_DIR_NAMES:
+        child = root / name
+        if child.is_dir():
+            candidates.append(child)
+    result: list[Path] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        resolved = str(candidate.resolve())
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        result.append(candidate)
+    return result
+
+
+def _dashboard_body_index_source_paths(source_dir: str | None) -> list[Path]:
+    roots = _dashboard_body_index_source_dirs(source_dir)
+    paths: list[Path] = []
+    seen_paths: set[str] = set()
+    explicit_root = source_dir is not None
+    for root in roots:
+        for candidate_dir in _dashboard_body_index_source_candidate_dirs(
+            root,
+            explicit_root=explicit_root,
+        ):
+            for path in sorted(candidate_dir.iterdir(), key=lambda item: item.name):
+                if not path.is_file() or path.suffix.lower() not in {".zip", ".json"}:
+                    continue
+                resolved = str(path.resolve())
+                if resolved in seen_paths:
+                    continue
+                seen_paths.add(resolved)
+                paths.append(path)
+    return paths
 
 
 def _dashboard_body_index_boundary() -> dict[str, Any]:
@@ -613,6 +706,7 @@ def _dashboard_body_index_default_snapshot(project_id: str) -> dict[str, Any]:
         "pressure_timeline": [],
         "provider_metrics": [],
         "provider_metric_summaries": [],
+        "source_formats": [],
         "source_index": [],
         "import_result": {
             "new_source_count": 0,
@@ -643,6 +737,16 @@ def _load_dashboard_body_index_snapshot(project_id: str) -> dict[str, Any]:
             for source in sources
             if isinstance(source, dict) and source.get("sha256")
         ]
+    data.setdefault(
+        "source_formats",
+        sorted(
+            {
+                str(source.get("source_format"))
+                for source in data.get("source_index", [])
+                if isinstance(source, dict) and source.get("source_format")
+            }
+        ),
+    )
     if isinstance(data.get("summary"), dict):
         data["summary"] = _dashboard_body_index_enrich_summary(data["summary"])
     data.setdefault("body_index", aggregate_body_index_sources([]))
@@ -658,6 +762,7 @@ def _dashboard_body_index_sanitize_source_entry(source: dict[str, Any]) -> dict[
         "source_id",
         "source_label",
         "sha256",
+        "source_format",
         "gpx_count",
         "walking_sessions",
         "analysis_windows",
@@ -703,6 +808,42 @@ def _dashboard_body_index_provider_metric_summary(metric: Any) -> dict[str, Any]
         "source_value_only": payload.get("source_value_only", True),
         "scout_truth": payload.get("scout_truth", False),
     }
+
+
+def _dashboard_body_index_metric_summaries_from_analysis(
+    body_index_analysis: Mapping[str, Any],
+) -> list[dict[str, Any]]:
+    """Summarize only explicit daily metric rows from a JSON source.
+
+    Workout ``basalEnergy`` samples are activity-local estimates, not a full
+    day's static energy total, so they intentionally do not enter this
+    provider summary.  A standalone Auto Export JSON may still carry a
+    top-level ``metrics`` array, which the Body Index parser records here.
+    """
+    buckets: dict[str, list[float]] = {}
+    for row in body_index_analysis.get("daily_metric_records", []):
+        if not isinstance(row, Mapping) or row.get("status") != "available":
+            continue
+        name = str(row.get("metric_name") or "")
+        value = row.get("value_kj")
+        if not name or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+            continue
+        buckets.setdefault(name, []).append(float(value))
+    summaries: list[dict[str, Any]] = []
+    for name, values in sorted(buckets.items()):
+        summaries.append(
+            {
+                "metric_name": name,
+                "sample_count": len(values),
+                "min_value": round(min(values), 3),
+                "mean_value": round(statistics.mean(values), 3),
+                "median_value": round(statistics.median(values), 3),
+                "max_value": round(max(values), 3),
+                "source_value_only": True,
+                "scout_truth": False,
+            }
+        )
+    return summaries
 
 
 def _dashboard_body_index_provider_metric_summaries_by_name(
@@ -873,7 +1014,7 @@ def _dashboard_body_index_window_trend(
     }
 
 
-def _dashboard_body_index_source_from_zip(
+def _dashboard_body_index_source_from_path(
     path: Path,
     imported_at: str,
     *,
@@ -885,36 +1026,92 @@ def _dashboard_body_index_source_from_zip(
         body_mass_kg=body_mass_kg,
         source_sha256=source_sha,
     )
-    analysis = build_health_auto_export_physio_analysis(path, activity_type="walking")
-    provider_metric_names = sorted(
-        metric.metric_name for metric in analysis.provider_metric_summaries
-    )
-    provider_metric_summaries = [
-        _dashboard_body_index_provider_metric_summary(metric)
-        for metric in analysis.provider_metric_summaries
-    ]
+    analysis_windows = 0
+    hr_pressure_windows = 0
+    recovery_debt_windows = 0
+    total_distance_km = 0.0
+    total_duration_min = 0.0
+    if path.suffix.lower() == ".zip":
+        analysis = build_health_auto_export_physio_analysis(path, activity_type="walking")
+        analysis_windows = analysis.overall.total_windows
+        hr_pressure_windows = analysis.overall.total_hr_pressure_windows
+        recovery_debt_windows = analysis.overall.total_recovery_debt_candidate_windows
+        total_distance_km = analysis.overall.total_distance_km
+        total_duration_min = analysis.overall.total_duration_min
+        provider_metric_names = sorted(
+            metric.metric_name for metric in analysis.provider_metric_summaries
+        )
+        provider_metric_summaries = [
+            _dashboard_body_index_provider_metric_summary(metric)
+            for metric in analysis.provider_metric_summaries
+        ]
+    else:
+        provider_metric_summaries = _dashboard_body_index_metric_summaries_from_analysis(
+            body_index_analysis
+        )
+        provider_metric_names = sorted(
+            str(metric.get("metric_name"))
+            for metric in provider_metric_summaries
+            if metric.get("metric_name")
+        )
+        activities = body_index_analysis.get("activities", [])
+        total_distance_km = round(
+            sum(
+                float(activity.get("distance_km") or 0.0)
+                for activity in activities
+                if isinstance(activity, Mapping)
+            ),
+            2,
+        )
+        total_duration_min = round(
+            sum(
+                float(activity.get("duration_s") or 0.0)
+                for activity in activities
+                if isinstance(activity, Mapping)
+            )
+            / 60.0,
+            1,
+        )
     return {
         "source_id": source_sha[:16],
         "source_label": f"HealthExport source {source_sha[:8]}",
         "sha256": source_sha,
-        "gpx_count": _dashboard_body_index_zip_gpx_count(path),
+        "source_format": str(
+            body_index_analysis.get("source_format")
+            or ("health_auto_export_json" if path.suffix.lower() == ".json" else "health_export_zip")
+        ),
+        "gpx_count": _dashboard_body_index_zip_gpx_count(path)
+        if path.suffix.lower() == ".zip"
+        else 0,
         "walking_sessions": int(
             (body_index_analysis.get("coverage") or {})
             .get("activity_count_by_mode", {})
             .get("walking", 0)
         ),
-        "analysis_windows": analysis.overall.total_windows,
-        "hr_pressure_windows": analysis.overall.total_hr_pressure_windows,
-        "recovery_debt_windows": (
-            analysis.overall.total_recovery_debt_candidate_windows
-        ),
-        "total_distance_km": analysis.overall.total_distance_km,
-        "total_duration_min": analysis.overall.total_duration_min,
+        "analysis_windows": analysis_windows,
+        "hr_pressure_windows": hr_pressure_windows,
+        "recovery_debt_windows": recovery_debt_windows,
+        "total_distance_km": total_distance_km,
+        "total_duration_min": total_duration_min,
         "provider_metric_names": provider_metric_names,
         "provider_metric_summaries": provider_metric_summaries,
         "body_index_analysis": body_index_analysis,
         "imported_at": imported_at,
     }
+
+
+def _dashboard_body_index_source_from_zip(
+    path: Path,
+    imported_at: str,
+    *,
+    body_mass_kg: float = DEFAULT_BODY_MASS_KG,
+) -> dict[str, Any]:
+    """Compatibility wrapper for callers that still name the ZIP path."""
+    return _dashboard_body_index_source_from_path(
+        path,
+        imported_at,
+        body_mass_kg=body_mass_kg,
+    )
 
 
 def _dashboard_body_index_int(source: dict[str, Any], key: str) -> int:
@@ -1144,6 +1341,13 @@ def _dashboard_body_index_snapshot_from_sources(
     provider_metric_summaries = [
         metrics_by_name[name] for name in sorted(metrics_by_name)
     ]
+    source_formats = sorted(
+        {
+            str(source.get("source_format"))
+            for source in sources
+            if source.get("source_format")
+        }
+    )
     total_exports = len(sources)
     total_sessions = sum(
         _dashboard_body_index_int(source, "walking_sessions") for source in sources
@@ -1204,7 +1408,11 @@ def _dashboard_body_index_snapshot_from_sources(
         "source_provider": "local_health_export",
         "summary": summary,
         "coverage_cards": [
-            ["Health exports", str(total_exports), "deduped local zip files"],
+            [
+                "Health exports",
+                str(total_exports),
+                "deduped local ZIP and Auto Export JSON sources",
+            ],
             [
                 "Walking sessions",
                 str(total_sessions),
@@ -1248,6 +1456,7 @@ def _dashboard_body_index_snapshot_from_sources(
         "pressure_timeline": _dashboard_body_index_pressure_timeline(sources),
         "provider_metrics": provider_metrics,
         "provider_metric_summaries": provider_metric_summaries,
+        "source_formats": source_formats,
         "body_index": body_index,
         "source_index": [
             _dashboard_body_index_sanitize_source_entry(source)
@@ -1267,16 +1476,20 @@ def _import_dashboard_body_index(
     request: DashboardBodyIndexImportRequest,
 ) -> dict[str, Any]:
     source_dir = _dashboard_body_index_source_dir(request.source_dir)
-    if not source_dir.exists() or not source_dir.is_dir():
+    source_roots = _dashboard_body_index_source_dirs(request.source_dir)
+    if not any(root.exists() and root.is_dir() for root in source_roots):
         raise HTTPException(
             status_code=404,
             detail=f"HealthExport source directory not found: {source_dir}",
         )
-    zip_paths = sorted(source_dir.glob("*.zip"))
-    if not zip_paths:
+    source_paths = _dashboard_body_index_source_paths(request.source_dir)
+    if not source_paths:
         raise HTTPException(
             status_code=404,
-            detail=f"No HealthExport zip files found in {source_dir}",
+            detail=(
+                "No supported HealthExport ZIP or Auto Export JSON sources found "
+                f"in {source_dir}"
+            ),
         )
 
     current_snapshot = _load_dashboard_body_index_snapshot(request.project_id)
@@ -1293,13 +1506,14 @@ def _import_dashboard_body_index(
     duplicate_source_count = 0
     imported_at = datetime.now(timezone.utc).isoformat()
 
-    for source_index, zip_path in enumerate(zip_paths, start=1):
+    for source_index, source_path in enumerate(source_paths, start=1):
+        source_kind = "JSON" if source_path.suffix.lower() == ".json" else "ZIP"
         try:
-            source_sha = sha256_file(zip_path)
+            source_sha = sha256_file(source_path)
         except OSError as exc:
             import_errors.append(
                 {
-                    "source_candidate": f"HealthExport zip {source_index}",
+                    "source_candidate": f"HealthExport {source_kind} source {source_index}",
                     "error_type": type(exc).__name__,
                     "error": str(exc),
                 }
@@ -1335,6 +1549,7 @@ def _import_dashboard_body_index(
                     )
                     or not isinstance(existing_source.get("body_index_analysis"), dict)
                     or body_mass_changed
+                    or not existing_source.get("source_format")
                     or any(
                         isinstance(summary, dict)
                         and summary.get("mean_value") is None
@@ -1344,8 +1559,8 @@ def _import_dashboard_body_index(
             )
             if needs_summary_refresh:
                 try:
-                    current_by_sha[source_sha] = _dashboard_body_index_source_from_zip(
-                        zip_path,
+                    current_by_sha[source_sha] = _dashboard_body_index_source_from_path(
+                        source_path,
                         str(existing_source.get("imported_at") or imported_at),
                         body_mass_kg=request.body_mass_kg,
                     )
@@ -1359,8 +1574,8 @@ def _import_dashboard_body_index(
                     )
             continue
         try:
-            source = _dashboard_body_index_source_from_zip(
-                zip_path,
+            source = _dashboard_body_index_source_from_path(
+                source_path,
                 imported_at,
                 body_mass_kg=request.body_mass_kg,
             )
@@ -1433,6 +1648,7 @@ class _DashboardBodyIndexDirectoryWatcher:
             "last_scan_at": None,
             "last_import_at": None,
             "last_seen_zip_count": 0,
+            "last_seen_json_count": 0,
             "last_known_source_count": 0,
             "last_new_candidate_count": 0,
             "last_result": None,
@@ -1480,10 +1696,10 @@ class _DashboardBodyIndexDirectoryWatcher:
         try:
             if not self.source_dir.exists() or not self.source_dir.is_dir():
                 raise FileNotFoundError(f"HealthExport source directory not found: {self.source_dir}")
-            zip_paths = sorted(self.source_dir.glob("*.zip"))
+            source_paths = _dashboard_body_index_source_paths(str(self.source_dir))
             current_shas: set[str] = set()
-            for zip_path in zip_paths:
-                current_shas.add(sha256_file(zip_path))
+            for source_path in source_paths:
+                current_shas.add(sha256_file(source_path))
             snapshot = _load_dashboard_body_index_snapshot(self.project_id)
             known_shas = {
                 str(source.get("sha256"))
@@ -1494,7 +1710,12 @@ class _DashboardBodyIndexDirectoryWatcher:
             scan_update = {
                 "scan_count": int(self.status().get("scan_count") or 0) + 1,
                 "last_scan_at": scanned_at,
-                "last_seen_zip_count": len(zip_paths),
+                "last_seen_zip_count": sum(
+                    path.suffix.lower() == ".zip" for path in source_paths
+                ),
+                "last_seen_json_count": sum(
+                    path.suffix.lower() == ".json" for path in source_paths
+                ),
                 "last_known_source_count": len(known_shas),
                 "last_new_candidate_count": len(new_shas),
                 "last_error": None,
@@ -1534,7 +1755,7 @@ class _DashboardBodyIndexDirectoryWatcher:
                     "duplicate_source_count": 0,
                     "error_count": 0,
                     "processed_source_count": len(known_shas),
-                    "message": "no new zip sha detected",
+                    "message": "no new supported source sha detected",
                 }
             self._update_status(scan_update)
         except Exception as exc:  # noqa: BLE001 - monitor must keep running after scan errors.

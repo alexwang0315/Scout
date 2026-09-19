@@ -158,16 +158,35 @@ def _scalar(value: Any) -> tuple[float, str] | None:
     return number, str(value.get("units") or "")
 
 
+def _json_payload(raw: Any) -> dict[str, Any] | None:
+    if not isinstance(raw, Mapping):
+        return None
+    data = raw.get("data", raw)
+    return dict(data) if isinstance(data, Mapping) else None
+
+
 def _json_members(path: Path) -> list[dict[str, Any]]:
+    """Read a standard HealthExport ZIP or one Auto Export JSON file.
+
+    The iCloud Auto Export directory contains standalone JSON documents with
+    the same ``{"data": ...}`` envelope used inside HealthExport ZIPs.  Keep
+    the decoder deliberately narrow: compressed ``.hae`` AutoSync records and
+    automation configuration files are not this source contract and are
+    filtered by the dashboard importer before reaching this function.
+    """
+    if path.suffix.lower() == ".json":
+        return [
+            payload
+            for payload in [_json_payload(json.loads(path.read_text(encoding="utf-8")))]
+            if payload is not None
+        ]
     with zipfile.ZipFile(path) as archive:
         members = [name for name in archive.namelist() if name.lower().endswith(".json")]
         payloads: list[dict[str, Any]] = []
         for name in members:
-            raw = json.loads(archive.read(name).decode("utf-8"))
-            if isinstance(raw, Mapping):
-                data = raw.get("data", raw)
-                if isinstance(data, Mapping):
-                    payloads.append(dict(data))
+            payload = _json_payload(json.loads(archive.read(name).decode("utf-8")))
+            if payload is not None:
+                payloads.append(payload)
         return payloads
 
 
@@ -609,6 +628,10 @@ def _activity_analysis(workout: Mapping[str, Any], body_mass_kg: float) -> dict[
             "activity_kind": kind,
             "date": _local_date(start),
             "duration_s": _round(duration, 1),
+            "distance_km": _round(
+                sum(item.value for item in distance_intervals) / 1000.0,
+                5,
+            ),
             "active_energy_kj": _round(energy_total_kj, 5),
             "active_energy_kcal": _round(energy_total_kj / KJ_PER_KCAL, 5),
             "active_energy_coverage_s": _round(energy_coverage_seconds, 1),
@@ -900,6 +923,10 @@ def _activity_analysis(workout: Mapping[str, Any], body_mass_kg: float) -> dict[
         "activity_kind": kind,
         "date": _local_date(start),
         "duration_s": _round(duration, 1),
+        "distance_km": _round(
+            sum(item.value for item in distance_intervals) / 1000.0,
+            5,
+        ),
         "active_energy_kj": _round(energy_total_kj, 5),
         "active_energy_kcal": _round(energy_total_kj / KJ_PER_KCAL, 5),
         "active_energy_coverage_s": _round(energy_coverage_seconds, 1),
@@ -1107,7 +1134,7 @@ def build_body_index_source_analysis(
     body_mass_kg: float = DEFAULT_BODY_MASS_KG,
     source_sha256: str | None = None,
 ) -> dict[str, Any]:
-    """Parse one local HealthExport ZIP into sanitized, mergeable evidence."""
+    """Parse one local HealthExport ZIP or Auto Export JSON into evidence."""
     path = Path(path)
     mass = _safe_body_mass(body_mass_kg)
     payloads = _json_members(path)
@@ -1138,6 +1165,11 @@ def build_body_index_source_analysis(
     dates = [activity["date"] for activity in activity_records] + [row["date"] for row in metric_records]
     return {
         "schema_version": SCHEMA_VERSION,
+        "source_format": (
+            "health_auto_export_json"
+            if path.suffix.lower() == ".json"
+            else "health_export_zip"
+        ),
         "source_ref": source_sha[:16],
         "source_sha256": source_sha,
         "body_mass_kg": mass,

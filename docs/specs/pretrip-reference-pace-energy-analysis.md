@@ -108,7 +108,15 @@ scenario uses a configurable 70 kg body mass (`user_assumption`), grade 0°,
 zero load, and light clothing. These are model conditions and do not prove that
 historical activities were flat, unloaded, or performed in light clothing.
 
-The local HealthExport time-series contract is:
+The local HealthExport time-series contract accepts both HealthExport ZIP
+archives and standalone iCloud Auto Export JSON documents with the standard
+`data.workouts` envelope. AutoSync `.hae` records are a different compressed
+format and remain outside this contract until a separately validated decoder
+exists. Source provenance is retained as a SHA and source format, while raw
+filenames, routes, coordinates, and exact timestamps stay out of the
+Dashboard response.
+
+The energy calculation is:
 
 ```text
 activity_energy_kcal = sum(distinct interval activeEnergy_kJ) / 4.184
@@ -116,9 +124,12 @@ activity_energy_rate_W = sum(distinct interval activeEnergy_kJ) * 1000 / covered
 ```
 
 Interval energy is summed once and is never multiplied by interval duration a
-second time. Duplicate ZIPs, daily summaries, and activity details are
-deduplicated before aggregation. The resulting W is a provider-estimated
-active-energy rate, not external mechanical power.
+second time. Duplicate ZIPs, standalone JSON exports, daily summaries, and
+activity details are deduplicated before aggregation. Workout-local
+`basalEnergy` samples are not daily static-energy totals; a static or total
+daily result is emitted only when an explicit daily metric covers that date.
+The resulting W is a provider-estimated active-energy rate, not external
+mechanical power.
 
 Activity mode is inferred from speed/time and cadence/time, with heart rate as
 auxiliary evidence. Smoothing, minimum segment duration, and transition

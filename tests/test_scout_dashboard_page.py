@@ -974,6 +974,62 @@ def test_scout_dashboard_body_index_watch_imports_new_zip(
         assert stop_response.json()["running"] is False
 
 
+def test_scout_dashboard_body_index_default_import_merges_downloads_and_icloud_json(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    downloads_dir = tmp_path / "downloads" / "HealthExport"
+    icloud_documents = tmp_path / "icloud" / "Documents"
+    icloud_export_dir = icloud_documents / "Healthy export automation"
+    downloads_dir.mkdir(parents=True)
+    icloud_export_dir.mkdir(parents=True)
+    zip_path = _write_body_index_health_export_zip(
+        downloads_dir / "HealthAutoExport-combined.zip",
+        day="2026-06-02",
+        workout_id="same-health-export-workout",
+        hour=8,
+    )
+    with zipfile.ZipFile(zip_path) as archive:
+        standalone_json = archive.read("HealthAutoExport-body-index.json")
+    (icloud_export_dir / "HealthyAutoExport-2026-06-02.json").write_bytes(standalone_json)
+    monkeypatch.setattr(admin_api, "DEFAULT_BODY_INDEX_SOURCE_DIR", downloads_dir)
+    monkeypatch.setattr(
+        admin_api,
+        "DEFAULT_BODY_INDEX_DOWNLOADS_SOURCE_DIR",
+        tmp_path / "capitalized-downloads" / "HealthExport",
+    )
+    monkeypatch.setattr(admin_api, "DEFAULT_BODY_INDEX_ICLOUD_DOCUMENTS_DIR", icloud_documents)
+    monkeypatch.setattr(
+        admin_api,
+        "DEFAULT_DASHBOARD_BODY_INDEX_STORE_ROOT",
+        tmp_path / "combined_store",
+    )
+    client = TestClient(create_admin_app())
+
+    response = client.post(
+        "/admin/dashboard/body-index/import",
+        json={"project_id": "combined_body_index", "confirm_import": True},
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["import_result"]["new_source_count"] == 2
+    assert payload["import_result"]["processed_source_count"] == 2
+    assert payload["source_formats"] == ["health_auto_export_json", "health_export_zip"]
+    assert payload["body_index"]["observations"]["activity_count"] == 1
+    assert payload["body_index"]["observations"]["eligible_activity_count"] == 1
+    assert payload["body_index"]["body_mass_kg"] == 70.0
+    assert payload["body_index"]["body_mass_basis"] == "user_assumption"
+    assert {source["source_format"] for source in payload["source_index"]} == {
+        "health_auto_export_json",
+        "health_export_zip",
+    }
+    serialized = json.dumps(payload, ensure_ascii=False)
+    assert "latitude" not in serialized
+    assert "longitude" not in serialized
+    assert "HealthAutoExport-body-index.json" not in serialized
+
+
 def test_scout_dashboard_serves_pace_fit_emergency_desktop_approval_ui() -> None:
     client = TestClient(create_admin_app())
 
