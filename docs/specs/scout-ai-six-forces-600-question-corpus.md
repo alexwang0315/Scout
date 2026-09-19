@@ -30,6 +30,365 @@ For factual or contextual questions, Scout should answer from attributable
 route/workspace evidence and distinguish confirmed facts, candidates, stale
 evidence, and unknowns. Missing evidence is not permission to invent an answer.
 
+The answer contract is unchanged when Jev is introduced. Jev does not replace
+the user's natural-language question with a multiple-choice question. It adds a
+separate, internal decision layer used to compile a bounded evidence trajectory.
+
+## Jev Decision Annotation Layer
+
+The 600 questions remain the user-facing question corpus. Each executable eval
+case may additionally carry a versioned `JevDecisionAnnotation`. The annotation
+describes what Scout must know before selecting a tool or deciding whether to
+escalate; it is not a rewritten user question and it is not the final answer.
+
+```text
+natural-language question
+  -> QuestionContractCompiler
+       - deterministic defaults from force, subsection, and scenario
+       - bounded Jev decision questions for ambiguous or compound cases
+  -> candidate Jev decision
+  -> deterministic contract / policy merge
+  -> workspace, database, or GIS evidence
+  -> MSER sufficiency certificate
+  -> final Scout answer contract
+```
+
+Jev annotations are candidate-only. They must include:
+
+```text
+candidate_only=true
+runtime_safety_truth=false
+```
+
+Jev may suggest an additional evidence dimension, but it may not remove a
+dimension required by the deterministic contract compiler. It may not select an
+arbitrary file path, SQL statement, GIS parameter, permission change, safety
+state, notification, or hardware action.
+
+### Annotation schema
+
+Every `EXP-001` through `NAV-100` question should eventually have one annotation
+record. The question text and its hash remain unchanged; the annotation is an
+additive sidecar or generated field.
+
+```text
+JevDecisionAnnotation
+  schema_version
+  question_id
+  force_code
+  subsection
+  question_text_sha256
+  answer_mode                  # factual_context | decision | compound
+  primary_question_class       # bounded choice
+  required_dimensions[]        # deterministic evidence contract
+  artifact_scope[]             # bounded artifact families
+  criticality                  # informational | operational | safety_sensitive | authority_sensitive
+  time_scope                   # historical | static_workspace | scenario_time | current_live | unknown
+  freshness_requirement        # none | workspace_revision | scenario_replay | live_required
+  allowed_tool_families[]      # server-owned capabilities, not paths
+  denied_tool_families[]
+  hard_gates[]                 # stale, conflict, authority, provenance, etc.
+  jev_question_profile
+  gold_decision_expectation
+    preferred_disposition
+    acceptable_dispositions[]
+    forbidden_dispositions[]
+  expected_answer_elements[]
+  candidate_only=true
+  runtime_safety_truth=false
+```
+
+The `gold_decision_expectation` is maintained by the corpus owner and
+deterministic evidence contract. It must never be generated from Jev's answer.
+For safety-sensitive cases, the gold record must also state the forbidden
+automatic dispositions.
+
+### Fixed Jev option registry
+
+The QuestionContractCompiler generates Jev questions from a single option
+registry, for example `scout.jev_option_registry.v1`. Individual questions may
+use a deterministic subset of the registry, but may not invent incompatible
+labels. Every registry version must have a stable hash recorded in benchmark
+artifacts.
+
+#### Primary artifact family
+
+```text
+route
+checkpoint
+terrain
+weather
+position
+pace
+team
+permission
+safety
+contextual_research
+multi_artifact
+unknown
+```
+
+`multi_artifact` is allowed as a high-level choice, but the compiler should
+still record the expected artifact set in `artifact_scope`. Jev must not choose
+an absolute workspace path or an unregistered artifact name.
+
+#### Primary question class
+
+```text
+static_fact
+aggregate
+spatial
+cross_artifact_join
+contextual_research
+compound_decision
+live_freshness
+unsupported
+ambiguous
+```
+
+The four core query classes remain `static_fact`, `aggregate`, `spatial`, and
+`cross_artifact_join`. `contextual_research` and `compound_decision` are added
+because the EXP and six-forces decision questions cannot be represented safely
+by those four classes alone.
+
+Composite questions must not be forced into one mutually exclusive label. Use
+one primary class plus bounded `noul` dimensions such as:
+
+```text
+requires_aggregation
+requires_spatial_evidence
+requires_cross_artifact_join
+requires_freshness
+requires_research
+requires_route_intersection
+```
+
+The deterministic compiler derives the final execution profile from these
+signals.
+
+#### Evidence state
+
+```text
+complete
+missing
+stale
+conflicted
+irrelevant
+unknown
+```
+
+Jev may classify a candidate evidence state, but exact freshness, provenance,
+and numeric contradiction remain deterministic checks.
+
+#### Tool family
+
+```text
+database_read
+workspace_query
+gis_spatial
+freshness_refresh
+praisonai_information_need
+max_reasoning
+human_review
+unknown
+```
+
+These are capability families. The server maps them to registered tools. Jev
+does not receive or emit arbitrary SQL, paths, shell commands, or GIS payloads.
+
+#### Next action / disposition
+
+```text
+deterministic_query
+answer_with_evidence
+collect_more_evidence
+refresh_required
+preserve_conflict
+praisonai_information_need
+max_reasoning
+human_review
+unknown
+```
+
+`answer_with_evidence` is only a candidate disposition. Automatic handling
+requires all of the following:
+
+```text
+Jev confidence is calibrated above the eligible threshold
+AND MSER = SUFFICIENT
+AND no hard stale/conflict/provenance gate is active
+AND deterministic verifier and authority policy pass
+```
+
+For a safety-sensitive or authority-sensitive question, Jev disagreement is
+resolved conservatively. If Jev says `collect_more_evidence` but deterministic
+MSER says `SUFFICIENT`, the result is recorded as an over-escalation; it may
+continue to low-risk synthesis, but it cannot bypass a safety hard gate.
+
+### Jev question types
+
+The internal Jev bundle should use the smallest suitable typed questions:
+
+| Jev type | Use | Rule |
+|---|---|---|
+| `choice` | artifact, primary class, tool family, next action | Mutually exclusive bounded IDs with descriptions. Always include `unknown` or `ambiguous` when guessing is possible. |
+| `noul` | required dimension, freshness need, spatial need, join need, possible conflict | Must include explicit true/false criteria. |
+| `score` | relevance, completeness, semantic contradiction risk | Use a fixed rubric such as 0–3; scores are routing signals, not evidence truth. |
+
+Do not ask Jev one broad question such as “is the evidence sufficient?”. Use
+several narrow signals and let MSER produce the authoritative
+`SufficiencyCertificate`. The OpenRouter Decisions adapter must preserve the
+explicit true/false criteria required by `noul` questions.
+
+### Six-forces default annotation profiles
+
+These are deterministic defaults, not hardcoded answers. A particular question
+may add dimensions or tighten its hard gates, but may not silently remove a
+force's safety requirements.
+
+| Force | Typical artifact scope | Common classes | Default required dimensions | Usual Jev route |
+|---|---|---|---|---|
+| 探索力 `EXP` | route, terrain, contextual research, multi-artifact | `static_fact`, `contextual_research`, `cross_artifact_join` | route identity, source provenance, historical/cultural/ecological evidence, time scope | `workspace_query` or `praisonai_information_need` |
+| 自信力 `RPF` | pace, position, route, team, weather | `aggregate`, `spatial`, `cross_artifact_join`, `compound_decision` | pace baseline, route progress, time/distance, daylight, team state, freshness | `workspace_query`, `gis_spatial`, or escalation |
+| 勇氣力 `PER` | position, route, weather, terrain, permission, safety | `compound_decision`, `spatial`, `cross_artifact_join` | current position, time window, terrain consequence, weather, authority boundary, exit options | deterministic policy first; `human_review` for authority-sensitive cases |
+| 路線力 `RTE` | route, checkpoint, retreat, supply, time window | `static_fact`, `aggregate`, `spatial`, `cross_artifact_join` | route graph, CP/segment identity, retreat links, supplies, time constraints | `workspace_query` or `gis_spatial` |
+| 天氣力 `WTH` | weather, route, terrain, position | `live_freshness`, `spatial`, `cross_artifact_join`, `compound_decision` | valid time, freshness, route intersection, warning/QPF/observation distinction, terrain consequence | `freshness_refresh`, `gis_spatial`, then policy/escalation |
+| 地圖力 `NAV` | position, route/GPX, terrain, offline map, retreat | `spatial`, `cross_artifact_join`, `compound_decision` | position quality, route progress, heading, route match, terrain exposure, retreat capability | `gis_spatial`, `workspace_query`, or human review |
+
+These profiles preserve the distinction between evidence acquisition and
+decision authority. In particular, Jev can identify that a `PER`, `WTH`, or
+`NAV` case needs escalation, but it cannot grant permission or declare a route
+safe.
+
+### Representative annotations
+
+The original natural-language questions remain unchanged.
+
+#### RTE-021 — simple aggregate
+
+> 這條路線目前有多少個主要 CP？
+
+```text
+answer_mode: factual_context
+primary_question_class: aggregate
+artifact_scope: [route, checkpoint]
+required_dimensions: [route_identity, checkpoint_candidates]
+criticality: informational
+allowed_tool_families: [workspace_query]
+gold_decision_expectation:
+  preferred_disposition: deterministic_query
+  acceptable_dispositions: [deterministic_query]
+  forbidden_dispositions: [praisonai_information_need, max_reasoning]
+```
+
+The Jev bundle may contain `artifact_family`, `requires_aggregation`,
+`evidence_completeness`, and `next_action`. It must not ask Jev to calculate the
+checkpoint count.
+
+#### EXP-016 — contextual research
+
+> 沿途有沒有古道、警備道或舊產業道路？
+
+```text
+answer_mode: factual_context
+primary_question_class: contextual_research
+artifact_scope: [route, contextual_research]
+required_dimensions: [route_identity, source_provenance, historical_evidence]
+criticality: informational
+allowed_tool_families: [workspace_query, praisonai_information_need]
+gold_decision_expectation:
+  preferred_disposition: praisonai_information_need
+  acceptable_dispositions: [workspace_query, praisonai_information_need]
+  forbidden_dispositions: [answer_with_evidence]  # when no attributable historical source is present
+```
+
+Jev selects whether the workspace has a relevant artifact and whether research
+is needed. It does not invent historical claims from an empty catalog.
+
+#### NAV-100 — compound navigation decision
+
+> 請用位置精度、GPX、地形、方向和撤退能力給我一個導航決策。
+
+```text
+answer_mode: compound
+primary_question_class: compound_decision
+artifact_scope: [position, route, terrain, safety]
+required_dimensions:
+  - position_quality
+  - route_match
+  - heading_or_travel_direction
+  - terrain_consequence
+  - retreat_capability
+criticality: safety_sensitive
+allowed_tool_families: [workspace_query, gis_spatial, human_review]
+hard_gates: [position_uncertainty, route_conflict, missing_retreat_evidence]
+gold_decision_expectation:
+  preferred_disposition: human_review
+  acceptable_dispositions: [human_review, preserve_conflict, collect_more_evidence]
+  forbidden_dispositions: [answer_with_evidence]
+```
+
+Jev may choose `gis_spatial` or `human_review`, but deterministic navigation
+and safety policy decides whether the final answer can recommend movement.
+
+### Corpus generation and evaluation rules
+
+The annotation layer must be generated from the existing question IDs and
+subsections, not by changing the question text into option prompts. The
+QuestionContractCompiler should:
+
+1. preserve `question_id`, `question_text`, `force_code`, and subsection;
+2. apply the force default profile;
+3. add scenario-specific dimensions from the Eval Case;
+4. build a compact Jev state from the anonymized workspace catalog;
+5. emit a bounded question bundle from the option registry;
+6. merge Jev suggestions only as additions or escalation signals;
+7. compile the final deterministic contract before any tool execution.
+
+Jev should be evaluated in shadow mode for all 600 questions where practical,
+but it need not be called in the active fast path for every obvious static fact
+or aggregate. Each case must record `jev_called`, `jev_not_called_reason`, or
+`jev_unavailable` so skipped calls are not confused with missing evaluation.
+
+Scoring must be separated into:
+
+- natural-language answer correctness;
+- question-contract classification accuracy;
+- artifact and tool-family selection accuracy;
+- required-dimension recall;
+- evidence-state accuracy;
+- over-escalation and under-escalation;
+- MSER sufficiency correctness;
+- final verifier pass rate;
+- latency and model-request amortization;
+- safety/authority auto-disposition, whose critical error target is zero.
+
+For robustness, the corpus should add paired variants without replacing the
+base questions:
+
+```text
+full evidence      -> missing evidence
+fresh evidence     -> stale evidence
+consistent sources -> conflicted sources
+clear wording      -> ambiguous wording
+single artifact    -> cross-artifact distractor
+Chinese wording    -> English or paraphrased wording
+```
+
+Options should be evaluated with stable IDs and, in a separate robustness
+split, with permuted display order. The gold labels remain hidden from Jev and
+are derived from the evidence contract, not from the model's preferred choice.
+
+The corpus therefore has two distinct artifacts:
+
+```text
+Six-Forces Question Corpus
+  = 600 unchanged natural-language questions
+
+Jev Annotation Manifest
+  = one versioned contract and bounded decision profile per question
+```
+
 ## Distribution
 
 | Force | Scout capability | IDs | Count |
