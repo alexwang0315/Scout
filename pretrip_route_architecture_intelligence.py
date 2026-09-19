@@ -88,6 +88,7 @@ def build_route_architecture_intelligence(
         ),
         source_sha256=str(reference_value.get("sha256") or ""),
         crowd_axis=crowd_axis,
+        pace_speed_correction_inputs=_pace_speed_correction_inputs(normalized_value),
     )
     source_route_distance_m = (
         _number(crowd_axis.get("source_route_distance_m"))
@@ -294,6 +295,11 @@ def build_route_architecture_intelligence(
             "axis_alignment": route_axis_transform,
         },
         "segment_demand_vectors": vectors,
+        "pace_fit_mapping": _pace_fit_mapping_projection(
+            vectors,
+            source_ref=source_ref_values.get("route_architecture")
+            or "normalized/architecture/route_architecture.json",
+        ),
         "checkpoint_passage_timing": checkpoint_passage_timing,
         "historical_return_cost": historical_return_cost,
         "historical_time_windows": historical_time_windows,
@@ -807,6 +813,7 @@ def _demand_vectors(
     source_path: str,
     source_sha256: str,
     crowd_axis: Mapping[str, Any] | None = None,
+    pace_speed_correction_inputs: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     viscosity_values = [_number(item.get("grade_adjusted_viscosity_index")) for item in raw_bins]
     duration_values = [_number(item.get("continuous_moving_minutes_p50")) for item in raw_bins]
@@ -870,8 +877,11 @@ def _demand_vectors(
             100.0,
         )
         quality = str(item.get("data_quality") or "unknown")
+        route_bin_id = str(
+            item.get("route_bin_id") or f"route_architecture.bin.{index:04d}"
+        )
         vector = {
-            "route_bin_id": str(item.get("route_bin_id") or f"route_architecture.bin.{index:04d}"),
+            "route_bin_id": route_bin_id,
             "route_bin_index": int(item.get("route_bin_index", index)),
             "start_distance_m": round(start_m, 3),
             "end_distance_m": round(end_m, 3),
@@ -922,6 +932,24 @@ def _demand_vectors(
             "candidate_only": True,
             "runtime_safety_truth": False,
         }
+        explicit_correction = (pace_speed_correction_inputs or {}).get(route_bin_id)
+        if explicit_correction is not None:
+            vector.update(
+                {
+                    "pace_speed_correction_ratio": explicit_correction[
+                        "pace_speed_correction_ratio"
+                    ],
+                    "pace_speed_correction_basis": explicit_correction[
+                        "pace_speed_correction_basis"
+                    ],
+                    "pace_speed_correction_source_ref": explicit_correction[
+                        "pace_speed_correction_source_ref"
+                    ],
+                    "pace_speed_correction_review_state": explicit_correction[
+                        "pace_speed_correction_review_state"
+                    ],
+                }
+            )
         vectors.append(
             _with_candidate_metadata(
                 vector,
@@ -937,6 +965,69 @@ def _demand_vectors(
             )
         )
     return vectors
+
+
+def _pace_speed_correction_inputs(
+    normalized_route_architecture: Mapping[str, Any],
+) -> dict[str, dict[str, Any]]:
+    """Read only explicit, route-bin keyed Architecture correction inputs.
+
+    Historical ``reference_speed_kmh`` and grade/load demand fields are
+    observations, not an implicit personal speed multiplier.  A correction
+    becomes eligible only when Architecture supplies the named field in its
+    own route-architecture artifact.
+    """
+    raw_vectors = normalized_route_architecture.get("pace_speed_correction_vectors")
+    if not isinstance(raw_vectors, list):
+        return {}
+    result: dict[str, dict[str, Any]] = {}
+    for raw in raw_vectors:
+        if not isinstance(raw, Mapping):
+            continue
+        route_bin_id = str(raw.get("route_bin_id") or "").strip()
+        ratio = _number(raw.get("pace_speed_correction_ratio"))
+        if not route_bin_id or ratio is None or ratio <= 0.0:
+            continue
+        result[route_bin_id] = {
+            "pace_speed_correction_ratio": round(ratio, 6),
+            "pace_speed_correction_basis": str(
+                raw.get("basis")
+                or "explicit Architecture route speed/time correction"
+            ),
+            "pace_speed_correction_source_ref": str(
+                raw.get("source_ref")
+                or "normalized/architecture/route_architecture.json#pace_speed_correction_vectors"
+            ),
+            "pace_speed_correction_review_state": str(
+                raw.get("review_state") or "proposed"
+            ),
+        }
+    return result
+
+
+def _pace_fit_mapping_projection(
+    vectors: Sequence[Mapping[str, Any]],
+    *,
+    source_ref: str,
+) -> dict[str, Any]:
+    explicit_count = sum(
+        1
+        for vector in vectors
+        if (_number(vector.get("pace_speed_correction_ratio")) or 0.0) > 0.0
+    )
+    return {
+        "status": "available" if explicit_count else "unavailable",
+        "explicit_correction_vector_count": explicit_count,
+        "required_field": "pace_speed_correction_ratio",
+        "source_ref": source_ref,
+        "method": (
+            "Architecture explicit route speed/time correction; do not infer "
+            "from reference_speed_kmh, grade, load, or personal energy"
+        ),
+        "slope_load_not_applied_to_personal_energy": True,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
 
 
 def _route_spine_nodes(

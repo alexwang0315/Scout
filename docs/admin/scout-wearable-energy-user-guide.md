@@ -84,6 +84,8 @@ Pace Fit % = 個人預估耗時 ÷ 同一對 CP 的歷史平均耗時 × 100
 
 例如 105% 是比該 CP 對的歷史平均多 5%。活動能量或 W 不能直接換成這個百分比；尚未有可追溯映射時，Pace Fit 仍顯示歷史平均耗時，但個人百分比維持 `unavailable`。
 
+Architecture 只有在 `normalized/architecture/route_architecture.json` 提供以 `route_bin_id` 對齊的 `pace_speed_correction_vectors` 與明確 `pace_speed_correction_ratio` 時，才會讓這條映射進入 Pace Fit；歷史 `reference_speed_kmh`、坡度、負重或 Body Index 能量不會自動變成個人倍率。
+
 ## UI 操作
 
 先啟動 admin server。一般本機 alpha 測試使用固定 port `9099`：

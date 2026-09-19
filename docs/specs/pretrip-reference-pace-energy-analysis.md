@@ -169,6 +169,28 @@ CP average remains visible. No slope or load coefficient is multiplied into
 personal usable energy; those variables remain route-demand inputs owned by
 Architecture.
 
+The Architecture-to-Pace Fit input contract is explicit and route-bin keyed:
+
+```json
+{
+  "pace_speed_correction_vectors": [
+    {
+      "route_bin_id": "reference_pace.bin.0001",
+      "pace_speed_correction_ratio": 0.8,
+      "source_ref": "normalized/architecture/route_architecture.json#pace_speed_correction_vectors",
+      "review_state": "reviewed"
+    }
+  ]
+}
+```
+
+The ratio is a route speed/time correction applied to the Body Index flat
+speed; it is not a Body Index energy multiplier. `reference_speed_kmh`, grade,
+load, and terrain-demand fields alone do not satisfy this contract. When the
+vector list is absent or has no positive explicit ratio, the Architecture
+projection reports `pace_fit_mapping.status=unavailable` and Pace Fit keeps
+the personal percentage unavailable.
+
 ### 2026-07-21 Golden-Scope And Pairwise-Filter Correction
 
 Architecture measures route demand from the crowd corpus inside the route the

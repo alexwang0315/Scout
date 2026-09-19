@@ -70,6 +70,14 @@ Scope and implementation:
 - Workout-local `basalEnergy` is not treated as an all-day static-energy
   metric. Static and total daily energy remain unavailable unless an explicit
   daily metric covers that date.
+- Architecture now exposes the additive `pace_fit_mapping` contract and
+  carries only route-bin keyed values from
+  `normalized/architecture/route_architecture.json#pace_speed_correction_vectors`.
+  The required field is `pace_speed_correction_ratio`; historical
+  `reference_speed_kmh`, grade, load, and Body Index energy are not used to
+  invent it. The current workspace supplies zero such vectors, so Pace Fit
+  continues to show CP historical averages while personal percentages remain
+  unavailable.
 
 Real-source parser replay on 2026-09-19 found 6 ZIP sources and 49 standard
 Auto Export JSON sources. After activity deduplication it retained 104
