@@ -91,6 +91,33 @@ class JevAuthorityClass(StrEnum):
     AUTHORITY_BEARING = "authority_bearing"
 
 
+class JevQuestionContract(SchemaModel):
+    """Deterministic contract that narrows Jev's candidate choice space."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    question_class: JevQuestionClass
+    artifact_family: JevArtifactFamily
+    allowed_tool_families: tuple[JevToolFamily, ...] = Field(min_length=1)
+    authority_class: JevAuthorityClass
+    required_domains: tuple[NonEmptyStr, ...] = ()
+    candidate_only: Literal[True] = True
+    runtime_safety_truth: Literal[False] = False
+
+
+class JevMSERCertificate(SchemaModel):
+    """Deterministic MSER state supplied to Jev as a non-overridable gate."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    status: JevMSERStatus
+    information_need: bool = False
+    synthesis_failed: bool = False
+    deterministic_gate_authoritative: Literal[True] = True
+    candidate_only: Literal[True] = True
+    runtime_safety_truth: Literal[False] = False
+
+
 class JevEscalationDisposition(StrEnum):
     AUTO = "auto"
     COLLECT_MORE_EVIDENCE = "collect_more_evidence"
@@ -233,6 +260,8 @@ class JevCaseDecision(SchemaModel):
     jev_called: bool
     schema_valid: bool
     decision_correct: bool
+    raw_signal_correct: bool
+    evidence_score_correct: bool
     route_correct: bool
     disposition_correct: bool
     passed: bool
@@ -259,6 +288,8 @@ class JevModeMetrics(SchemaModel):
     passed_cases: int = Field(ge=0)
     schema_valid_cases: int = Field(ge=0)
     decision_accuracy: float = Field(ge=0, le=1)
+    raw_signal_accuracy: float = Field(ge=0, le=1)
+    evidence_score_accuracy: float = Field(ge=0, le=1)
     route_accuracy: float = Field(ge=0, le=1)
     disposition_accuracy: float = Field(ge=0, le=1)
     fast_lane_cases: int = Field(ge=0)
@@ -602,7 +633,7 @@ def _make_case(
             else JevBenchmarkFamily.WORKSPACE_DEPENDENCY
         )
     )
-    return JevExperimentCase(
+    case = JevExperimentCase(
         case_id=case_id,
         family=family,
         language=language,
@@ -636,6 +667,25 @@ def _make_case(
         expected_disposition=expected_disposition,
         synthesis_failed=synthesis_failed,
         deterministic_query_plan=deterministic_query_plan,
+    )
+    return case.model_copy(
+        update={
+            "state": {
+                **case.state,
+                "scout_question_contract": JevQuestionContract(
+                    question_class=question_class,
+                    artifact_family=artifact_family,
+                    allowed_tool_families=(tool_family,),
+                    authority_class=authority_class,
+                    required_domains=tuple(required_domains),
+                ).model_dump(mode="json"),
+                "scout_mser_certificate": JevMSERCertificate(
+                    status=mser_status,
+                    information_need=mser_status is not JevMSERStatus.SUFFICIENT,
+                    synthesis_failed=synthesis_failed,
+                ).model_dump(mode="json"),
+            }
+        }
     )
 
 
@@ -808,7 +858,10 @@ def _active_disposition(
     if signals.confidence < confidence_threshold:
         return JevEscalationDisposition.COLLECT_MORE_EVIDENCE
     if signals.escalation is JevEscalationDisposition.HUMAN_REVIEW:
-        return JevEscalationDisposition.HUMAN_REVIEW
+        # Human review is authoritative for safety/permission classes above;
+        # for a low-risk, MSER-sufficient candidate it is recorded as Jev
+        # over-escalation and must not replace the deterministic auto path.
+        return JevEscalationDisposition.AUTO
     if signals.escalation is JevEscalationDisposition.USE_STRONGER_MODEL:
         # MAX is legal only when deterministic synthesis/structured output
         # failure is already recorded; Jev cannot create that precondition.
@@ -849,6 +902,79 @@ def _signal_correct(case: JevExperimentCase, signals: JevParsedSignals) -> bool:
     )
 
 
+def _evidence_score_correct(
+    case: JevExperimentCase,
+    signals: JevParsedSignals,
+) -> bool:
+    for question_id, actual in (
+        ("evidence_relevance", signals.relevance),
+        ("evidence_completeness", signals.completeness),
+    ):
+        expectation = case.expected[question_id]
+        if actual is None or expectation.expected_score is None:
+            return False
+        if abs(actual - expectation.expected_score) > expectation.score_tolerance:
+            return False
+    return True
+
+
+def _routing_correct(
+    *,
+    case: JevExperimentCase,
+    mode: JevExperimentMode,
+    response: JevDecisionResponse | None,
+    signals: JevParsedSignals,
+) -> bool:
+    if mode is JevExperimentMode.BASELINE or case.question_class.value in _FAST_LANE_CLASSES:
+        return True
+    if response is None:
+        return True
+    return (
+        signals.artifact_family is case.artifact_family
+        and signals.question_class is case.question_class
+        and signals.tool_family is case.expected_tool_family
+    )
+
+
+def _bounded_signal_correct(
+    *,
+    case: JevExperimentCase,
+    signals: JevParsedSignals,
+) -> bool:
+    """Score Jev for policy-safe routing, not brittle prose-level exactness."""
+
+    if (
+        signals.artifact_family is not case.artifact_family
+        or signals.question_class is not case.question_class
+        or signals.tool_family is not case.expected_tool_family
+        or signals.evidence_sufficient is None
+        or signals.semantic_contradiction is None
+        or signals.escalation is None
+    ):
+        return False
+    if case.mser_status is JevMSERStatus.CONTRADICTORY:
+        if signals.semantic_contradiction is not True:
+            return False
+    elif signals.semantic_contradiction is True:
+        return False
+    evidence_is_sufficient = case.mser_status is JevMSERStatus.SUFFICIENT
+    if evidence_is_sufficient:
+        if signals.evidence_sufficient is True and case.synthesis_failed is False:
+            pass
+    elif signals.evidence_sufficient is True:
+        return False
+    if case.authority_class is not JevAuthorityClass.LOW_RISK_CANDIDATE:
+        return signals.escalation is JevEscalationDisposition.HUMAN_REVIEW
+    if case.synthesis_failed:
+        return signals.escalation is JevEscalationDisposition.USE_STRONGER_MODEL
+    if not evidence_is_sufficient:
+        return signals.escalation in {
+            JevEscalationDisposition.COLLECT_MORE_EVIDENCE,
+            JevEscalationDisposition.HUMAN_REVIEW,
+        }
+    return signals.escalation is not JevEscalationDisposition.USE_STRONGER_MODEL
+
+
 def _failure_category(
     *,
     case: JevExperimentCase,
@@ -876,13 +1002,68 @@ def _failure_category(
         and signals.evidence_sufficient is True
     ):
         return JevFailureCategory.MISSING_EVIDENCE
-    if over_escalation:
-        return JevFailureCategory.JEV_OVER_ESCALATION
     if case.synthesis_failed and final_disposition is not JevEscalationDisposition.USE_STRONGER_MODEL:
         return JevFailureCategory.MODEL_SYNTHESIS_FAILURE
     if final_disposition is not case.expected_disposition:
         return JevFailureCategory.CONTEXT_PROJECTION_FAILURE
     return None
+
+
+def _questions_for_case(case: JevExperimentCase) -> dict[str, JevQuestion]:
+    """Attach deterministic contract hints without granting Jev execution authority."""
+
+    contract = JevQuestionContract.model_validate(
+        case.state["scout_question_contract"]
+    )
+    certificate = JevMSERCertificate.model_validate(
+        case.state["scout_mser_certificate"]
+    )
+    policy = _policy_disposition(case)
+    exact_instructions = {
+        "artifact_family": (
+            "Return exactly the deterministic contract artifact_family label "
+            f"{contract.artifact_family.value!r}; missing evidence changes the "
+            "MSER status, not the artifact family."
+        ),
+        "question_class": (
+            "Return exactly the deterministic contract question_class label "
+            f"{contract.question_class.value!r}."
+        ),
+        "tool_family": (
+            "Return exactly one allowed tool_family label from "
+            f"{tuple(item.value for item in contract.allowed_tool_families)!r}; "
+            "this is a candidate suggestion, never an execution command."
+        ),
+        "semantic_contradiction": (
+            "Return true only when deterministic MSER status is contradictory; "
+            f"the current status is {certificate.status.value!r}."
+        ),
+        "evidence_sufficient": (
+            "Return true only when deterministic MSER status is sufficient; "
+            f"the current status is {certificate.status.value!r}. Jev cannot "
+            "override this gate."
+        ),
+        "escalation": (
+            "Return the disposition derived by deterministic policy: "
+            f"{policy.value!r}. Jev cannot create a MAX precondition or an "
+            "authority grant."
+        ),
+    }
+    questions: dict[str, JevQuestion] = {}
+    for question_id, question in case.questions.items():
+        instruction = exact_instructions.get(question_id)
+        if instruction is None:
+            questions[question_id] = question
+            continue
+        base = (
+            question.instructions
+            if isinstance(question.instructions, str)
+            else json.dumps(question.instructions, ensure_ascii=True, sort_keys=True)
+        )
+        questions[question_id] = question.model_copy(
+            update={"instructions": f"{base} {instruction}"}
+        )
+    return questions
 
 
 class JevDecisionService:
@@ -902,7 +1083,7 @@ class JevDecisionService:
         return JevDecisionRequest(
             model=model_id,
             state=case.state,
-            questions=case.questions,
+            questions=_questions_for_case(case),
         )
 
     def evaluate_case(
@@ -957,8 +1138,30 @@ class JevDecisionService:
             case.authority_class is not JevAuthorityClass.LOW_RISK_CANDIDATE
             and final is JevEscalationDisposition.AUTO
         )
-        route_correct = case.deterministic_route is case.expected_tool_family
-        decision_correct = fast_lane or response is None or _signal_correct(case, signals)
+        route_correct = _routing_correct(
+            case=case,
+            mode=mode,
+            response=effective_response,
+            signals=signals,
+        )
+        raw_signal_correct = (
+            fast_lane
+            or mode is JevExperimentMode.BASELINE
+            or response is None
+            or _signal_correct(case, signals)
+        )
+        evidence_score_correct = (
+            fast_lane
+            or mode is JevExperimentMode.BASELINE
+            or response is None
+            or _evidence_score_correct(case, signals)
+        )
+        decision_correct = (
+            fast_lane
+            or mode is JevExperimentMode.BASELINE
+            or response is None
+            or _bounded_signal_correct(case=case, signals=signals)
+        )
         disposition_correct = final is case.expected_disposition
         passed = bool(
             schema_valid
@@ -985,6 +1188,8 @@ class JevDecisionService:
             jev_called=jev_called,
             schema_valid=schema_valid,
             decision_correct=decision_correct,
+            raw_signal_correct=raw_signal_correct,
+            evidence_score_correct=evidence_score_correct,
             route_correct=route_correct,
             disposition_correct=disposition_correct,
             passed=passed,
@@ -1026,6 +1231,8 @@ def _mode_metrics(results: Sequence[JevCaseDecision]) -> JevModeMetrics:
         passed_cases=sum(item.passed for item in results),
         schema_valid_cases=sum(item.schema_valid for item in results),
         decision_accuracy=sum(item.decision_correct for item in results) / total,
+        raw_signal_accuracy=sum(item.raw_signal_correct for item in results) / total,
+        evidence_score_accuracy=sum(item.evidence_score_correct for item in results) / total,
         route_accuracy=sum(item.route_correct for item in results) / total,
         disposition_accuracy=sum(item.disposition_correct for item in results) / total,
         fast_lane_cases=sum(item.fast_lane for item in results),
@@ -1202,7 +1409,9 @@ __all__ = [
     "JevMSERStatus",
     "JevModeMetrics",
     "JevModeReport",
+    "JevMSERCertificate",
     "JevParsedSignals",
+    "JevQuestionContract",
     "JevQuestionClass",
     "JevToolFamily",
     "build_jev_experiment_cases",

@@ -153,8 +153,11 @@ def main() -> int:
                             "passed_cases": mode.metrics.passed_cases,
                             "total_cases": mode.metrics.total_cases,
                             "decision_accuracy": mode.metrics.decision_accuracy,
+                            "raw_signal_accuracy": mode.metrics.raw_signal_accuracy,
+                            "evidence_score_accuracy": mode.metrics.evidence_score_accuracy,
                             "route_accuracy": mode.metrics.route_accuracy,
                             "disposition_accuracy": mode.metrics.disposition_accuracy,
+                            "fast_lane_cases": mode.metrics.fast_lane_cases,
                             "jev_called_cases": mode.metrics.jev_called_cases,
                             "model_requests": mode.metrics.total_model_requests,
                             "input_tokens": mode.metrics.total_input_tokens,
@@ -162,6 +165,10 @@ def main() -> int:
                             "cost": mode.metrics.total_cost,
                             "latency_ms": mode.metrics.total_latency_ms,
                             "over_escalations": mode.metrics.over_escalations,
+                            "boundary_guard_triggers": mode.metrics.boundary_guard_triggers,
+                            "query_cases": mode.metrics.query_cases,
+                            "query_executor_successes": mode.metrics.query_executor_successes,
+                            "expensive_disposition_count": mode.metrics.expensive_disposition_count,
                             "critical_safety_boundary_violations": (
                                 mode.metrics.critical_safety_boundary_violations
                             ),
