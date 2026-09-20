@@ -89,6 +89,22 @@ def _parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path("artifacts/jev-experiment-20260919"),
     )
+    parser.add_argument(
+        "--max-cases",
+        type=int,
+        help=(
+            "Run only the first N deterministic experiment cases while "
+            "retaining the full dataset hash"
+        ),
+    )
+    parser.add_argument(
+        "--progress",
+        action="store_true",
+        help=(
+            "Print redacted per-case routing, JEV request/response, "
+            "and mode-result events"
+        ),
+    )
     parser.add_argument("--timeout-seconds", type=float, default=120.0)
     parser.add_argument(
         "--dry-run",
@@ -100,18 +116,40 @@ def _parser() -> argparse.ArgumentParser:
 
 def main() -> int:
     args = _parser().parse_args()
+    if args.max_cases is not None and args.max_cases <= 0:
+        raise SystemExit("--max-cases must be positive")
     projection = build_anonymized_workspace_projection(args.workspace)
-    cases = build_jev_experiment_cases(projection)
-    dataset = build_jev_experiment_dataset(projection, cases)
+    all_cases = build_jev_experiment_cases(projection)
+    cases = (
+        all_cases[: args.max_cases]
+        if args.max_cases is not None
+        else all_cases
+    )
+    dataset = build_jev_experiment_dataset(projection, all_cases)
     args.output_dir.mkdir(parents=True, exist_ok=True)
     dataset_path = args.output_dir / "jev-anonymized-dataset.json"
     _write_json(dataset_path, dataset.model_dump(mode="json"))
+    selection_path = args.output_dir / "jev-run-selection.json"
+    _write_json(
+        selection_path,
+        {
+            "dataset_hash": dataset.dataset_hash,
+            "workspace_projection_hash": projection.projection_hash,
+            "full_case_count": len(all_cases),
+            "selected_case_count": len(cases),
+            "selected_case_ids": [case.case_id for case in cases],
+            "candidate_only": dataset.candidate_only,
+            "runtime_safety_truth": dataset.runtime_safety_truth,
+        },
+    )
     print(
         json.dumps(
             {
                 "dataset": str(dataset_path),
+                "selection": str(selection_path),
                 "dataset_hash": dataset.dataset_hash,
-                "cases": len(cases),
+                "full_cases": len(all_cases),
+                "selected_cases": len(cases),
                 "workspace_projection_hash": projection.projection_hash,
                 "endpoint": JEvEndpoint,
                 "dry_run": args.dry_run,
@@ -132,6 +170,50 @@ def main() -> int:
             model_id=model_id,
             timeout_seconds=args.timeout_seconds,
         )
+        case_index = {case.case_id: index for index, case in enumerate(cases, 1)}
+
+        def progress_callback(event, case, payload):
+            if not args.progress:
+                return
+            index = case_index[case.case_id]
+            prefix = (
+                f"[jev-live] model={model_id} "
+                f"case={index}/{len(cases)} case_id={case.case_id}"
+            )
+            if event == "case_route":
+                print(
+                    f"{prefix} route={payload['deterministic_route']} "
+                    f"fast_lane={payload['fast_lane']} "
+                    f"jev_called={not payload['fast_lane']}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+            elif event == "jev_request":
+                print(
+                    f"{prefix} JEV_REQUEST endpoint={JEvEndpoint} "
+                    f"questions={','.join(payload['question_ids'])}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+            elif event == "jev_response":
+                signals = payload.get("signals") or {}
+                print(
+                    f"{prefix} JEV_RESPONSE status={payload['status']} "
+                    f"latency_ms={payload['latency_ms']} "
+                    f"signals={json.dumps(signals, ensure_ascii=False, sort_keys=True)}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+            elif event == "mode_result":
+                print(
+                    f"{prefix} mode={payload['mode']} "
+                    f"jev_called={payload['jev_called']} "
+                    f"disposition={payload['final_disposition']} "
+                    f"passed={payload['passed']}",
+                    file=sys.stderr,
+                    flush=True,
+                )
+
         report = run_jev_experiment(
             model_id=model_id,
             cases=cases,
@@ -139,6 +221,7 @@ def main() -> int:
             dataset_hash=dataset.dataset_hash,
             workspace_projection_hash=projection.projection_hash,
             workspace_root=args.workspace,
+            progress_callback=progress_callback,
         )
         report_path = args.output_dir / f"jev-experiment-{_safe_model_filename(model_id)}.json"
         _write_json(report_path, report.model_dump(mode="json"))

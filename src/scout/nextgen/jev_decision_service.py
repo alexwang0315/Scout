@@ -14,7 +14,7 @@ from __future__ import annotations
 import hashlib
 import json
 import time
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from enum import StrEnum
 from pathlib import Path
@@ -1303,12 +1303,25 @@ def run_jev_experiment(
     dataset_hash: str,
     workspace_projection_hash: str,
     workspace_root: str | Path | None = None,
+    progress_callback: Callable[
+        [str, JevExperimentCase, Mapping[str, Any]], None
+    ]
+    | None = None,
 ) -> JevExperimentReport:
     """Run baseline, shadow, and active modes with one Jev batch per eligible case."""
 
     service = JevDecisionService()
     response_by_case: dict[str, tuple[JevDecisionResponse | None, str | None, int]] = {}
     query_by_case: dict[str, JevQueryExecution | None] = {}
+
+    def emit_progress(
+        event: str,
+        case: JevExperimentCase,
+        **payload: Any,
+    ) -> None:
+        if progress_callback is not None:
+            progress_callback(event, case, payload)
+
     for case in cases:
         if case.deterministic_query_plan and workspace_root is not None:
             query_by_case[case.case_id] = execute_deterministic_query_plan(
@@ -1317,19 +1330,42 @@ def run_jev_experiment(
             )
         else:
             query_by_case[case.case_id] = None
-        if case.question_class.value in _FAST_LANE_CLASSES:
+        fast_lane = case.question_class.value in _FAST_LANE_CLASSES
+        emit_progress(
+            "case_route",
+            case,
+            fast_lane=fast_lane,
+            deterministic_route=case.deterministic_route.value,
+            question_count=len(case.questions),
+        )
+        if fast_lane:
             continue
         started = time.perf_counter()
         if client is None:
+            latency_ms = max(0, int((time.perf_counter() - started) * 1000))
             response_by_case[case.case_id] = (
                 None,
                 "Jev client unavailable",
-                max(0, int((time.perf_counter() - started) * 1000)),
+                latency_ms,
+            )
+            emit_progress(
+                "jev_response",
+                case,
+                status="unavailable",
+                latency_ms=latency_ms,
+                signals=None,
             )
             continue
         try:
+            request = service.request_for_case(model_id=model_id, case=case)
+            emit_progress(
+                "jev_request",
+                case,
+                model=model_id,
+                question_ids=tuple(request.questions),
+            )
             response = client.decide(
-                service.request_for_case(model_id=model_id, case=case)
+                request
             )
             error = None
         except (JevDecisionError, ValueError) as exc:
@@ -1337,10 +1373,25 @@ def run_jev_experiment(
             error = "Jev request failed: " + (
                 str(exc) if isinstance(exc, ValueError) else type(exc).__name__
             )
+        latency_ms = max(0, int((time.perf_counter() - started) * 1000))
         response_by_case[case.case_id] = (
             response,
             error,
-            max(0, int((time.perf_counter() - started) * 1000)),
+            latency_ms,
+        )
+        signals = parse_jev_signals(response) if response is not None else None
+        emit_progress(
+            "jev_response",
+            case,
+            status="ok" if response is not None else "error",
+            latency_ms=latency_ms,
+            error=error,
+            signals=(signals.model_dump(mode="json") if signals is not None else None),
+            usage=(
+                response.usage.model_dump(mode="json")
+                if response is not None
+                else None
+            ),
         )
 
     generated_at = datetime.now(UTC)
@@ -1355,15 +1406,24 @@ def run_jev_experiment(
             response, error, latency = response_by_case.get(case.case_id, (None, None, 0))
             if mode is JevExperimentMode.BASELINE:
                 response, error, latency = None, None, 0
-            results.append(
-                service.evaluate_case(
-                    case=case,
-                    mode=mode,
-                    response=response,
-                    transport_error=error,
-                    latency_ms=latency,
-                    query_execution=query_by_case.get(case.case_id),
-                )
+            result = service.evaluate_case(
+                case=case,
+                mode=mode,
+                response=response,
+                transport_error=error,
+                latency_ms=latency,
+                query_execution=query_by_case.get(case.case_id),
+            )
+            results.append(result)
+            emit_progress(
+                "mode_result",
+                case,
+                mode=mode.value,
+                jev_called=result.jev_called,
+                schema_valid=result.schema_valid,
+                route_correct=result.route_correct,
+                final_disposition=result.final_disposition.value,
+                passed=result.passed,
             )
         mode_reports.append(
             _validated_mode_report(

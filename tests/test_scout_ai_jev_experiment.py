@@ -290,6 +290,37 @@ def test_comparison_runs_one_batched_request_only_for_non_fast_cases(
     assert report.runtime_safety_truth is False
 
 
+def test_progress_callback_exposes_redacted_jev_request_and_mode_events(
+    tmp_path: Path,
+) -> None:
+    projection = _projection(tmp_path)
+    all_cases = build_jev_experiment_cases(projection)
+    cases = all_cases[:10]
+    client = _FakeClient(all_cases)
+    dataset = build_jev_experiment_dataset(projection, all_cases)
+    events: list[tuple[str, str, dict[str, Any]]] = []
+
+    report = run_jev_experiment(
+        model_id="test-model",
+        cases=cases,
+        client=client,
+        dataset_hash=dataset.dataset_hash,
+        workspace_projection_hash=projection.projection_hash,
+        progress_callback=lambda event, case, payload: events.append(
+            (event, case.case_id, dict(payload))
+        ),
+    )
+
+    assert len([event for event in events if event[0] == "case_route"]) == 10
+    assert len([event for event in events if event[0] == "jev_request"]) == 6
+    assert len([event for event in events if event[0] == "jev_response"]) == 6
+    assert len([event for event in events if event[0] == "mode_result"]) == 30
+    request_events = [event for event in events if event[0] == "jev_request"]
+    assert all(event[2]["question_ids"] for event in request_events)
+    assert all("raw" not in event[2] for event in events)
+    assert all(mode.metrics.total_cases == 10 for mode in report.mode_reports)
+
+
 def test_unavailable_jev_fails_closed_for_eligible_cases(tmp_path: Path) -> None:
     projection = _projection(tmp_path)
     cases = build_jev_experiment_cases(projection)
