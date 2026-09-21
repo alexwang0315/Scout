@@ -13,7 +13,7 @@ from collections import Counter
 from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -3687,6 +3687,7 @@ def execute_run(
     mser_mode: str = "off",
     compose_conservative_gap_responses: bool = False,
     experimental_intelligence_bridge: Any | None = None,
+    jev_preflight: Callable[..., dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     started = time.monotonic()
     started_at = datetime.now(timezone.utc)
@@ -3857,6 +3858,22 @@ def execute_run(
                 "candidate_only": True,
                 "runtime_safety_truth": False,
                 "local_injection_status": "not_attempted",
+            }
+    jev_preflight_result: dict[str, Any] | None = None
+    if jev_preflight is not None:
+        try:
+            jev_preflight_result = jev_preflight(
+                run=run,
+                mser_context=mser_context,
+                compact_evidence=compact,
+                deterministic_tool_ids=tool_ids,
+            )
+        except Exception as exc:  # Jev is advisory; synthesis remains deterministic.
+            jev_preflight_result = {
+                "status": "error",
+                "error": type(exc).__name__,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
             }
     effective_missing_evidence = list(compact.get("missing_evidence") or [])
     blocking_missing_evidence = list(compact.get("blocking_missing_evidence") or [])
@@ -4541,6 +4558,7 @@ def execute_run(
         "selected_tools": model_tool_ids,
         "legacy_selected_tools": legacy_tool_ids,
         "experimental_intelligence": experimental_intelligence,
+        "jev_preflight": jev_preflight_result,
         "completed_tools": completed_tools,
         "missing_tools": missing_tools,
         "missing_evidence": effective_missing_evidence,
