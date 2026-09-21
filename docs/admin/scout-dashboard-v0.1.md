@@ -46,6 +46,69 @@ Each entry should include:
 
 ## Implementation Record
 
+### 2026-09-21 - Pace Fit CP workbench layout reorganization
+
+User request:
+
+- Rework Pace Fit so the map, selected checkpoint, CP timeline, interval
+  conclusion, and supporting evidence read as one related workspace.
+- Keep the CP interval evidence open while switching checkpoints, avoid
+  one-word English wrapping, give the timeline its own vertical scroll area,
+  and remove the large empty strip below the map.
+
+Scope and implementation:
+
+- Updated `docs/admin/scout-dashboard-v0.1.html` only for this visual slice. The
+  desktop workbench now keeps the map and the selected-CP inspector at the same
+  height, with a compact right rail that contains the merged interval result,
+  checkpoint facts, advisory, and a vertically scrollable CP Timeline.
+- Merged the former standalone Pace Fit conclusion into the selected
+  checkpoint card. The three comparison values remain explicit: reference CP
+  average, Body Index expected time, and Pace Fit percentage when the mapping
+  is available. The existing candidate-only and `runtime_safety_truth=false`
+  boundaries remain unchanged.
+- Changed CP supporting evidence to an open, persistent details drawer. Its
+  reference table now uses a readable fixed column layout with an internal
+  scroll container rather than forcing the entire page to grow or wrapping
+  English labels one word at a time.
+- Added responsive rules for the narrow layout: the map remains a bounded
+  surface, the inspector follows it in document order, the timeline keeps its
+  own scroll area, and the document has no horizontal overflow.
+- Updated `tests/test_scout_dashboard_page.py` assertions for the merged
+  conclusion, persistent evidence drawer, right-rail timeline, and bounded
+  table/timeline scroll behavior.
+
+Verification:
+
+- `./venv/bin/python -m pytest -q tests/test_scout_dashboard_page.py`: 173
+  passed.
+- `./venv/bin/python -m pytest -q tests/test_dashboard_diagnostic_alignment.py
+  tests/test_dashboard_diagnostic_coverage.py
+  tests/test_diagnostic_pace_arch_interactions.py`: 12 passed.
+- Extracted inline JavaScript passed `node --check`.
+- Live 9099 browser replay on the requested workspace rendered a 807.25 ×
+  580 px map beside a 342.75 × 580 px inspector, 10 CP timeline nodes in a
+  380/218 px internal scroll area, and all 218 reference rows in a 11321/340
+  px internal table scroll area. Enter on a focused CP node and click on the
+  last node both changed the selected CP while the evidence drawer stayed
+  open. The 390 px replay had a 460 px map, the same bounded timeline, and
+  zero horizontal overflow; no browser console or page errors were observed.
+- The existing `tests/test_dashboard_diagnostic_map_evidence.py` has 9
+  failures in its formal evidence-state harness (the extracted diagnostic
+  runner returns `failed` instead of the fixture's expected `warning`/`idle`
+  state and emits no map-evidence JSON). This test surface is unrelated to the
+  Pace Fit markup change and is retained as an unresolved pre-existing
+  diagnostic conflict rather than reclassified as a pass.
+
+Boundary and remaining gaps:
+
+- This is a presentation and interaction reorganization; it does not change
+  CP averages, Body Index calculations, reference GPX provenance, map data,
+  route truth, safety state, or external actions.
+- The repository's existing browser qualification still has the documented
+  48-versus-50 Diagnostic case-count conflict. This slice does not select a
+  contract resolution or claim full qualification.
+
 ### 2026-09-19 - HealthExport ZIP and iCloud Auto Export JSON source bridge
 
 This entry records the next implementation step after the 2026-09-18 Body

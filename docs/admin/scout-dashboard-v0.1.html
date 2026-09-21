@@ -3424,18 +3424,18 @@
     .pace-cp-timeline {
       position: relative;
       display: grid;
-      grid-template-columns: repeat(9, minmax(0, 1fr));
-      gap: 7px;
-      padding: 18px 0 8px;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 2px;
+      padding: 4px 0 4px 18px;
     }
 
     .pace-cp-timeline::before {
       content: "";
       position: absolute;
-      top: 33px;
-      left: 4%;
-      right: 4%;
-      height: 2px;
+      top: 14px;
+      bottom: 14px;
+      left: 8px;
+      width: 2px;
       background: rgba(255, 255, 255, .18);
     }
 
@@ -3444,17 +3444,23 @@
       width: 100%;
       min-width: 0;
       display: grid;
-      justify-items: center;
-      gap: 5px;
-      padding: 0;
-      border: 0;
+      grid-template-columns: 18px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 8px;
+      border: 1px solid transparent;
       border-radius: 5px;
       color: var(--muted);
       background: transparent;
       font: inherit;
       font-size: 11px;
-      text-align: center;
+      text-align: left;
       cursor: pointer;
+    }
+
+    .pace-cp-node.is-current {
+      border-color: rgba(105, 174, 244, .42);
+      background: rgba(105, 174, 244, .1);
     }
 
     .pace-cp-node:hover,
@@ -3468,6 +3474,8 @@
       z-index: 1;
       width: 18px;
       height: 18px;
+      grid-column: 1;
+      grid-row: 1;
       border: 2px solid rgba(255, 255, 255, .72);
       border-radius: 999px;
       background: var(--surface-2);
@@ -3480,8 +3488,8 @@
     }
 
     .pace-cp-node.is-current .pace-cp-dot {
-      width: 28px;
-      height: 28px;
+      width: 18px;
+      height: 18px;
       border-color: #69aef4;
       background: rgba(105, 174, 244, .38);
       box-shadow: 0 0 0 4px rgba(105, 174, 244, .18);
@@ -3493,8 +3501,21 @@
     }
 
     .pace-cp-node strong {
+      grid-column: 2;
+      min-width: 0;
       color: var(--text);
       font-size: 11px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .pace-cp-node > span:last-child {
+      grid-column: 3;
+      color: var(--muted);
+      font-family: var(--mono);
+      font-size: 10px;
+      white-space: nowrap;
     }
 
     .pace-delay-grid {
@@ -3576,7 +3597,8 @@
     }
 
     .pace-mini-map {
-      min-height: clamp(520px, 62vh, 760px);
+      height: 100%;
+      min-height: 0;
       border: 0;
       border-radius: 0;
       overflow: hidden;
@@ -3605,6 +3627,7 @@
 
       .pace-cp-inspector {
         min-height: 0;
+        height: auto;
       }
 
       .pace-supporting-grid {
@@ -3618,12 +3641,8 @@
     }
 
     @media (max-width: 620px) {
-      .pace-fit-conclusion {
+      .pace-interval-metrics {
         grid-template-columns: 1fr;
-      }
-
-      .pace-fit-conclusion p {
-        grid-column: auto;
       }
 
       .pace-fit-status-cell {
@@ -3639,11 +3658,12 @@
       .pace-map-body,
       .pace-map-body .architecture-empty,
       .pace-mini-map {
-        min-height: min(62dvh, 560px);
+        height: min(58dvh, 460px);
+        min-height: 0;
       }
 
       .pace-cp-timeline {
-        min-width: 720px;
+        padding-left: 16px;
       }
 
       .pace-supporting-details > summary {
@@ -37747,6 +37767,19 @@
                 <span class="chip warn">candidate only</span>
               </div>
               <div class="pace-cp-inspector-body">
+                <section class="pace-fit-conclusion" data-pace-fit-conclusion="${escapeHtml(selectedConclusion.status)}" data-pace-interval-result="true" aria-label="Selected CP pace fit conclusion">
+                  <div>
+                    <span class="chip ${selectedConclusion.status === "available" ? "ok" : "warn"}">Selected CP interval</span>
+                    <h3>${escapeHtml(nextSegmentLabel)}</h3>
+                  </div>
+                  <div class="pace-interval-metrics" aria-label="Selected CP interval metrics">
+                    <div class="pace-interval-metric"><span>Reference average</span><strong>${selectedConclusion.referenceMinutes === null ? "--" : `${selectedConclusion.referenceMinutes.toFixed(1)} min`}</strong></div>
+                    <div class="pace-interval-metric"><span>Body Index expected</span><strong>${selectedConclusion.expectedMinutes === null ? "--" : `${selectedConclusion.expectedMinutes.toFixed(1)} min`}</strong></div>
+                    <div class="pace-interval-metric"><span>Pace Fit</span><strong>${selectedConclusion.percent === null ? "--" : `${selectedConclusion.percent}%`}</strong></div>
+                  </div>
+                  <strong>${escapeHtml(selectedConclusion.text)}</strong>
+                  <p class="pace-interval-definition">百分比定義：個人預估耗時 ÷ 同一對 CP 的 reference GPX 平均耗時 × 100；個人預估耗時來自 Body Index 與固定 reference/golden GPX schedule 的可追溯映射。資料不完整時保留未知。</p>
+                </section>
                 <div class="pace-cp-facts">
                   ${[
                     ["Coordinate", coordinateLabel],
@@ -37755,9 +37788,6 @@
                     ["Review state", context.reviewState || "unknown"],
                     ["Source", context.sourceId || "unavailable"],
                     ["Recorded GPX time", context.observedAt ? formatDateTime(context.observedAt) : "unavailable"],
-                    ["Next CP interval", nextSegmentLabel],
-                    ["Reference average", selectedConclusion.referenceMinutes === null ? "unavailable" : `${selectedConclusion.referenceMinutes.toFixed(1)} min`],
-                    ["Body Index expected", selectedConclusion.expectedMinutes === null ? "unavailable" : `${selectedConclusion.expectedMinutes.toFixed(1)} min`],
                   ].map(([label, value]) => `<div class="pace-cp-fact"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("")}
                 </div>
                 <p class="pace-cp-meaning">這個位置來自目前 workspace 的 checkpoint candidate，作用是把 CP 編號、路線位置與來源證據綁在一起；下面的 reference average 是同一段相鄰 CP 的歷史 GPX 耗時，不代表隊伍目前位於此處，也不是安全或通行判定。</p>
@@ -37767,53 +37797,43 @@
                   <strong>尚未接上即時隊伍速度；此頁目前只提供可查證的空間上下文。</strong>
                   <small>not live location or safety truth</small>
                 </div>
+                <section class="pace-timeline-band" aria-label="Pace checkpoint timeline">
+                  <div class="pace-timeline-head">
+                    <div><h3>CP Timeline</h3><p>選 CP 對照地圖位置與下一段耗時。</p></div>
+                    <span class="chip info">${escapeHtml(`${context.checkpoints.length} candidates`)}</span>
+                  </div>
+                  <div class="pace-timeline-scroll">
+                    <div class="pace-cp-timeline" aria-label="Pace checkpoint timeline">
+                      ${timelineNodes.map(point => {
+                        const pointIndex = context.checkpoints.findIndex(item => item.id === point.id);
+                        const stateClass = point.selected ? "current" : pointIndex >= 0 && pointIndex < context.selectedIndex ? "done" : "";
+                        const pointDistance = point.routeDistanceM === null || point.routeDistanceM === undefined
+                          ? "route sample"
+                          : `${(point.routeDistanceM / 1000).toFixed(1)} km`;
+                        return `
+                          <button class="pace-cp-node ${stateClass ? `is-${stateClass}` : ""}" type="button" data-pace-checkpoint-select="${escapeHtml(point.id)}" aria-pressed="${point.selected ? "true" : "false"}">
+                            <span class="pace-cp-dot" aria-hidden="true"></span>
+                            <strong>${escapeHtml(point.label)}</strong>
+                            <span>${escapeHtml(pointDistance)}</span>
+                          </button>
+                        `;
+                      }).join("")}
+                    </div>
+                  </div>
+                </section>
               </div>
             </aside>
           </div>
 
-          <section class="pace-fit-conclusion" data-pace-fit-conclusion="${escapeHtml(selectedConclusion.status)}" aria-label="Selected CP pace fit conclusion">
-            <div>
-              <span class="chip ${selectedConclusion.status === "available" ? "ok" : "warn"}">Pace Fit conclusion</span>
-              <h3>${escapeHtml(nextSegmentLabel)}</h3>
-            </div>
-            <strong>${escapeHtml(selectedConclusion.text)}</strong>
-            <p>百分比定義：個人預估耗時 ÷ 同一對 CP 的 reference GPX 平均耗時 × 100；其中個人預估耗時 = 固定 reference/golden GPX schedule 耗時 × route-scoped correction ratio。schedule 或 calibration 不完整時，畫面保留未知，不產生百分比。</p>
-          </section>
-
-          <section class="pace-timeline-band">
-            <div class="pace-timeline-head">
-              <div><h3>CP Timeline</h3><p>選擇某個 CP 會查看「該 CP → 下一個 CP」的歷史平均耗時與 Pace Fit；距離來自 workspace route projection。</p></div>
-              <span class="chip info">${escapeHtml(`${context.checkpoints.length} candidates`)}</span>
-            </div>
-            <div class="pace-timeline-scroll">
-              <div class="pace-cp-timeline" aria-label="Pace checkpoint timeline">
-                ${timelineNodes.map(point => {
-                  const pointIndex = context.checkpoints.findIndex(item => item.id === point.id);
-                  const stateClass = point.selected ? "current" : pointIndex >= 0 && pointIndex < context.selectedIndex ? "done" : "";
-                  const pointDistance = point.routeDistanceM === null || point.routeDistanceM === undefined
-                    ? "route sample"
-                    : `${(point.routeDistanceM / 1000).toFixed(1)} km`;
-                  return `
-                    <button class="pace-cp-node ${stateClass ? `is-${stateClass}` : ""}" type="button" data-pace-checkpoint-select="${escapeHtml(point.id)}" aria-pressed="${point.selected ? "true" : "false"}">
-                      <span class="pace-cp-dot" aria-hidden="true"></span>
-                      <strong>${escapeHtml(point.label)}</strong>
-                      <span>${escapeHtml(pointDistance)}</span>
-                    </button>
-                  `;
-                }).join("")}
-              </div>
-            </div>
-          </section>
-
-          <details class="pace-supporting-details" data-pace-supporting-details="true">
-            <summary><span>CP interval averages and supporting evidence</span><em>Every adjacent CP pair, Body Index comparison, parameters, provenance, and raw object</em></summary>
+          <details class="pace-supporting-details" data-pace-supporting-details="true" open>
+            <summary><span>CP 區間平均與 supporting evidence</span><em>218 intervals · reference average × Body Index expected · scroll inside table</em></summary>
             <div class="pace-fit-workbench pace-supporting-grid">
               <section class="pace-support-section" data-pace-fit-reference-table="true">
                 <h3>Historical CP Interval Averages <span class="chip info">reference GPX aggregate</span></h3>
                 <p class="status">每列都是相鄰兩個 CP 的移動區間。Reference average 使用通過兩點的歷史 GPX elapsed time 算術平均；沒有足夠樣本的區間維持 --。</p>
                 <div class="pace-table-scroll">
                   <table class="pace-budget-table pace-fit-reference-table">
-                    <thead><tr><th>CP interval</th><th>Reference average</th><th>Body Index expected</th><th>Pace Fit</th></tr></thead>
+                    <thead><tr><th>CP interval</th><th>Reference 平均</th><th>Body Index 預估</th><th>Pace Fit</th></tr></thead>
                     <tbody>${referencePairRows || `<tr><td colspan="4">尚未取得 CP interval reference timing。</td></tr>`}</tbody>
                   </table>
                 </div>

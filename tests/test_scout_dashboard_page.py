@@ -4474,8 +4474,13 @@ def test_scout_dashboard_pace_fit_is_map_first_and_discloses_supporting_info() -
     assert 'data-pace-map-primary="true"' in renderer
     assert 'data-pace-supporting-details="true"' in renderer
     assert (
-        '<details class="pace-supporting-details" data-pace-supporting-details="true">'
+        '<details class="pace-supporting-details" data-pace-supporting-details="true" open>'
         in renderer
+    )
+    assert 'data-pace-interval-result="true"' in renderer
+    assert renderer.count('class="pace-timeline-band"') == 1
+    assert renderer.index('aria-label="Selected checkpoint inspector"') < renderer.index(
+        'data-pace-interval-result="true"'
     )
     assert "pace-spatial-workbench" in renderer
     assert "pace-cp-inspector" in renderer
@@ -4503,8 +4508,10 @@ def test_scout_dashboard_pace_fit_is_map_first_and_discloses_supporting_info() -
         )[0]
     )
     assert "23.120456, 120.832156" not in html
-    assert "min-height: clamp(520px, 62vh, 760px)" in pace_css
-    assert "height: 210px" not in pace_css
+    assert "grid-template-columns: minmax(0, 1.7fr) minmax(340px, .72fr)" in pace_css
+    assert "height: clamp(430px, 58vh, 620px)" in pace_css
+    assert "max-height: 340px" in pace_css
+    assert "min-width: 720px" not in pace_css
 
 
 def test_scout_dashboard_pace_fit_compares_each_cp_interval_with_body_index_time_ratio() -> None:

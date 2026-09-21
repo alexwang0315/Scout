@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import hashlib
 import ipaddress
 import json
@@ -20,7 +21,7 @@ from urllib.parse import quote, urlparse
 from xml.etree.ElementTree import ParseError
 
 import yaml
-from fastapi import APIRouter, FastAPI, HTTPException, Query, Request
+from fastapi import APIRouter, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import (
     BaseModel,
@@ -346,10 +347,16 @@ _BODY_INDEX_AUTO_EXPORT_DIR_NAMES = (
     "AutoExport",
 )
 DEFAULT_DASHBOARD_BODY_INDEX_STORE_ROOT = ROOT / "outputs" / "dashboard" / "body_index"
+DEFAULT_BODY_INDEX_ACTIVITY_IMPORT_SESSION_TTL_SECONDS = 15 * 60
+MAX_BODY_INDEX_ACTIVITY_IMPORT_FILE_BYTES = 256 * 1024 * 1024
+MAX_BODY_INDEX_ACTIVITY_IMPORT_FILES = 128
 DEFAULT_EMERGENCY_MOBILE_SANDBOX_STORE_ROOT = (
     ROOT / "outputs" / "dashboard" / "living"
 )
 DASHBOARD_BODY_INDEX_SCHEMA_VERSION = "scout_dashboard_body_index.v1"
+
+_BODY_INDEX_ACTIVITY_IMPORT_SESSIONS_LOCK = threading.Lock()
+_BODY_INDEX_ACTIVITY_IMPORT_SESSIONS: dict[str, dict[str, Any]] = {}
 
 
 def _dashboard_emergency_desktop_approval_html() -> str:
@@ -779,6 +786,9 @@ def _dashboard_body_index_sanitize_source_entry(source: dict[str, Any]) -> dict[
         "provider_metric_names",
         "provider_metric_summaries",
         "body_index_analysis",
+        "selected_activity_keys",
+        "selection_mode",
+        "selected_activity_count",
     }
     sanitized = {key: source[key] for key in allowed_keys if key in source}
     source_sha = str(sanitized.get("sha256") or source.get("sha256") or "")
@@ -1118,6 +1128,152 @@ def _dashboard_body_index_source_from_zip(
         imported_at,
         body_mass_kg=body_mass_kg,
     )
+
+
+def _dashboard_body_index_activity_candidate_id(
+    source_sha256: str,
+    activity_key: str,
+) -> str:
+    return hashlib.sha256(
+        f"{source_sha256}:{activity_key}".encode("utf-8")
+    ).hexdigest()[:32]
+
+
+def _dashboard_body_index_imported_activity_map(
+    snapshot: Mapping[str, Any],
+) -> dict[str, set[str] | None]:
+    """Return selected activity keys, with ``None`` meaning a full source import."""
+
+    result: dict[str, set[str] | None] = {}
+    for source in snapshot.get("source_index", []):
+        if not isinstance(source, Mapping):
+            continue
+        source_sha = str(source.get("sha256") or "").strip()
+        if not source_sha:
+            continue
+        selected = source.get("selected_activity_keys")
+        if isinstance(selected, list):
+            result[source_sha] = {
+                str(value).strip() for value in selected if str(value).strip()
+            }
+        else:
+            result[source_sha] = None
+    return result
+
+
+def _dashboard_body_index_activity_candidate(
+    *,
+    candidate_id: str,
+    source_sha256: str,
+    source_name: str,
+    source: Mapping[str, Any],
+    activity: Mapping[str, Any],
+    already_imported: bool,
+) -> dict[str, Any]:
+    coverage = activity.get("data_coverage")
+    safe_coverage = {
+        key: coverage.get(key)
+        for key in ("speed", "cadence", "heart_rate", "active_energy", "energy")
+        if isinstance(coverage, Mapping) and key in coverage
+    }
+    return {
+        "candidate_id": candidate_id,
+        "source_sha256_prefix": source_sha256[:16],
+        "source_name": source_name,
+        "activity_ref": str(activity.get("activity_ref") or candidate_id[:16]),
+        "activity_kind": str(activity.get("activity_kind") or "other"),
+        "date": str(activity.get("date") or ""),
+        "duration_s": activity.get("duration_s"),
+        "distance_km": activity.get("distance_km"),
+        "active_energy_kcal": activity.get("active_energy_kcal"),
+        "classification_status": activity.get("classification_status"),
+        "data_coverage": safe_coverage,
+        "already_imported": already_imported,
+        "selection_status": "already_imported" if already_imported else "available",
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+        "source_format": source.get("source_format"),
+    }
+
+
+def _dashboard_body_index_selected_source(
+    source: Mapping[str, Any],
+    selected_activity_keys: set[str],
+) -> dict[str, Any]:
+    """Keep only explicitly selected activities and discard unrelated daily metrics."""
+
+    selected = copy.deepcopy(dict(source))
+    analysis = selected.get("body_index_analysis")
+    if not isinstance(analysis, dict):
+        raise ValueError("HealthExport source has no Body Index analysis")
+    activities = [
+        dict(activity)
+        for activity in analysis.get("activities", [])
+        if isinstance(activity, Mapping)
+        and str(activity.get("activity_key") or activity.get("activity_ref") or "")
+        in selected_activity_keys
+    ]
+    if not activities:
+        raise ValueError("selected activity was not found in the preview source")
+    mode_counts: dict[str, int] = {}
+    dates: list[str] = []
+    for activity in activities:
+        mode = str(activity.get("activity_kind") or "other")
+        mode_counts[mode] = mode_counts.get(mode, 0) + 1
+        if activity.get("date"):
+            dates.append(str(activity["date"]))
+    filtered_analysis = copy.deepcopy(analysis)
+    filtered_analysis["activities"] = activities
+    filtered_analysis["daily_metric_records"] = []
+    filtered_coverage = dict(filtered_analysis.get("coverage") or {})
+    filtered_coverage.update(
+        {
+            "activity_count": len(activities),
+            "activity_count_by_mode": mode_counts,
+            "date_start": min(dates) if dates else None,
+            "date_end": max(dates) if dates else None,
+            "parse_error_count": 0,
+            "parse_errors_by_type": [],
+        }
+    )
+    filtered_analysis["coverage"] = filtered_coverage
+    selected["body_index_analysis"] = filtered_analysis
+    selected["selected_activity_keys"] = sorted(selected_activity_keys)
+    selected["selected_activity_count"] = len(activities)
+    selected["selection_mode"] = "selected_activity_only"
+    selected["gpx_count"] = 0
+    selected["walking_sessions"] = mode_counts.get("walking", 0)
+    selected["analysis_windows"] = 0
+    selected["hr_pressure_windows"] = 0
+    selected["recovery_debt_windows"] = 0
+    selected["total_distance_km"] = round(
+        sum(float(activity.get("distance_km") or 0.0) for activity in activities),
+        2,
+    )
+    selected["total_duration_min"] = round(
+        sum(float(activity.get("duration_s") or 0.0) for activity in activities)
+        / 60.0,
+        1,
+    )
+    selected["provider_metric_names"] = []
+    selected["provider_metric_summaries"] = []
+    return selected
+
+
+def _dashboard_body_index_prune_activity_import_sessions(
+    *,
+    now: float | None = None,
+) -> None:
+    current = time.time() if now is None else now
+    with _BODY_INDEX_ACTIVITY_IMPORT_SESSIONS_LOCK:
+        expired = [
+            session_id
+            for session_id, session in _BODY_INDEX_ACTIVITY_IMPORT_SESSIONS.items()
+            if current - float(session.get("created_at") or 0.0)
+            > DEFAULT_BODY_INDEX_ACTIVITY_IMPORT_SESSION_TTL_SECONDS
+        ]
+        for session_id in expired:
+            _BODY_INDEX_ACTIVITY_IMPORT_SESSIONS.pop(session_id, None)
 
 
 def _dashboard_body_index_int(source: dict[str, Any], key: str) -> int:
@@ -2258,6 +2414,34 @@ class DashboardBodyIndexImportRequest(BaseModel):
             raise ValueError("project_id may only contain letters, numbers, dot, underscore, and dash")
         self.source_dir = self.source_dir.strip() or None if self.source_dir else None
         self.operator_alias = self.operator_alias.strip()
+        return self
+
+
+class DashboardBodyIndexActivityImportConfirmRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: str = Field(min_length=1)
+    import_session_id: str = Field(min_length=1, max_length=200)
+    selected_activity_ids: list[str] = Field(min_length=1, max_length=500)
+    confirm_import: bool = False
+    operator_alias: str = Field(default="dashboard_operator", min_length=1)
+    body_mass_kg: float = Field(default=DEFAULT_BODY_MASS_KG, gt=0, le=500)
+
+    @model_validator(mode="after")
+    def normalize_dashboard_body_index_activity_import(
+        self,
+    ) -> "DashboardBodyIndexActivityImportConfirmRequest":
+        self.project_id = self.project_id.strip()
+        if not _dashboard_body_index_project_id(self.project_id):
+            raise ValueError(
+                "project_id may only contain letters, numbers, dot, underscore, and dash"
+            )
+        self.import_session_id = self.import_session_id.strip()
+        self.operator_alias = self.operator_alias.strip()
+        normalized_ids = [str(item).strip() for item in self.selected_activity_ids]
+        if not normalized_ids or any(not item for item in normalized_ids):
+            raise ValueError("selected_activity_ids must contain non-blank ids")
+        self.selected_activity_ids = list(dict.fromkeys(normalized_ids))
         return self
 
 
