@@ -69,6 +69,7 @@ Dashboard 的 Pace Fit > Body Index 會從本機 HealthExport 時間序列建立
 - 跑→走／停前的累積活動能量與後續恢復跑段會保留為操作性代理；它不能被解讀為純有氧代謝、力竭或生理最大值。
 - 每日會分別顯示活動能量、靜態能量與合計，並揭露日期範圍、完整性與排除規則。同日跑段占比與「相對平日平均活動能量倍率」是不同欄位；倍率不預設為 2，也不等同登山每日最大可用能量。
 - 預設匯入會合併本機 `~/downloads/HealthExport` 的 ZIP 與 iCloud Documents 下 `Healthy export automation` 的標準 JSON，並以檔案 SHA、活動 fingerprint 去重。iCloud `AutoSync/Workouts` 的 `.hae` 壓縮內部檔與 automation 設定不會被當成標準 Auto Export JSON；活動內 `basalEnergy` 也不會冒充全天靜態能量。
+- 在 Body Index 按「加入新的活動紀錄」會重新掃描上述本機來源，沿用同一個 HealthExport import/merge endpoint；新活動會加入，已存在的來源會去重略過，原始健康序列不會送到外部。
 
 平地速度／能量成本另以 ACSM walking/running metabolic equations 作為 70 kg 模型交叉檢查；Pace Fit 校準兩端則使用同一 `pandolf_metabolic_power_w_estimate` 域的候選代謝功率。公式的適用範圍與來源會隨輸出保留。這些模型不會覆寫手錶既有熱量，也不會把坡度、負重係數直接乘到個人可用能量。
 

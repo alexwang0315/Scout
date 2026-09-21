@@ -2758,7 +2758,7 @@
 
     .pace-fit-dashboard {
       display: grid;
-      gap: 12px;
+      gap: 16px;
     }
 
     .pace-fit-status-grid {
@@ -2804,8 +2804,8 @@
 
     .pace-spatial-workbench {
       display: grid;
-      grid-template-columns: minmax(520px, 2.25fr) minmax(280px, .75fr);
-      gap: 12px;
+      grid-template-columns: minmax(0, 1.7fr) minmax(340px, .72fr);
+      gap: 16px;
       align-items: stretch;
     }
 
@@ -2814,9 +2814,9 @@
     .pace-timeline-band,
     .pace-supporting-details {
       min-width: 0;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: var(--surface);
+      border: 1px solid rgba(143, 183, 215, .22);
+      border-radius: 12px;
+      background: linear-gradient(145deg, rgba(22, 29, 34, .98), rgba(16, 25, 29, .98));
       overflow: hidden;
     }
 
@@ -2827,9 +2827,9 @@
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      padding: 9px 12px;
-      border-bottom: 1px solid var(--line);
-      background: rgba(255, 255, 255, .018);
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(143, 183, 215, .16);
+      background: rgba(255, 255, 255, .025);
     }
 
     .pace-map-head h3,
@@ -2847,12 +2847,13 @@
 
     .pace-map-body {
       position: relative;
-      min-height: clamp(520px, 62vh, 760px);
+      height: clamp(430px, 58vh, 620px);
+      min-height: 0;
       background: #0a1418;
     }
 
     .pace-map-body .architecture-empty {
-      min-height: clamp(520px, 62vh, 760px);
+      min-height: 100%;
       border: 0;
       border-radius: 0;
     }
@@ -2884,7 +2885,8 @@
     }
 
     .pace-cp-inspector {
-      min-height: clamp(520px, 62vh, 760px);
+      height: clamp(430px, 58vh, 620px);
+      min-height: 0;
       display: flex;
       flex-direction: column;
     }
@@ -2894,8 +2896,9 @@
       align-items: flex-start;
       justify-content: space-between;
       gap: 12px;
-      padding: 15px 14px 13px;
-      border-bottom: 1px solid var(--line);
+      padding: 14px 16px 13px;
+      border-bottom: 1px solid rgba(143, 183, 215, .16);
+      background: rgba(255, 255, 255, .02);
     }
 
     .pace-cp-inspector-head > div span {
@@ -2911,16 +2914,39 @@
       margin-top: 4px;
       color: var(--text);
       font-family: var(--mono);
-      font-size: 27px;
+      font-size: clamp(20px, 2vw, 27px);
+      line-height: 1.15;
       font-variant-numeric: tabular-nums;
+      word-break: keep-all;
+      overflow-wrap: normal;
     }
 
     .pace-cp-inspector-body {
+      min-height: 0;
       flex: 1;
       display: flex;
       flex-direction: column;
-      gap: 14px;
-      padding: 14px;
+      gap: 12px;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding: 14px 16px 16px;
+      scrollbar-color: rgba(143, 183, 215, .5) rgba(255, 255, 255, .04);
+    }
+
+    .pace-cp-inspector-body::-webkit-scrollbar,
+    .pace-timeline-scroll::-webkit-scrollbar,
+    .pace-table-scroll::-webkit-scrollbar {
+      width: 9px;
+      height: 9px;
+    }
+
+    .pace-cp-inspector-body::-webkit-scrollbar-thumb,
+    .pace-timeline-scroll::-webkit-scrollbar-thumb,
+    .pace-table-scroll::-webkit-scrollbar-thumb {
+      border: 2px solid transparent;
+      border-radius: 999px;
+      background: rgba(143, 183, 215, .42);
+      background-clip: padding-box;
     }
 
     .pace-cp-facts {
@@ -2951,7 +2977,8 @@
       font-family: var(--mono);
       font-size: 12px;
       font-variant-numeric: tabular-nums;
-      overflow-wrap: anywhere;
+      word-break: keep-all;
+      overflow-wrap: normal;
     }
 
     .pace-cp-meaning {
@@ -2962,11 +2989,12 @@
     }
 
     .pace-primary-advisory {
-      margin-top: auto;
       display: grid;
       gap: 5px;
       padding: 12px;
+      border: 1px solid rgba(183, 207, 99, .22);
       border-left: 3px solid var(--accent);
+      border-radius: 8px;
       background: rgba(183, 207, 99, .065);
     }
 
@@ -2985,11 +3013,10 @@
 
     .pace-fit-conclusion {
       display: grid;
-      grid-template-columns: minmax(190px, .7fr) minmax(280px, 1.3fr);
-      gap: 12px 18px;
+      gap: 10px;
       align-items: start;
-      padding: 14px;
-      border: 1px solid rgba(183, 207, 99, .35);
+      padding: 13px;
+      border: 1px solid rgba(183, 207, 99, .3);
       border-radius: 8px;
       background: rgba(183, 207, 99, .055);
     }
@@ -3000,42 +3027,87 @@
     }
 
     .pace-fit-conclusion h3 {
-      margin: 7px 0 0;
+      margin: 6px 0 0;
       color: var(--text);
-      font-size: 15px;
+      font-size: 14px;
+      line-height: 1.4;
+      overflow-wrap: normal;
     }
 
     .pace-fit-conclusion > strong {
       color: var(--text);
-      font-size: 18px;
-      line-height: 1.45;
+      font-size: 15px;
+      line-height: 1.5;
     }
 
     .pace-fit-conclusion p {
-      grid-column: 1 / -1;
       margin: 0;
       color: var(--muted);
       font-size: 11px;
       line-height: 1.55;
     }
 
+    .pace-interval-metrics {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 6px;
+      margin-top: 2px;
+    }
+
+    .pace-interval-metric {
+      min-width: 0;
+      display: grid;
+      gap: 3px;
+      padding: 8px 9px;
+      border: 1px solid rgba(255, 255, 255, .09);
+      border-radius: 7px;
+      background: rgba(0, 0, 0, .14);
+    }
+
+    .pace-interval-metric span {
+      color: var(--muted);
+      font-size: 9px;
+      font-weight: 850;
+      letter-spacing: .05em;
+      text-transform: uppercase;
+    }
+
+    .pace-interval-metric strong {
+      min-width: 0;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 14px;
+      font-variant-numeric: tabular-nums;
+      overflow-wrap: normal;
+    }
+
+    .pace-interval-definition {
+      color: var(--muted);
+      font-size: 10px;
+      line-height: 1.45;
+    }
+
     .pace-timeline-band {
-      padding-bottom: 10px;
+      flex: 0 0 auto;
+      border-color: rgba(143, 183, 215, .2);
+      background: rgba(8, 17, 21, .72);
     }
 
     .pace-timeline-scroll {
-      overflow-x: auto;
-      overscroll-behavior-inline: contain;
-      padding: 0 12px;
+      max-height: 218px;
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      padding: 4px 10px 10px 12px;
     }
 
     .pace-supporting-details > summary {
-      min-height: 48px;
+      min-height: 56px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 12px;
-      padding: 10px 12px;
+      padding: 11px 14px;
       color: var(--text);
       cursor: pointer;
       list-style: none;
@@ -3063,20 +3135,30 @@
 
     .pace-supporting-details > summary em {
       margin-left: auto;
+      max-width: 45%;
       color: var(--muted);
       font-style: normal;
       font-size: 11px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .pace-supporting-grid {
       display: grid;
-      grid-template-columns: repeat(4, minmax(250px, 1fr));
+      grid-template-columns: repeat(3, minmax(240px, 1fr));
       border-top: 1px solid var(--line);
     }
 
     .pace-support-section {
       min-width: 0;
-      padding: 14px;
+      padding: 16px;
+      background: rgba(255, 255, 255, .012);
+    }
+
+    .pace-support-section[data-pace-fit-reference-table="true"] {
+      grid-column: 1 / -1;
+      background: rgba(8, 17, 21, .38);
     }
 
     .pace-support-section + .pace-support-section {
@@ -3095,8 +3177,36 @@
 
     .pace-table-scroll {
       max-width: 100%;
+      max-height: 340px;
+      overflow-y: auto;
       overflow-x: auto;
-      overscroll-behavior-inline: contain;
+      overscroll-behavior: contain;
+    }
+
+    .pace-fit-reference-table {
+      table-layout: fixed;
+    }
+
+    .pace-fit-reference-table th,
+    .pace-fit-reference-table td {
+      white-space: normal;
+      word-break: keep-all;
+      overflow-wrap: normal;
+    }
+
+    .pace-fit-reference-table th:first-child,
+    .pace-fit-reference-table td:first-child {
+      width: 44%;
+    }
+
+    .pace-fit-reference-table th:nth-child(2),
+    .pace-fit-reference-table td:nth-child(2),
+    .pace-fit-reference-table th:nth-child(3),
+    .pace-fit-reference-table td:nth-child(3),
+    .pace-fit-reference-table th:nth-child(4),
+    .pace-fit-reference-table td:nth-child(4) {
+      width: 18.66%;
+      white-space: nowrap;
     }
 
     .pace-support-section .pace-output {
@@ -22301,6 +22411,8 @@
       const markup = renderPaceFitBodyIndexPage();
       diagnosticRequire(markup.includes("Import HealthExport"), "Body Index import control is missing.");
       diagnosticRequire(markup.includes("data-body-index-import"), "Body Index import binding is missing.");
+      diagnosticRequire(markup.includes("data-body-index-add-activity"), "Body Index add-activity control is missing.");
+      diagnosticRequire(markup.includes("加入新的活動紀錄"), "Body Index add-activity label is missing.");
       diagnosticRequire(BODY_INDEX_IMPORT_PATH === "/admin/dashboard/body-index/import", "Body Index import path changed unexpectedly.");
       const body = await diagnosticBodyIndex();
       const importHandler = diagnosticCompactSource(bindBodyIndexControls);
@@ -38212,8 +38324,11 @@
                   class="body-index-import-button"
                   type="button"
                   data-body-index-import
+                  data-body-index-add-activity="true"
+                  aria-label="加入新的活動紀錄（本機 HealthExport）"
+                  title="加入新的活動紀錄（Import HealthExport）：掃描本機來源並去重合併"
                   ${state.bodyIndexImportBusy ? "disabled" : ""}
-                >${state.bodyIndexImportBusy ? "Importing..." : "Import HealthExport"}</button>
+                >${state.bodyIndexImportBusy ? "匯入中..." : "加入新的活動紀錄"}</button>
                 <label for="bodyIndexBodyMass">Body mass kg</label>
                 <input
                   id="bodyIndexBodyMass"
