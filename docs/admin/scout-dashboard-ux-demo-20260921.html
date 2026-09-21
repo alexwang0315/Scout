@@ -1,0 +1,634 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scout Dashboard UX Demo · 2026-09-21</title>
+  <style>
+    :root {
+      --ink: #18313a;
+      --muted: #667b83;
+      --soft: #8ba0a7;
+      --line: #d7e3e6;
+      --paper: #eef4f5;
+      --panel: #ffffff;
+      --panel-soft: #f7faf9;
+      --sidebar: #18343d;
+      --sidebar-muted: #b5cbd0;
+      --route: #2f8ca3;
+      --route-soft: #e2f2f5;
+      --timeline: #8067c7;
+      --timeline-soft: #eeeafb;
+      --result: #bf8735;
+      --result-soft: #fff5e3;
+      --personal: #4b9870;
+      --personal-soft: #e6f4ec;
+      --next: #1e9d8a;
+      --next-soft: #e4f6f1;
+      --source: #d47a46;
+      --source-soft: #fff0e7;
+      --danger: #c75e63;
+      --danger-soft: #fff0f0;
+      --shadow: 0 18px 50px rgba(33, 72, 79, .11);
+      --radius: 16px;
+    }
+    * { box-sizing: border-box; }
+    html { background: var(--paper); }
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--paper);
+      font: 14px/1.45 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    button { font: inherit; }
+    button:focus-visible {
+      outline: 3px solid rgba(47, 140, 163, .38);
+      outline-offset: 3px;
+    }
+    .icon-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+    .icon { width: 24px; height: 24px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    .icon.route { color: var(--route); }
+    .icon.timeline { color: var(--timeline); }
+    .icon.result { color: var(--result); }
+    .icon.personal { color: var(--personal); }
+    .icon.next { color: var(--next); }
+    .icon.source { color: var(--source); }
+    .app-shell { min-height: 100vh; display: grid; grid-template-columns: 248px minmax(0, 1fr); }
+    .sidebar { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 20px; padding: 24px 16px; color: #f7fbfb; background: var(--sidebar); }
+    .brand { display: flex; align-items: flex-start; gap: 11px; padding: 2px 8px 22px; border-bottom: 1px solid rgba(255,255,255,.14); }
+    .brand-mark { width: 40px; height: 40px; display: grid; place-items: center; border: 1px solid rgba(133,226,224,.5); border-radius: 13px; color: #8de0d6; background: rgba(55,157,163,.18); }
+    .brand-mark .icon { width: 25px; height: 25px; }
+    .brand strong { display: block; font-size: 16px; letter-spacing: .02em; }
+    .brand small { display: block; margin-top: 3px; color: var(--sidebar-muted); font-size: 11px; }
+    .side-label { padding: 0 10px; color: #8eafb5; font-size: 10px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
+    .side-nav { display: grid; gap: 8px; }
+    .side-nav button { width: 100%; min-height: 42px; display: flex; align-items: center; gap: 10px; border: 1px solid transparent; border-radius: 12px; color: var(--sidebar-muted); background: transparent; text-align: left; cursor: pointer; padding: 8px 11px; }
+    .side-nav button:hover, .side-nav button[aria-current="page"] { border-color: rgba(141,224,214,.25); color: #fff; background: rgba(141,224,214,.12); }
+    .side-nav button[aria-current="page"] { box-shadow: inset 3px 0 0 #8de0d6; }
+    .side-nav .icon { width: 22px; height: 22px; color: #8de0d6; }
+    .side-note { margin-top: auto; padding: 12px; border: 1px solid rgba(255,255,255,.14); border-radius: 13px; color: var(--sidebar-muted); background: rgba(255,255,255,.05); font-size: 11px; }
+    .side-note strong { display: block; margin-bottom: 3px; color: #fff; font-size: 12px; }
+    .main { min-width: 0; }
+    .topbar { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 16px 30px; border-bottom: 1px solid var(--line); background: rgba(255,255,255,.88); backdrop-filter: blur(15px); }
+    .crumbs { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+    .crumbs strong { color: var(--ink); }
+    .demo-label { display: inline-flex; align-items: center; gap: 7px; border: 1px solid #c9dfe0; border-radius: 999px; color: #287b77; background: #edf9f5; padding: 5px 10px; font-size: 11px; font-weight: 800; }
+    .demo-label::before { width: 7px; height: 7px; display: inline-block; border-radius: 50%; background: var(--next); content: ""; }
+    .content { width: min(1480px, 100%); margin: 0 auto; padding: 30px; }
+    .view-switcher { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 25px; }
+    .view-switcher button { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; border: 1px solid var(--line); border-radius: 12px; color: var(--muted); background: rgba(255,255,255,.75); padding: 7px 13px; font-weight: 750; cursor: pointer; }
+    .view-switcher button:hover, .view-switcher button[aria-selected="true"] { border-color: var(--route); color: var(--route); background: #fff; box-shadow: 0 6px 18px rgba(47,140,163,.11); }
+    .view-switcher .icon { width: 20px; height: 20px; }
+    .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 22px; }
+    .eyebrow { margin: 0 0 5px; color: var(--route); font-size: 11px; font-weight: 850; letter-spacing: .12em; text-transform: uppercase; }
+    h1, h2, h3, p { margin: 0; }
+    h1 { font-size: clamp(25px, 3vw, 36px); letter-spacing: -.035em; line-height: 1.12; }
+    h2 { font-size: 20px; letter-spacing: -.02em; }
+    h3 { font-size: 15px; }
+    .subtitle { max-width: 690px; margin-top: 9px; color: var(--muted); }
+    .route-identity { display: flex; align-items: center; gap: 11px; min-width: 240px; padding: 10px 13px; border: 1px solid var(--line); border-radius: 13px; background: #fff; }
+    .route-identity .icon { width: 28px; height: 28px; }
+    .route-identity strong { display: block; font-size: 13px; }
+    .route-identity span { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; }
+    .decision-banner { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(230px, .9fr) auto; gap: 18px; align-items: center; margin-bottom: 22px; padding: 19px 21px; border: 1px solid #cce4df; border-radius: var(--radius); background: linear-gradient(120deg, #f4fffc, #fff); box-shadow: var(--shadow); }
+    .decision-banner .kicker { color: var(--next); font-size: 11px; font-weight: 850; letter-spacing: .1em; text-transform: uppercase; }
+    .decision-banner strong { display: block; margin-top: 4px; font-size: 20px; }
+    .decision-banner p { color: var(--muted); font-size: 12px; }
+    .decision-detail { padding-left: 18px; border-left: 1px solid var(--line); }
+    .decision-detail span { display: block; color: var(--muted); font-size: 11px; }
+    .decision-detail strong { margin-top: 2px; font-size: 14px; }
+    .primary-button, .quiet-button, .text-button, .select-button { border: 1px solid transparent; border-radius: 11px; cursor: pointer; font-weight: 800; }
+    .primary-button { min-height: 42px; color: #fff; background: var(--next); padding: 9px 14px; box-shadow: 0 8px 18px rgba(30,157,138,.18); }
+    .primary-button:hover { background: #168574; }
+    .quiet-button { min-height: 36px; color: var(--ink); border-color: var(--line); background: #fff; padding: 7px 11px; }
+    .quiet-button:hover, .select-button:hover { border-color: var(--route); color: var(--route); }
+    .text-button { color: var(--route); background: transparent; padding: 3px 0; }
+    .select-button { width: 100%; display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; color: var(--ink); border-color: var(--line); background: #fff; padding: 10px 12px; text-align: left; }
+    .select-button.is-selected { border-color: var(--timeline); box-shadow: inset 3px 0 0 var(--timeline); background: var(--timeline-soft); }
+    .select-button .point-copy { min-width: 0; }
+    .select-button strong { display: block; overflow-wrap: anywhere; white-space: normal; line-height: 1.3; }
+    .select-button span { display: block; overflow: hidden; margin-top: 2px; color: var(--muted); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+    .workbench { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
+    .panel { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); box-shadow: 0 10px 28px rgba(33,72,79,.06); }
+    .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 17px 18px; border-bottom: 1px solid var(--line); }
+    .panel-head > div:first-child { display: flex; align-items: center; gap: 10px; }
+    .panel-head .icon { width: 26px; height: 26px; }
+    .panel-head p { margin-top: 2px; color: var(--muted); font-size: 11px; }
+    .panel-body { padding: 17px 18px; }
+    .control-center { position: sticky; top: 89px; max-height: calc(100vh - 105px); overflow: auto; }
+    .control-center .panel-head { background: linear-gradient(120deg, #f7f3ff, #fff); }
+    .control-label { color: var(--timeline); font-size: 10px; font-weight: 850; letter-spacing: .12em; text-transform: uppercase; }
+    .control-status { display: flex; align-items: center; gap: 7px; margin-bottom: 12px; color: var(--muted); font-size: 11px; }
+    .control-status::before { width: 7px; height: 7px; display: inline-block; border-radius: 50%; background: var(--timeline); content: ""; }
+    .point-list { display: grid; gap: 8px; }
+    .point-list { max-height: 560px; overflow-y: auto; padding-right: 4px; }
+    .control-footer { position: sticky; bottom: -1px; display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 15px; padding: 14px 0 2px; border-top: 1px solid var(--line); color: var(--muted); background: #fff; font-size: 11px; }
+    .hint { position: relative; display: inline-grid; place-items: center; width: 22px; height: 22px; border: 1px solid #e8c5a9; border-radius: 50%; color: var(--source); background: var(--source-soft); font-size: 12px; font-weight: 900; cursor: help; }
+    .hint span { position: absolute; z-index: 20; right: 0; bottom: calc(100% + 7px); width: 210px; display: none; border: 1px solid #e8c5a9; border-radius: 9px; color: var(--ink); background: #fff9f4; box-shadow: var(--shadow); padding: 8px 10px; font-size: 11px; font-weight: 500; line-height: 1.35; text-align: left; }
+    .hint:hover span, .hint:focus-visible span { display: block; }
+    .map-panel { overflow: hidden; }
+    .map-canvas { position: relative; min-height: 390px; overflow: hidden; background: #dceff0; }
+    .map-canvas::after { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(135deg, rgba(255,255,255,.12), transparent 50%); content: ""; }
+    .map-svg { width: 100%; height: 390px; display: block; }
+    .map-svg .contour { fill: none; stroke: rgba(47, 140, 163, .18); stroke-width: 2; }
+    .map-svg .contour-two { stroke: rgba(47, 140, 163, .24); }
+    .map-svg .contour-three { stroke: rgba(47, 140, 163, .13); }
+    .map-svg .route-line { fill: none; stroke: var(--route); stroke-width: 7; stroke-linecap: round; stroke-linejoin: round; }
+    .map-svg { pointer-events: none; }
+    .map-svg > rect, .map-svg .contour, .map-svg .route-line { pointer-events: none; }
+    .map-marker { cursor: pointer; outline: none; pointer-events: bounding-box; }
+    .map-marker .marker-halo { fill: rgba(255, 255, 255, .88); stroke: var(--route); stroke-width: 2; }
+    .map-marker .marker-core { fill: var(--route); }
+    .map-marker text { fill: #2e5b66; font: 700 14px ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; paint-order: stroke; stroke: rgba(231, 246, 246, .95); stroke-width: 4px; stroke-linejoin: round; }
+    .map-marker.selected .marker-halo { fill: var(--timeline-soft); stroke: var(--timeline); stroke-width: 3; }
+    .map-marker.selected .marker-core { fill: var(--timeline); }
+    .map-marker.selected text { fill: #654ca4; }
+    .map-top-status { position: absolute; z-index: 2; top: 14px; left: 15px; display: flex; align-items: center; gap: 8px; border: 1px solid rgba(255,255,255,.8); border-radius: 999px; color: #245c69; background: rgba(255,255,255,.9); padding: 6px 10px; font-size: 11px; font-weight: 800; }
+    .map-top-status::before { width: 7px; height: 7px; border-radius: 50%; background: var(--next); content: ""; }
+    .map-controls { position: absolute; z-index: 3; top: 14px; right: 15px; display: flex; gap: 6px; }
+    .map-controls button { width: 34px; height: 34px; border: 1px solid rgba(255,255,255,.9); border-radius: 10px; color: var(--ink); background: rgba(255,255,255,.93); cursor: pointer; font-weight: 900; }
+    .map-controls button:hover { color: var(--route); border-color: var(--route); }
+    .map-controls button.fit { width: auto; padding: 0 10px; color: var(--route); }
+    .map-label { position: absolute; z-index: 3; right: 15px; bottom: 14px; border: 1px solid rgba(255,255,255,.85); border-radius: 9px; color: var(--muted); background: rgba(255,255,255,.9); padding: 6px 9px; font-size: 10px; }
+    .map-legend { display: flex; flex-wrap: wrap; gap: 9px 15px; padding: 13px 17px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
+    .legend-item { display: inline-flex; align-items: center; gap: 6px; }
+    .legend-swatch { width: 10px; height: 10px; display: inline-block; border-radius: 50%; background: var(--route); }
+    .legend-swatch.selected { background: var(--timeline); box-shadow: 0 0 0 3px var(--timeline-soft); }
+    .legend-swatch.context { background: var(--result); }
+    .legend-swatch.route-line { width: 20px; height: 3px; border-radius: 5px; background: var(--route); }
+    .result-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 20px; }
+    .metric-card { min-width: 0; padding: 14px 15px; border: 1px solid var(--line); border-radius: 13px; background: var(--panel-soft); }
+    .metric-card .metric-label { display: flex; align-items: center; gap: 7px; color: var(--muted); font-size: 11px; }
+    .metric-card .icon { width: 22px; height: 22px; }
+    .metric-card strong { display: block; margin-top: 7px; font-size: 22px; letter-spacing: -.03em; }
+    .metric-card small { display: block; margin-top: 3px; color: var(--muted); font-size: 10px; }
+    .evidence-panel { margin-top: 20px; }
+    .evidence-grid { display: grid; grid-template-columns: 1.15fr .85fr; gap: 13px; }
+    .evidence-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+    .evidence-row:last-child { border-bottom: 0; }
+    .evidence-row strong { display: block; font-size: 12px; }
+    .evidence-row span { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; }
+    .status-pill { display: inline-flex; align-items: center; gap: 5px; width: fit-content; border-radius: 999px; padding: 5px 8px; font-size: 10px; font-weight: 850; white-space: nowrap; }
+    .status-pill.ready { color: #287457; background: var(--personal-soft); }
+    .status-pill.partial { color: #9b6b20; background: var(--result-soft); }
+    .status-pill.error { color: #a3484c; background: var(--danger-soft); }
+    .status-pill.info { color: #2a7080; background: var(--route-soft); }
+    .status-pill::before { width: 6px; height: 6px; border-radius: 50%; background: currentColor; content: ""; }
+    .interaction-status { min-height: 18px; margin-top: 13px; color: var(--next); font-size: 11px; font-weight: 750; }
+    .comparison-hero { display: grid; grid-template-columns: minmax(0, 1.2fr) repeat(3, minmax(130px, .55fr)); gap: 14px; align-items: center; margin-bottom: 20px; padding: 20px; border: 1px solid #ecd7ae; border-radius: var(--radius); background: linear-gradient(120deg, #fffaf0, #fff); box-shadow: var(--shadow); }
+    .comparison-hero .eyebrow { color: var(--result); }
+    .comparison-hero h2 { margin-top: 3px; font-size: 24px; }
+    .comparison-hero p { margin-top: 5px; color: var(--muted); font-size: 12px; }
+    .comparison-value { padding-left: 15px; border-left: 1px solid var(--line); }
+    .comparison-value span { display: block; color: var(--muted); font-size: 11px; }
+    .comparison-value strong { display: block; margin-top: 4px; font-size: 22px; }
+    .comparison-value small { display: block; margin-top: 2px; color: var(--muted); font-size: 10px; }
+    .formula { display: flex; align-items: center; gap: 8px; margin-top: 14px; padding: 10px 12px; border: 1px dashed #e4c98f; border-radius: 11px; color: #8b6425; background: var(--result-soft); font-size: 12px; }
+    .formula strong { font-size: 13px; }
+    .timeline-center .panel-head { background: linear-gradient(120deg, #f7f3ff, #fff); }
+    .timeline-list { display: grid; gap: 3px; }
+    .timeline-item { position: relative; display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 9px; padding: 8px 0; }
+    .timeline-item::before { position: absolute; top: 30px; bottom: -4px; left: 10px; width: 1px; background: #d9d2f0; content: ""; }
+    .timeline-item:last-child::before { display: none; }
+    .timeline-dot { position: relative; z-index: 1; width: 21px; height: 21px; margin-top: 2px; border: 4px solid #fff; border-radius: 50%; background: #d7cef3; box-shadow: 0 0 0 1px #d1c7eb; }
+    .timeline-item.is-selected .timeline-dot { background: var(--timeline); box-shadow: 0 0 0 4px var(--timeline-soft); }
+    .timeline-button { width: 100%; border: 0; color: var(--ink); background: transparent; padding: 0; text-align: left; cursor: pointer; }
+    .timeline-button strong { display: block; font-size: 13px; }
+    .timeline-button span { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; }
+    .timeline-item.is-selected .timeline-button strong { color: var(--timeline); }
+    .data-state-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; }
+    .state-card { min-height: 230px; }
+    .state-card .panel-head { align-items: flex-start; }
+    .state-card .panel-head > div:first-child { align-items: flex-start; }
+    .state-card .panel-head p { max-width: 360px; }
+    .state-summary { display: flex; align-items: center; gap: 12px; padding: 12px 13px; border-radius: 13px; background: var(--personal-soft); }
+    .state-summary .icon { width: 30px; height: 30px; }
+    .state-summary strong { display: block; }
+    .state-summary span { display: block; margin-top: 3px; color: var(--muted); font-size: 11px; }
+    .state-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; margin-top: 14px; }
+    .state-metric { padding: 10px; border: 1px solid var(--line); border-radius: 11px; background: var(--panel-soft); }
+    .state-metric span { display: block; color: var(--muted); font-size: 10px; }
+    .state-metric strong { display: block; margin-top: 4px; font-size: 16px; }
+    .error-state { padding: 13px; border: 1px solid #f0c7c8; border-radius: 13px; background: var(--danger-soft); }
+    .error-state.recovered { border-color: #bfe2cf; background: var(--personal-soft); }
+    .error-state.recovered strong { color: #287457; }
+    .error-state.recovered p { color: #4a7460; }
+    .error-state strong { display: block; color: #a3484c; }
+    .error-state p { margin-top: 4px; color: #7f5558; font-size: 12px; }
+    .error-actions { display: flex; align-items: center; gap: 10px; margin-top: 13px; }
+    .recovery-map { position: relative; height: 120px; margin-top: 14px; overflow: hidden; border: 1px dashed #e9b5b7; border-radius: 12px; background: repeating-linear-gradient(0deg, transparent 0 23px, rgba(199,94,99,.08) 24px), repeating-linear-gradient(90deg, transparent 0 23px, rgba(199,94,99,.08) 24px), #fff8f8; }
+    .recovery-map svg { width: 100%; height: 100%; display: block; }
+    .recovery-route { fill: none; stroke: #d7898d; stroke-width: 4; stroke-linecap: round; stroke-linejoin: round; }
+    .recovery-point { fill: #fff; stroke: #c75e63; stroke-width: 3; }
+    .recovery-map text { fill: #96565a; font-size: 11px; font-weight: 800; }
+    .source-note { display: flex; align-items: flex-start; gap: 9px; margin-top: 15px; padding: 10px 11px; border-radius: 11px; color: #805d44; background: var(--source-soft); font-size: 11px; }
+    .source-note .icon { width: 20px; height: 20px; margin-top: 1px; }
+    .source-note strong { display: block; color: #8f5f37; }
+    .source-note span { display: block; margin-top: 2px; }
+    .demo-footer { margin-top: 24px; padding-top: 15px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    @media (max-width: 1050px) {
+      .app-shell { grid-template-columns: 205px minmax(0, 1fr); }
+      .content { padding: 22px; }
+      .workbench { grid-template-columns: minmax(0, 1fr) 300px; }
+      .decision-banner { grid-template-columns: 1fr 1fr; }
+      .decision-banner .primary-button { grid-column: 2; justify-self: end; }
+      .comparison-hero { grid-template-columns: 1fr 1fr; }
+      .comparison-hero .comparison-copy { grid-column: 1 / -1; }
+    }
+    @media (max-width: 760px) {
+      .app-shell { display: block; }
+      .sidebar { position: static; height: auto; padding: 14px 15px; }
+      .brand { padding-bottom: 13px; }
+      .side-label, .side-note { display: none; }
+      .side-nav { display: flex; overflow-x: auto; padding-bottom: 2px; }
+      .side-nav button { min-width: max-content; min-height: 37px; }
+      .topbar { position: static; padding: 13px 16px; }
+      .content { padding: 18px 15px 28px; }
+      .page-head { display: block; }
+      .route-identity { margin-top: 15px; }
+      .decision-banner, .workbench, .data-state-grid, .evidence-grid { grid-template-columns: 1fr; }
+      .decision-detail { padding-top: 12px; padding-left: 0; border-top: 1px solid var(--line); border-left: 0; }
+      .decision-banner .primary-button { grid-column: auto; justify-self: start; }
+      .workbench { display: flex; flex-direction: column; }
+      .workbench > .control-center { order: -1; position: sticky; top: 8px; z-index: 4; max-height: 60vh; width: 100%; }
+      .workbench > .control-center .point-list { max-height: 240px; }
+      .result-strip, .state-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .comparison-hero { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .comparison-hero .comparison-copy { grid-column: 1 / -1; }
+      .comparison-value { padding-left: 0; border-left: 0; }
+      .map-canvas, .map-svg { min-height: 300px; height: 300px; }
+    }
+    @media (max-width: 430px) {
+      h1 { font-size: 28px; }
+      .result-strip, .state-metrics { grid-template-columns: 1fr 1fr; }
+      .comparison-hero { display: block; }
+      .comparison-value { display: inline-block; width: 48%; margin-top: 15px; vertical-align: top; }
+      .comparison-value:nth-child(3) { padding-left: 12px; border-left: 1px solid var(--line); }
+      .map-top-status { right: 12px; max-width: calc(100% - 24px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .map-controls { top: 56px; right: 12px; left: 12px; justify-content: flex-end; }
+      .map-marker text { font-size: 34px; stroke-width: 7px; }
+    }
+  </style>
+</head>
+<body>
+  <svg class="icon-defs" aria-hidden="true">
+    <defs>
+      <symbol id="icon-route" viewBox="0 0 24 24"><path d="M5 19c2-5 3-10 7-14 2-2 5-1 7 1"/><circle cx="5" cy="19" r="2"/><circle cx="19" cy="6" r="2"/><path d="M9 16h6"/></symbol>
+      <symbol id="icon-map" viewBox="0 0 24 24"><path d="M3 6.5 9 4l6 2.5L21 4v13.5L15 20l-6-2.5-6 2.5z"/><path d="M9 4v13.5M15 6.5V20"/></symbol>
+      <symbol id="icon-timeline" viewBox="0 0 24 24"><path d="M6 4v16M18 4v16"/><circle cx="6" cy="7" r="2"/><circle cx="18" cy="12" r="2"/><circle cx="6" cy="18" r="2"/></symbol>
+      <symbol id="icon-result" viewBox="0 0 24 24"><path d="M5 19V9M12 19V5M19 19v-7"/><path d="M3 19h18"/></symbol>
+      <symbol id="icon-source" viewBox="0 0 24 24"><path d="M5 4h14v16H5z"/><path d="M8 8h8M8 12h8M8 16h5"/></symbol>
+      <symbol id="icon-next" viewBox="0 0 24 24"><path d="M4 12h15M13 6l6 6-6 6"/></symbol>
+      <symbol id="icon-import" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 20h16"/></symbol>
+      <symbol id="icon-control" viewBox="0 0 24 24"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="2"/><circle cx="15" cy="17" r="2"/></symbol>
+      <symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
+      <symbol id="icon-alert" viewBox="0 0 24 24"><path d="m12 4 9 16H3z"/><path d="M12 9v5M12 17v.1"/></symbol>
+    </defs>
+  </svg>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Demo workflow navigation">
+      <div class="brand">
+        <div class="brand-mark"><svg class="icon"><use href="#icon-route"></use></svg></div>
+        <div><strong>Scout Dashboard</strong><small>UX layout demo · 2026-09-21</small></div>
+      </div>
+      <div class="side-label">工作流程</div>
+      <nav class="side-nav">
+        <button type="button" data-view="overview" data-focus-key="side-view-overview" aria-current="page"><svg class="icon"><use href="#icon-route"></use></svg><span>目前行程</span></button>
+        <button type="button" data-view="segment" data-focus-key="side-view-segment" aria-current="false"><svg class="icon"><use href="#icon-timeline"></use></svg><span>區間比較</span></button>
+        <button type="button" data-view="states" data-focus-key="side-view-states" aria-current="false"><svg class="icon"><use href="#icon-import"></use></svg><span>匯入與狀態</span></button>
+      </nav>
+      <div class="side-note"><strong>單一控制中心</strong>選取後同步地圖、結果與證據。</div>
+    </aside>
+    <main class="main">
+      <header class="topbar">
+        <div class="crumbs"><strong>Dashboard UX Demo</strong><span>/</span><span>設計方向審查</span></div>
+        <div class="demo-label">獨立 demo · 未修改正式頁面</div>
+      </header>
+      <div class="content">
+        <div class="view-switcher" role="tablist" aria-label="Demo views">
+          <button type="button" id="tab-overview" data-view="overview" data-focus-key="tab-overview" role="tab" aria-selected="true" aria-controls="panel-overview"><svg class="icon route"><use href="#icon-route"></use></svg>控制中心優先</button>
+          <button type="button" id="tab-segment" data-view="segment" data-focus-key="tab-segment" role="tab" aria-selected="false"><svg class="icon timeline"><use href="#icon-timeline"></use></svg>結論優先</button>
+          <button type="button" id="tab-states" data-view="states" data-focus-key="tab-states" role="tab" aria-selected="false"><svg class="icon source"><use href="#icon-import"></use></svg>證據與狀態</button>
+        </div>
+        <div id="appContent" aria-live="polite"></div>
+        <div class="demo-footer"><span id="interactionStatus">目前選取：雲海保線所。切換視圖不會重置。</span></div>
+      </div>
+    </main>
+  </div>
+  <script>
+    const DATA = {
+      route: "奇萊南華-能高越嶺步道Day1",
+      importedTrack: "2013-10-08 10:58:50 每日記錄",
+      workspace: "chilai_nanhua_day1",
+      points: [
+        {name: "舊林道叉路", distance: "0.6 km", kind: "路線脈絡", note: "分岔位置，先確認行進方向。", next: "查看路線來源"},
+        {name: "雲海保線所", distance: "1.5 km", kind: "宿點", note: "可作為第一個時間與資源節點。", next: "比較區間時間"},
+        {name: "黑水塘", distance: "2.35 km", kind: "水源／宿點", note: "保留真實名稱與來源脈絡。", next: "查看補水證據"},
+        {name: "大崩壁", distance: "4.1 km", kind: "地形重點", note: "路線脈絡中的高注意區段。", next: "查看地形證據"},
+        {name: "固定繩橋段", distance: "4.7 km", kind: "通過設施", note: "以真實節點名稱呈現。", next: "查看通過條件"},
+        {name: "隱蔽樹林區", distance: "6.9 km", kind: "路徑辨識", note: "需要在地圖上保留位置感。", next: "查看路線脈絡"},
+        {name: "稜線啞口觀景點", distance: "8.2 km", kind: "觀景點", note: "作為後段方向確認節點。", next: "查看天氣與導航", labelDx: -108, labelDy: 37},
+        {name: "稜線通訊點", distance: "9.5 km", kind: "通訊脈絡", note: "座標可信度較低，放入來源提示。", next: "查看來源狀態", labelDx: -112, labelDy: -16},
+        {name: "天池山莊", distance: "距離未提供", kind: "時間節點", note: "保留真實節點名稱，等待路線距離資料。", next: "查看時間參考"},
+        {name: "南華山", distance: "距離未提供", kind: "時間節點", note: "保留真實節點名稱，等待路線距離資料。", next: "查看時間參考"},
+        {name: "奇萊南峰", distance: "距離未提供", kind: "時間節點", note: "保留真實節點名稱，等待路線距離資料。", next: "查看時間參考"}
+      ],
+      segments: [
+        {from: "屯原登山口", to: "雲海保線所", distance: "4.6 km", history: "106.4 分鐘", range: "88.2–153.7 分鐘", personal: "--", ratio: "--", source: "24 個歷史 GPX 參考檔"},
+        {from: "雲海保線所", to: "天池山莊", distance: "—", history: "237.3 分鐘", range: "215.3–287.4 分鐘", personal: "210 分鐘", ratio: "88.5%", source: "歷史區間時間 + 路線指南"},
+        {from: "天池山莊", to: "南華山", distance: "—", history: "40.0 分鐘", range: "34.6–57.7 分鐘", personal: "--", ratio: "--", source: "歷史區間時間"},
+        {from: "南華山", to: "奇萊南峰", distance: "—", history: "64.3 分鐘", range: "59.5–82.0 分鐘", personal: "--", ratio: "--", source: "歷史區間時間"}
+      ]
+    };
+    const state = {view: "overview", selectedPoint: "雲海保線所", selectedSegment: 0, mapStatus: "ready", mapNote: "路線已符合範圍", mapZoom: 1, sortMode: "route", focusKey: ""};
+    const icon = (name, className) => `<svg class="icon ${className || ""}"><use href="#icon-${name}"></use></svg>`;
+    const point = () => DATA.points.find(item => item.name === state.selectedPoint) || DATA.points[1];
+    const segment = () => DATA.segments[state.selectedSegment] || DATA.segments[0];
+    const namedPoints = () => DATA.points.filter(item => item.kind !== "時間節點");
+    const orderedPoints = () => {
+      const points = [...DATA.points];
+      if (state.sortMode !== "distance") return points;
+      return points.sort((a, b) => {
+        const distance = item => Number.parseFloat(item.distance) || Number.POSITIVE_INFINITY;
+        return distance(a) - distance(b);
+      });
+    };
+    let hintCount = 0;
+    const hint = (text) => {
+      hintCount += 1;
+      const id = `hint-${hintCount}`;
+      return `<button class="hint" type="button" aria-label="查看提示" aria-describedby="${id}">i<span id="${id}" role="tooltip">${text}</span></button>`;
+    };
+
+    function routeIdentity() {
+      return `<div class="route-identity">${icon("route", "route")}<div><strong>${DATA.route}</strong><span>${DATA.workspace} · ${DATA.importedTrack}</span></div></div>`;
+    }
+
+    function mapSvg() {
+      const selectedName = state.selectedPoint;
+      const coords = [[110, 298], [230, 245], [330, 278], [455, 205], [575, 245], [700, 162], [830, 210], [905, 125], [860, 300], [700, 330], [525, 315]];
+      const isMobileMap = window.matchMedia("(max-width: 430px)").matches;
+      const visiblePoints = DATA.points;
+      const lines = coords.map((xy, index) => index ? `${coords[index - 1][0]},${coords[index - 1][1]} ${xy[0]},${xy[1]}` : "").filter(Boolean).join(" ");
+      const markers = visiblePoints.map((item, index) => {
+        const [x, y] = coords[index];
+        const selected = item.name === selectedName;
+        const mobileTimeLabelDy = item.name === "天池山莊" ? 30 : item.name === "南華山" ? 35 : item.name === "奇萊南峰" ? 10 : 0;
+        const labelX = x + (item.labelDx ?? (isMobileMap && item.kind === "時間節點" ? -96 : 12));
+        const labelY = y + (item.labelDy ?? (isMobileMap && item.kind === "時間節點" ? mobileTimeLabelDy : y < 190 ? 35 : -25));
+        const showLabel = !isMobileMap || selected;
+        return `<g class="map-marker ${selected ? "selected" : ""}" data-map-point="${item.name}" data-focus-key="marker-${item.name}" tabindex="0" role="button" aria-pressed="${selected}" aria-label="選取 ${item.name}">
+          <circle cx="${x}" cy="${y}" r="${selected ? 10 : 7}" class="marker-halo"></circle>
+          <circle cx="${x}" cy="${y}" r="${selected ? 6 : 4}" class="marker-core"></circle>
+          ${showLabel ? `<text x="${labelX}" y="${labelY}">${item.name}</text>` : ""}
+        </g>`;
+      }).join("");
+      return `<svg class="map-svg" viewBox="0 0 1000 390" role="img" aria-label="${DATA.route} 路線示意圖">
+        <defs><linearGradient id="mapFill" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#e5f4f3"/><stop offset="1" stop-color="#cfe5e9"/></linearGradient></defs>
+        <rect width="1000" height="390" fill="url(#mapFill)"></rect>
+        <g class="map-viewport" transform="translate(500 195) scale(${state.mapZoom}) translate(-500 -195)">
+          <path d="M0 90 C140 28 200 155 330 92 S550 50 675 118 S835 80 1000 140" class="contour contour-one"></path>
+          <path d="M0 205 C145 120 250 260 385 190 S580 145 730 235 S880 188 1000 250" class="contour contour-two"></path>
+          <path d="M0 330 C135 220 245 360 390 300 S575 260 730 345 S860 300 1000 345" class="contour contour-three"></path>
+          <polyline points="${lines}" class="route-line"></polyline>
+          ${markers}
+        </g>
+      </svg>`;
+    }
+
+    function mapPanel() {
+      const status = state.mapStatus === "error" ? "地圖尚未載入" : "地圖已載入";
+      return `<section class="panel map-panel" aria-label="路線地圖">
+        <div class="map-canvas">
+          <div class="map-top-status">${status} · ${state.mapNote}</div>
+          <div class="map-controls" role="group" aria-label="地圖控制">
+            <button type="button" class="fit" data-action="fit" data-focus-key="action-fit" title="將路線放入合理視窗">符合路線範圍</button>
+            <button type="button" data-action="zoom-in" data-focus-key="action-zoom-in" aria-label="放大地圖">+</button>
+            <button type="button" data-action="zoom-out" data-focus-key="action-zoom-out" aria-label="縮小地圖">−</button>
+          </div>
+          ${state.mapStatus === "error" ? `<div style="position:absolute;z-index:3;inset:0;display:grid;place-items:center;color:#9c5b5e;font-weight:800;">${icon("alert", "")}<span>路線資料暫時未載入</span></div>` : mapSvg()}
+          <div class="map-label">路線示意圖 · ${DATA.route}</div>
+        </div>
+        <div class="map-legend">
+          <span class="legend-item"><i class="legend-swatch route-line"></i>目前路線</span>
+          <span class="legend-item"><i class="legend-swatch selected"></i>目前選取</span>
+          <span class="legend-item"><i class="legend-swatch context"></i>路線脈絡</span>
+          ${hint("地圖、清單與結果共用同一個選取節點。")}
+        </div>
+      </section>`;
+    }
+
+    function pointList() {
+      return orderedPoints().map(item => `<button type="button" class="select-button ${item.name === state.selectedPoint ? "is-selected" : ""}" data-select-point="${item.name}" data-focus-key="point-${item.name}" aria-pressed="${item.name === state.selectedPoint}">
+        <span class="point-copy"><strong>${item.name}</strong><span>${item.distance} · ${item.kind}</span></span>
+      <span aria-hidden="true">›</span>
+      </button>`).join("");
+    }
+
+    function pointControlCenter(title, subtitle) {
+      return `<aside class="panel control-center">
+        <div class="panel-head"><div>${icon("timeline", "timeline")}<div><h3>${title}</h3><p>${subtitle}</p></div></div>${hint("這裡是本流程唯一的主要控制中心。")}</div>
+        <div class="panel-body" data-sort-mode="${state.sortMode}"><div class="control-label">目前選取</div><div class="control-status">地圖與結果會同步更新</div><div class="point-list">${pointList()}</div><div class="control-footer"><span>${namedPoints().length} 個命名節點 · ${DATA.points.length - namedPoints().length} 個時間節點</span><button type="button" class="text-button" data-action="sort" data-focus-key="action-sort">依距離</button></div></div>
+      </aside>`;
+    }
+
+    function selectedResult() {
+      const current = point();
+      return `<section class="panel evidence-panel">
+        <div class="panel-head"><div>${icon("result", "result")}<div><h3>目前結果</h3><p>先看選取節點，再看來源。</p></div></div><span class="status-pill ready">已同步</span></div>
+        <div class="panel-body"><div class="result-strip" style="margin-top:0">
+          <div class="metric-card"><div class="metric-label">${icon("route", "route")}目前節點</div><strong>${current.name}</strong><small>${current.kind}</small></div>
+          <div class="metric-card"><div class="metric-label">${icon("map", "route")}距離</div><strong>${current.distance}</strong><small>由路線脈絡資料提供</small></div>
+          <div class="metric-card"><div class="metric-label">${icon("next", "next")}下一步</div><strong>${current.next}</strong><small>保持在同一控制中心</small></div>
+          <div class="metric-card"><div class="metric-label">${icon("source", "source")}資料狀態</div><strong>可查看</strong><small>來源提示可由資訊按鈕查看</small></div>
+        </div><div class="interaction-status">${state.selectedPoint} 已同步到地圖、結果與證據。</div></div>
+      </section>`;
+    }
+
+    function renderOverview() {
+      const current = point();
+      return `<section id="panel-overview" data-view-panel="overview" role="tabpanel" aria-labelledby="tab-overview">
+        <div class="page-head"><div><p class="eyebrow">目前行程 · 01</p><h1>先知道現在要做什麼</h1><p class="subtitle">控制中心固定在右側；選取命名節點後，地圖、結果與證據一起更新。</p></div>${routeIdentity()}</div>
+        <div class="decision-banner"><div><span class="kicker">目前結果</span><strong>先確認${current.name}的時間與資源</strong><p>${current.note}</p></div><div class="decision-detail"><span>目前選取</span><strong>${current.name}</strong><span>${current.distance} · ${current.kind}</span></div><button type="button" class="primary-button" data-action="next" data-focus-key="action-next">查看區間比較 ${icon("next", "")}</button></div>
+        <div class="workbench"><div>${mapPanel()}${selectedResult()}</div>${pointControlCenter("路線脈絡", "選取節點，保持同一個控制中心。")}</div>
+      </section>`;
+    }
+
+    function timelineList() {
+      return DATA.segments.map((item, index) => `<div class="timeline-item ${index === state.selectedSegment ? "is-selected" : ""}"><span class="timeline-dot" aria-hidden="true"></span><button type="button" class="timeline-button" data-select-segment="${index}" data-focus-key="segment-${index}" aria-pressed="${index === state.selectedSegment}"><strong>${item.from} → ${item.to}</strong><span>${item.distance} · 歷史平均 ${item.history}</span></button></div>`).join("");
+    }
+
+    function comparisonHero() {
+      const item = segment();
+      const hasPersonal = item.personal !== "--";
+      const hasRatio = item.ratio !== "--";
+      const formulaResult = hasRatio ? `${item.personal} ÷ ${item.history} × 100 = ${item.ratio}` : "等待個人估計後計算";
+      return `<section class="comparison-hero"><div class="comparison-copy"><p class="eyebrow">目前結果 · ${item.from} → ${item.to}</p><h2>區間時間比較</h2><p>先看結論；來源與計算放在下一層。</p><div class="formula">${icon("result", "result")}<span>個人估計耗時 ÷ 同一區間歷史平均耗時 × 100</span><strong>${formulaResult}</strong></div></div><div class="comparison-value"><span>個人估計</span><strong style="color:var(--personal)">${item.personal}</strong><small>${hasPersonal ? "目前估計" : "等待個人資料"}</small></div><div class="comparison-value"><span>歷史平均</span><strong style="color:var(--result)">${item.history}</strong><small>${item.range}</small></div><div class="comparison-value"><span>比較結果</span><strong style="color:var(--timeline)">${item.ratio}</strong><small>${hasRatio ? "已完成比較" : "需要兩側資料"}</small></div></section>`;
+    }
+
+    function timelineCenter() {
+      return `<aside class="panel control-center timeline-center"><div class="panel-head"><div>${icon("timeline", "timeline")}<div><h3>區間時間軸</h3><p>選區間，更新地圖與結果。</p></div></div>${hint("選取狀態會保留在工作流程內。")}</div><div class="panel-body"><div class="control-label">目前區間</div><div class="control-status">${segment().from} → ${segment().to}</div><div class="timeline-list">${timelineList()}</div><div class="control-footer"><span>4 個可比較區間</span><button type="button" class="text-button" data-action="reset-segment" data-focus-key="action-reset-segment">回到第一段</button></div></div></aside>`;
+    }
+
+
+    function renderSegment() {
+      const item = segment();
+      const hasPersonal = item.personal !== "--";
+      const hasRatio = item.ratio !== "--";
+      const personalText = hasPersonal ? `目前估計：${item.personal}` : "尚未產生個人估計";
+      const ratioText = hasRatio ? `已完成比較：${item.ratio}` : "需要兩側資料";
+      return `<section id="panel-segment" data-view-panel="segment" role="tabpanel" aria-labelledby="tab-segment"><div class="page-head"><div><p class="eyebrow">區間比較 · 02</p><h1>結論先出現，依據留在旁邊</h1><p class="subtitle">區間時間軸是完整的右側控制中心，不需要反覆展開，也不因換資料消失。</p></div>${routeIdentity()}</div>${comparisonHero()}<div class="workbench"><div>${mapPanel()}<section class="panel evidence-panel"><div class="panel-head"><div>${icon("source", "source")}<div><h3>來源與計算</h3><p>${item.source}</p></div></div>${hint("技術計算與候選邊界只在提示中說明。")}</div><div class="panel-body"><div class="evidence-grid"><div><div class="evidence-row"><div><strong>歷史參考</strong><span>同一區間的 GPX 參考資料</span></div><span class="status-pill info">可用</span></div><div class="evidence-row"><div><strong>個人資料</strong><span>${personalText}</span></div><span class="status-pill ${hasPersonal ? "ready" : "partial"}">${hasPersonal ? item.personal : "--"}</span></div><div class="evidence-row"><div><strong>比較結果</strong><span>${ratioText}</span></div><span class="status-pill ${hasRatio ? "ready" : "partial"}">${item.ratio}</span></div></div><div class="source-note">${icon("source", "source")}<div><strong>資料來源</strong><span>來源名稱保留在次要區域，方便追溯但不搶走主要結果。</span></div></div></div></div></section></div>${timelineCenter()}</div></section>`;
+    }
+
+
+    function renderStates() {
+      const recovered = state.mapStatus === "ready" && state.mapNote === "重試成功";
+      const selected = state.selectedPoint;
+      const mapStateTitle = recovered ? "地圖已恢復" : "地圖載入失敗";
+      const mapStateCopy = recovered ? "路線與目前選取已保留。" : "錯誤不應讓主要流程中斷。";
+      const mapStateBody = recovered ? "地圖已恢復，路線與目前選取仍保留。" : "路線名稱與目前選取仍保留。";
+      const mapStateButton = recovered ? "再次查看結果" : "重試地圖";
+      const recoveryRoute = `<svg viewBox="0 0 420 120" role="img" aria-label="${selected} 的地圖狀態示意"><polyline class="recovery-route" points="18,91 76,63 132,78 194,42 258,63 320,28 397,48"></polyline><circle class="recovery-point" cx="132" cy="78" r="6"></circle><text x="144" y="73">${selected}</text></svg>`;
+      return `<section id="panel-states" data-view-panel="states" role="tabpanel" aria-labelledby="tab-states">
+        <div class="page-head"><div><p class="eyebrow">匯入與狀態 · 03</p><h1>資料不足，也能繼續工作</h1><p class="subtitle">保留可用結果，清楚說明缺少什麼，並把恢復操作放在眼前。</p></div>${routeIdentity()}</div>
+        <div class="data-state-grid">
+          <section class="panel state-card"><div class="panel-head"><div>${icon("check", "personal")}<div><h3>匯入完成</h3><p>路線與來源已建立。</p></div></div><span class="status-pill ready">可查看</span></div><div class="panel-body"><div class="state-summary">${icon("route", "route")}<div><strong>${DATA.route}</strong><span>匯入檔：${DATA.importedTrack}</span></div></div><div class="state-metrics"><div class="state-metric"><span>路線資料</span><strong>可用</strong></div><div class="state-metric"><span>命名節點</span><strong>${namedPoints().length}</strong></div><div class="state-metric"><span>時間節點</span><strong>${DATA.points.length - namedPoints().length}</strong></div></div><div class="interaction-status">下一步：查看目前行程。</div></div></section>
+          <section class="panel state-card"><div class="panel-head"><div>${icon("result", "result")}<div><h3>個人估計尚未產生</h3><p>不隱藏已有的歷史資料。</p></div></div><span class="status-pill partial">部分可用</span></div><div class="panel-body"><div class="result-strip" style="margin-top:0"><div class="metric-card"><div class="metric-label">${icon("personal", "personal")}個人估計</div><strong>--</strong><small>等待個人資料</small></div><div class="metric-card"><div class="metric-label">${icon("result", "result")}歷史平均</div><strong>106.4 分鐘</strong><small>屯原登山口 → 雲海保線所</small></div></div><div class="source-note">${icon("source", "source")}<div><strong>時間參考仍可用</strong><span>個人資料補齊後，再計算比較結果。</span></div></div></div></section>
+          <section class="panel state-card"><div class="panel-head"><div>${icon("map", "route")}<div><h3>${mapStateTitle}</h3><p>${mapStateCopy}</p></div></div><span class="status-pill ${recovered ? "ready" : "error"}">${recovered ? "已恢復" : "可恢復"}</span></div><div class="panel-body"><div class="error-state ${recovered ? "recovered" : ""}"><strong>${mapStateBody}</strong><p>${recovered ? `可以繼續查看 ${selected}。` : `目前選取：${selected}。`}</p><div class="error-actions"><button type="button" class="primary-button" data-action="${recovered ? "next" : "retry"}" data-focus-key="action-${recovered ? "next" : "retry"}">${mapStateButton}</button><button type="button" class="quiet-button" data-action="next" data-focus-key="action-next">查看結果</button></div></div><div class="recovery-map" aria-label="地圖狀態示意">${recoveryRoute}</div></div></section>
+          <section class="panel state-card"><div class="panel-head"><div>${icon("source", "source")}<div><h3>來源與計算</h3><p>低頻資訊使用提示呈現。</p></div></div>${hint("候選與來源狀態不阻擋主要操作。")}</div><div class="panel-body"><div class="evidence-row"><div><strong>路線來源</strong><span>${DATA.importedTrack}</span></div><span class="status-pill info">已保留</span></div><div class="evidence-row"><div><strong>比較基準</strong><span>歷史區間時間</span></div><span class="status-pill ready">可用</span></div><div class="evidence-row"><div><strong>下一步</strong><span>補齊個人資料後重新計算</span></div><span class="status-pill partial">等待</span></div></div></section>
+        </div>
+      </section>`;
+    }
+
+    function render() {
+      const focusKey = state.focusKey;
+      state.focusKey = "";
+      document.querySelectorAll("[data-view]").forEach(button => {
+        const active = button.dataset.view === state.view;
+        button.setAttribute("aria-selected", String(active));
+        button.setAttribute("aria-current", active ? "page" : "false");
+      });
+      document.querySelectorAll('[role="tab"]').forEach(tab => {
+        const active = tab.dataset.view === state.view;
+        tab.setAttribute("aria-selected", String(active));
+        tab.tabIndex = active ? 0 : -1;
+        if (active) tab.setAttribute("aria-controls", `panel-${state.view}`);
+        else tab.removeAttribute("aria-controls");
+      });
+      const content = state.view === "overview" ? renderOverview() : state.view === "segment" ? renderSegment() : renderStates();
+      document.getElementById("appContent").innerHTML = content;
+      if (state.view === "states") {
+        const historicalContext = document.querySelector(".state-card:nth-child(2) .metric-card:nth-child(2) small");
+        if (historicalContext) historicalContext.textContent = `基準區間：${DATA.segments[0].from} → ${DATA.segments[0].to}`;
+      }
+      document.getElementById("interactionStatus").textContent = state.mapStatus === "error"
+        ? `地圖目前可重試；目前選取：${state.selectedPoint}。`
+        : `目前選取：${state.selectedPoint}。切換視圖不會重置。`;
+      if (state.view === "states") {
+        document.querySelector(".error-state .primary-button")?.setAttribute("data-focus-key", "map-recovery");
+      }
+      if (focusKey) {
+        document.querySelector(`[data-focus-key="${CSS.escape(focusKey)}"]`)?.focus();
+      }
+    }
+
+    document.addEventListener("click", event => {
+      const viewButton = event.target.closest("[data-view]");
+      if (viewButton) {
+        state.focusKey = viewButton.dataset.focusKey || `view-${viewButton.dataset.view}`;
+        state.view = viewButton.dataset.view;
+        if (state.view === "states") {
+          state.mapStatus = "error";
+          state.mapNote = "等待重試";
+        } else {
+          state.mapStatus = "ready";
+          state.mapNote = "路線已符合範圍";
+        }
+        render();
+        return;
+      }
+      const mapPoint = event.target.closest("[data-map-point]");
+      if (mapPoint) {
+        state.focusKey = mapPoint.dataset.focusKey || `marker-${mapPoint.dataset.mapPoint}`;
+        state.selectedPoint = mapPoint.dataset.mapPoint;
+        state.mapStatus = "ready";
+        state.mapNote = "選取已同步";
+        render();
+        return;
+      }
+      const pointButton = event.target.closest("[data-select-point]");
+      if (pointButton) {
+        state.focusKey = pointButton.dataset.focusKey || `point-${pointButton.dataset.selectPoint}`;
+        state.selectedPoint = pointButton.dataset.selectPoint;
+        state.mapStatus = "ready";
+        state.mapNote = "選取已同步";
+        render();
+        return;
+      }
+      const segmentButton = event.target.closest("[data-select-segment]");
+      if (segmentButton) {
+        state.focusKey = segmentButton.dataset.focusKey || `segment-${segmentButton.dataset.selectSegment}`;
+        state.selectedSegment = Number(segmentButton.dataset.selectSegment);
+        state.selectedPoint = state.selectedSegment === 0 ? "雲海保線所" : state.selectedSegment === 1 ? "天池山莊" : state.selectedSegment === 2 ? "南華山" : "奇萊南峰";
+        state.mapStatus = "ready";
+        state.mapNote = "區間已同步";
+        render();
+        return;
+      }
+      const action = event.target.closest("[data-action]");
+      if (!action) return;
+      state.focusKey = action.dataset.action === "retry" ? "map-recovery" : action.dataset.focusKey || `action-${action.dataset.action}`;
+      if (action.dataset.action === "fit") {
+        state.mapStatus = "ready";
+        state.mapNote = "路線已符合範圍";
+        state.mapZoom = 1;
+      } else if (action.dataset.action === "retry") {
+        state.mapStatus = "ready";
+        state.mapNote = "重試成功";
+      } else if (action.dataset.action === "zoom-in") {
+        state.mapNote = "已放大";
+        state.mapZoom = Math.min(1.45, state.mapZoom + 0.15);
+      } else if (action.dataset.action === "zoom-out") {
+        state.mapNote = "已縮小";
+        state.mapZoom = Math.max(0.75, state.mapZoom - 0.15);
+      } else if (action.dataset.action === "sort") {
+        state.mapNote = "已依距離排序";
+        state.sortMode = "distance";
+      } else if (action.dataset.action === "reset-segment") {
+        state.selectedSegment = 0;
+        state.selectedPoint = "雲海保線所";
+        state.mapNote = "已回到第一段";
+        state.focusKey = "action-reset-segment";
+      } else if (action.dataset.action === "next") {
+        state.view = "segment";
+        state.mapStatus = "ready";
+        state.mapNote = "路線已符合範圍";
+      }
+      render();
+    });
+
+    document.addEventListener("keydown", event => {
+      const tab = event.target.closest('[role="tab"]');
+      if (tab && ["ArrowRight", "ArrowLeft", "Home", "End"].includes(event.key)) {
+        event.preventDefault();
+        const tabs = [...document.querySelectorAll('[role="tab"]')];
+        const currentIndex = tabs.indexOf(tab);
+        const nextIndex = event.key === "Home" ? 0 : event.key === "End" ? tabs.length - 1 : (currentIndex + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+        tabs[nextIndex]?.focus();
+        tabs[nextIndex]?.click();
+        return;
+      }
+      const marker = event.target.closest("[data-map-point]");
+      if (marker && (event.key === "Enter" || event.key === " ")) {
+        event.preventDefault();
+        state.focusKey = marker.dataset.focusKey || `marker-${marker.dataset.mapPoint}`;
+        state.selectedPoint = marker.dataset.mapPoint;
+        state.mapNote = "選取已同步";
+        render();
+      }
+    });
+    render();
+  </script>
+</body>
+</html>
