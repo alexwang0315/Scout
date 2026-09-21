@@ -23,13 +23,22 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 
 def _read_rows(path: Path) -> list[dict[str, Any]]:
-    rows: list[dict[str, Any]] = []
+    # Revalidation appends replacement rows to the historical JSONL file.
+    # The evaluator summary counts the latest row per run_case_id, so the
+    # comparator must use the same effective dataset rather than double-counting
+    # the original and revalidated records.
+    rows_by_id: dict[str, dict[str, Any]] = {}
+    anonymous_rows: list[dict[str, Any]] = []
     for line in path.read_text(encoding="utf-8").splitlines():
         if line.strip():
             item = json.loads(line)
             if isinstance(item, dict):
-                rows.append(item)
-    return rows
+                run_case_id = str(item.get("run_case_id") or "")
+                if run_case_id:
+                    rows_by_id[run_case_id] = item
+                else:
+                    anonymous_rows.append(item)
+    return [*rows_by_id.values(), *anonymous_rows]
 
 
 def _counts(rows: list[dict[str, Any]], key: str) -> dict[str, int]:
