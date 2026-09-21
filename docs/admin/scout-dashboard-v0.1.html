@@ -3221,6 +3221,59 @@
       text-transform: uppercase;
     }
 
+    .pace-daily-energy-summary {
+      margin: 12px 0 0;
+      padding: 10px 12px;
+      border: 1px solid rgba(147, 181, 191, .28);
+      border-radius: 8px;
+      background: rgba(147, 181, 191, .045);
+    }
+
+    .pace-daily-energy-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(150px, 1fr));
+      gap: 1px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--line);
+    }
+
+    .pace-daily-energy-cell {
+      min-width: 0;
+      padding: 9px 10px;
+      background: var(--surface);
+    }
+
+    .pace-daily-energy-cell span {
+      display: block;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 850;
+      text-transform: uppercase;
+    }
+
+    .pace-daily-energy-cell strong {
+      display: block;
+      margin-top: 4px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 17px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .pace-daily-energy-cell em {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 11px;
+      font-style: normal;
+    }
+
+    .pace-daily-energy-summary > .status {
+      margin: 8px 0 0;
+    }
+
     .pace-meter {
       min-width: 112px;
       display: grid;
@@ -26767,16 +26820,46 @@
       const days = subject?.schedule_status === "adopted" ? asArray(subject.mission_day_estimates) : [];
       if (!days.length) return `<section class="panel" data-pace-adopted-schedule="unavailable"><h3>採用後分日與節奏</h3><p class="status">${escapeHtml(subject?.schedule_status || "loading")}：需有來源一致的 Accept 與 Rebuild，才顯示採用日程。幾何與原始 CP 可繼續研究。</p></section>`;
       const number = value => value == null || !Number.isFinite(Number(value)) ? "未知" : `${Number(value).toFixed(1)} 分`;
+      const dailyEnergy = state.paceFitData?.pace_fit_mapping?.architecture_daily_energy
+        || state.paceFitData?.architecture_daily_energy || {};
+      const dailyEnergyRows = asArray(dailyEnergy.daily_values);
+      const dailyEnergyByDay = new Map(dailyEnergyRows.map(row => [String(row?.mission_day_id || ""), row]));
+      const finiteEnergy = value => value == null || value === "" || !Number.isFinite(Number(value)) ? null : Number(value);
+      const dailyEnergyValue = missionDayId => finiteEnergy(dailyEnergyByDay.get(String(missionDayId || ""))?.energy_kcal);
+      const dailyEnergyLabel = missionDayId => {
+        const value = dailyEnergyValue(missionDayId);
+        return value === null ? "unavailable" : `${value.toFixed(1)} kcal`;
+      };
+      const aggregateEnergyLabel = (value, suffix = "kcal") => {
+        const numberValue = finiteEnergy(value);
+        return numberValue === null ? "unavailable" : `${numberValue.toFixed(1)} ${suffix}`;
+      };
+      const energyStatus = dailyEnergy.status || "unavailable";
+      const energyCoverage = dailyEnergy.coverage || {};
+      const energyCoverageLabel = finiteEnergy(energyCoverage.coverage_ratio) === null
+        ? "coverage unavailable"
+        : `${(Number(energyCoverage.coverage_ratio) * 100).toFixed(1)}% route-bin coverage`;
+      const energySummary = dailyEnergy.status === "unavailable"
+        ? "需有 adopted planned_eta 分日與 Architecture route bins"
+        : `${dailyEnergy.available_day_count || 0}/${dailyEnergy.day_count || 0} 日有耗能列 · ${energyCoverageLabel}`;
       return `<section class="panel" data-pace-adopted-schedule="${escapeHtml(subject.analysis_revision)}"><h3>採用後分日與節奏 · ${days.length} 日</h3>
         <p class="status">${escapeHtml(subject.schedule_time_role)} · ${escapeHtml(subject.timezone || "時區未知")}。停留由軌跡推估；缺口不是休息，GPX 不證明本人腳程或當次安全。</p>
-        <div class="pace-table-scroll"><table class="pace-budget-table"><thead><tr><th>日</th><th>啟程 → 到達</th><th>總經過</th><th>推估停留</th><th>CP / 缺口</th></tr></thead><tbody>
+        <div class="pace-daily-energy-summary" data-pace-daily-energy="true" data-pace-daily-energy-status="${escapeHtml(energyStatus)}">
+          <div class="pace-daily-energy-grid">
+            <div class="pace-daily-energy-cell"><span>平均日耗能</span><strong>${escapeHtml(aggregateEnergyLabel(dailyEnergy.mean_daily_energy_kcal, "kcal/day"))}</strong><em>${escapeHtml(energySummary)}</em></div>
+            <div class="pace-daily-energy-cell"><span>最大日耗能</span><strong>${escapeHtml(aggregateEnergyLabel(dailyEnergy.maximum_daily_energy_kcal))}</strong><em>${escapeHtml(dailyEnergy.maximum_day_id || "mission day unavailable")}</em></div>
+            <div class="pace-daily-energy-cell"><span>最小日耗能</span><strong>${escapeHtml(aggregateEnergyLabel(dailyEnergy.minimum_daily_energy_kcal))}</strong><em>${escapeHtml(dailyEnergy.minimum_day_id || "mission day unavailable")}</em></div>
+          </div>
+          <p class="status">Architecture route moving-energy candidate；70 kg 使用者假設、平地/無負重基準，負坡度採水平分量 cos(atan(|grade|))。只加總有 reference bin 的移動能量，缺口不補值；不是 HealthExport active energy、靜態能量、機械功率或安全真值，且不直接換算 Pace Fit %。</p>
+        </div>
+        <div class="pace-table-scroll"><table class="pace-budget-table"><thead><tr><th>日</th><th>啟程 → 到達</th><th>總經過</th><th>推估停留</th><th>日耗能</th><th>CP / 缺口</th></tr></thead><tbody>
         ${days.map(day => {
           const replay = day.reference_replay || {};
           const stops = asArray(replay.rest_stops);
           const gaps = asArray(replay.unknown_ranges);
-          return `<tr data-pace-mission-day="${escapeHtml(day.mission_day_id)}"><th>${escapeHtml(day.mission_day_id)}<br>${escapeHtml(replay.source_day_id || "planning assumption")}</th><td>${escapeHtml(replay.departure_clock || "未知")} → ${escapeHtml(replay.arrival_clock || "未知")}</td><td>${number(replay.elapsed_minutes ?? day.eta?.observed_elapsed_minutes)}</td><td>${stops.length} 段 · ${number(stops.reduce((sum, stop) => sum + Number(stop.duration_minutes || 0), 0))}</td><td>${asArray(replay.checkpoint_windows).length} / ${gaps.length}</td></tr>`;
+          return `<tr data-pace-mission-day="${escapeHtml(day.mission_day_id)}"><th>${escapeHtml(day.mission_day_id)}<br>${escapeHtml(replay.source_day_id || "planning assumption")}</th><td>${escapeHtml(replay.departure_clock || "未知")} → ${escapeHtml(replay.arrival_clock || "未知")}</td><td>${number(replay.elapsed_minutes ?? day.eta?.observed_elapsed_minutes)}</td><td>${stops.length} 段 · ${number(stops.reduce((sum, stop) => sum + Number(stop.duration_minutes || 0), 0))}</td><td data-pace-day-energy="${escapeHtml(day.mission_day_id)}">${escapeHtml(dailyEnergyLabel(day.mission_day_id))}</td><td>${asArray(replay.checkpoint_windows).length} / ${gaps.length}</td></tr>`;
         }).join("")}</tbody></table></div>
-        <p class="status">過夜間隔 ${asArray(subject.overnight_gaps).length}；全程未知範圍 ${asArray(subject.unknown_ranges).length}。Recorded CP clock 與分日依同一 Golden；未用每日八小時或 Ref. crowd pace 重新切日。</p>
+        <p class="status">過夜間隔 ${asArray(subject.overnight_gaps).length}；全程未知範圍 ${asArray(subject.unknown_ranges).length}。Recorded CP clock 與分日依同一 Golden；未用每日八小時或 Ref. crowd pace 重新切日。耗能來源：${escapeHtml(dailyEnergy.source_ref || "unavailable")}。</p>
         <details><summary>各日停留、CP 時刻與未知範圍</summary>${days.map(day => {
           const replay = day.reference_replay || {};
           return `<h4>${escapeHtml(day.mission_day_id)}</h4><p>${escapeHtml(replay.start?.label || "起點未知")} → ${escapeHtml(replay.end?.label || "終點未知")}</p>

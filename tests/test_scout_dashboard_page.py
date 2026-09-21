@@ -663,6 +663,20 @@ def test_scout_dashboard_pace_fit_attaches_adaptive_reference_schedule_mapping(
                 "pace_fit_mapping": {
                     "source_ref": "outputs/reference_pace_energy_analysis.json",
                 },
+                "architecture_daily_energy": {
+                    "status": "partial",
+                    "day_count": 1,
+                    "available_day_count": 1,
+                    "mean_daily_energy_kcal": 725.692,
+                    "minimum_daily_energy_kcal": 268.385,
+                    "maximum_daily_energy_kcal": 1792.502,
+                    "minimum_day_id": "D3",
+                    "maximum_day_id": "D1",
+                    "daily_values": [],
+                    "coverage": {"coverage_ratio": 0.911029},
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                },
             },
         },
     )
@@ -697,6 +711,8 @@ def test_scout_dashboard_pace_fit_attaches_adaptive_reference_schedule_mapping(
     assert mapping["schedule_is_not_corrected"] is True
     assert mapping["energy_not_used_as_time_ratio"] is True
     assert payload["pace_fit_mapping"]["mapped_pair_count"] == 1
+    assert payload["pace_fit_mapping"]["architecture_daily_energy"]["mean_daily_energy_kcal"] == 725.692
+    assert payload["architecture_daily_energy"]["status"] == "partial"
     assert "energy_or_w_not_converted_directly" not in payload
     assert response.headers["x-scout-candidate-only"] == "true"
     assert response.headers["x-scout-runtime-safety-truth"] == "false"
@@ -4463,6 +4479,10 @@ def test_scout_dashboard_pace_fit_is_map_first_and_discloses_supporting_info() -
     )
     assert "pace-spatial-workbench" in renderer
     assert "pace-cp-inspector" in renderer
+    assert 'data-pace-daily-energy="true"' in html
+    assert "平均日耗能" in html
+    assert "日耗能" in html
+    assert "cos(atan(|grade|))" in html
     assert renderer.index("renderPaceFitPrimaryMap") < renderer.index(
         "Risk Budget Calculator"
     )

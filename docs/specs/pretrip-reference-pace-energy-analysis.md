@@ -154,6 +154,43 @@ segment watch value, flat-ground model value, and their difference with both
 sources. It never re-labels the provider's active-energy value as a newly
 calculated 70 kg measurement.
 
+### Architecture Route Daily Moving-Energy Candidate
+
+Architecture keeps the ref/golden GPX schedule speed and elapsed time fixed.
+Its route model is a candidate metabolic-power estimate for the route
+conditions, not a replacement schedule and not a direct Pace Fit percentage.
+`route_total_power_w` is the time-weighted mean over covered route bins in the
+same `pandolf_metabolic_power_w_estimate` domain; it is not a nine-day average
+and it is not mechanical power.
+
+For a positive grade, the signed-grade Pandolf estimate is retained. For a
+negative grade, a zero-power clamp is not valid because the route still has a
+horizontal movement component. The current explicit candidate assumption is:
+
+```text
+theta = atan(abs(signed_grade_ratio))
+horizontal_component_ratio = cos(theta)
+downhill_power = same_speed_level_ground_Pandolf_power
+                  × horizontal_component_ratio
+```
+
+The cosine floor is a transparent approximation requested for this dashboard;
+it is not a claim that GPX has identified downhill eccentric metabolic cost.
+The output exposes the model, grade angle, horizontal ratio, and count of
+downhill bins. Slope, load, terrain, and an explicitly supplied psychological
+scenario multiplier remain Architecture inputs. They are not multiplied into
+Body Index personal available energy.
+
+For an adopted multi-day schedule, `architecture_daily_energy` allocates each
+route-bin energy (`power × fixed schedule seconds`) to the explicit
+`planned_eta.json#mission_day_estimates` route boundaries. Uncovered route gaps
+remain excluded and are reported as coverage; no gap is converted to rest and
+no short day is extrapolated to a longer day. The dashboard reports each
+mission day's kcal, coverage, sample/bin count, mean, maximum, and minimum.
+The mean is an arithmetic mean of the represented mission-day rows and is
+marked `partial` when route-bin coverage is incomplete. Calendar dates are
+`unavailable` when the adopted plan provides only D1…D9 labels.
+
 Pace Fit retains each CP pair's historical reference average independently. The
 reference/golden GPX (or its generated planned schedule) supplies the fixed
 per-interval speed/time baseline. A personal percentage is emitted only when

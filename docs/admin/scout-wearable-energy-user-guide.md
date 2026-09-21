@@ -74,6 +74,15 @@ Dashboard 的 Pace Fit > Body Index 會從本機 HealthExport 時間序列建立
 
 頁面會在可比的分類段落上分開顯示手錶 interval activeEnergy、ACSM 平地模型與兩者差值；這是來源核對，不是重新按 70 kg 產生手錶熱量或能力分數。
 
+Pace Dashboard 的「日耗能」是 Architecture 的路線移動能量候選值，不是 Body
+Index 的 HealthExport 日活動能量，也不是全天總能量。固定 ref/golden GPX 的速度與
+時間仍是鐵律；每個 route bin 以候選代謝功率乘固定 schedule 秒數，再依
+`planned_eta.json` 的 D1…D9 路線邊界分配。負坡度不會被視為 0 W，現在使用
+`cos(atan(abs(grade)))` 的水平分量比例乘同速度平地基準。這是透明的 candidate
+model，不是由 GPX 識別出的下坡生理成本。頁面同時顯示每日 kcal、平均、最大、最小與
+route-bin 覆蓋率；缺口不補值、不當成休息，也不把不足資料外推到其他時長。因目前
+計畫只有 mission-day 標籤而非日曆日期，日期範圍可能維持 `unavailable`。
+
 ### Body Index 與 Pace Fit 的分工
 
 Body Index 提供個人的跑／走／停行為、活動能量、持續輸出與恢復觀察。Architecture 提供固定 reference/golden GPX schedule，以及坡度、負重、地形與其他路線需求的功率模型。Pace Fit 只在同一對 CP 有歷史 reference GPX 平均耗時，且固定 schedule 可追溯時輸出：

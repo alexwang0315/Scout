@@ -15,7 +15,10 @@ from typing import Any, Iterable, Mapping, Sequence
 
 from pretrip_historical_return_cost import build_historical_return_cost
 from pretrip_historical_time_window import build_historical_time_windows
-from scout_pace_correction_calibration import architecture_route_power_summary
+from scout_pace_correction_calibration import (
+    architecture_route_daily_energy_summary,
+    architecture_route_power_summary,
+)
 
 
 SCHEMA_VERSION = "scout_route_architecture_intelligence.v0"
@@ -185,6 +188,20 @@ def build_route_architecture_intelligence(
         ),
         source_ref=f"{reference_source_ref}#route_bins.reference_speed_mps.p50",
     )
+    architecture_daily_energy = architecture_route_daily_energy_summary(
+        vectors,
+        eta,
+        body_mass_kg=_number(power_config.get("body_mass_kg")) or 70.0,
+        load_kg=_number(power_config.get("load_kg")) or 0.0,
+        terrain_factor=_number(power_config.get("terrain_factor")) or 1.0,
+        psychological_stress_multiplier=(
+            _number(power_config.get("psychological_stress_multiplier")) or 1.0
+        ),
+        source_ref=f"{reference_source_ref}#route_bins.reference_speed_mps.p50",
+        eta_source_ref=source_ref_values.get("planned_eta")
+        or source_ref_values.get("eta")
+        or "outputs/planned_eta.json#mission_day_estimates",
+    )
     historical_return_cost = _historical_return_cost_projection(
         reference_value.get("historical_route_timing"),
         route_distance_m=route_distance_m,
@@ -315,8 +332,10 @@ def build_route_architecture_intelligence(
             source_ref=source_ref_values.get("route_architecture")
             or "normalized/architecture/route_architecture.json",
             route_power_model=route_power_model,
+            architecture_daily_energy=architecture_daily_energy,
         ),
         "route_power_model": route_power_model,
+        "architecture_daily_energy": architecture_daily_energy,
         "checkpoint_passage_timing": checkpoint_passage_timing,
         "historical_return_cost": historical_return_cost,
         "historical_time_windows": historical_time_windows,
@@ -972,6 +991,7 @@ def _pace_fit_mapping_projection(
     *,
     source_ref: str,
     route_power_model: Mapping[str, Any] | None = None,
+    architecture_daily_energy: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     schedule_count = sum(
         1
@@ -998,6 +1018,11 @@ def _pace_fit_mapping_projection(
         "slope_load_terrain_stress_feed_route_power_model": True,
         "route_power_model_status": str((route_power_model or {}).get("status") or "unavailable"),
         "route_power_model_source_ref": (route_power_model or {}).get("source_ref"),
+        "architecture_daily_energy": dict(architecture_daily_energy or {
+            "status": "unavailable",
+            "reason": "architecture_daily_energy_unavailable",
+        }),
+        "daily_energy_is_not_pace_fit_percent": True,
         "candidate_only": True,
         "runtime_safety_truth": False,
     }

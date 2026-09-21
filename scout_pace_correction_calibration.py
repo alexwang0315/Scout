@@ -135,6 +135,110 @@ def pandolf_metabolic_power_w(
     }
 
 
+def architecture_route_bin_power_estimate_w(
+    speed_mps: float,
+    *,
+    body_mass_kg: float = 70.0,
+    load_kg: float = 0.0,
+    grade_fraction: float = 0.0,
+    terrain_factor: float = 1.0,
+    psychological_stress_multiplier: float = 1.0,
+) -> dict[str, Any]:
+    """Estimate one Architecture route-bin metabolic power.
+
+    The signed-grade Pandolf equation is useful for positive grade, but its
+    linear grade term can become negative on steep descents.  Clamping that
+    result to zero would incorrectly claim that a person moving downhill has
+    no energy cost.  For a negative grade, this candidate model keeps the
+    fixed reference schedule speed and applies the horizontal-motion ratio
+    ``cos(atan(abs(grade)))`` to the same-speed level-ground estimate.
+
+    This is deliberately exposed as a model assumption, not as a claim that
+    downhill eccentric metabolic cost has been identified from GPX alone.
+    ``power_w`` remains Pandolf metabolic power, not mechanical power.
+    """
+
+    speed = _positive(speed_mps)
+    grade = _finite(grade_fraction)
+    if speed is None or grade is None:
+        return {
+            "status": "unavailable",
+            "reason": "speed_or_grade_unavailable",
+            "power_domain": PANDOLF_POWER_DOMAIN,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+
+    grade_angle_rad = math.atan(abs(grade))
+    horizontal_component_ratio = math.cos(grade_angle_rad)
+    if grade < 0:
+        level = pandolf_metabolic_power_w(
+            speed,
+            body_mass_kg=body_mass_kg,
+            load_kg=load_kg,
+            grade_fraction=0.0,
+            terrain_factor=terrain_factor,
+            psychological_stress_multiplier=psychological_stress_multiplier,
+        )
+        level_power = _positive(level.get("power_w"))
+        if level_power is None:
+            return {
+                **level,
+                "status": "unavailable",
+                "reason": "level_ground_reference_unavailable",
+                "grade_fraction": _round(grade, 6),
+                "grade_percent": _round(grade * 100.0, 3),
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        result = dict(level)
+        result.update(
+            {
+                "power_w": _round(level_power * horizontal_component_ratio, 3),
+                "grade_fraction": _round(grade, 6),
+                "grade_percent": _round(grade * 100.0, 3),
+                "grade_angle_degrees": _round(math.degrees(grade_angle_rad), 3),
+                "horizontal_component_ratio": _round(horizontal_component_ratio, 6),
+                "horizontal_component_speed_mps": _round(
+                    speed * horizontal_component_ratio, 6
+                ),
+                "grade_model": "downhill_horizontal_component_cosine_floor",
+                "grade_model_basis": "user_requested_candidate_assumption",
+                "reference_grade_fraction": 0.0,
+                "formula_note": (
+                    "downhill power = same-speed level-ground Pandolf power x "
+                    "cos(atan(abs(signed grade ratio)))"
+                ),
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        )
+        return result
+
+    result = pandolf_metabolic_power_w(
+        speed,
+        body_mass_kg=body_mass_kg,
+        load_kg=load_kg,
+        grade_fraction=grade,
+        terrain_factor=terrain_factor,
+        psychological_stress_multiplier=psychological_stress_multiplier,
+    )
+    result.update(
+        {
+            "grade_angle_degrees": _round(math.degrees(grade_angle_rad), 3),
+            "horizontal_component_ratio": _round(horizontal_component_ratio, 6),
+            "horizontal_component_speed_mps": _round(
+                speed * horizontal_component_ratio, 6
+            ),
+            "grade_model": "pandolf_signed_grade_uphill_or_level",
+            "grade_model_basis": "pandolf_reference_equation",
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+    )
+    return result
+
+
 def build_body_flat_power_reference(
     flat_speed_by_mode: Mapping[str, Any] | None,
     *,
@@ -178,29 +282,20 @@ def build_body_flat_power_reference(
     }
 
 
-def architecture_route_power_summary(
+def _architecture_route_energy_bins(
     vectors: Sequence[Mapping[str, Any]],
     *,
-    body_mass_kg: float = 70.0,
-    load_kg: float = 0.0,
-    terrain_factor: float = 1.0,
-    psychological_stress_multiplier: float = 1.0,
-    speed_key: str = "p50",
-    source_ref: str = "route_architecture.segment_demand_vectors",
-) -> dict[str, Any]:
-    """Estimate time-weighted route metabolic power from Architecture vectors.
+    body_mass_kg: float,
+    load_kg: float,
+    terrain_factor: float,
+    psychological_stress_multiplier: float,
+    speed_key: str,
+) -> tuple[list[dict[str, Any]], int, int]:
+    """Return usable route-bin energy records and explicit skip counters."""
 
-    Reference speed is the GPX-derived schedule speed.  The function does not
-    alter that schedule; it only provides a route-condition power estimate that
-    a successful-climb receipt may use for calibration.
-    """
-
-    total_energy_j = 0.0
-    total_duration_s = 0.0
-    covered_distance_m = 0.0
-    usable_bin_count = 0
+    bins: list[dict[str, Any]] = []
     skipped_bin_count = 0
-
+    downhill_bin_count = 0
     for vector in vectors:
         if not isinstance(vector, Mapping):
             skipped_bin_count += 1
@@ -229,7 +324,7 @@ def architecture_route_power_summary(
             _positive(vector.get("psychological_stress_multiplier"))
             or psychological_stress_multiplier
         )
-        estimate = pandolf_metabolic_power_w(
+        estimate = architecture_route_bin_power_estimate_w(
             speed,
             body_mass_kg=body_mass_kg,
             load_kg=load_kg,
@@ -242,10 +337,57 @@ def architecture_route_power_summary(
             skipped_bin_count += 1
             continue
         duration_s = distance / speed
-        total_duration_s += duration_s
-        total_energy_j += power * duration_s
-        covered_distance_m += distance
-        usable_bin_count += 1
+        if grade < 0:
+            downhill_bin_count += 1
+        bins.append(
+            {
+                "route_bin_id": vector.get("route_bin_id"),
+                "start_distance_m": start,
+                "end_distance_m": end,
+                "distance_m": distance,
+                "speed_mps": speed,
+                "grade_fraction": grade,
+                "power_w": power,
+                "duration_s": duration_s,
+                "energy_j": power * duration_s,
+                "grade_model": estimate.get("grade_model"),
+                "horizontal_component_ratio": estimate.get(
+                    "horizontal_component_ratio"
+                ),
+            }
+        )
+    return bins, skipped_bin_count, downhill_bin_count
+
+
+def architecture_route_power_summary(
+    vectors: Sequence[Mapping[str, Any]],
+    *,
+    body_mass_kg: float = 70.0,
+    load_kg: float = 0.0,
+    terrain_factor: float = 1.0,
+    psychological_stress_multiplier: float = 1.0,
+    speed_key: str = "p50",
+    source_ref: str = "route_architecture.segment_demand_vectors",
+) -> dict[str, Any]:
+    """Estimate time-weighted route metabolic power from Architecture vectors.
+
+    Reference speed is the GPX-derived schedule speed.  The function does not
+    alter that schedule; it only provides a route-condition power estimate that
+    a successful-climb receipt may use for calibration.
+    """
+
+    bins, skipped_bin_count, downhill_bin_count = _architecture_route_energy_bins(
+        vectors,
+        body_mass_kg=body_mass_kg,
+        load_kg=load_kg,
+        terrain_factor=terrain_factor,
+        psychological_stress_multiplier=psychological_stress_multiplier,
+        speed_key=speed_key,
+    )
+    total_energy_j = sum(float(item["energy_j"]) for item in bins)
+    total_duration_s = sum(float(item["duration_s"]) for item in bins)
+    covered_distance_m = sum(float(item["distance_m"]) for item in bins)
+    usable_bin_count = len(bins)
 
     average_power = total_energy_j / total_duration_s if total_duration_s > 0 else None
     return {
@@ -257,6 +399,9 @@ def architecture_route_power_summary(
         "covered_distance_m": _round(covered_distance_m, 3),
         "usable_bin_count": usable_bin_count,
         "skipped_bin_count": skipped_bin_count,
+        "downhill_bin_count": downhill_bin_count,
+        "downhill_model": "cosine_horizontal_component_floor",
+        "downhill_model_basis": "user_requested_candidate_assumption",
         "speed_basis": f"Architecture reference/golden GPX schedule speed {speed_key}",
         "condition_inputs": {
             "body_mass_kg": body_mass_kg,
@@ -272,6 +417,254 @@ def architecture_route_power_summary(
         "validation_context": PANDOLF_VALIDATION_SOURCE,
         "not_mechanical_power": True,
         "not_watch_active_energy": True,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+
+
+def _mission_day_bounds(day: Mapping[str, Any]) -> tuple[float | None, float | None, str]:
+    replay = day.get("reference_replay")
+    replay = replay if isinstance(replay, Mapping) else {}
+    start_payload = replay.get("start")
+    end_payload = replay.get("end")
+    start_payload = start_payload if isinstance(start_payload, Mapping) else {}
+    end_payload = end_payload if isinstance(end_payload, Mapping) else {}
+
+    def first_finite(*values: Any) -> float | None:
+        for value in values:
+            number = _finite(value)
+            if number is not None:
+                return number
+        return None
+
+    start = first_finite(
+        start_payload.get("route_order_m"),
+        day.get("route_start_distance_m"),
+        day.get("start_distance_m"),
+    )
+    end = first_finite(
+        end_payload.get("route_order_m"),
+        day.get("route_end_distance_m"),
+        day.get("end_distance_m"),
+    )
+    boundary_source = (
+        "mission_day_estimates.reference_replay.start/end.route_order_m"
+        if start_payload.get("route_order_m") is not None
+        and end_payload.get("route_order_m") is not None
+        else "mission_day_estimates.route_start_distance_m/route_end_distance_m"
+    )
+    return start, end, boundary_source
+
+
+def architecture_route_daily_energy_summary(
+    vectors: Sequence[Mapping[str, Any]],
+    eta: Mapping[str, Any] | None,
+    *,
+    body_mass_kg: float = 70.0,
+    load_kg: float = 0.0,
+    terrain_factor: float = 1.0,
+    psychological_stress_multiplier: float = 1.0,
+    speed_key: str = "p50",
+    source_ref: str = "outputs/reference_pace_energy_analysis.json#route_bins",
+    eta_source_ref: str = "outputs/planned_eta.json#mission_day_estimates",
+) -> dict[str, Any]:
+    """Allocate route-bin candidate energy to the adopted mission days.
+
+    Allocation uses only interval overlap between route-bin distance and the
+    explicit mission-day route boundaries.  Uncovered route gaps remain gaps;
+    they are reported in coverage and are never interpolated as rest or energy.
+    Aggregate mean/min/max are emitted only when every mission day has an
+    energy row.  This prevents a missing day from silently becoming a complete
+    nine-day average.
+    """
+
+    days = (eta or {}).get("mission_day_estimates") if isinstance(eta, Mapping) else None
+    if not isinstance(days, Sequence) or isinstance(days, (str, bytes, bytearray)):
+        return {
+            "status": "unavailable",
+            "reason": "mission_day_estimates_unavailable",
+            "daily_values": [],
+            "day_count": 0,
+            "available_day_count": 0,
+            "mean_daily_energy_kcal": None,
+            "minimum_daily_energy_kcal": None,
+            "maximum_daily_energy_kcal": None,
+            "total_energy_kj": None,
+            "source_ref": source_ref,
+            "eta_source_ref": eta_source_ref,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+
+    bins, skipped_bin_count, downhill_bin_count = _architecture_route_energy_bins(
+        vectors,
+        body_mass_kg=body_mass_kg,
+        load_kg=load_kg,
+        terrain_factor=terrain_factor,
+        psychological_stress_multiplier=psychological_stress_multiplier,
+        speed_key=speed_key,
+    )
+    daily_values: list[dict[str, Any]] = []
+    for index, raw_day in enumerate(days):
+        day = raw_day if isinstance(raw_day, Mapping) else {}
+        mission_day_id = str(
+            day.get("mission_day_id") or day.get("day_id") or f"D{index + 1}"
+        )
+        start, end, boundary_source = _mission_day_bounds(day)
+        elapsed_minutes = _finite(
+            (day.get("eta") or {}).get("observed_elapsed_minutes")
+            if isinstance(day.get("eta"), Mapping)
+            else None
+        )
+        if start is None or end is None or end <= start:
+            daily_values.append(
+                {
+                    "mission_day_id": mission_day_id,
+                    "status": "unavailable",
+                    "reason": "mission_day_route_boundaries_unavailable",
+                    "energy_kj": None,
+                    "energy_kcal": None,
+                    "route_start_distance_m": _round(start, 3),
+                    "route_end_distance_m": _round(end, 3),
+                    "route_span_m": None,
+                    "covered_distance_m": 0.0,
+                    "coverage_ratio": None,
+                    "reference_elapsed_minutes": _round(elapsed_minutes, 3),
+                    "usable_bin_count": 0,
+                    "source_ref": f"{eta_source_ref}[{mission_day_id}]",
+                    "boundary_source": boundary_source,
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                }
+            )
+            continue
+
+        span = end - start
+        energy_j = 0.0
+        covered_distance_m = 0.0
+        usable_bin_count = 0
+        for item in bins:
+            overlap_start = max(start, float(item["start_distance_m"]))
+            overlap_end = min(end, float(item["end_distance_m"]))
+            overlap = overlap_end - overlap_start
+            if overlap <= 0:
+                continue
+            fraction = overlap / float(item["distance_m"])
+            energy_j += float(item["energy_j"]) * fraction
+            covered_distance_m += overlap
+            usable_bin_count += 1
+        coverage_ratio = covered_distance_m / span if span > 0 else None
+        row_status = "unavailable" if usable_bin_count == 0 else (
+            "available" if coverage_ratio is not None and coverage_ratio >= 0.999 else "partial"
+        )
+        daily_values.append(
+            {
+                "mission_day_id": mission_day_id,
+                "status": row_status,
+                "reason": (
+                    "no_route_bins_overlap_day"
+                    if not usable_bin_count
+                    else "uncovered_route_gap"
+                    if row_status == "partial"
+                    else None
+                ),
+                "energy_kj": _round(energy_j / 1000.0, 3),
+                "energy_kcal": _round(energy_j / 4184.0, 3),
+                "route_start_distance_m": _round(start, 3),
+                "route_end_distance_m": _round(end, 3),
+                "route_span_m": _round(span, 3),
+                "covered_distance_m": _round(covered_distance_m, 3),
+                "coverage_ratio": _round(coverage_ratio, 6),
+                "reference_elapsed_minutes": _round(elapsed_minutes, 3),
+                "usable_bin_count": usable_bin_count,
+                "source_ref": f"{eta_source_ref}[{mission_day_id}]",
+                "boundary_source": boundary_source,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
+            }
+        )
+
+    energy_rows = [
+        row for row in daily_values if _finite(row.get("energy_kcal")) is not None
+    ]
+    all_days_available = len(energy_rows) == len(daily_values) and bool(daily_values)
+    statuses = {str(row.get("status")) for row in daily_values}
+    if not energy_rows:
+        aggregate_status = "unavailable"
+    elif not all_days_available:
+        aggregate_status = "partial"
+    elif statuses == {"available"}:
+        aggregate_status = "available"
+    else:
+        aggregate_status = "partial"
+    values = [float(row["energy_kcal"]) for row in energy_rows]
+    aggregate_reason = (
+        "no_usable_mission_day_energy"
+        if not energy_rows
+        else "one_or_more_mission_days_missing_energy"
+        if not all_days_available
+        else "route_bin_coverage_incomplete"
+        if aggregate_status == "partial"
+        else None
+    )
+    requested_span = sum(
+        float(row["route_span_m"])
+        for row in daily_values
+        if _finite(row.get("route_span_m")) is not None
+    )
+    covered_distance = sum(float(row.get("covered_distance_m") or 0.0) for row in daily_values)
+    return {
+        "status": aggregate_status,
+        "reason": aggregate_reason,
+        "day_count": len(daily_values),
+        "available_day_count": len(energy_rows),
+        "daily_values": daily_values,
+        "mean_daily_energy_kcal": _round(sum(values) / len(values), 3) if all_days_available else None,
+        "minimum_daily_energy_kcal": _round(min(values), 3) if all_days_available else None,
+        "maximum_daily_energy_kcal": _round(max(values), 3) if all_days_available else None,
+        "minimum_day_id": min(energy_rows, key=lambda row: float(row["energy_kcal"])).get(
+            "mission_day_id"
+        ) if all_days_available else None,
+        "maximum_day_id": max(energy_rows, key=lambda row: float(row["energy_kcal"])).get(
+            "mission_day_id"
+        ) if all_days_available else None,
+        "total_energy_kj": _round(sum(values) * 4.184, 3),
+        "coverage": {
+            "requested_route_span_m": _round(requested_span, 3),
+            "covered_distance_m": _round(covered_distance, 3),
+            "coverage_ratio": _round(
+                covered_distance / requested_span if requested_span > 0 else None,
+                6,
+            ),
+            "skipped_bin_count": skipped_bin_count,
+            "downhill_bin_count": downhill_bin_count,
+            "uncovered_route_gaps_excluded": True,
+        },
+        "mean_basis": (
+            "arithmetic mean of mission-day route-bin energy rows; each row uses "
+            "covered reference schedule bins only; no gap interpolation or duration extrapolation"
+        ),
+        "energy_basis": (
+            "sum of Architecture candidate metabolic power x fixed reference/golden "
+            "GPX schedule seconds; not HealthExport active energy, basal energy, or mechanical power"
+        ),
+        "day_boundary_basis": "adopted planned_eta mission_day_estimates reference_replay route boundaries",
+        "calendar_date_range": {
+            "status": "unavailable",
+            "reason": "mission-day plan provides D labels rather than calendar dates",
+        },
+        "source_ref": source_ref,
+        "eta_source_ref": eta_source_ref,
+        "speed_basis": f"Architecture reference/golden GPX schedule speed {speed_key}",
+        "downhill_model": "cosine_horizontal_component_floor",
+        "downhill_model_basis": "user_requested_candidate_assumption",
+        "condition_inputs": {
+            "body_mass_kg": body_mass_kg,
+            "body_mass_basis": "user_assumption",
+            "load_kg": load_kg,
+            "terrain_factor": terrain_factor,
+            "psychological_stress_multiplier": psychological_stress_multiplier,
+        },
         "candidate_only": True,
         "runtime_safety_truth": False,
     }
@@ -606,6 +999,8 @@ __all__ = [
     "DEFAULT_PACE_CORRECTION_CALIBRATION_REF",
     "PANDOLF_POWER_DOMAIN",
     "apply_successful_climb_calibration",
+    "architecture_route_bin_power_estimate_w",
+    "architecture_route_daily_energy_summary",
     "architecture_route_power_summary",
     "build_body_flat_power_reference",
     "calibration_digest",

@@ -435,6 +435,17 @@ def test_route_architecture_keeps_reference_schedule_and_defers_correction_to_ca
         segments=[],
         retreat_routes=[],
         reference_pace_energy_analysis=_reference_pace_payload(),
+        eta={
+            "mission_day_estimates": [
+                {
+                    "mission_day_id": "D1",
+                    "reference_replay": {
+                        "start": {"route_order_m": 0},
+                        "end": {"route_order_m": 750},
+                    },
+                }
+            ]
+        },
         normalized_route_architecture={
             "pace_speed_correction_vectors": [
                 {
@@ -467,6 +478,8 @@ def test_route_architecture_keeps_reference_schedule_and_defers_correction_to_ca
     assert pace_mapping["schedule_is_not_corrected"] is True
     assert projection["route_power_model"]["power_domain"] == "pandolf_metabolic_power_w_estimate"
     assert projection["route_power_model"]["status"] == "available"
+    assert projection["architecture_daily_energy"]["day_count"] == 1
+    assert projection["architecture_daily_energy"]["mean_daily_energy_kcal"] is not None
 
 
 def test_route_architecture_projection_builds_candidate_only_mobility_vectors() -> None:

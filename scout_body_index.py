@@ -1826,6 +1826,15 @@ def attach_pace_fit_mappings(
         pair["personal_mapping"] = mapping
         pairs.append(pair)
     result["pairs"] = pairs
+    architecture_daily_energy = (architecture or {}).get("architecture_daily_energy")
+    if not isinstance(architecture_daily_energy, Mapping):
+        architecture_daily_energy = {
+            "status": "unavailable",
+            "reason": "architecture_daily_energy_unavailable",
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+    result["architecture_daily_energy"] = dict(architecture_daily_energy)
     result["pace_fit_mapping"] = {
         "status": "available" if mapping_available else "unavailable",
         "mapped_pair_count": mapping_available,
@@ -1841,6 +1850,8 @@ def attach_pace_fit_mappings(
         "schedule_is_not_corrected": True,
         "schedule_source": "Architecture reference/golden GPX p50 speed integrated per CP interval",
         "route_power_model": (architecture or {}).get("route_power_model"),
+        "architecture_daily_energy": dict(architecture_daily_energy),
+        "daily_energy_is_not_pace_fit_percent": True,
         "energy_or_w_not_converted_directly": True,
         "candidate_only": True,
         "runtime_safety_truth": False,
