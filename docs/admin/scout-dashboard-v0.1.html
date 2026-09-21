@@ -3875,6 +3875,149 @@
       opacity: .62;
     }
 
+    .body-index-activity-import-panel {
+      margin-top: 12px;
+      border: 1px solid rgba(240, 184, 92, .38);
+      border-radius: 9px;
+      background: rgba(240, 184, 92, .045);
+    }
+
+    .body-index-activity-import-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+      padding: 12px;
+      border-bottom: 1px solid rgba(240, 184, 92, .2);
+    }
+
+    .body-index-activity-import-head h4 {
+      margin: 0;
+      color: var(--text);
+    }
+
+    .body-index-activity-import-head p {
+      max-width: 760px;
+      margin: 5px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .body-index-activity-import-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 7px;
+    }
+
+    .body-index-activity-import-actions button {
+      min-height: 31px;
+      border: 1px solid rgba(98, 181, 196, .58);
+      border-radius: 7px;
+      padding: 0 10px;
+      color: var(--accent);
+      background: rgba(98, 181, 196, .08);
+      font: 800 11px var(--mono);
+      cursor: pointer;
+    }
+
+    .body-index-activity-import-actions button.primary {
+      border-color: rgba(240, 184, 92, .75);
+      color: var(--warn);
+      background: rgba(240, 184, 92, .12);
+    }
+
+    .body-index-activity-import-actions button:disabled {
+      cursor: wait;
+      opacity: .58;
+    }
+
+    .body-index-activity-import-body {
+      display: grid;
+      gap: 9px;
+      padding: 12px;
+    }
+
+    .body-index-activity-import-status {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .body-index-activity-import-status.bad {
+      color: var(--bad);
+    }
+
+    .body-index-activity-import-status.ok {
+      color: var(--ok);
+    }
+
+    .body-index-activity-candidates {
+      display: grid;
+      gap: 6px;
+      max-height: 380px;
+      overflow: auto;
+      padding-right: 3px;
+    }
+
+    .body-index-activity-candidate {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: start;
+      padding: 9px 10px;
+      border: 1px solid rgba(255, 255, 255, .09);
+      border-radius: 7px;
+      background: rgba(0, 0, 0, .15);
+    }
+
+    .body-index-activity-candidate input {
+      margin-top: 3px;
+      accent-color: var(--warn);
+    }
+
+    .body-index-activity-candidate-main {
+      min-width: 0;
+      display: grid;
+      gap: 3px;
+    }
+
+    .body-index-activity-candidate-title {
+      color: var(--text);
+      font-weight: 800;
+    }
+
+    .body-index-activity-candidate-meta,
+    .body-index-activity-candidate-source {
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
+    }
+
+    .body-index-activity-candidate-state {
+      color: var(--subtle);
+      font: 800 10px var(--mono);
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .body-index-activity-candidate-state.available {
+      color: var(--accent);
+    }
+
+    .body-index-activity-candidate-state.already-imported {
+      color: var(--subtle);
+    }
+
+    .body-index-activity-import-errors {
+      display: grid;
+      gap: 4px;
+      color: var(--bad);
+      font-size: 11px;
+    }
+
     .body-index-import-status {
       max-width: 380px;
       white-space: normal;
@@ -13015,6 +13158,8 @@
     const BODY_INDEX_STATUS_PATH = "/admin/dashboard/body-index";
     const PACE_FIT_STATUS_PATH = "/admin/dashboard/pace-fit";
     const BODY_INDEX_IMPORT_PATH = "/admin/dashboard/body-index/import";
+    const BODY_INDEX_ACTIVITY_PREVIEW_PATH = "/admin/dashboard/body-index/activity-import/preview";
+    const BODY_INDEX_ACTIVITY_CONFIRM_PATH = "/admin/dashboard/body-index/activity-import/confirm";
     const BODY_INDEX_WATCH_STATUS_PATH = "/admin/dashboard/body-index/watch/status";
     const BODY_INDEX_WATCH_START_PATH = "/admin/dashboard/body-index/watch/start";
     const BODY_INDEX_WATCH_STOP_PATH = "/admin/dashboard/body-index/watch/stop";
@@ -13890,6 +14035,17 @@
         tone: "info",
         text: "HealthExport import idle",
       },
+      bodyIndexActivityImportOpen: false,
+      bodyIndexActivityImportBusy: false,
+      bodyIndexActivityImportStatus: {
+        tone: "info",
+        text: "尚未選擇 HealthExport 檔案或資料夾",
+      },
+      bodyIndexActivityImportSessionId: null,
+      bodyIndexActivityImportCandidates: [],
+      bodyIndexActivityImportErrors: [],
+      bodyIndexActivitySelectedIds: [],
+      bodyIndexActivityFiles: [],
       bodyIndexWatchStatus: null,
       bodyIndexWatchBusy: false,
       bodyIndexWatchIntervalSeconds: 300,
@@ -14261,6 +14417,39 @@
             ? `${detail.code || response.status}: ${detail.message || JSON.stringify(detail)}`
             : Array.isArray(detail)
               ? JSON.stringify(detail)
+              : String(detail);
+          throw new Error(message);
+        }
+        return data;
+      } catch (error) {
+        if (error?.name === "AbortError" && timeoutMs !== null) {
+          throw new Error(`request timed out after ${Math.round(timeoutMs / 1000)}s: ${path}`);
+        }
+        throw error;
+      } finally {
+        if (timer !== null) window.clearTimeout(timer);
+      }
+    }
+
+    async function postFormData(path, formData, options = {}) {
+      if (DIAGNOSTIC_MAP_PROBE) throw new Error("Map order diagnostics are read-only.");
+      const timeoutMs = options.timeoutMs === null ? null : Number(options.timeoutMs) || FETCH_TIMEOUT_MS;
+      const controller = new AbortController();
+      const timer = timeoutMs === null ? null : window.setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const response = await fetch(`${apiBase()}${path}`, {
+          method: "POST",
+          headers: {"Accept": "application/json"},
+          body: formData,
+          signal: controller.signal,
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          const detail = data.detail || `${response.status} ${path}`;
+          const message = Array.isArray(detail)
+            ? JSON.stringify(detail)
+            : typeof detail === "object"
+              ? `${detail.code || response.status}: ${detail.message || JSON.stringify(detail)}`
               : String(detail);
           throw new Error(message);
         }
@@ -22433,12 +22622,20 @@
       diagnosticRequire(markup.includes("data-body-index-import"), "Body Index import binding is missing.");
       diagnosticRequire(markup.includes("data-body-index-add-activity"), "Body Index add-activity control is missing.");
       diagnosticRequire(markup.includes("加入新的活動紀錄"), "Body Index add-activity label is missing.");
-      diagnosticRequire(BODY_INDEX_IMPORT_PATH === "/admin/dashboard/body-index/import", "Body Index import path changed unexpectedly.");
+      diagnosticRequire(markup.includes("data-body-index-pick-files"), "Body Index file picker is missing.");
+      diagnosticRequire(markup.includes("data-body-index-pick-folder"), "Body Index folder picker is missing.");
+      diagnosticRequire(markup.includes("data-body-index-activity-candidate"), "Body Index activity candidate list is missing.");
+      diagnosticRequire(markup.includes("data-body-index-confirm-activity-import"), "Body Index selected-activity confirmation is missing.");
+      diagnosticRequire(BODY_INDEX_ACTIVITY_PREVIEW_PATH === "/admin/dashboard/body-index/activity-import/preview", "Body Index activity preview path changed unexpectedly.");
+      diagnosticRequire(BODY_INDEX_ACTIVITY_CONFIRM_PATH === "/admin/dashboard/body-index/activity-import/confirm", "Body Index activity confirm path changed unexpectedly.");
       const body = await diagnosticBodyIndex();
       const importHandler = diagnosticCompactSource(bindBodyIndexControls);
-      diagnosticRequire(importHandler.includes("confirm_import: true"), "Body Index import does not require explicit confirmation.");
+      diagnosticRequire(importHandler.includes("FormData"), "Body Index activity picker does not upload a local FormData selection.");
+      diagnosticRequire(importHandler.includes("selected_activity_ids"), "Body Index selected activity ids are not submitted.");
+      diagnosticRequire(importHandler.includes("confirm_import: true"), "Body Index selected activity import does not require explicit confirmation.");
       diagnosticRequire(importHandler.includes("body_mass_kg"), "Body Index import does not expose the adjustable body-mass assumption.");
-      diagnosticRequire(importHandler.includes("BODY_INDEX_IMPORT_PATH"), "Body Index import control is not wired to the bounded endpoint.");
+      diagnosticRequire(importHandler.includes("BODY_INDEX_ACTIVITY_PREVIEW_PATH"), "Body Index activity picker is not wired to the bounded preview endpoint.");
+      diagnosticRequire(importHandler.includes("BODY_INDEX_ACTIVITY_CONFIRM_PATH"), "Body Index activity picker is not wired to the bounded confirm endpoint.");
       const serialized = JSON.stringify(body);
       for (const forbidden of ["original_zip_filename", "\"coordinates\"", "heartRateData", "<gpx"]) {
         diagnosticRequire(!serialized.includes(forbidden), `Body Index status exposes ${forbidden}.`);
@@ -38068,6 +38265,39 @@
       };
     }
 
+    function bodyIndexActivityImportStatus() {
+      return state.bodyIndexActivityImportStatus || {
+        tone: "info",
+        text: "尚未選擇 HealthExport 檔案或資料夾",
+      };
+    }
+
+    function bodyIndexActivityCandidates() {
+      return Array.isArray(state.bodyIndexActivityImportCandidates)
+        ? state.bodyIndexActivityImportCandidates
+        : [];
+    }
+
+    function bodyIndexActivityKindLabel(kind) {
+      return {
+        running: "跑步",
+        walking: "步行",
+        other: "其他活動",
+      }[String(kind || "other")] || "未知活動";
+    }
+
+    function bodyIndexActivityDurationLabel(seconds) {
+      const value = Number(seconds);
+      if (!Number.isFinite(value) || value < 0) return "duration unavailable";
+      const minutes = Math.round(value / 60);
+      return `${minutes} 分鐘`;
+    }
+
+    function bodyIndexActivityEnergyLabel(kcal) {
+      const value = Number(kcal);
+      return Number.isFinite(value) ? `${value.toFixed(1)} kcal` : "active energy unavailable";
+    }
+
     function bodyIndexWatchStatus() {
       return state.bodyIndexWatchStatus || {
         running: false,
@@ -38260,6 +38490,12 @@
       const hasBodyIndexEvidence = model.status === "available" && Number(bodyIndexCoverageValue("Health exports", "0")) > 0;
       const importStatus = bodyIndexImportStatus();
       const importTone = ["ok", "warn", "bad", "info"].includes(importStatus.tone) ? importStatus.tone : "info";
+      const activityImportStatus = bodyIndexActivityImportStatus();
+      const activityImportTone = ["ok", "warn", "bad", "info"].includes(activityImportStatus.tone) ? activityImportStatus.tone : "info";
+      const activityCandidates = bodyIndexActivityCandidates();
+      const activitySelectedIds = new Set(Array.isArray(state.bodyIndexActivitySelectedIds) ? state.bodyIndexActivitySelectedIds : []);
+      const activityAvailableCount = activityCandidates.filter(candidate => !candidate.already_imported).length;
+      const activitySelectedCount = activityCandidates.filter(candidate => activitySelectedIds.has(candidate.candidate_id)).length;
       const watchTone = bodyIndexWatchTone();
       const watchSummary = bodyIndexWatchSummary();
       const watchStatus = bodyIndexWatchStatus();
@@ -38346,9 +38582,9 @@
                   data-body-index-import
                   data-body-index-add-activity="true"
                   aria-label="加入新的活動紀錄（本機 HealthExport）"
-                  title="加入新的活動紀錄（Import HealthExport）：掃描本機來源並去重合併"
-                  ${state.bodyIndexImportBusy ? "disabled" : ""}
-                >${state.bodyIndexImportBusy ? "匯入中..." : "加入新的活動紀錄"}</button>
+                  title="加入新的活動紀錄：選擇本機 HealthExport 檔案或資料夾，再勾選要加入的活動"
+                  ${state.bodyIndexActivityImportBusy || state.bodyIndexWatchBusy ? "disabled" : ""}
+                >${state.bodyIndexActivityImportBusy ? "解析中..." : "加入新的活動紀錄"}</button>
                 <label for="bodyIndexBodyMass">Body mass kg</label>
                 <input
                   id="bodyIndexBodyMass"
@@ -38357,7 +38593,7 @@
                   max="500"
                   step="0.1"
                   value="${escapeHtml(state.bodyIndexBodyMassKg || 70)}"
-                  ${state.bodyIndexImportBusy || state.bodyIndexWatchBusy ? "disabled" : ""}
+                  ${state.bodyIndexActivityImportBusy || state.bodyIndexWatchBusy ? "disabled" : ""}
                 />
                 <div class="body-index-watch-controls" data-body-index-watch-controls="true">
                   <label for="bodyIndexWatchInterval">Scan sec</label>
@@ -38398,6 +38634,58 @@
                 `).join("")}
               </div>
             </div>
+            <section
+              class="body-index-activity-import-panel"
+              data-body-index-activity-import-panel="true"
+              aria-labelledby="bodyIndexActivityImportTitle"
+              ${state.bodyIndexActivityImportOpen ? "" : "hidden"}
+            >
+              <div class="body-index-activity-import-head">
+                <div>
+                  <h4 id="bodyIndexActivityImportTitle">指定加入某筆活動</h4>
+                  <p>資料只在這個本機 Dashboard 解析。先選擇 ZIP／JSON 檔案或 HealthExport 資料夾，再從活動清單勾選；確認後只合併選取的活動，不會把整個檔案內的其他活動或日級指標一併加入。</p>
+                </div>
+                <div class="body-index-activity-import-actions">
+                  <button type="button" data-body-index-pick-files ${state.bodyIndexActivityImportBusy ? "disabled" : ""}>選擇 HealthExport 檔案</button>
+                  <button type="button" data-body-index-pick-folder ${state.bodyIndexActivityImportBusy ? "disabled" : ""}>選擇 HealthExport 資料夾</button>
+                  <button type="button" data-body-index-close-activity-import>關閉</button>
+                  <input id="bodyIndexActivityFiles" type="file" accept=".zip,.json,application/zip,application/json" multiple hidden />
+                  <input id="bodyIndexActivityFolder" type="file" accept=".zip,.json,application/zip,application/json" webkitdirectory directory multiple hidden />
+                </div>
+              </div>
+              <div class="body-index-activity-import-body">
+                <div class="body-index-activity-import-status ${activityImportTone}" data-body-index-activity-import-status="true">${escapeHtml(activityImportStatus.text)}</div>
+                ${activityCandidates.length ? `
+                  <div class="body-index-activity-import-status" data-body-index-activity-selection-summary="true">預覽 ${activityCandidates.length} 筆活動 · 可加入 ${activityAvailableCount} 筆 · 已勾選 ${activitySelectedCount} 筆</div>
+                  <div class="body-index-activity-candidates" data-body-index-activity-candidates="true">
+                    ${activityCandidates.map(candidate => {
+                      const candidateId = String(candidate.candidate_id || "");
+                      const selected = activitySelectedIds.has(candidateId);
+                      const alreadyImported = Boolean(candidate.already_imported);
+                      return `
+                        <label class="body-index-activity-candidate" data-body-index-activity-candidate="true" data-candidate-id="${escapeHtml(candidateId)}">
+                          <input type="checkbox" data-body-index-activity-select="${escapeHtml(candidateId)}" ${selected ? "checked" : ""} />
+                          <span class="body-index-activity-candidate-main">
+                            <span class="body-index-activity-candidate-title">${escapeHtml(bodyIndexActivityKindLabel(candidate.activity_kind))} · ${escapeHtml(candidate.date || "date unavailable")} · ${escapeHtml(bodyIndexActivityDurationLabel(candidate.duration_s))}</span>
+                            <span class="body-index-activity-candidate-meta">${escapeHtml(candidate.distance_km === null || candidate.distance_km === undefined ? "distance unavailable" : `${Number(candidate.distance_km).toFixed(2)} km`)} · ${escapeHtml(bodyIndexActivityEnergyLabel(candidate.active_energy_kcal))} · coverage ${escapeHtml(String(Math.round(Number(candidate.data_coverage?.active_energy || 0) * 100)))}%</span>
+                            <span class="body-index-activity-candidate-source">${escapeHtml(candidate.source_name || "selected HealthExport source")} · ${escapeHtml(candidate.classification_status || "classification unavailable")}</span>
+                          </span>
+                          <span class="body-index-activity-candidate-state ${alreadyImported ? "already-imported" : "available"}">${alreadyImported ? "已加入" : "可加入"}</span>
+                        </label>
+                      `;
+                    }).join("")}
+                  </div>
+                  <div class="body-index-activity-import-actions">
+                    <button class="primary" type="button" data-body-index-confirm-activity-import ${state.bodyIndexActivityImportBusy || !state.bodyIndexActivityImportSessionId || activitySelectedCount === 0 ? "disabled" : ""}>確認加入已選活動（${activitySelectedCount}）</button>
+                  </div>
+                ` : `<div class="empty-state">尚未產生活動預覽；請選擇 HealthExport 檔案或資料夾。</div>`}
+                ${Array.isArray(state.bodyIndexActivityImportErrors) && state.bodyIndexActivityImportErrors.length ? `
+                  <div class="body-index-activity-import-errors" data-body-index-activity-import-errors="true">
+                    ${state.bodyIndexActivityImportErrors.map(error => `<div>${escapeHtml(error.source_name || "selected source")} · ${escapeHtml(error.error || error.error_type || "parse error")}</div>`).join("")}
+                  </div>
+                ` : ""}
+              </div>
+            </section>
           </section>
 
           <div class="body-index-layout" data-body-index-model-output="true">
@@ -43606,36 +43894,159 @@
       };
       if (massInput) massInput.addEventListener("change", readBodyMassKg);
       const button = document.querySelector("[data-body-index-import]");
-      if (button) button.addEventListener("click", async () => {
-        state.bodyIndexImportBusy = true;
-        state.bodyIndexImportStatus = {
+      if (button) button.addEventListener("click", () => {
+        state.bodyIndexActivityImportOpen = true;
+        state.bodyIndexActivityImportStatus = {
+          tone: "info",
+          text: state.bodyIndexActivityImportSessionId
+            ? "請檢查預覽並勾選要加入的活動。"
+            : "尚未選擇 HealthExport 檔案或資料夾",
+        };
+        render();
+      });
+      const closeActivityImport = document.querySelector("[data-body-index-close-activity-import]");
+      if (closeActivityImport) closeActivityImport.addEventListener("click", () => {
+        state.bodyIndexActivityImportOpen = false;
+        render();
+      });
+      const chooseActivityFiles = async (input) => {
+        const files = [...(input?.files || [])].filter(file => {
+          const name = String(file?.name || "").toLowerCase();
+          return name.endsWith(".zip") || name.endsWith(".json");
+        });
+        if (input) input.value = "";
+        if (!files.length) {
+          state.bodyIndexActivityImportStatus = {
+            tone: "bad",
+            text: "沒有選到可解析的 .zip 或 .json HealthExport 檔案。",
+          };
+          state.bodyIndexActivityImportOpen = true;
+          render();
+          return;
+        }
+        const deduped = [...new Map(files.map(file => [`${file.name}:${file.size}:${file.lastModified}`, file])).values()];
+        state.bodyIndexActivityImportOpen = true;
+        state.bodyIndexActivityImportBusy = true;
+        state.bodyIndexActivityImportSessionId = null;
+        state.bodyIndexActivityImportCandidates = [];
+        state.bodyIndexActivitySelectedIds = [];
+        state.bodyIndexActivityImportErrors = [];
+        state.bodyIndexActivityFiles = deduped;
+        state.bodyIndexActivityImportStatus = {
           tone: "warn",
-          text: "Importing local HealthExport zip files and merging deduped body metrics...",
+          text: `正在本機解析 ${deduped.length} 個 HealthExport 檔案；尚未加入任何活動。`,
         };
         render();
         try {
-          const payload = await postJson(BODY_INDEX_IMPORT_PATH, {
+          const form = new FormData();
+          form.append("project_id", projectId());
+          form.append("body_mass_kg", String(readBodyMassKg()));
+          deduped.forEach(file => form.append("files", file, file.name));
+          const payload = await postFormData(
+            BODY_INDEX_ACTIVITY_PREVIEW_PATH,
+            form,
+            {timeoutMs: BODY_INDEX_FETCH_TIMEOUT_MS},
+          );
+          const candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
+          state.bodyIndexActivityImportSessionId = payload.import_session_id || null;
+          state.bodyIndexActivityImportCandidates = candidates;
+          state.bodyIndexActivitySelectedIds = candidates
+            .filter(candidate => !candidate.already_imported)
+            .map(candidate => candidate.candidate_id)
+            .filter(Boolean);
+          state.bodyIndexActivityImportErrors = Array.isArray(payload.errors) ? payload.errors : [];
+          state.bodyIndexActivityImportStatus = {
+            tone: candidates.length ? "ok" : "warn",
+            text: candidates.length
+              ? `已產生 ${candidates.length} 筆活動預覽；請勾選後確認加入。`
+              : "沒有可供選擇的活動；請檢查檔案與解析錯誤。",
+          };
+        } catch (error) {
+          state.bodyIndexActivityImportSessionId = null;
+          state.bodyIndexActivityImportCandidates = [];
+          state.bodyIndexActivitySelectedIds = [];
+          state.bodyIndexActivityImportStatus = {
+            tone: "bad",
+            text: `HealthExport 預覽失敗：${error.message || error}`,
+          };
+        } finally {
+          state.bodyIndexActivityImportBusy = false;
+          state.bodyIndexActivityFiles = [];
+          render();
+        }
+      };
+      const fileInput = document.getElementById("bodyIndexActivityFiles");
+      const folderInput = document.getElementById("bodyIndexActivityFolder");
+      const pickFiles = document.querySelector("[data-body-index-pick-files]");
+      const pickFolder = document.querySelector("[data-body-index-pick-folder]");
+      if (pickFiles && fileInput) pickFiles.addEventListener("click", () => fileInput.click());
+      if (pickFolder && folderInput) pickFolder.addEventListener("click", () => folderInput.click());
+      if (fileInput) fileInput.addEventListener("change", () => chooseActivityFiles(fileInput));
+      if (folderInput) folderInput.addEventListener("change", () => chooseActivityFiles(folderInput));
+      document.querySelectorAll("[data-body-index-activity-select]").forEach(input => {
+        input.addEventListener("change", () => {
+          const selected = new Set(Array.isArray(state.bodyIndexActivitySelectedIds) ? state.bodyIndexActivitySelectedIds : []);
+          const candidateId = input.dataset.bodyIndexActivitySelect || "";
+          if (input.checked) selected.add(candidateId);
+          else selected.delete(candidateId);
+          state.bodyIndexActivitySelectedIds = [...selected].filter(Boolean);
+          render();
+        });
+      });
+      const confirmActivityImport = document.querySelector("[data-body-index-confirm-activity-import]");
+      if (confirmActivityImport) confirmActivityImport.addEventListener("click", async () => {
+        const selectedIds = [...document.querySelectorAll("[data-body-index-activity-select]:checked")]
+          .map(input => input.dataset.bodyIndexActivitySelect)
+          .filter(Boolean);
+        if (!state.bodyIndexActivityImportSessionId || !selectedIds.length) {
+          state.bodyIndexActivityImportStatus = {
+            tone: "bad",
+            text: "請先選擇至少一筆活動。",
+          };
+          render();
+          return;
+        }
+        state.bodyIndexActivitySelectedIds = selectedIds;
+        state.bodyIndexActivityImportBusy = true;
+        state.bodyIndexActivityImportStatus = {
+          tone: "warn",
+          text: `正在合併 ${selectedIds.length} 筆已選活動；未選活動不會加入。`,
+        };
+        render();
+        try {
+          const payload = await postJson(BODY_INDEX_ACTIVITY_CONFIRM_PATH, {
             project_id: projectId(),
+            import_session_id: state.bodyIndexActivityImportSessionId,
+            selected_activity_ids: selectedIds,
             confirm_import: true,
             operator_alias: "dashboard_operator",
             body_mass_kg: readBodyMassKg(),
-          }, { timeoutMs: BODY_INDEX_FETCH_TIMEOUT_MS });
+          }, {timeoutMs: BODY_INDEX_FETCH_TIMEOUT_MS});
           state.bodyIndexData = payload;
           const result = payload.import_result || {};
-          const newCount = Number(result.new_source_count || 0);
-          const duplicateCount = Number(result.duplicate_source_count || 0);
+          const newCount = Number(result.new_activity_count || 0);
+          const duplicateCount = Number(result.duplicate_activity_count || 0);
           const errorCount = Number(result.error_count || 0);
           state.bodyIndexImportStatus = {
             tone: errorCount > 0 ? "warn" : "ok",
-            text: `merged ${newCount} new / skipped ${duplicateCount} duplicates / ${errorCount} errors`,
+            text: `selected activity import · ${newCount} new / ${duplicateCount} duplicates / ${errorCount} errors`,
           };
+          state.bodyIndexActivityImportStatus = {
+            tone: errorCount > 0 ? "warn" : "ok",
+            text: `已加入 ${newCount} 筆活動；重複 ${duplicateCount} 筆。`,
+          };
+          state.bodyIndexActivityImportOpen = false;
+          state.bodyIndexActivityImportSessionId = null;
+          state.bodyIndexActivityImportCandidates = [];
+          state.bodyIndexActivityImportErrors = [];
+          state.bodyIndexActivitySelectedIds = [];
         } catch (error) {
-          state.bodyIndexImportStatus = {
+          state.bodyIndexActivityImportStatus = {
             tone: "bad",
-            text: `HealthExport import failed: ${error.message || error}`,
+            text: `指定活動加入失敗：${error.message || error}`,
           };
         } finally {
-          state.bodyIndexImportBusy = false;
+          state.bodyIndexActivityImportBusy = false;
           render();
         }
       });

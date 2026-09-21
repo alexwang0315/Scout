@@ -1012,6 +1012,134 @@ def test_scout_dashboard_body_index_import_dedupes_and_sanitizes(
         assert forbidden_value not in serialized_read
 
 
+def test_scout_dashboard_body_index_activity_picker_imports_only_selected_activity(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    project_id = "selected_activity_picker"
+    source_path = tmp_path / "selected-activities.zip"
+    payload = {
+        "data": {
+            "workouts": [
+                _body_index_walk_workout(
+                    "selected-activity-a",
+                    day="2026-06-04",
+                    hour=8,
+                    distances_km=[0.72, 0.89, 0.8],
+                    step_counts=[1072, 1250, 1260],
+                    active_energy_kj=[100, 110, 100],
+                    heart_rates=[100] * 15 + [101] * 15 + [94] * 15,
+                ),
+                _body_index_walk_workout(
+                    "selected-activity-b",
+                    day="2026-06-05",
+                    hour=9,
+                    distances_km=[0.62, 0.74, 0.7],
+                    step_counts=[980, 1100, 1120],
+                    active_energy_kj=[80, 90, 85],
+                    heart_rates=[102] * 15 + [103] * 15 + [96] * 15,
+                ),
+            ],
+        }
+    }
+    with zipfile.ZipFile(source_path, "w") as archive:
+        archive.writestr("HealthAutoExport-selected.json", json.dumps(payload))
+    monkeypatch.setattr(
+        admin_api,
+        "DEFAULT_DASHBOARD_BODY_INDEX_STORE_ROOT",
+        tmp_path / "selected_store",
+    )
+    client = TestClient(create_admin_app())
+
+    rejected = client.post(
+        "/admin/dashboard/body-index/activity-import/confirm",
+        json={
+            "project_id": project_id,
+            "import_session_id": "missing-session",
+            "selected_activity_ids": ["candidate"],
+            "body_mass_kg": 70,
+        },
+    )
+    assert rejected.status_code == 400
+
+    with source_path.open("rb") as handle:
+        preview_response = client.post(
+            "/admin/dashboard/body-index/activity-import/preview",
+            data={"project_id": project_id, "body_mass_kg": "70"},
+            files={"files": ("selected-activities.zip", handle, "application/zip")},
+        )
+    assert preview_response.status_code == 200, preview_response.text
+    preview = preview_response.json()
+    assert preview["schema_version"] == "scout_dashboard_body_index_activity_import_preview.v1"
+    assert preview["boundary"]["candidate_only"] is True
+    assert preview["boundary"]["runtime_safety_truth"] is False
+    assert len(preview["candidates"]) == 2
+    assert preview["available_candidate_count"] == 2
+    assert all("start" not in candidate and "end" not in candidate for candidate in preview["candidates"])
+    assert all("latitude" not in candidate and "longitude" not in candidate for candidate in preview["candidates"])
+
+    selected_candidate = preview["candidates"][0]
+    confirm_response = client.post(
+        "/admin/dashboard/body-index/activity-import/confirm",
+        json={
+            "project_id": project_id,
+            "import_session_id": preview["import_session_id"],
+            "selected_activity_ids": [selected_candidate["candidate_id"]],
+            "confirm_import": True,
+            "body_mass_kg": 70,
+        },
+    )
+    assert confirm_response.status_code == 200, confirm_response.text
+    confirmed = confirm_response.json()
+    assert confirmed["import_result"]["import_mode"] == "selected_activity_only"
+    assert confirmed["import_result"]["selected_activity_count"] == 1
+    assert confirmed["import_result"]["new_activity_count"] == 1
+    assert confirmed["import_result"]["duplicate_activity_count"] == 0
+    assert confirmed["body_index"]["observations"]["activity_count"] == 1
+    assert len(confirmed["source_index"][0]["body_index_analysis"]["activities"]) == 1
+    assert confirmed["source_index"][0]["selected_activity_count"] == 1
+    assert len(confirmed["source_index"][0]["selected_activity_keys"]) == 1
+    serialized = json.dumps(confirmed, ensure_ascii=False)
+    for forbidden_value in (
+        "heartRateData",
+        "latitude",
+        "longitude",
+        "selected-activities.zip",
+        "2026-06-04 08:00:00 +0800",
+    ):
+        assert forbidden_value not in serialized
+
+    with source_path.open("rb") as handle:
+        repeat_preview_response = client.post(
+            "/admin/dashboard/body-index/activity-import/preview",
+            data={"project_id": project_id, "body_mass_kg": "70"},
+            files={"files": ("selected-activities.zip", handle, "application/zip")},
+        )
+    assert repeat_preview_response.status_code == 200
+    repeat_preview = repeat_preview_response.json()
+    assert sum(candidate["already_imported"] for candidate in repeat_preview["candidates"]) == 1
+    already_imported = next(
+        candidate
+        for candidate in repeat_preview["candidates"]
+        if candidate["already_imported"]
+    )
+    duplicate_response = client.post(
+        "/admin/dashboard/body-index/activity-import/confirm",
+        json={
+            "project_id": project_id,
+            "import_session_id": repeat_preview["import_session_id"],
+            "selected_activity_ids": [already_imported["candidate_id"]],
+            "confirm_import": True,
+            "body_mass_kg": 70,
+        },
+    )
+    assert duplicate_response.status_code == 200, duplicate_response.text
+    duplicate_payload = duplicate_response.json()
+    assert duplicate_payload["import_result"]["new_activity_count"] == 0
+    assert duplicate_payload["import_result"]["duplicate_activity_count"] == 1
+    assert duplicate_payload["body_index"]["observations"]["activity_count"] == 1
+
+
 def test_scout_dashboard_body_index_watch_imports_new_zip(
     tmp_path: Path,
     monkeypatch,
@@ -4628,6 +4756,8 @@ def test_scout_dashboard_pace_fit_body_index_dashboard_contract() -> None:
         "BODY_INDEX_FETCH_TIMEOUT_MS = 180000",
         'BODY_INDEX_STATUS_PATH = "/admin/dashboard/body-index"',
         'BODY_INDEX_IMPORT_PATH = "/admin/dashboard/body-index/import"',
+        'BODY_INDEX_ACTIVITY_PREVIEW_PATH = "/admin/dashboard/body-index/activity-import/preview"',
+        'BODY_INDEX_ACTIVITY_CONFIRM_PATH = "/admin/dashboard/body-index/activity-import/confirm"',
         'BODY_INDEX_WATCH_STATUS_PATH = "/admin/dashboard/body-index/watch/status"',
         'BODY_INDEX_WATCH_START_PATH = "/admin/dashboard/body-index/watch/start"',
         'BODY_INDEX_WATCH_STOP_PATH = "/admin/dashboard/body-index/watch/stop"',
@@ -4638,13 +4768,22 @@ def test_scout_dashboard_pace_fit_body_index_dashboard_contract() -> None:
         'data-body-index-import',
         'data-body-index-watch-start',
         'data-body-index-watch-stop',
+        'data-body-index-pick-files',
+        'data-body-index-pick-folder',
+        'data-body-index-activity-import-panel="true"',
+        'data-body-index-activity-candidate="true"',
+        'data-body-index-confirm-activity-import',
+        'webkitdirectory',
+        'selected_activity_ids',
+        'import_session_id',
+        'FormData',
         'data-body-index-watch-controls="true"',
         "state.bodyIndexData = payload",
         "bodyIndexImportBusy",
         "bodyIndexWatchBusy",
         "confirm_import: true",
         "confirm_watch: true",
-        "merged ${newCount} new / skipped ${duplicateCount} duplicates",
+        "selected activity import · ${newCount} new / ${duplicateCount} duplicates / ${errorCount} errors",
     ):
         assert marker in html
 
@@ -4700,7 +4839,7 @@ def test_scout_dashboard_pace_fit_body_index_dashboard_contract() -> None:
         "Start Watch",
         "watch stopped",
         "Scan sec",
-        "Importing local HealthExport zip files",
+            "正在本機解析",
         "median -- bpm",
         "median -- ms",
         "-- windows",

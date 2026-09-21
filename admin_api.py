@@ -1773,6 +1773,283 @@ def _import_dashboard_body_index(
     return snapshot
 
 
+async def _preview_dashboard_body_index_activity_import(
+    *,
+    project_id: str,
+    body_mass_kg: float,
+    files: list[UploadFile],
+) -> dict[str, Any]:
+    project_id = _require_dashboard_body_index_project_id(project_id)
+    if not files:
+        raise HTTPException(status_code=400, detail="at least one HealthExport file is required")
+    if len(files) > MAX_BODY_INDEX_ACTIVITY_IMPORT_FILES:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                "too many HealthExport files; the local picker is limited to "
+                f"{MAX_BODY_INDEX_ACTIVITY_IMPORT_FILES} files"
+            ),
+        )
+    try:
+        body_mass = float(body_mass_kg)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=422, detail="body_mass_kg must be numeric") from None
+    if not math.isfinite(body_mass) or body_mass <= 0 or body_mass > 500:
+        raise HTTPException(status_code=422, detail="body_mass_kg must be between 0 and 500")
+
+    current_snapshot = _load_dashboard_body_index_snapshot(project_id)
+    imported_activity_map = _dashboard_body_index_imported_activity_map(current_snapshot)
+    candidates: list[dict[str, Any]] = []
+    candidate_map: dict[str, dict[str, str]] = {}
+    sources_by_sha: dict[str, dict[str, Any]] = {}
+    errors: list[dict[str, str]] = []
+    imported_at = datetime.now(timezone.utc).isoformat()
+
+    with tempfile.TemporaryDirectory(prefix="scout-body-index-picker-") as temp_dir:
+        temp_root = Path(temp_dir)
+        for index, upload in enumerate(files, start=1):
+            source_name = Path(str(upload.filename or "")).name
+            suffix = Path(source_name).suffix.lower()
+            if not source_name or suffix not in {".zip", ".json"}:
+                errors.append(
+                    {
+                        "source_name": source_name or f"selected file {index}",
+                        "error_type": "unsupported_file_type",
+                        "error": "only .zip and .json HealthExport files are supported",
+                    }
+                )
+                await upload.close()
+                continue
+            temp_path = temp_root / f"upload-{index:04d}{suffix}"
+            byte_count = 0
+            try:
+                with temp_path.open("wb") as destination:
+                    while True:
+                        chunk = await upload.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        byte_count += len(chunk)
+                        if byte_count > MAX_BODY_INDEX_ACTIVITY_IMPORT_FILE_BYTES:
+                            raise ValueError(
+                                "selected file exceeds the 256 MiB local import limit"
+                            )
+                        destination.write(chunk)
+                source_sha = sha256_file(temp_path)
+                if source_sha in sources_by_sha:
+                    continue
+                source = _dashboard_body_index_source_from_path(
+                    temp_path,
+                    imported_at,
+                    body_mass_kg=body_mass,
+                )
+                analysis = source.get("body_index_analysis")
+                activities = [
+                    activity
+                    for activity in (analysis or {}).get("activities", [])
+                    if isinstance(activity, Mapping)
+                ]
+                if not activities:
+                    errors.append(
+                        {
+                            "source_name": source_name,
+                            "error_type": "no_activity_records",
+                            "error": "no parseable activity records were found",
+                        }
+                    )
+                    continue
+                sources_by_sha[source_sha] = {
+                    "source": source,
+                    "source_name": source_name,
+                }
+                imported_keys = imported_activity_map.get(source_sha, set())
+                for activity in activities:
+                    activity_key = str(
+                        activity.get("activity_key") or activity.get("activity_ref") or ""
+                    ).strip()
+                    if not activity_key:
+                        continue
+                    candidate_id = _dashboard_body_index_activity_candidate_id(
+                        source_sha,
+                        activity_key,
+                    )
+                    already_imported = imported_keys is None or (
+                        imported_keys is not None and activity_key in imported_keys
+                    )
+                    candidates.append(
+                        _dashboard_body_index_activity_candidate(
+                            candidate_id=candidate_id,
+                            source_sha256=source_sha,
+                            source_name=source_name,
+                            source=source,
+                            activity=activity,
+                            already_imported=already_imported,
+                        )
+                    )
+                    candidate_map[candidate_id] = {
+                        "source_sha256": source_sha,
+                        "activity_key": activity_key,
+                    }
+            except (OSError, ValueError, zipfile.BadZipFile, ValidationError, json.JSONDecodeError) as exc:
+                errors.append(
+                    {
+                        "source_name": source_name,
+                        "error_type": type(exc).__name__,
+                        "error": str(exc),
+                    }
+                )
+            finally:
+                await upload.close()
+
+    session_id = secrets.token_urlsafe(24)
+    session = {
+        "project_id": project_id,
+        "body_mass_kg": body_mass,
+        "created_at": time.time(),
+        "sources_by_sha": sources_by_sha,
+        "candidate_map": candidate_map,
+        "errors": errors,
+    }
+    _dashboard_body_index_prune_activity_import_sessions()
+    with _BODY_INDEX_ACTIVITY_IMPORT_SESSIONS_LOCK:
+        _BODY_INDEX_ACTIVITY_IMPORT_SESSIONS[session_id] = session
+    return {
+        "schema_version": "scout_dashboard_body_index_activity_import_preview.v1",
+        "project_id": project_id,
+        "import_session_id": session_id,
+        "body_mass_kg": body_mass,
+        "files": [
+            {
+                "source_name": value["source_name"],
+                "source_sha256_prefix": source_sha[:16],
+                "activity_count": sum(
+                    1
+                    for candidate in candidates
+                    if candidate["source_sha256_prefix"] == source_sha[:16]
+                ),
+            }
+            for source_sha, value in sources_by_sha.items()
+        ],
+        "candidates": candidates,
+        "errors": errors,
+        "available_candidate_count": sum(
+            not bool(candidate.get("already_imported")) for candidate in candidates
+        ),
+        "boundary": _dashboard_body_index_boundary(),
+    }
+
+
+def _confirm_dashboard_body_index_activity_import(
+    request: DashboardBodyIndexActivityImportConfirmRequest,
+) -> dict[str, Any]:
+    _dashboard_body_index_prune_activity_import_sessions()
+    with _BODY_INDEX_ACTIVITY_IMPORT_SESSIONS_LOCK:
+        session = _BODY_INDEX_ACTIVITY_IMPORT_SESSIONS.get(request.import_session_id)
+    if not isinstance(session, dict):
+        raise HTTPException(
+            status_code=404,
+            detail="activity import preview expired; select the files again",
+        )
+    if str(session.get("project_id")) != request.project_id:
+        raise HTTPException(status_code=409, detail="activity import preview belongs to another workspace")
+    try:
+        session_body_mass = float(session.get("body_mass_kg"))
+    except (TypeError, ValueError):
+        session_body_mass = None
+    if session_body_mass is None or abs(session_body_mass - request.body_mass_kg) > 1e-9:
+        raise HTTPException(
+            status_code=409,
+            detail="body mass changed after preview; select the files again to recalculate activities",
+        )
+
+    candidate_map = session.get("candidate_map")
+    sources_by_sha = session.get("sources_by_sha")
+    if not isinstance(candidate_map, Mapping) or not isinstance(sources_by_sha, Mapping):
+        raise HTTPException(status_code=409, detail="activity import preview is invalid")
+    selected_by_source: dict[str, set[str]] = {}
+    for candidate_id in request.selected_activity_ids:
+        candidate = candidate_map.get(candidate_id)
+        if not isinstance(candidate, Mapping):
+            raise HTTPException(
+                status_code=422,
+                detail="one or more selected activities are not in the current preview",
+            )
+        source_sha = str(candidate.get("source_sha256") or "").strip()
+        activity_key = str(candidate.get("activity_key") or "").strip()
+        if not source_sha or not activity_key:
+            raise HTTPException(status_code=422, detail="selected activity identity is incomplete")
+        selected_by_source.setdefault(source_sha, set()).add(activity_key)
+
+    current_snapshot = _load_dashboard_body_index_snapshot(request.project_id)
+    current_sources = [
+        source
+        for source in current_snapshot.get("source_index", [])
+        if isinstance(source, dict) and source.get("sha256")
+    ]
+    current_by_sha = {str(source["sha256"]): source for source in current_sources}
+    source_order = [str(source["sha256"]) for source in current_sources]
+    new_source_count = 0
+    new_activity_count = 0
+    duplicate_activity_count = 0
+    for source_sha, requested_keys in selected_by_source.items():
+        source_record = sources_by_sha.get(source_sha)
+        if not isinstance(source_record, Mapping):
+            raise HTTPException(status_code=409, detail="activity import source is no longer available")
+        preview_source = source_record.get("source")
+        if not isinstance(preview_source, Mapping):
+            raise HTTPException(status_code=409, detail="activity import source is invalid")
+        existing = current_by_sha.get(source_sha)
+        if existing is None:
+            current_by_sha[source_sha] = _dashboard_body_index_selected_source(
+                preview_source,
+                requested_keys,
+            )
+            source_order.append(source_sha)
+            new_source_count += 1
+            new_activity_count += len(requested_keys)
+            continue
+        existing_selected = existing.get("selected_activity_keys")
+        if not isinstance(existing_selected, list):
+            duplicate_activity_count += len(requested_keys)
+            continue
+        existing_keys = {str(value).strip() for value in existing_selected if str(value).strip()}
+        new_keys = requested_keys - existing_keys
+        duplicate_activity_count += len(requested_keys & existing_keys)
+        if not new_keys:
+            continue
+        current_by_sha[source_sha] = _dashboard_body_index_selected_source(
+            preview_source,
+            existing_keys | requested_keys,
+        )
+        new_activity_count += len(new_keys)
+
+    sources = [current_by_sha[source_sha] for source_sha in source_order]
+    snapshot = _dashboard_body_index_snapshot_from_sources(
+        project_id=request.project_id,
+        source_dir=Path("."),
+        sources=sources,
+        import_result={
+            "import_mode": "selected_activity_only",
+            "selected_activity_count": sum(len(keys) for keys in selected_by_source.values()),
+            "new_activity_count": new_activity_count,
+            "duplicate_activity_count": duplicate_activity_count,
+            "new_source_count": new_source_count,
+            "duplicate_source_count": 0,
+            "operator_alias": request.operator_alias,
+            "body_mass_kg": request.body_mass_kg,
+        },
+        import_errors=[
+            error
+            for error in session.get("errors", [])
+            if isinstance(error, dict)
+        ],
+        body_mass_kg=request.body_mass_kg,
+    )
+    _write_dashboard_body_index_snapshot(snapshot)
+    with _BODY_INDEX_ACTIVITY_IMPORT_SESSIONS_LOCK:
+        _BODY_INDEX_ACTIVITY_IMPORT_SESSIONS.pop(request.import_session_id, None)
+    return snapshot
+
+
 class _DashboardBodyIndexDirectoryWatcher:
     def __init__(
         self,
@@ -4035,6 +4312,47 @@ def create_admin_router(
                 detail="confirm_import=true is required for Body Index import",
             )
         snapshot = _import_dashboard_body_index(request)
+        return Response(
+            json.dumps(snapshot, ensure_ascii=False),
+            media_type="application/json",
+            headers={
+                "Cache-Control": "no-store",
+                "X-Scout-Candidate-Only": "true",
+                "X-Scout-Runtime-Safety-Truth": "false",
+            },
+        )
+
+    @router.post("/dashboard/body-index/activity-import/preview")
+    async def scout_dashboard_body_index_activity_import_preview(
+        project_id: str = Form(...),
+        body_mass_kg: float = Form(DEFAULT_BODY_MASS_KG),
+        files: list[UploadFile] = File(...),
+    ) -> Response:
+        preview = await _preview_dashboard_body_index_activity_import(
+            project_id=project_id,
+            body_mass_kg=body_mass_kg,
+            files=files,
+        )
+        return Response(
+            json.dumps(preview, ensure_ascii=False),
+            media_type="application/json",
+            headers={
+                "Cache-Control": "no-store",
+                "X-Scout-Candidate-Only": "true",
+                "X-Scout-Runtime-Safety-Truth": "false",
+            },
+        )
+
+    @router.post("/dashboard/body-index/activity-import/confirm")
+    def scout_dashboard_body_index_activity_import_confirm(
+        request: DashboardBodyIndexActivityImportConfirmRequest,
+    ) -> Response:
+        if not request.confirm_import:
+            raise HTTPException(
+                status_code=400,
+                detail="confirm_import=true is required for selected Body Index activity import",
+            )
+        snapshot = _confirm_dashboard_body_index_activity_import(request)
         return Response(
             json.dumps(snapshot, ensure_ascii=False),
             media_type="application/json",

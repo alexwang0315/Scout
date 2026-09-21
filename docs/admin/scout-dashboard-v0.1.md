@@ -46,6 +46,58 @@ Each entry should include:
 
 ## Implementation Record
 
+### 2026-09-21 - Body Index selected activity picker import
+
+User request:
+
+- Make Body Index「加入新的活動紀錄」a real local file/folder selection flow.
+- Let the operator preview and explicitly select individual HealthExport
+  activities before anything is merged.
+
+Scope and implementation:
+
+- Added local-only multipart preview and explicit confirmation endpoints in
+  `admin_api.py`. The preview parses selected ZIP/Auto Export JSON files into
+  candidate activity rows; confirmation accepts only selected activity IDs and
+  uses source SHA plus activity fingerprint deduplication.
+- Added file and folder pickers, activity checkboxes, local preview status,
+  parse-error display, and a selected-activity confirmation action to
+  `docs/admin/scout-dashboard-v0.1.html`. The selected import clears unrelated
+  daily provider metrics and does not add unselected activities from the same
+  source file.
+- Added regression coverage for selecting one of two activities, persistence,
+  duplicate confirmation, privacy projection, and the UI contract. Updated the
+  wearable-energy guide with the two-stage picker semantics.
+
+Boundary and safety notes:
+
+- The browser sends selected local files only to the local Dashboard runtime;
+  no external network path is introduced. Responses remain
+  `candidate_only=true` and `runtime_safety_truth=false` and do not expose raw
+  HealthExport rows, exact timestamps, coordinates, or original filenames in
+  persisted Body Index snapshots.
+- The existing default-directory import endpoint and directory watcher remain
+  separate explicit flows; the add-activity button no longer silently scans
+  them.
+
+Verification:
+
+- `./venv/bin/python -m pytest -q tests/test_scout_dashboard_page.py
+  tests/test_scout_body_index.py tests/test_dashboard_diagnostic_alignment.py
+  tests/test_dashboard_diagnostic_coverage.py
+  tests/test_diagnostic_advanced_entrypoint.py
+  tests/test_diagnostic_advanced_storage.py`: 204 passed.
+- Extracted dashboard inline JavaScript passed `node --check`.
+- The restarted 9099 launcher rendered the file and folder picker. A local
+  browser File replay produced two activity candidates; unchecking the second
+  left exactly one checked candidate. The observed multipart preview request
+  returned HTTP 200 with the candidate-only/runtime-safety headers, and the
+  browser console had no errors.
+- A real local HealthExport ZIP also returned the activity preview schema over
+  127.0.0.1 with one already-imported candidate and no write confirmation.
+  The selected-activity persistence and duplicate-confirmation path is covered
+  by the backend regression test without polluting the real workspace.
+
 ### 2026-09-21 - Pace Fit CP workbench layout reorganization
 
 User request:
