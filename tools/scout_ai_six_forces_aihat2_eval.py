@@ -4,6 +4,7 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import re
 import subprocess
 import sys
@@ -42,6 +43,16 @@ from scout.services.mser_pipeline import (  # noqa: E402
 )
 from scout.services.mser_response_composer import (  # noqa: E402
     compose_conservative_gap_response,
+)
+from scout.nextgen.jev_decision_service import parse_jev_signals  # noqa: E402
+from scout.nextgen.jev_decisions import (  # noqa: E402
+    JEvEndpoint,
+    JevDecisionError,
+    OpenRouterJevClient,
+    build_anonymized_workspace_projection,
+)
+from scout.nextgen.jev_six_forces import (  # noqa: E402
+    build_six_forces_jev_request,
 )
 from tools.scout_ai_aihat2_fallback_eval import (  # noqa: E402
     _compact_aihat_context,
@@ -4953,6 +4964,57 @@ def run_eval(args: argparse.Namespace) -> Path:
     run_id = args.run_id or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_dir = workspace / "outputs" / "evals" / f"six_forces_600_total_info_{run_id}"
     run_dir.mkdir(parents=True, exist_ok=True)
+    jev_projection = (
+        build_anonymized_workspace_projection(workspace)
+        if args.jev_model
+        else None
+    )
+    jev_events_path = run_dir / "jev-events.jsonl"
+    jev_event_lock = threading.Lock()
+
+    def write_jev_event(
+        *,
+        event: str,
+        index: int,
+        run: dict[str, Any],
+        payload: dict[str, Any],
+    ) -> None:
+        if not args.jev_model:
+            return
+        record = {
+            "event": event,
+            "index": index,
+            "total": len(runs),
+            "run_case_id": str(run["run_case_id"]),
+            "question_id": str(run["question_id"]),
+            "payload": payload,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+        with jev_event_lock:
+            with jev_events_path.open("a", encoding="utf-8") as event_file:
+                event_file.write(
+                    json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n"
+                )
+        if event in {"jev_request", "jev_response"}:
+            print(
+                f"[six-forces-aihat2-jev] {index}/{len(runs)} "
+                f"{run['run_case_id']} {event} "
+                f"status={payload.get('status', 'requested')} "
+                f"latency_ms={payload.get('latency_ms', '-')}",
+                file=sys.stderr,
+                flush=True,
+            )
+    jev_client = (
+        OpenRouterJevClient(
+            api_key=os.environ[args.jev_api_key_env_var],
+            model_id=args.jev_model,
+            endpoint=JEvEndpoint,
+            timeout_seconds=args.jev_timeout_seconds,
+        )
+        if args.jev_model
+        else None
+    )
     results_path = run_dir / "per_case_results.jsonl"
     completed_ids: set[str] = set()
     existing: list[dict[str, Any]] = []
@@ -4980,6 +5042,14 @@ def run_eval(args: argparse.Namespace) -> Path:
         "provider": model_adapter.provider,
         "model_transport": model_adapter.transport,
         "endpoint": args.endpoint,
+        "jev_enabled": bool(args.jev_model),
+        "jev_model": args.jev_model,
+        "jev_endpoint": JEvEndpoint if args.jev_model else None,
+        "jev_mode": "shadow_advisory" if args.jev_model else None,
+        "jev_workspace_projection_hash": (
+            jev_projection.projection_hash if jev_projection is not None else None
+        ),
+        "jev_events_path": str(jev_events_path) if args.jev_model else None,
         "runtime_packages": runtime_package_versions(),
         "max_tool_calls_per_attempt": 10,
         "max_model_requests_per_attempt": args.max_model_requests,
@@ -5025,6 +5095,123 @@ def run_eval(args: argparse.Namespace) -> Path:
                     raise RuntimeError(
                         f"AI HAT eval health guard failed: {guard['errors']}"
                     )
+
+            def jev_preflight(**kwargs: Any) -> dict[str, Any]:
+                if jev_client is None or jev_projection is None:
+                    return {
+                        "status": "disabled",
+                        "candidate_only": True,
+                        "runtime_safety_truth": False,
+                    }
+                request, metadata = build_six_forces_jev_request(
+                    model_id=args.jev_model,
+                    projection=jev_projection,
+                    run=kwargs["run"],
+                    mser_context=kwargs.get("mser_context"),
+                    compact_evidence=kwargs["compact_evidence"],
+                    deterministic_tool_ids=list(
+                        kwargs.get("deterministic_tool_ids") or ()
+                    ),
+                )
+                state_hash = hashlib.sha256(
+                    json.dumps(
+                        request.state,
+                        ensure_ascii=True,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ).encode("utf-8")
+                ).hexdigest()
+                write_jev_event(
+                    event="jev_request",
+                    index=index,
+                    run=run,
+                    payload={
+                        "status": "requested",
+                        "endpoint": JEvEndpoint,
+                        "model": args.jev_model,
+                        "question_ids": list(request.questions),
+                        "state_hash": state_hash,
+                        "question_contract": metadata.question_contract,
+                        "mser_certificate": metadata.mser_certificate,
+                    },
+                )
+                started_jev = time.perf_counter()
+                try:
+                    response = jev_client.decide(request)
+                    signals = parse_jev_signals(response)
+                    status = "ok"
+                    error = None
+                    usage = response.usage.model_dump(mode="json")
+                except (JevDecisionError, ValueError) as exc:
+                    signals = None
+                    status = "error"
+                    error = type(exc).__name__
+                    usage = None
+                latency_ms = max(
+                    0, int((time.perf_counter() - started_jev) * 1000)
+                )
+                signal_payload = (
+                    signals.model_dump(mode="json") if signals is not None else None
+                )
+                allowed_tools = set(metadata.allowed_tool_families)
+                suggested_tool = (
+                    signal_payload.get("tool_family") if signal_payload else None
+                )
+                mser_status = metadata.mser_certificate["status"]
+                escalation = (
+                    signal_payload.get("escalation") if signal_payload else None
+                )
+                guards = {
+                    "suggested_tool_within_contract": (
+                        suggested_tool in allowed_tools
+                        if suggested_tool is not None
+                        else False
+                    ),
+                    "mser_auto_override_blocked": (
+                        mser_status != "sufficient" and escalation == "auto"
+                    ),
+                    "authority_auto_guard": (
+                        metadata.question_contract["authority_class"]
+                        != "low_risk_candidate"
+                        and escalation != "human_review"
+                    ),
+                    "runtime_route_changed_by_jev": False,
+                    "runtime_authority_granted": False,
+                }
+                payload = {
+                    "status": status,
+                    "endpoint": JEvEndpoint,
+                    "model": args.jev_model,
+                    "latency_ms": latency_ms,
+                    "signals": signal_payload,
+                    "usage": usage,
+                    "error": error,
+                    "guards": guards,
+                }
+                write_jev_event(
+                    event="jev_response",
+                    index=index,
+                    run=run,
+                    payload=payload,
+                )
+                return {
+                    "status": status,
+                    "endpoint": JEvEndpoint,
+                    "model": args.jev_model,
+                    "mode": "shadow_advisory",
+                    "request_count": 1,
+                    "state_hash": state_hash,
+                    "latency_ms": latency_ms,
+                    "signals": signal_payload,
+                    "usage": usage,
+                    "error": error,
+                    "guards": guards,
+                    "question_contract": metadata.question_contract,
+                    "mser_certificate": metadata.mser_certificate,
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                }
+
             result = execute_run(
                 run=run,
                 project_root=workspace,
@@ -5041,6 +5228,7 @@ def run_eval(args: argparse.Namespace) -> Path:
                 compose_conservative_gap_responses=bool(
                     getattr(args, "compose_conservative_gap_responses", False)
                 ),
+                jev_preflight=jev_preflight if args.jev_model else None,
             )
             result_file.write(
                 json.dumps(result, ensure_ascii=False, sort_keys=True) + "\n"
@@ -5427,6 +5615,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
     parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument(
+        "--jev-model",
+        help=(
+            "Optional Jev Decisions model for one shadow/advisory preflight "
+            "per local-model run; deterministic runtime remains authoritative."
+        ),
+    )
+    parser.add_argument("--jev-timeout-seconds", type=float, default=120.0)
+    parser.add_argument(
+        "--jev-api-key-env-var",
+        default="OPENROUTER_API_KEY",
+    )
     parser.add_argument("--timeout-seconds", type=int, default=0)
     parser.add_argument(
         "--total-run-timeout-seconds",
@@ -5479,6 +5679,10 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("--offset must be >= 0 and --health-interval must be positive")
     if args.total_run_timeout_seconds < 0:
         raise SystemExit("--total-run-timeout-seconds must be >= 0")
+    if args.jev_timeout_seconds <= 0:
+        raise SystemExit("--jev-timeout-seconds must be positive")
+    if args.jev_model and not os.environ.get(args.jev_api_key_env_var):
+        raise SystemExit(f"{args.jev_api_key_env_var} is missing; not running Jev")
     if (
         args.compose_conservative_gap_responses
         and args.mser_mode != MSERExecutionMode.ENFORCE.value

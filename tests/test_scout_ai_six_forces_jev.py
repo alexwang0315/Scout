@@ -7,6 +7,7 @@ from pathlib import Path
 
 from scout.nextgen.jev_decisions import build_anonymized_workspace_projection
 from scout.nextgen.jev_six_forces import build_six_forces_jev_request
+from tools.scout_ai_six_forces_aihat2_eval import build_parser
 
 
 def _projection(tmp_path: Path):
@@ -83,3 +84,21 @@ def test_six_forces_jev_request_is_bounded_and_carries_mser_state(
     assert "/home/" not in encoded
     assert "latitude" not in encoded
     assert "longitude" not in encoded
+
+
+def test_local_evaluator_exposes_jev_shadow_options() -> None:
+    args = build_parser().parse_args(
+        [
+            "--workspace",
+            "/tmp/scout-workspace",
+            "--jev-model",
+            "typesafe/jev-1.13",
+            "--jev-timeout-seconds",
+            "45",
+        ]
+    )
+
+    assert args.model == "qwen3:1.7b"
+    assert args.jev_model == "typesafe/jev-1.13"
+    assert args.jev_timeout_seconds == 45.0
+    assert args.jev_api_key_env_var == "OPENROUTER_API_KEY"
