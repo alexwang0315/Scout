@@ -88,7 +88,9 @@ class RoutingCorpus(SchemaModel):
     workspace_id: NonEmptyStr
     description: NonEmptyStr
     routing_authority: Literal["deterministic_gate_with_jev_advisory"]
-    questions: tuple[RoutingQuestion, ...] = Field(min_length=100, max_length=100)
+    # The canonical corpus has 100 cases, while smoke and replay slices may be
+    # smaller.  The producer for each artifact owns its exact count check.
+    questions: tuple[RoutingQuestion, ...] = Field(min_length=1, max_length=100)
     candidate_only: Literal[True] = True
     runtime_safety_truth: Literal[False] = False
 
@@ -247,4 +249,3 @@ def validate_routing_corpus(corpus: RoutingCorpus) -> list[str]:
             if item.answer_contract.kind != "evidence_grounded":
                 errors.append(f"{item.question_id}: cloud answer contract must be evidence_grounded")
     return errors
-
