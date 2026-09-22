@@ -91,6 +91,8 @@ def test_local_evaluator_exposes_jev_shadow_options() -> None:
         [
             "--workspace",
             "/tmp/scout-workspace",
+            "--backend",
+            "ollama_cpu",
             "--jev-model",
             "typesafe/jev-1.13",
             "--jev-timeout-seconds",
@@ -99,6 +101,7 @@ def test_local_evaluator_exposes_jev_shadow_options() -> None:
     )
 
     assert args.model == "qwen3:1.7b"
+    assert args.backend == "ollama_cpu"
     assert args.jev_model == "typesafe/jev-1.13"
     assert args.jev_timeout_seconds == 45.0
     assert args.jev_api_key_env_var == "OPENROUTER_API_KEY"

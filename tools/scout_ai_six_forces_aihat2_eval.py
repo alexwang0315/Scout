@@ -10,6 +10,9 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from collections import Counter
 from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError, version
@@ -164,6 +167,20 @@ def build_ai_hat_plus_2_model_adapter(
         profile="local",
         provider="hailo_ollama_ai_hat_plus_2",
         transport="pydantic_ai_function_model_hailo_ollama",
+        invoke=model_call,
+    )
+
+
+def build_local_ollama_model_adapter(
+    model_call: ModelCall = call_hailo_model_via_pydantic_ai,
+) -> ScoutModelExecutionAdapter:
+    """Reuse the bounded Ollama transport with CPU-local provenance labels."""
+
+    return ScoutModelExecutionAdapter(
+        adapter_id="local_ollama.pydantic_ai",
+        profile="local",
+        provider="ollama_cpu_local",
+        transport="pydantic_ai_function_model_ollama",
         invoke=model_call,
     )
 
@@ -4944,11 +4961,97 @@ def health_guard(health: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def run_eval(args: argparse.Namespace) -> Path:
-    ai_hat_attestation = require_ai_hat_runtime(
-        args.endpoint,
-        health_ssh_host=args.health_ssh_host,
+def require_local_ollama_runtime(
+    endpoint: str,
+    *,
+    model: str,
+) -> dict[str, Any]:
+    """Attest a loopback CPU Ollama endpoint without claiming Hailo hardware."""
+
+    parsed_endpoint = urllib.parse.urlparse(endpoint)
+    if parsed_endpoint.hostname not in {"127.0.0.1", "localhost", "::1"}:
+        raise SystemExit("CPU Ollama eval endpoint must be a loopback address")
+    tags_url = urllib.parse.urlunparse(
+        (
+            parsed_endpoint.scheme,
+            parsed_endpoint.netloc,
+            "/api/tags",
+            "",
+            "",
+            "",
+        )
     )
+    try:
+        with urllib.request.urlopen(tags_url, timeout=5) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (OSError, urllib.error.URLError, json.JSONDecodeError) as exc:
+        raise SystemExit(
+            f"local CPU Ollama endpoint unavailable: {type(exc).__name__}"
+        ) from exc
+    models = payload.get("models") if isinstance(payload, dict) else None
+    model_names = [
+        str(item.get("name"))
+        for item in models or []
+        if isinstance(item, dict) and item.get("name")
+    ]
+    if model not in model_names:
+        raise SystemExit(
+            f"local CPU Ollama model is not installed: {model}; "
+            f"available={model_names[:12]}"
+        )
+    return {
+        "attestation_mode": "local_ollama_cpu",
+        "hardware_scan_attested": False,
+        "hef_model_attested": False,
+        "endpoint_host": parsed_endpoint.hostname,
+        "endpoint_port": parsed_endpoint.port,
+        "model_names": model_names,
+        "selected_model": model,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+
+
+def local_backend_health_guard(
+    health: dict[str, Any],
+    *,
+    backend: str,
+) -> dict[str, Any]:
+    """Keep thermal/runtime failures blocking while scoping out Hailo-only UPS gates."""
+
+    guard = health_guard(health)
+    if backend != "ollama_cpu":
+        return guard
+    ignored_errors = [
+        error
+        for error in guard["errors"]
+        if str(error).startswith("ups_")
+    ]
+    blocking_errors = [
+        error for error in guard["errors"] if error not in ignored_errors
+    ]
+    warnings = [*guard["warnings"], *ignored_errors]
+    return {
+        **guard,
+        "status": "fail" if blocking_errors else "warn" if warnings else "pass",
+        "errors": blocking_errors,
+        "warnings": warnings,
+        "ignored_hailo_only_errors": ignored_errors,
+        "scope": "cpu_ollama_local_inference;_hailo_ups_gate_not_applicable",
+    }
+
+
+def run_eval(args: argparse.Namespace) -> Path:
+    if args.backend == "hailo":
+        ai_hat_attestation = require_ai_hat_runtime(
+            args.endpoint,
+            health_ssh_host=args.health_ssh_host,
+        )
+    else:
+        ai_hat_attestation = require_local_ollama_runtime(
+            args.endpoint,
+            model=args.model,
+        )
     workspace = args.workspace.expanduser().resolve()
     scenario_path = workspace / args.scenario_artifact
     artifact = json.loads(scenario_path.read_text(encoding="utf-8"))
@@ -4960,7 +5063,11 @@ def run_eval(args: argparse.Namespace) -> Path:
         runs = runs[args.offset :]
     if args.max_runs is not None:
         runs = runs[: args.max_runs]
-    model_adapter = build_ai_hat_plus_2_model_adapter()
+    model_adapter = (
+        build_ai_hat_plus_2_model_adapter()
+        if args.backend == "hailo"
+        else build_local_ollama_model_adapter()
+    )
     run_id = args.run_id or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_dir = workspace / "outputs" / "evals" / f"six_forces_600_total_info_{run_id}"
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -5042,6 +5149,7 @@ def run_eval(args: argparse.Namespace) -> Path:
         "provider": model_adapter.provider,
         "model_transport": model_adapter.transport,
         "endpoint": args.endpoint,
+        "runtime_backend": args.backend,
         "jev_enabled": bool(args.jev_model),
         "jev_model": args.jev_model,
         "jev_endpoint": JEvEndpoint if args.jev_model else None,
@@ -5087,7 +5195,10 @@ def run_eval(args: argparse.Namespace) -> Path:
                     ssh_host=args.health_ssh_host,
                     remote_repo_root=args.health_remote_repo_root,
                 )
-                guard = health_guard(health)
+                guard = local_backend_health_guard(
+                    health,
+                    backend=args.backend,
+                )
                 health["eval_guard"] = guard
                 health_file.write(json.dumps(health, ensure_ascii=False) + "\n")
                 health_file.flush()
@@ -5245,7 +5356,10 @@ def run_eval(args: argparse.Namespace) -> Path:
             ssh_host=args.health_ssh_host,
             remote_repo_root=args.health_remote_repo_root,
         )
-        health["eval_guard"] = health_guard(health)
+        health["eval_guard"] = local_backend_health_guard(
+            health,
+            backend=args.backend,
+        )
         health_file.write(json.dumps(health, ensure_ascii=False) + "\n")
     _write_summaries(run_dir, manifest, all_results)
     return run_dir
@@ -5615,6 +5729,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
     parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument(
+        "--backend",
+        choices=("hailo", "ollama_cpu"),
+        default="hailo",
+        help="Local model backend; ollama_cpu avoids Hailo hardware load.",
+    )
     parser.add_argument(
         "--jev-model",
         help=(
