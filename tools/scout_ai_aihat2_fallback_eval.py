@@ -85,6 +85,29 @@ def run_command(command: list[str], timeout_seconds: float = 5.0) -> dict[str, A
         }
 
 
+def _power_path_status() -> dict[str, Any]:
+    """Read the local observer's latest power-path record without writes."""
+    path = Path.home() / "scout-power-path-monitor" / "power-path-telemetry.jsonl"
+    result: dict[str, Any] = {"source": str(path), "available": False, "fresh": False, "latest": None}
+    try:
+        with path.open("rb") as stream:
+            stream.seek(0, 2)
+            stream.seek(max(0, stream.tell() - 65536))
+            lines = stream.read().decode("utf-8", errors="replace").splitlines()
+        latest = json.loads(lines[-1]) if lines else None
+        if not isinstance(latest, dict):
+            return result
+        captured = datetime.fromisoformat(str(latest.get("captured_at")))
+        if captured.tzinfo is None:
+            captured = captured.replace(tzinfo=timezone.utc)
+        age_seconds = (datetime.now(timezone.utc) - captured).total_seconds()
+        result.update(available=True, fresh=-5 <= age_seconds <= 15, age_seconds=round(age_seconds, 3), latest=latest)
+        return result
+    except Exception as exc:  # noqa: BLE001 - unknown power is a safety state.
+        result["error"] = f"{type(exc).__name__}: {exc}"[:500]
+        return result
+
+
 def collect_health() -> dict[str, Any]:
     return {
         "captured_at": utc_iso(),
@@ -99,9 +122,14 @@ def collect_health() -> dict[str, Any]:
             ["hailortcli", "fw-control", "identify"],
             timeout_seconds=8,
         ),
+        "hailortcli_monitor": run_command(
+            ["sh", "-lc", "timeout 2 hailortcli monitor 2>&1 || true"],
+            timeout_seconds=4,
+        ),
         "hailo_nodes": run_command(["sh", "-lc", "ls -l /dev/hailo* 2>/dev/null || true"]),
         "hailo_models": _hailo_tags(),
         "ups": _ups_status(),
+        "power_path": _power_path_status(),
     }
 
 
@@ -251,6 +279,8 @@ def require_ai_hat_runtime(
     endpoint: str,
     *,
     health_ssh_host: str | None = None,
+    model: str = "qwen3:1.7b",
+    verify_chat: bool = False,
 ) -> dict[str, Any]:
     if os.getenv("SCOUT_ALLOW_NON_AIHAT_EVAL") == "1":
         return {
@@ -305,6 +335,22 @@ def require_ai_hat_runtime(
         for item in models
     ):
         raise SystemExit("AI HAT+2 eval endpoint has no hardware HEF model")
+    chat_probe: dict[str, Any] | None = None
+    if verify_chat:
+        answer, metadata = call_hailo_model(
+            endpoint=endpoint,
+            model=model,
+            prompt="Reply with exactly HAILO_OK",
+            timeout_seconds=30,
+        )
+        chat_probe = {
+            "model": model,
+            "answer": answer,
+            "metadata": metadata,
+            "passed": answer.strip() == "HAILO_OK" and not metadata.get("error"),
+        }
+        if not chat_probe["passed"]:
+            raise SystemExit("AI HAT+2 Hailo chat completion probe failed")
     return {
         "attestation_mode": "local" if local_attested else "ssh_remote",
         "hardware_scan_attested": True,
@@ -319,6 +365,7 @@ def require_ai_hat_runtime(
         "remote_scan_returncode": (
             remote_scan.get("returncode") if remote_scan is not None else None
         ),
+        "chat_completion_probe": chat_probe,
     }
 
 
