@@ -1643,6 +1643,41 @@
       cursor: help;
     }
 
+    /* All ordinary hover hints render in the document root. Keeping the
+       surface outside cards, drawers, maps and sticky rails prevents local
+       stacking contexts or overflow clipping from hiding the explanation. */
+    .dashboard-global-hint {
+      position: fixed;
+      z-index: 2147483647;
+      display: block;
+      width: max-content;
+      max-width: min(360px, calc(100vw - 24px));
+      padding: 9px 11px;
+      border: 1px solid #e5c6ac;
+      border-radius: 10px;
+      color: var(--v02-ink);
+      background: #fffaf5;
+      box-shadow: 0 14px 32px rgba(30, 63, 68, .22);
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1.4;
+      opacity: 1;
+      pointer-events: none;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+
+    .dashboard-global-hint[hidden] {
+      display: none;
+    }
+
+    /* The portal owns these hints; suppress the old local pseudo layers so a
+       clipped duplicate cannot compete with the top-level explanation. */
+    .v02-theme [data-hint]::after,
+    .v02-theme .project-name-inline::after {
+      display: none !important;
+    }
+
     svg [data-dashboard-map-hint-title] {
       pointer-events: bounding-box;
     }
@@ -12007,6 +12042,99 @@
       font-family: inherit;
       font-size: 11px;
       line-height: 1.4;
+      min-width: 0;
+      max-width: 100%;
+      overflow: hidden;
+    }
+
+    .v02-theme .dashboard-sidebar > .brand {
+      min-width: 0;
+    }
+
+    /* Project names keep their readable type size and one-line footprint.
+       The full identifier remains available on hover and keyboard focus. */
+    .v02-theme .project-name-inline {
+      position: relative;
+      display: inline-flex;
+      min-width: 0;
+      max-width: 100%;
+      vertical-align: middle;
+      outline: none;
+    }
+
+    .v02-theme .project-name-text {
+      display: block;
+      min-width: 0;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .v02-theme .project-name-inline::after {
+      position: absolute;
+      z-index: 80;
+      top: calc(100% + 8px);
+      left: 0;
+      width: max-content;
+      max-width: min(420px, 78vw);
+      padding: 8px 10px;
+      border: 1px solid #d7b896;
+      border-radius: 9px;
+      color: #2f3d42;
+      background: #fffaf5;
+      box-shadow: 0 10px 22px rgba(30, 63, 68, .16);
+      content: attr(data-project-name);
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1.35;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-3px);
+      transition: opacity .16s ease, transform .16s ease;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+
+    .v02-theme .project-name-inline:hover::after,
+    .v02-theme .project-name-inline:focus::after,
+    .v02-theme .project-name-inline:focus-visible::after {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .v02-theme .brand .project-name-inline {
+      display: flex;
+      width: 100%;
+    }
+
+    .v02-theme .brand .project-name-text {
+      width: 100%;
+    }
+
+    .v02-theme .v02-overview-identity .project-name-inline,
+    .v02-theme .project-name-cell .project-name-inline {
+      display: flex;
+      width: 100%;
+    }
+
+    .v02-theme .v02-overview-identity .project-name-text,
+    .v02-theme .project-name-cell .project-name-text {
+      width: 100%;
+    }
+
+    .v02-theme .project-name-pair {
+      display: grid;
+      min-width: 0;
+      gap: 2px;
+    }
+
+    .v02-theme .project-name-pair .project-name-inline {
+      width: 100%;
+    }
+
+    .v02-theme .project-name-separator {
+      color: var(--v02-muted);
     }
 
     .v02-theme .nav {
@@ -12309,6 +12437,61 @@
       opacity: .84;
     }
 
+    .v02-theme .v02-workflow-hint {
+      position: relative;
+      display: inline-grid;
+      width: 22px;
+      height: 22px;
+      min-height: 22px;
+      padding: 0;
+      place-items: center;
+      border: 1px solid #e8c5a9;
+      border-radius: 50%;
+      color: var(--v02-source);
+      background: var(--v02-source-soft);
+      cursor: help;
+      font-size: 0;
+      line-height: 0;
+    }
+
+    .v02-theme .v02-workflow-hint::before {
+      display: block;
+      width: 15px;
+      height: 15px;
+      background: currentColor;
+      content: "";
+      -webkit-mask: url("/admin/icons/lucide/circle-help.svg") center / contain no-repeat;
+      mask: url("/admin/icons/lucide/circle-help.svg") center / contain no-repeat;
+    }
+
+    .v02-theme .v02-workflow-hint::after {
+      position: absolute;
+      z-index: 40;
+      top: calc(100% + 7px);
+      right: 0;
+      width: 220px;
+      padding: 8px 9px;
+      border: 1px solid #e8c5a9;
+      border-radius: 9px;
+      color: var(--v02-ink);
+      background: #fff9f4;
+      box-shadow: var(--v02-shadow);
+      content: attr(data-hint);
+      font-size: 11px;
+      font-weight: 650;
+      line-height: 1.35;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-3px);
+      transition: opacity .16s ease, transform .16s ease;
+    }
+
+    .v02-theme .v02-workflow-hint:hover::after,
+    .v02-theme .v02-workflow-hint:focus-visible::after {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
     .v02-theme .v02-info-hint {
       position: relative;
       align-self: start;
@@ -12324,9 +12507,19 @@
       color: var(--v02-source);
       background: var(--v02-source-soft);
       cursor: help;
-      font-size: 12px;
-      font-weight: 900;
+      font-size: 0;
+      line-height: 0;
       list-style: none;
+    }
+
+    .v02-theme .v02-info-hint summary::before {
+      display: block;
+      width: 16px;
+      height: 16px;
+      background: currentColor;
+      content: "";
+      -webkit-mask: url("/admin/icons/lucide/circle-help.svg") center / contain no-repeat;
+      mask: url("/admin/icons/lucide/circle-help.svg") center / contain no-repeat;
     }
 
     .v02-theme .v02-info-hint summary::-webkit-details-marker { display: none; }
@@ -12534,6 +12727,124 @@
 
     .v02-theme .drawer-section {
       border-bottom-color: var(--v02-line);
+    }
+
+    /* Paths stay compact in the first-read surface; the adjacent control
+       preserves access to the complete filesystem or endpoint value. */
+    .v02-theme .copyable-path {
+      display: inline-flex;
+      align-items: center;
+      min-width: 0;
+      max-width: 100%;
+      gap: 6px;
+      vertical-align: middle;
+    }
+
+    .v02-theme .copy-path-label {
+      min-width: 0;
+      overflow: hidden;
+      color: var(--v02-ink);
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .v02-theme .copy-path-label[href] {
+      color: var(--v02-route);
+      text-decoration: underline;
+      text-decoration-color: rgba(47, 140, 163, .35);
+      text-underline-offset: 3px;
+    }
+
+    .v02-theme .copy-path-label[href]:hover,
+    .v02-theme .copy-path-label[href]:focus-visible {
+      color: #17677a;
+    }
+
+    .v02-theme .copy-path-button {
+      display: inline-grid;
+      width: 25px;
+      height: 25px;
+      min-height: 25px;
+      flex: 0 0 auto;
+      padding: 0;
+      place-items: center;
+      border: 1px solid #c7dadd;
+      border-radius: 8px;
+      color: var(--v02-source);
+      background: var(--v02-source-soft);
+      cursor: pointer;
+    }
+
+    .v02-theme .copy-path-button [data-icon="copy"] {
+      display: block;
+      width: 15px;
+      height: 15px;
+      background: currentColor;
+      -webkit-mask: url("/admin/icons/lucide/copy.svg") center / contain no-repeat;
+      mask: url("/admin/icons/lucide/copy.svg") center / contain no-repeat;
+    }
+
+    .v02-theme .copy-path-button:hover,
+    .v02-theme .copy-path-button:focus-visible {
+      border-color: var(--v02-source);
+      color: #b85e2e;
+      outline: 2px solid rgba(212, 122, 70, .18);
+      outline-offset: 1px;
+    }
+
+    .v02-theme .copy-path-button[data-copy-state="copied"] {
+      border-color: var(--v02-next);
+      color: #147f72;
+      background: var(--v02-next-soft);
+    }
+
+    .v02-theme .copy-path-status {
+      color: var(--v02-next);
+      font-size: 10px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .v02-theme .drawer-list .copyable-path {
+      width: 100%;
+    }
+
+    .v02-theme .drawer-list,
+    .v02-theme .drawer-list .item {
+      min-width: 0;
+    }
+
+    .v02-theme .map-panel .panel-header {
+      min-width: 0;
+      flex-wrap: wrap;
+    }
+
+    .v02-theme .map-panel .panel-header h3,
+    .v02-theme .map-panel .panel-header .chip {
+      min-width: 0;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+    }
+
+    .v02-theme .drawer-list .copy-path-label {
+      color: var(--v02-muted);
+    }
+
+    .v02-theme .drawer-list .copy-path-label[href] {
+      color: var(--v02-route);
+    }
+
+    .v02-theme .v02-overview-meta-list .copyable-path,
+    .v02-theme .v02-overview-details-body .copyable-path {
+      width: 100%;
+    }
+
+    @media (max-width: 1120px) {
+      .v02-theme .copy-path-label {
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+      }
     }
 
     .v02-theme .pace-primary-advisory {
@@ -12875,6 +13186,1045 @@
         width: 100%;
       }
     }
+
+    /* v0.2 overview design demos. The overview is a decision surface, not a
+       catalogue: one result, one next action, then compact evidence. */
+    body.v02-route-home .v02-workflow-rail {
+      display: none;
+    }
+
+    body.v02-route-home .content-grid {
+      grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
+    }
+
+    body.v02-route-home .evidence-drawer {
+      display: block;
+    }
+
+    body.v02-route-home .v02-theme .workspace,
+    body.v02-route-home .workspace {
+      grid-column: 1;
+      max-width: none;
+    }
+
+    .v02-overview {
+      --overview-ink: #142f38;
+      --overview-muted: #4d6971;
+      --overview-soft: #6c858b;
+      --overview-line: #bad1d5;
+      --overview-paper: #f4f8f7;
+      --overview-card: #ffffff;
+      --overview-teal: #087f86;
+      --overview-teal-soft: #e3f4f2;
+      --overview-amber: #9b641a;
+      --overview-amber-soft: #fff2d8;
+      --overview-purple: #6552a5;
+      --overview-purple-soft: #eeeafb;
+      --overview-orange: #aa5f2d;
+      --overview-orange-soft: #fff0e3;
+      --overview-green: #197456;
+      --overview-green-soft: #e5f5ed;
+      max-width: 1180px;
+      margin: 0 auto;
+      color: var(--overview-ink);
+    }
+
+    .v02-overview button,
+    .v02-overview a {
+      font: inherit;
+    }
+
+    .v02-overview-head {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 16px;
+    }
+
+    .v02-overview-kicker {
+      display: block;
+      color: var(--overview-teal);
+      font-size: 11px;
+      font-weight: 850;
+      letter-spacing: .13em;
+    }
+
+    .v02-overview-head h3 {
+      margin-top: 4px;
+      color: var(--overview-ink);
+      font-size: 25px;
+      letter-spacing: -.04em;
+      line-height: 1.08;
+      text-transform: none;
+    }
+
+    .v02-overview-title-line {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .v02-overview-head-note {
+      margin-top: 7px;
+      color: var(--overview-muted);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .v02-overview-head-status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 38px;
+      padding: 6px 10px 6px 6px;
+      border: 1px solid var(--overview-line);
+      border-radius: 999px;
+      color: var(--overview-muted);
+      background: rgba(255, 255, 255, .72);
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .v02-overview-head-status .v02-overview-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 9px;
+    }
+
+    .v02-overview-head-status .v02-overview-icon::before {
+      width: 17px;
+      height: 17px;
+    }
+
+    .v02-overview-variant-label {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--overview-soft);
+      font-size: 11px;
+      text-align: right;
+    }
+
+    .v02-overview-switcher {
+      display: inline-flex;
+      gap: 4px;
+      padding: 4px;
+      border: 1px solid var(--overview-line);
+      border-radius: 14px;
+      background: #eaf3f2;
+    }
+
+    .v02-overview-switcher button {
+      min-height: 34px;
+      padding: 6px 11px;
+      border: 1px solid transparent;
+      border-radius: 10px;
+      color: var(--overview-muted);
+      background: transparent;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .v02-overview-switcher button:hover,
+    .v02-overview-switcher button:focus-visible,
+    .v02-overview-switcher button[aria-pressed="true"] {
+      border-color: var(--overview-teal);
+      color: #075d63;
+      background: #ffffff;
+      box-shadow: 0 3px 8px rgba(22, 82, 88, .10);
+      outline: none;
+    }
+
+    .v02-overview-board {
+      display: grid;
+      grid-template-columns: minmax(0, 1.32fr) minmax(280px, .68fr);
+      gap: 14px;
+      align-items: stretch;
+    }
+
+    .v02-overview-card {
+      min-width: 0;
+      border: 1px solid var(--overview-line);
+      border-radius: 18px;
+      background: var(--overview-card);
+      box-shadow: 0 12px 28px rgba(24, 72, 78, .07);
+    }
+
+    .v02-overview-card--decision {
+      display: grid;
+      min-height: 244px;
+      padding: 22px 24px;
+      background: linear-gradient(135deg, #ffffff 0%, #fffaf0 100%);
+    }
+
+    .v02-overview-card-head,
+    .v02-overview-section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .v02-overview-card-head > div,
+    .v02-overview-section-head > div {
+      display: flex;
+      align-items: center;
+      min-width: 0;
+      gap: 10px;
+    }
+
+    /* Local Lucide icons (ISC). Keep semantic pictograms independent from
+       language so a label is never used as an icon substitute. */
+    .v02-overview-icon {
+      display: inline-grid;
+      width: 42px;
+      height: 42px;
+      flex: 0 0 auto;
+      place-items: center;
+      border: 1px solid currentColor;
+      border-radius: 13px;
+      line-height: 0;
+    }
+
+    .v02-overview-icon::before,
+    .v02-overview-flow-icon::before,
+    .v02-overview-hint::before {
+      display: block;
+      width: 26px;
+      height: 26px;
+      background: currentColor;
+      content: "";
+      -webkit-mask: var(--overview-icon-url) center / contain no-repeat;
+      mask: var(--overview-icon-url) center / contain no-repeat;
+    }
+
+    .v02-overview [data-icon="arrow-right"] { --overview-icon-url: url("/admin/icons/lucide/arrow-right.svg"); }
+    .v02-overview [data-icon="bug"] { --overview-icon-url: url("/admin/icons/lucide/bug.svg"); }
+    .v02-overview [data-icon="circle-alert"] { --overview-icon-url: url("/admin/icons/lucide/circle-alert.svg"); }
+    .v02-overview [data-icon="circle-check"] { --overview-icon-url: url("/admin/icons/lucide/circle-check.svg"); }
+    .v02-overview [data-icon="clock-3"] { --overview-icon-url: url("/admin/icons/lucide/clock-3.svg"); }
+    .v02-overview [data-icon="cloud-rain"] { --overview-icon-url: url("/admin/icons/lucide/cloud-rain.svg"); }
+    .v02-overview [data-icon="compass"] { --overview-icon-url: url("/admin/icons/lucide/compass.svg"); }
+    .v02-overview [data-icon="copy"] { --overview-icon-url: url("/admin/icons/lucide/copy.svg"); }
+    .v02-overview [data-icon="database"] { --overview-icon-url: url("/admin/icons/lucide/database.svg"); }
+    .v02-overview [data-icon="file-check-2"] { --overview-icon-url: url("/admin/icons/lucide/file-check-2.svg"); }
+    .v02-overview [data-icon="gauge"] { --overview-icon-url: url("/admin/icons/lucide/gauge.svg"); }
+    .v02-overview [data-icon="layers-3"] { --overview-icon-url: url("/admin/icons/lucide/layers-3.svg"); }
+    .v02-overview [data-icon="map"] { --overview-icon-url: url("/admin/icons/lucide/map.svg"); }
+    .v02-overview [data-icon="mountain"] { --overview-icon-url: url("/admin/icons/lucide/mountain.svg"); }
+    .v02-overview [data-icon="navigation"] { --overview-icon-url: url("/admin/icons/lucide/navigation.svg"); }
+    .v02-overview [data-icon="route"] { --overview-icon-url: url("/admin/icons/lucide/route.svg"); }
+    .v02-overview [data-icon="shield-check"] { --overview-icon-url: url("/admin/icons/lucide/shield-check.svg"); }
+
+    .v02-overview-hint[data-icon="circle-help"] {
+      --overview-icon-url: url("/admin/icons/lucide/circle-help.svg");
+    }
+
+    .v02-overview-icon--result {
+      color: var(--overview-amber);
+      background: var(--overview-amber-soft);
+    }
+
+    .v02-overview-icon--route {
+      color: var(--overview-teal);
+      background: var(--overview-teal-soft);
+    }
+
+    .v02-overview-icon--evidence {
+      color: var(--overview-orange);
+      background: var(--overview-orange-soft);
+    }
+
+    .v02-overview-icon--orange {
+      color: var(--overview-orange);
+      background: var(--overview-orange-soft);
+    }
+
+    .v02-overview-icon--source {
+      color: var(--overview-purple);
+      background: var(--overview-purple-soft);
+    }
+
+    .v02-overview-icon--next {
+      color: var(--overview-green);
+      background: var(--overview-green-soft);
+    }
+
+    .v02-overview-card h4,
+    .v02-overview-section-head h4 {
+      margin: 0;
+      color: var(--overview-ink);
+      font-size: 17px;
+      letter-spacing: -.02em;
+      text-transform: none;
+    }
+
+    .v02-overview-card-head small,
+    .v02-overview-section-head small {
+      display: block;
+      margin-top: 3px;
+      color: var(--overview-muted);
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    .v02-overview-decision-value {
+      align-self: center;
+      margin: 18px 0 4px;
+      color: var(--overview-ink);
+      font-size: clamp(34px, 4vw, 54px);
+      font-weight: 900;
+      letter-spacing: -.065em;
+      line-height: .98;
+    }
+
+    .v02-overview-decision-note {
+      align-self: start;
+      color: var(--overview-muted);
+      font-size: 15px;
+      font-weight: 750;
+    }
+
+    .v02-overview-decision-truth {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 8px;
+      align-items: baseline;
+      margin-top: 13px;
+      padding-top: 10px;
+      border-top: 1px solid #eadfc9;
+    }
+
+    .v02-overview-decision-truth span {
+      color: var(--overview-soft);
+      font-size: 10px;
+      font-weight: 850;
+      white-space: nowrap;
+    }
+
+    .v02-overview-decision-truth strong {
+      min-width: 0;
+      overflow-wrap: anywhere;
+      color: var(--overview-muted);
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    .v02-overview-card--next {
+      display: grid;
+      align-content: space-between;
+      min-height: 244px;
+      padding: 22px;
+      background: var(--overview-teal-soft);
+    }
+
+    .v02-overview-card--next h3 {
+      margin-top: 25px;
+      color: var(--overview-ink);
+      font-size: 25px;
+      letter-spacing: -.04em;
+      line-height: 1.1;
+      text-transform: none;
+    }
+
+    .v02-overview-card--next p {
+      margin-top: 7px;
+      color: var(--overview-muted);
+      font-size: 13px;
+    }
+
+    .v02-theme .v02-overview-primary-action,
+    .v02-theme .v02-overview-secondary-action {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 42px;
+      border: 1px solid var(--overview-teal);
+      border-radius: 12px;
+      color: #ffffff;
+      background: var(--overview-teal);
+      box-shadow: 0 6px 12px rgba(8, 127, 134, .18);
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 850;
+    }
+
+    .v02-theme .v02-overview-primary-action {
+      width: 100%;
+      margin-top: 20px;
+    }
+
+    .v02-theme .v02-overview-primary-action:hover,
+    .v02-theme .v02-overview-primary-action:focus-visible {
+      border-color: #075d63;
+      background: #075d63;
+      outline: 3px solid rgba(8, 127, 134, .22);
+      outline-offset: 2px;
+    }
+
+    .v02-theme .v02-overview-secondary-action {
+      min-height: 32px;
+      padding: 5px 10px;
+      border-color: var(--overview-line);
+      color: var(--overview-teal);
+      background: #ffffff;
+      box-shadow: none;
+      font-size: 11px;
+    }
+
+    .v02-theme .v02-overview-secondary-action:hover,
+    .v02-theme .v02-overview-secondary-action:focus-visible {
+      border-color: var(--overview-teal);
+      outline: 2px solid rgba(8, 127, 134, .18);
+      outline-offset: 1px;
+    }
+
+    .v02-overview-status-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .v02-overview-status-card {
+      min-width: 0;
+      display: grid;
+      gap: 12px;
+      padding: 16px;
+      border: 1px solid var(--overview-line);
+      border-radius: 15px;
+      background: var(--overview-card);
+    }
+
+    .v02-overview-status-card strong {
+      display: block;
+      margin-top: 5px;
+      overflow-wrap: anywhere;
+      color: var(--overview-ink);
+      font-size: 17px;
+      letter-spacing: -.02em;
+    }
+
+    .v02-overview-status-card small {
+      display: block;
+      color: var(--overview-muted);
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    .v02-overview-status-card .v02-overview-section-head {
+      align-items: start;
+    }
+
+    .v02-overview-details {
+      margin-top: 14px;
+      border: 1px solid var(--overview-line);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, .70);
+    }
+
+    .v02-overview-details summary {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      min-height: 44px;
+      padding: 10px 14px;
+      color: var(--overview-ink);
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 850;
+      list-style: none;
+    }
+
+    .v02-overview-details summary::-webkit-details-marker { display: none; }
+
+    .v02-overview-details summary::after {
+      content: "+";
+      color: var(--overview-teal);
+      font-size: 17px;
+    }
+
+    .v02-overview-details[open] summary::after { content: "−"; }
+
+    .v02-overview-details summary:focus-visible {
+      outline: 3px solid rgba(8, 127, 134, .20);
+      outline-offset: -3px;
+    }
+
+    .v02-overview-details-body {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      padding: 0 14px 14px;
+      border-top: 1px solid var(--overview-line);
+    }
+
+    .v02-overview-details-body div {
+      min-width: 0;
+      padding-top: 12px;
+    }
+
+    .v02-overview-details-body dt {
+      color: var(--overview-soft);
+      font-size: 10px;
+      font-weight: 850;
+      letter-spacing: .08em;
+    }
+
+    .v02-overview-details-body dd {
+      margin: 4px 0 0;
+      overflow-wrap: anywhere;
+      color: var(--overview-ink);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .v02-overview-workspace {
+      margin-top: 14px;
+      padding: 17px;
+      border: 1px solid var(--overview-line);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, .58);
+    }
+
+    .v02-overview-workspace-head {
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .v02-overview-workspace-head > div:first-child {
+      display: flex;
+      align-items: center;
+      min-width: 0;
+      gap: 7px;
+    }
+
+    .v02-overview-workspace-head h4 {
+      margin: 0;
+      color: var(--overview-ink);
+      font-size: 17px;
+      letter-spacing: -.02em;
+    }
+
+    .v02-overview-workspace-head p {
+      margin-top: 3px;
+      color: var(--overview-muted);
+      font-size: 11px;
+    }
+
+    .v02-overview-workspace-count {
+      color: var(--overview-soft);
+      font-size: 11px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .v02-overview-workspace-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .v02-overview-workspace-card {
+      min-width: 0;
+      padding: 15px;
+      border: 1px solid var(--overview-line);
+      border-radius: 15px;
+      background: var(--overview-card);
+    }
+
+    .v02-overview-workspace-card--six-axis {
+      grid-column: 1 / -1;
+    }
+
+    .v02-overview-workspace-card-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .v02-overview-card-head-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      flex: 0 0 auto;
+    }
+
+    .v02-overview-workspace-card-head > div:first-child {
+      display: flex;
+      align-items: center;
+      min-width: 0;
+      gap: 9px;
+    }
+
+    .v02-overview-workspace-card h5 {
+      margin: 0;
+      color: var(--overview-ink);
+      font-size: 15px;
+      letter-spacing: -.015em;
+    }
+
+    .v02-overview-workspace-card-head small {
+      display: block;
+      margin-top: 3px;
+      color: var(--overview-muted);
+      font-size: 11px;
+    }
+
+    .v02-overview-workspace-card > p {
+      margin-top: 12px;
+      color: var(--overview-muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .v02-overview-workspace-card > .v02-overview-workspace-action,
+    .v02-overview-workspace-actions {
+      margin-top: 13px;
+    }
+
+    .v02-overview-workspace-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .v02-overview-workspace-icon {
+      display: inline-grid;
+      width: 36px;
+      height: 36px;
+      flex: 0 0 auto;
+      place-items: center;
+      border: 1px solid currentColor;
+      border-radius: 11px;
+      line-height: 0;
+    }
+
+    .v02-overview-workspace-icon::before {
+      display: block;
+      width: 21px;
+      height: 21px;
+      background: currentColor;
+      content: "";
+      -webkit-mask: var(--overview-icon-url) center / contain no-repeat;
+      mask: var(--overview-icon-url) center / contain no-repeat;
+    }
+
+    .v02-overview-workspace-icon--route { color: var(--overview-teal); background: var(--overview-teal-soft); }
+    .v02-overview-workspace-icon--evidence { color: var(--overview-orange); background: var(--overview-orange-soft); }
+    .v02-overview-workspace-icon--map { color: var(--overview-purple); background: var(--overview-purple-soft); }
+    .v02-overview-workspace-icon--debug { color: var(--overview-amber); background: var(--overview-amber-soft); }
+    .v02-overview-workspace-icon--boundary { color: var(--overview-green); background: var(--overview-green-soft); }
+
+    .v02-overview-workspace-card [data-icon="bug"] { --overview-icon-url: url("/admin/icons/lucide/bug.svg"); }
+    .v02-overview-workspace-card [data-icon="file-check-2"] { --overview-icon-url: url("/admin/icons/lucide/file-check-2.svg"); }
+    .v02-overview-workspace-card [data-icon="layers-3"] { --overview-icon-url: url("/admin/icons/lucide/layers-3.svg"); }
+    .v02-overview-workspace-card [data-icon="map"] { --overview-icon-url: url("/admin/icons/lucide/map.svg"); }
+    .v02-overview-workspace-card [data-icon="route"] { --overview-icon-url: url("/admin/icons/lucide/route.svg"); }
+    .v02-overview-workspace-card [data-icon="shield-check"] { --overview-icon-url: url("/admin/icons/lucide/shield-check.svg"); }
+
+    .v02-overview-six-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 7px 12px;
+      margin-top: 14px;
+    }
+
+    .v02-overview-six-item {
+      display: grid;
+      grid-template-columns: 26px minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      min-width: 0;
+      padding: 8px 0;
+      border-bottom: 1px solid #e0ebec;
+    }
+
+    .v02-overview-six-item > span:first-child {
+      display: inline-grid;
+      width: 26px;
+      height: 26px;
+      place-items: center;
+      border: 1px solid var(--overview-line);
+      border-radius: 8px;
+      color: var(--overview-teal);
+      background: var(--overview-teal-soft);
+      line-height: 0;
+    }
+
+    .v02-overview-six-item > span:first-child::before {
+      display: block;
+      width: 16px;
+      height: 16px;
+      background: currentColor;
+      content: "";
+      -webkit-mask: var(--overview-icon-url) center / contain no-repeat;
+      mask: var(--overview-icon-url) center / contain no-repeat;
+    }
+
+    .v02-overview-six-item strong {
+      display: block;
+      overflow: hidden;
+      color: var(--overview-ink);
+      font-size: 12px;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .v02-overview-six-title {
+      display: inline-flex;
+      align-items: center;
+      min-width: 0;
+      gap: 6px;
+    }
+
+    .v02-overview-six-title .v02-overview-hint {
+      width: 22px;
+      min-height: 22px;
+      flex: 0 0 auto;
+      padding: 0;
+      border-radius: 50%;
+      color: var(--overview-orange);
+      background: var(--overview-orange-soft);
+      cursor: help;
+      font-size: 0;
+    }
+
+    .v02-overview-six-title .v02-overview-hint::after {
+      right: auto;
+      left: 0;
+    }
+
+    .v02-overview-six-item small {
+      display: none;
+    }
+
+    .v02-overview-six-item button,
+    .v02-overview-workspace-action {
+      min-height: 30px;
+      padding: 5px 9px;
+      border: 1px solid var(--overview-line);
+      border-radius: 9px;
+      color: var(--overview-teal);
+      background: #ffffff;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 850;
+    }
+
+    .v02-overview-six-item button:hover,
+    .v02-overview-six-item button:focus-visible,
+    .v02-overview-workspace-action:hover,
+    .v02-overview-workspace-action:focus-visible {
+      border-color: var(--overview-teal);
+      outline: 2px solid rgba(8, 127, 134, .18);
+      outline-offset: 1px;
+    }
+
+    .v02-overview-meta-list {
+      display: grid;
+      gap: 7px;
+      margin-top: 13px;
+    }
+
+    .v02-overview-meta-list div {
+      display: grid;
+      grid-template-columns: 70px minmax(0, 1fr);
+      gap: 8px;
+      min-width: 0;
+      padding-bottom: 7px;
+      border-bottom: 1px solid #e0ebec;
+    }
+
+    .v02-overview-meta-list div:last-child { border-bottom: 0; }
+
+    .v02-overview-meta-list dt {
+      color: var(--overview-soft);
+      font-size: 10px;
+      font-weight: 850;
+    }
+
+    .v02-overview-meta-list dd {
+      min-width: 0;
+      margin: 0;
+      overflow-wrap: anywhere;
+      color: var(--overview-ink);
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    .v02-overview-boundary-strip {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 12px;
+      margin-top: 12px;
+      padding: 12px 14px;
+      border: 1px solid var(--overview-line);
+      border-radius: 13px;
+      background: #f8fbfa;
+    }
+
+    .v02-overview-boundary-strip strong {
+      display: inline-block;
+      color: var(--overview-ink);
+      font-size: 12px;
+    }
+
+    .v02-overview-boundary-strip > div:first-child {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
+    }
+
+    .v02-overview-boundary-strip p {
+      margin-top: 3px;
+      color: var(--overview-muted);
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    .v02-overview-boundary-tags {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 5px;
+    }
+
+    .v02-overview-boundary-tags span {
+      padding: 4px 7px;
+      border: 1px solid #c8ded8;
+      border-radius: 999px;
+      color: var(--overview-green);
+      background: var(--overview-green-soft);
+      font-size: 10px;
+      font-weight: 800;
+    }
+
+    .v02-overview-map-details {
+      margin-top: 12px;
+      border-top: 1px solid #e0ebec;
+    }
+
+    .v02-overview-map-details summary {
+      padding-top: 11px;
+      color: var(--overview-teal);
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 850;
+    }
+
+    .v02-overview-map-details > .panel {
+      margin-top: 10px;
+    }
+
+    @media (max-width: 1120px) {
+      body.v02-route-home .content-grid {
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      body.v02-route-home .evidence-drawer {
+        grid-column: 1;
+        grid-row: 3;
+      }
+    }
+
+    .v02-overview-hint {
+      position: relative;
+      display: inline-grid;
+      width: 22px;
+      height: 22px;
+      padding: 0;
+      place-items: center;
+      border: 1px solid var(--overview-line);
+      border-radius: 50%;
+      color: var(--overview-orange);
+      background: var(--overview-orange-soft);
+      cursor: help;
+      font-size: 0;
+      line-height: 0;
+    }
+
+    .v02-overview-hint::before {
+      width: 15px;
+      height: 15px;
+    }
+
+    .v02-overview-hint::after {
+      position: absolute;
+      z-index: 20;
+      top: calc(100% + 8px);
+      right: 0;
+      width: 190px;
+      padding: 8px 9px;
+      border: 1px solid #e5c6ac;
+      border-radius: 9px;
+      color: var(--overview-ink);
+      background: #fffaf5;
+      box-shadow: 0 10px 22px rgba(30, 63, 68, .13);
+      content: attr(data-hint);
+      font-size: 11px;
+      font-weight: 650;
+      line-height: 1.35;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-3px);
+      transition: opacity .16s ease, transform .16s ease;
+    }
+
+    .v02-overview-hint:hover::after,
+    .v02-overview-hint:focus-visible::after {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .v02-overview-route-grid,
+    .v02-overview-evidence-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 14px;
+    }
+
+    .v02-overview-route-card,
+    .v02-overview-evidence-card {
+      min-width: 0;
+      padding: 22px;
+      border: 1px solid var(--overview-line);
+      border-radius: 18px;
+      background: var(--overview-card);
+      box-shadow: 0 12px 28px rgba(24, 72, 78, .07);
+    }
+
+    .v02-overview-route-name,
+    .v02-overview-evidence-value {
+      margin-top: 24px;
+      overflow-wrap: anywhere;
+      color: var(--overview-ink);
+      font-size: clamp(24px, 3vw, 38px);
+      font-weight: 900;
+      letter-spacing: -.055em;
+      line-height: 1.08;
+    }
+
+    .v02-overview-route-subline,
+    .v02-overview-evidence-note {
+      margin-top: 8px;
+      color: var(--overview-muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .v02-overview-flow {
+      display: grid;
+      gap: 8px;
+      margin-top: 18px;
+    }
+
+    .v02-overview-flow-step {
+      display: grid;
+      grid-template-columns: 30px minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      min-width: 0;
+      padding: 10px 0;
+      border-bottom: 1px solid #e0ebec;
+    }
+
+    .v02-overview-flow-step:last-child { border-bottom: 0; }
+
+    .v02-overview-flow-step > span:first-child {
+      display: grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border: 1px solid var(--overview-line);
+      border-radius: 9px;
+      color: var(--overview-teal);
+      background: var(--overview-teal-soft);
+      line-height: 0;
+    }
+
+    .v02-overview-flow-icon::before {
+      width: 17px;
+      height: 17px;
+    }
+
+    .v02-overview-flow-step strong {
+      display: block;
+      color: var(--overview-ink);
+      font-size: 13px;
+    }
+
+    .v02-overview-flow-step small {
+      display: block;
+      margin-top: 2px;
+      color: var(--overview-muted);
+      font-size: 11px;
+    }
+
+    .v02-overview-evidence-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      margin-top: 14px;
+    }
+
+    .v02-overview-evidence-card {
+      padding: 16px;
+      border-radius: 15px;
+      box-shadow: none;
+    }
+
+    .v02-overview-evidence-value {
+      margin-top: 18px;
+      font-size: 25px;
+    }
+
+    .v02-overview--evidence .v02-overview-board {
+      grid-template-columns: minmax(0, 1fr) minmax(280px, .8fr);
+    }
+
+    .v02-overview--evidence .v02-overview-card--decision {
+      min-height: 220px;
+    }
+
+    @media (max-width: 820px) {
+      .v02-overview-head,
+      .v02-overview-board,
+      .v02-overview-route-grid,
+      .v02-overview--evidence .v02-overview-board {
+        grid-template-columns: 1fr;
+      }
+
+      .v02-overview-head {
+        align-items: start;
+        flex-direction: column;
+      }
+
+      .v02-overview-variant-label { text-align: left; }
+      .v02-overview-status-grid,
+      .v02-overview-evidence-grid { grid-template-columns: 1fr; }
+      .v02-overview-workspace-grid,
+      .v02-overview-six-list { grid-template-columns: 1fr; }
+      .v02-overview-workspace-card--six-axis { grid-column: auto; }
+      .v02-overview-boundary-strip { grid-template-columns: 1fr; }
+      .v02-overview-boundary-tags { justify-content: flex-start; }
+    }
+
+    @media (max-width: 560px) {
+      .v02-overview-switcher { width: 100%; }
+      .v02-overview-switcher button { flex: 1 1 0; padding-inline: 5px; }
+      .v02-overview-card--decision,
+      .v02-overview-card--next,
+      .v02-overview-route-card,
+      .v02-overview-evidence-card { padding: 17px; }
+      .v02-overview-details-body { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body class="field-instrument-theme v02-theme">
@@ -12882,7 +14232,7 @@
     <aside class="dashboard-sidebar" id="dashboardSidebar" aria-label="Scout dashboard sections">
       <header class="brand">
         <h1>Scout Dashboard v0.2</h1>
-        <div class="route" id="dashboardRouteStatus">Loading workspace…</div>
+        <div class="route" id="dashboardRouteStatus"><span class="project-name-inline" data-project-name="Loading workspace…" tabindex="0" title="Loading workspace…" aria-label="專案名稱：Loading workspace…"><span class="project-name-text">Loading workspace…</span></span></div>
       </header>
       <nav class="nav" aria-label="Scout dashboard navigation">
         <button class="nav-item" type="button" data-nav-primary data-route="home" data-route-truth="live"><span class="mark"></span><span>總覽</span></button>
@@ -12895,10 +14245,10 @@
           </div>
         </details>
         <details class="nav-section" data-nav-primary>
-          <summary><span class="mark"></span><span>地圖與證據</span></summary>
+          <summary><span class="mark"></span><span>地圖與資料</span></summary>
           <div class="nav-subtree">
             <button class="nav-item" type="button" data-route="map" data-route-truth="live"><span class="mark"></span><span>地圖</span></button>
-            <button class="nav-item" type="button" data-route="timeline" data-route-truth="partial"><span class="mark"></span><span>時間軸證據</span></button>
+            <button class="nav-item" type="button" data-route="timeline" data-route-truth="partial"><span class="mark"></span><span>時間軸</span></button>
             <button class="nav-item" type="button" data-route="features-lbs" data-route-truth="preview"><span class="mark"></span><span>位置資料</span></button>
           </div>
         </details>
@@ -12956,11 +14306,11 @@
               <span class="dashboard-truth-summary-copy" id="dashboardTruthSummary">Loading dashboard truth metadata</span>
             </summary>
             <div class="dashboard-truth-panel">
-              <div class="truth-item" data-truth-field="surface"><span>Surface</span><strong>Loading</strong></div>
-              <div class="truth-item" data-truth-field="data"><span>Data</span><strong>Unknown</strong></div>
-              <div class="truth-item" data-truth-field="action"><span>Action</span><strong>Read-only</strong></div>
-              <div class="truth-item" data-truth-field="verification"><span>Verification</span><strong>Untested</strong></div>
-              <div class="truth-item" data-truth-field="provenance"><span>Provenance / Readiness</span><strong>Unknown</strong></div>
+              <div class="truth-item" data-truth-field="surface"><span>目前畫面</span><strong>載入中</strong></div>
+              <div class="truth-item" data-truth-field="data"><span>目前資料</span><strong>尚未確認</strong></div>
+              <div class="truth-item" data-truth-field="action"><span>下一步</span><strong>僅供檢視</strong></div>
+              <div class="truth-item" data-truth-field="verification"><span>確認狀態</span><strong>尚未確認</strong></div>
+              <div class="truth-item" data-truth-field="provenance"><span>來源／可用度</span><strong>尚未確認</strong></div>
             </div>
           </details>
         </div>
@@ -12971,20 +14321,20 @@
           <div class="v02-workflow-lead">
             <span class="v02-kicker">目前工作流程</span>
             <strong id="v02WorkflowTitle">Scout Dashboard</strong>
-            <small id="v02WorkflowRoute">選取資料後，地圖、結果與來源會同步更新</small>
+            <button type="button" class="v02-workflow-hint" id="v02WorkflowRoute" data-icon="circle-help" data-hint="選取資料後，地圖、結果與來源會同步更新。" aria-label="查看目前工作流程說明"></button>
           </div>
           <div class="v02-workflow-station v02-result-station">
             <span class="v02-kicker">主要結果</span>
             <strong id="v02PrimaryResult" aria-live="polite" aria-atomic="true">讀取目前結果</strong>
-            <small id="v02PrimaryEvidence">結果優先；補充證據保留在下方</small>
+            <button type="button" class="v02-workflow-hint" id="v02PrimaryEvidence" data-icon="circle-help" data-hint="結果優先；補充資料保留在下方。" aria-label="查看主要結果說明"></button>
           </div>
           <div class="v02-workflow-station v02-next-station">
             <span class="v02-kicker">下一步</span>
             <button type="button" id="v02NextAction">聚焦主要操作</button>
-            <small id="v02NextHint" aria-live="polite" aria-atomic="true">目前畫面只保留一個操作焦點</small>
+            <button type="button" class="v02-workflow-hint" id="v02NextHint" data-icon="circle-help" data-hint="目前畫面只保留一個操作焦點。" aria-label="查看下一步說明" aria-live="polite"></button>
           </div>
           <details class="v02-info-hint">
-            <summary aria-label="查看目前工作流程說明">i</summary>
+            <summary aria-label="查看目前工作流程說明"></summary>
             <div>先看主要結果，再操作目前控制中心；來源與技術細節放在次要區域。</div>
           </details>
         </section>
@@ -13041,7 +14391,7 @@
             </form>
           </div>
         </section>
-        <aside class="evidence-drawer" id="dashboardEvidence" aria-label="Evidence and boundary drawer"></aside>
+        <aside class="evidence-drawer" id="dashboardEvidence" aria-label="系統目前狀態與相關連結"></aside>
       </div>
     </main>
   </div>
@@ -13049,6 +14399,7 @@
     <strong></strong>
     <span></span>
   </div>
+  <div class="dashboard-global-hint" id="dashboardGlobalHint" role="tooltip" hidden></div>
 
   <script src="/admin/scout-maplibre-evidence.js"></script>
   <script src="/admin/scout-planned-map-review.js"></script>
@@ -14781,12 +16132,14 @@
       void bootstrapDashboardWorkspace(initialRoute);
       window.addEventListener("hashchange", () => {
         const requestedRoute = routeFromHash();
-        if (workspaceIdentityReady() || ["home", "settings"].includes(requestedRoute)) {
-          setRoute(requestedRoute, {loadRouteData: true});
+        const identityReady = workspaceIdentityReady();
+        if (identityReady || ["home", "settings"].includes(requestedRoute)) {
+          setRoute(requestedRoute, {loadRouteData: identityReady});
         } else {
-          state.route = requestedRoute;
-          const status = document.getElementById("dashboardRouteStatus");
-          if (status) status.textContent = `${projectId() || "workspace"} · loading workspace`;
+          // Keep navigation usable while the selected workspace is loading or
+          // missing. Rendering a fail-closed route shell is preferable to
+          // leaving the previous page visible after the hash has changed.
+          setRoute(requestedRoute);
         }
       });
       window.addEventListener("online", () => {
@@ -15647,7 +17000,7 @@
 
     async function loadDataForRoute(route, {force = false} = {}) {
       requireLoadedWorkspaceProjectId();
-      document.getElementById("dashboardRouteStatus").textContent = projectId();
+      setProjectNameDisplay(document.getElementById("dashboardRouteStatus"), projectId());
       const scopes = dataScopesForRoute(route);
       if (scopes.includes("analysis_subject")) {
         // Re-check the shared identity on every six-axis transition. An accepted
@@ -15661,9 +17014,9 @@
         .map((result, index) => ({result, scope: scopes[index]}))
         .filter(item => item.result.status === "rejected")
         .map(item => item.scope);
-      document.getElementById("dashboardRouteStatus").textContent = failedScopes.length
+      setProjectNameDisplay(document.getElementById("dashboardRouteStatus"), failedScopes.length
         ? `${projectId()} · retrying ${failedScopes.join(", ")}`
-        : projectId();
+        : projectId());
       refreshCurrentDataView();
     }
 
@@ -18471,9 +19824,9 @@
       }
       const failedScopes = Object.keys(state.dataScopeErrors || {});
       if (failedScopes.length && dataScopesForRoute(route).some(scope => failedScopes.includes(scope))) {
-        truth.surface = "Degraded";
-        truth.verification = `Data load failed · ${failedScopes.join(", ")}`;
-        truth.mode = "Degraded";
+        truth.surface = "資料狀態需確認";
+        truth.verification = `資料載入失敗 · ${failedScopes.map(dashboardDataScopeLabel).join(", ")}`;
+        truth.mode = "需要處理";
       }
       return applyAnalysisSubjectTruth(truth, route);
     }
@@ -18505,14 +19858,26 @@
     function renderTruthStrip(route) {
       const strip = document.getElementById("dashboardTruthStrip");
       if (!strip) return;
+      // Route truth is an internal diagnostic contract. Do not expose its
+      // hard-coded engineering labels as user-facing workspace/data claims.
+      // The Diagnostic route may inspect it; normal workflows use their
+      // actual loaded result, source and next action instead.
+      if (route !== "diagnostic") {
+        strip.hidden = true;
+        strip.setAttribute("aria-hidden", "true");
+        strip.replaceChildren();
+        return;
+      }
+      strip.hidden = false;
+      strip.removeAttribute("aria-hidden");
       const truth = resolveRouteTruth(route);
       const maturityTone = truth.maturity === "live" ? "ok" : truth.maturity === "partial" ? "warn" : "info";
       const fields = [
-        ["surface", "Surface", truth.surface],
-        ["data", "Data", truth.data],
-        ["action", "Action", truth.action],
-        ["verification", "Verification", truth.verification],
-        ["provenance", "Provenance / Readiness", `${truth.provenance} · ${truth.mode}`],
+        ["surface", "目前畫面", truth.surface],
+        ["data", "目前資料", truth.data],
+        ["action", "下一步", truth.action],
+        ["verification", "確認狀態", truth.verification],
+        ["provenance", "來源／可用度", `${truth.provenance} · ${truth.mode}`],
       ];
       strip.innerHTML = `
         <details class="dashboard-truth-details">
@@ -18527,10 +19892,44 @@
       `;
     }
 
+    function renderWorkspaceUnavailablePage(route) {
+      const routeLabel = SIX_FORCES.find((item) => item.route === route)?.label
+        || routeMeta[route]?.[0]
+        || "目前頁面";
+      const status = state.workspaceCatalogStatus;
+      const loading = status === "loading" || status === "idle";
+      const heading = loading ? "正在確認工作區" : "工作區無法載入";
+      const detail = loading
+        ? "正在確認目前專案。"
+        : status === "missing"
+          ? "目前專案不在 Dashboard 工作區清單。"
+          : "工作區清單暫時無法取得。";
+      const action = loading
+        ? "請稍候。"
+        : "請到設定選擇可用工作區。";
+      return `
+        <section class="panel v02-workspace-blocked" data-workspace-blocked="true" data-workspace-status="${escapeHtml(status)}">
+          <div class="panel-header">
+            <div>
+              <span class="eyebrow">${escapeHtml(routeLabel)}</span>
+              <h3>${escapeHtml(heading)}</h3>
+            </div>
+            <span class="chip ${loading ? "info" : "bad"}">${loading ? "載入中" : "不可用"}</span>
+          </div>
+          <div class="panel-body">
+            <p class="status">${escapeHtml(detail)}</p>
+            <p class="mono project-name-cell">${renderProjectName(projectId() || "未指定專案")}</p>
+            <p class="status">${escapeHtml(action)}</p>
+            ${loading ? "" : '<button type="button" data-route="settings">開啟設定</button>'}
+          </div>
+        </section>
+      `;
+    }
+
     function setRoute(route, {loadRouteData = false} = {}) {
       state.route = route;
       if (route === "trip-notebook" || route === "outdoor-permission") {
-        document.getElementById("dashboardRouteStatus").textContent = projectId();
+        setProjectNameDisplay(document.getElementById("dashboardRouteStatus"), projectId());
         document.querySelector(".sidebar-footer strong").textContent = window.location.origin;
       }
       document.querySelectorAll("[data-route]").forEach((button) => {
@@ -18544,7 +19943,7 @@
         : (routeMeta[route] || routeMeta.home);
       document.getElementById("pageTitle").textContent = meta[0];
       render();
-      if (route === "living") scheduleLivingRefresh();
+      if (route === "living" && workspaceIdentityReady()) scheduleLivingRefresh();
       else stopLivingRefresh();
       if (loadRouteData) {
         void loadDataForRoute(route, {
@@ -18553,13 +19952,154 @@
       }
     }
 
+    const DASHBOARD_COPY_ALIASES = Object.freeze([
+      ["Evidence & Receipts", "狀態與紀錄"],
+      ["Supporting Evidence", "補充資料"],
+      ["Pace Parameters", "配速設定"],
+      ["Pace Evidence", "配速資料"],
+      ["Debug Surface", "除錯工作區"],
+      ["Map preview", "地圖預覽"],
+      ["Exploring for Six Axis", "六軸探索"],
+      ["candidate-only", "規劃用資料"],
+      ["Technical Prototype", "技術預覽"],
+      ["technical prototype", "技術預覽"],
+      ["Major / Minor", "重要程度"],
+      ["GIS-related", "地圖資料"],
+      ["Repro-only", "方便重現"],
+      ["Boundary", "使用範圍"],
+      ["Projection", "整理後資料"],
+      ["Blocking", "先處理"],
+      ["Evidence", "系統目前狀態"],
+      ["boundary", "使用範圍"],
+      ["projection", "整理後資料"],
+      ["blocking", "先處理"],
+    ]);
+
+    function applyDashboardCopyAliases(root = document) {
+      if (!root) return;
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      const nodes = [];
+      let current;
+      while ((current = walker.nextNode())) nodes.push(current);
+      nodes.forEach(node => {
+        const parent = node.parentElement;
+        if (!parent || parent.closest("script, style, pre, code, .mono, [data-dashboard-raw]")) return;
+        let value = node.nodeValue || "";
+        if (/https?:\/\/|\/(?:admin|data|docs)\//i.test(value)) return;
+        DASHBOARD_COPY_ALIASES.forEach(([from, to]) => {
+          value = value.replaceAll(from, to);
+        });
+        if (value !== node.nodeValue) node.nodeValue = value;
+      });
+    }
+
+    function pathDisplayName(value) {
+      const raw = String(value || "").trim();
+      if (!raw) return "未指定";
+      const withoutQuery = raw.split(/[?#]/, 1)[0].replace(/[\\/]+$/, "");
+      const leaf = withoutQuery.split(/[\\/]/).filter(Boolean).pop();
+      return leaf || raw;
+    }
+
+    function pathShortcutHref(value) {
+      const raw = String(value || "").trim();
+      return /^(?:https?:\/\/|\/(?:admin|debug|fixture)(?:\/|$))/i.test(raw) ? raw : "";
+    }
+
+    function renderProjectName(value, options = {}) {
+      const raw = String(value || "").trim() || "未指定專案";
+      const extraClass = options.className ? ` ${escapeHtml(options.className)}` : "";
+      return `<span class="project-name-inline${extraClass}" data-project-name="${escapeHtml(raw)}" tabindex="0" title="${escapeHtml(raw)}" aria-label="專案名稱：${escapeHtml(raw)}"><span class="project-name-text">${escapeHtml(raw)}</span></span>`;
+    }
+
+    function setProjectNameDisplay(element, value) {
+      if (!element) return;
+      element.innerHTML = renderProjectName(value);
+    }
+
+    function renderWorkspaceTripIdentity(projectValue, tripValue) {
+      const project = String(projectValue || "").trim();
+      const trip = String(tripValue || "").trim();
+      const values = project && trip && project !== trip ? [project, trip] : [project || trip];
+      return `<span class="mono project-name-pair">${values.map((value, index) => `${index ? '<span class="project-name-separator" aria-hidden="true">/</span>' : ""}${renderProjectName(value)}`).join("")}</span>`;
+    }
+
+    function renderCopyablePath(label, value, options = {}) {
+      const raw = String(value || "").trim();
+      const display = pathDisplayName(raw);
+      const shortcut = pathShortcutHref(raw);
+      const extraClass = options.className ? ` ${escapeHtml(options.className)}` : "";
+      const displayNode = shortcut
+        ? `<a class="copy-path-label mono" href="${escapeHtml(shortcut)}" title="開啟捷徑">${escapeHtml(display)}</a>`
+        : `<span class="copy-path-label mono" title="按旁邊按鈕複製完整路徑">${escapeHtml(display)}</span>`;
+      return `<span class="copyable-path${extraClass}" data-full-path="${escapeHtml(raw)}">
+        ${displayNode}
+        <button type="button" class="copy-path-button" data-copy-path="${escapeHtml(raw)}" title="複製完整路徑" aria-label="複製${escapeHtml(label)}完整路徑"><span data-icon="copy" aria-hidden="true"></span></button>
+        <span class="copy-path-status" role="status" aria-live="polite"></span>
+      </span>`;
+    }
+
+    function renderPathOrText(label, value) {
+      const raw = String(value || "").trim();
+      if (/^(?:https?:\/\/|\/|\.\.?\/|(?:data|docs|admin)\/)/i.test(raw)) {
+        return renderCopyablePath(label, raw);
+      }
+      return `<span>${escapeHtml(raw || "未指定")}</span>`;
+    }
+
+    async function copyPathValue(value) {
+      const raw = String(value || "");
+      if (!raw) return false;
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(raw);
+          return true;
+        }
+      } catch (_error) {
+        // Fall through to the local clipboard fallback.
+      }
+      const textarea = document.createElement("textarea");
+      textarea.value = raw;
+      textarea.setAttribute("readonly", "");
+      textarea.style.position = "fixed";
+      textarea.style.left = "-9999px";
+      document.body.appendChild(textarea);
+      textarea.select();
+      let copied = false;
+      try {
+        copied = document.execCommand("copy");
+      } catch (_error) {
+        copied = false;
+      }
+      textarea.remove();
+      return copied;
+    }
+
+    function bindCopyPathControls() {
+      document.querySelectorAll("[data-copy-path]").forEach((button) => {
+        button.addEventListener("click", async () => {
+          const copied = await copyPathValue(button.dataset.copyPath || "");
+          const container = button.closest(".copyable-path");
+          const status = container?.querySelector(".copy-path-status");
+          button.dataset.copyState = copied ? "copied" : "failed";
+          button.setAttribute("aria-label", copied ? "已複製完整路徑" : "複製失敗，請重試");
+          if (status) status.textContent = copied ? "已複製" : "複製失敗";
+          window.setTimeout(() => {
+            button.removeAttribute("data-copy-state");
+            button.setAttribute("aria-label", `複製${container?.querySelector(".copy-path-label")?.textContent || "路徑"}完整路徑`);
+            if (status) status.textContent = "";
+          }, 1600);
+        });
+      });
+    }
+
     function render() {
       if (DIAGNOSTIC_MAP_PROBE && !navigationCameraPageProbeState.active) return;
       const selectedProjectId = projectId();
       document.title = `Scout Dashboard · ${selectedProjectId}`;
       const projectLabel = document.getElementById("dashboardRouteStatus");
       if (projectLabel && !projectLabel.textContent.startsWith(`${selectedProjectId} · retrying `)) {
-        projectLabel.textContent = selectedProjectId;
+        setProjectNameDisplay(projectLabel, selectedProjectId);
       }
       destroyNavigationTerrainMapLibre();
       hideDashboardMapHint();
@@ -18584,7 +20124,16 @@
       dashboardShell?.classList.toggle("is-page-header-hidden", pageHeaderHidden);
       document.body.classList.toggle("is-frame-full", frameFull);
       let preservedPlanningFrame = false;
-      if (route === "map") {
+      const workspaceBlocked = !workspaceIdentityReady() && !["home", "settings"].includes(route);
+      if (workspaceBlocked) {
+        workspace.hidden = false;
+        workspace.setAttribute("aria-hidden", "false");
+        dashboardMap.hidden = true;
+        dashboardMap.setAttribute("aria-hidden", "true");
+        dashboardAgent.hidden = true;
+        dashboardAgent.setAttribute("aria-hidden", "true");
+        workspace.innerHTML = renderWorkspaceUnavailablePage(route);
+      } else if (route === "map") {
         workspace.hidden = true;
         workspace.setAttribute("aria-hidden", "true");
         dashboardMap.hidden = false;
@@ -18632,8 +20181,9 @@
         }
       }
       evidence.innerHTML = renderEvidenceDrawer(route);
+      applyDashboardCopyAliases(document.querySelector(".content-grid"));
       bindRenderedControls();
-      if (route === "outdoor-navigation") {
+      if (route === "outdoor-navigation" && !workspaceBlocked) {
         void initializeNavigationTerrainMapLibre();
       }
       if (route === "map") {
@@ -18698,101 +20248,228 @@
       return renderHomePage();
     }
 
+    function overviewVariantFromUrl() {
+      const variant = new URLSearchParams(window.location.search).get("overview");
+      return ["decision", "route", "evidence"].includes(variant) ? variant : "decision";
+    }
+
+    function bindOverviewVariantControls() {
+      document.querySelectorAll("[data-overview-variant]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const nextUrl = new URL(window.location.href);
+          nextUrl.searchParams.set("overview", button.dataset.overviewVariant || "decision");
+          nextUrl.hash = "home";
+          window.history.replaceState(null, "", `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
+          setRoute("home");
+        });
+      });
+    }
+
+    function renderOverviewVariantSwitcher(activeVariant) {
+      const variants = [
+        ["decision", "決策台"],
+        ["route", "路線脈絡"],
+        ["evidence", "證據摘要"],
+      ];
+      return `
+        <div>
+          <span class="v02-overview-variant-label">總覽方案</span>
+          <div class="v02-overview-switcher" role="tablist" aria-label="總覽方案">
+            ${variants.map(([variant, label]) => `
+              <button type="button" role="tab" data-overview-variant="${variant}" aria-selected="${variant === activeVariant ? "true" : "false"}" aria-pressed="${variant === activeVariant ? "true" : "false"}">${label}</button>
+            `).join("")}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderOverviewDetails({weatherStatus, blockingTruth, failedScopes, counts}) {
+      const failedScopeLabels = failedScopes.map(dashboardDataScopeLabel);
+      return `
+        <details class="v02-overview-details">
+          <summary><span>來源與計算</span><span class="v02-overview-hint" data-icon="circle-help" data-hint="需要時再查看來源與技術狀態" tabindex="0" aria-label="查看來源與計算"></span></summary>
+          <dl class="v02-overview-details-body">
+            <div><dt>專案</dt><dd class="mono project-name-cell">${renderProjectName(projectId())}</dd></div>
+            <div><dt>工作區</dt><dd>${renderCopyablePath("工作區", resolvedWorkspaceRoot())}</dd></div>
+            <div><dt>狀態</dt><dd>${escapeHtml(blockingTruth)}</dd></div>
+            <div><dt>天氣</dt><dd>${escapeHtml(weatherStatus)}</dd></div>
+            <div><dt>待確認</dt><dd>${failedScopeLabels.length ? escapeHtml(failedScopeLabels.join(", ")) : "無"}</dd></div>
+            <div><dt>地形</dt><dd>${counts.terrainTiles} 個圖磚</dd></div>
+          </dl>
+        </details>
+      `;
+    }
+
+    function dashboardDataScopeLabel(scope) {
+      return ({
+        project: "專案資料",
+        weather: "天氣資料",
+        terrain: "地形資料",
+        evidence: "系統狀態資料",
+        route: "路線資料",
+        workspace: "工作區資料",
+      })[scope] || scope;
+    }
+
+    function renderOverviewStatusCard({icon, tone, title, value, note, route}) {
+      return `
+        <article class="v02-overview-status-card">
+          <div class="v02-overview-section-head">
+            <div>
+              <span class="v02-overview-icon ${tone}" data-icon="${escapeHtml(icon)}" aria-hidden="true"></span>
+              <div><h4>${escapeHtml(title)}</h4></div>
+            </div>
+            <button type="button" class="v02-overview-hint" data-icon="circle-help" data-hint="${escapeHtml(note)}" aria-label="查看${escapeHtml(title)}說明"></button>
+          </div>
+          <strong>${escapeHtml(value)}</strong>
+          <button type="button" class="v02-overview-secondary-action" data-route="${escapeHtml(route)}">查看</button>
+        </article>
+      `;
+    }
+
     function renderHomePage() {
       const counts = projectCounts();
       const weatherStatus = dashboardWeatherDerivedStatus();
       const failedScopes = Object.keys(state.dataScopeErrors || {});
-      const decisionTone = failedScopes.length || ["error", "unavailable", "stale_data", "no_coverage"].includes(weatherStatus) ? "warn" : "ok";
+      const weatherReady = /ready|operational/i.test(String(weatherStatus || ""));
+      const decisionTone = failedScopes.length || !weatherReady ? "warn" : "ok";
       const tripIdentity = state.project?.trip_id || state.project?.project_id || projectId();
-      const currentDecision = decisionTone === "warn" ? "暫停 · 檢查阻擋條件" : "可繼續 · 檢視路線背景";
-      const blockingTruth = `就緒度=${counts.readiness} · 天氣=${weatherStatus} · 資料缺口=${failedScopes.length ? failedScopes.join(", ") : "未發現"}`;
-      return `
-        <section class="panel" data-overview-priority="current-decision">
-          <div class="panel-header">
-            <h3>目前決策摘要</h3>
-            <span class="chip ${decisionTone}">${failedScopes.length ? `${failedScopes.length} data gaps` : escapeHtml(counts.readiness)}</span>
+      const decisionValue = decisionTone === "warn" ? "暫停" : "可繼續";
+      const decisionNote = decisionTone === "warn" ? "先完成必要確認" : "先檢視路線背景";
+      const decisionChip = decisionTone === "warn" ? "需確認" : "可開始";
+      const weatherValue = /ready|operational/i.test(weatherStatus) ? "已就緒" : "尚不可用";
+      const evidenceValue = failedScopes.length ? `${failedScopes.length} 項待確認` : "目前可用";
+      const terrainValue = counts.terrainTiles ? `${counts.terrainTiles} 個圖磚` : "待準備";
+      const blockingTruth = `可用度=${counts.readiness} · 天氣=${weatherStatus} · 待確認=${failedScopes.length ? failedScopes.map(dashboardDataScopeLabel).join(", ") : "無"}`;
+      const overviewMapData = buildMapData();
+      const mapPreviewState = overviewMapData.connected ? "可預覽" : "待路線資料";
+      const mapPreviewNote = overviewMapData.connected ? "路線與地標已載入。" : "載入路線資料後顯示地圖。";
+      const sixAxisIcons = ["route", "gauge", "shield-check", "layers-3", "cloud-rain", "navigation"];
+      const sixAxisRows = SIX_FORCES.map((force, index) => `
+        <div class="v02-overview-six-item" data-overview-axis="${escapeHtml(force.route)}">
+          <span data-icon="${sixAxisIcons[index] || "route"}" aria-hidden="true"></span>
+          <div class="v02-overview-six-title"><strong>${escapeHtml(force.label)}</strong><button type="button" class="v02-overview-hint" data-icon="circle-help" data-hint="${escapeHtml(force.question)}" aria-label="查看${escapeHtml(force.label)}說明"></button></div>
+          <button type="button" data-route="${escapeHtml(force.route)}">查看</button>
+        </div>
+      `).join("");
+      const overviewHead = `
+        <div class="v02-overview-head">
+          <div>
+            <span class="v02-overview-kicker">總覽</span>
+            <div class="v02-overview-title-line"><h3>目前工作區</h3><button type="button" class="v02-overview-hint" data-icon="circle-help" data-hint="先看目前決策，再選下一個工作區。" aria-label="查看總覽說明"></button></div>
           </div>
-          <div class="panel-body">
-            <div class="force-list" data-overview-task-order="workspace-decision-blocker-action">
-              <div class="force-row overview-primary-row">
-                <div class="label-stack" data-overview-step="workspace-identity"><strong>工作區／行程</strong><span class="mono">${escapeHtml(projectId())} / ${escapeHtml(tripIdentity)}</span></div>
-                <div class="label-stack" data-overview-step="current-decision"><strong>目前決策</strong><span>${escapeHtml(currentDecision)}</span></div>
-                <div class="label-stack" data-overview-step="blocking-truth"><strong>阻擋條件</strong><span>${escapeHtml(blockingTruth)}</span></div>
-                <div class="label-stack" data-overview-step="next-action"><strong>下一步</strong><button type="button" data-route="outdoor-route-context">檢視路線背景</button></div>
-              </div>
+          <div class="v02-overview-head-status">
+            <span class="v02-overview-icon v02-overview-icon--route" data-icon="route" aria-hidden="true"></span>
+            <span>單一總覽 · ${escapeHtml(counts.readiness)}</span>
+          </div>
+        </div>
+      `;
+      const decisionCard = `
+        <section class="v02-overview-card v02-overview-card--decision" data-overview-priority="current-decision" data-v02-audit-label="Current Decision Brief">
+          <div class="v02-overview-card-head">
+            <div>
+              <span class="v02-overview-icon v02-overview-icon--result" data-icon="circle-alert" aria-hidden="true"></span>
+              <div><h4>目前決策</h4></div>
             </div>
-            <div class="force-list" data-overview-secondary="verification" style="margin-top:9px">
-              <div class="force-row">
-                <div class="label-stack"><strong>確認天氣與地形</strong><span>決策前先確認資料新鮮度、覆蓋範圍與來源狀態。</span></div>
-                <div class="label-stack"><strong>天氣資料</strong><span>${escapeHtml(weatherStatus)}</span></div>
-                <div class="label-stack"><strong>地形</strong><span>${counts.terrainTiles} 個已準備圖磚</span></div>
-                <button type="button" data-route="outdoor-weather">查看</button>
-              </div>
-              <div class="force-row">
-                <div class="label-stack"><strong>補齊證據缺口</strong><span>開啟分頁證據目錄，查看每筆資料來源。</span></div>
-                <div class="label-stack"><strong>載入失敗</strong><span>${failedScopes.length ? escapeHtml(failedScopes.join(", ")) : "未發現"}</span></div>
-                <div class="label-stack"><strong>操作</strong><span>唯讀檢視</span></div>
-                <button type="button" data-route="timeline">開啟證據</button>
-              </div>
+            <div class="v02-overview-card-head-actions">
+              <span class="chip ${decisionTone}">${decisionChip}</span>
+              <button type="button" class="v02-overview-hint" data-icon="circle-help" data-hint="顯示目前工作區與行程能否繼續。" aria-label="查看目前決策說明"></button>
             </div>
+          </div>
+          <div class="v02-overview-decision-value" data-overview-step="current-decision"><span>${decisionValue}</span></div>
+          <p class="v02-overview-decision-note">${decisionNote}</p>
+          <div class="v02-overview-identity project-name-cell" data-overview-step="workspace-identity">${renderWorkspaceTripIdentity(projectId(), tripIdentity)}</div>
+          <div class="v02-overview-decision-truth" data-overview-step="blocking-truth"><span>資料狀態</span><strong>${escapeHtml(blockingTruth)}</strong></div>
+        </section>
+      `;
+      const nextCard = `
+        <section class="v02-overview-card v02-overview-card--next">
+          <div class="v02-overview-card-head">
+            <div>
+              <span class="v02-overview-icon v02-overview-icon--next" data-icon="compass" aria-hidden="true"></span>
+              <div><h4>下一步</h4></div>
+            </div>
+            <button type="button" class="v02-overview-hint" data-icon="circle-help" data-hint="這是目前總覽的主要操作。" aria-label="查看下一步說明"></button>
+          </div>
+          <div>
+            <h3>檢視路線背景</h3>
+          </div>
+          <div data-overview-step="next-action">
+            <button type="button" class="v02-overview-primary-action" data-route="outdoor-route-context">開始檢視</button>
           </div>
         </section>
-        <div style="height:12px"></div>
-        <div class="grid-2">
-          <section class="panel">
-            <div class="panel-header"><h3>工作區資訊</h3><span class="chip info">內容</span></div>
-            <div class="panel-body">
-              <div class="metric-line">
-                <div class="metric-row"><span>專案</span><span class="mono">${escapeHtml(projectId())}</span></div>
-                <div class="metric-row"><span>工作區根目錄</span><span class="mono">${escapeHtml(resolvedWorkspaceRoot())}</span></div>
-                <div class="metric-row"><span>執行狀態</span><span>交接、匯出與載入都由使用者觸發</span></div>
-              </div>
+      `;
+      const statusCards = `
+        <section class="v02-overview-status-grid" data-overview-secondary="verification" aria-label="資料摘要">
+          ${renderOverviewStatusCard({icon: "cloud-rain", tone: "v02-overview-icon--route", title: "天氣", value: weatherValue, note: "路線資料", route: "outdoor-weather"})}
+          ${renderOverviewStatusCard({icon: "mountain", tone: "v02-overview-icon--source", title: "地形", value: terrainValue, note: "地圖來源", route: "map"})}
+          ${renderOverviewStatusCard({icon: "circle-check", tone: "v02-overview-icon--evidence", title: "系統狀態", value: evidenceValue, note: "查看系統目前狀態。", route: "timeline"})}
+        </section>
+      `;
+      return `
+        <section class="v02-overview" data-v02-overview="single">
+          ${overviewHead}
+          <div class="v02-overview-board">
+            ${decisionCard}
+            ${nextCard}
+          </div>
+          ${statusCards}
+          <section class="v02-overview-workspace" aria-label="工作區入口">
+            <div class="v02-overview-workspace-head">
+              <div><h4>工作區入口</h4><button type="button" class="v02-overview-hint" data-icon="circle-help" data-hint="需要時從這裡進入完整工作流程。" aria-label="查看工作區入口說明"></button></div>
+              <span class="v02-overview-workspace-count">6 軸 · 3 資料入口 · 2 工具</span>
+            </div>
+            <div class="v02-overview-workspace-grid">
+              <article class="v02-overview-workspace-card v02-overview-workspace-card--six-axis" data-overview-workspace="six-axis">
+                <div class="v02-overview-workspace-card-head">
+                  <div><span class="v02-overview-workspace-icon v02-overview-workspace-icon--route" data-icon="compass" aria-hidden="true"></span><div><h5>六軸探索</h5></div></div>
+                  <div class="v02-overview-card-head-actions"><span class="chip info">6 個流程</span><button type="button" class="v02-overview-hint" data-icon="circle-help" data-hint="依目前要解決的問題選擇入口。" aria-label="查看六軸探索說明"></button></div>
+                </div>
+                <div class="v02-overview-six-list">${sixAxisRows}</div>
+              </article>
+              <article class="v02-overview-workspace-card" data-overview-workspace="workspace">
+                <div class="v02-overview-workspace-card-head"><div><span class="v02-overview-workspace-icon v02-overview-workspace-icon--boundary" data-icon="layers-3" aria-hidden="true"></span><div><h5>工作區</h5></div></div><div class="v02-overview-card-head-actions"><span class="chip info">目前</span><button type="button" class="v02-overview-hint" data-icon="circle-help" data-hint="顯示目前專案與資料位置。" aria-label="查看工作區說明"></button></div></div>
+                <dl class="v02-overview-meta-list">
+                  <div><dt>專案</dt><dd class="mono project-name-cell">${renderProjectName(projectId())}</dd></div>
+                  <div><dt>工作區</dt><dd>${renderCopyablePath("工作區", resolvedWorkspaceRoot())}</dd></div>
+                  <div><dt>狀態</dt><dd>${escapeHtml(counts.readiness)}</dd></div>
+                </dl>
+                <button type="button" class="v02-overview-workspace-action" data-route="features-workspace">開啟工作區</button>
+              </article>
+              <article class="v02-overview-workspace-card" data-overview-workspace="evidence">
+                <div class="v02-overview-workspace-card-head"><div><span class="v02-overview-workspace-icon v02-overview-workspace-icon--evidence" data-icon="database" aria-hidden="true"></span><div><h5>時間與來源</h5></div></div><div class="v02-overview-card-head-actions"><span class="chip ${failedScopes.length ? "warn" : "ok"}">${evidenceValue}</span><button type="button" class="v02-overview-hint" data-icon="circle-help" data-hint="查看系統目前狀態、時間軸與位置資料。" aria-label="查看時間與來源說明"></button></div></div>
+                <div class="v02-overview-workspace-actions"><button type="button" class="v02-overview-workspace-action" data-route="timeline">時間軸</button> <button type="button" class="v02-overview-workspace-action" data-route="features-lbs">位置資料</button></div>
+              </article>
+              <article class="v02-overview-workspace-card" data-overview-workspace="map">
+                <div class="v02-overview-workspace-card-head"><div><span class="v02-overview-workspace-icon v02-overview-workspace-icon--map" data-icon="map" aria-hidden="true"></span><div><h5>地圖預覽</h5></div></div><div class="v02-overview-card-head-actions"><span class="chip ${overviewMapData.connected ? "ok" : "warn"}">${mapPreviewState}</span><button type="button" class="v02-overview-hint" data-icon="circle-help" data-hint="查看路線與地標目前是否能顯示。" aria-label="查看地圖預覽說明"></button></div></div>
+                <p>${mapPreviewNote}</p>
+                <details class="v02-overview-map-details">
+                  <summary>查看預覽狀態</summary>
+                  ${renderMapPanel("overview")}
+                </details>
+                <button type="button" class="v02-overview-workspace-action" data-route="map">開啟完整地圖</button>
+              </article>
+              <article class="v02-overview-workspace-card" data-overview-workspace="debug">
+                <div class="v02-overview-workspace-card-head"><div><span class="v02-overview-workspace-icon v02-overview-workspace-icon--debug" data-icon="bug" aria-hidden="true"></span><div><h5>除錯工作區</h5></div></div><div class="v02-overview-card-head-actions"><span class="chip info">唯讀</span><button type="button" class="v02-overview-hint" data-icon="circle-help" data-hint="查看系統狀態與事件，不會改變資料。" aria-label="查看除錯工作區說明"></button></div></div>
+                <button type="button" class="v02-overview-workspace-action" data-route="surface-debug">開啟除錯</button>
+              </article>
+            </div>
+            <div class="v02-overview-boundary-strip">
+              <div><strong>使用提醒</strong><button type="button" class="v02-overview-hint" data-icon="circle-help" data-hint="這裡的資料用於檢視與規劃，不會直接改變現地安全狀態。" aria-label="查看使用提醒"></button></div>
+              <div class="v02-overview-boundary-tags"><span>唯讀</span><span>可檢視</span></div>
             </div>
           </section>
-          <section class="panel">
-            <div class="panel-header"><h3>資料狀態</h3><span class="chip info">狀態標籤</span></div>
-            <div class="panel-body">
-              <div class="metric-line">
-                <div class="metric-row"><span>產品預覽</span><span>互動概念；不代表執行決策</span></div>
-                <div class="metric-row"><span>技術原型</span><span>已驗證的可執行局部流程</span></div>
-                <div class="metric-row"><span>參考資料</span><span>文件或路線參考</span></div>
-                <div class="metric-row"><span>固定規則</span><span>描述性分類；尚未形成評估政策</span></div>
-              </div>
-            </div>
-          </section>
-        </div>
-        <div style="height:12px"></div>
-        <details class="panel optional-parameters-frame">
-          <summary><span>六軸探索</span><small>深入查看</small></summary>
-          <div class="panel-body">
-            <div class="force-list">
-              ${SIX_FORCES.map((force) => renderForceRow(force)).join("")}
-            </div>
-          </div>
-        </details>
-        <div style="height:12px"></div>
-        <details class="panel optional-parameters-frame">
-          <summary><span>除錯介面</span><small>技術細節</small></summary>
-          <div class="panel-body">
-            <div class="force-list">
-              ${renderSurfaceRow("Debug", surfaceSrc("/admin/debug"), "Runtime/debug timeline, projection messages, observer boundaries and diagnostics.", "surface-debug")}
-            </div>
-          </div>
-        </details>
-        <div style="height:12px"></div>
-        <details class="panel optional-parameters-frame">
-          <summary><span>地圖預覽</span><small>技術細節</small></summary>
-          <div class="panel-body">${renderMapPanel("overview")}</div>
-        </details>
+          ${renderOverviewDetails({weatherStatus, blockingTruth, failedScopes, counts})}
+        </section>
       `;
     }
 
     function renderSurfaceRow(label, path, detail, route) {
       return `
         <div class="force-row">
-          <div class="label-stack"><strong>${escapeHtml(label)}</strong><span class="mono">${escapeHtml(path)}</span></div>
+          <div class="label-stack"><strong>${escapeHtml(label)}</strong>${renderCopyablePath("路徑", path)}</div>
           <div class="label-stack"><strong>${escapeHtml(detail)}</strong></div>
-          <div class="label-stack"><strong>Project</strong><span class="mono">${escapeHtml(projectId())}</span></div>
+          <div class="label-stack project-name-cell"><strong>Project</strong>${renderProjectName(projectId())}</div>
           <button type="button" data-route="${escapeHtml(route)}">Open</button>
         </div>
       `;
@@ -19370,7 +21047,7 @@
           <div class="agent-chat-empty">
             ${escapeHtml(readiness.label)}. Provider configuration, transport connection,
             and repository readiness are reported separately above. Questions remain
-            operator-triggered and read-only for <span class="mono">${escapeHtml(projectId())}</span>.
+            operator-triggered and read-only for ${renderProjectName(projectId())}.
           </div>
         `;
         return;
@@ -19682,9 +21359,9 @@
               </div>
               <div class="panel-body">
                 <div class="drawer-list">
-                  <div class="item"><strong>material_root</strong><span class="mono">${escapeHtml(defaults.materialRoot)}</span></div>
-                  <div class="item"><strong>dtm_dirs</strong><span class="mono">${escapeHtml(defaults.dtmDirs)}</span></div>
-                  <div class="item"><strong>osm_pbf_source_url</strong><span class="mono">${escapeHtml(defaults.osmPbfSourceUrl)}</span></div>
+                  <div class="item"><strong>material_root</strong>${renderPathOrText("material_root", defaults.materialRoot)}</div>
+                  <div class="item"><strong>dtm_dirs</strong>${renderPathOrText("dtm_dirs", defaults.dtmDirs)}</div>
+                  <div class="item"><strong>osm_pbf_source_url</strong>${renderPathOrText("osm_pbf_source_url", defaults.osmPbfSourceUrl)}</div>
                   <div class="item"><strong>weather_provider</strong><span>${escapeHtml(defaults.weatherProvider)}</span></div>
                   <div class="item"><strong>geology_provider</strong><span>${escapeHtml(defaults.geologyProvider)}</span></div>
                   <div class="item"><strong>marine_provider</strong><span>${escapeHtml(defaults.marineProvider)}</span></div>
@@ -21065,7 +22742,7 @@
               <tbody>
                 ${rows.map(([label, path, payload, count]) => `
                   <tr>
-                    <td><strong>${escapeHtml(label)}</strong><br><span class="mono">${escapeHtml(path)}</span></td>
+                    <td><strong>${escapeHtml(label)}</strong><br>${renderCopyablePath("Endpoint", path)}</td>
                     <td><span class="debug-pill ${debugToneClass(debugPayloadStatus(payload))}">${escapeHtml(debugPayloadStatus(payload))}</span></td>
                     <td>${escapeHtml(formatInteger(count || 0))}</td>
                     <td>${escapeHtml(formatInteger(debugPayloadSize(payload)))} bytes</td>
@@ -27616,9 +29293,9 @@
       const golden = subject.sources?.golden_geometry || {};
       const dependencyStatus = architectureStatusLabel(dependency.status || "unknown");
       return `<details class="panel v02-analysis-source-drawer" data-analysis-subject="${escapeHtml(subject.subject_id)}" data-analysis-project="${escapeHtml(subject.project_id)}" data-analysis-revision="${escapeHtml(subject.analysis_revision)}" data-analysis-dependency="${escapeHtml(dependency.status || "unknown")}">
-        <summary><strong>來源與分析狀態</strong><small>${escapeHtml(dependencyStatus)} · ${escapeHtml(subject.project_id)}</small></summary>
+        <summary><strong>來源與分析狀態</strong><small>${escapeHtml(dependencyStatus)} · ${renderProjectName(subject.project_id)}</small></summary>
         <div class="metric-line v02-analysis-source-body">
-          <div class="metric-row"><span>共同分析</span><strong>${escapeHtml(subject.project_id)} · ${escapeHtml(subject.analysis_revision.slice(0, 16))}</strong></div>
+          <div class="metric-row"><span>共同分析</span><strong>${renderProjectName(subject.project_id)} · ${escapeHtml(subject.analysis_revision.slice(0, 16))}</strong></div>
           <div class="metric-row"><span>Golden／CP／區段</span><span>${escapeHtml((golden.sha256 || "尚未確認").slice(0, 16))} · ${escapeHtml(subject.geometry_fingerprint.slice(0, 16))}</span></div>
           <div class="metric-row"><span>採用日程</span><span>${escapeHtml(architectureStatusLabel(subject.schedule_status || "unknown"))} · ${subject.mission_day_estimates?.length || 0} 日 · ${escapeHtml(subject.timezone || "時區未知")}</span></div>
           <div class="metric-row"><span>本頁來源狀態</span><span>${escapeHtml(dependencyStatus)}</span></div>
@@ -36523,7 +38200,7 @@
               <div><small>Reachable</small><strong>${String(Boolean(status.reachable))}</strong></div>
               <div><small>QGIS app</small><strong>${String(Boolean(status.qgis_application_available))}</strong></div>
               <div><small>Bridge</small><strong>${String(Boolean(status.plugin_bridge_available))}</strong></div>
-              <div><small>Project</small><strong>${escapeHtml(projectContext.project_loaded ? (projectContext.project_label || projectId()) : "unavailable")}</strong></div>
+              <div class="project-name-cell"><small>Project</small>${renderProjectName(projectContext.project_loaded ? (projectContext.project_label || projectId()) : "unavailable")}</div>
               <div><small>Capabilities</small><strong>${formatInteger(asArray(capabilities.capabilities).length)}</strong></div>
             </div>
           </details>
@@ -37901,7 +39578,7 @@
           <div class="architecture-map-legend-head"><strong>${escapeHtml(architectureLensLabel())}</strong><span>${escapeHtml(architectureLensLegendSubtitle())}</span></div>
           ${renderArchitectureLensLegend()}
           <div class="architecture-map-legend-symbols"><span class="architecture-map-legend-symbol is-selected">琥珀光 · 目前區段</span><span class="architecture-map-legend-symbol is-cp">琥珀菱形 · 難點 CP</span><span class="architecture-map-legend-symbol is-mcp">青色點 · MCP</span><span class="architecture-map-legend-symbol is-checkpoint">白色點 · 路線錨點</span></div>
-          <div class="architecture-map-legend-meta">Rudy+TW Scout 快取圖磚 · ${formatInteger(mapData.coordinateSegments.length)} 個工作區區段幾何，來源 <span class="mono">${escapeHtml(mapData.sourcePath)}</span> · 保留完整 Golden 路線範圍；歷史樣本缺口顯示為無觀測區段 · 沿用既有 <span class="mono">segments</span> 資料群組。</div>
+          <div class="architecture-map-legend-meta">Rudy+TW Scout 快取圖磚 · ${formatInteger(mapData.coordinateSegments.length)} 個工作區區段幾何，來源 ${renderCopyablePath("地圖來源", mapData.sourcePath)} · 保留完整 Golden 路線範圍；歷史樣本缺口顯示為無觀測區段 · 沿用既有 <span class="mono">segments</span> 資料群組。</div>
         </div>
       ` : `<div class="architecture-empty"><div><strong>路線地圖投影不可用。</strong>${bins.length ? "需求指標已載入，但缺少顯示幾何。" : "缺少路線顯示幾何。"}</div></div>`;
       return `
@@ -41667,18 +43344,17 @@
       const refs = asArray(projection.source_refs);
       return `
         <section class="drawer-section" id="dashboardEvidenceHeader">
-          <h3>Living Evidence</h3>
+          <h3>系統目前狀態</h3>
           <div class="drawer-list">
-            <div class="item"><strong>Endpoint</strong><span class="mono">${DASHBOARD_LIVING_PATH}</span></div>
+            <div class="item"><strong>服務位置</strong>${renderCopyablePath("服務位置", DASHBOARD_LIVING_PATH)}</div>
             <div class="item"><strong>Scenario</strong><span class="mono">${escapeHtml(projection.scenario?.scenario_id || "not loaded")}</span></div>
-            <div class="item"><strong>Boundary</strong><span class="mono">candidate-only / runtime truth=false</span></div>
-            <div class="item"><strong>Delivery</strong><span class="mono">production sent=false</span></div>
+            <div class="item"><strong>傳送狀態</strong><span class="mono">尚未送出</span></div>
           </div>
         </section>
         <section class="drawer-section">
-          <h3>Artifact Refs</h3>
+          <h3>相關連結</h3>
           <div class="drawer-list">
-            ${refs.map(ref => `<div class="item"><strong>ref</strong><span class="mono">${escapeHtml(ref)}</span></div>`).join("") || '<div class="item"><strong>ref</strong><span>Run the sandbox to populate evidence.</span></div>'}
+            ${refs.map(ref => `<div class="item"><strong>來源</strong>${renderPathOrText("來源", ref)}</div>`).join("") || '<div class="item"><strong>來源</strong><span>執行預覽後會顯示來源。</span></div>'}
           </div>
         </section>
       `;
@@ -41687,38 +43363,29 @@
     function renderEvidenceDrawer(route) {
       if (route === "living") return renderLivingEvidenceDrawer();
       const force = SIX_FORCES.find((item) => item.route === route);
-      const title = force ? `${force.label} · 證據` : "證據";
+      const title = force ? `${force.label} · 系統目前狀態` : "系統目前狀態";
       const collapsible = COLLAPSIBLE_EVIDENCE_ROUTES.has(route);
       const collapsed = evidenceDrawerCollapsed(route);
-      const bodyTitle = collapsible ? "內容" : title;
+      const bodyTitle = collapsible ? "系統目前狀態" : title;
       const body = `
         <section class="drawer-section" id="dashboardEvidenceHeader">
           <h3>${escapeHtml(bodyTitle)}</h3>
           <div class="drawer-list">
-            <div class="item"><strong>專案</strong><span class="mono">${escapeHtml(projectId())}</span></div>
-            <div class="item"><strong>工作區根目錄</strong><span class="mono">${escapeHtml(resolvedWorkspaceRoot())}</span></div>
-            <div class="item"><strong>資料邊界</strong><span class="mono">候選資料／不送出</span></div>
+          <div class="item project-name-cell"><strong>專案</strong>${renderProjectName(projectId())}</div>
+            <div class="item"><strong>工作區位置</strong>${renderCopyablePath("工作區位置", resolvedWorkspaceRoot())}</div>
           </div>
         </section>
         <section class="drawer-section">
-          <h3>參考資料</h3>
+          <h3>相關連結</h3>
           <div class="drawer-list">
-            <div class="item"><strong>標準</strong><span>docs/specs/SCOUT_OUTDOOR_AI_AGENT_STANDARD.md</span></div>
-            <div class="item"><strong>行前 API</strong><span>/admin/pretrip/projects/${escapeHtml(resolvedPretripProjectId())}?compact=1</span></div>
-            <div class="item"><strong>投影資料</strong><span>/admin/pretrip/projects/${escapeHtml(resolvedPretripProjectId())}/admin-projection</span></div>
-          </div>
-        </section>
-        <section class="drawer-section">
-          <h3>問題標記</h3>
-          <div class="drawer-list">
-            <div class="item"><strong>阻擋</strong><span>需要使用者處理</span></div>
-            <div class="item"><strong>重大／次要</strong><span>Dashboard 可見</span></div>
-            <div class="item"><strong>GIS 相關</strong><span>僅供重現</span></div>
+            <div class="item"><strong>使用規範</strong>${renderCopyablePath("使用規範", "docs/specs/SCOUT_OUTDOOR_AI_AGENT_STANDARD.md")}</div>
+            <div class="item"><strong>行前資料</strong>${renderCopyablePath("行前資料", `/admin/pretrip/projects/${resolvedPretripProjectId()}?compact=1`)}</div>
+            <div class="item"><strong>整理後資料</strong>${renderCopyablePath("整理後資料", `/admin/pretrip/projects/${resolvedPretripProjectId()}/admin-projection`)}</div>
           </div>
         </section>
       `;
       if (!collapsible) return body;
-      const toggleLabel = collapsed ? `Expand ${title}` : `Collapse ${title}`;
+      const toggleLabel = collapsed ? `展開${title}` : `收合${title}`;
       return `
         <button
           class="contextual-evidence-toggle"
@@ -43801,6 +45468,8 @@
     }
 
     function bindRenderedControls() {
+      bindOverviewVariantControls();
+      bindCopyPathControls();
       bindRuntimeAuditControls();
       bindDiagnosticControls();
       bindLivingControls();
@@ -46494,6 +48163,8 @@
         localizeV02Surface();
         const route = currentRoute();
         const routeTitle = routeLabels[route] || text(document.getElementById("pageTitle")) || "目前工作流程";
+        document.body.dataset.v02Route = route;
+        document.body.classList.toggle("v02-route-home", route === "home");
         const pageTitle = document.getElementById("pageTitle");
         const title = document.getElementById("v02WorkflowTitle");
         const routeLine = document.getElementById("v02WorkflowRoute");
@@ -46509,9 +48180,11 @@
           maturity.textContent = ({live: "可用", partial: "部分可用", preview: "預覽", sandbox: "沙盒"})[maturity.textContent.trim()] || maturity.textContent;
         }
         title.textContent = routeTitle;
-        routeLine.textContent = `${currentProject()} · 選取後同步更新地圖與結果`;
+        routeLine.dataset.hint = route === "home" ? "目前工作區。" : `${currentProject()} · 選取後同步更新地圖與結果。`;
+        routeLine.setAttribute("aria-label", routeLine.dataset.hint);
         result.textContent = currentResult();
-        evidence.textContent = currentEvidence();
+        evidence.dataset.hint = currentEvidence();
+        evidence.setAttribute("aria-label", evidence.dataset.hint);
         const action = primaryAction();
         const profile = routeProfiles[route];
         document.querySelectorAll(".nav-item[data-route]").forEach((item) => {
@@ -46525,9 +48198,10 @@
         next.textContent = action ? (profile?.actionLabel || "聚焦主要操作") : "目前沒有主要工作流程操作";
         next.disabled = !action;
         next.setAttribute("aria-disabled", String(!action));
-        nextHint.textContent = action
-          ? (profile?.actionHint || `操作：${short(text(action), 38)}`)
-          : "等待資料或目前頁面沒有主要操作";
+        nextHint.dataset.hint = action
+          ? (route === "home" ? "先確認路線背景。" : (profile?.actionHint || `操作：${short(text(action), 38)}`))
+          : "等待資料或目前頁面沒有主要操作。";
+        nextHint.setAttribute("aria-label", nextHint.dataset.hint);
         next.dataset.target = action?.id || "";
       };
       const schedule = () => {
@@ -46565,6 +48239,109 @@
         }
         schedule();
       };
+      if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", bind, {once: true});
+      else bind();
+    })();
+  </script>
+  <script>
+    // Render ordinary hover explanations in one fixed document-level portal.
+    // Local pseudo-elements remain useful as a visual fallback in old builds,
+    // but this layer is the authoritative surface and cannot be clipped by a
+    // card, drawer, sticky rail or map stacking context.
+    (() => {
+      "use strict";
+      const selector = "[data-hint], .project-name-inline[data-project-name]";
+      let activeTarget = null;
+
+      function hintNode() {
+        return document.getElementById("dashboardGlobalHint");
+      }
+
+      function hintText(target) {
+        return String(target?.dataset?.hint || target?.dataset?.projectName || "").trim();
+      }
+
+      function targetFromEvent(event) {
+        return event.target instanceof Element ? event.target.closest(selector) : null;
+      }
+
+      function positionHint(target) {
+        const hint = hintNode();
+        if (!hint || hint.hidden || !target?.isConnected) return;
+        const rect = target.getBoundingClientRect();
+        const margin = 12;
+        const gap = 10;
+        const left = Math.max(
+          margin,
+          Math.min(window.innerWidth - hint.offsetWidth - margin, rect.left + (rect.width - hint.offsetWidth) / 2),
+        );
+        const below = rect.bottom + gap;
+        const above = rect.top - hint.offsetHeight - gap;
+        const top = below + hint.offsetHeight <= window.innerHeight - margin
+          ? below
+          : Math.max(margin, above);
+        hint.style.left = `${Math.round(left)}px`;
+        hint.style.top = `${Math.round(top)}px`;
+      }
+
+      function hideHint(target = activeTarget) {
+        const hint = hintNode();
+        if (!hint) return;
+        if (target?.getAttribute?.("aria-describedby") === hint.id) {
+          target.removeAttribute("aria-describedby");
+        }
+        hint.hidden = true;
+        activeTarget = null;
+      }
+
+      function showHint(target) {
+        const hint = hintNode();
+        const text = hintText(target);
+        if (!hint || !text || !target?.isConnected || !target.getClientRects().length) return;
+        if (activeTarget && activeTarget !== target) hideHint(activeTarget);
+        activeTarget = target;
+        hint.textContent = text;
+        hint.hidden = false;
+        target.setAttribute("aria-describedby", hint.id);
+        positionHint(target);
+      }
+
+      function bind() {
+        if (document.documentElement.dataset.globalHintBound === "true") return;
+        document.documentElement.dataset.globalHintBound = "true";
+        document.querySelectorAll(".v02-info-hint summary").forEach(summary => {
+          const detail = summary.nextElementSibling;
+          const text = String(detail?.textContent || "").replace(/\s+/g, " ").trim();
+          if (text && !summary.dataset.hint) summary.dataset.hint = text;
+        });
+        document.addEventListener("pointerover", event => {
+          const target = targetFromEvent(event);
+          if (!target || target.contains(event.relatedTarget)) return;
+          showHint(target);
+        }, {passive: true});
+        document.addEventListener("pointermove", event => {
+          if (activeTarget) positionHint(activeTarget);
+        }, {passive: true});
+        document.addEventListener("pointerout", event => {
+          const target = targetFromEvent(event);
+          if (!target || target.contains(event.relatedTarget)) return;
+          if (target === activeTarget) hideHint(target);
+        }, {passive: true});
+        document.addEventListener("focusin", event => {
+          const target = targetFromEvent(event);
+          if (target) showHint(target);
+        });
+        document.addEventListener("focusout", event => {
+          const target = targetFromEvent(event);
+          if (target && target === activeTarget && !target.contains(event.relatedTarget)) hideHint(target);
+        });
+        window.addEventListener("resize", () => positionHint(activeTarget), {passive: true});
+        window.addEventListener("scroll", () => positionHint(activeTarget), {passive: true, capture: true});
+        new MutationObserver(() => {
+          if (activeTarget && !activeTarget.isConnected) hideHint();
+        }).observe(document.body, {childList: true, subtree: true});
+      }
+
       if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", bind, {once: true});
       else bind();
     })();
