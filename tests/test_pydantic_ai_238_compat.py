@@ -24,11 +24,18 @@ from pydantic_ai.providers.openai import OpenAIProvider
 
 from scout.agents.model_policy import resolve_model_policy
 from scout.agents.pydantic_ai_compat import pydantic_native_research_capabilities
+from scout.agents.pydantic_model_lifecycle import pydantic_model_session
 
 pytestmark = pytest.mark.skipif(
     Version(version("pydantic-ai-slim")) < Version("2.38.0"),
     reason="Upgrade-candidate contracts require Pydantic AI 2.38 or newer",
 )
+
+
+@pytest.fixture(autouse=True)
+def own_sync_agent_session():
+    with pydantic_model_session():
+        yield
 
 
 def test_one_off_merge_preserves_collections_and_later_scalar() -> None:
@@ -165,36 +172,38 @@ def test_missing_stream_finish_reason_is_opt_in_and_preserves_partial(
                 content=f"data: {json.dumps(chunk)}\n\ndata: [DONE]\n\n",
             )
 
-        async with httpx2.AsyncClient(transport=httpx2.MockTransport(respond)) as http:
-            async with AsyncOpenAI(
+        async with (
+            httpx2.AsyncClient(transport=httpx2.MockTransport(respond)) as http,
+            AsyncOpenAI(
                 base_url="https://fixture.invalid/v1",
                 api_key=uuid4().hex,
                 http_client=http,
-            ) as client:
-                model = OpenAIChatModel(
-                    "fixture-model",
-                    provider=OpenAIProvider(openai_client=client),
-                    profile=OpenAIModelProfile(
-                        openai_chat_streaming_requires_finish_reason=strict
-                    ),
-                )
-                with capture_run_messages() as messages:
-                    try:
-                        async with Agent(model).run_stream("Read evidence") as run:
-                            await run.get_output()
-                    except ModelAPIError as exc:
-                        assert strict and finish_reason is None
-                        assert "finish_reason" in str(exc)
-                    else:
-                        assert not strict or finish_reason == "stop"
-                responses = [m for m in messages if isinstance(m, ModelResponse)]
-                assert responses
-                assert "partial Scout evidence" in "".join(
-                    p.content for p in responses[-1].parts if isinstance(p, TextPart)
-                )
-                if strict and finish_reason is None:
-                    # Agent history records a provider stream failure as interrupted.
-                    assert responses[-1].state == "interrupted"
+            ) as client,
+        ):
+            model = OpenAIChatModel(
+                "fixture-model",
+                provider=OpenAIProvider(openai_client=client),
+                profile=OpenAIModelProfile(
+                    openai_chat_streaming_requires_finish_reason=strict
+                ),
+            )
+            with capture_run_messages() as messages:
+                try:
+                    async with Agent(model).run_stream("Read evidence") as run:
+                        await run.get_output()
+                except ModelAPIError as exc:
+                    assert strict and finish_reason is None
+                    assert "finish_reason" in str(exc)
+                else:
+                    assert not strict or finish_reason == "stop"
+            responses = [m for m in messages if isinstance(m, ModelResponse)]
+            assert responses
+            assert "partial Scout evidence" in "".join(
+                p.content for p in responses[-1].parts if isinstance(p, TextPart)
+            )
+            if strict and finish_reason is None:
+                # Agent history records a provider stream failure as interrupted.
+                assert responses[-1].state == "interrupted"
 
     asyncio.run(run_case())
 
@@ -249,6 +258,10 @@ def test_cancel_during_first_tool_call_keeps_resumable_history() -> None:
 def test_deepseek_direct_profile_scopes_forced_tools_to_non_thinking() -> None:
     profile = DeepSeekProvider.model_profile("deepseek-v4-flash")
 
-    assert profile["openai_supports_tool_choice_required"] is True
-    assert profile["openai_supports_forced_tool_choice_with_thinking"] is False
+    if Version(version("pydantic-ai-slim")) >= Version("2.52.0"):
+        assert profile["supports_forced_tool_choice"] is True
+        assert profile["supports_forced_tool_choice_with_thinking"] is False
+    else:
+        assert profile["openai_supports_tool_choice_required"] is True
+        assert profile["openai_supports_forced_tool_choice_with_thinking"] is False
     assert profile["openai_responses_supports_json_schema_output"] is True

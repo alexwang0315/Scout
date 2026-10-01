@@ -47,7 +47,7 @@ from scout.agents.pydantic_ai_compat import (
 )
 from scout.cli.pydantic_243_checks import check_banner_output, check_stream_boundaries
 
-REQUIRED_VERSION = "2.45.0"
+REQUIRED_VERSION = "2.52.0"
 DEFAULT_OPENROUTER_MODEL = "deepseek/deepseek-v4-flash-0731"
 DEFAULT_TIMEOUT_SECONDS = 120.0
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -393,26 +393,26 @@ async def _zai_finish_reason_case(
             )
         return httpx2.Response(200, json=completion)
 
-    async with httpx2.AsyncClient(transport=httpx2.MockTransport(respond)) as http:
-        async with AsyncOpenAI(
+    async with (
+        httpx2.AsyncClient(transport=httpx2.MockTransport(respond)) as http,
+        AsyncOpenAI(
             base_url="https://fixture.invalid/v1",
             api_key=uuid4().hex,
             http_client=http,
-        ) as client:
-            model = ZaiModel("glm-5.2", provider=ZaiProvider(openai_client=client))
-            agent = Agent(model, **pydantic_agent_runtime_kwargs())
-            limits = UsageLimits(request_limit=10, tool_calls_limit=10)
-            if streaming:
-                async with agent.run_stream(
-                    "Read Scout evidence.", usage_limits=limits
-                ) as run:
-                    chunks = [
-                        chunk async for chunk in run.stream_text(debounce_by=None)
-                    ]
-                    output, response = chunks[-1], run.response
-            else:
-                run = await agent.run("Read Scout evidence.", usage_limits=limits)
-                output, response = run.output, run.response
+        ) as client,
+    ):
+        model = ZaiModel("glm-5.2", provider=ZaiProvider(openai_client=client))
+        agent = Agent(model, **pydantic_agent_runtime_kwargs())
+        limits = UsageLimits(request_limit=10, tool_calls_limit=10)
+        if streaming:
+            async with agent.run_stream(
+                "Read Scout evidence.", usage_limits=limits
+            ) as run:
+                chunks = [chunk async for chunk in run.stream_text(debounce_by=None)]
+                output, response = chunks[-1], run.response
+        else:
+            run = await agent.run("Read Scout evidence.", usage_limits=limits)
+            output, response = run.output, run.response
     provider_reason = (response.provider_details or {}).get("finish_reason")
     _require(provider_reason == raw_reason, "raw provider finish reason was lost")
     return {

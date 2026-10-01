@@ -110,8 +110,8 @@ def test_runtime_and_deployment_dependency_pins_stay_aligned() -> None:
         "requirements.pi.live.txt",
     } <= dependency_sets.keys()
     expected_versions = {
-        "pydantic-ai-slim": "2.45.0",
-        "pydantic-evals": "2.45.0",
+        "pydantic-ai-slim": "2.52.0",
+        "pydantic-evals": "2.52.0",
         "praisonaiagents": "1.7.6",
     }
     seen = set()
@@ -224,7 +224,7 @@ def test_native_web_smoke_keeps_ten_use_capacity_and_transport_scope(
     async def run_fixture(agent, prompt):
         return SimpleNamespace(
             output="Pydantic AI: https://pydantic.dev/docs/ai/project/changelog/",
-            all_messages=lambda: [],
+            all_messages=list,
         )
 
     monkeypatch.setattr(smoke, "NativeTool", record_tool)

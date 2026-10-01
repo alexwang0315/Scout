@@ -1,5 +1,5 @@
 pydantic==2.13.3
-pydantic-ai-slim[mcp,openai]==2.45.0
+pydantic-ai-slim[mcp,openai]==2.52.0
 mcp<2
 fastmcp-slim<4
 httpx>=0.28,<1
