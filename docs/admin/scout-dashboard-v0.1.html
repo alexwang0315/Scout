@@ -104,7 +104,120 @@
       color: var(--muted);
       font-family: var(--mono);
       font-size: 12px;
+      min-width: 0;
+      max-width: 100%;
+      overflow: hidden;
       overflow-wrap: anywhere;
+    }
+
+    .dashboard-sidebar > .brand {
+      min-width: 0;
+    }
+
+    /* Long project identifiers stay one line without shrinking the label.
+       Hover and keyboard focus expose the complete name. */
+    .project-name-inline {
+      position: relative;
+      display: inline-flex;
+      min-width: 0;
+      max-width: 100%;
+      vertical-align: middle;
+      outline: none;
+    }
+
+    .project-name-text {
+      display: block;
+      min-width: 0;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .project-name-inline::after {
+      position: absolute;
+      z-index: 80;
+      top: calc(100% + 8px);
+      left: 0;
+      width: max-content;
+      max-width: min(420px, 78vw);
+      padding: 8px 10px;
+      border: 1px solid #d7b896;
+      border-radius: 9px;
+      color: #2f3d42;
+      background: #fffaf5;
+      box-shadow: 0 10px 22px rgba(30, 63, 68, .16);
+      content: attr(data-project-name);
+      font-family: var(--sans);
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1.35;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-3px);
+      transition: opacity .16s ease, transform .16s ease;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+
+    .project-name-inline:hover::after,
+    .project-name-inline:focus::after,
+    .project-name-inline:focus-visible::after {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .brand .project-name-inline,
+    .project-name-cell .project-name-inline {
+      display: flex;
+      width: 100%;
+    }
+
+    .brand .project-name-text,
+    .project-name-cell .project-name-text {
+      width: 100%;
+    }
+
+    .project-name-pair {
+      display: grid;
+      min-width: 0;
+      gap: 2px;
+    }
+
+    .project-name-pair .project-name-inline {
+      width: 100%;
+    }
+
+    .project-name-separator {
+      color: var(--muted);
+    }
+
+    /* Ordinary hover hints use one document-level layer so cards, drawers and
+       sticky surfaces cannot clip or cover the explanation. */
+    .dashboard-global-hint {
+      position: fixed;
+      z-index: 2147483647;
+      display: block;
+      width: max-content;
+      max-width: min(360px, calc(100vw - 24px));
+      padding: 9px 11px;
+      border: 1px solid rgba(98, 184, 198, .62);
+      border-radius: 10px;
+      color: var(--text);
+      background: rgba(7, 16, 18, .97);
+      box-shadow: 0 14px 32px rgba(0, 0, 0, .42);
+      font: 700 11px/1.4 var(--sans);
+      pointer-events: none;
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+
+    .dashboard-global-hint[hidden] {
+      display: none;
+    }
+
+    .project-name-inline::after {
+      display: none !important;
     }
 
     .nav {
@@ -12278,7 +12391,7 @@
     <aside class="dashboard-sidebar" id="dashboardSidebar" aria-label="Scout dashboard sections">
       <header class="brand">
         <h1>Scout Dashboard v0.1</h1>
-        <div class="route" id="dashboardRouteStatus">Loading workspace…</div>
+        <div class="route" id="dashboardRouteStatus"><span class="project-name-inline" data-project-name="Loading workspace…" tabindex="0" title="Loading workspace…" aria-label="專案名稱：Loading workspace…"><span class="project-name-text">Loading workspace…</span></span></div>
       </header>
       <nav class="nav" aria-label="Scout dashboard navigation">
         <button class="nav-item" type="button" data-nav-primary data-route="home" data-route-truth="live"><span class="mark"></span><span>Overview</span></button>
@@ -12424,6 +12537,7 @@
     <strong></strong>
     <span></span>
   </div>
+  <div class="dashboard-global-hint" id="dashboardGlobalHint" role="tooltip" hidden></div>
 
   <script src="/admin/scout-maplibre-evidence.js"></script>
   <script src="/admin/scout-planned-map-review.js"></script>
@@ -14179,7 +14293,7 @@
         } else {
           state.route = requestedRoute;
           const status = document.getElementById("dashboardRouteStatus");
-          if (status) status.textContent = `${projectId() || "workspace"} · loading workspace`;
+          if (status) setProjectNameDisplay(status, `${projectId() || "workspace"} · loading workspace`);
         }
       });
       window.addEventListener("online", () => {
@@ -15075,7 +15189,7 @@
 
     async function loadDataForRoute(route, {force = false} = {}) {
       requireLoadedWorkspaceProjectId();
-      document.getElementById("dashboardRouteStatus").textContent = projectId();
+      setProjectNameDisplay(document.getElementById("dashboardRouteStatus"), projectId());
       const scopes = dataScopesForRoute(route);
       if (scopes.includes("analysis_subject")) {
         // Re-check the shared identity on every six-axis transition. An accepted
@@ -15089,9 +15203,9 @@
         .map((result, index) => ({result, scope: scopes[index]}))
         .filter(item => item.result.status === "rejected")
         .map(item => item.scope);
-      document.getElementById("dashboardRouteStatus").textContent = failedScopes.length
+      setProjectNameDisplay(document.getElementById("dashboardRouteStatus"), failedScopes.length
         ? `${projectId()} · retrying ${failedScopes.join(", ")}`
-        : projectId();
+        : projectId());
       refreshCurrentDataView();
     }
 
@@ -17971,7 +18085,7 @@
     function setRoute(route, {loadRouteData = false} = {}) {
       state.route = route;
       if (route === "trip-notebook" || route === "outdoor-permission") {
-        document.getElementById("dashboardRouteStatus").textContent = projectId();
+        setProjectNameDisplay(document.getElementById("dashboardRouteStatus"), projectId());
         document.querySelector(".sidebar-footer strong").textContent = window.location.origin;
       }
       document.querySelectorAll("[data-route]").forEach((button) => {
@@ -18000,7 +18114,7 @@
       document.title = `Scout Dashboard · ${selectedProjectId}`;
       const projectLabel = document.getElementById("dashboardRouteStatus");
       if (projectLabel && !projectLabel.textContent.startsWith(`${selectedProjectId} · retrying `)) {
-        projectLabel.textContent = selectedProjectId;
+        setProjectNameDisplay(projectLabel, selectedProjectId);
       }
       destroyNavigationTerrainMapLibre();
       hideDashboardMapHint();
@@ -18156,7 +18270,7 @@
           <div class="panel-body">
             <div class="force-list" data-overview-task-order="workspace-decision-blocker-action">
               <div class="force-row overview-primary-row">
-                <div class="label-stack" data-overview-step="workspace-identity"><strong>Workspace / trip</strong><span class="mono">${escapeHtml(projectId())} / ${escapeHtml(tripIdentity)}</span></div>
+                <div class="label-stack project-name-cell" data-overview-step="workspace-identity"><strong>Workspace / trip</strong>${renderWorkspaceTripIdentity(projectId(), tripIdentity)}</div>
                 <div class="label-stack" data-overview-step="current-decision"><strong>Current decision</strong><span>${escapeHtml(currentDecision)}</span></div>
                 <div class="label-stack" data-overview-step="blocking-truth"><strong>Blocking truth</strong><span>${escapeHtml(blockingTruth)}</span></div>
                 <div class="label-stack" data-overview-step="next-action"><strong>Next action</strong><button type="button" data-route="outdoor-route-context">Review route context</button></div>
@@ -18184,7 +18298,7 @@
             <div class="panel-header"><h3>Alpha Workspace</h3><span class="chip info">context</span></div>
             <div class="panel-body">
               <div class="metric-line">
-                <div class="metric-row"><span>Project</span><span class="mono">${escapeHtml(projectId())}</span></div>
+                <div class="metric-row project-name-cell"><span>Project</span>${renderProjectName(projectId())}</div>
                 <div class="metric-row"><span>Workspace root</span><span class="mono">${escapeHtml(resolvedWorkspaceRoot())}</span></div>
                 <div class="metric-row"><span>Runtime</span><span>handoff/export/load is operator-triggered only</span></div>
               </div>
@@ -18233,7 +18347,7 @@
         <div class="force-row">
           <div class="label-stack"><strong>${escapeHtml(label)}</strong><span class="mono">${escapeHtml(path)}</span></div>
           <div class="label-stack"><strong>${escapeHtml(detail)}</strong></div>
-          <div class="label-stack"><strong>Project</strong><span class="mono">${escapeHtml(projectId())}</span></div>
+          <div class="label-stack project-name-cell"><strong>Project</strong>${renderProjectName(projectId())}</div>
           <button type="button" data-route="${escapeHtml(route)}">Open</button>
         </div>
       `;
@@ -18811,7 +18925,7 @@
           <div class="agent-chat-empty">
             ${escapeHtml(readiness.label)}. Provider configuration, transport connection,
             and repository readiness are reported separately above. Questions remain
-            operator-triggered and read-only for <span class="mono">${escapeHtml(projectId())}</span>.
+            operator-triggered and read-only for ${renderProjectName(projectId())}.
           </div>
         `;
         return;
@@ -27130,7 +27244,7 @@
       const golden = subject.sources?.golden_geometry || {};
       return `<section class="panel" data-analysis-subject="${escapeHtml(subject.subject_id)}" data-analysis-project="${escapeHtml(subject.project_id)}" data-analysis-revision="${escapeHtml(subject.analysis_revision)}" data-analysis-dependency="${escapeHtml(dependency.status || "unknown")}">
         <div class="metric-line">
-          <div class="metric-row"><span>共同分析</span><strong>${escapeHtml(subject.project_id)} · ${escapeHtml(subject.analysis_revision.slice(0, 16))}</strong></div>
+          <div class="metric-row"><span>共同分析</span><strong>${renderProjectName(subject.project_id)} · ${escapeHtml(subject.analysis_revision.slice(0, 16))}</strong></div>
           <div class="metric-row"><span>Golden / CP / Segment</span><span>${escapeHtml((golden.sha256 || "missing").slice(0, 16))} · ${escapeHtml(subject.geometry_fingerprint.slice(0, 16))}</span></div>
           <div class="metric-row"><span>採用日程</span><span>${escapeHtml(subject.schedule_status)} · ${subject.mission_day_estimates?.length || 0} 日 · ${escapeHtml(subject.timezone || "時區未知")}</span></div>
           <div class="metric-row"><span>本頁來源狀態</span><span>${escapeHtml(dependency.status || "unknown")}</span></div>
@@ -36059,7 +36173,7 @@
               <div><small>Reachable</small><strong>${String(Boolean(status.reachable))}</strong></div>
               <div><small>QGIS app</small><strong>${String(Boolean(status.qgis_application_available))}</strong></div>
               <div><small>Bridge</small><strong>${String(Boolean(status.plugin_bridge_available))}</strong></div>
-              <div><small>Project</small><strong>${escapeHtml(projectContext.project_loaded ? (projectContext.project_label || projectId()) : "unavailable")}</strong></div>
+              <div class="project-name-cell"><small>Project</small>${renderProjectName(projectContext.project_loaded ? (projectContext.project_label || projectId()) : "unavailable")}</div>
               <div><small>Capabilities</small><strong>${formatInteger(asArray(capabilities.capabilities).length)}</strong></div>
             </div>
           </details>
@@ -41516,7 +41630,7 @@
         <section class="drawer-section" id="dashboardEvidenceHeader">
           <h3>${escapeHtml(bodyTitle)}</h3>
           <div class="drawer-list">
-            <div class="item"><strong>Project</strong><span class="mono">${escapeHtml(projectId())}</span></div>
+            <div class="item project-name-cell"><strong>Project</strong>${renderProjectName(projectId())}</div>
             <div class="item"><strong>Workspace root</strong><span class="mono">${escapeHtml(resolvedWorkspaceRoot())}</span></div>
             <div class="item"><strong>Boundary</strong><span class="mono">candidate-only / no outbound</span></div>
           </div>
@@ -45695,12 +45809,125 @@
         .replace(/'/g, "&#39;");
     }
 
+    function renderProjectName(value) {
+      const raw = String(value || "").trim() || "未指定專案";
+      return `<span class="project-name-inline" data-project-name="${escapeHtml(raw)}" tabindex="0" title="${escapeHtml(raw)}" aria-label="專案名稱：${escapeHtml(raw)}"><span class="project-name-text">${escapeHtml(raw)}</span></span>`;
+    }
+
+    function renderWorkspaceTripIdentity(projectValue, tripValue) {
+      const project = String(projectValue || "").trim();
+      const trip = String(tripValue || "").trim();
+      const values = project && trip && project !== trip ? [project, trip] : [project || trip];
+      return `<span class="mono project-name-pair">${values.map((value, index) => `${index ? '<span class="project-name-separator" aria-hidden="true">/</span>' : ""}${renderProjectName(value)}`).join("")}</span>`;
+    }
+
+    function setProjectNameDisplay(element, value) {
+      if (!element) return;
+      element.innerHTML = renderProjectName(value);
+    }
+
     window.scoutDashboardTruthContracts = Object.freeze({
       assistantReadiness: (status) => deriveAssistantReadiness(status),
       cwaStatus: (snapshot) => dashboardCwaDerivedStatus(snapshot),
       weatherStatus: (weather, project) => dashboardWeatherDerivedStatus(weather, project),
       evidenceGroupPage: (group, requestedPage, pageSize) => paginateEvidenceGroup(group, requestedPage, pageSize),
     });
+  </script>
+  <script>
+    // Keep ordinary hover explanations in one fixed document-level portal so
+    // cards, drawers and sticky surfaces cannot clip or cover them.
+    (() => {
+      "use strict";
+      const selector = "[data-hint], .project-name-inline[data-project-name]";
+      let activeTarget = null;
+
+      function hintNode() {
+        return document.getElementById("dashboardGlobalHint");
+      }
+
+      function hintText(target) {
+        return String(target?.dataset?.hint || target?.dataset?.projectName || "").trim();
+      }
+
+      function targetFromEvent(event) {
+        return event.target instanceof Element ? event.target.closest(selector) : null;
+      }
+
+      function positionHint(target) {
+        const hint = hintNode();
+        if (!hint || hint.hidden || !target?.isConnected) return;
+        const rect = target.getBoundingClientRect();
+        const margin = 12;
+        const gap = 10;
+        const left = Math.max(
+          margin,
+          Math.min(window.innerWidth - hint.offsetWidth - margin, rect.left + (rect.width - hint.offsetWidth) / 2),
+        );
+        const below = rect.bottom + gap;
+        const above = rect.top - hint.offsetHeight - gap;
+        const top = below + hint.offsetHeight <= window.innerHeight - margin
+          ? below
+          : Math.max(margin, above);
+        hint.style.left = `${Math.round(left)}px`;
+        hint.style.top = `${Math.round(top)}px`;
+      }
+
+      function hideHint(target = activeTarget) {
+        const hint = hintNode();
+        if (!hint) return;
+        if (target?.getAttribute?.("aria-describedby") === hint.id) {
+          target.removeAttribute("aria-describedby");
+        }
+        hint.hidden = true;
+        activeTarget = null;
+      }
+
+      function showHint(target) {
+        const hint = hintNode();
+        const text = hintText(target);
+        if (!hint || !text || !target?.isConnected || !target.getClientRects().length) return;
+        if (activeTarget && activeTarget !== target) hideHint(activeTarget);
+        activeTarget = target;
+        hint.textContent = text;
+        hint.hidden = false;
+        target.setAttribute("aria-describedby", hint.id);
+        positionHint(target);
+      }
+
+      function bind() {
+        if (document.documentElement.dataset.globalHintBound === "true") return;
+        document.documentElement.dataset.globalHintBound = "true";
+        document.addEventListener("pointerover", event => {
+          const target = targetFromEvent(event);
+          if (!target || target.contains(event.relatedTarget)) return;
+          showHint(target);
+        }, {passive: true});
+        document.addEventListener("pointermove", () => {
+          if (activeTarget) positionHint(activeTarget);
+        }, {passive: true});
+        document.addEventListener("pointerout", event => {
+          const target = targetFromEvent(event);
+          if (!target || target.contains(event.relatedTarget)) return;
+          if (target === activeTarget) hideHint(target);
+        }, {passive: true});
+        document.addEventListener("focusin", event => {
+          const target = targetFromEvent(event);
+          if (target) showHint(target);
+        });
+        document.addEventListener("focusout", event => {
+          const target = targetFromEvent(event);
+          if (target && target === activeTarget && !target.contains(event.relatedTarget)) hideHint(target);
+        });
+        window.addEventListener("resize", () => positionHint(activeTarget), {passive: true});
+        window.addEventListener("scroll", () => positionHint(activeTarget), {passive: true, capture: true});
+        new MutationObserver(() => {
+          if (activeTarget && !activeTarget.isConnected) hideHint();
+        }).observe(document.body, {childList: true, subtree: true});
+      }
+
+      if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", bind, {once: true});
+      else bind();
+    })();
   </script>
 </body>
 </html>

@@ -28,6 +28,63 @@ that would otherwise require all of the following on every change:
 
 The hard safety boundaries in this file never relax.
 
+## Frontend Data Truth And Workspace Identity — Zero Tolerance
+
+**前端絕對不得用自行寫入的固定詞句、舊 fixture、預載資料、fallback 或
+route metadata 冒充目前 workspace、project、trip、資料狀態、結果、載入成功或
+切換成功。** 這是針對已發生數百起事件的硬性回歸規則，不是視覺偏好。
+
+1. **Workspace 名稱必須來自真實載入結果。** Workspace/project/trip 名稱、路徑、
+   `project_id`、`workspace_id` 與目前資料狀態，不得硬編碼在 HTML、JavaScript、
+   CSS、route truth、demo default、label mapping、mock fallback 或任何前端固定
+   文案中。畫面只能渲染成功 API／workspace payload 中與目前選取 ID 相符的值。
+2. **不得用固定詞句宣稱狀態。** `可用`、`已載入`、`已切換`、`已驗證`、`目前資料`、
+   `混合專案證據`、`工作區與執行投影`、`唯讀導覽` 或同類詞句，若不是由真實
+   runtime/data response 推導，就不得顯示為目前狀態或結果。固定 UI label 只能
+   描述確實存在的控制，不得描述動態事實。
+3. **切換成功必須有可核對證據。** 只有在請求成功、回應中的 workspace/project ID
+   與目標相符、workspace context 與頁面資料實際載入，且畫面從該回應重新渲染後，
+   才能宣稱 workspace 已切換。HTTP 200、路由變更、舊畫面仍存在或截圖本身都
+   不能單獨算成功。
+4. **載入中與失敗不可冒充成功。** 未載入、timeout、404、資料不完整、ID 不符或
+   route 尚未同步時，只能顯示中性狀態，例如「正在載入」、「尚未確認」或「無法
+   載入」及可恢復操作；不得顯示舊 workspace 名稱或新的成功標語。最後一次快取
+   值若要保留，必須明確標示為 stale/cache，且不得被當成目前 workspace。
+5. **真實名稱與顯示名稱必須可追溯。** 可以使用 ellipsis、短顯示名稱或翻譯 label，
+   但必須保留真實值、copy path／hover hint 與 source reference；不得用另一個
+   專案名稱、CP 流水號或抽象詞句代替尚未載入的真實資料。
+6. **驗證必須覆蓋所有共用消費者。** Workspace 切換後要逐一檢查 sidebar、header、
+   route、map、結果、來源、匯入、空狀態、錯誤狀態、返回與重新載入；任何一處仍
+   顯示舊名稱或固定成功詞句都算 FAIL。既有頁面若仍引用舊 `chilai_nanhua_day1`
+   等名稱，不能以「只是 label mapping」視為無害。
+7. **Diagnostic 必須檢查來源，不只檢查文字存在。** 回歸檢查要證明畫面文字來自
+   當次真實 payload，並攔截 hardcoded workspace names、route truth 假資料、跨
+   workspace stale state 與切換後未同步的結果；不得用新增 fallback 或改期待值
+   讓檢查通過。
+
+違反本節時，結果只能報告為「未完成／未驗證／workspace 尚未確認」，不得使用
+「已修復」「可用」「已換好 workspace」或等價宣稱。任何新增或修改 Dashboard UI
+前，先檢查 [scout-dashboard-ux-issue-ledger.md](docs/admin/scout-dashboard-ux-issue-ledger.md)
+與 [scout-dashboard-v0.2-copy-source-audit.md](docs/admin/scout-dashboard-v0.2-copy-source-audit.md)。
+
+## Issue Logged Means Fix Now — Mandatory
+
+**問題一旦被確認並登錄，就必須立即進入修正，不得只建立 issue、audit 或來源
+文件後停下來等使用者再次要求修改。** 禁止以「目前尚未修改程式，只完成來源
+追查」作為正常交付結果。Issue 登錄是執行修正的起點，不是工作的終點。
+
+- 在同一輪依 issue 的影響範圍追查根因、修改所有適用的共用程式與頁面、執行
+  focused check，並依 [UI Iteration Handoff](#ui-iteration-handoff--mandatory)
+  自行開啟本輪成果。
+- 只有以下情況可以暫停修改：需要使用者對規格／Diagnostic 衝突作裁決、缺少
+  明確的外部權限／服務／真實資料，或修改會跨越明確的安全／外部副作用邊界。
+  暫停時必須把 blocker、已完成的候選修正、需要的裁決與未驗證範圍寫清楚；不能
+  把文件建立誤報成問題已處理。
+- 若問題可在目前授權、目前 workspace 與本地程式範圍內修正，Codex 必須自行
+  做出合理的可回溯修改，不得把「等使用者說修改」當成下一步。
+- 修正後必須更新 issue 狀態與 evidence；若仍有 FAIL、WARN、SKIP 或未驗證，
+  明確標示未完成，但仍要交付已完成的修正與可檢視成果。
+
 ## 全面回歸與完成宣告門檻（使用者要求，2026-09-12）
 
 **不要頭痛醫頭、腳痛醫腳。修正必須處理根因與完整影響範圍；所有適用檢查
@@ -618,6 +675,26 @@ must never be printed, copied into prompts, or committed. The verified Mac host
 key fingerprint is `SHA256:cFmaGA0olTmjLeQ1laeURtl0oBscHsfA4H0l/s+9i8g`, and
 the Scout-to-Mac public key fingerprint is
 `SHA256:pLCijCRBUa1mpJOtvVTiaqgJE9ZedaO4I+MJuUJN/vM`.
+
+## UI Iteration Handoff — Mandatory
+
+**每完成一輪 Dashboard／網站 UI 修改，就必須自行開啟該輪實際成果給使用者
+檢視，不得等使用者再次要求，也不得只回報「已修改」。** 這是每輪迭代的交付
+步驟，不是最後一次驗收的選項。
+
+- 開啟的版本必須是本輪修改後、實際通過 focused check 的同一份 source／runtime；
+  不得開舊 server、舊 tab、舊 fixture 或未載入本輪修改的頁面。
+- URL 必須明確帶上目前指定 workspace；目前 Dashboard 預設使用
+  `dongqing_batongguan_historic_trail_newImport`，不得用舊的
+  `chilai_nanhua_day1` 冒充成果。
+- 開啟前至少確認 GET／頁面載入、workspace ID 與畫面實際顯示值一致；UI 若有
+  動態資料，必須確認資料完成載入後再交付畫面。
+- 在 Mac Browser Handoff 可用時，必須主動透過既有 SSH／temporary tunnel 開啟
+  Google Chrome，並在回覆中提供同一個可複製 URL。不得只說「應該已開啟」。
+- 若 Chrome、tunnel、服務或真實 workspace 無法載入，必須回報精確 blocker，
+  並將成果標記為「未展示／未驗證」；不得宣稱已完成或已可用。
+- 若本輪修改跨多個 route 或 state，開啟成果至少要停在本輪主要修改頁，並附上
+  受影響路由／狀態的驗證範圍；不能用單一成功頁面代表全站成功。
 
 ## Mac Browser Handoff — User Preference
 

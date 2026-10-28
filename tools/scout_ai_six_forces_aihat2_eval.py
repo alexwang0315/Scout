@@ -4,16 +4,20 @@ import argparse
 import hashlib
 import json
 import math
+import os
 import re
 import subprocess
 import sys
 import threading
 import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from collections import Counter
 from datetime import datetime, timezone
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, Callable, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -43,6 +47,16 @@ from scout.services.mser_pipeline import (  # noqa: E402
 from scout.services.mser_response_composer import (  # noqa: E402
     compose_conservative_gap_response,
 )
+from scout.nextgen.jev_decision_service import parse_jev_signals  # noqa: E402
+from scout.nextgen.jev_decisions import (  # noqa: E402
+    JEvEndpoint,
+    JevDecisionError,
+    OpenRouterJevClient,
+    build_anonymized_workspace_projection,
+)
+from scout.nextgen.jev_six_forces import (  # noqa: E402
+    build_six_forces_jev_request,
+)
 from tools.scout_ai_aihat2_fallback_eval import (  # noqa: E402
     _compact_aihat_context,
     assess_aihat_answer_quality,
@@ -52,6 +66,12 @@ from tools.scout_ai_aihat2_fallback_eval import (  # noqa: E402
     require_ai_hat_runtime,
     run_tools,
     utc_iso,
+)
+from scout.hardware.power_safety_supervisor import (  # noqa: E402
+    PowerSafetySupervisor,
+    SafetyTransition,
+    append_transition,
+    classify_power_mode,
 )
 
 ARTIFACT_KIND = "scout_ai_six_forces_600_total_info_aihat2_eval"
@@ -92,6 +112,7 @@ EXP_PRAISON_TOOL_ID = "scout.intelligence.exp_research_candidate.v0"
 CURRENT_LOCATION_TERRAIN_SCOPE_M = 250.0
 TERRAIN_SCORE_TOOL_ID = "pydantic_ai.tool.search_scout_terrain_scores.v0"
 CONTEXTUAL_PERMISSION_TOOL_ID = "scout.ai.contextual_permission.assess.v0"
+DEFAULT_CPU_FALLBACK_SCRIPT = ROOT / "tools" / "scout_ai_cpu_fallback_allowlisted.sh"
 
 
 class StructuredAnswerObligationCheck(BaseModel):
@@ -153,6 +174,20 @@ def build_ai_hat_plus_2_model_adapter(
         profile="local",
         provider="hailo_ollama_ai_hat_plus_2",
         transport="pydantic_ai_function_model_hailo_ollama",
+        invoke=model_call,
+    )
+
+
+def build_local_ollama_model_adapter(
+    model_call: ModelCall = call_hailo_model_via_pydantic_ai,
+) -> ScoutModelExecutionAdapter:
+    """Reuse the bounded Ollama transport with CPU-local provenance labels."""
+
+    return ScoutModelExecutionAdapter(
+        adapter_id="local_ollama.pydantic_ai",
+        profile="local",
+        provider="ollama_cpu_local",
+        transport="pydantic_ai_function_model_ollama",
         invoke=model_call,
     )
 
@@ -3687,6 +3722,7 @@ def execute_run(
     mser_mode: str = "off",
     compose_conservative_gap_responses: bool = False,
     experimental_intelligence_bridge: Any | None = None,
+    jev_preflight: Callable[..., dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     started = time.monotonic()
     started_at = datetime.now(timezone.utc)
@@ -3857,6 +3893,22 @@ def execute_run(
                 "candidate_only": True,
                 "runtime_safety_truth": False,
                 "local_injection_status": "not_attempted",
+            }
+    jev_preflight_result: dict[str, Any] | None = None
+    if jev_preflight is not None:
+        try:
+            jev_preflight_result = jev_preflight(
+                run=run,
+                mser_context=mser_context,
+                compact_evidence=compact,
+                deterministic_tool_ids=tool_ids,
+            )
+        except Exception as exc:  # Jev is advisory; synthesis remains deterministic.
+            jev_preflight_result = {
+                "status": "error",
+                "error": type(exc).__name__,
+                "candidate_only": True,
+                "runtime_safety_truth": False,
             }
     effective_missing_evidence = list(compact.get("missing_evidence") or [])
     blocking_missing_evidence = list(compact.get("blocking_missing_evidence") or [])
@@ -4541,6 +4593,7 @@ def execute_run(
         "selected_tools": model_tool_ids,
         "legacy_selected_tools": legacy_tool_ids,
         "experimental_intelligence": experimental_intelligence,
+        "jev_preflight": jev_preflight_result,
         "completed_tools": completed_tools,
         "missing_tools": missing_tools,
         "missing_evidence": effective_missing_evidence,
@@ -4704,6 +4757,37 @@ def power_supplies():
         records.append(record)
     return records
 
+def power_path():
+    path = Path.home() / "scout-power-path-monitor" / "power-path-telemetry.jsonl"
+    result = {{
+        "source": str(path),
+        "available": False,
+        "fresh": False,
+        "latest": None,
+    }}
+    try:
+        with path.open("rb") as stream:
+            stream.seek(0, 2)
+            stream.seek(max(0, stream.tell() - 65536))
+            lines = stream.read().decode("utf-8", errors="replace").splitlines()
+        latest = json.loads(lines[-1]) if lines else None
+        if not isinstance(latest, dict):
+            return result
+        captured = datetime.fromisoformat(str(latest.get("captured_at")))
+        if captured.tzinfo is None:
+            captured = captured.replace(tzinfo=timezone.utc)
+        age_seconds = (datetime.now(timezone.utc) - captured).total_seconds()
+        result.update(
+            available=True,
+            fresh=-5 <= age_seconds <= 15,
+            age_seconds=round(age_seconds, 3),
+            latest=latest,
+        )
+        return result
+    except Exception as exc:
+        result["error"] = f"{{type(exc).__name__}}: {{exc}}"[:500]
+        return result
+
 def ups_hat_e():
     result = run(
         [sys.executable, str(root / "tools" / "pi_ups_hat_e_smoke.py"), "--samples", "1"],
@@ -4764,6 +4848,7 @@ payload = {{
         "upsc_list": run(["sh", "-lc", "command -v upsc >/dev/null && upsc -l || true"]),
         "ups_hat_e": ups_hat_e(),
     }},
+    "power_path": power_path(),
 }}
 print(json.dumps(payload, ensure_ascii=False))
 """
@@ -4892,14 +4977,34 @@ def health_guard(health: dict[str, Any]) -> dict[str, Any]:
     battery = ups_hat.get("battery") or {}
     battery_percent = battery.get("percent")
     battery_voltage_mv = battery.get("voltage_mv")
-    if ups_hat.get("low_cell_voltage_present") is True:
-        errors.append("ups_low_cell_voltage_present")
-    if isinstance(battery_percent, (int, float)) and battery_percent <= 10:
-        errors.append("ups_battery_at_or_below_10_percent")
-    elif isinstance(battery_percent, (int, float)) and battery_percent <= 20:
-        warnings.append("ups_battery_at_or_below_20_percent")
+    power_decision = classify_power_mode(health)
+    if power_decision.power_mode == "unknown":
+        warnings.append("power_mode_unknown_requires_manual_confirmation")
+        policy_battery_percent = None
+        policy_battery_voltage_mv = None
+        policy_low_cell = None
+    elif power_decision.power_mode == "direct":
+        policy_battery_percent = None
+        policy_battery_voltage_mv = None
+        policy_low_cell = None
+    else:
+        policy_battery_percent = battery_percent
+        policy_battery_voltage_mv = battery_voltage_mv
+        policy_low_cell = ups_hat.get("low_cell_voltage_present")
+        if policy_low_cell is True:
+            errors.append("ups_low_cell_voltage_present")
+        if isinstance(policy_battery_percent, (int, float)) and policy_battery_percent <= 10:
+            errors.append("ups_battery_at_or_below_10_percent")
+        elif isinstance(policy_battery_percent, (int, float)) and policy_battery_percent <= 20:
+            warnings.append("ups_battery_at_or_below_20_percent")
     return {
         "status": "fail" if errors else "warn" if warnings else "pass",
+        "safety_state": "NORMAL_HAILO" if power_decision.power_mode == "direct" else "SAFETY_ALERT",
+        "power_mode": power_decision.power_mode,
+        "power_mode_reason": power_decision.reason,
+        "power_mode_evidence": power_decision.evidence,
+        "ups_battery_status": power_decision.ups_battery_status,
+        "ups_low_cell_status": power_decision.ups_battery_status,
         "temperature_c": temperature_c,
         "throttled_raw": throttled_text or None,
         "current_flags": current_flags,
@@ -4907,19 +5012,119 @@ def health_guard(health: dict[str, Any]) -> dict[str, Any]:
         "ai_hat_temperature_c": ai_hat_temperature_c,
         "ai_hat_voltage_mv": ai_hat_voltage_mv,
         "ai_hat_nnc_utilization_percent": ai_hat_nnc_utilization_percent,
-        "ups_battery_percent": battery_percent,
-        "ups_battery_voltage_mv": battery_voltage_mv,
-        "ups_low_cell_voltage_present": ups_hat.get("low_cell_voltage_present"),
+        "ups_battery_percent": policy_battery_percent,
+        "ups_battery_voltage_mv": policy_battery_voltage_mv,
+        "ups_low_cell_voltage_present": policy_low_cell,
         "errors": errors,
         "warnings": warnings,
     }
 
 
-def run_eval(args: argparse.Namespace) -> Path:
-    ai_hat_attestation = require_ai_hat_runtime(
-        args.endpoint,
-        health_ssh_host=args.health_ssh_host,
+def require_local_ollama_runtime(
+    endpoint: str,
+    *,
+    model: str,
+) -> dict[str, Any]:
+    """Attest a loopback CPU Ollama endpoint without claiming Hailo hardware."""
+
+    parsed_endpoint = urllib.parse.urlparse(endpoint)
+    if parsed_endpoint.hostname not in {"127.0.0.1", "localhost", "::1"}:
+        raise SystemExit("CPU Ollama eval endpoint must be a loopback address")
+    tags_url = urllib.parse.urlunparse(
+        (
+            parsed_endpoint.scheme,
+            parsed_endpoint.netloc,
+            "/api/tags",
+            "",
+            "",
+            "",
+        )
     )
+    try:
+        with urllib.request.urlopen(tags_url, timeout=5) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (OSError, urllib.error.URLError, json.JSONDecodeError) as exc:
+        raise SystemExit(
+            f"local CPU Ollama endpoint unavailable: {type(exc).__name__}"
+        ) from exc
+    models = payload.get("models") if isinstance(payload, dict) else None
+    model_names = [
+        str(item.get("name"))
+        for item in models or []
+        if isinstance(item, dict) and item.get("name")
+    ]
+    if model not in model_names:
+        raise SystemExit(
+            f"local CPU Ollama model is not installed: {model}; "
+            f"available={model_names[:12]}"
+        )
+    return {
+        "attestation_mode": "local_ollama_cpu",
+        "hardware_scan_attested": False,
+        "hef_model_attested": False,
+        "endpoint_host": parsed_endpoint.hostname,
+        "endpoint_port": parsed_endpoint.port,
+        "model_names": model_names,
+        "selected_model": model,
+        "candidate_only": True,
+        "runtime_safety_truth": False,
+    }
+
+
+def local_backend_health_guard(
+    health: dict[str, Any],
+    *,
+    backend: str,
+    allow_power_safety_override: bool = False,
+) -> dict[str, Any]:
+    """Keep thermal/runtime failures blocking; CPU fallback needs an audit token."""
+
+    guard = health_guard(health)
+    if backend != "ollama_cpu":
+        return guard
+    ignored_errors = []
+    if allow_power_safety_override and guard.get("power_mode") == "ups":
+        ignored_errors = [error for error in guard["errors"] if str(error).startswith("ups_")]
+    blocking_errors = [
+        error for error in guard["errors"] if error not in ignored_errors
+    ]
+    warnings = [*guard["warnings"], *ignored_errors]
+    if guard.get("power_mode") == "unknown" and not allow_power_safety_override:
+        blocking_errors.append("power_mode_unknown_requires_manual_confirmation")
+    return {
+        **guard,
+        "status": "fail" if blocking_errors else "warn" if warnings else "pass",
+        "errors": blocking_errors,
+        "warnings": warnings,
+        "ignored_hailo_only_errors": ignored_errors,
+        "scope": "cpu_ollama_local_inference;_explicit_safety_override_required",
+    }
+
+
+def _append_safety_record(path: Path, transition: Any) -> None:
+    append_transition(path, transition)
+    print(
+        f"[six-forces-aihat2-safety] {transition.state_before} -> "
+        f"{transition.state_after} event={transition.event} "
+        f"choice={transition.choice or '-'} timeout={transition.timed_out}",
+        file=sys.stderr,
+        flush=True,
+    )
+
+
+def run_eval(args: argparse.Namespace) -> Path:
+    if args.backend == "hailo":
+        ai_hat_attestation = require_ai_hat_runtime(
+            args.endpoint,
+            health_ssh_host=args.health_ssh_host,
+            model=args.model,
+            verify_chat=True,
+        )
+    else:
+        ai_hat_attestation = require_local_ollama_runtime(
+            args.endpoint,
+            model=args.model,
+        )
     workspace = args.workspace.expanduser().resolve()
     scenario_path = workspace / args.scenario_artifact
     artifact = json.loads(scenario_path.read_text(encoding="utf-8"))
@@ -4931,10 +5136,68 @@ def run_eval(args: argparse.Namespace) -> Path:
         runs = runs[args.offset :]
     if args.max_runs is not None:
         runs = runs[: args.max_runs]
-    model_adapter = build_ai_hat_plus_2_model_adapter()
+    model_adapter = (
+        build_ai_hat_plus_2_model_adapter()
+        if args.backend == "hailo"
+        else build_local_ollama_model_adapter()
+    )
     run_id = args.run_id or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     run_dir = workspace / "outputs" / "evals" / f"six_forces_600_total_info_{run_id}"
     run_dir.mkdir(parents=True, exist_ok=True)
+    jev_projection = (
+        build_anonymized_workspace_projection(workspace)
+        if args.jev_model
+        else None
+    )
+    jev_events_path = run_dir / "jev-events.jsonl"
+    safety_transitions_path = run_dir / "safety-transitions.jsonl"
+    jev_event_lock = threading.Lock()
+    supervisor = PowerSafetySupervisor(fallback_script=args.fallback_script)
+    safety_state = "NORMAL_HAILO" if args.backend == "hailo" else "CPU_FALLBACK"
+
+    def write_jev_event(
+        *,
+        event: str,
+        index: int,
+        run: dict[str, Any],
+        payload: dict[str, Any],
+    ) -> None:
+        if not args.jev_model:
+            return
+        record = {
+            "event": event,
+            "index": index,
+            "total": len(runs),
+            "run_case_id": str(run["run_case_id"]),
+            "question_id": str(run["question_id"]),
+            "payload": payload,
+            "candidate_only": True,
+            "runtime_safety_truth": False,
+        }
+        with jev_event_lock:
+            with jev_events_path.open("a", encoding="utf-8") as event_file:
+                event_file.write(
+                    json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n"
+                )
+        if event in {"jev_request", "jev_response"}:
+            print(
+                f"[six-forces-aihat2-jev] {index}/{len(runs)} "
+                f"{run['run_case_id']} {event} "
+                f"status={payload.get('status', 'requested')} "
+                f"latency_ms={payload.get('latency_ms', '-')}",
+                file=sys.stderr,
+                flush=True,
+            )
+    jev_client = (
+        OpenRouterJevClient(
+            api_key=os.environ[args.jev_api_key_env_var],
+            model_id=args.jev_model,
+            endpoint=JEvEndpoint,
+            timeout_seconds=args.jev_timeout_seconds,
+        )
+        if args.jev_model
+        else None
+    )
     results_path = run_dir / "per_case_results.jsonl"
     completed_ids: set[str] = set()
     existing: list[dict[str, Any]] = []
@@ -4962,6 +5225,22 @@ def run_eval(args: argparse.Namespace) -> Path:
         "provider": model_adapter.provider,
         "model_transport": model_adapter.transport,
         "endpoint": args.endpoint,
+        "runtime_backend": args.backend,
+        "hardware_backend": "hailo" if args.backend == "hailo" else "cpu",
+        "model_backend": model_adapter.provider,
+        "fallback_reason": args.fallback_reason,
+        "fallback_parent_run_id": args.fallback_parent_run_id,
+        "run_status": "running",
+        "safety_state": safety_state,
+        "safety_transition_path": str(safety_transitions_path),
+        "jev_enabled": bool(args.jev_model),
+        "jev_model": args.jev_model,
+        "jev_endpoint": JEvEndpoint if args.jev_model else None,
+        "jev_mode": "shadow_advisory" if args.jev_model else None,
+        "jev_workspace_projection_hash": (
+            jev_projection.projection_hash if jev_projection is not None else None
+        ),
+        "jev_events_path": str(jev_events_path) if args.jev_model else None,
         "runtime_packages": runtime_package_versions(),
         "max_tool_calls_per_attempt": 10,
         "max_model_requests_per_attempt": args.max_model_requests,
@@ -4981,12 +5260,26 @@ def run_eval(args: argparse.Namespace) -> Path:
         "candidate_only": True,
         "runtime_safety_truth": False,
     }
+    if args.backend == "ollama_cpu" and args.fallback_reason:
+        append_transition(
+            safety_transitions_path,
+            SafetyTransition(
+                "SAFETY_ALERT",
+                "CPU_FALLBACK",
+                "cpu_fallback_child_started",
+                choice="cpu_fallback",
+                fallback_requested=True,
+                fallback_status="child_run",
+                reason=args.fallback_reason,
+            ),
+        )
     (run_dir / "run_manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True),
         encoding="utf-8",
     )
     health_path = run_dir / "health_samples.jsonl"
     all_results = list(existing)
+    latest_guard: dict[str, Any] = {}
     with (
         results_path.open("a", encoding="utf-8") as result_file,
         health_path.open("a", encoding="utf-8") as health_file,
@@ -4999,14 +5292,224 @@ def run_eval(args: argparse.Namespace) -> Path:
                     ssh_host=args.health_ssh_host,
                     remote_repo_root=args.health_remote_repo_root,
                 )
-                guard = health_guard(health)
+                guard = local_backend_health_guard(
+                    health,
+                    backend=args.backend,
+                    allow_power_safety_override=args.allow_power_safety_override,
+                )
+                latest_guard = guard
                 health["eval_guard"] = guard
                 health_file.write(json.dumps(health, ensure_ascii=False) + "\n")
                 health_file.flush()
+                manifest.update(
+                    {
+                        "power_mode": guard.get("power_mode"),
+                        "power_mode_reason": guard.get("power_mode_reason"),
+                        "safety_state": safety_state,
+                    }
+                )
+                (run_dir / "run_manifest.json").write_text(
+                    json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True),
+                    encoding="utf-8",
+                )
+                if args.backend == "hailo":
+                    observed = supervisor.inspect_hailo(health)
+                    _append_safety_record(safety_transitions_path, observed)
+                    if observed.state_after == "SAFETY_ALERT":
+                        if args.safety_human_choice is None and args.safety_timeout_seconds > 0:
+                            print(
+                                "[six-forces-aihat2-safety] SAFETY_ALERT: "
+                                "waiting for human choice before timeout fallback",
+                                file=sys.stderr,
+                                flush=True,
+                            )
+                            time.sleep(args.safety_timeout_seconds)
+                            resolved = supervisor.resolve_alert(timed_out=True)
+                        else:
+                            resolved = supervisor.resolve_alert(choice=args.safety_human_choice)
+                        _append_safety_record(safety_transitions_path, resolved)
+                        safety_state = resolved.state_after
+                        if resolved.state_after == "NORMAL_HAILO":
+                            guard["safety_state"] = "NORMAL_HAILO"
+                            guard["human_confirmation"] = resolved.as_dict()
+                            guard["errors"] = [
+                                error for error in guard["errors"]
+                                if not str(error).startswith("ups_")
+                            ]
+                            guard["status"] = "fail" if guard["errors"] else "warn" if guard["warnings"] else "pass"
+                        elif resolved.state_after == "CPU_FALLBACK":
+                            fallback_run_id = f"{run_id}__cpu_fallback"
+                            fallback_command = [
+                                str(args.fallback_script),
+                                "--workspace", str(workspace),
+                                "--scenario-artifact", str(args.scenario_artifact),
+                                "--endpoint", args.cpu_fallback_endpoint,
+                                "--model", args.cpu_fallback_model,
+                                "--run-id", fallback_run_id,
+                                "--fallback-reason", resolved.event,
+                                "--fallback-parent-run-id", run_id,
+                                "--health-ssh-host", str(args.health_ssh_host or ""),
+                                "--health-remote-repo-root", args.health_remote_repo_root,
+                                "--max-model-requests", str(args.max_model_requests),
+                                "--mser-mode", args.mser_mode,
+                            ]
+                            if args.max_runs is not None:
+                                fallback_command.extend(["--max-runs", str(args.max_runs)])
+                            if args.guided_retry:
+                                fallback_command.append("--guided-retry")
+                            else:
+                                fallback_command.append("--no-guided-retry")
+                            if args.jev_model:
+                                fallback_command.extend(["--jev-model", args.jev_model])
+                            fallback = supervisor.run_allowlisted_fallback(
+                                command=fallback_command,
+                                allowlisted_script=args.fallback_script,
+                                timeout_seconds=max(30.0, args.fallback_timeout_seconds),
+                            )
+                            _append_safety_record(safety_transitions_path, fallback)
+                            manifest.update({
+                                "run_status": "fallback_started" if fallback.state_after == "CPU_FALLBACK" else "safe_stop",
+                                "safety_state": fallback.state_after,
+                                "fallback_run_id": fallback_run_id,
+                                "fallback_result": fallback.as_dict(),
+                            })
+                            (run_dir / "run_manifest.json").write_text(
+                                json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True),
+                                encoding="utf-8",
+                            )
+                            if fallback.state_after != "CPU_FALLBACK":
+                                raise RuntimeError("SAFE_STOP: allowlisted CPU fallback failed")
+                            return run_dir
+                        else:
+                            manifest.update({"run_status": "blocked", "safety_state": resolved.state_after})
+                            (run_dir / "run_manifest.json").write_text(
+                                json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True),
+                                encoding="utf-8",
+                            )
+                            raise RuntimeError(
+                                f"{resolved.state_after}: Hailo run requires explicit safety decision"
+                            )
                 if guard["status"] == "fail":
                     raise RuntimeError(
                         f"AI HAT eval health guard failed: {guard['errors']}"
                     )
+
+            def jev_preflight(**kwargs: Any) -> dict[str, Any]:
+                if jev_client is None or jev_projection is None:
+                    return {
+                        "status": "disabled",
+                        "candidate_only": True,
+                        "runtime_safety_truth": False,
+                    }
+                request, metadata = build_six_forces_jev_request(
+                    model_id=args.jev_model,
+                    projection=jev_projection,
+                    run=kwargs["run"],
+                    mser_context=kwargs.get("mser_context"),
+                    compact_evidence=kwargs["compact_evidence"],
+                    deterministic_tool_ids=list(
+                        kwargs.get("deterministic_tool_ids") or ()
+                    ),
+                )
+                state_hash = hashlib.sha256(
+                    json.dumps(
+                        request.state,
+                        ensure_ascii=True,
+                        sort_keys=True,
+                        separators=(",", ":"),
+                    ).encode("utf-8")
+                ).hexdigest()
+                write_jev_event(
+                    event="jev_request",
+                    index=index,
+                    run=run,
+                    payload={
+                        "status": "requested",
+                        "endpoint": JEvEndpoint,
+                        "model": args.jev_model,
+                        "question_ids": list(request.questions),
+                        "state_hash": state_hash,
+                        "question_contract": metadata.question_contract,
+                        "mser_certificate": metadata.mser_certificate,
+                    },
+                )
+                started_jev = time.perf_counter()
+                try:
+                    response = jev_client.decide(request)
+                    signals = parse_jev_signals(response)
+                    status = "ok"
+                    error = None
+                    usage = response.usage.model_dump(mode="json")
+                except (JevDecisionError, ValueError) as exc:
+                    signals = None
+                    status = "error"
+                    error = type(exc).__name__
+                    usage = None
+                latency_ms = max(
+                    0, int((time.perf_counter() - started_jev) * 1000)
+                )
+                signal_payload = (
+                    signals.model_dump(mode="json") if signals is not None else None
+                )
+                allowed_tools = set(metadata.allowed_tool_families)
+                suggested_tool = (
+                    signal_payload.get("tool_family") if signal_payload else None
+                )
+                mser_status = metadata.mser_certificate["status"]
+                escalation = (
+                    signal_payload.get("escalation") if signal_payload else None
+                )
+                guards = {
+                    "suggested_tool_within_contract": (
+                        suggested_tool in allowed_tools
+                        if suggested_tool is not None
+                        else False
+                    ),
+                    "mser_auto_override_blocked": (
+                        mser_status != "sufficient" and escalation == "auto"
+                    ),
+                    "authority_auto_guard": (
+                        metadata.question_contract["authority_class"]
+                        != "low_risk_candidate"
+                        and escalation != "human_review"
+                    ),
+                    "runtime_route_changed_by_jev": False,
+                    "runtime_authority_granted": False,
+                }
+                payload = {
+                    "status": status,
+                    "endpoint": JEvEndpoint,
+                    "model": args.jev_model,
+                    "latency_ms": latency_ms,
+                    "signals": signal_payload,
+                    "usage": usage,
+                    "error": error,
+                    "guards": guards,
+                }
+                write_jev_event(
+                    event="jev_response",
+                    index=index,
+                    run=run,
+                    payload=payload,
+                )
+                return {
+                    "status": status,
+                    "endpoint": JEvEndpoint,
+                    "model": args.jev_model,
+                    "mode": "shadow_advisory",
+                    "request_count": 1,
+                    "state_hash": state_hash,
+                    "latency_ms": latency_ms,
+                    "signals": signal_payload,
+                    "usage": usage,
+                    "error": error,
+                    "guards": guards,
+                    "question_contract": metadata.question_contract,
+                    "mser_certificate": metadata.mser_certificate,
+                    "candidate_only": True,
+                    "runtime_safety_truth": False,
+                }
+
             result = execute_run(
                 run=run,
                 project_root=workspace,
@@ -5023,15 +5526,34 @@ def run_eval(args: argparse.Namespace) -> Path:
                 compose_conservative_gap_responses=bool(
                     getattr(args, "compose_conservative_gap_responses", False)
                 ),
+                jev_preflight=jev_preflight if args.jev_model else None,
             )
-            result_file.write(
-                json.dumps(result, ensure_ascii=False, sort_keys=True) + "\n"
-            )
+            result = {
+                **result,
+                "hardware_backend": "hailo" if args.backend == "hailo" else "cpu",
+                "model_backend": model_adapter.provider,
+                "jev_status": (result.get("jev_preflight") or {}).get("status", "disabled"),
+                "fallback_reason": args.fallback_reason,
+                "safety_state": safety_state,
+                "runtime_hardware_evidence": {
+                    "hailo_attested": bool(manifest.get("ai_hat_attestation", {}).get("hardware_scan_attested")),
+                    "model": args.model,
+                    "backend": args.backend,
+                    "ai_hat_temperature_c": latest_guard.get("ai_hat_temperature_c"),
+                    "ai_hat_voltage_mv": latest_guard.get("ai_hat_voltage_mv"),
+                    "ai_hat_nnc_utilization_percent": latest_guard.get("ai_hat_nnc_utilization_percent"),
+                    "power_mode": latest_guard.get("power_mode"),
+                },
+            }
+            result_file.write(json.dumps(result, ensure_ascii=False, sort_keys=True) + "\n")
             result_file.flush()
             all_results.append(result)
             print(
                 f"[six-forces-aihat2] {index}/{len(runs)} {run['run_case_id']} "
-                f"verifier={result['verifier']['status']} identity={result['context_identity_check']['status']}",
+                f"backend={result['hardware_backend']} model={args.model} "
+                f"hailo_runtime={result['runtime_hardware_evidence']['hailo_attested']} "
+                f"jev={result['jev_status']} verifier={result['verifier']['status']} "
+                f"identity={result['context_identity_check']['status']} safety={safety_state}",
                 file=sys.stderr,
                 flush=True,
             )
@@ -5039,8 +5561,17 @@ def run_eval(args: argparse.Namespace) -> Path:
             ssh_host=args.health_ssh_host,
             remote_repo_root=args.health_remote_repo_root,
         )
-        health["eval_guard"] = health_guard(health)
+        health["eval_guard"] = local_backend_health_guard(
+            health,
+            backend=args.backend,
+            allow_power_safety_override=args.allow_power_safety_override,
+        )
         health_file.write(json.dumps(health, ensure_ascii=False) + "\n")
+    manifest.update({"run_status": "completed", "safety_state": safety_state})
+    (run_dir / "run_manifest.json").write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True),
+        encoding="utf-8",
+    )
     _write_summaries(run_dir, manifest, all_results)
     return run_dir
 
@@ -5362,6 +5893,9 @@ def _write_summaries(
         "",
         f"- run_id: `{manifest['run_id']}`",
         f"- model/provider: `{manifest['model']}` / `{manifest['provider']}`",
+        f"- hardware/model backend: `{manifest.get('hardware_backend')}` / `{manifest.get('model_backend')}`",
+        f"- power/safety: `{manifest.get('power_mode', 'see health_samples')}` / `{manifest.get('safety_state')}`",
+        f"- run status: `{manifest.get('run_status')}`; fallback reason: `{manifest.get('fallback_reason')}`",
         f"- unique questions: `{summary['unique_questions']}`",
         f"- model runs: `{summary['completed_model_runs']}`",
         f"- model requests: `{summary['total_model_requests']}`",
@@ -5409,6 +5943,24 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
     parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument(
+        "--backend",
+        choices=("hailo", "ollama_cpu"),
+        default="hailo",
+        help="Local model backend; ollama_cpu avoids Hailo hardware load.",
+    )
+    parser.add_argument(
+        "--jev-model",
+        help=(
+            "Optional Jev Decisions model for one shadow/advisory preflight "
+            "per local-model run; deterministic runtime remains authoritative."
+        ),
+    )
+    parser.add_argument("--jev-timeout-seconds", type=float, default=120.0)
+    parser.add_argument(
+        "--jev-api-key-env-var",
+        default="OPENROUTER_API_KEY",
+    )
     parser.add_argument("--timeout-seconds", type=int, default=0)
     parser.add_argument(
         "--total-run-timeout-seconds",
@@ -5448,7 +6000,33 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--health-ssh-host")
     parser.add_argument(
         "--health-remote-repo-root",
-        default="~/scout-fusion",
+        default="/home/alexwang0315/work/scout-fusion",
+    )
+    parser.add_argument(
+        "--safety-human-choice",
+        choices=("continue_hailo", "cpu_fallback", "stop"),
+        help="Explicit human response to a Hailo power SAFETY_ALERT.",
+    )
+    parser.add_argument(
+        "--safety-timeout-seconds",
+        type=float,
+        default=0.0,
+        help="After this timeout with no human choice, run the allowlisted CPU fallback.",
+    )
+    parser.add_argument(
+        "--fallback-script",
+        type=Path,
+        default=DEFAULT_CPU_FALLBACK_SCRIPT,
+    )
+    parser.add_argument("--fallback-timeout-seconds", type=float, default=180.0)
+    parser.add_argument("--cpu-fallback-endpoint", default="http://127.0.0.1:11434/api/chat")
+    parser.add_argument("--cpu-fallback-model", default=DEFAULT_MODEL)
+    parser.add_argument("--fallback-reason")
+    parser.add_argument("--fallback-parent-run-id")
+    parser.add_argument(
+        "--allow-power-safety-override",
+        action="store_true",
+        help="Only for a supervisor-started CPU child run with an audit transition.",
     )
     return parser
 
@@ -5461,6 +6039,16 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("--offset must be >= 0 and --health-interval must be positive")
     if args.total_run_timeout_seconds < 0:
         raise SystemExit("--total-run-timeout-seconds must be >= 0")
+    if args.safety_timeout_seconds < 0 or args.fallback_timeout_seconds <= 0:
+        raise SystemExit("safety/fallback timeouts are invalid")
+    if args.backend == "hailo" and args.allow_power_safety_override:
+        raise SystemExit("power safety override is only valid for a supervisor-started CPU child run")
+    if args.backend == "ollama_cpu" and not args.allow_power_safety_override and args.fallback_reason:
+        raise SystemExit("CPU fallback runs require --allow-power-safety-override")
+    if args.jev_timeout_seconds <= 0:
+        raise SystemExit("--jev-timeout-seconds must be positive")
+    if args.jev_model and not os.environ.get(args.jev_api_key_env_var):
+        raise SystemExit(f"{args.jev_api_key_env_var} is missing; not running Jev")
     if (
         args.compose_conservative_gap_responses
         and args.mser_mode != MSERExecutionMode.ENFORCE.value
@@ -5469,9 +6057,8 @@ def main(argv: list[str] | None = None) -> int:
             "--compose-conservative-gap-responses requires --mser-mode enforce"
         )
     run_dir = run_eval(args)
-    print(
-        json.dumps({"status": "completed", "run_dir": str(run_dir)}, ensure_ascii=False)
-    )
+    manifest = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
+    print(json.dumps({"status": manifest.get("run_status", "completed"), "run_dir": str(run_dir)}, ensure_ascii=False))
     return 0
 
 

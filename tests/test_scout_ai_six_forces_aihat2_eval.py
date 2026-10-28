@@ -3,6 +3,7 @@ from __future__ import annotations
 import inspect
 import json
 import threading
+from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -1865,6 +1866,7 @@ def test_health_guard_warns_on_historical_flags_but_fails_current_flags() -> Non
 
 
 def test_health_guard_accepts_read_only_ups_hat_e_telemetry() -> None:
+    captured_at = datetime.now(timezone.utc).isoformat()
     guard = health_guard(
         {
             "temp": {"stdout": "temp=56.5'C"},
@@ -1878,6 +1880,20 @@ def test_health_guard_accepts_read_only_ups_hat_e_telemetry() -> None:
                     "power_control_write_allowed": False,
                 },
             },
+            "power_path": {
+                "available": True,
+                "fresh": True,
+                "latest": {
+                    "captured_at": captured_at,
+                    "ext5v_v": 5.1,
+                    "ups_vbus_voltage_mv": 0,
+                    "ups_vbus_current_ma": 0,
+                    "ups_vbus_power_mw": 0,
+                    "battery_current_flow": "idle",
+                    "ups_power_state": "idle",
+                    "errors": [],
+                },
+            },
         }
     )
 
@@ -1886,6 +1902,7 @@ def test_health_guard_accepts_read_only_ups_hat_e_telemetry() -> None:
 
 
 def test_health_guard_extracts_ai_hat_on_die_telemetry() -> None:
+    captured_at = datetime.now(timezone.utc).isoformat()
     guard = health_guard(
         {
             "temp": {"stdout": "temp=52.4'C"},
@@ -1897,6 +1914,20 @@ def test_health_guard_extracts_ai_hat_on_die_telemetry() -> None:
                 )
             },
             "ups": {"ups_hat_e": {"available": True}},
+            "power_path": {
+                "available": True,
+                "fresh": True,
+                "latest": {
+                    "captured_at": captured_at,
+                    "ext5v_v": 5.1,
+                    "ups_vbus_voltage_mv": 0,
+                    "ups_vbus_current_ma": 0,
+                    "ups_vbus_power_mw": 0,
+                    "battery_current_flow": "idle",
+                    "ups_power_state": "idle",
+                    "errors": [],
+                },
+            },
         }
     )
 
@@ -1932,6 +1963,20 @@ def test_health_guard_fails_remote_collection_error_and_low_ups_cell() -> None:
                     "low_cell_voltage_present": True,
                     "battery": {"percent": 8, "voltage_mv": 12000},
                 }
+            },
+            "power_path": {
+                "available": True,
+                "fresh": True,
+                "latest": {
+                    "captured_at": datetime.now(timezone.utc).isoformat(),
+                    "ext5v_v": 0.0,
+                    "ups_vbus_voltage_mv": 5000,
+                    "ups_vbus_current_ma": 900,
+                    "ups_vbus_power_mw": 4200,
+                    "battery_current_flow": "discharging",
+                    "ups_power_state": "discharging",
+                    "errors": [],
+                },
             },
         }
     )
@@ -3734,9 +3779,9 @@ def test_plain_excerpt_keeps_string_newlines_natural_and_finishes_nearby_sentenc
 def test_runtime_package_versions_attest_pydantic_ai_stack() -> None:
     versions = runtime_package_versions()
 
-    assert versions["pydantic_ai_slim"] == "2.36.0"
-    assert versions["pydantic_evals"] == "2.36.0"
-    assert versions["pydantic_graph"] == "2.36.0"
+    assert versions["pydantic_ai_slim"] == "2.43.0"
+    assert versions["pydantic_evals"] == "2.43.0"
+    assert versions["pydantic_graph"] == "2.43.0"
 
 
 def test_aihat_eval_defaults_to_guided_retry_with_explicit_single_pass_opt_out() -> None:

@@ -278,6 +278,30 @@ _AUTO_TERRAIN_GUIDANCE_ELEVATION_SAMPLER = object()
 DEFAULT_PRETRIP_ADMIN_PAGE = ROOT / "docs" / "admin" / "phase4-pretrip-planning.html"
 DEFAULT_DEBUG_ADMIN_PAGE = ROOT / "docs" / "admin" / "phase-3-5-runtime-debug.html"
 DEFAULT_SCOUT_DASHBOARD_PAGE = ROOT / "docs" / "admin" / "scout-dashboard-v0.1.html"
+DEFAULT_SCOUT_DASHBOARD_V02_PAGE = ROOT / "docs" / "admin" / "scout-dashboard-v0.2.html"
+DEFAULT_SCOUT_DASHBOARD_ICON_ROOT = ROOT / "docs" / "admin" / "icons" / "lucide"
+SCOUT_DASHBOARD_ICON_NAMES = frozenset(
+    {
+        "arrow-right",
+        "bug",
+        "circle-alert",
+        "circle-check",
+        "circle-help",
+        "clock-3",
+        "cloud-rain",
+        "copy",
+        "compass",
+        "database",
+        "file-check-2",
+        "gauge",
+        "layers-3",
+        "map",
+        "mountain",
+        "navigation",
+        "route",
+        "shield-check",
+    }
+)
 DEFAULT_DASHBOARD_ASSISTANT_CONFIG = (
     ROOT / "configs" / "assistant-models.dashboard-aihat2.json"
 )
@@ -3754,6 +3778,29 @@ def create_admin_router(
             DEFAULT_SCOUT_DASHBOARD_PAGE.read_text(encoding="utf-8"),
             media_type="text/html",
             headers={"Cache-Control": "no-store"},
+        )
+
+    @router.get("/dashboard-v0.2", response_class=HTMLResponse)
+    def scout_dashboard_v02_page() -> Response:
+        if not DEFAULT_SCOUT_DASHBOARD_V02_PAGE.exists():
+            raise HTTPException(status_code=404, detail="Scout dashboard v0.2 page not found")
+        return Response(
+            DEFAULT_SCOUT_DASHBOARD_V02_PAGE.read_text(encoding="utf-8"),
+            media_type="text/html",
+            headers={"Cache-Control": "no-store"},
+        )
+
+    @router.get("/icons/lucide/{icon_name}.svg")
+    def scout_dashboard_lucide_icon(icon_name: str) -> Response:
+        if icon_name not in SCOUT_DASHBOARD_ICON_NAMES:
+            raise HTTPException(status_code=404, detail="Dashboard icon not found")
+        icon_path = DEFAULT_SCOUT_DASHBOARD_ICON_ROOT / f"{icon_name}.svg"
+        if not icon_path.is_file():
+            raise HTTPException(status_code=404, detail="Dashboard icon not found")
+        return Response(
+            icon_path.read_bytes(),
+            media_type="image/svg+xml",
+            headers={"Cache-Control": "public, max-age=3600"},
         )
 
     @router.get("/dashboard/body-index")

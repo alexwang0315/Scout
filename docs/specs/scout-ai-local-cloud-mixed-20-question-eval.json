@@ -1,0 +1,580 @@
+{
+  "schema_version": "scout.ai.local_cloud_routing_corpus.v1",
+  "workspace_id": "dongqing_batongguan_historic_trail_newImport",
+  "description": "10 題 local 標準答案與 EXP-001～EXP-010 cloud workspace-grounded 題的 JEV routing smoke corpus。",
+  "routing_authority": "deterministic_gate_with_jev_advisory",
+  "questions": [
+    {
+      "question_id": "LOCAL-001",
+      "question": "已知路段 A 為 3.5 公里、B 為 2.25 公里，合計幾公里？",
+      "category": "arithmetic",
+      "expected_route": "local",
+      "capabilities": [
+        "static_fact"
+      ],
+      "standard_answer": "5.75 公里",
+      "answer_contract": {
+        "kind": "exact",
+        "expected": "5.75 公里",
+        "required_fields": [],
+        "must_state_unknowns": false
+      },
+      "source_refs": [
+        "prompt://given-facts"
+      ],
+      "required_tools": [],
+      "cloud_reason": null,
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "question_id": "LOCAL-002",
+      "question": "把 2 小時 30 分鐘換算成分鐘，答案是多少？",
+      "category": "unit_conversion",
+      "expected_route": "local",
+      "capabilities": [
+        "static_fact"
+      ],
+      "standard_answer": "150 分鐘",
+      "answer_contract": {
+        "kind": "exact",
+        "expected": "150 分鐘",
+        "required_fields": [],
+        "must_state_unknowns": false
+      },
+      "source_refs": [
+        "prompt://given-facts"
+      ],
+      "required_tools": [],
+      "cloud_reason": null,
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "question_id": "LOCAL-003",
+      "question": "將 4,500 公尺換算成公里，保留小數兩位。",
+      "category": "unit_conversion",
+      "expected_route": "local",
+      "capabilities": [
+        "static_fact"
+      ],
+      "standard_answer": "4.50 公里",
+      "answer_contract": {
+        "kind": "exact",
+        "expected": "4.50 公里",
+        "required_fields": [],
+        "must_state_unknowns": false
+      },
+      "source_refs": [
+        "prompt://given-facts"
+      ],
+      "required_tools": [],
+      "cloud_reason": null,
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "question_id": "LOCAL-004",
+      "question": "每小時走 3 公里，走 2 小時 20 分鐘的距離是多少？",
+      "category": "arithmetic",
+      "expected_route": "local",
+      "capabilities": [
+        "static_fact"
+      ],
+      "standard_answer": "7 公里",
+      "answer_contract": {
+        "kind": "exact",
+        "expected": "7 公里",
+        "required_fields": [],
+        "must_state_unknowns": false
+      },
+      "source_refs": [
+        "prompt://given-facts"
+      ],
+      "required_tools": [],
+      "cloud_reason": null,
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "question_id": "LOCAL-005",
+      "question": "起點海拔 420 公尺、終點海拔 1,020 公尺，爬升多少？",
+      "category": "arithmetic",
+      "expected_route": "local",
+      "capabilities": [
+        "static_fact"
+      ],
+      "standard_answer": "600 公尺",
+      "answer_contract": {
+        "kind": "exact",
+        "expected": "600 公尺",
+        "required_fields": [],
+        "must_state_unknowns": false
+      },
+      "source_refs": [
+        "prompt://given-facts"
+      ],
+      "required_tools": [],
+      "cloud_reason": null,
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "question_id": "LOCAL-006",
+      "question": "四段距離分別為 1.2、0.8、2.5、1.5 公里，總長是多少？",
+      "category": "arithmetic",
+      "expected_route": "local",
+      "capabilities": [
+        "static_fact"
+      ],
+      "standard_answer": "6.0 公里",
+      "answer_contract": {
+        "kind": "exact",
+        "expected": "6.0 公里",
+        "required_fields": [],
+        "must_state_unknowns": false
+      },
+      "source_refs": [
+        "prompt://given-facts"
+      ],
+      "required_tools": [],
+      "cloud_reason": null,
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "question_id": "LOCAL-007",
+      "question": "剩餘 9 公里，平均速度 3 公里／小時，估計需要幾小時？",
+      "category": "arithmetic",
+      "expected_route": "local",
+      "capabilities": [
+        "static_fact"
+      ],
+      "standard_answer": "3 小時",
+      "answer_contract": {
+        "kind": "exact",
+        "expected": "3 小時",
+        "required_fields": [],
+        "must_state_unknowns": false
+      },
+      "source_refs": [
+        "prompt://given-facts"
+      ],
+      "required_tools": [],
+      "cloud_reason": null,
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "question_id": "LOCAL-008",
+      "question": "將 75 分鐘加上 1 小時 10 分鐘，總共幾分鐘？",
+      "category": "arithmetic",
+      "expected_route": "local",
+      "capabilities": [
+        "static_fact"
+      ],
+      "standard_answer": "145 分鐘",
+      "answer_contract": {
+        "kind": "exact",
+        "expected": "145 分鐘",
+        "required_fields": [],
+        "must_state_unknowns": false
+      },
+      "source_refs": [
+        "prompt://given-facts"
+      ],
+      "required_tools": [],
+      "cloud_reason": null,
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "question_id": "LOCAL-009",
+      "question": "里程從 12.4 公里增加到 15.1 公里，增加多少？",
+      "category": "arithmetic",
+      "expected_route": "local",
+      "capabilities": [
+        "static_fact"
+      ],
+      "standard_answer": "2.7 公里",
+      "answer_contract": {
+        "kind": "exact",
+        "expected": "2.7 公里",
+        "required_fields": [],
+        "must_state_unknowns": false
+      },
+      "source_refs": [
+        "prompt://given-facts"
+      ],
+      "required_tools": [],
+      "cloud_reason": null,
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "question_id": "LOCAL-010",
+      "question": "一箱有 24 瓶水，分給 6 人且平均分配，每人幾瓶？",
+      "category": "arithmetic",
+      "expected_route": "local",
+      "capabilities": [
+        "static_fact"
+      ],
+      "standard_answer": "4 瓶",
+      "answer_contract": {
+        "kind": "exact",
+        "expected": "4 瓶",
+        "required_fields": [],
+        "must_state_unknowns": false
+      },
+      "source_refs": [
+        "prompt://given-facts"
+      ],
+      "required_tools": [],
+      "cloud_reason": null,
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "question_id": "EXP-001",
+      "question": "這條路線除了登頂，最值得理解的是什麼？",
+      "category": "six_forces_exp_workspace_grounded",
+      "expected_route": "cloud",
+      "capabilities": [
+        "tool_use",
+        "cross_artifact_join"
+      ],
+      "standard_answer": "需使用 workspace route context 與 provenance 證據後回答；不能用固定答案代替查證。",
+      "answer_contract": {
+        "kind": "evidence_grounded",
+        "expected": null,
+        "required_fields": [
+          "answer",
+          "decisive_evidence",
+          "opposing_evidence",
+          "evidence_gaps",
+          "decision_change_conditions",
+          "source_refs"
+        ],
+        "must_state_unknowns": true
+      },
+      "source_refs": [
+        "workspace://route_context",
+        "workspace://source_provenance"
+      ],
+      "required_tools": [
+        "scout_workspace_query"
+      ],
+      "cloud_reason": "EXP six-forces 題要求 workspace route context、scenario identity 與 source provenance。",
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "question_id": "EXP-002",
+      "question": "這趟行程沿途會經過哪些不同的山林環境？",
+      "category": "six_forces_exp_workspace_grounded",
+      "expected_route": "cloud",
+      "capabilities": [
+        "tool_use",
+        "cross_artifact_join"
+      ],
+      "standard_answer": "需使用 workspace route context 與 provenance 證據後回答；不能用固定答案代替查證。",
+      "answer_contract": {
+        "kind": "evidence_grounded",
+        "expected": null,
+        "required_fields": [
+          "answer",
+          "decisive_evidence",
+          "opposing_evidence",
+          "evidence_gaps",
+          "decision_change_conditions",
+          "source_refs"
+        ],
+        "must_state_unknowns": true
+      },
+      "source_refs": [
+        "workspace://route_context",
+        "workspace://source_provenance"
+      ],
+      "required_tools": [
+        "scout_workspace_query"
+      ],
+      "cloud_reason": "EXP six-forces 題要求 workspace route context、scenario identity 與 source provenance。",
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "question_id": "EXP-003",
+      "question": "這條路線為什麼會形成現在的走法？",
+      "category": "six_forces_exp_workspace_grounded",
+      "expected_route": "cloud",
+      "capabilities": [
+        "tool_use",
+        "cross_artifact_join"
+      ],
+      "standard_answer": "需使用 workspace route context 與 provenance 證據後回答；不能用固定答案代替查證。",
+      "answer_contract": {
+        "kind": "evidence_grounded",
+        "expected": null,
+        "required_fields": [
+          "answer",
+          "decisive_evidence",
+          "opposing_evidence",
+          "evidence_gaps",
+          "decision_change_conditions",
+          "source_refs"
+        ],
+        "must_state_unknowns": true
+      },
+      "source_refs": [
+        "workspace://route_context",
+        "workspace://source_provenance"
+      ],
+      "required_tools": [
+        "scout_workspace_query"
+      ],
+      "cloud_reason": "EXP six-forces 題要求 workspace route context、scenario identity 與 source provenance。",
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "question_id": "EXP-004",
+      "question": "這條路線和附近聚落有什麼關係？",
+      "category": "six_forces_exp_workspace_grounded",
+      "expected_route": "cloud",
+      "capabilities": [
+        "tool_use",
+        "cross_artifact_join"
+      ],
+      "standard_answer": "需使用 workspace route context 與 provenance 證據後回答；不能用固定答案代替查證。",
+      "answer_contract": {
+        "kind": "evidence_grounded",
+        "expected": null,
+        "required_fields": [
+          "answer",
+          "decisive_evidence",
+          "opposing_evidence",
+          "evidence_gaps",
+          "decision_change_conditions",
+          "source_refs"
+        ],
+        "must_state_unknowns": true
+      },
+      "source_refs": [
+        "workspace://route_context",
+        "workspace://source_provenance"
+      ],
+      "required_tools": [
+        "scout_workspace_query"
+      ],
+      "cloud_reason": "EXP six-forces 題要求 workspace route context、scenario identity 與 source provenance。",
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "question_id": "EXP-005",
+      "question": "這段山徑原本是登山路，還是更早以前就有人使用？",
+      "category": "six_forces_exp_workspace_grounded",
+      "expected_route": "cloud",
+      "capabilities": [
+        "tool_use",
+        "cross_artifact_join"
+      ],
+      "standard_answer": "需使用 workspace route context 與 provenance 證據後回答；不能用固定答案代替查證。",
+      "answer_contract": {
+        "kind": "evidence_grounded",
+        "expected": null,
+        "required_fields": [
+          "answer",
+          "decisive_evidence",
+          "opposing_evidence",
+          "evidence_gaps",
+          "decision_change_conditions",
+          "source_refs"
+        ],
+        "must_state_unknowns": true
+      },
+      "source_refs": [
+        "workspace://route_context",
+        "workspace://source_provenance"
+      ],
+      "required_tools": [
+        "scout_workspace_query"
+      ],
+      "cloud_reason": "EXP six-forces 題要求 workspace route context、scenario identity 與 source provenance。",
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "question_id": "EXP-006",
+      "question": "沿途有哪些地方能看出人和山林互動的痕跡？",
+      "category": "six_forces_exp_workspace_grounded",
+      "expected_route": "cloud",
+      "capabilities": [
+        "tool_use",
+        "cross_artifact_join"
+      ],
+      "standard_answer": "需使用 workspace route context 與 provenance 證據後回答；不能用固定答案代替查證。",
+      "answer_contract": {
+        "kind": "evidence_grounded",
+        "expected": null,
+        "required_fields": [
+          "answer",
+          "decisive_evidence",
+          "opposing_evidence",
+          "evidence_gaps",
+          "decision_change_conditions",
+          "source_refs"
+        ],
+        "must_state_unknowns": true
+      },
+      "source_refs": [
+        "workspace://route_context",
+        "workspace://source_provenance"
+      ],
+      "required_tools": [
+        "scout_workspace_query"
+      ],
+      "cloud_reason": "EXP six-forces 題要求 workspace route context、scenario identity 與 source provenance。",
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "question_id": "EXP-007",
+      "question": "這條路線最能代表當地特色的是哪一段？",
+      "category": "six_forces_exp_workspace_grounded",
+      "expected_route": "cloud",
+      "capabilities": [
+        "tool_use",
+        "cross_artifact_join"
+      ],
+      "standard_answer": "需使用 workspace route context 與 provenance 證據後回答；不能用固定答案代替查證。",
+      "answer_contract": {
+        "kind": "evidence_grounded",
+        "expected": null,
+        "required_fields": [
+          "answer",
+          "decisive_evidence",
+          "opposing_evidence",
+          "evidence_gaps",
+          "decision_change_conditions",
+          "source_refs"
+        ],
+        "must_state_unknowns": true
+      },
+      "source_refs": [
+        "workspace://route_context",
+        "workspace://source_provenance"
+      ],
+      "required_tools": [
+        "scout_workspace_query"
+      ],
+      "cloud_reason": "EXP six-forces 題要求 workspace route context、scenario identity 與 source provenance。",
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "question_id": "EXP-008",
+      "question": "如果只記住三件事，這條路線有哪些故事值得帶回去？",
+      "category": "six_forces_exp_workspace_grounded",
+      "expected_route": "cloud",
+      "capabilities": [
+        "tool_use",
+        "cross_artifact_join"
+      ],
+      "standard_answer": "需使用 workspace route context 與 provenance 證據後回答；不能用固定答案代替查證。",
+      "answer_contract": {
+        "kind": "evidence_grounded",
+        "expected": null,
+        "required_fields": [
+          "answer",
+          "decisive_evidence",
+          "opposing_evidence",
+          "evidence_gaps",
+          "decision_change_conditions",
+          "source_refs"
+        ],
+        "must_state_unknowns": true
+      },
+      "source_refs": [
+        "workspace://route_context",
+        "workspace://source_provenance"
+      ],
+      "required_tools": [
+        "scout_workspace_query"
+      ],
+      "cloud_reason": "EXP six-forces 題要求 workspace route context、scenario identity 與 source provenance。",
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "question_id": "EXP-009",
+      "question": "這條路線的名稱是怎麼來的？",
+      "category": "six_forces_exp_workspace_grounded",
+      "expected_route": "cloud",
+      "capabilities": [
+        "tool_use",
+        "cross_artifact_join"
+      ],
+      "standard_answer": "需使用 workspace route context 與 provenance 證據後回答；不能用固定答案代替查證。",
+      "answer_contract": {
+        "kind": "evidence_grounded",
+        "expected": null,
+        "required_fields": [
+          "answer",
+          "decisive_evidence",
+          "opposing_evidence",
+          "evidence_gaps",
+          "decision_change_conditions",
+          "source_refs"
+        ],
+        "must_state_unknowns": true
+      },
+      "source_refs": [
+        "workspace://route_context",
+        "workspace://source_provenance"
+      ],
+      "required_tools": [
+        "scout_workspace_query"
+      ],
+      "cloud_reason": "EXP six-forces 題要求 workspace route context、scenario identity 與 source provenance。",
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    },
+    {
+      "question_id": "EXP-010",
+      "question": "沿途地名和實際地形有什麼關聯？",
+      "category": "six_forces_exp_workspace_grounded",
+      "expected_route": "cloud",
+      "capabilities": [
+        "tool_use",
+        "cross_artifact_join"
+      ],
+      "standard_answer": "需使用 workspace route context 與 provenance 證據後回答；不能用固定答案代替查證。",
+      "answer_contract": {
+        "kind": "evidence_grounded",
+        "expected": null,
+        "required_fields": [
+          "answer",
+          "decisive_evidence",
+          "opposing_evidence",
+          "evidence_gaps",
+          "decision_change_conditions",
+          "source_refs"
+        ],
+        "must_state_unknowns": true
+      },
+      "source_refs": [
+        "workspace://route_context",
+        "workspace://source_provenance"
+      ],
+      "required_tools": [
+        "scout_workspace_query"
+      ],
+      "cloud_reason": "EXP six-forces 題要求 workspace route context、scenario identity 與 source provenance。",
+      "candidate_only": true,
+      "runtime_safety_truth": false
+    }
+  ],
+  "candidate_only": true,
+  "runtime_safety_truth": false
+}

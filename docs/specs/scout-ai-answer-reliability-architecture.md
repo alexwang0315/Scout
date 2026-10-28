@@ -73,6 +73,13 @@ Question Contract Compiler
   - choose deterministic vs agentic path
         |
         v
+Jev Decision Plane (optional, candidate-only)
+  - artifact / question / tool-family routing
+  - evidence relevance / completeness / contradiction signals
+  - auto / repair / stronger-model / human-review proposal
+  - no workspace reads, arbitrary tool arguments, or authority
+        |
+        v
 Workspace Evidence Compiler
   - WorkspaceQueryService
   - route / mission / weather / terrain / sensor stores
@@ -139,6 +146,7 @@ VerifiedCandidateAnswer | EvidenceGapAnswer | ConflictAnswer | UnknownAnswer
 | --- | --- | --- | --- |
 | Pydantic AI | Scout answer control plane | Type-safe deps, tools, output schemas, usage limits, validation | Become a freeform prompt wrapper that trusts model prose |
 | MSER | Minimal sufficient evidence representation | Prevents the model from answering before required evidence exists | Replace full workspace or become runtime safety truth |
+| Jev | Optional low-latency typed decision plane | Selects bounded evidence/tool paths and identifies when to escalate before expensive agent/model work | Become the source of truth, execute SQL/GIS, decide freshness, or promote runtime safety authority |
 | PraisonAI | Optional multi-agent intelligence service | Decomposes complex research/GIS/context tasks and fills information needs | Directly mutate mission, permission, route, safety, notification, or hardware state |
 | MCP | Process/capability boundary | Isolates PraisonAI/QGIS failures and controls capabilities | Become an untyped backdoor into workspace writes |
 | Modular/MAX | Model inference runtime backend | Can serve stronger local/server models and structured output through a standard client path | Act as Scout agent framework or Hailo substitute |
@@ -170,6 +178,75 @@ position, weather freshness, route geometry, or permission state. Deterministic
 classification and policy provide the default required dimensions. The model may
 suggest additional evidence, but it does not remove required evidence.
 
+### Jev Decision Plane
+
+Jev is an optional, candidate-only decision layer around the question contract
+and evidence trajectory. It is not a fourth Scout agent and it is not an answer
+generator. Its useful decisions are bounded and typed:
+
+```text
+JevDecisionCandidate
+  artifact_family
+  question_class
+  tool_family
+  relevance
+  completeness
+  contradiction
+  escalation
+  confidence
+  candidate_only=true
+  runtime_safety_truth=false
+```
+
+The three appropriate decision points are:
+
+1. Before evidence acquisition: suggest the relevant workspace artifact,
+   question class, and tool family.
+2. After evidence acquisition: rank relevance and completeness, and flag
+   possible semantic contradiction for deterministic verification.
+3. During recovery: suggest `auto`, `collect_more_evidence`, `use_stronger_model`,
+   or `human_review`.
+
+Jev suggestions must be compiled through deterministic Scout policy. The
+`QuestionContractCompiler` remains authoritative for criticality, required
+dimensions, allowed and denied tools, freshness requirements, and authority
+class. Jev must never emit arbitrary SQL, file paths, unrestricted GIS
+arguments, permission changes, safety truth, or outbound effects.
+
+The sufficiency boundary is deliberately asymmetric:
+
+```text
+automatic handling requires
+  Jev confidence
+  AND deterministic MSER = SUFFICIENT
+  AND no stale or confirmed conflict
+  AND verifier / authority policy pass
+```
+
+Jev's `more_evidence_required` result is a soft escalation signal. It becomes a
+hard stop when deterministic MSER also reports missing, stale, or contradictory
+evidence. For safety-sensitive or authority-bearing questions, disagreement is
+resolved conservatively and may require human review. Conversely, if Jev is
+conservative but MSER certifies sufficient evidence for a low-risk question, the
+system may record an over-escalation and continue to synthesis rather than pay
+for unnecessary research.
+
+Jev should not be called for every obvious static fact or aggregate. Those cases
+should use the deterministic workspace query path. For ambiguous, spatial, or
+cross-artifact cases, one batched Jev decision request should cover artifact,
+question type, tool family, evidence signals, and escalation. The state sent to
+Jev should be a compact, anonymized workspace catalog rather than raw GPX,
+coordinates, paths, or full artifact contents. Decisions may be cached by
+question hash, workspace revision, catalog hash, and Jev model identity; live
+freshness-sensitive evidence must still be checked deterministically.
+
+The Jev transport should be an adapter behind a Scout-owned decision service.
+It may share the answer-attempt trace, cancellation, and model-request ledger,
+but it should not be forced into the ordinary chat-model adapter when the
+provider exposes a separate typed Decisions endpoint. If Jev is unavailable,
+clear low-risk queries may fall back to deterministic classification; ambiguous
+or safety-sensitive queries must fail closed or escalate.
+
 ### 2. Evidence Plan And Tool Execution
 
 The evidence compiler turns required dimensions into deterministic tool calls:
@@ -199,6 +276,12 @@ MSER becomes the central gate:
 - `AMBIGUOUS_DECISION`: ask clarification.
 
 The model only sees `ModelFacingMSERPayload`, not raw workspace dumps.
+
+MSER is the authority for whether required evidence exists. A Jev score or
+`evidence_sufficient` answer may be recorded as a routing feature, but it cannot
+override the `SufficiencyCertificate`. This keeps Jev useful for speed and
+semantic triage without allowing a probabilistic decision to bypass missing,
+stale, conflicted, or uncited evidence.
 
 ### 4. PraisonAI Only For Information Needs
 
@@ -237,6 +320,14 @@ Model routing should be based on the failure mode and the required capability:
 MAX should be tested as an OpenAI-compatible model endpoint. Scout should route
 to it through `ScoutModelRuntime`; Pydantic AI should still own tools and output
 validation.
+
+Jev is complementary to this gateway rather than another MAX runtime profile:
+it decides whether a cheap deterministic path is adequate, whether PraisonAI
+needs to explore an information need, or whether a stronger synthesis model is
+justified. MAX should be selected when the evidence trajectory is already
+sufficient but synthesis, structured output, or difficult reasoning fails; it
+should not be used to repair a missing source or replace deterministic GIS and
+database operations.
 
 ### 6. Structured Answer And Deterministic Verification
 
@@ -278,6 +369,9 @@ Retries should not be generic. Every failed attempt should be classified:
 | Context sufficient but model misreads it | Switch model or use MAX/cloud; keep same evidence |
 | Structured output invalid | Retry with Pydantic AI output mode/validator; compare MAX structured output if available |
 | Unsupported claim | Feed verifier violation back once; then classify model failure |
+| Jev selects the wrong route | Repair the compact catalog, bounded choice labels, or question-class hints; do not switch to a stronger synthesis model first |
+| Jev over-escalates | Recheck against deterministic MSER, record the over-escalation, and calibrate the decision criteria; retain conservative behavior for safety classes |
+| Jev transport unavailable | Use deterministic low-risk defaults or fail closed for ambiguous and safety-sensitive requests |
 | Conflict/stale state | Surface conflict/stale; do not force answer |
 | Safety/authority escalation | Reject output; record boundary violation |
 
@@ -390,6 +484,10 @@ Replace one aggregate "answer success rate" with a layer-by-layer scorecard:
 | Metric | Definition |
 | --- | --- |
 | Question classification accuracy | Correct question class, decision type, criticality, authority class |
+| Jev decision accuracy | Correct artifact, question class, tool family, and escalation proposal on eligible cases |
+| Jev over-escalation rate | Fraction of MSER-sufficient cases unnecessarily sent to research, MAX, or human review |
+| Jev unsafe-disposition rate | Safety or authority cases incorrectly marked for automatic handling; target is zero |
+| Decision latency and amortization | Jev latency and whether one batched decision avoids more expensive calls |
 | Evidence plan recall | Required dimensions identified |
 | Tool selection precision | Avoids unnecessary or wrong tools |
 | Evidence acquisition success | Required facts found with source refs |
@@ -415,6 +513,7 @@ The first slice should not start with PraisonAI. Use the existing MSER pieces:
 ```text
 one route/workspace question
   -> QuestionContract
+  -> optional Jev shadow decision
   -> WorkspaceQueryService
   -> MSER projection
   -> sufficiency certificate
@@ -451,11 +550,15 @@ Record `AnswerAttemptTrace` for current answer flows without changing user
 behavior.
 
 Artifacts:
-Question contract, evidence plan, MSER state, selected tools, model runtime,
-verifier result.
+Question contract, optional Jev decision, evidence plan, MSER state, selected
+tools, model runtime, verifier result.
 
 Gate:
 At least 20 existing eval questions have layer-attributed outcomes.
+
+Jev remains shadow-only in this phase. Its artifact, question-class, tool, and
+escalation decisions are compared with deterministic expectations without
+changing the user-visible route.
 
 ### Phase B - MSER-Gated Eval Path
 
@@ -467,6 +570,26 @@ Eval fixture modes: full, missing, stale, conflicted, no-workspace.
 
 Gate:
 Unknown/conflict/stale answers are scored as success when correct.
+
+If Jev is enabled for the eval path, it is a soft routing signal; MSER remains
+the hard sufficiency gate.
+
+### Phase B.5 - Selective Jev Decision Plane
+
+Goal:
+Enable Jev only for ambiguous, spatial, cross-artifact, or recovery cases after
+the shadow trace has established its error profile.
+
+Artifacts:
+Scout-owned Jev decision adapter, bounded decision schema, compact anonymized
+workspace catalog, decision cache key, confidence calibration, and deterministic
+fallback policy.
+
+Gate:
+Jev improves tool-selection precision or recovery success without reducing
+simple workspace-query success, increasing unsupported claims, or creating any
+safety/authority boundary violation. Its latency must be measured against the
+expensive calls it avoids rather than judged in isolation.
 
 ### Phase C - Root-Cause Recovery
 
@@ -524,14 +647,26 @@ The recommended new architecture is:
 
 ```text
 Pydantic AI + MSER = answer reliability kernel
+Jev = optional low-latency typed decision plane for routing, evidence triage, and escalation
 PraisonAI + MCP = optional evidence exploration workforce
 Modular/MAX = optional high-capability model runtime
 Hailo = edge inference backend
 Mojo = future measured compute kernel
 ```
 
-The first success-rate improvement should come from making MSER and answer
-verification the default measurement path, not from adding more agents. Once the
-failure traces show that evidence exploration is the bottleneck, PraisonAI is
-worth adding. Once traces show the context is sufficient but the model cannot
-produce valid structured answers, MAX/cloud/model specialization is worth adding.
+Jev is therefore embedded as a selective decision service, not as a replacement
+for Pydantic AI, PraisonAI, MAX, MSER, or deterministic Scout tools. The first
+success-rate improvement should still come from making MSER and answer
+verification the default measurement path. Jev then reduces unnecessary
+PraisonAI/MAX calls and improves early tool selection; PraisonAI remains the
+workforce for genuine information needs; and MAX remains the escalation backend
+when the evidence is sufficient but synthesis or difficult reasoning fails.
+
+The initial isolated workspace benchmark supports this bounded role: Jev
+responses were schema-valid across the tested cases, deterministic query
+execution and critical candidate-boundary checks passed, and the only notable
+miss was a conservative full-workspace over-escalation. That result supports
+using Jev as a routing and escalation candidate, not as the authoritative
+sufficiency oracle. The model identity behind the tested OpenRouter latest and
+pinned aliases must also be independently verified before treating them as two
+different model variants.
