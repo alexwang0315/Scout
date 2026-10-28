@@ -39,6 +39,9 @@ docs/.obsidian/
 .env
 .env.local
 
+# TLS keys and certificates
+*.pem
+
 # Testing
 .pytest_cache/
 .coverage
